@@ -7,18 +7,19 @@ Contract (``docs/ownership/doc_structure_contract.md`` § C4 / C9):
 
   S1  Every ``docs/modules/<m>/research/*.md`` must be referenced (by basename)
       in ``docs/modules/<m>/README.md``.
-  S2  Every note under ``docs/research/{pipeline,eval,training,reid,threads}/*.md``
-      (except README.md) must be referenced by basename in the subdir README
-      if it exists, else in ``docs/research/README.md``.
+  S2  Every note under a general ``docs/research/<area>/*.md`` directory
+      (except README.md) must be referenced by basename in that directory's
+      README if it exists, else in ``docs/research/README.md``.
   S3  Every ``docs/modules/<m>/`` directory must contain README.md and TODO.md.
 
-This checker is **warn-only** by default (exit 0 even with findings). Pass
-``--strict`` to exit non-zero (reserved for a later hard phase).
+This checker is **warn-only** by default for index-coverage findings (exit 0
+even with findings). ``--strict`` exits non-zero on C6.4 lifecycle violations
+(L1–L4); ``scripts/pre_push.sh`` uses that mode. Index coverage remains
+warn-only in either mode.
 
 Index detection currently uses basename substring match against the owning
-README body. That is acceptable for warn-only hygiene; before enabling
-``--strict`` in CI, switch to Markdown link parsing to reduce false positives
-(basename mentioned only in prose or stale paths).
+README body. It remains warn-only hygiene; Markdown link parsing would reduce
+false positives (basename mentioned only in prose or stale paths).
 
 Usage: uv run python3 scripts/tools/check_doc_structure.py [--strict]
 """
@@ -33,7 +34,13 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 MODULES_ROOT = REPO_ROOT / "docs" / "modules"
 RESEARCH_ROOT = REPO_ROOT / "docs" / "research"
-RESEARCH_SUBDIRS = ("pipeline", "eval", "training", "reid", "threads")
+# These directories own different kinds of artifacts and have their own rules:
+# contracts holds rules/state (L3), and tracker-decision is a closed decision
+# line. Every other direct research subdirectory — threads included — follows
+# C4's local-README-then-top-level fallback. threads additionally gets the L4
+# projection check, which only compares cards that *are* indexed; S2 is what
+# catches a card that is missing from the index entirely.
+RESEARCH_SPECIAL_SUBDIRS = frozenset({"contracts", "tracker-decision"})
 
 
 def _read(path: Path) -> str:
@@ -97,10 +104,12 @@ def check_global_research_indexes() -> list[str]:
     top_readme = RESEARCH_ROOT / "README.md"
     top_body = _read(top_readme)
 
-    for sub in RESEARCH_SUBDIRS:
-        sub_dir = RESEARCH_ROOT / sub
-        if not sub_dir.is_dir():
-            continue
+    for sub_dir in sorted(
+        p
+        for p in RESEARCH_ROOT.iterdir()
+        if p.is_dir() and p.name not in RESEARCH_SPECIAL_SUBDIRS
+    ):
+        sub = sub_dir.name
         sub_readme = sub_dir / "README.md"
         if sub_readme.is_file():
             index_body = _read(sub_readme)

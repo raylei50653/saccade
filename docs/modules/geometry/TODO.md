@@ -1,6 +1,6 @@
 # Geometry — 模組 TODO
 
-> **WIP register only.** Dashboard：[DEVELOPMENT.md](../../../DEVELOPMENT.md)。
+> **WIP register only.** 開發路由：[DEVELOPMENT.md](../../../DEVELOPMENT.md#agent-action-cards)。
 
 ## Sole active
 

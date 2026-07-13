@@ -58,7 +58,7 @@ Saccade 的文檔庫採用「模組化物理結構」配合「全局共享目錄
 2. Cheb-GR / bank / occ-exit / offline identity
                                       →  modules/semantic/              →  非 reid（code 可在 reid 路徑）
 3. 特徵抽取 / Feature Bank 實作       →  modules/reid/                  →  architecture 或 research/
-4. 全局 / 跨模組實驗                  →  research/<area>/               →  子目錄或 research/README 索引
+4. 全局 / 跨模組實驗                  →  research/<area>/               →  local <area>/README 索引；不存在才 research/README
 5. 可引用 baseline / 決策數字         →  research/evidence_ledger.md    →  加列 + 連 source
 6. 論文 claim / 可重建表圖            →  report_data/                   →  source_map 或 README 回連
 7. 結案 one-shot / 廢棄設計           →  archive/                       →  活躍索引移除或標 historical
@@ -67,13 +67,13 @@ Saccade 的文檔庫採用「模組化物理結構」配合「全局共享目錄
 10. 任務勾選                          →  TODO.md / modules/<m>/TODO.md  →  WIP=1；長文不塞 TODO
 ──────────────────────────────────────────────────────────────────────────────────────────────
 ※ 日常 Bug fix、純重構 (API 外部行為未變) → 無需新增/更新文檔。
-※ 完整契約：ownership/doc_structure_contract.md
+※ 先依 [DEVELOPMENT action cards](../DEVELOPMENT.md#agent-action-cards) 選動作；完整規範以 `ownership/doc_structure_contract.md` 為準。
 ```
 
 ---
 
 ## 🔗 文檔寫作規範
 
-請務必嚴格遵守 **[DOC_MAINTENANCE.md](DOC_MAINTENANCE.md)** 所規定的寫作標準：
+路徑與 PR 維護規範見 **[DOC_MAINTENANCE.md](DOC_MAINTENANCE.md)**；文件家、promotion 與 lifecycle 以 **[Doc Structure Contract](ownership/doc_structure_contract.md)** 為準：
 * **路徑連結規範**：所有文檔內的相對連結必須使用**相對於目前文件所在位置的相對路徑**，絕對不允許使用 `file:///`、`/docs/...`、`/src/...` 等本機或 repo-root 絕對路徑。
 * **PR 前檢查**：請確保新實驗、決策已同步勾選並與代碼進度一致。

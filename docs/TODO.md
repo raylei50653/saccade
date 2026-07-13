@@ -63,7 +63,7 @@ legacy `native_960` presets (`speed` / `baseline`) remain useful for comparison,
 
 ## 模組 TODO 索引
 
-> 模組專屬待辦已物理拆分至各 `docs/modules/<name>/TODO.md`。**狀態一覽（哪些 active / 收斂）見 [DEVELOPMENT.md 模組現狀總覽](../DEVELOPMENT.md)**——本表只提供連結，摘要不在此重複，避免兩處 drift。
+> 模組專屬待辦已物理拆分至各 `docs/modules/<name>/TODO.md`，它們是 sole-active 的唯一 live state。 [DEVELOPMENT.md 模組現狀總覽](../DEVELOPMENT.md#模組現狀總覽)只提供穩定入口。
 
 | 模組 | TODO | 模組 | TODO |
 |------|------|------|------|
