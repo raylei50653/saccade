@@ -74,27 +74,65 @@ Each execution manifest must separately record all of the following:
 
 - the preceding `policy_base_head`, base-tree, base-source, preset, and
   resolved-config fingerprints;
-- `instrumentation_head`, its complete source tree hash, the machine-readable
-  diff from `policy_base_head`, and that diff's SHA-256;
-- the sealed `h0_observational_diff_v1` admission result; and
+- `instrumentation_head`, its complete repository tree ID and canonical
+  recursive tree-list SHA-256, and the complete binary/full-index repository
+  diff from `policy_base_head` with its SHA-256;
+- `runtime_policy_code_projection_v1`, its canonical diff and SHA-256, the
+  excluded governance paths and blob SHA-256 values, and the sealed
+  `h0_observational_diff_v1` admission result for that projection only; and
 - CUDA build/compiler/extension identity, GPU identity, seven-sequence set,
   capture-schema version, and every instrumented kernel and host-helper
   SHA-256.
 
-`instrumentation_head` must descend from `policy_base_head`. Its diff may add
+`instrumentation_head` must descend from `policy_base_head`. Repository
+provenance is complete: no changed path is omitted from the recorded tree or
+full diff. Policy admission is deliberately narrower. Construct
+`runtime_policy_code_projection_v1` from that full diff by excluding **only**
+the following `h0_governance_docs_allowlist_v1` paths:
+
+```text
+docs/modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md
+docs/modules/semantic/research/headline_bridge_full_decision_capture_results_20260713.md
+docs/modules/semantic/research/runtime_bridge_decision_path_identifiability_declaration_20260713.md
+docs/modules/semantic/research/runtime_bridge_decision_path_identifiability_results_20260713.md
+docs/modules/semantic/research/evidence/p0_runtime_bridge_decision_path_20260713/manifest.json
+docs/modules/semantic/research/evidence/p0_runtime_bridge_decision_path_20260713/field_sufficiency.json
+docs/modules/semantic/research/evidence/p0_runtime_bridge_decision_path_20260713/decision_funnel.csv
+docs/modules/semantic/research/evidence/p0_runtime_bridge_decision_path_20260713/metrics.json
+docs/modules/semantic/README.md
+docs/modules/semantic/TODO.md
+docs/TODO.md
+```
+
+The manifest retains the excluded path list and each excluded blob hash, so the
+allowlist does not hide a repository change. An excluded path must be
+docs-only/non-executable content and must not alter or be consumed as a
+resolved configuration, build input, runtime-policy source, executable
+artifact, or production test. Every changed path outside this exact allowlist,
+including any other document, remains in the runtime projection.
+
+`h0_observational_diff_v1` applies only to the runtime projection. It may add
 only H0-owned trace schema/storage, deterministic instance-UID state,
 trace-only allocation/clear/drain/serialization, and trace-pointer arguments
-or writes at the observation points sealed in §4. It may use atomics only on
-H0-owned cursors, overflow counters, or trace buffers. It may not change an
-existing policy input, arithmetic operation, comparison, branch predicate,
-loop/order used for policy selection, policy-state write, launch geometry, or
-the values written to `track_ids`, `active`, claims, proposals, debug counters,
-or MOT output. Trace-only source additions are not policy-base drift.
+or writes at the observation points sealed in §4. It may also add only the
+declared H0 export/replay verifier and its dedicated test:
+`scripts/tools/export_headline_bridge_decision_trace.py`,
+`scripts/tools/verify_headline_bridge_decision_trace.py`, and
+`tests/unit/tracking/test_headline_bridge_decision_trace.py`; these must only
+consume H0 trace outputs and never enter a production build or runtime path. It
+may use atomics only on H0-owned cursors, overflow counters, or trace buffers.
+It may not change an existing policy input, arithmetic operation, comparison,
+branch predicate, loop/order used for policy selection, policy-state write,
+launch geometry, or the values written to `track_ids`, `active`, claims,
+proposals, debug counters, or MOT output. Trace-only source additions are not
+policy-base drift.
 
-Any base/config mismatch, non-descendant instrumentation head, missing diff, or
-diff outside `h0_observational_diff_v1` is `H0_PROVENANCE_INVALID` before
-replay. A different instrumentation hash by itself is expected and is not a
-provenance failure.
+Any base/config mismatch, non-descendant instrumentation head, missing complete
+repository evidence or projection, a governance path outside the exact
+allowlist, an allowlisted path that violates its docs-only restriction, or a
+runtime projection outside `h0_observational_diff_v1` is
+`H0_PROVENANCE_INVALID` before replay. A different instrumentation hash by
+itself is expected and is not a provenance failure.
 
 ## 3. Canonical native decision graph
 
@@ -264,16 +302,18 @@ condition holds.
 
 1. `H0_PROVENANCE_INVALID` — any mismatch of `policy_base_head`, base tree or
    source fingerprint, resolved configuration fingerprint, preset, sequence
-   authority, or `h0_observational_diff_v1` admission; a missing required
-   instrumentation provenance field; or a non-descendant instrumentation head.
-   Stop before replay.
+   authority, complete repository provenance, or
+   `runtime_policy_code_projection_v1` / `h0_observational_diff_v1` admission;
+   a governance path outside its exact allowlist or violating its docs-only
+   restriction; a missing required instrumentation provenance field; or a
+   non-descendant instrumentation head. Stop before replay.
 2. `H0_CAPTURE_PERTURBS_POLICY` — capture-on/off differs in MOT output, final
    IDs, proposal or commit winner, bridge debug counters, proposal/commit
    counts, or scheduling-/memory-visible policy state.
 3. `H0_PACKET_INVALID` — a produced packet has overflow, duplicate key,
-   identity collision, a `computed_nan` policy input or other scalar invalidity, canonical
-   semantic-digest mismatch across repeated capture-on runs, or any scalar,
-   gate, ranking, margin, claim, or commit replay disagreement.
+   identity collision, a `computed_nan` policy input or other scalar invalidity,
+   canonical semantic-digest mismatch across repeated capture-on runs, or any
+   scalar, gate, ranking, margin, claim, or commit replay disagreement.
 4. `H0_CAPTURE_PARTIAL` — with 1–3 false, Phase A proves that a required DAG
    stage cannot be observed by the sealed ABI without changing policy
    semantics. It must name the highest replay level and missing field(s); it
