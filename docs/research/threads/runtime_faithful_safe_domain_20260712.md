@@ -1,9 +1,9 @@
 ---
-doc-status: proposed
+doc-status: active
 doc-promotion: navigation-only; not evidence
 owner-module: semantic
 work-class: mainline-study
-wip-role: non-wip
+wip-role: sole-active
 created: 2026-07-12
 ---
 
@@ -11,15 +11,16 @@ created: 2026-07-12
 
 ## Status
 
-**PROPOSED · mainline-study · non-WIP (unauthorized, seal pending)** (2026-07-12).
+**ACTIVE · mainline-study · sole-active (`SEALED`; S0 execution authorized)**
+(2026-07-13; PR #152).
 
 ## Expected state (lease)
 
-If owner seals this charter, S0 is expected to decide one disposable planning target:
-whether the accepted axes keep the required safety characteristics on runtime
-coordinates. This is **not** an accepted registry state or an authorization to run.
-The lease may be replaced or dropped without a registry transition if the charter
-is not sealed, its decision relevance becomes zero, or a dependency changes.
+S0 is expected to decide one disposable planning target: whether the accepted axes
+keep the required safety characteristics on runtime coordinates. This is **not** an
+accepted registry state; only the sealed declaration authorizes the bounded run.
+The lease may be replaced or dropped without a registry transition if its decision
+relevance becomes zero or a dependency changes.
 
 ## Commit point
 
@@ -29,15 +30,17 @@ changed. Opening, editing, or discarding this lease does not.
 
 ## Discard when
 
-- owner declines to seal the S0 charter;
 - runtime fidelity is no longer decision-relevant to the safe-domain consumer;
 - a superseding substrate or contract makes this target obsolete.
 
 ## Current step
 
-`none — proposed / seal pending`. No probe is authorized. A later probe may be
-replaced or discarded here without closing the charter; reusable evidence, if any,
-must move to the canonical module research home.
+Execute the frozen S0 declaration §§ 3–7 against the sealed inputs, emit the
+canonical evidence packet and terminal, then stop for owner review at the commit
+point. This authorizes no closure solve, threshold selection, preset change,
+production hook, or score-ranking claim. The execution probe may be replaced or
+discarded here without closing the charter; reusable evidence must move to the
+canonical module research home.
 
 ## Design (the architecture this line serves)
 
@@ -125,9 +128,8 @@ S3  production hook — relink_bridge_max_speed / spatial_gate / h_lo,h_hi are
                       (separately declared; no authorization from S0–S2)
 ```
 
-S0 is a proposed draft; no unit on this line is currently open or active.
-S1–S3 are named so the direction is legible; none is authorized, and each
-needs its own declaration.
+S0 is sealed and active. S1–S3 are named so the direction is legible; none is
+authorized, and each needs its own declaration.
 
 ## Must not
 
@@ -146,3 +148,6 @@ needs its own declaration.
   offline proxy coordinates that D0 already ruled unfaithful, and that the
   closure solve which would consume them has not started. S0 declared as the
   proposed draft.
+- 2026-07-13: Owner seal recorded on PR #152 against reviewed head
+  `55adbbbcddf52a8bf036ca0a01b3fb0ef859025a`; thread transitioned to active / sole-active
+  and S0 execution authorized exactly within the frozen declaration §§ 1–8.

@@ -176,7 +176,7 @@ derived_from: §4.2 substrate
 last_reviewed_at: 2026-07-12
 ```
 
-**S0 宣告（draft，未 seal）：** [safe_domain_runtime_transfer_declaration](../../modules/semantic/research/safe_domain_runtime_transfer_declaration_20260712.md) · [thread](../threads/runtime_faithful_safe_domain_20260712.md)
+**S0 宣告（sealed / active；仍不是 accepted state）：** [safe_domain_runtime_transfer_declaration](../../modules/semantic/research/safe_domain_runtime_transfer_declaration_20260712.md) · [thread](../threads/runtime_faithful_safe_domain_20260712.md)
 
 ### `gate.safe_region.region_asset_pack`
 

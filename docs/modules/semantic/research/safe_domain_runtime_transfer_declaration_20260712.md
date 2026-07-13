@@ -1,9 +1,9 @@
-<!-- doc-status: draft -->
+<!-- doc-status: active -->
 <!-- doc-promotion: none -->
 <!-- doc-date: 2026-07-12 -->
 <!-- doc-module: semantic -->
 
-# S0 — safe-domain axis transfer to runtime coordinates — **draft** declaration
+# S0 — safe-domain axis transfer to runtime coordinates — **sealed** declaration
 
 > **One-line:** the accepted safe axes `{dist_h, log_h_ratio}` were certified on
 > **offline proxy** coordinates that D0 already ruled unfaithful. Before the
@@ -13,8 +13,9 @@
 > coordinates?** Coarse thresholds only — no boundary fit, no score, no
 > production change.
 
-> **⚠️ NOT SEALED.** Draft. Binding only at the seal event in § 9. Until then no
-> number in this file may be read from data.
+> **SEALED.** Execution is authorized only for the frozen scope in §§ 1–8. Results
+> must be emitted to the canonical evidence packet and reviewed at the thread's
+> commit point; the seal does not itself accept a terminal or authorize later units.
 
 **Normative inputs (cited, never re-derived):**
 [feasible-set framework](../../../research/contracts/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md) ·
@@ -189,9 +190,11 @@ research acceptance*). Before the seal: no run, no number.
 
 - Prepared: 2026-07-13
 - Scope: the frozen declaration in §§ 1–8, submitted for owner review
-- Authority: **none until** the PR receives the literal owner token `SEALED`;
-  preparing this candidate does not authorize a run or a number
+- Owner review: literal token `SEALED` recorded on PR #152 at reviewed head
+  `55adbbbcddf52a8bf036ca0a01b3fb0ef859025a`
 
 ### Seal record
 
-*(none — not sealed)*
+| Date | PR | Reviewed head SHA | Transition | Authority |
+|---|---|---|---|---|
+| 2026-07-13 | #152 | `55adbbbcddf52a8bf036ca0a01b3fb0ef859025a` | draft → active | Execute S0 exactly as frozen in §§ 1–8; no later unit or production change authorized |
