@@ -6,17 +6,45 @@
 
 ---
 
-## 🔄 現在在做什麼
+<a id="research-control-plane"></a>
 
-**這裡不列狀態**（列了就會漂移——實測如此）。三個入口，各有唯一 owner：
+## 🧭 Research control plane
 
-| 我要知道 | 去 |
-|------|------|
-| 每個研究對象**現在站在哪一格**（state / substrate / limits / 合法候選集） | **[claim_state_registry](contracts/claim_state_registry.md)** |
-| 哪一個被選為 **sole active**（WIP 鎖） | 對應的 [module TODO](../modules/) |
-| 這條線**怎麼接續**（敘事導覽） | [threads/](threads/README.md) |
+這裡是研究任務的總入口。本圖只擁有**路由拓撲、型別與轉移邊**；
+每個可點節點都連到狀態或事實 owner，不在入口複寫 terminal、數字或 live state。
+每個可判定任務必須宣告
 
-治理（O-series，非實驗正文）：[../ownership/README.md](../ownership/README.md) · [DOC_MAINTENANCE § WIP](../DOC_MAINTENANCE.md) · [DEVELOPMENT.md 模組現狀總覽](../../DEVELOPMENT.md)
+\[
+\kappa=(\text{quantification space},\ \text{comparison relation},\ \text{decision rule}).
+\]
+
+### Typed route — runtime representation → reduction → validation
+
+- **Runtime event universe** `U_evt = D_evt ˙∪ G_evt ˙∪ E_evt`
+  - **Representation and reduction**
+    - [D0 — offline proxy ↔ runtime quantity](../modules/semantic/research/d0_runtime_shadow_fidelity_results_20260712.md)
+    - [R1 — captured runtime ↔ canonical replay](../modules/semantic/research/r1_temporal_reduction_capture_results_20260712.md)
+    - `ρ_v: event → trial unit` → [S0 — runtime-coordinate transfer / claim support](../modules/semantic/research/closed/safe_domain_runtime_transfer_results_20260713.md)
+  - **Representation boundary**
+    - [EK0 — frozen-packet representability boundary](../modules/semantic/research/frozen_packet_exact_key_recoverability_results_20260713.md)
+  - **Runtime decision-path observability**
+    - [P0 — frozen capture identifiability](../modules/semantic/research/closed/runtime_bridge_decision_path_identifiability_results_20260713.md)
+      → [H0 — native full-decision-path capture contract](../modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md)
+      → downstream claim 必須另行宣告。
+
+### State resolution
+
+| 圖上要讀的東西 | 唯一 owner |
+|---|---|
+| accepted state / substrate / limits / admissible units | [claim-state registry](contracts/claim_state_registry.md) |
+| sole-active selection / module transition pointer | 對應 [module TODO](../modules/)；本線見 [semantic TODO](../modules/semantic/TODO.md) |
+| charter lifecycle / sequence / expected-state lease / handoff | [research threads](threads/README.md) 與 linked declaration |
+| verdict / statistics / reproducible evidence | 圖上 linked fact owner；可引用數字見 [evidence ledger](evidence_ledger.md) |
+
+關閉一個節點不會自動授權下一個節點。任務只能由 owner-accepted terminal
+觸發新的 admissible transition，再由 TODO 的 WIP 鎖選定是否執行。
+
+治理（O-series，非實驗正文）：[../ownership/README.md](../ownership/README.md) · [DOC_MAINTENANCE § WIP](../DOC_MAINTENANCE.md) · [DEVELOPMENT.md](../../DEVELOPMENT.md)
 
 ---
 
@@ -82,7 +110,7 @@
 
 | 模組 | 入口 |
 |------|------|
-| [semantic](../modules/semantic/README.md) | 12 notes — offline relink hub、Cheb-GR bank、**occ-exit active** |
+| [semantic](../modules/semantic/README.md) | Semantic relink / runtime bridge / safe-domain research index |
 | [detection](../modules/detection/README.md) | T3→T1、CUDA graph、kernel fusion 等 |
 | [geometry](../modules/geometry/README.md) | [fp_fn_recovery_and_gmc](../modules/geometry/research/fp_fn_recovery_and_gmc.md) |
 | [lifecycle](../modules/lifecycle/README.md) | [tentative_confirmed_state](../modules/lifecycle/research/tentative_confirmed_state.md) |

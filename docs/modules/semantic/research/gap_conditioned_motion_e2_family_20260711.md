@@ -12,7 +12,7 @@
 > or claim a V1–V5 verdict. E3 signal generation is authorized under the sealed
 > family and LOO/output contracts only.
 
-Thread: [gap-conditioned probabilistic motion probe](../../../research/threads/gap_conditioned_probabilistic_motion_probe_20260711.md)
+Thread: [gap-conditioned probabilistic motion probe](../../../research/threads/closed/gap_conditioned_probabilistic_motion_probe_20260711.md)
 
 E0: [substrate audit](gap_conditioned_motion_e0_20260711.md)
 

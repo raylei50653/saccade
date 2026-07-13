@@ -1,18 +1,27 @@
 # H0 — headline-s full bridge-decision trace capture
 
-<!-- doc-status: draft-unsealed -->
+<!-- doc-status: proposed -->
+<!-- doc-seal: draft-unsealed -->
 <!-- doc-promotion: none -->
 <!-- doc-date: 2026-07-13 -->
 <!-- doc-module: semantic -->
 
-> **Status: declaration draft only.** This document is deliberately not an execution seal. It records the exact scope that the owner must seal before any instrumentation, build, smoke run, or capture. It does not accept P0, change a preset, authorize B1, or authorize a threshold study.
+> **Status: proposed / draft-unsealed.** Trace instrumentation exists, but this
+> declaration is not an execution seal. Until an owner seals the reviewed head,
+> no Phase A/B capture, downstream claim study, preset change, or threshold study
+> is authorized.
+
+Research-wide type and upstream/downstream routing live in the
+[research control plane](../../../research/README.md#research-control-plane). This
+declaration owns only the H0 observability contract and its ordered terminal in
+§7; it does not re-decide D0/R1 fidelity, S0 support, or any downstream claim.
 
 ## 1. Preconditions and authority
 
-Before Phase A, two distinct owner actions are required:
+Before Phase A, the routing ledger is:
 
-1. Accept and close `P0_CAPTURE_SEMANTICS_INVALID` separately.
-2. Record a literal `SEALED` review against this declaration at the reviewed head, with the source and preset fingerprints in §2.
+1. **Satisfied:** `P0_CAPTURE_SEMANTICS_INVALID` was accepted and P0 closed.
+2. **Pending:** record a literal `SEALED` review against this declaration at the reviewed head, with the source and preset fingerprints in §2.
 
 The seal authorizes only an observational H0 implementation and its Phase A/B unlabelled captures. It authorizes no GT/FP read, threshold variation, policy choice, registry/ledger modification, or production-preset change.
 

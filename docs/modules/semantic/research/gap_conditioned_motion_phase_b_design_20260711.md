@@ -15,7 +15,7 @@
 > contract. It authorizes no calibration change, family change, production
 > change, or verdict by itself.
 
-Thread: [gap-conditioned probabilistic motion probe](../../../research/threads/gap_conditioned_probabilistic_motion_probe_20260711.md)
+Thread: [gap-conditioned probabilistic motion probe](../../../research/threads/closed/gap_conditioned_probabilistic_motion_probe_20260711.md)
 
 Inputs: [E0 substrate](gap_conditioned_motion_e0_20260711.md) ·
 [E1 baseline](gap_conditioned_motion_e1_m0_20260711.md) ·

@@ -14,7 +14,7 @@
 > Research acceptance = **`ACCEPTED_WITH_LIMITS`**; probabilistic
 > representation verdict = **`NOT_YET_EVALUATED`**.
 
-Thread: [gap-conditioned probabilistic motion probe](../../../research/threads/gap_conditioned_probabilistic_motion_probe_20260711.md)  
+Thread: [gap-conditioned probabilistic motion probe](../../../research/threads/closed/gap_conditioned_probabilistic_motion_probe_20260711.md)
 E0: [substrate audit](gap_conditioned_motion_e0_20260711.md)  
 Packet: [evidence/gap_conditioned_motion_e1_m0_20260711/](evidence/gap_conditioned_motion_e1_m0_20260711/manifest.json)
 

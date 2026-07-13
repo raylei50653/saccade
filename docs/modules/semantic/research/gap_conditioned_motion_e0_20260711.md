@@ -11,7 +11,7 @@
 > fields. Joint/velocity likelihoods and sequence-conditioned LOO headlines are
 > fail-closed.
 
-Thread: [gap-conditioned probabilistic motion probe](../../../research/threads/gap_conditioned_probabilistic_motion_probe_20260711.md)  
+Thread: [gap-conditioned probabilistic motion probe](../../../research/threads/closed/gap_conditioned_probabilistic_motion_probe_20260711.md)
 Packet: [evidence/gap_conditioned_motion_e0_20260711/](evidence/gap_conditioned_motion_e0_20260711/manifest.json)
 
 ## 1. Frozen substrate

@@ -15,7 +15,7 @@
 > unauthorized until the research owner records an explicit authorization
 > after this seal.
 
-Thread: [gap-conditioned probabilistic motion probe](../../../research/threads/gap_conditioned_probabilistic_motion_probe_20260711.md)
+Thread: [gap-conditioned probabilistic motion probe](../../../research/threads/closed/gap_conditioned_probabilistic_motion_probe_20260711.md)
 
 E2 family: [note](gap_conditioned_motion_e2_family_20260711.md) ·
 [packet](evidence/gap_conditioned_motion_e2_family_20260711/manifest.json)
