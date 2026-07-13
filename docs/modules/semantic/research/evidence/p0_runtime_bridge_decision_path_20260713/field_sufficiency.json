@@ -1,0 +1,98 @@
+[
+  {
+    "complete": false,
+    "existing_artifact": "D0/R1 provenance records only a git commit",
+    "missing_consequence": "a commit label is not an exact source-file identity; capture/source code equivalence is unproven",
+    "required_fields": [
+      "capture kernel source SHA-256",
+      "headline kernel source SHA-256"
+    ],
+    "stage": "source_snapshot_alignment"
+  },
+  {
+    "complete": false,
+    "existing_artifact": "D0 v2 capture header",
+    "missing_consequence": "capture is emitted after eligibility and pre-score continues; raw exclusions are unobservable",
+    "required_fields": [
+      "all candidate/lost state before height gate",
+      "frame",
+      "candidate slot",
+      "lost slot"
+    ],
+    "stage": "A_pair_eligibility"
+  },
+  {
+    "complete": false,
+    "existing_artifact": "D0 has ema_lost/ema_cand only on emitted survivors",
+    "missing_consequence": "height-gate attrition and disabled-path counterfactuals cannot be observed",
+    "required_fields": [
+      "all raw pairs",
+      "EMA heights",
+      "height-gate result",
+      "speed/centre state"
+    ],
+    "stage": "B_pre_score_gates"
+  },
+  {
+    "complete": true,
+    "existing_artifact": "D0 v2 capture header",
+    "missing_consequence": "scalar formula terms are observable only for the foreign-config survivor population",
+    "required_fields": [
+      "fwd_r",
+      "bwd_r",
+      "dist_h",
+      "s_lost",
+      "w",
+      "bdist",
+      "directional provenance"
+    ],
+    "stage": "C_score_construction"
+  },
+  {
+    "complete": false,
+    "existing_artifact": "D0 v2 capture header + manifest",
+    "missing_consequence": "scalar cutoff is mechanically evaluable, but not for the frozen headline configuration",
+    "required_fields": [
+      "bdist",
+      "production threshold",
+      "headline preset stamp"
+    ],
+    "stage": "D_pair_cutoff"
+  },
+  {
+    "complete": false,
+    "existing_artifact": "D0 v2 export",
+    "missing_consequence": "exported event key omits frame and slots; best/second-best and margin are unreconstructable",
+    "required_fields": [
+      "frame",
+      "candidate slot/index",
+      "complete lost competitor set",
+      "bdist"
+    ],
+    "stage": "E_candidate_local_ranking"
+  },
+  {
+    "complete": false,
+    "existing_artifact": "D0/R1 canonical packets",
+    "missing_consequence": "atomicMax winner cannot be replayed",
+    "required_fields": [
+      "lost slot",
+      "all proposing candidates",
+      "detection score",
+      "quantized key",
+      "candidate index"
+    ],
+    "stage": "F_claim_competition"
+  },
+  {
+    "complete": false,
+    "existing_artifact": "shadow capture",
+    "missing_consequence": "shadow deliberately suppresses the only bridge writes; final commit is not observed",
+    "required_fields": [
+      "winning claim",
+      "post-commit candidate ID",
+      "lost-slot deactivation"
+    ],
+    "stage": "G_commit"
+  }
+]

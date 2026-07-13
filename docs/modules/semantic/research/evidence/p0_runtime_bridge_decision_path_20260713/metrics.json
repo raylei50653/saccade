@@ -1,0 +1,187 @@
+{
+  "d0_header": [
+    "event_key",
+    "event_key_version",
+    "partition",
+    "seq",
+    "lost_global_id",
+    "cand_global_id",
+    "lost_local_id",
+    "cand_local_id",
+    "gap",
+    "bridge_at",
+    "la",
+    "bdist",
+    "dist_h",
+    "fwd_r",
+    "bwd_r",
+    "v_lost_x",
+    "v_lost_y",
+    "v_cand_x",
+    "v_cand_y",
+    "ax",
+    "ay",
+    "cx0",
+    "cy0",
+    "ema_lost",
+    "ema_cand",
+    "h_ref",
+    "s_lost",
+    "w",
+    "production_threshold",
+    "capture_mode",
+    "evidence_role",
+    "anchor_mode",
+    "anchor_rate"
+  ],
+  "decision_funnel_status": "not_entered_due_to_capture_semantics_invalid",
+  "headline": {
+    "preset": "configs/presets/mamba_whole_graph.yaml",
+    "reid_mode": "off",
+    "relink_bridge_dir_bonus": 0.8,
+    "relink_bridge_enabled": true,
+    "relink_bridge_h_hi": 1.33,
+    "relink_bridge_h_lo": 0.75,
+    "relink_bridge_margin": 0.05,
+    "relink_bridge_max_speed": 0.0,
+    "relink_bridge_px": 0.25,
+    "relink_bridge_spatial_gate": 0.0
+  },
+  "label_access": {
+    "gt_or_fp_labels_accessed": false,
+    "p5": "not_entered"
+  },
+  "provenance": {
+    "capture_kernel_source_sha256_present": false,
+    "current_kernel_source_sha256": "36a0c7f952e99aee309c7fe4c9187852d070ee0ae600cd737a0beeeb55904e55",
+    "d0_alignment": {
+      "all_fields_match": false,
+      "artifact": "D0",
+      "comparisons": [
+        {
+          "actual": 0.4,
+          "artifact_field": "px",
+          "expected": 0.25,
+          "headline_knob": "relink_bridge_px",
+          "status": "mismatch_or_absent"
+        },
+        {
+          "actual": 0.0,
+          "artifact_field": "dir_bonus",
+          "expected": 0.8,
+          "headline_knob": "relink_bridge_dir_bonus",
+          "status": "mismatch_or_absent"
+        },
+        {
+          "actual": null,
+          "artifact_field": "h_lo",
+          "expected": 0.75,
+          "headline_knob": "relink_bridge_h_lo",
+          "status": "mismatch_or_absent"
+        },
+        {
+          "actual": null,
+          "artifact_field": "h_hi",
+          "expected": 1.33,
+          "headline_knob": "relink_bridge_h_hi",
+          "status": "mismatch_or_absent"
+        },
+        {
+          "actual": null,
+          "artifact_field": "spatial_gate",
+          "expected": 0.0,
+          "headline_knob": "relink_bridge_spatial_gate",
+          "status": "mismatch_or_absent"
+        },
+        {
+          "actual": null,
+          "artifact_field": "max_speed",
+          "expected": 0.0,
+          "headline_knob": "relink_bridge_max_speed",
+          "status": "mismatch_or_absent"
+        }
+      ]
+    },
+    "d0_capture_git_commit": "b43772b75b3eee1067076adf2cfdbb976f946d5b",
+    "d0_capture_sha256": "96093b9b723ed4500b389f8ad74600d75bb49a75064630dd2205cea0b0887047",
+    "d0_packet_hash_match": true,
+    "r1_alignment": {
+      "all_fields_match": false,
+      "artifact": "R1",
+      "comparisons": [
+        {
+          "actual": 0.4,
+          "artifact_field": "px",
+          "expected": 0.25,
+          "headline_knob": "relink_bridge_px",
+          "status": "mismatch_or_absent"
+        },
+        {
+          "actual": 0.0,
+          "artifact_field": "dir_bonus",
+          "expected": 0.8,
+          "headline_knob": "relink_bridge_dir_bonus",
+          "status": "mismatch_or_absent"
+        },
+        {
+          "actual": null,
+          "artifact_field": "h_lo",
+          "expected": 0.75,
+          "headline_knob": "relink_bridge_h_lo",
+          "status": "mismatch_or_absent"
+        },
+        {
+          "actual": null,
+          "artifact_field": "h_hi",
+          "expected": 1.33,
+          "headline_knob": "relink_bridge_h_hi",
+          "status": "mismatch_or_absent"
+        },
+        {
+          "actual": null,
+          "artifact_field": "spatial_gate",
+          "expected": 0.0,
+          "headline_knob": "relink_bridge_spatial_gate",
+          "status": "mismatch_or_absent"
+        },
+        {
+          "actual": null,
+          "artifact_field": "max_speed",
+          "expected": 0.0,
+          "headline_knob": "relink_bridge_max_speed",
+          "status": "mismatch_or_absent"
+        }
+      ]
+    },
+    "r1_capture_git_commit": "94c54299ab4c412ef5312cc37f0a897149c27852",
+    "r1_frozen_preset": "configs/presets/mamba_whole_graph_m.yaml",
+    "r1_packet_terminal": "R1_FAITHFUL",
+    "s0_inherits_same_capture_hash": true
+  },
+  "replay": {
+    "counterfactual_ceiling_if_headline_alignment_existed": "L1_pair_cutoff_replay",
+    "l2_blockers": [
+      "no frame",
+      "no candidate slot/index",
+      "no complete candidate competitor universe"
+    ],
+    "l3_blockers": [
+      "no raw pre-height universe",
+      "no detection score",
+      "no quantized atomicMax key",
+      "shadow capture has no commit"
+    ],
+    "observed_level": "not_assignable_due_to_capture_semantics_invalid"
+  },
+  "source_proofs": {
+    "stage_a": true,
+    "stage_b_height": true,
+    "stage_c_bdist": true,
+    "stage_d_cutoff": true,
+    "stage_e_margin": true,
+    "stage_f_claim": true,
+    "stage_g_commit": true
+  },
+  "study": "p0_runtime_bridge_decision_path_20260713",
+  "terminal": "P0_CAPTURE_SEMANTICS_INVALID"
+}
