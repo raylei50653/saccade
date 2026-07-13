@@ -1,0 +1,195 @@
+{
+  "frozen_reference": {
+    "base_k": 3,
+    "base_n": 116,
+    "confidence": 0.95,
+    "epsilon": 0.05,
+    "zero_new_hurt_pass_floor_n": 153
+  },
+  "gt_label_accessed": false,
+  "j1_provenance": {
+    "capture_overflow_events": 0,
+    "capture_shadow": true,
+    "event_key": {
+      "fields": [
+        "seq",
+        "lost_global_id",
+        "cand_global_id"
+      ],
+      "version": "d0_event_key_v2_global"
+    },
+    "input_hashes": {
+      "_global_id_map.txt": "ae3b6441d1712bcce0826d611cee2cfdf7a01b4d37ec331336f91a0b9148f366",
+      "capture.csv.gz": "96093b9b723ed4500b389f8ad74600d75bb49a75064630dd2205cea0b0887047",
+      "pairs.csv": "ee2898a25ef7f01ed46331c49c12d667846975f25769bc4c3e6b8bad493f8e87",
+      "substrate_mot_concat": "4c5e322a3b8c026de584baa883e26353720837ffa2bf146dfcef2679426a670e"
+    },
+    "partition": {
+      "cohort_gap": 539,
+      "matched": 1684,
+      "unemitted": 354
+    },
+    "partition_total": 2577,
+    "passed": true,
+    "s0_packet_hashes": {
+      "grid.csv": "300bdd6ea670f4c0ea236d69d3c625cfe9a4da2c71ccbbbc24b30bacec471e04",
+      "manifest.json": "423591cb2b8e18a7129ce4e375c9dc55cfa588892c9e599c25de95f216fc8cdb",
+      "metrics.json": "296fb996f65b9ec3c2a845962e8dfde6cedafe9d32bdf746933840c5e2531009"
+    },
+    "s0_runner_sha256": "07d4eb40433e915a4335f44756ab2e0a3e4b8d5b5f86bfe190193070867da4e2"
+  },
+  "j2_classification": {
+    "classification_rules": "sealed declaration \u00a73",
+    "duplicate_target_event_keys": 0,
+    "offline_nonunique_pair_identities": 0,
+    "offline_pair_rows_scanned_without_gt_projection": 24346,
+    "target_partitions": {
+      "cohort_gap": 539,
+      "unemitted": 354
+    }
+  },
+  "j3_independence_reduction": {
+    "best_case_floor_n": 153,
+    "n_max_zero_new_hurt": 116,
+    "partitions": {
+      "cohort_gap": {
+        "by_sequence": {
+          "MOT17-02-SDP": {
+            "events": 99,
+            "identified_unique_lost_tracks": 25,
+            "reconstructable_unique_lost_tracks": 0
+          },
+          "MOT17-04-SDP": {
+            "events": 31,
+            "identified_unique_lost_tracks": 14,
+            "reconstructable_unique_lost_tracks": 0
+          },
+          "MOT17-05-SDP": {
+            "events": 66,
+            "identified_unique_lost_tracks": 27,
+            "reconstructable_unique_lost_tracks": 0
+          },
+          "MOT17-09-SDP": {
+            "events": 16,
+            "identified_unique_lost_tracks": 8,
+            "reconstructable_unique_lost_tracks": 0
+          },
+          "MOT17-10-SDP": {
+            "events": 131,
+            "identified_unique_lost_tracks": 43,
+            "reconstructable_unique_lost_tracks": 0
+          },
+          "MOT17-11-SDP": {
+            "events": 17,
+            "identified_unique_lost_tracks": 9,
+            "reconstructable_unique_lost_tracks": 0
+          },
+          "MOT17-13-SDP": {
+            "events": 179,
+            "identified_unique_lost_tracks": 43,
+            "reconstructable_unique_lost_tracks": 0
+          }
+        },
+        "classification": {
+          "structurally unjoinable": 539
+        },
+        "events": 539,
+        "events_with_identified_lost_track": 539,
+        "identified_unique_lost_tracks": 169,
+        "reasons": {
+          "same_global_pair_absent_from_offline_universe": 539
+        },
+        "reconstructable_unique_lost_track_upper_bound": 0,
+        "repeat_events_after_lost_track_reduction": 370,
+        "repeat_rate_among_identified_events": 0.686456400742115,
+        "unidentified_events": 0
+      },
+      "unemitted": {
+        "by_sequence": {
+          "MOT17-02-SDP": {
+            "events": 21,
+            "identified_unique_lost_tracks": 0,
+            "reconstructable_unique_lost_tracks": 0
+          },
+          "MOT17-04-SDP": {
+            "events": 24,
+            "identified_unique_lost_tracks": 0,
+            "reconstructable_unique_lost_tracks": 0
+          },
+          "MOT17-05-SDP": {
+            "events": 40,
+            "identified_unique_lost_tracks": 0,
+            "reconstructable_unique_lost_tracks": 0
+          },
+          "MOT17-09-SDP": {
+            "events": 6,
+            "identified_unique_lost_tracks": 0,
+            "reconstructable_unique_lost_tracks": 0
+          },
+          "MOT17-10-SDP": {
+            "events": 56,
+            "identified_unique_lost_tracks": 0,
+            "reconstructable_unique_lost_tracks": 0
+          },
+          "MOT17-11-SDP": {
+            "events": 2,
+            "identified_unique_lost_tracks": 0,
+            "reconstructable_unique_lost_tracks": 0
+          },
+          "MOT17-13-SDP": {
+            "events": 205,
+            "identified_unique_lost_tracks": 0,
+            "reconstructable_unique_lost_tracks": 0
+          }
+        },
+        "classification": {
+          "structurally unjoinable": 354
+        },
+        "events": 354,
+        "events_with_identified_lost_track": 0,
+        "identified_unique_lost_tracks": 0,
+        "reasons": {
+          "unresolved_global_identity_no_local_id_fallback": 354
+        },
+        "reconstructable_unique_lost_track_upper_bound": 0,
+        "repeat_events_after_lost_track_reduction": 0,
+        "repeat_rate_among_identified_events": null,
+        "unidentified_events": 354
+      }
+    },
+    "reconstructable_unique_lost_track_upper_bound": 0,
+    "trial_unit": "(seq, lost_global_id)"
+  },
+  "j4_gt_reveal": {
+    "additional_gt_valid_match_unique_lost_tracks": 0,
+    "additional_hurt_observable_range": [
+      0,
+      0
+    ],
+    "gt_label_accessed": false,
+    "possible_merged_counts": [
+      {
+        "k": 3,
+        "n": 116,
+        "ucb": 0.06548327985535148
+      }
+    ],
+    "reason": "frozen reconstructable inventory is empty; no GT-label projection exists",
+    "reference_cells": []
+  },
+  "j5_join_semantic_admissibility": {
+    "admissibility_note": "No reconstructable support may be replaced by an alternate join key.",
+    "local_id_fallback_used": false,
+    "new_proxy_or_refit": false,
+    "outcome_conditioned_join_selection": false,
+    "production_state_mutation": false,
+    "same_frozen_axes_and_grid": true,
+    "same_lost_track_independence_unit": true,
+    "same_offline_runtime_coordinate_definitions": true,
+    "same_research_population": true
+  },
+  "phase": "complete",
+  "pre_gt_inventory_sha256": "a90c424dc6a74fbbb0bdb3997e388517e56f0b237fa4f65384046510c3590d92",
+  "study": "rj0_runtime_join_support_sufficiency_20260713",
+  "terminal": "RJ0_EXPANSION_FUTILE"
+}

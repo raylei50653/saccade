@@ -1,0 +1,33 @@
+{
+  "declaration": "docs/modules/semantic/research/runtime_join_support_sufficiency_declaration_20260713.md",
+  "declaration_sha256": "657b665a4a732388db7ea7bb69d3317a2134970411f5790c1c44dd515d311ed2",
+  "event_key": {
+    "fields": [
+      "seq",
+      "lost_global_id",
+      "cand_global_id"
+    ],
+    "version": "d0_event_key_v2_global"
+  },
+  "files": {
+    "inventory.csv": "a90c424dc6a74fbbb0bdb3997e388517e56f0b237fa4f65384046510c3590d92",
+    "metrics.json": "32d3f9979e4269cbe2195a8203f401e36a6c58d6195f7e095d7c290fdf749fd9"
+  },
+  "input_hashes": {
+    "_global_id_map.txt": "ae3b6441d1712bcce0826d611cee2cfdf7a01b4d37ec331336f91a0b9148f366",
+    "capture.csv.gz": "96093b9b723ed4500b389f8ad74600d75bb49a75064630dd2205cea0b0887047",
+    "pairs.csv": "ee2898a25ef7f01ed46331c49c12d667846975f25769bc4c3e6b8bad493f8e87",
+    "substrate_mot_concat": "4c5e322a3b8c026de584baa883e26353720837ffa2bf146dfcef2679426a670e"
+  },
+  "phase": "complete",
+  "pre_gt_seal": {
+    "classification_rules": "sealed declaration \u00a73",
+    "gt_label_accessed": false,
+    "inventory_sha256": "a90c424dc6a74fbbb0bdb3997e388517e56f0b237fa4f65384046510c3590d92",
+    "trial_unit": "(seq, lost_global_id)"
+  },
+  "runner": "scripts/tools/audit_runtime_join_support_sufficiency.py",
+  "runner_sha256": "0eed3f0a301d5159a2f505fdbf1f4c5b8e04507ae2f7bbf4e02588db648e33a6",
+  "study": "rj0_runtime_join_support_sufficiency_20260713",
+  "terminal": "RJ0_EXPANSION_FUTILE"
+}

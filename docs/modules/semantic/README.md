@@ -64,6 +64,8 @@
 
 | 文件 | 這是什麼 |
 |------|------|
+| [research/runtime_join_support_sufficiency_results_20260713.md](research/runtime_join_support_sufficiency_results_20260713.md) | RJ0：runtime-join 支撐充分性 L0 feasibility audit（結果） |
+| [research/runtime_join_support_sufficiency_declaration_20260713.md](research/runtime_join_support_sufficiency_declaration_20260713.md) | RJ0 預宣告（sealed） |
 | [research/closed/safe_domain_runtime_transfer_results_20260713.md](research/closed/safe_domain_runtime_transfer_results_20260713.md) | S0：offline→runtime safe-axis transfer audit（closed results） |
 | [research/safe_domain_runtime_transfer_declaration_20260712.md](research/safe_domain_runtime_transfer_declaration_20260712.md) | S0 declaration：已接受的 safe 軸能否從 offline 座標轉移到 runtime 座標 |
 | [research/boolean_atom_partial_order_20260711.md](research/boolean_atom_partial_order_20260711.md) | Boolean atom 偏序稽核 — 全域可排序軸的認定 |
