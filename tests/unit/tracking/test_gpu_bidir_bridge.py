@@ -10,6 +10,7 @@ import torch
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(PROJECT_ROOT / "build"))
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
+sys.path.insert(0, str(PROJECT_ROOT / "scripts/tools"))
 
 pytest.importorskip("saccade_tracking_ext", exc_type=ImportError)
 pytestmark = [
@@ -17,7 +18,12 @@ pytestmark = [
     pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required"),
 ]
 
-from saccade.perception.tracking.tracker_gpu import GPUByteTracker  # noqa: E402
+from saccade.perception.tracking.tracker_gpu import (  # noqa: E402
+    GPUByteTracker,
+    GraphedTrackerUpdate,
+)
+from export_headline_bridge_decision_trace import semantic_digest  # noqa: E402
+from verify_headline_bridge_decision_trace import verify_capture  # noqa: E402
 
 
 def _tracker(*, bidirectional: bool, bridge_px: float = 0.25) -> GPUByteTracker:
@@ -74,6 +80,7 @@ def _run_sequence(
     bidirectional: bool,
     competing_candidates: bool = False,
     fidelity_audit: bool = False,
+    h0_trace: bool = False,
     shadow: bool = False,
 ) -> tuple[dict[int, list[int]], list[int], dict[str, object] | None]:
     tracker = _tracker(
@@ -82,6 +89,14 @@ def _run_sequence(
     )
     if fidelity_audit:
         tracker.set_research_bridge_fidelity_audit(True, capacity=64)
+    if h0_trace:
+        tracker.set_research_h0_bridge_trace(
+            True,
+            pair_capacity=64,
+            candidate_capacity=32,
+            claim_capacity=32,
+            commit_capacity=32,
+        )
     if shadow:
         tracker.set_research_bridge_shadow(True)
     buffers = tracker.allocate_result_buffers(device="cuda")
@@ -136,15 +151,22 @@ def _run_sequence(
             scores = torch.zeros((0,), dtype=torch.float32, device="cuda")
             classes = torch.zeros((0,), dtype=torch.int32, device="cuda")
 
-        tracker.update_into(boxes, scores, classes, buffers, gmc=gmc)
+        tracker.update_into(
+            boxes,
+            scores,
+            classes,
+            buffers,
+            gmc=gmc,
+            h0_frame_id=frame_id if h0_trace else None,
+        )
         torch.cuda.synchronize()
         count = int(buffers["count"].item())
         outputs[frame_id] = buffers["ids"][:count].detach().cpu().tolist()
-    capture = (
-        tracker.drain_research_bridge_fidelity_events(seq="bridge_fixture")
-        if fidelity_audit
-        else None
-    )
+    capture = None
+    if fidelity_audit:
+        capture = tracker.drain_research_bridge_fidelity_events(seq="bridge_fixture")
+    if h0_trace:
+        capture = tracker.drain_research_h0_bridge_trace(seq="bridge_fixture")
     return outputs, tracker.get_relink_debug(), capture
 
 
@@ -232,3 +254,162 @@ def test_bridge_fidelity_audit_is_observational_and_exports_native_values() -> N
     assert event["production_threshold"] == pytest.approx(0.25)
     assert event["h_ref"] >= 1.0
     assert event["la"] == event["gap"] + event["bridge_at"] - 1
+
+
+def test_h0_trace_observes_real_commit_without_changing_bridge_output() -> None:
+    baseline, baseline_debug, _ = _run_sequence(bidirectional=True)
+    captured, captured_debug, trace = _run_sequence(bidirectional=True, h0_trace=True)
+
+    assert captured == baseline
+    assert captured_debug == baseline_debug
+    assert trace is not None
+    assert trace["complete"] is True
+    assert trace["stream_overflow"] == {
+        "pair_records": 0,
+        "candidate_records": 0,
+        "claim_records": 0,
+        "commit_records": 0,
+    }
+    assert trace["claim_records"]
+    assert trace["commit_records"]
+    commit = trace["commit_records"][0]
+    assert commit["cand_postcommit_track_id"] == commit["lost_precommit_track_id"]
+    assert (commit["lost_active_before"], commit["lost_active_after"]) == (1, 0)
+    assert verify_capture(trace)["replay"] == "full_commit_decision_trace_v1"
+
+    repeated, repeated_debug, repeated_trace = _run_sequence(
+        bidirectional=True, h0_trace=True
+    )
+    assert repeated == baseline
+    assert repeated_debug == baseline_debug
+    assert repeated_trace is not None
+    assert semantic_digest(repeated_trace) == semantic_digest(trace)
+
+
+def _run_h0_graph_sequence(
+    *, graphed: bool, h0_trace: bool = True
+) -> tuple[dict[int, list[int]], list[int], dict[str, object] | None]:
+    """Two real bridge commits with evaluator-owned MOT frame IDs."""
+    tracker = _tracker(bidirectional=True)
+    if h0_trace:
+        tracker.set_research_h0_bridge_trace(
+            True,
+            pair_capacity=128,
+            candidate_capacity=64,
+            claim_capacity=64,
+            commit_capacity=64,
+        )
+    buffers = tracker.allocate_result_buffers(device="cuda")
+    graph = GraphedTrackerUpdate(tracker, max_assoc=4) if graphed else None
+    gmc = torch.tensor([1, 0, 0, 0, 1, 0], dtype=torch.float32, device="cuda")
+    detections = {
+        1: [(100, 200, 0.90)],
+        2: [(110, 200, 0.90)],
+        3: [(120, 200, 0.90)],
+        4: [(130, 200, 0.90)],
+        5: [],
+        6: [],
+        7: [],
+        8: [],
+        9: [(210, 200, 0.90)],
+        10: [(220, 200, 0.90)],
+        11: [(230, 200, 0.90)],
+        12: [(240, 200, 0.90)],
+        13: [],
+        14: [],
+        15: [],
+        16: [],
+        17: [(320, 200, 0.90)],
+        18: [(330, 200, 0.90)],
+        19: [(340, 200, 0.90)],
+        20: [(350, 200, 0.90)],
+    }
+    outputs: dict[int, list[int]] = {}
+    for frame_id, dets in detections.items():
+        boxes = (
+            torch.tensor(
+                [_box(cx, cy) for cx, cy, _score in dets],
+                dtype=torch.float32,
+                device="cuda",
+            )
+            if dets
+            else torch.zeros((0, 4), dtype=torch.float32, device="cuda")
+        )
+        scores = (
+            torch.tensor(
+                [_score for _cx, _cy, _score in dets],
+                dtype=torch.float32,
+                device="cuda",
+            )
+            if dets
+            else torch.zeros((0,), dtype=torch.float32, device="cuda")
+        )
+        classes = torch.zeros((len(dets),), dtype=torch.int32, device="cuda")
+        if graph is None:
+            tracker.update_into(
+                boxes,
+                scores,
+                classes,
+                buffers,
+                gmc=gmc,
+                h0_frame_id=frame_id if h0_trace else None,
+            )
+            result = buffers
+        else:
+            graph.copy_inputs(
+                boxes,
+                scores,
+                classes,
+                gmc,
+                frame_id=frame_id if h0_trace else None,
+            )
+            result = graph.replay()
+        torch.cuda.synchronize()
+        count = int(result["count"].item())
+        outputs[frame_id] = result["ids"][:count].detach().cpu().tolist()
+    trace = (
+        tracker.drain_research_h0_bridge_trace(seq="bridge_graph_fixture")
+        if h0_trace
+        else None
+    )
+    return outputs, tracker.get_relink_debug(), trace
+
+
+def test_h0_trace_graph_replay_uses_evaluator_frame_input() -> None:
+    eager_outputs, _eager_debug, eager_trace = _run_h0_graph_sequence(graphed=False)
+    graph_outputs, _graph_debug, graph_trace = _run_h0_graph_sequence(graphed=True)
+
+    assert eager_trace is not None
+    assert graph_trace is not None
+    assert graph_outputs == eager_outputs
+    assert verify_capture(graph_trace)["replay"] == "full_commit_decision_trace_v1"
+    assert semantic_digest(graph_trace) == semantic_digest(eager_trace)
+
+    # The two bridge events occur on distinct, evaluator-supplied MOT frames.
+    # This would be [capture_frame, capture_frame] with the former host counter.
+    frames = sorted({int(row["frame"]) for row in graph_trace["pair_records"]})
+    assert frames == [12, 20]
+    # Frame 4 has the first candidate decision but no structural lost track;
+    # later decision, claim, and commit records retain their own evaluation
+    # frames rather than graph-capture's frozen frame.
+    assert {int(row["frame"]) for row in graph_trace["candidate_records"]} == {
+        4,
+        12,
+        20,
+    }
+    for stream in ("claim_records", "commit_records"):
+        assert {int(row["frame"]) for row in graph_trace[stream]} == {12, 20}
+
+
+def test_h0_trace_is_graph_output_and_counter_neutral() -> None:
+    baseline_outputs, baseline_debug, _ = _run_h0_graph_sequence(
+        graphed=True, h0_trace=False
+    )
+    captured_outputs, captured_debug, trace = _run_h0_graph_sequence(
+        graphed=True, h0_trace=True
+    )
+
+    assert captured_outputs == baseline_outputs
+    assert captured_debug == baseline_debug
+    assert trace is not None
+    assert trace["complete"] is True

@@ -3777,6 +3777,167 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
             result["overflow_events"] = capture.overflow_events;
             return result;
         }, "Drain native Issue #112 events plus total and overflow counters.")
+        .def("set_research_h0_bridge_trace", &GPUByteTracker::set_research_h0_bridge_trace,
+             py::arg("enabled"), py::arg("pair_capacity") = 65536,
+             py::arg("candidate_capacity") = 16384, py::arg("claim_capacity") = 16384,
+             py::arg("commit_capacity") = 16384,
+             "H0 default-off four-stream capture of the real bridge decision and commit path.")
+        .def("bind_research_h0_bridge_trace_frame_device", [](GPUByteTracker& self,
+                                                               uintptr_t frame_ptr) {
+            self.bind_research_h0_bridge_trace_frame_device(
+                reinterpret_cast<const int*>(frame_ptr));
+        }, py::arg("frame_ptr"),
+        "Bind a caller-owned CUDA int32 scalar containing the actual evaluation frame. "
+        "Its address must remain stable until H0 tracing is disabled; H0 graph replays read "
+        "the scalar at replay time rather than a capture-time host value.")
+        .def("clear_research_h0_bridge_trace", &GPUByteTracker::clear_research_h0_bridge_trace,
+             "Clear H0 trace cursors and overflow counters without changing bridge policy state.")
+        .def("drain_research_h0_bridge_trace", [](GPUByteTracker& self) {
+            const H0BridgeDecisionTraceCapture capture = self.drain_research_h0_bridge_trace();
+            auto scalar = [](const H0Float32& value) {
+                py::dict out;
+                out["bits"] = value.bits;
+                out["status"] = static_cast<int>(value.status);
+                return out;
+            };
+            py::list pairs;
+            for (const H0BridgePairRecord& ev : capture.pair_records) {
+                py::dict row;
+                row["schema_version"] = ev.schema_version;
+                row["frame"] = ev.frame;
+                row["cand_slot"] = ev.cand_slot;
+                row["lost_slot"] = ev.lost_slot;
+                row["cand_precommit_track_id"] = ev.cand_precommit_track_id;
+                row["lost_precommit_track_id"] = ev.lost_precommit_track_id;
+                row["cand_instance_uid"] = ev.cand_instance_uid;
+                row["lost_instance_uid"] = ev.lost_instance_uid;
+                row["la"] = ev.la;
+                row["bridge_at"] = ev.bridge_at;
+                row["cand_ring_length"] = ev.cand_ring_length;
+                row["lost_ring_length"] = ev.lost_ring_length;
+                row["ema_lost"] = scalar(ev.ema_lost);
+                row["ema_cand"] = scalar(ev.ema_cand);
+                row["height_ratio"] = scalar(ev.height_ratio);
+                row["height_verdict"] = static_cast<int>(ev.height_verdict);
+                row["speed"] = scalar(ev.speed);
+                row["speed_verdict"] = static_cast<int>(ev.speed_verdict);
+                row["spatial_distance"] = scalar(ev.spatial_distance);
+                row["spatial_verdict"] = static_cast<int>(ev.spatial_verdict);
+                row["lost_anchor_x"] = scalar(ev.lost_anchor_x);
+                row["lost_anchor_y"] = scalar(ev.lost_anchor_y);
+                row["cand_anchor_x"] = scalar(ev.cand_anchor_x);
+                row["cand_anchor_y"] = scalar(ev.cand_anchor_y);
+                row["lost_velocity_x"] = scalar(ev.lost_velocity_x);
+                row["lost_velocity_y"] = scalar(ev.lost_velocity_y);
+                row["cand_velocity_x"] = scalar(ev.cand_velocity_x);
+                row["cand_velocity_y"] = scalar(ev.cand_velocity_y);
+                row["h_ref"] = scalar(ev.h_ref);
+                row["fwd_r"] = scalar(ev.fwd_r);
+                row["bwd_r"] = scalar(ev.bwd_r);
+                row["dist_h"] = scalar(ev.dist_h);
+                row["s_lost"] = scalar(ev.s_lost);
+                row["w"] = scalar(ev.w);
+                row["direction_cosine"] = scalar(ev.direction_cosine);
+                row["directional_alpha"] = scalar(ev.directional_alpha);
+                row["directional_cross_bdist"] = scalar(ev.directional_cross_bdist);
+                row["bdist_before_direction"] = scalar(ev.bdist_before_direction);
+                row["bdist_after_direction"] = scalar(ev.bdist_after_direction);
+                row["cutoff_verdict"] = static_cast<int>(ev.cutoff_verdict);
+                row["occupancy_verdict"] = static_cast<int>(ev.occupancy_verdict);
+                row["occupancy_coverage"] = scalar(ev.occupancy_coverage);
+                row["appearance_verdict"] = static_cast<int>(ev.appearance_verdict);
+                row["appearance_cosine"] = scalar(ev.appearance_cosine);
+                row["portable_tail_verdict"] = static_cast<int>(ev.portable_tail_verdict);
+                row["portable_tail_mask"] = ev.portable_tail_mask;
+                row["final_pair_eligible"] = static_cast<int>(ev.final_pair_eligible);
+                row["reject_reason"] = static_cast<int>(ev.reject_reason);
+                pairs.append(std::move(row));
+            }
+            py::list candidates;
+            for (const H0BridgeCandidateRecord& ev : capture.candidate_records) {
+                py::dict row;
+                row["schema_version"] = ev.schema_version;
+                row["frame"] = ev.frame;
+                row["cand_slot"] = ev.cand_slot;
+                row["cand_precommit_track_id"] = ev.cand_precommit_track_id;
+                row["cand_instance_uid"] = ev.cand_instance_uid;
+                row["structural_competitors"] = ev.structural_competitors;
+                row["pre_score_passes"] = ev.pre_score_passes;
+                row["final_pair_eligible_count"] = ev.final_pair_eligible_count;
+                row["best_lost_slot"] = ev.best_lost_slot;
+                row["second_lost_slot"] = ev.second_lost_slot;
+                row["best_lost_precommit_track_id"] = ev.best_lost_precommit_track_id;
+                row["second_lost_precommit_track_id"] = ev.second_lost_precommit_track_id;
+                row["best_lost_instance_uid"] = ev.best_lost_instance_uid;
+                row["second_lost_instance_uid"] = ev.second_lost_instance_uid;
+                row["best_bdist"] = scalar(ev.best_bdist);
+                row["second_best_bdist"] = scalar(ev.second_best_bdist);
+                row["margin"] = scalar(ev.margin);
+                row["no_second_competitor"] = static_cast<int>(ev.no_second_competitor);
+                row["margin_verdict"] = static_cast<int>(ev.margin_verdict);
+                row["proposal_emitted"] = static_cast<int>(ev.proposal_emitted);
+                row["proposal_reject_reason"] = static_cast<int>(ev.proposal_reject_reason);
+                row["candidate_status"] = static_cast<int>(ev.candidate_status);
+                candidates.append(std::move(row));
+            }
+            py::list claims;
+            for (const H0BridgeClaimRecord& ev : capture.claim_records) {
+                py::dict row;
+                row["schema_version"] = ev.schema_version;
+                row["frame"] = ev.frame;
+                row["proposing_cand_slot"] = ev.proposing_cand_slot;
+                row["proposed_lost_slot"] = ev.proposed_lost_slot;
+                row["proposing_cand_precommit_track_id"] = ev.proposing_cand_precommit_track_id;
+                row["proposed_lost_precommit_track_id"] = ev.proposed_lost_precommit_track_id;
+                row["proposing_cand_instance_uid"] = ev.proposing_cand_instance_uid;
+                row["proposed_lost_instance_uid"] = ev.proposed_lost_instance_uid;
+                row["detection_score"] = scalar(ev.detection_score);
+                row["sq"] = ev.sq;
+                row["packed_atomic_key"] = ev.packed_atomic_key;
+                row["candidate_index_component"] = ev.candidate_index_component;
+                row["winning_cand_slot"] = ev.winning_cand_slot;
+                row["winning_cand_precommit_track_id"] = ev.winning_cand_precommit_track_id;
+                row["winning_cand_instance_uid"] = ev.winning_cand_instance_uid;
+                row["claim_won"] = static_cast<int>(ev.claim_won);
+                claims.append(std::move(row));
+            }
+            py::list commits;
+            for (const H0BridgeCommitRecord& ev : capture.commit_records) {
+                py::dict row;
+                row["schema_version"] = ev.schema_version;
+                row["frame"] = ev.frame;
+                row["cand_slot"] = ev.cand_slot;
+                row["lost_slot"] = ev.lost_slot;
+                row["cand_precommit_track_id"] = ev.cand_precommit_track_id;
+                row["lost_precommit_track_id"] = ev.lost_precommit_track_id;
+                row["cand_postcommit_track_id"] = ev.cand_postcommit_track_id;
+                row["lost_postcommit_track_id"] = ev.lost_postcommit_track_id;
+                row["cand_instance_uid"] = ev.cand_instance_uid;
+                row["lost_instance_uid"] = ev.lost_instance_uid;
+                row["cand_active_before"] = static_cast<int>(ev.cand_active_before);
+                row["cand_active_after"] = static_cast<int>(ev.cand_active_after);
+                row["lost_active_before"] = static_cast<int>(ev.lost_active_before);
+                row["lost_active_after"] = static_cast<int>(ev.lost_active_after);
+                row["commit_executed"] = static_cast<int>(ev.commit_executed);
+                row["lost_slot_deactivated"] = static_cast<int>(ev.lost_slot_deactivated);
+                commits.append(std::move(row));
+            }
+            py::dict result;
+            result["pair_records"] = std::move(pairs);
+            result["candidate_records"] = std::move(candidates);
+            result["claim_records"] = std::move(claims);
+            result["commit_records"] = std::move(commits);
+            result["total_pair_records"] = capture.total_pair_records;
+            result["total_candidate_records"] = capture.total_candidate_records;
+            result["total_claim_records"] = capture.total_claim_records;
+            result["total_commit_records"] = capture.total_commit_records;
+            result["overflow_pair_records"] = capture.overflow_pair_records;
+            result["overflow_candidate_records"] = capture.overflow_candidate_records;
+            result["overflow_claim_records"] = capture.overflow_claim_records;
+            result["overflow_commit_records"] = capture.overflow_commit_records;
+            result["identity_uid_wrap_events"] = capture.identity_uid_wrap_events;
+            return result;
+        }, "Drain H0 pair, candidate, claim, and commit records without reordering them.")
         .def("set_oao_params", &GPUByteTracker::set_oao_params,
              py::arg("tau"), py::arg("contest_thresh") = -1.0f, py::arg("score_w") = -1.0f,
              py::arg("occ_mode") = 0, py::arg("crowd_radius") = 0.0f, py::arg("height_gate") = 0.0f,

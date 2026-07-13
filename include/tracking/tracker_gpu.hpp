@@ -92,6 +92,192 @@ struct BridgeFidelityCapture {
     int overflow_events = 0;
 };
 
+// H0 v1 records the native bridge policy as four separate streams.  These POD
+// structures are the capture ABI: CUDA writes them directly and the host only
+// drains/serializes their fields.  They never participate in bridge selection.
+enum H0ScalarStatus : uint8_t {
+    H0_NOT_COMPUTED = 0,
+    H0_COMPUTED_FINITE = 1,
+    H0_COMPUTED_POS_INF = 2,
+    H0_COMPUTED_NEG_INF = 3,
+    H0_COMPUTED_NAN = 4,
+};
+
+struct H0Float32 {
+    uint32_t bits = 0;
+    uint8_t status = H0_NOT_COMPUTED;
+    uint8_t reserved[3] = {};
+};
+
+enum H0Verdict : uint8_t {
+    H0_NOT_EVALUATED = 0,
+    H0_PASS = 1,
+    H0_REJECT = 2,
+    H0_DISABLED = 3,
+};
+
+enum H0PairRejectReason : uint8_t {
+    H0_PAIR_REJECT_NONE = 0,
+    H0_PAIR_REJECT_HEIGHT = 1,
+    H0_PAIR_REJECT_SPEED = 2,
+    H0_PAIR_REJECT_SPATIAL = 3,
+    H0_PAIR_REJECT_CUTOFF = 4,
+    H0_PAIR_REJECT_OCCUPANCY = 5,
+    H0_PAIR_REJECT_APPEARANCE = 6,
+    H0_PAIR_REJECT_PORTABLE_TAIL = 7,
+};
+
+enum H0CandidateStatus : uint8_t {
+    H0_CAND_NO_STRUCTURAL_COMPETITORS = 0,
+    H0_CAND_ALL_REJECTED_PRE_SCORE = 1,
+    H0_CAND_ALL_REJECTED_CUTOFF_OR_VETO = 2,
+    H0_CAND_MARGIN_REJECTED = 3,
+    H0_CAND_PROPOSAL_EMITTED = 4,
+};
+
+enum H0ProposalRejectReason : uint8_t {
+    H0_PROPOSAL_REJECT_NONE = 0,
+    H0_PROPOSAL_REJECT_NO_COMPETITOR = 1,
+    H0_PROPOSAL_REJECT_MARGIN = 2,
+};
+
+// Stable key: (frame, cand_slot, cand_instance_uid, lost_slot,
+// lost_instance_uid).  The sequence is supplied by the caller at drain time;
+// a tracker instance has no dataset-sequence identity.
+struct H0BridgePairRecord {
+    uint32_t schema_version = 1;
+    int frame = 0;
+    int cand_slot = -1;
+    int lost_slot = -1;
+    int cand_precommit_track_id = -1;
+    int lost_precommit_track_id = -1;
+    uint64_t cand_instance_uid = 0;
+    uint64_t lost_instance_uid = 0;
+    int la = 0;
+    int bridge_at = 0;
+    int cand_ring_length = 0;
+    int lost_ring_length = 0;
+    H0Float32 ema_lost;
+    H0Float32 ema_cand;
+    H0Float32 height_ratio;
+    uint8_t height_verdict = H0_NOT_EVALUATED;
+    H0Float32 speed;
+    uint8_t speed_verdict = H0_NOT_EVALUATED;
+    H0Float32 spatial_distance;
+    uint8_t spatial_verdict = H0_NOT_EVALUATED;
+    H0Float32 lost_anchor_x;
+    H0Float32 lost_anchor_y;
+    H0Float32 cand_anchor_x;
+    H0Float32 cand_anchor_y;
+    H0Float32 lost_velocity_x;
+    H0Float32 lost_velocity_y;
+    H0Float32 cand_velocity_x;
+    H0Float32 cand_velocity_y;
+    H0Float32 h_ref;
+    H0Float32 fwd_r;
+    H0Float32 bwd_r;
+    H0Float32 dist_h;
+    H0Float32 s_lost;
+    H0Float32 w;
+    H0Float32 direction_cosine;
+    H0Float32 directional_alpha;
+    H0Float32 directional_cross_bdist;
+    H0Float32 bdist_before_direction;
+    H0Float32 bdist_after_direction;
+    uint8_t cutoff_verdict = H0_NOT_EVALUATED;
+    uint8_t occupancy_verdict = H0_NOT_EVALUATED;
+    H0Float32 occupancy_coverage;
+    uint8_t appearance_verdict = H0_NOT_EVALUATED;
+    H0Float32 appearance_cosine;
+    uint8_t portable_tail_verdict = H0_NOT_EVALUATED;
+    int portable_tail_mask = 0;
+    uint8_t final_pair_eligible = H0_NOT_EVALUATED;
+    uint8_t reject_reason = H0_PAIR_REJECT_NONE;
+};
+
+// Stable key: (frame, cand_slot, cand_instance_uid).
+struct H0BridgeCandidateRecord {
+    uint32_t schema_version = 1;
+    int frame = 0;
+    int cand_slot = -1;
+    int cand_precommit_track_id = -1;
+    uint64_t cand_instance_uid = 0;
+    int structural_competitors = 0;
+    int pre_score_passes = 0;
+    int final_pair_eligible_count = 0;
+    int best_lost_slot = -1;
+    int second_lost_slot = -1;
+    int best_lost_precommit_track_id = -1;
+    int second_lost_precommit_track_id = -1;
+    uint64_t best_lost_instance_uid = 0;
+    uint64_t second_lost_instance_uid = 0;
+    H0Float32 best_bdist;
+    H0Float32 second_best_bdist;
+    H0Float32 margin;
+    uint8_t no_second_competitor = 0;
+    uint8_t margin_verdict = H0_NOT_EVALUATED;
+    uint8_t proposal_emitted = H0_NOT_EVALUATED;
+    uint8_t proposal_reject_reason = H0_PROPOSAL_REJECT_NONE;
+    uint8_t candidate_status = H0_CAND_NO_STRUCTURAL_COMPETITORS;
+};
+
+// Stable key: (frame, proposing_cand_slot, proposing_cand_instance_uid,
+// proposed_lost_slot, proposed_lost_instance_uid).
+struct H0BridgeClaimRecord {
+    uint32_t schema_version = 1;
+    int frame = 0;
+    int proposing_cand_slot = -1;
+    int proposed_lost_slot = -1;
+    int proposing_cand_precommit_track_id = -1;
+    int proposed_lost_precommit_track_id = -1;
+    uint64_t proposing_cand_instance_uid = 0;
+    uint64_t proposed_lost_instance_uid = 0;
+    H0Float32 detection_score;
+    int sq = 0;
+    int packed_atomic_key = 0;
+    int candidate_index_component = -1;
+    int winning_cand_slot = -1;
+    int winning_cand_precommit_track_id = -1;
+    uint64_t winning_cand_instance_uid = 0;
+    uint8_t claim_won = H0_NOT_EVALUATED;
+};
+
+// Stable key is the winning H0BridgeClaimRecord key.
+struct H0BridgeCommitRecord {
+    uint32_t schema_version = 1;
+    int frame = 0;
+    int cand_slot = -1;
+    int lost_slot = -1;
+    int cand_precommit_track_id = -1;
+    int lost_precommit_track_id = -1;
+    int cand_postcommit_track_id = -1;
+    int lost_postcommit_track_id = -1;
+    uint64_t cand_instance_uid = 0;
+    uint64_t lost_instance_uid = 0;
+    uint8_t cand_active_before = 0;
+    uint8_t cand_active_after = 0;
+    uint8_t lost_active_before = 0;
+    uint8_t lost_active_after = 0;
+    uint8_t commit_executed = H0_NOT_EVALUATED;
+    uint8_t lost_slot_deactivated = H0_NOT_EVALUATED;
+};
+
+struct H0BridgeDecisionTraceCapture {
+    std::vector<H0BridgePairRecord> pair_records;
+    std::vector<H0BridgeCandidateRecord> candidate_records;
+    std::vector<H0BridgeClaimRecord> claim_records;
+    std::vector<H0BridgeCommitRecord> commit_records;
+    int total_pair_records = 0;
+    int total_candidate_records = 0;
+    int total_claim_records = 0;
+    int total_commit_records = 0;
+    int overflow_pair_records = 0;
+    int overflow_candidate_records = 0;
+    int overflow_claim_records = 0;
+    int overflow_commit_records = 0;
+    int identity_uid_wrap_events = 0;
+};
+
 struct UnifiedScoreParams {
     float w_sim_base = 0.0f;
     float w_iou_base = 0.0f;
@@ -185,6 +371,21 @@ public:
     void set_research_bridge_fidelity_audit(bool enabled, int capacity = 65536);
     void clear_research_bridge_fidelity_audit();
     BridgeFidelityCapture drain_research_bridge_fidelity_events();
+
+    // H0 full decision-path capture.  This is default-off observational
+    // instrumentation for the real bridge commit path; it is not shadow mode.
+    void set_research_h0_bridge_trace(bool enabled,
+                                      int pair_capacity = 65536,
+                                      int candidate_capacity = 16384,
+                                      int claim_capacity = 16384,
+                                      int commit_capacity = 16384);
+    // Bind the caller-owned, stable device scalar containing the actual
+    // evaluation-frame ID.  H0 kernels read this scalar at replay time, so a
+    // CUDA graph never freezes a host-side frame argument.  The caller must
+    // retain the allocation until H0 tracing is disabled.
+    void bind_research_h0_bridge_trace_frame_device(const int* frame_ptr);
+    void clear_research_h0_bridge_trace();
+    H0BridgeDecisionTraceCapture drain_research_h0_bridge_trace();
 
     /**
      * @brief Issue #112 shadow bridge: propose (and capture) but never commit.

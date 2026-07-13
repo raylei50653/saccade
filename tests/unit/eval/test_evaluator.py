@@ -141,6 +141,88 @@ def test_nms_graph_retains_captured_count_buffer(monkeypatch):
     assert graph.replay_calls == 1
 
 
+def test_run_track_routes_evaluation_frame_to_graph_and_eager_tracker() -> None:
+    """H0's device scalar must receive the evaluator's actual frame in both paths."""
+
+    def _time_stage(_totals, _stage, callback, *, sync_cuda):
+        assert sync_cuda is False
+        return callback(), 0.0
+
+    common = dict(
+        seq="MOT17-04-SDP",
+        current_frame_id=47,
+        seq_stage_totals={},
+        time_stage=_time_stage,
+        contract=SimpleNamespace(fpn_reid_mode=False, feature_dim=0),
+        extractor=None,
+    )
+    boxes = torch.zeros((1, 4), dtype=torch.float32)
+    scores = torch.ones((1,), dtype=torch.float32)
+    classes = torch.zeros((1,), dtype=torch.int32)
+    gmc = torch.eye(2, 3, dtype=torch.float32)
+    graph_result = {"graph": True}
+    graph = MagicMock()
+    graph.replay.return_value = graph_result
+    graph_state = SimpleNamespace(
+        **common,
+        gtu=graph,
+        detector=SimpleNamespace(),
+        cfg=SimpleNamespace(),
+    )
+
+    assert (
+        stages_mod._run_track(
+            graph_state,
+            fused_boxes=boxes,
+            fused_scores=scores,
+            fused_classes=classes,
+            gmc_warp=gmc,
+            embeddings=None,
+            mid_thresh_scale=0.9,
+            tracker_result_buffers={"unused": True},
+            synchronize=False,
+        )
+        is graph_result
+    )
+    graph.copy_inputs.assert_called_once_with(
+        boxes, scores, classes, gmc=gmc, frame_id=47
+    )
+
+    eager_tracker = MagicMock()
+    eager_buffers = {"eager": True}
+    eager_state = SimpleNamespace(
+        **common,
+        gtu=None,
+        detector=SimpleNamespace(tracker=eager_tracker),
+        cfg=SimpleNamespace(use_tracker_reid=False),
+    )
+
+    assert (
+        stages_mod._run_track(
+            eager_state,
+            fused_boxes=boxes,
+            fused_scores=scores,
+            fused_classes=classes,
+            gmc_warp=gmc,
+            embeddings=None,
+            mid_thresh_scale=0.9,
+            tracker_result_buffers=eager_buffers,
+            synchronize=False,
+        )
+        is eager_buffers
+    )
+    eager_tracker.update_into.assert_called_once_with(
+        boxes,
+        scores,
+        classes,
+        eager_buffers,
+        embeddings=None,
+        gmc=gmc,
+        mid_thresh_scale=0.9,
+        h0_frame_id=47,
+    )
+
+
 # Test _record_profile_scope
 def test_record_profile_scope():
     with _record_profile_scope("test_scope"):
