@@ -176,7 +176,10 @@ derived_from: §4.2 substrate
 last_reviewed_at: 2026-07-12
 ```
 
-**S0 宣告（sealed / active；仍不是 accepted state）：** [safe_domain_runtime_transfer_declaration](../../modules/semantic/research/safe_domain_runtime_transfer_declaration_20260712.md) · [thread](../threads/runtime_faithful_safe_domain_20260712.md)
+**Stable limit:** runtime-coordinate transfer 尚未被接受；任何消費此 offline state
+的 closure solve 仍 inadmissible。執行 authority 與 lifecycle 只見
+[declaration](../../modules/semantic/research/safe_domain_runtime_transfer_declaration_20260712.md) /
+[thread](../threads/runtime_faithful_safe_domain_20260712.md)，不在 registry 鏡射。
 
 ### `gate.safe_region.region_asset_pack`
 

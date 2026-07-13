@@ -183,13 +183,12 @@ frontmatter、搬移與索引要求。
 
 | Thread | Work class / WIP role | Current concrete work / Intent | Owner |
 |:--|:--|:--|:--|
-| *(none)* | — | — | — |
+| [runtime_faithful_safe_domain_20260712.md](runtime_faithful_safe_domain_20260712.md) | mainline-study · **non-WIP** | Amendment 1 replaces V5's invalid event-as-track CP construction with a non-statistical adversarial coverage gate; awaiting a new reviewed head and `SEALED` record | semantic |
 
 ## Active threads
 
 | Thread | Work class / WIP role | Current concrete work | Owner |
 |:--|:--|:--|:--|
-| [runtime_faithful_safe_domain_20260712.md](runtime_faithful_safe_domain_20260712.md) | mainline-study · **sole-active** | **Only:** execute sealed S0 §§ 3–7, emit the evidence packet and terminal, then stop for owner review; no closure solve or production change | semantic |
 | [gap_conditioned_probabilistic_motion_probe_20260711.md](gap_conditioned_probabilistic_motion_probe_20260711.md) | engineering follow-up · **non-WIP** | **Only:** D0 / #112 runtime CUDA capture；Phase B `V5` is already recorded and authorizes no new semantic mainline work | semantic |
 | [association_recovery_registry_20260709.md](association_recovery_registry_20260709.md) | maintenance · **non-WIP** | Keep R/H ownership and path-health registry current | semantic |
 | [doc_structure_o15_followup_20260709.md](doc_structure_o15_followup_20260709.md) | governance · **non-WIP** | Pay down research-index debt; optional structure checks remain non-blocking | ownership |
