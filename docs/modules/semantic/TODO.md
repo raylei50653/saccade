@@ -9,7 +9,7 @@
 
 ## Proposed（non-WIP）
 
-- H0 full bridge-decision trace capture（pending declaration repair under contract §20.2/§20.8, then owner seal；不得執行或開下游 claim）→ [declaration](research/headline_bridge_full_decision_capture_declaration_20260713.md)
+- H0 full bridge-decision trace capture（Amendment 4 已滿足 declaration repair；sole pending gate 為完成 pre-seal freeze artifact 後的 owner seal，未 seal 前不得執行或開下游 claim）→ [declaration](research/headline_bridge_full_decision_capture_declaration_20260713.md)
 
 ## Parked
 

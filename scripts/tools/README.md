@@ -186,6 +186,7 @@ These have known repo references outside this README.
 | `check_api_layers.py` | API layering audit | `scripts/pre_push.sh` |
 | `check_doc_links.py` | Relative markdown link checker | `scripts/pre_push.sh` |
 | `check_gpu_contract.py` | GPU-first contract checker | `scripts/pre_push.sh` and docs |
+| `check_h0_bridge_decision_trace_contract.py` | Static H0 pre-seal field/sidecar coverage checker | H0 full-decision capture declaration |
 | `check_continuous_decimal_hash.py` | In-process ID-free final MOT decimal consistency probe | Continuous-run determinism primitive |
 | `check_decimal_chain_routine.py` | Fixed continuous chain `A,A,B,A,B,B` sentinel | Routine pre-push regression guard |
 | `check_decimal_matrix_2x2.py` | Forensic 2×2 order-contamination matrix | Post-failure directional diagnosis |

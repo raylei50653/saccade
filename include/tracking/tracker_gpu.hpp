@@ -262,11 +262,48 @@ struct H0BridgeCommitRecord {
     uint8_t lost_slot_deactivated = H0_NOT_EVALUATED;
 };
 
+// These keys are emitted at native decision points independently of the four
+// record append paths. They make a dropped record observable to the host
+// verifier rather than letting the packet define its own completeness domain.
+struct H0BridgeCandidateKey {
+    int frame = 0;
+    int cand_slot = -1;
+    uint64_t cand_instance_uid = 0;
+};
+
+struct H0BridgePairKey {
+    int frame = 0;
+    int cand_slot = -1;
+    int lost_slot = -1;
+    uint64_t cand_instance_uid = 0;
+    uint64_t lost_instance_uid = 0;
+};
+
+struct H0BridgeClaimKey {
+    int frame = 0;
+    int proposing_cand_slot = -1;
+    int proposed_lost_slot = -1;
+    uint64_t proposing_cand_instance_uid = 0;
+    uint64_t proposed_lost_instance_uid = 0;
+};
+
 struct H0BridgeDecisionTraceCapture {
+    // An unarmed or partially allocated trace must remain distinguishable from
+    // a valid run with zero data-dependent events. The host exporter rejects
+    // trace_armed == 0 rather than treating this default capture as complete.
+    uint8_t trace_armed = 0;
+    int processed_frame_count = 0;
+    int bridge_attempt_count = 0;
+    int bridge_commit_count = 0;
     std::vector<H0BridgePairRecord> pair_records;
     std::vector<H0BridgeCandidateRecord> candidate_records;
     std::vector<H0BridgeClaimRecord> claim_records;
     std::vector<H0BridgeCommitRecord> commit_records;
+    std::vector<H0BridgeCandidateKey> native_candidate_keys;
+    std::vector<H0BridgePairKey> native_pair_keys;
+    std::vector<H0BridgeClaimKey> native_proposal_keys;
+    std::vector<H0BridgeClaimKey> native_claim_winner_keys;
+    std::vector<H0BridgePairKey> native_commit_keys;
     int total_pair_records = 0;
     int total_candidate_records = 0;
     int total_claim_records = 0;
@@ -275,6 +312,16 @@ struct H0BridgeDecisionTraceCapture {
     int overflow_candidate_records = 0;
     int overflow_claim_records = 0;
     int overflow_commit_records = 0;
+    int total_native_candidate_keys = 0;
+    int total_native_pair_keys = 0;
+    int total_native_proposal_keys = 0;
+    int total_native_claim_winner_keys = 0;
+    int total_native_commit_keys = 0;
+    int overflow_native_candidate_keys = 0;
+    int overflow_native_pair_keys = 0;
+    int overflow_native_proposal_keys = 0;
+    int overflow_native_claim_winner_keys = 0;
+    int overflow_native_commit_keys = 0;
     int identity_uid_wrap_events = 0;
 };
 

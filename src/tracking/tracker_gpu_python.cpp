@@ -3922,11 +3922,54 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
                 row["lost_slot_deactivated"] = static_cast<int>(ev.lost_slot_deactivated);
                 commits.append(std::move(row));
             }
+            py::list native_candidates;
+            for (const H0BridgeCandidateKey& ev : capture.native_candidate_keys) {
+                py::dict row;
+                row["frame"] = ev.frame;
+                row["cand_slot"] = ev.cand_slot;
+                row["cand_instance_uid"] = ev.cand_instance_uid;
+                native_candidates.append(std::move(row));
+            }
+            auto append_pair_keys = [](const std::vector<H0BridgePairKey>& keys) {
+                py::list rows;
+                for (const H0BridgePairKey& ev : keys) {
+                    py::dict row;
+                    row["frame"] = ev.frame;
+                    row["cand_slot"] = ev.cand_slot;
+                    row["lost_slot"] = ev.lost_slot;
+                    row["cand_instance_uid"] = ev.cand_instance_uid;
+                    row["lost_instance_uid"] = ev.lost_instance_uid;
+                    rows.append(std::move(row));
+                }
+                return rows;
+            };
+            auto append_claim_keys = [](const std::vector<H0BridgeClaimKey>& keys) {
+                py::list rows;
+                for (const H0BridgeClaimKey& ev : keys) {
+                    py::dict row;
+                    row["frame"] = ev.frame;
+                    row["proposing_cand_slot"] = ev.proposing_cand_slot;
+                    row["proposed_lost_slot"] = ev.proposed_lost_slot;
+                    row["proposing_cand_instance_uid"] = ev.proposing_cand_instance_uid;
+                    row["proposed_lost_instance_uid"] = ev.proposed_lost_instance_uid;
+                    rows.append(std::move(row));
+                }
+                return rows;
+            };
             py::dict result;
+            result["trace_armed"] = capture.trace_armed != 0;
+            result["processed_frame_count"] = capture.processed_frame_count;
+            result["bridge_attempt_count"] = capture.bridge_attempt_count;
+            result["bridge_commit_count"] = capture.bridge_commit_count;
             result["pair_records"] = std::move(pairs);
             result["candidate_records"] = std::move(candidates);
             result["claim_records"] = std::move(claims);
             result["commit_records"] = std::move(commits);
+            result["native_candidate_keys"] = std::move(native_candidates);
+            result["native_pair_keys"] = append_pair_keys(capture.native_pair_keys);
+            result["native_proposal_keys"] = append_claim_keys(capture.native_proposal_keys);
+            result["native_claim_winner_keys"] = append_claim_keys(capture.native_claim_winner_keys);
+            result["native_commit_keys"] = append_pair_keys(capture.native_commit_keys);
             result["total_pair_records"] = capture.total_pair_records;
             result["total_candidate_records"] = capture.total_candidate_records;
             result["total_claim_records"] = capture.total_claim_records;
@@ -3935,9 +3978,19 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
             result["overflow_candidate_records"] = capture.overflow_candidate_records;
             result["overflow_claim_records"] = capture.overflow_claim_records;
             result["overflow_commit_records"] = capture.overflow_commit_records;
+            result["total_native_candidate_keys"] = capture.total_native_candidate_keys;
+            result["total_native_pair_keys"] = capture.total_native_pair_keys;
+            result["total_native_proposal_keys"] = capture.total_native_proposal_keys;
+            result["total_native_claim_winner_keys"] = capture.total_native_claim_winner_keys;
+            result["total_native_commit_keys"] = capture.total_native_commit_keys;
+            result["overflow_native_candidate_keys"] = capture.overflow_native_candidate_keys;
+            result["overflow_native_pair_keys"] = capture.overflow_native_pair_keys;
+            result["overflow_native_proposal_keys"] = capture.overflow_native_proposal_keys;
+            result["overflow_native_claim_winner_keys"] = capture.overflow_native_claim_winner_keys;
+            result["overflow_native_commit_keys"] = capture.overflow_native_commit_keys;
             result["identity_uid_wrap_events"] = capture.identity_uid_wrap_events;
             return result;
-        }, "Drain H0 pair, candidate, claim, and commit records without reordering them.")
+        }, "Drain H0 records and the independent native decision-key universe without reordering.")
         .def("set_oao_params", &GPUByteTracker::set_oao_params,
              py::arg("tau"), py::arg("contest_thresh") = -1.0f, py::arg("score_w") = -1.0f,
              py::arg("occ_mode") = 0, py::arg("crowd_radius") = 0.0f, py::arg("height_gate") = 0.0f,

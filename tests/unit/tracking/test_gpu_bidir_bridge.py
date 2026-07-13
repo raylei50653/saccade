@@ -166,7 +166,12 @@ def _run_sequence(
     if fidelity_audit:
         capture = tracker.drain_research_bridge_fidelity_events(seq="bridge_fixture")
     if h0_trace:
-        capture = tracker.drain_research_h0_bridge_trace(seq="bridge_fixture")
+        capture = tracker.drain_research_h0_bridge_trace(
+            seq="bridge_fixture",
+            capture_phase="phase_a",
+            require_candidate_exposure=True,
+            require_commit_exposure=True,
+        )
     return outputs, tracker.get_relink_debug(), capture
 
 
@@ -264,6 +269,10 @@ def test_h0_trace_observes_real_commit_without_changing_bridge_output() -> None:
     assert captured_debug == baseline_debug
     assert trace is not None
     assert trace["complete"] is True
+    assert trace["trace_armed"] is True
+    assert int(trace["processed_frame_count"]) > 0
+    assert int(trace["bridge_attempt_count"]) == len(trace["native_candidate_keys"])
+    assert int(trace["bridge_commit_count"]) == len(trace["native_commit_keys"])
     assert trace["stream_overflow"] == {
         "pair_records": 0,
         "candidate_records": 0,
@@ -275,7 +284,7 @@ def test_h0_trace_observes_real_commit_without_changing_bridge_output() -> None:
     commit = trace["commit_records"][0]
     assert commit["cand_postcommit_track_id"] == commit["lost_precommit_track_id"]
     assert (commit["lost_active_before"], commit["lost_active_after"]) == (1, 0)
-    assert verify_capture(trace)["replay"] == "full_commit_decision_trace_v1"
+    assert verify_capture(trace)["replay"] == "full_commit_decision_trace_v2"
 
     repeated, repeated_debug, repeated_trace = _run_sequence(
         bidirectional=True, h0_trace=True
@@ -284,6 +293,18 @@ def test_h0_trace_observes_real_commit_without_changing_bridge_output() -> None:
     assert repeated_debug == baseline_debug
     assert repeated_trace is not None
     assert semantic_digest(repeated_trace) == semantic_digest(trace)
+
+
+def test_h0_unarmed_native_drain_is_rejected_before_envelope_creation() -> None:
+    tracker = _tracker(bidirectional=True)
+
+    with pytest.raises(RuntimeError, match="not armed"):
+        tracker.drain_research_h0_bridge_trace(
+            seq="bridge_fixture",
+            capture_phase="phase_a",
+            require_candidate_exposure=True,
+            require_commit_exposure=False,
+        )
 
 
 def _run_h0_graph_sequence(
@@ -368,7 +389,12 @@ def _run_h0_graph_sequence(
         count = int(result["count"].item())
         outputs[frame_id] = result["ids"][:count].detach().cpu().tolist()
     trace = (
-        tracker.drain_research_h0_bridge_trace(seq="bridge_graph_fixture")
+        tracker.drain_research_h0_bridge_trace(
+            seq="bridge_graph_fixture",
+            capture_phase="phase_a",
+            require_candidate_exposure=True,
+            require_commit_exposure=True,
+        )
         if h0_trace
         else None
     )
@@ -382,7 +408,7 @@ def test_h0_trace_graph_replay_uses_evaluator_frame_input() -> None:
     assert eager_trace is not None
     assert graph_trace is not None
     assert graph_outputs == eager_outputs
-    assert verify_capture(graph_trace)["replay"] == "full_commit_decision_trace_v1"
+    assert verify_capture(graph_trace)["replay"] == "full_commit_decision_trace_v2"
     assert semantic_digest(graph_trace) == semantic_digest(eager_trace)
 
     # The two bridge events occur on distinct, evaluator-supplied MOT frames.

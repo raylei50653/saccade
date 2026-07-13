@@ -370,3 +370,419 @@ Only owner acceptance of `H0_FULL_COMMIT_CAPTURE_FAITHFUL` makes a separately de
 | Date | Reviewed head | Owner token | Transition |
 | --- | --- | --- | --- |
 | — | — | — | Draft only; execution prohibited |
+
+## Amendment 1 — §20.2 / §20.8 sealability repair (2026-07-13; pre-seal)
+
+This is an **append-only** correction to the draft declaration. It replaces
+only the three pending conditions named in §1 item 2: the missing typed
+\(\kappa\) declarations, the non-mechanical `H0_CAPTURE_PARTIAL` condition,
+and the missing no-packet execution terminal. It changes no policy-base input,
+observation point, physical stream, record ABI, stable key, identity contract,
+conservation equation, replay bar, or authorized scope. It is not an execution
+seal: the table above remains unsealed until an owner records a literal
+`SEALED` review at a reviewed descendant head.
+
+### A1. Required declaration block and typed \(\kappa\)
+
+```text
+Target decision layer   none (cross-layer substrate / observability work).
+Study intent            boundary diagnostic. It determines whether the frozen
+                        full native bridge-decision path can be observed and
+                        replayed without changing that path.
+Design objective        n/a. No policy, threshold, candidate, ranking, or
+                        production action is selected or evaluated.
+Selection rule          none. There are no competing candidates; the first
+                        applicable ordered terminal in A3 is the result.
+Validity gate           §2 provenance admission; A2 coverage admission;
+                        capture-on/off non-perturbation (§6); zero stream
+                        overflow, exact conservation (§5), and 100% replay.
+Stop condition          exactly three Phase-A coverage attempts at most;
+                        then one Phase-A capture only when A2 passes. Phase B
+                        is available only after every Phase-A bar passes.
+                        No retry, threshold sweep, policy change, or scope
+                        expansion follows a terminal.
+Output class            diagnostic result only. It cannot be promoted into a
+                        design candidate or a policy claim.
+Mainline transition     none / diagnostic-only. No H0 terminal occupies
+                        mainline cadence. Only owner acceptance of
+                        H0_FULL_COMMIT_CAPTURE_FAITHFUL makes a separately
+                        declared B1 study a candidate; it is not a handoff.
+```
+
+Every comparison below consumes the canonical records or artifacts named in
+this declaration, never final MOT output reconstructed offline. `exact` means
+equality of keys, enum/status tags, integer fields, and raw IEEE-754 binary32
+bits after the sealed canonical ordering. A scalar tagged `not_computed` is
+compared as that tag, not as a numeric zero.
+
+| Decidable unit | Quantification space | Comparison relation | Decision rule |
+| --- | --- | --- | --- |
+| Pair replay | Every `pair_record` key in the canonical Phase-A/B packet | Exact fieldwise equality between the native trace and independent replay, including the ordered gate/rejection result | Every record and gate agrees; any missing, extra, duplicate, or disagreeing pair is `H0_PACKET_INVALID`. |
+| Candidate replay | Every `candidate_record` key in the canonical packet | Exact fieldwise equality of native loop state, best/second construction, margin, and proposal result | Every candidate agrees; any mismatch is `H0_PACKET_INVALID`. |
+| Claim replay | Every `claim_record` key in the canonical packet | Exact fieldwise equality of proposal inputs, packed key, winner identity, and `claim_won` outcome | Every claim agrees; any mismatch is `H0_PACKET_INVALID`. |
+| Commit replay | Every `commit_record` key in the canonical packet | Exact fieldwise equality of winning claim identity, visible IDs, active-state transition, and commit result | Every commit agrees and satisfies §4.4; any mismatch is `H0_PACKET_INVALID`. |
+| Packet conservation | The four canonical streams as a single packet | Exact equality of the six §5 conservation equations and their keyed joins | All equations and joins hold with zero overflow and no identity collision; otherwise `H0_PACKET_INVALID`. |
+| Capture non-perturbation | A capture-off / capture-on pair using the same frozen input and resolved configuration | Byte equality of MOT output and final IDs; exact equality of bridge debug counters, proposal/commit counts, winners, and scheduling-/memory-visible policy state | Every listed comparison agrees; any difference is `H0_CAPTURE_PERTURBS_POLICY`. |
+| Coverage admission | The five required H0 components in A2, for each numbered coverage attempt | Exact equality of the sealed component set and the attempt's `h0_coverage_v1` Boolean map | All five values are `true` before capture; a remaining `false` after attempt 3 is `H0_CAPTURE_PARTIAL`. |
+| Execution completion | Each invoked coverage, capture, verification, or serialization phase | The controller's frozen result enum and required artifact set | A non-success controller result or a missing/unreadable required phase artifact is `H0_EXECUTION_INVALID`. |
+| Ordered terminal | One completed Phase-A or Phase-B attempt | First applicable predicate in A3, evaluated in order | Record exactly that terminal; no later terminal may be substituted. |
+
+### A2. Mechanical coverage budget for `H0_CAPTURE_PARTIAL`
+
+The required H0 component set is fixed as:
+
+```text
+track_instance_uid_v1
+pair_record
+candidate_record
+claim_record
+commit_record
+```
+
+Before any Phase-A capture, the sealed H0 controller writes one canonical
+`h0_coverage_v1` artifact for each numbered coverage attempt. It contains
+exactly the five names above as lexicographically ordered Boolean keys. A
+`true` value means the admitted instrumentation build contains the sealed
+writer and required field mapping for that component; it is a static capture
+capability assertion, not a count of data-dependent runtime events. Thus an
+otherwise valid sequence with zero commits does not by itself create a coverage
+gap.
+
+There are exactly three coverage attempts, `1`, `2`, and `3`. An attempt is
+counted only after its controller exits successfully and emits a parseable,
+complete `h0_coverage_v1` artifact. Between attempts, a repair may change only
+trace-owned code allowed by `h0_observational_diff_v1`; every repair must again
+pass the §2 provenance admission. No fourth attempt is permitted under this
+declaration.
+
+`H0_CAPTURE_PARTIAL` is mechanically selected only when attempts 1–3 all
+complete, attempts 1–2 did not admit all five components, and attempt 3 still
+has at least one `false` component. Its required terminal artifact is the three
+coverage maps plus the lexicographically ordered set of false component names.
+It produces no valid full-capture packet and forbids Phase B. This fixed
+predicate replaces the earlier judgment phrased as a stage being impossible to
+observe without changing policy semantics.
+
+### A3. Exhaustive ordered terminal partition
+
+For every controller invocation, the wall-clock deadline is 3,600 seconds from
+process launch, measured by a monotonic clock. Its result enum is exactly
+`success`, `build_failed`, `extension_load_failed`, `runner_nonzero`,
+`runner_timeout`, `serialization_failed`, `artifact_missing_or_unreadable`, or
+`unclassified_execution_failure`. The last value is mandatory for any
+no-artifact failure not covered by a preceding value, so a failure can never be
+left unmapped. A complete packet that is emitted but malformed is a packet
+validity failure, not a serialization success.
+
+The following order supersedes §7's draft list while preserving the meaning of
+its existing terminals:
+
+1. `H0_PROVENANCE_INVALID` — §2 provenance or projection admission fails.
+   **Transition: none / diagnostic-only.** Stop before coverage, capture, or
+   replay.
+2. `H0_EXECUTION_INVALID` — after provenance passes, a required controller
+   invocation has any non-`success` enum, exceeds its deadline, or fails to
+   emit the required complete phase artifact. This includes build failure,
+   runner crash/nonzero exit, and serialization failure that yields no complete
+   artifact. **Transition: none / diagnostic-only.** Stop; do not reinterpret
+   it as partial observability.
+3. `H0_CAPTURE_PERTURBS_POLICY` — the §6 capture-on/off comparison differs.
+   **Transition: none / diagnostic-only.** Stop before replay or Phase B.
+4. `H0_PACKET_INVALID` — a complete emitted packet has overflow, duplicate
+   key, identity collision, invalid scalar, canonical-digest mismatch, failed
+   conservation, or any pair/candidate/claim/commit replay disagreement.
+   **Transition: none / diagnostic-only.** Stop before Phase B.
+5. `H0_CAPTURE_PARTIAL` — only the exact A2 three-attempt predicate holds,
+   with terminals 1–4 false. **Transition: none / diagnostic-only.** Its
+   coverage artifacts are diagnostic only; Phase B is forbidden.
+6. `H0_FULL_COMMIT_CAPTURE_FAITHFUL` — Phase A and the frozen unlabelled
+   seven-sequence Phase B both complete with every preceding predicate false
+   and every §2, §5, §6, and A1 replay bar true. **Transition: none /
+   diagnostic-only.** It may be owner-accepted, after which a new B1
+   declaration is merely a candidate.
+
+Phase A may emit only terminals 1–5. Terminal 6 is unavailable until the
+seven-sequence Phase-B artifact exists. This amendment adds no policy evidence,
+does not authorize Phase A or B, and leaves registry, ledger, preset, and
+production behavior unchanged.
+
+## Amendment 2 — pre-seal coverage and independent native completeness (2026-07-13; pre-seal)
+
+This is an **append-only** correction to Amendment 1. Its A2 three-attempt
+repair budget is not a sealable experiment: it lets an executor choose a new
+trace implementation between attempts, and its Boolean map has no frozen
+checker, field schema, or static evidence. Its packet-defined κ universes also
+cannot detect a native candidate or pair that was never appended. Amendment 2
+supersedes A1–A3 wherever they conflict. In particular, it retires
+`H0_CAPTURE_PARTIAL` as an H0 execution terminal and replaces A1's
+packet-derived pair/candidate/claim/commit quantification spaces.
+
+For avoidance of doubt, this also supersedes the old `H0_CAPTURE_PARTIAL`
+sentence in §4.5, the “Phase A may repair instrumentation” sentence in §6,
+and §7 item 4. Those retained passages are historical draft text only; the
+state effect, A2.1 progression, and A2.4 partition below are authoritative.
+
+### Amendment state effect
+
+- §1 item 2 is **satisfied by Amendment 2's declaration repair**. This is a
+  statement about the executable contract, not an admission that a future
+  instrumentation head has already passed it.
+- §1 item 3 — a literal owner `SEALED` review — is now the sole pending gate.
+  An owner may make that review only after the pre-seal freeze artifact in A2.2
+  is complete and all of its coverage components are `true`.
+- The §8 table remains unsealed. No pre-seal check, build, or dry run is a
+  Phase-A/B capture or evidence. The TODO pointer must name owner seal as the
+  sole pending gate and must retain the pre-seal-freeze condition on that gate.
+
+### A2.1. Engineering boundary and coverage component/field authority
+
+All instrumentation repair is **pre-seal engineering**, not a sealed Phase-A
+activity. It has no fixed number of edits or attempts and may not emit an H0
+terminal. The only permitted progression is:
+
+```text
+pre-seal engineering
+  -> choose one fixed instrumentation head
+  -> run the frozen static coverage checker and obtain all true
+  -> record the schema/checker/source hashes in one freeze artifact
+  -> owner reviews and writes SEALED for that exact head
+  -> sealed Phase A, then (only if admitted) Phase B; no repair is permitted
+```
+
+Thus neither implementer discretion nor an engineering failure can determine a
+research terminal. A failed or incomplete pre-seal checker result is simply
+`H0_PRESEAL_COVERAGE_INCOMPLETE`, an engineering status that prohibits seal and
+capture. It is not an H0 observability terminal and supplies no result. After
+seal, a missing checker artifact, altered hash, false coverage value, build
+failure, runner failure, timeout, unreadable artifact, or any attempted repair
+is `H0_EXECUTION_INVALID`; it never becomes `H0_CAPTURE_PARTIAL`.
+
+The frozen complete field authority is
+`scripts/tools/h0_bridge_decision_trace_schema_v2.json`. It fixes the exact
+field list (not merely stable keys) for each of `pair_records`,
+`candidate_records`, `claim_records`, and `commit_records`; it also fixes all
+five native-universe key schemas, their observed-stream relations, and this
+lexicographically ordered component set:
+
+```text
+track_instance_uid_v1
+pair_record
+candidate_record
+claim_record
+commit_record
+native_universe_v2
+```
+
+`scripts/tools/check_h0_bridge_decision_trace_contract.py` is the corresponding
+frozen checker. It verifies every declared C++ record field and Python drain
+field (except externally supplied `seq`), every CUDA writer/key-field mapping,
+each native writer marker, independent native-universe cursor path, and
+`track_instance_uid_v1` marker. It emits a
+canonical `h0_coverage_v2` object with the ordered Boolean map, its own SHA-256,
+the schema SHA-256, and SHA-256 values for the admitted H0 source files. The
+exporter consumes the same schema and rejects a missing or unexpected record
+field, so a coverage `true` is backed by static source evidence and by packet
+admission rather than a self-declaration.
+
+This amendment extends the §2 `h0_observational_diff_v1` offline-tool allowance
+only with these non-production inputs:
+
+```text
+scripts/tools/h0_bridge_decision_trace_schema_v2.json
+scripts/tools/check_h0_bridge_decision_trace_contract.py
+```
+
+They may read H0 source and trace-output schemas only; they may not be a build
+input or runtime-policy path. The checker and schema are subject to the same
+complete repository provenance and runtime-projection record as every other
+non-governance changed path.
+
+### A2.2. Freeze artifact and deterministic progression rule
+
+Before owner seal, `h0_preseal_freeze_v2` must canonically record:
+
+```text
+instrumentation_head and complete tree/projection evidence
+capture_schema_version = h0_bridge_decision_trace_v2
+the complete h0_coverage_v2 object, with every component true
+SHA-256 of h0_bridge_decision_trace_schema_v2.json
+SHA-256 of check_h0_bridge_decision_trace_contract.py
+the checker-recorded SHA-256 values of every admitted H0 source file
+the exact command line and tool/runtime identity that produced the check
+```
+
+The `instrumentation_head` named by the freeze artifact is the only head that
+an owner may seal. The owner review verifies that all listed hashes, the
+checker object, the resolved configuration, and §2 provenance agree. Capture
+does not begin otherwise. A head change, checker/schema change, source hash
+change, absent field, or false component returns the work to pre-seal
+engineering; it cannot be repaired within an execution or counted as a retry.
+
+`seq` is an external immutable sequence authority, inserted once by the frozen
+capture serializer into both the observed records and the native-universe keys.
+It comes from the frozen manifest, never a stream row or final MOT output.
+
+### A2.3. Native κ universes and completeness authority
+
+The four semantic record streams remain append-only observations. Amendment 2
+adds a separate, H0-owned **native-universe sidecar** with its own five buffers,
+capacities, cursors, and overflow counters. Its append paths are independent
+of all four record cursors: a dropped semantic record leaves its expected
+native key present, while an exhausted sidecar buffer fails closed by overflow.
+The sidecar is an expected-key authority, not a fifth semantic replay stream.
+
+| Decidable unit | Native quantification space and observation point | Comparison relation and decision rule |
+| --- | --- | --- |
+| Candidate completeness | Every native structural candidate instance entering the production candidate loop, keyed by `(seq, frame, cand_slot, cand_instance_uid)` before the candidate-record append | `native_candidate_keys` equals the canonical candidate-record key set exactly. Missing, extra, duplicate, or sidecar overflow is `H0_PACKET_INVALID`. |
+| Pair completeness | Every native candidate–lost structural evaluation after the production structural filters and before the pair-record append, keyed by `(seq, frame, cand_slot, cand_instance_uid, lost_slot, lost_instance_uid)` | `native_pair_keys` equals the canonical pair-record key set exactly. Any inequality or overflow is `H0_PACKET_INVALID`. |
+| Proposal completeness | Every native proposal that passes native best/second/margin selection, immediately before claim-record append and `atomicMax`, keyed by the claim key | `native_proposal_keys` equals the canonical claim-record key set exactly. Any inequality or overflow is `H0_PACKET_INVALID`. |
+| Claim-winner completeness | Every native winner after atomic-claim resolution and before the commit-record append or policy-state write, keyed by the winning claim key | `native_claim_winner_keys` equals precisely the canonical claim keys with `claim_won=pass`. Any inequality or overflow is `H0_PACKET_INVALID`. |
+| Commit completeness | Every native winner entering the actual commit branch immediately before the production `track_ids`/`active` writes, keyed by the commit key | `native_commit_keys` equals the canonical commit-record key set exactly. Any inequality or overflow is `H0_PACKET_INVALID`. |
+
+The native sidecar is therefore the κ quantification space. The packet does
+not enumerate its own universe. Only after these five exact expected-versus-
+observed comparisons pass does the existing fieldwise replay quantify over the
+observed record at every expected native key. The four replay units from A1
+(pair, candidate, claim, commit), §5 conservation, and §6 non-perturbation
+remain required, but their old phrase “every `*_record` key in the packet” is
+replaced by “every observed record at every expected native-universe key.”
+
+### A2.4. Sealed terminal partition replacement
+
+For a sealed invocation, the ordered partition is:
+
+1. `H0_PROVENANCE_INVALID` — any §2 or A2.2 provenance/freeze mismatch. Stop
+   before capture.
+2. `H0_EXECUTION_INVALID` — any non-success controller result, deadline,
+   incomplete required artifact, altered checker/schema/source hash, false
+   coverage value, or attempted trace repair after seal. Stop; there is no
+   partial-capture reinterpretation.
+3. `H0_CAPTURE_PERTURBS_POLICY` — the §6 capture-off/on comparison differs.
+4. `H0_PACKET_INVALID` — any packet/schema violation, native-universe or
+   observed-stream inequality, duplicate, overflow, identity collision,
+   scalar invalidity, conservation failure, canonical-digest mismatch, or
+   pair/candidate/claim/commit replay disagreement.
+5. `H0_FULL_COMMIT_CAPTURE_FAITHFUL` — Phase A then the frozen unlabelled
+   seven-sequence Phase B complete with every preceding predicate false and
+   every replay bar true.
+
+The first applicable terminal remains authoritative. Phase A may emit only
+1–4. Terminal 5 remains unavailable until the seven-sequence Phase-B artifact
+exists. This amendment changes no policy selection or production write and
+does not itself authorize Phase A, Phase B, or any downstream claim.
+
+## Amendment 3 — fail-closed envelope and mechanical writer admission (2026-07-13; pre-seal)
+
+This is an **append-only** correction to Amendment 2. Amendment 2 fixed the
+native κ universe but still allowed an unarmed native drain to be rewritten by
+the Python wrapper into an apparently complete all-zero v2 packet. It also
+described a mechanical writer checker whose earlier implementation could accept
+a stale occurrence of a buffer name, a comment about cursor independence, or a
+field assignment outside the actual writer. Amendment 3 supersedes A2.1–A2.4
+where they conflict and makes these admission and execution predicates
+fail-closed.
+
+### A3.1. Complete capture envelope and production exposure authority
+
+`h0_bridge_decision_trace_schema_v2.json`'s ordered `envelope_fields` list is
+the complete top-level packet ABI. Every listed record/native stream, every
+total and overflow counter, `identity_uid_wrap_events`, `trace_armed`,
+`processed_frame_count`, `bridge_attempt_count`, `bridge_commit_count`,
+`capture_phase`, and both exposure requirements must be present. A wrapper,
+exporter, or verifier may not synthesize a missing field, stream, total, or
+overflow value. In particular, it may not interpret an absent cursor as the
+number of drained rows or an absent overflow counter as zero.
+
+`trace_armed` is native provenance, not a Python convenience flag. It is true
+only when H0 tracing is enabled and all semantic/native buffers, capacities,
+cursors, overflow counters, identity state, claim-index state, and the native
+bridge-debug authority are allocated. An unarmed or partly allocated native
+drain is not a capture packet: the wrapper rejects it before adding the v2
+envelope. `processed_frame_count > 0` is mandatory invocation provenance.
+`complete` is a derived convenience value only and has no terminal authority.
+The manifest preserves this provenance field, but the semantic digest excludes
+it so CUDA-graph bookkeeping cannot make otherwise equal decision packets
+non-deterministic.
+
+The native bridge debug counter `dbg[2]`, incremented before the candidate
+sidecar append, is the independent candidate-exposure authority:
+
+```text
+bridge_attempt_count == len(native_candidate_keys)
+```
+
+Likewise `dbg[3]`, incremented on the actual commit path, is the independent
+commit-exposure authority:
+
+```text
+bridge_commit_count == len(native_commit_keys)
+```
+
+Both equalities are exact and are checked in the wrapper and exporter in
+addition to all native-sidecar comparisons. Phase A must declare and satisfy
+nonzero candidate exposure. Phase B must declare and satisfy nonzero candidate
+and commit exposure. Thus a Phase-B artifact with no actual commit path cannot
+support `H0_FULL_COMMIT_CAPTURE_FAITHFUL`; any missing, unarmed, malformed,
+truncated, or zero-required-exposure packet is `H0_PACKET_INVALID` (after the
+earlier partition predicates).
+
+### A3.2. Mechanical writer and cursor proof
+
+The frozen checker parses whitespace-tolerant `h0_append_record(...)` calls;
+it does not treat a broad source-string occurrence as evidence. For all four
+semantic and five native append paths it must prove, in the named production
+propose or commit kernel, the exact five-argument tuple:
+
+```text
+(buffer, capacity, cursor, overflow, local record/key)
+```
+
+It then limits field evidence to the local record/key construction through the
+matching append call. Each frozen field (other than serializer-owned `seq` and
+the fixed record schema tag) must have an assignment in that slice. The native
+key cursor in the checked tuple must be the named native cursor rather than the
+paired observed-record cursor; a prose comment cannot establish independence.
+The checker also verifies the native binding/wrapper envelope gate, exporter
+absence of `capture.get(...)` fallbacks, exact exposure comparisons, and that
+the verifier enters through canonical fail-closed packet validation.
+
+The checker-recorded source set explicitly includes
+`scripts/tools/verify_headline_bridge_decision_trace.py` as well as the header,
+CUDA source, Python binding, wrapper, and exporter. Its mutation tests are part
+of the pre-seal admission proof: deleting the claim append, substituting the
+record cursor for a native cursor, or moving a native key-field assignment
+after its append must each make the relevant coverage component false.
+
+### A3.3. State effect
+
+§1 item 2 remains satisfied by the repaired executable declaration. The sole
+pending gate remains §1 item 3: an owner may write `SEALED` only after one
+complete `h0_preseal_freeze_v2` artifact records the amended schema, checker,
+all admitted source hashes, and all-true coverage. This amendment neither
+authorizes capture nor changes policy behavior, and it creates no new
+observability terminal.
+
+## Amendment 4 — comment-free static evidence (2026-07-13; pre-seal)
+
+This is an **append-only** correction to Amendment 3's mechanical-admission
+implementation. All CUDA evidence used by `kernel_scopes()`,
+`h0_append_record(...)` parsing, local construction-to-append slicing, and
+pre-append field-assignment matching is taken from a comment-masked analysis
+source. The mask replaces every `//...` and `/*...*/` non-newline character
+with whitespace while preserving total length and each newline offset. It does
+not alter string, character, or raw-string literal contents.
+
+Consequently a commented-out append, a stale commented field assignment, or a
+commented kernel-boundary marker cannot be writer evidence, while every parsed
+offset still identifies the same location in the frozen source. Pre-seal
+mutation tests must demonstrate both of these cases:
+
+```text
+live claim append replaced by an exact commented append -> claim_record = false
+native key assignment only commented before append, live only after append
+    -> native_universe_v2 = false
+```
+
+This correction changes neither the envelope/exposure predicates nor any
+policy behavior. §1 item 2 remains satisfied; §1 item 3 owner `SEALED` after a
+complete freeze artifact remains the sole pending gate.

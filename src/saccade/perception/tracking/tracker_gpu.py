@@ -919,7 +919,13 @@ class GPUByteTracker:
         clearer()
 
     def drain_research_h0_bridge_trace(
-        self, *, seq: str, capture_run_uuid: str | None = None
+        self,
+        *,
+        seq: str,
+        capture_phase: str,
+        require_candidate_exposure: bool,
+        require_commit_exposure: bool,
+        capture_run_uuid: str | None = None,
     ) -> dict[str, object]:
         """Drain H0 records without treating CUDA append order as semantic order.
 
@@ -929,43 +935,140 @@ class GPUByteTracker:
         """
         if not str(seq).strip():
             raise ValueError("H0 bridge trace requires a non-empty sequence name")
+        if capture_phase not in {"phase_a", "phase_b"}:
+            raise ValueError("H0 capture_phase must be phase_a or phase_b")
+        if not isinstance(require_candidate_exposure, bool):
+            raise TypeError("require_candidate_exposure must be bool")
+        if not isinstance(require_commit_exposure, bool):
+            raise TypeError("require_commit_exposure must be bool")
+        if capture_phase == "phase_a" and not require_candidate_exposure:
+            raise ValueError("Phase A must predeclare candidate exposure")
+        if capture_phase == "phase_b" and (
+            not require_candidate_exposure or not require_commit_exposure
+        ):
+            raise ValueError("Phase B must predeclare candidate and commit exposure")
         getter = getattr(self.tracker, "drain_research_h0_bridge_trace", None)
         if getter is None:
             raise RuntimeError(
                 "native tracker missing H0 bridge trace; rebuild extension"
             )
         native = dict(getter())
-        streams = (
+        record_streams = (
             "pair_records",
             "candidate_records",
             "claim_records",
             "commit_records",
         )
-        for stream in streams:
-            rows = [dict(row) for row in native.get(stream, [])]
+        native_universe_streams = (
+            "native_candidate_keys",
+            "native_pair_keys",
+            "native_proposal_keys",
+            "native_claim_winner_keys",
+            "native_commit_keys",
+        )
+        native_counter_fields = (
+            "trace_armed",
+            "processed_frame_count",
+            "bridge_attempt_count",
+            "bridge_commit_count",
+            "identity_uid_wrap_events",
+            "total_pair_records",
+            "total_candidate_records",
+            "total_claim_records",
+            "total_commit_records",
+            "overflow_pair_records",
+            "overflow_candidate_records",
+            "overflow_claim_records",
+            "overflow_commit_records",
+            "total_native_candidate_keys",
+            "total_native_pair_keys",
+            "total_native_proposal_keys",
+            "total_native_claim_winner_keys",
+            "total_native_commit_keys",
+            "overflow_native_candidate_keys",
+            "overflow_native_pair_keys",
+            "overflow_native_proposal_keys",
+            "overflow_native_claim_winner_keys",
+            "overflow_native_commit_keys",
+        )
+        missing = [
+            field
+            for field in (
+                *record_streams,
+                *native_universe_streams,
+                *native_counter_fields,
+            )
+            if field not in native
+        ]
+        if missing:
+            raise RuntimeError(
+                f"native H0 capture is missing required fields: {missing}"
+            )
+        if native["trace_armed"] is not True:
+            raise RuntimeError("native H0 capture is not armed with complete buffers")
+        for stream in record_streams + native_universe_streams:
+            raw_rows = native[stream]
+            if not isinstance(raw_rows, list):
+                raise RuntimeError(f"native H0 {stream} is not a list")
+            rows = [dict(row) for row in raw_rows]
             for row in rows:
                 row["seq"] = str(seq)
             native[stream] = rows
-        native["capture_schema_version"] = "h0_bridge_decision_trace_v1"
+        native["capture_schema_version"] = "h0_bridge_decision_trace_v2"
         native["capture_run_uuid"] = capture_run_uuid or str(uuid.uuid4())
+        native["capture_phase"] = capture_phase
+        native["require_candidate_exposure"] = require_candidate_exposure
+        native["require_commit_exposure"] = require_commit_exposure
         totals = {
-            "pair_records": int(native.get("total_pair_records", 0)),
-            "candidate_records": int(native.get("total_candidate_records", 0)),
-            "claim_records": int(native.get("total_claim_records", 0)),
-            "commit_records": int(native.get("total_commit_records", 0)),
+            "pair_records": int(native["total_pair_records"]),
+            "candidate_records": int(native["total_candidate_records"]),
+            "claim_records": int(native["total_claim_records"]),
+            "commit_records": int(native["total_commit_records"]),
+        }
+        native_universe_totals = {
+            "native_candidate_keys": int(native["total_native_candidate_keys"]),
+            "native_pair_keys": int(native["total_native_pair_keys"]),
+            "native_proposal_keys": int(native["total_native_proposal_keys"]),
+            "native_claim_winner_keys": int(native["total_native_claim_winner_keys"]),
+            "native_commit_keys": int(native["total_native_commit_keys"]),
         }
         overflow = {
-            "pair_records": int(native.get("overflow_pair_records", 0)),
-            "candidate_records": int(native.get("overflow_candidate_records", 0)),
-            "claim_records": int(native.get("overflow_claim_records", 0)),
-            "commit_records": int(native.get("overflow_commit_records", 0)),
+            "pair_records": int(native["overflow_pair_records"]),
+            "candidate_records": int(native["overflow_candidate_records"]),
+            "claim_records": int(native["overflow_claim_records"]),
+            "commit_records": int(native["overflow_commit_records"]),
+        }
+        native_universe_overflow = {
+            "native_candidate_keys": int(native["overflow_native_candidate_keys"]),
+            "native_pair_keys": int(native["overflow_native_pair_keys"]),
+            "native_proposal_keys": int(native["overflow_native_proposal_keys"]),
+            "native_claim_winner_keys": int(
+                native["overflow_native_claim_winner_keys"]
+            ),
+            "native_commit_keys": int(native["overflow_native_commit_keys"]),
         }
         native["stream_totals"] = totals
         native["stream_overflow"] = overflow
+        native["native_universe_totals"] = native_universe_totals
+        native["native_universe_overflow"] = native_universe_overflow
+        candidate_exposed = int(native["bridge_attempt_count"])
+        commit_exposed = int(native["bridge_commit_count"])
         native["complete"] = (
-            int(native.get("identity_uid_wrap_events", 0)) == 0
+            int(native["processed_frame_count"]) > 0
+            and candidate_exposed >= 0
+            and commit_exposed >= 0
+            and int(native["identity_uid_wrap_events"]) == 0
             and all(value == 0 for value in overflow.values())
+            and all(value == 0 for value in native_universe_overflow.values())
             and all(totals[name] == len(native[name]) for name in totals)
+            and all(
+                native_universe_totals[name] == len(native[name])
+                for name in native_universe_totals
+            )
+            and candidate_exposed == len(native["native_candidate_keys"])
+            and commit_exposed == len(native["native_commit_keys"])
+            and (not require_candidate_exposure or candidate_exposed > 0)
+            and (not require_commit_exposure or commit_exposed > 0)
         )
         return native
 

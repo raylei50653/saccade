@@ -278,7 +278,8 @@ def verify_capture(capture: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "semantic_digest_sha256": semantic_digest(capture),
         "stream_totals": packet["stream_totals"],
-        "replay": "full_commit_decision_trace_v1",
+        "native_universe_totals": packet["native_universe_totals"],
+        "replay": "full_commit_decision_trace_v2",
     }
 
 
