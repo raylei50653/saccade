@@ -1,9 +1,9 @@
-<!-- doc-status: draft -->
+<!-- doc-status: active -->
 <!-- doc-promotion: none -->
 <!-- doc-date: 2026-07-12 -->
 <!-- doc-module: semantic -->
 
-# S0 — safe-domain axis transfer to runtime coordinates — **amended draft** declaration
+# S0 — safe-domain axis transfer to runtime coordinates — **sealed Amendment 1** declaration
 
 > **One-line:** the accepted safe axes `{dist_h, log_h_ratio}` were certified on
 > **offline proxy** coordinates that D0 already ruled unfaithful. Before the
@@ -13,10 +13,10 @@
 > coordinates?** Coarse thresholds only — no boundary fit, no score, no
 > production change.
 
-> **NOT SEALED AFTER AMENDMENT 1.** The original seal is preserved in § 9, but its
-> execution authority was suspended before any run because V5 mixed event counts
-> with a track-level bound. Amendment 1 is binding only after a new reviewed head
-> receives a new literal `SEALED` owner record.
+> **AMENDMENT 1 SEALED.** The original execution authority was suspended before
+> any run because V5 mixed event counts with a track-level bound. Amendment 1 was
+> reviewed and resealed at the exact head recorded in § 9; execution is authorized
+> only for frozen §§ 1–8, with no terminal accepted in advance.
 
 **Normative inputs (cited, never re-derived):**
 [feasible-set framework](../../../research/contracts/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md) ·
@@ -200,6 +200,7 @@ research acceptance*). Before the seal: no run, no number.
 | Date | PR | Reviewed head SHA | Transition | Authority |
 |---|---|---|---|---|
 | 2026-07-13 | #152 | `55adbbbcddf52a8bf036ca0a01b3fb0ef859025a` | draft → active | Execute S0 exactly as frozen in §§ 1–8; no later unit or production change authorized |
+| 2026-07-13 | #152 | `70a40cf9d61eb6512b9b5096049ca59efd58aa95` | amended draft → active | Execute S0 Amendment 1 exactly as frozen in §§ 1–8; no later unit or production change authorized |
 
 ### Amendment record
 

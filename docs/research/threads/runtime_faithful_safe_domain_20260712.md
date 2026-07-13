@@ -1,9 +1,9 @@
 ---
-doc-status: proposed
+doc-status: active
 doc-promotion: navigation-only; not evidence
 owner-module: semantic
 work-class: mainline-study
-wip-role: non-wip
+wip-role: sole-active
 created: 2026-07-12
 ---
 
@@ -11,16 +11,16 @@ created: 2026-07-12
 
 ## Status
 
-**PROPOSED · mainline-study · non-WIP (Amendment 1 awaiting reseal)**
-(2026-07-13; PR #152). The original execution authority was suspended before any
-run after architecture review found a V5 independence-unit violation.
+**ACTIVE · mainline-study · sole-active (Amendment 1 `SEALED`; S0 execution
+authorized)** (2026-07-13; PR #152). The original authority was suspended before
+any run; the corrected V5 was reviewed and resealed at exact head
+`70a40cf9d61eb6512b9b5096049ca59efd58aa95`.
 
 ## Expected state (lease)
 
-If Amendment 1 is resealed, S0 is expected to decide one disposable planning target:
-whether the accepted axes keep the required safety characteristics on runtime
-coordinates. This is **not** an accepted registry state; only the resealed
-declaration authorizes the bounded run.
+S0 is expected to decide one disposable planning target: whether the accepted axes
+keep the required safety characteristics on runtime coordinates. This is **not** an
+accepted registry state; only the resealed declaration authorizes the bounded run.
 The lease may be replaced or dropped without a registry transition if its decision
 relevance becomes zero or a dependency changes.
 
@@ -37,11 +37,10 @@ changed. Opening, editing, or discarding this lease does not.
 
 ## Current step
 
-`none — Amendment 1 awaiting reseal`. No run or number is authorized. After a new
-reviewed head receives a new `SEALED` record, the bounded step is to compute §§ 3–7,
-apply the ordered terminal mapping in § 8, emit the canonical evidence packet, and
-stop for owner review. This authorizes no closure solve, threshold selection,
-preset change, production hook, or score-ranking claim.
+Compute the frozen declaration §§ 3–7, apply the ordered terminal mapping in § 8,
+emit the canonical evidence packet, and stop for owner review. This authorizes no
+closure solve, threshold selection, preset change, production hook, or score-ranking
+claim.
 
 ## Design (the architecture this line serves)
 
@@ -129,7 +128,7 @@ S3  production hook — relink_bridge_max_speed / spatial_gate / h_lo,h_hi are
                       (separately declared; no authorization from S0–S2)
 ```
 
-S0 Amendment 1 is awaiting reseal. S1–S3 are named so the direction is legible;
+S0 Amendment 1 is sealed and active. S1–S3 are named so the direction is legible;
 none is authorized, and each needs its own declaration.
 
 ## Must not
@@ -156,3 +155,6 @@ none is authorized, and each needs its own declaration.
   counts into a track-level CP bound. Execution authority suspended before any run;
   Amendment 1 replaces V5 with a non-statistical adversarial coverage gate and
   returns the charter to proposed / non-WIP pending a new reviewed head and seal.
+- 2026-07-13: Amendment 1 resealed on PR #152 at reviewed head
+  `70a40cf9d61eb6512b9b5096049ca59efd58aa95`; thread restored to active / sole-active.
+  Execution is compute §§ 3–7 and apply § 8; later units remain unauthorized.

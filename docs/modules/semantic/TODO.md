@@ -5,11 +5,11 @@
 
 ## Sole active
 
-*(none — no decision-changing charter authorized)*
+- Runtime-faithful safe domain — S0 Amendment 1 sealed; execution authorized → [charter](../../research/threads/runtime_faithful_safe_domain_20260712.md) · [declaration](research/safe_domain_runtime_transfer_declaration_20260712.md)
 
 ## Proposed（non-WIP）
 
-- Runtime-faithful safe domain — S0 Amendment 1 awaiting reseal → [charter](../../research/threads/runtime_faithful_safe_domain_20260712.md) · [declaration](research/safe_domain_runtime_transfer_declaration_20260712.md)
+*(none)*
 
 ## Parked
 
