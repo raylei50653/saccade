@@ -1,7 +1,6 @@
 # H0 — headline-s full bridge-decision trace capture
 
 <!-- doc-status: proposed -->
-<!-- doc-seal: draft-unsealed -->
 <!-- doc-promotion: none -->
 <!-- doc-date: 2026-07-13 -->
 <!-- doc-module: semantic -->

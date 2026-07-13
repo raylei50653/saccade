@@ -25,8 +25,8 @@
     - [D0 — offline proxy ↔ runtime quantity](../modules/semantic/research/d0_runtime_shadow_fidelity_results_20260712.md)
     - [R1 — captured runtime ↔ canonical replay](../modules/semantic/research/r1_temporal_reduction_capture_results_20260712.md)
     - `ρ_v: event → trial unit` → [S0 — runtime-coordinate transfer / claim support](../modules/semantic/research/closed/safe_domain_runtime_transfer_results_20260713.md)
-  - **Representation boundary**
-    - [EK0 — frozen-packet representability boundary](../modules/semantic/research/frozen_packet_exact_key_recoverability_results_20260713.md)
+  - **Frozen-packet bookkeeping**
+    - [EK0 — frozen-packet consistency audit](../modules/semantic/research/frozen_packet_exact_key_recoverability_results_20260713.md)
   - **Runtime decision-path observability**
     - [P0 — frozen capture identifiability](../modules/semantic/research/closed/runtime_bridge_decision_path_identifiability_results_20260713.md)
       → [H0 — native full-decision-path capture contract](../modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md)
@@ -36,7 +36,8 @@
 
 | 圖上要讀的東西 | 唯一 owner |
 |---|---|
-| accepted state / substrate / limits / admissible units | [claim-state registry](contracts/claim_state_registry.md) |
+| research-object accepted state / substrate / limits / admissible units | [claim-state registry](contracts/claim_state_registry.md) |
+| closed diagnostic（S0 / EK0 / P0）的 terminal | 圖上 linked results note；registry 只承接其誘發的 object limits，不鏡射 diagnostic terminal |
 | sole-active selection / module transition pointer | 對應 [module TODO](../modules/)；本線見 [semantic TODO](../modules/semantic/TODO.md) |
 | charter lifecycle / sequence / expected-state lease / handoff | [research threads](threads/README.md) 與 linked declaration |
 | verdict / statistics / reproducible evidence | 圖上 linked fact owner；可引用數字見 [evidence ledger](evidence_ledger.md) |
