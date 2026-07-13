@@ -5,11 +5,11 @@
 
 ## Sole active
 
-*(none — no decision-changing charter authorized)*
+⏸️ 無 active mainline charter.
 
 ## Proposed（non-WIP）
 
-- Runtime-faithful safe domain — owner seal pending → [charter](../../research/threads/runtime_faithful_safe_domain_20260712.md) · [draft declaration](research/safe_domain_runtime_transfer_declaration_20260712.md)
+*(none)*
 
 ## Parked
 

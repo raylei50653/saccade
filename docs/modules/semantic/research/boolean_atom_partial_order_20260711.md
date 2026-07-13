@@ -66,7 +66,7 @@ coordinates by formula shape or field name (see the
 **Binding consequence:** the authorized restricted-closure prototype **may not be
 solved on these axes** until their runtime transfer is audited. That audit is
 [S0](safe_domain_runtime_transfer_declaration_20260712.md)
-([thread](../../../research/threads/runtime_faithful_safe_domain_20260712.md)).
+([thread](../../../research/threads/closed/runtime_faithful_safe_domain_20260712.md)).
 
 ## 0. Scope and claim ceiling
 

@@ -183,7 +183,7 @@ frontmatter、搬移與索引要求。
 
 | Thread | Work class / WIP role | Current concrete work / Intent | Owner |
 |:--|:--|:--|:--|
-| [runtime_faithful_safe_domain_20260712.md](runtime_faithful_safe_domain_20260712.md) | mainline-study · **non-WIP** | (Seal pending) Gate builds a safe domain (coarse, one-sided GT-retention guarantee); S0 audits whether the accepted axes `{dist_h, log_h_ratio}` — certified on offline coordinates D0 ruled unfaithful — keep their \(L_{GT}\) bound at runtime (framework L4), before the closure is solved on them. | semantic |
+| *(none)* | — | — | — |
 
 ## Active threads
 
@@ -205,6 +205,7 @@ frontmatter、搬移與索引要求。
 
 | Thread | Closed | Terminal (one-line) | Direct handoff disposition | Cross-thread consequence (not handoff) | Owner |
 |:--|:--|:--|:--|:--|:--|
+| [runtime_faithful_safe_domain_20260712.md](closed/runtime_faithful_safe_domain_20260712.md) | 2026-07-13 | **S0 `S0_UNDECIDABLE` ACCEPTED** · V7 has no offline-safe grid point, so runtime transfer is not assessed · [PR #152](https://github.com/raylei50653/saccade/pull/152) | **no receiver / no continuation** — wider runtime join requires a new decision-relevance and O0 decision | offline partial-order state unchanged; runtime transfer unaccepted and closure remains inadmissible | semantic |
 | [ambiguous_band_ranking_power_probe_20260712.md](closed/ambiguous_band_ranking_power_probe_20260712.md) | 2026-07-12 | **T2 `NO_USABLE_RANKING_POWER_IN_CLASS` ACCEPTED**（12-member class-scoped；step ⑤ 生效；step ④ 未開）· [PR #135](https://github.com/raylei50653/saccade/pull/135) seal／[PR #136](https://github.com/raylei50653/saccade/pull/136) acceptance | tested 12-member score class → **no receiver / no continuation** | morphology score branch is closed for this class; its gate branch remains parked in its own card | semantic |
 | [safe_region_assetization_20260710.md](closed/safe_region_assetization_20260710.md) | 2026-07-11 | **A1 CLOSED**（`A1_ACCEPTED_WITH_LIMITS`）· R2–R4 fail-closed | → [gt-support morphology](gt_support_morphology_20260711.md) (parked) | — | semantic |
 | [composition_grammar_coverage_program_20260710.md](closed/composition_grammar_coverage_program_20260710.md) | 2026-07-10 | **SUPERSEDED** · coverage map absorbed into assetization R2–R4 · no C1–C6 execution | → assetization closed line; **no further continuation** | — | semantic |

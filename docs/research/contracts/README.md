@@ -50,7 +50,7 @@ feasible-set 框架的 **§9.3 substrate robustness** 與 fidelity protocol 的 
 > 座標來源的改變**就是**一次 substrate 變更 → 需要 **L4 portability 審計**，而不是繼承。
 > 對照框架 §13 的禁則：**offline safe \(\not\Rightarrow\) online effective**。
 
-現行實例：[S0 safe-domain axis transfer](../../modules/semantic/research/safe_domain_runtime_transfer_declaration_20260712.md)（[thread](../threads/runtime_faithful_safe_domain_20260712.md)）。
+現行實例：[S0 safe-domain axis transfer](../../modules/semantic/research/safe_domain_runtime_transfer_declaration_20260712.md)（[thread](../threads/closed/runtime_faithful_safe_domain_20260712.md)）。
 
 ## 已知缺口
 

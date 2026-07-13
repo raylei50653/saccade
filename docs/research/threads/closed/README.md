@@ -19,6 +19,7 @@ docs/archive/    = archived（很少用；不再需要 threads 導航）
 | [composition_grammar_coverage_program_20260710.md](composition_grammar_coverage_program_20260710.md) |
 | [composition_grammar_safe_region.md](composition_grammar_safe_region.md) |
 | [m_b1_online_hook_20260709.md](m_b1_online_hook_20260709.md) |
+| [runtime_faithful_safe_domain_20260712.md](runtime_faithful_safe_domain_20260712.md) |
 
 ## On move-in
 

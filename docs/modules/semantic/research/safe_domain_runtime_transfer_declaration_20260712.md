@@ -1,9 +1,9 @@
-<!-- doc-status: draft -->
+<!-- doc-status: active -->
 <!-- doc-promotion: none -->
 <!-- doc-date: 2026-07-12 -->
 <!-- doc-module: semantic -->
 
-# S0 — safe-domain axis transfer to runtime coordinates — **draft** declaration
+# S0 — safe-domain axis transfer to runtime coordinates — **sealed Amendment 1** declaration
 
 > **One-line:** the accepted safe axes `{dist_h, log_h_ratio}` were certified on
 > **offline proxy** coordinates that D0 already ruled unfaithful. Before the
@@ -13,8 +13,10 @@
 > coordinates?** Coarse thresholds only — no boundary fit, no score, no
 > production change.
 
-> **⚠️ NOT SEALED.** Draft. Binding only at the seal event in § 9. Until then no
-> number in this file may be read from data.
+> **AMENDMENT 1 SEALED.** The original execution authority was suspended before
+> any run because V5 mixed event counts with a track-level bound. Amendment 1 was
+> reviewed and resealed at the exact head recorded in § 9; execution is authorized
+> only for frozen §§ 1–8, with no terminal accepted in advance.
 
 **Normative inputs (cited, never re-derived):**
 [feasible-set framework](../../../research/contracts/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md) ·
@@ -22,7 +24,7 @@
 [gate-vs-score layer contract](../../../research/contracts/signal_table_schema.md#05-gate-vs-score-support--calibration--policy) ·
 [runtime-quantity fidelity protocol](../../../research/contracts/runtime_quantity_fidelity_protocol.md)
 
-Thread: [runtime-faithful safe domain](../../../research/threads/runtime_faithful_safe_domain_20260712.md) ·
+Thread: [runtime-faithful safe domain](../../../research/threads/closed/runtime_faithful_safe_domain_20260712.md) ·
 Accepted axes: [partial-order note](boolean_atom_partial_order_20260711.md) ·
 Fidelity fact: [D0 results](d0_runtime_shadow_fidelity_results_20260712.md)
 
@@ -116,7 +118,7 @@ Exposure counts are reported wherever a rate is reported (framework § 2.2).
 |---|---|
 | Independence unit | the **lost track** |
 | Clustering structure | one lost track contributes many candidate pairs across slots and frames; pair-level counts are **not** independent trials |
-| Aggregation | hurt is aggregated to the unit **before** bounding: a track counts once iff ≥ 1 of its GT pairs falls inside \(D\). Base Clopper-Pearson UCB safety calculations are performed **only** on the matched pairs that have valid track identities. The 893 unjoined events (539 cohort_gap and 354 unemitted) represent coverage ambiguity, which is evaluated on their runtime coordinates and checked as a fail-closed flip condition (see V5). |
+| Aggregation | hurt is aggregated to the unit **before** bounding: a track counts once iff ≥ 1 of its GT pairs falls inside \(D\). Clopper-Pearson UCB safety calculations are performed **only** on matched rows with valid track identities. The 893 unjoined events (539 `cohort_gap` and 354 `unemitted`) are **not statistical trials** and never enter a CP numerator or denominator; their runtime coordinates feed the separate fail-closed adversarial coverage gate V5. |
 | Bound | one-sided 95 % **Clopper–Pearson** upper bound \(\mathrm{UCB}(x,N)\) on the track-level counts |
 | Residual clustering (named, not dismissed) | **sequence-level** shared scene / pipeline state remains above the declared unit; the bound is therefore not claimed to be sequence-robust, and § 9.1 sequence robustness is **not** established by this unit |
 
@@ -135,7 +137,7 @@ constraint is one-sided (framework § 2.1 asymmetric loss).
 | V2 partition conservation | `matched + cohort_gap + unemitted = 2,577`, reproduced from the sealed packet |
 | V3 join integrity | every matched pair carries **both** coordinate systems and a GT flag; keys unique |
 | V4 exposure floor | \(N_{\mathrm{GT,exposed}} \ge 59\) lost tracks (mathematically required for 95% CP UCB ≤ 0.05 at zero harm) and ≥ 1,000 matched pairs, else `S0_UNDECIDABLE` |
-| V5 **worst-case unjoined ambiguity (evaluated on \(D_{\mathrm{rt}}\))** | the 893 unjoined events are evaluated on their **runtime coordinates** (\(D_{\mathrm{rt}}\)). If \(M\) unjoined events fall inside \(D_{\mathrm{rt}}\) at a given grid point, they represent potential GT losses. We compute the worst-case UCB by adding \(M\) to both numerator and denominator of the matched UCB: \(\mathrm{UCB}_{\mathrm{worst}} = \mathrm{UCB}(X_{\mathrm{matched}} + M, N_{\mathrm{matched}} + M)\). If this flips a base-safe point to unsafe (\(\mathrm{UCB}_{\mathrm{worst}} > 0.05\)), the safety certification at this point is denied. If this worst-case flip occurs for any grid point certified safe offline, the terminal is `S0_UNDECIDABLE`. |
+| V5 **adversarial unjoined coverage (evaluated on \(D_{\mathrm{rt}}\))** | at every **active offline-safe** grid point, evaluate all 893 unjoined events on their runtime coordinates. Let \(M(\theta)\) be the raw number whose runtime coordinates fall inside \(D_{\mathrm{rt}}(\theta)\). \(M\) is a coverage diagnostic only: it is not a lost-track count, does not alter \(X_{\mathrm{matched}}\) or \(N_{\mathrm{matched}}\), and never enters a CP calculation. Because complete lost-track identity and GT status are unavailable for this partition, any \(M(\theta)>0\) denies portability and yields `S0_UNDECIDABLE`; \(M(\theta)=0\) only passes this coverage gate and contributes no statistical evidence. |
 | V6 no leakage | GT is used **only** to count \(L_{\mathrm{GT}}\); it never enters a coordinate, a threshold, or the region definition |
 | V7 non-empty active safe set | ∃ at least one grid point certified safe on offline coordinates (\(\mathrm{UCB}_{\mathrm{off}} \le \varepsilon\)) that is **active** (i.e. its offline reject mask is non-empty, meaning \(N_{\mathrm{FP,removed,off}} > 0\) on matched pairs), else `S0_UNDECIDABLE` (prevents vacuous transfer when the safe set is empty or rejects nothing) |
 
@@ -150,6 +152,7 @@ with exposures, and the safe/unsafe certification. Plus:
 | axis agreement | per-axis Spearman \(\rho\) between offline and runtime values, on matched pairs |
 | direction agreement | count of matched pairs whose safer-side classification flips between substrates (i.e., \(\texttt{dist\_h}_{\mathrm{off}} \ge \theta_d \iff \texttt{dist\_h}_{\mathrm{rt}} < \theta_d\), or same for \(|\texttt{log\_h\_ratio}|\)), evaluated on all points. For any offline-safe grid point, the direction flips must be exactly zero on all axes |
 | region agreement | Jaccard similarity \(|D_{\mathrm{off}} \cap D_{\mathrm{rt}}|/|D_{\mathrm{off}} \cup D_{\mathrm{rt}}|\) of the reject masks. If both masks are empty (no pairs rejected by either), Jaccard is defined as 1.0; if only one is empty, it is 0.0 |
+| adversarial unjoined coverage | per active offline-safe grid point, report \(M(\theta)\), the raw unjoined-event count inside \(D_{\mathrm{rt}}\), and `pass := M == 0`; this readout never enters a CP bound |
 | **the decisive readout** | for every \(\theta\) the **offline** substrate certifies safe, the **runtime** \(\mathrm{UCB}\) of that same region |
 
 ## 8. Terminal mapping (ordered, disjoint)
@@ -157,7 +160,7 @@ with exposures, and the safe/unsafe certification. Plus:
 | # | Terminal | Condition | Consequence |
 |---|---|---|---|
 | 0 | `S0_INVALID` | any V1–V3 / V6 gate fails | repair inputs; no conclusion |
-| 1 | `S0_UNDECIDABLE` | V4 or V7 fails, **or** V5's worst-case unjoined bound flips the terminal | fail-closed; **no** portability claim in either direction; a wider runtime join is required before any closure solve |
+| 1 | `S0_UNDECIDABLE` | V4 or V7 fails, **or** V5 finds \(M(\theta)>0\) at any active offline-safe point | fail-closed; **no** portability claim in either direction; a wider runtime join is required before any closure solve |
 | 2 | **`AXES_TRANSFER_BROKEN`** | ∃ a grid point certified safe on **offline** coordinates (\(\mathrm{UCB}_{\mathrm{off}}\le\varepsilon\)) whose **runtime** harm exceeds the bound (\(\mathrm{UCB}_{\mathrm{rt}}>\varepsilon\)) | the signal axes do not transfer: the offline safety certification is denied by the runtime substrate. Morphology limits amended (§ 8.1); the closure **must** be solved on runtime coordinates. This is what D0's 7.03 % offline-safe/online-unsafe inversion on GT under the s0 proxy warns us about |
 | 3 | `AXES_TRANSFER_DEGRADED` | no safety inversion, but \(\rho < 0.98\) on either axis, **or** any safer-side direction flip, **or** Jaccard \(< 0.90\) | axes are **not interchangeable**: definitions may be reused, but every certification must be re-earned at runtime; **no offline number carries over** |
 | 4 | `AXES_TRANSFER_HOLDS` | every point in the active safe set is runtime-certified, and all agreement bars pass (\(\rho \ge 0.98\) on both axes, zero direction flips, and Jaccard \(\ge 0.90\)) | the axes may carry into a separately declared closure solve (S2) as a prerequisite for L4, but region-level portability remains unestablished until a closure is solved and tested |
@@ -185,6 +188,22 @@ any preset, ledger, no-go, or RegionAsset maturity change; any score-ranking cla
 PR merge alone is **not** the seal (framework § 13: *engineering merge \(\not\Rightarrow\)
 research acceptance*). Before the seal: no run, no number.
 
+### Seal candidate
+
+- Prepared: 2026-07-13
+- Scope: the frozen declaration in §§ 1–8, submitted for owner review
+- Owner review: literal token `SEALED` recorded on PR #152 at reviewed head
+  `55adbbbcddf52a8bf036ca0a01b3fb0ef859025a`
+
 ### Seal record
 
-*(none — not sealed)*
+| Date | PR | Reviewed head SHA | Transition | Authority |
+|---|---|---|---|---|
+| 2026-07-13 | #152 | `55adbbbcddf52a8bf036ca0a01b3fb0ef859025a` | draft → active | Execute S0 exactly as frozen in §§ 1–8; no later unit or production change authorized |
+| 2026-07-13 | #152 | `70a40cf9d61eb6512b9b5096049ca59efd58aa95` | amended draft → active | Execute S0 Amendment 1 exactly as frozen in §§ 1–8; no later unit or production change authorized |
+
+### Amendment record
+
+| Date | PR | Prior sealed state | Disposition |
+|---|---|---|---|
+| 2026-07-13 | #152 architecture review | `6bac5ce01444877b51b00ac006d918c2acf9c611` | **Execution suspended before any run.** V5 used raw event count as effective track-level sample size; Amendment 1 replaces it with a non-statistical adversarial coverage gate and requires a new reviewed head plus a new `SEALED` record. |
