@@ -379,6 +379,11 @@ public:
                                       int candidate_capacity = 16384,
                                       int claim_capacity = 16384,
                                       int commit_capacity = 16384);
+    // Bind the caller-owned, stable device scalar containing the actual
+    // evaluation-frame ID.  H0 kernels read this scalar at replay time, so a
+    // CUDA graph never freezes a host-side frame argument.  The caller must
+    // retain the allocation until H0 tracing is disabled.
+    void bind_research_h0_bridge_trace_frame_device(const int* frame_ptr);
     void clear_research_h0_bridge_trace();
     H0BridgeDecisionTraceCapture drain_research_h0_bridge_trace();
 

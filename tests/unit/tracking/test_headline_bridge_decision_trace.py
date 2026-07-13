@@ -201,6 +201,14 @@ def test_h0_packet_rejects_duplicate_stable_key() -> None:
         EXPORT.canonical_semantic_packet(packet)
 
 
+def test_h0_packet_rejects_missing_evaluation_frame_identity() -> None:
+    packet = _packet()
+    packet["pair_records"][0]["frame"] = 0
+
+    with pytest.raises(ValueError, match="non-positive evaluator frame identity"):
+        EXPORT.canonical_semantic_packet(packet)
+
+
 def test_h0_native_source_keeps_observer_state_separate_from_policy_state() -> None:
     source = (ROOT / "src/tracking/tracker_gpu.cu").read_text(encoding="utf-8")
 
@@ -209,3 +217,6 @@ def test_h0_native_source_keeps_observer_state_separate_from_policy_state() -> N
     assert "track_ids[cand] = track_ids[lost];" in source
     assert "H0 bridge trace observes the real commit path" in source
     assert "research_h0_bridge_trace_ ? d_h0_slot_generation_ : nullptr" in source
+    assert "relink_bidir_propose_kernel<false>" in source
+    assert "relink_bidir_propose_kernel<true>" in source
+    assert "frame_input = d_h0_trace_frame_input_" in source

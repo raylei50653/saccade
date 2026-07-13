@@ -3782,6 +3782,14 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
              py::arg("candidate_capacity") = 16384, py::arg("claim_capacity") = 16384,
              py::arg("commit_capacity") = 16384,
              "H0 default-off four-stream capture of the real bridge decision and commit path.")
+        .def("bind_research_h0_bridge_trace_frame_device", [](GPUByteTracker& self,
+                                                               uintptr_t frame_ptr) {
+            self.bind_research_h0_bridge_trace_frame_device(
+                reinterpret_cast<const int*>(frame_ptr));
+        }, py::arg("frame_ptr"),
+        "Bind a caller-owned CUDA int32 scalar containing the actual evaluation frame. "
+        "Its address must remain stable until H0 tracing is disabled; H0 graph replays read "
+        "the scalar at replay time rather than a capture-time host value.")
         .def("clear_research_h0_bridge_trace", &GPUByteTracker::clear_research_h0_bridge_trace,
              "Clear H0 trace cursors and overflow counters without changing bridge policy state.")
         .def("drain_research_h0_bridge_trace", [](GPUByteTracker& self) {

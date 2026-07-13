@@ -102,6 +102,10 @@ def canonical_semantic_packet(capture: Mapping[str, Any]) -> dict[str, Any]:
         keys = [stable_key(stream, row) for row in rows]
         if len(set(keys)) != len(keys):
             raise ValueError(f"{stream} has duplicate stable keys")
+        if any(int(row["frame"]) <= 0 for row in rows):
+            raise ValueError(
+                f"{stream} contains a non-positive evaluator frame identity"
+            )
         streams[stream] = rows
 
     return {

@@ -534,6 +534,8 @@ class GPUByteTracker:
         self.embedding_dim = embedding_dim
         self.max_assoc = max(1, int(max_assoc))
         self.tracker = CppGPUByteTracker(max_objects, embedding_dim, self.max_assoc)
+        self._h0_trace_enabled = False
+        self._h0_trace_frame_input: torch.Tensor | None = None
         # Check if we are using the real C++ implementation
         self.is_cuda = not self.tracker.__class__.__name__.startswith(
             "dummy"
@@ -865,6 +867,47 @@ class GPUByteTracker:
             int(claim_capacity),
             int(commit_capacity),
         )
+        self._h0_trace_enabled = bool(enabled)
+        if enabled:
+            # Stable caller-owned device scalar.  Eager updates fill it before
+            # dispatch; GraphedTrackerUpdate rebinds it to its fixed graph
+            # input and fills it before every replay.
+            self._h0_trace_frame_input = torch.full(
+                (), -1, dtype=torch.int32, device="cuda"
+            )
+            self._bind_research_h0_bridge_trace_frame_device(self._h0_trace_frame_input)
+        else:
+            self._h0_trace_frame_input = None
+
+    def _bind_research_h0_bridge_trace_frame_device(
+        self, frame_input: torch.Tensor
+    ) -> None:
+        """Bind a stable CUDA int32 scalar as H0's replay-time frame source."""
+        if frame_input.device.type != "cuda" or frame_input.dtype != torch.int32:
+            raise TypeError("H0 trace frame input must be a CUDA int32 scalar")
+        if frame_input.numel() != 1:
+            raise ValueError("H0 trace frame input must contain exactly one value")
+        binder = getattr(
+            self.tracker, "bind_research_h0_bridge_trace_frame_device", None
+        )
+        if binder is None:
+            raise RuntimeError(
+                "native tracker missing H0 bridge trace frame binding; rebuild extension"
+            )
+        binder(frame_input.data_ptr())
+
+    def _set_research_h0_bridge_trace_frame(self, frame_id: int | None) -> None:
+        if not self._h0_trace_enabled:
+            return
+        if frame_id is None:
+            raise ValueError(
+                "H0 bridge trace requires the actual evaluation frame_id on every update"
+            )
+        if int(frame_id) <= 0:
+            raise ValueError("H0 bridge trace frame_id must be a positive integer")
+        if self._h0_trace_frame_input is None:
+            raise RuntimeError("H0 bridge trace has no bound device frame input")
+        self._h0_trace_frame_input.fill_(int(frame_id))
 
     def clear_research_h0_bridge_trace(self) -> None:
         """Clear H0 stream cursors while preserving the immutable slot generations."""
@@ -1253,6 +1296,7 @@ class GPUByteTracker:
         gmc: Optional[torch.Tensor] = None,
         light_factor: float = 0.0,
         mid_thresh_scale: float = 1.0,
+        h0_frame_id: int | None = None,
     ) -> List[TrackResult]:
         """
         更新追蹤器狀態。
@@ -1278,6 +1322,7 @@ class GPUByteTracker:
             gmc_ptr = gmc_contig.data_ptr()
 
         stream = torch.cuda.current_stream().cuda_stream
+        self._set_research_h0_bridge_trace_frame(h0_frame_id)
 
         return cast(
             List[TrackResult],
@@ -1326,6 +1371,7 @@ class GPUByteTracker:
         gmc: Optional[torch.Tensor] = None,
         light_factor: float = 0.0,
         mid_thresh_scale: float = 1.0,
+        h0_frame_id: int | None = None,
     ) -> GPUTrackResultBuffers:
         num_dets = boxes.size(0)
         self._validate_num_dets(num_dets)
@@ -1351,6 +1397,7 @@ class GPUByteTracker:
             gmc_ptr = gmc.data_ptr()
 
         stream = torch.cuda.current_stream().cuda_stream
+        self._set_research_h0_bridge_trace_frame(h0_frame_id)
         self.tracker.update_into(
             boxes_contig.data_ptr(),
             scores_contig.data_ptr(),
@@ -1640,7 +1687,26 @@ class GraphedTrackerUpdate:
         self.out_det_idx = torch.zeros(self._max_objs, dtype=torch.int32, device=device)
         self.out_count = torch.zeros((), dtype=torch.int32, device=device)
 
+        # This scalar has a stable device address for the graph's lifetime.
+        # When H0 is active its bridge kernels read the value at replay time,
+        # after copy_inputs has supplied the evaluator's real MOT frame ID.
+        self._h0_frame_input: torch.Tensor | None = None
+
         self._graphed_callable: Callable[..., None] | None = None
+
+    def _ensure_h0_frame_input(self) -> None:
+        if not self._tracker._h0_trace_enabled:
+            return
+        if self._h0_frame_input is not None:
+            return
+        if self._graphed_callable is not None:
+            raise RuntimeError(
+                "H0 bridge trace must be enabled before GraphedTrackerUpdate capture"
+            )
+        self._h0_frame_input = torch.full(
+            (), -1, dtype=torch.int32, device=self.d_boxes.device
+        )
+        self._tracker._bind_research_h0_bridge_trace_frame_device(self._h0_frame_input)
 
     def _warmup(self) -> None:
         with torch.no_grad():
@@ -1726,7 +1792,27 @@ class GraphedTrackerUpdate:
         scores: torch.Tensor,
         classes: torch.Tensor,
         gmc: torch.Tensor | None = None,
+        *,
+        frame_id: int | None = None,
     ) -> None:
+        self._ensure_h0_frame_input()
+        if self._tracker._h0_trace_enabled:
+            if frame_id is None:
+                raise ValueError(
+                    "H0 bridge trace requires the actual evaluation frame_id before replay"
+                )
+            if int(frame_id) <= 0:
+                raise ValueError("H0 bridge trace frame_id must be a positive integer")
+        # Capture must consume only the zero-padded scratch buffers.  Capturing
+        # after the first evaluator input would execute that real input once
+        # during graph construction and once again on replay, which is neither
+        # production-faithful nor compatible with a one-frame H0 identity.
+        if self._graphed_callable is None:
+            self._capture()
+        if self._tracker._h0_trace_enabled:
+            assert self._h0_frame_input is not None
+            assert frame_id is not None
+            self._h0_frame_input.fill_(int(frame_id))
         n = min(boxes.shape[0], self._max_assoc)
         if n > 0:
             self.d_boxes[:n].copy_(boxes[:n].float())
