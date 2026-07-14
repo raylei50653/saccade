@@ -50,6 +50,7 @@ the check needs to understand nothing about the document's structure to say so.
 from __future__ import annotations
 
 import hashlib
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -65,10 +66,44 @@ sys.path.insert(0, str(_REPO / "scripts" / "tools"))
 from resolved_bridge_policy_config import (  # noqa: E402
     SCHEMA_ID,
     fingerprint,
+    preset_path,
     preset_sha256,
 )
 
 SCHEMA = "declaration_policy_binding_v1"
+_HEX64 = re.compile(r"[0-9a-f]{64}")
+
+
+class _StrictLoader(yaml.SafeLoader):
+    """A loader that refuses duplicate keys, at every depth.
+
+    `yaml.safe_load` takes the *last* of a repeated key and says nothing. So a
+    binding could carry two `preset:` lines, and the exact-key-set check below —
+    which only ever sees the merged mapping — would find one key and pass. The
+    binding would then declare two policy targets and pin neither, which is the
+    ambiguity this whole line exists to remove, moved from Markdown into YAML.
+    """
+
+
+def _no_duplicate_keys(loader: yaml.Loader, node: yaml.MappingNode) -> dict[str, Any]:
+    seen: dict[Any, Any] = {}
+    for key_node, value_node in node.value:
+        key = loader.construct_object(key_node, deep=True)
+        if key in seen:
+            raise yaml.constructor.ConstructorError(
+                "while constructing a mapping",
+                node.start_mark,
+                f"duplicate key {key!r} — a binding that says a thing twice says it "
+                "once, silently, and you do not get to see which",
+                key_node.start_mark,
+            )
+        seen[key] = loader.construct_object(value_node, deep=True)
+    return seen
+
+
+_StrictLoader.add_constructor(
+    yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, _no_duplicate_keys
+)
 
 # The code's own answer to "which preset is the headline bridge path". Read from
 # the source, so that moving it in code and not in the declarations fails here.
@@ -101,14 +136,14 @@ def _bindings() -> list[Path]:
     return sorted(_RESEARCH.rglob("*.policy.yaml"))
 
 
-def _load(path: Path) -> dict[str, Any]:
-    return yaml.safe_load(path.read_text(encoding="utf-8"))
+def load_binding(path: Path) -> dict[str, Any]:
+    return yaml.load(path.read_text(encoding="utf-8"), Loader=_StrictLoader)
 
 
 @pytest.fixture(params=_bindings(), ids=lambda p: p.name)
 def binding(request) -> tuple[Path, dict[str, Any]]:
     path = request.param
-    return path, _load(path)
+    return path, load_binding(path)
 
 
 # --------------------------------------------------------------------------- #
@@ -177,6 +212,25 @@ def test_the_binding_schema_is_complete(binding) -> None:
         f"{path.name}: resolved_schema must be {SCHEMA_ID}"
     )
 
+    # `bytes` is fed straight to a slice, and a slice forgives everything. `0` pins
+    # nothing at all — and `sha256(b"")` is a real, checkable hash, so the binding
+    # would still pass while pinning an empty prefix. A negative value pins all but
+    # the tail. `true` is an `int` in Python and slices to `[:1]`. None of that is a
+    # pin; all of it type-checks.
+    size = data["sealed_prefix"]["bytes"]
+    assert type(size) is int, (
+        f"{path.name}: sealed_prefix.bytes must be an integer, not {type(size).__name__} "
+        f"({size!r}). `true` is an int in Python and would slice to one byte."
+    )
+    assert size > 0, (
+        f"{path.name}: sealed_prefix.bytes is {size}. A prefix of zero pins nothing — "
+        f"and sha256(b'') is a perfectly valid hash, so the check would pass while "
+        f"leaving the entire sealed body free to change."
+    )
+    assert _HEX64.fullmatch(data["sealed_prefix"]["sha256"]), (
+        f"{path.name}: sealed_prefix.sha256 is not a 64-character hex digest"
+    )
+
 
 # --------------------------------------------------------------------------- #
 # 2. The declaration's immutable prefix has not moved.                          #
@@ -208,10 +262,26 @@ def test_the_sealed_prefix_is_unchanged(binding) -> None:
 # --------------------------------------------------------------------------- #
 # 3-4. The preset exists, and its identity is reproducible from the code.        #
 # --------------------------------------------------------------------------- #
-def test_the_bound_preset_exists(binding) -> None:
+def test_the_declared_preset_is_the_one_the_resolver_reads(binding) -> None:
+    """The path the binding names must be the file the identity is computed from.
+
+    The existence check took the binding's full path, but the identity was computed
+    from its `.stem` — and the resolver then reads `configs/presets/<stem>.yaml`,
+    whatever path the binding actually named. So a binding could point at some other
+    file that happens to share a stem, pass the existence check, and have its
+    identity silently computed from the canonical preset instead. Two files, one
+    identity: the same substitution P0 made, in a different currency.
+    """
     path, data = binding
-    preset = _REPO / data["policy_target"]["preset"]
-    assert preset.is_file(), f"{path.name}: no such preset: {preset}"
+    declared = (_REPO / data["policy_target"]["preset"]).resolve()
+    assert declared.is_file(), f"{path.name}: no such preset: {declared}"
+
+    stem = Path(data["policy_target"]["preset"]).stem
+    canonical = preset_path(stem).resolve()
+    assert declared == canonical, (
+        f"{path.name}: binds {declared}, but the resolver computes identity from "
+        f"{canonical}. The binding must name the file its identity comes from."
+    )
 
 
 def test_the_preset_identity_is_reproducible(binding) -> None:
@@ -260,3 +330,92 @@ def test_a_non_headline_binding_names_its_preset_explicitly(binding) -> None:
     if target["kind"] == "headline":
         pytest.skip("headline target; the preset is the code's to name")
     assert target["preset"], f"{path.name}: non-headline binding names no preset"
+
+
+# --------------------------------------------------------------------------- #
+# The validator's own failure modes. Each of these passed before.               #
+#                                                                               #
+# The schema moved the authority out of Markdown, but a schema is only as strict #
+# as its validator: a field fed straight to a slice, or a loader that quietly    #
+# merges a repeated key, reintroduces exactly the ambiguity the move was for.    #
+# --------------------------------------------------------------------------- #
+_H0_BINDING = (
+    _RESEARCH / "headline_bridge_full_decision_capture_declaration_20260713.policy.yaml"
+)
+
+
+def _rebound(tmp_path: Path, text: str) -> Path:
+    path = tmp_path / _H0_BINDING.name
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
+def test_the_real_bindings_load_and_validate(binding) -> None:
+    """Calibration: the mutations below must be rejected *from* a passing base."""
+    path, data = binding
+    assert data["schema"] == SCHEMA and data["sealed_prefix"]["bytes"] > 0
+
+
+@pytest.mark.parametrize(
+    "literal,why",
+    [
+        ("0", "a zero-length prefix pins nothing — and sha256(b'') is a valid hash"),
+        ("-1", "a negative prefix pins everything but the tail"),
+        ("true", "`true` is an int in Python and slices to one byte"),
+        ('"3531"', "a quoted number is a string, and a string is not a byte count"),
+    ],
+)
+def test_a_sealed_prefix_that_pins_nothing_is_rejected(
+    tmp_path: Path, literal: str, why: str
+) -> None:
+    original = load_binding(_H0_BINDING)["sealed_prefix"]["bytes"]
+    text = _H0_BINDING.read_text(encoding="utf-8").replace(
+        f"bytes: {original}", f"bytes: {literal}", 1
+    )
+    size = load_binding(_rebound(tmp_path, text))["sealed_prefix"]["bytes"]
+    assert not (type(size) is int and size > 0), why
+
+
+def test_an_empty_prefix_with_the_empty_hash_would_otherwise_pass() -> None:
+    """The mutation is not hypothetical: `bytes: 0` has a genuine, matching hash."""
+    empty = hashlib.sha256(b"").hexdigest()
+    document = (_RESEARCH / load_binding(_H0_BINDING)["document"]["path"]).read_bytes()
+    assert hashlib.sha256(document[:0]).hexdigest() == empty
+    assert len(document) >= 0  # the old range check was satisfied by any document
+
+
+def test_a_duplicate_yaml_key_is_rejected(tmp_path: Path) -> None:
+    """`yaml.safe_load` takes the last of a repeated key and says nothing.
+
+    So a binding could name two presets, and the exact-key-set check — which only
+    sees the merged mapping — would find one `preset` and pass.
+    """
+    text = _H0_BINDING.read_text(encoding="utf-8").replace(
+        "  preset: configs/presets/mamba_whole_graph_m.yaml",
+        "  preset: configs/presets/mamba_whole_graph_m.yaml\n"
+        "  preset: configs/presets/mamba_whole_graph.yaml",
+        1,
+    )
+    mutant = _rebound(tmp_path, text)
+
+    # The permissive loader accepts it, and silently keeps the *second* preset.
+    lax = yaml.safe_load(mutant.read_text(encoding="utf-8"))
+    assert lax["policy_target"]["preset"].endswith("mamba_whole_graph.yaml")
+    assert set(lax["policy_target"]) == {"kind", "preset"}  # the key check sees one
+
+    with pytest.raises(yaml.constructor.ConstructorError):
+        load_binding(mutant)
+
+
+def test_a_non_canonical_preset_path_is_rejected(tmp_path: Path) -> None:
+    """A file that shares a stem is not the file the resolver reads."""
+    decoy_dir = tmp_path / "elsewhere"
+    decoy_dir.mkdir()
+    stem = Path(load_binding(_H0_BINDING)["policy_target"]["preset"]).stem
+    decoy = decoy_dir / f"{stem}.yaml"
+    decoy.write_text("relink_bridge_px: 0.25\n", encoding="utf-8")
+
+    declared = decoy.resolve()
+    canonical = preset_path(stem).resolve()
+    assert declared.is_file()  # the existence check passes...
+    assert declared != canonical  # ...but it is not what the identity comes from
