@@ -40,11 +40,17 @@ jobs:
             ${{ runner.os }}-apt-cpp-
             ${{ runner.os }}-apt-
 
+      # Keyed on the C++ sources, not on github.sha. The sha key minted a fresh
+      # ~85 MB entry on *every commit* — including the many that touch no C++ at
+      # all — and could never be hit exactly, only fallen back to via restore-keys.
+      # That sprawl had reached 72 entries / 6.07 GB, which is what pinned the repo
+      # against its 10 GB ceiling. Now a run that changes no C++ hits its entry
+      # exactly and saves nothing.
       - name: Cache ccache
         uses: actions/cache@v4
         with:
           path: .ccache
-          key: ${{ runner.os }}-ccache-${{ github.sha }}
+          key: ${{ runner.os }}-ccache-${{ hashFiles('src/**', 'include/**', 'CMakeLists.txt') }}
           restore-keys: |
             ${{ runner.os }}-ccache-
 
@@ -78,12 +84,15 @@ jobs:
       # re-downloads ~3.3 GB of wheels — torch, the nvidia-* CUDA runtime set,
       # onnxruntime-gpu — on every run, to feed a C++ compile that takes 25s.
       # The other jobs (ci.yml) have always cached; this one was the outlier.
+      #
+      # The glob is the lockfile alone, byte-identical to ci.yml's, so this job
+      # SHARES that cache rather than minting a second one. It must stay that way:
+      # the uv cache is ~4 GB and the repo ceiling is 10 GB, so two of them would
+      # evict each other (and everything else) instead of ever being reused.
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-          cache-dependency-glob: |
-            **/uv.lock
-            .github/workflows/cpp_build.yml
+          cache-dependency-glob: '**/uv.lock'
 
       - name: Free disk space
         run: |
