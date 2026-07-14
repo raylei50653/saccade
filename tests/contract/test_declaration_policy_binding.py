@@ -115,20 +115,25 @@ HEADLINE_PRESET_REL = next(
     if line.startswith("HEADLINE_PRESET_REL")
 )
 
-# Declarations that bind no bridge policy, and so need no binding file. Listed
-# rather than detected: detection would mean parsing Markdown, which is the thing
-# this file exists to stop doing. A new declaration is therefore a deliberate
-# decision — write a binding, or record here why it needs none.
+# Declarations that bind no bridge policy, and so need no binding file.
+#
+# Listed rather than detected: detection would mean parsing Markdown, which is the
+# thing this file exists to stop doing. A new declaration is therefore a deliberate
+# decision — write a binding beside it, or record here why it needs none.
+#
+# Keyed by path relative to research/, exactly as scope is booked. A stem is not an
+# identity: an exemption keyed by stem would excuse a same-named declaration in any
+# directory, which is the decoy substitution this contract now forbids.
 NO_POLICY_BINDING = {
-    "d0_runtime_shadow_fidelity_declaration_20260712": "capture fidelity; freezes no policy table",
-    "discrete_m_capability_declaration_20260712": "capability study; freezes no policy table",
-    "safe_domain_runtime_transfer_declaration_20260712": "safe-domain transfer; freezes no policy table",
-    "frozen_packet_exact_key_recoverability_declaration_20260713": "key recoverability; freezes no policy table",
-    "ambiguous_band_ranking_power_probe_declaration_20260712": "read-only probe; explicitly forbids preset change",
+    "d0_runtime_shadow_fidelity_declaration_20260712.md": "capture fidelity; freezes no policy table",
+    "discrete_m_capability_declaration_20260712.md": "capability study; freezes no policy table",
+    "safe_domain_runtime_transfer_declaration_20260712.md": "safe-domain transfer; freezes no policy table",
+    "frozen_packet_exact_key_recoverability_declaration_20260713.md": "key recoverability; freezes no policy table",
+    "ambiguous_band_ranking_power_probe_declaration_20260712.md": "read-only probe; explicitly forbids preset change",
     # R1's *evidence* is captured under `m`, and P0's audit checks that against the
     # policy target. The declaration itself freezes no policy — its only mention of
     # a preset is the row declaring preset changes unauthorized.
-    "r1_temporal_reduction_capture_declaration_20260712": "capture declaration; freezes no policy table",
+    "r1_temporal_reduction_capture_declaration_20260712.md": "capture declaration; freezes no policy table",
 }
 
 
@@ -156,18 +161,21 @@ def test_every_declaration_either_binds_a_policy_or_says_why_not() -> None:
     tables it could not parse simply fell out of scope and was never checked. Scope
     is now a fact on disk: a declaration has a binding file, or it is named here.
     """
+    # Booked by path relative to research/, never by stem. Two declarations of the
+    # same name in different directories are two declarations; keyed by stem they
+    # would cancel each other out, and one of them would be silently credited with
+    # the other's binding — or the other's exemption.
     declarations = {
-        path.stem
+        str(path.relative_to(_RESEARCH))
         for path in _RESEARCH.rglob("*_declaration_*.md")
-        if not path.name.endswith(".policy.yaml")
     }
-    bound = {path.name[: -len(".policy.yaml")] for path in _bindings()}
+    bound = {str(_bound_document(path).relative_to(_RESEARCH)) for path in _bindings()}
 
     unaccounted = declarations - bound - set(NO_POLICY_BINDING)
     assert not unaccounted, (
         f"{sorted(unaccounted)} have no policy binding and are not listed in "
-        "NO_POLICY_BINDING. Write a `<declaration>.policy.yaml`, or record there why "
-        "the declaration freezes no bridge policy. Silence is what produced P0."
+        "NO_POLICY_BINDING. Write a `<declaration>.policy.yaml` beside it, or record "
+        "there why it freezes no bridge policy. Silence is what produced P0."
     )
     stale = set(NO_POLICY_BINDING) - declarations
     assert not stale, f"{sorted(stale)} no longer exist — remove the dead exemption."
@@ -175,12 +183,35 @@ def test_every_declaration_either_binds_a_policy_or_says_why_not() -> None:
     assert bound, "no declaration is bound: the guard would be checking nothing"
 
 
-def test_a_binding_names_a_declaration_that_exists(binding) -> None:
+def _bound_document(binding_path: Path) -> Path:
+    """The one document a binding may bind: its own name, in its own directory.
+
+    Identity by *basename* is not identity. A binding could name
+    `closed/<same-name>.md`, and if a copy lived there the basename check passed,
+    scope still believed the real declaration was bound, and the prefix hash pinned
+    the copy — leaving the real sealed body free to change with nothing objecting.
+    Verified: with a decoy in place, H0's frozen `relink_bridge_px` could be edited
+    from `0.4` to `0.25` — the original P0 bug — and every test still passed.
+
+    This is the same substitution as the preset-path one, on the document side. A
+    binding's location decides what it binds; the `path` field must agree, not
+    choose.
+    """
+    return binding_path.with_name(
+        binding_path.name[: -len(".policy.yaml")] + ".md"
+    ).resolve()
+
+
+def test_a_binding_binds_exactly_the_declaration_it_sits_beside(binding) -> None:
     path, data = binding
-    document = _RESEARCH / data["document"]["path"]
-    assert document.is_file(), f"{path.name}: binds {data['document']['path']}, absent"
-    assert document.name == path.name[: -len(".policy.yaml")] + ".md", (
-        f"{path.name}: binds a document it is not named after"
+    declared = (_RESEARCH / data["document"]["path"]).resolve()
+    expected = _bound_document(path)
+
+    assert declared.is_file(), f"{path.name}: binds {data['document']['path']}, absent"
+    assert declared == expected, (
+        f"{path.name}: binds {declared}, but a binding may only bind the declaration "
+        f"it sits beside ({expected}). A same-named document in another directory is "
+        f"a different document — pinning it leaves the real one unguarded."
     )
 
 
@@ -419,3 +450,65 @@ def test_a_non_canonical_preset_path_is_rejected(tmp_path: Path) -> None:
     canonical = preset_path(stem).resolve()
     assert declared.is_file()  # the existence check passes...
     assert declared != canonical  # ...but it is not what the identity comes from
+
+
+def test_a_same_named_decoy_in_another_directory_cannot_be_bound(
+    tmp_path: Path,
+) -> None:
+    """Identity by basename is not identity — the document-side substitution.
+
+    A binding could name `closed/<same-name>.md`. If a copy lived there, the
+    basename check passed, scope still believed the real declaration was bound, and
+    the prefix hash pinned the *copy*. Verified before the fix: with a decoy in
+    place, H0's frozen `relink_bridge_px` could be edited from `0.4` to `0.25` — the
+    original P0 bug — and every test still passed.
+
+    Same shape as the preset-path substitution, on the other side of the binding.
+    """
+    real = _bound_document(_H0_BINDING)
+    decoy_dir = tmp_path / "closed"
+    decoy_dir.mkdir()
+    decoy = decoy_dir / real.name
+    decoy.write_bytes(real.read_bytes())  # byte-identical: the prefix hash matches
+
+    data = load_binding(_H0_BINDING)
+    size, pinned = data["sealed_prefix"]["bytes"], data["sealed_prefix"]["sha256"]
+    assert hashlib.sha256(decoy.read_bytes()[:size]).hexdigest() == pinned, (
+        "the decoy satisfies the prefix hash — which is exactly why the *identity* "
+        "of the document, not just its contents, has to be pinned"
+    )
+    assert decoy.name == real.name  # ...and the basename check would have passed
+
+    # But a binding may only bind the declaration it sits beside.
+    assert decoy.resolve() != _bound_document(_H0_BINDING)
+
+
+def test_a_decoy_declaration_cannot_inherit_the_real_ones_binding() -> None:
+    """Scope booked by stem would credit a `closed/` copy with the real one's binding.
+
+    Placed in the real tree, so this exercises the production bookkeeping rather
+    than a restatement of it.
+    """
+    real = _bound_document(_H0_BINDING)
+    decoy = _RESEARCH / "closed" / real.name
+    assert not decoy.exists(), "the decoy name is already taken; pick another"
+
+    decoy.write_bytes(real.read_bytes())
+    try:
+        declarations = {
+            str(path.relative_to(_RESEARCH))
+            for path in _RESEARCH.rglob("*_declaration_*.md")
+        }
+        bound = {
+            str(_bound_document(path).relative_to(_RESEARCH)) for path in _bindings()
+        }
+        key = str(decoy.relative_to(_RESEARCH))
+
+        assert key in declarations, "the decoy is a declaration in its own right..."
+        assert key not in bound, "...and it does not inherit the real one's binding"
+        assert declarations - bound - set(NO_POLICY_BINDING) == {key}, (
+            "the decoy must show up as unaccounted, forcing a decision — keyed by "
+            "stem it would have been silently absorbed by the real declaration"
+        )
+    finally:
+        decoy.unlink()
