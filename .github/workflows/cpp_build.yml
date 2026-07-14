@@ -85,10 +85,10 @@ jobs:
       # onnxruntime-gpu — on every run, to feed a C++ compile that takes 25s.
       # The other jobs (ci.yml) have always cached; this one was the outlier.
       #
-      # The glob is the lockfile alone, byte-identical to ci.yml's, so this job
-      # SHARES that cache rather than minting a second one. It must stay that way:
-      # the uv cache is ~4 GB and the repo ceiling is 10 GB, so two of them would
-      # evict each other (and everything else) instead of ever being reused.
+      # This cache is ~4.3 GB against a 10 GB repo ceiling, and it cannot be shared
+      # with ci.yml's: setup-uv keys on `<arch>-<python>-<glob>`, and this job's
+      # python resolves to `unknown` inside the CUDA container while ci.yml's is
+      # 3.12.3. The room comes from the ccache fix below instead.
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true

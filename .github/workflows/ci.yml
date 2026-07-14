@@ -19,9 +19,9 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-          # Lockfile only: the key must not depend on which workflow file asked
-          # for it, or cpp_build.yml cannot share this cache. See its setup-uv step.
-          cache-dependency-glob: '**/uv.lock'
+          cache-dependency-glob: |
+            **/uv.lock
+            .github/workflows/ci.yml
       - name: Check Lockfile
         run: uv lock --check
 
@@ -40,9 +40,9 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-          # Lockfile only: the key must not depend on which workflow file asked
-          # for it, or cpp_build.yml cannot share this cache. See its setup-uv step.
-          cache-dependency-glob: '**/uv.lock'
+          cache-dependency-glob: |
+            **/uv.lock
+            .github/workflows/ci.yml
       - name: Sync dependencies
         run: uv cache clean tensorrt-cu12-libs tensorrt-cu12 || true && uv sync --refresh-package tensorrt-cu12-libs
       - name: Ruff Check
@@ -65,9 +65,9 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-          # Lockfile only: the key must not depend on which workflow file asked
-          # for it, or cpp_build.yml cannot share this cache. See its setup-uv step.
-          cache-dependency-glob: '**/uv.lock'
+          cache-dependency-glob: |
+            **/uv.lock
+            .github/workflows/ci.yml
       - name: Sync dependencies
         run: uv cache clean tensorrt-cu12-libs tensorrt-cu12 || true && uv sync --refresh-package tensorrt-cu12-libs
       - name: Type Check with mypy
@@ -88,9 +88,9 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-          # Lockfile only: the key must not depend on which workflow file asked
-          # for it, or cpp_build.yml cannot share this cache. See its setup-uv step.
-          cache-dependency-glob: '**/uv.lock'
+          cache-dependency-glob: |
+            **/uv.lock
+            .github/workflows/ci.yml
       - name: Sync dependencies
         run: uv cache clean tensorrt-cu12-libs tensorrt-cu12 || true && uv sync --refresh-package tensorrt-cu12-libs
       - name: GPU Contract Check
@@ -132,9 +132,9 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-          # Lockfile only: the key must not depend on which workflow file asked
-          # for it, or cpp_build.yml cannot share this cache. See its setup-uv step.
-          cache-dependency-glob: '**/uv.lock'
+          cache-dependency-glob: |
+            **/uv.lock
+            .github/workflows/ci.yml
       - name: Sync dependencies
         run: uv cache clean tensorrt-cu12-libs tensorrt-cu12 || true && uv sync --refresh-package tensorrt-cu12-libs
       - name: Run Pytest (exclude GPU benchmarks and rely on Python fallbacks)
