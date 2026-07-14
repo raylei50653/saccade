@@ -116,6 +116,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # tests/contract/test_declaration_seal_order.py reads commit history to
+          # prove a declaration was sealed before its results existed. The default
+          # shallow checkout hides that history, and the check would pass silently.
+          fetch-depth: 0
       - name: Install System Dependencies
         run: |
           sudo apt-get update -q

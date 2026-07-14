@@ -91,40 +91,38 @@ audit, and D0 itself all state, and as this study's own
 > The delta is a **scope mismatch, not capture corruption.** The capture
 > stamped its policy faithfully; P0 compared it against a different preset.
 
-**The terminal nevertheless stands — it was over-determined.** Re-running the
-audit against `m` (the runner now takes the policy target as a required
-parameter) returns the *same* terminal: `px` and `dir_bonus` now match, but
-`h_lo`, `h_hi`, `spatial_gate` and `max_speed` are **never stamped into capture
-provenance at all**, so configuration alignment fails under *every* preset. The
-`px` / `dir_bonus` comparison reported above never carried the decision.
+**This packet's terminal is correct — for the `s` scope it declared.** Against
+`s`, the capture's *stamped* `px` and `dir_bonus` genuinely contradict the audited
+policy, so `INVALID` is warranted. The error was never the inference; it was the
+scope.
 
-> **The terminal is right; the reason published for it is wrong.** The capture
-> is not foreign — it is **under-stamped**. That distinction decides the next
-> move: a foreign capture would mean the D0/R1/S0 line is corrupt and must be
-> re-captured; an under-stamped one means the evidence is sound but
+**But § 5's partition had no cell for "cannot tell",** and the runner fused two
+kinds of evidence into one status (`mismatch_or_absent`): a field that is stamped
+and *differs* (the capture ran another policy) and a field that is *never stamped*
+(nothing can be concluded). With them held apart and the terminal derived from
+which kind was found — measured on these same sealed artifacts:
+
+| Policy target | mismatched (stamped, contradicts) | unstamped | Terminal |
+| --- | --- | --- | --- |
+| `s` (declared in § 1) | `px`, `dir_bonus` | `h_lo`, `h_hi`, `spatial_gate`, `max_speed` | `P0_CAPTURE_SEMANTICS_INVALID` |
+| **`m`** (what the evidence is) | *(none)* | same four | **`P0_CAPTURE_SEMANTICS_UNVERIFIABLE`** |
+
+> The capture is not foreign — it is **under-stamped**. That distinction decides
+> the next move: a foreign capture would mean the D0/R1/S0 line is corrupt and
+> must be re-captured; an under-stamped one means the evidence is sound but
 > under-documented, and the fields simply need stamping (which H0 does).
+
+**Terminal of record (scope-corrected, owner-accepted 2026-07-14):**
+`P0_CAPTURE_SEMANTICS_UNVERIFIABLE`, cause **capture-provenance incompleteness** —
+`h_lo`, `h_hi`, `spatial_gate`, `max_speed` unstamped and no capture-time
+`tracker_gpu.cu` hash. **This packet, sealed 2026-07-13, is not edited**; it
+records what was accepted then, and its label is right for its scope. See
+declaration § C1.3, § C1.5–C1.9.
 
 **Surviving, preset-independent findings** (§ 3 stands on these, not on the
 foreign-config framing): the field-sufficiency cap at **L1 replay**;
 `h_lo`/`h_hi` (and `spatial_gate`/`max_speed`) unstamped; no capture-time
 `tracker_gpu.cu` hash.
-
-**Terminal retyped (owner review, 2026-07-14).** Keeping the label
-`P0_CAPTURE_SEMANTICS_INVALID` while asserting the evidence is sound would leave
-the artifacts mechanically restating a withdrawn proposition. Missing provenance
-fields prove the capture cannot be *verified* against any policy — not that its
-semantics are wrong. Terminal of record for corrected runs:
-
-| | |
-| --- | --- |
-| **Terminal** | **`P0_CAPTURE_SEMANTICS_UNVERIFIABLE`** |
-| Cause | capture-provenance incompleteness: `h_lo`, `h_hi`, `spatial_gate`, `max_speed` unstamped; no capture-time `tracker_gpu.cu` hash |
-| Supersedes (in type) | `P0_CAPTURE_SEMANTICS_INVALID` |
-
-§ 5's stop rule and its precedence are **unchanged** — only the proposition the
-halt licenses is retyped. This packet, sealed 2026-07-13, keeps the superseded
-label and is **not** edited; it records what was accepted then. See declaration
-§ C1.5–C1.7.
 
 No unit may cite this study as evidence that the D0/R1/S0 capture **semantics**
 are invalid, nor as grounds to downgrade D0/R1/S0 — they never claimed the `s`

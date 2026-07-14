@@ -116,27 +116,36 @@ stamped its policy faithfully.
 The evidence packets are **not** amended: they are frozen and they were not
 wrong. What is wrong is the yardstick § 1 chose.
 
-### C1.3 The terminal survives — but it was over-determined
+### C1.3 The terminal partition had no cell for "cannot tell"
 
-The audit runner now takes its policy target as a required parameter. Re-running
-it against **`m`**, on the same D0 provenance, **does not flip the terminal**:
+§ 5 offered one terminal for every way alignment could fail. But alignment fails
+in two ways that mean opposite things:
 
-| Compared knob | expected (`m`) | actual (D0 provenance) | status |
-| --- | ---: | ---: | --- |
-| `relink_bridge_px` | `0.4` | `0.4` | **match** |
-| `relink_bridge_dir_bonus` | `0.0` | `0.0` | **match** |
-| `relink_bridge_h_lo` | `0.6` | *absent* | mismatch_or_absent |
-| `relink_bridge_h_hi` | `1.7` | *absent* | mismatch_or_absent |
-| `relink_bridge_spatial_gate` | `0.0` | *absent* | mismatch_or_absent |
-| `relink_bridge_max_speed` | `0.0` | *absent* | mismatch_or_absent |
+| Evidence | Kind | What it licenses |
+| --- | --- | --- |
+| a stamped field **contradicts** the audited policy | ontic | the capture really did run another policy |
+| a field is **never stamped** | epistemic | nothing — only that the check cannot be made |
 
-Four of the six compared knobs are **never stamped into capture provenance at
-all**. Configuration alignment therefore fails for **every** preset, so
-`P0_CAPTURE_SEMANTICS_INVALID` would have fired whichever preset § 1 had frozen.
+The runner fused them into a single status (`mismatch_or_absent`) and a single
+boolean, and the one available label was named after the **stronger** kind. So the
+weaker evidence inherited the stronger claim, and an *absence of evidence* was
+published as *evidence of invalidity*.
 
-> **The terminal is right; its published reason is wrong.** The capture is not
-> foreign — it is **under-stamped**. The `px` / `dir_bonus` comparison that the
-> results doc presents as the cause never carried the decision.
+With the two held apart and the terminal **derived** from which kind was found,
+the same frozen D0 provenance gives **different** answers for the two presets —
+measured, on the real sealed artifacts:
+
+| Policy target | mismatched (stamped, contradicts) | unstamped (cannot check) | Terminal |
+| --- | --- | --- | --- |
+| **`s`** (what § 1 froze) | `px`, `dir_bonus` | `h_lo`, `h_hi`, `spatial_gate`, `max_speed` | **`P0_CAPTURE_SEMANTICS_INVALID`** |
+| **`m`** (what the evidence *is*) | *(none)* | same four | **`P0_CAPTURE_SEMANTICS_UNVERIFIABLE`** |
+
+> **P0's terminal was correct for the preset it declared.** Against `s`, the
+> capture genuinely contradicts the audited policy — `INVALID` is warranted. The
+> error was never the inference. **It was the scope.**
+>
+> Against `m` — the preset the evidence is actually sealed on — nothing is
+> contradicted. The capture is not foreign; it is **under-stamped**.
 
 This matters because the two readings license opposite next moves. *"The evidence
 is from a foreign config"* implies the D0/R1/S0 line is corrupt and must be
@@ -163,19 +172,20 @@ this audit that should reach the claim-state registry.
 
 ### C1.5 What is submitted to the owner
 
-`P0_CAPTURE_SEMANTICS_INVALID` was owner-accepted on 2026-07-13 and is **not**
-rewritten here. It survives on the corrected reasoning (C1.3), so what the owner
-is asked to re-issue is its **cause**, not its outcome:
+`P0_CAPTURE_SEMANTICS_INVALID` was owner-accepted on 2026-07-13, is **correct
+within the scope § 1 declared**, and is **not** rewritten here. What the owner is
+asked to accept is the **scope-corrected terminal**:
 
-- **the recorded cause becomes provenance incompleteness** (C1.4 (2)–(3)) — four
-  policy knobs are unstamped — rather than a foreign capture configuration;
-- **the scope error is recorded**: § 1 froze `s` while auditing `m`-sealed
-  evidence, and no conclusion may be drawn from that comparison;
-- **re-running P0 against `m` is not a remedy** and is not proposed: it has been
-  run (C1.3) and returns the same terminal. The remedy is stamping the missing
-  provenance fields, which H0 already covers.
+- **the audit's scope was wrong**: § 1 froze `s` while auditing `m`-sealed
+  evidence, so its verdict is a statement about `s`, not about the evidence's own
+  policy;
+- **against `m`, the terminal is `P0_CAPTURE_SEMANTICS_UNVERIFIABLE`** (C1.3),
+  with cause **provenance incompleteness** (C1.4 (2)–(3));
+- **re-capture is not the remedy and is not proposed.** The evidence is sound; it
+  is under-documented. The remedy is stamping the missing provenance fields, which
+  H0 already covers.
 
-No downstream unit may cite this terminal as evidence that the D0/R1/S0 capture
+No downstream unit may cite this study as evidence that the D0/R1/S0 capture
 **semantics** are invalid — the demonstrated defect is in what the capture
 **records about itself**.
 
@@ -197,31 +207,84 @@ line, and a record for this object). It authorizes no capture, sweep, threshold
 study, B1, or production modification. The D0/R1/S0 states are **not** downgraded
 — they never claimed the `s` policy.
 
-### C1.7 The terminal is retyped, not merely re-caused (2026-07-14; owner review)
+### C1.7 The partition is completed, and the terminal becomes derived (2026-07-14; owner review)
 
 C1.6 as first written kept the label `P0_CAPTURE_SEMANTICS_INVALID` and changed
-only its cause. That is incoherent, and owner review rejected it: a terminal is a
-**typed proposition**, not a bookmark for wherever the study stopped. Asserting
-*"the evidence is sound, merely under-stamped"* while the runner keeps emitting
-`..._capture_semantics_invalid` means the artifacts **mechanically restate a
+only its cause. Owner review rejected that, and rightly: a terminal is a **typed
+proposition**, not a bookmark for wherever the study stopped. Asserting *"the
+evidence is sound, merely under-stamped"* while the runner keeps emitting
+`..._capture_semantics_invalid` leaves the artifacts **mechanically restating a
 proposition that has been withdrawn**.
 
-Missing provenance fields support exactly one inference — *the capture cannot be
-verified against any policy* — and not the stronger one that its semantics are
-wrong. So the terminal is **retyped**:
+But the deeper defect is not the label — it is that **§ 5's partition had no cell
+for "cannot tell"** (C1.3). So the fix is not a rename. The terminal is now
+**derived from the kind of evidence found**, over an ordered partition, and can no
+longer be chosen in advance:
 
-| | |
-| --- | --- |
-| **Terminal of record (corrected runs)** | **`P0_CAPTURE_SEMANTICS_UNVERIFIABLE`** |
-| Cause | capture-provenance incompleteness (C1.6) |
-| Supersedes (in type) | `P0_CAPTURE_SEMANTICS_INVALID` |
+| Order | Terminal | Fires when |
+| --- | --- | --- |
+| 1 | `P0_CAPTURE_SEMANTICS_INVALID` | any **stamped** field contradicts the target, the R1 frozen preset differs, a packet hash is broken, or a source proof is missing |
+| 2 | `P0_CAPTURE_SEMANTICS_UNVERIFIABLE` | nothing is contradicted, but a required field is **unstamped** (or no capture-time kernel hash exists) |
+| 3 | `P0_PAIR_CUTOFF_ONLY` | everything stamped and matching |
 
-What is **unchanged** is § 5's stop rule and its ordering: provenance that cannot
-be aligned to the frozen policy still halts the audit before any label is read,
-and still takes precedence. Only the proposition that halt licenses is retyped.
-The **2026-07-13 sealed packet keeps the superseded label** and is not edited —
-it is the historical record of what was accepted then. A corrected run emits the
-retyped terminal and carries `terminal_supersedes` so the two are never conflated.
+Each run emits `terminal_basis`, from which a reader can recompute the verdict and
+see **which kind of evidence carried it** — the thing the fused status destroyed.
 
-The registry records the retyped terminal as this object's state, with the
-superseded label named.
+§ 5's stop rule and its precedence are **unchanged**: provenance that cannot be
+aligned still halts the audit before any label is read. What changed is that the
+halt no longer has only one proposition available to it.
+
+The **2026-07-13 sealed packet is not edited.** Its `P0_CAPTURE_SEMANTICS_INVALID`
+is the correct terminal for the `s` scope it declared, and it stands as the record
+of what was accepted then. The registry records the **scope-corrected** terminal
+(`m` → `UNVERIFIABLE`) as this object's state.
+
+### C1.8 How the proposition slipped (attribution)
+
+The label overreached its evidence at a seam that was visible in § 5 all along:
+
+> **Trigger** (epistemic): *"whenever the capture provenance **cannot be aligned**
+> to the frozen policy"* — i.e. *I am unable to check*.
+> **Label** (ontic): `P0_CAPTURE_**SEMANTICS_INVALID**` — i.e. *it is wrong*.
+
+A halt condition was allowed to name a conclusion. Nothing in the artifacts could
+object, because the runner had already fused the two kinds of evidence into one
+boolean, so the distinction was **unrepresentable** by the time the terminal was
+computed.
+
+The vocabulary to prevent this **already existed in the contracts**: the
+feasible-set framework's § 20.7 requires exactly this separation — *"it separates
+'the experiment answered no' from 'the experiment could not answer the
+question'"*, and reserves `UNRESOLVED / INVALID-STUDY` for the latter. P0's
+partition simply had no such cell. The contract had the word; the study did not
+use it.
+
+### C1.9 Why nothing caught it: the seal is not auditable (2026-07-14)
+
+The § 20.8 seal bar assumes a declaration is fixed **before** the result is known.
+For P0 that cannot be checked from this repository: the declaration, the runner,
+the results and the sealed evidence packet **all arrived in one commit**
+(`b136437f`, 2026-07-13 14:32). Worse, the H0 draft (`392265e6`, 13:02 — ninety
+minutes earlier) already names `P0_CAPTURE_SEMANTICS_INVALID` as a settled
+outcome, so the terminal's name existed before the study that was to produce it
+was committed.
+
+This is not a P0 anomaly. Across every declaration/results pair in the module:
+
+| Study | declaration | results | |
+| --- | --- | --- | --- |
+| D0 runtime shadow fidelity | 07-12 17:32 | 07-12 17:32 | same commit |
+| frozen-packet key recoverability | 07-13 17:31 | 07-13 17:31 | same commit |
+| **P0 decision path** | 07-13 14:32 | 07-13 14:32 | same commit |
+| R1 temporal reduction | 07-12 19:17 | 07-12 20:41 | ✅ 84 min apart |
+
+Git cannot see working-tree order, so the defensible claim is not *"the seal was
+written afterwards"* but the more uncomfortable one: **nothing in the artifact
+record proves it was not.** A seal that cannot be audited cannot stop a terminal
+from being named after a result already in hand — which is precisely what has to
+be ruled out here.
+
+`tests/contract/test_declaration_seal_order.py` now requires a declaration to be
+introduced in a strictly earlier commit than its results. The three studies above
+are recorded there as **grandfathered, with their seals marked not auditable** —
+an entry on the books, not an absolution.

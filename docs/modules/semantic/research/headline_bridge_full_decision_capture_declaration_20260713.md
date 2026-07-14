@@ -871,13 +871,14 @@ that they cannot later be reported as findings:
 ### A5.4 Effect on the § 1 routing ledger
 
 § 1 item 1 reads *"Satisfied: `P0_CAPTURE_SEMANTICS_INVALID` was accepted and P0
-closed."* P0 remains closed and **its terminal still holds**, but an append-only
+closed."* P0 remains closed, and its sealed terminal is **correct for the `s`
+scope it declared** — but that is not this line's scope. An append-only
 [Correction 1](runtime_bridge_decision_path_identifiability_declaration_20260713.md)
-records that the terminal's *published cause* was wrong: P0 audited the `s`
-policy against `m`-sealed evidence, and the `px` / `dir_bonus` delta it reported
-as evidence of a foreign capture is simply `m`'s correct values. Re-run against
-`m`, the terminal is unchanged — because `h_lo`, `h_hi`, `spatial_gate` and
-`max_speed` are **never stamped into capture provenance under any preset**.
+records that P0 audited the `s` policy against `m`-sealed evidence: the `px` /
+`dir_bonus` delta it read as a foreign capture is simply `m`'s correct values.
+Re-run against **`m`**, with contradiction and absence held apart, the terminal
+becomes **`P0_CAPTURE_SEMANTICS_UNVERIFIABLE`** — nothing is contradicted; four
+policy knobs are simply **never stamped**.
 
 So the defect H0 inherits is **provenance incompleteness, not capture
 corruption**: the D0/R1/S0 evidence is sound but under-documented. H0 is built on

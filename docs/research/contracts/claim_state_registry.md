@@ -258,18 +258,24 @@ last_reviewed_at: 2026-07-12
 ```yaml
 layer: quantity                        # 非決策層:它管「證據能否自證」,不管任何 gate/score
 ladder: P0 ordered terminal            transition_semantics: defined（該研究自帶封印判準）
-state: P0_CAPTURE_SEMANTICS_UNVERIFIABLE (retyped 2026-07-14, owner review)
-supersedes: P0_CAPTURE_SEMANTICS_INVALID (accepted 2026-07-13; 2026-07-14 撤回其命題型別)
-       # 缺 provenance 只能推出「無法自證」,推不出「語義錯誤」;stop rule 與 precedence 不變,
-       # 只有 halt 所授權的命題被重判型別。sealed packet 保留舊 label,不得改。
+state: P0_CAPTURE_SEMANTICS_UNVERIFIABLE (scope-corrected 2026-07-14, owner review)
+       # terminal 現為**推導值**:contradiction（有蓋章且矛盾）> absence（未蓋章）> clean。
+       # 對 m（證據實際封存的 preset）稽核 ⇒ 零矛盾、四欄位缺席 ⇒ UNVERIFIABLE。
+prior_terminal: P0_CAPTURE_SEMANTICS_INVALID (sealed 2026-07-13)
+       # **不是被推翻,是 out of scope**:P0 §1 凍結 s,而對 s 而言 px/dir_bonus 確實是
+       # 已蓋章的矛盾 ⇒ INVALID 在其宣告的 scope 內成立。錯的只有 scope。
+       # sealed packet 保留該 label,不得改。
 cause: capture-provenance incompleteness（h_lo / h_hi / spatial_gate / max_speed 未蓋章;
        無 capture-time tracker_gpu.cu hash）
 substrate: D0/R1/S0 的 shadow capture provenance（runtime CUDA）
 target_substrate: same
-open_limits: [terminal 為 **over-determined**:h_lo / h_hi / spatial_gate / max_speed
-              未蓋章 ⇒ configuration alignment 在**任何 preset** 下皆失敗;
+open_limits: [h_lo / h_hi / spatial_gate / max_speed 未蓋章 ⇒ packet 無法自證其 policy
+              （**在任何 preset 下**;此為記錄缺口,非證據矛盾）;
+              無 capture-time tracker_gpu.cu hash;
               replay 封頂 L1（D0 v2 export 缺 frame / slot / det score
-              ⇒ margin、atomicMax claim、commit 不可重建）]
+              ⇒ margin、atomicMax claim、commit 不可重建）;
+              **本研究的 seal 不可稽核**——宣告/runner/results/packet 同一 commit 落地
+              （b136437f）⇒ 見 declaration §C1.9 與 tests/contract/test_declaration_seal_order.py]
 blockers: []
 decision_relevance:
   role: **反向約束 + enabler 前提** — 它不改任何 production 決策,但它決定

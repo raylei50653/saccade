@@ -23,14 +23,18 @@ from typing import Any, Iterable
 REPO = Path(__file__).resolve().parents[2]
 STAMP = "20260713"
 
-# The stop rule is unchanged — provenance that cannot be aligned to a policy still
-# halts the audit before any label is read. What changed is the *type* of the
-# proposition that halt licenses. Missing provenance fields prove that the capture
-# cannot certify the policy it ran under; they do not prove its semantics are
-# wrong. The 2026-07-13 sealed packet carries the superseded label and is never
-# edited; a corrected run emits the retyped one (declaration Correction 1 § C1.7).
-TERMINAL = "P0_CAPTURE_SEMANTICS_UNVERIFIABLE"
-TERMINAL_SUPERSEDES = "P0_CAPTURE_SEMANTICS_INVALID"
+# Ordered terminal partition — first match wins, mirroring § 5's "takes precedence".
+#
+# The original partition had one label for every way alignment could fail, and it
+# was named after the strongest of them. So "the capture records a *different*
+# policy" (ontic: its semantics really are not the target's) and "the capture does
+# not record the policy *at all*" (epistemic: nothing can be concluded) collapsed
+# into one verdict, and the weaker evidence inherited the stronger claim. That is
+# the defect this partition removes: the terminal is now *derived* from which kind
+# of evidence was found, never named in advance (declaration Correction 1 § C1.7).
+TERMINAL_CONTRADICTED = "P0_CAPTURE_SEMANTICS_INVALID"
+TERMINAL_UNVERIFIABLE = "P0_CAPTURE_SEMANTICS_UNVERIFIABLE"
+TERMINAL_CLEAN = "P0_PAIR_CUTOFF_ONLY"
 
 if str(REPO / "scripts" / "tools") not in sys.path:
     sys.path.insert(0, str(REPO / "scripts" / "tools"))
@@ -120,6 +124,14 @@ def _eq(actual: Any, expected: Any) -> bool:
 def _alignment(
     name: str, bridge: dict[str, Any], policy: dict[str, Any]
 ) -> dict[str, Any]:
+    """Compare stamped provenance against the audited policy, three-valued.
+
+    `mismatch` and `absent` are different *kinds* of evidence and must never share
+    a status. A stamped field that differs proves the capture ran another policy.
+    An unstamped field proves nothing at all — it only removes the ability to
+    check. Fusing them (the original `mismatch_or_absent`) is what let an absence
+    of evidence be reported as evidence of invalidity.
+    """
     mapping = {
         "relink_bridge_px": "px",
         "relink_bridge_dir_bonus": "dir_bonus",
@@ -130,24 +142,53 @@ def _alignment(
     }
     comparisons = []
     for policy_key, artifact_key in mapping.items():
-        present = artifact_key in bridge
-        actual = bridge.get(artifact_key)
+        if artifact_key not in bridge:
+            status = "absent"
+        elif _eq(bridge[artifact_key], policy[policy_key]):
+            status = "match"
+        else:
+            status = "mismatch"
         comparisons.append(
             {
-                "headline_knob": policy_key,
+                "policy_knob": policy_key,
                 "artifact_field": artifact_key,
                 "expected": policy[policy_key],
-                "actual": actual,
-                "status": "match"
-                if present and _eq(actual, policy[policy_key])
-                else "mismatch_or_absent",
+                "actual": bridge.get(artifact_key),
+                "status": status,
             }
         )
+
+    def _of(status: str) -> list[str]:
+        return [c["policy_knob"] for c in comparisons if c["status"] == status]
+
     return {
         "artifact": name,
-        "all_fields_match": all(item["status"] == "match" for item in comparisons),
+        "mismatched": _of("mismatch"),  # ontic: contradicts the audited policy
+        "unstamped": _of("absent"),  # epistemic: cannot be checked at all
+        "all_fields_match": not _of("mismatch") and not _of("absent"),
         "comparisons": comparisons,
     }
+
+
+def derive_terminal(
+    contradictions: dict[str, Any], absences: dict[str, Any]
+) -> tuple[str, bool, bool]:
+    """Ordered partition over the *kind* of evidence found, not over a stop condition.
+
+    Contradiction outranks absence: if the artifacts positively record something
+    incompatible with the audited policy, that is a fact about the capture. If they
+    merely fail to record it, the only fact is about the audit's reach. Naming the
+    verdict in advance — as the original partition did — is what let the second be
+    reported as the first.
+    """
+    contradicted = any(bool(value) for value in contradictions.values())
+    unverifiable = any(bool(value) for value in absences.values())
+
+    if contradicted:
+        return TERMINAL_CONTRADICTED, contradicted, unverifiable
+    if unverifiable:
+        return TERMINAL_UNVERIFIABLE, contradicted, unverifiable
+    return TERMINAL_CLEAN, contradicted, unverifiable
 
 
 def _field_matrix(header: set[str]) -> list[dict[str, Any]]:
@@ -309,27 +350,45 @@ def audit(
     r1_alignment = _alignment("R1", dict(r1_export["provenance"]["bridge"]), policy)
     r1_preset = str(r1_hashes["scope"]["preset"])
 
-    configuration_valid = (
-        d0_alignment["all_fields_match"]
-        and r1_alignment["all_fields_match"]
-        and r1_preset == policy["preset"]
-    )
-    source_valid = all(source_proofs.values())
-    terminal = (
-        TERMINAL
-        if not (configuration_valid and source_valid and d0_hash_ok and s0_hash_ok)
-        else "P0_PAIR_CUTOFF_ONLY"
-    )
+    # Positive contradictions: the artifacts record something incompatible with the
+    # audited policy or with themselves. These license the ontic verdict.
+    contradictions = {
+        "d0_mismatched_knobs": d0_alignment["mismatched"],
+        "r1_mismatched_knobs": r1_alignment["mismatched"],
+        "r1_frozen_preset_differs": (
+            r1_preset if r1_preset != policy["preset"] else None
+        ),
+        "d0_packet_hash_broken": not d0_hash_ok,
+        "s0_capture_hash_broken": not s0_hash_ok,
+        "source_proofs_missing": [n for n, ok in source_proofs.items() if not ok],
+    }
+    # Absences: nothing is contradicted, but nothing can be checked either. These
+    # license only the epistemic verdict — never the ontic one.
+    absences = {
+        "d0_unstamped_knobs": d0_alignment["unstamped"],
+        "r1_unstamped_knobs": r1_alignment["unstamped"],
+        "capture_kernel_source_hash_absent": True,  # only a git_commit is recorded
+    }
+    terminal, contradicted, unverifiable = derive_terminal(contradictions, absences)
+
     matrix = _field_matrix(header_set)
     return {
         "study": "p0_runtime_bridge_decision_path_20260713",
         "terminal": terminal,
-        "terminal_supersedes": TERMINAL_SUPERSEDES,
-        "terminal_cause": (
-            "capture_provenance_incomplete: h_lo, h_hi, spatial_gate and max_speed are "
-            "not stamped, and no capture-time kernel source hash is recorded, so the "
-            "capture cannot certify the policy it ran under — under any preset"
-        ),
+        # The terminal is a derived value: this is what derived it. A reader can
+        # recompute the verdict from `terminal_basis` alone, and can see which kind
+        # of evidence carried it — which the fused `mismatch_or_absent` could not.
+        "terminal_basis": {
+            "ordered_partition": [
+                TERMINAL_CONTRADICTED,
+                TERMINAL_UNVERIFIABLE,
+                TERMINAL_CLEAN,
+            ],
+            "contradictions": contradictions,
+            "absences": absences,
+            "contradicted": contradicted,
+            "unverifiable": unverifiable,
+        },
         "policy_target": policy,
         "label_access": {"gt_or_fp_labels_accessed": False, "p5": "not_entered"},
         "source_proofs": source_proofs,
