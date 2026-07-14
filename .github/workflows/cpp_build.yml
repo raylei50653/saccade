@@ -43,9 +43,9 @@ jobs:
       # Keyed on the C++ sources, not on github.sha. The sha key minted a fresh
       # ~85 MB entry on *every commit* — including the many that touch no C++ at
       # all — and could never be hit exactly, only fallen back to via restore-keys.
-      # That sprawl had reached 72 entries / 6.07 GB, which is what pinned the repo
-      # against its 10 GB ceiling. Now a run that changes no C++ hits its entry
-      # exactly and saves nothing.
+      # That sprawl had reached 72 entries / 6.07 GB and was pinning the repo
+      # against its 10 GB cache ceiling, evicting everything else. A run that
+      # changes no C++ now hits its entry exactly and saves nothing.
       - name: Cache ccache
         uses: actions/cache@v4
         with:
@@ -79,20 +79,10 @@ jobs:
           apt-get clean
           rm -rf /var/lib/apt/lists/*
 
-      # Installed via setup-uv, not curl, for `enable-cache`: without it this job
-      # has no uv cache at all (`No cache found at: /github/home/.cache/uv`) and
-      # re-downloads ~3.3 GB of wheels — torch, the nvidia-* CUDA runtime set,
-      # onnxruntime-gpu — on every run, to feed a C++ compile that takes 25s.
-      # The other jobs (ci.yml) have always cached; this one was the outlier.
-      #
-      # This cache is ~4.3 GB against a 10 GB repo ceiling, and it cannot be shared
-      # with ci.yml's: setup-uv keys on `<arch>-<python>-<glob>`, and this job's
-      # python resolves to `unknown` inside the CUDA container while ci.yml's is
-      # 3.12.3. The room comes from the ccache fix below instead.
-      - uses: astral-sh/setup-uv@v5
-        with:
-          enable-cache: true
-          cache-dependency-glob: '**/uv.lock'
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: Free disk space
         run: |
