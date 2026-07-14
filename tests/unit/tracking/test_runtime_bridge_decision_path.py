@@ -25,7 +25,9 @@ end-to-end split is asserted against the real sealed artifacts where they exist.
 
 from __future__ import annotations
 
+import csv
 import gzip
+import hashlib
 import importlib.util
 import json
 import shutil
@@ -163,21 +165,65 @@ def test_the_two_presets_reach_different_terminals_on_the_real_artifacts() -> No
 # --------------------------------------------------------------------------- #
 def test_kernel_source_evidence_splits_absence_from_contradiction() -> None:
     runner = _load_runner()
+    key = runner.CAPTURE_KERNEL_SOURCE_KEY
+    at_capture = "aa" * 32
 
-    absent = runner.kernel_source_evidence({"git_commit": "abc"}, "aa" * 32)
-    assert absent == {"stamped": None, "absent": True, "differs": None}
+    absent = runner.kernel_source_evidence({"git_commit": "abc"}, at_capture)
+    assert absent["absent"] is True and absent["differs"] is None
 
-    agrees = runner.kernel_source_evidence(
-        {runner.CAPTURE_KERNEL_SOURCE_KEY: "aa" * 32}, "aa" * 32
-    )
+    agrees = runner.kernel_source_evidence({key: at_capture}, at_capture)
     assert agrees["absent"] is False and agrees["differs"] is None
 
-    # Stamped, and it names a *different* kernel: that is a fact about the capture,
-    # not a gap in the audit. It must contradict, never merely fail to verify.
-    differs = runner.kernel_source_evidence(
-        {runner.CAPTURE_KERNEL_SOURCE_KEY: "bb" * 32}, "aa" * 32
-    )
+    # Stamped, and it names a kernel the capture's own commit does not contain:
+    # a fact about the capture, not a gap in the audit. It must contradict.
+    differs = runner.kernel_source_evidence({key: "bb" * 32}, at_capture)
     assert differs["absent"] is False and differs["differs"] == "bb" * 32
+
+    # The capture's commit cannot be resolved, so there is nothing to compare it
+    # against. That is an absence — never a contradiction.
+    unresolvable = runner.kernel_source_evidence({key: at_capture}, None)
+    assert unresolvable["absent"] is True and unresolvable["differs"] is None
+
+
+def test_a_capture_is_not_falsified_by_later_edits_to_the_kernel() -> None:
+    """The comparand is the capture-time source, never the working tree's.
+
+    Comparing a stamp against today's `tracker_gpu.cu` would turn every later edit
+    to that file into a false `..._SEMANTICS_INVALID` for an untouched historical
+    capture. The 2026-07-12 capture already runs a kernel a thousand lines removed
+    from HEAD, so this is live, not hypothetical.
+    """
+    runner = _load_runner()
+    at_capture, today = "aa" * 32, "ee" * 32
+    assert at_capture != today
+
+    honest = runner.kernel_source_evidence(
+        {runner.CAPTURE_KERNEL_SOURCE_KEY: at_capture}, at_capture
+    )
+    assert honest["differs"] is None, "an untouched capture must survive kernel drift"
+
+
+@pytest.mark.packet_bound
+@pytest.mark.skipif(
+    not (REAL_CAPTURE / "capture.csv.gz").exists(),
+    reason="sealed D0 capture not present in this checkout",
+)
+def test_source_proofs_are_read_from_the_kernel_the_capture_ran() -> None:
+    """Static proofs grepped from HEAD certify a decision path that never ran."""
+    runner = _load_runner()
+    result = runner.audit(ROOT, policy_preset=SEALED_PRESET)
+    provenance = result["provenance"]
+
+    assert provenance["source_proofs_verified_against"] == "capture_time_kernel"
+    # The kernel has moved since the capture; the audit must notice and still not
+    # treat that drift as evidence against the capture.
+    assert provenance["kernel_source_drifted_since_capture"] is True
+    assert (
+        provenance["capture_time_kernel_source_sha256"]
+        != provenance["current_kernel_source_sha256"]
+    )
+    assert result["terminal_basis"]["contradictions"]["source_proofs_missing"] == []
+    assert result["terminal_basis"]["contradicted"] is False
 
 
 def _fully_stamped_capture_dir(runner, tmp_path: Path) -> Path:
@@ -202,9 +248,15 @@ def _fully_stamped_capture_dir(runner, tmp_path: Path) -> Path:
             "max_speed": resolved["relink_bridge_max_speed"],
         }
     )
-    # A complete capture stamps the kernel that produced it — here, the source the
-    # audit itself hashes, so a complete stamp is what the audit sees.
-    manifest["provenance"][runner.CAPTURE_KERNEL_SOURCE_KEY] = runner.sha256(KERNEL_SRC)
+    # A complete capture stamps the kernel *it ran* — the source at its own commit,
+    # not the one in the tree today (which has since moved on).
+    at_capture = runner.kernel_source_at_capture(
+        ROOT, manifest["provenance"]["git_commit"]
+    )
+    assert at_capture is not None, "capture-time kernel source must be resolvable"
+    manifest["provenance"][runner.CAPTURE_KERNEL_SOURCE_KEY] = hashlib.sha256(
+        at_capture
+    ).hexdigest()
     (d0_dir / "capture.csv.gz.manifest.json").write_text(
         json.dumps(manifest), encoding="utf-8"
     )
@@ -287,3 +339,48 @@ def test_p0_keeps_candidate_and_commit_replay_below_l2(tmp_path: Path) -> None:
         result["replay"]["counterfactual_ceiling_if_provenance_were_complete"]
         == "L1_pair_cutoff_replay"
     )
+
+
+# --------------------------------------------------------------------------- #
+# A terminal types the whole packet, not one field.                             #
+#                                                                               #
+# When the terminal was retyped to `..._UNVERIFIABLE`, three fields were left    #
+# behind as fixed strings — `replay.observed_level`, `decision_funnel_status`,   #
+# and `decision_funnel.csv`'s per-row `reason`, which went on saying "headline   #
+# provenance is invalid". A single packet then asserted both "cannot be          #
+# verified" and "is invalid": the withdrawn proposition, still shipping.         #
+# --------------------------------------------------------------------------- #
+@pytest.mark.parametrize("preset", [SEALED_PRESET, FOREIGN_PRESET])
+def test_no_packet_field_contradicts_its_own_terminal(
+    tmp_path: Path, preset: str
+) -> None:
+    runner = _load_runner()
+    result = runner.audit(
+        ROOT, policy_preset=preset, d0_capture_dir=_synthetic_d0_capture_dir(tmp_path)
+    )
+    terminal = result["terminal"]
+    narrative = runner.TERMINAL_NARRATIVE[terminal]
+
+    runner.write_packet(result, tmp_path / "packet")
+    funnel = list(csv.DictReader((tmp_path / "packet" / "decision_funnel.csv").open()))
+    assert funnel, "funnel must not be empty"
+
+    # Every field that says *why* the audit stopped must say the same thing.
+    assert result["replay"]["observed_level"] == narrative["observed_level"]
+    assert result["decision_funnel_status"] == narrative["funnel_status"]
+    for row in funnel:
+        assert row["reason"] == narrative["funnel_reason"]
+        assert row["observability"] == narrative["observability"]
+
+    # And no field may still assert the *other* terminal's proposition. This is the
+    # bug in its concrete form: an UNVERIFIABLE packet whose funnel says "invalid".
+    if terminal == "P0_CAPTURE_SEMANTICS_UNVERIFIABLE":
+        stopped = [
+            result["replay"]["observed_level"],
+            result["decision_funnel_status"],
+            *(row["reason"] for row in funnel),
+            *(row["consequence"] for row in result["field_sufficiency"]),
+        ]
+        assert not [text for text in stopped if "invalid" in text.lower()], (
+            "a packet that cannot verify its capture must not also call it invalid"
+        )

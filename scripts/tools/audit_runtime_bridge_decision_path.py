@@ -15,9 +15,10 @@ import csv
 import gzip
 import hashlib
 import json
+import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Final, Iterable
 
 
 REPO = Path(__file__).resolve().parents[2]
@@ -47,6 +48,79 @@ TERMINAL_CLEAN = "P0_PAIR_CUTOFF_ONLY"
 # study corrects: it fixes a verdict in code instead of deriving it from evidence,
 # and it floors the terminal at UNVERIFIABLE under every possible input.
 CAPTURE_KERNEL_SOURCE_KEY = "kernel_source_sha256"
+
+KERNEL_SOURCE_REL = "src/tracking/tracker_gpu.cu"
+
+# Every field that states *why* the audit stopped is derived from the terminal.
+# They used to be fixed strings, and when the terminal was retyped they were left
+# behind: a packet could carry `P0_CAPTURE_SEMANTICS_UNVERIFIABLE` while its
+# decision funnel still read "headline provenance is invalid" — the withdrawn
+# proposition, restated in a file nobody re-read. A terminal is not a label on one
+# field; it types the whole packet.
+TERMINAL_NARRATIVE: Final[dict[str, dict[str, str]]] = {
+    TERMINAL_CONTRADICTED: {
+        "observed_level": "not_assignable_due_to_capture_semantics_invalid",
+        "funnel_status": "not_entered_due_to_capture_semantics_invalid",
+        "observability": "UNOBSERVABLE",
+        "funnel_reason": "capture provenance contradicts the audited policy; P4 not entered",
+        "cutoff_consequence": "scalar cutoff is mechanically evaluable, but the capture records a policy other than the audited one",
+        "scalar_consequence": "scalar formula terms are observable only for a population the capture attributes to another policy",
+    },
+    TERMINAL_UNVERIFIABLE: {
+        "observed_level": "not_assignable_while_capture_provenance_is_incomplete",
+        "funnel_status": "not_entered_while_capture_provenance_is_incomplete",
+        "observability": "UNOBSERVABLE",
+        "funnel_reason": "capture provenance is incomplete, so no policy can be certified; P4 not entered",
+        "cutoff_consequence": "scalar cutoff is mechanically evaluable, but not attributable to a certified policy while provenance is incomplete",
+        "scalar_consequence": "scalar formula terms are observable only for the emitted survivor population, under a configuration the capture cannot certify",
+    },
+    TERMINAL_CLEAN: {
+        "observed_level": "L1_pair_cutoff_replay",
+        "funnel_status": "admissible_p4_not_executed_by_this_runner",
+        # Not `OBSERVABLE`: admission passing does not mean this runner counted
+        # anything. It emits no funnel figures, so it must not claim to have any.
+        "observability": "PENDING_P4",
+        "funnel_reason": "provenance is complete and the funnel is computable; P4 must compute it — this admission runner does not",
+        "cutoff_consequence": "scalar cutoff is mechanically evaluable and attributable to the audited policy",
+        "scalar_consequence": "scalar formula terms are observable for the emitted survivor population under the audited policy",
+    },
+}
+
+
+def kernel_source_at_capture(root: Path, git_commit: Any) -> bytes | None:
+    """The audited kernel source as of the capture's *own* commit.
+
+    Both the capture's stamped hash and this audit's static source proofs describe
+    the kernel that **ran** — not the one in today's working tree. Reading either
+    from the current checkout is a category error with two teeth:
+
+      * every later edit to `tracker_gpu.cu` would make an untouched historical
+        capture look like it stamped the wrong kernel (a false contradiction), and
+      * the source proofs would be grepped from code the capture never executed,
+        silently certifying a decision path that was never the one under audit.
+
+    Not hypothetical: the 2026-07-12 capture ran a kernel a thousand lines removed
+    from HEAD, and its proofs were being read from HEAD.
+
+    Returns None when the capture's commit or that path within it cannot be
+    resolved — which is an *absence* (nothing can be compared), never a
+    contradiction.
+    """
+    if not git_commit:
+        return None
+    result = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(root),
+            "cat-file",
+            "blob",
+            f"{git_commit}:{KERNEL_SOURCE_REL}",
+        ],
+        capture_output=True,
+    )
+    return result.stdout if result.returncode == 0 else None
+
 
 if str(REPO / "scripts" / "tools") not in sys.path:
     sys.path.insert(0, str(REPO / "scripts" / "tools"))
@@ -183,26 +257,43 @@ def _alignment(
 
 
 def kernel_source_evidence(
-    provenance: dict[str, Any], current_source_sha256: str
+    provenance: dict[str, Any], capture_source_sha256: str | None
 ) -> dict[str, Any]:
     """Which kind of evidence the capture offers about the kernel that produced it.
 
     The same three-way split as `_alignment`, for the same reason. An unstamped
     kernel hash is an *absence*: the capture cannot say what ran, so nothing about
-    the kernel can be concluded. A stamped hash that differs from the source under
-    audit is a *contradiction*: the capture positively records a different kernel.
-    Collapsing the second into the first would hide a real defect; asserting the
-    first as a constant makes the clean terminal unreachable under any evidence.
+    the kernel can be concluded. A stamped hash that disagrees with the source at
+    the capture's **own commit** is a *contradiction*: the capture records a kernel
+    its own commit does not contain.
+
+    The comparand is the capture-time source, never the working tree's. A capture
+    is not falsified by edits made to the file after it ran.
     """
     stamped = provenance.get(CAPTURE_KERNEL_SOURCE_KEY)
+    if capture_source_sha256 is None:
+        return {
+            "stamped": stamped,
+            "absent": True,
+            "differs": None,
+            "reason": "capture-time kernel source could not be resolved from its commit",
+        }
     if stamped is None:
-        return {"stamped": None, "absent": True, "differs": None}
+        return {
+            "stamped": None,
+            "absent": True,
+            "differs": None,
+            "reason": f"capture stamps no {CAPTURE_KERNEL_SOURCE_KEY}",
+        }
     stamped = str(stamped)
-    return {
-        "stamped": stamped,
-        "absent": False,
-        "differs": stamped if stamped != current_source_sha256 else None,
-    }
+    if stamped != capture_source_sha256:
+        return {
+            "stamped": stamped,
+            "absent": False,
+            "differs": stamped,
+            "reason": "capture stamps a kernel its own commit does not contain",
+        }
+    return {"stamped": stamped, "absent": False, "differs": None, "reason": None}
 
 
 def derive_terminal(
@@ -226,7 +317,7 @@ def derive_terminal(
     return TERMINAL_CLEAN, contradicted, unverifiable
 
 
-def _field_matrix(header: set[str]) -> list[dict[str, Any]]:
+def _field_matrix(header: set[str], narrative: dict[str, str]) -> list[dict[str, Any]]:
     def row(
         stage: str, required: list[str], artifact: str, complete: bool, consequence: str
     ) -> dict[str, Any]:
@@ -283,14 +374,14 @@ def _field_matrix(header: set[str]) -> list[dict[str, Any]]:
             ],
             "D0 v2 capture header",
             {"fwd_r", "bwd_r", "dist_h", "s_lost", "w", "bdist"}.issubset(header),
-            "scalar formula terms are observable only for the emitted survivor population, under a configuration the capture cannot certify",
+            narrative["scalar_consequence"],
         ),
         row(
             "D_pair_cutoff",
             ["bdist", "production threshold", "headline preset stamp"],
             "D0 v2 capture header + manifest",
             False,
-            "scalar cutoff is mechanically evaluable, but not attributable to a certified policy while provenance is incomplete",
+            narrative["cutoff_consequence"],
         ),
         row(
             "E_candidate_local_ranking",
@@ -347,7 +438,7 @@ def audit(
         root
         / "docs/modules/semantic/research/runtime_bridge_decision_path_identifiability_declaration_20260713.md"
     )
-    source = root / "src/tracking/tracker_gpu.cu"
+    source = root / KERNEL_SOURCE_REL
 
     for path in (
         d0_packet_path,
@@ -371,8 +462,28 @@ def audit(
     s0_packet = load_json(s0_packet_path)
     header = csv_header_gzip(d0_capture)
     header_set = set(header)
-    source_text = source.read_text(encoding="utf-8")
-    source_proofs = {name: text in source_text for name, text in SOURCE_PROOFS.items()}
+
+    # The static proofs must be read from the kernel the capture *ran*, not from
+    # today's working tree — otherwise the audit certifies a decision path the
+    # capture never executed. When that source cannot be recovered, the proofs are
+    # unverifiable (an absence), not missing (a contradiction).
+    capture_provenance = dict(d0_capture_manifest["provenance"])
+    capture_source = kernel_source_at_capture(
+        root, capture_provenance.get("git_commit")
+    )
+    capture_source_sha = (
+        hashlib.sha256(capture_source).hexdigest()
+        if capture_source is not None
+        else None
+    )
+    source_proofs: dict[str, bool | None]
+    if capture_source is None:
+        source_proofs = {name: None for name in SOURCE_PROOFS}
+    else:
+        capture_source_text = capture_source.decode("utf-8", errors="replace")
+        source_proofs = {
+            name: text in capture_source_text for name, text in SOURCE_PROOFS.items()
+        }
 
     expected_d0_hash = str(d0_packet["frozen_inputs"]["capture.csv.gz"])
     actual_d0_hash = sha256(d0_capture)
@@ -385,9 +496,7 @@ def audit(
     r1_alignment = _alignment("R1", dict(r1_export["provenance"]["bridge"]), policy)
     r1_preset = str(r1_hashes["scope"]["preset"])
     current_source_sha = sha256(source)
-    kernel = kernel_source_evidence(
-        dict(d0_capture_manifest["provenance"]), current_source_sha
-    )
+    kernel = kernel_source_evidence(capture_provenance, capture_source_sha)
 
     # Positive contradictions: the artifacts record something incompatible with the
     # audited policy or with themselves. These license the ontic verdict.
@@ -399,7 +508,9 @@ def audit(
         ),
         "d0_packet_hash_broken": not d0_hash_ok,
         "s0_capture_hash_broken": not s0_hash_ok,
-        "source_proofs_missing": [n for n, ok in source_proofs.items() if not ok],
+        # `is False` — a proof that could not be *checked* is None, and an unchecked
+        # proof is an absence. `not ok` would have promoted it to a contradiction.
+        "source_proofs_missing": [n for n, ok in source_proofs.items() if ok is False],
         "capture_kernel_source_differs": kernel["differs"],
     }
     # Absences: nothing is contradicted, but nothing can be checked either. These
@@ -408,10 +519,14 @@ def audit(
         "d0_unstamped_knobs": d0_alignment["unstamped"],
         "r1_unstamped_knobs": r1_alignment["unstamped"],
         "capture_kernel_source_hash_absent": kernel["absent"],
+        "source_proofs_unverifiable": [
+            n for n, ok in source_proofs.items() if ok is None
+        ],
     }
     terminal, contradicted, unverifiable = derive_terminal(contradictions, absences)
+    narrative = TERMINAL_NARRATIVE[terminal]
 
-    matrix = _field_matrix(header_set)
+    matrix = _field_matrix(header_set, narrative)
     return {
         "study": "p0_runtime_bridge_decision_path_20260713",
         "terminal": terminal,
@@ -434,13 +549,23 @@ def audit(
         "source_proofs": source_proofs,
         "provenance": {
             "d0_capture_sha256": actual_d0_hash,
-            "current_kernel_source_sha256": current_source_sha,
-            "d0_capture_git_commit": d0_capture_manifest["provenance"].get(
-                "git_commit"
-            ),
-            "r1_capture_git_commit": r1_export["provenance"].get("git_commit"),
-            "capture_kernel_source_sha256": kernel["stamped"],
+            # The kernel the capture ran, the kernel it says it ran, and the kernel
+            # in the tree today are three different questions. The audit compares
+            # the first two; the third is drift, reported and never a verdict.
+            "capture_time_kernel_source_sha256": capture_source_sha,
+            "capture_stamped_kernel_source_sha256": kernel["stamped"],
             "capture_kernel_source_sha256_present": not kernel["absent"],
+            "capture_kernel_source_note": kernel["reason"],
+            "current_kernel_source_sha256": current_source_sha,
+            "kernel_source_drifted_since_capture": (
+                capture_source_sha is not None
+                and capture_source_sha != current_source_sha
+            ),
+            "source_proofs_verified_against": (
+                "capture_time_kernel" if capture_source is not None else None
+            ),
+            "d0_capture_git_commit": capture_provenance.get("git_commit"),
+            "r1_capture_git_commit": r1_export["provenance"].get("git_commit"),
             "d0_packet_hash_match": d0_hash_ok,
             "s0_inherits_same_capture_hash": s0_hash_ok,
             "d0_alignment": d0_alignment,
@@ -451,7 +576,7 @@ def audit(
         "d0_header": header,
         "field_sufficiency": matrix,
         "replay": {
-            "observed_level": "not_assignable_while_capture_provenance_is_incomplete",
+            "observed_level": narrative["observed_level"],
             "counterfactual_ceiling_if_provenance_were_complete": "L1_pair_cutoff_replay",
             "l2_blockers": [
                 "no frame",
@@ -465,7 +590,7 @@ def audit(
                 "shadow capture has no commit",
             ],
         },
-        "decision_funnel_status": "not_entered_while_capture_provenance_is_incomplete",
+        "decision_funnel_status": narrative["funnel_status"],
         "inputs": {
             input_key(path, root): sha256(path)
             for path in (
@@ -488,6 +613,12 @@ def write_packet(result: dict[str, Any], output_dir: Path) -> None:
         json.dumps(result["field_sufficiency"], indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
+    # The funnel's own account of why it is empty is derived from the terminal, like
+    # every other such field. It used to read "headline provenance is invalid" no
+    # matter what — so a packet terminating in `..._UNVERIFIABLE` shipped a CSV that
+    # still asserted the invalidity the packet had just withdrawn. One artifact,
+    # two incompatible propositions.
+    narrative = TERMINAL_NARRATIVE[result["terminal"]]
     funnel_rows: Iterable[dict[str, str]] = (
         {
             "stage": stage,
@@ -495,8 +626,8 @@ def write_packet(result: dict[str, Any], output_dir: Path) -> None:
             "unique_candidate_count": "",
             "unique_lost_track_count": "",
             "sequence_distribution": "",
-            "observability": "UNOBSERVABLE",
-            "reason": "headline provenance is invalid; P4 not entered",
+            "observability": narrative["observability"],
+            "reason": narrative["funnel_reason"],
         }
         for stage in (
             "eligible_raw_pairs",

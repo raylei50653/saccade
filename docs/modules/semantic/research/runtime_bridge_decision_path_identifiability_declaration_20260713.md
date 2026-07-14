@@ -181,9 +181,12 @@ asked to accept is the **scope-corrected terminal**:
   policy;
 - **against `m`, the terminal is `P0_CAPTURE_SEMANTICS_UNVERIFIABLE`** (C1.3),
   with cause **provenance incompleteness** (C1.4 (2)–(3));
-- **re-capture is not the remedy and is not proposed.** The evidence is sound; it
-  is under-documented. The remedy is stamping the missing provenance fields, which
-  H0 already covers.
+- **re-capture is not the remedy and is not proposed** — an **owner disposition**
+  (accepted 2026-07-14), *not* a consequence of the terminal. `..._UNVERIFIABLE`
+  says only that the policy cannot be certified; it is equally compatible with
+  re-capturing. The disposition rests on the capture's stamped fields agreeing with
+  `m` and its bytes being hash-intact, and it elects the cheaper remedy: stamp the
+  missing provenance fields, which H0 already covers. See C1.11.
 
 No downstream unit may cite this study as evidence that the D0/R1/S0 capture
 **semantics** are invalid — the demonstrated defect is in what the capture
@@ -333,3 +336,58 @@ hash, so the absence is real and `P0_CAPTURE_SEMANTICS_UNVERIFIABLE` still stand
 return nothing else. R1's export carries the same four unstamped knobs, which is
 what still holds row 3 shut; that, too, is now a readable fact in `terminal_basis`
 rather than a constant.
+
+### C1.11 The retype did not reach the whole packet (2026-07-14; owner review)
+
+Owner review of C1.10 accepted the direction and found that the **implementation
+had not caught up with the semantics it authorised**. A terminal is not a label on
+one field; it types the whole packet. Three fields were still fixed strings:
+
+| field | said | under terminal |
+| --- | --- | --- |
+| `decision_funnel.csv` `reason` | `headline provenance is invalid` | `..._UNVERIFIABLE` |
+| `replay.observed_level` | `not_assignable_while_capture_provenance_is_incomplete` | *any* |
+| `decision_funnel_status` | `not_entered_while_capture_provenance_is_incomplete` | *any* |
+
+So one packet asserted both *"cannot be verified"* and *"is invalid"* — the
+withdrawn proposition, still shipping in a file nobody re-read — and the clean
+terminal was **only nominally** reachable: `audit()` could derive it while the rest
+of the packet went on assuming incomplete provenance.
+
+All three now derive from the terminal (`TERMINAL_NARRATIVE`), as does the field
+matrix's `consequence`. Reaching `P0_PAIR_CUTOFF_ONLY` yields
+`observability: PENDING_P4` — **not** `OBSERVABLE`: admission passing does not mean
+this runner counted anything, and it must not claim figures it never computed.
+
+#### The kernel-hash comparand was in the wrong time domain
+
+C1.10 compared the capture's stamped kernel hash against **the `tracker_gpu.cu` in
+the working tree at audit time**. That is a category error, and it cuts twice:
+
+* any later edit to the kernel would make an *untouched* historical capture look
+  like it stamped the wrong source — a **false `..._SEMANTICS_INVALID`**; and
+* worse, the audit's static `SOURCE_PROOFS` were being grepped from HEAD, so it
+  was **certifying a decision path the capture never executed**.
+
+Not hypothetical. The 2026-07-12 capture ran at `b43772b7`, whose `tracker_gpu.cu`
+is **a thousand lines removed from HEAD** (`3a58917c…` vs `e89934f6…`). The proofs
+happened to still hold in both — luck, not soundness.
+
+The comparand is now the source at the **capture's own commit**
+(`git cat-file blob <capture git_commit>:src/tracking/tracker_gpu.cu`), and the
+proofs are read from it. Drift against HEAD is reported
+(`kernel_source_drifted_since_capture`) and **never drives a verdict**. If the
+capture's commit cannot be resolved, that is an *absence* — nothing to compare —
+never a contradiction.
+
+**The terminal of record still does not move**: `P0_CAPTURE_SEMANTICS_UNVERIFIABLE`
+for `m`. All seven source proofs hold against the capture-time kernel.
+
+#### "The evidence is sound" is an owner decision, not a derived result
+
+§ C1.5 and C1.6 state that **re-capture is not the remedy**. `..._UNVERIFIABLE`
+does not entail that: "cannot be certified" is compatible with both *"stamp the
+four fields"* and *"re-capture"*. Choosing the former is an **owner disposition**
+(accepted 2026-07-14), taken on the grounds that the capture's stamped fields
+agree with `m` and its bytes are hash-intact — not a conclusion the audit derives.
+It is recorded as a decision, and the audit does not assert it.
