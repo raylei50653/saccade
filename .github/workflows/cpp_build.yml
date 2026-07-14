@@ -73,10 +73,17 @@ jobs:
           apt-get clean
           rm -rf /var/lib/apt/lists/*
 
-      - name: Install uv
-        run: |
-          curl -LsSf https://astral.sh/uv/install.sh | sh
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
+      # Installed via setup-uv, not curl, for `enable-cache`: without it this job
+      # has no uv cache at all (`No cache found at: /github/home/.cache/uv`) and
+      # re-downloads ~3.3 GB of wheels — torch, the nvidia-* CUDA runtime set,
+      # onnxruntime-gpu — on every run, to feed a C++ compile that takes 25s.
+      # The other jobs (ci.yml) have always cached; this one was the outlier.
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            **/uv.lock
+            .github/workflows/cpp_build.yml
 
       - name: Free disk space
         run: |
