@@ -207,20 +207,31 @@ last_reviewed_at: 2026-07-12
 ```yaml
 layer: quantity
 ladder: fidelity 四分 terminal          transition_semantics: defined
-state: R1_FAITHFUL
-substrate: runtime CUDA（封印於 headline adaptive-anchor 設定 + 七序列 support）
+state: R1_FAITHFUL                     # 未降級:P0 從未證偽此 state,見下方 open_limits
+substrate: runtime CUDA（封印於 headline-**m** preset 的 adaptive-anchor 設定 + 七序列 support）
 target_substrate: same
-open_limits: [不推廣至其他 anchor mode / preset / detector / substrate]
+open_limits: [不推廣至其他 anchor mode / preset / detector / substrate,
+              **capture provenance 不完整（P0 2026-07-14 重發 cause）**:
+                h_lo / h_hi / spatial_gate / max_speed 未蓋章,
+                且無 capture-time tracker_gpu.cu file hash（僅 git_commit）
+                ⇒ packet 無法自證其所跑的 policy;此為記錄缺口,非 state 反證]
 blockers: []
 decision_relevance:
   variable: 無直接決策變數
   role: **enabler** — 它是「runtime 座標可稽核」的前提,safe domain 與任何 score 研究得以
         建在 runtime 座標上,靠的就是它
 supporting_declaration: ../../modules/semantic/research/r1_temporal_reduction_capture_results_20260712.md
+accepting_review: P0 Correction 1 §C1.6（2026-07-14 owner 重發 cause;僅授權本表更新）
 last_transition: 2026-07-12 — owner accepted R1_FAITHFUL
+                 2026-07-14 — open_limits append-only 追記 provenance 缺口（state 不變）
 admissible_units: []                   # 已達成
-last_reviewed_at: 2026-07-12
+last_reviewed_at: 2026-07-14
 ```
+
+> **不要把 P0 讀成「D0/R1/S0 證據無效」。** P0 原本公布的 cause（外來 capture config）
+> 已於 2026-07-14 撤回:它比對的 `px=0.4 / dir_bonus=0.0` 正是 headline-**m** 的正確值,
+> 而 P0 凍結的是 **s**。真因是上面的 provenance 缺口,**在任何 preset 下都成立**,
+> 補救是補蓋章（H0 在做），不是重捕證據。
 
 ### `quantity.s0_offline_proxy_of_bdist`
 
@@ -240,6 +251,44 @@ supporting_declaration: ../../modules/semantic/research/d0_runtime_shadow_fideli
 last_transition: 2026-07-12
 admissible_units: []
 last_reviewed_at: 2026-07-12
+```
+
+### `quantity.bridge_capture_provenance`
+
+```yaml
+layer: quantity                        # 非決策層:它管「證據能否自證」,不管任何 gate/score
+ladder: P0 ordered terminal            transition_semantics: defined（該研究自帶封印判準）
+state: P0_CAPTURE_SEMANTICS_UNVERIFIABLE (scope-corrected 2026-07-14, owner review)
+       # terminal 現為**推導值**:contradiction（有蓋章且矛盾）> absence（未蓋章）> clean。
+       # 對 m（證據實際封存的 preset）稽核 ⇒ 零矛盾、四欄位缺席 ⇒ UNVERIFIABLE。
+prior_terminal: P0_CAPTURE_SEMANTICS_INVALID (sealed 2026-07-13)
+       # **不是被推翻,是 out of scope**:P0 §1 凍結 s,而對 s 而言 px/dir_bonus 確實是
+       # 已蓋章的矛盾 ⇒ INVALID 在其宣告的 scope 內成立。錯的只有 scope。
+       # sealed packet 保留該 label,不得改。
+cause: capture-provenance incompleteness（h_lo / h_hi / spatial_gate / max_speed 未蓋章;
+       無 capture-time tracker_gpu.cu hash）
+substrate: D0/R1/S0 的 shadow capture provenance（runtime CUDA）
+target_substrate: same
+open_limits: [h_lo / h_hi / spatial_gate / max_speed 未蓋章 ⇒ packet 無法自證其 policy
+              （**在任何 preset 下**;此為記錄缺口,非證據矛盾）;
+              無 capture-time tracker_gpu.cu hash;
+              replay 封頂 L1（D0 v2 export 缺 frame / slot / det score
+              ⇒ margin、atomicMax claim、commit 不可重建）;
+              **本研究的 seal 不可稽核**——宣告/runner/results/packet 同一 commit 落地
+              （b136437f）⇒ 見 declaration §C1.9 與 tests/contract/test_declaration_seal_order.py]
+blockers: []
+decision_relevance:
+  role: **反向約束 + enabler 前提** — 它不改任何 production 決策,但它決定
+        D0/R1/S0 的 packet 能否自證所跑的 policy;缺口未補前,任何「這份證據代表
+        headline runtime」的宣稱都只能靠**外部**宣告支撐,不能由 packet 自證
+  variable: 無直接決策變數
+supporting_declaration: ../../modules/semantic/research/runtime_bridge_decision_path_identifiability_declaration_20260713.md
+accepting_review: 同上 §C1.6（2026-07-14 owner 重發 cause）
+last_transition: 2026-07-14 — cause 由 foreign-capture 改為 provenance incompleteness;
+                 terminal **重判型別** INVALID → UNVERIFIABLE（owner review）
+admissible_units: [補蓋 provenance 欄位 + kernel source hash（H0 已涵蓋,pre-seal）]
+derived_from: §4.3 — H0 為 dependency 而非 inadmissibility（合法,待 owner seal）
+last_reviewed_at: 2026-07-14
 ```
 
 ### `score.ambiguous_band_ranking_class`
@@ -297,14 +346,18 @@ last_reviewed_at: 2026-07-12
 
 ## 8. 候選集 → O0 選擇（registry 到此為止）
 
-**registry 產生的合法候選集（2026-07-12）：**
+**registry 產生的合法候選集（重推於 2026-07-14；前次 2026-07-12 早於 P0/H0）：**
 
 | 候選 | Object | 為何合法 |
 |---|---|---|
-| *(空)* | 所有 object | 已達 terminal／被 inadmissibility 排除／依賴未解／relevance zero |
+| **補齊 bridge capture provenance**（H0 pre-seal） | `quantity.bridge_capture_provenance` | §4.3 **dependency**（非 inadmissibility）：terminal 已接受且 cause 已釘死＝*provenance 不完整*；補救動作已存在且已宣告（H0 Amendment 5，target=**m**），**待 owner seal**。它是 enabler：不補，D0/R1/S0 的 packet 永遠只能靠外部宣告而非自證來支撐「代表 headline runtime」。 |
+| *(其餘全空)* | 其他所有 object | 已達 terminal／被 inadmissibility 排除／依賴未解／relevance zero |
 
-**O0 的選擇（不是 registry 的）：** 候選集目前為空。目前除維護、治理與工程收尾外，無科學主線 WIP 鎖被授權。
-若候選集有多個成員，**由 O0 依 decision relevance、依賴關係與 WIP=1 選出唯一 active**，
+**O0 的選擇（不是 registry 的）：** 候選集現有**一個**成員。registry 只說它**合法**，
+不說它值得做——`next admissible unit ≠ next task`（§0）。H0 是否取得 WIP 鎖、freeze artifact
+何時對 **m** 產生、seal 與否，都是 O0 的裁量。若不取，候選集回到空集，D0/R1/S0 的
+provenance 缺口就以 `open_limits` 的形式**永久留在帳上**（這是合法終局，不是待辦）。
+若候選集日後有多個成員，**由 O0 依 decision relevance、依賴關係與 WIP=1 選出唯一 active**，
 並在 module TODO 記錄唯一 charter pointer；預計狀態與 probe 放 linked charter，DEVELOPMENT 只提供穩定入口。
 
 **入口：** [semantic TODO](../../modules/semantic/TODO.md)
