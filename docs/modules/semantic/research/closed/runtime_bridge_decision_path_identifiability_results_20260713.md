@@ -109,11 +109,23 @@ foreign-config framing): the field-sufficiency cap at **L1 replay**;
 `h_lo`/`h_hi` (and `spatial_gate`/`max_speed`) unstamped; no capture-time
 `tracker_gpu.cu` hash.
 
-**Terminal status (re-issued cause, owner accepted 2026-07-14):**
-`P0_CAPTURE_SEMANTICS_INVALID` stands. Its cause of record is now
-**capture-provenance incompleteness** — `h_lo`, `h_hi`, `spatial_gate`,
-`max_speed` unstamped and no capture-time `tracker_gpu.cu` hash, so no packet can
-self-certify its policy under *any* preset. The foreign-capture cause published
-in § 1 is **withdrawn** (declaration § C1.5–C1.6). No unit may cite this terminal
-as evidence that the D0/R1/S0 capture **semantics** are invalid, nor as grounds
-to downgrade D0/R1/S0 — they never claimed the `s` policy.
+**Terminal retyped (owner review, 2026-07-14).** Keeping the label
+`P0_CAPTURE_SEMANTICS_INVALID` while asserting the evidence is sound would leave
+the artifacts mechanically restating a withdrawn proposition. Missing provenance
+fields prove the capture cannot be *verified* against any policy — not that its
+semantics are wrong. Terminal of record for corrected runs:
+
+| | |
+| --- | --- |
+| **Terminal** | **`P0_CAPTURE_SEMANTICS_UNVERIFIABLE`** |
+| Cause | capture-provenance incompleteness: `h_lo`, `h_hi`, `spatial_gate`, `max_speed` unstamped; no capture-time `tracker_gpu.cu` hash |
+| Supersedes (in type) | `P0_CAPTURE_SEMANTICS_INVALID` |
+
+§ 5's stop rule and its precedence are **unchanged** — only the proposition the
+halt licenses is retyped. This packet, sealed 2026-07-13, keeps the superseded
+label and is **not** edited; it records what was accepted then. See declaration
+§ C1.5–C1.7.
+
+No unit may cite this study as evidence that the D0/R1/S0 capture **semantics**
+are invalid, nor as grounds to downgrade D0/R1/S0 — they never claimed the `s`
+policy.

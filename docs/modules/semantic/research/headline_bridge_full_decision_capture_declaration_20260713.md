@@ -97,8 +97,9 @@ It is produced — and must be re-derivable — by
 [`scripts/tools/resolved_bridge_policy_config.py`](../../../../scripts/tools/resolved_bridge_policy_config.py),
 which reproduces the `s` fingerprint this declaration carried before
 [Amendment 5](#amendment-5--policy-target-identity-2026-07-13-pre-seal)
-(`b1b78318…`) from the same code path, and is pinned by
-`tests/contract/test_declaration_policy_target.py`.
+(`b1b78318…`) from the same code path. Both values, and this declaration's
+agreement with them, are pinned by
+`tests/unit/test_resolved_bridge_policy_config.py`.
 This includes disabled paths and their values; the short authority table above
 is only a review aid, never the configuration fingerprint. H0 additionally
 freezes `research_portable_or_tail_enabled=false`, a null portable-tail

@@ -258,7 +258,12 @@ last_reviewed_at: 2026-07-12
 ```yaml
 layer: quantity                        # 非決策層:它管「證據能否自證」,不管任何 gate/score
 ladder: P0 ordered terminal            transition_semantics: defined（該研究自帶封印判準）
-state: P0_CAPTURE_SEMANTICS_INVALID (accepted 2026-07-13; cause 重發 2026-07-14)
+state: P0_CAPTURE_SEMANTICS_UNVERIFIABLE (retyped 2026-07-14, owner review)
+supersedes: P0_CAPTURE_SEMANTICS_INVALID (accepted 2026-07-13; 2026-07-14 撤回其命題型別)
+       # 缺 provenance 只能推出「無法自證」,推不出「語義錯誤」;stop rule 與 precedence 不變,
+       # 只有 halt 所授權的命題被重判型別。sealed packet 保留舊 label,不得改。
+cause: capture-provenance incompleteness（h_lo / h_hi / spatial_gate / max_speed 未蓋章;
+       無 capture-time tracker_gpu.cu hash）
 substrate: D0/R1/S0 的 shadow capture provenance（runtime CUDA）
 target_substrate: same
 open_limits: [terminal 為 **over-determined**:h_lo / h_hi / spatial_gate / max_speed
@@ -274,7 +279,7 @@ decision_relevance:
 supporting_declaration: ../../modules/semantic/research/runtime_bridge_decision_path_identifiability_declaration_20260713.md
 accepting_review: 同上 §C1.6（2026-07-14 owner 重發 cause）
 last_transition: 2026-07-14 — cause 由 foreign-capture 改為 provenance incompleteness;
-                 terminal 不變
+                 terminal **重判型別** INVALID → UNVERIFIABLE（owner review）
 admissible_units: [補蓋 provenance 欄位 + kernel source hash（H0 已涵蓋,pre-seal）]
 derived_from: §4.3 — H0 為 dependency 而非 inadmissibility（合法,待 owner seal）
 last_reviewed_at: 2026-07-14

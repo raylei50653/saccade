@@ -181,19 +181,47 @@ No downstream unit may cite this terminal as evidence that the D0/R1/S0 capture
 
 ### C1.6 Owner re-issue (2026-07-14; accepted)
 
-The owner accepted the re-issued cause on 2026-07-14. Terminal of record:
+The owner accepted the re-issued cause on 2026-07-14:
 
-> **`P0_CAPTURE_SEMANTICS_INVALID`** — unchanged. **Cause: capture-provenance
-> incompleteness.** `relink_bridge_h_lo`, `relink_bridge_h_hi`,
-> `relink_bridge_spatial_gate` and `relink_bridge_max_speed` are never stamped
-> into capture provenance, and no capture-time `tracker_gpu.cu` file hash is
-> recorded, so no packet can self-certify the policy it ran under — under **any**
-> preset. The superseded cause (a foreign capture configuration, inferred from a
-> `px` / `dir_bonus` delta against the `s` preset) is **withdrawn**: those values
-> are `m`'s correct ones.
+> **Cause of record: capture-provenance incompleteness.** `relink_bridge_h_lo`,
+> `relink_bridge_h_hi`, `relink_bridge_spatial_gate` and `relink_bridge_max_speed`
+> are never stamped into capture provenance, and no capture-time `tracker_gpu.cu`
+> file hash is recorded, so no packet can self-certify the policy it ran under —
+> under **any** preset. The superseded cause (a foreign capture configuration,
+> inferred from a `px` / `dir_bonus` delta against the `s` preset) is
+> **withdrawn**: those values are `m`'s correct ones.
 
 This re-issue authorizes exactly one thing beyond the original terminal: the
 corresponding **claim-state registry** update (the `open_limits` of the D0/R1/S0
 line, and a record for this object). It authorizes no capture, sweep, threshold
 study, B1, or production modification. The D0/R1/S0 states are **not** downgraded
 — they never claimed the `s` policy.
+
+### C1.7 The terminal is retyped, not merely re-caused (2026-07-14; owner review)
+
+C1.6 as first written kept the label `P0_CAPTURE_SEMANTICS_INVALID` and changed
+only its cause. That is incoherent, and owner review rejected it: a terminal is a
+**typed proposition**, not a bookmark for wherever the study stopped. Asserting
+*"the evidence is sound, merely under-stamped"* while the runner keeps emitting
+`..._capture_semantics_invalid` means the artifacts **mechanically restate a
+proposition that has been withdrawn**.
+
+Missing provenance fields support exactly one inference — *the capture cannot be
+verified against any policy* — and not the stronger one that its semantics are
+wrong. So the terminal is **retyped**:
+
+| | |
+| --- | --- |
+| **Terminal of record (corrected runs)** | **`P0_CAPTURE_SEMANTICS_UNVERIFIABLE`** |
+| Cause | capture-provenance incompleteness (C1.6) |
+| Supersedes (in type) | `P0_CAPTURE_SEMANTICS_INVALID` |
+
+What is **unchanged** is § 5's stop rule and its ordering: provenance that cannot
+be aligned to the frozen policy still halts the audit before any label is read,
+and still takes precedence. Only the proposition that halt licenses is retyped.
+The **2026-07-13 sealed packet keeps the superseded label** and is not edited —
+it is the historical record of what was accepted then. A corrected run emits the
+retyped terminal and carries `terminal_supersedes` so the two are never conflated.
+
+The registry records the retyped terminal as this object's state, with the
+superseded label named.

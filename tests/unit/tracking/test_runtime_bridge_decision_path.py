@@ -1,4 +1,4 @@
-"""P0 must fail closed before outcome access when capture provenance cannot be aligned.
+"""P0 must fail closed before outcome access when capture provenance cannot be certified.
 
 The original P0 run hard-coded the `s` preset as "the headline" and read the
 resulting `px` / `dir_bonus` delta as proof of a *foreign* capture. The audited
@@ -75,7 +75,8 @@ def test_p0_fails_closed_before_label_access_under_any_policy_target(
         ROOT, policy_preset=preset, d0_capture_dir=_synthetic_d0_capture_dir(tmp_path)
     )
 
-    assert result["terminal"] == "P0_CAPTURE_SEMANTICS_INVALID"
+    assert result["terminal"] == "P0_CAPTURE_SEMANTICS_UNVERIFIABLE"
+    assert result["terminal_supersedes"] == "P0_CAPTURE_SEMANTICS_INVALID"
     assert result["label_access"] == {
         "gt_or_fp_labels_accessed": False,
         "p5": "not_entered",
@@ -128,6 +129,6 @@ def test_p0_keeps_candidate_and_commit_replay_below_l2(tmp_path: Path) -> None:
     assert matrix["F_claim_competition"]["complete"] is False
     assert matrix["G_commit"]["complete"] is False
     assert (
-        result["replay"]["counterfactual_ceiling_if_headline_alignment_existed"]
+        result["replay"]["counterfactual_ceiling_if_provenance_were_complete"]
         == "L1_pair_cutoff_replay"
     )

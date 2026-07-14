@@ -22,7 +22,15 @@ from typing import Any, Iterable
 
 REPO = Path(__file__).resolve().parents[2]
 STAMP = "20260713"
-TERMINAL = "P0_CAPTURE_SEMANTICS_INVALID"
+
+# The stop rule is unchanged — provenance that cannot be aligned to a policy still
+# halts the audit before any label is read. What changed is the *type* of the
+# proposition that halt licenses. Missing provenance fields prove that the capture
+# cannot certify the policy it ran under; they do not prove its semantics are
+# wrong. The 2026-07-13 sealed packet carries the superseded label and is never
+# edited; a corrected run emits the retyped one (declaration Correction 1 § C1.7).
+TERMINAL = "P0_CAPTURE_SEMANTICS_UNVERIFIABLE"
+TERMINAL_SUPERSEDES = "P0_CAPTURE_SEMANTICS_INVALID"
 
 if str(REPO / "scripts" / "tools") not in sys.path:
     sys.path.insert(0, str(REPO / "scripts" / "tools"))
@@ -199,14 +207,14 @@ def _field_matrix(header: set[str]) -> list[dict[str, Any]]:
             ],
             "D0 v2 capture header",
             {"fwd_r", "bwd_r", "dist_h", "s_lost", "w", "bdist"}.issubset(header),
-            "scalar formula terms are observable only for the foreign-config survivor population",
+            "scalar formula terms are observable only for the emitted survivor population, under a configuration the capture cannot certify",
         ),
         row(
             "D_pair_cutoff",
             ["bdist", "production threshold", "headline preset stamp"],
             "D0 v2 capture header + manifest",
             False,
-            "scalar cutoff is mechanically evaluable, but not for the frozen headline configuration",
+            "scalar cutoff is mechanically evaluable, but not attributable to a certified policy while provenance is incomplete",
         ),
         row(
             "E_candidate_local_ranking",
@@ -316,6 +324,12 @@ def audit(
     return {
         "study": "p0_runtime_bridge_decision_path_20260713",
         "terminal": terminal,
+        "terminal_supersedes": TERMINAL_SUPERSEDES,
+        "terminal_cause": (
+            "capture_provenance_incomplete: h_lo, h_hi, spatial_gate and max_speed are "
+            "not stamped, and no capture-time kernel source hash is recorded, so the "
+            "capture cannot certify the policy it ran under — under any preset"
+        ),
         "policy_target": policy,
         "label_access": {"gt_or_fp_labels_accessed": False, "p5": "not_entered"},
         "source_proofs": source_proofs,
@@ -337,8 +351,8 @@ def audit(
         "d0_header": header,
         "field_sufficiency": matrix,
         "replay": {
-            "observed_level": "not_assignable_due_to_capture_semantics_invalid",
-            "counterfactual_ceiling_if_headline_alignment_existed": "L1_pair_cutoff_replay",
+            "observed_level": "not_assignable_while_capture_provenance_is_incomplete",
+            "counterfactual_ceiling_if_provenance_were_complete": "L1_pair_cutoff_replay",
             "l2_blockers": [
                 "no frame",
                 "no candidate slot/index",
@@ -351,7 +365,7 @@ def audit(
                 "shadow capture has no commit",
             ],
         },
-        "decision_funnel_status": "not_entered_due_to_capture_semantics_invalid",
+        "decision_funnel_status": "not_entered_while_capture_provenance_is_incomplete",
         "inputs": {
             input_key(path, root): sha256(path)
             for path in (
