@@ -36,6 +36,18 @@ TERMINAL_CONTRADICTED = "P0_CAPTURE_SEMANTICS_INVALID"
 TERMINAL_UNVERIFIABLE = "P0_CAPTURE_SEMANTICS_UNVERIFIABLE"
 TERMINAL_CLEAN = "P0_PAIR_CUTOFF_ONLY"
 
+# How a capture certifies which kernel source produced it. The name is not coined
+# here: it is the key D0's own fidelity packet already stamps
+# (evidence/d0_bridge_estimator_fidelity_20260711/manifest.json).
+#
+# The D0 *runtime* capture does not stamp it — its provenance carries a
+# `git_commit`, which names a tree, not the file that ran. That is a fact about
+# today's artifacts, so it is *read* from them. Writing it into the audit as a
+# constant (`..._absent: True`, as this once did) re-commits the very error the
+# study corrects: it fixes a verdict in code instead of deriving it from evidence,
+# and it floors the terminal at UNVERIFIABLE under every possible input.
+CAPTURE_KERNEL_SOURCE_KEY = "kernel_source_sha256"
+
 if str(REPO / "scripts" / "tools") not in sys.path:
     sys.path.insert(0, str(REPO / "scripts" / "tools"))
 
@@ -167,6 +179,29 @@ def _alignment(
         "unstamped": _of("absent"),  # epistemic: cannot be checked at all
         "all_fields_match": not _of("mismatch") and not _of("absent"),
         "comparisons": comparisons,
+    }
+
+
+def kernel_source_evidence(
+    provenance: dict[str, Any], current_source_sha256: str
+) -> dict[str, Any]:
+    """Which kind of evidence the capture offers about the kernel that produced it.
+
+    The same three-way split as `_alignment`, for the same reason. An unstamped
+    kernel hash is an *absence*: the capture cannot say what ran, so nothing about
+    the kernel can be concluded. A stamped hash that differs from the source under
+    audit is a *contradiction*: the capture positively records a different kernel.
+    Collapsing the second into the first would hide a real defect; asserting the
+    first as a constant makes the clean terminal unreachable under any evidence.
+    """
+    stamped = provenance.get(CAPTURE_KERNEL_SOURCE_KEY)
+    if stamped is None:
+        return {"stamped": None, "absent": True, "differs": None}
+    stamped = str(stamped)
+    return {
+        "stamped": stamped,
+        "absent": False,
+        "differs": stamped if stamped != current_source_sha256 else None,
     }
 
 
@@ -349,6 +384,10 @@ def audit(
     )
     r1_alignment = _alignment("R1", dict(r1_export["provenance"]["bridge"]), policy)
     r1_preset = str(r1_hashes["scope"]["preset"])
+    current_source_sha = sha256(source)
+    kernel = kernel_source_evidence(
+        dict(d0_capture_manifest["provenance"]), current_source_sha
+    )
 
     # Positive contradictions: the artifacts record something incompatible with the
     # audited policy or with themselves. These license the ontic verdict.
@@ -361,13 +400,14 @@ def audit(
         "d0_packet_hash_broken": not d0_hash_ok,
         "s0_capture_hash_broken": not s0_hash_ok,
         "source_proofs_missing": [n for n, ok in source_proofs.items() if not ok],
+        "capture_kernel_source_differs": kernel["differs"],
     }
     # Absences: nothing is contradicted, but nothing can be checked either. These
     # license only the epistemic verdict — never the ontic one.
     absences = {
         "d0_unstamped_knobs": d0_alignment["unstamped"],
         "r1_unstamped_knobs": r1_alignment["unstamped"],
-        "capture_kernel_source_hash_absent": True,  # only a git_commit is recorded
+        "capture_kernel_source_hash_absent": kernel["absent"],
     }
     terminal, contradicted, unverifiable = derive_terminal(contradictions, absences)
 
@@ -394,12 +434,13 @@ def audit(
         "source_proofs": source_proofs,
         "provenance": {
             "d0_capture_sha256": actual_d0_hash,
-            "current_kernel_source_sha256": sha256(source),
+            "current_kernel_source_sha256": current_source_sha,
             "d0_capture_git_commit": d0_capture_manifest["provenance"].get(
                 "git_commit"
             ),
             "r1_capture_git_commit": r1_export["provenance"].get("git_commit"),
-            "capture_kernel_source_sha256_present": False,
+            "capture_kernel_source_sha256": kernel["stamped"],
+            "capture_kernel_source_sha256_present": not kernel["absent"],
             "d0_packet_hash_match": d0_hash_ok,
             "s0_inherits_same_capture_hash": s0_hash_ok,
             "d0_alignment": d0_alignment,

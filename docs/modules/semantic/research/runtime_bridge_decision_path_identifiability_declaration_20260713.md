@@ -288,3 +288,48 @@ be ruled out here.
 introduced in a strictly earlier commit than its results. The three studies above
 are recorded there as **grandfathered, with their seals marked not auditable** —
 an entry on the books, not an absolution.
+
+### C1.10 The derived terminal was still floored by a constant (2026-07-14)
+
+C1.7 made the terminal derived. Review of the runner that implements it found the
+same defect one level down, in the code written to remove it:
+
+```python
+absences = {
+    ...,
+    "capture_kernel_source_hash_absent": True,  # only a git_commit is recorded
+}
+```
+
+That `True` is a fact a reader observed in today's capture manifest and then
+**transcribed into the audit** — the identical move that put the `s` preset's
+knobs into § 1. Because `unverifiable = any(absences)`, it held under every
+possible input, so row 3 of C1.7's partition (`P0_PAIR_CUTOFF_ONLY`) was
+**unreachable from any evidence whatsoever**. A capture that *did* stamp its
+kernel would have gone on being reported as uncertifiable, and nothing would have
+said so. A partition with a dead cell is a verdict named in advance by omission.
+
+The unit test did not see it because it exercised `derive_terminal` with a
+hand-built `absences` dict — never the one `audit` actually passes.
+
+Corrected: the runner reads `kernel_source_sha256` from capture provenance — the
+key D0's own fidelity packet already stamps — and the evidence splits three ways,
+as everywhere else in C1.7:
+
+| capture provenance | kind | terminal row |
+| --- | --- | --- |
+| no `kernel_source_sha256` | **absence** (epistemic) | 2 |
+| stamped, differs from the audited source | **contradiction** (ontic) | 1 |
+| stamped, agrees | clean | 3 |
+
+The stamped-but-differing case is new: it was previously unrepresentable, and it
+is a positive fact about the capture, so it belongs in row 1 — C1.7's row-1 list
+is extended by *"or the capture stamps a kernel hash that is not the audited
+source's"*.
+
+**The terminal of record does not move.** The D0 runtime capture stamps no kernel
+hash, so the absence is real and `P0_CAPTURE_SEMANTICS_UNVERIFIABLE` still stands
+— but it now stands *because the artifacts say so*, not because the audit could
+return nothing else. R1's export carries the same four unstamped knobs, which is
+what still holds row 3 shut; that, too, is now a readable fact in `terminal_basis`
+rather than a constant.

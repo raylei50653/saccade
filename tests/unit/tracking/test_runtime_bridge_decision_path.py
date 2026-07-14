@@ -10,9 +10,12 @@ These tests hold the two apart:
 
   * `_alignment` must report `mismatch` and `absent` as different statuses;
   * `derive_terminal` must rank contradiction above absence;
-  * and the audit must therefore reach *different* terminals for the two presets —
+  * the audit must therefore reach *different* terminals for the two presets —
     `s` (which the capture genuinely contradicts) and `m` (which it merely cannot
-    certify).
+    certify);
+  * and every terminal in the partition must be reachable *from evidence*. A
+    verdict no input can produce is a verdict named in advance, which is the
+    defect this study exists to correct.
 
 The synthetic fixture below cannot exercise the last point end-to-end: a made-up
 capture file has a made-up hash, which is itself a contradiction and masks the
@@ -25,6 +28,7 @@ from __future__ import annotations
 import gzip
 import importlib.util
 import json
+import shutil
 from pathlib import Path
 
 import pytest
@@ -33,6 +37,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[3]
 RUNNER = ROOT / "scripts/tools/audit_runtime_bridge_decision_path.py"
 REAL_CAPTURE = ROOT / "out/signal_study/d0_runtime_shadow_fidelity_20260712T085642Z"
+KERNEL_SRC = ROOT / "src/tracking/tracker_gpu.cu"  # the source the audit hashes
 
 SEALED_PRESET = "mamba_whole_graph_m"  # the preset D0/R1/S0 are captured under
 FOREIGN_PRESET = "mamba_whole_graph"  # the `s` preset P0 originally assumed
@@ -142,6 +147,107 @@ def test_the_two_presets_reach_different_terminals_on_the_real_artifacts() -> No
     assert (
         against_m["terminal_basis"]["absences"]["d0_unstamped_knobs"] == NEVER_STAMPED
     )
+
+
+# --------------------------------------------------------------------------- #
+# The clean terminal must be reachable *from evidence*.                         #
+#                                                                               #
+# `absences` once carried `capture_kernel_source_hash_absent: True` as a literal —
+# a fact a human read off today's manifest and transcribed into the audit. It made
+# `unverifiable` true under every possible input, so `P0_PAIR_CUTOFF_ONLY` could   #
+# never be reached and a future capture that *did* stamp its kernel would go on   #
+# being reported as uncertifiable. That is the same move the study corrects (a    #
+# verdict fixed in code, not derived), and the unit test above could not see it:  #
+# it calls `derive_terminal` with a hand-built dict, never the one `audit` sends. #
+# So the partition is exercised end-to-end, through `audit`, instead.             #
+# --------------------------------------------------------------------------- #
+def test_kernel_source_evidence_splits_absence_from_contradiction() -> None:
+    runner = _load_runner()
+
+    absent = runner.kernel_source_evidence({"git_commit": "abc"}, "aa" * 32)
+    assert absent == {"stamped": None, "absent": True, "differs": None}
+
+    agrees = runner.kernel_source_evidence(
+        {runner.CAPTURE_KERNEL_SOURCE_KEY: "aa" * 32}, "aa" * 32
+    )
+    assert agrees["absent"] is False and agrees["differs"] is None
+
+    # Stamped, and it names a *different* kernel: that is a fact about the capture,
+    # not a gap in the audit. It must contradict, never merely fail to verify.
+    differs = runner.kernel_source_evidence(
+        {runner.CAPTURE_KERNEL_SOURCE_KEY: "bb" * 32}, "aa" * 32
+    )
+    assert differs["absent"] is False and differs["differs"] == "bb" * 32
+
+
+def _fully_stamped_capture_dir(runner, tmp_path: Path) -> Path:
+    """The real capture, byte-for-byte, with the provenance a complete one would carry.
+
+    The bytes must be the real ones or the packet hashes break — and a broken hash
+    is itself a contradiction, which would mask the very thing under test.
+    """
+    d0_dir = tmp_path / "d0_complete"
+    d0_dir.mkdir()
+    shutil.copy(REAL_CAPTURE / "capture.csv.gz", d0_dir / "capture.csv.gz")
+
+    manifest = json.loads(
+        (REAL_CAPTURE / "capture.csv.gz.manifest.json").read_text(encoding="utf-8")
+    )
+    resolved = runner.resolve_policy(SEALED_PRESET)
+    manifest["provenance"]["bridge"].update(
+        {
+            "h_lo": resolved["relink_bridge_h_lo"],
+            "h_hi": resolved["relink_bridge_h_hi"],
+            "spatial_gate": resolved["relink_bridge_spatial_gate"],
+            "max_speed": resolved["relink_bridge_max_speed"],
+        }
+    )
+    # A complete capture stamps the kernel that produced it — here, the source the
+    # audit itself hashes, so a complete stamp is what the audit sees.
+    manifest["provenance"][runner.CAPTURE_KERNEL_SOURCE_KEY] = runner.sha256(KERNEL_SRC)
+    (d0_dir / "capture.csv.gz.manifest.json").write_text(
+        json.dumps(manifest), encoding="utf-8"
+    )
+    return d0_dir
+
+
+@pytest.mark.packet_bound
+@pytest.mark.skipif(
+    not (REAL_CAPTURE / "capture.csv.gz").exists(),
+    reason="sealed D0 capture not present in this checkout",
+)
+def test_every_absence_answers_to_evidence_and_the_clean_terminal_is_reachable(
+    tmp_path: Path,
+) -> None:
+    """Stamp everything the D0 capture omits, and its absences must clear."""
+    runner = _load_runner()
+    capture_dir = _fully_stamped_capture_dir(runner, tmp_path)
+
+    result = runner.audit(ROOT, policy_preset=SEALED_PRESET, d0_capture_dir=capture_dir)
+    basis = result["terminal_basis"]
+    absences = basis["absences"]
+
+    # D0's side is now fully stamped, kernel included, and the audit sees it. Under
+    # the literal, `capture_kernel_source_hash_absent` stayed `True` here.
+    assert absences["d0_unstamped_knobs"] == []
+    assert absences["capture_kernel_source_hash_absent"] is False
+    assert basis["contradictions"]["capture_kernel_source_differs"] is None
+    assert basis["contradicted"] is False
+
+    # What still blocks the clean terminal is a gap in a *real artifact* — R1's
+    # export stamps no height gate either — not a constant in the audit. Every
+    # absence is now traceable to evidence, which is what the literal destroyed.
+    assert absences["r1_unstamped_knobs"] == NEVER_STAMPED
+    assert result["terminal"] == "P0_CAPTURE_SEMANTICS_UNVERIFIABLE"
+
+    # Clear that last one and the partition does reach its clean terminal. Under the
+    # literal this was unreachable under *every* input — a verdict named in advance
+    # by being permanently withheld.
+    terminal, _, unverifiable = runner.derive_terminal(
+        basis["contradictions"], dict(absences, r1_unstamped_knobs=[])
+    )
+    assert unverifiable is False
+    assert terminal == "P0_PAIR_CUTOFF_ONLY"
 
 
 # --------------------------------------------------------------------------- #
