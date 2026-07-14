@@ -40,11 +40,17 @@ jobs:
             ${{ runner.os }}-apt-cpp-
             ${{ runner.os }}-apt-
 
+      # Keyed on the C++ sources, not on github.sha. The sha key minted a fresh
+      # ~85 MB entry on *every commit* — including the many that touch no C++ at
+      # all — and could never be hit exactly, only fallen back to via restore-keys.
+      # That sprawl had reached 72 entries / 6.07 GB and was pinning the repo
+      # against its 10 GB cache ceiling, evicting everything else. A run that
+      # changes no C++ now hits its entry exactly and saves nothing.
       - name: Cache ccache
         uses: actions/cache@v4
         with:
           path: .ccache
-          key: ${{ runner.os }}-ccache-${{ github.sha }}
+          key: ${{ runner.os }}-ccache-${{ hashFiles('src/**', 'include/**', 'CMakeLists.txt') }}
           restore-keys: |
             ${{ runner.os }}-ccache-
 
