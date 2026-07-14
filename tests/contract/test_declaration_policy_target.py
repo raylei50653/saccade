@@ -18,6 +18,31 @@ So a frozen-policy table is treated as a claim about a named preset, and checked
      reproducible from that preset.
 
 A declaration may still target a non-headline preset — it just has to say so.
+
+## Which text is "in force"
+
+These documents are append-only: a sealed body is never rewritten, and amendments
+and corrections accrete below it. So "what does this declaration freeze *now*" has
+to be defined, not guessed:
+
+  * **the effective marker is the LAST one in document order.** Corrections may
+    retarget a declaration, and when they do, the later marker supersedes the
+    earlier. (Taking the first match would let a superseded target win — and
+    would also mean a document could be rescued by a marker it has since
+    corrected away.)
+  * **every value — preset name, byte hash, knob table, fingerprint — is read
+    from the BODY only**, i.e. above the first amendment/correction heading. The
+    body is the statement of the policy in force; amendments quote superseded
+    values and audit comparisons on purpose, and must never be able to satisfy a
+    check.
+
+The two rules interlock: a marker anywhere names the target, but the body's values
+are then checked against *that* target. So a correction cannot silently retarget a
+declaration without the body being brought along (H0's Amendment 5 does exactly
+this), and a historical marker cannot vouch for a body it no longer describes.
+
+This also lets a sealed body keep its marker in a correction — P0's does, because
+its § 1 is frozen and must not be edited to add one.
 """
 
 from __future__ import annotations
@@ -75,8 +100,27 @@ _HISTORY = re.compile(r"^##\s+(Amendment|Correction)\b", re.MULTILINE)
 
 
 def _body(text: str) -> str:
+    """The declaration proper — everything above the first amendment/correction."""
     first = _HISTORY.search(text)
     return text[: first.start()] if first else text
+
+
+def _effective_marker(text: str) -> re.Match[str] | None:
+    """The last marker in document order: a later correction supersedes an earlier one."""
+    markers = list(_MARKER.finditer(text))
+    return markers[-1] if markers else None
+
+
+def _effective_preset(marker: re.Match[str], path: Path) -> str:
+    if marker.group(1).lower() == "headline":
+        return HEADLINE_PRESET
+    named = re.search(r"preset:\s*([\w.]+)\.yaml", marker.group(2))
+    assert named, (
+        f"{path}: a non-headline policy target must name its preset in the marker, "
+        "e.g. `<!-- policy-target: non-headline; preset: mamba_whole_graph.yaml; "
+        "reason: … -->`"
+    )
+    return named.group(1)
 
 
 def _frozen_knobs(text: str) -> list[tuple[str, str]]:
@@ -122,8 +166,7 @@ def declaration(request) -> tuple[Path, str]:
 
 def test_a_frozen_policy_names_its_target_explicitly(declaration) -> None:
     path, text = declaration
-    marker = _MARKER.search(text)
-    assert marker is not None, (
+    assert _effective_marker(text) is not None, (
         f"{path.relative_to(_REPO)} freezes a bridge policy but declares no "
         "policy target. Add `<!-- policy-target: headline -->`, or "
         "`<!-- policy-target: non-headline; preset: <stem>.yaml; reason: … -->`. "
@@ -133,18 +176,18 @@ def test_a_frozen_policy_names_its_target_explicitly(declaration) -> None:
 
 def test_headline_target_is_the_preset_the_code_calls_headline(declaration) -> None:
     path, text = declaration
-    marker = _MARKER.search(text)
+    marker = _effective_marker(text)
     if marker is None or marker.group(1).lower() != "headline":
         pytest.skip("not a headline-targeted declaration")
 
-    presets = set(_PRESET_REF.findall(text))
-    assert HEADLINE_PRESET in presets, (
-        f"{path.relative_to(_REPO)} claims policy-target: headline, but never names "
-        f"{HEADLINE_PRESET}.yaml — the preset HEADLINE_PRESET_REL points at."
+    body = _body(text)
+    assert HEADLINE_PRESET in set(_PRESET_REF.findall(body)), (
+        f"{path.relative_to(_REPO)} claims policy-target: headline, but its body never "
+        f"names {HEADLINE_PRESET}.yaml — the preset HEADLINE_PRESET_REL points at."
     )
-    assert preset_sha256(HEADLINE_PRESET) in text, (
-        f"{path.relative_to(_REPO)} claims policy-target: headline but does not pin "
-        f"{HEADLINE_PRESET}.yaml's current bytes "
+    assert preset_sha256(HEADLINE_PRESET) in body, (
+        f"{path.relative_to(_REPO)} claims policy-target: headline but its body does not "
+        f"pin {HEADLINE_PRESET}.yaml's current bytes "
         f"({preset_sha256(HEADLINE_PRESET)[:12]}…). Either the preset moved under the "
         "declaration or the declaration froze a different one."
     )
@@ -152,19 +195,9 @@ def test_headline_target_is_the_preset_the_code_calls_headline(declaration) -> N
 
 def test_printed_knobs_match_the_targets_resolved_policy(declaration) -> None:
     path, text = declaration
-    marker = _MARKER.search(text)
+    marker = _effective_marker(text)
     assert marker is not None
-
-    if marker.group(1).lower() == "headline":
-        preset = HEADLINE_PRESET
-    else:
-        named = re.search(r"preset:\s*([\w.]+)\.yaml", marker.group(2))
-        assert named, (
-            f"{path.relative_to(_REPO)}: a non-headline policy target must name its "
-            "preset in the marker, e.g. "
-            "`<!-- policy-target: non-headline; preset: mamba_whole_graph.yaml; reason: … -->`"
-        )
-        preset = named.group(1)
+    preset = _effective_preset(marker, path.relative_to(_REPO))
 
     resolved = resolve(preset)
     checked = 0
@@ -188,17 +221,12 @@ def test_printed_knobs_match_the_targets_resolved_policy(declaration) -> None:
 
 def test_declared_config_fingerprint_is_reproducible(declaration) -> None:
     path, text = declaration
-    if "resolved_bridge_policy_config_v1" not in text:
-        pytest.skip("declaration pins no resolved-config fingerprint")
+    if "resolved_bridge_policy_config_v1" not in _body(text):
+        pytest.skip("declaration body pins no resolved-config fingerprint")
 
-    marker = _MARKER.search(text)
+    marker = _effective_marker(text)
     assert marker is not None
-    if marker.group(1).lower() == "headline":
-        preset = HEADLINE_PRESET
-    else:
-        named = re.search(r"preset:\s*([\w.]+)\.yaml", marker.group(2))
-        assert named
-        preset = named.group(1)
+    preset = _effective_preset(marker, path.relative_to(_REPO))
 
     expected = fingerprint(preset)
     assert expected in _FINGERPRINT.findall(_body(text)), (
@@ -207,3 +235,63 @@ def test_declared_config_fingerprint_is_reproducible(declaration) -> None:
         f"`scripts/tools/resolved_bridge_policy_config.py --preset {preset}` "
         f"(current: {expected})."
     )
+
+
+# --------------------------------------------------------------------------- #
+# The guard's own failure modes. A guard that only ever passes proves nothing,  #
+# and the append-only model above is subtle enough that it needs pinning.       #
+# --------------------------------------------------------------------------- #
+_H0 = (
+    _REPO
+    / "docs/modules/semantic/research"
+    / "headline_bridge_full_decision_capture_declaration_20260713.md"
+)
+_BODY_MARKER = "<!-- policy-target: headline -->\n\n"
+
+
+def _knobs_ok(text: str) -> bool:
+    marker = _effective_marker(text)
+    if marker is None:
+        return False
+    resolved = resolve(_effective_preset(marker, Path("<mutant>")))
+    return all(
+        abs(float(_scalar(printed)) - float(resolved[knob])) <= 1e-9
+        for knob, printed in _frozen_knobs(text)
+        if knob in resolved and not isinstance(resolved[knob], str)
+    )
+
+
+def _retarget_body_to_s(text: str) -> str:
+    return text.replace(
+        "| `relink_bridge_px` | `0.4` |", "| `relink_bridge_px` | `0.25` |", 1
+    )
+
+
+def test_guard_rejects_the_original_bug() -> None:
+    """`s` values under a headline claim — exactly what P0 did."""
+    assert not _knobs_ok(_retarget_body_to_s(_H0.read_text(encoding="utf-8")))
+
+
+def test_guard_rejects_a_correction_that_retargets_without_updating_the_body() -> None:
+    mutant = _H0.read_text(encoding="utf-8") + (
+        "\n\n## Correction 9\n\n<!-- policy-target: non-headline; "
+        "preset: mamba_whole_graph.yaml; reason: mutation -->\n"
+    )
+    # The later marker wins, so the body's `m` values must now fail against `s`.
+    assert (
+        _effective_preset(_effective_marker(mutant), Path("<mutant>"))
+        == "mamba_whole_graph"
+    )
+    assert not _knobs_ok(mutant)
+
+
+def test_a_historical_marker_cannot_vouch_for_a_body_that_moved_under_it() -> None:
+    """A marker only names the target; the body still has to match it."""
+    mutant = (
+        _retarget_body_to_s(
+            _H0.read_text(encoding="utf-8").replace(_BODY_MARKER, "", 1)
+        )
+        + "\n\n## Correction 9\n\n<!-- policy-target: headline -->\n"
+    )
+    assert _effective_marker(mutant) is not None  # the marker survives...
+    assert not _knobs_ok(mutant)  # ...and rescues nothing
