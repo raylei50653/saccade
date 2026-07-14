@@ -9,7 +9,8 @@
 
 ## Proposed（non-WIP）
 
-- H0 full bridge-decision trace capture（Amendment 4 已滿足 declaration repair；sole pending gate 為完成 pre-seal freeze artifact 後的 owner seal，未 seal 前不得執行或開下游 claim）→ [declaration](research/headline_bridge_full_decision_capture_declaration_20260713.md)
+- H0 full bridge-decision trace capture（Amendment 4 已滿足 declaration repair；**Amendment 5 已把 policy target 由 s 改為 m**——freeze artifact 須對 **m** 產生；sole pending gate 為完成 pre-seal freeze artifact 後的 owner seal，未 seal 前不得執行或開下游 claim）→ [declaration](research/headline_bridge_full_decision_capture_declaration_20260713.md)
+  - **待 owner 裁決**：P0 terminal 的 *cause* 需重發（terminal 本身成立）→ [Correction 1](research/runtime_bridge_decision_path_identifiability_declaration_20260713.md#correction-1--the-frozen-policy-is-not-the-audited-evidences-policy-2026-07-13-append-only)；registry 的 open_limits 補記在 owner 重發後才寫
 
 ## Parked
 

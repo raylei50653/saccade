@@ -1,4 +1,4 @@
-# H0 — headline-s full bridge-decision trace capture
+# H0 — headline-m full bridge-decision trace capture
 
 <!-- doc-status: proposed -->
 <!-- doc-promotion: none -->
@@ -41,16 +41,21 @@ The seal authorizes only an observational H0 implementation and its Phase A/B un
 
 ## 2. Frozen policy base, resolved configuration, and instrumentation provenance
 
-The sole policy target is `configs/presets/mamba_whole_graph.yaml`:
+<!-- policy-target: headline -->
+
+The sole policy target is `configs/presets/mamba_whole_graph_m.yaml` — the preset
+the bridge-fidelity line is sealed on, and the one `HEADLINE_PRESET_REL`
+(`src/saccade/perception/eval/consumer_a_bridge_fidelity.py`) names. It was
+`mamba_whole_graph.yaml` (the `s` preset) until [Amendment 5](#amendment-5--policy-target-identity-2026-07-13-pre-seal).
 
 | Setting | Required value |
 | --- | ---: |
 | `relink_bridge_enabled` | `true` |
-| `relink_bridge_px` | `0.25` |
+| `relink_bridge_px` | `0.4` |
 | `relink_bridge_margin` | `0.05` |
-| `relink_bridge_h_lo`, `relink_bridge_h_hi` | `0.75`, `1.33` |
+| `relink_bridge_h_lo`, `relink_bridge_h_hi` | `0.6`, `1.7` |
 | `relink_bridge_spatial_gate`, `relink_bridge_max_speed` | `0`, `0` |
-| `relink_bridge_dir_bonus` | `0.8` |
+| `relink_bridge_dir_bonus` | `0.0` |
 | `reid_mode` | `off` |
 
 The sealed **policy base** is the pre-H0 decision path against which the H0
@@ -62,7 +67,7 @@ must not be required to have the same source-file hashes as its base.
 | --- | --- |
 | `policy_base_head` | `7581c9720569e17593d1844ad494253ce664fed8` |
 | `policy_base_tree` | `2706ee3af0ddd6cd304f83289b575b2ae9b72fc6` |
-| headline preset | `093b66ed124063f035ae9cf2a76e4f5426743cd819fb66e3e54994c97ea42cd1` |
+| headline preset (`mamba_whole_graph_m.yaml`) | `496c4ec22b497c70bc8409227513939b4cd86834bf2210475d0ad655be6937af` |
 | base `src/tracking/tracker_gpu.cu` | `36a0c7f952e99aee309c7fe4c9187852d070ee0ae600cd737a0beeeb55904e55` |
 | base `include/tracking/tracker_gpu.hpp` | `b97a145a12a8f7ae3f6f055b210675f02d68d39a0d312f3e606a469d00272124` |
 
@@ -87,7 +92,13 @@ relink_bridge_occ_expand_cover, relink_bridge_app_veto
 
 For the sole headline invocation (no module or CLI override), its canonical
 SHA-256 is
-`b1b78318ccbb87a701986f71c86147d83058e598ffd3b21e06f42d6116a51ae6`.
+`c7a6dbb35168cba75249b7f2c67d8455b6f634732493e455a4bb920aab6d7782`.
+It is produced — and must be re-derivable — by
+[`scripts/tools/resolved_bridge_policy_config.py`](../../../../scripts/tools/resolved_bridge_policy_config.py),
+which reproduces the `s` fingerprint this declaration carried before
+[Amendment 5](#amendment-5--policy-target-identity-2026-07-13-pre-seal)
+(`b1b78318…`) from the same code path, and is pinned by
+`tests/contract/test_declaration_policy_target.py`.
 This includes disabled paths and their values; the short authority table above
 is only a review aid, never the configuration fingerprint. H0 additionally
 freezes `research_portable_or_tail_enabled=false`, a null portable-tail
@@ -786,3 +797,96 @@ native key assignment only commented before append, live only after append
 This correction changes neither the envelope/exposure predicates nor any
 policy behavior. §1 item 2 remains satisfied; §1 item 3 owner `SEALED` after a
 complete freeze artifact remains the sole pending gate.
+
+---
+
+## Amendment 5 — policy-target identity (2026-07-13; pre-seal)
+
+This is an **append-only** correction to the frozen policy target of § 2. It
+changes which preset H0 observes. It changes no capture ABI, no κ, no coverage
+budget, no terminal partition, and no envelope predicate: Amendments 1–4 are
+untouched.
+
+### A5.1 The error
+
+The declaration froze `configs/presets/mamba_whole_graph.yaml` (the **`s`**
+preset) and called it *"the current headline runtime path"*. `headline` is
+overloaded in this repository — `docs/research/tracker-decision/status_2026-07-09.md`
+keeps **both** an `s` (primary) and an `m` (capacity) track — but the
+bridge-fidelity line H0 continues is sealed on **`m`**:
+
+| Authority | Says |
+| --- | --- |
+| `src/saccade/perception/eval/consumer_a_bridge_fidelity.py` (`HEADLINE_PRESET_REL`) | `configs/presets/mamba_whole_graph_m.yaml` |
+| same file, production constants | `PRODUCTION_BRIDGE_PX = 0.4` — *"must match headline preset"* |
+| [Step-0 production substrate audit](production_substrate_mapping_20260711.md) § wiring | `configs/presets/mamba_whole_graph_m.yaml` |
+| [D0](d0_bridge_estimator_fidelity_20260711.md) | headline preset = `mamba_whole_graph_m.yaml` |
+
+An H0 capture on `s` would therefore have produced a trace comparable to **no
+existing packet** — not D0's, not R1's, not S0's — while claiming to observe the
+headline path.
+
+### A5.2 What changed, exactly
+
+Resolved through the runtime's own parser, `s → m` moves **four** fields and
+nothing else (verified by
+[`scripts/tools/resolved_bridge_policy_config.py`](../../../../scripts/tools/resolved_bridge_policy_config.py)):
+
+| Field | was (`s`) | now (`m`) |
+| --- | ---: | ---: |
+| `relink_bridge_px` | `0.25` | `0.4` |
+| `relink_bridge_h_lo` | `0.75` | `0.6` |
+| `relink_bridge_h_hi` | `1.33` | `1.7` |
+| `relink_bridge_dir_bonus` | `0.8` | `0.0` |
+
+| Fingerprint | was | now |
+| --- | --- | --- |
+| preset bytes | `093b66ed…` | `496c4ec2…` |
+| `resolved_bridge_policy_config_v1` | `b1b78318…` | `c7a6dbb3…` |
+
+`policy_base_head`, `policy_base_tree`, and the base `tracker_gpu.cu` / `.hpp`
+hashes are **unchanged**: they fingerprint source, not policy.
+
+### A5.3 Pre-declared consequences of observing `m`
+
+These follow from the `m` policy and are declared **now**, before capture, so
+that they cannot later be reported as findings:
+
+1. **The directional branch is inert.** `m` runs `relink_bridge_dir_bonus = 0.0`
+   (its preset states explicitly that `m` does not inherit `s`'s `0.8`). The
+   pair record still carries the directional scalar, but it is identically zero
+   for every observed pair. **H0-on-`m` yields no evidence about the directional
+   path**, and an all-zero column is the expected result, not an anomaly.
+2. **The height gate is the wider `[0.6, 1.7]`.** The pre-cutoff funnel — the
+   population H0 exists to observe, because D0 could not see height-gate
+   rejects — is shaped by these bounds. The reject counts are `m`'s, and are
+   not comparable to any `s`-gated quantity.
+3. **Only `m` connects to the sealed line.** H0's motivating finding (field
+   insufficiency: no `frame`, no slot ids, no detection score ⇒ margin,
+   `atomicMax` claim, and commit are unreplayable, capping replay at L1) was
+   established on the **`m`** packets. On `m`, H0's trace closes exactly those
+   fields.
+
+### A5.4 Effect on the § 1 routing ledger
+
+§ 1 item 1 reads *"Satisfied: `P0_CAPTURE_SEMANTICS_INVALID` was accepted and P0
+closed."* P0 remains closed and **its terminal still holds**, but an append-only
+[Correction 1](runtime_bridge_decision_path_identifiability_declaration_20260713.md)
+records that the terminal's *published cause* was wrong: P0 audited the `s`
+policy against `m`-sealed evidence, and the `px` / `dir_bonus` delta it reported
+as evidence of a foreign capture is simply `m`'s correct values. Re-run against
+`m`, the terminal is unchanged — because `h_lo`, `h_hi`, `spatial_gate` and
+`max_speed` are **never stamped into capture provenance under any preset**.
+
+So the defect H0 inherits is **provenance incompleteness, not capture
+corruption**: the D0/R1/S0 evidence is sound but under-documented. H0 is built on
+that plus P0's surviving **field-sufficiency** finding (L1 replay cap), and it
+closes both — it stamps the unstamped gates and records the fields whose absence
+caps replay. H0 must **not** be sealed on the strength of the foreign-capture
+framing.
+
+### A5.5 State effect
+
+Still pre-seal. § 1 item 2 remains satisfied; § 1 item 3 — owner `SEALED` after a
+complete freeze artifact — remains the sole pending gate, and the freeze artifact
+must now be produced against `m`.

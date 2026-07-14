@@ -15,6 +15,7 @@ import csv
 import gzip
 import hashlib
 import json
+import sys
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -22,18 +23,43 @@ from typing import Any, Iterable
 REPO = Path(__file__).resolve().parents[2]
 STAMP = "20260713"
 TERMINAL = "P0_CAPTURE_SEMANTICS_INVALID"
-HEADLINE = {
-    "preset": "configs/presets/mamba_whole_graph.yaml",
-    "relink_bridge_enabled": True,
-    "relink_bridge_px": 0.25,
-    "relink_bridge_margin": 0.05,
-    "relink_bridge_h_lo": 0.75,
-    "relink_bridge_h_hi": 1.33,
-    "relink_bridge_spatial_gate": 0.0,
-    "relink_bridge_max_speed": 0.0,
-    "relink_bridge_dir_bonus": 0.8,
-    "reid_mode": "off",
-}
+
+if str(REPO / "scripts" / "tools") not in sys.path:
+    sys.path.insert(0, str(REPO / "scripts" / "tools"))
+
+from resolved_bridge_policy_config import (  # noqa: E402
+    fingerprint as policy_fingerprint,
+    resolve as resolve_policy,
+)
+
+# The policy target is a *parameter*, never an assumption. The original P0 run
+# hard-coded the `s` preset while calling it "the headline", then judged
+# `m`-sealed evidence against it; see the declaration's Correction 1. Callers
+# must now name the preset, and its knob values are resolved from that preset
+# rather than transcribed.
+POLICY_KNOBS = (
+    "relink_bridge_enabled",
+    "relink_bridge_px",
+    "relink_bridge_margin",
+    "relink_bridge_h_lo",
+    "relink_bridge_h_hi",
+    "relink_bridge_spatial_gate",
+    "relink_bridge_max_speed",
+    "relink_bridge_dir_bonus",
+    "reid_mode",
+)
+
+
+def policy_target(preset: str) -> dict[str, Any]:
+    """Resolve the audited policy from a named preset (no hidden default)."""
+    resolved = resolve_policy(preset)
+    policy: dict[str, Any] = {
+        "preset": f"configs/presets/{preset}.yaml",
+        "resolved_bridge_policy_config_v1": policy_fingerprint(preset),
+    }
+    policy.update({knob: resolved[knob] for knob in POLICY_KNOBS})
+    return policy
+
 
 SOURCE_PROOFS = {
     "stage_a": "if (!active[cand] || trk_to_det[cand] < 0) return;",
@@ -83,7 +109,9 @@ def _eq(actual: Any, expected: Any) -> bool:
     return actual == expected
 
 
-def _alignment(name: str, bridge: dict[str, Any]) -> dict[str, Any]:
+def _alignment(
+    name: str, bridge: dict[str, Any], policy: dict[str, Any]
+) -> dict[str, Any]:
     mapping = {
         "relink_bridge_px": "px",
         "relink_bridge_dir_bonus": "dir_bonus",
@@ -100,10 +128,10 @@ def _alignment(name: str, bridge: dict[str, Any]) -> dict[str, Any]:
             {
                 "headline_knob": policy_key,
                 "artifact_field": artifact_key,
-                "expected": HEADLINE[policy_key],
+                "expected": policy[policy_key],
                 "actual": actual,
                 "status": "match"
-                if present and _eq(actual, HEADLINE[policy_key])
+                if present and _eq(actual, policy[policy_key])
                 else "mismatch_or_absent",
             }
         )
@@ -210,7 +238,12 @@ def _field_matrix(header: set[str]) -> list[dict[str, Any]]:
     ]
 
 
-def audit(root: Path = REPO, *, d0_capture_dir: Path | None = None) -> dict[str, Any]:
+def audit(
+    root: Path = REPO,
+    *,
+    policy_preset: str,
+    d0_capture_dir: Path | None = None,
+) -> dict[str, Any]:
     evidence = root / "docs/modules/semantic/research/evidence"
     d0_packet_path = evidence / "d0_runtime_shadow_fidelity_20260712/manifest.json"
     r1_packet_path = evidence / "r1_temporal_reduction_capture_20260712/manifest.json"
@@ -261,14 +294,17 @@ def audit(root: Path = REPO, *, d0_capture_dir: Path | None = None) -> dict[str,
     actual_d0_hash = sha256(d0_capture)
     d0_hash_ok = expected_d0_hash == actual_d0_hash
     s0_hash_ok = str(s0_packet["input_hashes"]["capture.csv.gz"]) == actual_d0_hash
-    d0_alignment = _alignment("D0", dict(d0_capture_manifest["provenance"]["bridge"]))
-    r1_alignment = _alignment("R1", dict(r1_export["provenance"]["bridge"]))
+    policy = policy_target(policy_preset)
+    d0_alignment = _alignment(
+        "D0", dict(d0_capture_manifest["provenance"]["bridge"]), policy
+    )
+    r1_alignment = _alignment("R1", dict(r1_export["provenance"]["bridge"]), policy)
     r1_preset = str(r1_hashes["scope"]["preset"])
 
     configuration_valid = (
         d0_alignment["all_fields_match"]
         and r1_alignment["all_fields_match"]
-        and r1_preset == HEADLINE["preset"]
+        and r1_preset == policy["preset"]
     )
     source_valid = all(source_proofs.values())
     terminal = (
@@ -280,7 +316,7 @@ def audit(root: Path = REPO, *, d0_capture_dir: Path | None = None) -> dict[str,
     return {
         "study": "p0_runtime_bridge_decision_path_20260713",
         "terminal": terminal,
-        "headline": HEADLINE,
+        "policy_target": policy,
         "label_access": {"gt_or_fp_labels_accessed": False, "p5": "not_entered"},
         "source_proofs": source_proofs,
         "provenance": {
@@ -411,6 +447,15 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=REPO)
     parser.add_argument(
+        "--policy-preset",
+        required=True,
+        help=(
+            "preset stem under configs/presets/ whose resolved policy the frozen "
+            "evidence is audited against; there is no default, because assuming "
+            "one is the error Correction 1 records"
+        ),
+    )
+    parser.add_argument(
         "--output-dir",
         type=Path,
         default=REPO
@@ -418,10 +463,17 @@ def main() -> int:
     )
     args = parser.parse_args()
     root = args.root.resolve()
-    result = audit(root)
     output_dir = (
         args.output_dir if args.output_dir.is_absolute() else root / args.output_dir
     )
+    # The 2026-07-13 packet is sealed evidence: a re-run emits a new packet, it
+    # never edits the old one.
+    if (output_dir / "manifest.json").exists():
+        raise SystemExit(
+            f"refusing to overwrite a sealed packet at {output_dir}; "
+            "pass --output-dir <new path>"
+        )
+    result = audit(root, policy_preset=args.policy_preset)
     write_packet(result, output_dir)
     print(
         json.dumps(
