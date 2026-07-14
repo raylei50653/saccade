@@ -76,14 +76,35 @@ TERMINAL_NARRATIVE: Final[dict[str, dict[str, str]]] = {
     },
     TERMINAL_CLEAN: {
         "observed_level": "L1_pair_cutoff_replay",
-        "funnel_status": "admissible_p4_not_executed_by_this_runner",
-        # Not `OBSERVABLE`: admission passing does not mean this runner counted
-        # anything. It emits no funnel figures, so it must not claim to have any.
+        "funnel_status": "admissible_l1_pair_cutoff_stratum_only",
+        # Admission is not observability. Passing admission licenses P4 to compute
+        # exactly the stratum the replay level names — L1, the pair cutoff — and
+        # nothing beyond it. The stages after D are blocked by *absent capture
+        # fields* (no frame, no candidate slot, no atomicMax key), which no amount
+        # of provenance stamping can supply. So the clean terminal is NOT
+        # "the funnel is computable": six of the seven stages stay UNOBSERVABLE,
+        # and write_packet says so stage by stage. Claiming otherwise would let the
+        # terminal contradict the field matrix printed beside it.
         "observability": "PENDING_P4",
-        "funnel_reason": "provenance is complete and the funnel is computable; P4 must compute it — this admission runner does not",
+        "funnel_reason": "provenance admission passes; P4 may compute the declared L1 pair-cutoff stratum only — the full decision funnel remains unreconstructable",
         "cutoff_consequence": "scalar cutoff is mechanically evaluable and attributable to the audited policy",
         "scalar_consequence": "scalar formula terms are observable for the emitted survivor population under the audited policy",
     },
+}
+
+# Which field-matrix stage governs each funnel stage. A funnel row may only claim
+# to be computable if the matrix row behind it is complete — otherwise the CSV and
+# the matrix, shipped in the same packet, contradict each other.
+# `pass_margin` maps to E: the margin is what E's own consequence calls
+# unreconstructable ("best/second-best and margin are unreconstructable").
+FUNNEL_STAGE_FIELD: Final[dict[str, str]] = {
+    "eligible_raw_pairs": "A_pair_eligibility",
+    "pass_height_gate": "B_pre_score_gates",
+    "pass_bdist_cutoff": "D_pair_cutoff",
+    "candidate_local_winners": "E_candidate_local_ranking",
+    "pass_margin": "E_candidate_local_ranking",
+    "claim_winners": "F_claim_competition",
+    "final_commits": "G_commit",
 }
 
 
@@ -317,7 +338,9 @@ def derive_terminal(
     return TERMINAL_CLEAN, contradicted, unverifiable
 
 
-def _field_matrix(header: set[str], narrative: dict[str, str]) -> list[dict[str, Any]]:
+def _field_matrix(
+    header: set[str], narrative: dict[str, str], admitted: bool
+) -> list[dict[str, Any]]:
     def row(
         stage: str, required: list[str], artifact: str, complete: bool, consequence: str
     ) -> dict[str, Any]:
@@ -380,7 +403,12 @@ def _field_matrix(header: set[str], narrative: dict[str, str]) -> list[dict[str,
             "D_pair_cutoff",
             ["bdist", "production threshold", "headline preset stamp"],
             "D0 v2 capture header + manifest",
-            False,
+            # The only stage whose completeness turns on provenance: it needs the
+            # preset stamp, which is exactly what admission establishes. Every other
+            # stage is blocked by *missing capture fields*, which no amount of
+            # stamping can supply — so admission never unblocks them, and a clean
+            # terminal must not pretend otherwise.
+            "bdist" in header and admitted,
             narrative["cutoff_consequence"],
         ),
         row(
@@ -418,8 +446,13 @@ def audit(
     *,
     policy_preset: str,
     d0_capture_dir: Path | None = None,
+    evidence_dir: Path | None = None,
 ) -> dict[str, Any]:
-    evidence = root / "docs/modules/semantic/research/evidence"
+    # `evidence_dir` exists so a test can drive the *clean* terminal end-to-end. It
+    # cannot be reached against the real packets — R1's export is missing the same
+    # four knobs the D0 capture is — and a terminal no test can produce is a
+    # terminal no reader should trust.
+    evidence = evidence_dir or (root / "docs/modules/semantic/research/evidence")
     d0_packet_path = evidence / "d0_runtime_shadow_fidelity_20260712/manifest.json"
     r1_packet_path = evidence / "r1_temporal_reduction_capture_20260712/manifest.json"
     r1_hashes_path = (
@@ -525,8 +558,9 @@ def audit(
     }
     terminal, contradicted, unverifiable = derive_terminal(contradictions, absences)
     narrative = TERMINAL_NARRATIVE[terminal]
+    admitted = terminal == TERMINAL_CLEAN
 
-    matrix = _field_matrix(header_set, narrative)
+    matrix = _field_matrix(header_set, narrative, admitted)
     return {
         "study": "p0_runtime_bridge_decision_path_20260713",
         "terminal": terminal,
@@ -613,12 +647,33 @@ def write_packet(result: dict[str, Any], output_dir: Path) -> None:
         json.dumps(result["field_sufficiency"], indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
-    # The funnel's own account of why it is empty is derived from the terminal, like
-    # every other such field. It used to read "headline provenance is invalid" no
-    # matter what — so a packet terminating in `..._UNVERIFIABLE` shipped a CSV that
-    # still asserted the invalidity the packet had just withdrawn. One artifact,
-    # two incompatible propositions.
+    # The funnel's account of why it is empty is derived from the terminal — and,
+    # once admission passes, from each stage's *own* field-matrix row.
+    #
+    # Two bugs lived here. It used to read "headline provenance is invalid" no
+    # matter what, so a packet terminating in `..._UNVERIFIABLE` shipped a CSV still
+    # asserting the invalidity the packet had just withdrawn. Fixing that with one
+    # terminal-wide string then created the mirror defect: under a clean terminal
+    # every stage claimed to be awaiting computation, including `eligible_raw_pairs`,
+    # `claim_winners` and `final_commits` — which the field matrix in the same packet
+    # says are unobservable *whatever* the provenance says, because the capture never
+    # recorded the fields. Admission is not observability.
+    #
+    # So: admission failing stops the whole funnel; admission passing releases only
+    # the stages the evidence actually supports — which at L1 is the pair cutoff and
+    # nothing else.
     narrative = TERMINAL_NARRATIVE[result["terminal"]]
+    admitted = result["terminal"] == TERMINAL_CLEAN
+    by_stage = {row["stage"]: row for row in result["field_sufficiency"]}
+
+    def _disposition(stage: str) -> tuple[str, str]:
+        if not admitted:
+            return narrative["observability"], narrative["funnel_reason"]
+        field_row = by_stage[FUNNEL_STAGE_FIELD[stage]]
+        if field_row["complete"]:
+            return "PENDING_P4", narrative["funnel_reason"]
+        return "UNOBSERVABLE", str(field_row["missing_consequence"])
+
     funnel_rows: Iterable[dict[str, str]] = (
         {
             "stage": stage,
@@ -626,18 +681,10 @@ def write_packet(result: dict[str, Any], output_dir: Path) -> None:
             "unique_candidate_count": "",
             "unique_lost_track_count": "",
             "sequence_distribution": "",
-            "observability": narrative["observability"],
-            "reason": narrative["funnel_reason"],
+            "observability": _disposition(stage)[0],
+            "reason": _disposition(stage)[1],
         }
-        for stage in (
-            "eligible_raw_pairs",
-            "pass_height_gate",
-            "pass_bdist_cutoff",
-            "candidate_local_winners",
-            "pass_margin",
-            "claim_winners",
-            "final_commits",
-        )
+        for stage in FUNNEL_STAGE_FIELD
     )
     with (output_dir / "decision_funnel.csv").open(
         "w", newline="", encoding="utf-8"

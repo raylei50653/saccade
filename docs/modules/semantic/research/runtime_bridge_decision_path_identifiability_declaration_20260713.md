@@ -391,3 +391,55 @@ four fields"* and *"re-capture"*. Choosing the former is an **owner disposition*
 (accepted 2026-07-14), taken on the grounds that the capture's stamped fields
 agree with `m` and its bytes are hash-intact — not a conclusion the audit derives.
 It is recorded as a decision, and the audit does not assert it.
+
+### C1.12 Admission is not observability (2026-07-14; owner review)
+
+C1.11 derived the packet's narrative from the terminal. Owner review found that
+the *clean* branch of that narrative over-claimed, and that the test guarding it
+never ran.
+
+**The over-claim.** `P0_PAIR_CUTOFF_ONLY` was narrated as *"provenance is complete
+and the funnel is computable"*, and `write_packet` wrote that one string to all
+seven funnel stages — `eligible_raw_pairs`, `claim_winners`, `final_commits`
+included. But the field matrix in the **same packet** says those stages are
+unobservable, and says so for a reason provenance cannot touch: the capture never
+recorded a frame column, a candidate slot, or the quantized atomicMax key. So the
+clean terminal reintroduced the very defect C1.11 removed — a packet at war with
+itself — merely in the opposite direction.
+
+The error is a conflation. **Admission passing is not observability.** Stamping the
+four missing knobs licenses P4 to compute *the stratum the replay level names* —
+L1, the pair cutoff — and nothing beyond it. Six of the seven stages remain shut
+whatever the provenance says.
+
+Corrected: the funnel's disposition is now **stage-specific**, and each row answers
+to its own field-matrix row rather than to one terminal-wide string:
+
+| admission | stage | disposition |
+| --- | --- | --- |
+| fails | *all* | `UNOBSERVABLE`, reason = the terminal's |
+| passes | matrix row complete | `PENDING_P4` |
+| passes | matrix row incomplete | `UNOBSERVABLE`, reason = **that row's own blocker** |
+
+`D_pair_cutoff.complete` was itself a hard-coded `False` — the same class of defect
+again — and is now derived (`"bdist" in header and admitted`). It is the only stage
+whose completeness turns on provenance, which is exactly why the clean terminal is
+named `..._PAIR_CUTOFF_ONLY`. Under a clean terminal the funnel now releases
+`pass_bdist_cutoff` and nothing else, and the other six cite their own blockers
+(*"atomicMax winner cannot be replayed"*, *"shadow deliberately suppresses the only
+bridge writes"*, …).
+
+**The guard that never ran.** `test_no_packet_field_contradicts_its_own_terminal`
+drove a *synthetic* capture, whose bytes cannot match the sealed packet hash — so
+`d0_packet_hash_broken` fired and **both presets fell to `INVALID`**. Its
+`UNVERIFIABLE` branch never executed. That branch also indexed `row["consequence"]`,
+a key that does not exist (the field is `missing_consequence`), and CI stayed green
+because the line was never reached. A test that cannot fail is not evidence — it is
+the same "nothing mechanical objected" this study exists to end, one level up.
+
+Replaced by tests that **reach the terminals for real**: `UNVERIFIABLE` from the
+sealed artifacts, and clean from a fixture that stamps what they omit. Reaching the
+clean terminal end-to-end required making the evidence tree injectable
+(`audit(evidence_dir=…)`), because R1's export is missing the same four knobs the
+D0 capture is — so without it, no test could produce that terminal at all, and **a
+terminal no test can reach is one no reader should trust**.

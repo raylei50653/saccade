@@ -342,45 +342,147 @@ def test_p0_keeps_candidate_and_commit_replay_below_l2(tmp_path: Path) -> None:
 
 
 # --------------------------------------------------------------------------- #
-# A terminal types the whole packet, not one field.                             #
+# A terminal types the whole packet — and admission is not observability.       #
 #                                                                               #
-# When the terminal was retyped to `..._UNVERIFIABLE`, three fields were left    #
-# behind as fixed strings — `replay.observed_level`, `decision_funnel_status`,   #
-# and `decision_funnel.csv`'s per-row `reason`, which went on saying "headline   #
-# provenance is invalid". A single packet then asserted both "cannot be          #
-# verified" and "is invalid": the withdrawn proposition, still shipping.         #
+# Two defects, in sequence. The funnel CSV first said "headline provenance is    #
+# invalid" unconditionally, so an `..._UNVERIFIABLE` packet still shipped the    #
+# proposition it had withdrawn. Fixing that with one terminal-wide string then   #
+# created the mirror bug: under a clean terminal *every* stage claimed to be     #
+# awaiting computation — including `eligible_raw_pairs`, `claim_winners` and     #
+# `final_commits`, which the field matrix in the same packet calls unobservable  #
+# whatever the provenance says, because the capture never recorded the fields.   #
+#                                                                               #
+# The first version of these tests could not see either: it drove a synthetic    #
+# capture whose bytes cannot match the sealed packet hash, so both presets fell  #
+# to INVALID and the UNVERIFIABLE branch never ran. (It even indexed a key that  #
+# does not exist, `row["consequence"]`, and CI stayed green.) So the terminals    #
+# are now reached for real: UNVERIFIABLE from the sealed artifacts, and clean    #
+# from a fixture that stamps everything they omit.                               #
 # --------------------------------------------------------------------------- #
-@pytest.mark.parametrize("preset", [SEALED_PRESET, FOREIGN_PRESET])
-def test_no_packet_field_contradicts_its_own_terminal(
-    tmp_path: Path, preset: str
+def _clean_evidence_dir(runner, tmp_path: Path) -> Path:
+    """The real evidence tree, with R1's export stamping what it omits.
+
+    The clean terminal is unreachable against the sealed packets — R1's export is
+    missing the same four knobs the D0 capture is. Without an injectable copy, no
+    test can drive it, and a terminal no test can produce is one no reader should
+    trust.
+    """
+    source = ROOT / "docs/modules/semantic/research/evidence"
+    evidence = tmp_path / "evidence"
+    shutil.copytree(source, evidence)
+
+    export = evidence / "r1_temporal_reduction_capture_20260712/export_manifest.json"
+    manifest = json.loads(export.read_text(encoding="utf-8"))
+    resolved = runner.resolve_policy(SEALED_PRESET)
+    manifest["provenance"]["bridge"].update(
+        {
+            "h_lo": resolved["relink_bridge_h_lo"],
+            "h_hi": resolved["relink_bridge_h_hi"],
+            "spatial_gate": resolved["relink_bridge_spatial_gate"],
+            "max_speed": resolved["relink_bridge_max_speed"],
+        }
+    )
+    export.write_text(json.dumps(manifest), encoding="utf-8")
+    return evidence
+
+
+def _funnel(runner, result, out: Path) -> list[dict[str, str]]:
+    runner.write_packet(result, out)
+    with (out / "decision_funnel.csv").open(encoding="utf-8") as handle:
+        return list(csv.DictReader(handle))
+
+
+@pytest.mark.packet_bound
+@pytest.mark.skipif(
+    not (REAL_CAPTURE / "capture.csv.gz").exists(),
+    reason="sealed D0 capture not present in this checkout",
+)
+def test_an_unverifiable_packet_never_also_calls_the_capture_invalid(
+    tmp_path: Path,
 ) -> None:
     runner = _load_runner()
-    result = runner.audit(
-        ROOT, policy_preset=preset, d0_capture_dir=_synthetic_d0_capture_dir(tmp_path)
+    result = runner.audit(ROOT, policy_preset=SEALED_PRESET)
+    assert result["terminal"] == "P0_CAPTURE_SEMANTICS_UNVERIFIABLE"  # the real one
+
+    funnel = _funnel(runner, result, tmp_path / "packet")
+    assert len(funnel) == 7
+
+    stopped = [
+        result["replay"]["observed_level"],
+        result["decision_funnel_status"],
+        *(row["reason"] for row in funnel),
+        *(str(row["missing_consequence"]) for row in result["field_sufficiency"]),
+    ]
+    assert not [text for text in stopped if "invalid" in text.lower()], (
+        "a packet that cannot verify its capture must not also call it invalid"
     )
-    terminal = result["terminal"]
-    narrative = runner.TERMINAL_NARRATIVE[terminal]
+    # Admission failed, so the whole funnel is stopped — uniformly, and by the
+    # terminal.
+    assert {row["observability"] for row in funnel} == {"UNOBSERVABLE"}
 
-    runner.write_packet(result, tmp_path / "packet")
-    funnel = list(csv.DictReader((tmp_path / "packet" / "decision_funnel.csv").open()))
-    assert funnel, "funnel must not be empty"
 
-    # Every field that says *why* the audit stopped must say the same thing.
-    assert result["replay"]["observed_level"] == narrative["observed_level"]
-    assert result["decision_funnel_status"] == narrative["funnel_status"]
-    for row in funnel:
-        assert row["reason"] == narrative["funnel_reason"]
-        assert row["observability"] == narrative["observability"]
+@pytest.mark.packet_bound
+@pytest.mark.skipif(
+    not (REAL_CAPTURE / "capture.csv.gz").exists(),
+    reason="sealed D0 capture not present in this checkout",
+)
+def test_a_clean_terminal_releases_only_the_pair_cutoff_stage(tmp_path: Path) -> None:
+    """`P0_PAIR_CUTOFF_ONLY` means the pair cutoff — not the whole funnel."""
+    runner = _load_runner()
+    result = runner.audit(
+        ROOT,
+        policy_preset=SEALED_PRESET,
+        d0_capture_dir=_fully_stamped_capture_dir(runner, tmp_path),
+        evidence_dir=_clean_evidence_dir(runner, tmp_path),
+    )
+    assert result["terminal"] == "P0_PAIR_CUTOFF_ONLY"  # reached, not simulated
+    assert result["terminal_basis"]["unverifiable"] is False
+    assert result["replay"]["observed_level"] == "L1_pair_cutoff_replay"
 
-    # And no field may still assert the *other* terminal's proposition. This is the
-    # bug in its concrete form: an UNVERIFIABLE packet whose funnel says "invalid".
-    if terminal == "P0_CAPTURE_SEMANTICS_UNVERIFIABLE":
-        stopped = [
-            result["replay"]["observed_level"],
-            result["decision_funnel_status"],
-            *(row["reason"] for row in funnel),
-            *(row["consequence"] for row in result["field_sufficiency"]),
-        ]
-        assert not [text for text in stopped if "invalid" in text.lower()], (
-            "a packet that cannot verify its capture must not also call it invalid"
-        )
+    funnel = {row["stage"]: row for row in _funnel(runner, result, tmp_path / "packet")}
+
+    # Exactly the stage the replay level names — and no other. Stamping provenance
+    # cannot conjure a frame column, a candidate slot or an atomicMax key, so the
+    # stages after D stay shut whatever the terminal says.
+    assert funnel["pass_bdist_cutoff"]["observability"] == "PENDING_P4"
+    assert [s for s, r in funnel.items() if r["observability"] == "PENDING_P4"] == [
+        "pass_bdist_cutoff"
+    ]
+    for stage in ("eligible_raw_pairs", "claim_winners", "final_commits"):
+        assert funnel[stage]["observability"] == "UNOBSERVABLE", stage
+
+    # And each stopped row cites *its own* blocker, not one terminal-wide string.
+    assert "atomicMax" in funnel["claim_winners"]["reason"]
+    assert "shadow" in funnel["final_commits"]["reason"]
+
+
+@pytest.mark.packet_bound
+@pytest.mark.skipif(
+    not (REAL_CAPTURE / "capture.csv.gz").exists(),
+    reason="sealed D0 capture not present in this checkout",
+)
+def test_the_funnel_never_outruns_the_field_matrix_beside_it(tmp_path: Path) -> None:
+    """No funnel row may claim computability its own matrix row denies.
+
+    This is the invariant both bugs broke, stated once. It must hold under every
+    terminal, so it is asserted under both the real one and the clean one.
+    """
+    runner = _load_runner()
+    cases = {
+        "real": runner.audit(ROOT, policy_preset=SEALED_PRESET),
+        "clean": runner.audit(
+            ROOT,
+            policy_preset=SEALED_PRESET,
+            d0_capture_dir=_fully_stamped_capture_dir(runner, tmp_path),
+            evidence_dir=_clean_evidence_dir(runner, tmp_path),
+        ),
+    }
+    for name, result in cases.items():
+        matrix = {row["stage"]: row for row in result["field_sufficiency"]}
+        for row in _funnel(runner, result, tmp_path / f"packet_{name}"):
+            governing = matrix[runner.FUNNEL_STAGE_FIELD[row["stage"]]]
+            if row["observability"] == "PENDING_P4":
+                assert governing["complete"] is True, (
+                    f"{name}/{row['stage']}: funnel says computable, field matrix "
+                    f"says {governing['stage']} is incomplete"
+                )
