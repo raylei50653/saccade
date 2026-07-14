@@ -443,3 +443,42 @@ clean terminal end-to-end required making the evidence tree injectable
 (`audit(evidence_dir=…)`), because R1's export is missing the same four knobs the
 D0 capture is — so without it, no test could produce that terminal at all, and **a
 terminal no test can reach is one no reader should trust**.
+
+### C1.13 The clean terminal was reached by tampering (2026-07-14; owner review)
+
+C1.12 made the clean terminal reachable by a test. Owner review found **how** it
+was reached, and it was not honest.
+
+`_clean_evidence_dir()` copied the evidence tree and wrote the four missing knobs
+into R1's sealed `export_manifest.json` — **updating no hash**. The audit read that
+export for its bridge provenance and trusted it: it verified the D0 capture's bytes
+and S0's inherited hash, but **never checked R1's export against its own packet
+seal**. So the fixture passed *because it tampered*. What the clean test actually
+demonstrated was:
+
+> editing a sealed R1 export lets the audit return `P0_PAIR_CUTOFF_ONLY`.
+
+That directly contradicts § 5's partition, which puts **any broken packet hash** in
+row 1 (`..._INVALID`), and reserves row 3 for *everything stamped and matching*.
+
+The export is pinned in two places, and the ledger that pins it is itself pinned by
+the manifest. All three are now verified, and any failure is a **contradiction**:
+
+| check | pin |
+| --- | --- |
+| `export_vs_manifest` | `manifest.json["files"]["export_manifest.json"]` |
+| `export_vs_hash_ledger` | `frozen_packet_hashes.json["local_artifacts"]["export_manifest"]` |
+| `hash_ledger_vs_manifest` | `manifest.json["files"]["frozen_packet_hashes.json"]` |
+
+The fixture now recomputes the seal outward — export → hash ledger → manifest — so
+the packet it injects is **internally sealed**, not merely edited. Its dishonest
+twin is kept as a test (`reseal=False`): the same edit with no hash updated must
+reach `..._INVALID` on both broken pins, and it does. A guard that only ever sees
+well-formed input proves nothing.
+
+**No terminal of record moves.** The real R1 packet is sealed
+(`r1_packet_seal: {export_vs_manifest: true, export_vs_hash_ledger: true,
+hash_ledger_vs_manifest: true}`), and `m` remains
+`P0_CAPTURE_SEMANTICS_UNVERIFIABLE`. What changes is that the audit now *checks*
+this rather than assuming it — the same correction as C1.10 and C1.12, applied to
+the one artifact that had been exempt from it.

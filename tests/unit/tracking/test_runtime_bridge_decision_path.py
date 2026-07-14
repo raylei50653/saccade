@@ -359,22 +359,38 @@ def test_p0_keeps_candidate_and_commit_replay_below_l2(tmp_path: Path) -> None:
 # are now reached for real: UNVERIFIABLE from the sealed artifacts, and clean    #
 # from a fixture that stamps everything they omit.                               #
 # --------------------------------------------------------------------------- #
-def _clean_evidence_dir(runner, tmp_path: Path) -> Path:
+def _sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _clean_evidence_dir(runner, tmp_path: Path, *, reseal: bool = True) -> Path:
     """The real evidence tree, with R1's export stamping what it omits.
 
     The clean terminal is unreachable against the sealed packets — R1's export is
-    missing the same four knobs the D0 capture is. Without an injectable copy, no
+    missing the same four knobs the D0 capture is. Without an injectable copy no
     test can drive it, and a terminal no test can produce is one no reader should
     trust.
-    """
-    source = ROOT / "docs/modules/semantic/research/evidence"
-    evidence = tmp_path / "evidence"
-    shutil.copytree(source, evidence)
 
-    export = evidence / "r1_temporal_reduction_capture_20260712/export_manifest.json"
-    manifest = json.loads(export.read_text(encoding="utf-8"))
+    But an injected packet must be **internally sealed**, not merely edited. R1's
+    export is pinned in two places, and the ledger that pins it is itself pinned by
+    the manifest, so a fixture that rewrites the export and leaves the hashes alone
+    is a *tampered* packet. Driving the clean terminal with one would prove only
+    that tampering reaches clean — the opposite of the property under test, and
+    exactly what the partition calls a contradiction.
+
+    So the seal is recomputed outward: export → hash ledger → manifest.
+
+    `reseal=False` deliberately skips that, to prove the audit rejects the packet
+    the honest fixture would otherwise be mistaken for.
+    """
+    evidence = tmp_path / ("evidence" if reseal else "evidence_tampered")
+    shutil.copytree(ROOT / "docs/modules/semantic/research/evidence", evidence)
+    packet = evidence / "r1_temporal_reduction_capture_20260712"
+
+    export_path = packet / "export_manifest.json"
+    export = json.loads(export_path.read_text(encoding="utf-8"))
     resolved = runner.resolve_policy(SEALED_PRESET)
-    manifest["provenance"]["bridge"].update(
+    export["provenance"]["bridge"].update(
         {
             "h_lo": resolved["relink_bridge_h_lo"],
             "h_hi": resolved["relink_bridge_h_hi"],
@@ -382,7 +398,20 @@ def _clean_evidence_dir(runner, tmp_path: Path) -> Path:
             "max_speed": resolved["relink_bridge_max_speed"],
         }
     )
-    export.write_text(json.dumps(manifest), encoding="utf-8")
+    export_path.write_text(json.dumps(export), encoding="utf-8")
+    if not reseal:
+        return evidence
+
+    ledger_path = packet / "frozen_packet_hashes.json"
+    ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+    ledger["local_artifacts"]["export_manifest"] = _sha256(export_path)
+    ledger_path.write_text(json.dumps(ledger), encoding="utf-8")
+
+    manifest_path = packet / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["files"]["export_manifest.json"] = _sha256(export_path)
+    manifest["files"]["frozen_packet_hashes.json"] = _sha256(ledger_path)
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
     return evidence
 
 
@@ -486,3 +515,53 @@ def test_the_funnel_never_outruns_the_field_matrix_beside_it(tmp_path: Path) -> 
                     f"{name}/{row['stage']}: funnel says computable, field matrix "
                     f"says {governing['stage']} is incomplete"
                 )
+
+
+@pytest.mark.packet_bound
+@pytest.mark.skipif(
+    not (REAL_CAPTURE / "capture.csv.gz").exists(),
+    reason="sealed D0 capture not present in this checkout",
+)
+def test_a_tampered_r1_export_cannot_reach_any_clean_terminal(tmp_path: Path) -> None:
+    """Editing the sealed export and leaving its hashes alone must contradict.
+
+    The audit verified the D0 capture's bytes but not R1's, and read R1's export for
+    its bridge provenance on trust. So four fields written into the sealed
+    `export_manifest.json`, with no hash updated, carried the audit all the way to
+    `P0_PAIR_CUTOFF_ONLY` — the clean fixture was passing *because* it tampered.
+    The partition is explicit that a broken packet hash is a contradiction.
+    """
+    runner = _load_runner()
+    result = runner.audit(
+        ROOT,
+        policy_preset=SEALED_PRESET,
+        d0_capture_dir=_fully_stamped_capture_dir(runner, tmp_path),
+        evidence_dir=_clean_evidence_dir(runner, tmp_path, reseal=False),
+    )
+
+    assert result["terminal"] == "P0_CAPTURE_SEMANTICS_INVALID"
+    assert result["terminal_basis"]["contradicted"] is True
+    # Both pins fail together: the export no longer matches the manifest that seals
+    # it, nor the ledger that inventories it.
+    assert set(result["terminal_basis"]["contradictions"]["r1_packet_seal_broken"]) == {
+        "export_vs_manifest",
+        "export_vs_hash_ledger",
+    }
+
+
+@pytest.mark.packet_bound
+@pytest.mark.skipif(
+    not (REAL_CAPTURE / "capture.csv.gz").exists(),
+    reason="sealed D0 capture not present in this checkout",
+)
+def test_the_real_r1_packet_is_sealed() -> None:
+    """The guard must pass on the artifacts as committed, or it is unusable."""
+    runner = _load_runner()
+    result = runner.audit(ROOT, policy_preset=SEALED_PRESET)
+
+    assert result["provenance"]["r1_packet_seal"] == {
+        "export_vs_manifest": True,
+        "export_vs_hash_ledger": True,
+        "hash_ledger_vs_manifest": True,
+    }
+    assert result["terminal_basis"]["contradictions"]["r1_packet_seal_broken"] == []

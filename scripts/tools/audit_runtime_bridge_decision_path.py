@@ -522,6 +522,24 @@ def audit(
     actual_d0_hash = sha256(d0_capture)
     d0_hash_ok = expected_d0_hash == actual_d0_hash
     s0_hash_ok = str(s0_packet["input_hashes"]["capture.csv.gz"]) == actual_d0_hash
+
+    # R1's export is read for its bridge provenance and then trusted — but nothing
+    # checked it against its own packet seal. The D0 capture's bytes were verified;
+    # R1's were not. So editing four fields into the sealed `export_manifest.json`
+    # and changing no hash could carry the audit all the way to a clean terminal,
+    # which is precisely what the partition forbids: a broken packet hash is a
+    # *contradiction*. The seal is pinned in two places, and the ledger that pins it
+    # is itself pinned by the manifest; all three are now verified.
+    r1_export_hash = sha256(r1_export_path)
+    r1_seal = {
+        "export_vs_manifest": r1_export_hash
+        == str(r1_packet["files"]["export_manifest.json"]),
+        "export_vs_hash_ledger": r1_export_hash
+        == str(r1_hashes["local_artifacts"]["export_manifest"]),
+        "hash_ledger_vs_manifest": sha256(r1_hashes_path)
+        == str(r1_packet["files"]["frozen_packet_hashes.json"]),
+    }
+
     policy = policy_target(policy_preset)
     d0_alignment = _alignment(
         "D0", dict(d0_capture_manifest["provenance"]["bridge"]), policy
@@ -541,6 +559,7 @@ def audit(
         ),
         "d0_packet_hash_broken": not d0_hash_ok,
         "s0_capture_hash_broken": not s0_hash_ok,
+        "r1_packet_seal_broken": [n for n, ok in r1_seal.items() if not ok],
         # `is False` — a proof that could not be *checked* is None, and an unchecked
         # proof is an absence. `not ok` would have promoted it to a contradiction.
         "source_proofs_missing": [n for n, ok in source_proofs.items() if ok is False],
@@ -602,6 +621,8 @@ def audit(
             "r1_capture_git_commit": r1_export["provenance"].get("git_commit"),
             "d0_packet_hash_match": d0_hash_ok,
             "s0_inherits_same_capture_hash": s0_hash_ok,
+            "r1_export_sha256": r1_export_hash,
+            "r1_packet_seal": r1_seal,
             "d0_alignment": d0_alignment,
             "r1_alignment": r1_alignment,
             "r1_frozen_preset": r1_preset,
