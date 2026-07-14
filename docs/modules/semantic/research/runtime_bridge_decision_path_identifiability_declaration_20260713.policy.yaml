@@ -1,0 +1,35 @@
+# Declaration -> preset binding. THIS FILE IS THE MECHANICAL AUTHORITY.
+#
+# The Markdown declaration is human-readable history: its tables, corrections and
+# amendments are for people. Nothing in this repository parses them to decide what
+# policy a declaration froze — a contract test that has to understand Markdown,
+# HTML comments and tables ends up being a partial parser trusted with fail-closed
+# authority, and every round of hardening it found another way to be wrong.
+#
+# P0's § 1 froze the `s` preset while calling it "the current headline
+  # runtime path". Correction 1 re-scoped that claim: the table is a faithful
+  # statement of `s`, and `s` is simply not the bridge headline. This binding
+  # records whose policy that sealed table is — it does not restate its history.
+schema: declaration_policy_binding_v1
+
+document:
+  path: runtime_bridge_decision_path_identifiability_declaration_20260713.md
+
+# The declaration's immutable prefix — everything above the first appended
+# Correction/Amendment. A whole-file hash would break on every legitimate
+# append-only addition; a fixed byte count plus SHA-256 pins the frozen body
+# exactly, still permits appending history below it, and needs no notion of a
+# heading, a fence or a table.
+sealed_prefix:
+  bytes: 3531
+  sha256: "d91a7e2cd2e0931fe1dd259d44faf3f49d615b4b6dab5264cab3e659cd1aa61c"
+
+policy_target:
+  kind: non-headline
+  preset: configs/presets/mamba_whole_graph.yaml
+
+# Recomputed by scripts/tools/resolved_bridge_policy_config.py, never transcribed.
+preset_identity:
+  sha256: "093b66ed124063f035ae9cf2a76e4f5426743cd819fb66e3e54994c97ea42cd1"
+  resolved_schema: resolved_bridge_policy_config_v1
+  resolved_fingerprint: "b1b78318ccbb87a701986f71c86147d83058e598ffd3b21e06f42d6116a51ae6"
