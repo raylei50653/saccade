@@ -19,6 +19,14 @@ So a frozen-policy table is treated as a claim about a named preset, and checked
 
 A declaration may still target a non-headline preset — it just has to say so.
 
+## Scope is itself load-bearing
+
+All four checks are parametrized over the documents the frozen-policy regex finds,
+so *scope decides whether anything is checked at all*. An empty parameter set does
+not fail in pytest — it skips, and the suite goes green. Scope is therefore pinned
+(`MUST_BE_IN_SCOPE`) and its detection kept independent of table shape, because a
+guard that silently checks nothing is this file's own thesis turned against it.
+
 ## Which text is "in force"
 
 These documents are append-only: a sealed body is never rewritten, and amendments
@@ -79,11 +87,16 @@ _HEADLINE_REL = re.search(
 ).group(1)
 HEADLINE_PRESET = Path(_HEADLINE_REL).stem
 
-# A frozen-policy row is a two-cell markdown row whose first cell is nothing but
-# backticked knob names. It may pair knobs off:
+# A frozen-policy row is a markdown row whose first cell is nothing but backticked
+# knob names and whose second cell holds their values. It may pair knobs off:
 #   | `relink_bridge_px` | `0.4` |
 #   | `relink_bridge_h_lo`, `relink_bridge_h_hi` | `0.6`, `1.7` |
-_TABLE_ROW = re.compile(r"^\|([^|\n]+)\|([^|\n]+)\|\s*$", re.MULTILINE)
+#
+# Trailing cells are allowed and ignored: a knob table with a `rationale` or `note`
+# column is an ordinary way to write one, and requiring exactly two cells would let
+# such a declaration fall out of scope *entirely* — unguarded, and silently, since
+# scope is what decides whether any of these checks run at all.
+_TABLE_ROW = re.compile(r"^\|([^|\n]+)\|([^|\n]+)\|", re.MULTILINE)
 _TICKED = re.compile(r"`([^`]+)`")
 _KNOB = re.compile(r"^(relink_bridge_\w+|relink_\w+|reid_mode)$")
 
@@ -162,6 +175,53 @@ def _scalar(raw: str) -> Any:
 def declaration(request) -> tuple[Path, str]:
     path = request.param
     return path, path.read_text(encoding="utf-8")
+
+
+# --------------------------------------------------------------------------- #
+# Guard the guard's *scope*.                                                    #
+#                                                                               #
+# Every check below is parametrized over `_declarations()`, and `_declarations()`
+# is a regex over table shape. So scope decides whether anything is checked at    #
+# all — and when a parametrized fixture comes back empty, pytest does not fail:   #
+# it collects nothing, reports a skip, and exits 0. A guard that quietly checks   #
+# zero documents is the exact failure it was written to prevent, one level up.    #
+# --------------------------------------------------------------------------- #
+
+# Declarations known to freeze a bridge policy. Pinned by name so that a regex
+# which stops matching them fails loudly here instead of emptying the suite.
+MUST_BE_IN_SCOPE = {
+    "headline_bridge_full_decision_capture_declaration_20260713",
+    "runtime_bridge_decision_path_identifiability_declaration_20260713",
+}
+
+
+def test_the_guard_actually_has_documents_to_check() -> None:
+    in_scope = {path.stem for path in _declarations()}
+    assert in_scope, (
+        "no document is in scope: the frozen-policy regex matches nothing, so every "
+        "check in this file would silently pass. The guard is not guarding."
+    )
+    missing = MUST_BE_IN_SCOPE - in_scope
+    assert not missing, (
+        f"{sorted(missing)} freeze a bridge policy but are no longer detected as "
+        "doing so. Either the declaration changed shape or the regex rotted — "
+        "either way these documents are now unguarded."
+    )
+
+
+def test_scope_detection_is_not_coupled_to_a_two_column_table() -> None:
+    """A knob table with a notes column is still a frozen policy.
+
+    Scope keyed on exactly-two-cell rows, so this table — an entirely ordinary way
+    to write one — fell out of scope and took all four checks with it.
+    """
+    with_notes = (
+        "| knob | value | rationale |\n"
+        "|---|---|---|\n"
+        "| `relink_bridge_px` | `0.4` | height-gated |\n"
+    )
+    assert _freezes_a_policy(with_notes)
+    assert _frozen_knobs(with_notes) == [("relink_bridge_px", "0.4")]
 
 
 def test_a_frozen_policy_names_its_target_explicitly(declaration) -> None:
