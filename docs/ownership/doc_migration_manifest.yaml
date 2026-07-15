@@ -1,0 +1,105 @@
+# Doc migration manifest — 過渡期邏輯半封存 (ADR 020 §4.5)
+#
+# 目的：舊旗艦核心被推翻後，止血隔離舊 cluster，但不立即搬/刪、也不等全量定性完才恢復研究。
+#
+# 性質：
+#   - EPHEMERAL：遷移抽乾後整份刪除，不得長成第四套 archive。
+#   - MACHINE-CONSUMED：由 build_master_map（gray-out frozen）與 pre_push freeze guard 讀取；
+#     不是人讀的散文。詳見 issue #164。
+#   - 只記機械需要的「事實」，不存分類、不複寫 verdict。
+#
+# A/B/C 是查詢視圖（可重疊），不是存起來的欄位：
+#   A = terminal_owner 存在且合法
+#   B = terminal_owner 缺失
+#   C = premise_refs 命中「registry state = refuted」的 claim
+# 只有 premise_refs（失效傳播型依賴）參與 C；普通 links/歷史來源/證據引用/比較對象不參與。
+# refuted 狀態由 docs/research/contracts/claim_state_registry.md 擁有，此檔不複寫（no second truth）。
+#
+# migration_state（manifest-only，不進 ADR 020 的 terminal slot）：
+#   quarantined → (terminal 提取後) disposable → (dispose 後) entry removed
+# `frozen` 由 migration_state: quarantined 推導，不另存欄位。
+#
+# 填寫協議：terminal_owner 初版多為 null；在該 cluster 的「定性批次」(恢復 lane) 才填，
+# 不在此處事先臆測（避免 fabricate）。process_globs 相對 repo root。
+
+refuted_claims_ref: docs/research/contracts/claim_state_registry.md   # C 查詢的 refuted 狀態來源
+
+clusters:
+
+  old-flagship:            # bridge-fidelity / commutativity 核心（D0/R1/S0/EK0/P0/T2/H0）
+    migration_state: quarantined
+    process_globs:
+      - docs/modules/semantic/research/d0_*
+      - docs/modules/semantic/research/r1_*
+      - docs/modules/semantic/research/s0_*
+      - docs/modules/semantic/research/frozen_packet_*
+      - docs/modules/semantic/research/runtime_bridge_*
+      - docs/modules/semantic/research/closed/runtime_bridge_*
+      - docs/modules/semantic/research/door0_*
+      - docs/modules/semantic/research/headline_bridge_*
+      - docs/modules/semantic/research/safe_domain_*
+      - docs/modules/semantic/research/closed/safe_domain_*
+      - docs/modules/semantic/research/production_substrate_*
+      - docs/modules/semantic/research/ambiguous_band_*
+      - docs/modules/semantic/research/discrete_m_*
+      - docs/modules/semantic/research/m_gate_*
+    terminal_owner: docs/modules/semantic/research/bridge_fidelity_reconciled_map_20260715.md
+    premise_refs: []        # 這是 d0/core-claim 的來源，不是它的依賴
+
+  safe-region:             # assetization + composition-grammar + score-axis（建在 D0 判為不忠實的 offline 座標上）
+    migration_state: quarantined
+    process_globs:
+      - docs/modules/semantic/research/safe_region_*
+      - docs/modules/semantic/research/composition_grammar_*
+      - docs/modules/semantic/research/score_temporal_*
+    terminal_owner: null    # 部分已定性（A1 audit closed）；批次時彙整
+    premise_refs:
+      - d0/core-claim        # → C：safe 軸的前提依賴已被推翻的 D0 fidelity
+
+  gap-motion:
+    migration_state: quarantined
+    process_globs:
+      - docs/modules/semantic/research/gap_conditioned_motion_*
+    terminal_owner: null
+    premise_refs: []
+
+  m-b1-or-tail-hook:
+    migration_state: quarantined
+    process_globs:
+      - docs/modules/semantic/research/m_b1_*
+      - docs/modules/semantic/research/m_b2_*
+    terminal_owner: null
+    premise_refs: []
+
+  boolean-atom-closure:
+    migration_state: quarantined
+    process_globs:
+      - docs/modules/semantic/research/boolean_*
+    terminal_owner: null
+    premise_refs: []
+
+  relink-bank-chebgr:      # 歷史工具線（無活依賴，優先級最低）
+    migration_state: quarantined
+    process_globs:
+      - docs/modules/semantic/research/chebgr_*
+      - docs/modules/semantic/research/clean_fifo_bank_*
+      - docs/modules/semantic/research/sparse_key_embedding_*
+      - docs/modules/semantic/research/relink_normalization_*
+      - docs/modules/semantic/research/offline_relink_*
+      - docs/modules/semantic/research/bidir*
+    terminal_owner: null
+    premise_refs: []
+
+  online-sparse-reid:
+    migration_state: quarantined
+    process_globs:
+      - docs/modules/semantic/research/online_sparse_reid_*
+    terminal_owner: null
+    premise_refs: []
+
+  depth-ordering:
+    migration_state: quarantined
+    process_globs:
+      - docs/modules/semantic/research/depth_ordering_*
+    terminal_owner: null
+    premise_refs: []
