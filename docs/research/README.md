@@ -38,7 +38,7 @@
       — consistency audit
   - **Runtime decision-path observability**(κ quantification space = frozen evidence under examination — capture 與 provenance records)
     - [P0 — runtime bridge decision-path identifiability: results](../modules/semantic/research/closed/runtime_bridge_decision_path_identifiability_results_20260713.md)
-      → [H0 — headline-s full bridge-decision trace capture](../modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md)（native capture 宣告）
+      → [H0 — headline-m full bridge-decision trace capture](../modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md)（native capture 宣告）
       → downstream claim 必須另行宣告。
 
 ### State resolution
