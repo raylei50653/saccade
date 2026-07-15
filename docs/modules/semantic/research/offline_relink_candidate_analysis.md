@@ -63,7 +63,7 @@ first, then follow out.
 | **Live-association crossing-swap quantification** | [`mamba-score-distribution-20260613.md`](../../detection/research/mamba-score-distribution-20260613.md) §7–8 | 109 swaps = 22% of IDs, the live counterpart | source of the §8 target |
 | **Cheb-GR offline handover signal map** | [`chebgr_handover_signal_map_20260704.md`](chebgr_handover_signal_map_20260704.md) | post-hoc ID cleanup frontier (`best_cost`) | GO offline; live claims #56 NO-GO |
 | **CleanFifoBank substrate** | [`clean_fifo_bank_substrate_20260704.md`](clean_fifo_bank_substrate_20260704.md) | shared bank API + hard constraints | reusable substrate; async C++ parked |
-| **#55 occ-exit audit** | [`occ_exit_audit_p55_scope_20260709.md`](occ_exit_audit_p55_scope_20260709.md) (+ WP2/WP3) | post-exit identity cut / seq conditioning | WP3 net harm; promotion `split_feat_pr` only |
+| **#55 occ-exit audit** | [`occ_exit_audit_p55/`](../../../experiments/occ_exit_audit_p55/README.md) (WP1–WP3) | post-exit identity cut / seq conditioning | WP3 net harm; promotion `split_feat_pr` only |
 
 > The §3–§6 base-rate ceiling is specific to **bridge-relink / velocity-direction**, *not* a
 > universal wall on the crossing-swap door — the depth-ordering channel cracks it (§8 + its

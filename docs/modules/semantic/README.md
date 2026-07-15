@@ -121,9 +121,7 @@
 
 | 文件 | 這是什麼 |
 |------|------|
-| [research/occ_exit_audit_p55_scope_20260709.md](research/occ_exit_audit_p55_scope_20260709.md) | occ-exit 稽核 WP1 範圍 |
-| [research/occ_exit_audit_p55_wp2_seq_conditioning_20260709.md](research/occ_exit_audit_p55_wp2_seq_conditioning_20260709.md) | occ-exit WP2 序列條件化 |
-| [research/occ_exit_audit_p55_wp3_promotion_decision_20260709.md](research/occ_exit_audit_p55_wp3_promotion_decision_20260709.md) | occ-exit WP3 升格決策 |
+| [../../experiments/occ_exit_audit_p55/](../../experiments/occ_exit_audit_p55/README.md) | occ-exit 稽核工作區（WP1–WP3；prototype workspace） |
 | [research/m_b1_research_history_20260709_20260710.md](research/m_b1_research_history_20260709_20260710.md) | 📜 M-B1 offline 階段的歷史彙整 |
 | [research/m_b1_repaired_eps0_loo_pass_candidate_20260709.md](research/m_b1_repaired_eps0_loo_pass_candidate_20260709.md) | M-B1 候選規則 |
 | [research/m_b1_portable_or_tail_hook_contract_20260709.md](research/m_b1_portable_or_tail_hook_contract_20260709.md) | M-B1 portable OR-tail hook 契約 |

@@ -253,9 +253,9 @@ If missing: regenerate from the owning research note’s command block; do not i
 | closed | [sparse_key_embedding_bank_20260704.md](sparse_key_embedding_bank_20260704.md) | Sparse ≡ dense; FIFO-20 |
 | closed contract | [clean_fifo_bank_substrate_20260704.md](clean_fifo_bank_substrate_20260704.md) | Bank API + hard constraints |
 | closed | [online_sparse_reid_handoff_20260704.md](online_sparse_reid_handoff_20260704.md) | Async/sidecar handoff notes |
-| active series | [occ_exit_audit_p55_scope_20260709.md](occ_exit_audit_p55_scope_20260709.md) | #55 scope |
-| active series | [occ_exit_audit_p55_wp2_seq_conditioning_20260709.md](occ_exit_audit_p55_wp2_seq_conditioning_20260709.md) | Seq labels |
-| active series | [occ_exit_audit_p55_wp3_promotion_decision_20260709.md](occ_exit_audit_p55_wp3_promotion_decision_20260709.md) | Promotion = split_feat_pr |
+| workspace → thread | [scope.md](../../../experiments/occ_exit_audit_p55/scope.md) | #55 scope |
+| workspace → thread | [wp2_seq_conditioning.md](../../../experiments/occ_exit_audit_p55/wp2_seq_conditioning.md) | Seq labels |
+| workspace → thread | [wp3_promotion_decision.md](../../../experiments/occ_exit_audit_p55/wp3_promotion_decision.md) | Promotion = split_feat_pr |
 | **this file** | association_recovery_crosswalk | Experiment ↔ code对照 |
 
 Module card GO/NO-GO table: [../README.md](../README.md).

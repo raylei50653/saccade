@@ -41,7 +41,7 @@ table**:
 | Pure classifier / aggregator | `src/saccade/perception/eval/occ_audit_seq_conditioning.py` |
 | CLI diagnostic | `scripts/eval/diagnostics/analyze_occ_audit_seq_conditioning.py` |
 | Unit tests | `tests/unit/eval/test_occ_audit_seq_conditioning.py` |
-| This report | `docs/modules/semantic/research/occ_exit_audit_p55_wp2_seq_conditioning_20260709.md` |
+| This report | `docs/experiments/occ_exit_audit_p55/wp2_seq_conditioning.md` |
 
 ---
 
@@ -216,5 +216,5 @@ WP3 should:
   --out-md /tmp/occ_audit_wp2_smoke.md
 ```
 
-Related: [occ_exit_audit_p55_scope_20260709.md](occ_exit_audit_p55_scope_20260709.md),
-WP1a #74, WP1b #75, registry [#55](../../../reference/no_go_registry.md).
+Related: [scope.md](scope.md),
+WP1a #74, WP1b #75, registry [#55](../../reference/no_go_registry.md).
