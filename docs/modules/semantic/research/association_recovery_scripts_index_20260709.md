@@ -178,7 +178,7 @@ Fact-owner: [clean_fifo_bank_substrate_20260704.md](clean_fifo_bank_substrate_20
 | P0 | `scripts/eval/diagnostics/run_occ_audit_wp3_promotion.py` | WP3 control/treatment |
 | P1 | `scripts/eval/run_occ_audit_offline.py` | earlier offline A/B |
 
-Fact-owner: occ_exit_audit_p55_*.md series.
+Fact-owner: `occ_exit_audit_p55/` workspace (docs/experiments/).
 
 ### Occ-signal / FN peripheral (mostly closed probes)
 

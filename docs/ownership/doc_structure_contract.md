@@ -69,6 +69,8 @@ Expected state 是 linked charter 中可替換的 planning lease，不是 regist
 | Cheb-GR / bank / offline identity / occ-exit | **`docs/modules/semantic/`** | Doc home is semantic even if code lives under `perception/reid/` |
 | Feature extract / bank implementation (not association policy) | `docs/modules/reid/` | Keep association / handover policy out |
 
+> **Prototype carve-out — `docs/experiments/`.** This tree is a **non-normative shape prototype**, not a routing authority. It currently houses exactly one sample (`occ_exit_audit_p55/`) as a docs-only, reversible shape demo. **The routing above is unchanged**: occ-exit's canonical home remains `docs/modules/semantic/` (the workspace files are physically relocated there only for the prototype observation). Whether `docs/experiments/` becomes a canonical home — and its workspace↔object cardinality and state-projection rules — is deferred to a future architecture PR; until then no doc may treat `docs/experiments/` as an authoritative home.
+
 Also see the shorter tree in [docs/README.md](../README.md).
 
 ---

@@ -4,6 +4,7 @@ doc-promotion: navigation-only; not evidence
 owner-module: semantic
 work-class: mainline-study
 wip-role: parked
+workspace: docs/experiments/occ_exit_audit_p55/
 created: 2026-07-09
 ---
 
@@ -39,9 +40,9 @@ Parking preserves this bounded conclusion. It does not convert the local positiv
 
 ## Read first
 
-1. [WP3 promotion decision](../../modules/semantic/research/occ_exit_audit_p55_wp3_promotion_decision_20260709.md)
-2. [WP2 seq conditioning](../../modules/semantic/research/occ_exit_audit_p55_wp2_seq_conditioning_20260709.md)
-3. [occ_exit scope](../../modules/semantic/research/occ_exit_audit_p55_scope_20260709.md)
+1. [WP3 promotion decision](../../experiments/occ_exit_audit_p55/wp3_promotion_decision.md)
+2. [WP2 seq conditioning](../../experiments/occ_exit_audit_p55/wp2_seq_conditioning.md)
+3. [occ_exit scope](../../experiments/occ_exit_audit_p55/scope.md)
 4. [clean_fifo_bank substrate](../../modules/semantic/research/clean_fifo_bank_substrate_20260704.md)
 5. [Safe-Region Assetization Program](closed/safe_region_assetization_20260710.md)
 

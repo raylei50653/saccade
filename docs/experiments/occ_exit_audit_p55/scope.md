@@ -25,8 +25,8 @@ Finish the **audit / 條件化** path on top of substrate already landed:
 | **Cheb-GR graph decision** (not cosine-only) | ❌ remaining |
 | **13-type sequence conditioning** (not global on) | ❌ remaining |
 
-Substrate contracts: [clean_fifo_bank_substrate_20260704.md](clean_fifo_bank_substrate_20260704.md).  
-TODO entry: [../TODO.md](../TODO.md) § Active.
+Substrate contracts: [clean_fifo_bank_substrate_20260704.md](../../modules/semantic/research/clean_fifo_bank_substrate_20260704.md).  
+TODO entry: [semantic/TODO.md](../../modules/semantic/TODO.md) § Active.
 
 ---
 
@@ -78,7 +78,7 @@ Do not upgrade the same PR from probe → live default.
 | **RUNTIME** touched | Immediately require smoke / MOT17-04; prefer **split** to `feat/` PR |
 
 Semantic card (should-not-own): RUNTIME critical-path ReID; dual-stability defaults; preset birth policy.  
-See [docs/ownership/module_objective_map.md](../../../ownership/module_objective_map.md).
+See [docs/ownership/module_objective_map.md](../../ownership/module_objective_map.md).
 
 ---
 
