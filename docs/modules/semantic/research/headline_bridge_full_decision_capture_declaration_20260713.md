@@ -381,7 +381,7 @@ Only owner acceptance of `H0_FULL_COMMIT_CAPTURE_FAITHFUL` makes a separately de
 
 | Date | Reviewed head | Owner token | Transition |
 | --- | --- | --- | --- |
-| — | — | — | Draft only; execution prohibited |
+| 2026-07-16 | `5996d83e2e79255c4ef7f596e622a64d612498fc` | `SEALED` | Draft → active |
 
 ## Amendment 1 — §20.2 / §20.8 sealability repair (2026-07-13; pre-seal)
 
