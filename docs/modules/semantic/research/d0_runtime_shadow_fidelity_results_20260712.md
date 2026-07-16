@@ -13,6 +13,22 @@
 Declaration (sealed, boxes owner-confirmed 2026-07-12 before any metric was
 computed): [d0_runtime_shadow_fidelity_declaration_20260712.md](d0_runtime_shadow_fidelity_declaration_20260712.md)
 
+## ADR 020 terminal slot (per-study owner)
+
+```yaml
+study_id: kappa_d0_proxy_fidelity
+line_type: scoped-empirical
+claim_verdict: FALSIFIED
+decision_outcome: NOT_ASSESSED
+lifecycle_disposition: SEALED
+verdict_locus:
+  assumptions: shadow, non-committing Consumer-A runtime capture; sealed headline-m configuration; predeclared D0 threshold, numeric, and rank boxes
+  domain: exact-key matched D0-v2 pairs only; excludes cohort_gap, unemitted, other presets, detectors, and committing-bridge behavior
+  protocol_ref: sealed D0 shadow-fidelity declaration (predeclared threshold/numeric/rank boxes)
+evidence_owner: docs/modules/semantic/research/d0_runtime_shadow_fidelity_results_20260712.md
+process_disposition: retained
+```
+
 ---
 
 ## 1. Validity gate — all pass (this is a real verdict, not UNRESOLVED)

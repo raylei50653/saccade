@@ -50,6 +50,14 @@ has **one primary job**, explicit secondaries, and a clear **should-not-own** li
 | [extraction_candidates.md](extraction_candidates.md) | What to extract later (reasons only; no moves) |
 | [doc_structure_contract.md](doc_structure_contract.md) | **O1.5** write-where / index / promotion / lifecycle |
 
+## Doc-lifecycle recovery
+
+- [doc_migration_manifest.yaml](doc_migration_manifest.yaml) is the frozen
+  cluster set consumed by lifecycle tooling.
+- [old_flagship_per_study_inventory.yaml](old_flagship_per_study_inventory.yaml)
+  is the #168 per-study role inventory for `old-flagship`; its validator derives
+  terminal/live/shared coverage without authorizing disposal.
+
 ---
 
 ## O1 completion definition

@@ -15,6 +15,22 @@ Declaration: [sealed Amendment 1](../safe_domain_runtime_transfer_declaration_20
 Thread: [runtime-faithful safe domain](../../../../research/threads/closed/runtime_faithful_safe_domain_20260712.md) ·
 Canonical packet: [manifest](../evidence/s0_safe_domain_runtime_transfer_20260713/manifest.json)
 
+## ADR 020 terminal slot (per-study owner)
+
+```yaml
+study_id: rho_s0_safe_axis_transfer
+line_type: scoped-empirical
+claim_verdict: NOT_IDENTIFIABLE
+decision_outcome: NOT_ASSESSED
+lifecycle_disposition: SEALED
+verdict_locus:
+  assumptions: frozen coarse grid, one-sided 95% Clopper–Pearson rule, ε = 0.05, lost-track independence unit
+  domain: D0 matched rows with valid GT lost-track identities; unjoined events are coverage inputs, never CP trials
+  protocol_ref: sealed safe-domain transfer declaration (grid, CP rule, ε, independence unit)
+evidence_owner: docs/modules/semantic/research/closed/safe_domain_runtime_transfer_results_20260713.md
+process_disposition: retained
+```
+
 ---
 
 ## 1. Frozen execution and validity

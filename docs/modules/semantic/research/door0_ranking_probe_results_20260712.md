@@ -61,6 +61,22 @@ sealed declaration (atoms, thresholds, metrics, boxes, terminals all as
 sealed; a synthetic-data self-test of the metric functions preceded the run
 and touched no substrate).
 
+## ADR 020 terminal slot (per-study owner)
+
+```yaml
+study_id: door0_t2_ranking_power
+line_type: scoped-empirical
+claim_verdict: FALSIFIED
+decision_outcome: NET_NEGATIVE
+lifecycle_disposition: SEALED
+verdict_locus:
+  assumptions: gate-retained ambiguous band; s0 ordering; sealed ranking metrics and boxes
+  domain: exactly the 12 enumerated candidates; excludes the 9 untested AND pairs, finite-λ, continuous, learned, and runtime-bdist score families
+  protocol_ref: sealed Door-0 ranking-probe declaration (atoms, thresholds, metrics, boxes, terminals)
+evidence_owner: docs/modules/semantic/research/door0_ranking_probe_results_20260712.md
+process_disposition: retained
+```
+
 ## 1. Validity and headroom
 
 ```text

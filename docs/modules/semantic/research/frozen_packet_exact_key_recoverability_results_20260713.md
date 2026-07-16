@@ -30,6 +30,22 @@ Canonical packet: [manifest](evidence/ek0_frozen_packet_exact_key_recoverability
 [metrics](evidence/ek0_frozen_packet_exact_key_recoverability_20260713/metrics.json) ·
 [outcome-blind inventory](evidence/ek0_frozen_packet_exact_key_recoverability_20260713/inventory.csv).
 
+## ADR 020 terminal slot (per-study owner)
+
+```yaml
+study_id: ek0_exact_key_recoverability
+line_type: scoped-empirical
+claim_verdict: FALSIFIED
+decision_outcome: NOT_ASSESSED
+lifecycle_disposition: SEALED
+verdict_locus:
+  assumptions: outcome-blind audit of immutable D0-v2 artifacts and their hashes; exact v2 key only
+  domain: frozen cohort_gap and unemitted events, not prospective expanded captures or joins
+  protocol_ref: EK0 outcome-blind recoverability declaration (exact v2 key, per-event verification)
+evidence_owner: docs/modules/semantic/research/frozen_packet_exact_key_recoverability_results_20260713.md
+process_disposition: retained
+```
+
 ## J1 — provenance reproduction
 
 PASS.  The five frozen source hashes reproduce exactly — including the

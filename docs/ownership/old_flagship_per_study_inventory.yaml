@@ -1,0 +1,88 @@
+# old-flagship per-study lifecycle inventory — doc-lifecycle slice 2 (#168)
+#
+# This is a machine-consumed recovery inventory, not a terminal owner and not
+# a disposal authorization.  Each old-flagship resolved file is assigned once:
+# either to a study's process or to explicit shared support.  shared_support
+# is deliberately non-terminal and cannot authorize disposal.
+
+schema_version: 1
+cluster: old-flagship
+
+studies:
+  kappa_d0_proxy_fidelity:
+    terminal_ref: docs/modules/semantic/research/d0_runtime_shadow_fidelity_results_20260712.md
+  kappa_r1_runtime_replay:
+    terminal_ref: docs/modules/semantic/research/r1_temporal_reduction_capture_results_20260712.md
+  rho_s0_safe_axis_transfer:
+    terminal_ref: docs/modules/semantic/research/closed/safe_domain_runtime_transfer_results_20260713.md
+  ek0_exact_key_recoverability:
+    terminal_ref: docs/modules/semantic/research/frozen_packet_exact_key_recoverability_results_20260713.md
+  p0_decision_path_identifiability:
+    terminal_ref: docs/research/contracts/claim_state_registry.md
+  door0_t2_ranking_power:
+    terminal_ref: docs/modules/semantic/research/door0_ranking_probe_results_20260712.md
+
+  discrete_m_capability_20260712:
+    live_owner: docs/modules/semantic/research/discrete_m_capability_declaration_20260712.md
+  h0_full_bridge_decision_capture:
+    live_owner: docs/modules/semantic/TODO.md
+
+file_roles:
+  - path: docs/modules/semantic/research/ambiguous_band_ranking_power_probe_declaration_20260712.md
+    kind: process
+    study_id: door0_t2_ranking_power
+  - path: docs/modules/semantic/research/closed/runtime_bridge_decision_path_identifiability_results_20260713.md
+    kind: process
+    study_id: p0_decision_path_identifiability
+  - path: docs/modules/semantic/research/closed/safe_domain_runtime_transfer_results_20260713.md
+    kind: process
+    study_id: rho_s0_safe_axis_transfer
+  - path: docs/modules/semantic/research/d0_bridge_estimator_fidelity_20260711.md
+    kind: process
+    study_id: kappa_d0_proxy_fidelity
+  - path: docs/modules/semantic/research/d0_runtime_shadow_fidelity_declaration_20260712.md
+    kind: process
+    study_id: kappa_d0_proxy_fidelity
+  - path: docs/modules/semantic/research/d0_runtime_shadow_fidelity_results_20260712.md
+    kind: process
+    study_id: kappa_d0_proxy_fidelity
+  - path: docs/modules/semantic/research/discrete_m_capability_declaration_20260712.md
+    kind: process
+    study_id: discrete_m_capability_20260712
+  - path: docs/modules/semantic/research/door0_ranking_probe_results_20260712.md
+    kind: process
+    study_id: door0_t2_ranking_power
+  - path: docs/modules/semantic/research/frozen_packet_exact_key_recoverability_declaration_20260713.md
+    kind: process
+    study_id: ek0_exact_key_recoverability
+  - path: docs/modules/semantic/research/frozen_packet_exact_key_recoverability_results_20260713.md
+    kind: process
+    study_id: ek0_exact_key_recoverability
+  - path: docs/modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md
+    kind: process
+    study_id: h0_full_bridge_decision_capture
+  - path: docs/modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.policy.yaml
+    kind: process
+    study_id: h0_full_bridge_decision_capture
+  - path: docs/modules/semantic/research/m_gate_h_ratio_signal_7seq_20260709.md
+    kind: shared_support
+  - path: docs/modules/semantic/research/production_substrate_mapping_20260711.md
+    kind: shared_support
+  - path: docs/modules/semantic/research/r1_temporal_reduction_capture_declaration_20260712.md
+    kind: process
+    study_id: kappa_r1_runtime_replay
+  - path: docs/modules/semantic/research/r1_temporal_reduction_capture_results_20260712.md
+    kind: process
+    study_id: kappa_r1_runtime_replay
+  - path: docs/modules/semantic/research/runtime_bridge_decision_path_identifiability_declaration_20260713.md
+    kind: process
+    study_id: p0_decision_path_identifiability
+  - path: docs/modules/semantic/research/runtime_bridge_decision_path_identifiability_declaration_20260713.policy.yaml
+    kind: process
+    study_id: p0_decision_path_identifiability
+  - path: docs/modules/semantic/research/s0_proxy_validity_amendment_20260712.md
+    kind: process
+    study_id: kappa_d0_proxy_fidelity
+  - path: docs/modules/semantic/research/safe_domain_runtime_transfer_declaration_20260712.md
+    kind: process
+    study_id: rho_s0_safe_axis_transfer

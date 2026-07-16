@@ -125,6 +125,7 @@ Manifest: `docs/ownership/doc_migration_manifest.yaml`
 - `docs/ownership/extraction_candidates.md`
 - `docs/ownership/module_objective_map.md`
 - `docs/ownership/objective_template.md`
+- `docs/ownership/old_flagship_per_study_inventory.yaml`
 - `docs/ownership/terminal_slot_fixtures.yaml`
 - `docs/reference/PIPELINE_REFERENCE.md`
 - `docs/reference/README.md`
@@ -309,6 +310,6 @@ Excluded from the active index and default search view.
 
 ## Inventory summary
 
-- documents: 259
-- active: 204
+- documents: 260
+- active: 205
 - grayed out: 55

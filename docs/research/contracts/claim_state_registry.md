@@ -291,6 +291,22 @@ derived_from: §4.3 — H0 為 dependency 而非 inadmissibility（合法,待 ow
 last_reviewed_at: 2026-07-14
 ```
 
+#### ADR 020 terminal slot (per-study owner)
+
+```yaml
+study_id: p0_decision_path_identifiability
+line_type: scoped-empirical
+claim_verdict: NOT_IDENTIFIABLE
+decision_outcome: NOT_ASSESSED
+lifecycle_disposition: SEALED
+verdict_locus:
+  assumptions: scope-corrected target is headline-m; provenance lacks h_lo, h_hi, spatial_gate, max_speed, and a capture-time kernel hash
+  domain: the frozen D0/R1/S0 packets; not an assertion that their capture semantics are invalid
+  protocol_ref: P0 decision-path identifiability declaration (runtime_bridge_decision_path_identifiability_declaration_20260713)
+evidence_owner: docs/research/contracts/claim_state_registry.md
+process_disposition: retained
+```
+
 ### `score.ambiguous_band_ranking_class`
 
 ```yaml

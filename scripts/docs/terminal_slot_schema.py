@@ -361,6 +361,12 @@ def extract_yaml_slots_from_markdown(path: str | Path) -> list[Mapping[str, obje
 
     slots: list[Mapping[str, object]] = []
     for block in re.findall(r"```yaml\s*\n(.*?)```", text, flags=re.DOTALL):
+        # Documents may use YAML fences for their own non-slot records.  Only
+        # parse a fence once it declares itself slot-shaped; otherwise an
+        # unrelated legacy pseudo-YAML block could prevent a terminal owner
+        # from being validated.
+        if not re.search(r"(?m)^\s*study_id\s*:", block):
+            continue
         try:
             parsed: Any = strict_safe_load(block)
         except StrictYamlError as error:
