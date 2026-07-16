@@ -150,7 +150,10 @@ Discard 走 threads README 收尾流程，terminal＝declined，缺口留帳。
 
 ## Current step
 
-H0 pre-seal freeze artifact（對 **m**）完成度檢查 → owner seal review。
+H0 pre-seal engineering（owner 已授權開跑，2026-07-16）：Amendment 6
+（runtime-projection admission classifier）＋
+`scripts/tools/build_h0_preseal_freeze.py`（assembler）已落地；merge 後在確切
+merged head 上產 `h0_preseal_freeze_v2` artifact → owner seal review。
 （engineering、non-evidence；可替換、可丟棄。）
 
 ## Acceptance
@@ -181,3 +184,12 @@ route 5 或任一 typed negative route（1–4，含 route 0 declined）被 owne
   Authority corrected to Amendment 2 §A2.4 (four negative terminals, then
   `H0_FULL_COMMIT_CAPTURE_FAITHFUL`; later amendments supersede on conflict);
   routes renumbered to 1–4 negative / 5 positive.
+- 2026-07-16: Owner authorized H0 pre-seal engineering. Verified at head
+  `cd30fe51`: `h0_coverage_v2` all-true; preset and
+  `resolved_bridge_policy_config_v1` fingerprints for `m` reproduce the §2/A5.2
+  values; A3.2/A4 five-case mutation admission passes (in-memory overrides).
+  Found the §2 projection admission literally inadmissible for every `main`
+  descendant (~60 accumulated non-runtime paths); owner chose the mechanical
+  path classifier. Amendment 6 appended (sealed prefix unchanged) and the
+  freeze assembler + classifier tests landed. Artifact production runs at the
+  merged head; owner seal remains the sole pending gate.

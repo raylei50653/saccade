@@ -892,3 +892,111 @@ framing.
 Still pre-seal. § 1 item 2 remains satisfied; § 1 item 3 — owner `SEALED` after a
 complete freeze artifact — remains the sole pending gate, and the freeze artifact
 must now be produced against `m`.
+
+---
+
+## Amendment 6 — runtime-projection admission classifier (2026-07-16; pre-seal)
+
+This is an **append-only** correction to §2's `h0_observational_diff_v1`
+admission as consumed by A2.2's freeze artifact. It changes no observation
+point, record ABI, coverage component, terminal partition, or policy behavior.
+
+### A6.1 The defect
+
+§2 constructs `runtime_policy_code_projection_v1` by excluding only the fixed
+twelve-path governance allowlist and then admits the projection only if it adds
+nothing beyond the enumerated H0-owned trace surface. That enumeration was
+written against an instrumentation head expected to sit near
+`policy_base_head`. Since then the repository has accumulated non-runtime
+progress — governance and research documents outside the fixed allowlist,
+documentation tooling, CI workflows, and tests belonging to other sealed
+studies. Read literally, every such path makes every descendant of current
+`main` inadmissible, permanently: the projection can never again be clean, and
+the only textual escape is sealing an untested cherry-picked side branch. That
+outcome weakens provenance — capture would run on a tree no CI has exercised —
+while hiding nothing, so the admission rule, not the provenance record, is what
+must be repaired.
+
+### A6.2 Frozen path classifier `h0_projection_path_class_v1`
+
+Admission of the runtime projection is now evaluated through a frozen,
+mechanical, fail-closed path classifier:
+
+```text
+runtime_build_consumable:
+    prefix src/ | include/ | configs/ | cmake/
+    or exact root build/dependency manifest:
+       pyproject.toml, uv.lock, CMakeLists.txt, setup.py, setup.cfg, Makefile
+    or ANY path matching no rule (fail-closed default)
+non_runtime_recorded:
+    prefix docs/ | .github/ | tests/ | scripts/
+```
+
+- Every `runtime_build_consumable` changed path must be a member of the frozen
+  admitted set `h0_admitted_runtime_paths_v1`:
+
+```text
+include/tracking/tracker_gpu.hpp
+src/tracking/tracker_gpu.cu
+src/tracking/tracker_gpu_python.cpp
+src/saccade/perception/tracking/tracker_gpu.py
+src/saccade/perception/eval/stages.py
+```
+
+  Their content restrictions are unchanged: exactly the trace-only additions
+  §2 already admits, never a policy input, comparison, branch predicate,
+  ordering, launch geometry, or policy-state change. Any other
+  `runtime_build_consumable` changed path makes the projection **not
+  admitted** — a pre-seal engineering status that prohibits seal, of the same
+  kind as `H0_PRESEAL_COVERAGE_INCOMPLETE`; it is not an observability
+  terminal.
+
+- `non_runtime_recorded` paths stay **in** both the full diff and the
+  projection diff and are each recorded with before/after content SHA-256
+  (`absent`/`null` when a side does not exist). Classification records; it
+  never excludes or hides. The governance allowlist and its blob-hash record
+  are unchanged.
+
+- Paths classified `non_runtime_recorded` under `tests/` and `scripts/` must
+  not be consumed by the production build or runtime import graph. The
+  production build consumes only the `runtime_build_consumable` surface;
+  introducing a new build edge from a `non_runtime_recorded` path is a
+  classifier-breaking change: it requires amending this classifier, changes
+  the assembler hash recorded in the freeze artifact, and returns the work to
+  pre-seal engineering.
+
+### A6.3 Freeze assembler and artifact extension
+
+`scripts/tools/build_h0_preseal_freeze.py` is the frozen assembler that
+implements `h0_projection_path_class_v1` and emits `h0_preseal_freeze_v2`. It
+joins the A2.1 offline-tool allowance (schema + checker) as a non-production
+input: it may read git history, H0 sources, and the trace schema; it may not
+be a build input or runtime-policy path. The artifact additionally records:
+
+```text
+full-diff SHA-256 and projection-diff SHA-256
+    (git diff --no-color --binary --full-index --no-renames)
+per-path projection classification with before/after content SHA-256
+excluded governance allowlist paths with blob SHA-256 values
+the governance_rename_v1 record of §2
+projection_admitted verdict (false prohibits seal; engineering status only)
+the A3.2/A4 mutation admission results — all five named cases must flip
+    their coverage component to false against an all-true baseline
+the resolved policy identity for the sole target m: preset SHA-256 and
+    resolved_bridge_policy_config_v1 fingerprint
+the assembler's own SHA-256
+```
+
+The artifact is produced at the exact `instrumentation_head` it names, with a
+clean working tree, and is committed afterward; it is not required to be
+reachable from that head's tree. A2.2's rule is unchanged: that head is the
+only head an owner may seal, and any head, checker, schema, source, or
+classifier change returns the work to pre-seal engineering.
+
+### A6.4 State effect
+
+§1 item 2 remains satisfied by the repaired executable declaration. The sole
+pending gate remains §1 item 3: owner literal `SEALED` for the exact head named
+by one complete freeze artifact whose coverage components are all true, whose
+projection is admitted, and whose mutation admission passes. This amendment
+authorizes no capture and creates no observability terminal.
