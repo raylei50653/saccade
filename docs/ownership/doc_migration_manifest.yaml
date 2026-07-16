@@ -9,18 +9,22 @@
 #   - 只記機械需要的「事實」，不存分類、不複寫 verdict。
 #
 # A/B/C 是查詢視圖（可重疊），不是存起來的欄位：
-#   A = terminal_owner 存在且合法
-#   B = terminal_owner 缺失
+#   A = 該 cluster 全部 matched process objects 都有合法 per-study terminal（⇒ disposable 前提）
+#   B = 尚有 matched process object 缺 terminal
 #   C = premise_refs 命中「registry state = refuted」的 claim
 # 只有 premise_refs（失效傳播型依賴）參與 C；普通 links/歷史來源/證據引用/比較對象不參與。
 # refuted 狀態由 docs/research/contracts/claim_state_registry.md 擁有，此檔不複寫（no second truth）。
 #
 # migration_state（manifest-only，不進 ADR 020 的 terminal slot）：
-#   quarantined → (terminal 提取後) disposable → (dispose 後) entry removed
+#   quarantined → (全部 study 皆有 terminal 後) disposable → (dispose 後) entry removed
 # `frozen` 由 migration_state: quarantined 推導，不另存欄位。
 #
-# 填寫協議：terminal_owner 初版多為 null；在該 cluster 的「定性批次」(恢復 lane) 才填，
-# 不在此處事先臆測（避免 fabricate）。process_globs 相對 repo root。
+# 填寫協議（ADR 020 §4.5）：
+#   - cluster 級 terminal_owner 恆 null（混合 cluster 無單一 owner）。真正 terminal 是 per-study
+#     的（各 study evidence_owner doc），由恢復批次逐項 inventory，不在此事先臆測（避免 fabricate）。
+#   - navigation_ref = 只導覽、不擁有 verdict 的圖（如 reconciled map）；≠ terminal owner。
+#   - frozen_at_commit = 凍結時點；process_globs 只解析成「該 commit 當時存在」的檔，之後新增檔不繼承
+#     glob（避免未來 lane 沿用命名被誤凍）；一個檔不得匹配 >1 cluster。process_globs 相對 repo root。
 
 refuted_claims_ref: docs/research/contracts/claim_state_registry.md   # C 查詢的 refuted 狀態來源
 
@@ -28,6 +32,7 @@ clusters:
 
   old-flagship:            # bridge-fidelity / commutativity 核心（D0/R1/S0/EK0/P0/T2/H0）
     migration_state: quarantined
+    frozen_at_commit: 5858d16372a58cd1ed97b2083d501c9097b0a632
     process_globs:
       - docs/modules/semantic/research/d0_*
       - docs/modules/semantic/research/r1_*
@@ -43,7 +48,8 @@ clusters:
       - docs/modules/semantic/research/ambiguous_band_*
       - docs/modules/semantic/research/discrete_m_*
       - docs/modules/semantic/research/m_gate_*
-    terminal_owner: docs/modules/semantic/research/bridge_fidelity_reconciled_map_20260715.md
+    terminal_owner: null    # cluster 級恆 null；per-study terminal 由恢復批次逐項 inventory（H0 尚無 terminal → 未達 A）
+    navigation_ref: docs/modules/semantic/research/bridge_fidelity_reconciled_map_20260715.md  # 導覽用，非 terminal owner（該圖自稱 navigation-only / not evidence）
     premise_refs: []        # 這是 d0/core-claim 的來源，不是它的依賴
 
   safe-region:             # assetization + composition-grammar + score-axis（建在 D0 判為不忠實的 offline 座標上）

@@ -59,7 +59,7 @@ typed terminal = ( versioned_model @ coordinate  |  engineering empirical verdic
 
 | 選擇 | 理由 | 被否決的替代 |
 |---|---|---|
-| **typed terminal slot**(固定小 tuple)取代 1 格 GO/NO-GO | 承載 epistemic 軸上 `FALSIFIED≠NOT_IDENTIFIABLE≠NET_NEGATIVE` 的區別,且與 lifecycle 軸正交;座標/enum 不會像自由字串漂移 | 自由文字 terminal(會漂,如 sealed 兩拼);單一 enum 混兩軸(如舊 `active`) |
+| **typed terminal slot**(固定小 tuple)取代 1 格 GO/NO-GO | 承載 `claim_verdict`(`FALSIFIED≠NOT_IDENTIFIABLE≠PROVED`)與 `decision_outcome`(`NET_NEGATIVE≠NO_PRODUCTION_ADVANTAGE`)兩條正交軸的區別;座標/enum 不會像自由字串漂移 | 自由文字 terminal(會漂,如 sealed 兩拼);單一 enum 混多軸(如舊 `active`、或把命題真假與決策效用塞一格) |
 | **slot 必須便宜(~1 分鐘填完)** | 老 NO-GO 之所以能當 disposal,唯一原因是 30 秒寫完;貴到快 pivot 會跳過 = 重演堆積 | 每 study 都畫完整模型圖(貴,必被跳過) |
 | **一線一模型,非一 repo 一模型** | 專案不是一個數學物件(89 條 NO-GO 多是異質工程 ablation);且有「機制全成立、端到端淨負」的**不可定位** failure | 全 repo 統一主模型(過度一般化) |
 | **主模型 versioned + git**;terminal pin 版本 | model 改了是新版本,舊 terminal 準確指舊版座標,永不錯位;靜默飄移 → 可見版本落後 | 不版本化(model 一改,所有 terminal misplace) |
@@ -77,42 +77,47 @@ typed terminal = ( versioned_model @ coordinate  |  engineering empirical verdic
 
 ```yaml
 study_id:              <stable id>
-line_type:             math-closed | engineering-ablation | local-math-claim
+line_type:             math-closed | local-math-claim | scoped-empirical | engineering-ablation
 
-# --- 三條正交 typed 軸(勿合併) ---
-epistemic_verdict:     VERIFIED | FALSIFIED | NOT_IDENTIFIABLE | NET_NEGATIVE
-                       | INCONCLUSIVE | NOT_EVALUATED       # empirical 線(math-closed / engineering-ablation)
-                       | PROVED | REFUTED                   # 純演繹線(local-math-claim only)
-lifecycle_disposition: PROPOSED | ACTIVE | PARKED | SEALED | CLOSED   # 生命週期 / 調度;single writer
-model_relation:        current | superseded                 # 與當前 master model 的關係(SUPERSEDED 從 lifecycle 移來此軸)
+# --- 四條正交 typed 軸(勿合併) ---
+claim_verdict:         # 認識論:命題本身如何(依 line_type 限定子集,§S3)
+                       VERIFIED | FALSIFIED | NOT_IDENTIFIABLE | INCONCLUSIVE | NOT_EVALUATED   # empirical 組
+                       | PROVED | REFUTED                                                        # deductive 組
+decision_outcome:      POSITIVE | NET_NEGATIVE | NO_PRODUCTION_ADVANTAGE | NOT_ASSESSED           # 生產決策效用:與命題真假正交
+lifecycle_disposition: SEALED           # 生命週期:只在 seal 時 emit 的終端標記(單值);live 態(proposed/active/parked)不進 slot
+model_relation:        current | superseded    # 僅 line_type=math-closed(有 model 才有語意),其餘省略
 
 # --- verdict 的證據定位(依 line_type) ---
 verdict_locus:
-  # 兩維(數學命題的有效性只沿此二維移動)—— math-closed 與 local-math-claim 皆用:
+  # assumptions/domain 兩維 —— math-closed / local-math-claim / scoped-empirical 皆用:
   assumptions:         <在什麼前提下 — 假設 / substrate / 門檻 / held-fixed>
   domain:              <對哪些對象成立或失效 — 量化域 / representability>
-  # + line_type=math-closed(已有 versioned 旗艦模型):
+  # + line_type=math-closed(有 versioned 旗艦模型):
   model_ref:           <path to model doc>
   model_version:       vMAJOR.MINOR
-  # + line_type=local-math-claim(尚無旗艦模型、但已有局部數學命題):
-  claim:               <局部命題>
-  # + line_type=engineering-ablation(改用一行歸因,即上二維的非形式影子):
+  # + line_type=local-math-claim(純演繹命題、無 model):
+  claim:               <局部演繹命題>
+  # + line_type=scoped-empirical(empirical、有預宣告協議、無 model):
+  protocol_ref:        <link 到預宣告 declaration / seal 契約>
+  # + line_type=engineering-ablation(一行歸因,即上二維的非形式影子):
   attribution:         <one-line 歸因,指向證據,不複寫數字>
 
 evidence_owner:        <link 到 fact-owner doc(registry / results)>   # link-not-copy
-process_disposition:   retained | deleted-to-git@<sha> | folded-to-workspace@<path>
+process_disposition:   retained | deleted-to-git | folded-to-workspace@<path>
+                       # deleted-to-git 不寫 inline sha;刪除 commit 由 `git log -- <path>` 機械解析(見 §S4)
 # migration_state:     quarantined  —— 遷移期 manifest-only,不進本 slot(見 §4.5)
 ```
 
-- **三軸正交,不可合併**:`epistemic_verdict`(證據上如何)/ `lifecycle_disposition`(調度上如何)/ `model_relation`(與當前 master model 的關係)。同一 study 可 `lifecycle=SEALED` 且 `epistemic=NOT_IDENTIFIABLE`(封了但沒判出來),或 `lifecycle=SEALED` 且 `model_relation=superseded`(當年封的、如今被新模型取代)。把它們塞一個 enum 正是舊 `active` 同時扛多義而漂移的病根。**`SUPERSEDED` 從 lifecycle 移到 `model_relation`** 就是這道理——它講的是「與模型的關係」,不是「調度狀態」。
-- **`VERIFIED`(epistemic)= 通過預宣告經驗檢查、在 scope 內成立的正面判決**(如 `R1_FAITHFUL`)——這是 empirical protocol 判決。**純演繹的 `local-math-claim` 用獨立值 `PROVED`/`REFUTED`,不與 `VERIFIED`/`FALSIFIED` 過載**:後者代表「過了 fidelity / 預宣告協議」,前者代表「被推導證明」;混用會讓 verdict 必須先看 `line_type` 才能解碼,正是本 ADR 要殺的 cross-axis 解碼依賴。`NET_NEGATIVE`/`NOT_EVALUATED` 對演繹線通常 N/A。相容性由 enum guard 的 `line_type → 允許 verdict` 矩陣強制(§S3),順帶抓「在 empirical ablation 上填 `PROVED`」這類錯。正面**生產晉升**走 registry accepted-state,不佔 epistemic 軸。**`PROPOSED`(lifecycle)= 已宣告未 seal**(如 H0),與 `ACTIVE` 區分。(`PROVED`/`REFUTED` + `PROPOSED` + `model_relation` + `local-math-claim` 皆為 2026-07-15 以旗艦線實測本 schema 撞出缺口後補入。)
-- **三種 `line_type`**:`math-closed`(有 versioned 旗艦模型,verdict 以 `model@version` 定位於 assumptions/domain 兩維)/ `local-math-claim`(**尚無旗艦模型、但已有局部數學命題**——同用 assumptions/domain 兩維但無 model;將來模型出現時**加上** `model_ref/version` 即升格,不必原地改寫 terminal)/ `engineering-ablation`(用一行 attribution)。
-- slot 存放位置:study 的 terminal owner doc(如 registry 條目或 workspace entry),**單一寫入者**。
+- **四軸正交,不可合併**:`claim_verdict`(命題證據上如何)/ `decision_outcome`(生產決策效用如何)/ `lifecycle_disposition`(調度上如何)/ `model_relation`(與當前 master model 的關係)。**`claim_verdict` 與 `decision_outcome` 必須分開**:一條線可 `claim_verdict=VERIFIED`(機制忠實、局部 claim 成立)且 `decision_outcome=NET_NEGATIVE`(端到端淨負)——這正是本 repo 反覆出現的「機制全成立、端到端有害」型 NO-GO(如 T2:類內無可用 ranking power **且** motion 條件實測有害)。舊版把二者塞進單一 `epistemic_verdict`(含 `NET_NEGATIVE`)會逼二選一,並造成不對稱(正面走 registry、負面卻佔 epistemic 軸)。
+- **`lifecycle_disposition` 收成單值 `SEALED`**:slot 只在 seal 時存在,live 調度態(`proposed`/`active`/`parked`)**不進 slot**(留在 Issue / module TODO);「是否仍承重 / 可 reopen」由 `process_disposition` + `premise_refs` 依賴圖**推導**,不另存 enum——少一個飄移面,並取代舊 `sealed-for-execution`↔`sealed-execution` 兩拼。`model_relation` 只對 `math-closed`(有 model)有語意,其餘 line_type 省略(不再對「根本沒有 model」的線硬填)。
+- **`claim_verdict` 依 line_type 分 empirical / deductive 兩組**:`scoped-empirical` / `engineering-ablation` / empirical 的 `math-closed` 用 `VERIFIED`/`FALSIFIED`/`NOT_IDENTIFIABLE`/`INCONCLUSIVE`/`NOT_EVALUATED`(過了 / 沒過預宣告經驗協議、或無法識別);純演繹的 `local-math-claim` 用 `PROVED`/`REFUTED`(被推導證明 / 反證)。不混用——否則 verdict 要先看 line_type 才能解碼,正是本 ADR 要殺的 cross-axis 依賴。相容性由 §S3 的 `line_type → 允許 claim_verdict` 矩陣強制,順帶抓「在 empirical 線填 `PROVED`」這類錯。正面**生產晉升**走 registry accepted-state。
+- **四種 `line_type`**(依 verdict 如何定位):`math-closed`(有 versioned 旗艦模型,定位於 `model@version` + assumptions/domain)/ `local-math-claim`(純演繹、無 model,assumptions/domain + `claim`;將來模型出現**加上** `model_ref/version` 即升格,不必原地改寫)/ `scoped-empirical`(**empirical、有完整 assumptions/domain locus + 預宣告協議、但尚無 versioned model**——D0/R1/S0/EK0/P0/T2 這類 fidelity / probe 線;帶 `protocol_ref`,claim_verdict 用 empirical 組)/ `engineering-ablation`(empirical,一行 attribution,89 條異質工程 NO-GO 的形態)。
+- slot 存放位置:study 的 **per-study** terminal owner doc(如 registry 條目或 workspace entry),**單一寫入者**;混合 cluster 沒有單一 cluster-level owner(見 §4.5)。
 
 ### S2. Master model + 版本(僅 math-closed 線)
 
 - 數學封閉線**可**宣告一份 master model doc,帶語意版本 `vMAJOR.MINOR`。
-- terminal 以 `(model_ref@version, assumptions/domain)` 定位。`local-math-claim` 無此段(無 model);升格為 `math-closed` = 補上 `model_ref/version`。
+- terminal 以 `(model_ref@version, assumptions/domain)` 定位。`local-math-claim` / `scoped-empirical` 無此段(無 model),故 `model_relation` 省略;升格為 `math-closed` = 補上 `model_ref/version`。
 - **Fail-closed 規則:對 model doc body 的任何語意改動,必須 bump 版本。** CI 檢查:model body diff 存在但版本未變 → fail(防止「v1.1 悄悄換意思」= enum 飄移升到模型層)。
 - git 保有所有版本;無需獨立 archive。
 
@@ -120,8 +125,8 @@ process_disposition:   retained | deleted-to-git@<sha> | folded-to-workspace@<pa
 
 在 `scripts/pre_push.sh` / CI 增設:
 
-1. **Slot presence**:任何 study 的 `disposition` 轉入 terminal(`sealed`/`closed`)時,必須存在合法 terminal slot;缺失或欄位不合 schema → **阻擋 push**。
-2. **Enum guard**:`epistemic_verdict` / `lifecycle_disposition` / `model_relation` / `doc-status` 各自只能取其封閉詞彙;未知、錯拼、或**跨軸誤用**(例如把 `NOT_IDENTIFIABLE` 填進 lifecycle,含既有 `sealed-for-execution`↔`sealed-execution`)→ fail。**另加 `line_type → 允許 verdict` 相容矩陣**:`PROVED`/`REFUTED` 僅 `local-math-claim`;`VERIFIED`/`FALSIFIED`/`NOT_IDENTIFIABLE`/`NET_NEGATIVE` 僅 empirical 線(`math-closed`/`engineering-ablation`)——錯配即 fail。本 PR 一次性收斂既有漂移值。(`migration_state` 屬 manifest,由 §4.5 的 manifest 工具守,不在此 doc-slot guard。)
+1. **Slot presence**:任何 study 被 `SEALED`(唯一終端態)時,必須存在合法 terminal slot;缺失或欄位不合 schema → **阻擋 push**。（`proposed`/`active`/`parked` 是 live 態、不 emit slot,故不觸發此檢查。）
+2. **Enum guard**:`claim_verdict` / `decision_outcome` / `lifecycle_disposition` / `model_relation` / `doc-status` 各自只能取其封閉詞彙;未知、錯拼、或**跨軸誤用**(例如把 `NOT_IDENTIFIABLE` 填進 `decision_outcome`,或把 `NET_NEGATIVE` 填進 `claim_verdict`,或既有 `sealed-for-execution`↔`sealed-execution`)→ fail。**另加 `line_type → 允許 claim_verdict` 相容矩陣**:`PROVED`/`REFUTED` 僅 `local-math-claim`;empirical 組(`VERIFIED`/`FALSIFIED`/`NOT_IDENTIFIABLE`/`INCONCLUSIVE`/`NOT_EVALUATED`)僅 `scoped-empirical`/`engineering-ablation`/empirical `math-closed`——錯配即 fail。`model_relation` 僅 `math-closed` 可出現。本 PR 一次性收斂既有漂移值。(`migration_state` 屬 manifest,由 §4.5 的 manifest 工具守,不在此 doc-slot guard。)
 3. **Version-bump guard**:見 S2。
 4. 填了合法 slot,才**授權** S4 的 dispose。
 
@@ -131,8 +136,9 @@ process_disposition:   retained | deleted-to-git@<sha> | folded-to-workspace@<pa
 - 兩種模式:
   - `delete-to-git`(死 process 預設):git history 保有內容,工作區移除。
   - `fold-to-workspace`:搬進 `docs/experiments/<study>/`,適用可能 reopen 的線。
-- **入鏈處理(維持 `check_doc_links` 綠)**:活檔指向被 dispose 檔的連結必須改寫——fold 改指新 workspace 路徑;delete 改成 `sealed — see <registry slot> / git@<sha>` stub。
-- **keep-in-tree 資格規則**:一份檔留在工作區,當且僅當**有活的 artifact 需要碰到它**(verdict 索引 / 活引用)。死 process 無活物可達 → `delete-to-git`。
+- **入鏈處理(維持 `check_doc_links` 綠)**:活檔指向被 dispose 檔的連結必須改寫——fold 改指新 workspace 路徑;delete 改成 `sealed — see <registry slot>(deleted; 由 git log -- <path> 復原)` stub。
+- **`deleted-to-git` 無 commit 循環**:process_disposition 只記 `deleted-to-git`,**不 pin 刪除 commit 的 SHA**(該 SHA 在 commit 建立前不存在,pin 會逼兩次 commit/amend)。刪除 commit 事後由 `git log -- <path>` 機械解析;若要更緊,可記 deleted blob SHA(pre-commit 即存在)。
+- **keep-in-tree 資格規則**:一份檔留在工作區,當且僅當**有活的 artifact 需要碰到它**(verdict 索引 / 活引用)。死 process 無活物可達 → `deleted-to-git`。
 
 ### S5. Master map(生成骨架 + 手維原子)
 
@@ -153,6 +159,7 @@ process_disposition:   retained | deleted-to-git@<sha> | folded-to-workspace@<pa
 - 本策略文檔(即本 ADR)+ 預計改動清單。
 - 機械件:
   - `docs/ownership/` 或本 ADR 附錄定義 terminal slot schema(S1)。
+  - **標準 fixture `docs/ownership/terminal_slot_fixtures.yaml`**(valid / invalid + `expect_error`):validator 先對它跑;reconciled map 的 6 個 slot 必須全屬 `valid`(`scoped-empirical`)型,避免「照 ADR 寫就打爆範例」或「為範例放寬 schema」。
   - `scripts/pre_push.sh` / CI 增 S3 三道 fail-closed 檢查。
   - 一次性收斂既有 enum 漂移值(S3.2)。
   - `build_master_map.py` 生成骨架(S5),先只做 inventory + version-lag flag。
@@ -184,23 +191,27 @@ process_disposition:   retained | deleted-to-git@<sha> | folded-to-workspace@<pa
 clusters:
   old-flagship:
     migration_state: quarantined        # 唯一狀態;`frozen` 由此推導,不另存欄位
-    process_globs: [ docs/modules/semantic/research/d0_*, ... ]
-    terminal_owner: <ref | null>        # null = 尚未定性
+    frozen_at_commit: <sha>             # 凍結時點;process_globs 只解析到「此 commit 當時存在」的檔
+    process_globs: [ docs/modules/semantic/research/d0_*, ... ]   # 開放 prefix,但於 frozen_at_commit 解析成固定清單
+    terminal_owner: null                # cluster 級恆 null(混合 cluster 無單一 owner,見下);per-study terminal 由恢復批次逐項 inventory
+    navigation_ref: <非規範導覽圖 | null>   # 只導覽、不擁有 verdict(如 reconciled map);≠ terminal owner
     premise_refs: [ d0/core-claim ]      # 只記「失效傳播型」依賴
 ```
 
 規則:
+- **cluster 級 `terminal_owner` 恆 `null`,不指向導覽圖。** 混合 cluster(old-flagship 含 D0/R1/S0/EK0/P0/T2/H0,部分已 terminal、部分仍 proposed)無法用單一 owner 表示;明示 `navigation-only / not evidence` 的 reconciled map **不得**充當 terminal owner(它自己也聲明沒有 terminal-slot ownership)。真正的 terminal 是**per-study** 的(各 study 的 `evidence_owner` doc),由恢復批次逐項 inventory,不在此事先臆測。
+- **`frozen_at_commit` + resolved snapshot**:`process_globs` 是開放 prefix,但只解析成 `frozen_at_commit` 當時存在的具體檔;**之後新增的檔不繼承 glob**(否則未來 lane 沿用 `d0_*`/`runtime_bridge_*`/`headline_bridge_*` 命名會被自動誤凍)。工具須檢查**一個檔不得匹配 >1 cluster**(重疊 = manifest 錯誤)。
 - **frozen(= quarantined)cluster 不再被當成當前架構依據**;除定性 PR 外不改其 process 檔;搜尋 / 交接**預設排除**;git 與原路徑**暫留**(避免 churn);terminal 提取完才進正式 disposal。
 - manifest **被工具消費**(`build_master_map` 讀它 gray-out;`pre_push` 讀它做 freeze guard),**不是人讀的散文**——否則凍結規則 = honor-system = 正在修的病。
 - manifest **ephemeral**:遷移抽乾後**刪除**,不留成第四套 archive。
 
 ### A/B/C 是查詢視圖,不是存起來的分類
 
-manifest 只存事實(`terminal_owner`、`premise_refs`);A/B/C 由查詢生成,且**可重疊**(PR #165 證明同一 cluster 可同時 A 又 C):
+manifest 只存事實(per-study terminal 完整度、`premise_refs`);A/B/C 由查詢生成,且**可重疊**(old-flagship 同時 B 又 C:H0 尚無 terminal → 未達 A,且 premise 依賴已被推翻的 D0 → C):
 
 ```text
-A = terminal_owner 存在且合法
-B = terminal_owner 缺失
+A = 該 cluster 全部 matched process objects 都有合法 per-study terminal(⇒ disposable 前提)
+B = 尚有 matched process object 缺 terminal
 C = premise_refs 命中「registry state = refuted」的 claim
 ```
 
@@ -211,8 +222,8 @@ C = premise_refs 命中「registry state = refuted」的 claim
 `active`(仍執行)/ `quarantined`(停了但 terminal 未提取 = 債)/ `disposable`(terminal 完成,可 fold/delete)。**這三態是遷移標記,不進永久 `lifecycle_disposition` enum**。quarantined 是**排水口不是家**:
 
 ```text
-quarantined + terminal missing
-→ quarantined + terminal present
+quarantined + 尚有 study 缺 terminal
+→ quarantined + 全部 matched study 皆有合法 per-study terminal
 → disposable
 → manifest entry removed
 ```
@@ -227,7 +238,7 @@ quarantined + terminal missing
 
 ### 兩條不混的 lane
 
-- **研究 lane**:新任務照常,每個**當場閉環**(開題 = 局部 object + 前提 + 作用面 + 預期 terminal;關閉 = terminal record + process disposition)。無新旗艦模型時用 `local-math-claim` slot,**不強掛** master map。
+- **研究 lane**:新任務照常,每個**當場閉環**(開題 = 局部 object + 前提 + 作用面 + 預期 terminal;關閉 = terminal record + process disposition)。無新旗艦模型時:純演繹命題用 `local-math-claim`、有預宣告協議的經驗線用 `scoped-empirical` slot,**不強掛** master map。
 - **恢復 lane**:一次只抽乾**一個**舊 cluster。
 
 **不開「整理全部 56 份」的大任務**——跨整體修正本身就是任務邊界不合理的信號。新任務即刻閉環讓**新債歸零**,舊債才會慢慢下降。

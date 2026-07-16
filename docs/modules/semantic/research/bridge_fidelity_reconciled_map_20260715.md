@@ -82,90 +82,110 @@ Thus the current ceiling is not “commutes on the representable subdomain.” O
 
 ## Typed terminals
 
-`model_ref / model_version` is intentionally “no model yet” below: I found versioned capture contracts and the framework contract, but no line-specific, versioned master model to which these verdicts are pinned. A capture-contract version is not silently promoted into a model version.
+All blocks below are `line_type: scoped-empirical` (ADR 020 §S1): empirical fidelity/probe studies with a full `assumptions`/`domain` locus and a predeclared protocol, but **no line-specific versioned master model** — so there is no `model_ref`/`model_version`/`model_relation`. I found versioned capture contracts and the framework contract, but a capture-contract version is not silently promoted into a model version. Each block carries the four orthogonal axes (`claim_verdict` ⟂ `decision_outcome` ⟂ `lifecycle_disposition` ⟂ ~~`model_relation`~~ N/A); live scheduling states never appear here (`SEALED` is the only terminal disposition).
 
 ```yaml
 layer: κ_D0 — offline s0 ↔ runtime bdist fidelity
-epistemic_verdict: FALSIFIED
+study_id: kappa_d0_proxy_fidelity
+line_type: scoped-empirical
+claim_verdict: FALSIFIED
+decision_outcome: NOT_ASSESSED
 lifecycle_disposition: SEALED
 verdict_locus:
-  model_ref / model_version: no line-specific versioned model yet
   assumptions: shadow, non-committing Consumer-A runtime capture; sealed headline-m configuration; predeclared D0 threshold, numeric, and rank boxes
   domain: exact-key matched D0-v2 pairs only; excludes cohort_gap, unemitted, other presets, detectors, and committing-bridge behavior
+  protocol_ref: sealed D0 shadow-fidelity declaration (predeclared threshold/numeric/rank boxes)
 evidence_owner: docs/modules/semantic/research/d0_runtime_shadow_fidelity_results_20260712.md
+process_disposition: retained
 ```
 
 ```yaml
 layer: κ_R1 — captured-runtime temporal-reduction replay
-epistemic_verdict: VERIFIED
-lifecycle_disposition: CLOSED
+study_id: kappa_r1_runtime_replay
+line_type: scoped-empirical
+claim_verdict: VERIFIED
+decision_outcome: NOT_ASSESSED
+lifecycle_disposition: SEALED
 verdict_locus:
-  model_ref / model_version: no line-specific versioned model yet
   assumptions: r1_temporal_reduction_capture_v1; device replay backend; sealed adaptive-anchor Consumer-A configuration
   domain: captured events on the declared seven-sequence MOT17-SDP support
+  protocol_ref: r1_temporal_reduction_capture_v1 (sealed capture contract)
 evidence_owner: docs/modules/semantic/research/r1_temporal_reduction_capture_results_20260712.md
+process_disposition: retained
 ```
 
 > `VERIFIED` reflects the owner-accepted `R1_FAITHFUL`. (Earlier draft of this map was forced to `INCONCLUSIVE` because ADR 020 lacked an affirmative epistemic value; the value was added on 2026-07-15 precisely from this gap.)
 
 ```yaml
 layer: κ_claim / S0 — safe-axis transfer and ε-level hurt bound
-epistemic_verdict: NOT_IDENTIFIABLE
-lifecycle_disposition: CLOSED
+study_id: rho_s0_safe_axis_transfer
+line_type: scoped-empirical
+claim_verdict: NOT_IDENTIFIABLE
+decision_outcome: NOT_ASSESSED
+lifecycle_disposition: SEALED
 verdict_locus:
-  model_ref / model_version: no line-specific versioned model yet
   assumptions: frozen coarse grid, one-sided 95% Clopper–Pearson rule, ε = 0.05, lost-track independence unit
   domain: D0 matched rows with valid GT lost-track identities; unjoined events are coverage inputs, never CP trials
+  protocol_ref: sealed safe-domain transfer declaration (grid, CP rule, ε, independence unit)
 evidence_owner: docs/modules/semantic/research/closed/safe_domain_runtime_transfer_results_20260713.md
+process_disposition: retained
 ```
 
 ```yaml
 layer: EK0 — exact-key recoverability of frozen unjoined events (RJ0 replacement)
-epistemic_verdict: NET_NEGATIVE
+study_id: ek0_exact_key_recoverability
+line_type: scoped-empirical
+claim_verdict: FALSIFIED
+decision_outcome: NOT_ASSESSED
 lifecycle_disposition: SEALED
 verdict_locus:
-  model_ref / model_version: no line-specific versioned model yet
   assumptions: outcome-blind audit of immutable D0-v2 artifacts and their hashes; exact v2 key only
   domain: frozen cohort_gap and unemitted events, not prospective expanded captures or joins
+  protocol_ref: EK0 outcome-blind recoverability declaration (exact v2 key, per-event verification)
 evidence_owner: docs/modules/semantic/research/frozen_packet_exact_key_recoverability_results_20260713.md
+process_disposition: retained
 ```
+
+> **Correction (2026-07-16):** an earlier draft labeled EK0 `NET_NEGATIVE`, but the owner terminal is `EK0_NO_RECOVERABLE_SUPPORT` and the results doc explicitly retracts the `RJ0_EXPANSION_FUTILE` utility framing as an over-claim. The real content is a **falsified recoverability claim** (`claim_verdict: FALSIFIED`) with **no decision assessed** (`decision_outcome: NOT_ASSESSED`) — a direct instance of why ADR 020 splits `claim_verdict` from `decision_outcome`. `[EK0]`
 
 ```yaml
 layer: P0 — capture provenance and decision-path observability
-epistemic_verdict: NOT_IDENTIFIABLE
-lifecycle_disposition: CLOSED
+study_id: p0_decision_path_identifiability
+line_type: scoped-empirical
+claim_verdict: NOT_IDENTIFIABLE
+decision_outcome: NOT_ASSESSED
+lifecycle_disposition: SEALED
 verdict_locus:
-  model_ref / model_version: no model yet
   assumptions: scope-corrected target is headline-m; provenance lacks h_lo, h_hi, spatial_gate, max_speed, and a capture-time kernel hash
   domain: the frozen D0/R1/S0 packets; not an assertion that their capture semantics are invalid
+  protocol_ref: P0 decision-path identifiability declaration (runtime_bridge_decision_path_identifiability_declaration_20260713)
 evidence_owner: docs/research/contracts/claim_state_registry.md
+process_disposition: retained
 ```
 
 ```yaml
 layer: Door 0 / T2 — ranking power of the declared proxy-space class
-epistemic_verdict: NET_NEGATIVE
-lifecycle_disposition: CLOSED
+study_id: door0_t2_ranking_power
+line_type: scoped-empirical
+claim_verdict: FALSIFIED          # NO_USABLE_RANKING_POWER_IN_CLASS — the class's ranking-power claim is refuted
+decision_outcome: NET_NEGATIVE    # motion conditions (speed_mismatch, dir_cos) are actively harmful, not merely no-advantage
+lifecycle_disposition: SEALED
 verdict_locus:
-  model_ref / model_version: no line-specific versioned model yet
   assumptions: gate-retained ambiguous band; s0 ordering; sealed ranking metrics and boxes
   domain: exactly the 12 enumerated candidates; excludes the 9 untested AND pairs, finite-λ, continuous, learned, and runtime-bdist score families
+  protocol_ref: sealed Door-0 ranking-probe declaration (atoms, thresholds, metrics, boxes, terminals)
 evidence_owner: docs/modules/semantic/research/door0_ranking_probe_results_20260712.md
+process_disposition: retained
 ```
 
 The class closure is only about `s0`, not production `bdist`; it remains a valid proxy-space closure, but its mainline-transition status was revoked. `[T2] [State]`
 
-```yaml
-layer: discrete-M anchor propagation
-epistemic_verdict: NOT_EVALUATED
-lifecycle_disposition: PARKED
-verdict_locus:
-  model_ref / model_version: no model yet
-  assumptions: unsealed m0_state_capture_v1 design; no capture, fit, or metric authorized
-  domain: none observed
-evidence_owner: docs/modules/semantic/research/discrete_m_capability_declaration_20260712.md
-```
+## Live / non-terminal — no slot emitted
 
-H0 has no terminal slot: it is proposed/draft-unsealed (`lifecycle_disposition: PROPOSED`), has no results document, and execution remains prohibited pending a complete pre-seal freeze artifact and owner seal. Its corrected target is `m`, not `s`. `[Work]` Its pre-terminal state should not be fabricated as a sealed terminal.
+Per ADR 020 §S1, live scheduling states (`proposed`/`active`/`parked`) do **not** emit a terminal slot — they live in the Issue / module TODO, not here. Two studies are in this state; listed for navigation only:
+
+- **discrete-M anchor propagation** — `parked`. Unsealed `m0_state_capture_v1` design; no capture, fit, or metric authorized; nothing observed. Owner: `docs/modules/semantic/research/discrete_m_capability_declaration_20260712.md`. `[Work]`
+- **H0** — `proposed`/draft-unsealed. No results document; execution prohibited pending a complete pre-seal freeze artifact and owner seal. Corrected target is `m`, not `s`. Its pre-terminal state must **not** be fabricated as a sealed terminal. `[Work]`
 
 ## Discrepancies vs the pasted reference
 

@@ -1,0 +1,150 @@
+# Canonical terminal-slot fixtures — ADR 020 §S1 / §S3
+#
+# 目的：在寫 validator（issue #164 step 0–2）之前，先釘死 schema 的正/反例，
+# 讓 validator「照 ADR 寫就打爆現有範例」或「為範例放寬 schema」兩種壞選擇都不會發生。
+#
+# 契約：
+#   - `valid` 內每筆都必須通過 validator。
+#   - `invalid` 內每筆都必須被 validator 擋下，且錯誤類別 == `expect_error`。
+#   - reconciled map 的 6 個 slot（D0/R1/S0/EK0/P0/T2）必須全屬 `valid` 類型
+#     （line_type: scoped-empirical），是本 fixture 的實戰對照。
+#
+# machine-consumed；勿把散文塞進資料欄。
+
+valid:
+
+  - name: scoped-empirical (D0-shaped)
+    study_id: kappa_d0_proxy_fidelity
+    line_type: scoped-empirical
+    claim_verdict: FALSIFIED
+    decision_outcome: NOT_ASSESSED
+    lifecycle_disposition: SEALED
+    verdict_locus:
+      assumptions: shadow non-committing capture; sealed headline-m config; predeclared boxes
+      domain: exact-key matched pairs only
+      protocol_ref: docs/modules/semantic/research/d0_runtime_shadow_fidelity_results_20260712.md
+    evidence_owner: docs/modules/semantic/research/d0_runtime_shadow_fidelity_results_20260712.md
+    process_disposition: retained
+
+  - name: scoped-empirical with net-negative decision (T2-shaped)
+    study_id: door0_t2_ranking_power
+    line_type: scoped-empirical
+    claim_verdict: FALSIFIED            # claim axis: no usable ranking power in class
+    decision_outcome: NET_NEGATIVE      # decision axis (orthogonal): motion actively harmful
+    lifecycle_disposition: SEALED
+    verdict_locus:
+      assumptions: gate-retained ambiguous band; s0 ordering; sealed metrics/boxes
+      domain: exactly the 12 enumerated candidates
+      protocol_ref: sealed Door-0 ranking-probe declaration
+    evidence_owner: docs/modules/semantic/research/door0_ranking_probe_results_20260712.md
+    process_disposition: retained
+
+  - name: local-math-claim (deductive)
+    study_id: example_local_math_claim
+    line_type: local-math-claim
+    claim_verdict: PROVED               # deductive group only
+    decision_outcome: NOT_ASSESSED
+    lifecycle_disposition: SEALED
+    verdict_locus:
+      assumptions: stated antecedents / held-fixed conditions
+      domain: objects over which the proposition holds
+      claim: the scoped deductive proposition
+    evidence_owner: docs/research/contracts/claim_state_registry.md
+    process_disposition: retained
+
+  - name: math-closed (has versioned model)
+    study_id: example_math_closed
+    line_type: math-closed
+    claim_verdict: VERIFIED
+    decision_outcome: NOT_ASSESSED
+    model_relation: current             # only math-closed may carry this
+    lifecycle_disposition: SEALED
+    verdict_locus:
+      assumptions: held-fixed conditions
+      domain: quantified domain
+      model_ref: docs/modules/semantic/models/example_model.md
+      model_version: v1.2
+    evidence_owner: docs/modules/semantic/research/example_results.md
+    process_disposition: retained
+
+  - name: engineering-ablation (one-line attribution)
+    study_id: example_engineering_ablation
+    line_type: engineering-ablation
+    claim_verdict: FALSIFIED
+    decision_outcome: NET_NEGATIVE
+    lifecycle_disposition: SEALED
+    verdict_locus:
+      attribution: end-to-end IDF1 regressed; see results row X, no reused mechanism
+    evidence_owner: docs/reference/no_go_registry.md
+    process_disposition: deleted-to-git   # no inline sha
+
+invalid:
+
+  - name: PROVED on empirical line
+    expect_error: line_type_claim_verdict_mismatch
+    line_type: scoped-empirical
+    claim_verdict: PROVED               # PROVED/REFUTED only for local-math-claim
+    decision_outcome: NOT_ASSESSED
+    lifecycle_disposition: SEALED
+
+  - name: decision value leaked into claim axis
+    expect_error: cross_axis_misuse
+    line_type: scoped-empirical
+    claim_verdict: NET_NEGATIVE          # NET_NEGATIVE belongs to decision_outcome
+    decision_outcome: NOT_ASSESSED
+    lifecycle_disposition: SEALED
+
+  - name: claim value leaked into decision axis
+    expect_error: cross_axis_misuse
+    line_type: scoped-empirical
+    claim_verdict: FALSIFIED
+    decision_outcome: NOT_IDENTIFIABLE   # NOT_IDENTIFIABLE belongs to claim_verdict
+    lifecycle_disposition: SEALED
+
+  - name: live scheduling state in a slot
+    expect_error: live_state_not_terminal
+    line_type: scoped-empirical
+    claim_verdict: NOT_EVALUATED
+    decision_outcome: NOT_ASSESSED
+    lifecycle_disposition: PARKED        # slots only exist at seal; SEALED is the only value
+
+  - name: model_relation on a no-model line
+    expect_error: model_relation_requires_math_closed
+    line_type: scoped-empirical
+    claim_verdict: VERIFIED
+    decision_outcome: NOT_ASSESSED
+    model_relation: current              # only math-closed
+    lifecycle_disposition: SEALED
+
+  - name: model_ref on local-math-claim
+    expect_error: model_ref_requires_math_closed
+    line_type: local-math-claim
+    claim_verdict: PROVED
+    decision_outcome: NOT_ASSESSED
+    lifecycle_disposition: SEALED
+    verdict_locus:
+      model_ref: docs/x.md              # local-math-claim has no model
+      model_version: v1.0
+
+  - name: inline sha on deleted-to-git
+    expect_error: process_disposition_no_inline_sha
+    line_type: engineering-ablation
+    claim_verdict: FALSIFIED
+    decision_outcome: NET_NEGATIVE
+    lifecycle_disposition: SEALED
+    process_disposition: deleted-to-git@deadbeef   # sha must not be pinned inline
+
+  - name: unknown / misspelled enum
+    expect_error: unknown_enum
+    line_type: scoped-empirical
+    claim_verdict: FALSIFED             # typo
+    decision_outcome: NOT_ASSESSED
+    lifecycle_disposition: SEALED
+
+  - name: missing required field
+    expect_error: missing_required_field
+    study_id: example_missing
+    # line_type absent
+    claim_verdict: VERIFIED
+    decision_outcome: NOT_ASSESSED
+    lifecycle_disposition: SEALED
