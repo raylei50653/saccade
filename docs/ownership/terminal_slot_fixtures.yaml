@@ -138,9 +138,17 @@ invalid:   # each = base_scoped_empirical with EXACTLY one field mutated
 
   - name: missing required field
     expect_error: missing_required_field
-    slot:
-      <<: *base_scoped_empirical
-      line_type: null                     # required field removed
+    slot:                                  # base_scoped_empirical expanded, `line_type` key omitted entirely
+      study_id: fixture_base_scoped_empirical
+      claim_verdict: FALSIFIED
+      decision_outcome: NOT_ASSESSED
+      lifecycle_disposition: SEALED
+      verdict_locus:
+        assumptions: shadow non-committing capture; sealed headline-m config; predeclared boxes
+        domain: exact-key matched pairs only
+        protocol_ref: docs/modules/semantic/research/d0_runtime_shadow_fidelity_results_20260712.md
+      evidence_owner: docs/modules/semantic/research/d0_runtime_shadow_fidelity_results_20260712.md
+      process_disposition: retained
 
   - name: unknown / drifted field (fail-closed)
     expect_error: unknown_field
