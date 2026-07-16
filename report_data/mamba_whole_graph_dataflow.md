@@ -135,7 +135,7 @@ GPU result buffer → HostTrackResultView → Bridge relink / identity resolve
 ```
 
 - **Materialize**：GPU tensor 複製至 host-visible view
-- **Relink**：GPU bridge relink (bidirectional midpoint check)，async pipeline path
+- **Relink**：GPU bridge relink（speed-weighted bidirectional full-gap extrapolation + per-lost detection-score claim），async pipeline path
 - **Interpolation**：`interpolate_max_gap=35`，容忍約 1.17s 遮蔽，Recall +1.3pp
 
 ---

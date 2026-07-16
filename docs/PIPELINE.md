@@ -192,9 +192,9 @@
 **職責**：把 lost track 重連回現役 detection；將 local track id 解析成穩定 identity 輸出。可選 appearance / motion / lifecycle merge。
 
 **現行最優**：
-- **GPU 雙向中點橋接 relink**（px=0.25 + scale gate）—— **preset default ON**：IDF1 **+2.1**、AssA +2.8、IDs −13.6%、FP −14%（06-11 全指標嚴格優勢）。專案級大增益。
+- **GPU 雙向橋接 relink**（px=0.25 + scale gate）—— **preset default ON**：IDF1 **+2.1**、AssA +2.8、IDs −13.6%、FP −14%（06-11 全指標嚴格優勢）。專案級大增益。現行 kernel 公式＝speed-weighted full-gap 外推（非 gap/2 中點；s preset 另含 `dir_bonus=0.8` 方向 blend，cutoff/ranking 用 post-direction `bdist`；見 [reference/math_model.md](reference/math_model.md) §10.3–10.4），winner＝candidate-local 最小 `bdist` ranking + 每 lost 一次 detection-score atomic claim（[decision semantics](research/tracker-decision/relink_bridge.md)）。
 - source 對照：bridge 參數透過 `detector.tracker.set_relink_params(..., bidirectional=True, bridge_*)` 進 tracker core。這和 Python `SemanticRelinker` 是兩條路；current headline 不啟用 semantic appearance relink。
-- 機制關鍵：**farewell archive + 中點外推**改變候選生成，**繞過 age gate 結構**（age gate 原本拒掉 86–89% relink 候選 —— 這正是 motion/semantic relink 單獨測試中性的根因）。
+- 機制關鍵：**farewell archive + 雙向外推**改變候選生成，**繞過 age gate 結構**（age gate 原本拒掉 86–89% relink 候選 —— 這正是 motion/semantic relink 單獨測試中性的根因）。
 - `async_reid` + `pipeline_relink` 是可用的吞吐優化，但 current `mamba_whole_graph` headline 為 `reid_mode=off`；不要把它們記成精度來源。
 - source 對照：`relink_write` 在 headline path 會走 `_fast_emit_mot_lines()`，因為 relinker / appearance bank / dynamic ReID / id-stability filter 都不存在。只有這些 emit-stage component 開啟時，才會走完整 prepare/resolve/emit pipeline；`pipeline_relink` 可把完整 emit pipeline 丟到背景 thread，但 `--profile-stages` 會關掉它。
 - semantic relink / appearance bank：default **OFF**（GMC 下冗余）。

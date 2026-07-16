@@ -53,7 +53,7 @@ buf --> gmc --> trk
 | Association cost | 把 IoU、OAO/velocity penalty、stability reward 匯成單一配對成本 $c_{ij}$ |
 | Auction 指派 | ByteTrack 風格分數級聯 + 單輪平行 auction,決定 track 與 detection 配對 |
 | Track lifecycle | track 生死:tentative→confirmed 的 birth/confirm,與 lost/remove |
-| Bridge relink | 找回短暫消失又重生的 ID(雙向中點外推,非 appearance ReID) |
+| Bridge relink | 找回短暫消失又重生的 ID(速度加權雙向 full-gap 外推,非 appearance ReID) |
 
 *表/圖：`track` 內部子機制(Part II 逐章展開)。*
 
@@ -759,7 +759,7 @@ flowchart LR
 
 **輸入** 新穩定的 candidate track、窗內未配的 lost confirmed track
 **輸出** candidate 採用 lost track 的 id(lost slot deactivate)<br>
-**方法** 雙向中點外推(bidirectional midpoint extrapolation),*非* appearance ReID
+**方法** 速度加權雙向 full-gap 外推(speed-weighted bidirectional extrapolation),*非* appearance ReID
 **Source** `tracker_gpu.cu`( $\ne$`relink_gate.cu` 的 appearance gate)<br>
 **Baseline** `relink_bridge_enabled: true`、`relink_bridge_px: 0.25`、
 `margin: 0.05`、`h_lo/h_hi: 0.75/1.33`、`dir_bonus: 0.8`、
@@ -960,7 +960,7 @@ baseline 值對應 `mamba_whole_graph`(frozen_v2)。各機制的代碼錨點
 - **Assignment** = Bertsekas auction(單輪平行貪婪)跑在 softmin-temperature top-k 上;
 分數分段 = ByteTrack 風格 cascade。`sinkhorn_lambda` 為歷史命名——只用 $e^{-\lambda c}$ 當 value,**非**完整 Sinkhorn 迭代。
 - **OAO** = occlusion-aware(track-track overlap)配對抑制 + duration ramp。
-- **Bridge relink** = 雙向中點外推,項目自有機制,非標準 appearance ReID。
+- **Bridge relink** = 速度加權雙向 full-gap 外推,項目自有機制,非標準 appearance ReID。
 - **Semantic relink gate** = appearance + Mahalanobis + IoU joint gate(baseline 關)。
 
 **提醒。** $w_{\mathrm{stab}}$ (§sec:as-stab,成本側 reward)與

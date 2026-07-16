@@ -125,7 +125,7 @@ orchestration，而不是承接大規模每幀資料面工作。
 | Kalman + GPU Sinkhorn-Auction | 兼顧 motion prediction 與可平行化的 assignment | 關聯延遲記錄約 0.67 ms；避免 CPU association round-trip |
 | 同高遮擋 gate | 交叉、重疊後的錯接 | 純幾何修復，改善 crossing-swap；不依賴 appearance |
 | OAO duration-ramp | 長時間遮擋與短暫交叉不應使用同一懲罰 | 以重疊持續時間調節 penalty，避免只改善單一高密度 sequence |
-| bidirectional bridge relink | lost track 與新 detection 的候選生成受 age gate 限制 | farewell archive + 中點外推改變候選生成；IDF1 +2.1、AssA +2.8、IDs −13.6% |
+| bidirectional bridge relink | lost track 與新 detection 的候選生成受 age gate 限制 | farewell archive + 雙向外推改變候選生成；IDF1 +2.1、AssA +2.8、IDs −13.6% |
 | interpolation | 短 gap 的輸出連續性 | 回收 FN，但明確記錄其 FP 代價與上游限制 |
 
 這些模組並非任意堆疊。它們共用一個乘法式 association cost，並在同一個指數項上掛載
@@ -181,8 +181,8 @@ p_{ij} = e^{-\lambda c_{ij}}\, G_{\mathrm{aspect}}(b_j),
 \qquad \lambda = 10
 $$
 
-**Bidirectional bridge relink（§10）**——lost track 與新 candidate 以雙向中點外推
-的殘差判斷是否同一身份，殘差皆以 reference height 正規化：
+**Bidirectional bridge relink（§10）**——lost track 與新 candidate 以速度加權
+雙向 full-gap 外推的殘差判斷是否同一身份，殘差皆以 reference height 正規化：
 
 $$
 d_{\mathrm{bridge}} = w\,\frac{r_{\mathrm{fwd}} + r_{\mathrm{bwd}}}{2} + (1-w)\,d_h,
@@ -337,7 +337,7 @@ tracker 內部的最小消融序列可採：`bare → +GMC → +bridge relink �
 - GMC：相機移動是一階問題，先消除共同偏移。
 - GPU association：為何選 Sinkhorn-Auction，而不把偵測框送回 CPU 做 Hungarian。
 - bridge relink：原本的 age gate 為何讓 motion signal 沒有機會作用；如何以 archive +
-  中點外推改變候選生成。
+  雙向外推改變候選生成。
 - duration-ramp：為何「遮擋」不是單一條件，而要區分短 crossing 和長人群重疊。
 
 ### 5:30–7:00：SSM-FPN 與 runtime
