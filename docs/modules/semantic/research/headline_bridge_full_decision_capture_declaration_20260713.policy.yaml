@@ -19,8 +19,8 @@ document:
 # exactly, still permits appending history below it, and needs no notion of a
 # heading, a fence or a table.
 sealed_prefix:
-  bytes: 21971
-  sha256: "ed56cdab692280441db7d77100670a8d1106aa0e6502e1f251e3517c945a1067"
+  bytes: 22006
+  sha256: "db0b5699f03b4637047d2c871576b1193bdc3b017cbc2f97d5cba0557b8337f3"
 
 policy_target:
   kind: headline
