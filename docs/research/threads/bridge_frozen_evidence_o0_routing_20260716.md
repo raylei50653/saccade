@@ -99,18 +99,21 @@ terminal。只有 ② 造成 object state 轉移。
 Routing 對象＝本 charter 的 decision question：「bridge-fidelity 線是否取得可自證
 provenance 的證據基礎？」每格語義逐字歸
 [H0 declaration](../../modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md)
-（§7 / A3 ordered partition；先滿足者為準，不得後移），本表只做 charter-level 處置：
+的 **Amendment 2 §A2.4 sealed terminal partition**（先滿足者為準，不得後移；
+`H0_CAPTURE_PARTIAL` 已被 A2.4 退役——sealed invocation 下 there is no
+partial-capture reinterpretation；後續 amendments 依其 supersession 條款優先，
+如 Amendment 3 supersedes A2.1–A2.4 where they conflict），本表只做
+charter-level 處置：
 
 | # | 事件（labels verbatim） | charter 處置 | 下游 |
 |:--|:--|:--|:--|
 | 0 | owner 不 seal／Discard 條件成立 | charter CLOSED（declined） | 候選集回空；provenance 缺口以 registry `open_limits` 形式**永久留帳＝合法終局**，非待辦 |
-| 0′ | `H0_PRESEAL_COVERAGE_INCOMPLETE` 持續 | 非 terminal；停在 pre-seal，禁 seal 禁 capture | 修 instrumentation，或走 route 0 |
+| 0′ | `H0_PRESEAL_COVERAGE_INCOMPLETE` 持續 | 非 terminal；pre-seal engineering status，禁 seal 禁 capture | 修 instrumentation，或走 route 0 |
 | 1 | `H0_PROVENANCE_INVALID` | charter CLOSED（diagnostic-only） | 同 route 0 下游；重進須 amendment＋owner reseal |
-| 2 | `H0_EXECUTION_INVALID` | charter CLOSED（diagnostic-only；不得重讀為 partial） | 同上 |
+| 2 | `H0_EXECUTION_INVALID` | charter CLOSED（diagnostic-only；不得重讀為 partial capture） | 同上 |
 | 3 | `H0_CAPTURE_PERTURBS_POLICY` | charter CLOSED（diagnostic-only） | 同上 |
 | 4 | `H0_PACKET_INVALID` | charter CLOSED（diagnostic-only） | 同上 |
-| 5 | `H0_CAPTURE_PARTIAL` | charter CLOSED：sealed ABI 下自證 capture 不可達；禁 Phase B | 同 route 0 下游（缺口永久留帳）；重開＝新宣告 |
-| 6 | `H0_FULL_COMMIT_CAPTURE_FAITHFUL` ＋ owner acceptance | charter CLOSED（enabler delivered） | **B1 consumer-faithful operating-curve study 僅成為 candidate，絕非 direct handoff**（declaration §7）；任何 re-audit 須新 §20.2 宣告 |
+| 5 | `H0_FULL_COMMIT_CAPTURE_FAITHFUL` ＋ owner acceptance | charter CLOSED（enabler delivered） | **B1 consumer-faithful operating-curve study 僅成為 candidate，絕非 direct handoff**（declaration §7）；任何 re-audit 須新 §20.2 宣告 |
 
 為 exhaustiveness 必須顯式排除的兩條「母體層」路（皆不由本卡授權）：
 
@@ -123,7 +126,7 @@ provenance 的證據基礎？」每格語義逐字歸
   Discrepancies）。殘餘的 downgrade 只剩 registry 既有 inadmissibility（s0 永不
   代表 production `bdist`）——那是既有狀態，不是新動作。
 
-⇒ 全部未來狀態 ∈ { route 0／0′，routes 1–5（typed negative），route 6
+⇒ 全部未來狀態 ∈ { route 0／0′，routes 1–4（typed negative），route 5
 （positive）}；無第三扇門。
 
 ## Discard when
@@ -152,7 +155,7 @@ H0 pre-seal freeze artifact（對 **m**）完成度檢查 → owner seal review�
 
 ## Acceptance
 
-route 6 或任一 typed negative route（含 route 0 declined）被 owner 接受 →
+route 5 或任一 typed negative route（1–4，含 route 0 declined）被 owner 接受 →
 本卡照 threads README 收尾流程 close。
 
 ## Must not
@@ -173,3 +176,8 @@ route 6 或任一 typed negative route（含 route 0 declined）被 owner 接受
   O0 took the sole registry candidate (H0 pre-seal, target m) as sole-active;
   thin map and exhaustive terminal routing recorded. No execution authorized;
   owner seal remains the single authoritative event.
+- 2026-07-16: Review fix (blocking): the routing map had reintroduced the
+  retired `H0_CAPTURE_PARTIAL` and cited the historical §7/A3 partition.
+  Authority corrected to Amendment 2 §A2.4 (four negative terminals, then
+  `H0_FULL_COMMIT_CAPTURE_FAITHFUL`; later amendments supersede on conflict);
+  routes renumbered to 1–4 negative / 5 positive.
