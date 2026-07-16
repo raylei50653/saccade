@@ -240,10 +240,25 @@ share the same \(S_\Delta\), dimension, gap, context, and observation mode,
 \(q\) and NLL induce the same ordering. Candidate-specific covariance can alter
 ordering only when its source and causal availability are explicitly declared.
 
-## Pre-activation and pre-seal blockers
+## Activation-contract and model-seal obligations
 
-All four items below are unresolved. They must be repaired before activation
-and before any future model seal; this PR does not resolve them.
+All four items below are unresolved mandatory activation-contract obligations,
+and all must be resolved before any future model-spec seal. Activation may
+authorize the work needed to resolve them; neither activation nor its active
+declaration may assert that they are already solved.
+
+The timing is split explicitly:
+
+- **Before the active declaration is sealed:** freeze the scope, a mechanically
+  exhaustive ordered terminal partition (including the specification-incomplete
+  outcome), and its decision procedure; encode all four obligations in the
+  active contract. Item 1 is therefore an active-declaration seal condition,
+  while items 2–4 remain explicitly unresolved work.
+- **After activation, before selecting `GCTM_MODEL_SPEC_SEALABLE`:** resolve
+  items 2–4 and every remaining proof or specification obligation required for
+  a model-spec seal.
+
+This PR resolves none of the four items.
 
 ### 1. Exhaustive specification-incomplete outcome
 
@@ -336,8 +351,10 @@ task and Issue #175. It must not create an empty D5-equivalent peer document.
 ## Provisional terminal family
 
 This is a **provisional, not sealed** terminal shape. Its exhaustive order,
-decision procedure, and dispositions must be completed before activation. No
-terminal is selected by this charter.
+decision procedure, and dispositions must be completed before the active
+declaration is sealed. That active contract must also carry the four mandatory
+obligations above without claiming that the post-activation work is complete.
+No terminal is selected by this charter.
 
 | Provisional terminal | Required future coverage |
 |:--|:--|
