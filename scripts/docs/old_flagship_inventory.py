@@ -46,11 +46,10 @@ except ImportError:  # pragma: no cover - exercised by direct CLI use
 
 OLD_FLAGSHIP = "old-flagship"
 INVENTORY_SCHEMA_VERSION = 1
-STUDY_STATES = frozenset({"sealed", "proposed", "active", "parked"})
 FILE_KINDS = frozenset({"process", "shared_support"})
 
 _TOP_LEVEL_FIELDS = frozenset({"schema_version", "cluster", "studies", "file_roles"})
-_STUDY_FIELDS = frozenset({"state", "terminal_ref", "live_owner"})
+_STUDY_FIELDS = frozenset({"terminal_ref", "live_owner"})
 _PROCESS_FILE_FIELDS = frozenset({"path", "kind", "study_id"})
 _SHARED_SUPPORT_FILE_FIELDS = frozenset({"path", "kind"})
 
@@ -65,16 +64,19 @@ class OldFlagshipInventoryError(ValueError):
 
 @dataclass(frozen=True)
 class StudyInventory:
-    """One study's terminal or live owner, never both."""
+    """One study's terminal or live owner, never both.
+
+    The inventory routes to the current source of truth; it deliberately does
+    not duplicate live scheduling state such as ``proposed`` or ``parked``.
+    """
 
     study_id: str
-    state: str
     terminal_ref: str | None
     live_owner: str | None
 
     @property
     def is_terminal_backed(self) -> bool:
-        return self.state == "sealed"
+        return self.terminal_ref is not None
 
 
 @dataclass(frozen=True)
@@ -205,59 +207,29 @@ def _parse_studies(value: object, *, repo_root: Path) -> Mapping[str, StudyInven
         _fail("invalid_value", "studies must not be empty")
 
     studies: dict[str, StudyInventory] = {}
-    terminal_owners: dict[str, str] = {}
     for raw_study_id, raw_study in studies_data.items():
         study_id = _string(raw_study_id, field="study id")
         study = _mapping(raw_study, field=f"studies.{study_id}")
         _require_exact_fields(
             study, field=f"studies.{study_id}", permitted=_STUDY_FIELDS
         )
-        if "state" not in study:
-            _fail("missing_required_field", f"studies.{study_id} is missing 'state'")
-        state = _string(study["state"], field=f"studies.{study_id}.state")
-        if state not in STUDY_STATES:
+        has_terminal_ref = "terminal_ref" in study
+        has_live_owner = "live_owner" in study
+        if has_terminal_ref == has_live_owner:
             _fail(
-                "unknown_enum", f"studies.{study_id}.state has unknown value {state!r}"
+                "invalid_owner_form",
+                f"study {study_id!r} must declare exactly one of terminal_ref or live_owner",
             )
 
-        terminal_ref = study.get("terminal_ref")
-        live_owner = study.get("live_owner")
-        if state == "sealed":
-            if live_owner is not None:
-                _fail(
-                    "sealed_study_has_live_owner",
-                    f"sealed study {study_id!r} must not have live_owner",
-                )
-            if terminal_ref is None:
-                _fail(
-                    "missing_required_field",
-                    f"sealed study {study_id!r} is missing terminal_ref",
-                )
+        if has_terminal_ref:
             terminal_ref = _repo_relative_path(
-                terminal_ref, field=f"studies.{study_id}.terminal_ref"
+                study["terminal_ref"], field=f"studies.{study_id}.terminal_ref"
             )
-            previous_study = terminal_owners.get(terminal_ref)
-            if previous_study is not None:
-                _fail(
-                    "duplicate_terminal_ref",
-                    f"terminal_ref {terminal_ref!r} is shared by {previous_study!r} and {study_id!r}",
-                )
             _read_terminal_owner(terminal_ref, study_id=study_id, repo_root=repo_root)
-            terminal_owners[terminal_ref] = study_id
             live_owner = None
         else:
-            if terminal_ref is not None:
-                _fail(
-                    "live_study_has_terminal_ref",
-                    f"live study {study_id!r} must not have terminal_ref",
-                )
-            if live_owner is None:
-                _fail(
-                    "missing_required_field",
-                    f"live study {study_id!r} is missing live_owner",
-                )
             live_owner = _repo_relative_path(
-                live_owner, field=f"studies.{study_id}.live_owner"
+                study["live_owner"], field=f"studies.{study_id}.live_owner"
             )
             if not (repo_root / live_owner).is_file():
                 _fail(
@@ -268,7 +240,6 @@ def _parse_studies(value: object, *, repo_root: Path) -> Mapping[str, StudyInven
 
         studies[study_id] = StudyInventory(
             study_id=study_id,
-            state=state,
             terminal_ref=terminal_ref,
             live_owner=live_owner,
         )

@@ -10,29 +10,21 @@ cluster: old-flagship
 
 studies:
   kappa_d0_proxy_fidelity:
-    state: sealed
     terminal_ref: docs/modules/semantic/research/d0_runtime_shadow_fidelity_results_20260712.md
   kappa_r1_runtime_replay:
-    state: sealed
     terminal_ref: docs/modules/semantic/research/r1_temporal_reduction_capture_results_20260712.md
   rho_s0_safe_axis_transfer:
-    state: sealed
     terminal_ref: docs/modules/semantic/research/closed/safe_domain_runtime_transfer_results_20260713.md
   ek0_exact_key_recoverability:
-    state: sealed
     terminal_ref: docs/modules/semantic/research/frozen_packet_exact_key_recoverability_results_20260713.md
   p0_decision_path_identifiability:
-    state: sealed
     terminal_ref: docs/research/contracts/claim_state_registry.md
   door0_t2_ranking_power:
-    state: sealed
     terminal_ref: docs/modules/semantic/research/door0_ranking_probe_results_20260712.md
 
-  discrete_m_anchor_propagation:
-    state: parked
+  discrete_m_capability_20260712:
     live_owner: docs/modules/semantic/research/discrete_m_capability_declaration_20260712.md
   h0_full_bridge_decision_capture:
-    state: proposed
     live_owner: docs/modules/semantic/TODO.md
 
 file_roles:
@@ -56,7 +48,7 @@ file_roles:
     study_id: kappa_d0_proxy_fidelity
   - path: docs/modules/semantic/research/discrete_m_capability_declaration_20260712.md
     kind: process
-    study_id: discrete_m_anchor_propagation
+    study_id: discrete_m_capability_20260712
   - path: docs/modules/semantic/research/door0_ranking_probe_results_20260712.md
     kind: process
     study_id: door0_t2_ranking_power
