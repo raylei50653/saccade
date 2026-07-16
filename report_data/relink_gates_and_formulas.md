@@ -3,6 +3,11 @@
 Summary of all relink thresholds and mathematical formulas in the saccade tracker.
 Based on `mamba_whole_graph` preset (`reid_mode: "off"`, `relink_bridge_enabled: true`).
 
+> Line anchors in the Location columns are historical and may lag the source; bridge
+> knobs live on the tracker config/constructor, not `lifecycle.py`. For the
+> authoritative bridge decision contract see the H0 declaration
+> (`docs/modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md`).
+
 ---
 
 ## Active Gates (mamba_whole_graph)
@@ -49,6 +54,17 @@ Reject if (second_best_dist − best_dist) < bridge_margin
 | Parameter | Default | Location |
 |-----------|---------|----------|
 | `relink_bridge_margin` | 0.05 | `lifecycle.py:91`, `tracker_gpu.cu:1448` |
+
+> **Winner stages (not a joint score, not global assignment).** `bdist` ranks losts
+> **within one candidate** (lower is better); the margin above applies to that
+> candidate-local best-vs-second. When multiple candidates pass gates for the same
+> lost, the winner is picked by an atomic packed key of the **quantized detection
+> score** (candidate index tie-break) — `bdist` is not re-compared across candidates.
+> A claim loser does not retry its second-best lost. Commit mutates only
+> `track_ids[cand]` and `active[lost]`. There is no Hungarian / bipartite
+> re-ranking. Authoritative decision contract: H0 declaration
+> (`docs/modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md`);
+> decision semantics: `docs/research/tracker-decision/relink_bridge.md`.
 
 ### 4. TTL & Min-Lost Gate
 

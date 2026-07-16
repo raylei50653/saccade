@@ -27,6 +27,15 @@ This is **not** the same as:
 | Lifecycle / Cheb-GR merge | **off** | Post-hoc stitch |
 | Sync ReID in tracker | **off** (NO-GO #57) | Appearance veto on bridge |
 
+Three **distinct online relink contracts** co-exist and must not be conflated:
+
+1. **GPU foot-bridge** (this doc; `relink_bridge_enabled`) — scalar `bdist` + two-stage winner (below).
+2. **Birth-bank Cheb-GR** (`relink_enabled`, baseline off) — cosine distance vs `μ − λσ` bank threshold, CAS claim at spawn.
+3. **SemanticRelinker joint score** (pipeline relink, baseline off) — `w_sim·sim + w_iou·iou + w_maha·maha + motion_bonus`, sequential greedy over an `assigned` set.
+
+The SemanticRelinker joint score must **not** be used to describe this GPU bridge: the
+headline bridge has no multi-term joint score.
+
 ---
 
 ## What is a relink bridge?
@@ -35,8 +44,15 @@ Kalman-free, appearance-free reconnect:
 
 1. Young candidate reaches `hit_streak == bridge_at` (default 4) with enough foot history.
 2. System regresses velocity from last/first **4 foot points** on lost and candidate.
-3. Bidirectional midpoint extrapolation produces a residual distance in **units of reference height**.
-4. If residual passes gates (distance, height ratio, margin, optional extras), candidate **inherits lost track's ID**.
+3. Speed-weighted bidirectional **full-gap** extrapolation produces a scalar `bdist` in
+   **units of reference height**: forward/backward full-gap residuals blended with the
+   static distance by lost-exit speed (`bdist = w·0.5·(fwd_r+bwd_r) + (1−w)·dist_h`,
+   lower is better). The legacy gap/2 *midpoint* form survives only in the semantic-path
+   mirrors (`relink_gate.cu`, Python `_midpoint_bridge_dist`) — it is **not** the
+   production kernel formula.
+4. If the pair passes gates (distance cutoff, height ratio, margin, optional extras),
+   the candidate may **inherit the lost track's ID** — via the two-stage winner below,
+   not directly.
 
 Trigger sketch:
 
@@ -74,6 +90,48 @@ fire if:
 | `relink_bridge_app_veto` | appearance veto | off / NO-GO sync ReID | off |
 
 **m relaxation rationale:** m detector recovers noisier small boxes; s-tuned h-band and px reject valid small-object bridges. Wider gates recover AssA/IDs; primary association thresholds stay tight.
+
+---
+
+## Winner selection: two stages, not a joint score, not global assignment
+
+`bdist` is a single scalar, not a weighted composite, and the bridge runs **no global
+assignment** (no Hungarian, no bipartite re-ranking, no second-pass reassignment):
+
+```text
+hard pair gates
+→ candidate-local minimum-bdist ranking
+→ best/second margin
+→ per-lost atomic claim by quantized detection score
+→ commit: candidate adopts lost ID; lost slot deactivated
+```
+
+1. **Candidate chooses lost by `bdist`.** Each candidate independently ranks its
+   eligible losts by `bdist` ascending; the margin gate applies to this
+   candidate-local best-vs-second pair.
+2. **Lost chooses candidate by detection score.** When multiple candidates propose
+   the same lost, an atomic packed key — quantized detection score, candidate index
+   as tie-break — picks exactly one winner. `bdist` is **not** re-compared across
+   candidates at this stage.
+3. **A claim loser does not retry** its second-best lost; it keeps its own new ID.
+4. **Commit is surgically narrow:** only `track_ids[cand]` and `active[lost]` mutate.
+   The candidate's Kalman state, foot ring, EMA height, and hit_streak are not
+   rewritten — subsequent frames continue the young track's motion state under the
+   lost ID.
+
+Authoritative stage-by-stage decision/capture contract: the
+[H0 declaration](../../modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md).
+Formulas: [math_model.md §10](../../reference/math_model.md).
+
+### Scope note for math / offline claims
+
+Mathematical or offline claims about "the relink score" act on the **candidate-local
+lost ranking** (stage 1) under **fixed pair eligibility**. Claim arbitration, loser
+fallback, and commit mutation are separate online-contract problems, not exercised by
+pair-table analysis. Offline proxies rebuilt from pair residuals do not reproduce
+det-score claim contention, `track_revived` single-fire misses, or live-slot competitor
+sets — runtime-quantity claims must pass the fidelity protocol
+([runtime_quantity_fidelity_protocol.md](../contracts/runtime_quantity_fidelity_protocol.md)).
 
 ---
 
