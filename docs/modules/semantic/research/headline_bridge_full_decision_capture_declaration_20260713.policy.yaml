@@ -13,14 +13,13 @@ schema: declaration_policy_binding_v1
 document:
   path: headline_bridge_full_decision_capture_declaration_20260713.md
 
-# The declaration's immutable prefix — everything above the first appended
-# Correction/Amendment. A whole-file hash would break on every legitimate
-# append-only addition; a fixed byte count plus SHA-256 pins the frozen body
-# exactly, still permits appending history below it, and needs no notion of a
-# heading, a fence or a table.
+# The declaration's immutable authority prefix, deliberately rebound through
+# Amendment 7 after the historical seal lost execution authority. A fixed byte
+# count plus SHA-256 pins that append-only history exactly while still permitting
+# a later amendment below it without teaching this sidecar Markdown structure.
 sealed_prefix:
-  bytes: 22006
-  sha256: "db0b5699f03b4637047d2c871576b1193bdc3b017cbc2f97d5cba0557b8337f3"
+  bytes: 77578
+  sha256: "f29e15ab72813a6242a3670d1581d7051e44075d88f3bb38c543b5d473cde300"
 
 policy_target:
   kind: headline
