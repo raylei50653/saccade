@@ -1,0 +1,157 @@
+# Canonical terminal-slot fixtures — ADR 020 §S1 / §S3
+#
+# 目的：在寫 validator（issue #166）之前釘死 schema 的正/反例，讓「照 ADR 寫就打爆
+# 現有範例」或「為範例放寬 schema」兩種壞選擇都不會發生。
+#
+# 契約（#166 必須實作成這樣，否則 error class 無法唯一）：
+#   - 每筆 fixture 的 terminal slot 在 `slot:` 底下。`name` / `expect_error` 是
+#     fixture metadata，**不是** slot 欄位（故不會污染 unknown-field 檢查）。
+#   - `valid[].slot` 全部必須通過。
+#   - `invalid[].slot` = 一份**完整合法 slot，只突變一個欄位**（多打一個、少一個、
+#     或改一個值），且 validator 回報的 error class == `expect_error`。單點突變才能
+#     讓 error class 唯一，不逼實作綁定任意檢查順序。
+#   - **schema 本體 unknown-field fail-closed**：slot 出現非 schema 欄位即 fail
+#     （`unknown_field`）。這是擋語意欄位再次漂移（如舊 `epistemic_verdict`）的關鍵。
+#   - reconciled map 的 6 個 slot（D0/R1/S0/EK0/P0/T2）必須全部作為 `scoped-empirical`
+#     的 valid slot 通過（其 `# layer:` 是註解、非欄位）。
+#
+# machine-consumed；勿把散文塞進資料欄。
+
+# 供 invalid 突變的合法底 slot（scoped-empirical，語意同 D0）：
+_base_scoped_empirical: &base_scoped_empirical
+  study_id: fixture_base_scoped_empirical
+  line_type: scoped-empirical
+  claim_verdict: FALSIFIED
+  decision_outcome: NOT_ASSESSED
+  lifecycle_disposition: SEALED
+  verdict_locus:
+    assumptions: shadow non-committing capture; sealed headline-m config; predeclared boxes
+    domain: exact-key matched pairs only
+    protocol_ref: docs/modules/semantic/research/d0_runtime_shadow_fidelity_results_20260712.md
+  evidence_owner: docs/modules/semantic/research/d0_runtime_shadow_fidelity_results_20260712.md
+  process_disposition: retained
+
+valid:
+
+  - name: scoped-empirical (D0-shaped)
+    slot: *base_scoped_empirical
+
+  - name: scoped-empirical with net-negative decision (T2-shaped)
+    slot:
+      study_id: door0_t2_ranking_power
+      line_type: scoped-empirical
+      claim_verdict: FALSIFIED            # claim axis: no usable ranking power in class
+      decision_outcome: NET_NEGATIVE      # decision axis (orthogonal): motion actively harmful
+      lifecycle_disposition: SEALED
+      verdict_locus:
+        assumptions: gate-retained ambiguous band; s0 ordering; sealed metrics/boxes
+        domain: exactly the 12 enumerated candidates
+        protocol_ref: sealed Door-0 ranking-probe declaration
+      evidence_owner: docs/modules/semantic/research/door0_ranking_probe_results_20260712.md
+      process_disposition: retained
+
+  - name: local-math-claim (deductive)
+    slot:
+      study_id: example_local_math_claim
+      line_type: local-math-claim
+      claim_verdict: PROVED               # deductive group only
+      decision_outcome: NOT_ASSESSED
+      lifecycle_disposition: SEALED
+      verdict_locus:
+        assumptions: stated antecedents / held-fixed conditions
+        domain: objects over which the proposition holds
+        claim: the scoped deductive proposition
+      evidence_owner: docs/research/contracts/claim_state_registry.md
+      process_disposition: retained
+
+  - name: math-closed (has versioned model)
+    slot:
+      study_id: example_math_closed
+      line_type: math-closed
+      claim_verdict: VERIFIED
+      decision_outcome: NOT_ASSESSED
+      model_relation: current             # only math-closed may carry this
+      lifecycle_disposition: SEALED
+      verdict_locus:
+        assumptions: held-fixed conditions
+        domain: quantified domain
+        model_ref: docs/modules/semantic/models/example_model.md
+        model_version: v1.2
+      evidence_owner: docs/modules/semantic/research/example_results.md
+      process_disposition: retained
+
+  - name: engineering-ablation (one-line attribution)
+    slot:
+      study_id: example_engineering_ablation
+      line_type: engineering-ablation
+      claim_verdict: FALSIFIED
+      decision_outcome: NET_NEGATIVE
+      lifecycle_disposition: SEALED
+      verdict_locus:
+        attribution: end-to-end IDF1 regressed; see results row X, no reused mechanism
+      evidence_owner: docs/reference/no_go_registry.md
+      process_disposition: deleted-to-git   # no inline sha
+
+invalid:   # each = base_scoped_empirical with EXACTLY one field mutated
+
+  - name: PROVED on empirical line
+    expect_error: line_type_claim_verdict_mismatch
+    slot:
+      <<: *base_scoped_empirical
+      claim_verdict: PROVED               # PROVED/REFUTED only for local-math-claim
+
+  - name: decision value leaked into claim axis
+    expect_error: cross_axis_misuse
+    slot:
+      <<: *base_scoped_empirical
+      claim_verdict: NET_NEGATIVE          # NET_NEGATIVE belongs to decision_outcome
+
+  - name: claim value leaked into decision axis
+    expect_error: cross_axis_misuse
+    slot:
+      <<: *base_scoped_empirical
+      decision_outcome: NOT_IDENTIFIABLE   # NOT_IDENTIFIABLE belongs to claim_verdict
+
+  - name: live scheduling state in a slot
+    expect_error: live_state_not_terminal
+    slot:
+      <<: *base_scoped_empirical
+      lifecycle_disposition: PARKED        # slots only exist at seal; SEALED is the only value
+
+  - name: model_relation on a no-model line
+    expect_error: model_relation_requires_math_closed
+    slot:
+      <<: *base_scoped_empirical
+      model_relation: current              # only math-closed
+
+  - name: inline sha on deleted-to-git
+    expect_error: process_disposition_no_inline_sha
+    slot:
+      <<: *base_scoped_empirical
+      process_disposition: deleted-to-git@deadbeef   # sha must not be pinned inline
+
+  - name: unknown / misspelled enum
+    expect_error: unknown_enum
+    slot:
+      <<: *base_scoped_empirical
+      claim_verdict: FALSIFED             # typo
+
+  - name: missing required field
+    expect_error: missing_required_field
+    slot:                                  # base_scoped_empirical expanded, `line_type` key omitted entirely
+      study_id: fixture_base_scoped_empirical
+      claim_verdict: FALSIFIED
+      decision_outcome: NOT_ASSESSED
+      lifecycle_disposition: SEALED
+      verdict_locus:
+        assumptions: shadow non-committing capture; sealed headline-m config; predeclared boxes
+        domain: exact-key matched pairs only
+        protocol_ref: docs/modules/semantic/research/d0_runtime_shadow_fidelity_results_20260712.md
+      evidence_owner: docs/modules/semantic/research/d0_runtime_shadow_fidelity_results_20260712.md
+      process_disposition: retained
+
+  - name: unknown / drifted field (fail-closed)
+    expect_error: unknown_field
+    slot:
+      <<: *base_scoped_empirical
+      epistemic_verdict: FALSIFIED         # legacy field name — must not be silently ignored
