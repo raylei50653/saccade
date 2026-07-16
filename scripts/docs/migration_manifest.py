@@ -16,7 +16,10 @@ from pathlib import Path, PurePosixPath
 from types import MappingProxyType
 from typing import Any
 
-import yaml
+try:  # Supports both ``python -m`` and direct script execution.
+    from .strict_yaml import StrictYamlError, strict_safe_load
+except ImportError:  # pragma: no cover - exercised by direct CLI use
+    from strict_yaml import StrictYamlError, strict_safe_load
 
 
 MIGRATION_STATES = frozenset({"active", "quarantined", "disposable"})
@@ -139,14 +142,14 @@ def _validate_repo_relative_path(value: str, *, field: str) -> str:
 
 def _load_document(path: Path) -> Mapping[str, object]:
     try:
-        content: Any = yaml.safe_load(path.read_text(encoding="utf-8"))
+        content: Any = strict_safe_load(path.read_text(encoding="utf-8"))
     except OSError as error:
         raise MigrationManifestError(
             "manifest_unreadable", f"cannot read {path}: {error}"
         ) from error
-    except yaml.YAMLError as error:
+    except StrictYamlError as error:
         raise MigrationManifestError(
-            "manifest_invalid_yaml", f"cannot parse {path}: {error}"
+            error.error_class, f"cannot parse {path}: {error}"
         ) from error
     return _mapping(content, field="manifest")
 

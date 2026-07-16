@@ -18,6 +18,7 @@ from scripts.docs.migration_manifest import (
 
 ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = ROOT / "docs/ownership/doc_migration_manifest.yaml"
+MASTER_MAP = ROOT / "docs/ownership/master_map.generated.md"
 
 
 def _write_manifest(root: Path, clusters: str) -> Path:
@@ -111,6 +112,38 @@ def test_manifest_rejects_resolved_file_cross_cluster_overlap(tmp_path: Path) ->
     assert raised.value.error_class == "resolved_file_cluster_overlap"
 
 
+@pytest.mark.parametrize(
+    "clusters",
+    [
+        """  duplicate: {}
+  duplicate: {}
+""",
+        """  duplicate_field:
+    resolved_files: []
+    resolved_files: []
+""",
+    ],
+)
+def test_manifest_rejects_duplicate_cluster_or_field_key(
+    tmp_path: Path, clusters: str
+) -> None:
+    manifest_path = tmp_path / "manifest.yaml"
+    manifest_path.write_text(
+        """snapshot:
+  frozen_at_commit: not-a-real-git-commit
+  resolved_at: 2026-07-16
+clusters:
+"""
+        + clusters,
+        encoding="utf-8",
+    )
+
+    with pytest.raises(MigrationManifestError) as raised:
+        parse_migration_manifest(manifest_path, repo_root=tmp_path)
+
+    assert raised.value.error_class == "duplicate_yaml_key"
+
+
 def test_master_map_grays_out_quarantined_files_from_active_views(
     tmp_path: Path,
 ) -> None:
@@ -176,6 +209,17 @@ def test_generated_master_map_is_deterministic_and_detects_staleness(
     output.write_text("stale", encoding="utf-8")
     assert not master_map_is_current(
         output,
+        master_map,
+        manifest_path="docs/ownership/doc_migration_manifest.yaml",
+    )
+
+
+def test_checked_in_master_map_is_current() -> None:
+    manifest = parse_migration_manifest(MANIFEST, repo_root=ROOT)
+    master_map = build_master_map(manifest, repo_root=ROOT)
+
+    assert master_map_is_current(
+        MASTER_MAP,
         master_map,
         manifest_path="docs/ownership/doc_migration_manifest.yaml",
     )

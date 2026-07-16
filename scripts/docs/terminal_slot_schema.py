@@ -15,7 +15,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import yaml
+try:  # Supports both ``python -m`` and direct script execution.
+    from .strict_yaml import StrictYamlError, strict_safe_load
+except ImportError:  # pragma: no cover - exercised by direct CLI use
+    from strict_yaml import StrictYamlError, strict_safe_load
 
 
 LINE_TYPES = frozenset(
@@ -92,9 +95,19 @@ class TerminalSlotValidationError(ValueError):
 class FixtureValidationError(ValueError):
     """The canonical fixture file did not demonstrate the promised contract."""
 
+    def __init__(self, message: str, *, error_class: str = "invalid_fixture") -> None:
+        super().__init__(message)
+        self.error_class = error_class
+
 
 class WorkedExampleValidationError(ValueError):
     """The reconciled navigation map no longer supplies the six valid slots."""
+
+    def __init__(
+        self, message: str, *, error_class: str = "invalid_worked_example"
+    ) -> None:
+        super().__init__(message)
+        self.error_class = error_class
 
 
 @dataclass(frozen=True)
@@ -264,11 +277,13 @@ def validate_terminal_slot(slot: Mapping[str, object]) -> None:
 
 def _load_yaml_mapping(path: Path) -> Mapping[str, object]:
     try:
-        document = yaml.safe_load(path.read_text(encoding="utf-8"))
+        document = strict_safe_load(path.read_text(encoding="utf-8"))
     except OSError as error:
         raise FixtureValidationError(f"cannot read {path}: {error}") from error
-    except yaml.YAMLError as error:
-        raise FixtureValidationError(f"cannot parse YAML {path}: {error}") from error
+    except StrictYamlError as error:
+        raise FixtureValidationError(
+            f"cannot parse YAML {path}: {error}", error_class=error.error_class
+        ) from error
     if not isinstance(document, Mapping):
         raise FixtureValidationError(f"{path} must contain a YAML mapping")
     return document
@@ -347,10 +362,11 @@ def extract_yaml_slots_from_markdown(path: str | Path) -> list[Mapping[str, obje
     slots: list[Mapping[str, object]] = []
     for block in re.findall(r"```yaml\s*\n(.*?)```", text, flags=re.DOTALL):
         try:
-            parsed: Any = yaml.safe_load(block)
-        except yaml.YAMLError as error:
+            parsed: Any = strict_safe_load(block)
+        except StrictYamlError as error:
             raise WorkedExampleValidationError(
-                f"invalid YAML fence in {source}: {error}"
+                f"invalid YAML fence in {source}: {error}",
+                error_class=error.error_class,
             ) from error
         if isinstance(parsed, Mapping) and "study_id" in parsed:
             slots.append(parsed)
