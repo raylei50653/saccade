@@ -189,6 +189,7 @@ frontmatter、搬移與索引要求。
 
 | Thread | Work class / WIP role | Current concrete work | Owner |
 |:--|:--|:--|:--|
+| [bridge_frozen_evidence_o0_routing_20260716.md](bridge_frozen_evidence_o0_routing_20260716.md) | mainline-study · **sole-active** | O0 thin orchestration: H0 pre-seal freeze artifact (target m) → owner seal is the sole pending gate; no execution pre-seal | semantic |
 | [association_recovery_registry_20260709.md](association_recovery_registry_20260709.md) | maintenance · **non-WIP** | Keep R/H ownership and path-health registry current | semantic |
 | [doc_structure_o15_followup_20260709.md](doc_structure_o15_followup_20260709.md) | governance · **non-WIP** | Pay down research-index debt; optional structure checks remain non-blocking | ownership |
 
