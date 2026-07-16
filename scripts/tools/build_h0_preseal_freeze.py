@@ -27,7 +27,14 @@ ROOT = TOOLS_DIR.parents[1]
 sys.path.insert(0, str(TOOLS_DIR))
 
 from check_h0_bridge_decision_trace_contract import (  # noqa: E402
+    CHECKER_PATH,
     CUDA_PATH,
+    EXPORT_PATH,
+    HEADER_PATH,
+    PYTHON_BINDING_PATH,
+    SCHEMA_PATH,
+    TRACKER_WRAPPER_PATH,
+    VERIFIER_PATH,
     coverage_report,
 )
 
@@ -86,6 +93,26 @@ ROOT_BUILD_MANIFESTS = frozenset(
 )
 NON_RUNTIME_PREFIXES = ("docs/", ".github/", "tests/", "scripts/")
 
+ASSEMBLER_PATH = Path(__file__).resolve()
+PRESET_PATH = ROOT / POLICY_TARGET_PRESET
+
+# Every input whose bytes determine the seal decision. Coverage/mutations are
+# computed from these head blobs directly (never the working tree), and after
+# assembly the working tree must still be byte-identical to them — otherwise
+# an editor/formatter racing the run could bind `complete=true` to content
+# that is not the named head's (the TOCTOU gap from PR #171 review).
+CHECKER_INPUT_PATHS = (
+    HEADER_PATH,
+    CUDA_PATH,
+    PYTHON_BINDING_PATH,
+    TRACKER_WRAPPER_PATH,
+    EXPORT_PATH,
+    VERIFIER_PATH,
+    CHECKER_PATH,
+    SCHEMA_PATH,
+)
+SEAL_RELEVANT_PATHS = CHECKER_INPUT_PATHS + (PRESET_PATH, ASSEMBLER_PATH)
+
 
 def classify_path(path: str) -> str:
     """Amendment 6 ``h0_projection_path_class_v1`` — fail-closed.
@@ -137,6 +164,25 @@ def _blob_slot(rev: str, path: str) -> dict[str, Any]:
         "state": "present",
         "sha256": _sha256_bytes(_git_bytes("show", f"{rev}:{path}")),
     }
+
+
+def _rel(path: Path) -> str:
+    return path.resolve().relative_to(ROOT).as_posix()
+
+
+def _head_blob(head: str, path: Path) -> bytes:
+    """Read a seal-relevant input from the head tree, never the working tree."""
+    result = subprocess.run(
+        ["git", "-c", "core.quotepath=false", "show", f"{head}:{_rel(path)}"],
+        cwd=ROOT,
+        capture_output=True,
+    )
+    if result.returncode != 0:
+        raise SystemExit(
+            f"pre-seal engineering status: seal-relevant input {_rel(path)} "
+            f"is not in the tree of {head}; commit it before assembling"
+        )
+    return result.stdout
 
 
 DIFF_FLAGS = ("--no-color", "--binary", "--full-index", "--no-renames")
@@ -212,13 +258,16 @@ def _mutation_cases(cuda: str) -> list[tuple[str, str, str]]:
     ]
 
 
-def mutation_admission(cuda: str) -> tuple[list[dict[str, Any]], bool]:
+def mutation_admission(
+    overrides: dict[Path, str],
+) -> tuple[list[dict[str, Any]], bool]:
+    cuda = overrides[CUDA_PATH]
     results: list[dict[str, Any]] = []
     all_pass = True
     for name, component, mutated in _mutation_cases(cuda):
         if mutated == cuda:
             raise SystemExit(f"mutation case is a no-op: {name}")
-        report, _ = coverage_report(source_overrides={CUDA_PATH: mutated})
+        report, _ = coverage_report(source_overrides={**overrides, CUDA_PATH: mutated})
         flipped = report["coverage_components"][component] is False
         all_pass = all_pass and flipped
         results.append(
@@ -239,12 +288,16 @@ def build_artifact(command_line: list[str]) -> tuple[dict[str, Any], list[str]]:
             "working tree is not clean; the artifact must be produced at an exact head"
         )
 
+    # The head is resolved once and pinned: every git read below names it
+    # explicitly, so a concurrent commit cannot split the evidence across two
+    # trees. Seal-relevant inputs are read from this head's blobs, never from
+    # the working tree.
     head = _git("rev-parse", "HEAD")
-    tree_id = _git("rev-parse", "HEAD^{tree}")
-    tree_list = _git_bytes("ls-tree", "-r", "--full-tree", "HEAD")
+    tree_id = _git("rev-parse", f"{head}^{{tree}}")
+    tree_list = _git_bytes("ls-tree", "-r", "--full-tree", head)
     if (
         subprocess.run(
-            ["git", "merge-base", "--is-ancestor", POLICY_BASE_HEAD, "HEAD"], cwd=ROOT
+            ["git", "merge-base", "--is-ancestor", POLICY_BASE_HEAD, head], cwd=ROOT
         ).returncode
         != 0
     ):
@@ -252,7 +305,9 @@ def build_artifact(command_line: list[str]) -> tuple[dict[str, Any], list[str]]:
     if _git("rev-parse", f"{POLICY_BASE_HEAD}^{{tree}}") != POLICY_BASE_TREE:
         problems.append("policy_base_tree mismatch against §2")
 
-    diff_range = f"{POLICY_BASE_HEAD}..HEAD"
+    seal_inputs = {path: _head_blob(head, path) for path in SEAL_RELEVANT_PATHS}
+
+    diff_range = f"{POLICY_BASE_HEAD}..{head}"
     full_diff = _git_bytes("diff", *DIFF_FLAGS, diff_range)
     projection_pathspec = ["--", "."] + [f":(exclude){p}" for p in GOVERNANCE_ALLOWLIST]
     projection_diff = _git_bytes("diff", *DIFF_FLAGS, diff_range, *projection_pathspec)
@@ -273,7 +328,7 @@ def build_artifact(command_line: list[str]) -> tuple[dict[str, Any], list[str]]:
             "path": path,
             "class": classified[path],
             "before": _blob_slot(POLICY_BASE_HEAD, path),
-            "after": _blob_slot("HEAD", path),
+            "after": _blob_slot(head, path),
         }
         for path in sorted(projection_paths)
     ]
@@ -282,7 +337,7 @@ def build_artifact(command_line: list[str]) -> tuple[dict[str, Any], list[str]]:
         {
             "path": path,
             "before": _blob_slot(POLICY_BASE_HEAD, path),
-            "after": _blob_slot("HEAD", path),
+            "after": _blob_slot(head, path),
         }
         for path in GOVERNANCE_ALLOWLIST
     ]
@@ -292,25 +347,27 @@ def build_artifact(command_line: list[str]) -> tuple[dict[str, Any], list[str]]:
         "source_path": GOVERNANCE_RENAME_SOURCE,
         "destination_path": GOVERNANCE_RENAME_DESTINATION,
         "source_blob_before": _blob_slot(POLICY_BASE_HEAD, GOVERNANCE_RENAME_SOURCE),
-        "source_blob_after": _blob_slot("HEAD", GOVERNANCE_RENAME_SOURCE),
+        "source_blob_after": _blob_slot(head, GOVERNANCE_RENAME_SOURCE),
         "destination_blob_before": _blob_slot(
             POLICY_BASE_HEAD, GOVERNANCE_RENAME_DESTINATION
         ),
-        "destination_blob_after": _blob_slot("HEAD", GOVERNANCE_RENAME_DESTINATION),
+        "destination_blob_after": _blob_slot(head, GOVERNANCE_RENAME_DESTINATION),
     }
 
-    coverage, coverage_failures = coverage_report()
+    checker_overrides = {
+        path: seal_inputs[path].decode("utf-8") for path in CHECKER_INPUT_PATHS
+    }
+    coverage, coverage_failures = coverage_report(source_overrides=checker_overrides)
     if not coverage["all_components_true"]:
         problems.append(
             "h0_coverage_v2 is not all-true: " + "; ".join(coverage_failures)
         )
 
-    cuda = CUDA_PATH.read_text(encoding="utf-8")
-    mutation_results, mutations_pass = mutation_admission(cuda)
+    mutation_results, mutations_pass = mutation_admission(checker_overrides)
     if not mutations_pass:
         problems.append("A3.2/A4 mutation admission did not flip every named component")
 
-    preset_bytes = (ROOT / POLICY_TARGET_PRESET).read_bytes()
+    preset_bytes = seal_inputs[PRESET_PATH]
     preset_sha = _sha256_bytes(preset_bytes)
     if preset_sha != POLICY_TARGET_PRESET_SHA256:
         problems.append(f"policy target preset hash drifted: {preset_sha}")
@@ -331,6 +388,30 @@ def build_artifact(command_line: list[str]) -> tuple[dict[str, Any], list[str]]:
     if resolved_sha != POLICY_TARGET_RESOLVED_SHA256:
         problems.append(
             f"resolved_bridge_policy_config_v1 fingerprint drifted: {resolved_sha}"
+        )
+
+    # TOCTOU guard (PR #171 review): nothing may have moved between the pinned
+    # head resolution above and the `complete` verdict below. The evidence was
+    # computed from head blobs; the working tree must still agree with them,
+    # HEAD must not have advanced, and the tree must still be clean — the
+    # resolver subprocess above reads the working tree, so byte-agreement is
+    # what ties its output back to the named head.
+    head_after = _git("rev-parse", "HEAD")
+    if head_after != head:
+        problems.append(
+            f"HEAD moved during assembly: artifact names {head} but HEAD is now {head_after}"
+        )
+    if _git("status", "--porcelain"):
+        problems.append("working tree or index is not clean after assembly")
+    drifted = sorted(
+        _rel(path)
+        for path, blob in seal_inputs.items()
+        if not path.is_file() or path.read_bytes() != blob
+    )
+    if drifted:
+        problems.append(
+            "working-tree bytes differ from the head blobs for seal-relevant "
+            "inputs: " + ", ".join(drifted)
         )
 
     artifact = {
@@ -361,7 +442,11 @@ def build_artifact(command_line: list[str]) -> tuple[dict[str, Any], list[str]]:
             "resolved_schema": "resolved_bridge_policy_config_v1",
             "resolved_fingerprint": resolved_sha,
         },
-        "assembler_sha256": _sha256_bytes(Path(__file__).read_bytes()),
+        "assembler_sha256": _sha256_bytes(seal_inputs[ASSEMBLER_PATH]),
+        "input_binding": {
+            "mode": "head_blobs_with_post_assembly_reverify",
+            "seal_relevant_paths": sorted(_rel(path) for path in SEAL_RELEVANT_PATHS),
+        },
         "produced_by": {
             "command_line": command_line,
             "python": sys.version,
