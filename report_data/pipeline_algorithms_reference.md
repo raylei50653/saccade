@@ -396,8 +396,12 @@ GPU 實作見 `relink_bidir_propose_kernel`（`tracker_gpu.cu`），C++/CPU 見 
 > 輸家不 retry second-best，非全局 assignment。另注意實作分歧：Python
 > `_midpoint_bridge_dist` 是 legacy gap/2 中點變體（與上式 full-gap 不同）；C++
 > `midpoint_bridge_dist` 名稱沿用「midpoint」但實作為 full-gap（`h_ref` 僅取
-> lost-side EMA，無 dir_bonus）。詳見
-> `docs/research/tracker-decision/relink_bridge.md` 與 H0 declaration。
+> lost-side EMA，無 dir_bonus）；GPU kernel 的 `bdist` 在 s preset 另含
+> `dir_bonus=0.8` 方向 blend（cutoff/ranking 用 post-direction 值，見
+> `math_model.md` §10.4）。詳見
+> `docs/research/tracker-decision/relink_bridge.md`；source authority＝
+> `tracker_gpu.cu`（H0 declaration 為 pre-seal draft capture contract，非
+> description authority）。
 
 \[
 \begin{aligned}

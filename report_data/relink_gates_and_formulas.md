@@ -3,16 +3,20 @@
 Summary of all relink thresholds and mathematical formulas in the saccade tracker.
 Based on `mamba_whole_graph` preset (`reid_mode: "off"`, `relink_bridge_enabled: true`).
 
-> Line anchors in the Location columns are historical and may lag the source; bridge
-> knobs live on the tracker config/constructor, not `lifecycle.py`. For the
-> authoritative bridge decision contract see the H0 declaration
-> (`docs/modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md`).
+> Location anchors are symbol-level (config field / kernel / class); line numbers are
+> intentionally omitted because they do not survive edits. Bridge knobs live on
+> `EvalConfig` (`config.py`) and the tracker constructor — not `lifecycle.py`.
+> Source/runtime authority: `src/tracking/tracker_gpu.cu`; formula derivations:
+> `docs/reference/math_model.md` §10.3–10.5. The H0 declaration
+> (`docs/modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md`)
+> is a **pre-seal draft capture contract** (policy target = `m` preset), not a
+> description authority for this sheet.
 
 ---
 
 ## Active Gates (mamba_whole_graph)
 
-### 1. Speed-Weighted Bridge Score
+### 1. Speed-Weighted Bridge Score (base + direction adjustment)
 
 ```
 w       = sqrt(clamp(s_lost / 0.12, 0, 1))
@@ -20,15 +24,26 @@ fwd_r   = ‖(lost_pos + v_lost·gap) − cand_pos‖ / h_ref
 bwd_r   = ‖(cand_pos − v_cand·gap) − lost_pos‖ / h_ref
 sym_fb  = 0.5·(fwd_r + bwd_r)
 dist_h  = ‖lost_pos − cand_pos‖ / h_ref
-bdist   = w·sym_fb + (1−w)·dist_h
+b0      = w·sym_fb + (1−w)·dist_h        # base score (bdist_before_direction)
+
+# Direction adjustment — ACTIVE on mamba_whole_graph (dir_bonus = 0.8).
+# Fires only when dir_bonus > 0, both velocities are trusted, and
+# cos_sim(v_lost, v_cand) > 0.5; otherwise bdist = b0.
+d_cross = 0.5·(fwd_cross + bwd_cross)    # cross-track-only residuals / h_ref
+α       = clamp(dir_bonus · cos² · speed_trust · min(gap/30, 1), 0, 1)
+bdist   = (1−α)·b0 + α·d_cross           # bdist_after_direction
 
 Accept if bdist ≤ bridge_px
 ```
 
+The cutoff, candidate-local ranking, and margin all consume the
+**post-direction** `bdist`, never `b0`.
+
 | Parameter | Default | Location |
 |-----------|---------|----------|
-| `relink_bridge_px` | 0.25 | `lifecycle.py:84`, `tracker_gpu.cu:1435-1443` |
-| `h_ref` | `avg(ema_h_lost, ema_h_cand)` | `tracker_gpu.cu:1432` |
+| `relink_bridge_px` | 0.25 (s) / 0.4 (m) | `EvalConfig.relink_bridge_px` (`config.py`) → `relink_bidir_propose_kernel` (`tracker_gpu.cu`) |
+| `relink_bridge_dir_bonus` | **0.8 (s preset)** / 0.0 (m, explicit) / 0.0 (schema) | `EvalConfig.relink_bridge_dir_bonus` → same kernel |
+| `h_ref` | `max(avg(ema_h_lost, ema_h_cand), 1)` | `relink_bidir_propose_kernel` |
 | `s_lost` | `‖v_lost‖ / h_ref` | speed in heights/frame |
 | saturation | 0.12 h/f | hardcoded in sqrt ramp |
 
@@ -42,8 +57,8 @@ Disabled when bridge_h_hi ≤ 0
 
 | Parameter | Default | Location |
 |-----------|---------|----------|
-| `relink_bridge_h_lo` | 0.75 | `lifecycle.py:95` |
-| `relink_bridge_h_hi` | 1.33 | `lifecycle.py:96` |
+| `relink_bridge_h_lo` | 0.75 (s) / 0.6 (m) | `EvalConfig.relink_bridge_h_lo` (`config.py`) → `relink_bidir_propose_kernel` |
+| `relink_bridge_h_hi` | 1.33 (s) / 1.7 (m) | `EvalConfig.relink_bridge_h_hi` → same kernel |
 
 ### 3. Margin Gate (Ambiguity Rejection)
 
@@ -53,7 +68,7 @@ Reject if (second_best_dist − best_dist) < bridge_margin
 
 | Parameter | Default | Location |
 |-----------|---------|----------|
-| `relink_bridge_margin` | 0.05 | `lifecycle.py:91`, `tracker_gpu.cu:1448` |
+| `relink_bridge_margin` | 0.05 | `EvalConfig.relink_bridge_margin` (`config.py`) → `relink_bidir_propose_kernel` |
 
 > **Winner stages (not a joint score, not global assignment).** `bdist` ranks losts
 > **within one candidate** (lower is better); the margin above applies to that
@@ -62,9 +77,9 @@ Reject if (second_best_dist − best_dist) < bridge_margin
 > score** (candidate index tie-break) — `bdist` is not re-compared across candidates.
 > A claim loser does not retry its second-best lost. Commit mutates only
 > `track_ids[cand]` and `active[lost]`. There is no Hungarian / bipartite
-> re-ranking. Authoritative decision contract: H0 declaration
-> (`docs/modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md`);
-> decision semantics: `docs/research/tracker-decision/relink_bridge.md`.
+> re-ranking. Source/runtime authority: `relink_bidir_propose_kernel` /
+> `relink_bidir_commit_kernel` (`tracker_gpu.cu`); decision semantics:
+> `docs/research/tracker-decision/relink_bridge.md`.
 
 ### 4. TTL & Min-Lost Gate
 
@@ -75,8 +90,8 @@ Reject if age < min_lost OR age > ttl
 
 | Parameter | Default | Location |
 |-----------|---------|----------|
-| `relink_bridge_min_lost` | 2 | `lifecycle.py:86` |
-| `relink_bridge_ttl` | 120 | `lifecycle.py:87` |
+| `relink_bridge_min_lost` | 2 | `EvalConfig.relink_bridge_min_lost` (`config.py`) → `relink_bidir_propose_kernel` |
+| `relink_bridge_ttl` | 120 | `EvalConfig.relink_bridge_ttl` → same kernel |
 
 ### 5. Hit-Streak Trigger
 
@@ -88,7 +103,7 @@ Fire bridge attempt when hit_streak[cand] == bridge_at
 
 | Parameter | Default | Location |
 |-----------|---------|----------|
-| `relink_bridge_at` | 4 | `lifecycle.py:85`, `tracker_gpu.cu:1372` |
+| `relink_bridge_at` | 4 | `EvalConfig.relink_bridge_at` (`config.py`) → `relink_bidir_propose_kernel` |
 
 ### 6. Velocity Regression (4-Point OLS)
 
@@ -100,7 +115,7 @@ Closed-form least-squares over the last 4 foot positions.
 
 | Location |
 |----------|
-| `relink.py:471-489`, `relink_gate.cu:17-24`, `tracker_gpu.cu:1173-1178` |
+| `PythonSemanticRelinker` (`relink.py`) · `relink_gate.cu` · `bridge_vel4` (`tracker_gpu.cu`) |
 
 ### 7. EMA Height Tracking
 
@@ -110,7 +125,7 @@ ema_h = 0.95·ema_h_old + 0.05·current_h
 
 | Location |
 |----------|
-| `relink.py:1339`, `tracker_gpu.cu:1350` |
+| `PythonSemanticRelinker` (`relink.py`) · `update_foot_history_kernel` (`tracker_gpu.cu`) |
 
 ---
 
@@ -126,7 +141,7 @@ Disabled when bridge_spatial_gate == 0
 
 | Parameter | Default | Location |
 |-----------|---------|----------|
-| `relink_bridge_spatial_gate` | 0.0 (disabled) | `lifecycle.py:92`, `tracker_gpu.cu:1425-1429` |
+| `relink_bridge_spatial_gate` | 0.0 (disabled) | `EvalConfig.relink_bridge_spatial_gate` (`config.py`) → `relink_bidir_propose_kernel` |
 
 ### 9. Physical Speed Gate
 
@@ -141,9 +156,9 @@ Disabled when max_speed_mps == 0
 
 | Parameter | Default | Location |
 |-----------|---------|----------|
-| `relink_bridge_max_speed` | 0.0 (disabled) | `lifecycle.py:88` |
-| `relink_bridge_person_height` | 1.65 | `lifecycle.py:89` |
-| `relink_bridge_fps` | 30.0 | `lifecycle.py:90` |
+| `relink_bridge_max_speed` | 0.0 (disabled) | `EvalConfig.relink_bridge_max_speed` (`config.py`) → `relink_bidir_propose_kernel` |
+| `relink_bridge_person_height` | 1.65 | `EvalConfig.relink_bridge_person_height` |
+| `relink_bridge_fps` | 30.0 | `EvalConfig.relink_bridge_fps` |
 
 ### 10. Birth-Bank Chebyshev-GR Relink (GPU ReID)
 
@@ -159,12 +174,12 @@ Accept if D ≤ T_cheb AND D ≤ (1−sim_thresh)
 
 | Parameter | Default | Location |
 |-----------|---------|----------|
-| `relink_enabled` | False | `lifecycle.py:73` |
-| `relink_sim_thresh` | 0.6 | `lifecycle.py:75` |
-| `relink_lambda` | 2.5 | `lifecycle.py:76` |
-| `relink_spatial_gate` | 4.0 (γ) | `lifecycle.py:77` |
-| `relink_max_age` | 300 | `lifecycle.py:78` |
-| `relink_bank_cap` | 256 | `lifecycle.py:74` |
+| `relink_enabled` | False | `EvalConfig.relink_enabled` (`config.py`) → `relink_births_kernel` (`tracker_gpu.cu`) |
+| `relink_sim_thresh` | 0.6 | `EvalConfig.relink_sim_thresh` → same kernel |
+| `relink_lambda` | 2.5 | `EvalConfig.relink_lambda` → same kernel |
+| `relink_spatial_gate` | 4.0 (γ) | `EvalConfig.relink_spatial_gate` → same kernel |
+| `relink_max_age` | 300 | `EvalConfig.relink_max_age` → same kernel |
+| `relink_bank_cap` | 256 | `EvalConfig.relink_bank_cap` → same kernel |
 
 ### 11. Cosine Similarity Threshold (Python Semantic Relinker)
 
@@ -175,7 +190,7 @@ Reject if sim < sim_threshold
 
 | Parameter | Default | Location |
 |-----------|---------|----------|
-| `sim_threshold` | 0.985 | `relink.py:53` |
+| `sim_threshold` | 0.985 | `PythonSemanticRelinker` (`relink.py`) |
 
 ### 12. Spatial Gate (Python Semantic Relinker)
 
@@ -186,8 +201,8 @@ Reject if center_norm > spatial_gate
 
 | Parameter | Default | Location |
 |-----------|---------|----------|
-| `spatial_gate` | 0.11 | `relink.py:56` |
-| `min_iou` | 0.0 | `relink.py:58` |
+| `spatial_gate` | 0.11 | `PythonSemanticRelinker` (`relink.py`) |
+| `min_iou` | 0.0 | `PythonSemanticRelinker` (`relink.py`) |
 
 ### 13. Mahalanobis Gate (Static Snapshot)
 
@@ -200,7 +215,7 @@ Reject if maha > mahalanobis_threshold
 
 | Parameter | Default | Location |
 |-----------|---------|----------|
-| `mahalanobis_threshold` | 6.6 | `relink.py:59` |
+| `mahalanobis_threshold` | 6.6 | `PythonSemanticRelinker` (`relink.py`) |
 
 ### 14. Kalman Probabilistic Gate (Chi²)
 
@@ -213,9 +228,9 @@ Reject if kalman_d² > kalman_chi2
 
 | Parameter | Default | Location |
 |-----------|---------|----------|
-| `kalman_gate` | False | `relink.py:84` |
-| `kalman_chi2` | 9.4877 | `relink.py:85` |
-| `kalman_penalty_weight` | 0.0 | `relink.py:86` |
+| `kalman_gate` | False | `PythonSemanticRelinker` (`relink.py`) |
+| `kalman_chi2` | 9.4877 | `PythonSemanticRelinker` (`relink.py`) |
+| `kalman_penalty_weight` | 0.0 | `PythonSemanticRelinker` (`relink.py`) |
 
 ### 15. Direction Gate (Velocity Cosine)
 
@@ -227,8 +242,8 @@ Disabled when kalman_dir_min_cos ≤ −1
 
 | Parameter | Default | Location |
 |-----------|---------|----------|
-| `kalman_dir_min_cos` | −1.0 (disabled) | `relink.py:87` |
-| `kalman_dir_min_speed` | 1.0 px/frame | `relink.py:88` |
+| `kalman_dir_min_cos` | −1.0 (disabled) | `PythonSemanticRelinker` (`relink.py`) |
+| `kalman_dir_min_speed` | 1.0 px/frame | `PythonSemanticRelinker` (`relink.py`) |
 
 ### 16. Unified Joint Score (Python Semantic Relinker)
 
@@ -244,11 +259,11 @@ kalman_penalty: joint −= kpw · (1 − exp(−0.5·kalman_d²))
 
 | Parameter | Default | Location |
 |-----------|---------|----------|
-| `w_sim_base` | 1.0 | `relink.py:66` |
-| `w_iou_base` | 0.0 | `relink.py:67` |
-| `w_maha_base` | 0.0 | `relink.py:68` |
-| `shift_ambiguity` | 0.0 | `relink.py:69` |
-| `shift_lost_age` | 0.0 | `relink.py:70` |
+| `w_sim_base` | 1.0 | `PythonSemanticRelinker` (`relink.py`) |
+| `w_iou_base` | 0.0 | `PythonSemanticRelinker` (`relink.py`) |
+| `w_maha_base` | 0.0 | `PythonSemanticRelinker` (`relink.py`) |
+| `shift_ambiguity` | 0.0 | `PythonSemanticRelinker` (`relink.py`) |
+| `shift_lost_age` | 0.0 | `PythonSemanticRelinker` (`relink.py`) |
 
 ### 17. Dynamic Margin (Python Semantic Relinker)
 
@@ -261,9 +276,9 @@ Reject if (best_joint − second_best_joint) < effective_margin
 
 | Parameter | Default | Location |
 |-----------|---------|----------|
-| `reciprocal_margin` | 0.0 | `relink.py:63` |
-| `dynamic_margin_crowd` | 0.0 | `relink.py:71` |
-| `dynamic_margin_age` | 0.0 | `relink.py:72` |
+| `reciprocal_margin` | 0.0 | `PythonSemanticRelinker` (`relink.py`) |
+| `dynamic_margin_crowd` | 0.0 | `PythonSemanticRelinker` (`relink.py`) |
+| `dynamic_margin_age` | 0.0 | `PythonSemanticRelinker` (`relink.py`) |
 
 ### 18. Biometric Gate
 
@@ -275,7 +290,7 @@ Disabled when threshold == 0
 
 | Parameter | Default | Location |
 |-----------|---------|----------|
-| `biometric_threshold` | 0.0 (disabled) | `relink.py:73` |
+| `biometric_threshold` | 0.0 (disabled) | `PythonSemanticRelinker` (`relink.py`) |
 
 ### 19. Detection Quality Filter
 
@@ -289,11 +304,11 @@ Unclean detections → use strict_sim_threshold instead of sim_threshold
 
 | Parameter | Default | Location |
 |-----------|---------|----------|
-| `clean_score_threshold` | 0.0 | `relink.py:75` |
-| `clean_margin_ratio` | 0.0 | `relink.py:76` |
-| `clean_min_aspect` | 0.0 | `relink.py:77` |
-| `clean_max_aspect` | 99.0 | `relink.py:78` |
-| `strict_sim_threshold` | 0.0 | `relink.py:79` |
+| `clean_score_threshold` | 0.0 | `PythonSemanticRelinker` (`relink.py`) |
+| `clean_margin_ratio` | 0.0 | `PythonSemanticRelinker` (`relink.py`) |
+| `clean_min_aspect` | 0.0 | `PythonSemanticRelinker` (`relink.py`) |
+| `clean_max_aspect` | 99.0 | `PythonSemanticRelinker` (`relink.py`) |
+| `strict_sim_threshold` | 0.0 | `PythonSemanticRelinker` (`relink.py`) |
 
 ### 20. Density-Adaptive Mahalanobis
 
@@ -304,9 +319,9 @@ threshold = mahalanobis_threshold · exp(−eta · density)
 
 | Parameter | Default | Location |
 |-----------|---------|----------|
-| `exp_density_gating` | False | `relink.py:113` |
-| `exp_density_k` | 2.0 | `relink.py:114` |
-| `exp_density_eta` | 0.15 | `relink.py:115` |
+| `exp_density_gating` | False | `PythonSemanticRelinker` (`relink.py`) |
+| `exp_density_k` | 2.0 | `PythonSemanticRelinker` (`relink.py`) |
+| `exp_density_eta` | 0.15 | `PythonSemanticRelinker` (`relink.py`) |
 
 ---
 
@@ -314,7 +329,8 @@ threshold = mahalanobis_threshold · exp(−eta · density)
 
 | Gate | Status | Key Threshold |
 |------|--------|---------------|
-| Bridge distance (speed-weighted) | **ON** | bdist ≤ 0.25 |
+| Bridge distance (speed-weighted, post-direction) | **ON** | bdist ≤ 0.25 |
+| Bridge direction bonus (blend toward cross-track) | **ON** | dir_bonus = 0.8 (m preset: 0.0 explicit) |
 | Scale gate | **ON** | ratio ∈ [0.75, 1.33] |
 | Bridge margin | **ON** | Δ ≥ 0.05 |
 | TTL | **ON** | 2 ≤ age ≤ 120 |

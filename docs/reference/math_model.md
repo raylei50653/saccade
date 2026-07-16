@@ -309,7 +309,7 @@ Tracker state：
 
 | 符號 | 用途 | config / env | 代碼錨點 | baseline |
 |:--|:--|:--|:--|:--|
-| `d_bridge` / `τ_bridge` | 速度加權雙向 full-gap 外推殘差 vs 門檻（已 `h_ref` 正規化；§10.3） | `relink_bridge_px` | `cu` | s=0.25；m=0.4 |
+| `d_bridge` / `τ_bridge` | 速度加權雙向 full-gap 外推殘差 vs 門檻（已 `h_ref` 正規化；base §10.3 ＋ dir blend §10.4，cutoff 用 post-direction 值） | `relink_bridge_px` | `cu` | s=0.25；m=0.4 |
 | `w_dir` / `α` | 方向一致時向 cross-track 誤差偏移 | `relink_bridge_dir_bonus` | §10.4 | s=0.8；m=0.0 |
 | `h_lo` / `h_hi` | 高度比 gate | `relink_bridge_h_lo` / `_h_hi` | §10.5 | s=0.75/1.33；m=0.6/1.7 |
 | `m_bridge` | best-vs-second margin | `relink_bridge_margin` | §10.5 | 0.05 |
@@ -338,7 +338,8 @@ Tracker state：
 - **Aspect penalty** = 長寬比品質權重（套在 auction value）。
 - **OAO** = occlusion-aware（track-track overlap）配對抑制 + duration ramp。
 - **Bridge relink** = 速度加權雙向 full-gap 外推（speed-weighted bidirectional
-  full-gap extrapolation，§10.3），項目自有機制，非標準 appearance ReID。
+  full-gap extrapolation，base §10.3；s baseline 另有 §10.4 direction blend），
+  項目自有機制，非標準 appearance ReID。
   「中點外推（midpoint）」是 legacy gap/2 公式，只存在於 semantic relink gate 的
   mirror 實作（§11 `relink_gate.cu` / Python `_midpoint_bridge_dist`），
   **不是** production bridge kernel 的公式。

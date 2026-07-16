@@ -45,11 +45,19 @@ Kalman-free, appearance-free reconnect:
 1. Young candidate reaches `hit_streak == bridge_at` (default 4) with enough foot history.
 2. System regresses velocity from last/first **4 foot points** on lost and candidate.
 3. Speed-weighted bidirectional **full-gap** extrapolation produces a scalar `bdist` in
-   **units of reference height**: forward/backward full-gap residuals blended with the
-   static distance by lost-exit speed (`bdist = w·0.5·(fwd_r+bwd_r) + (1−w)·dist_h`,
-   lower is better). The legacy gap/2 *midpoint* form survives only in the semantic-path
-   mirrors (`relink_gate.cu`, Python `_midpoint_bridge_dist`) — it is **not** the
-   production kernel formula.
+   **units of reference height** (lower is better), in two steps:
+
+   ```text
+   b0    = w·0.5·(fwd_r+bwd_r) + (1−w)·dist_h   # speed-weighted base score
+   bdist = (1−α)·b0 + α·d_cross                 # direction adjustment, when
+                                                # dir_bonus > 0 and velocities agree
+   ```
+
+   The direction blend (`relink_bridge_dir_bonus`) is **active on the s preset
+   (0.8)** and explicitly off on m (0.0). The cutoff, candidate-local ranking, and
+   margin all consume the **post-direction** `bdist`, never `b0`. The legacy gap/2
+   *midpoint* form survives only in the semantic-path mirrors (`relink_gate.cu`,
+   Python `_midpoint_bridge_dist`) — it is **not** the production kernel formula.
 4. If the pair passes gates (distance cutoff, height ratio, margin, optional extras),
    the candidate may **inherit the lost track's ID** — via the two-stage winner below,
    not directly.
@@ -95,8 +103,9 @@ fire if:
 
 ## Winner selection: two stages, not a joint score, not global assignment
 
-`bdist` is a single scalar, not a weighted composite, and the bridge runs **no global
-assignment** (no Hungarian, no bipartite re-ranking, no second-pass reassignment):
+`bdist` is the scalar ranking key — it is not the SemanticRelinker multi-signal joint
+score — and the bridge runs **no global assignment** (no Hungarian, no bipartite
+re-ranking, no second-pass reassignment):
 
 ```text
 hard pair gates
@@ -119,9 +128,12 @@ hard pair gates
    rewritten — subsequent frames continue the young track's motion state under the
    lost ID.
 
-Authoritative stage-by-stage decision/capture contract: the
-[H0 declaration](../../modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md).
-Formulas: [math_model.md §10](../../reference/math_model.md).
+Source/runtime authority: `src/tracking/tracker_gpu.cu`
+(`relink_bidir_propose_kernel` / `relink_bidir_commit_kernel`). Formulas:
+[math_model.md §10.3–10.5](../../reference/math_model.md). The
+[H0 declaration](../../modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md)
+is a **pre-seal draft capture contract** (proposed stage-by-stage decision/capture
+graph, policy target = m preset) — not yet an execution or description authority.
 
 ### Scope note for math / offline claims
 
