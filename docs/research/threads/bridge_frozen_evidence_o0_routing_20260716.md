@@ -59,8 +59,9 @@ non-commuting ≠ not-exchangeable）。S0 / T2 不指派 §20.9 failure type。
 
 Live（依 ADR 020 §S1 不發 slot）：discrete-\(M\)
 [parked-unsealed](../../modules/semantic/research/discrete_m_capability_declaration_20260712.md)；
-H0 [proposed-unsealed](../../modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md)
-——其 pre-terminal 狀態不得被寫成 sealed terminal。
+H0 [Amendment 7 pre-seal engineering](../../modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md)
+——舊 owner seal 保留為歷史事件但不是 execution authority；目前狀態不得被寫成
+sealed terminal。
 
 ## Current boundary
 
@@ -74,25 +75,30 @@ frozen evidence 上沒有第三種讀法：**要嘛取得可自證 provenance �
 
 依 [registry §8](../contracts/claim_state_registry.md)：合法候選集恰有一個成員＝
 H0（§4.3 dependency-typed，非 inadmissibility）。O0 決定：**取 H0，授予 WIP 鎖**。
-範圍嚴格＝H0 declaration 已宣告的 pre-seal freeze artifact（target＝**m**，
-Amendment 5）→ owner seal。
+範圍嚴格＝H0 Amendment 7 已凍結的 Phase-A controller implementation（target＝
+**m**）→ 新 complete freeze artifact → 新 owner reseal。
 
-- **seal 仍是唯一權威事件**（declaration §8 的 literal `SEALED` review）；本
-  charter 不是 seal，不授權任何 capture / 執行。
-- 未 seal 前：execution prohibited；`H0_PRESEAL_COVERAGE_INCOMPLETE`＝engineering
-  status，禁 seal 禁 capture，**不是** H0 terminal、不供給任何 result。
+- **新 seal 仍是唯一未來 execution authority event**（declaration 的新 literal
+  `SEALED` review）；§8 的舊 seal 只是歷史 owner event，本 charter 不是 seal，
+  不授權任何 capture / 執行。
+- 新 seal 前：execution prohibited；coverage、projection、controller ABI 或其他
+  sealability/admission incomplete 都是 pre-seal engineering status，禁 seal 禁
+  capture，**不是** H0 terminal、不供給任何 result。
 - registry 不因本決定改寫（無 object state 轉移；registry §9）。
 
 ## Expected state (lease)
 
-pre-seal freeze artifact 對 **m** 完成 → owner literal `SEALED` → Phase A（單序列
-preflight，只可能出 negative terminals）→ Phase B（七序列）→ H0 ordered
-terminal → owner acceptance 時同 PR 回寫 registry（§9；不在本卡先寫）。
+Amendment 7 controller/schema/verifier implementation → 新 instrumentation head →
+新 complete freeze artifact 對 **m** 完成 → 新 owner literal `SEALED` → 單次固定
+Phase A invocation（pass 只作 non-terminal progression，controller 不自動續跑）→
+另行啟動 Phase B（七序列）→ H0 ordered terminal → owner acceptance 時同 PR
+回寫 registry（§9；不在本卡先寫）。
 
 ## Commit point
 
-兩個：① owner 在 declaration §8 記 literal `SEALED`；② owner 接受某個 H0
-terminal。只有 ② 造成 object state 轉移。
+兩個：① owner 對新 complete freeze / instrumentation head 記新的 literal
+`SEALED`；② owner 接受某個 H0 terminal。只有 ② 造成 object state 轉移；§8
+舊 seal 已由 Amendment 7 保留為歷史事件但撤去 execution authority。
 
 ## Terminal routing map（exhaustive；無第三扇門，contract §20.7）
 
@@ -105,10 +111,16 @@ partial-capture reinterpretation；後續 amendments 依其 supersession 條款�
 如 Amendment 3 supersedes A2.1–A2.4 where they conflict），本表只做
 charter-level 處置：
 
+Routes 1–4 的 domain 嚴格是**已 launch 的、具有新 complete freeze 與新 literal
+`SEALED` 的 invocation**。Controller launch 前的 read-only preflight、sealability
+review 或 admission check 不得映射到 routes 1–4；特別是 owner seal 後、第一次
+invocation 前才發現 sealed execution ABI 不完整，仍走 route 0′，不是
+`H0_EXECUTION_INVALID`。
+
 | # | 事件（labels verbatim） | charter 處置 | 下游 |
 |:--|:--|:--|:--|
 | 0 | owner 不 seal／Discard 條件成立 | charter CLOSED（declined） | 候選集回空；provenance 缺口以 registry `open_limits` 形式**永久留帳＝合法終局**，非待辦 |
-| 0′ | `H0_PRESEAL_COVERAGE_INCOMPLETE` 持續 | 非 terminal；pre-seal engineering status，禁 seal 禁 capture | 修 instrumentation，或走 route 0 |
+| 0′ | Pre-execution sealability／pre-seal admission incomplete；包含 `H0_PRESEAL_COVERAGE_INCOMPLETE`，也包含 owner seal 後、首次 invocation 前發現 sealed execution ABI 不完整 | 非 terminal；返回 pre-seal engineering，禁用舊 seal，禁 build/capture | append amendment → 新 instrumentation head／complete freeze → owner reseal；或走 route 0 |
 | 1 | `H0_PROVENANCE_INVALID` | charter CLOSED（diagnostic-only） | 同 route 0 下游；重進須 amendment＋owner reseal |
 | 2 | `H0_EXECUTION_INVALID` | charter CLOSED（diagnostic-only；不得重讀為 partial capture） | 同上 |
 | 3 | `H0_CAPTURE_PERTURBS_POLICY` | charter CLOSED（diagnostic-only） | 同上 |
@@ -126,7 +138,8 @@ charter-level 處置：
   Discrepancies）。殘餘的 downgrade 只剩 registry 既有 inadmissibility（s0 永不
   代表 production `bdist`）——那是既有狀態，不是新動作。
 
-⇒ 全部未來狀態 ∈ { route 0／0′，routes 1–4（typed negative），route 5
+⇒ 全部未來狀態 ∈ { route 0／0′（pre-execution），routes 1–4（已開始 sealed
+invocation 的 typed negative），route 5
 （positive）}；無第三扇門。
 
 ## Discard when
@@ -136,7 +149,7 @@ Discard 走 threads README 收尾流程，terminal＝declined，缺口留帳。
 
 ## Read first
 
-- [H0 declaration（含 Amendments 1–5）](../../modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md)
+- [H0 declaration（含 Amendments 1–7）](../../modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md)
 - [claim-state registry（§8 候選集）](../contracts/claim_state_registry.md)
 - [reconciled flagship map（數字家）](../../modules/semantic/research/bridge_fidelity_reconciled_map_20260715.md)
 - [contract v1.2 §20.7 / §20.8 / §20.9](../contracts/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)
@@ -150,12 +163,13 @@ Discard 走 threads README 收尾流程，terminal＝declined，缺口留帳。
 
 ## Current step
 
-**Owner seal review。** 完整 `h0_preseal_freeze_v2` artifact 已在確切 head
-`5996d83e` 產出（`complete=true`；coverage 全 true、projection admitted、
-mutation admission 5/5、m fingerprints 命中）→
-[artifact](../../modules/semantic/research/evidence/h0_preseal_freeze_20260716/h0_preseal_freeze_v2.json)。
-依 A2.2：`5996d83e` 是唯一可被 seal 的 head；owner 在 declaration §8 寫
-literal `SEALED` 前，Phase A 一步不得動。
+**Pre-seal execution-ABI engineering。** 舊 `h0_preseal_freeze_v2` 對
+`5996d83e` 的 coverage、projection、mutation admission 與 m fingerprints 仍是
+通過的歷史 artifact，但 Amendment 7 禁止把它和舊 §8 seal 當 execution
+authority。當前唯一下一步是按 A7 實作 controller/schema/verifier，選新
+instrumentation head，產出新 complete `h0_preseal_freeze_v3`，再由 owner 記新
+literal `SEALED`。本卡不實作 controller、不產 freeze、不 reseal；Phase A/B
+一步不得動。
 
 ## Acceptance
 
@@ -194,3 +208,9 @@ route 5 或任一 typed negative route（1–4，含 route 0 declined）被 owne
   path classifier. Amendment 6 appended (sealed prefix unchanged) and the
   freeze assembler + classifier tests landed. Artifact production runs at the
   merged head; owner seal remains the sole pending gate.
+- 2026-07-16: First read-only Phase-A preflight found the sealed invocation ABI
+  incomplete before controller launch, build, or capture. H0 Amendment 7 keeps
+  the §8 seal as historical owner event, removes its Phase-A/B execution
+  authority, and returns H0 to route 0′ pre-seal engineering. No H0 terminal;
+  routes 1–4 remain exclusive to an invocation that has actually launched under
+  a new complete freeze and new literal `SEALED`.
