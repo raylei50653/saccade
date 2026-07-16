@@ -14,12 +14,13 @@ document:
   path: headline_bridge_full_decision_capture_declaration_20260713.md
 
 # The declaration's immutable authority prefix, deliberately rebound through
-# Amendment 7 after the historical seal lost execution authority. A fixed byte
-# count plus SHA-256 pins that append-only history exactly while still permitting
-# a later amendment below it without teaching this sidecar Markdown structure.
+# Amendment 7 and its first review correction after the historical seal lost
+# execution authority. A fixed byte count plus SHA-256 pins that append-only
+# history exactly while still permitting a later amendment below it without
+# teaching this sidecar Markdown structure.
 sealed_prefix:
-  bytes: 77578
-  sha256: "f29e15ab72813a6242a3670d1581d7051e44075d88f3bb38c543b5d473cde300"
+  bytes: 94104
+  sha256: "e24f983b03c6586bfb24e25718a24ca4fe0db75dae40495e61e6c2cb683e9520"
 
 policy_target:
   kind: headline

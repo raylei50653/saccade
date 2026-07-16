@@ -1348,3 +1348,335 @@ selection, run cardinality/order, repeat count, exposure gates, attempts,
 deadline, result mapping, comparison inventory, artifact set, or output path.
 The new freeze must mechanically prove those constants and hashes. Until then,
 H0 remains in pre-seal engineering with no terminal and no execution authority.
+
+---
+
+## Amendment 7 Review Correction 1 — child execution, failure bundles, and input immutability (2026-07-16)
+
+This is an **append-only sealability correction to Amendment 7** after its first
+review. A7 correctly removed the old seal's execution authority, but still left
+three implementation choices open: the runtime-child entry/environment, the
+negative-result file set, and protection against bound-input drift after
+controller launch. RC1 closes exactly those choices. Where RC1 conflicts with
+A7.2--A7.9, RC1 is authoritative. It changes no H0 terminal, terminal order,
+observer ABI, policy target, runtime threshold, instrumentation source,
+registry, or contract, and it authorizes no implementation or execution.
+
+### A7.RC1.1 Sole child entry and four literal child invocations
+
+The controller implementation set gains exactly one repository path:
+`scripts/tools/run_h0_phase_a_child.py`, schema/version
+`h0_phase_a_child_v1`. The future `h0_preseal_freeze_v3` must bind its Git
+object ID and file-byte SHA-256 in the same way as the controller, execution
+schema, and verifiers. The child is an implementation artifact, not an operator
+entry point. A7.2's no-argument rule continues to apply to the sole operator
+command; it does not forbid the controller from launching the following four
+internal argv vectors.
+
+Let `<ROOT>` be the physical repository root established by A7.3. From
+`cwd=<ROOT>`, after the one successful build, the controller calls
+`subprocess.Popen` exactly four times with `shell=false`, `close_fds=true`,
+`start_new_session=true`, stdin connected to `/dev/null`, separate binary
+stdout/stderr files, and the exact environment in A7.RC1.2. The argv vectors,
+in order, are:
+
+```text
+<ROOT>/.venv/bin/python -I -B <ROOT>/scripts/tools/run_h0_phase_a_child.py --run-id 00_capture_off
+<ROOT>/.venv/bin/python -I -B <ROOT>/scripts/tools/run_h0_phase_a_child.py --run-id 01_capture_on_1
+<ROOT>/.venv/bin/python -I -B <ROOT>/scripts/tools/run_h0_phase_a_child.py --run-id 02_capture_on_2
+<ROOT>/.venv/bin/python -I -B <ROOT>/scripts/tools/run_h0_phase_a_child.py --run-id 03_capture_on_3
+```
+
+`<ROOT>` substitution is byte-for-byte the same absolute POSIX path in all four
+vectors. `-I` isolates the interpreter from user-site and Python environment
+configuration; `-B` forbids bytecode writes into the bound repository. No other
+token, Python option, cwd, stdio mode, process-launch API, or child count is
+permitted. The child parser accepts exactly the two-token suffix
+`--run-id <one-enumerated-id>` and rejects duplicates, abbreviations, positional
+arguments, response files, and every other option.
+
+For each run ID, the child constructs this exact synthetic evaluator argv,
+where `<RUN>` is the corresponding A7.8 run directory beneath the incomplete
+evidence root:
+
+```text
+--preset mamba_whole_graph_m
+--detector SDP
+--data-root datasets/MOT17
+--split train
+--sequences MOT17-04-SDP
+--max-frames 0
+--warmup-frames 0
+--latency-only
+--gpu-decode
+--double-buffer
+--detect-barrier event
+--main-nms-graphed
+--processes 0
+--output <RUN>/_runtime
+```
+
+The child passes that vector through the repository's existing MOT17 parser and
+preset/default resolution, rejects unknown or residual arguments, verifies the
+resolved `m` fingerprint from §2, and calls
+`saccade.perception.eval.evaluator.run_eval` exactly once with that completely
+resolved map. `latency_only=true` is literal and mandatory: `run_eval` must
+return at its no-metrics boundary, and neither the child nor any imported code
+may import/call `run_motmetrics_evaluation`, enumerate `gt/` or `det/`, or open a
+GT/FP label or label-derived cache. Because the existing latency-only path does
+not write a MOT file, the child supplies the existing
+`sequence_result_callback`; it accepts exactly the sole sequence's complete
+ordered tuple and writes `MOT17-04-SDP.txt` as UTF-8
+`"\n".join(result_lines)` with no trailing newline. A missing, duplicate, or
+second-sequence callback is `runner_nonzero`.
+
+Before frame 1 the fresh child-owned tracker makes exactly one of these calls:
+
+```text
+00_capture_off:
+  set_research_h0_bridge_trace(false, 65536, 16384, 16384, 16384)
+
+01_capture_on_1 / 02_capture_on_2 / 03_capture_on_3:
+  set_research_h0_bridge_trace(true, 65536, 16384, 16384, 16384)
+  clear_research_h0_bridge_trace()
+```
+
+The five arguments are respectively enabled, pair capacity, candidate capacity,
+claim capacity, and commit capacity. After the last frame and callback, capture
+off performs no drain. Each capture-on child drains exactly once using:
+
+```text
+drain_research_h0_bridge_trace(
+  seq="MOT17-04-SDP",
+  capture_phase="phase_a",
+  require_candidate_exposure=true,
+  require_commit_exposure=false,
+  capture_run_uuid=<controller-issued UUID for this run>)
+```
+
+It then invokes the frozen packet exporter once and packet verifier only when
+the result matrix in A7.RC1.4 requires it. The controller-issued UUID is the
+only per-run nondeterministic value; it is provenance-only as already declared.
+The child API, capacities, evaluator vector, callback serialization, and H0
+lifecycle calls are literal v3-freeze constants; the future child cannot replace
+them with `scripts/eval/mot17.py`, another evaluator API, or a code-default
+metrics choice.
+
+### A7.RC1.2 Exact sanitized child environment
+
+The controller constructs every child environment **from an empty mapping**;
+it never copies, overlays, or passes through `os.environ`. Before any Python
+module other than the standard library is imported, the child verifies that its
+environment key set and values equal this table exactly:
+
+| Key | Exact value / sole mechanical derivation |
+| --- | --- |
+| `CUDA_DEVICE_ORDER` | literal `PCI_BUS_ID` |
+| `CUDA_VISIBLE_DEVICES` | NVML UUID of the physical NVIDIA GPU with lexicographically smallest normalized PCI bus ID; the controller records that ID/UUID before child launch |
+| `HOME` | `<RUN_TMP>/home` |
+| `LANG` | literal `C.UTF-8` |
+| `LC_ALL` | literal `C.UTF-8` |
+| `LD_LIBRARY_PATH` | colon-join, in this order and with no empty member: `<ROOT>/build/h0_phase_a`, the v3-bound TensorRT library directory, the v3-bound PyTorch library directory, the v3-bound CUDA toolkit `lib64` directory |
+| `PATH` | literal `<ROOT>/.venv/bin:/usr/bin:/bin` |
+| `PYTHONHASHSEED` | literal `0` |
+| `PYTHONNOUSERSITE` | literal `1` |
+| `SACCADE_BUILD_PATH` | literal `<ROOT>/build/h0_phase_a` |
+| `SACCADE_DETECT_BARRIER` | literal `event` |
+| `SACCADE_DOUBLE_BUFFER` | literal `1` |
+| `SACCADE_GPU_DECODE` | literal `1` |
+| `SACCADE_MAIN_NMS_GRAPHED` | literal `1` |
+| `TMPDIR` | `<RUN_TMP>/tmp` |
+| `TZ` | literal `UTC` |
+| `XDG_CACHE_HOME` | `<RUN_TMP>/xdg-cache` |
+
+`<RUN_TMP>` is the absolute `<RUN>/_env` path for that run. The controller
+creates fresh `home`, `tmp`, and `xdg-cache` directories immediately before
+each child; no child sees another run's writable home, temp, or cache. The three
+library directories are canonical physical paths recorded, hashed, and
+re-derived by v3; a missing, duplicate, symlink-substituted, or differently
+ordered directory is `provenance_invalid`. Every unlisted key is absent,
+including `PYTHONPATH`, `LD_PRELOAD`, all `MLFLOW_*`, all proxy variables,
+`SACCADE_STREAM_MODE`, and every H0/config/output/sequence override. The child
+does not consult a dotenv file, user/site customization, shell profile, network
+service, or inherited cache. This exact key/value map and its placeholder
+substitution algorithm are part of the v3 freeze.
+
+### A7.RC1.3 Bound-input inventory and continuous drift admission
+
+The controller creates one canonical `h0_bound_inputs_v1` inventory before any
+build command. It has these exhaustive members:
+
+1. **Repository:** every entry returned by
+   `git ls-tree -r --full-tree -z <instrumentation_head>`, including mode, type,
+   Git object ID, UTF-8 POSIX path bytes, file length, and file-byte SHA-256 (or
+   symlink-target bytes for mode `120000`). Every working-tree entry must equal
+   the named head. This includes CMake, Python, preset, controller/child,
+   schemas, verifiers, and all admitted instrumentation sources; untracked
+   build/evidence outputs are not repository inputs.
+2. **Models/engines:** the complete path set produced by resolving the sole
+   evaluator vector before launch, including every detector, Mamba, ReID, pose,
+   plugin, weight, engine, or calibration file that any of the four children can
+   open. Each record contains the logical path, `realpath`, symlink chain, byte
+   length, and SHA-256. No lazy download, alternate cache hit, or new path may
+   extend the set at runtime.
+3. **Sequence:** exactly A7.3's sorted digest inventory for
+   `datasets/MOT17/train/MOT17-04-SDP`, excluding the complete `gt/` and `det/`
+   subtrees. The inventory records every allowed regular file individually as
+   well as the aggregate digest; the child is denied every path not in it.
+4. **Tool/runtime inputs:** the physical executable/library paths and SHA-256
+   values for `uv`, `.venv/bin/python`, CMake, the selected generator, C/C++/CUDA
+   compilers, `nvcc`, `uv.lock`, the four A7.RC1.2 library directories' loaded
+   regular files, and every shared library actually resolved for the two build
+   artifacts and child process. A runtime-loaded file absent from this frozen
+   set is provenance failure.
+
+Before the initial inventory hash, the controller starts a Linux inotify monitor
+covering every bound file and its ancestor directories with
+`IN_CLOSE_WRITE|IN_MODIFY|IN_ATTRIB|IN_DELETE_SELF|IN_MOVE_SELF|IN_CREATE|IN_DELETE|IN_MOVED_FROM|IN_MOVED_TO`.
+Events are filtered to a bound path or an ancestor move/delete; reads and output
+paths are ignored. Watch-install failure, queue overflow, ignored watch, or any
+filtered mutation event is drift. The monitor remains live until T4, after all
+bound-input consumption is complete.
+
+The controller recomputes and byte-compares the entire inventory at these exact
+checkpoints, never by `git status`:
+
+```text
+T0  after all watches are installed, before CMake configure
+T1  after build identity is complete, before extension load
+T2a immediately before each of the four child launches
+T2b immediately after each corresponding child exits
+T3  after the third capture-on packet closes, before comparison/verification
+T4  after comparison/verification, before input_binding.json final close
+```
+
+At each checkpoint the repository object/mode/byte inventory, every model/engine
+record, every allowed sequence file and aggregate digest, and every frozen
+tool/runtime input must equal T0 and the v3 freeze. The controller also drains
+the inotify queue before and after each hash pass. Any mismatch or monitor event
+at any time kills the active child process group, forbids further build/run
+steps, sets controller result `provenance_invalid`, and maps to the existing
+first A2.4 terminal `H0_PROVENANCE_INVALID`. Modification followed by restoration
+does not escape because the event itself fails admission. After T4 no bound input
+may be read again; the controller stops/drains the monitor, closes
+`input_binding.json`, then writes the result/checksum and publishes the already
+decided bundle. Build outputs, controller logs, and the evidence tree are outside
+the bound-input set and may appear without being mistaken for source drift.
+`input_binding.json` records the complete T0 inventory digest, every checkpoint
+digest/time, monitor status/events, and the final equality verdict.
+
+### A7.RC1.4 Complete result-to-artifact matrix
+
+This section replaces A7.8's open-ended negative-result paragraph. The future
+execution schema may only encode this matrix; it may not add an optional,
+required, or forbidden path.
+
+Define these three disjoint path sets. `C` (control/failure envelope) is exactly:
+
+```text
+manifest.json
+build_identity.json
+runtime_identity.json
+gpu_identity.json
+input_binding.json
+comparison.json
+result.json
+checksums.sha256
+logs/00_cmake_configure.stdout.log
+logs/00_cmake_configure.stderr.log
+logs/01_cmake_build.stdout.log
+logs/01_cmake_build.stderr.log
+runs/00_capture_off/invocation.json
+runs/00_capture_off/stdout.log
+runs/00_capture_off/stderr.log
+runs/01_capture_on_1/invocation.json
+runs/01_capture_on_1/stdout.log
+runs/01_capture_on_1/stderr.log
+runs/02_capture_on_2/invocation.json
+runs/02_capture_on_2/stdout.log
+runs/02_capture_on_2/stderr.log
+runs/03_capture_on_3/invocation.json
+runs/03_capture_on_3/stdout.log
+runs/03_capture_on_3/stderr.log
+verification/aggregate.json
+```
+
+`D` (completed run data) is exactly:
+
+```text
+runs/00_capture_off/policy_inventory.json
+runs/00_capture_off/MOT17-04-SDP.txt
+runs/01_capture_on_1/policy_inventory.json
+runs/01_capture_on_1/MOT17-04-SDP.txt
+runs/01_capture_on_1/packet.json
+runs/02_capture_on_2/policy_inventory.json
+runs/02_capture_on_2/MOT17-04-SDP.txt
+runs/02_capture_on_2/packet.json
+runs/03_capture_on_3/policy_inventory.json
+runs/03_capture_on_3/MOT17-04-SDP.txt
+runs/03_capture_on_3/packet.json
+```
+
+`V` (packet-verifier data) is exactly:
+
+```text
+runs/01_capture_on_1/packet_verification.json
+runs/02_capture_on_2/packet_verification.json
+runs/03_capture_on_3/packet_verification.json
+```
+
+The complete published regular-file universe is `C union D union V`; any other
+regular file, symlink, device, socket, or directory entry not implied by a
+required path is forbidden. The result matrix is:
+
+| Controller result | Required paths | Forbidden / not-produced paths |
+| --- | --- | --- |
+| `provenance_invalid` | exactly `C` | exactly `D union V` |
+| `build_failed` | exactly `C` | exactly `D union V` |
+| `extension_load_failed` | exactly `C` | exactly `D union V` |
+| `runner_nonzero` | exactly `C` | exactly `D union V` |
+| `runner_timeout` | exactly `C` | exactly `D union V` |
+| `serialization_failed` | exactly `C` | exactly `D union V` |
+| `artifact_missing_or_unreadable` | exactly `C` | exactly `D union V` |
+| `unclassified_execution_failure` | exactly `C` | exactly `D union V` |
+| `capture_perturbs_policy` | exactly `C union D` | exactly `V` |
+| `packet_invalid` | exactly `C union D union V` | empty set |
+| `phase_a_pass` | exactly `C union D union V` | empty set |
+
+Every `C` path exists for every finalized controller result. A build log for a
+command not reached and a run stdout/stderr log for a child not launched contain
+the exact ASCII bytes `NOT_RUN\n`. Each `invocation.json` exists and has exactly
+one state from `not_run`, `running_interrupted`, `failed`, or `completed`, plus
+the frozen argv/environment digest; it never stands in for run data. An identity,
+comparison, or aggregate JSON whose stage was not reached is a canonical status
+object with `state="not_produced"` and the first blocking result; it cannot claim
+successful identity or verification. Actual logs for a reached stage retain
+their exact child/command bytes.
+
+For any result requiring only `C`, all partial `D` or `V` files from the
+incomplete workspace are removed before checksums and publication. For
+`capture_perturbs_policy`, all four runs and `D` must be complete, the comparison
+must name the first unequal A7.6 member, and packet replay `V` is not run. For
+`packet_invalid`, every `V` file exists and records pass/fail for its packet;
+the first A2.4 packet predicate remains authoritative. For `phase_a_pass`, every
+`V` state is pass. `verification/aggregate.json` validates the applicable row,
+including absence of every forbidden path. `checksums.sha256` lists every other
+required regular file and no forbidden path.
+
+If the controller cannot serialize and fsync the mandatory `C` failure envelope,
+it must not publish the final evidence root: the `.incomplete` root remains,
+the process exits nonzero, and the absence of the mandatory artifact is itself
+fail-closed `H0_EXECUTION_INVALID`. An incomplete directory is never a second
+evidence schema or a source of policy/packet evidence.
+
+### A7.RC1.5 State effect
+
+The three review blockers are declaration choices now: the child process/API and
+no-metrics environment are literal; every controller result has a complete
+required/forbidden file row; and bound inputs are monitored and reverified from
+before build through publication. The v3 freeze must record the child hash,
+four argv vectors, synthetic evaluator vector, exact environment table,
+`h0_bound_inputs_v1` algorithm/checkpoints, inotify mask, `C`/`D`/`V` sets, and
+result matrix. Until an implementation passes those frozen admissions at a new
+instrumentation head and an owner records a new literal `SEALED`, H0 remains
+pre-seal, unexecuted, and without an H0 terminal.
