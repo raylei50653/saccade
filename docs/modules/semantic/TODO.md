@@ -5,12 +5,11 @@
 
 ## Sole active
 
-⏸️ 無 active mainline charter.
+- **O0 bridge frozen-evidence routing** → [charter](../../research/threads/bridge_frozen_evidence_o0_routing_20260716.md)。唯一 in-scope unit＝H0 pre-seal freeze artifact（target＝**m**，Amendment 5）→ [declaration](research/headline_bridge_full_decision_capture_declaration_20260713.md)；**sole pending gate＝完成 pre-seal freeze artifact 後的 owner seal，未 seal 前不得執行或開下游 claim**。
 
 ## Proposed（non-WIP）
 
-- H0 full bridge-decision trace capture（Amendment 4 已滿足 declaration repair；**Amendment 5 已把 policy target 由 s 改為 m**——freeze artifact 須對 **m** 產生；sole pending gate 為完成 pre-seal freeze artifact 後的 owner seal，未 seal 前不得執行或開下游 claim）→ [declaration](research/headline_bridge_full_decision_capture_declaration_20260713.md)
-  - P0 已收斂（2026-07-14 owner）：terminal 重判型別為 `P0_CAPTURE_SEMANTICS_UNVERIFIABLE`（supersedes `..._INVALID`），cause＝provenance incompleteness；registry 已更新。**無殘留 pending gate** → [Correction 1](research/runtime_bridge_decision_path_identifiability_declaration_20260713.md#correction-1--the-frozen-policy-is-not-the-audited-evidences-policy-2026-07-13-append-only)
+- （無）
 
 ## Parked
 
