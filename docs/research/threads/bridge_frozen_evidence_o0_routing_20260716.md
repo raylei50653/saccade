@@ -150,11 +150,12 @@ Discard 走 threads README 收尾流程，terminal＝declined，缺口留帳。
 
 ## Current step
 
-H0 pre-seal engineering（owner 已授權開跑，2026-07-16）：Amendment 6
-（runtime-projection admission classifier）＋
-`scripts/tools/build_h0_preseal_freeze.py`（assembler）已落地；merge 後在確切
-merged head 上產 `h0_preseal_freeze_v2` artifact → owner seal review。
-（engineering、non-evidence；可替換、可丟棄。）
+**Owner seal review。** 完整 `h0_preseal_freeze_v2` artifact 已在確切 head
+`5996d83e` 產出（`complete=true`；coverage 全 true、projection admitted、
+mutation admission 5/5、m fingerprints 命中）→
+[artifact](../../modules/semantic/research/evidence/h0_preseal_freeze_20260716/h0_preseal_freeze_v2.json)。
+依 A2.2：`5996d83e` 是唯一可被 seal 的 head；owner 在 declaration §8 寫
+literal `SEALED` 前，Phase A 一步不得動。
 
 ## Acceptance
 
