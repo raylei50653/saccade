@@ -81,15 +81,16 @@ line_type:             math-closed | engineering-ablation | local-math-claim
 
 # --- 三條正交 typed 軸(勿合併) ---
 epistemic_verdict:     VERIFIED | FALSIFIED | NOT_IDENTIFIABLE | NET_NEGATIVE
-                       | INCONCLUSIVE | NOT_EVALUATED       # 認識論 / 實證判決
+                       | INCONCLUSIVE | NOT_EVALUATED       # empirical 線(math-closed / engineering-ablation)
+                       | PROVED | REFUTED                   # 純演繹線(local-math-claim only)
 lifecycle_disposition: PROPOSED | ACTIVE | PARKED | SEALED | CLOSED   # 生命週期 / 調度;single writer
 model_relation:        current | superseded                 # 與當前 master model 的關係(SUPERSEDED 從 lifecycle 移來此軸)
 
 # --- verdict 的證據定位(依 line_type) ---
 verdict_locus:
   # 兩維(數學命題的有效性只沿此二維移動)—— math-closed 與 local-math-claim 皆用:
-  premise_context:     <在什麼前提下 — 假設 / substrate / 門檻 / held-fixed>
-  object_domain:       <對哪些對象成立或失效 — 量化域 / representability>
+  assumptions:         <在什麼前提下 — 假設 / substrate / 門檻 / held-fixed>
+  domain:              <對哪些對象成立或失效 — 量化域 / representability>
   # + line_type=math-closed(已有 versioned 旗艦模型):
   model_ref:           <path to model doc>
   model_version:       vMAJOR.MINOR
@@ -104,14 +105,14 @@ process_disposition:   retained | deleted-to-git@<sha> | folded-to-workspace@<pa
 ```
 
 - **三軸正交,不可合併**:`epistemic_verdict`(證據上如何)/ `lifecycle_disposition`(調度上如何)/ `model_relation`(與當前 master model 的關係)。同一 study 可 `lifecycle=SEALED` 且 `epistemic=NOT_IDENTIFIABLE`(封了但沒判出來),或 `lifecycle=SEALED` 且 `model_relation=superseded`(當年封的、如今被新模型取代)。把它們塞一個 enum 正是舊 `active` 同時扛多義而漂移的病根。**`SUPERSEDED` 從 lifecycle 移到 `model_relation`** 就是這道理——它講的是「與模型的關係」,不是「調度狀態」。
-- **`VERIFIED`(epistemic)= 通過預宣告檢查、在 scope 內成立的正面判決**(如 `R1_FAITHFUL`);對純演繹的 `local-math-claim`,`VERIFIED` 讀作 proved、`FALSIFIED` 讀作 refuted,`NET_NEGATIVE`/`NOT_EVALUATED` 通常 N/A。正面**生產晉升**走 registry accepted-state,不佔 epistemic 軸。**`PROPOSED`(lifecycle)= 已宣告未 seal**(如 H0),與 `ACTIVE` 區分。(此二值 + `model_relation` + `local-math-claim` 皆為 2026-07-15 以旗艦線實測本 schema 撞出缺口後補入。)
-- **三種 `line_type`**:`math-closed`(有 versioned 旗艦模型,verdict 以 `model@version` 定位於 premise/object 兩維)/ `local-math-claim`(**尚無旗艦模型、但已有局部數學命題**——同用 premise/object 兩維但無 model;將來模型出現時**加上** `model_ref/version` 即升格,不必原地改寫 terminal)/ `engineering-ablation`(用一行 attribution)。
+- **`VERIFIED`(epistemic)= 通過預宣告經驗檢查、在 scope 內成立的正面判決**(如 `R1_FAITHFUL`)——這是 empirical protocol 判決。**純演繹的 `local-math-claim` 用獨立值 `PROVED`/`REFUTED`,不與 `VERIFIED`/`FALSIFIED` 過載**:後者代表「過了 fidelity / 預宣告協議」,前者代表「被推導證明」;混用會讓 verdict 必須先看 `line_type` 才能解碼,正是本 ADR 要殺的 cross-axis 解碼依賴。`NET_NEGATIVE`/`NOT_EVALUATED` 對演繹線通常 N/A。相容性由 enum guard 的 `line_type → 允許 verdict` 矩陣強制(§S3),順帶抓「在 empirical ablation 上填 `PROVED`」這類錯。正面**生產晉升**走 registry accepted-state,不佔 epistemic 軸。**`PROPOSED`(lifecycle)= 已宣告未 seal**(如 H0),與 `ACTIVE` 區分。(`PROVED`/`REFUTED` + `PROPOSED` + `model_relation` + `local-math-claim` 皆為 2026-07-15 以旗艦線實測本 schema 撞出缺口後補入。)
+- **三種 `line_type`**:`math-closed`(有 versioned 旗艦模型,verdict 以 `model@version` 定位於 assumptions/domain 兩維)/ `local-math-claim`(**尚無旗艦模型、但已有局部數學命題**——同用 assumptions/domain 兩維但無 model;將來模型出現時**加上** `model_ref/version` 即升格,不必原地改寫 terminal)/ `engineering-ablation`(用一行 attribution)。
 - slot 存放位置:study 的 terminal owner doc(如 registry 條目或 workspace entry),**單一寫入者**。
 
 ### S2. Master model + 版本(僅 math-closed 線)
 
 - 數學封閉線**可**宣告一份 master model doc,帶語意版本 `vMAJOR.MINOR`。
-- terminal 以 `(model_ref@version, premise_context/object_domain)` 定位。`local-math-claim` 無此段(無 model);升格為 `math-closed` = 補上 `model_ref/version`。
+- terminal 以 `(model_ref@version, assumptions/domain)` 定位。`local-math-claim` 無此段(無 model);升格為 `math-closed` = 補上 `model_ref/version`。
 - **Fail-closed 規則:對 model doc body 的任何語意改動,必須 bump 版本。** CI 檢查:model body diff 存在但版本未變 → fail(防止「v1.1 悄悄換意思」= enum 飄移升到模型層)。
 - git 保有所有版本;無需獨立 archive。
 
@@ -120,7 +121,7 @@ process_disposition:   retained | deleted-to-git@<sha> | folded-to-workspace@<pa
 在 `scripts/pre_push.sh` / CI 增設:
 
 1. **Slot presence**:任何 study 的 `disposition` 轉入 terminal(`sealed`/`closed`)時,必須存在合法 terminal slot;缺失或欄位不合 schema → **阻擋 push**。
-2. **Enum guard**:`epistemic_verdict` / `lifecycle_disposition` / `model_relation` / `doc-status` 各自只能取其封閉詞彙;未知、錯拼、或**跨軸誤用**(例如把 `NOT_IDENTIFIABLE` 填進 lifecycle,含既有 `sealed-for-execution`↔`sealed-execution`)→ fail。本 PR 一次性收斂既有漂移值。(`migration_state` 屬 manifest,由 §4.5 的 manifest 工具守,不在此 doc-slot guard。)
+2. **Enum guard**:`epistemic_verdict` / `lifecycle_disposition` / `model_relation` / `doc-status` 各自只能取其封閉詞彙;未知、錯拼、或**跨軸誤用**(例如把 `NOT_IDENTIFIABLE` 填進 lifecycle,含既有 `sealed-for-execution`↔`sealed-execution`)→ fail。**另加 `line_type → 允許 verdict` 相容矩陣**:`PROVED`/`REFUTED` 僅 `local-math-claim`;`VERIFIED`/`FALSIFIED`/`NOT_IDENTIFIABLE`/`NET_NEGATIVE` 僅 empirical 線(`math-closed`/`engineering-ablation`)——錯配即 fail。本 PR 一次性收斂既有漂移值。(`migration_state` 屬 manifest,由 §4.5 的 manifest 工具守,不在此 doc-slot guard。)
 3. **Version-bump guard**:見 S2。
 4. 填了合法 slot,才**授權** S4 的 dispose。
 

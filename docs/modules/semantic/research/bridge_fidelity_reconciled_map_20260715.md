@@ -90,8 +90,8 @@ epistemic_verdict: FALSIFIED
 lifecycle_disposition: SEALED
 verdict_locus:
   model_ref / model_version: no line-specific versioned model yet
-  premise_context: shadow, non-committing Consumer-A runtime capture; sealed headline-m configuration; predeclared D0 threshold, numeric, and rank boxes
-  object_domain: exact-key matched D0-v2 pairs only; excludes cohort_gap, unemitted, other presets, detectors, and committing-bridge behavior
+  assumptions: shadow, non-committing Consumer-A runtime capture; sealed headline-m configuration; predeclared D0 threshold, numeric, and rank boxes
+  domain: exact-key matched D0-v2 pairs only; excludes cohort_gap, unemitted, other presets, detectors, and committing-bridge behavior
 evidence_owner: docs/modules/semantic/research/d0_runtime_shadow_fidelity_results_20260712.md
 ```
 
@@ -101,8 +101,8 @@ epistemic_verdict: VERIFIED
 lifecycle_disposition: CLOSED
 verdict_locus:
   model_ref / model_version: no line-specific versioned model yet
-  premise_context: r1_temporal_reduction_capture_v1; device replay backend; sealed adaptive-anchor Consumer-A configuration
-  object_domain: captured events on the declared seven-sequence MOT17-SDP support
+  assumptions: r1_temporal_reduction_capture_v1; device replay backend; sealed adaptive-anchor Consumer-A configuration
+  domain: captured events on the declared seven-sequence MOT17-SDP support
 evidence_owner: docs/modules/semantic/research/r1_temporal_reduction_capture_results_20260712.md
 ```
 
@@ -114,8 +114,8 @@ epistemic_verdict: NOT_IDENTIFIABLE
 lifecycle_disposition: CLOSED
 verdict_locus:
   model_ref / model_version: no line-specific versioned model yet
-  premise_context: frozen coarse grid, one-sided 95% Clopper–Pearson rule, ε = 0.05, lost-track independence unit
-  object_domain: D0 matched rows with valid GT lost-track identities; unjoined events are coverage inputs, never CP trials
+  assumptions: frozen coarse grid, one-sided 95% Clopper–Pearson rule, ε = 0.05, lost-track independence unit
+  domain: D0 matched rows with valid GT lost-track identities; unjoined events are coverage inputs, never CP trials
 evidence_owner: docs/modules/semantic/research/closed/safe_domain_runtime_transfer_results_20260713.md
 ```
 
@@ -125,8 +125,8 @@ epistemic_verdict: NET_NEGATIVE
 lifecycle_disposition: SEALED
 verdict_locus:
   model_ref / model_version: no line-specific versioned model yet
-  premise_context: outcome-blind audit of immutable D0-v2 artifacts and their hashes; exact v2 key only
-  object_domain: frozen cohort_gap and unemitted events, not prospective expanded captures or joins
+  assumptions: outcome-blind audit of immutable D0-v2 artifacts and their hashes; exact v2 key only
+  domain: frozen cohort_gap and unemitted events, not prospective expanded captures or joins
 evidence_owner: docs/modules/semantic/research/frozen_packet_exact_key_recoverability_results_20260713.md
 ```
 
@@ -136,8 +136,8 @@ epistemic_verdict: NOT_IDENTIFIABLE
 lifecycle_disposition: CLOSED
 verdict_locus:
   model_ref / model_version: no model yet
-  premise_context: scope-corrected target is headline-m; provenance lacks h_lo, h_hi, spatial_gate, max_speed, and a capture-time kernel hash
-  object_domain: the frozen D0/R1/S0 packets; not an assertion that their capture semantics are invalid
+  assumptions: scope-corrected target is headline-m; provenance lacks h_lo, h_hi, spatial_gate, max_speed, and a capture-time kernel hash
+  domain: the frozen D0/R1/S0 packets; not an assertion that their capture semantics are invalid
 evidence_owner: docs/research/contracts/claim_state_registry.md
 ```
 
@@ -147,8 +147,8 @@ epistemic_verdict: NET_NEGATIVE
 lifecycle_disposition: CLOSED
 verdict_locus:
   model_ref / model_version: no line-specific versioned model yet
-  premise_context: gate-retained ambiguous band; s0 ordering; sealed ranking metrics and boxes
-  object_domain: exactly the 12 enumerated candidates; excludes the 9 untested AND pairs, finite-λ, continuous, learned, and runtime-bdist score families
+  assumptions: gate-retained ambiguous band; s0 ordering; sealed ranking metrics and boxes
+  domain: exactly the 12 enumerated candidates; excludes the 9 untested AND pairs, finite-λ, continuous, learned, and runtime-bdist score families
 evidence_owner: docs/modules/semantic/research/door0_ranking_probe_results_20260712.md
 ```
 
@@ -160,8 +160,8 @@ epistemic_verdict: NOT_EVALUATED
 lifecycle_disposition: PARKED
 verdict_locus:
   model_ref / model_version: no model yet
-  premise_context: unsealed m0_state_capture_v1 design; no capture, fit, or metric authorized
-  object_domain: none observed
+  assumptions: unsealed m0_state_capture_v1 design; no capture, fit, or metric authorized
+  domain: none observed
 evidence_owner: docs/modules/semantic/research/discrete_m_capability_declaration_20260712.md
 ```
 
