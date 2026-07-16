@@ -46,14 +46,17 @@ and re-decides nothing owned elsewhere.
   ladder) does not exist yet, so no B1 object can enter the admissible
   candidate set (`transition_semantics: unavailable`) regardless of H0/GCTM
   outcomes. Writing that contract does not depend on H0.
-- **One online hook, one contract.** "Association/relink hook" spans two
-  distinct online contracts: the association (auction) stage and the GPU
-  foot-bridge two-stage winner
+- **Hook scope: GPU foot-bridge only.** This synthesis is scoped end-to-end —
+  B1's substrate/fidelity owner (the bridge-specific H0) and O1's intervention
+  contract alike — to the **GPU foot-bridge** two-stage winner
   ([bridge decision semantics](../../../research/tracker-decision/relink_bridge.md)).
-  A future O1 declaration must pin exactly one. If the target is the bridge,
-  the legal insertion surface is the candidate-local (stage-1) lost ranking
-  under fixed pair eligibility; claim arbitration, loser fallback, and commit
-  mutation are separate online-contract problems.
+  The association (auction) stage is a different online contract and is **out
+  of scope**: an association-stage variant would require its own
+  substrate/fidelity owner and a separately declared synthesis/charter, not a
+  reinterpretation of this one. Within the bridge, the legal insertion surface
+  is the candidate-local (stage-1) lost ranking under fixed pair eligibility;
+  claim arbitration, loser fallback, and commit mutation are separate
+  online-contract problems.
 - **Reserved-symbol renames applied at landing** (the 2026-07-16 working draft
   used the left-hand forms):
 
@@ -177,7 +180,8 @@ candidate-ranking space
   Does the score order the GT candidate above competing candidates in one event?
 
 assignment space
-  Does the changed ordering alter the selected association or relink decision?
+  Does the changed ordering alter the selected relink decision
+  (bridge claim/commit outcome; §0 hook scope)?
 
 system space
   Do altered decisions improve track-level and sequence-level MOT outcomes?
@@ -910,8 +914,8 @@ No B1 terminal auto-activates O1.
 
 ## 20. O1 research question
 
-> When the frozen B1 GCTM score policy is executed at the real online
-> association/relink hook, does it retain the intended event-local mechanism
+> When the frozen B1 GCTM score policy is executed at the real online bridge
+> relink hook (§0 hook scope), does it retain the intended event-local mechanism
 > and produce a stable improvement in system-level tracking outcomes, while the
 > disabled path reproduces baseline behavior and runtime costs remain within
 > predeclared limits?
