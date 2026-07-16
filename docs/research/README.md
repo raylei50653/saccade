@@ -28,7 +28,7 @@
     - κ quantification space = matched joined pairs；relation / rule = owner-defined fidelity boxes:
       [D0 — runtime shadow bridge fidelity: results](../modules/semantic/research/d0_runtime_shadow_fidelity_results_20260712.md)
       — offline proxy ↔ runtime quantity
-    - `ρ_v: event → trial unit` ↓
+    - `ρ_v: event → trial unit`(typing、conservation 與 cross-space 義務:[experiment contract §20.9](contracts/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md))↓
     - **Trial-unit claim space**(track-level independence unit)
       - κ quantification space = trial units:
         [S0 — safe-domain axis transfer to runtime coordinates: results](../modules/semantic/research/closed/safe_domain_runtime_transfer_results_20260713.md)
