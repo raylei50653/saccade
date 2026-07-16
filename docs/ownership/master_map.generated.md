@@ -105,6 +105,7 @@ Manifest: `docs/ownership/doc_migration_manifest.yaml`
 - `docs/modules/semantic/research/association_tools.yaml`
 - `docs/modules/semantic/research/bridge_fidelity_reconciled_map_20260715.md`
 - `docs/modules/semantic/research/escape_tail_forensic_20260711.md`
+- `docs/modules/semantic/research/gctm_b1_o1_task_objectives_and_semantics_20260716.md`
 - `docs/modules/semantic/research/gt_support_morphology_step0_20260711.md`
 - `docs/modules/storage/README.md`
 - `docs/modules/storage/TODO.md`
@@ -312,6 +313,6 @@ Excluded from the active index and default search view.
 
 ## Inventory summary
 
-- documents: 262
-- active: 207
+- documents: 263
+- active: 208
 - grayed out: 55

@@ -117,6 +117,7 @@
 | [research/gap_conditioned_motion_e3_signals_20260711.md](research/gap_conditioned_motion_e3_signals_20260711.md) | E3 LOO fold 訊號（sealed cube） |
 | [research/gap_conditioned_motion_phase_b_design_20260711.md](research/gap_conditioned_motion_phase_b_design_20260711.md) | Phase B 預宣告設計（A1–A8） |
 | [research/gap_conditioned_motion_phase_b_20260711.md](research/gap_conditioned_motion_phase_b_20260711.md) | Phase B 執行結果 |
+| [research/gctm_b1_o1_task_objectives_and_semantics_20260716.md](research/gctm_b1_o1_task_objectives_and_semantics_20260716.md) | GCTM 下游 B1/O1 任務目標與語意 synthesis（draft、非 charter、無執行權；§0＝防飄移邊界：B1 身份未決、score-layer 契約前置、hook 消歧義、保留符號改名表） |
 
 ### occ-exit / m_b1 hook（closed 線的參考）
 
