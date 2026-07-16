@@ -1,0 +1,13 @@
+{
+  "study": "h0_preseal_freeze_20260716",
+  "packet_kind": "pre-seal engineering freeze artifact (H0 declaration A2.2/A6.3); not capture evidence and carrying no H0 terminal",
+  "instrumentation_head": "5996d83e2e79255c4ef7f596e622a64d612498fc",
+  "files": {
+    "h0_preseal_freeze_v2.json": "988e934afced0f9c2fda95b030c0e58aba7934d98b64be05236237a0498f88d7"
+  },
+  "runner": "scripts/tools/build_h0_preseal_freeze.py",
+  "runner_sha256": "ac715a1301db98e4999b21168564b55325feed31889633cc28dcd55882aee4cd",
+  "label_access": {
+    "gt_or_fp_labels_accessed": false
+  }
+}
