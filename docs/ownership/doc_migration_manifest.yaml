@@ -5,35 +5,47 @@
 # 性質：
 #   - EPHEMERAL：遷移抽乾後整份刪除，不得長成第四套 archive。
 #   - MACHINE-CONSUMED：由 build_master_map（gray-out frozen）與 pre_push freeze guard 讀取；
-#     不是人讀的散文。詳見 issue #164。
+#     不是人讀的散文。詳見 issue #164 / #166。
 #   - 只記機械需要的「事實」，不存分類、不複寫 verdict。
 #
+# SNAPSHOT 契約（避免把 Git history availability 變成隱性前提）：
+#   - `resolved_files` 是 parser 直接消費的**固定清單**（該 cluster 的凍結集合）。
+#   - `process_globs` 只是**重生 recipe / provenance**（如何得到 resolved_files），parser 不靠它解析。
+#   - 頂層 `snapshot.frozen_at_commit` 只是 provenance（哪個時點解析的），**非** parser 需要可達的 commit。
+#   - 之後新增的檔不繼承 glob；重跑 recipe 才會納入。工具須檢查一個檔不匹配 >1 cluster。
+#
 # A/B/C 是查詢視圖（可重疊），不是存起來的欄位：
-#   A = 該 cluster 全部 matched process objects 都有合法 per-study terminal（⇒ disposable 前提）
-#   B = 尚有 matched process object 缺 terminal
-#   C = premise_refs 命中「registry state = refuted」的 claim
-# 只有 premise_refs（失效傳播型依賴）參與 C；普通 links/歷史來源/證據引用/比較對象不參與。
-# refuted 狀態由 docs/research/contracts/claim_state_registry.md 擁有，此檔不複寫（no second truth）。
+#   A = 該 cluster 全部 resolved_files 都有合法 per-study terminal（⇒ disposable 前提）
+#   B = 尚有 resolved_file 缺 terminal
+#   C = premise_refs 命中「registry state = refuted」的 claim（只有 premise_refs 參與 C；
+#       普通 links/歷史來源/證據引用/比較對象不參與）
+#   目前：old-flagship = B（premise_refs 空，它是 d0/core-claim 的來源不是依賴）；
+#         safe-region = B ∧ C（terminal 未齊 + 前提依賴已被推翻的 D0）。
+#   refuted 狀態由 docs/research/contracts/claim_state_registry.md 擁有，此檔不複寫（no second truth）。
 #
 # migration_state（manifest-only，不進 ADR 020 的 terminal slot）：
-#   quarantined → (全部 study 皆有 terminal 後) disposable → (dispose 後) entry removed
+#   quarantined → (全部 resolved_file 皆有 terminal 後) disposable → (dispose 後) entry removed
 # `frozen` 由 migration_state: quarantined 推導，不另存欄位。
 #
 # 填寫協議（ADR 020 §4.5）：
 #   - cluster 級 terminal_owner 恆 null（混合 cluster 無單一 owner）。真正 terminal 是 per-study
 #     的（各 study evidence_owner doc），由恢復批次逐項 inventory，不在此事先臆測（避免 fabricate）。
 #   - navigation_ref = 只導覽、不擁有 verdict 的圖（如 reconciled map）；≠ terminal owner。
-#   - frozen_at_commit = 凍結時點；process_globs 只解析成「該 commit 當時存在」的檔，之後新增檔不繼承
-#     glob（避免未來 lane 沿用命名被誤凍）；一個檔不得匹配 >1 cluster。process_globs 相對 repo root。
 
 refuted_claims_ref: docs/research/contracts/claim_state_registry.md   # C 查詢的 refuted 狀態來源
+
+snapshot:
+  frozen_at_commit: 5858d16372a58cd1ed97b2083d501c9097b0a632   # provenance only；parser 消費 resolved_files，不解析此 commit
+  resolved_at: 2026-07-16
 
 clusters:
 
   old-flagship:            # bridge-fidelity / commutativity 核心（D0/R1/S0/EK0/P0/T2/H0）
     migration_state: quarantined
-    frozen_at_commit: 5858d16372a58cd1ed97b2083d501c9097b0a632
-    process_globs:
+    terminal_owner: null   # cluster 級恆 null；per-study terminal 由恢復批次逐項 inventory（H0 尚無 terminal → B）
+    navigation_ref: docs/modules/semantic/research/bridge_fidelity_reconciled_map_20260715.md  # 導覽用，非 terminal owner（該圖自稱 navigation-only / not evidence）
+    premise_refs: []       # 這是 d0/core-claim 的來源，不是它的依賴 ⇒ B（非 C）
+    process_globs:         # 重生 recipe（provenance），parser 不靠它
       - docs/modules/semantic/research/d0_*
       - docs/modules/semantic/research/r1_*
       - docs/modules/semantic/research/s0_*
@@ -48,44 +60,94 @@ clusters:
       - docs/modules/semantic/research/ambiguous_band_*
       - docs/modules/semantic/research/discrete_m_*
       - docs/modules/semantic/research/m_gate_*
-    terminal_owner: null    # cluster 級恆 null；per-study terminal 由恢復批次逐項 inventory（H0 尚無 terminal → 未達 A）
-    navigation_ref: docs/modules/semantic/research/bridge_fidelity_reconciled_map_20260715.md  # 導覽用，非 terminal owner（該圖自稱 navigation-only / not evidence）
-    premise_refs: []        # 這是 d0/core-claim 的來源，不是它的依賴
+    resolved_files:        # 凍結集合（parser 消費）
+      - docs/modules/semantic/research/ambiguous_band_ranking_power_probe_declaration_20260712.md
+      - docs/modules/semantic/research/closed/runtime_bridge_decision_path_identifiability_results_20260713.md
+      - docs/modules/semantic/research/closed/safe_domain_runtime_transfer_results_20260713.md
+      - docs/modules/semantic/research/d0_bridge_estimator_fidelity_20260711.md
+      - docs/modules/semantic/research/d0_runtime_shadow_fidelity_declaration_20260712.md
+      - docs/modules/semantic/research/d0_runtime_shadow_fidelity_results_20260712.md
+      - docs/modules/semantic/research/discrete_m_capability_declaration_20260712.md
+      - docs/modules/semantic/research/door0_ranking_probe_results_20260712.md
+      - docs/modules/semantic/research/frozen_packet_exact_key_recoverability_declaration_20260713.md
+      - docs/modules/semantic/research/frozen_packet_exact_key_recoverability_results_20260713.md
+      - docs/modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md
+      - docs/modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.policy.yaml
+      - docs/modules/semantic/research/m_gate_h_ratio_signal_7seq_20260709.md
+      - docs/modules/semantic/research/production_substrate_mapping_20260711.md
+      - docs/modules/semantic/research/r1_temporal_reduction_capture_declaration_20260712.md
+      - docs/modules/semantic/research/r1_temporal_reduction_capture_results_20260712.md
+      - docs/modules/semantic/research/runtime_bridge_decision_path_identifiability_declaration_20260713.md
+      - docs/modules/semantic/research/runtime_bridge_decision_path_identifiability_declaration_20260713.policy.yaml
+      - docs/modules/semantic/research/s0_proxy_validity_amendment_20260712.md
+      - docs/modules/semantic/research/safe_domain_runtime_transfer_declaration_20260712.md
 
   safe-region:             # assetization + composition-grammar + score-axis（建在 D0 判為不忠實的 offline 座標上）
     migration_state: quarantined
+    terminal_owner: null   # 部分已定性（A1 audit closed）；批次時彙整
+    premise_refs:
+      - d0/core-claim      # → C：safe 軸的前提依賴已被推翻的 D0 fidelity
     process_globs:
       - docs/modules/semantic/research/safe_region_*
       - docs/modules/semantic/research/composition_grammar_*
       - docs/modules/semantic/research/score_temporal_*
-    terminal_owner: null    # 部分已定性（A1 audit closed）；批次時彙整
-    premise_refs:
-      - d0/core-claim        # → C：safe 軸的前提依賴已被推翻的 D0 fidelity
+    resolved_files:
+      - docs/modules/semantic/research/composition_grammar_safe_region_coverage_audit_20260710.md
+      - docs/modules/semantic/research/composition_grammar_t0_artifact_preflight_20260710.md
+      - docs/modules/semantic/research/composition_grammar_t0_region_interpretation_20260710.md
+      - docs/modules/semantic/research/safe_region_a1_audit_20260711.md
+      - docs/modules/semantic/research/safe_region_asset_r1_conversion_20260710.md
+      - docs/modules/semantic/research/safe_region_assetization_r11_20260710.md
+      - docs/modules/semantic/research/safe_region_assetization_r1_20260710.md
+      - docs/modules/semantic/research/safe_region_r0_asset_contract_preflight_20260710.md
+      - docs/modules/semantic/research/score_temporal_to_stable_domain_20260712.md
 
   gap-motion:
     migration_state: quarantined
-    process_globs:
-      - docs/modules/semantic/research/gap_conditioned_motion_*
     terminal_owner: null
     premise_refs: []
+    process_globs:
+      - docs/modules/semantic/research/gap_conditioned_motion_*
+    resolved_files:
+      - docs/modules/semantic/research/gap_conditioned_motion_e0_20260711.md
+      - docs/modules/semantic/research/gap_conditioned_motion_e1_m0_20260711.md
+      - docs/modules/semantic/research/gap_conditioned_motion_e2_family_20260711.md
+      - docs/modules/semantic/research/gap_conditioned_motion_e3_signals_20260711.md
+      - docs/modules/semantic/research/gap_conditioned_motion_phase_b_20260711.md
+      - docs/modules/semantic/research/gap_conditioned_motion_phase_b_design_20260711.md
 
   m-b1-or-tail-hook:
     migration_state: quarantined
+    terminal_owner: null
+    premise_refs: []
     process_globs:
       - docs/modules/semantic/research/m_b1_*
       - docs/modules/semantic/research/m_b2_*
-    terminal_owner: null
-    premise_refs: []
+    resolved_files:
+      - docs/modules/semantic/research/m_b1_5_stage2_d_online_final_20260710.md
+      - docs/modules/semantic/research/m_b1_5_stage2_entry_contract_20260710.md
+      - docs/modules/semantic/research/m_b1_doc_consolidation_report_20260710.md
+      - docs/modules/semantic/research/m_b1_portable_or_tail_hook_contract_20260709.md
+      - docs/modules/semantic/research/m_b1_repaired_eps0_loo_pass_candidate_20260709.md
+      - docs/modules/semantic/research/m_b1_research_history_20260709_20260710.md
+      - docs/modules/semantic/research/m_b1_stage1_online_hook_final_20260710.md
+      - docs/modules/semantic/research/m_b1_to_m_b1_5_two_stage_plan_20260710.md
+      - docs/modules/semantic/research/m_b2_reconnect_bridge_ab_20260709.md
 
   boolean-atom-closure:
     migration_state: quarantined
-    process_globs:
-      - docs/modules/semantic/research/boolean_*
     terminal_owner: null
     premise_refs: []
+    process_globs:
+      - docs/modules/semantic/research/boolean_*
+    resolved_files:
+      - docs/modules/semantic/research/boolean_atom_partial_order_20260711.md
+      - docs/modules/semantic/research/boolean_closure_domain_line_20260711.md
 
   relink-bank-chebgr:      # 歷史工具線（無活依賴，優先級最低）
     migration_state: quarantined
+    terminal_owner: null
+    premise_refs: []
     process_globs:
       - docs/modules/semantic/research/chebgr_*
       - docs/modules/semantic/research/clean_fifo_bank_*
@@ -93,19 +155,29 @@ clusters:
       - docs/modules/semantic/research/relink_normalization_*
       - docs/modules/semantic/research/offline_relink_*
       - docs/modules/semantic/research/bidir*
-    terminal_owner: null
-    premise_refs: []
+    resolved_files:
+      - docs/modules/semantic/research/bidir_relink_data_analysis.md
+      - docs/modules/semantic/research/bidirectional_relink_roadmap.md
+      - docs/modules/semantic/research/chebgr_handover_signal_map_20260704.md
+      - docs/modules/semantic/research/clean_fifo_bank_substrate_20260704.md
+      - docs/modules/semantic/research/offline_relink_candidate_analysis.md
+      - docs/modules/semantic/research/relink_normalization_gate_analysis.md
+      - docs/modules/semantic/research/sparse_key_embedding_bank_20260704.md
 
   online-sparse-reid:
     migration_state: quarantined
-    process_globs:
-      - docs/modules/semantic/research/online_sparse_reid_*
     terminal_owner: null
     premise_refs: []
+    process_globs:
+      - docs/modules/semantic/research/online_sparse_reid_*
+    resolved_files:
+      - docs/modules/semantic/research/online_sparse_reid_handoff_20260704.md
 
   depth-ordering:
     migration_state: quarantined
-    process_globs:
-      - docs/modules/semantic/research/depth_ordering_*
     terminal_owner: null
     premise_refs: []
+    process_globs:
+      - docs/modules/semantic/research/depth_ordering_*
+    resolved_files:
+      - docs/modules/semantic/research/depth_ordering_crossing_swap.md

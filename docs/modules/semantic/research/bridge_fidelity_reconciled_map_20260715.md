@@ -85,7 +85,7 @@ Thus the current ceiling is not “commutes on the representable subdomain.” O
 All blocks below are `line_type: scoped-empirical` (ADR 020 §S1): empirical fidelity/probe studies with a full `assumptions`/`domain` locus and a predeclared protocol, but **no line-specific versioned master model** — so there is no `model_ref`/`model_version`/`model_relation`. I found versioned capture contracts and the framework contract, but a capture-contract version is not silently promoted into a model version. Each block carries the four orthogonal axes (`claim_verdict` ⟂ `decision_outcome` ⟂ `lifecycle_disposition` ⟂ ~~`model_relation`~~ N/A); live scheduling states never appear here (`SEALED` is the only terminal disposition).
 
 ```yaml
-layer: κ_D0 — offline s0 ↔ runtime bdist fidelity
+# layer: κ_D0 — offline s0 ↔ runtime bdist fidelity
 study_id: kappa_d0_proxy_fidelity
 line_type: scoped-empirical
 claim_verdict: FALSIFIED
@@ -100,7 +100,7 @@ process_disposition: retained
 ```
 
 ```yaml
-layer: κ_R1 — captured-runtime temporal-reduction replay
+# layer: κ_R1 — captured-runtime temporal-reduction replay
 study_id: kappa_r1_runtime_replay
 line_type: scoped-empirical
 claim_verdict: VERIFIED
@@ -117,7 +117,7 @@ process_disposition: retained
 > `VERIFIED` reflects the owner-accepted `R1_FAITHFUL`. (Earlier draft of this map was forced to `INCONCLUSIVE` because ADR 020 lacked an affirmative epistemic value; the value was added on 2026-07-15 precisely from this gap.)
 
 ```yaml
-layer: κ_claim / S0 — safe-axis transfer and ε-level hurt bound
+# layer: κ_claim / S0 — safe-axis transfer and ε-level hurt bound
 study_id: rho_s0_safe_axis_transfer
 line_type: scoped-empirical
 claim_verdict: NOT_IDENTIFIABLE
@@ -132,7 +132,7 @@ process_disposition: retained
 ```
 
 ```yaml
-layer: EK0 — exact-key recoverability of frozen unjoined events (RJ0 replacement)
+# layer: EK0 — exact-key recoverability of frozen unjoined events (RJ0 replacement)
 study_id: ek0_exact_key_recoverability
 line_type: scoped-empirical
 claim_verdict: FALSIFIED
@@ -149,7 +149,7 @@ process_disposition: retained
 > **Correction (2026-07-16):** an earlier draft labeled EK0 `NET_NEGATIVE`, but the owner terminal is `EK0_NO_RECOVERABLE_SUPPORT` and the results doc explicitly retracts the `RJ0_EXPANSION_FUTILE` utility framing as an over-claim. The real content is a **falsified recoverability claim** (`claim_verdict: FALSIFIED`) with **no decision assessed** (`decision_outcome: NOT_ASSESSED`) — a direct instance of why ADR 020 splits `claim_verdict` from `decision_outcome`. `[EK0]`
 
 ```yaml
-layer: P0 — capture provenance and decision-path observability
+# layer: P0 — capture provenance and decision-path observability
 study_id: p0_decision_path_identifiability
 line_type: scoped-empirical
 claim_verdict: NOT_IDENTIFIABLE
@@ -164,7 +164,7 @@ process_disposition: retained
 ```
 
 ```yaml
-layer: Door 0 / T2 — ranking power of the declared proxy-space class
+# layer: Door 0 / T2 — ranking power of the declared proxy-space class
 study_id: door0_t2_ranking_power
 line_type: scoped-empirical
 claim_verdict: FALSIFIED          # NO_USABLE_RANKING_POWER_IN_CLASS — the class's ranking-power claim is refuted

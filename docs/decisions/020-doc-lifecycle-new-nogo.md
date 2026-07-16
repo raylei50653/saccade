@@ -153,16 +153,19 @@ process_disposition:   retained | deleted-to-git | folded-to-workspace@<path>
 
 ---
 
-## 4. Scope —— 預計 PR 改動(lean)
+## 4. Scope —— 分工(lean)
 
-**首個 PR 含:**
-- 本策略文檔(即本 ADR)+ 預計改動清單。
-- 機械件:
-  - `docs/ownership/` 或本 ADR 附錄定義 terminal slot schema(S1)。
-  - **標準 fixture `docs/ownership/terminal_slot_fixtures.yaml`**(valid / invalid + `expect_error`):validator 先對它跑;reconciled map 的 6 個 slot 必須全屬 `valid`(`scoped-empirical`)型,避免「照 ADR 寫就打爆範例」或「為範例放寬 schema」。
-  - `scripts/pre_push.sh` / CI 增 S3 三道 fail-closed 檢查。
-  - 一次性收斂既有 enum 漂移值(S3.2)。
-  - `build_master_map.py` 生成骨架(S5),先只做 inventory + version-lag flag。
+**PR #165(本 ADR;design / data-model only,不含 enforcement 程式碼):**
+- 本策略文檔(即本 ADR)+ terminal slot schema 規格(S1)。
+- **標準 fixture** `docs/ownership/terminal_slot_fixtures.yaml`(valid / invalid + `expect_error`;每個 invalid = 合法 slot 單點突變;unknown-field fail-closed)——reconciled map 的 6 個 slot 必須全屬 `valid`(`scoped-empirical`)型,避免「照 ADR 寫就打爆範例」或「為範例放寬 schema」。
+- migration manifest(§4.5)的 snapshot(`resolved_files`)+ 首個 reconciled flagship map(navigation-only)。
+- **刻意不含**任何 enforcement 程式碼:資料模型未撞過範例前先不寫 CI,免得把矛盾固化成規則。
+
+**Mechanization(umbrella #164,逐 slice)—— 首個可執行 slice = #166:**
+- schema v0 validator(對 fixture 跑;valid pass、invalid == `expect_error`;unknown-field fail-closed)。
+- manifest parser(消費 `resolved_files`;一檔一 cluster;gray-out `quarantined`)。
+- `build_master_map.py` 生成骨架(S5),先只做 inventory + version-lag flag。
+- **後續 slice**(不在 #166):`scripts/pre_push.sh` / CI 的 S3 seal gate + freeze guard、一次性收斂既有 enum 漂移值(S3.2)、model version-bump guard(S2)。
 
 **Non-goals(明確不做):**
 - 一次回填 177 份無 status 舊檔。
@@ -188,30 +191,32 @@ process_disposition:   retained | deleted-to-git | folded-to-workspace@<path>
 一份很小的 manifest(`docs/ownership/doc_migration_manifest.yaml`),cluster 級 ~10 條,**只記機械需要的事實**:
 
 ```yaml
+snapshot:
+  frozen_at_commit: <sha>               # provenance only;parser 消費 resolved_files,不解析此 commit
 clusters:
   old-flagship:
     migration_state: quarantined        # 唯一狀態;`frozen` 由此推導,不另存欄位
-    frozen_at_commit: <sha>             # 凍結時點;process_globs 只解析到「此 commit 當時存在」的檔
-    process_globs: [ docs/modules/semantic/research/d0_*, ... ]   # 開放 prefix,但於 frozen_at_commit 解析成固定清單
     terminal_owner: null                # cluster 級恆 null(混合 cluster 無單一 owner,見下);per-study terminal 由恢復批次逐項 inventory
     navigation_ref: <非規範導覽圖 | null>   # 只導覽、不擁有 verdict(如 reconciled map);≠ terminal owner
-    premise_refs: [ d0/core-claim ]      # 只記「失效傳播型」依賴
+    premise_refs: []                     # 只記「失效傳播型」依賴;old-flagship 是 d0/core-claim 的來源不是依賴 ⇒ B(非 C)
+    process_globs: [ docs/modules/semantic/research/d0_*, ... ]   # 重生 recipe / provenance,parser 不靠它
+    resolved_files: [ ... ]              # parser 消費的固定清單(凍結集合)
 ```
 
 規則:
 - **cluster 級 `terminal_owner` 恆 `null`,不指向導覽圖。** 混合 cluster(old-flagship 含 D0/R1/S0/EK0/P0/T2/H0,部分已 terminal、部分仍 proposed)無法用單一 owner 表示;明示 `navigation-only / not evidence` 的 reconciled map **不得**充當 terminal owner(它自己也聲明沒有 terminal-slot ownership)。真正的 terminal 是**per-study** 的(各 study 的 `evidence_owner` doc),由恢復批次逐項 inventory,不在此事先臆測。
-- **`frozen_at_commit` + resolved snapshot**:`process_globs` 是開放 prefix,但只解析成 `frozen_at_commit` 當時存在的具體檔;**之後新增的檔不繼承 glob**(否則未來 lane 沿用 `d0_*`/`runtime_bridge_*`/`headline_bridge_*` 命名會被自動誤凍)。工具須檢查**一個檔不得匹配 >1 cluster**(重疊 = manifest 錯誤)。
+- **snapshot 契約(不把 Git history availability 變成隱性前提)**:parser 直接消費 `resolved_files`(固定清單 = 凍結集合);`process_globs` 只是**重生 recipe / provenance**、`snapshot.frozen_at_commit` 只是**哪個時點解析的** provenance——兩者 parser 都不解析(squash-merge / shallow clone 後那個 branch commit 未必可達,故不能當 parse 前提)。**之後新增的檔不繼承 glob**(未來 lane 沿用 `d0_*`/`runtime_bridge_*`/`headline_bridge_*` 命名不會被自動誤凍);工具須檢查**一個檔不得出現在 >1 cluster 的 resolved_files**(重疊 = manifest 錯誤),並可用 recipe 重跑對帳 drift。
 - **frozen(= quarantined)cluster 不再被當成當前架構依據**;除定性 PR 外不改其 process 檔;搜尋 / 交接**預設排除**;git 與原路徑**暫留**(避免 churn);terminal 提取完才進正式 disposal。
 - manifest **被工具消費**(`build_master_map` 讀它 gray-out;`pre_push` 讀它做 freeze guard),**不是人讀的散文**——否則凍結規則 = honor-system = 正在修的病。
 - manifest **ephemeral**:遷移抽乾後**刪除**,不留成第四套 archive。
 
 ### A/B/C 是查詢視圖,不是存起來的分類
 
-manifest 只存事實(per-study terminal 完整度、`premise_refs`);A/B/C 由查詢生成,且**可重疊**(old-flagship 同時 B 又 C:H0 尚無 terminal → 未達 A,且 premise 依賴已被推翻的 D0 → C):
+manifest 只存事實(per-study terminal 完整度、`premise_refs`);A/B/C 由查詢生成,且**可重疊**。目前:**old-flagship = B**(`premise_refs` 空 → 非 C:它是 d0/core-claim 的**來源**不是依賴,且 cluster 太粗、混了 D0 來源與下游依賴,不宜為 C 硬拆);**safe-region = B ∧ C**(terminal 未齊 + 前提依賴已被推翻的 D0)。細粒度的 C 等 recovery batch 做完 per-study inventory 再由依賴推導:
 
 ```text
-A = 該 cluster 全部 matched process objects 都有合法 per-study terminal(⇒ disposable 前提)
-B = 尚有 matched process object 缺 terminal
+A = 該 cluster 全部 resolved_files 都有合法 per-study terminal(⇒ disposable 前提)
+B = 尚有 resolved_file 缺 terminal
 C = premise_refs 命中「registry state = refuted」的 claim
 ```
 
