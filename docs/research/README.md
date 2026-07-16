@@ -12,8 +12,8 @@
 
 這裡是研究任務的總入口。本圖只擁有**路由拓撲、型別與轉移邊**；
 每個可點節點都連到狀態或事實 owner，不在入口複寫 terminal、數字或 live state。
-宣告邊界規則的唯一 owner 是 [experiment contract §20.2 / §20.8](contracts/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)：
-每個可判定任務宣告 typed κ（§20.2），宣告可封印性由 §20.8 seal bar 判定。
+宣告邊界規則 owner：[experiment contract §20.2 / §20.8 / §20.9](contracts/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)：
+每個可判定任務宣告 typed κ（§20.2），宣告可封印性由 §20.8 seal bar 判定，cross-space typing 與化約義務歸 §20.9。
 
 ### Typed route — runtime representation → reduction → validation
 
@@ -28,8 +28,8 @@
     - κ quantification space = matched joined pairs；relation / rule = owner-defined fidelity boxes:
       [D0 — runtime shadow bridge fidelity: results](../modules/semantic/research/d0_runtime_shadow_fidelity_results_20260712.md)
       — offline proxy ↔ runtime quantity
-    - `ρ_v: event → trial unit` ↓
-    - **Trial-unit claim space**(track-level independence unit)
+    - `ρ_v: event → trial unit`(typing、conservation 與 cross-space 義務:[experiment contract §20.9](contracts/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md))↓
+    - **Trial-unit claim space**(lost-track claim unit;candidate independence unit only,adequacy 歸 §20.7 / §20.9.5)
       - κ quantification space = trial units:
         [S0 — safe-domain axis transfer to runtime coordinates: results](../modules/semantic/research/closed/safe_domain_runtime_transfer_results_20260713.md)
         — runtime-coordinate transfer / claim support

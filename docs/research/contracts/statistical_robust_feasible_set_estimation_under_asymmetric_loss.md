@@ -1332,7 +1332,7 @@ is the historical exception to the §20.0 hosting rule.
 
 ### 20.0 Status and scope
 
-Contract version **v1.1 (2026-07-13; append-only — v1 2026-07-12 text unchanged, §20.8 and the §20.2 κ line added to consolidate the declaration seal bar accrued in owner reviews)**. This section is the normative home of the experiment contract. Issue threads, study notes, and PR descriptions must **reference** this section; they must not restate or fork it. Every new decision-layer study that uses this framework's language or infrastructure runs under this contract. Studies opened before v1 keep their sealed procedures but must be re-classified under §20.4 before any result is cited as a design recommendation.
+Contract version **v1.2 (2026-07-16; append-only — v1.1 2026-07-13 text unchanged, §20.9 added: substrate as a fourth declaration coordinate, dual-space accounting in owner symbols, ρ/aggregation reduction typing, conservation identities, dependence declaration, cross-space inference obligations, and typed failure semantics; no ε-bound formula is made normative)**. Prior version note: v1.1 (2026-07-13; append-only — v1 2026-07-12 text unchanged, §20.8 and the §20.2 κ line added to consolidate the declaration seal bar accrued in owner reviews). This section is the normative home of the experiment contract. Issue threads, study notes, and PR descriptions must **reference** this section; they must not restate or fork it. Every new decision-layer study that uses this framework's language or infrastructure runs under this contract. Studies opened before v1 keep their sealed procedures but must be re-classified under §20.4 before any result is cited as a design recommendation.
 
 **Hosting rule.** This framework hosts cross-line semantics only. Line-specific predeclared procedures are hosted as standalone files under [`procedures/`](../eval/procedures/), referencing this framework for shared terms; they are not added as new framework sections. §19 (GT-support morphology) was drafted in-framework and is the historical exception — its sealed v1 body has been moved to [procedures/gt_support_morphology_procedure_v1.md](../eval/procedures/gt_support_morphology_procedure_v1.md) with §19.x numbering preserved, and the §19 slot is a tombstone.
 
@@ -1497,6 +1497,179 @@ A declaration is sealable only if every item below holds:
 How other documents may cite a sealed boundary is doc governance, not part of
 this bar: projections copy the owner document's self-designation verbatim
 (doc structure contract C5.1 — link, don't relabel).
+
+### 20.9 Dual-space accounting and reduction typing (v1.2)
+
+This section is the normative home for how a declaration locates its claim
+across quantification spaces and what a cross-space inference must declare.
+The route *topology* (which spaces exist and how studies chain) is owned by
+the research control plane; per-capture partitions and counts are owned by
+their study documents. This section owns only the typing rules. **No specific
+ε-bound formula is normative in v1.2**; the bound *interface* is fixed
+(§20.9.6), the formula is deliberately deferred.
+
+#### 20.9.1 Declaration coordinates
+
+v1.2 **adds substrate as a fourth declaration coordinate**. This is a new
+axis, not a restatement of any earlier role taxonomy. Every decidable unit is
+located by four orthogonal coordinates, none inferable from another;
+collapsing any two into one label is not permitted (extends the §20.2
+two-axis rule):
+
+1. **target decision layer** (§20.2);
+2. **study intent** (§20.2);
+3. **κ quantification space** (§20.2) — one node of the space account below;
+4. **substrate** — the coordinate family the claim is proven on, **declared
+   in the sealed study declaration**. When the study consumes or proposes a
+   transition of a registered object, the declaration must cite and agree
+   with that object's accepted `substrate` / `target_substrate` record. The
+   declaration owns the current claim's substrate; the claim-state registry
+   owns the accepted substrate state of production objects — the two are
+   never merged, and neither a probe, a draft declaration, nor a diagnostic
+   needs a registry object to declare its substrate.
+
+Motivation: the D0 falsification shows that a shared scoring-function *form*
+does not make one substrate — the offline and kernel representations of the
+same quantity disagreed on the matched domain itself. A claim without a
+substrate coordinate is not sealable.
+
+#### 20.9.2 Space account (owner symbols)
+
+The contract adopts the owner map's symbols and does not mint parallel ones:
+
+```text
+U^evt = M^evt ⊍ G^evt ⊍ E^evt
+```
+
+- **U^evt** — captured runtime event universe;
+- **M^evt** — matched / joined pairs;
+- **G^evt** — cohort_gap;
+- **E^evt** — unemitted;
+- **T_v** — trial-unit claim space (typed in §20.9.3).
+
+Partition membership and counts for a given capture are owned by that
+capture's study documents. Where matched events and joined pairs must be
+distinguished, the join is a separately declared partial map **J_v**
+(exact-key join); this contract introduces no separate pair-space symbol.
+Fidelity-type κ quantifies over event/pair units; claim-type κ quantifies
+over trial units (§20.2).
+
+#### 20.9.3 Reduction typing: assignment ≠ aggregation ≠ judgment
+
+A study whose claim quantifies over T_v while its evidence is produced over
+event/pair units must declare the following **separately typed objects**.
+Overloading one "ρ" symbol to simultaneously mean grouping, aggregation,
+weighting, and decision is not sealable.
+
+```text
+S_v ⊆ U^evt                      source scope: declared union of partition cells
+ρ_v : dom(ρ_v) → T_v,            assignment (quotient) map, dom(ρ_v) ⊆ S_v
+X_v = S_v \ dom(ρ_v)             excluded events, each with a typed reason
+a_{v,t} : Y^{ρ_v⁻¹(t)} → Z_t     per-trial aggregation of fiber observables
+κ_T                              judgment over trial observables (§20.2 typed κ)
+```
+
+- **ρ_v is pure assignment**: it says only which events belong to the same
+  trial unit. It is many-to-one, creates no trial units beyond its image, and
+  performs no aggregation, weighting, or decision.
+- **a_{v,t} is the aggregation rule**: how fiber observables become the trial
+  observable. It is a separately frozen object referenced by κ_T; it is not
+  itself the judgment.
+
+All components are frozen at seal time (§20.8):
+
+- **source scope** — `S_v` is a declared union of top-level partition cells;
+- **domain** — `dom(ρ_v)` is a mechanically declared subset of S_v, selected
+  by a frozen key/eligibility predicate; it is not required to equal S_v.
+  Events in `S_v \ dom(ρ_v)` are excluded *and accounted* in X_v with typed
+  reasons, never silently dropped;
+- **codomain** — the trial-unit constructor, named before reveal. It is the
+  **claim unit and candidate independence unit; independence is not granted
+  by construction** and remains subject to §20.7 validity (§20.9.5);
+- **version** — ρ_v is versioned; consumers bind to a version; a version bump
+  is fail-closed (consumers do not silently follow);
+- **computability** — ρ_v is total on its declared domain and mechanically
+  computable from frozen keys alone; no post-hoc reassignment; naming must
+  not exceed the partition definitions;
+- **fiber accounting** — the study reports the fiber assignment and
+  cardinalities `{|ρ_v⁻¹(t)| : t ∈ T_v}`.
+
+#### 20.9.4 Conservation identities
+
+Two identities, mechanically checkable, never merged into one equation:
+
+```text
+Σ_{t∈T_v} |ρ_v⁻¹(t)| = |dom(ρ_v)|          (assignment totality)
+|dom(ρ_v)| + |X_v|   = |S_v|               (scope accounting)
+```
+
+When the study additionally claims coverage of the capture universe:
+
+```text
+|S_v| + |U^evt \ S_v| = |U^evt|            (universe accounting)
+```
+
+#### 20.9.5 Dependence declaration
+
+T_v is the trial *observation/decision* unit. A study making trial-level
+statistical claims must declare its dependence treatment: optionally a
+cluster map `c_v : T_v → C_v`, and the level at which inference is claimed —
+trial-weighted, cluster-weighted, sequence-blocked, or worst-case. Whether
+the declared treatment suffices is judged by the §20.7 validity gate
+(residual clustering, §19.5); this section only makes the treatment a
+declaration obligation.
+
+#### 20.9.6 Cross-space inference obligations
+
+1. **No automatic transport in either direction.** An event/pair-level
+   fidelity result never auto-upgrades to a trial-level claim; upward
+   transport requires a sealed ρ_v, a declared aggregation rule a_{v,t},
+   and a declared dependence treatment (§20.9.5). A trial-level result does
+   not *by itself* refine to an event-level statement; any downward
+   refinement requires a separately sealed theorem for the declared
+   aggregation (e.g. a max-aggregate bound legitimately bounds every event
+   in its fiber). An actual event-level counterexample continues to falsify
+   a fidelity κ according to that κ's own declared quantification domain,
+   comparison relation, and decision rule — trial eligibility does not
+   shield a fidelity claim.
+2. **Bound input interface — formula deferred.** Any cross-space bound must
+   be declared as a function of a declared subset of the following interface:
+   event/pair-level observables or fidelity bounds; the fiber assignment and
+   cardinalities; the aggregation rule; the exclusion/missingness account;
+   the weighting measure; the dependence/cluster structure; and
+   reduction-specific stability certificates (e.g. margins). **Fiber
+   accounting is a mandatory structural input to any cross-space bound, but
+   is never presumed sufficient.** No ε-bound formula is normative in v1.2;
+   nominal cluster-blind bounds remain recorded open limits and are not
+   silently blessed.
+3. **Substrate non-discharge.** ρ_v does not discharge substrate-equivalence
+   obligations: any trial-level result derived through ρ_v remains pinned to
+   the source substrate unless a separately sealed runtime-quantity fidelity
+   edge authorizes transport. Reduction is never a substrate-transport proof.
+
+#### 20.9.7 Failure semantics (not a terminal enum)
+
+Four distinct failure semantics. This section defines the semantics only;
+§20.7 owns their mapping into terminal families and §20.8 their sealability.
+No terminal-slot enum values are added by this section.
+
+| Failure semantics | Precise meaning | Repair path |
+|---|---|---|
+| **assignment-unresolved** | No ρ_v is mechanically computable from frozen keys on the declared S_v (constructibility/keying failure) | capture / keying |
+| **not-identifiable** | The available observations do not determine the target claim on the declared domain; observational equivalence (distinct structures inducing identical observations) is one sufficient witness, not the only one — an empty decidable support is another; ρ_v may be fully constructible | new identifying evidence, substrate change, narrower model class, or weaker claim |
+| **transport-noncommuting** | A declared cross-representation or cross-space transport fails to commute (e.g. offline vs runtime representations of the same quantity), or no legal expansion within the frozen class reaches the target condition | change representation/reduction, or record a class-scoped closure |
+| **not-exchangeable** | The dependence structure does not support the declared nominal trial-independent inference | change cluster unit or statistical bound; owned by the §20.7 validity gate (§19.5) |
+
+Conflating any two of these in a terminal name violates §20.8 item 4 (naming
+must not exceed what the definitions entail). These semantics are **not
+intrinsically assigned to one terminal family**: the mapping depends on the
+study's declared target and on whether its observation-validity gate passed.
+A transport-noncommuting or not-identifiable outcome can be the *valid
+negative answer* of a study that targets that very question (a fidelity
+study validly falsifying a proxy is a completed falsification, not an
+invalid study), while the same semantics arising incidentally elsewhere is a
+validity failure. §20.7 must preserve the distinction between a valid
+negative answer and an experiment that could not answer.
 
 ---
 
