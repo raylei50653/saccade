@@ -15,6 +15,22 @@ Declaration (sealed pre-outcome): [r1_temporal_reduction_capture_declaration_202
 Thread: [score temporal-to-stable-domain](../../../research/threads/score_temporal_to_stable_domain_20260712.md)  
 Evidence packet: [evidence/r1_temporal_reduction_capture_20260712/](evidence/r1_temporal_reduction_capture_20260712/manifest.json)
 
+## ADR 020 terminal slot (per-study owner)
+
+```yaml
+study_id: kappa_r1_runtime_replay
+line_type: scoped-empirical
+claim_verdict: VERIFIED
+decision_outcome: NOT_ASSESSED
+lifecycle_disposition: SEALED
+verdict_locus:
+  assumptions: r1_temporal_reduction_capture_v1; device replay backend; sealed adaptive-anchor Consumer-A configuration
+  domain: captured events on the declared seven-sequence MOT17-SDP support
+  protocol_ref: r1_temporal_reduction_capture_v1 (sealed capture contract)
+evidence_owner: docs/modules/semantic/research/r1_temporal_reduction_capture_results_20260712.md
+process_disposition: retained
+```
+
 ---
 
 ## 0. Scope of the terminal (binding)
