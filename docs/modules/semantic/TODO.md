@@ -13,6 +13,7 @@
 
 ## Parked
 
+- **PARKED — Gap-conditioned stochastic transition model task** → [Issue #175](https://github.com/raylei50653/saccade/issues/175) · activation: accepted H0 ordered terminal + owner scheduling · [task charter](../../research/threads/gap_conditioned_stochastic_transition_model_task.md)
 - Score temporal-to-stable-domain → [charter](../../research/threads/score_temporal_to_stable_domain_20260712.md)
 - GT-support morphology → [charter](../../research/threads/gt_support_morphology_20260711.md)
 - Occ-exit intervention modeling → [charter](../../research/threads/occ_exit_audit_20260709.md)
