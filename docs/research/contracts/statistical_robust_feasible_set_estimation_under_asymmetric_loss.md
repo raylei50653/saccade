@@ -1519,8 +1519,14 @@ two-axis rule):
 1. **target decision layer** (§20.2);
 2. **study intent** (§20.2);
 3. **κ quantification space** (§20.2) — one node of the space account below;
-4. **substrate** — the coordinate family the claim is proven on, recorded
-   per-object in the claim-state registry.
+4. **substrate** — the coordinate family the claim is proven on, **declared
+   in the sealed study declaration**. When the study consumes or proposes a
+   transition of a registered object, the declaration must cite and agree
+   with that object's accepted `substrate` / `target_substrate` record. The
+   declaration owns the current claim's substrate; the claim-state registry
+   owns the accepted substrate state of production objects — the two are
+   never merged, and neither a probe, a draft declaration, nor a diagnostic
+   needs a registry object to declare its substrate.
 
 Motivation: the D0 falsification shows that a shared scoring-function *form*
 does not make one substrate — the offline and kernel representations of the
@@ -1567,12 +1573,16 @@ a_{v,t} : Y^{ρ_v⁻¹(t)} → Z_t     per-trial aggregation of fiber observable
   trial unit. It is many-to-one, creates no trial units beyond its image, and
   performs no aggregation, weighting, or decision.
 - **a_{v,t} is the aggregation rule**: how fiber observables become the trial
-  observable. It is declared as part of the κ decision rule.
+  observable. It is a separately frozen object referenced by κ_T; it is not
+  itself the judgment.
 
 All components are frozen at seal time (§20.8):
 
-- **domain** — which partition cells; events outside `dom(ρ_v)` are excluded
-  *and accounted* in X_v with typed reasons, never silently dropped;
+- **source scope** — `S_v` is a declared union of top-level partition cells;
+- **domain** — `dom(ρ_v)` is a mechanically declared subset of S_v, selected
+  by a frozen key/eligibility predicate; it is not required to equal S_v.
+  Events in `S_v \ dom(ρ_v)` are excluded *and accounted* in X_v with typed
+  reasons, never silently dropped;
 - **codomain** — the trial-unit constructor, named before reveal. It is the
   **claim unit and candidate independence unit; independence is not granted
   by construction** and remains subject to §20.7 validity (§20.9.5);
@@ -1611,11 +1621,17 @@ declaration obligation.
 
 #### 20.9.6 Cross-space inference obligations
 
-1. **No free transport.** An event/pair-level fidelity result never
-   auto-upgrades to a trial-level claim, and a trial-level claim never
-   refines to an event-level statement (no ∃-counterexample reading of
-   fidelity boxes). Upward transport requires a sealed ρ_v, a declared
-   aggregation rule a_{v,t}, and a declared dependence treatment (§20.9.5).
+1. **No automatic transport in either direction.** An event/pair-level
+   fidelity result never auto-upgrades to a trial-level claim; upward
+   transport requires a sealed ρ_v, a declared aggregation rule a_{v,t},
+   and a declared dependence treatment (§20.9.5). A trial-level result does
+   not *by itself* refine to an event-level statement; any downward
+   refinement requires a separately sealed theorem for the declared
+   aggregation (e.g. a max-aggregate bound legitimately bounds every event
+   in its fiber). An actual event-level counterexample continues to falsify
+   a fidelity κ according to that κ's own declared quantification domain,
+   comparison relation, and decision rule — trial eligibility does not
+   shield a fidelity claim.
 2. **Bound input interface — formula deferred.** Any cross-space bound must
    be declared as a function of a declared subset of the following interface:
    event/pair-level observables or fidelity bounds; the fiber assignment and
@@ -1640,13 +1656,20 @@ No terminal-slot enum values are added by this section.
 | Failure semantics | Precise meaning | Repair path |
 |---|---|---|
 | **assignment-unresolved** | No ρ_v is mechanically computable from frozen keys on the declared S_v (constructibility/keying failure) | capture / keying |
-| **not-identifiable** | The available observables cannot uniquely determine the target structure or claim — distinct structures induce identical trial observations; ρ_v may be fully constructible | new identifying evidence, substrate change, narrower model class, or weaker claim |
+| **not-identifiable** | The available observations do not determine the target claim on the declared domain; observational equivalence (distinct structures inducing identical observations) is one sufficient witness, not the only one — an empty decidable support is another; ρ_v may be fully constructible | new identifying evidence, substrate change, narrower model class, or weaker claim |
 | **transport-noncommuting** | A declared cross-representation or cross-space transport fails to commute (e.g. offline vs runtime representations of the same quantity), or no legal expansion within the frozen class reaches the target condition | change representation/reduction, or record a class-scoped closure |
 | **not-exchangeable** | The dependence structure does not support the declared nominal trial-independent inference | change cluster unit or statistical bound; owned by the §20.7 validity gate (§19.5) |
 
 Conflating any two of these in a terminal name violates §20.8 item 4 (naming
-must not exceed what the definitions entail). All four are validity-side
-semantics; none is an efficacy door.
+must not exceed what the definitions entail). These semantics are **not
+intrinsically assigned to one terminal family**: the mapping depends on the
+study's declared target and on whether its observation-validity gate passed.
+A transport-noncommuting or not-identifiable outcome can be the *valid
+negative answer* of a study that targets that very question (a fidelity
+study validly falsifying a proxy is a completed falsification, not an
+invalid study), while the same semantics arising incidentally elsewhere is a
+validity failure. §20.7 must preserve the distinction between a valid
+negative answer and an experiment that could not answer.
 
 ---
 
