@@ -20,6 +20,7 @@ import run_h0_phase_a as parent  # noqa: E402
 import run_h0_phase_a_child as child  # noqa: E402
 import h0_runtime_confinement as runtime_confinement  # noqa: E402
 import verify_h0_phase_a as verifier  # noqa: E402
+import verify_h0_preseal_freeze as freeze_verifier  # noqa: E402
 import export_headline_bridge_decision_trace as trace_export  # noqa: E402
 import verify_headline_bridge_decision_trace as trace_verifier  # noqa: E402
 
@@ -147,6 +148,42 @@ def _controller() -> dict[str, object]:
             "uv": "/usr/bin/uv",
         },
     }
+
+
+def _write_discovery_candidate(root: Path, head: str) -> Path:
+    path = (
+        root
+        / "docs/modules/semantic/research/evidence"
+        / f"h0_preseal_freeze_{head}"
+        / "h0_preseal_freeze_v3.json"
+    )
+    path.parent.mkdir(parents=True)
+    controller = _controller()
+    if head != controller["instrumentation_head"]:
+        evidence = f"docs/modules/semantic/research/evidence/h0_phase_a_{head}"
+        artifact = path.relative_to(root).as_posix()
+        landing = controller["authority_landing"]
+        assert isinstance(landing, dict)
+        controller["instrumentation_head"] = head
+        controller["evidence_root"] = evidence
+        controller["incomplete_root"] = evidence + ".incomplete"
+        controller["authority_landing"] = {
+            **landing,
+            "artifact_path": artifact,
+            "post_head_allowed_paths": [
+                artifact,
+                "docs/modules/semantic/research/"
+                "headline_bridge_full_decision_capture_declaration_20260713.md",
+            ],
+        }
+    payload = {
+        "complete": True,
+        "freeze_schema_version": "h0_preseal_freeze_v3",
+        "instrumentation_head": head,
+        "phase_a_controller_input": controller,
+    }
+    path.write_bytes(parent.canonical_json_file_bytes(payload))
+    return path
 
 
 def _environment(controller: dict[str, object], run_id: str) -> dict[str, str]:
@@ -343,6 +380,70 @@ def test_parent_parser_has_no_execution_options_or_positionals() -> None:
     for argv in (("--dry-run",), ("manifest.json",), ("--preset", "other")):
         with pytest.raises(parent.ContractError):
             parent._parse_no_options(argv)
+
+
+def test_discovery_selects_the_unique_current_landing_among_history(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    historical = _write_discovery_candidate(tmp_path, "b" * 40)
+    current = _write_discovery_candidate(tmp_path, "a" * 40)
+    checked: list[Path] = []
+
+    def independently_classify(path: Path, root: Path) -> dict[str, object]:
+        assert root == tmp_path
+        checked.append(path)
+        return {"matches_current_checkout": path == current}
+
+    monkeypatch.setattr(
+        freeze_verifier, "verify_current_landing_candidate", independently_classify
+    )
+    selected, contract = parent._discover_controller_input(tmp_path)
+    assert selected == current
+    assert contract["instrumentation_head"] == "a" * 40
+    assert checked == [current, historical]
+
+
+@pytest.mark.parametrize("matches", [set(), {"a" * 40, "b" * 40}])
+def test_discovery_rejects_zero_or_multiple_current_landings(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, matches: set[str]
+) -> None:
+    _write_discovery_candidate(tmp_path, "a" * 40)
+    _write_discovery_candidate(tmp_path, "b" * 40)
+
+    def independently_classify(path: Path, _root: Path) -> dict[str, object]:
+        return {
+            "matches_current_checkout": path.parent.name.removeprefix(
+                "h0_preseal_freeze_"
+            )
+            in matches
+        }
+
+    monkeypatch.setattr(
+        freeze_verifier, "verify_current_landing_candidate", independently_classify
+    )
+    with pytest.raises(parent.ContractError, match="exactly one current-HEAD"):
+        parent._discover_controller_input(tmp_path)
+
+
+@pytest.mark.parametrize("kind", ["malformed", "symlink"])
+def test_discovery_rejects_malformed_or_symlinked_candidate(
+    tmp_path: Path, kind: str
+) -> None:
+    path = (
+        tmp_path
+        / "docs/modules/semantic/research/evidence"
+        / f"h0_preseal_freeze_{'a' * 40}"
+        / "h0_preseal_freeze_v3.json"
+    )
+    path.parent.mkdir(parents=True)
+    if kind == "malformed":
+        path.write_bytes(b"{}\n")
+    else:
+        target = tmp_path / "candidate.json"
+        target.write_bytes(b"{}\n")
+        path.symlink_to(target)
+    with pytest.raises(parent.ContractError, match="landing candidate rejected"):
+        parent._discover_controller_input(tmp_path)
 
 
 def test_main_carries_one_deadline_from_entry_through_controller_discovery(

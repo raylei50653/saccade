@@ -289,6 +289,10 @@ class VerificationError(RuntimeError):
     """A malformed or unauthoritative v3 artifact/check-out."""
 
 
+class LandingMismatchError(VerificationError):
+    """A sound historical artifact that does not land at this checkout."""
+
+
 def canonical_json(value: object) -> bytes:
     try:
         return json.dumps(
@@ -1365,7 +1369,7 @@ def verify_authority_landing(
     freeze_commit = _single_parent(root, execution)
     instrumentation = _single_parent(root, freeze_commit)
     if instrumentation != head:
-        raise VerificationError("execution checkout does not derive I -> F -> S")
+        raise LandingMismatchError("execution checkout does not derive I -> F -> S")
     path = freeze_path(head)
     if _changed_paths(root, instrumentation, freeze_commit) != [path]:
         raise VerificationError("freeze commit has an extra or missing post-head delta")
@@ -1411,6 +1415,128 @@ def verify_authority_landing(
         "seal_commit": execution,
         "execution_checkout": execution,
     }
+
+
+def _verify_landing_candidate_header(path: Path, root: Path) -> dict[str, Any]:
+    """Validate the fail-closed, path-bound header needed for landing discovery.
+
+    Historical v3 artifacts intentionally bind implementation and host inputs at
+    their own I commits.  Discovery must therefore not require those historical
+    bindings to equal the current worktree merely to determine that they are
+    not the current landing.  The selected candidate still receives the full
+    independent artifact verification below.
+    """
+    try:
+        details = path.lstat()
+    except OSError as exc:
+        raise VerificationError(f"v3 artifact is unreadable: {path}") from exc
+    if path.is_symlink() or not stat.S_ISREG(details.st_mode):
+        raise VerificationError("v3 artifact is not a physical regular file")
+    value = load_canonical_json(path)
+    required = {
+        "freeze_schema_version",
+        "capture_schema_version",
+        "instrumentation_head",
+        "instrumentation_tree",
+        "tree_list_sha256",
+        "policy_base_head",
+        "policy_base_tree",
+        "full_repo_diff_sha256",
+        "runtime_policy_code_projection_v1",
+        "h0_coverage_v2",
+        "mutation_admission",
+        "policy_target",
+        "assembler_sha256",
+        "input_binding",
+        "produced_by",
+        "authority_landing",
+        "implementation_bindings",
+        "phase_a_controller_input",
+        "complete",
+        "problems",
+    }
+    _require_exact_members(value, required, "h0_preseal_freeze_v3")
+    head = value.get("instrumentation_head")
+    if (
+        value.get("freeze_schema_version") != FREEZE_SCHEMA
+        or not isinstance(head, str)
+        or not HEAD_RE.fullmatch(head)
+        or value.get("complete") is not True
+        or not isinstance(value.get("problems"), list)
+        or not all(isinstance(problem, str) for problem in value["problems"])
+    ):
+        raise VerificationError("landing candidate v3 header is malformed")
+    landing = value["authority_landing"]
+    if not isinstance(landing, Mapping):
+        raise VerificationError("landing candidate has no authority-landing object")
+    _verify_landing_shape(landing, head)
+    expected = root.resolve(strict=True) / freeze_path(head)
+    if path.absolute() != expected.absolute():
+        raise VerificationError("v3 artifact is not at its deterministic RC2 path")
+    controller = value["phase_a_controller_input"]
+    required_controller = {
+        "authority_landing",
+        "bound_inputs",
+        "document_type",
+        "evidence_root",
+        "execution_constants",
+        "gpu",
+        "incomplete_root",
+        "instrumentation_head",
+        "library_dirs",
+        "repository_root",
+        "schema",
+        "sequence_input_digest",
+        "tool_paths",
+    }
+    if not isinstance(controller, Mapping):
+        raise VerificationError("landing candidate controller input is not an object")
+    _require_exact_members(controller, required_controller, "phase_a_controller_input")
+    controller_landing = controller["authority_landing"]
+    if (
+        controller.get("schema") != "h0_phase_a_controller_v1"
+        or controller.get("document_type") != "controller_input"
+        or controller.get("instrumentation_head") != head
+        or not isinstance(controller_landing, Mapping)
+    ):
+        raise VerificationError("landing candidate controller identity is malformed")
+    _verify_landing_shape(controller_landing, head)
+    expected_root = root.resolve(strict=True).as_posix()
+    evidence_root = f"docs/modules/semantic/research/evidence/h0_phase_a_{head}"
+    if (
+        controller.get("repository_root") != expected_root
+        or controller.get("evidence_root") != evidence_root
+        or controller.get("incomplete_root") != evidence_root + ".incomplete"
+    ):
+        raise VerificationError("landing candidate controller derivation is malformed")
+    return value
+
+
+def verify_current_landing_candidate(path: Path, root: Path) -> dict[str, Any]:
+    """Independently classify one physical v3 artifact for this checkout.
+
+    A valid artifact from a prior sealed execution is reported as a non-match,
+    not an error.  Any malformed/symlinked candidate, and the selected current
+    candidate's full v3 verification, remain fail-closed.
+    """
+    value = _verify_landing_candidate_header(path, root)
+    try:
+        landing = verify_authority_landing(root, value)
+    except LandingMismatchError:
+        return {
+            "schema": "h0_preseal_freeze_v3_landing_candidate_v1",
+            "instrumentation_head": value["instrumentation_head"],
+            "matches_current_checkout": False,
+        }
+    report = verify_artifact_path(
+        path, root, require_complete=True, verify_landing=True
+    )
+    if report.get("landing") != landing:
+        raise VerificationError(
+            "current landing report differs after full verification"
+        )
+    report["matches_current_checkout"] = True
+    return report
 
 
 def verify_artifact_path(

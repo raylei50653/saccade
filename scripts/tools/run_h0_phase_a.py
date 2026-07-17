@@ -1292,20 +1292,38 @@ def _parse_no_options(argv: Sequence[str]) -> bool:
 
 
 def _discover_controller_input(root: Path) -> tuple[Path, dict[str, Any]]:
-    """Find the sole tracked v3 freeze by its fixed basename, never by a user input."""
+    """Select the sole v3 artifact whose independently verified landing is HEAD."""
     evidence = root / "docs/modules/semantic/research/evidence"
+    if evidence.is_symlink() or not evidence.is_dir():
+        raise ContractError("evidence root is not a physical directory")
     candidates = sorted(evidence.glob("**/h0_preseal_freeze_v3.json"))
-    if len(candidates) != 1:
+    try:
+        import verify_h0_preseal_freeze
+
+        current = []
+        for candidate in candidates:
+            report = verify_h0_preseal_freeze.verify_current_landing_candidate(
+                candidate, root
+            )
+            if report.get("matches_current_checkout") is True:
+                current.append(candidate)
+    except (OSError, RuntimeError, ValueError, subprocess.SubprocessError) as exc:
         raise ContractError(
-            f"expected exactly one h0_preseal_freeze_v3.json, found {len(candidates)}"
+            f"v3 landing candidate rejected by independent verifier: {exc}"
+        ) from exc
+    if len(current) != 1:
+        raise ContractError(
+            "expected exactly one current-HEAD h0_preseal_freeze_v3 landing, "
+            f"found {len(current)} among {len(candidates)} candidates"
         )
+    freeze_path = current[0]
     if (
-        candidates[0].is_symlink()
-        or not candidates[0].is_file()
-        or candidates[0].resolve(strict=True) != candidates[0].absolute()
+        freeze_path.is_symlink()
+        or not freeze_path.is_file()
+        or freeze_path.resolve(strict=True) != freeze_path.absolute()
     ):
         raise ContractError("h0_preseal_freeze_v3.json is not a physical regular file")
-    freeze = read_canonical_json(candidates[0])
+    freeze = read_canonical_json(freeze_path)
     if (
         not isinstance(freeze, dict)
         or freeze.get("freeze_schema_version") != "h0_preseal_freeze_v3"
@@ -1320,10 +1338,10 @@ def _discover_controller_input(root: Path) -> tuple[Path, dict[str, Any]]:
     landing = contract.get("authority_landing")
     if (
         not isinstance(landing, dict)
-        or landing.get("artifact_path") != candidates[0].relative_to(root).as_posix()
+        or landing.get("artifact_path") != freeze_path.relative_to(root).as_posix()
     ):
         raise ContractError("v3 freeze is not at its RC2 deterministic artifact path")
-    return candidates[0], contract
+    return freeze_path, contract
 
 
 def _verify_authority_landing(
