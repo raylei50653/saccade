@@ -681,7 +681,6 @@ def test_independent_verifier_rejects_self_consistent_build_environment_drift(
         "cmake": {"generator": "fixture", **tool_record("/usr/bin/true")},
         "cmake_cache_sha256": hashlib.sha256(cache.read_bytes()).hexdigest(),
         "compilers": {
-            "c": tool_record("/usr/bin/true"),
             "cxx": tool_record("/usr/bin/true"),
             "cuda": tool_record("/usr/bin/true"),
         },

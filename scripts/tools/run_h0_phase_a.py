@@ -2142,7 +2142,6 @@ def _build_identity(
     required_cache = (
         "CMAKE_COMMAND",
         "CMAKE_GENERATOR",
-        "CMAKE_C_COMPILER",
         "CMAKE_CXX_COMPILER",
         "CMAKE_CUDA_COMPILER",
     )
@@ -2150,7 +2149,6 @@ def _build_identity(
         raise ContractError("CMake cache lacks generator/compiler identity")
     compiler_records: dict[str, dict[str, Any]] = {}
     for language, key in (
-        ("c", "CMAKE_C_COMPILER"),
         ("cxx", "CMAKE_CXX_COMPILER"),
         ("cuda", "CMAKE_CUDA_COMPILER"),
     ):

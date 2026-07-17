@@ -1155,7 +1155,7 @@ def _verify_complete_build_identity(
     }:
         raise VerificationError("CMake identity has missing or unknown members")
     compilers = identity["compilers"]
-    if not isinstance(compilers, dict) or set(compilers) != {"c", "cxx", "cuda"}:
+    if not isinstance(compilers, dict) or set(compilers) != {"cxx", "cuda"}:
         raise VerificationError("compiler identity set mismatch")
     python_identity = identity["python"]
     if not isinstance(python_identity, dict) or set(python_identity) != {
