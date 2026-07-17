@@ -1,0 +1,10 @@
+CMake Error at /usr/share/cmake/Modules/Internal/CMakeCUDAFindToolkit.cmake:104 (message):
+  Failed to find nvcc.
+
+  Compiler requires the CUDA toolkit.  Please set the CUDAToolkit_ROOT
+  variable.
+Call Stack (most recent call first):
+  /usr/share/cmake/Modules/CMakeDetermineCUDACompiler.cmake:109 (cmake_cuda_find_toolkit)
+  CMakeLists.txt:2 (project)
+
+
