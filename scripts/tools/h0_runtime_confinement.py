@@ -2,10 +2,12 @@
 """Linux fail-closed runtime confinement and file-input attestation.
 
 The Phase-A parent forks the final child itself so that Landlock is installed
-before ``execve(2)`` starts the ELF loader.  A small seccomp filter reports only
-file-consuming syscalls to the ptrace supervisor; all other syscalls run at
-normal speed.  Landlock is the enforcing boundary and the supervisor is the
-independent recorder/fail-closed classifier.
+before ``execve(2)`` starts the ELF loader.  A small seccomp filter reports
+file-consuming syscalls, the explicitly admitted ``getrandom(2)`` resource,
+and deny-listed external-byte ingress syscalls to the ptrace supervisor; all
+remaining syscalls run at normal speed.  Landlock is the path-enforcing
+boundary and the supervisor is the independent recorder/fail-closed
+classifier.
 """
 
 from __future__ import annotations
