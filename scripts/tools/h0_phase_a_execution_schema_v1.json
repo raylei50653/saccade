@@ -125,7 +125,7 @@
         "build_environment_algorithm", "build_environment_keys", "build_vectors", "c_paths", "checkpoints", "child_vectors", "d_paths",
         "deadline_seconds", "environment_keys", "evaluator_argv_prefix", "inotify_mask",
         "model_inputs", "operator_vector", "ordered_run_plan", "required_repository_inputs", "result_enum", "result_matrix",
-        "trace_capacities", "v_paths"
+        "runtime_confinement_backend", "runtime_trace_scope", "trace_capacities", "v_paths"
       ],
       "properties": {
         "build_environment_algorithm": {"const": "h0_build_environment_v1"},
@@ -136,7 +136,7 @@
             ["uv", "run", "--frozen", "cmake", "--build", "build/h0_phase_a", "--target", "saccade_tracking_ext", "saccade_scan_plugin", "--parallel", "1"]
           ]
         },
-        "c_paths": {"$ref": "#/$defs/path_set", "minItems": 25, "maxItems": 25},
+        "c_paths": {"$ref": "#/$defs/path_set", "minItems": 29, "maxItems": 29},
         "checkpoints": {"const": ["T0", "T1", "T2a_0", "T2b_0", "T2a_1", "T2b_1", "T2a_2", "T2b_2", "T2a_3", "T2b_3", "T3", "T4"]},
         "child_vectors": {"type": "array", "items": {"$ref": "#/$defs/command_vector"}, "minItems": 4, "maxItems": 4},
         "d_paths": {"$ref": "#/$defs/path_set", "minItems": 11, "maxItems": 11},
@@ -147,10 +147,12 @@
         "model_inputs": {"const": ["models/yolo/mamba_head_26m.engine", "models/yolo/yolo26m.pt", "models/yolo/yolo26m_backbone_640_best.engine", "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt", "runs/mamba_gt_yolo26m_v14replica_t3_t1/best.ckpt"]},
         "operator_vector": {"const": ["uv", "run", "--frozen", "python", "scripts/tools/run_h0_phase_a.py"]},
         "ordered_run_plan": {"const": ["00_capture_off", "01_capture_on_1", "02_capture_on_2", "03_capture_on_3"]},
-        "required_repository_inputs": {"const": ["configs/presets/mamba_whole_graph_m.yaml", "docs/modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md", "docs/modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.policy.yaml", "scripts/tools/export_headline_bridge_decision_trace.py", "scripts/tools/h0_bridge_decision_trace_schema_v2.json", "scripts/tools/h0_phase_a_execution_schema_v1.json", "scripts/tools/resolved_bridge_policy_config.py", "scripts/tools/run_h0_phase_a.py", "scripts/tools/run_h0_phase_a_child.py", "scripts/tools/verify_h0_phase_a.py", "scripts/tools/verify_headline_bridge_decision_trace.py", "uv.lock"]},
+        "required_repository_inputs": {"const": ["configs/presets/mamba_whole_graph_m.yaml", "docs/modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md", "docs/modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.policy.yaml", "scripts/tools/export_headline_bridge_decision_trace.py", "scripts/tools/h0_bridge_decision_trace_schema_v2.json", "scripts/tools/h0_phase_a_execution_schema_v1.json", "scripts/tools/h0_runtime_confinement.py", "scripts/tools/resolved_bridge_policy_config.py", "scripts/tools/run_h0_phase_a.py", "scripts/tools/run_h0_phase_a_child.py", "scripts/tools/verify_h0_phase_a.py", "scripts/tools/verify_headline_bridge_decision_trace.py", "uv.lock"]},
         "result_enum": {"const": ["provenance_invalid", "build_failed", "extension_load_failed", "runner_nonzero", "runner_timeout", "serialization_failed", "artifact_missing_or_unreadable", "unclassified_execution_failure", "capture_perturbs_policy", "packet_invalid", "phase_a_pass"]},
         "result_matrix": {"$ref": "#/$defs/result_matrix"},
         "trace_capacities": {"const": [65536, 16384, 16384, 16384]},
+        "runtime_confinement_backend": {"const": "landlock_seccomp_ptrace_v1"},
+        "runtime_trace_scope": {"const": ["execve", "execveat", "mmap", "open", "openat", "openat2"]},
         "v_paths": {"$ref": "#/$defs/path_set", "minItems": 3, "maxItems": 3}
       }
     },
@@ -212,10 +214,13 @@
     "child_invocation": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["bound_inputs_digest", "capture_run_uuid", "document_type", "environment", "environment_digest", "evaluator_argv", "incomplete_root", "instrumentation_head", "result", "run_id", "schema", "state", "vector"],
+      "required": ["bound_inputs_digest", "capture_run_uuid", "confinement_backend", "confinement_plan_digest", "confinement_probe_passed", "document_type", "environment", "environment_digest", "evaluator_argv", "incomplete_root", "instrumentation_head", "result", "run_id", "runtime_inputs_digest", "schema", "state", "vector"],
       "properties": {
         "bound_inputs_digest": {"$ref": "#/$defs/sha256"},
         "capture_run_uuid": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},
+        "confinement_backend": {"const": "landlock_seccomp_ptrace_v1"},
+        "confinement_plan_digest": {"oneOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]},
+        "confinement_probe_passed": {"type": ["boolean", "null"]},
         "document_type": {"const": "child_invocation"},
         "environment": {"$ref": "#/$defs/environment"},
         "environment_digest": {"$ref": "#/$defs/sha256"},
@@ -224,13 +229,15 @@
         "instrumentation_head": {"$ref": "#/$defs/head"},
         "result": {"type": ["string", "null"], "enum": [null, "run_completed", "runner_nonzero", "provenance_invalid", "runner_timeout"]},
         "run_id": {"$ref": "#/$defs/run_id"},
+        "runtime_inputs_digest": {"oneOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]},
         "schema": {"const": "h0_phase_a_child_v1"},
         "state": {"enum": ["not_run", "running_interrupted", "failed", "completed"]},
         "vector": {"$ref": "#/$defs/command_vector"}
       },
       "allOf": [
-        {"if": {"properties": {"state": {"enum": ["not_run", "running_interrupted"]}}}, "then": {"properties": {"result": {"type": "null"}}}},
-        {"if": {"properties": {"state": {"const": "completed"}}}, "then": {"properties": {"result": {"const": "run_completed"}}}},
+        {"if": {"properties": {"state": {"const": "not_run"}}}, "then": {"properties": {"confinement_plan_digest": {"type": "null"}, "confinement_probe_passed": {"type": "null"}, "result": {"type": "null"}, "runtime_inputs_digest": {"type": "null"}}}},
+        {"if": {"properties": {"state": {"const": "running_interrupted"}}}, "then": {"properties": {"result": {"type": "null"}, "runtime_inputs_digest": {"type": "null"}}}},
+        {"if": {"properties": {"state": {"const": "completed"}}}, "then": {"properties": {"confinement_plan_digest": {"$ref": "#/$defs/sha256"}, "confinement_probe_passed": {"const": true}, "result": {"const": "run_completed"}, "runtime_inputs_digest": {"$ref": "#/$defs/sha256"}}}},
         {"if": {"properties": {"state": {"const": "failed"}}}, "then": {"properties": {"result": {"enum": ["runner_nonzero", "provenance_invalid", "runner_timeout"]}}}}
       ]
     },
@@ -256,7 +263,7 @@
       "type": "object", "additionalProperties": false,
       "required": ["classification", "mask", "path"],
       "properties": {
-        "classification": {"enum": ["bound_mutation", "ignored_watch", "inventory_mismatch", "queue_overflow", "watch_failed"]},
+        "classification": {"enum": ["bound_mutation", "ignored_watch", "inventory_mismatch", "queue_overflow", "runtime_confinement_failed", "watch_failed"]},
         "mask": {"type": "integer", "minimum": 0},
         "path": {"type": "string"}
       }

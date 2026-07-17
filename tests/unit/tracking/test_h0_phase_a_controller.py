@@ -154,6 +154,9 @@ def _children(controller: dict[str, object]) -> list[dict[str, object]]:
             {
                 "bound_inputs_digest": controller["bound_inputs"]["digest"],
                 "capture_run_uuid": f"00000000-0000-4000-8000-{index:012d}",
+                "confinement_backend": "landlock_seccomp_ptrace_v1",
+                "confinement_plan_digest": "1" * 64,
+                "confinement_probe_passed": True,
                 "document_type": "child_invocation",
                 "environment": environment,
                 "environment_digest": verifier.digest(environment),
@@ -163,12 +166,21 @@ def _children(controller: dict[str, object]) -> list[dict[str, object]]:
                 "instrumentation_head": controller["instrumentation_head"],
                 "result": "run_completed",
                 "run_id": run_id,
+                "runtime_inputs_digest": "2" * 64,
                 "schema": "h0_phase_a_child_v1",
                 "state": "completed",
                 "vector": list(parent.child_argv(ROOT, run_id)),
             }
         )
     return result
+
+
+def _mark_not_run(invocation: dict[str, object]) -> None:
+    invocation["confinement_plan_digest"] = None
+    invocation["confinement_probe_passed"] = None
+    invocation["result"] = None
+    invocation["runtime_inputs_digest"] = None
+    invocation["state"] = "not_run"
 
 
 def _predicates() -> dict[str, bool]:
@@ -247,12 +259,18 @@ def evidence_for(result: str = "phase_a_pass") -> dict[str, object]:
     children = _children(controller)
     if result in {"provenance_invalid", "build_failed", "extension_load_failed"}:
         for invocation in children:
+            invocation["confinement_plan_digest"] = None
+            invocation["confinement_probe_passed"] = None
+            invocation["runtime_inputs_digest"] = None
             invocation["state"] = "not_run"
             invocation["result"] = None
     elif result in {"runner_nonzero", "runner_timeout"}:
         children[0]["state"] = "failed"
         children[0]["result"] = result
         for invocation in children[1:]:
+            invocation["confinement_plan_digest"] = None
+            invocation["confinement_probe_passed"] = None
+            invocation["runtime_inputs_digest"] = None
             invocation["state"] = "not_run"
             invocation["result"] = None
     return {
@@ -482,8 +500,7 @@ def test_runner_timeout_accepts_completed_prefix_then_not_run_suffix(
     evidence = evidence_for("runner_timeout")
     children = _children(evidence["controller_input"])
     for child_invocation in children[completed_count:]:
-        child_invocation["state"] = "not_run"
-        child_invocation["result"] = None
+        _mark_not_run(child_invocation)
     evidence["child_invocations"] = children
     assert verifier.verify_evidence(evidence)["result"] == "runner_timeout"
 
@@ -497,8 +514,7 @@ def test_runner_timeout_accepts_completed_prefix_then_failed_child(
     children[failed_index]["state"] = "failed"
     children[failed_index]["result"] = "runner_timeout"
     for child_invocation in children[failed_index + 1 :]:
-        child_invocation["state"] = "not_run"
-        child_invocation["result"] = None
+        _mark_not_run(child_invocation)
     evidence["child_invocations"] = children
     assert verifier.verify_evidence(evidence)["result"] == "runner_timeout"
 
@@ -506,8 +522,7 @@ def test_runner_timeout_accepts_completed_prefix_then_failed_child(
 def test_runner_timeout_rejects_non_prefix_controller_timeout_states() -> None:
     evidence = evidence_for("runner_timeout")
     children = _children(evidence["controller_input"])
-    children[1]["state"] = "not_run"
-    children[1]["result"] = None
+    _mark_not_run(children[1])
     evidence["child_invocations"] = children
     with pytest.raises(verifier.VerificationError, match="state order"):
         verifier.verify_evidence(evidence)
@@ -589,7 +604,11 @@ def test_runner_timeout_rejects_non_prefix_controller_timeout_states() -> None:
         ),
         (
             lambda value: value["child_invocations"][2].update(
-                {"state": "running_interrupted", "result": None}
+                {
+                    "runtime_inputs_digest": None,
+                    "state": "running_interrupted",
+                    "result": None,
+                }
             ),
             "non-completed child",
         ),
@@ -764,8 +783,11 @@ class _FakeProcess:
         self._captured["timeout"] = timeout
         if self._mode == "complete":
             value = parent.read_canonical_json(self._invocation)
+            value["confinement_plan_digest"] = "1" * 64
+            value["confinement_probe_passed"] = True
             value["state"] = "completed"
             value["result"] = "run_completed"
+            value["runtime_inputs_digest"] = "2" * 64
             parent._replace_canonical_fsync(self._invocation, value)
             return 0
         if self._mode == "malformed":
@@ -884,6 +906,11 @@ def _write_c_only_root(root: Path) -> None:
     }
     for invocation in evidence["child_invocations"]:
         json_values[f"runs/{invocation['run_id']}/invocation.json"] = invocation
+        json_values[f"runs/{invocation['run_id']}/runtime_inputs.json"] = {
+            "blocking_result": "build_failed",
+            "schema": "h0_runtime_inputs_v1",
+            "state": "not_produced",
+        }
     for relative in parent.C_PATHS:
         if relative == "checksums.sha256":
             continue
@@ -1133,8 +1160,11 @@ def test_parent_fsync_timeout_after_four_completed_children_republishes_valid_ti
     for run_id in parent.RUN_IDS:
         invocation_path = incomplete / "runs" / run_id / "invocation.json"
         invocation = parent.read_canonical_json(invocation_path)
+        invocation["confinement_plan_digest"] = "1" * 64
+        invocation["confinement_probe_passed"] = True
         invocation["state"] = "completed"
         invocation["result"] = "run_completed"
+        invocation["runtime_inputs_digest"] = "2" * 64
         parent._replace_canonical_fsync(invocation_path, invocation)
     for relative in parent.D_PATHS:
         path = incomplete / relative

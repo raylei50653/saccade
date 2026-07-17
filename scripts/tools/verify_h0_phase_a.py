@@ -152,6 +152,7 @@ REQUIRED_REPOSITORY_INPUTS = (
     "scripts/tools/export_headline_bridge_decision_trace.py",
     "scripts/tools/h0_bridge_decision_trace_schema_v2.json",
     "scripts/tools/h0_phase_a_execution_schema_v1.json",
+    "scripts/tools/h0_runtime_confinement.py",
     "scripts/tools/resolved_bridge_policy_config.py",
     "scripts/tools/run_h0_phase_a.py",
     "scripts/tools/run_h0_phase_a_child.py",
@@ -175,15 +176,19 @@ C_PATHS = (
     "runs/00_capture_off/invocation.json",
     "runs/00_capture_off/stdout.log",
     "runs/00_capture_off/stderr.log",
+    "runs/00_capture_off/runtime_inputs.json",
     "runs/01_capture_on_1/invocation.json",
     "runs/01_capture_on_1/stdout.log",
     "runs/01_capture_on_1/stderr.log",
+    "runs/01_capture_on_1/runtime_inputs.json",
     "runs/02_capture_on_2/invocation.json",
     "runs/02_capture_on_2/stdout.log",
     "runs/02_capture_on_2/stderr.log",
+    "runs/02_capture_on_2/runtime_inputs.json",
     "runs/03_capture_on_3/invocation.json",
     "runs/03_capture_on_3/stdout.log",
     "runs/03_capture_on_3/stderr.log",
+    "runs/03_capture_on_3/runtime_inputs.json",
     "verification/aggregate.json",
 )
 D_PATHS = (
@@ -414,6 +419,17 @@ def _verify_constants(controller: Mapping[str, Any]) -> None:
         raise VerificationError("resolved model/engine input set mismatch")
     if constants["required_repository_inputs"] != list(REQUIRED_REPOSITORY_INPUTS):
         raise VerificationError("required controller/runtime authority set mismatch")
+    if constants[
+        "runtime_confinement_backend"
+    ] != "landlock_seccomp_ptrace_v1" or constants["runtime_trace_scope"] != [
+        "execve",
+        "execveat",
+        "mmap",
+        "open",
+        "openat",
+        "openat2",
+    ]:
+        raise VerificationError("runtime confinement declaration mismatch")
     if constants["checkpoints"] != list(CHECKPOINTS):
         raise VerificationError("bound-input checkpoint order mismatch")
     if constants["deadline_seconds"] != 3600 or constants["trace_capacities"] != [
@@ -510,6 +526,25 @@ def _verify_children(evidence: Mapping[str, Any]) -> None:
             environment
         ):
             raise VerificationError("child environment table/digest mismatch")
+        if child["confinement_backend"] != "landlock_seccomp_ptrace_v1":
+            raise VerificationError("child runtime confinement backend mismatch")
+        if child["state"] == "completed" and (
+            child["confinement_probe_passed"] is not True
+            or child["confinement_plan_digest"] is None
+            or child["runtime_inputs_digest"] is None
+        ):
+            raise VerificationError("completed child lacks runtime confinement proof")
+        if child["state"] == "not_run" and any(
+            child[key] is not None
+            for key in (
+                "confinement_plan_digest",
+                "confinement_probe_passed",
+                "runtime_inputs_digest",
+            )
+        ):
+            raise VerificationError(
+                "not-run child fabricates runtime confinement proof"
+            )
 
 
 def _verify_input_binding(evidence: Mapping[str, Any]) -> None:
@@ -1011,6 +1046,382 @@ def _verify_complete_build_identity(
         raise VerificationError("uv.lock identity mismatch")
 
 
+def _verify_runtime_inputs(
+    value: Mapping[str, Any],
+    invocation: Mapping[str, Any],
+    controller: Mapping[str, Any],
+    build_identity: Mapping[str, Any],
+) -> None:
+    members = {
+        "backend",
+        "confinement_plan",
+        "confinement_plan_digest",
+        "denial_probe_observed",
+        "installed_before_exec",
+        "landlock_abi",
+        "regular_files",
+        "resources",
+        "schema",
+        "state",
+        "trace_scope",
+        "violations",
+    }
+    if set(value) != members or value.get("schema") != "h0_runtime_inputs_v1":
+        raise VerificationError("runtime input attestation shape mismatch")
+    expected_scope = ["execve", "execveat", "mmap", "open", "openat", "openat2"]
+    if (
+        value["backend"] != "landlock_seccomp_ptrace_v1"
+        or value["trace_scope"] != expected_scope
+        or value["installed_before_exec"] is not True
+        or not isinstance(value["landlock_abi"], int)
+        or value["landlock_abi"] < 3
+    ):
+        raise VerificationError("runtime OS boundary declaration mismatch")
+    plan = value["confinement_plan"]
+    if not isinstance(plan, dict) or value["confinement_plan_digest"] != digest(plan):
+        raise VerificationError("runtime confinement plan digest mismatch")
+    if invocation["confinement_plan_digest"] != value["confinement_plan_digest"]:
+        raise VerificationError("parent/child runtime confinement plan mismatch")
+    if invocation["runtime_inputs_digest"] != digest(value):
+        raise VerificationError("child/runtime input inventory digest mismatch")
+    plan_members = {
+        "backend",
+        "denial_probe",
+        "files",
+        "lookup_directories",
+        "output_directories",
+        "resource_rules",
+        "schema",
+        "trace_scope",
+    }
+    if (
+        set(plan) != plan_members
+        or plan["schema"] != "h0_runtime_confinement_plan_v1"
+        or plan["backend"] != value["backend"]
+        or plan["trace_scope"] != expected_scope
+    ):
+        raise VerificationError("runtime confinement plan shape mismatch")
+
+    repository_root = Path(controller["repository_root"])
+    incomplete = repository_root / controller["incomplete_root"]
+    expected_outputs = [(incomplete / "runs" / run_id).as_posix() for run_id in RUN_IDS]
+    if (
+        plan["denial_probe"]
+        != (incomplete / "_runtime_confinement_denial_probe").as_posix()
+        or plan["output_directories"] != expected_outputs
+    ):
+        raise VerificationError("runtime output/probe confinement plan mismatch")
+
+    expected: dict[str, dict[str, Any]] = {}
+
+    def admit(
+        realpath: str,
+        *,
+        binding: str,
+        logical_paths: Sequence[str],
+        length: int,
+        sha256: str,
+    ) -> None:
+        current = expected.setdefault(
+            realpath,
+            {
+                "bindings": set(),
+                "length": length,
+                "logical_paths": set(),
+                "sha256": sha256,
+            },
+        )
+        if (current["length"], current["sha256"]) != (length, sha256):
+            raise VerificationError("conflicting frozen runtime file identity")
+        current["bindings"].add(binding)
+        current["logical_paths"].update(logical_paths)
+        current["logical_paths"].add(realpath)
+
+    inventory = controller["bound_inputs"]
+    for record in inventory["repository"]:
+        if record["kind"] == "regular":
+            path = (repository_root / record["path"]).as_posix()
+            admit(
+                path,
+                binding="repository",
+                logical_paths=(path,),
+                length=record["length"],
+                sha256=record["sha256"],
+            )
+    sequence_root = repository_root / inventory["sequence"]["root"]
+    for record in inventory["sequence"]["files"]:
+        path = (sequence_root / record["path"]).as_posix()
+        admit(
+            path,
+            binding="sequence",
+            logical_paths=(path,),
+            length=record["length"],
+            sha256=record["sha256"],
+        )
+    for binding in ("models_engines", "tool_runtime"):
+        for record in inventory[binding]:
+            logical = Path(record["logical_path"])
+            if not logical.is_absolute():
+                logical = repository_root / logical
+            admit(
+                record["realpath"],
+                binding=binding,
+                logical_paths=(logical.as_posix(), record["realpath"]),
+                length=record["length"],
+                sha256=record["sha256"],
+            )
+    for record in build_identity["artifacts"]:
+        path = (repository_root / record["path"]).as_posix()
+        admit(
+            path,
+            binding="build_artifact",
+            logical_paths=(path,),
+            length=record["length"],
+            sha256=record["sha256"],
+        )
+    python_identity = build_identity["python"]
+    admit(
+        python_identity["path"],
+        binding="tool_runtime",
+        logical_paths=(
+            (repository_root / ".venv/bin/python").as_posix(),
+            python_identity["path"],
+        ),
+        length=python_identity["length"],
+        sha256=python_identity["sha256"],
+    )
+    plan_files = plan["files"]
+    plan_file_members = {
+        "bindings",
+        "executable",
+        "length",
+        "logical_paths",
+        "realpath",
+        "sha256",
+    }
+    if not isinstance(plan_files, list) or any(
+        not isinstance(record, dict) or set(record) != plan_file_members
+        for record in plan_files
+    ):
+        raise VerificationError("runtime confinement file record shape mismatch")
+    if [record["realpath"] for record in plan_files] != sorted(
+        expected, key=lambda path: path.encode("utf-8")
+    ):
+        raise VerificationError("runtime confinement file universe mismatch")
+    for record in plan_files:
+        frozen = expected[record["realpath"]]
+        if (
+            record["bindings"] != sorted(frozen["bindings"])
+            or record["length"] != frozen["length"]
+            or record["logical_paths"]
+            != sorted(frozen["logical_paths"], key=lambda path: path.encode("utf-8"))
+            or record["sha256"] != frozen["sha256"]
+            or not isinstance(record["executable"], bool)
+        ):
+            raise VerificationError("runtime confinement identity differs from binding")
+    expected_lookup = {
+        str(Path(path).parent) for item in plan_files for path in item["logical_paths"]
+    } | {
+        parent.as_posix()
+        for item in plan_files
+        if "tool_runtime" in item["bindings"]
+        for path in item["logical_paths"]
+        for parent in Path(path).parents
+        if parent.as_posix() != "/"
+    }
+    python_library_lookup = (
+        Path(python_identity["path"]).parent.parent / "lib"
+    ).as_posix()
+    observed_lookup = set(plan["lookup_directories"])
+    if observed_lookup not in (
+        expected_lookup,
+        expected_lookup | {python_library_lookup},
+    ) or plan["lookup_directories"] != sorted(
+        observed_lookup, key=lambda path: path.encode("utf-8")
+    ):
+        raise VerificationError("runtime lookup-directory plan mismatch")
+    resource_rules = plan["resource_rules"]
+    if not isinstance(resource_rules, list) or any(
+        not isinstance(resource, dict) or set(resource) != {"kind", "path"}
+        for resource in resource_rules
+    ):
+        raise VerificationError("runtime resource-rule shape mismatch")
+    if [resource["path"] for resource in resource_rules] != sorted(
+        {resource["path"] for resource in resource_rules},
+        key=lambda path: path.encode("utf-8"),
+    ):
+        raise VerificationError("runtime resource-rule order/uniqueness mismatch")
+    for resource in resource_rules:
+        if not (
+            resource == {"kind": "procfs", "path": "/proc"}
+            or resource == {"kind": "sysfs", "path": "/sys"}
+            or (
+                resource["kind"] == "device"
+                and (
+                    resource["path"] in {"/dev/null", "/dev/zero", "/dev/urandom"}
+                    or resource["path"].startswith("/dev/nvidia")
+                    or resource["path"].startswith("/dev/dri/renderD")
+                )
+            )
+        ):
+            raise VerificationError("unclassified runtime resource rule")
+
+    if value["state"] == "complete":
+        if (
+            value["violations"]
+            or value["denial_probe_observed"] is not True
+            or invocation["confinement_probe_passed"] is not True
+        ):
+            raise VerificationError("complete runtime attestation has a violation")
+    elif value["state"] == "rejected":
+        if not value["violations"] or invocation["result"] != "provenance_invalid":
+            raise VerificationError("rejected runtime access did not fail provenance")
+    else:
+        raise VerificationError("unknown runtime attestation state")
+    observed = value["regular_files"]
+    observed_members = {
+        "bindings",
+        "length",
+        "logical_paths",
+        "operations",
+        "realpath",
+        "roles",
+        "sha256",
+    }
+    if not isinstance(observed, list) or any(
+        not isinstance(record, dict) or set(record) != observed_members
+        for record in observed
+    ):
+        raise VerificationError("actual runtime file record shape mismatch")
+    if [record["realpath"] for record in observed] != sorted(
+        {record["realpath"] for record in observed},
+        key=lambda path: path.encode("utf-8"),
+    ):
+        raise VerificationError(
+            "actual runtime file inventory order/uniqueness mismatch"
+        )
+    plan_by_path = {record["realpath"]: record for record in plan_files}
+    for record in observed:
+        if record["realpath"] not in plan_by_path:
+            raise VerificationError("actual runtime file is unbound or malformed")
+        admitted = plan_by_path[record["realpath"]]
+        if (
+            record["bindings"] != admitted["bindings"]
+            or record["length"] != admitted["length"]
+            or record["logical_paths"] != admitted["logical_paths"]
+            or record["sha256"] != admitted["sha256"]
+            or not record["operations"]
+            or any(
+                operation
+                not in {
+                    "execve",
+                    "execveat",
+                    "mmap",
+                    "mmap_exec",
+                    "mmap_read",
+                    "open",
+                    "openat",
+                    "openat2",
+                    "startup_mapping",
+                }
+                for operation in record["operations"]
+            )
+        ):
+            raise VerificationError("actual runtime file identity/operation mismatch")
+        roles = set(record["bindings"])
+        suffixes = Path(record["realpath"]).suffixes
+        if any(suffix in {".py", ".pyc"} for suffix in suffixes):
+            roles.add("python_module")
+        if ".so" in suffixes or ".so." in Path(record["realpath"]).name:
+            roles.add("shared_library")
+        if any(
+            operation in {"execve", "execveat"} for operation in record["operations"]
+        ):
+            roles.add("interpreter_or_executable")
+        if record["roles"] != sorted(roles):
+            raise VerificationError("actual runtime file role classification mismatch")
+    resources = value["resources"]
+    allowed_operations = {
+        "execve",
+        "execveat",
+        "mmap",
+        "mmap_exec",
+        "mmap_read",
+        "open",
+        "openat",
+        "openat2",
+        "startup_mapping",
+    }
+    if not isinstance(resources, list) or any(
+        not isinstance(resource, dict)
+        or set(resource) != {"kind", "operations", "path"}
+        or not isinstance(resource["path"], str)
+        or not resource["operations"]
+        or resource["operations"] != sorted(set(resource["operations"]))
+        or any(
+            operation not in allowed_operations for operation in resource["operations"]
+        )
+        for resource in resources
+    ):
+        raise VerificationError("runtime non-file resource inventory malformed")
+    if [(resource["path"], resource["kind"]) for resource in resources] != sorted(
+        {(resource["path"], resource["kind"]) for resource in resources},
+        key=lambda item: (item[0].encode("utf-8"), item[1]),
+    ):
+        raise VerificationError("runtime resource inventory order/uniqueness mismatch")
+    output_roots = tuple(Path(path) for path in plan["output_directories"])
+    lookup_roots = tuple(Path(path) for path in plan["lookup_directories"])
+    resource_roots = {
+        (resource["kind"], resource["path"]) for resource in resource_rules
+    }
+    for resource in resources:
+        kind = resource["kind"]
+        path = resource["path"]
+        candidate = Path(path)
+        canonical = candidate.is_absolute() and not any(
+            part in {".", ".."} for part in candidate.parts
+        )
+        if kind == "run_output":
+            admitted = canonical and any(
+                candidate == root or root in candidate.parents for root in output_roots
+            )
+        elif kind in {"procfs", "sysfs"}:
+            root = Path("/proc" if kind == "procfs" else "/sys")
+            admitted = (
+                (kind, root.as_posix()) in resource_roots
+                and canonical
+                and (candidate == root or root in candidate.parents)
+            )
+        elif kind == "device":
+            admitted = (kind, path) in resource_roots
+        elif kind == "bound_directory":
+            admitted = canonical and any(
+                candidate == root or root in candidate.parents for root in lookup_roots
+            )
+        elif kind == "kernel_object":
+            admitted = path.startswith(("anon_inode:", "socket:", "pipe:", "/memfd:"))
+        else:
+            admitted = False
+        if not admitted:
+            raise VerificationError("runtime resource is absent from confinement plan")
+    violations = value["violations"]
+    if not isinstance(violations, list) or any(
+        not isinstance(violation, dict)
+        or set(violation) != {"operation", "path", "reason"}
+        or not all(isinstance(member, str) for member in violation.values())
+        for violation in violations
+    ):
+        raise VerificationError("runtime violation inventory malformed")
+    if value["state"] == "complete" and not any(
+        "interpreter_or_executable" in record["roles"] for record in observed
+    ):
+        raise VerificationError("interpreter startup is absent from runtime inventory")
+    if value["state"] == "complete" and not any(
+        "startup_mapping" in record["operations"] for record in observed
+    ):
+        raise VerificationError("kernel-created startup mappings are absent")
+
+
 def verify_evidence_root(root: Path) -> dict[str, Any]:
     """Verify the published filesystem universe, checksums, and embedded evidence."""
     if (
@@ -1080,12 +1491,19 @@ def verify_evidence_root(root: Path) -> dict[str, Any]:
             raise VerificationError(f"checksum mismatch: {relative}")
     if observed_paths != expected_checksum_paths:
         raise VerificationError("checksum path order/inventory mismatch")
+    runtime_documents: list[Mapping[str, Any]] = []
     for run_id, embedded in zip(RUN_IDS, manifest["child_invocations"], strict=True):
         actual = load_json(
             root / "runs" / run_id / "invocation.json", canonical_file=True
         )
         if actual != embedded:
             raise VerificationError(f"manifest/child invocation mismatch: {run_id}")
+        runtime_value = load_json(
+            root / "runs" / run_id / "runtime_inputs.json", canonical_file=True
+        )
+        if not isinstance(runtime_value, dict):
+            raise VerificationError("runtime input artifact is not an object")
+        runtime_documents.append(runtime_value)
     if (
         load_json(root / "input_binding.json", canonical_file=True)
         != manifest["input_binding"]
@@ -1116,12 +1534,55 @@ def verify_evidence_root(root: Path) -> dict[str, Any]:
     blocking_status = {"blocking_result": manifest["result"], "state": "not_produced"}
     if build_identity.get("state") == "complete":
         _verify_complete_build_identity(build_identity, manifest["controller_input"])
+        for invocation, runtime_value in zip(
+            manifest["child_invocations"], runtime_documents, strict=True
+        ):
+            if runtime_value.get("state") in {"complete", "rejected"}:
+                _verify_runtime_inputs(
+                    runtime_value,
+                    invocation,
+                    manifest["controller_input"],
+                    build_identity,
+                )
+            elif (
+                runtime_value
+                != {
+                    "blocking_result": manifest["result"],
+                    "schema": "h0_runtime_inputs_v1",
+                    "state": "not_produced",
+                }
+                or invocation["runtime_inputs_digest"] is not None
+            ):
+                raise VerificationError("runtime input not-produced status mismatch")
         expected_runtime = {
             "bound_inputs_digest": manifest["controller_input"]["bound_inputs"][
                 "digest"
             ],
+            "child_runtime_inputs": [
+                {
+                    "confinement_plan_digest": invocation["confinement_plan_digest"],
+                    "run_id": run_id,
+                    "runtime_inputs_digest": invocation["runtime_inputs_digest"],
+                    "state": runtime_value["state"],
+                }
+                for run_id, invocation, runtime_value in zip(
+                    RUN_IDS,
+                    manifest["child_invocations"],
+                    runtime_documents,
+                    strict=True,
+                )
+            ],
+            "confinement_backend": "landlock_seccomp_ptrace_v1",
             "library_dirs": manifest["controller_input"]["library_dirs"],
             "resolved_policy_fingerprint": "c7a6dbb35168cba75249b7f2c67d8455b6f634732493e455a4bb920aab6d7782",
+            "runtime_trace_scope": [
+                "execve",
+                "execveat",
+                "mmap",
+                "open",
+                "openat",
+                "openat2",
+            ],
             "state": "complete",
             "tool_runtime": manifest["controller_input"]["bound_inputs"][
                 "tool_runtime"
@@ -1135,6 +1596,11 @@ def verify_evidence_root(root: Path) -> dict[str, Any]:
                 "runtime/GPU identity differs from controller binding"
             )
     else:
+        expected_runtime_status = {
+            "blocking_result": manifest["result"],
+            "schema": "h0_runtime_inputs_v1",
+            "state": "not_produced",
+        }
         if (
             build_identity != blocking_status
             or runtime_identity != blocking_status
@@ -1143,6 +1609,8 @@ def verify_evidence_root(root: Path) -> dict[str, Any]:
             raise VerificationError(
                 "not-produced identity status has missing or unknown members"
             )
+        if any(value != expected_runtime_status for value in runtime_documents):
+            raise VerificationError("pre-build runtime input status mismatch")
         if manifest["result"] not in {
             "provenance_invalid",
             "build_failed",
