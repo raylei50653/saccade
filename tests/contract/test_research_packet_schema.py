@@ -9,6 +9,7 @@ tests/research/README.md).
 from __future__ import annotations
 
 import re
+import sys
 
 import pytest
 
@@ -22,6 +23,7 @@ from tests.contract.packet_inventory import (
     evidence_entries,
     evidence_entry_errors,
     evidence_kind,
+    h0_phase_a_execution_dirs,
     h0_preseal_freeze_v3_dirs,
     h0_preseal_freeze_v3_layout_errors,
     is_generic_dated_packet_name,
@@ -30,7 +32,14 @@ from tests.contract.packet_inventory import (
     load_manifest,
     packet_dirs,
     packet_ids,
+    REPO,
 )
+
+
+TOOLS = REPO / "scripts" / "tools"
+sys.path.insert(0, TOOLS.as_posix())
+
+import verify_h0_phase_a as phase_a_verifier  # noqa: E402
 
 
 def test_evidence_root_exists() -> None:
@@ -64,6 +73,41 @@ def test_exact_h0_preseal_freeze_v3_dirs_are_governance_artifacts() -> None:
         if errors:
             violations[evidence_dir.name] = errors
     assert not violations, f"non-canonical H0 v3 governance artifacts: {violations}"
+
+
+def test_h0_phase_a_execution_dirs_are_verified_by_the_dedicated_verifier() -> None:
+    evidence_dirs = h0_phase_a_execution_dirs()
+    assert evidence_dirs, "no H0 Phase-A execution evidence directories were found"
+    reports: dict[str, object] = {}
+    failures: dict[str, str] = {}
+    for evidence_dir in evidence_dirs:
+        try:
+            reports[evidence_dir.name] = phase_a_verifier.verify_evidence_root(
+                evidence_dir
+            )
+        except phase_a_verifier.VerificationError as exc:
+            failures[evidence_dir.name] = str(exc)
+    assert not failures, f"invalid H0 Phase-A execution evidence: {failures}"
+    assert all(
+        isinstance(report, dict) and report.get("valid") is True
+        for report in reports.values()
+    )
+
+
+@pytest.mark.parametrize(
+    "entry_name", [None, "unexpected.json"], ids=["empty", "extra"]
+)
+def test_h0_phase_a_execution_layout_is_rejected_by_dedicated_verifier(
+    tmp_path, entry_name: str | None
+) -> None:
+    evidence_dir = tmp_path / ("h0_phase_a_" + "a" * 40)
+    evidence_dir.mkdir()
+    if entry_name is not None:
+        (evidence_dir / entry_name).write_text("not a packet")
+
+    assert evidence_kind(evidence_dir) == H0_PHASE_A_EXECUTION_PACKET
+    with pytest.raises(phase_a_verifier.VerificationError):
+        phase_a_verifier.verify_evidence_root(evidence_dir)
 
 
 @pytest.fixture(params=packet_dirs(), ids=packet_ids())

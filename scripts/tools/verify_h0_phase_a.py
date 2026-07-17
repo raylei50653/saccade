@@ -59,6 +59,17 @@ BUILD_VECTORS = (
         "1",
     ),
 )
+BUILD_ENVIRONMENT_V1_KEYS = (
+    "HOME",
+    "LANG",
+    "LC_ALL",
+    "PATH",
+    "PYTHONHASHSEED",
+    "PYTHONNOUSERSITE",
+    "TMPDIR",
+    "TZ",
+    "XDG_CACHE_HOME",
+)
 BUILD_ENVIRONMENT_KEYS = (
     "CUDACXX",
     "HOME",
@@ -437,8 +448,7 @@ def _expected_environment(controller: Mapping[str, Any], run_id: str) -> dict[st
 def _expected_build_environment(controller: Mapping[str, Any]) -> dict[str, str]:
     root = controller["repository_root"]
     environment_root = f"{root}/{controller['incomplete_root']}/_build_env"
-    return {
-        "CUDACXX": _bound_nvcc_path(controller),
+    environment = {
         "HOME": f"{environment_root}/home",
         "LANG": "C.UTF-8",
         "LC_ALL": "C.UTF-8",
@@ -449,6 +459,26 @@ def _expected_build_environment(controller: Mapping[str, Any]) -> dict[str, str]
         "TZ": "UTC",
         "XDG_CACHE_HOME": f"{environment_root}/xdg-cache",
     }
+    if _build_environment_algorithm(controller) == "h0_build_environment_v2":
+        return {"CUDACXX": _bound_nvcc_path(controller), **environment}
+    return environment
+
+
+def _build_environment_algorithm(controller: Mapping[str, Any]) -> str:
+    """Admit only the exact historical v1 or repaired v2 build environment."""
+    try:
+        constants = controller["execution_constants"]
+        algorithm = constants["build_environment_algorithm"]
+        keys = constants["build_environment_keys"]
+    except (KeyError, TypeError) as exc:
+        raise VerificationError("build environment declaration is malformed") from exc
+    expected = {
+        "h0_build_environment_v1": list(BUILD_ENVIRONMENT_V1_KEYS),
+        "h0_build_environment_v2": list(BUILD_ENVIRONMENT_KEYS),
+    }
+    if algorithm not in expected or keys != expected[algorithm]:
+        raise VerificationError("build environment declaration mismatch")
+    return algorithm
 
 
 def _bound_nvcc_path(controller: Mapping[str, Any]) -> str:
@@ -537,12 +567,17 @@ def _verify_constants(controller: Mapping[str, Any]) -> None:
         raise VerificationError("operator vector mismatch")
     if constants["build_vectors"] != [list(value) for value in BUILD_VECTORS]:
         raise VerificationError("build vector mismatch")
-    if constants[
-        "build_environment_algorithm"
-    ] != "h0_build_environment_v2" or constants["build_environment_keys"] != list(
-        BUILD_ENVIRONMENT_KEYS
-    ):
-        raise VerificationError("build environment declaration mismatch")
+    algorithm = _build_environment_algorithm(controller)
+    expected_tools = {
+        "git",
+        "ldd",
+        "readelf",
+        "uv",
+    }
+    if algorithm == "h0_build_environment_v2":
+        expected_tools.add("nvcc")
+    if set(controller["tool_paths"]) != expected_tools:
+        raise VerificationError("build tool-path declaration mismatch")
     if constants["ordered_run_plan"] != list(RUN_IDS):
         raise VerificationError("ordered run plan mismatch")
     if constants["child_vectors"] != [
