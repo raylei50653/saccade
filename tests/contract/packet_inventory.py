@@ -10,9 +10,17 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import re
 
 REPO = Path(__file__).resolve().parents[2]
 EVIDENCE_ROOT = REPO / "docs" / "modules" / "semantic" / "research" / "evidence"
+
+GENERIC_RESEARCH_PACKET = "generic_research_packet"
+H0_PRESEAL_FREEZE_V3_ARTIFACT = "h0_preseal_freeze_v3_artifact"
+H0_PRESEAL_FREEZE_V3_FILENAME = "h0_preseal_freeze_v3.json"
+
+_DATED_PACKET_NAME = re.compile(r".+_\d{8}(T\d{6}Z)?$")
+_H0_PRESEAL_FREEZE_V3_DIR_NAME = re.compile(r"^h0_preseal_freeze_[0-9a-f]{40}$")
 
 # manifest.json keys observed to map filename -> sha256 hex digest.
 # `artifact_hashes` is deliberately absent: its keys are logical artifact
@@ -31,10 +39,81 @@ EXTERNAL_ARTIFACT_HASH_EXCEPTIONS: dict[str, str] = {
 }
 
 
-def packet_dirs() -> list[Path]:
+def evidence_dirs() -> list[Path]:
     if not EVIDENCE_ROOT.is_dir():
         return []
     return sorted(p for p in EVIDENCE_ROOT.iterdir() if p.is_dir())
+
+
+def evidence_kind(evidence_dir: Path) -> str | None:
+    """Classify one evidence directory, returning None for an unknown kind.
+
+    The exact H0 v3 governance-artifact family is intentionally separate from
+    dated research packets.  Every other directory must either be a dated
+    packet or be rejected by the schema contract; it must never disappear from
+    generic validation merely because it lacks a manifest.
+    """
+    if _H0_PRESEAL_FREEZE_V3_DIR_NAME.fullmatch(evidence_dir.name):
+        return H0_PRESEAL_FREEZE_V3_ARTIFACT
+    if _DATED_PACKET_NAME.fullmatch(evidence_dir.name):
+        return GENERIC_RESEARCH_PACKET
+    return None
+
+
+def generic_packet_dirs() -> list[Path]:
+    return [
+        evidence_dir
+        for evidence_dir in evidence_dirs()
+        if evidence_kind(evidence_dir) == GENERIC_RESEARCH_PACKET
+    ]
+
+
+def h0_preseal_freeze_v3_dirs() -> list[Path]:
+    return [
+        evidence_dir
+        for evidence_dir in evidence_dirs()
+        if evidence_kind(evidence_dir) == H0_PRESEAL_FREEZE_V3_ARTIFACT
+    ]
+
+
+def unclassified_evidence_dirs() -> list[Path]:
+    return [
+        evidence_dir
+        for evidence_dir in evidence_dirs()
+        if evidence_kind(evidence_dir) is None
+    ]
+
+
+def h0_preseal_freeze_v3_layout_errors(evidence_dir: Path) -> list[str]:
+    """Return structural errors for one H0 v3 governance artifact directory.
+
+    This is deliberately a layout check only.  The dedicated H0 v3 verifier
+    remains the authority for artifact contents, identity binding, and v3
+    canonicality.
+    """
+    if not evidence_dir.is_dir():
+        return [f"{evidence_dir.name}: governance artifact directory missing"]
+
+    names = {entry.name for entry in evidence_dir.iterdir()}
+    expected = {H0_PRESEAL_FREEZE_V3_FILENAME}
+    errors: list[str] = []
+    if names != expected:
+        errors.append(
+            f"{evidence_dir.name}: expected only {sorted(expected)}, found {sorted(names)}"
+        )
+
+    artifact = evidence_dir / H0_PRESEAL_FREEZE_V3_FILENAME
+    if not artifact.is_file() or artifact.is_symlink():
+        errors.append(
+            f"{evidence_dir.name}: {H0_PRESEAL_FREEZE_V3_FILENAME} "
+            "must be a physical regular file"
+        )
+    return errors
+
+
+def packet_dirs() -> list[Path]:
+    """Return only dated generic research packets for manifest validation."""
+    return generic_packet_dirs()
 
 
 def resolve_inventory_path(packet: Path, name: str) -> Path | None:
