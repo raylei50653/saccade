@@ -65,6 +65,18 @@ BUILD_VECTORS = (
         "1",
     ),
 )
+BUILD_ENVIRONMENT_SCHEMA = "h0_build_environment_v1"
+BUILD_ENVIRONMENT_KEYS = (
+    "HOME",
+    "LANG",
+    "LC_ALL",
+    "PATH",
+    "PYTHONHASHSEED",
+    "PYTHONNOUSERSITE",
+    "TMPDIR",
+    "TZ",
+    "XDG_CACHE_HOME",
+)
 RUN_IDS = (
     "00_capture_off",
     "01_capture_on_1",
@@ -826,6 +838,16 @@ def environment_digest(environment: Mapping[str, str]) -> str:
     return sha256_bytes(canonical_json_bytes(dict(environment)))
 
 
+def build_environment_digest(environment: Mapping[str, str]) -> str:
+    if set(environment) != set(BUILD_ENVIRONMENT_KEYS) or not all(
+        isinstance(value, str) for value in environment.values()
+    ):
+        raise ContractError(
+            "build environment has missing, unknown, or non-string members"
+        )
+    return sha256_bytes(canonical_json_bytes(dict(environment)))
+
+
 def normalize_pci_bus_id(value: str) -> str:
     try:
         domain_bus, device_function = value.lower().split(":", 1)
@@ -900,6 +922,8 @@ def nvml_gpu_inventory() -> list[dict[str, Any]]:
 def execution_constants(root: Path) -> dict[str, Any]:
     """All A7/RC1 choices that v3 must mechanically reproduce."""
     return {
+        "build_environment_algorithm": BUILD_ENVIRONMENT_SCHEMA,
+        "build_environment_keys": list(BUILD_ENVIRONMENT_KEYS),
         "build_vectors": [list(vector) for vector in BUILD_VECTORS],
         "c_paths": list(C_PATHS),
         "checkpoints": list(CHECKPOINTS),
@@ -1045,6 +1069,19 @@ def _bounded_remaining(
     if remaining <= 0:
         raise TimeoutError("single Phase-A monotonic deadline exhausted")
     return remaining
+
+
+def _deadline_checked_call(
+    started: float,
+    clock: Callable[[], float],
+    action: Callable[..., Any],
+    *args: object,
+) -> Any:
+    """Run a finalization operation without admitting an over-deadline result."""
+    _bounded_remaining(started, now=clock)
+    value = action(*args)
+    _bounded_remaining(started, now=clock)
+    return value
 
 
 def _write_canonical_fsync(path: Path, value: object) -> None:
@@ -1264,6 +1301,37 @@ def _create_run_directories(incomplete: Path, run_id: str) -> Path:
     return run_dir
 
 
+def build_environment(contract: Mapping[str, Any]) -> dict[str, str]:
+    """Rebuild the sole admitted environment for both frozen build vectors."""
+    root = Path(contract["repository_root"])
+    environment_root = root / contract["incomplete_root"] / "_build_env"
+    return {
+        "HOME": (environment_root / "home").as_posix(),
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": f"{root}/.venv/bin:/usr/bin:/bin",
+        "PYTHONHASHSEED": "0",
+        "PYTHONNOUSERSITE": "1",
+        "TMPDIR": (environment_root / "tmp").as_posix(),
+        "TZ": "UTC",
+        "XDG_CACHE_HOME": (environment_root / "xdg-cache").as_posix(),
+    }
+
+
+def _create_build_environment(contract: Mapping[str, Any]) -> dict[str, str]:
+    environment = build_environment(contract)
+    if tuple(environment) != BUILD_ENVIRONMENT_KEYS:
+        raise ContractError("build environment key order drift")
+    environment_root = Path(environment["HOME"]).parent
+    environment_root.mkdir(parents=False, exist_ok=False)
+    for key in ("HOME", "TMPDIR", "XDG_CACHE_HOME"):
+        path = Path(environment[key])
+        path.mkdir(exist_ok=False)
+        if path.is_symlink() or path.resolve(strict=True) != path.absolute():
+            raise ContractError(f"non-physical build environment directory: {key}")
+    return environment
+
+
 def _terminate_process_group(process: subprocess.Popen[bytes]) -> None:
     if process.poll() is not None:
         return
@@ -1280,9 +1348,10 @@ def _wait_with_monitor(
     started: float,
     monitor: BoundInputMonitor | None,
     stage: str,
+    clock: Callable[[], float] = time.monotonic,
 ) -> int:
     if monitor is None:
-        return process.wait(timeout=_bounded_remaining(started))
+        return process.wait(timeout=_bounded_remaining(started, now=clock))
     while True:
         events = monitor.drain()
         if events:
@@ -1291,7 +1360,7 @@ def _wait_with_monitor(
                 f"bound-input mutation while {stage} was active: {events!r}"
             )
         try:
-            remaining = _bounded_remaining(started)
+            remaining = _bounded_remaining(started, now=clock)
         except TimeoutError:
             _terminate_process_group(process)
             raise
@@ -1308,6 +1377,7 @@ def launch_child(
     started: float,
     monitor: BoundInputMonitor | None = None,
     popen_factory: Callable[..., subprocess.Popen[bytes]] = subprocess.Popen,
+    clock: Callable[[], float] = time.monotonic,
 ) -> tuple[int, dict[str, Any]]:
     """Create one fixed invocation and execute one RC1.1 child process."""
     root = Path(contract["repository_root"])
@@ -1378,7 +1448,11 @@ def launch_child(
         )
         try:
             returncode = _wait_with_monitor(
-                process, started=started, monitor=monitor, stage=f"child {run_id}"
+                process,
+                started=started,
+                monitor=monitor,
+                stage=f"child {run_id}",
+                clock=clock,
             )
         except (subprocess.TimeoutExpired, TimeoutError) as exc:
             _terminate_process_group(process)
@@ -1417,8 +1491,14 @@ def _run_build_vector(
     started: float,
     monitor: BoundInputMonitor | None = None,
     popen_factory: Callable[..., subprocess.Popen[bytes]] = subprocess.Popen,
+    clock: Callable[[], float] = time.monotonic,
 ) -> int:
     uv_path = require_canonical_absolute(contract["tool_paths"]["uv"], directory=False)
+    environment = build_environment(contract)
+    if tuple(environment) != BUILD_ENVIRONMENT_KEYS:
+        raise ContractError("build environment key order drift")
+    for key in ("HOME", "TMPDIR", "XDG_CACHE_HOME"):
+        require_canonical_absolute(environment[key], directory=True)
     with (
         open(os.devnull, "rb", buffering=0) as stdin,
         open(stdout_path, "xb", buffering=0) as stdout,
@@ -1428,7 +1508,7 @@ def _run_build_vector(
             vector,
             executable=uv_path,
             cwd=contract["repository_root"],
-            env=dict(os.environ),
+            env=environment,
             stdin=stdin,
             stdout=stdout,
             stderr=stderr,
@@ -1438,7 +1518,11 @@ def _run_build_vector(
         )
         try:
             return _wait_with_monitor(
-                process, started=started, monitor=monitor, stage="build"
+                process,
+                started=started,
+                monitor=monitor,
+                stage="build",
+                clock=clock,
             )
         except subprocess.TimeoutExpired as exc:
             _terminate_process_group(process)
@@ -1634,6 +1718,10 @@ def _build_identity(contract: Mapping[str, Any], root: Path) -> dict[str, Any]:
     cmake_data = cmake_path.read_bytes()
     return {
         "artifacts": artifacts,
+        "build_environment": build_environment(contract),
+        "build_environment_digest": build_environment_digest(
+            build_environment(contract)
+        ),
         "build_vectors": [list(vector) for vector in BUILD_VECTORS],
         "cmake_cache_sha256": sha256_bytes(cache.read_bytes()),
         "cmake": {
@@ -2057,6 +2145,14 @@ def _artifact_inventory(incomplete: Path) -> list[str]:
 
 def _remove_transient_run_trees(incomplete: Path) -> None:
     resolved_root = incomplete.resolve(strict=True)
+    build_environment_root = incomplete / "_build_env"
+    if build_environment_root.exists():
+        resolved = build_environment_root.resolve(strict=True)
+        if resolved_root not in resolved.parents or build_environment_root.is_symlink():
+            raise ContractError(
+                f"unsafe transient build environment tree: {build_environment_root}"
+            )
+        shutil.rmtree(build_environment_root)
     for run_id in RUN_IDS:
         for name in ("_env", "_runtime"):
             target = incomplete / "runs" / run_id / name
@@ -2086,22 +2182,79 @@ def _validate_directory_universe(incomplete: Path, required: Sequence[str]) -> N
         )
 
 
-def _finalize_bundle(
+def _fsync_directory(path: Path) -> None:
+    directory_fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
+    try:
+        os.fsync(directory_fd)
+    finally:
+        os.close(directory_fd)
+
+
+def _publish_evidence_root(
+    incomplete: Path,
+    final: Path,
+    *,
+    started: float,
+    clock: Callable[[], float] = time.monotonic,
+    enforce_deadline: bool = True,
+) -> None:
+    """Atomically publish only if rename and parent fsync finish in time."""
+    if enforce_deadline:
+        _bounded_remaining(started, now=clock)
+    renamed = False
+    try:
+        os.replace(incomplete, final)
+        renamed = True
+        if enforce_deadline:
+            _bounded_remaining(started, now=clock)
+        _fsync_directory(final.parent)
+        if enforce_deadline:
+            _bounded_remaining(started, now=clock)
+    except BaseException:
+        if renamed:
+            if incomplete.exists() or incomplete.is_symlink():
+                raise ContractError(
+                    "publication rollback refused an occupied incomplete root"
+                )
+            if not final.exists() or final.is_symlink():
+                raise ContractError(
+                    "publication rollback could not identify the renamed root"
+                )
+            os.replace(final, incomplete)
+            _fsync_directory(incomplete.parent)
+        raise
+
+
+def _finalize_bundle_once(
     contract: Mapping[str, Any],
     *,
+    started: float,
     result: str,
     predicates: Mapping[str, bool],
     checkpoints: list[dict[str, Any]],
     comparison: Mapping[str, Any] | None,
     build_identity: Mapping[str, Any] | None,
     mutation_events: Sequence[Mapping[str, Any]],
+    clock: Callable[[], float] = time.monotonic,
+    enforce_deadline: bool = True,
 ) -> Path:
+    def admit() -> None:
+        if enforce_deadline:
+            _bounded_remaining(started, now=clock)
+
+    def finish(action: Callable[..., Any], *args: object) -> Any:
+        if enforce_deadline:
+            return _deadline_checked_call(started, clock, action, *args)
+        return action(*args)
+
     root = Path(contract["repository_root"])
     incomplete = root / contract["incomplete_root"]
     final = root / contract["evidence_root"]
+    admit()
     incomplete.mkdir(parents=True, exist_ok=True)
     (incomplete / "logs").mkdir(exist_ok=True)
     (incomplete / "verification").mkdir(exist_ok=True)
+    admit()
     for log_name in (
         "00_cmake_configure.stdout.log",
         "00_cmake_configure.stderr.log",
@@ -2110,10 +2263,12 @@ def _finalize_bundle(
     ):
         path = incomplete / "logs" / log_name
         if not path.exists():
-            _write_bytes_fsync(path, b"NOT_RUN\n")
+            finish(_write_bytes_fsync, path, b"NOT_RUN\n")
     _ensure_not_run_slots(contract, incomplete)
+    admit()
     _remove_forbidden(incomplete, result)
     _remove_transient_run_trees(incomplete)
+    admit()
     identities: dict[str, Mapping[str, Any]] = {
         "build_identity.json": build_identity or _not_produced(result),
         "runtime_identity.json": {
@@ -2133,7 +2288,7 @@ def _finalize_bundle(
     for name, value in identities.items():
         path = incomplete / name
         if not path.exists():
-            _write_canonical_fsync(path, value)
+            finish(_write_canonical_fsync, path, value)
     completed_all = all(item["state"] == "completed" for item in checkpoints)
     if mutation_events:
         classifications = {str(item["classification"]) for item in mutation_events}
@@ -2161,7 +2316,11 @@ def _finalize_bundle(
         "mutation_events": list(mutation_events),
         "t0_digest": contract["bound_inputs"]["digest"],
     }
-    _write_canonical_fsync(incomplete / "input_binding.json", input_binding)
+    finish(
+        _write_canonical_fsync,
+        incomplete / "input_binding.json",
+        input_binding,
+    )
     children = [
         read_canonical_json(incomplete / "runs" / run_id / "invocation.json")
         for run_id in RUN_IDS
@@ -2186,9 +2345,15 @@ def _finalize_bundle(
         "result_matrix": execution_constants(root)["result_matrix"],
         "schema": EXECUTION_SCHEMA,
     }
-    _write_canonical_fsync(incomplete / "manifest.json", manifest)
-    _write_canonical_fsync(
-        incomplete / "result.json", {"result": result, "schema": EXECUTION_SCHEMA}
+    finish(
+        _write_canonical_fsync,
+        incomplete / "manifest.json",
+        manifest,
+    )
+    finish(
+        _write_canonical_fsync,
+        incomplete / "result.json",
+        {"result": result, "schema": EXECUTION_SCHEMA},
     )
     tools = SCHEMA_PATH.parent
     if tools.as_posix() not in sys.path:
@@ -2196,7 +2361,12 @@ def _finalize_bundle(
     import verify_h0_phase_a
 
     aggregate = verify_h0_phase_a.verify_evidence(manifest)
-    _write_canonical_fsync(incomplete / "verification/aggregate.json", aggregate)
+    admit()
+    finish(
+        _write_canonical_fsync,
+        incomplete / "verification/aggregate.json",
+        aggregate,
+    )
     actual_without_checksums = _artifact_inventory(incomplete)
     expected_without_checksums = [
         path for path in result_artifact_sets(result)[0] if path != "checksums.sha256"
@@ -2205,6 +2375,7 @@ def _finalize_bundle(
         actual_without_checksums, key=lambda value: value.encode("utf-8")
     ) != sorted(expected_without_checksums, key=lambda value: value.encode("utf-8")):
         raise ContractError("final artifact inventory does not equal the RC1.4 row")
+    admit()
     checksum_lines = []
     for relative in sorted(
         actual_without_checksums, key=lambda value: value.encode("utf-8")
@@ -2212,31 +2383,111 @@ def _finalize_bundle(
         checksum_lines.append(
             f"{sha256_bytes((incomplete / relative).read_bytes())}  {relative}\n"
         )
-    _write_bytes_fsync(
-        incomplete / "checksums.sha256", "".join(checksum_lines).encode("ascii")
+        admit()
+    finish(
+        _write_bytes_fsync,
+        incomplete / "checksums.sha256",
+        "".join(checksum_lines).encode("ascii"),
     )
     if _artifact_inventory(incomplete) != sorted(
         result_artifact_sets(result)[0], key=lambda value: value.encode("utf-8")
     ):
         raise ContractError("checksummed artifact inventory mismatch")
+    admit()
     _validate_directory_universe(incomplete, result_artifact_sets(result)[0])
-    os.replace(incomplete, final)
-    parent_fd = os.open(final.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
-    try:
-        os.fsync(parent_fd)
-    finally:
-        os.close(parent_fd)
+    admit()
+    _publish_evidence_root(
+        incomplete,
+        final,
+        started=started,
+        clock=clock,
+        enforce_deadline=enforce_deadline,
+    )
     return final
+
+
+def _reset_incomplete_finalization(incomplete: Path) -> None:
+    """Remove only derived publication members before timeout reclassification."""
+    for relative in (
+        "build_identity.json",
+        "runtime_identity.json",
+        "gpu_identity.json",
+        "comparison.json",
+        "input_binding.json",
+        "manifest.json",
+        "result.json",
+        "verification/aggregate.json",
+        "checksums.sha256",
+    ):
+        path = incomplete / relative
+        if not path.exists() and not path.is_symlink():
+            continue
+        if path.is_symlink() or not path.is_file():
+            raise ContractError(f"unsafe derived publication member: {relative}")
+        path.unlink()
+
+
+def _finalize_bundle(
+    contract: Mapping[str, Any],
+    *,
+    started: float,
+    result: str,
+    predicates: Mapping[str, bool],
+    checkpoints: list[dict[str, Any]],
+    comparison: Mapping[str, Any] | None,
+    build_identity: Mapping[str, Any] | None,
+    mutation_events: Sequence[Mapping[str, Any]],
+    clock: Callable[[], float] = time.monotonic,
+) -> str:
+    """Finalize once in-deadline, or publish the reclassified failure envelope."""
+    try:
+        _finalize_bundle_once(
+            contract,
+            started=started,
+            result=result,
+            predicates=predicates,
+            checkpoints=checkpoints,
+            comparison=comparison,
+            build_identity=build_identity,
+            mutation_events=mutation_events,
+            clock=clock,
+        )
+        return result
+    except TimeoutError:
+        timed_out_predicates = dict(predicates)
+        timed_out_predicates["timed_out"] = True
+        timeout_result = classify_result(**timed_out_predicates)
+        root = Path(contract["repository_root"])
+        incomplete = root / contract["incomplete_root"]
+        final = root / contract["evidence_root"]
+        if final.exists() or final.is_symlink():
+            raise ContractError("deadline recovery found a published evidence root")
+        incomplete.mkdir(parents=True, exist_ok=True)
+        _reset_incomplete_finalization(incomplete)
+        _finalize_bundle_once(
+            contract,
+            started=started,
+            result=timeout_result,
+            predicates=timed_out_predicates,
+            checkpoints=checkpoints,
+            comparison=None,
+            build_identity=build_identity,
+            mutation_events=mutation_events,
+            clock=clock,
+            enforce_deadline=False,
+        )
+        return timeout_result
 
 
 def execute_controller(
     contract: Mapping[str, Any],
     *,
     popen_factory: Callable[..., subprocess.Popen[bytes]] = subprocess.Popen,
+    clock: Callable[[], float] = time.monotonic,
 ) -> str:
     """Execute the single A7 plan and publish exactly one RC1.4 bundle."""
     root = Path(contract["repository_root"])
-    started = time.monotonic()
+    started = clock()
     incomplete = root / contract["incomplete_root"]
     checkpoints: list[dict[str, Any]] = []
     predicates = {
@@ -2274,6 +2525,7 @@ def execute_controller(
         incomplete.mkdir(parents=True, exist_ok=False)
         (incomplete / "logs").mkdir()
         _ensure_not_run_slots(contract, incomplete)
+        _create_build_environment(contract)
         configure_rc = _run_build_vector(
             contract,
             BUILD_VECTORS[0],
@@ -2282,6 +2534,7 @@ def execute_controller(
             started=started,
             monitor=monitor,
             popen_factory=popen_factory,
+            clock=clock,
         )
         if configure_rc != 0:
             predicates["build_ok"] = False
@@ -2295,6 +2548,7 @@ def execute_controller(
             started=started,
             monitor=monitor,
             popen_factory=popen_factory,
+            clock=clock,
         )
         if build_rc != 0:
             predicates["build_ok"] = False
@@ -2329,6 +2583,7 @@ def execute_controller(
                     started=started,
                     monitor=monitor,
                     popen_factory=popen_factory,
+                    clock=clock,
                 )
             except BaseException as exc:
                 child_error = exc
@@ -2424,20 +2679,22 @@ def execute_controller(
     # If it expired while classifying or closing T4, the fixed result priority
     # is recomputed before any final bundle member is serialized.
     try:
-        _bounded_remaining(started)
+        _bounded_remaining(started, now=clock)
     except TimeoutError:
         predicates["timed_out"] = True
     selected = classify_result(**predicates)
     if selected != result:
         result = selected
-    _finalize_bundle(
+    result = _finalize_bundle(
         contract,
+        started=started,
         result=result,
         predicates=predicates,
         checkpoints=checkpoints,
         comparison=comparison,
         build_identity=build_identity,
         mutation_events=mutation_events,
+        clock=clock,
     )
     return result
 
