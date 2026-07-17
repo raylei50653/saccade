@@ -19,7 +19,9 @@ GENERIC_RESEARCH_PACKET = "generic_research_packet"
 H0_PRESEAL_FREEZE_V3_ARTIFACT = "h0_preseal_freeze_v3_artifact"
 H0_PRESEAL_FREEZE_V3_FILENAME = "h0_preseal_freeze_v3.json"
 
-_DATED_PACKET_NAME = re.compile(r".+_\d{8}(T\d{6}Z)?$")
+# ASCII digits only: `\d` would also accept Unicode digits (e.g. ٠١٢٣),
+# which must stay unclassified and be rejected fail-closed.
+_DATED_PACKET_NAME = re.compile(r".+_[0-9]{8}(T[0-9]{6}Z)?$")
 _H0_PRESEAL_FREEZE_V3_DIR_NAME = re.compile(r"^h0_preseal_freeze_[0-9a-f]{40}$")
 
 # manifest.json keys observed to map filename -> sha256 hex digest.
@@ -46,17 +48,28 @@ def evidence_entries(evidence_root: Path = EVIDENCE_ROOT) -> list[Path]:
     return sorted(evidence_root.iterdir())
 
 
+def is_h0_preseal_freeze_v3_name(name: str) -> bool:
+    return _H0_PRESEAL_FREEZE_V3_DIR_NAME.fullmatch(name) is not None
+
+
+def is_generic_dated_packet_name(name: str) -> bool:
+    return _DATED_PACKET_NAME.fullmatch(name) is not None
+
+
 def evidence_kind(evidence_dir: Path) -> str | None:
     """Classify one evidence directory, returning None for an unknown kind.
 
     The exact H0 v3 governance-artifact family is intentionally separate from
-    dated research packets.  Every other directory must either be a dated
-    packet or be rejected by the schema contract; it must never disappear from
-    generic validation merely because it lacks a manifest.
+    dated research packets: the two name grammars are disjoint (an H0 name has
+    no `_` within its trailing 40-hex segment, so it can never end in
+    `_[0-9]{8}`), so classification does not depend on check order.  Every
+    other directory must either be a dated packet or be rejected by the schema
+    contract; it must never disappear from generic validation merely because
+    it lacks a manifest.
     """
-    if _H0_PRESEAL_FREEZE_V3_DIR_NAME.fullmatch(evidence_dir.name):
+    if is_h0_preseal_freeze_v3_name(evidence_dir.name):
         return H0_PRESEAL_FREEZE_V3_ARTIFACT
-    if _DATED_PACKET_NAME.fullmatch(evidence_dir.name):
+    if is_generic_dated_packet_name(evidence_dir.name):
         return GENERIC_RESEARCH_PACKET
     return None
 

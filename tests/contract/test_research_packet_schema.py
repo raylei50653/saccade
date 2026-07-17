@@ -23,6 +23,8 @@ from tests.contract.packet_inventory import (
     evidence_kind,
     h0_preseal_freeze_v3_dirs,
     h0_preseal_freeze_v3_layout_errors,
+    is_generic_dated_packet_name,
+    is_h0_preseal_freeze_v3_name,
     load_manifest,
     packet_dirs,
     packet_ids,
@@ -104,12 +106,25 @@ def test_packet_has_checksum_inventory(packet) -> None:
         ("h0_preseal_freeze_" + "a" * 41, None),
         ("h0_preseal_freeze_" + "A" * 40, None),
         ("unclassified_evidence", None),
+        ("study_٠١٢٣٤٥٦٧", None),
     ],
 )
 def test_evidence_kind_is_explicit_and_fail_closed(
     tmp_path, name: str, expected_kind: str | None
 ) -> None:
     assert evidence_kind(tmp_path / name) == expected_kind
+
+
+def test_h0_and_dated_name_grammars_are_disjoint(tmp_path) -> None:
+    # The hardest case for disjointness: an H0 sha whose last 8 hex chars are
+    # all decimal digits still has no `_` before them, so the dated grammar
+    # (`.+_[0-9]{8}$`) must not match and classification cannot depend on
+    # check order in evidence_kind.
+    name = "h0_preseal_freeze_" + "a" * 32 + "12345678"
+
+    assert is_h0_preseal_freeze_v3_name(name)
+    assert not is_generic_dated_packet_name(name)
+    assert evidence_kind(tmp_path / name) == H0_PRESEAL_FREEZE_V3_ARTIFACT
 
 
 def test_evidence_entries_include_all_top_level_entry_types(tmp_path) -> None:
