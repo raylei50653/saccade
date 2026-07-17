@@ -770,6 +770,41 @@ def _launch_contract(tmp_path: Path) -> dict[str, object]:
     return controller
 
 
+def _write_synthetic_phase_pass_slots(
+    contract: dict[str, object],
+) -> Path:
+    root = Path(contract["repository_root"])
+    incomplete = root / str(contract["incomplete_root"])
+    incomplete.mkdir()
+    parent._ensure_not_run_slots(contract, incomplete)
+    for run_id in parent.RUN_IDS:
+        invocation_path = incomplete / "runs" / run_id / "invocation.json"
+        invocation = parent.read_canonical_json(invocation_path)
+        invocation["confinement_plan_digest"] = "1" * 64
+        invocation["confinement_probe_passed"] = True
+        invocation["state"] = "completed"
+        invocation["result"] = "run_completed"
+        invocation["runtime_inputs_digest"] = "2" * 64
+        parent._replace_canonical_fsync(invocation_path, invocation)
+    for relative in parent.D_PATHS:
+        path = incomplete / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"synthetic\n")
+    semantic_digest = "1" * 64
+    for relative in parent.V_PATHS:
+        path = incomplete / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(
+            parent.canonical_json_file_bytes(
+                {
+                    "report": {"semantic_digest_sha256": semantic_digest},
+                    "state": "pass",
+                }
+            )
+        )
+    return incomplete
+
+
 class _FakeProcess:
     def __init__(
         self, invocation: Path, mode: str, captured: dict[str, object], *args, **kwargs
@@ -1258,6 +1293,45 @@ def test_staged_verifier_rejects_non_regular_entry_types(
             open_socket.close()
 
 
+@pytest.mark.parametrize("member", ["manifest.json", "checksums.sha256"])
+@pytest.mark.parametrize("entry_type", ["symlink", "fifo", "socket"])
+def test_required_member_entry_type_is_rejected_before_any_staged_read(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    member: str,
+    entry_type: str,
+) -> None:
+    root = tmp_path / "r"
+    root.mkdir()
+    _write_c_only_root(root)
+    target = root / member
+    target.unlink()
+    open_socket: socket.socket | None = None
+    if entry_type == "symlink":
+        outside = tmp_path / "outside"
+        outside.write_bytes(b"{}\n")
+        target.symlink_to(outside)
+    elif entry_type == "fifo":
+        os.mkfifo(target)
+    else:
+        open_socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        open_socket.bind(target.as_posix())
+    staged_reads: list[Path] = []
+
+    def reject_staged_read(path: Path, *, canonical_file: bool = False):
+        staged_reads.append(path)
+        raise AssertionError(f"staged member was read before classification: {path}")
+
+    monkeypatch.setattr(verifier, "load_json", reject_staged_read)
+    try:
+        with pytest.raises(verifier.VerificationError, match="entry type"):
+            verifier.verify_evidence_root(root)
+        assert staged_reads == []
+    finally:
+        if open_socket is not None:
+            open_socket.close()
+
+
 @pytest.mark.parametrize("mutation", ["content_tamper", "order_drift", "malformed"])
 def test_staged_verifier_rejects_checksum_content_order_and_shape(
     tmp_path: Path, mutation: str
@@ -1282,6 +1356,66 @@ def test_staged_verifier_rejects_checksum_content_order_and_shape(
         match = "malformed checksum"
     with pytest.raises(verifier.VerificationError, match=match):
         verifier.verify_evidence_root(root)
+
+
+@pytest.mark.parametrize("malicious_path", ["../outside", "/dev/zero"])
+def test_checksum_path_is_rejected_before_outside_dereference(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    malicious_path: str,
+) -> None:
+    root = tmp_path / "evidence.incomplete"
+    root.mkdir()
+    _write_c_only_root(root)
+    outside = tmp_path / "outside"
+    outside.write_bytes(b"outside")
+    checksum = root / "checksums.sha256"
+    lines = checksum.read_text(encoding="ascii").splitlines(True)
+    lines[0] = f"{lines[0][:64]}  {malicious_path}\n"
+    checksum.write_text("".join(lines), encoding="ascii")
+    real_read_bytes = Path.read_bytes
+    forbidden_reads: list[Path] = []
+    forbidden_targets = {
+        os.path.normpath(outside.as_posix()),
+        os.path.normpath("/dev/zero"),
+    }
+
+    def guarded_read_bytes(path: Path) -> bytes:
+        if os.path.normpath(path.as_posix()) in forbidden_targets:
+            forbidden_reads.append(path)
+            raise AssertionError(f"checksum path was dereferenced: {path}")
+        return real_read_bytes(path)
+
+    monkeypatch.setattr(Path, "read_bytes", guarded_read_bytes)
+    with pytest.raises(verifier.VerificationError, match="canonical relative"):
+        verifier.verify_evidence_root(root)
+    assert forbidden_reads == []
+
+
+def test_checksum_order_is_rejected_before_out_of_index_member_read(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "evidence.incomplete"
+    root.mkdir()
+    _write_c_only_root(root)
+    checksum = root / "checksums.sha256"
+    lines = checksum.read_text(encoding="ascii").splitlines(True)
+    lines.reverse()
+    checksum.write_text("".join(lines), encoding="ascii")
+    first_out_of_index = root / lines[0][66:-1]
+    real_read_bytes = Path.read_bytes
+    out_of_index_reads: list[Path] = []
+
+    def guarded_read_bytes(path: Path) -> bytes:
+        if path == first_out_of_index:
+            out_of_index_reads.append(path)
+            raise AssertionError(f"out-of-index checksum member was read: {path}")
+        return real_read_bytes(path)
+
+    monkeypatch.setattr(Path, "read_bytes", guarded_read_bytes)
+    with pytest.raises(verifier.VerificationError, match="path order/inventory"):
+        verifier.verify_evidence_root(root)
+    assert out_of_index_reads == []
 
 
 @pytest.mark.parametrize(
@@ -1471,6 +1605,70 @@ def test_staged_verification_crossing_deadline_prevents_rename(
     assert not final.exists()
 
 
+def test_publication_cannot_disable_deadline_admission(tmp_path: Path) -> None:
+    contract = _launch_contract(tmp_path)
+    predicates = _predicates()
+    predicates["build_ok"] = False
+    with pytest.raises(parent.ContractError, match="active deadline admission"):
+        parent._finalize_bundle_once(
+            contract,
+            started=0.0,
+            result="build_failed",
+            predicates=predicates,
+            checkpoints=_binding(contract)["checkpoints"],
+            comparison=None,
+            build_identity=None,
+            mutation_events=[],
+            enforce_deadline=False,
+        )
+    assert not (tmp_path / contract["incomplete_root"]).exists()
+    assert not (tmp_path / contract["evidence_root"]).exists()
+
+
+def test_production_deadline_recovery_never_publishes_after_staged_verification(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    contract = _launch_contract(tmp_path)
+    incomplete = _write_synthetic_phase_pass_slots(contract)
+    final = tmp_path / contract["evidence_root"]
+    now = {"value": 3599.0}
+    real_verify = verifier.verify_evidence_root
+    verified_results: list[str] = []
+
+    def crossing_verify(root: Path) -> dict[str, object]:
+        manifest = parent.read_canonical_json(root / "manifest.json")
+        verified_results.append(manifest["result"])
+        aggregate = parent.read_canonical_json(root / "verification/aggregate.json")
+        if len(verified_results) == 1:
+            now["value"] = 3600.0
+        return aggregate
+
+    def reject_publication(*_args, **_kwargs) -> None:
+        raise AssertionError("publication attempted after deadline expiry")
+
+    monkeypatch.setattr(verifier, "verify_evidence_root", crossing_verify)
+    monkeypatch.setattr(parent, "_publish_evidence_root", reject_publication)
+    result = parent._finalize_bundle(
+        contract,
+        started=0.0,
+        result="phase_a_pass",
+        predicates=_predicates(),
+        checkpoints=_binding(contract)["checkpoints"],
+        comparison={"state": "equal"},
+        build_identity=None,
+        mutation_events=[],
+        clock=lambda: now["value"],
+    )
+    assert result == "runner_timeout"
+    assert verified_results == ["phase_a_pass", "runner_timeout"]
+    assert not final.exists()
+    assert incomplete.is_dir()
+    assert parent.read_canonical_json(incomplete / "result.json")["result"] == result
+    assert not any((incomplete / relative).exists() for relative in parent.D_PATHS)
+    assert not any((incomplete / relative).exists() for relative in parent.V_PATHS)
+    assert real_verify(incomplete)["result"] == result
+
+
 def test_inotify_observes_bound_mutation(tmp_path: Path) -> None:
     bound = tmp_path / "bound.txt"
     bound.write_bytes(b"before")
@@ -1629,7 +1827,7 @@ def test_parent_fsync_crossing_deadline_rolls_back_publication(
     assert not final.exists()
 
 
-def test_expired_finalization_publishes_only_runner_timeout_envelope(
+def test_expired_finalization_stages_only_runner_timeout_envelope(
     tmp_path: Path,
 ) -> None:
     contract = _launch_contract(tmp_path)
@@ -1657,50 +1855,25 @@ def test_expired_finalization_publishes_only_runner_timeout_envelope(
         clock=lambda: 3600.0,
     )
     final = tmp_path / contract["evidence_root"]
+    incomplete = tmp_path / contract["incomplete_root"]
     assert result == "runner_timeout"
-    assert final.is_dir()
-    assert not (tmp_path / contract["incomplete_root"]).exists()
-    assert parent.read_canonical_json(final / "result.json")["result"] == result
-    assert parent._artifact_inventory(final) == sorted(
+    assert not final.exists()
+    assert incomplete.is_dir()
+    assert parent.read_canonical_json(incomplete / "result.json")["result"] == result
+    assert parent._artifact_inventory(incomplete) == sorted(
         parent.C_PATHS, key=lambda value: value.encode("utf-8")
     )
-    assert verifier.verify_evidence_root(final)["result"] == result
+    assert verifier.verify_evidence_root(incomplete)["result"] == result
 
 
-def test_parent_fsync_timeout_after_four_completed_children_republishes_valid_timeout(
+def test_parent_fsync_timeout_after_four_completed_children_stages_valid_timeout(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     contract = _launch_contract(tmp_path)
-    incomplete = tmp_path / contract["incomplete_root"]
-    incomplete.mkdir()
-    parent._ensure_not_run_slots(contract, incomplete)
-    for run_id in parent.RUN_IDS:
-        invocation_path = incomplete / "runs" / run_id / "invocation.json"
-        invocation = parent.read_canonical_json(invocation_path)
-        invocation["confinement_plan_digest"] = "1" * 64
-        invocation["confinement_probe_passed"] = True
-        invocation["state"] = "completed"
-        invocation["result"] = "run_completed"
-        invocation["runtime_inputs_digest"] = "2" * 64
-        parent._replace_canonical_fsync(invocation_path, invocation)
-    for relative in parent.D_PATHS:
-        path = incomplete / relative
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(b"synthetic\n")
-    semantic_digest = "1" * 64
-    for relative in parent.V_PATHS:
-        path = incomplete / relative
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(
-            parent.canonical_json_file_bytes(
-                {
-                    "report": {"semantic_digest_sha256": semantic_digest},
-                    "state": "pass",
-                }
-            )
-        )
+    incomplete = _write_synthetic_phase_pass_slots(contract)
     now = {"value": 3599.0}
     real_fsync = parent._fsync_directory
+    real_verify = verifier.verify_evidence_root
     fsync_calls = 0
 
     def crossing_fsync(path: Path) -> None:
@@ -1730,12 +1903,12 @@ def test_parent_fsync_timeout_after_four_completed_children_republishes_valid_ti
         clock=lambda: now["value"],
     )
     final = tmp_path / contract["evidence_root"]
-    assert fsync_calls == 3
+    assert fsync_calls == 2
     assert result == "runner_timeout"
-    assert final.is_dir()
-    assert not incomplete.exists()
-    assert parent.read_canonical_json(final / "manifest.json")["result"] == result
-    assert parent.read_canonical_json(final / "result.json")["result"] == result
-    assert not any((final / relative).exists() for relative in parent.D_PATHS)
-    assert not any((final / relative).exists() for relative in parent.V_PATHS)
-    assert verifier.verify_evidence_root(final)["result"] == result
+    assert not final.exists()
+    assert incomplete.is_dir()
+    assert parent.read_canonical_json(incomplete / "manifest.json")["result"] == result
+    assert parent.read_canonical_json(incomplete / "result.json")["result"] == result
+    assert not any((incomplete / relative).exists() for relative in parent.D_PATHS)
+    assert not any((incomplete / relative).exists() for relative in parent.V_PATHS)
+    assert real_verify(incomplete)["result"] == result

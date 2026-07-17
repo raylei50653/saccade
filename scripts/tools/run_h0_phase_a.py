@@ -2358,20 +2358,16 @@ def _publish_evidence_root(
     *,
     started: float,
     clock: Callable[[], float] = time.monotonic,
-    enforce_deadline: bool = True,
 ) -> None:
     """Atomically publish only if rename and parent fsync finish in time."""
-    if enforce_deadline:
-        _bounded_remaining(started, now=clock)
+    _bounded_remaining(started, now=clock)
     renamed = False
     try:
         os.replace(incomplete, final)
         renamed = True
-        if enforce_deadline:
-            _bounded_remaining(started, now=clock)
+        _bounded_remaining(started, now=clock)
         _fsync_directory(final.parent)
-        if enforce_deadline:
-            _bounded_remaining(started, now=clock)
+        _bounded_remaining(started, now=clock)
     except BaseException:
         if renamed:
             if incomplete.exists() or incomplete.is_symlink():
@@ -2399,7 +2395,11 @@ def _finalize_bundle_once(
     mutation_events: Sequence[Mapping[str, Any]],
     clock: Callable[[], float] = time.monotonic,
     enforce_deadline: bool = True,
+    publish: bool = True,
 ) -> Path:
+    if publish and not enforce_deadline:
+        raise ContractError("publication requires active deadline admission")
+
     def admit() -> None:
         if enforce_deadline:
             _bounded_remaining(started, now=clock)
@@ -2600,12 +2600,13 @@ def _finalize_bundle_once(
     if reconstructed_aggregate != aggregate:
         raise ContractError("staged-root reconstruction differs from stored aggregate")
     admit()
+    if not publish:
+        return incomplete
     _publish_evidence_root(
         incomplete,
         final,
         started=started,
         clock=clock,
-        enforce_deadline=enforce_deadline,
     )
     return final
 
@@ -2651,7 +2652,7 @@ def _finalize_bundle(
     mutation_events: Sequence[Mapping[str, Any]],
     clock: Callable[[], float] = time.monotonic,
 ) -> str:
-    """Finalize once in-deadline, or publish the reclassified failure envelope."""
+    """Publish in-deadline, or leave a verified timeout envelope staged."""
     try:
         _finalize_bundle_once(
             contract,
@@ -2687,6 +2688,7 @@ def _finalize_bundle(
             mutation_events=mutation_events,
             clock=clock,
             enforce_deadline=False,
+            publish=False,
         )
         return timeout_result
 
@@ -2697,7 +2699,7 @@ def execute_controller(
     popen_factory: Callable[..., subprocess.Popen[bytes]] = subprocess.Popen,
     clock: Callable[[], float] = time.monotonic,
 ) -> str:
-    """Execute the single A7 plan and publish exactly one RC1.4 bundle."""
+    """Execute A7 and publish RC1.4 only while the deadline remains valid."""
     root = Path(contract["repository_root"])
     started = clock()
     incomplete = root / contract["incomplete_root"]

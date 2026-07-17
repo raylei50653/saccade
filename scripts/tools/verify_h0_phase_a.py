@@ -6,9 +6,10 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import sys
 import stat
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Mapping, Sequence
 
 
@@ -1511,22 +1512,43 @@ def verify_evidence_root(root: Path) -> dict[str, Any]:
         or root.resolve(strict=True) != root.absolute()
     ):
         raise VerificationError("evidence root is absent, symlinked, or non-physical")
+    actual_files: list[str] = []
+    actual_directories: set[str] = set()
+    pending_directories = [root]
+    while pending_directories:
+        directory = pending_directories.pop()
+        try:
+            with os.scandir(directory) as iterator:
+                entries = list(iterator)
+        except OSError as exc:
+            raise VerificationError(
+                f"evidence directory is unreadable: {directory.relative_to(root)}"
+            ) from exc
+        for entry in entries:
+            path = Path(entry.path)
+            relative = path.relative_to(root).as_posix()
+            try:
+                info = entry.stat(follow_symlinks=False)
+            except OSError as exc:
+                raise VerificationError(
+                    f"evidence entry is unclassifiable: {relative}"
+                ) from exc
+            if stat.S_ISREG(info.st_mode):
+                actual_files.append(relative)
+            elif stat.S_ISDIR(info.st_mode):
+                actual_directories.add(relative)
+                pending_directories.append(path)
+            else:
+                raise VerificationError(f"forbidden evidence entry type: {relative}")
+    actual_file_set = set(actual_files)
+    required_control_files = {"checksums.sha256", "manifest.json"}
+    if not required_control_files.issubset(actual_file_set):
+        raise VerificationError(
+            "manifest.json or checksums.sha256 is absent or non-regular"
+        )
     manifest = load_json(root / "manifest.json", canonical_file=True)
     report = verify_evidence(manifest)
     expected_files = manifest["artifact_inventory"]
-    actual_files: list[str] = []
-    actual_directories: set[str] = set()
-    for path in root.rglob("*"):
-        relative = path.relative_to(root).as_posix()
-        info = path.lstat()
-        if stat.S_ISLNK(info.st_mode) or not (
-            stat.S_ISREG(info.st_mode) or stat.S_ISDIR(info.st_mode)
-        ):
-            raise VerificationError(f"forbidden evidence entry type: {relative}")
-        if stat.S_ISREG(info.st_mode):
-            actual_files.append(relative)
-        else:
-            actual_directories.add(relative)
     if sorted(actual_files, key=lambda value: value.encode("utf-8")) != sorted(
         expected_files, key=lambda value: value.encode("utf-8")
     ):
@@ -1556,20 +1578,28 @@ def verify_evidence_root(root: Path) -> dict[str, Any]:
         not line.endswith("\n") for line in lines
     ):
         raise VerificationError("checksums.sha256 cardinality/line ending mismatch")
-    observed_paths: list[str] = []
-    for line in lines:
+    for index, line in enumerate(lines):
         raw = line[:-1]
         if len(raw) < 67 or raw[64:66] != "  ":
             raise VerificationError("malformed checksum line")
         hash_value, relative = raw[:64], raw[66:]
         if any(char not in "0123456789abcdef" for char in hash_value):
             raise VerificationError("non-lowercase SHA-256 in checksum line")
-        observed_paths.append(relative)
+        pure = PurePosixPath(relative)
+        if (
+            not relative
+            or "\\" in relative
+            or "\x00" in relative
+            or pure.is_absolute()
+            or any(part in {"", ".", ".."} for part in pure.parts)
+            or pure.as_posix() != relative
+        ):
+            raise VerificationError("non-canonical relative checksum path")
+        if relative != expected_checksum_paths[index]:
+            raise VerificationError("checksum path order/inventory mismatch")
         path = root / relative
         if hashlib.sha256(path.read_bytes()).hexdigest() != hash_value:
             raise VerificationError(f"checksum mismatch: {relative}")
-    if observed_paths != expected_checksum_paths:
-        raise VerificationError("checksum path order/inventory mismatch")
     runtime_documents: list[Mapping[str, Any]] = []
     for run_id, embedded in zip(RUN_IDS, manifest["child_invocations"], strict=True):
         actual = load_json(
