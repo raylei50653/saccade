@@ -1,0 +1,1323 @@
+#!/usr/bin/env python3
+"""Independent A7/RC1 aggregate verifier for Phase-A execution evidence."""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import sys
+import stat
+from pathlib import Path
+from typing import Any, Mapping, Sequence
+
+
+TOOLS_DIR = Path(__file__).resolve().parent
+SCHEMA_PATH = TOOLS_DIR / "h0_phase_a_execution_schema_v1.json"
+RUN_IDS = ("00_capture_off", "01_capture_on_1", "02_capture_on_2", "03_capture_on_3")
+RESULTS = (
+    "provenance_invalid",
+    "build_failed",
+    "extension_load_failed",
+    "runner_nonzero",
+    "runner_timeout",
+    "serialization_failed",
+    "artifact_missing_or_unreadable",
+    "unclassified_execution_failure",
+    "capture_perturbs_policy",
+    "packet_invalid",
+    "phase_a_pass",
+)
+BUILD_VECTORS = (
+    (
+        "uv",
+        "run",
+        "--frozen",
+        "cmake",
+        "--fresh",
+        "-S",
+        ".",
+        "-B",
+        "build/h0_phase_a",
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DENABLE_NATIVE_TESTS=OFF",
+        "-DSACCADE_ENABLE_NVTX=ON",
+        "-DPython3_EXECUTABLE=.venv/bin/python",
+    ),
+    (
+        "uv",
+        "run",
+        "--frozen",
+        "cmake",
+        "--build",
+        "build/h0_phase_a",
+        "--target",
+        "saccade_tracking_ext",
+        "saccade_scan_plugin",
+        "--parallel",
+        "1",
+    ),
+)
+EVALUATOR_PREFIX = (
+    "--preset",
+    "mamba_whole_graph_m",
+    "--detector",
+    "SDP",
+    "--data-root",
+    "datasets/MOT17",
+    "--split",
+    "train",
+    "--sequences",
+    "MOT17-04-SDP",
+    "--max-frames",
+    "0",
+    "--warmup-frames",
+    "0",
+    "--latency-only",
+    "--gpu-decode",
+    "--double-buffer",
+    "--detect-barrier",
+    "event",
+    "--main-nms-graphed",
+    "--processes",
+    "0",
+    "--output",
+)
+ENV_KEYS = (
+    "CUDA_DEVICE_ORDER",
+    "CUDA_VISIBLE_DEVICES",
+    "HOME",
+    "LANG",
+    "LC_ALL",
+    "LD_LIBRARY_PATH",
+    "PATH",
+    "PYTHONHASHSEED",
+    "PYTHONNOUSERSITE",
+    "SACCADE_BUILD_PATH",
+    "SACCADE_DETECT_BARRIER",
+    "SACCADE_DOUBLE_BUFFER",
+    "SACCADE_GPU_DECODE",
+    "SACCADE_MAIN_NMS_GRAPHED",
+    "TMPDIR",
+    "TZ",
+    "XDG_CACHE_HOME",
+)
+INOTIFY_NAMES = (
+    "IN_CLOSE_WRITE",
+    "IN_MODIFY",
+    "IN_ATTRIB",
+    "IN_DELETE_SELF",
+    "IN_MOVE_SELF",
+    "IN_CREATE",
+    "IN_DELETE",
+    "IN_MOVED_FROM",
+    "IN_MOVED_TO",
+)
+CHECKPOINTS = (
+    "T0",
+    "T1",
+    "T2a_0",
+    "T2b_0",
+    "T2a_1",
+    "T2b_1",
+    "T2a_2",
+    "T2b_2",
+    "T2a_3",
+    "T2b_3",
+    "T3",
+    "T4",
+)
+MODEL_INPUTS = (
+    "models/yolo/mamba_head_26m.engine",
+    "models/yolo/yolo26m.pt",
+    "models/yolo/yolo26m_backbone_640_best.engine",
+    "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
+    "runs/mamba_gt_yolo26m_v14replica_t3_t1/best.ckpt",
+)
+REQUIRED_REPOSITORY_INPUTS = (
+    "configs/presets/mamba_whole_graph_m.yaml",
+    "docs/modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md",
+    "docs/modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.policy.yaml",
+    "scripts/tools/export_headline_bridge_decision_trace.py",
+    "scripts/tools/h0_bridge_decision_trace_schema_v2.json",
+    "scripts/tools/h0_phase_a_execution_schema_v1.json",
+    "scripts/tools/resolved_bridge_policy_config.py",
+    "scripts/tools/run_h0_phase_a.py",
+    "scripts/tools/run_h0_phase_a_child.py",
+    "scripts/tools/verify_h0_phase_a.py",
+    "scripts/tools/verify_headline_bridge_decision_trace.py",
+    "uv.lock",
+)
+C_PATHS = (
+    "manifest.json",
+    "build_identity.json",
+    "runtime_identity.json",
+    "gpu_identity.json",
+    "input_binding.json",
+    "comparison.json",
+    "result.json",
+    "checksums.sha256",
+    "logs/00_cmake_configure.stdout.log",
+    "logs/00_cmake_configure.stderr.log",
+    "logs/01_cmake_build.stdout.log",
+    "logs/01_cmake_build.stderr.log",
+    "runs/00_capture_off/invocation.json",
+    "runs/00_capture_off/stdout.log",
+    "runs/00_capture_off/stderr.log",
+    "runs/01_capture_on_1/invocation.json",
+    "runs/01_capture_on_1/stdout.log",
+    "runs/01_capture_on_1/stderr.log",
+    "runs/02_capture_on_2/invocation.json",
+    "runs/02_capture_on_2/stdout.log",
+    "runs/02_capture_on_2/stderr.log",
+    "runs/03_capture_on_3/invocation.json",
+    "runs/03_capture_on_3/stdout.log",
+    "runs/03_capture_on_3/stderr.log",
+    "verification/aggregate.json",
+)
+D_PATHS = (
+    "runs/00_capture_off/policy_inventory.json",
+    "runs/00_capture_off/MOT17-04-SDP.txt",
+    "runs/01_capture_on_1/policy_inventory.json",
+    "runs/01_capture_on_1/MOT17-04-SDP.txt",
+    "runs/01_capture_on_1/packet.json",
+    "runs/02_capture_on_2/policy_inventory.json",
+    "runs/02_capture_on_2/MOT17-04-SDP.txt",
+    "runs/02_capture_on_2/packet.json",
+    "runs/03_capture_on_3/policy_inventory.json",
+    "runs/03_capture_on_3/MOT17-04-SDP.txt",
+    "runs/03_capture_on_3/packet.json",
+)
+V_PATHS = (
+    "runs/01_capture_on_1/packet_verification.json",
+    "runs/02_capture_on_2/packet_verification.json",
+    "runs/03_capture_on_3/packet_verification.json",
+)
+
+
+class VerificationError(RuntimeError):
+    pass
+
+
+_SCHEMA_CACHE: Any | None = None
+
+
+def canonical_json(value: object) -> bytes:
+    return json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
+
+
+def digest(value: object) -> str:
+    return hashlib.sha256(canonical_json(value)).hexdigest()
+
+
+def _pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise VerificationError(f"duplicate JSON member {key}")
+        result[key] = value
+    return result
+
+
+def load_json(path: Path, *, canonical_file: bool) -> Any:
+    try:
+        raw = path.read_bytes()
+        value = json.loads(
+            raw,
+            object_pairs_hook=_pairs,
+            parse_constant=lambda value: (_ for _ in ()).throw(
+                VerificationError(f"non-finite number {value}")
+            ),
+        )
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise VerificationError(f"malformed JSON {path}: {exc}") from exc
+    if canonical_file and raw != canonical_json(value) + b"\n":
+        raise VerificationError(f"non-canonical execution JSON: {path}")
+    return value
+
+
+def _schema_validate(value: object) -> None:
+    try:
+        import jsonschema
+    except ImportError as exc:  # pragma: no cover
+        raise VerificationError("jsonschema dependency unavailable") from exc
+    schema = _schema_document()
+    try:
+        jsonschema.Draft202012Validator.check_schema(schema)
+        errors = sorted(
+            jsonschema.Draft202012Validator(schema).iter_errors(value),
+            key=lambda error: list(error.absolute_path),
+        )
+    except jsonschema.SchemaError as exc:
+        raise VerificationError(f"invalid execution schema: {exc.message}") from exc
+    if errors:
+        error = errors[0]
+        location = "/".join(str(part) for part in error.absolute_path) or "<root>"
+        raise VerificationError(f"schema rejection at {location}: {error.message}")
+
+
+def _schema_document() -> Any:
+    global _SCHEMA_CACHE
+    if _SCHEMA_CACHE is None:
+        _SCHEMA_CACHE = load_json(SCHEMA_PATH, canonical_file=False)
+    return _SCHEMA_CACHE
+
+
+def expected_matrix() -> dict[str, dict[str, list[str]]]:
+    all_paths = C_PATHS + D_PATHS + V_PATHS
+    matrix = {
+        result: {"forbidden": list(D_PATHS + V_PATHS), "required": list(C_PATHS)}
+        for result in RESULTS[:8]
+    }
+    matrix["capture_perturbs_policy"] = {
+        "forbidden": list(V_PATHS),
+        "required": list(C_PATHS + D_PATHS),
+    }
+    matrix["packet_invalid"] = {"forbidden": [], "required": list(all_paths)}
+    matrix["phase_a_pass"] = {"forbidden": [], "required": list(all_paths)}
+    return matrix
+
+
+def select_result(predicates: Mapping[str, bool]) -> str:
+    if not predicates["provenance_ok"]:
+        return "provenance_invalid"
+    if not predicates["build_ok"]:
+        return "build_failed"
+    if not predicates["extension_ok"]:
+        return "extension_load_failed"
+    if not predicates["runners_ok"]:
+        return "runner_nonzero"
+    if predicates["timed_out"]:
+        return "runner_timeout"
+    if not predicates["serialization_ok"]:
+        return "serialization_failed"
+    if not predicates["artifacts_ok"]:
+        return "artifact_missing_or_unreadable"
+    if not predicates["classified_execution"]:
+        return "unclassified_execution_failure"
+    if not predicates["policy_equal"]:
+        return "capture_perturbs_policy"
+    if not predicates["packets_valid"]:
+        return "packet_invalid"
+    return "phase_a_pass"
+
+
+def _expected_child_vector(root: str, run_id: str) -> list[str]:
+    return [
+        f"{root}/.venv/bin/python",
+        "-I",
+        "-B",
+        f"{root}/scripts/tools/run_h0_phase_a_child.py",
+        "--run-id",
+        run_id,
+    ]
+
+
+def _expected_environment(controller: Mapping[str, Any], run_id: str) -> dict[str, str]:
+    root = controller["repository_root"]
+    run_dir = f"{root}/{controller['incomplete_root']}/runs/{run_id}"
+    temp = f"{run_dir}/_env"
+    libraries = controller["library_dirs"]
+    return {
+        "CUDA_DEVICE_ORDER": "PCI_BUS_ID",
+        "CUDA_VISIBLE_DEVICES": controller["gpu"]["uuid"],
+        "HOME": f"{temp}/home",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "LD_LIBRARY_PATH": ":".join(
+            (
+                f"{root}/build/h0_phase_a",
+                libraries["tensorrt_library_dir"],
+                libraries["pytorch_library_dir"],
+                libraries["cuda_library_dir"],
+            )
+        ),
+        "PATH": f"{root}/.venv/bin:/usr/bin:/bin",
+        "PYTHONHASHSEED": "0",
+        "PYTHONNOUSERSITE": "1",
+        "SACCADE_BUILD_PATH": f"{root}/build/h0_phase_a",
+        "SACCADE_DETECT_BARRIER": "event",
+        "SACCADE_DOUBLE_BUFFER": "1",
+        "SACCADE_GPU_DECODE": "1",
+        "SACCADE_MAIN_NMS_GRAPHED": "1",
+        "TMPDIR": f"{temp}/tmp",
+        "TZ": "UTC",
+        "XDG_CACHE_HOME": f"{temp}/xdg-cache",
+    }
+
+
+def _verify_constants(controller: Mapping[str, Any]) -> None:
+    root = controller["repository_root"]
+    constants = controller["execution_constants"]
+    if constants["operator_vector"] != [
+        "uv",
+        "run",
+        "--frozen",
+        "python",
+        "scripts/tools/run_h0_phase_a.py",
+    ]:
+        raise VerificationError("operator vector mismatch")
+    if constants["build_vectors"] != [list(value) for value in BUILD_VECTORS]:
+        raise VerificationError("build vector mismatch")
+    if constants["ordered_run_plan"] != list(RUN_IDS):
+        raise VerificationError("ordered run plan mismatch")
+    if constants["child_vectors"] != [
+        _expected_child_vector(root, run_id) for run_id in RUN_IDS
+    ]:
+        raise VerificationError("child vector mismatch")
+    if constants["evaluator_argv_prefix"] != list(EVALUATOR_PREFIX):
+        raise VerificationError("synthetic evaluator vector mismatch")
+    if constants["environment_keys"] != list(ENV_KEYS):
+        raise VerificationError("environment table key order mismatch")
+    if constants["inotify_mask"] != list(INOTIFY_NAMES):
+        raise VerificationError("inotify mask mismatch")
+    if constants["model_inputs"] != list(MODEL_INPUTS):
+        raise VerificationError("resolved model/engine input set mismatch")
+    if constants["required_repository_inputs"] != list(REQUIRED_REPOSITORY_INPUTS):
+        raise VerificationError("required controller/runtime authority set mismatch")
+    if constants["checkpoints"] != list(CHECKPOINTS):
+        raise VerificationError("bound-input checkpoint order mismatch")
+    if constants["deadline_seconds"] != 3600 or constants["trace_capacities"] != [
+        65536,
+        16384,
+        16384,
+        16384,
+    ]:
+        raise VerificationError("deadline or trace capacity mismatch")
+    if constants["result_enum"] != list(RESULTS):
+        raise VerificationError("result enum/order mismatch")
+    if (
+        constants["c_paths"] != list(C_PATHS)
+        or constants["d_paths"] != list(D_PATHS)
+        or constants["v_paths"] != list(V_PATHS)
+    ):
+        raise VerificationError("C/D/V path set mismatch")
+    if constants["result_matrix"] != expected_matrix():
+        raise VerificationError("execution-constant C/D/V matrix mismatch")
+
+
+def _verify_bound_inputs(controller: Mapping[str, Any]) -> None:
+    inventory = controller["bound_inputs"]
+    if (
+        tuple(record["logical_path"] for record in inventory["models_engines"])
+        != MODEL_INPUTS
+    ):
+        raise VerificationError(
+            "bound model/engine inventory differs from resolved evaluator"
+        )
+    sequence = inventory["sequence"]
+    paths = [record["path"] for record in sequence["files"]]
+    if paths != sorted(paths, key=lambda path: path.encode("utf-8")) or len(
+        paths
+    ) != len(set(paths)):
+        raise VerificationError("sequence inventory path ordering/uniqueness mismatch")
+    for path in paths:
+        parts = Path(path).parts
+        if path.startswith("/") or ".." in parts or "." in parts or "\\" in path:
+            raise VerificationError("non-canonical sequence path")
+        if parts and parts[0] in {"gt", "det"}:
+            raise VerificationError("sequence inventory includes excluded subtree")
+    expected_sequence = digest(
+        {"algorithm": "h0_sequence_inputs_v1", "files": sequence["files"]}
+    )
+    if (
+        sequence["digest"] != expected_sequence
+        or controller["sequence_input_digest"] != expected_sequence
+    ):
+        raise VerificationError("canonical sequence-input digest mismatch")
+    for category in ("repository", "models_engines", "tool_runtime"):
+        path_key = "path" if category == "repository" else "logical_path"
+        encoded = [record[path_key].encode("utf-8") for record in inventory[category]]
+        if encoded != sorted(encoded) or len(encoded) != len(set(encoded)):
+            raise VerificationError(f"{category} inventory order/uniqueness mismatch")
+        if category != "repository":
+            realpaths = [record["realpath"] for record in inventory[category]]
+            if len(realpaths) != len(set(realpaths)):
+                raise VerificationError(
+                    f"{category} inventory duplicates a physical path"
+                )
+    repository_paths = {record["path"] for record in inventory["repository"]}
+    if not set(REQUIRED_REPOSITORY_INPUTS).issubset(repository_paths):
+        raise VerificationError("repository inventory omits an A7/RC1 authority")
+    payload = {
+        "models_engines": inventory["models_engines"],
+        "repository": inventory["repository"],
+        "schema": "h0_bound_inputs_v1",
+        "sequence": sequence,
+        "tool_runtime": inventory["tool_runtime"],
+    }
+    if inventory["digest"] != digest(payload):
+        raise VerificationError("h0_bound_inputs_v1 digest mismatch")
+
+
+def _verify_children(evidence: Mapping[str, Any]) -> None:
+    controller = evidence["controller_input"]
+    children = evidence["child_invocations"]
+    if [child["run_id"] for child in children] != list(RUN_IDS):
+        raise VerificationError("child cardinality/order mismatch")
+    for child, run_id in zip(children, RUN_IDS, strict=True):
+        if child["instrumentation_head"] != controller["instrumentation_head"]:
+            raise VerificationError("parent/child head mismatch")
+        if child["bound_inputs_digest"] != controller["bound_inputs"]["digest"]:
+            raise VerificationError("parent/child bound-input digest mismatch")
+        expected_vector = _expected_child_vector(controller["repository_root"], run_id)
+        if child["vector"] != expected_vector:
+            raise VerificationError("parent/child command vector mismatch")
+        run_dir = f"{controller['repository_root']}/{controller['incomplete_root']}/runs/{run_id}"
+        if child["evaluator_argv"] != list(EVALUATOR_PREFIX) + [f"{run_dir}/_runtime"]:
+            raise VerificationError("child evaluator vector/output mismatch")
+        environment = _expected_environment(controller, run_id)
+        if child["environment"] != environment or child["environment_digest"] != digest(
+            environment
+        ):
+            raise VerificationError("child environment table/digest mismatch")
+
+
+def _verify_input_binding(evidence: Mapping[str, Any]) -> None:
+    binding = evidence["input_binding"]
+    controller_digest = evidence["controller_input"]["bound_inputs"]["digest"]
+    if binding["t0_digest"] != controller_digest:
+        raise VerificationError("T0 inventory digest differs from controller binding")
+    if [checkpoint["name"] for checkpoint in binding["checkpoints"]] != list(
+        CHECKPOINTS
+    ):
+        raise VerificationError("input-binding checkpoint order mismatch")
+    if binding["inotify_mask"] != list(INOTIFY_NAMES):
+        raise VerificationError("mutation observation mask mismatch")
+    checkpoints = binding["checkpoints"]
+    states = [checkpoint["state"] for checkpoint in checkpoints]
+    completed_count = 0
+    failed_count = 0
+    terminal_seen = False
+    for checkpoint in checkpoints:
+        state = checkpoint["state"]
+        if state == "completed":
+            if terminal_seen:
+                raise VerificationError(
+                    "completed checkpoint follows a failed/not-reached checkpoint"
+                )
+            completed_count += 1
+            if (
+                checkpoint["digest"] != controller_digest
+                or checkpoint["inventory_equal"] is not True
+                or checkpoint["events_before"]
+                or checkpoint["events_after"]
+            ):
+                raise VerificationError(
+                    "bound input changed: completed checkpoint is not an exact clean T0 match"
+                )
+        elif state == "failed":
+            if terminal_seen:
+                raise VerificationError(
+                    "input binding has multiple or out-of-order failed checkpoints"
+                )
+            terminal_seen = True
+            failed_count += 1
+            if not checkpoint["events_before"] and not checkpoint["events_after"]:
+                raise VerificationError(
+                    "failed checkpoint has no mechanical mutation evidence"
+                )
+        else:
+            terminal_seen = True
+    if failed_count > 1:
+        raise VerificationError("input binding has multiple failed checkpoints")
+
+    mutations = binding["mutation_events"]
+    if mutations:
+        if (
+            evidence["result"] != "provenance_invalid"
+            or binding["final_equal"] is not False
+        ):
+            raise VerificationError(
+                "observed bound-input mutation did not select provenance_invalid"
+            )
+        classifications = {event["classification"] for event in mutations}
+        expected_monitor = (
+            "queue_overflow"
+            if "queue_overflow" in classifications
+            else "ignored_watch"
+            if "ignored_watch" in classifications
+            else "watch_failed"
+            if "watch_failed" in classifications
+            else "drift"
+        )
+        if binding["monitor_state"] != expected_monitor:
+            raise VerificationError(
+                "mutation classification and monitor state disagree"
+            )
+    elif completed_count == 0:
+        if (
+            evidence["result"] != "provenance_invalid"
+            or states != ["not_reached"] * len(CHECKPOINTS)
+            or binding["monitor_state"] != "not_started"
+            or binding["final_equal"] is not None
+        ):
+            raise VerificationError(
+                "unstarted monitor state is not a preflight provenance rejection"
+            )
+    else:
+        if failed_count or binding["monitor_state"] != "closed_clean":
+            raise VerificationError(
+                "clean checkpoint prefix has an inconsistent monitor state"
+            )
+        expected_final = True if completed_count == len(CHECKPOINTS) else None
+        if binding["final_equal"] is not expected_final:
+            raise VerificationError(
+                "input-binding final equality state is not mechanically derived"
+            )
+
+
+def _verify_result(evidence: Mapping[str, Any]) -> None:
+    result = evidence["result"]
+    predicates = evidence["decision_predicates"]
+    if result != select_result(predicates):
+        raise VerificationError(
+            "result enum disagrees with first-applicable decision predicates"
+        )
+    matrix = expected_matrix()
+    if evidence["result_matrix"] != matrix:
+        raise VerificationError("evidence C/D/V matrix mismatch")
+    required = matrix[result]["required"]
+    if evidence["artifact_inventory"] != required:
+        raise VerificationError(
+            "artifact inventory does not exactly equal the result row"
+        )
+    policy_state = evidence["policy_comparison"]
+    packet_states = evidence["packet_verification_states"]
+    child_states = [child["state"] for child in evidence["child_invocations"]]
+    if result in {"build_failed", "extension_load_failed"}:
+        if child_states != ["not_run"] * 4:
+            raise VerificationError(
+                f"{result} has a child that should not have launched"
+            )
+    if result == "provenance_invalid":
+        first_non_completed = next(
+            (index for index, state in enumerate(child_states) if state != "completed"),
+            len(child_states),
+        )
+        tail = child_states[first_non_completed:]
+        if tail:
+            if tail[0] == "failed":
+                failed = evidence["child_invocations"][first_non_completed]
+                if failed["result"] != "provenance_invalid" or tail[1:] != [
+                    "not_run"
+                ] * (len(tail) - 1):
+                    raise VerificationError(
+                        "provenance failure child state order/result mismatch"
+                    )
+            elif tail != ["not_run"] * len(tail):
+                raise VerificationError("provenance failure child state order mismatch")
+    if result in {"runner_nonzero", "runner_timeout"}:
+        if result == "runner_timeout" and child_states == ["not_run"] * 4:
+            non_completed = None
+        else:
+            non_completed = next(
+                (
+                    index
+                    for index, state in enumerate(child_states)
+                    if state != "completed"
+                ),
+                None,
+            )
+            if non_completed is None or child_states[non_completed + 1 :] != [
+                "not_run"
+            ] * (3 - non_completed):
+                raise VerificationError(
+                    "runner failure child state order is not fail-closed"
+                )
+            failed_child = evidence["child_invocations"][non_completed]
+            expected_child_result = (
+                "runner_timeout" if result == "runner_timeout" else "runner_nonzero"
+            )
+            if (
+                failed_child["state"] not in {"failed", "running_interrupted"}
+                or failed_child["result"] != expected_child_result
+            ):
+                raise VerificationError(
+                    "runner failure child result does not match controller result"
+                )
+    if result == "capture_perturbs_policy":
+        if policy_state != "unequal" or packet_states != ["not_produced"] * 3:
+            raise VerificationError("capture_perturbs_policy evidence-state mismatch")
+    elif result == "packet_invalid":
+        if (
+            policy_state != "equal"
+            or "fail" not in packet_states
+            or "not_produced" in packet_states
+        ):
+            raise VerificationError("packet_invalid evidence-state mismatch")
+    elif result == "phase_a_pass":
+        if policy_state != "equal" or packet_states != ["pass"] * 3:
+            raise VerificationError("phase_a_pass evidence-state mismatch")
+        if any(
+            child["state"] != "completed" or child["result"] != "run_completed"
+            for child in evidence["child_invocations"]
+        ):
+            raise VerificationError("phase_a_pass has a non-completed child")
+    else:
+        if policy_state != "not_produced" or packet_states != ["not_produced"] * 3:
+            raise VerificationError("C-only result fabricated D/V decision evidence")
+
+
+def verify_evidence(evidence: Mapping[str, Any]) -> dict[str, Any]:
+    """Rebuild every controller decision; never consume a self-reported valid bit."""
+    _schema_validate(evidence)
+    if evidence.get("document_type") != "execution_evidence":
+        raise VerificationError("not an execution_evidence document")
+    _verify_constants(evidence["controller_input"])
+    _verify_bound_inputs(evidence["controller_input"])
+    _verify_children(evidence)
+    _verify_input_binding(evidence)
+    _verify_result(evidence)
+    return {
+        "document_type": "aggregate_verification",
+        "result": evidence["result"],
+        "schema": "h0_phase_a_verifier_v1",
+        "valid": True,
+    }
+
+
+def _verify_policy_inventory(run_id: str, inventory: Mapping[str, Any]) -> None:
+    members = {
+        "active_tid_slot_pairs",
+        "final_track_rows",
+        "mot_output",
+        "overflow_vector",
+        "proposal_projection",
+        "relink_debug_raw",
+        "schema",
+        "winner_commit_projection",
+    }
+    if (
+        set(inventory) != members
+        or inventory.get("schema") != "h0_phase_a_policy_inventory_v1"
+    ):
+        raise VerificationError(f"policy inventory schema mismatch: {run_id}")
+
+    def exact_int(value: object) -> bool:
+        return type(value) is int
+
+    mot = inventory["mot_output"]
+    if (
+        not isinstance(mot, dict)
+        or set(mot) != {"length", "sha256"}
+        or not exact_int(mot["length"])
+        or mot["length"] < 0
+        or not isinstance(mot["sha256"], str)
+        or len(mot["sha256"]) != 64
+        or any(char not in "0123456789abcdef" for char in mot["sha256"])
+    ):
+        raise VerificationError(f"policy MOT identity shape mismatch: {run_id}")
+    final_rows = inventory["final_track_rows"]
+    active_rows = inventory["active_tid_slot_pairs"]
+    if not isinstance(final_rows, list) or not isinstance(active_rows, list):
+        raise VerificationError(f"policy inventory row collection mismatch: {run_id}")
+    for row in final_rows:
+        if not isinstance(row, dict) or set(row) != {
+            "binary32_bits",
+            "class",
+            "frame",
+            "row_index",
+            "track_id",
+        }:
+            raise VerificationError(f"final-track row shape mismatch: {run_id}")
+        bits = row["binary32_bits"]
+        if (
+            not isinstance(bits, list)
+            or len(bits) != 5
+            or any(
+                not exact_int(value) or value < 0 or value > 0xFFFFFFFF
+                for value in bits
+            )
+            or any(
+                not exact_int(row[key])
+                for key in ("class", "frame", "row_index", "track_id")
+            )
+            or row["frame"] < 1
+            or row["row_index"] < 0
+        ):
+            raise VerificationError(f"final-track row value mismatch: {run_id}")
+    positions: dict[int, list[int]] = {}
+    for row in final_rows:
+        positions.setdefault(row["frame"], []).append(row["row_index"])
+    if any(values != list(range(len(values))) for values in positions.values()):
+        raise VerificationError(
+            f"final-track row positions are not emitted order: {run_id}"
+        )
+    for row in active_rows:
+        if (
+            not isinstance(row, dict)
+            or set(row) != {"frame", "pairs"}
+            or not exact_int(row["frame"])
+            or row["frame"] < 1
+        ):
+            raise VerificationError(f"active tid/slot row shape mismatch: {run_id}")
+        pairs = row["pairs"]
+        if (
+            not isinstance(pairs, list)
+            or any(
+                not isinstance(pair, list)
+                or len(pair) != 2
+                or any(not exact_int(value) for value in pair)
+                for pair in pairs
+            )
+            or pairs != sorted(pairs, key=lambda pair: pair[1])
+            or len({pair[1] for pair in pairs}) != len(pairs)
+        ):
+            raise VerificationError(f"active tid/slot pairs mismatch: {run_id}")
+    for member, length in (("relink_debug_raw", 13), ("overflow_vector", 9)):
+        vector = inventory[member]
+        if (
+            not isinstance(vector, list)
+            or len(vector) != length
+            or any(not exact_int(value) for value in vector)
+        ):
+            raise VerificationError(
+                f"policy inventory vector mismatch: {run_id}:{member}"
+            )
+
+    def projection(value: object, *, winner: bool) -> None:
+        if not isinstance(value, dict) or set(value) != {"count", "digest", "records"}:
+            raise VerificationError(f"trace projection shape mismatch: {run_id}")
+        record_keys = (
+            {"commits", "winning_claims"} if winner else {"candidates", "claims"}
+        )
+        records = value["records"]
+        if (
+            not isinstance(records, dict)
+            or set(records) != record_keys
+            or any(not isinstance(records[key], list) for key in record_keys)
+        ):
+            raise VerificationError(f"trace projection records mismatch: {run_id}")
+        primary = records["commits" if winner else "candidates"]
+        if (
+            not exact_int(value["count"])
+            or value["count"] != len(primary)
+            or value["digest"] != digest(records)
+        ):
+            raise VerificationError(f"trace projection count/digest mismatch: {run_id}")
+
+    if run_id == RUN_IDS[0]:
+        if (
+            inventory["proposal_projection"] is not None
+            or inventory["winner_commit_projection"] is not None
+        ):
+            raise VerificationError("capture-off fabricated trace-only projections")
+    else:
+        projection(inventory["proposal_projection"], winner=False)
+        projection(inventory["winner_commit_projection"], winner=True)
+
+
+def _verify_complete_build_identity(
+    identity: Mapping[str, Any], repository_root: Path
+) -> None:
+    top_members = {
+        "artifacts",
+        "build_vectors",
+        "cmake",
+        "cmake_cache_sha256",
+        "compilers",
+        "cuda_toolkit_root",
+        "python",
+        "python_ext_suffix",
+        "state",
+        "uv_lock_sha256",
+    }
+    if set(identity) != top_members or identity.get("state") != "complete":
+        raise VerificationError("build identity has missing or unknown members")
+    if identity["build_vectors"] != [list(vector) for vector in BUILD_VECTORS]:
+        raise VerificationError("build identity command vectors differ from A7.4")
+    suffix = identity["python_ext_suffix"]
+    if not isinstance(suffix, str) or not suffix or "/" in suffix or "\\" in suffix:
+        raise VerificationError("build identity EXT_SUFFIX is non-canonical")
+    expected_artifacts = [
+        f"build/h0_phase_a/saccade_tracking_ext{suffix}",
+        "build/h0_phase_a/libsaccade_scan_plugin.so",
+    ]
+    artifacts = identity["artifacts"]
+    if (
+        not isinstance(artifacts, list)
+        or any(not isinstance(item, dict) for item in artifacts)
+        or [item.get("path") for item in artifacts] != expected_artifacts
+    ):
+        raise VerificationError("build identity artifact cardinality/path mismatch")
+
+    def sha(value: object) -> bool:
+        return (
+            isinstance(value, str)
+            and len(value) == 64
+            and not any(char not in "0123456789abcdef" for char in value)
+        )
+
+    for artifact in artifacts:
+        if set(artifact) != {
+            "dynamic_dependencies",
+            "elf_gnu_build_id",
+            "length",
+            "path",
+            "sha256",
+        }:
+            raise VerificationError(
+                "build artifact identity has missing or unknown members"
+            )
+        if (
+            type(artifact["length"]) is not int
+            or artifact["length"] < 0
+            or not sha(artifact["sha256"])
+        ):
+            raise VerificationError("build artifact length/hash is malformed")
+        build_id = artifact["elf_gnu_build_id"]
+        if (
+            not isinstance(build_id, str)
+            or not build_id
+            or any(char not in "0123456789abcdef" for char in build_id)
+        ):
+            raise VerificationError("ELF GNU build ID is malformed")
+        dependencies = artifact["dynamic_dependencies"]
+        if not isinstance(dependencies, list):
+            raise VerificationError("dynamic dependency inventory is not an array")
+        dependency_paths: list[str] = []
+        for dependency in dependencies:
+            if not isinstance(dependency, dict) or set(dependency) != {
+                "length",
+                "path",
+                "realpath",
+                "sha256",
+            }:
+                raise VerificationError(
+                    "dynamic dependency has missing or unknown members"
+                )
+            if (
+                type(dependency["length"]) is not int
+                or dependency["length"] < 0
+                or not sha(dependency["sha256"])
+            ):
+                raise VerificationError("dynamic dependency length/hash is malformed")
+            if not str(dependency["path"]).startswith("/") or not str(
+                dependency["realpath"]
+            ).startswith("/"):
+                raise VerificationError("dynamic dependency path is not absolute")
+            dependency_paths.append(dependency["path"])
+        if dependency_paths != sorted(
+            dependency_paths, key=lambda value: value.encode("utf-8")
+        ) or len(dependency_paths) != len(set(dependency_paths)):
+            raise VerificationError("dynamic dependency order/uniqueness mismatch")
+    cmake = identity["cmake"]
+    if not isinstance(cmake, dict) or set(cmake) != {
+        "generator",
+        "length",
+        "path",
+        "sha256",
+        "version",
+    }:
+        raise VerificationError("CMake identity has missing or unknown members")
+    compilers = identity["compilers"]
+    if not isinstance(compilers, dict) or set(compilers) != {"c", "cxx", "cuda"}:
+        raise VerificationError("compiler identity set mismatch")
+    python_identity = identity["python"]
+    if not isinstance(python_identity, dict) or set(python_identity) != {
+        "abi",
+        "length",
+        "path",
+        "sha256",
+        "version",
+    }:
+        raise VerificationError("Python identity has missing or unknown members")
+    for record in [cmake, python_identity, *compilers.values()]:
+        if not isinstance(record, dict):
+            raise VerificationError("tool/Python identity is not an object")
+        if (
+            record is not cmake
+            and record is not python_identity
+            and set(record) != {"length", "path", "sha256", "version"}
+        ):
+            raise VerificationError(
+                "tool/Python identity has missing or unknown members"
+            )
+        if (
+            type(record["length"]) is not int
+            or record["length"] < 0
+            or not sha(record["sha256"])
+        ):
+            raise VerificationError("tool/Python identity length/hash is malformed")
+        if not isinstance(record["path"], str) or not record["path"].startswith("/"):
+            raise VerificationError("tool/Python identity path is not absolute")
+    if not sha(identity["cmake_cache_sha256"]) or not sha(identity["uv_lock_sha256"]):
+        raise VerificationError("build input hash is malformed")
+    if not isinstance(identity["cuda_toolkit_root"], str) or not identity[
+        "cuda_toolkit_root"
+    ].startswith("/"):
+        raise VerificationError("CUDA toolkit root is not absolute")
+    for artifact in artifacts:
+        path = repository_root / artifact["path"]
+        data = path.read_bytes()
+        if (
+            artifact["length"] != len(data)
+            or artifact["sha256"] != hashlib.sha256(data).hexdigest()
+        ):
+            raise VerificationError(
+                f"build artifact identity mismatch: {artifact['path']}"
+            )
+    cache = repository_root / "build/h0_phase_a/CMakeCache.txt"
+    if hashlib.sha256(cache.read_bytes()).hexdigest() != identity["cmake_cache_sha256"]:
+        raise VerificationError("CMake cache identity mismatch")
+    if (
+        hashlib.sha256((repository_root / "uv.lock").read_bytes()).hexdigest()
+        != identity["uv_lock_sha256"]
+    ):
+        raise VerificationError("uv.lock identity mismatch")
+
+
+def verify_evidence_root(root: Path) -> dict[str, Any]:
+    """Verify the published filesystem universe, checksums, and embedded evidence."""
+    if (
+        root.is_symlink()
+        or not root.is_dir()
+        or root.resolve(strict=True) != root.absolute()
+    ):
+        raise VerificationError("evidence root is absent, symlinked, or non-physical")
+    manifest = load_json(root / "manifest.json", canonical_file=True)
+    report = verify_evidence(manifest)
+    expected_files = manifest["artifact_inventory"]
+    actual_files: list[str] = []
+    actual_directories: set[str] = set()
+    for path in root.rglob("*"):
+        relative = path.relative_to(root).as_posix()
+        info = path.lstat()
+        if stat.S_ISLNK(info.st_mode) or not (
+            stat.S_ISREG(info.st_mode) or stat.S_ISDIR(info.st_mode)
+        ):
+            raise VerificationError(f"forbidden evidence entry type: {relative}")
+        if stat.S_ISREG(info.st_mode):
+            actual_files.append(relative)
+        else:
+            actual_directories.add(relative)
+    if sorted(actual_files, key=lambda value: value.encode("utf-8")) != sorted(
+        expected_files, key=lambda value: value.encode("utf-8")
+    ):
+        raise VerificationError(
+            "published regular-file universe differs from C/D/V row"
+        )
+    expected_directories: set[str] = set()
+    for relative in expected_files:
+        current = Path(relative).parent
+        while current.as_posix() != ".":
+            expected_directories.add(current.as_posix())
+            current = current.parent
+    if actual_directories != expected_directories:
+        raise VerificationError(
+            "published directory universe has missing or unknown entries"
+        )
+    checksum_path = root / "checksums.sha256"
+    try:
+        checksum_bytes = checksum_path.read_bytes()
+        checksum_text = checksum_bytes.decode("ascii")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise VerificationError(f"checksums.sha256 unreadable: {exc}") from exc
+    expected_checksum_paths = sorted(
+        (path for path in expected_files if path != "checksums.sha256"),
+        key=lambda value: value.encode("utf-8"),
+    )
+    lines = checksum_text.splitlines(keepends=True)
+    if len(lines) != len(expected_checksum_paths) or any(
+        not line.endswith("\n") for line in lines
+    ):
+        raise VerificationError("checksums.sha256 cardinality/line ending mismatch")
+    observed_paths: list[str] = []
+    for line in lines:
+        raw = line[:-1]
+        if len(raw) < 67 or raw[64:66] != "  ":
+            raise VerificationError("malformed checksum line")
+        hash_value, relative = raw[:64], raw[66:]
+        if any(char not in "0123456789abcdef" for char in hash_value):
+            raise VerificationError("non-lowercase SHA-256 in checksum line")
+        observed_paths.append(relative)
+        path = root / relative
+        if hashlib.sha256(path.read_bytes()).hexdigest() != hash_value:
+            raise VerificationError(f"checksum mismatch: {relative}")
+    if observed_paths != expected_checksum_paths:
+        raise VerificationError("checksum path order/inventory mismatch")
+    for run_id, embedded in zip(RUN_IDS, manifest["child_invocations"], strict=True):
+        actual = load_json(
+            root / "runs" / run_id / "invocation.json", canonical_file=True
+        )
+        if actual != embedded:
+            raise VerificationError(f"manifest/child invocation mismatch: {run_id}")
+    if (
+        load_json(root / "input_binding.json", canonical_file=True)
+        != manifest["input_binding"]
+    ):
+        raise VerificationError("manifest/input_binding.json mismatch")
+    result = load_json(root / "result.json", canonical_file=True)
+    if result != {"result": manifest["result"], "schema": "h0_phase_a_execution_v1"}:
+        raise VerificationError("manifest/result.json mismatch")
+    aggregate = load_json(root / "verification/aggregate.json", canonical_file=True)
+    if aggregate != report:
+        raise VerificationError(
+            "stored aggregate differs from independent reconstruction"
+        )
+    build_identity = load_json(root / "build_identity.json", canonical_file=True)
+    runtime_identity = load_json(root / "runtime_identity.json", canonical_file=True)
+    gpu_identity = load_json(root / "gpu_identity.json", canonical_file=True)
+    comparison_identity = load_json(root / "comparison.json", canonical_file=True)
+    if not all(
+        isinstance(value, dict)
+        for value in (
+            build_identity,
+            runtime_identity,
+            gpu_identity,
+            comparison_identity,
+        )
+    ):
+        raise VerificationError("identity/comparison artifact is not an object")
+    blocking_status = {"blocking_result": manifest["result"], "state": "not_produced"}
+    if build_identity.get("state") == "complete":
+        repository_root = Path(manifest["controller_input"]["repository_root"])
+        _verify_complete_build_identity(build_identity, repository_root)
+        expected_runtime = {
+            "bound_inputs_digest": manifest["controller_input"]["bound_inputs"][
+                "digest"
+            ],
+            "library_dirs": manifest["controller_input"]["library_dirs"],
+            "resolved_policy_fingerprint": "c7a6dbb35168cba75249b7f2c67d8455b6f634732493e455a4bb920aab6d7782",
+            "state": "complete",
+            "tool_runtime": manifest["controller_input"]["bound_inputs"][
+                "tool_runtime"
+            ],
+        }
+        if runtime_identity != expected_runtime or gpu_identity != {
+            **manifest["controller_input"]["gpu"],
+            "state": "complete",
+        }:
+            raise VerificationError(
+                "runtime/GPU identity differs from controller binding"
+            )
+    else:
+        if (
+            build_identity != blocking_status
+            or runtime_identity != blocking_status
+            or gpu_identity != blocking_status
+        ):
+            raise VerificationError(
+                "not-produced identity status has missing or unknown members"
+            )
+        if manifest["result"] not in {
+            "provenance_invalid",
+            "build_failed",
+            "runner_timeout",
+            "serialization_failed",
+            "artifact_missing_or_unreadable",
+            "unclassified_execution_failure",
+        }:
+            raise VerificationError("post-build result lacks complete build identity")
+    if manifest["result"] in {
+        "capture_perturbs_policy",
+        "packet_invalid",
+        "phase_a_pass",
+    }:
+        inventories = {
+            run_id: load_json(
+                root / "runs" / run_id / "policy_inventory.json", canonical_file=True
+            )
+            for run_id in RUN_IDS
+        }
+        for run_id, inventory in inventories.items():
+            _verify_policy_inventory(run_id, inventory)
+            mot = (root / "runs" / run_id / "MOT17-04-SDP.txt").read_bytes()
+            if inventory["mot_output"] != {
+                "length": len(mot),
+                "sha256": hashlib.sha256(mot).hexdigest(),
+            }:
+                raise VerificationError(
+                    f"policy inventory MOT identity mismatch: {run_id}"
+                )
+        equality_members = (
+            "mot_output",
+            "final_track_rows",
+            "active_tid_slot_pairs",
+            "relink_debug_raw",
+        )
+        relations: list[dict[str, Any]] = []
+        first_unequal: str | None = None
+        for run_id in RUN_IDS[1:]:
+            for member in equality_members:
+                equal = inventories[RUN_IDS[0]][member] == inventories[run_id][member]
+                relations.append(
+                    {
+                        "equal": equal,
+                        "left": RUN_IDS[0],
+                        "member": member,
+                        "right": run_id,
+                    }
+                )
+                if not equal and first_unequal is None:
+                    first_unequal = f"{RUN_IDS[0]}:{run_id}:{member}"
+        for member in ("proposal_projection", "winner_commit_projection"):
+            reference = inventories[RUN_IDS[1]][member]
+            for run_id in RUN_IDS[2:]:
+                equal = reference == inventories[run_id][member]
+                relations.append(
+                    {
+                        "equal": equal,
+                        "left": RUN_IDS[1],
+                        "member": member,
+                        "right": run_id,
+                    }
+                )
+                if not equal and first_unequal is None:
+                    first_unequal = f"{RUN_IDS[1]}:{run_id}:{member}"
+        for run_id in RUN_IDS[1:]:
+            zero = inventories[run_id]["overflow_vector"] == [0] * 9
+            relations.append(
+                {
+                    "equal": zero,
+                    "left": run_id,
+                    "member": "overflow_vector",
+                    "right": "zero_vector",
+                }
+            )
+            if not zero and first_unequal is None:
+                first_unequal = f"{run_id}:overflow_vector"
+        reconstructed_comparison = {
+            "first_unequal": first_unequal,
+            "relations": relations,
+            "state": "equal" if first_unequal is None else "unequal",
+        }
+        if comparison_identity != reconstructed_comparison:
+            raise VerificationError(
+                "comparison.json differs from independent A7.6 reconstruction"
+            )
+        if (first_unequal is None) != (manifest["policy_comparison"] == "equal"):
+            raise VerificationError(
+                "manifest policy comparison differs from reconstructed inventories"
+            )
+        if first_unequal is not None:
+            if manifest["result"] != "capture_perturbs_policy":
+                raise VerificationError("unequal policy inventory has wrong result")
+        else:
+            _verify_packet_files(root, manifest)
+    elif comparison_identity != blocking_status:
+        raise VerificationError(
+            "not-produced comparison status has missing or unknown members"
+        )
+    return report
+
+
+def _verify_packet_files(root: Path, manifest: Mapping[str, Any]) -> None:
+    if manifest["result"] not in {"packet_invalid", "phase_a_pass"}:
+        raise VerificationError(
+            "equal complete D requires packet-invalid or pass result"
+        )
+    if TOOLS_DIR.as_posix() not in sys.path:
+        sys.path.insert(0, TOOLS_DIR.as_posix())
+    from export_headline_bridge_decision_trace import canonical_semantic_packet
+    from verify_headline_bridge_decision_trace import verify_capture
+
+    reconstructed_states: list[str] = []
+    semantic_digests: list[str] = []
+    for run_id in RUN_IDS[1:]:
+        capture = load_json(root / "runs" / run_id / "packet.json", canonical_file=True)
+        stored = load_json(
+            root / "runs" / run_id / "packet_verification.json", canonical_file=True
+        )
+        try:
+            packet_report = verify_capture(capture)
+            packet = canonical_semantic_packet(capture)
+        except (KeyError, TypeError, ValueError):
+            reconstructed_states.append("fail")
+            if stored != {"failure": "packet_invalid", "state": "fail"}:
+                raise VerificationError(
+                    f"packet verifier failure record mismatch: {run_id}"
+                )
+        else:
+            streams = packet["streams"]
+            candidates = [
+                row
+                for row in streams["candidate_records"]
+                if int(row["proposal_emitted"]) == 1
+            ]
+            claims = streams["claim_records"]
+            commits = streams["commit_records"]
+            proposal_payload = {"candidates": candidates, "claims": claims}
+            winner_payload = {
+                "commits": commits,
+                "winning_claims": [row for row in claims if int(row["claim_won"]) == 1],
+            }
+            expected_proposal = {
+                "count": len(candidates),
+                "digest": digest(proposal_payload),
+                "records": proposal_payload,
+            }
+            expected_winner = {
+                "count": len(commits),
+                "digest": digest(winner_payload),
+                "records": winner_payload,
+            }
+            inventory = load_json(
+                root / "runs" / run_id / "policy_inventory.json", canonical_file=True
+            )
+            if (
+                inventory["proposal_projection"] != expected_proposal
+                or inventory["winner_commit_projection"] != expected_winner
+            ):
+                raise VerificationError(f"packet/policy projection mismatch: {run_id}")
+            expected_overflow = [
+                int(capture[key])
+                for key in (
+                    "overflow_pair_records",
+                    "overflow_candidate_records",
+                    "overflow_claim_records",
+                    "overflow_commit_records",
+                    "overflow_native_candidate_keys",
+                    "overflow_native_pair_keys",
+                    "overflow_native_proposal_keys",
+                    "overflow_native_claim_winner_keys",
+                    "overflow_native_commit_keys",
+                )
+            ]
+            if inventory["overflow_vector"] != expected_overflow:
+                raise VerificationError(f"packet/policy overflow mismatch: {run_id}")
+            reconstructed_states.append("pass")
+            semantic_digests.append(packet_report["semantic_digest_sha256"])
+            if stored != {"report": packet_report, "state": "pass"}:
+                raise VerificationError(
+                    f"packet verifier pass record mismatch: {run_id}"
+                )
+    if len(semantic_digests) == 3 and len(set(semantic_digests)) != 1:
+        reconstructed_states[1] = "fail"
+    if reconstructed_states != manifest["packet_verification_states"]:
+        raise VerificationError(
+            "manifest packet states differ from replay reconstruction"
+        )
+    packets_valid = reconstructed_states == ["pass"] * 3
+    if packets_valid != (manifest["result"] == "phase_a_pass"):
+        raise VerificationError(
+            "packet replay/canonical-digest state disagrees with result"
+        )
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
+    parser.add_argument("evidence", type=Path)
+    args = parser.parse_args(argv)
+    try:
+        if args.evidence.is_dir():
+            report = verify_evidence_root(args.evidence)
+        else:
+            value = load_json(args.evidence, canonical_file=True)
+            report = verify_evidence(value)
+    except (VerificationError, KeyError, TypeError, ValueError, OSError) as exc:
+        print(f"H0 Phase-A verification rejected: {exc}", file=sys.stderr)
+        return 1
+    print((canonical_json(report) + b"\n").decode("utf-8"), end="")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
