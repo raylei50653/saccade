@@ -9,7 +9,8 @@
 
 ## Proposed（non-WIP）
 
-- （無）
+- **GCTM B1 — runtime-grounded offline attribution and score-ranking evaluation** → [task charter](../../research/threads/gctm_b1_runtime_grounded_offline_attribution_task.md)
+- **GCTM O1 — online score intervention and system-efficacy evaluation** → [task charter](../../research/threads/gctm_o1_online_intervention_efficacy_task.md)
 
 ## Parked
 

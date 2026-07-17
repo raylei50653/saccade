@@ -183,7 +183,8 @@ frontmatter、搬移與索引要求。
 
 | Thread | Work class / WIP role | Current concrete work / Intent | Owner |
 |:--|:--|:--|:--|
-| *(none)* | — | — | — |
+| [gctm_b1_runtime_grounded_offline_attribution_task.md](gctm_b1_runtime_grounded_offline_attribution_task.md) | mainline-study · **non-WIP** | Proposed task charter — GCTM B1 runtime-grounded offline attribution and score-ranking evaluation (split from B1/O1 synthesis §37) | semantic |
+| [gctm_o1_online_intervention_efficacy_task.md](gctm_o1_online_intervention_efficacy_task.md) | mainline-study · **non-WIP** | Proposed task charter — GCTM O1 online score intervention and system-efficacy evaluation (split from B1/O1 synthesis §37) | semantic |
 
 ## Active threads
 
