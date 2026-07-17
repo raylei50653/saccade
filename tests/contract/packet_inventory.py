@@ -18,11 +18,13 @@ EVIDENCE_ROOT = REPO / "docs" / "modules" / "semantic" / "research" / "evidence"
 GENERIC_RESEARCH_PACKET = "generic_research_packet"
 H0_PRESEAL_FREEZE_V3_ARTIFACT = "h0_preseal_freeze_v3_artifact"
 H0_PRESEAL_FREEZE_V3_FILENAME = "h0_preseal_freeze_v3.json"
+H0_PHASE_A_EXECUTION_PACKET = "h0_phase_a_execution_packet"
 
 # ASCII digits only: `\d` would also accept Unicode digits (e.g. ٠١٢٣),
 # which must stay unclassified and be rejected fail-closed.
 _DATED_PACKET_NAME = re.compile(r".+_[0-9]{8}(T[0-9]{6}Z)?$")
 _H0_PRESEAL_FREEZE_V3_DIR_NAME = re.compile(r"^h0_preseal_freeze_[0-9a-f]{40}$")
+_H0_PHASE_A_EXECUTION_DIR_NAME = re.compile(r"^h0_phase_a_[0-9a-f]{40}$")
 
 # manifest.json keys observed to map filename -> sha256 hex digest.
 # `artifact_hashes` is deliberately absent: its keys are logical artifact
@@ -52,6 +54,10 @@ def is_h0_preseal_freeze_v3_name(name: str) -> bool:
     return _H0_PRESEAL_FREEZE_V3_DIR_NAME.fullmatch(name) is not None
 
 
+def is_h0_phase_a_execution_name(name: str) -> bool:
+    return _H0_PHASE_A_EXECUTION_DIR_NAME.fullmatch(name) is not None
+
+
 def is_generic_dated_packet_name(name: str) -> bool:
     return _DATED_PACKET_NAME.fullmatch(name) is not None
 
@@ -59,16 +65,17 @@ def is_generic_dated_packet_name(name: str) -> bool:
 def evidence_kind(evidence_dir: Path) -> str | None:
     """Classify one evidence directory, returning None for an unknown kind.
 
-    The exact H0 v3 governance-artifact family is intentionally separate from
-    dated research packets: the two name grammars are disjoint (an H0 name has
-    no `_` within its trailing 40-hex segment, so it can never end in
-    `_[0-9]{8}`), so classification does not depend on check order.  Every
-    other directory must either be a dated packet or be rejected by the schema
-    contract; it must never disappear from generic validation merely because
-    it lacks a manifest.
+    Exact H0 governance and execution-evidence families are intentionally
+    separate from dated research packets.  Their final 40-hex component has no
+    underscore, so neither can end in the dated ``_[0-9]{8}`` grammar and
+    classification does not depend on check order.  Every other directory must
+    either be a dated packet or be rejected by the schema contract; it must
+    never disappear from generic validation merely because it lacks a manifest.
     """
     if is_h0_preseal_freeze_v3_name(evidence_dir.name):
         return H0_PRESEAL_FREEZE_V3_ARTIFACT
+    if is_h0_phase_a_execution_name(evidence_dir.name):
+        return H0_PHASE_A_EXECUTION_PACKET
     if is_generic_dated_packet_name(evidence_dir.name):
         return GENERIC_RESEARCH_PACKET
     return None
@@ -102,6 +109,10 @@ def generic_packet_dirs() -> list[Path]:
 
 def h0_preseal_freeze_v3_dirs() -> list[Path]:
     return _physical_dirs_of_kind(H0_PRESEAL_FREEZE_V3_ARTIFACT)
+
+
+def h0_phase_a_execution_dirs() -> list[Path]:
+    return _physical_dirs_of_kind(H0_PHASE_A_EXECUTION_PACKET)
 
 
 def h0_preseal_freeze_v3_layout_errors(evidence_dir: Path) -> list[str]:
