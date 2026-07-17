@@ -8,7 +8,6 @@ import hashlib
 import json
 import os
 import struct
-import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
@@ -62,6 +61,10 @@ class ChildContractError(RuntimeError):
     pass
 
 
+class RuntimeProvenanceError(PermissionError):
+    pass
+
+
 def _parse_argv(argv: Sequence[str]) -> str:
     """Accept exactly ``--run-id <enumerated>``; argparse abbreviation is absent."""
     if len(argv) != 2 or argv[0] != "--run-id" or argv[1] not in RUN_IDS:
@@ -106,28 +109,6 @@ def _physical_root() -> Path:
     if root.resolve(strict=True) != root:
         raise ChildContractError("repository root is not physical")
     return root
-
-
-def _head(root: Path, git_path: Path = Path("/usr/bin/git")) -> str:
-    if (
-        not git_path.is_absolute()
-        or git_path.resolve(strict=True) != git_path
-        or not git_path.is_file()
-    ):
-        raise ChildContractError("bound Git executable is absent or non-physical")
-    process = subprocess.run(
-        ["git", "rev-parse", "HEAD"],
-        executable=git_path,
-        cwd=root,
-        env={"PATH": "/usr/bin:/bin", "LC_ALL": "C.UTF-8"},
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    head = process.stdout.strip()
-    if len(head) != 40 or any(char not in "0123456789abcdef" for char in head):
-        raise ChildContractError("HEAD is not 40 lowercase hexadecimal bytes")
-    return head
 
 
 def invocation_path(root: Path, head: str, run_id: str) -> Path:
@@ -251,11 +232,34 @@ def install_access_guard(
             "unexpected",
             "unrecognized",
         }:
-            raise PermissionError(
+            raise RuntimeProvenanceError(
                 f"H0 child rejected {classification} filesystem access"
             )
 
     sys.addaudithook(audit)
+
+
+def _assert_os_confinement(root: Path, invocation: Mapping[str, Any]) -> None:
+    """Prove that the pre-exec OS boundary denies its unbound canary."""
+    if invocation.get("confinement_backend") != "landlock_seccomp_ptrace_v1":
+        raise ChildContractError("runtime confinement backend mismatch")
+    plan_digest = invocation.get("confinement_plan_digest")
+    if (
+        not isinstance(plan_digest, str)
+        or len(plan_digest) != 64
+        or any(char not in "0123456789abcdef" for char in plan_digest)
+    ):
+        raise ChildContractError("runtime confinement plan digest is absent")
+    probe = root / invocation["incomplete_root"] / "_runtime_confinement_denial_probe"
+    try:
+        probe.read_bytes()
+    except PermissionError:
+        return
+    except OSError as exc:
+        raise ChildContractError(
+            f"runtime confinement denial probe was not mechanically denied: {exc}"
+        ) from exc
+    raise ChildContractError("runtime confinement denial probe was readable")
 
 
 @dataclass(frozen=True)
@@ -701,7 +705,7 @@ def execute_child(
     root = _physical_root()
     parent = _load_parent_module()
     _freeze_path, controller = parent._discover_controller_input(root)
-    head = _head(root, Path(controller["tool_paths"]["git"]))
+    head = controller["instrumentation_head"]
     path = invocation_path(root, head, run_id)
     invocation = parent.read_canonical_json(path)
     parent.validate_schema_document(invocation, "child_invocation")
@@ -718,12 +722,16 @@ def execute_child(
     if invocation.get("evaluator_argv") != expected_evaluator:
         raise ChildContractError("canonical synthetic evaluator vector mismatch")
     _validate_full_environment(env, root, run_dir, invocation)
+    _assert_os_confinement(root, invocation)
+    confinement_probe_passed = True
+    probed = dict(invocation)
+    probed["confinement_probe_passed"] = True
+    _replace_invocation(path, probed)
+    invocation = probed
     if controller["instrumentation_head"] != head:
         raise ChildContractError("child and v3 instrumentation heads differ")
     if controller["bound_inputs"]["digest"] != invocation["bound_inputs_digest"]:
         raise ChildContractError("child and v3 bound-input digests differ")
-    if parent.recompute_bound_inventory(controller) != controller["bound_inputs"]:
-        raise ChildContractError("bound input changed before child evaluation")
     allowed_paths = {
         path.resolve(strict=True) for path in parent.bound_file_paths(controller)
     }
@@ -759,13 +767,21 @@ def execute_child(
             incomplete = root / invocation["incomplete_root"]
             _finalize_packet_verifications_if_required(incomplete)
         completed = dict(invocation)
+        completed["confinement_probe_passed"] = confinement_probe_passed
         completed["result"] = "run_completed"
         completed["state"] = "completed"
         _replace_invocation(path, completed)
         return 0
-    except BaseException:
+    except BaseException as exc:
         failed = dict(invocation)
-        failed["result"] = "runner_nonzero"
+        failed["confinement_probe_passed"] = locals().get(
+            "confinement_probe_passed", False
+        )
+        failed["result"] = (
+            "provenance_invalid"
+            if isinstance(exc, RuntimeProvenanceError)
+            else "runner_nonzero"
+        )
         failed["state"] = "failed"
         try:
             _replace_invocation(path, failed)

@@ -128,6 +128,7 @@ REQUIRED_REPOSITORY_INPUTS = (
     "scripts/tools/export_headline_bridge_decision_trace.py",
     "scripts/tools/h0_bridge_decision_trace_schema_v2.json",
     "scripts/tools/h0_phase_a_execution_schema_v1.json",
+    "scripts/tools/h0_runtime_confinement.py",
     "scripts/tools/resolved_bridge_policy_config.py",
     "scripts/tools/run_h0_phase_a.py",
     "scripts/tools/run_h0_phase_a_child.py",
@@ -166,15 +167,19 @@ C_PATHS = (
     "runs/00_capture_off/invocation.json",
     "runs/00_capture_off/stdout.log",
     "runs/00_capture_off/stderr.log",
+    "runs/00_capture_off/runtime_inputs.json",
     "runs/01_capture_on_1/invocation.json",
     "runs/01_capture_on_1/stdout.log",
     "runs/01_capture_on_1/stderr.log",
+    "runs/01_capture_on_1/runtime_inputs.json",
     "runs/02_capture_on_2/invocation.json",
     "runs/02_capture_on_2/stdout.log",
     "runs/02_capture_on_2/stderr.log",
+    "runs/02_capture_on_2/runtime_inputs.json",
     "runs/03_capture_on_3/invocation.json",
     "runs/03_capture_on_3/stdout.log",
     "runs/03_capture_on_3/stderr.log",
+    "runs/03_capture_on_3/runtime_inputs.json",
     "verification/aggregate.json",
 )
 D_PATHS = (
@@ -292,6 +297,9 @@ FORBIDDEN_SELECTOR_KEYS = frozenset(
         "H0_PHASE_B",
     }
 )
+RUNTIME_CONFINEMENT_BACKEND = "landlock_seccomp_ptrace_v1"
+RUNTIME_INGRESS_POLICY = "deny_external_bytes_v1"
+RUNTIME_TRACE_SCOPE = ("execve", "execveat", "mmap", "open", "openat", "openat2")
 
 
 class ContractError(RuntimeError):
@@ -943,6 +951,9 @@ def execution_constants(root: Path) -> dict[str, Any]:
             for result, (required, forbidden) in RESULT_MATRIX.items()
         },
         "trace_capacities": list(TRACE_CAPACITIES),
+        "runtime_confinement_backend": RUNTIME_CONFINEMENT_BACKEND,
+        "runtime_ingress_policy": RUNTIME_INGRESS_POLICY,
+        "runtime_trace_scope": list(RUNTIME_TRACE_SCOPE),
         "v_paths": list(V_PATHS),
     }
 
@@ -1335,6 +1346,10 @@ def _create_build_environment(contract: Mapping[str, Any]) -> dict[str, str]:
 def _terminate_process_group(process: subprocess.Popen[bytes]) -> None:
     if process.poll() is not None:
         return
+    terminate_tree = getattr(process, "terminate_tree", None)
+    if callable(terminate_tree):
+        terminate_tree()
+        return
     try:
         os.killpg(process.pid, signal.SIGKILL)
     except ProcessLookupError:
@@ -1370,11 +1385,34 @@ def _wait_with_monitor(
             continue
 
 
+def _collect_runtime_attestation(
+    process: Any, runtime_plan: Mapping[str, Any], runtime_path: Path
+) -> tuple[Mapping[str, Any], str, bool]:
+    attestation = process.runtime_attestation()
+    if runtime_path.exists() or runtime_path.is_symlink():
+        raise ContractError("duplicate or unsafe runtime input attestation")
+    _write_canonical_fsync(runtime_path, attestation)
+    runtime_digest = sha256_bytes(canonical_json_bytes(attestation))
+    valid = bool(
+        attestation.get("state") == "complete"
+        and attestation.get("confinement_plan_digest") == runtime_plan["digest"]
+        and attestation.get("backend") == RUNTIME_CONFINEMENT_BACKEND
+        and attestation.get("ingress_policy") == RUNTIME_INGRESS_POLICY
+        and attestation.get("trace_scope") == list(RUNTIME_TRACE_SCOPE)
+        and attestation.get("installed_before_exec") is True
+        and attestation.get("process_tree_terminal") is True
+        and attestation.get("denial_probe_observed") is True
+        and not attestation.get("violations")
+    )
+    return attestation, runtime_digest, valid
+
+
 def launch_child(
     contract: Mapping[str, Any],
     run_id: str,
     *,
     started: float,
+    build_identity: Mapping[str, Any] | None = None,
     monitor: BoundInputMonitor | None = None,
     popen_factory: Callable[..., subprocess.Popen[bytes]] = subprocess.Popen,
     clock: Callable[[], float] = time.monotonic,
@@ -1405,6 +1443,9 @@ def launch_child(
     child_contract = {
         "bound_inputs_digest": contract["bound_inputs"]["digest"],
         "capture_run_uuid": str(uuid.uuid4()),
+        "confinement_backend": RUNTIME_CONFINEMENT_BACKEND,
+        "confinement_plan_digest": None,
+        "confinement_probe_passed": None,
         "document_type": "child_invocation",
         "environment": env,
         "environment_digest": environment_digest(env),
@@ -1413,6 +1454,7 @@ def launch_child(
         "instrumentation_head": contract["instrumentation_head"],
         "result": None,
         "run_id": run_id,
+        "runtime_inputs_digest": None,
         "schema": CHILD_SCHEMA,
         "state": "running_interrupted",
         "vector": list(vector),
@@ -1429,23 +1471,68 @@ def launch_child(
             if log_path.is_symlink() or log_path.read_bytes() != b"NOT_RUN\n":
                 raise ContractError(f"child log placeholder drift: {log_path}")
             log_path.unlink()
+    confinement_error_type: Any = ()
     with (
         open(os.devnull, "rb", buffering=0) as stdin,
         open(stdout_path, "xb", buffering=0) as stdout,
         open(stderr_path, "xb", buffering=0) as stderr,
     ):
-        process = popen_factory(
-            vector,
-            executable=vector[0],
-            cwd=root,
-            env=env,
-            stdin=stdin,
-            stdout=stdout,
-            stderr=stderr,
-            shell=False,
-            close_fds=True,
-            start_new_session=True,
-        )
+        runtime_plan: Mapping[str, Any] | None = None
+        if popen_factory is subprocess.Popen:
+            if build_identity is None:
+                raise ContractError(
+                    "runtime confinement requires complete build identity"
+                )
+            tools = SCHEMA_PATH.parent
+            if tools.as_posix() not in sys.path:
+                sys.path.insert(0, tools.as_posix())
+            import h0_runtime_confinement
+
+            confinement_error_type = h0_runtime_confinement.ConfinementError
+            denial_probe = incomplete / "_runtime_confinement_denial_probe"
+            if not denial_probe.exists():
+                _write_bytes_fsync(denial_probe, b"MUST_BE_DENIED\n")
+            if denial_probe.is_symlink() or not denial_probe.is_file():
+                raise ContractError("runtime confinement denial probe is not regular")
+            try:
+                runtime_plan = h0_runtime_confinement.build_plan(
+                    root=root,
+                    incomplete=incomplete,
+                    inventory=contract["bound_inputs"],
+                    build_identity=build_identity,
+                    denial_probe=denial_probe,
+                    run_ids=RUN_IDS,
+                )
+                child_contract["confinement_plan_digest"] = runtime_plan["digest"]
+                _replace_canonical_fsync(invocation_path, child_contract)
+                process = h0_runtime_confinement.spawn_confined(
+                    vector,
+                    cwd=root,
+                    env=env,
+                    stdin=stdin,
+                    stdout=stdout,
+                    stderr=stderr,
+                    plan=runtime_plan,
+                )
+            except (h0_runtime_confinement.ConfinementError, OSError) as exc:
+                interrupted = dict(child_contract)
+                interrupted["result"] = "provenance_invalid"
+                interrupted["state"] = "failed"
+                _replace_canonical_fsync(invocation_path, interrupted)
+                raise DriftError(f"runtime confinement setup failed: {exc}") from exc
+        else:
+            process = popen_factory(
+                vector,
+                executable=vector[0],
+                cwd=root,
+                env=env,
+                stdin=stdin,
+                stdout=stdout,
+                stderr=stderr,
+                shell=False,
+                close_fds=True,
+                start_new_session=True,
+            )
         try:
             returncode = _wait_with_monitor(
                 process,
@@ -1457,6 +1544,27 @@ def launch_child(
         except (subprocess.TimeoutExpired, TimeoutError) as exc:
             _terminate_process_group(process)
             interrupted = dict(child_contract)
+            if runtime_plan is not None:
+                _attestation, runtime_digest, valid_runtime = (
+                    _collect_runtime_attestation(
+                        process, runtime_plan, run_dir / "runtime_inputs.json"
+                    )
+                )
+                current = read_canonical_json(invocation_path)
+                interrupted["confinement_probe_passed"] = current.get(
+                    "confinement_probe_passed"
+                )
+                interrupted["runtime_inputs_digest"] = runtime_digest
+                if (
+                    not valid_runtime
+                    or interrupted["confinement_probe_passed"] is not True
+                ):
+                    interrupted["result"] = "provenance_invalid"
+                    interrupted["state"] = "failed"
+                    _replace_canonical_fsync(invocation_path, interrupted)
+                    raise DriftError(
+                        "runtime confinement failed while child timed out"
+                    ) from exc
             interrupted["result"] = "runner_timeout"
             interrupted["state"] = "failed"
             _replace_canonical_fsync(invocation_path, interrupted)
@@ -1464,11 +1572,56 @@ def launch_child(
         except DriftError:
             _terminate_process_group(process)
             interrupted = dict(child_contract)
+            if runtime_plan is not None:
+                _attestation, runtime_digest, _valid_runtime = (
+                    _collect_runtime_attestation(
+                        process, runtime_plan, run_dir / "runtime_inputs.json"
+                    )
+                )
+                current = read_canonical_json(invocation_path)
+                interrupted["confinement_probe_passed"] = current.get(
+                    "confinement_probe_passed"
+                )
+                interrupted["runtime_inputs_digest"] = runtime_digest
             interrupted["result"] = "provenance_invalid"
             interrupted["state"] = "failed"
             _replace_canonical_fsync(invocation_path, interrupted)
             raise
+        except confinement_error_type as exc:
+            try:
+                _terminate_process_group(process)
+            except confinement_error_type:
+                pass
+            interrupted = dict(child_contract)
+            interrupted["result"] = "provenance_invalid"
+            interrupted["state"] = "failed"
+            _replace_canonical_fsync(invocation_path, interrupted)
+            raise DriftError(f"runtime confinement supervision failed: {exc}") from exc
+    runtime_attestation: Mapping[str, Any] | None = None
+    if runtime_plan is not None:
+        runtime_attestation, runtime_digest, valid_runtime = (
+            _collect_runtime_attestation(
+                process, runtime_plan, run_dir / "runtime_inputs.json"
+            )
+        )
+        if not valid_runtime:
+            rejected = dict(child_contract)
+            rejected["confinement_probe_passed"] = False
+            rejected["result"] = "provenance_invalid"
+            rejected["runtime_inputs_digest"] = runtime_digest
+            rejected["state"] = "failed"
+            _replace_canonical_fsync(invocation_path, rejected)
+            return 2, rejected
     result = read_canonical_json(invocation_path)
+    if runtime_attestation is not None:
+        if result.get("confinement_probe_passed") is not True:
+            result["result"] = "provenance_invalid"
+            result["state"] = "failed"
+            returncode = 2
+        result["runtime_inputs_digest"] = sha256_bytes(
+            canonical_json_bytes(runtime_attestation)
+        )
+        _replace_canonical_fsync(invocation_path, result)
     validate_schema_document(result, "child_invocation")
     if (
         result.get("state") not in {"failed", "completed"}
@@ -2090,6 +2243,9 @@ def _ensure_not_run_slots(contract: Mapping[str, Any], incomplete: Path) -> None
             value = {
                 "bound_inputs_digest": contract["bound_inputs"]["digest"],
                 "capture_run_uuid": str(uuid.uuid4()),
+                "confinement_backend": RUNTIME_CONFINEMENT_BACKEND,
+                "confinement_plan_digest": None,
+                "confinement_probe_passed": None,
                 "document_type": "child_invocation",
                 "environment": environment,
                 "environment_digest": environment_digest(environment),
@@ -2098,6 +2254,7 @@ def _ensure_not_run_slots(contract: Mapping[str, Any], incomplete: Path) -> None
                 "instrumentation_head": contract["instrumentation_head"],
                 "result": None,
                 "run_id": run_id,
+                "runtime_inputs_digest": None,
                 "schema": CHILD_SCHEMA,
                 "state": "not_run",
                 "vector": list(child_argv(root, run_id)),
@@ -2153,6 +2310,11 @@ def _remove_transient_run_trees(incomplete: Path) -> None:
                 f"unsafe transient build environment tree: {build_environment_root}"
             )
         shutil.rmtree(build_environment_root)
+    denial_probe = incomplete / "_runtime_confinement_denial_probe"
+    if denial_probe.exists() or denial_probe.is_symlink():
+        if denial_probe.is_symlink() or not denial_probe.is_file():
+            raise ContractError("unsafe runtime confinement denial probe")
+        denial_probe.unlink()
     for run_id in RUN_IDS:
         for name in ("_env", "_runtime"):
             target = incomplete / "runs" / run_id / name
@@ -2269,12 +2431,35 @@ def _finalize_bundle_once(
     _remove_forbidden(incomplete, result)
     _remove_transient_run_trees(incomplete)
     admit()
+    child_runtime_inputs = []
+    for run_id in RUN_IDS:
+        invocation = read_canonical_json(
+            incomplete / "runs" / run_id / "invocation.json"
+        )
+        runtime_path = incomplete / "runs" / run_id / "runtime_inputs.json"
+        runtime_state = (
+            read_canonical_json(runtime_path)["state"]
+            if runtime_path.exists()
+            else "not_produced"
+        )
+        child_runtime_inputs.append(
+            {
+                "confinement_plan_digest": invocation["confinement_plan_digest"],
+                "run_id": run_id,
+                "runtime_inputs_digest": invocation["runtime_inputs_digest"],
+                "state": runtime_state,
+            }
+        )
     identities: dict[str, Mapping[str, Any]] = {
         "build_identity.json": build_identity or _not_produced(result),
         "runtime_identity.json": {
             "bound_inputs_digest": contract["bound_inputs"]["digest"],
+            "child_runtime_inputs": child_runtime_inputs,
+            "confinement_backend": RUNTIME_CONFINEMENT_BACKEND,
+            "ingress_policy": RUNTIME_INGRESS_POLICY,
             "library_dirs": contract["library_dirs"],
             "resolved_policy_fingerprint": POLICY_FINGERPRINT,
+            "runtime_trace_scope": list(RUNTIME_TRACE_SCOPE),
             "state": "complete",
             "tool_runtime": contract["bound_inputs"]["tool_runtime"],
         }
@@ -2321,6 +2506,18 @@ def _finalize_bundle_once(
         incomplete / "input_binding.json",
         input_binding,
     )
+    for run_id in RUN_IDS:
+        runtime_path = incomplete / "runs" / run_id / "runtime_inputs.json"
+        if not runtime_path.exists():
+            finish(
+                _write_canonical_fsync,
+                runtime_path,
+                {
+                    "blocking_result": result,
+                    "schema": "h0_runtime_inputs_v1",
+                    "state": "not_produced",
+                },
+            )
     children = [
         read_canonical_json(incomplete / "runs" / run_id / "invocation.json")
         for run_id in RUN_IDS
@@ -2424,6 +2621,14 @@ def _reset_incomplete_finalization(incomplete: Path) -> None:
             continue
         if path.is_symlink() or not path.is_file():
             raise ContractError(f"unsafe derived publication member: {relative}")
+        path.unlink()
+    for run_id in RUN_IDS:
+        path = incomplete / "runs" / run_id / "runtime_inputs.json"
+        if not path.exists():
+            continue
+        value = read_canonical_json(path)
+        if not isinstance(value, dict) or value.get("state") != "not_produced":
+            continue
         path.unlink()
 
 
@@ -2581,6 +2786,7 @@ def execute_controller(
                     contract,
                     run_id,
                     started=started,
+                    build_identity=build_identity,
                     monitor=monitor,
                     popen_factory=popen_factory,
                     clock=clock,
@@ -2605,6 +2811,10 @@ def execute_controller(
                 )
             if child_error is not None:
                 raise child_error
+            if child_result.get("result") == "provenance_invalid":
+                predicates["provenance_ok"] = False
+                result = "provenance_invalid"
+                raise ContractError(f"child {run_id} rejected an unbound runtime input")
             if returncode != 0 or child_result["state"] != "completed":
                 predicates["runners_ok"] = False
                 result = "runner_nonzero"
@@ -2641,6 +2851,14 @@ def execute_controller(
         if not mutation_events and monitor is None and "inotify" in str(exc):
             mutation_events.append(
                 {"classification": "watch_failed", "mask": 0, "path": ""}
+            )
+        if not mutation_events and "runtime confinement" in str(exc):
+            mutation_events.append(
+                {
+                    "classification": "runtime_confinement_failed",
+                    "mask": 0,
+                    "path": "",
+                }
             )
         if not mutation_events:
             mutation_events.append(
