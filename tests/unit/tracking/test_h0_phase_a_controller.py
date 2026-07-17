@@ -314,6 +314,24 @@ def test_parent_parser_has_no_execution_options_or_positionals() -> None:
             parent._parse_no_options(argv)
 
 
+def test_main_carries_one_deadline_from_entry_through_controller_discovery(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(parent.time, "monotonic", lambda: 123.0)
+    monkeypatch.setattr(
+        parent, "_discover_controller_input", lambda _root: (Path("freeze"), {})
+    )
+
+    def execute(_contract, **kwargs):
+        captured.update(kwargs)
+        return "phase_a_pass"
+
+    monkeypatch.setattr(parent, "execute_controller", execute)
+    assert parent.main(()) == 0
+    assert captured["started"] == 123.0
+
+
 def test_parent_rejects_working_directory_drift_before_host_inspection(
     tmp_path: Path,
 ) -> None:
@@ -388,8 +406,97 @@ def test_build_environment_is_exact_and_ignores_host_selectors(
     assert parent.build_environment_digest(environment) == verifier.digest(environment)
 
 
+def test_auxiliary_timeout_kills_and_reaps_the_complete_process_group(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[object] = []
+
+    class Process:
+        pid = 424242
+        returncode = None
+
+        @staticmethod
+        def communicate(timeout=None):
+            calls.append(("communicate", timeout))
+            raise subprocess.TimeoutExpired("fixture", timeout)
+
+        @staticmethod
+        def wait():
+            calls.append("wait")
+            Process.returncode = -9
+            return -9
+
+    monkeypatch.setattr(parent.subprocess, "Popen", lambda *args, **kwargs: Process())
+    monkeypatch.setattr(
+        parent.os, "killpg", lambda pid, sig: calls.append(("killpg", pid, sig))
+    )
+    moments = iter((0.0, parent.DEADLINE_SECONDS))
+    with pytest.raises(TimeoutError, match="deadline exhausted"):
+        parent._run_auxiliary_subprocess(
+            ["fixture", "--hang"],
+            executable=Path("/usr/bin/true"),
+            cwd=tmp_path,
+            env={"PATH": "/usr/bin:/bin"},
+            started=0.0,
+            stage="hung fixture",
+            clock=lambda: next(moments),
+        )
+    assert ("killpg", Process.pid, parent.signal.SIGKILL) in calls
+    assert "wait" in calls
+
+
+@pytest.mark.parametrize(
+    "helper",
+    ["python_query", "ldd", "readelf", "tool_version"],
+)
+def test_every_identity_helper_propagates_the_single_deadline(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, helper: str
+) -> None:
+    contract = _launch_contract(tmp_path)
+
+    def timeout(*_args, **_kwargs):
+        raise TimeoutError("single Phase-A monotonic deadline exhausted")
+
+    monkeypatch.setattr(parent, "_run_auxiliary_subprocess", timeout)
+    with pytest.raises(TimeoutError, match="deadline exhausted"):
+        if helper == "python_query":
+            parent._build_identity(
+                contract,
+                tmp_path,
+                started=0.0,
+                monitor=None,
+                clock=lambda: 0.0,
+            )
+        elif helper == "ldd":
+            parent._dynamic_dependencies(
+                tmp_path / "build/h0_phase_a/libsaccade_scan_plugin.so",
+                Path("/usr/bin/ldd"),
+                root=tmp_path,
+                started=0.0,
+                monitor=None,
+                clock=lambda: 0.0,
+            )
+        elif helper == "readelf":
+            parent._elf_build_id(
+                tmp_path / "build/h0_phase_a/libsaccade_scan_plugin.so",
+                Path("/usr/bin/readelf"),
+                root=tmp_path,
+                started=0.0,
+                monitor=None,
+                clock=lambda: 0.0,
+            )
+        else:
+            parent._tool_version(
+                Path("/usr/bin/true"),
+                root=tmp_path,
+                started=0.0,
+                monitor=None,
+                clock=lambda: 0.0,
+            )
+
+
 def test_independent_verifier_rejects_self_consistent_build_environment_drift(
-    tmp_path: Path,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     contract = _launch_contract(tmp_path)
     artifact_values = {
@@ -442,7 +549,44 @@ def test_independent_verifier_rejects_self_consistent_build_environment_drift(
         "state": "complete",
         "uv_lock_sha256": hashlib.sha256(b"lock").hexdigest(),
     }
+    extension_environment = verifier._expected_extension_load_environment(contract)
+    identity["extension_load"] = {
+        "confinement_plan_digest": "2" * 64,
+        "confinement_probe_passed": True,
+        "environment": extension_environment,
+        "environment_digest": verifier.digest(extension_environment),
+        "result": "extension_loaded",
+        "returncode": 0,
+        "runtime_inputs": {
+            "regular_files": [
+                {"realpath": (tmp_path / relative).as_posix()}
+                for relative in artifact_values
+            ]
+        },
+        "runtime_inputs_digest": "3" * 64,
+        "state": "complete",
+        "vector": verifier._expected_extension_load_vector(contract, identity),
+    }
+    runtime_verifications: list[tuple[tuple[object, ...], dict[str, object]]] = []
+    monkeypatch.setattr(
+        verifier,
+        "_verify_runtime_inputs",
+        lambda *args, **kwargs: runtime_verifications.append((args, kwargs)),
+    )
     verifier._verify_complete_build_identity(identity, contract)
+    assert (
+        runtime_verifications[0][0][0] is identity["extension_load"]["runtime_inputs"]
+    )
+    assert runtime_verifications[0][1]["expected_output_directories"] == (
+        tmp_path / contract["incomplete_root"] / "_extension_load",
+    )
+    identity["extension_load"]["environment"] = {
+        **extension_environment,
+        "TZ": "Asia/Taipei",
+    }
+    with pytest.raises(verifier.VerificationError, match="extension-load environment"):
+        verifier._verify_complete_build_identity(identity, contract)
+    identity["extension_load"]["environment"] = extension_environment
     drifted = dict(environment)
     drifted["CC"] = "/host/cc"
     identity["build_environment"] = drifted
@@ -907,6 +1051,170 @@ def test_confinement_setup_failure_is_provenance_invalid(
     assert invocation["state"] == "failed"
 
 
+@pytest.mark.parametrize(
+    ("attestation_state", "violations", "returncode", "expected_state"),
+    [
+        ("complete", [], 0, "complete"),
+        ("complete", [], 17, "failed"),
+        (
+            "rejected",
+            [
+                {
+                    "operation": "openat",
+                    "path": "/unbound/plugin.so",
+                    "reason": "unbound_regular_file",
+                }
+            ],
+            -9,
+            "rejected",
+        ),
+    ],
+)
+def test_extension_load_runs_inside_runtime_confinement_and_records_attestation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    attestation_state: str,
+    violations: list[dict[str, str]],
+    returncode: int,
+    expected_state: str,
+) -> None:
+    contract = _launch_contract(tmp_path)
+    incomplete = tmp_path / contract["incomplete_root"]
+    incomplete.mkdir()
+    parent._create_build_environment(contract)
+    extension = tmp_path / "build/h0_phase_a/saccade_tracking_ext.so"
+    plugin = tmp_path / "build/h0_phase_a/libsaccade_scan_plugin.so"
+    extension.write_bytes(b"extension")
+    plugin.write_bytes(b"plugin")
+    identity = {
+        "artifacts": [
+            {"path": extension.relative_to(tmp_path).as_posix()},
+            {"path": plugin.relative_to(tmp_path).as_posix()},
+        ]
+    }
+    digest = "4" * 64
+    attestation = {
+        "backend": parent.RUNTIME_CONFINEMENT_BACKEND,
+        "confinement_plan_digest": digest,
+        "denial_probe_observed": True,
+        "ingress_policy": parent.RUNTIME_INGRESS_POLICY,
+        "installed_before_exec": True,
+        "process_tree_terminal": True,
+        "regular_files": [
+            {"realpath": extension.as_posix()},
+            {"realpath": plugin.as_posix()},
+        ],
+        "state": attestation_state,
+        "trace_scope": list(parent.RUNTIME_TRACE_SCOPE),
+        "violations": violations,
+    }
+
+    class Monitor:
+        @staticmethod
+        def drain() -> list[object]:
+            return []
+
+    class Process:
+        pid = 999999
+
+        @staticmethod
+        def wait(timeout=None) -> int:
+            return returncode
+
+        @staticmethod
+        def runtime_attestation() -> dict[str, object]:
+            return attestation
+
+    captured: dict[str, object] = {}
+
+    def build_plan(**kwargs):
+        captured["plan_kwargs"] = kwargs
+        return {"digest": digest}
+
+    monkeypatch.setattr(runtime_confinement, "build_plan", build_plan)
+
+    def spawn(*args, **kwargs):
+        captured["spawn_args"] = args
+        captured["spawn_kwargs"] = kwargs
+        return Process()
+
+    monkeypatch.setattr(runtime_confinement, "spawn_confined", spawn)
+    record = parent._verify_extension_load(
+        contract,
+        identity,
+        started=parent.time.monotonic(),
+        monitor=Monitor(),
+    )
+    assert record["state"] == expected_state
+    assert (
+        record["result"]
+        == {
+            "complete": "extension_loaded",
+            "failed": "extension_load_failed",
+            "rejected": "provenance_invalid",
+        }[expected_state]
+    )
+    assert record["runtime_inputs"] == attestation
+    assert record["confinement_plan_digest"] == digest
+    assert captured["plan_kwargs"]["output_directories"] == (
+        incomplete / "_extension_load",
+    )
+    assert captured["spawn_kwargs"]["plan"] == {"digest": digest}
+
+
+def test_hung_confined_extension_load_cannot_outlive_remaining_deadline(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    contract = _launch_contract(tmp_path)
+    incomplete = tmp_path / contract["incomplete_root"]
+    incomplete.mkdir()
+    parent._create_build_environment(contract)
+    extension = tmp_path / "build/h0_phase_a/saccade_tracking_ext.so"
+    plugin = tmp_path / "build/h0_phase_a/libsaccade_scan_plugin.so"
+    extension.write_bytes(b"extension")
+    plugin.write_bytes(b"plugin")
+    identity = {
+        "artifacts": [
+            {"path": extension.relative_to(tmp_path).as_posix()},
+            {"path": plugin.relative_to(tmp_path).as_posix()},
+        ]
+    }
+    terminated: list[bool] = []
+
+    class Monitor:
+        @staticmethod
+        def drain() -> list[object]:
+            return []
+
+    class Process:
+        pid = 999999
+
+        @staticmethod
+        def wait(timeout=None) -> int:
+            raise subprocess.TimeoutExpired("plugin import", timeout)
+
+        @staticmethod
+        def terminate_tree() -> None:
+            terminated.append(True)
+
+    monkeypatch.setattr(
+        runtime_confinement, "build_plan", lambda **_kwargs: {"digest": "4" * 64}
+    )
+    monkeypatch.setattr(
+        runtime_confinement, "spawn_confined", lambda *_args, **_kwargs: Process()
+    )
+    moments = iter((0.0, parent.DEADLINE_SECONDS))
+    with pytest.raises(TimeoutError, match="deadline exhausted"):
+        parent._verify_extension_load(
+            contract,
+            identity,
+            started=0.0,
+            monitor=Monitor(),
+            clock=lambda: next(moments),
+        )
+    assert terminated
+
+
 def test_unknown_result_is_never_classified() -> None:
     with pytest.raises(parent.ContractError, match="unrecognized"):
         parent.result_artifact_sets("unknown")
@@ -1113,7 +1421,10 @@ def _write_complete_synthetic_root(root: Path, result: str) -> None:
     json_values.update(
         {
             "manifest.json": evidence,
-            "build_identity.json": {"state": "complete"},
+            "build_identity.json": {
+                "extension_load": {"state": "complete"},
+                "state": "complete",
+            },
             "runtime_identity.json": {
                 "bound_inputs_digest": controller["bound_inputs"]["digest"],
                 "child_runtime_inputs": [
@@ -1167,7 +1478,10 @@ def _patch_synthetic_domain_verifiers(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     def verify_build(identity, _controller) -> None:
-        assert identity == {"state": "complete"}
+        assert identity == {
+            "extension_load": {"state": "complete"},
+            "state": "complete",
+        }
 
     def verify_runtime(value, _invocation, _controller, _identity) -> None:
         assert value == {"state": "complete"}

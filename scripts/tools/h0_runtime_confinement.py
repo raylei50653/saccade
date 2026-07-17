@@ -305,9 +305,14 @@ def build_plan(
     inventory: Mapping[str, Any],
     build_identity: Mapping[str, Any],
     denial_probe: Path,
-    run_ids: Sequence[str],
+    run_ids: Sequence[str] | None = None,
+    output_directories: Sequence[Path] | None = None,
 ) -> dict[str, Any]:
     """Freeze every file inode admitted to the child before it is forked."""
+    if (run_ids is None) == (output_directories is None):
+        raise ConfinementError(
+            "runtime plan requires exactly one output-directory derivation"
+        )
     files: dict[str, dict[str, Any]] = {}
 
     def admit(
@@ -408,10 +413,16 @@ def build_plan(
     python_library_root = Path(python_identity["path"]).parent.parent / "lib"
     if python_library_root.is_dir():
         lookup_directories.add(python_library_root.resolve(strict=True).as_posix())
-    output_directories = [
-        (incomplete / "runs" / run_id).resolve(strict=True).as_posix()
-        for run_id in run_ids
+    planned_output_directories = (
+        [(incomplete / "runs" / run_id) for run_id in run_ids]
+        if run_ids is not None
+        else list(output_directories or ())
+    )
+    output_directory_values = [
+        path.resolve(strict=True).as_posix() for path in planned_output_directories
     ]
+    if len(output_directory_values) != len(set(output_directory_values)):
+        raise ConfinementError("runtime plan has duplicate output directories")
     resource_rules: list[dict[str, str]] = []
     for path, kind in ((Path("/proc"), "procfs"), (Path("/sys"), "sysfs")):
         if path.is_dir() and path.resolve(strict=True) == path:
@@ -454,7 +465,7 @@ def build_plan(
         "lookup_directories": sorted(
             lookup_directories, key=lambda value: value.encode("utf-8")
         ),
-        "output_directories": output_directories,
+        "output_directories": output_directory_values,
         "resource_rules": resource_rules,
         "schema": PLAN_SCHEMA,
         "trace_scope": list(TRACE_SCOPE),

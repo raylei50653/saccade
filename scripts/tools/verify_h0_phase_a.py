@@ -453,6 +453,51 @@ def _expected_build_environment(controller: Mapping[str, Any]) -> dict[str, str]
     }
 
 
+def _expected_extension_load_environment(
+    controller: Mapping[str, Any],
+) -> dict[str, str]:
+    root = controller["repository_root"]
+    libraries = controller["library_dirs"]
+    return {
+        **_expected_build_environment(controller),
+        "CUDA_DEVICE_ORDER": "PCI_BUS_ID",
+        "CUDA_VISIBLE_DEVICES": controller["gpu"]["uuid"],
+        "LD_LIBRARY_PATH": ":".join(
+            (
+                f"{root}/build/h0_phase_a",
+                libraries["tensorrt_library_dir"],
+                libraries["pytorch_library_dir"],
+                libraries["cuda_library_dir"],
+            )
+        ),
+        "SACCADE_BUILD_PATH": f"{root}/build/h0_phase_a",
+    }
+
+
+def _expected_extension_load_vector(
+    controller: Mapping[str, Any], identity: Mapping[str, Any]
+) -> list[str]:
+    root = controller["repository_root"]
+    incomplete = f"{root}/{controller['incomplete_root']}"
+    extension = f"{root}/{identity['artifacts'][0]['path']}"
+    plugin = f"{root}/{identity['artifacts'][1]['path']}"
+    probe = f"{incomplete}/_runtime_confinement_denial_probe"
+    script = (
+        "import ctypes,pathlib;"
+        f"p=pathlib.Path({probe!r});"
+        "denied=False;"
+        "\ntry:p.read_bytes()"
+        "\nexcept PermissionError:denied=True"
+        "\nassert denied;"
+        "\nimport saccade_tracking_ext;"
+        f"e=pathlib.Path({extension!r}).resolve(strict=True);"
+        "a=pathlib.Path(saccade_tracking_ext.__file__).resolve(strict=True);"
+        "assert a==e;"
+        f"ctypes.CDLL({plugin!r},mode=ctypes.RTLD_LOCAL)"
+    )
+    return [f"{root}/.venv/bin/python", "-I", "-B", "-c", script]
+
+
 def _verify_constants(controller: Mapping[str, Any]) -> None:
     root = controller["repository_root"]
     constants = controller["execution_constants"]
@@ -947,7 +992,7 @@ def _verify_complete_build_identity(
     identity: Mapping[str, Any], controller: Mapping[str, Any]
 ) -> None:
     repository_root = Path(controller["repository_root"])
-    top_members = {
+    base_members = {
         "artifacts",
         "build_environment",
         "build_environment_digest",
@@ -961,7 +1006,10 @@ def _verify_complete_build_identity(
         "state",
         "uv_lock_sha256",
     }
-    if set(identity) != top_members or identity.get("state") != "complete":
+    if (
+        set(identity) not in (base_members, base_members | {"extension_load"})
+        or identity.get("state") != "complete"
+    ):
         raise VerificationError("build identity has missing or unknown members")
     if identity["build_vectors"] != [list(vector) for vector in BUILD_VECTORS]:
         raise VerificationError("build identity command vectors differ from A7.4")
@@ -1109,6 +1157,75 @@ def _verify_complete_build_identity(
         != identity["uv_lock_sha256"]
     ):
         raise VerificationError("uv.lock identity mismatch")
+    extension_load = identity.get("extension_load")
+    if extension_load is None:
+        return
+    extension_members = {
+        "confinement_plan_digest",
+        "confinement_probe_passed",
+        "environment",
+        "environment_digest",
+        "result",
+        "returncode",
+        "runtime_inputs",
+        "runtime_inputs_digest",
+        "state",
+        "vector",
+    }
+    if (
+        not isinstance(extension_load, dict)
+        or set(extension_load) != extension_members
+        or extension_load["state"] not in {"complete", "failed", "rejected"}
+        or type(extension_load["returncode"]) is not int
+    ):
+        raise VerificationError("extension-load confinement record is malformed")
+    expected_state = {
+        "complete": ("extension_loaded", 0),
+        "failed": ("extension_load_failed", None),
+        "rejected": ("provenance_invalid", None),
+    }[extension_load["state"]]
+    if extension_load["result"] != expected_state[0] or (
+        expected_state[1] is not None
+        and extension_load["returncode"] != expected_state[1]
+    ):
+        raise VerificationError("extension-load state/result mismatch")
+    if extension_load["state"] == "failed" and extension_load["returncode"] == 0:
+        raise VerificationError("failed extension-load has a zero return code")
+    if (
+        extension_load["state"] in {"complete", "failed"}
+        and extension_load["confinement_probe_passed"] is not True
+    ):
+        raise VerificationError("extension-load confinement probe did not pass")
+    expected_environment = _expected_extension_load_environment(controller)
+    if extension_load["environment"] != expected_environment or extension_load[
+        "environment_digest"
+    ] != digest(expected_environment):
+        raise VerificationError("extension-load environment table/digest mismatch")
+    if extension_load["vector"] != _expected_extension_load_vector(
+        controller, identity
+    ):
+        raise VerificationError("extension-load vector mismatch")
+    _verify_runtime_inputs(
+        extension_load["runtime_inputs"],
+        extension_load,
+        controller,
+        identity,
+        expected_output_directories=(
+            repository_root / controller["incomplete_root"] / "_extension_load",
+        ),
+    )
+    observed = {
+        record["realpath"]
+        for record in extension_load["runtime_inputs"]["regular_files"]
+    }
+    expected_loaded = {
+        (repository_root / artifact["path"]).resolve(strict=True).as_posix()
+        for artifact in artifacts
+    }
+    if not expected_loaded.issubset(observed):
+        raise VerificationError(
+            "extension/plugin load is absent from runtime attestation"
+        )
 
 
 def _verify_runtime_inputs(
@@ -1116,6 +1233,8 @@ def _verify_runtime_inputs(
     invocation: Mapping[str, Any],
     controller: Mapping[str, Any],
     build_identity: Mapping[str, Any],
+    *,
+    expected_output_directories: Sequence[Path] | None = None,
 ) -> None:
     members = {
         "backend",
@@ -1179,7 +1298,14 @@ def _verify_runtime_inputs(
 
     repository_root = Path(controller["repository_root"])
     incomplete = repository_root / controller["incomplete_root"]
-    expected_outputs = [(incomplete / "runs" / run_id).as_posix() for run_id in RUN_IDS]
+    expected_outputs = [
+        path.as_posix()
+        for path in (
+            expected_output_directories
+            if expected_output_directories is not None
+            else tuple(incomplete / "runs" / run_id for run_id in RUN_IDS)
+        )
+    ]
     if (
         plan["denial_probe"]
         != (incomplete / "_runtime_confinement_denial_probe").as_posix()
@@ -1643,6 +1769,37 @@ def verify_evidence_root(root: Path) -> dict[str, Any]:
     blocking_status = {"blocking_result": manifest["result"], "state": "not_produced"}
     if build_identity.get("state") == "complete":
         _verify_complete_build_identity(build_identity, manifest["controller_input"])
+        extension_load = build_identity.get("extension_load")
+        result = manifest["result"]
+        if result == "extension_load_failed":
+            if (
+                not isinstance(extension_load, dict)
+                or extension_load.get("state") != "failed"
+            ):
+                raise VerificationError(
+                    "extension_load_failed lacks its confined failure record"
+                )
+        elif result in {
+            "runner_nonzero",
+            "capture_perturbs_policy",
+            "packet_invalid",
+            "phase_a_pass",
+        }:
+            if (
+                not isinstance(extension_load, dict)
+                or extension_load.get("state") != "complete"
+            ):
+                raise VerificationError(
+                    "post-extension result lacks a complete confined load record"
+                )
+        elif (
+            isinstance(extension_load, dict)
+            and extension_load.get("state") == "rejected"
+            and result != "provenance_invalid"
+        ):
+            raise VerificationError(
+                "rejected extension-load record has a non-provenance result"
+            )
         for invocation, runtime_value in zip(
             manifest["child_invocations"], runtime_documents, strict=True
         ):
