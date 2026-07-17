@@ -1,0 +1,1481 @@
+{
+  "schema_id": "h0_phase_a_execution_v1",
+  "schema_version": "h0_phase_a_execution_v1",
+  "description": "Frozen A7 + RC1 Phase-A controller execution contract. Strict, unknown-field closed, no free-text mechanical verdicts.",
+  "additionalProperties": false,
+  "definitions": {
+    "sha256_hex": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "instrumentation_head": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "posix_abs_path": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^/"
+    },
+    "posix_rel_path": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[^/].*"
+    },
+    "run_id": {
+      "type": "string",
+      "enum": [
+        "00_capture_off",
+        "01_capture_on_1",
+        "02_capture_on_2",
+        "03_capture_on_3"
+      ]
+    },
+    "controller_result": {
+      "type": "string",
+      "enum": [
+        "provenance_invalid",
+        "build_failed",
+        "extension_load_failed",
+        "runner_nonzero",
+        "runner_timeout",
+        "serialization_failed",
+        "artifact_missing_or_unreadable",
+        "unclassified_execution_failure",
+        "capture_perturbs_policy",
+        "packet_invalid",
+        "phase_a_pass"
+      ]
+    },
+    "invocation_state": {
+      "type": "string",
+      "enum": [
+        "not_run",
+        "running_interrupted",
+        "failed",
+        "completed"
+      ]
+    },
+    "artifact_state": {
+      "type": "string",
+      "enum": [
+        "not_produced",
+        "produced"
+      ]
+    },
+    "mutation_class": {
+      "type": "string",
+      "enum": [
+        "none",
+        "bound_path_mutation",
+        "ancestor_move_or_delete",
+        "watch_install_failure",
+        "queue_overflow",
+        "ignored_watch",
+        "unclassified_monitor_failure"
+      ]
+    },
+    "checkpoint_id": {
+      "type": "string",
+      "enum": [
+        "T0",
+        "T1",
+        "T2a",
+        "T2b",
+        "T3",
+        "T4"
+      ]
+    },
+    "command_vector": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "minItems": 1,
+      "additionalItems": false
+    },
+    "ordered_run_plan": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/run_id"
+      },
+      "minItems": 4,
+      "maxItems": 4,
+      "additionalItems": false
+    },
+    "environment_table": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "CUDA_DEVICE_ORDER",
+        "CUDA_VISIBLE_DEVICES",
+        "HOME",
+        "LANG",
+        "LC_ALL",
+        "LD_LIBRARY_PATH",
+        "PATH",
+        "PYTHONHASHSEED",
+        "PYTHONNOUSERSITE",
+        "SACCADE_BUILD_PATH",
+        "SACCADE_DETECT_BARRIER",
+        "SACCADE_DOUBLE_BUFFER",
+        "SACCADE_GPU_DECODE",
+        "SACCADE_MAIN_NMS_GRAPHED",
+        "TMPDIR",
+        "TZ",
+        "XDG_CACHE_HOME"
+      ],
+      "properties": {
+        "CUDA_DEVICE_ORDER": {
+          "type": "string",
+          "const": "PCI_BUS_ID"
+        },
+        "CUDA_VISIBLE_DEVICES": {
+          "type": "string",
+          "minLength": 1
+        },
+        "HOME": {
+          "$ref": "#/definitions/posix_abs_path"
+        },
+        "LANG": {
+          "type": "string",
+          "const": "C.UTF-8"
+        },
+        "LC_ALL": {
+          "type": "string",
+          "const": "C.UTF-8"
+        },
+        "LD_LIBRARY_PATH": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^:]+(/[^:]+)*:[^:]+(/[^:]+)*:[^:]+(/[^:]+)*:[^:]+(/[^:]+)*$"
+        },
+        "PATH": {
+          "type": "string",
+          "minLength": 1
+        },
+        "PYTHONHASHSEED": {
+          "type": "string",
+          "const": "0"
+        },
+        "PYTHONNOUSERSITE": {
+          "type": "string",
+          "const": "1"
+        },
+        "SACCADE_BUILD_PATH": {
+          "$ref": "#/definitions/posix_abs_path"
+        },
+        "SACCADE_DETECT_BARRIER": {
+          "type": "string",
+          "const": "event"
+        },
+        "SACCADE_DOUBLE_BUFFER": {
+          "type": "string",
+          "const": "1"
+        },
+        "SACCADE_GPU_DECODE": {
+          "type": "string",
+          "const": "1"
+        },
+        "SACCADE_MAIN_NMS_GRAPHED": {
+          "type": "string",
+          "const": "1"
+        },
+        "TMPDIR": {
+          "$ref": "#/definitions/posix_abs_path"
+        },
+        "TZ": {
+          "type": "string",
+          "const": "UTC"
+        },
+        "XDG_CACHE_HOME": {
+          "$ref": "#/definitions/posix_abs_path"
+        }
+      }
+    },
+    "sequence_file_record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "relative_path",
+        "byte_length",
+        "sha256"
+      ],
+      "properties": {
+        "relative_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "byte_length": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sha256": {
+          "$ref": "#/definitions/sha256_hex"
+        }
+      }
+    },
+    "canonical_sequence_input_digest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "algorithm",
+        "sequence_root",
+        "excluded_subtrees",
+        "file_records",
+        "aggregate_sha256"
+      ],
+      "properties": {
+        "algorithm": {
+          "type": "string",
+          "const": "h0_sequence_input_digest_v1"
+        },
+        "sequence_root": {
+          "type": "string",
+          "const": "datasets/MOT17/train/MOT17-04-SDP"
+        },
+        "excluded_subtrees": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "gt",
+              "det"
+            ]
+          },
+          "minItems": 2,
+          "maxItems": 2,
+          "additionalItems": false
+        },
+        "file_records": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/sequence_file_record"
+          }
+        },
+        "aggregate_sha256": {
+          "$ref": "#/definitions/sha256_hex"
+        }
+      }
+    },
+    "repository_entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "object_type",
+        "object_id",
+        "path",
+        "byte_length",
+        "content_sha256_or_target"
+      ],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "pattern": "^[0-7]{6}$"
+        },
+        "object_type": {
+          "type": "string",
+          "enum": [
+            "blob",
+            "tree",
+            "commit"
+          ]
+        },
+        "object_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "byte_length": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "content_sha256_or_target": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "model_engine_record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "logical_path",
+        "realpath",
+        "symlink_chain",
+        "byte_length",
+        "sha256"
+      ],
+      "properties": {
+        "logical_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "realpath": {
+          "$ref": "#/definitions/posix_abs_path"
+        },
+        "symlink_chain": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "byte_length": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sha256": {
+          "$ref": "#/definitions/sha256_hex"
+        }
+      }
+    },
+    "tool_runtime_record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "path",
+        "sha256"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "$ref": "#/definitions/sha256_hex"
+        }
+      }
+    },
+    "h0_bound_inputs_v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "instrumentation_head",
+        "repository",
+        "models_engines",
+        "sequence",
+        "tool_runtime_inputs",
+        "inventory_digest"
+      ],
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "h0_bound_inputs_v1"
+        },
+        "instrumentation_head": {
+          "$ref": "#/definitions/instrumentation_head"
+        },
+        "repository": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/repository_entry"
+          }
+        },
+        "models_engines": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/model_engine_record"
+          }
+        },
+        "sequence": {
+          "$ref": "#/definitions/canonical_sequence_input_digest"
+        },
+        "tool_runtime_inputs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/tool_runtime_record"
+          }
+        },
+        "inventory_digest": {
+          "$ref": "#/definitions/sha256_hex"
+        }
+      }
+    },
+    "mutation_event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "watch_path",
+        "event_path",
+        "mask",
+        "classification"
+      ],
+      "properties": {
+        "watch_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "event_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mask": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "classification": {
+          "$ref": "#/definitions/mutation_class"
+        }
+      }
+    },
+    "mutation_observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "inotify_mask",
+        "inotify_mask_names",
+        "monitor_status",
+        "events",
+        "final_classification"
+      ],
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "h0_phase_a_mutation_observation_v1"
+        },
+        "inotify_mask": {
+          "type": "integer",
+          "const": 4046
+        },
+        "inotify_mask_names": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "IN_CLOSE_WRITE",
+              "IN_MODIFY",
+              "IN_ATTRIB",
+              "IN_DELETE_SELF",
+              "IN_MOVE_SELF",
+              "IN_CREATE",
+              "IN_DELETE",
+              "IN_MOVED_FROM",
+              "IN_MOVED_TO"
+            ]
+          },
+          "minItems": 9,
+          "maxItems": 9,
+          "additionalItems": false
+        },
+        "monitor_status": {
+          "type": "string",
+          "enum": [
+            "active",
+            "stopped",
+            "failed"
+          ]
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/mutation_event"
+          }
+        },
+        "final_classification": {
+          "$ref": "#/definitions/mutation_class"
+        }
+      }
+    },
+    "checkpoint_record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "checkpoint_id",
+        "inventory_digest",
+        "equal_to_t0",
+        "monotonic_ns"
+      ],
+      "properties": {
+        "checkpoint_id": {
+          "$ref": "#/definitions/checkpoint_id"
+        },
+        "inventory_digest": {
+          "$ref": "#/definitions/sha256_hex"
+        },
+        "equal_to_t0": {
+          "type": "boolean"
+        },
+        "monotonic_ns": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "cdv_set_name": {
+      "type": "string",
+      "enum": [
+        "C",
+        "D",
+        "V"
+      ]
+    },
+    "cdv_matrix_row": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "result",
+        "required_sets",
+        "forbidden_sets",
+        "required_paths",
+        "forbidden_paths"
+      ],
+      "properties": {
+        "result": {
+          "$ref": "#/definitions/controller_result"
+        },
+        "required_sets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/cdv_set_name"
+          }
+        },
+        "forbidden_sets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/cdv_set_name"
+          }
+        },
+        "required_paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "forbidden_paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "controller_input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "instrumentation_head",
+        "repository_root",
+        "tensorrt_lib_dir",
+        "pytorch_lib_dir",
+        "cuda_lib64_dir",
+        "cuda_device_uuid",
+        "cuda_pci_bus_id",
+        "bound_inputs",
+        "capture_run_uuids"
+      ],
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "h0_phase_a_controller_input_v1"
+        },
+        "instrumentation_head": {
+          "$ref": "#/definitions/instrumentation_head"
+        },
+        "repository_root": {
+          "$ref": "#/definitions/posix_abs_path"
+        },
+        "tensorrt_lib_dir": {
+          "$ref": "#/definitions/posix_abs_path"
+        },
+        "pytorch_lib_dir": {
+          "$ref": "#/definitions/posix_abs_path"
+        },
+        "cuda_lib64_dir": {
+          "$ref": "#/definitions/posix_abs_path"
+        },
+        "cuda_device_uuid": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cuda_pci_bus_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "bound_inputs": {
+          "$ref": "#/definitions/h0_bound_inputs_v1"
+        },
+        "capture_run_uuids": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "00_capture_off",
+            "01_capture_on_1",
+            "02_capture_on_2",
+            "03_capture_on_3"
+          ],
+          "properties": {
+            "00_capture_off": {
+              "type": "string",
+              "minLength": 1
+            },
+            "01_capture_on_1": {
+              "type": "string",
+              "minLength": 1
+            },
+            "02_capture_on_2": {
+              "type": "string",
+              "minLength": 1
+            },
+            "03_capture_on_3": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      }
+    },
+    "child_input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "run_id",
+        "repository_root",
+        "instrumentation_head",
+        "capture_run_uuid",
+        "environment",
+        "command_vector",
+        "evaluator_argv",
+        "bound_inputs_digest",
+        "sequence_input_digest"
+      ],
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "h0_phase_a_child_input_v1"
+        },
+        "run_id": {
+          "$ref": "#/definitions/run_id"
+        },
+        "repository_root": {
+          "$ref": "#/definitions/posix_abs_path"
+        },
+        "instrumentation_head": {
+          "$ref": "#/definitions/instrumentation_head"
+        },
+        "capture_run_uuid": {
+          "type": "string",
+          "minLength": 1
+        },
+        "environment": {
+          "$ref": "#/definitions/environment_table"
+        },
+        "command_vector": {
+          "$ref": "#/definitions/command_vector"
+        },
+        "evaluator_argv": {
+          "$ref": "#/definitions/command_vector"
+        },
+        "bound_inputs_digest": {
+          "$ref": "#/definitions/sha256_hex"
+        },
+        "sequence_input_digest": {
+          "$ref": "#/definitions/sha256_hex"
+        }
+      }
+    },
+    "child_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "run_id",
+        "exit_class",
+        "command_vector",
+        "evaluator_argv",
+        "environment_digest",
+        "bound_inputs_digest",
+        "sequence_input_digest",
+        "capture_run_uuid",
+        "stdout_sha256",
+        "stderr_sha256"
+      ],
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "h0_phase_a_child_result_v1"
+        },
+        "run_id": {
+          "$ref": "#/definitions/run_id"
+        },
+        "exit_class": {
+          "type": "string",
+          "enum": [
+            "completed",
+            "runner_nonzero",
+            "runner_timeout",
+            "provenance_invalid",
+            "unclassified_execution_failure",
+            "malformed"
+          ]
+        },
+        "command_vector": {
+          "$ref": "#/definitions/command_vector"
+        },
+        "evaluator_argv": {
+          "$ref": "#/definitions/command_vector"
+        },
+        "environment_digest": {
+          "$ref": "#/definitions/sha256_hex"
+        },
+        "bound_inputs_digest": {
+          "$ref": "#/definitions/sha256_hex"
+        },
+        "sequence_input_digest": {
+          "$ref": "#/definitions/sha256_hex"
+        },
+        "capture_run_uuid": {
+          "type": "string",
+          "minLength": 1
+        },
+        "stdout_sha256": {
+          "$ref": "#/definitions/sha256_hex"
+        },
+        "stderr_sha256": {
+          "$ref": "#/definitions/sha256_hex"
+        },
+        "failure_reason_code": {
+          "type": "string",
+          "enum": [
+            "none",
+            "env_mismatch",
+            "argv_reject",
+            "bound_input_drift",
+            "sequence_digest_mismatch",
+            "path_not_canonical",
+            "symlink_or_traversal",
+            "unexpected_file_access",
+            "unexpected_exit",
+            "malformed_output",
+            "unclassified"
+          ]
+        }
+      }
+    },
+    "controller_plan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "parent_command_vector",
+        "build_configure_vector",
+        "build_build_vector",
+        "ordered_run_plan",
+        "child_command_vectors",
+        "evaluator_argv_by_run",
+        "environment_tables_by_run",
+        "deadline_seconds",
+        "exposure_gates",
+        "result_enum",
+        "cdv_matrix",
+        "inotify_mask",
+        "inotify_mask_names",
+        "bound_input_checkpoints"
+      ],
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "h0_phase_a_controller_plan_v1"
+        },
+        "parent_command_vector": {
+          "$ref": "#/definitions/command_vector"
+        },
+        "build_configure_vector": {
+          "$ref": "#/definitions/command_vector"
+        },
+        "build_build_vector": {
+          "$ref": "#/definitions/command_vector"
+        },
+        "ordered_run_plan": {
+          "$ref": "#/definitions/ordered_run_plan"
+        },
+        "child_command_vectors": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "00_capture_off",
+            "01_capture_on_1",
+            "02_capture_on_2",
+            "03_capture_on_3"
+          ],
+          "properties": {
+            "00_capture_off": {
+              "$ref": "#/definitions/command_vector"
+            },
+            "01_capture_on_1": {
+              "$ref": "#/definitions/command_vector"
+            },
+            "02_capture_on_2": {
+              "$ref": "#/definitions/command_vector"
+            },
+            "03_capture_on_3": {
+              "$ref": "#/definitions/command_vector"
+            }
+          }
+        },
+        "evaluator_argv_by_run": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "00_capture_off",
+            "01_capture_on_1",
+            "02_capture_on_2",
+            "03_capture_on_3"
+          ],
+          "properties": {
+            "00_capture_off": {
+              "$ref": "#/definitions/command_vector"
+            },
+            "01_capture_on_1": {
+              "$ref": "#/definitions/command_vector"
+            },
+            "02_capture_on_2": {
+              "$ref": "#/definitions/command_vector"
+            },
+            "03_capture_on_3": {
+              "$ref": "#/definitions/command_vector"
+            }
+          }
+        },
+        "environment_tables_by_run": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "00_capture_off",
+            "01_capture_on_1",
+            "02_capture_on_2",
+            "03_capture_on_3"
+          ],
+          "properties": {
+            "00_capture_off": {
+              "$ref": "#/definitions/environment_table"
+            },
+            "01_capture_on_1": {
+              "$ref": "#/definitions/environment_table"
+            },
+            "02_capture_on_2": {
+              "$ref": "#/definitions/environment_table"
+            },
+            "03_capture_on_3": {
+              "$ref": "#/definitions/environment_table"
+            }
+          }
+        },
+        "deadline_seconds": {
+          "type": "integer",
+          "const": 3600
+        },
+        "exposure_gates": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "capture_phase",
+            "require_candidate_exposure",
+            "require_commit_exposure"
+          ],
+          "properties": {
+            "capture_phase": {
+              "type": "string",
+              "const": "phase_a"
+            },
+            "require_candidate_exposure": {
+              "type": "boolean",
+              "const": true
+            },
+            "require_commit_exposure": {
+              "type": "boolean",
+              "const": false
+            }
+          }
+        },
+        "result_enum": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/controller_result"
+          },
+          "minItems": 11,
+          "maxItems": 11,
+          "additionalItems": false
+        },
+        "cdv_matrix": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/cdv_matrix_row"
+          },
+          "minItems": 11,
+          "maxItems": 11,
+          "additionalItems": false
+        },
+        "inotify_mask": {
+          "type": "integer",
+          "const": 4046
+        },
+        "inotify_mask_names": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 9,
+          "maxItems": 9
+        },
+        "bound_input_checkpoints": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/checkpoint_id"
+          },
+          "minItems": 6,
+          "maxItems": 6
+        }
+      }
+    },
+    "evidence_package": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "controller_schema_version",
+        "child_schema_version",
+        "verifier_schema_version",
+        "instrumentation_head",
+        "result",
+        "controller_self_report_valid",
+        "parent_command_vector",
+        "build_configure_vector",
+        "build_build_vector",
+        "ordered_run_plan",
+        "child_command_vectors",
+        "evaluator_argv_by_run",
+        "environment_tables_by_run",
+        "environment_digests_by_run",
+        "bound_inputs",
+        "sequence_input_digest",
+        "mutation_observation",
+        "checkpoint_records",
+        "child_results",
+        "cdv_matrix_row",
+        "published_paths",
+        "artifact_states"
+      ],
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "h0_phase_a_execution_v1"
+        },
+        "controller_schema_version": {
+          "type": "string",
+          "const": "h0_phase_a_controller_v1"
+        },
+        "child_schema_version": {
+          "type": "string",
+          "const": "h0_phase_a_child_v1"
+        },
+        "verifier_schema_version": {
+          "type": "string",
+          "const": "h0_phase_a_verifier_v1"
+        },
+        "instrumentation_head": {
+          "$ref": "#/definitions/instrumentation_head"
+        },
+        "result": {
+          "$ref": "#/definitions/controller_result"
+        },
+        "controller_self_report_valid": {
+          "type": "boolean"
+        },
+        "parent_command_vector": {
+          "$ref": "#/definitions/command_vector"
+        },
+        "build_configure_vector": {
+          "$ref": "#/definitions/command_vector"
+        },
+        "build_build_vector": {
+          "$ref": "#/definitions/command_vector"
+        },
+        "ordered_run_plan": {
+          "$ref": "#/definitions/ordered_run_plan"
+        },
+        "child_command_vectors": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "00_capture_off",
+            "01_capture_on_1",
+            "02_capture_on_2",
+            "03_capture_on_3"
+          ],
+          "properties": {
+            "00_capture_off": {
+              "$ref": "#/definitions/command_vector"
+            },
+            "01_capture_on_1": {
+              "$ref": "#/definitions/command_vector"
+            },
+            "02_capture_on_2": {
+              "$ref": "#/definitions/command_vector"
+            },
+            "03_capture_on_3": {
+              "$ref": "#/definitions/command_vector"
+            }
+          }
+        },
+        "evaluator_argv_by_run": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "00_capture_off",
+            "01_capture_on_1",
+            "02_capture_on_2",
+            "03_capture_on_3"
+          ],
+          "properties": {
+            "00_capture_off": {
+              "$ref": "#/definitions/command_vector"
+            },
+            "01_capture_on_1": {
+              "$ref": "#/definitions/command_vector"
+            },
+            "02_capture_on_2": {
+              "$ref": "#/definitions/command_vector"
+            },
+            "03_capture_on_3": {
+              "$ref": "#/definitions/command_vector"
+            }
+          }
+        },
+        "environment_tables_by_run": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "00_capture_off",
+            "01_capture_on_1",
+            "02_capture_on_2",
+            "03_capture_on_3"
+          ],
+          "properties": {
+            "00_capture_off": {
+              "$ref": "#/definitions/environment_table"
+            },
+            "01_capture_on_1": {
+              "$ref": "#/definitions/environment_table"
+            },
+            "02_capture_on_2": {
+              "$ref": "#/definitions/environment_table"
+            },
+            "03_capture_on_3": {
+              "$ref": "#/definitions/environment_table"
+            }
+          }
+        },
+        "environment_digests_by_run": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "00_capture_off",
+            "01_capture_on_1",
+            "02_capture_on_2",
+            "03_capture_on_3"
+          ],
+          "properties": {
+            "00_capture_off": {
+              "$ref": "#/definitions/sha256_hex"
+            },
+            "01_capture_on_1": {
+              "$ref": "#/definitions/sha256_hex"
+            },
+            "02_capture_on_2": {
+              "$ref": "#/definitions/sha256_hex"
+            },
+            "03_capture_on_3": {
+              "$ref": "#/definitions/sha256_hex"
+            }
+          }
+        },
+        "bound_inputs": {
+          "$ref": "#/definitions/h0_bound_inputs_v1"
+        },
+        "sequence_input_digest": {
+          "$ref": "#/definitions/canonical_sequence_input_digest"
+        },
+        "mutation_observation": {
+          "$ref": "#/definitions/mutation_observation"
+        },
+        "checkpoint_records": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/checkpoint_record"
+          }
+        },
+        "child_results": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "00_capture_off",
+            "01_capture_on_1",
+            "02_capture_on_2",
+            "03_capture_on_3"
+          ],
+          "properties": {
+            "00_capture_off": {
+              "$ref": "#/definitions/child_result"
+            },
+            "01_capture_on_1": {
+              "$ref": "#/definitions/child_result"
+            },
+            "02_capture_on_2": {
+              "$ref": "#/definitions/child_result"
+            },
+            "03_capture_on_3": {
+              "$ref": "#/definitions/child_result"
+            }
+          }
+        },
+        "cdv_matrix_row": {
+          "$ref": "#/definitions/cdv_matrix_row"
+        },
+        "published_paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "artifact_states": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/artifact_state"
+          }
+        }
+      }
+    },
+    "verifier_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "accepted",
+        "result",
+        "rejection_codes"
+      ],
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "h0_phase_a_verifier_v1"
+        },
+        "accepted": {
+          "type": "boolean"
+        },
+        "result": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "rejection_codes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "schema_nonconformance",
+              "unknown_field",
+              "missing_required_field",
+              "illegal_enum",
+              "command_vector_mismatch",
+              "command_vector_order",
+              "executable_path_mismatch",
+              "argument_mismatch",
+              "environment_mismatch",
+              "working_directory_drift",
+              "bound_input_digest_mismatch",
+              "sequence_input_digest_mismatch",
+              "symlink_or_non_canonical_path",
+              "inotify_mask_mismatch",
+              "disallowed_mutation",
+              "child_unexpected_exit",
+              "malformed_child_output",
+              "controller_self_report_untrusted",
+              "cdv_matrix_inconsistency",
+              "result_enum_inconsistency",
+              "evidence_incomplete",
+              "unrecognized_state",
+              "parent_child_inconsistency",
+              "a7_9_free_choice_detected"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "path_sets": {
+    "C": [
+      "manifest.json",
+      "build_identity.json",
+      "runtime_identity.json",
+      "gpu_identity.json",
+      "input_binding.json",
+      "comparison.json",
+      "result.json",
+      "checksums.sha256",
+      "logs/00_cmake_configure.stdout.log",
+      "logs/00_cmake_configure.stderr.log",
+      "logs/01_cmake_build.stdout.log",
+      "logs/01_cmake_build.stderr.log",
+      "runs/00_capture_off/invocation.json",
+      "runs/00_capture_off/stdout.log",
+      "runs/00_capture_off/stderr.log",
+      "runs/01_capture_on_1/invocation.json",
+      "runs/01_capture_on_1/stdout.log",
+      "runs/01_capture_on_1/stderr.log",
+      "runs/02_capture_on_2/invocation.json",
+      "runs/02_capture_on_2/stdout.log",
+      "runs/02_capture_on_2/stderr.log",
+      "runs/03_capture_on_3/invocation.json",
+      "runs/03_capture_on_3/stdout.log",
+      "runs/03_capture_on_3/stderr.log",
+      "verification/aggregate.json"
+    ],
+    "D": [
+      "runs/00_capture_off/policy_inventory.json",
+      "runs/00_capture_off/MOT17-04-SDP.txt",
+      "runs/01_capture_on_1/policy_inventory.json",
+      "runs/01_capture_on_1/MOT17-04-SDP.txt",
+      "runs/01_capture_on_1/packet.json",
+      "runs/02_capture_on_2/policy_inventory.json",
+      "runs/02_capture_on_2/MOT17-04-SDP.txt",
+      "runs/02_capture_on_2/packet.json",
+      "runs/03_capture_on_3/policy_inventory.json",
+      "runs/03_capture_on_3/MOT17-04-SDP.txt",
+      "runs/03_capture_on_3/packet.json"
+    ],
+    "V": [
+      "runs/01_capture_on_1/packet_verification.json",
+      "runs/02_capture_on_2/packet_verification.json",
+      "runs/03_capture_on_3/packet_verification.json"
+    ]
+  },
+  "cdv_result_matrix": {
+    "provenance_invalid": {
+      "required_sets": [
+        "C"
+      ],
+      "forbidden_sets": [
+        "D",
+        "V"
+      ]
+    },
+    "build_failed": {
+      "required_sets": [
+        "C"
+      ],
+      "forbidden_sets": [
+        "D",
+        "V"
+      ]
+    },
+    "extension_load_failed": {
+      "required_sets": [
+        "C"
+      ],
+      "forbidden_sets": [
+        "D",
+        "V"
+      ]
+    },
+    "runner_nonzero": {
+      "required_sets": [
+        "C"
+      ],
+      "forbidden_sets": [
+        "D",
+        "V"
+      ]
+    },
+    "runner_timeout": {
+      "required_sets": [
+        "C"
+      ],
+      "forbidden_sets": [
+        "D",
+        "V"
+      ]
+    },
+    "serialization_failed": {
+      "required_sets": [
+        "C"
+      ],
+      "forbidden_sets": [
+        "D",
+        "V"
+      ]
+    },
+    "artifact_missing_or_unreadable": {
+      "required_sets": [
+        "C"
+      ],
+      "forbidden_sets": [
+        "D",
+        "V"
+      ]
+    },
+    "unclassified_execution_failure": {
+      "required_sets": [
+        "C"
+      ],
+      "forbidden_sets": [
+        "D",
+        "V"
+      ]
+    },
+    "capture_perturbs_policy": {
+      "required_sets": [
+        "C",
+        "D"
+      ],
+      "forbidden_sets": [
+        "V"
+      ]
+    },
+    "packet_invalid": {
+      "required_sets": [
+        "C",
+        "D",
+        "V"
+      ],
+      "forbidden_sets": []
+    },
+    "phase_a_pass": {
+      "required_sets": [
+        "C",
+        "D",
+        "V"
+      ],
+      "forbidden_sets": []
+    }
+  },
+  "frozen_constants": {
+    "parent_command_vector": [
+      "uv",
+      "run",
+      "--frozen",
+      "python",
+      "scripts/tools/run_h0_phase_a.py"
+    ],
+    "build_configure_vector": [
+      "uv",
+      "run",
+      "--frozen",
+      "cmake",
+      "--fresh",
+      "-S",
+      ".",
+      "-B",
+      "build/h0_phase_a",
+      "-DCMAKE_BUILD_TYPE=Release",
+      "-DENABLE_NATIVE_TESTS=OFF",
+      "-DSACCADE_ENABLE_NVTX=ON",
+      "-DPython3_EXECUTABLE=.venv/bin/python"
+    ],
+    "build_build_vector": [
+      "uv",
+      "run",
+      "--frozen",
+      "cmake",
+      "--build",
+      "build/h0_phase_a",
+      "--target",
+      "saccade_tracking_ext",
+      "saccade_scan_plugin",
+      "--parallel",
+      "1"
+    ],
+    "ordered_run_plan": [
+      "00_capture_off",
+      "01_capture_on_1",
+      "02_capture_on_2",
+      "03_capture_on_3"
+    ],
+    "evaluator_argv_prefix": [
+      "--preset",
+      "mamba_whole_graph_m",
+      "--detector",
+      "SDP",
+      "--data-root",
+      "datasets/MOT17",
+      "--split",
+      "train",
+      "--sequences",
+      "MOT17-04-SDP",
+      "--max-frames",
+      "0",
+      "--warmup-frames",
+      "0",
+      "--latency-only",
+      "--gpu-decode",
+      "--double-buffer",
+      "--detect-barrier",
+      "event",
+      "--main-nms-graphed",
+      "--processes",
+      "0"
+    ],
+    "deadline_seconds": 3600,
+    "inotify_mask": 4046,
+    "inotify_mask_names": [
+      "IN_CLOSE_WRITE",
+      "IN_MODIFY",
+      "IN_ATTRIB",
+      "IN_DELETE_SELF",
+      "IN_MOVE_SELF",
+      "IN_CREATE",
+      "IN_DELETE",
+      "IN_MOVED_FROM",
+      "IN_MOVED_TO"
+    ],
+    "bound_input_checkpoints": [
+      "T0",
+      "T1",
+      "T2a",
+      "T2b",
+      "T3",
+      "T4"
+    ],
+    "result_enum": [
+      "provenance_invalid",
+      "build_failed",
+      "extension_load_failed",
+      "runner_nonzero",
+      "runner_timeout",
+      "serialization_failed",
+      "artifact_missing_or_unreadable",
+      "unclassified_execution_failure",
+      "capture_perturbs_policy",
+      "packet_invalid",
+      "phase_a_pass"
+    ],
+    "trace_capacities": {
+      "pair_capacity": 65536,
+      "candidate_capacity": 16384,
+      "claim_capacity": 16384,
+      "commit_capacity": 16384
+    },
+    "sequence_root": "datasets/MOT17/train/MOT17-04-SDP",
+    "excluded_sequence_subtrees": [
+      "gt",
+      "det"
+    ],
+    "build_dir": "build/h0_phase_a",
+    "evidence_root_template": "docs/modules/semantic/research/evidence/h0_phase_a_{head}",
+    "evidence_incomplete_template": "docs/modules/semantic/research/evidence/h0_phase_a_{head}.incomplete"
+  }
+}
