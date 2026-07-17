@@ -2593,6 +2593,13 @@ def _finalize_bundle_once(
     admit()
     _validate_directory_universe(incomplete, result_artifact_sets(result)[0])
     admit()
+    reconstructed_aggregate = finish(
+        verify_h0_phase_a.verify_evidence_root,
+        incomplete,
+    )
+    if reconstructed_aggregate != aggregate:
+        raise ContractError("staged-root reconstruction differs from stored aggregate")
+    admit()
     _publish_evidence_root(
         incomplete,
         final,

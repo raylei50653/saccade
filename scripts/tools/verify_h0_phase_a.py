@@ -1504,7 +1504,7 @@ def _verify_runtime_inputs(
 
 
 def verify_evidence_root(root: Path) -> dict[str, Any]:
-    """Verify the published filesystem universe, checksums, and embedded evidence."""
+    """Verify a complete staged or published evidence filesystem."""
     if (
         root.is_symlink()
         or not root.is_dir()
@@ -1530,9 +1530,7 @@ def verify_evidence_root(root: Path) -> dict[str, Any]:
     if sorted(actual_files, key=lambda value: value.encode("utf-8")) != sorted(
         expected_files, key=lambda value: value.encode("utf-8")
     ):
-        raise VerificationError(
-            "published regular-file universe differs from C/D/V row"
-        )
+        raise VerificationError("evidence regular-file universe differs from C/D/V row")
     expected_directories: set[str] = set()
     for relative in expected_files:
         current = Path(relative).parent
@@ -1541,7 +1539,7 @@ def verify_evidence_root(root: Path) -> dict[str, Any]:
             current = current.parent
     if actual_directories != expected_directories:
         raise VerificationError(
-            "published directory universe has missing or unknown entries"
+            "evidence directory universe has missing or unknown entries"
         )
     checksum_path = root / "checksums.sha256"
     try:
