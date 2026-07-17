@@ -46,7 +46,9 @@ def _commit(root: Path, message: str) -> str:
     return _git(root, "rev-parse", "HEAD")
 
 
-def _chain(tmp_path: Path) -> tuple[Path, str, str, str, dict[str, str]]:
+def _chain(
+    tmp_path: Path, *, owner_date: str = "2026-07-17"
+) -> tuple[Path, str, str, str, dict[str, str]]:
     root = tmp_path / "repo"
     root.mkdir()
     _git(root, "init")
@@ -62,7 +64,9 @@ def _chain(tmp_path: Path) -> tuple[Path, str, str, str, dict[str, str]]:
     freeze_path.write_bytes(verifier.canonical_json(artifact) + b"\n")
     freeze = _commit(root, "freeze")
     with declaration.open("a", encoding="utf-8") as output:
-        output.write(f"| 2026-07-17 | `{instrumentation}` | `{freeze}` | `SEALED` |\n")
+        output.write(
+            f"| {owner_date} | `{instrumentation}` | `{freeze}` | `SEALED` |\n"
+        )
     seal = _commit(root, "seal")
     return root, instrumentation, freeze, seal, artifact
 
@@ -117,6 +121,87 @@ def test_wrong_or_duplicate_seal_row_fails_closed(tmp_path: Path) -> None:
     _commit(root, "duplicate seal")
     with pytest.raises(verifier.VerificationError, match="seal row"):
         verifier.verify_authority_landing(root, artifact)
+
+
+@pytest.mark.parametrize("owner_date", ["2026-02-30", "2026-13-01", "0000-01-01"])
+def test_non_calendar_owner_event_date_fails_closed(
+    tmp_path: Path, owner_date: str
+) -> None:
+    root, _instrumentation, _freeze, _seal, artifact = _chain(
+        tmp_path, owner_date=owner_date
+    )
+    with pytest.raises(verifier.VerificationError, match="ISO calendar date"):
+        verifier.verify_authority_landing(root, artifact)
+
+
+@pytest.mark.parametrize(
+    ("mutate", "match"),
+    [
+        (
+            lambda controller, inventory: controller["tool_paths"].update(
+                {"git": "/other/git"}
+            ),
+            r"which\(\) selection",
+        ),
+        (
+            lambda controller, inventory: controller["library_dirs"].update(
+                {"cuda_library_dir": "/other/cuda"}
+            ),
+            "Python/nvcc derivation",
+        ),
+        (
+            lambda controller, inventory: controller.update(
+                {"gpu": {"uuid": "GPU-other"}}
+            ),
+            "NVML selection",
+        ),
+        (
+            lambda controller, inventory: inventory.update({"tool_runtime": []}),
+            "host expansion",
+        ),
+    ],
+)
+def test_host_execution_input_substitution_fails_against_independent_rebuild(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    mutate,
+    match: str,
+) -> None:
+    expected = {
+        "tool_paths": {
+            "git": "/selected/git",
+            "ldd": "/selected/ldd",
+            "readelf": "/selected/readelf",
+            "uv": "/selected/uv",
+        },
+        "library_dirs": {
+            "cuda_library_dir": "/selected/cuda",
+            "pytorch_library_dir": "/selected/torch",
+            "tensorrt_library_dir": "/selected/tensorrt",
+        },
+        "gpu": {"uuid": "GPU-selected"},
+        "tool_runtime": [
+            {
+                "length": 1,
+                "logical_path": "/selected/git",
+                "realpath": "/selected/git",
+                "sha256": "a" * 64,
+                "symlink_chain": [],
+            }
+        ],
+    }
+    controller = {
+        "tool_paths": dict(expected["tool_paths"]),
+        "library_dirs": dict(expected["library_dirs"]),
+        "gpu": dict(expected["gpu"]),
+    }
+    inventory = {"tool_runtime": list(expected["tool_runtime"])}
+    monkeypatch.setattr(
+        verifier, "_independent_host_execution_inputs", lambda _root: expected
+    )
+    mutate(controller, inventory)
+    with pytest.raises(verifier.VerificationError, match=match):
+        verifier._verify_host_execution_inputs(controller, inventory, tmp_path)
 
 
 def test_execution_checkout_must_be_exact_seal_commit(tmp_path: Path) -> None:

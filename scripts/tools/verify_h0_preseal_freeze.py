@@ -9,10 +9,12 @@ and I -> F -> S landing checks are a separate authority path.
 from __future__ import annotations
 
 import argparse
+import datetime
 import hashlib
 import json
 import os
 import re
+import shutil
 import stat
 import subprocess
 from pathlib import Path
@@ -433,6 +435,166 @@ def _mutation_cases(cuda: str) -> list[tuple[str, str, str]]:
     ]
 
 
+def _physical_executable(command: str) -> Path:
+    """Reproduce the assembler's sole host executable selection algorithm."""
+    found = shutil.which(command)
+    if not found:
+        raise VerificationError(f"required host executable is absent: {command}")
+    candidate = Path(found).resolve(strict=True)
+    details = candidate.stat(follow_symlinks=False)
+    if candidate.is_symlink() or not stat.S_ISREG(details.st_mode):
+        raise VerificationError(
+            f"host executable is not a physical regular file: {command}"
+        )
+    return candidate
+
+
+def _host_file_record(path: Path) -> dict[str, Any]:
+    """Rebuild an RC1 external-input record for an already physical path."""
+    resolved = path.resolve(strict=True)
+    details = resolved.lstat()
+    if not stat.S_ISREG(details.st_mode) or resolved.is_symlink():
+        raise VerificationError(f"host runtime input is not a regular file: {path}")
+    data = resolved.read_bytes()
+    return {
+        "length": len(data),
+        "logical_path": path.as_posix(),
+        "realpath": resolved.as_posix(),
+        "sha256": _sha(data),
+        "symlink_chain": [],
+    }
+
+
+def _normalize_pci_bus_id(value: str) -> str:
+    try:
+        domain_bus, device_function = value.lower().split(":", 1)
+        bus, device_function = device_function.split(":", 1)
+        device, function = device_function.split(".", 1)
+        normalized = (
+            f"{int(domain_bus, 16):04x}:{int(bus, 16):02x}:"
+            f"{int(device, 16):02x}.{int(function, 16)}"
+        )
+    except (TypeError, ValueError) as exc:
+        raise VerificationError(f"non-canonical PCI bus ID: {value!r}") from exc
+    if int(function, 16) > 7:
+        raise VerificationError(f"PCI function out of range: {value!r}")
+    return normalized
+
+
+def _independently_selected_gpu() -> dict[str, Any]:
+    """Rebuild the A7 lexicographic physical-NVML selection without controller code."""
+    try:
+        import pynvml
+
+        pynvml.nvmlInit()
+    except BaseException as exc:
+        raise VerificationError(f"NVML initialization failed: {exc}") from exc
+    records: list[dict[str, Any]] = []
+    try:
+
+        def text(value: object) -> str:
+            return (
+                value.decode("utf-8", errors="strict")
+                if isinstance(value, bytes)
+                else str(value)
+            )
+
+        driver = text(pynvml.nvmlSystemGetDriverVersion())
+        for index in range(int(pynvml.nvmlDeviceGetCount())):
+            handle = pynvml.nvmlDeviceGetHandleByIndex(index)
+            pci = pynvml.nvmlDeviceGetPciInfo(handle)
+            major, minor = pynvml.nvmlDeviceGetCudaComputeCapability(handle)
+            records.append(
+                {
+                    "compute_capability": f"{int(major)}.{int(minor)}",
+                    "driver": driver,
+                    "name": text(pynvml.nvmlDeviceGetName(handle)),
+                    "normalized_pci_bus_id": _normalize_pci_bus_id(text(pci.busId)),
+                    "total_memory": int(pynvml.nvmlDeviceGetMemoryInfo(handle).total),
+                    "uuid": text(pynvml.nvmlDeviceGetUUID(handle)),
+                    "vbios": text(pynvml.nvmlDeviceGetVbiosVersion(handle)),
+                }
+            )
+    finally:
+        pynvml.nvmlShutdown()
+    if not records:
+        raise VerificationError("no physical NVIDIA GPU is available")
+    records.sort(key=lambda record: record["normalized_pci_bus_id"])
+    if len({record["normalized_pci_bus_id"] for record in records}) != len(records):
+        raise VerificationError("duplicate normalized NVIDIA PCI bus ID")
+    return records[0]
+
+
+def _independent_host_execution_inputs(root: Path) -> dict[str, Any]:
+    """Reconstruct every host-selected execution input from A7's algorithms.
+
+    The artifact is deliberately not consulted for path selection.  This closes
+    the self-consistent-but-substituted ``tool_runtime`` model rejected in P1.
+    """
+    tool_paths = {
+        name: _physical_executable(name).as_posix()
+        for name in ("git", "ldd", "readelf", "uv")
+    }
+    python = root / ".venv/bin/python"
+    if not python.is_file() or python.is_symlink():
+        raise VerificationError("frozen .venv/bin/python is absent or symlinked")
+    try:
+        query = subprocess.run(
+            [
+                python.as_posix(),
+                "-I",
+                "-c",
+                "import pathlib,torch; print((pathlib.Path(torch.__file__).resolve().parent/'lib').as_posix()); import tensorrt_libs; print(pathlib.Path(tensorrt_libs.__file__).resolve().parent.as_posix())",
+            ],
+            cwd=root,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.splitlines()
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise VerificationError(
+            "frozen Python could not derive runtime library directories"
+        ) from exc
+    if len(query) != 2:
+        raise VerificationError(
+            "frozen Python did not derive exactly two runtime library directories"
+        )
+    cuda = _physical_executable("nvcc").parent.parent / "lib64"
+    library_dirs = {
+        "tensorrt_library_dir": Path(query[1]).resolve(strict=True).as_posix(),
+        "pytorch_library_dir": Path(query[0]).resolve(strict=True).as_posix(),
+        "cuda_library_dir": cuda.resolve(strict=True).as_posix(),
+    }
+    if any(
+        not Path(value).is_dir() or Path(value).is_symlink()
+        for value in library_dirs.values()
+    ):
+        raise VerificationError(
+            "a independently derived runtime library directory is non-physical or absent"
+        )
+    candidates = [Path(path) for path in tool_paths.values()] + [python]
+    for directory in library_dirs.values():
+        candidates.extend(
+            sorted(
+                path
+                for path in Path(directory).rglob("*")
+                if path.is_file() and not path.is_symlink()
+            )
+        )
+    tool_runtime = sorted(
+        (_host_file_record(path) for path in candidates),
+        key=lambda record: record["logical_path"].encode("utf-8"),
+    )
+    if len({record["realpath"] for record in tool_runtime}) != len(tool_runtime):
+        raise VerificationError("independent tool/runtime inventory has duplicates")
+    return {
+        "tool_paths": tool_paths,
+        "library_dirs": library_dirs,
+        "gpu": _independently_selected_gpu(),
+        "tool_runtime": tool_runtime,
+    }
+
+
 def freeze_path(head: str) -> str:
     if not HEAD_RE.fullmatch(head):
         raise VerificationError("instrumentation head is not 40 lowercase hex")
@@ -623,6 +785,25 @@ def _verify_implementation_bindings(
                 )
 
 
+def _verify_host_execution_inputs(
+    controller: Mapping[str, Any], inventory: Mapping[str, Any], root: Path
+) -> None:
+    """Reject self-consistent host substitutions before inventory replay."""
+    independent_host = _independent_host_execution_inputs(root)
+    if controller["tool_paths"] != independent_host["tool_paths"]:
+        raise VerificationError("tool paths differ from independent which() selection")
+    if controller["library_dirs"] != independent_host["library_dirs"]:
+        raise VerificationError(
+            "library directories differ from independent Python/nvcc derivation"
+        )
+    if controller["gpu"] != independent_host["gpu"]:
+        raise VerificationError("GPU identity differs from independent NVML selection")
+    if inventory["tool_runtime"] != independent_host["tool_runtime"]:
+        raise VerificationError(
+            "tool/runtime inventory differs from independent host expansion"
+        )
+
+
 def _verify_controller_input(value: object, root: Path, head: str) -> None:
     if not isinstance(value, dict):
         raise VerificationError("phase_a_controller_input is not an object")
@@ -718,6 +899,7 @@ def _verify_controller_input(value: object, root: Path, head: str) -> None:
         or inventory.get("schema") != "h0_bound_inputs_v1"
     ):
         raise VerificationError("h0_bound_inputs_v1 shape drift")
+    _verify_host_execution_inputs(value, inventory, root)
     if value["sequence_input_digest"] != inventory.get("sequence", {}).get("digest"):
         raise VerificationError("controller sequence digest mismatch")
     repository = inventory["repository"]
@@ -1191,7 +1373,7 @@ def verify_authority_landing(
     before = _blob(root, freeze_commit, DECLARATION_PATH)
     after = _blob(root, execution, DECLARATION_PATH)
     event = re.compile(
-        rf"^\| [0-9]{{4}}-[0-9]{{2}}-[0-9]{{2}} \| `{head}` \| `{freeze_commit}` \| `SEALED` \|$"
+        rf"^\| (?P<date>[0-9]{{4}}-[0-9]{{2}}-[0-9]{{2}}) \| `{head}` \| `{freeze_commit}` \| `SEALED` \|$"
     )
     if not after.startswith(before):
         raise VerificationError("seal declaration was not append-only")
@@ -1202,14 +1384,17 @@ def verify_authority_landing(
     lines = after.decode("utf-8", errors="strict").splitlines()
     # The grammar allows the review date but nothing else; checking the suffix
     # directly keeps the owner event to one newly appended line.
-    if (
-        suffix_text.count("\n") != 1
-        or not suffix_text.endswith("\n")
-        or not event.fullmatch(suffix_text[:-1])
-    ):
+    match = event.fullmatch(suffix_text[:-1]) if suffix_text.endswith("\n") else None
+    if suffix_text.count("\n") != 1 or not suffix_text.endswith("\n") or match is None:
         raise VerificationError(
             "seal row is missing, duplicated, wrong, or not the exact append"
         )
+    try:
+        datetime.date.fromisoformat(match.group("date"))
+    except ValueError as exc:
+        raise VerificationError(
+            "seal row date is not a valid ISO calendar date"
+        ) from exc
     if len([entry for entry in lines if event.fullmatch(entry)]) != 1:
         raise VerificationError("seal row is missing or duplicated")
     return {
