@@ -1680,3 +1680,129 @@ four argv vectors, synthetic evaluator vector, exact environment table,
 result matrix. Until an implementation passes those frozen admissions at a new
 instrumentation head and an owner records a new literal `SEALED`, H0 remains
 pre-seal, unexecuted, and without an H0 terminal.
+
+---
+
+## Amendment 7 Review Correction 2 — landing topology for v3 freeze and owner seal (2026-07-17)
+
+This is an **append-only sealability correction** to A7/RC1. A7.3 said that
+the execution checkout, the instrumentation head named by v3, and the owner
+event had to be the same commit. That cannot be committed: the v3 artifact and
+the appended owner event necessarily create commits after the implementation
+commit whose blobs they review. RC2 replaces only that impossible checkout
+relation. It changes no executable/runtime-policy/controller implementation
+authority, policy target, observer ABI, threshold, terminal, registry, or
+execution choice, and authorizes neither a freeze, a seal, nor execution.
+
+### A7.RC2.1 Four names and the sole non-self-referential chain
+
+For one future invocation define these four distinct commit identities:
+
+| Name | Meaning | May contain executable/runtime-policy/controller changes? |
+| --- | --- | --- |
+| `instrumentation_head` (`I`) | the reviewed implementation commit; every executable, runtime-policy, schema, controller, child, verifier, confinement, and admitted-source blob is read from this tree | yes, and it is the **only** such authority |
+| `freeze_commit` (`F`) | the direct child of `I` that adds the canonical v3 artifact | no |
+| `seal_commit` (`S`) | the direct child of `F` that appends the one owner event below | no |
+| `execution_checkout` (`E`) | the clean checkout from which the sole operator argv is launched | `E` is exactly `S`; no |
+
+The only admissible topology is:
+
+```text
+I --parent--> F --parent--> S (= E)
+```
+
+`F` and `S` are ordinary one-parent commits; `I` may be any reviewable commit
+whose tree satisfies the frozen provenance rules. `F` and `S` are not stored
+inside the v3 artifact as self-referential fields: they are derived mechanically
+at execution as `F = S^` and `I = F^`. Thus the artifact can be serialized at
+`I`, committed as `F`, and then reviewed/sealed in `S` without a commit-hash
+fixed point. A missing object, merge parent, non-direct relation, ambiguous
+parent, or any other topology is `provenance_invalid` before build.
+
+### A7.RC2.2 Exact post-head delta and tracked artifact location
+
+Let `<I>` be the 40-lowercase-hex `instrumentation_head`. The assembler's only
+output path is:
+
+```text
+docs/modules/semantic/research/evidence/h0_preseal_freeze_<I>/h0_preseal_freeze_v3.json
+```
+
+It writes canonical UTF-8 JSON only when the checkout is clean at `I`; it never
+chooses an output directory, emits a seal, or launches a controller. `F` differs
+from `I` at exactly this one regular non-symlink tracked path, and `S` differs
+from `F` at exactly this declaration path:
+
+```text
+docs/modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md
+```
+
+No other path, including a preset, lockfile, build manifest, controller path,
+runtime path, schema, verifier, test, or governance path, is admitted in either
+post-head delta. The production build, runtime import graph, preset resolution,
+and controller executable path consume blobs from `I`; the two post-head paths
+are read only by preflight to obtain the freeze and owner event. Any extra,
+renamed, missing, symlinked, non-regular, or byte-drifting path fails closed.
+
+### A7.RC2.3 Literal owner-event grammar and execution admission
+
+`S` appends exactly one line (with a final LF) to the declaration bytes in `F`:
+
+```text
+| YYYY-MM-DD | `<I>` | `<F>` | `SEALED` |
+```
+
+`YYYY-MM-DD` is an ISO calendar date recorded for review provenance only; it
+does not select an executable. The four cells, backticks, upper-case literal
+`SEALED`, order, and the exact `I`/`F` values are mandatory. The declaration
+must contain exactly one line matching this grammar for the derived pair.
+The controller independently verifies the direct-parent chain, both exact diffs,
+the tracked canonical v3 bytes at `F` and `S`, the line append, all v3 bindings,
+and clean `HEAD == S` before it reads a build input. It derives `E == S`; it
+must never compare `HEAD` to `I`.
+
+The v3 artifact records `h0_authority_landing_v1`, its deterministic artifact
+path, the declaration path, and the ordered two-path post-head allowlist, but
+not `F` or `S`. Its controller input retains `I` as the repository/runtime
+inventory authority. Preflight admits the two independently verified governance
+records as the sole overlay; a change to either after validation is also a
+bound-input mutation. Unknown members, duplicate events, a second v3 artifact,
+a foreign artifact path, or a relation that cannot be derived from the current
+checkout are all fail-closed.
+
+### A7.RC2.4 State effect
+
+This correction makes the future landing sequence mechanically satisfiable; it
+does not select `I`, create `F`, write `S`, or grant Phase-A authority. Until
+the unique v3 assembler and its independent verifier accept all admissions and
+an owner subsequently commits the literal event in the exact chain above, H0
+remains Route 0′ pre-seal engineering.
+
+### A7.RC2.5 v3 implementation-binding universe
+
+The v3 implementation-binding array is ordered and has exactly the following
+repository-relative regular blobs. The identity cell is the schema/version
+identity where the artifact has one; no other implementation path is admitted
+or required by v3.
+
+| Order | Path | Identity |
+| --- | --- | --- |
+| 1 | `scripts/tools/run_h0_phase_a.py` | `h0_phase_a_controller_v1` |
+| 2 | `scripts/tools/run_h0_phase_a_child.py` | `h0_phase_a_child_v1` |
+| 3 | `scripts/tools/h0_phase_a_execution_schema_v1.json` | `h0_phase_a_execution_v1` |
+| 4 | `scripts/tools/h0_runtime_confinement.py` | `h0_runtime_confinement_plan_v1` |
+| 5 | `scripts/tools/verify_h0_phase_a.py` | `h0_phase_a_verifier_v1` |
+| 6 | `scripts/tools/export_headline_bridge_decision_trace.py` | `h0_bridge_decision_trace_v2` |
+| 7 | `scripts/tools/verify_headline_bridge_decision_trace.py` | `h0_bridge_decision_trace_v2` |
+| 8 | `scripts/tools/build_h0_preseal_freeze.py` | `h0_preseal_freeze_v3` |
+| 9 | `scripts/tools/check_h0_bridge_decision_trace_contract.py` | `h0_bridge_decision_trace_contract_v1` |
+| 10 | `scripts/tools/h0_bridge_decision_trace_schema_v2.json` | `h0_bridge_decision_trace_v2` |
+| 11 | `scripts/tools/verify_h0_preseal_freeze.py` | `h0_preseal_freeze_v3_verifier_v1` |
+
+For every row v3 records the path, identity, Git mode/type/object ID, byte
+length, and file-byte SHA-256 from `I`. The independent verifier reconstructs
+the table from the declaration literals, Git tree and filesystem and rejects a
+missing, extra, reordered, symlinked, non-blob, or byte-drifting row. This table
+does not elevate any confinement backend, ingress policy, or trace scope to a
+declaration constant; those remain implementation mechanisms bound only through
+these file records.
