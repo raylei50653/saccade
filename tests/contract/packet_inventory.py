@@ -39,10 +39,11 @@ EXTERNAL_ARTIFACT_HASH_EXCEPTIONS: dict[str, str] = {
 }
 
 
-def evidence_dirs() -> list[Path]:
-    if not EVIDENCE_ROOT.is_dir():
+def evidence_entries(evidence_root: Path = EVIDENCE_ROOT) -> list[Path]:
+    """Return every top-level evidence-root entry without filtering by type."""
+    if not evidence_root.is_dir() or evidence_root.is_symlink():
         return []
-    return sorted(p for p in EVIDENCE_ROOT.iterdir() if p.is_dir())
+    return sorted(evidence_root.iterdir())
 
 
 def evidence_kind(evidence_dir: Path) -> str | None:
@@ -60,28 +61,34 @@ def evidence_kind(evidence_dir: Path) -> str | None:
     return None
 
 
-def generic_packet_dirs() -> list[Path]:
+def _is_physical_directory(entry: Path) -> bool:
+    return entry.is_dir() and not entry.is_symlink()
+
+
+def evidence_entry_errors(entry: Path) -> list[str]:
+    """Return fail-closed classification/type errors for an evidence entry."""
+    kind = evidence_kind(entry)
+    if kind is None:
+        return [f"{entry.name}: unknown evidence entry kind"]
+    if not _is_physical_directory(entry):
+        return [f"{entry.name}: {kind} container must be a physical directory"]
+    return []
+
+
+def _physical_dirs_of_kind(kind: str) -> list[Path]:
     return [
-        evidence_dir
-        for evidence_dir in evidence_dirs()
-        if evidence_kind(evidence_dir) == GENERIC_RESEARCH_PACKET
+        entry
+        for entry in evidence_entries()
+        if evidence_kind(entry) == kind and _is_physical_directory(entry)
     ]
+
+
+def generic_packet_dirs() -> list[Path]:
+    return _physical_dirs_of_kind(GENERIC_RESEARCH_PACKET)
 
 
 def h0_preseal_freeze_v3_dirs() -> list[Path]:
-    return [
-        evidence_dir
-        for evidence_dir in evidence_dirs()
-        if evidence_kind(evidence_dir) == H0_PRESEAL_FREEZE_V3_ARTIFACT
-    ]
-
-
-def unclassified_evidence_dirs() -> list[Path]:
-    return [
-        evidence_dir
-        for evidence_dir in evidence_dirs()
-        if evidence_kind(evidence_dir) is None
-    ]
+    return _physical_dirs_of_kind(H0_PRESEAL_FREEZE_V3_ARTIFACT)
 
 
 def h0_preseal_freeze_v3_layout_errors(evidence_dir: Path) -> list[str]:
@@ -91,8 +98,11 @@ def h0_preseal_freeze_v3_layout_errors(evidence_dir: Path) -> list[str]:
     remains the authority for artifact contents, identity binding, and v3
     canonicality.
     """
-    if not evidence_dir.is_dir():
-        return [f"{evidence_dir.name}: governance artifact directory missing"]
+    if not _is_physical_directory(evidence_dir):
+        return [
+            f"{evidence_dir.name}: governance artifact container must be a "
+            "physical directory"
+        ]
 
     names = {entry.name for entry in evidence_dir.iterdir()}
     expected = {H0_PRESEAL_FREEZE_V3_FILENAME}

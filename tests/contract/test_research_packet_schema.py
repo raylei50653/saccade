@@ -18,20 +18,23 @@ from tests.contract.packet_inventory import (
     H0_PRESEAL_FREEZE_V3_ARTIFACT,
     H0_PRESEAL_FREEZE_V3_FILENAME,
     checksum_inventory,
+    evidence_entries,
+    evidence_entry_errors,
     evidence_kind,
     h0_preseal_freeze_v3_dirs,
     h0_preseal_freeze_v3_layout_errors,
     load_manifest,
     packet_dirs,
     packet_ids,
-    unclassified_evidence_dirs,
 )
 
 
 def test_evidence_root_exists() -> None:
     # Deliberately NOT a skip: losing or renaming the evidence root must
     # fail CI, otherwise the whole packet contract is fail-open.
-    assert EVIDENCE_ROOT.is_dir(), f"evidence root missing: {EVIDENCE_ROOT}"
+    assert EVIDENCE_ROOT.is_dir() and not EVIDENCE_ROOT.is_symlink(), (
+        f"evidence root missing or not a physical directory: {EVIDENCE_ROOT}"
+    )
 
 
 def test_packet_set_nonempty() -> None:
@@ -41,12 +44,13 @@ def test_packet_set_nonempty() -> None:
     )
 
 
-def test_all_evidence_directories_are_classified() -> None:
-    unknown = unclassified_evidence_dirs()
-    assert not unknown, (
-        "evidence directories must be explicitly classified as a dated generic "
-        f"packet or a governance artifact; unknown: {[path.name for path in unknown]}"
-    )
+def test_all_evidence_root_entries_are_classified_and_physical() -> None:
+    violations: dict[str, list[str]] = {}
+    for entry in evidence_entries():
+        errors = evidence_entry_errors(entry)
+        if errors:
+            violations[entry.name] = errors
+    assert not violations, f"invalid evidence-root entries: {violations}"
 
 
 def test_exact_h0_preseal_freeze_v3_dirs_are_governance_artifacts() -> None:
@@ -108,12 +112,72 @@ def test_evidence_kind_is_explicit_and_fail_closed(
     assert evidence_kind(tmp_path / name) == expected_kind
 
 
+def test_evidence_entries_include_all_top_level_entry_types(tmp_path) -> None:
+    (tmp_path / "study_20260717").mkdir()
+    (tmp_path / "not_a_directory").write_text("not a directory")
+
+    assert {entry.name for entry in evidence_entries(tmp_path)} == {
+        "not_a_directory",
+        "study_20260717",
+    }
+
+
+@pytest.mark.parametrize(
+    "target_kind",
+    ["directory", "file", "missing"],
+    ids=["directory-symlink", "file-symlink", "broken-symlink"],
+)
+def test_exact_h0_entry_symlinks_are_not_dropped_and_are_rejected(
+    tmp_path, target_kind: str
+) -> None:
+    entry = tmp_path / ("h0_preseal_freeze_" + "a" * 40)
+    target = tmp_path / "target"
+    if target_kind == "directory":
+        target.mkdir()
+    elif target_kind == "file":
+        target.write_text("not a directory")
+    else:
+        target = tmp_path / "missing"
+    entry.symlink_to(target, target_is_directory=target_kind == "directory")
+
+    assert entry in evidence_entries(tmp_path)
+    assert evidence_entry_errors(entry)
+
+
+def test_exact_h0_regular_file_is_not_dropped_and_is_rejected(tmp_path) -> None:
+    entry = tmp_path / ("h0_preseal_freeze_" + "a" * 40)
+    entry.write_text("not a directory")
+
+    assert entry in evidence_entries(tmp_path)
+    assert evidence_entry_errors(entry)
+
+
+def test_generic_packet_container_must_be_a_physical_directory(tmp_path) -> None:
+    target = tmp_path / "target"
+    target.mkdir()
+    entry = tmp_path / "study_20260717"
+    entry.symlink_to(target, target_is_directory=True)
+
+    assert evidence_kind(entry) == GENERIC_RESEARCH_PACKET
+    assert evidence_entry_errors(entry)
+
+
 def test_h0_preseal_freeze_v3_layout_accepts_only_canonical_artifact(tmp_path) -> None:
     evidence_dir = tmp_path / ("h0_preseal_freeze_" + "a" * 40)
     evidence_dir.mkdir()
     (evidence_dir / H0_PRESEAL_FREEZE_V3_FILENAME).write_text("{}")
 
     assert h0_preseal_freeze_v3_layout_errors(evidence_dir) == []
+
+
+def test_h0_preseal_freeze_v3_layout_rejects_artifact_file_symlink(tmp_path) -> None:
+    evidence_dir = tmp_path / ("h0_preseal_freeze_" + "a" * 40)
+    evidence_dir.mkdir()
+    target = tmp_path / "artifact-target.json"
+    target.write_text("{}")
+    (evidence_dir / H0_PRESEAL_FREEZE_V3_FILENAME).symlink_to(target)
+
+    assert h0_preseal_freeze_v3_layout_errors(evidence_dir)
 
 
 @pytest.mark.parametrize(
