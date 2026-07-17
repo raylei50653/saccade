@@ -241,8 +241,6 @@ def install_access_guard(
 
 def _assert_os_confinement(root: Path, invocation: Mapping[str, Any]) -> None:
     """Prove that the pre-exec OS boundary denies its unbound canary."""
-    if invocation.get("confinement_backend") != "landlock_seccomp_ptrace_v1":
-        raise ChildContractError("runtime confinement backend mismatch")
     plan_digest = invocation.get("confinement_plan_digest")
     if (
         not isinstance(plan_digest, str)

@@ -167,19 +167,15 @@ C_PATHS = (
     "runs/00_capture_off/invocation.json",
     "runs/00_capture_off/stdout.log",
     "runs/00_capture_off/stderr.log",
-    "runs/00_capture_off/runtime_inputs.json",
     "runs/01_capture_on_1/invocation.json",
     "runs/01_capture_on_1/stdout.log",
     "runs/01_capture_on_1/stderr.log",
-    "runs/01_capture_on_1/runtime_inputs.json",
     "runs/02_capture_on_2/invocation.json",
     "runs/02_capture_on_2/stdout.log",
     "runs/02_capture_on_2/stderr.log",
-    "runs/02_capture_on_2/runtime_inputs.json",
     "runs/03_capture_on_3/invocation.json",
     "runs/03_capture_on_3/stdout.log",
     "runs/03_capture_on_3/stderr.log",
-    "runs/03_capture_on_3/runtime_inputs.json",
     "verification/aggregate.json",
 )
 D_PATHS = (
@@ -297,6 +293,9 @@ FORBIDDEN_SELECTOR_KEYS = frozenset(
         "H0_PHASE_B",
     }
 )
+# Implementation mechanism for RC1.2/RC1.3 enforcement, bound only through the
+# v3 file hashes.  These names are not RC1 declaration constants and must never
+# be published through execution_constants or pinned by the execution schema.
 RUNTIME_CONFINEMENT_BACKEND = "landlock_seccomp_ptrace_v1"
 RUNTIME_INGRESS_POLICY = "deny_external_bytes_v1"
 RUNTIME_TRACE_SCOPE = ("execve", "execveat", "mmap", "open", "openat", "openat2")
@@ -982,9 +981,6 @@ def execution_constants(root: Path) -> dict[str, Any]:
             for result, (required, forbidden) in RESULT_MATRIX.items()
         },
         "trace_capacities": list(TRACE_CAPACITIES),
-        "runtime_confinement_backend": RUNTIME_CONFINEMENT_BACKEND,
-        "runtime_ingress_policy": RUNTIME_INGRESS_POLICY,
-        "runtime_trace_scope": list(RUNTIME_TRACE_SCOPE),
         "v_paths": list(V_PATHS),
     }
 
@@ -1522,14 +1518,17 @@ def _runtime_attestation_details(
 
 
 def _collect_runtime_attestation(
-    process: Any, runtime_plan: Mapping[str, Any], runtime_path: Path
+    process: Any,
+    runtime_plan: Mapping[str, Any],
+    run_id: str,
+    attestations: dict[str, Mapping[str, Any]],
 ) -> tuple[Mapping[str, Any], str, bool]:
     attestation, runtime_digest, valid = _runtime_attestation_details(
         process, runtime_plan
     )
-    if runtime_path.exists() or runtime_path.is_symlink():
-        raise ContractError("duplicate or unsafe runtime input attestation")
-    _write_canonical_fsync(runtime_path, attestation)
+    if run_id in attestations:
+        raise ContractError("duplicate runtime input attestation")
+    attestations[run_id] = attestation
     return attestation, runtime_digest, valid
 
 
@@ -1542,8 +1541,11 @@ def launch_child(
     monitor: BoundInputMonitor | None = None,
     popen_factory: Callable[..., subprocess.Popen[bytes]] = subprocess.Popen,
     clock: Callable[[], float] = time.monotonic,
+    attestations: dict[str, Mapping[str, Any]] | None = None,
 ) -> tuple[int, dict[str, Any]]:
     """Create one fixed invocation and execute one RC1.1 child process."""
+    if attestations is None:
+        attestations = {}
     root = Path(contract["repository_root"])
     incomplete = root / contract["incomplete_root"]
     run_dir = incomplete / "runs" / run_id
@@ -1569,7 +1571,6 @@ def launch_child(
     child_contract = {
         "bound_inputs_digest": contract["bound_inputs"]["digest"],
         "capture_run_uuid": str(uuid.uuid4()),
-        "confinement_backend": RUNTIME_CONFINEMENT_BACKEND,
         "confinement_plan_digest": None,
         "confinement_probe_passed": None,
         "document_type": "child_invocation",
@@ -1673,7 +1674,7 @@ def launch_child(
             if runtime_plan is not None:
                 _attestation, runtime_digest, valid_runtime = (
                     _collect_runtime_attestation(
-                        process, runtime_plan, run_dir / "runtime_inputs.json"
+                        process, runtime_plan, run_id, attestations
                     )
                 )
                 current = read_canonical_json(invocation_path)
@@ -1701,7 +1702,7 @@ def launch_child(
             if runtime_plan is not None:
                 _attestation, runtime_digest, _valid_runtime = (
                     _collect_runtime_attestation(
-                        process, runtime_plan, run_dir / "runtime_inputs.json"
+                        process, runtime_plan, run_id, attestations
                     )
                 )
                 current = read_canonical_json(invocation_path)
@@ -1726,9 +1727,7 @@ def launch_child(
     runtime_attestation: Mapping[str, Any] | None = None
     if runtime_plan is not None:
         runtime_attestation, runtime_digest, valid_runtime = (
-            _collect_runtime_attestation(
-                process, runtime_plan, run_dir / "runtime_inputs.json"
-            )
+            _collect_runtime_attestation(process, runtime_plan, run_id, attestations)
         )
         if not valid_runtime:
             rejected = dict(child_contract)
@@ -2521,7 +2520,6 @@ def _ensure_not_run_slots(contract: Mapping[str, Any], incomplete: Path) -> None
             value = {
                 "bound_inputs_digest": contract["bound_inputs"]["digest"],
                 "capture_run_uuid": str(uuid.uuid4()),
-                "confinement_backend": RUNTIME_CONFINEMENT_BACKEND,
                 "confinement_plan_digest": None,
                 "confinement_probe_passed": None,
                 "document_type": "child_invocation",
@@ -2670,12 +2668,15 @@ def _finalize_bundle_once(
     comparison: Mapping[str, Any] | None,
     build_identity: Mapping[str, Any] | None,
     mutation_events: Sequence[Mapping[str, Any]],
+    runtime_attestations: Mapping[str, Mapping[str, Any]] | None = None,
     clock: Callable[[], float] = time.monotonic,
     enforce_deadline: bool = True,
     publish: bool = True,
 ) -> Path:
     if publish and not enforce_deadline:
         raise ContractError("publication requires active deadline admission")
+    if runtime_attestations is None:
+        runtime_attestations = {}
 
     def admit() -> None:
         if enforce_deadline:
@@ -2709,34 +2710,36 @@ def _finalize_bundle_once(
     _remove_transient_run_trees(incomplete)
     admit()
     child_runtime_inputs = []
-    for run_id in RUN_IDS:
-        invocation = read_canonical_json(
-            incomplete / "runs" / run_id / "invocation.json"
-        )
-        runtime_path = incomplete / "runs" / run_id / "runtime_inputs.json"
-        runtime_state = (
-            read_canonical_json(runtime_path)["state"]
-            if runtime_path.exists()
-            else "not_produced"
-        )
-        child_runtime_inputs.append(
-            {
-                "confinement_plan_digest": invocation["confinement_plan_digest"],
-                "run_id": run_id,
-                "runtime_inputs_digest": invocation["runtime_inputs_digest"],
-                "state": runtime_state,
-            }
-        )
+    if build_identity:
+        for run_id in RUN_IDS:
+            invocation = read_canonical_json(
+                incomplete / "runs" / run_id / "invocation.json"
+            )
+            attestation = runtime_attestations.get(run_id)
+            if attestation is not None:
+                if invocation["runtime_inputs_digest"] != sha256_bytes(
+                    canonical_json_bytes(attestation)
+                ):
+                    raise ContractError(f"runtime attestation digest drift: {run_id}")
+                record: Mapping[str, Any] = attestation
+            else:
+                if invocation["runtime_inputs_digest"] is not None:
+                    raise ContractError(
+                        f"recorded runtime digest lacks its attestation: {run_id}"
+                    )
+                record = {
+                    "blocking_result": result,
+                    "schema": "h0_runtime_inputs_v1",
+                    "state": "not_produced",
+                }
+            child_runtime_inputs.append({"run_id": run_id, "runtime_inputs": record})
     identities: dict[str, Mapping[str, Any]] = {
         "build_identity.json": build_identity or _not_produced(result),
         "runtime_identity.json": {
             "bound_inputs_digest": contract["bound_inputs"]["digest"],
             "child_runtime_inputs": child_runtime_inputs,
-            "confinement_backend": RUNTIME_CONFINEMENT_BACKEND,
-            "ingress_policy": RUNTIME_INGRESS_POLICY,
             "library_dirs": contract["library_dirs"],
             "resolved_policy_fingerprint": POLICY_FINGERPRINT,
-            "runtime_trace_scope": list(RUNTIME_TRACE_SCOPE),
             "state": "complete",
             "tool_runtime": contract["bound_inputs"]["tool_runtime"],
         }
@@ -2783,18 +2786,6 @@ def _finalize_bundle_once(
         incomplete / "input_binding.json",
         input_binding,
     )
-    for run_id in RUN_IDS:
-        runtime_path = incomplete / "runs" / run_id / "runtime_inputs.json"
-        if not runtime_path.exists():
-            finish(
-                _write_canonical_fsync,
-                runtime_path,
-                {
-                    "blocking_result": result,
-                    "schema": "h0_runtime_inputs_v1",
-                    "state": "not_produced",
-                },
-            )
     children = [
         read_canonical_json(incomplete / "runs" / run_id / "invocation.json")
         for run_id in RUN_IDS
@@ -2907,14 +2898,6 @@ def _reset_incomplete_finalization(incomplete: Path) -> None:
         if path.is_symlink() or not path.is_file():
             raise ContractError(f"unsafe derived publication member: {relative}")
         path.unlink()
-    for run_id in RUN_IDS:
-        path = incomplete / "runs" / run_id / "runtime_inputs.json"
-        if not path.exists():
-            continue
-        value = read_canonical_json(path)
-        if not isinstance(value, dict) or value.get("state") != "not_produced":
-            continue
-        path.unlink()
 
 
 def _finalize_bundle(
@@ -2927,6 +2910,7 @@ def _finalize_bundle(
     comparison: Mapping[str, Any] | None,
     build_identity: Mapping[str, Any] | None,
     mutation_events: Sequence[Mapping[str, Any]],
+    runtime_attestations: Mapping[str, Mapping[str, Any]] | None = None,
     clock: Callable[[], float] = time.monotonic,
 ) -> str:
     """Publish in-deadline, or leave a verified timeout envelope staged."""
@@ -2940,6 +2924,7 @@ def _finalize_bundle(
             comparison=comparison,
             build_identity=build_identity,
             mutation_events=mutation_events,
+            runtime_attestations=runtime_attestations,
             clock=clock,
         )
         return result
@@ -2963,6 +2948,7 @@ def _finalize_bundle(
             comparison=None,
             build_identity=build_identity,
             mutation_events=mutation_events,
+            runtime_attestations=runtime_attestations,
             clock=clock,
             enforce_deadline=False,
             publish=False,
@@ -3001,6 +2987,7 @@ def execute_controller(
     stage = "preflight"
     monitor: BoundInputMonitor | None = None
     mutation_events: list[dict[str, Any]] = []
+    runtime_attestations: dict[str, Mapping[str, Any]] = {}
     try:
         preflight_controller_input(contract, root, started=started, clock=clock)
         tools = SCHEMA_PATH.parent
@@ -3117,6 +3104,7 @@ def execute_controller(
                     monitor=monitor,
                     popen_factory=popen_factory,
                     clock=clock,
+                    attestations=runtime_attestations,
                 )
             except BaseException as exc:
                 child_error = exc
@@ -3253,6 +3241,7 @@ def execute_controller(
         comparison=comparison,
         build_identity=build_identity,
         mutation_events=mutation_events,
+        runtime_attestations=runtime_attestations,
         clock=clock,
     )
     return result

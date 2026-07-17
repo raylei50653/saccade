@@ -177,19 +177,15 @@ C_PATHS = (
     "runs/00_capture_off/invocation.json",
     "runs/00_capture_off/stdout.log",
     "runs/00_capture_off/stderr.log",
-    "runs/00_capture_off/runtime_inputs.json",
     "runs/01_capture_on_1/invocation.json",
     "runs/01_capture_on_1/stdout.log",
     "runs/01_capture_on_1/stderr.log",
-    "runs/01_capture_on_1/runtime_inputs.json",
     "runs/02_capture_on_2/invocation.json",
     "runs/02_capture_on_2/stdout.log",
     "runs/02_capture_on_2/stderr.log",
-    "runs/02_capture_on_2/runtime_inputs.json",
     "runs/03_capture_on_3/invocation.json",
     "runs/03_capture_on_3/stdout.log",
     "runs/03_capture_on_3/stderr.log",
-    "runs/03_capture_on_3/runtime_inputs.json",
     "verification/aggregate.json",
 )
 D_PATHS = (
@@ -533,13 +529,6 @@ def _verify_constants(controller: Mapping[str, Any]) -> None:
         raise VerificationError("resolved model/engine input set mismatch")
     if constants["required_repository_inputs"] != list(REQUIRED_REPOSITORY_INPUTS):
         raise VerificationError("required controller/runtime authority set mismatch")
-    if (
-        constants["runtime_confinement_backend"] != "landlock_seccomp_ptrace_v1"
-        or constants["runtime_ingress_policy"] != "deny_external_bytes_v1"
-        or constants["runtime_trace_scope"]
-        != ["execve", "execveat", "mmap", "open", "openat", "openat2"]
-    ):
-        raise VerificationError("runtime confinement declaration mismatch")
     if constants["checkpoints"] != list(CHECKPOINTS):
         raise VerificationError("bound-input checkpoint order mismatch")
     if constants["deadline_seconds"] != 3600 or constants["trace_capacities"] != [
@@ -636,8 +625,6 @@ def _verify_children(evidence: Mapping[str, Any]) -> None:
             environment
         ):
             raise VerificationError("child environment table/digest mismatch")
-        if child["confinement_backend"] != "landlock_seccomp_ptrace_v1":
-            raise VerificationError("child runtime confinement backend mismatch")
         if child["state"] == "completed" and (
             child["confinement_probe_passed"] is not True
             or child["confinement_plan_digest"] is None
@@ -1726,19 +1713,12 @@ def verify_evidence_root(root: Path) -> dict[str, Any]:
         path = root / relative
         if hashlib.sha256(path.read_bytes()).hexdigest() != hash_value:
             raise VerificationError(f"checksum mismatch: {relative}")
-    runtime_documents: list[Mapping[str, Any]] = []
     for run_id, embedded in zip(RUN_IDS, manifest["child_invocations"], strict=True):
         actual = load_json(
             root / "runs" / run_id / "invocation.json", canonical_file=True
         )
         if actual != embedded:
             raise VerificationError(f"manifest/child invocation mismatch: {run_id}")
-        runtime_value = load_json(
-            root / "runs" / run_id / "runtime_inputs.json", canonical_file=True
-        )
-        if not isinstance(runtime_value, dict):
-            raise VerificationError("runtime input artifact is not an object")
-        runtime_documents.append(runtime_value)
     if (
         load_json(root / "input_binding.json", canonical_file=True)
         != manifest["input_binding"]
@@ -1800,9 +1780,41 @@ def verify_evidence_root(root: Path) -> dict[str, Any]:
             raise VerificationError(
                 "rejected extension-load record has a non-provenance result"
             )
-        for invocation, runtime_value in zip(
-            manifest["child_invocations"], runtime_documents, strict=True
+        records = runtime_identity.get("child_runtime_inputs")
+        if (
+            set(runtime_identity)
+            != {
+                "bound_inputs_digest",
+                "child_runtime_inputs",
+                "library_dirs",
+                "resolved_policy_fingerprint",
+                "state",
+                "tool_runtime",
+            }
+            or runtime_identity["state"] != "complete"
+            or runtime_identity["bound_inputs_digest"]
+            != manifest["controller_input"]["bound_inputs"]["digest"]
+            or runtime_identity["library_dirs"]
+            != manifest["controller_input"]["library_dirs"]
+            or runtime_identity["resolved_policy_fingerprint"]
+            != "c7a6dbb35168cba75249b7f2c67d8455b6f634732493e455a4bb920aab6d7782"
+            or runtime_identity["tool_runtime"]
+            != manifest["controller_input"]["bound_inputs"]["tool_runtime"]
+            or not isinstance(records, list)
+            or any(
+                not isinstance(record, dict)
+                or set(record) != {"run_id", "runtime_inputs"}
+                for record in records
+            )
+            or [record["run_id"] for record in records] != list(RUN_IDS)
         ):
+            raise VerificationError("runtime identity differs from controller binding")
+        for invocation, record in zip(
+            manifest["child_invocations"], records, strict=True
+        ):
+            runtime_value = record["runtime_inputs"]
+            if not isinstance(runtime_value, dict):
+                raise VerificationError("runtime input attestation is not an object")
             if runtime_value.get("state") in {"complete", "rejected"}:
                 _verify_runtime_inputs(
                     runtime_value,
@@ -1820,42 +1832,7 @@ def verify_evidence_root(root: Path) -> dict[str, Any]:
                 or invocation["runtime_inputs_digest"] is not None
             ):
                 raise VerificationError("runtime input not-produced status mismatch")
-        expected_runtime = {
-            "bound_inputs_digest": manifest["controller_input"]["bound_inputs"][
-                "digest"
-            ],
-            "child_runtime_inputs": [
-                {
-                    "confinement_plan_digest": invocation["confinement_plan_digest"],
-                    "run_id": run_id,
-                    "runtime_inputs_digest": invocation["runtime_inputs_digest"],
-                    "state": runtime_value["state"],
-                }
-                for run_id, invocation, runtime_value in zip(
-                    RUN_IDS,
-                    manifest["child_invocations"],
-                    runtime_documents,
-                    strict=True,
-                )
-            ],
-            "confinement_backend": "landlock_seccomp_ptrace_v1",
-            "ingress_policy": "deny_external_bytes_v1",
-            "library_dirs": manifest["controller_input"]["library_dirs"],
-            "resolved_policy_fingerprint": "c7a6dbb35168cba75249b7f2c67d8455b6f634732493e455a4bb920aab6d7782",
-            "runtime_trace_scope": [
-                "execve",
-                "execveat",
-                "mmap",
-                "open",
-                "openat",
-                "openat2",
-            ],
-            "state": "complete",
-            "tool_runtime": manifest["controller_input"]["bound_inputs"][
-                "tool_runtime"
-            ],
-        }
-        if runtime_identity != expected_runtime or gpu_identity != {
+        if gpu_identity != {
             **manifest["controller_input"]["gpu"],
             "state": "complete",
         }:
@@ -1863,11 +1840,6 @@ def verify_evidence_root(root: Path) -> dict[str, Any]:
                 "runtime/GPU identity differs from controller binding"
             )
     else:
-        expected_runtime_status = {
-            "blocking_result": manifest["result"],
-            "schema": "h0_runtime_inputs_v1",
-            "state": "not_produced",
-        }
         if (
             build_identity != blocking_status
             or runtime_identity != blocking_status
@@ -1876,8 +1848,6 @@ def verify_evidence_root(root: Path) -> dict[str, Any]:
             raise VerificationError(
                 "not-produced identity status has missing or unknown members"
             )
-        if any(value != expected_runtime_status for value in runtime_documents):
-            raise VerificationError("pre-build runtime input status mismatch")
         if manifest["result"] not in {
             "provenance_invalid",
             "build_failed",

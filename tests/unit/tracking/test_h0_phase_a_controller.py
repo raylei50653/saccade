@@ -159,7 +159,6 @@ def _children(controller: dict[str, object]) -> list[dict[str, object]]:
             {
                 "bound_inputs_digest": controller["bound_inputs"]["digest"],
                 "capture_run_uuid": f"00000000-0000-4000-8000-{index:012d}",
-                "confinement_backend": "landlock_seccomp_ptrace_v1",
                 "confinement_plan_digest": "1" * 64,
                 "confinement_probe_passed": True,
                 "document_type": "child_invocation",
@@ -789,6 +788,126 @@ def test_result_enum_and_matrix_must_agree() -> None:
         verifier.verify_evidence(value)
 
 
+# A7.RC1.4 literals, transcribed from the declaration document and never taken
+# from any implementation module.  These pin the frozen artifact universe so a
+# coordinated drift across controller/schema/verifier/tests cannot pass while
+# departing from the declaration authority.
+RC14_C_PATHS = (
+    "manifest.json",
+    "build_identity.json",
+    "runtime_identity.json",
+    "gpu_identity.json",
+    "input_binding.json",
+    "comparison.json",
+    "result.json",
+    "checksums.sha256",
+    "logs/00_cmake_configure.stdout.log",
+    "logs/00_cmake_configure.stderr.log",
+    "logs/01_cmake_build.stdout.log",
+    "logs/01_cmake_build.stderr.log",
+    "runs/00_capture_off/invocation.json",
+    "runs/00_capture_off/stdout.log",
+    "runs/00_capture_off/stderr.log",
+    "runs/01_capture_on_1/invocation.json",
+    "runs/01_capture_on_1/stdout.log",
+    "runs/01_capture_on_1/stderr.log",
+    "runs/02_capture_on_2/invocation.json",
+    "runs/02_capture_on_2/stdout.log",
+    "runs/02_capture_on_2/stderr.log",
+    "runs/03_capture_on_3/invocation.json",
+    "runs/03_capture_on_3/stdout.log",
+    "runs/03_capture_on_3/stderr.log",
+    "verification/aggregate.json",
+)
+RC14_D_PATHS = (
+    "runs/00_capture_off/policy_inventory.json",
+    "runs/00_capture_off/MOT17-04-SDP.txt",
+    "runs/01_capture_on_1/policy_inventory.json",
+    "runs/01_capture_on_1/MOT17-04-SDP.txt",
+    "runs/01_capture_on_1/packet.json",
+    "runs/02_capture_on_2/policy_inventory.json",
+    "runs/02_capture_on_2/MOT17-04-SDP.txt",
+    "runs/02_capture_on_2/packet.json",
+    "runs/03_capture_on_3/policy_inventory.json",
+    "runs/03_capture_on_3/MOT17-04-SDP.txt",
+    "runs/03_capture_on_3/packet.json",
+)
+RC14_V_PATHS = (
+    "runs/01_capture_on_1/packet_verification.json",
+    "runs/02_capture_on_2/packet_verification.json",
+    "runs/03_capture_on_3/packet_verification.json",
+)
+RC14_C_ONLY_RESULTS = (
+    "provenance_invalid",
+    "build_failed",
+    "extension_load_failed",
+    "runner_nonzero",
+    "runner_timeout",
+    "serialization_failed",
+    "artifact_missing_or_unreadable",
+    "unclassified_execution_failure",
+)
+
+
+def test_rc14_declaration_authority_pins_the_frozen_artifact_universe() -> None:
+    assert len(RC14_C_PATHS) == 25
+    assert len(RC14_D_PATHS) == 11
+    assert len(RC14_V_PATHS) == 3
+    assert parent.C_PATHS == RC14_C_PATHS
+    assert parent.D_PATHS == RC14_D_PATHS
+    assert parent.V_PATHS == RC14_V_PATHS
+    assert verifier.C_PATHS == RC14_C_PATHS
+    assert verifier.D_PATHS == RC14_D_PATHS
+    assert verifier.V_PATHS == RC14_V_PATHS
+    expected_matrix = {
+        result: {
+            "forbidden": list(RC14_D_PATHS + RC14_V_PATHS),
+            "required": list(RC14_C_PATHS),
+        }
+        for result in RC14_C_ONLY_RESULTS
+    }
+    expected_matrix["capture_perturbs_policy"] = {
+        "forbidden": list(RC14_V_PATHS),
+        "required": list(RC14_C_PATHS + RC14_D_PATHS),
+    }
+    for result in ("packet_invalid", "phase_a_pass"):
+        expected_matrix[result] = {
+            "forbidden": [],
+            "required": list(RC14_C_PATHS + RC14_D_PATHS + RC14_V_PATHS),
+        }
+    assert parent.execution_constants(ROOT)["result_matrix"] == expected_matrix
+    assert verifier.expected_matrix() == expected_matrix
+
+
+def test_rc14_execution_schema_encodes_only_the_declared_universe() -> None:
+    schema = verifier._schema_document()
+    constants = schema["$defs"]["execution_constants"]
+    assert constants["properties"]["c_paths"]["minItems"] == 25
+    assert constants["properties"]["c_paths"]["maxItems"] == 25
+    assert constants["properties"]["d_paths"]["minItems"] == 11
+    assert constants["properties"]["d_paths"]["maxItems"] == 11
+    assert constants["properties"]["v_paths"]["minItems"] == 3
+    assert constants["properties"]["v_paths"]["maxItems"] == 3
+    # RC1 declares no runtime-confinement constants; the backend, ingress
+    # policy, and trace scope are implementation mechanism bound only by the
+    # v3 file hashes and must not be published or schema-pinned.
+    published = parent.execution_constants(ROOT)
+    for key in (
+        "runtime_confinement_backend",
+        "runtime_ingress_policy",
+        "runtime_trace_scope",
+    ):
+        assert key not in published
+        assert key not in constants["properties"]
+        assert key not in constants["required"]
+    child_schema = schema["$defs"]["child_invocation"]
+    assert "confinement_backend" not in child_schema["properties"]
+    assert "confinement_backend" not in child_schema["required"]
+    universe = RC14_C_PATHS + RC14_D_PATHS + RC14_V_PATHS
+    assert len(set(universe)) == len(universe)
+    assert not any(path.endswith("runtime_inputs.json") for path in universe)
+
+
 @pytest.mark.parametrize(
     "argv",
     [
@@ -1282,11 +1401,6 @@ def _write_c_only_root(root: Path) -> None:
     }
     for invocation in evidence["child_invocations"]:
         json_values[f"runs/{invocation['run_id']}/invocation.json"] = invocation
-        json_values[f"runs/{invocation['run_id']}/runtime_inputs.json"] = {
-            "blocking_result": "build_failed",
-            "schema": "h0_runtime_inputs_v1",
-            "state": "not_produced",
-        }
     for relative in parent.C_PATHS:
         if relative == "checksums.sha256":
             continue
@@ -1396,7 +1510,6 @@ def _write_complete_synthetic_root(root: Path, result: str) -> None:
         parent.RUN_IDS, evidence["child_invocations"], strict=True
     ):
         json_values[f"runs/{run_id}/invocation.json"] = invocation
-        json_values[f"runs/{run_id}/runtime_inputs.json"] = {"state": "complete"}
         inventory = _empty_policy_inventory(
             run_id, perturb_policy=result == "capture_perturbs_policy"
         )
@@ -1428,25 +1541,11 @@ def _write_complete_synthetic_root(root: Path, result: str) -> None:
             "runtime_identity.json": {
                 "bound_inputs_digest": controller["bound_inputs"]["digest"],
                 "child_runtime_inputs": [
-                    {
-                        "confinement_plan_digest": invocation[
-                            "confinement_plan_digest"
-                        ],
-                        "run_id": run_id,
-                        "runtime_inputs_digest": invocation["runtime_inputs_digest"],
-                        "state": "complete",
-                    }
-                    for run_id, invocation in zip(
-                        parent.RUN_IDS,
-                        evidence["child_invocations"],
-                        strict=True,
-                    )
+                    {"run_id": run_id, "runtime_inputs": {"state": "complete"}}
+                    for run_id in parent.RUN_IDS
                 ],
-                "confinement_backend": parent.RUNTIME_CONFINEMENT_BACKEND,
-                "ingress_policy": parent.RUNTIME_INGRESS_POLICY,
                 "library_dirs": controller["library_dirs"],
                 "resolved_policy_fingerprint": parent.POLICY_FINGERPRINT,
-                "runtime_trace_scope": list(parent.RUNTIME_TRACE_SCOPE),
                 "state": "complete",
                 "tool_runtime": controller["bound_inputs"]["tool_runtime"],
             },

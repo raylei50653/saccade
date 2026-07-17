@@ -125,7 +125,7 @@
         "build_environment_algorithm", "build_environment_keys", "build_vectors", "c_paths", "checkpoints", "child_vectors", "d_paths",
         "deadline_seconds", "environment_keys", "evaluator_argv_prefix", "inotify_mask",
         "model_inputs", "operator_vector", "ordered_run_plan", "required_repository_inputs", "result_enum", "result_matrix",
-        "runtime_confinement_backend", "runtime_ingress_policy", "runtime_trace_scope", "trace_capacities", "v_paths"
+        "trace_capacities", "v_paths"
       ],
       "properties": {
         "build_environment_algorithm": {"const": "h0_build_environment_v1"},
@@ -136,7 +136,7 @@
             ["uv", "run", "--frozen", "cmake", "--build", "build/h0_phase_a", "--target", "saccade_tracking_ext", "saccade_scan_plugin", "--parallel", "1"]
           ]
         },
-        "c_paths": {"$ref": "#/$defs/path_set", "minItems": 29, "maxItems": 29},
+        "c_paths": {"$ref": "#/$defs/path_set", "minItems": 25, "maxItems": 25},
         "checkpoints": {"const": ["T0", "T1", "T2a_0", "T2b_0", "T2a_1", "T2b_1", "T2a_2", "T2b_2", "T2a_3", "T2b_3", "T3", "T4"]},
         "child_vectors": {"type": "array", "items": {"$ref": "#/$defs/command_vector"}, "minItems": 4, "maxItems": 4},
         "d_paths": {"$ref": "#/$defs/path_set", "minItems": 11, "maxItems": 11},
@@ -151,9 +151,6 @@
         "result_enum": {"const": ["provenance_invalid", "build_failed", "extension_load_failed", "runner_nonzero", "runner_timeout", "serialization_failed", "artifact_missing_or_unreadable", "unclassified_execution_failure", "capture_perturbs_policy", "packet_invalid", "phase_a_pass"]},
         "result_matrix": {"$ref": "#/$defs/result_matrix"},
         "trace_capacities": {"const": [65536, 16384, 16384, 16384]},
-        "runtime_confinement_backend": {"const": "landlock_seccomp_ptrace_v1"},
-        "runtime_ingress_policy": {"const": "deny_external_bytes_v1"},
-        "runtime_trace_scope": {"const": ["execve", "execveat", "mmap", "open", "openat", "openat2"]},
         "v_paths": {"$ref": "#/$defs/path_set", "minItems": 3, "maxItems": 3}
       }
     },
@@ -215,11 +212,10 @@
     "child_invocation": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["bound_inputs_digest", "capture_run_uuid", "confinement_backend", "confinement_plan_digest", "confinement_probe_passed", "document_type", "environment", "environment_digest", "evaluator_argv", "incomplete_root", "instrumentation_head", "result", "run_id", "runtime_inputs_digest", "schema", "state", "vector"],
+      "required": ["bound_inputs_digest", "capture_run_uuid", "confinement_plan_digest", "confinement_probe_passed", "document_type", "environment", "environment_digest", "evaluator_argv", "incomplete_root", "instrumentation_head", "result", "run_id", "runtime_inputs_digest", "schema", "state", "vector"],
       "properties": {
         "bound_inputs_digest": {"$ref": "#/$defs/sha256"},
         "capture_run_uuid": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},
-        "confinement_backend": {"const": "landlock_seccomp_ptrace_v1"},
         "confinement_plan_digest": {"oneOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]},
         "confinement_probe_passed": {"type": ["boolean", "null"]},
         "document_type": {"const": "child_invocation"},
