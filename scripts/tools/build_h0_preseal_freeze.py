@@ -312,6 +312,9 @@ def _derive_controller_input(head: str) -> dict[str, Any]:
     python = root / ".venv/bin/python"
     if not python.is_file() or python.is_symlink():
         raise RuntimeError("frozen .venv/bin/python is absent or symlinked")
+    pyvenv_config = root / ".venv/pyvenv.cfg"
+    if not pyvenv_config.is_file() or pyvenv_config.is_symlink():
+        raise RuntimeError("frozen .venv/pyvenv.cfg is absent or symlinked")
     # The locations are read from the frozen interpreter itself; no environment
     # variable or user argument can select an alternative runtime.
     query = subprocess.run(
@@ -357,7 +360,10 @@ def _derive_controller_input(head: str) -> dict[str, Any]:
     # Tool/runtime inventory starts from every executable and library directory
     # named by RC1.  The controller's actual-loaded attestation remains the
     # final admission for dependencies discovered while the frozen process runs.
-    tool_candidates = [Path(path) for path in tool_paths.values()] + [python]
+    tool_candidates = [Path(path) for path in tool_paths.values()] + [
+        python,
+        pyvenv_config,
+    ]
     for directory in libraries.values():
         tool_candidates.extend(
             sorted(

@@ -789,6 +789,9 @@ raise SystemExit(0 if module.VALUE in {7, 9} else 92)
         },
     )
     runtime_paths = [python, Path("/etc/ld.so.cache")]
+    pyvenv_config = python.parent.parent / "pyvenv.cfg"
+    if pyvenv_config.is_file() and not pyvenv_config.is_symlink():
+        runtime_paths.append(pyvenv_config)
     locale_archive = Path("/usr/lib/locale/locale-archive")
     if locale_archive.is_file():
         runtime_paths.append(locale_archive)
@@ -894,6 +897,12 @@ raise SystemExit(0 if module.VALUE in {7, 9} else 92)
         and record["realpath"] == allowed_module.as_posix()
         for record in allowed_attestation["regular_files"]
     )
+    if pyvenv_config.is_file() and not pyvenv_config.is_symlink():
+        assert any(
+            record["realpath"] == pyvenv_config.as_posix()
+            and "tool_runtime" in record["bindings"]
+            for record in allowed_attestation["regular_files"]
+        )
     unbound_code, unbound_attestation = run("unbound_runtime_module")
     assert unbound_code == -9
     assert unbound_attestation["state"] == "rejected"
