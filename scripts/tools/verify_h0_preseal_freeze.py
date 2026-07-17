@@ -73,6 +73,7 @@ BUILD_VECTORS = (
     ),
 )
 BUILD_ENV_KEYS = (
+    "CUDACXX",
     "HOME",
     "LANG",
     "LC_ALL",
@@ -533,7 +534,7 @@ def _independent_host_execution_inputs(root: Path) -> dict[str, Any]:
     """
     tool_paths = {
         name: _physical_executable(name).as_posix()
-        for name in ("git", "ldd", "readelf", "uv")
+        for name in ("git", "ldd", "nvcc", "readelf", "uv")
     }
     python = root / ".venv/bin/python"
     if not python.is_file() or python.is_symlink():
@@ -562,7 +563,7 @@ def _independent_host_execution_inputs(root: Path) -> dict[str, Any]:
         raise VerificationError(
             "frozen Python did not derive exactly two runtime library directories"
         )
-    cuda = _physical_executable("nvcc").parent.parent / "lib64"
+    cuda = Path(tool_paths["nvcc"]).parent.parent / "lib64"
     library_dirs = {
         "tensorrt_library_dir": Path(query[1]).resolve(strict=True).as_posix(),
         "pytorch_library_dir": Path(query[0]).resolve(strict=True).as_posix(),
@@ -643,7 +644,7 @@ def expected_execution_constants(root: Path) -> dict[str, Any]:
             "sequence": "h0_sequence_inputs_v1",
             "actual_loaded_attestation": "h0_runtime_inputs_v1",
         },
-        "build_environment_algorithm": "h0_build_environment_v1",
+        "build_environment_algorithm": "h0_build_environment_v2",
         "build_environment_keys": list(BUILD_ENV_KEYS),
         "build_vectors": [list(v) for v in BUILD_VECTORS],
         "c_paths": list(C_PATHS),
@@ -878,6 +879,7 @@ def _verify_controller_input(value: object, root: Path, head: str) -> None:
     if not isinstance(value["tool_paths"], dict) or set(value["tool_paths"]) != {
         "git",
         "ldd",
+        "nvcc",
         "readelf",
         "uv",
     }:

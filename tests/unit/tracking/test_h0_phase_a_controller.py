@@ -68,13 +68,23 @@ def _bound_inputs() -> dict[str, object]:
                 "sha256": hashlib.sha256(data).hexdigest(),
             }
         )
+    nvcc = Path("/usr/bin/true").resolve(strict=True)
+    nvcc_data = nvcc.read_bytes()
     value: dict[str, object] = {
         "digest": "0" * 64,
         "models_engines": models,
         "repository": repository,
         "schema": "h0_bound_inputs_v1",
         "sequence": _sequence(),
-        "tool_runtime": [],
+        "tool_runtime": [
+            {
+                "length": len(nvcc_data),
+                "logical_path": nvcc.as_posix(),
+                "realpath": nvcc.as_posix(),
+                "sha256": hashlib.sha256(nvcc_data).hexdigest(),
+                "symlink_chain": [],
+            }
+        ],
     }
     value["digest"] = parent.bound_inventory_digest(value)
     return value
@@ -132,6 +142,7 @@ def _controller() -> dict[str, object]:
         "tool_paths": {
             "git": "/usr/bin/git",
             "ldd": "/usr/bin/ldd",
+            "nvcc": "/usr/bin/true",
             "readelf": "/usr/bin/readelf",
             "uv": "/usr/bin/uv",
         },
@@ -421,9 +432,22 @@ def test_build_environment_is_exact_and_ignores_host_selectors(
     environment = captured["kwargs"]["env"]
     assert environment == expected
     assert tuple(environment) == parent.BUILD_ENVIRONMENT_KEYS
-    assert not set(environment).intersection(selectors)
+    assert environment["CUDACXX"] == "/usr/bin/true"
+    assert all(environment.get(key) != value for key, value in selectors.items())
     assert verifier._expected_build_environment(contract) == environment
     assert parent.build_environment_digest(environment) == verifier.digest(environment)
+
+
+def test_build_environment_rejects_unbound_or_drifted_nvcc() -> None:
+    contract = _controller()
+    contract["tool_paths"]["nvcc"] = "/usr/bin/false"
+    with pytest.raises(parent.ContractError, match="nvcc is absent"):
+        parent.build_environment(contract)
+
+    contract = _controller()
+    contract["bound_inputs"]["tool_runtime"][0]["sha256"] = "0" * 64
+    with pytest.raises(parent.DriftError, match="nvcc differs"):
+        parent.build_environment(contract)
 
 
 def test_auxiliary_timeout_kills_and_reaps_the_complete_process_group(

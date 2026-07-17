@@ -307,7 +307,7 @@ def _derive_controller_input(head: str) -> dict[str, Any]:
     git = _physical_executable("git")
     tool_paths = {
         name: _physical_executable(name).as_posix()
-        for name in ("git", "ldd", "readelf", "uv")
+        for name in ("git", "ldd", "nvcc", "readelf", "uv")
     }
     python = root / ".venv/bin/python"
     if not python.is_file() or python.is_symlink():
@@ -333,7 +333,7 @@ def _derive_controller_input(head: str) -> dict[str, Any]:
         raise RuntimeError(
             "frozen Python did not derive the two runtime library directories"
         )
-    cuda = _physical_executable("nvcc").parent.parent / "lib64"
+    cuda = Path(tool_paths["nvcc"]).parent.parent / "lib64"
     libraries = {
         "tensorrt_library_dir": Path(query[1]).resolve(strict=True).as_posix(),
         "pytorch_library_dir": Path(query[0]).resolve(strict=True).as_posix(),

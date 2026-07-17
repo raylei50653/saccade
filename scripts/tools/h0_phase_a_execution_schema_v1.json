@@ -130,8 +130,8 @@
       "properties": {
         "actual_loaded_input_attestation": {"const": "h0_runtime_inputs_v1"},
         "bound_input_algorithms": {"const": {"actual_loaded_attestation": "h0_runtime_inputs_v1", "bound_inputs": "h0_bound_inputs_v1", "repository": "git_ls_tree_r_full_tree_z", "sequence": "h0_sequence_inputs_v1"}},
-        "build_environment_algorithm": {"const": "h0_build_environment_v1"},
-        "build_environment_keys": {"const": ["HOME", "LANG", "LC_ALL", "PATH", "PYTHONHASHSEED", "PYTHONNOUSERSITE", "TMPDIR", "TZ", "XDG_CACHE_HOME"]},
+        "build_environment_algorithm": {"const": "h0_build_environment_v2"},
+        "build_environment_keys": {"const": ["CUDACXX", "HOME", "LANG", "LC_ALL", "PATH", "PYTHONHASHSEED", "PYTHONNOUSERSITE", "TMPDIR", "TZ", "XDG_CACHE_HOME"]},
         "build_vectors": {
           "const": [
             ["uv", "run", "--frozen", "cmake", "--fresh", "-S", ".", "-B", "build/h0_phase_a", "-DCMAKE_BUILD_TYPE=Release", "-DENABLE_NATIVE_TESTS=OFF", "-DSACCADE_ENABLE_NVTX=ON", "-DPython3_EXECUTABLE=.venv/bin/python"],
@@ -207,8 +207,8 @@
         "schema": {"const": "h0_phase_a_controller_v1"},
         "sequence_input_digest": {"$ref": "#/$defs/sha256"},
         "tool_paths": {
-          "type": "object", "additionalProperties": false, "required": ["git", "ldd", "readelf", "uv"],
-          "properties": {"git": {"$ref": "#/$defs/absolute_path"}, "ldd": {"$ref": "#/$defs/absolute_path"}, "readelf": {"$ref": "#/$defs/absolute_path"}, "uv": {"$ref": "#/$defs/absolute_path"}}
+          "type": "object", "additionalProperties": false, "required": ["git", "ldd", "nvcc", "readelf", "uv"],
+          "properties": {"git": {"$ref": "#/$defs/absolute_path"}, "ldd": {"$ref": "#/$defs/absolute_path"}, "nvcc": {"$ref": "#/$defs/absolute_path"}, "readelf": {"$ref": "#/$defs/absolute_path"}, "uv": {"$ref": "#/$defs/absolute_path"}}
         }
       }
     },

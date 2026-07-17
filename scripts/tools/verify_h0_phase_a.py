@@ -60,6 +60,7 @@ BUILD_VECTORS = (
     ),
 )
 BUILD_ENVIRONMENT_KEYS = (
+    "CUDACXX",
     "HOME",
     "LANG",
     "LC_ALL",
@@ -437,6 +438,7 @@ def _expected_build_environment(controller: Mapping[str, Any]) -> dict[str, str]
     root = controller["repository_root"]
     environment_root = f"{root}/{controller['incomplete_root']}/_build_env"
     return {
+        "CUDACXX": _bound_nvcc_path(controller),
         "HOME": f"{environment_root}/home",
         "LANG": "C.UTF-8",
         "LC_ALL": "C.UTF-8",
@@ -447,6 +449,34 @@ def _expected_build_environment(controller: Mapping[str, Any]) -> dict[str, str]
         "TZ": "UTC",
         "XDG_CACHE_HOME": f"{environment_root}/xdg-cache",
     }
+
+
+def _bound_nvcc_path(controller: Mapping[str, Any]) -> str:
+    """Reconstruct the frozen compiler from the controller's bound inventory."""
+    try:
+        selected = str(controller["tool_paths"]["nvcc"])
+        records = controller["bound_inputs"]["tool_runtime"]
+    except (KeyError, TypeError) as exc:
+        raise VerificationError("controller has no selected nvcc binding") from exc
+    matches = [record for record in records if record.get("logical_path") == selected]
+    if len(matches) != 1:
+        raise VerificationError("selected nvcc is absent or ambiguous in tool_runtime")
+    record = matches[0]
+    try:
+        path = Path(str(record["realpath"]))
+        data = path.read_bytes()
+        expected = (int(record["length"]), str(record["sha256"]))
+    except (KeyError, TypeError, ValueError, OSError) as exc:
+        raise VerificationError("selected nvcc bound identity is malformed") from exc
+    if (
+        not path.is_absolute()
+        or path.is_symlink()
+        or path.resolve(strict=True) != path
+        or path.as_posix() != selected
+        or (len(data), hashlib.sha256(data).hexdigest()) != expected
+    ):
+        raise VerificationError("selected nvcc differs from its bound identity")
+    return path.as_posix()
 
 
 def _expected_extension_load_environment(
@@ -509,7 +539,7 @@ def _verify_constants(controller: Mapping[str, Any]) -> None:
         raise VerificationError("build vector mismatch")
     if constants[
         "build_environment_algorithm"
-    ] != "h0_build_environment_v1" or constants["build_environment_keys"] != list(
+    ] != "h0_build_environment_v2" or constants["build_environment_keys"] != list(
         BUILD_ENVIRONMENT_KEYS
     ):
         raise VerificationError("build environment declaration mismatch")

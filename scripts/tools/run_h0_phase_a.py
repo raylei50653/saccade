@@ -65,8 +65,9 @@ BUILD_VECTORS = (
         "1",
     ),
 )
-BUILD_ENVIRONMENT_SCHEMA = "h0_build_environment_v1"
+BUILD_ENVIRONMENT_SCHEMA = "h0_build_environment_v2"
 BUILD_ENVIRONMENT_KEYS = (
+    "CUDACXX",
     "HOME",
     "LANG",
     "LC_ALL",
@@ -1452,6 +1453,7 @@ def build_environment(contract: Mapping[str, Any]) -> dict[str, str]:
     root = Path(contract["repository_root"])
     environment_root = root / contract["incomplete_root"] / "_build_env"
     return {
+        "CUDACXX": _bound_nvcc_path(contract).as_posix(),
         "HOME": (environment_root / "home").as_posix(),
         "LANG": "C.UTF-8",
         "LC_ALL": "C.UTF-8",
@@ -1462,6 +1464,32 @@ def build_environment(contract: Mapping[str, Any]) -> dict[str, str]:
         "TZ": "UTC",
         "XDG_CACHE_HOME": (environment_root / "xdg-cache").as_posix(),
     }
+
+
+def _bound_nvcc_path(contract: Mapping[str, Any]) -> Path:
+    """Derive the frozen CUDA compiler from its bound physical identity."""
+    try:
+        declared = str(contract["tool_paths"]["nvcc"])
+    except (KeyError, TypeError) as exc:
+        raise ContractError("controller input has no selected nvcc path") from exc
+    selected = require_canonical_absolute(declared, directory=False)
+    records = [
+        record
+        for record in contract["bound_inputs"]["tool_runtime"]
+        if record.get("logical_path") == declared
+    ]
+    if len(records) != 1:
+        raise ContractError("selected nvcc is absent or ambiguous in tool_runtime")
+    record = records[0]
+    try:
+        frozen = require_canonical_absolute(str(record["realpath"]), directory=False)
+        data = frozen.read_bytes()
+        expected = (int(record["length"]), str(record["sha256"]))
+    except (KeyError, TypeError, ValueError, OSError) as exc:
+        raise ContractError("selected nvcc bound identity is malformed") from exc
+    if frozen != selected or (len(data), sha256_bytes(data)) != expected:
+        raise DriftError("selected nvcc differs from its bound tool_runtime identity")
+    return frozen
 
 
 def _create_build_environment(contract: Mapping[str, Any]) -> dict[str, str]:
@@ -2333,7 +2361,7 @@ def _validate_build_tool_runtime_binding(
     for name in ("cmake", "python"):
         record = identity[name]
         required.append((record["path"], record["length"], record["sha256"]))
-    for name in ("git", "ldd", "readelf", "uv"):
+    for name in ("git", "ldd", "nvcc", "readelf", "uv"):
         path = Path(contract["tool_paths"][name]).resolve(strict=True)
         data = path.read_bytes()
         required.append((path.as_posix(), len(data), sha256_bytes(data)))

@@ -171,6 +171,7 @@ def test_host_execution_input_substitution_fails_against_independent_rebuild(
         "tool_paths": {
             "git": "/selected/git",
             "ldd": "/selected/ldd",
+            "nvcc": "/selected/nvcc",
             "readelf": "/selected/readelf",
             "uv": "/selected/uv",
         },
@@ -215,7 +216,7 @@ def _independent_host_fixture(
     pyvenv_config.write_bytes(b"home = /fixture/python\n")
     tools = tmp_path / "tools"
     tools.mkdir()
-    for name in ("git", "ldd", "readelf", "uv"):
+    for name in ("git", "ldd", "nvcc", "readelf", "uv"):
         (tools / name).write_bytes(name.encode("utf-8"))
     nvcc = tmp_path / "cuda/bin/nvcc"
     nvcc.parent.mkdir(parents=True)
@@ -259,6 +260,11 @@ def test_independent_host_expansion_binds_physical_pyvenv_config(
         if item["logical_path"] == pyvenv_config.as_posix()
     )
     assert record == verifier._host_file_record(pyvenv_config)
+    nvcc = root.parent / "cuda/bin/nvcc"
+    assert host["tool_paths"]["nvcc"] == nvcc.as_posix()
+    assert next(
+        item for item in host["tool_runtime"] if item["logical_path"] == nvcc.as_posix()
+    ) == verifier._host_file_record(nvcc)
 
 
 @pytest.mark.parametrize("state", ["missing", "symlink"])
