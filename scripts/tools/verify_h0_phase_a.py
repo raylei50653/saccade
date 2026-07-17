@@ -647,29 +647,25 @@ def _verify_result(evidence: Mapping[str, Any]) -> None:
             elif tail != ["not_run"] * len(tail):
                 raise VerificationError("provenance failure child state order mismatch")
     if result in {"runner_nonzero", "runner_timeout"}:
-        if result == "runner_timeout" and child_states == ["not_run"] * 4:
-            non_completed = None
-        else:
-            non_completed = next(
-                (
-                    index
-                    for index, state in enumerate(child_states)
-                    if state != "completed"
-                ),
-                None,
-            )
-            if non_completed is None or child_states[non_completed + 1 :] != [
-                "not_run"
-            ] * (3 - non_completed):
+        first_non_completed = next(
+            (index for index, state in enumerate(child_states) if state != "completed"),
+            len(child_states),
+        )
+        tail = child_states[first_non_completed:]
+        controller_timeout = result == "runner_timeout" and tail == ["not_run"] * len(
+            tail
+        )
+        if not controller_timeout:
+            if not tail or tail[1:] != ["not_run"] * (len(tail) - 1):
                 raise VerificationError(
                     "runner failure child state order is not fail-closed"
                 )
-            failed_child = evidence["child_invocations"][non_completed]
+            failed_child = evidence["child_invocations"][first_non_completed]
             expected_child_result = (
                 "runner_timeout" if result == "runner_timeout" else "runner_nonzero"
             )
             if (
-                failed_child["state"] not in {"failed", "running_interrupted"}
+                failed_child["state"] != "failed"
                 or failed_child["result"] != expected_child_result
             ):
                 raise VerificationError(

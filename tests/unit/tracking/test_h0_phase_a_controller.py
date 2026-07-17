@@ -475,6 +475,44 @@ def test_every_legal_result_matrix_terminal_combination(result: str) -> None:
     assert verifier.verify_evidence(evidence_for(result))["result"] == result
 
 
+@pytest.mark.parametrize("completed_count", range(5))
+def test_runner_timeout_accepts_completed_prefix_then_not_run_suffix(
+    completed_count: int,
+) -> None:
+    evidence = evidence_for("runner_timeout")
+    children = _children(evidence["controller_input"])
+    for child_invocation in children[completed_count:]:
+        child_invocation["state"] = "not_run"
+        child_invocation["result"] = None
+    evidence["child_invocations"] = children
+    assert verifier.verify_evidence(evidence)["result"] == "runner_timeout"
+
+
+@pytest.mark.parametrize("failed_index", range(4))
+def test_runner_timeout_accepts_completed_prefix_then_failed_child(
+    failed_index: int,
+) -> None:
+    evidence = evidence_for("runner_timeout")
+    children = _children(evidence["controller_input"])
+    children[failed_index]["state"] = "failed"
+    children[failed_index]["result"] = "runner_timeout"
+    for child_invocation in children[failed_index + 1 :]:
+        child_invocation["state"] = "not_run"
+        child_invocation["result"] = None
+    evidence["child_invocations"] = children
+    assert verifier.verify_evidence(evidence)["result"] == "runner_timeout"
+
+
+def test_runner_timeout_rejects_non_prefix_controller_timeout_states() -> None:
+    evidence = evidence_for("runner_timeout")
+    children = _children(evidence["controller_input"])
+    children[1]["state"] = "not_run"
+    children[1]["result"] = None
+    evidence["child_invocations"] = children
+    with pytest.raises(verifier.VerificationError, match="state order"):
+        verifier.verify_evidence(evidence)
+
+
 @pytest.mark.parametrize(
     ("mutation", "match"),
     [
@@ -1082,4 +1120,68 @@ def test_expired_finalization_publishes_only_runner_timeout_envelope(
     assert parent._artifact_inventory(final) == sorted(
         parent.C_PATHS, key=lambda value: value.encode("utf-8")
     )
+    assert verifier.verify_evidence_root(final)["result"] == result
+
+
+def test_parent_fsync_timeout_after_four_completed_children_republishes_valid_timeout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    contract = _launch_contract(tmp_path)
+    incomplete = tmp_path / contract["incomplete_root"]
+    incomplete.mkdir()
+    parent._ensure_not_run_slots(contract, incomplete)
+    for run_id in parent.RUN_IDS:
+        invocation_path = incomplete / "runs" / run_id / "invocation.json"
+        invocation = parent.read_canonical_json(invocation_path)
+        invocation["state"] = "completed"
+        invocation["result"] = "run_completed"
+        parent._replace_canonical_fsync(invocation_path, invocation)
+    for relative in parent.D_PATHS:
+        path = incomplete / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"synthetic\n")
+    semantic_digest = "1" * 64
+    for relative in parent.V_PATHS:
+        path = incomplete / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(
+            parent.canonical_json_file_bytes(
+                {
+                    "report": {"semantic_digest_sha256": semantic_digest},
+                    "state": "pass",
+                }
+            )
+        )
+    now = {"value": 3599.0}
+    real_fsync = parent._fsync_directory
+    fsync_calls = 0
+
+    def crossing_fsync(path: Path) -> None:
+        nonlocal fsync_calls
+        fsync_calls += 1
+        real_fsync(path)
+        if fsync_calls == 1:
+            now["value"] = 3600.0
+
+    monkeypatch.setattr(parent, "_fsync_directory", crossing_fsync)
+    result = parent._finalize_bundle(
+        contract,
+        started=0.0,
+        result="phase_a_pass",
+        predicates=_predicates(),
+        checkpoints=_binding(contract)["checkpoints"],
+        comparison={"state": "equal"},
+        build_identity=None,
+        mutation_events=[],
+        clock=lambda: now["value"],
+    )
+    final = tmp_path / contract["evidence_root"]
+    assert fsync_calls == 3
+    assert result == "runner_timeout"
+    assert final.is_dir()
+    assert not incomplete.exists()
+    assert parent.read_canonical_json(final / "manifest.json")["result"] == result
+    assert parent.read_canonical_json(final / "result.json")["result"] == result
+    assert not any((final / relative).exists() for relative in parent.D_PATHS)
+    assert not any((final / relative).exists() for relative in parent.V_PATHS)
     assert verifier.verify_evidence_root(final)["result"] == result
