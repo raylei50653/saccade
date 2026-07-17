@@ -257,6 +257,52 @@ INOTIFY_MASK = (
     | IN_MOVED_TO
 )
 
+# These records publish declaration choices only; confinement backend and ingress
+# mechanism remain implementation detail, bound exclusively by v3 file hashes.
+CHILD_ENVIRONMENT_SCHEMA = "h0_child_environment_v1"
+CHILD_ENVIRONMENT_TEMPLATE = {
+    "CUDA_DEVICE_ORDER": "PCI_BUS_ID",
+    "CUDA_VISIBLE_DEVICES": "<GPU_UUID>",
+    "HOME": "<RUN_TMP>/home",
+    "LANG": "C.UTF-8",
+    "LC_ALL": "C.UTF-8",
+    "LD_LIBRARY_PATH": "<ROOT>/build/h0_phase_a:<TENSORRT_LIBRARY_DIR>:<PYTORCH_LIBRARY_DIR>:<CUDA_LIBRARY_DIR>",
+    "PATH": "<ROOT>/.venv/bin:/usr/bin:/bin",
+    "PYTHONHASHSEED": "0",
+    "PYTHONNOUSERSITE": "1",
+    "SACCADE_BUILD_PATH": "<ROOT>/build/h0_phase_a",
+    "SACCADE_DETECT_BARRIER": "event",
+    "SACCADE_DOUBLE_BUFFER": "1",
+    "SACCADE_GPU_DECODE": "1",
+    "SACCADE_MAIN_NMS_GRAPHED": "1",
+    "TMPDIR": "<RUN_TMP>/tmp",
+    "TZ": "UTC",
+    "XDG_CACHE_HOME": "<RUN_TMP>/xdg-cache",
+}
+TRACE_LIFECYCLE = {
+    "schema": "h0_trace_lifecycle_v1",
+    "capture_off": ["set_research_h0_bridge_trace(false,65536,16384,16384,16384)"],
+    "capture_on": [
+        "set_research_h0_bridge_trace(true,65536,16384,16384,16384)",
+        "clear_research_h0_bridge_trace()",
+        "drain_research_h0_bridge_trace(seq=MOT17-04-SDP,capture_phase=phase_a,require_candidate_exposure=true,require_commit_exposure=false,capture_run_uuid=<CONTROLLER_UUID>)",
+    ],
+}
+BOUND_INPUT_ALGORITHMS = {
+    "bound_inputs": "h0_bound_inputs_v1",
+    "repository": "git_ls_tree_r_full_tree_z",
+    "sequence": "h0_sequence_inputs_v1",
+    "actual_loaded_attestation": "h0_runtime_inputs_v1",
+}
+CANONICALIZATION = {
+    "json": "utf8_lexicographic_keys_compact_finite_trailing_lf_v1",
+    "checksums": "lowercase_sha256_two_spaces_posix_path_sorted_utf8_bytes_v1",
+}
+PUBLICATION_ROLLBACK = {
+    "publication": "atomic_rename_incomplete_to_final_then_fsync_parent_v1",
+    "rollback": "remove_partial_D_V_before_checksums_or_leave_incomplete_unpublished_v1",
+}
+
 CHILD_ENV_KEYS = (
     "CUDA_DEVICE_ORDER",
     "CUDA_VISIBLE_DEVICES",
@@ -600,6 +646,7 @@ def repository_inventory(
     *,
     started: float,
     monitor: "BoundInputMonitor | None" = None,
+    landing_overlay_paths: Iterable[str] = (),
     clock: Callable[[], float] = time.monotonic,
 ) -> list[dict[str, Any]]:
     try:
@@ -615,6 +662,7 @@ def repository_inventory(
         )
     except subprocess.CalledProcessError as exc:
         raise DriftError("git repository inventory exited nonzero") from exc
+    overlays = set(landing_overlay_paths)
     records: list[dict[str, Any]] = []
     for raw in process.stdout.split(b"\0"):
         if not raw:
@@ -646,7 +694,24 @@ def repository_inventory(
             executable = bool(info.st_mode & stat.S_IXUSR)
             if executable != (mode == "100755"):
                 raise DriftError(f"repository executable-mode mismatch: {path_value}")
-            data = working.read_bytes()
+            # RC2 admits the declaration's one append-only SEALED overlay only
+            # after preflight has independently proven I -> F -> S.  The bound
+            # repository inventory remains an I inventory, while the physical
+            # overlay is separately watched for drift through T4.
+            data = (
+                _run_auxiliary_subprocess(
+                    ["git", "show", f"{head}:{path_value}"],
+                    executable=git_path,
+                    cwd=root,
+                    env={"PATH": "/usr/bin:/bin", "LC_ALL": "C.UTF-8"},
+                    started=started,
+                    monitor=monitor,
+                    stage="RC2 instrumentation-overlay inventory",
+                    clock=clock,
+                ).stdout
+                if path_value in overlays
+                else working.read_bytes()
+            )
             kind = "regular"
         framed = b"blob " + str(len(data)).encode("ascii") + b"\0" + data
         computed_oid = (
@@ -706,6 +771,9 @@ def recompute_bound_inventory(
             git_path,
             started=started,
             monitor=monitor,
+            landing_overlay_paths=contract["authority_landing"][
+                "post_head_allowed_paths"
+            ],
             clock=clock,
         ),
         "schema": BOUND_INPUTS_SCHEMA,
@@ -723,6 +791,8 @@ def bound_file_paths(contract: Mapping[str, Any]) -> tuple[Path, ...]:
     paths: list[Path] = []
     for record in inventory["repository"]:
         paths.append(root / record["path"])
+    for path in contract["authority_landing"]["post_head_allowed_paths"]:
+        paths.append(root / require_canonical_relative(path))
     for record in inventory["sequence"]["files"]:
         paths.append(root / SEQUENCE_REL / record["path"])
     for category in ("models_engines", "tool_runtime"):
@@ -960,12 +1030,17 @@ def nvml_gpu_inventory() -> list[dict[str, Any]]:
 def execution_constants(root: Path) -> dict[str, Any]:
     """All A7/RC1 choices that v3 must mechanically reproduce."""
     return {
+        "actual_loaded_input_attestation": "h0_runtime_inputs_v1",
+        "bound_input_algorithms": BOUND_INPUT_ALGORITHMS,
         "build_environment_algorithm": BUILD_ENVIRONMENT_SCHEMA,
         "build_environment_keys": list(BUILD_ENVIRONMENT_KEYS),
         "build_vectors": [list(vector) for vector in BUILD_VECTORS],
         "c_paths": list(C_PATHS),
+        "canonicalization": CANONICALIZATION,
         "checkpoints": list(CHECKPOINTS),
         "child_vectors": [list(child_argv(root, run_id)) for run_id in RUN_IDS],
+        "child_environment_algorithm": CHILD_ENVIRONMENT_SCHEMA,
+        "child_environment_template": CHILD_ENVIRONMENT_TEMPLATE,
         "d_paths": list(D_PATHS),
         "deadline_seconds": DEADLINE_SECONDS,
         "environment_keys": list(CHILD_ENV_KEYS),
@@ -974,6 +1049,7 @@ def execution_constants(root: Path) -> dict[str, Any]:
         "model_inputs": list(MODEL_LOGICAL_PATHS),
         "operator_vector": list(OPERATOR_ARGV),
         "ordered_run_plan": list(RUN_IDS),
+        "publication_rollback": PUBLICATION_ROLLBACK,
         "required_repository_inputs": list(REQUIRED_REPOSITORY_INPUTS),
         "result_enum": list(RESULT_ENUM),
         "result_matrix": {
@@ -981,6 +1057,7 @@ def execution_constants(root: Path) -> dict[str, Any]:
             for result, (required, forbidden) in RESULT_MATRIX.items()
         },
         "trace_capacities": list(TRACE_CAPACITIES),
+        "trace_lifecycle": TRACE_LIFECYCLE,
         "v_paths": list(V_PATHS),
     }
 
@@ -1239,30 +1316,39 @@ def _discover_controller_input(root: Path) -> tuple[Path, dict[str, Any]]:
     assert isinstance(contract, dict)
     if freeze.get("instrumentation_head") != contract.get("instrumentation_head"):
         raise ContractError("v3 freeze/controller instrumentation heads differ")
+    landing = contract.get("authority_landing")
+    if (
+        not isinstance(landing, dict)
+        or landing.get("artifact_path") != candidates[0].relative_to(root).as_posix()
+    ):
+        raise ContractError("v3 freeze is not at its RC2 deterministic artifact path")
     return candidates[0], contract
 
 
-def _verify_owner_event(root: Path, instrumentation_head: str) -> None:
-    declaration = (
-        root
-        / "docs/modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md"
-    )
-    token = "SEA" + "LED"
-    needle_head = f"`{instrumentation_head}`"
-    needle_token = f"`{token}`"
+def _verify_authority_landing(
+    root: Path, contract: Mapping[str, Any]
+) -> dict[str, str]:
+    """Delegate RC2's independent I -> F -> S verification before any build read."""
+    landing = contract.get("authority_landing")
+    if not isinstance(landing, Mapping) or not isinstance(
+        landing.get("artifact_path"), str
+    ):
+        raise ContractError("controller input has no authority-landing descriptor")
+    artifact_path = root / str(landing["artifact_path"])
     try:
-        lines = declaration.read_text(encoding="utf-8").splitlines()
-    except (OSError, UnicodeDecodeError) as exc:
-        raise ContractError(f"owner declaration unreadable: {exc}") from exc
-    matches = [
-        line
-        for line in lines
-        if line.startswith("|") and needle_head in line and needle_token in line
-    ]
-    if len(matches) != 1:
-        raise ContractError(
-            f"expected exactly one new owner event for {instrumentation_head}, found {len(matches)}"
+        import verify_h0_preseal_freeze
+
+        report = verify_h0_preseal_freeze.verify_artifact_path(
+            artifact_path, root, require_complete=True, verify_landing=True
         )
+        relation = report["landing"]
+        if not isinstance(
+            relation, dict
+        ):  # defensive boundary for the independent verifier
+            raise ContractError("independent v3 verifier returned no landing relation")
+        return {key: str(value) for key, value in relation.items()}
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise ContractError(f"authority landing verification failed: {exc}") from exc
 
 
 def preflight_controller_input(
@@ -1288,7 +1374,11 @@ def preflight_controller_input(
             raise ContractError(f"forbidden execution-selector environment key: {key}")
     validate_execution_constants(contract, root)
     head = contract["instrumentation_head"]
-    _verify_owner_event(root, head)
+    landing = _verify_authority_landing(root, contract)
+    if landing.get("instrumentation_head") != head:
+        raise ContractError(
+            "authority landing and controller instrumentation heads differ"
+        )
     if select_gpu_record(nvml_gpu_inventory()) != contract["gpu"]:
         raise ContractError(
             "lexicographically selected NVML GPU identity differs from v3"
@@ -1328,7 +1418,11 @@ def preflight_controller_input(
         ).stdout
     except subprocess.CalledProcessError as exc:
         raise ContractError("git provenance preflight exited nonzero") from exc
-    if top != root.as_posix() or actual_head != head or status_bytes != b"":
+    if (
+        top != root.as_posix()
+        or actual_head != landing.get("execution_checkout")
+        or status_bytes != b""
+    ):
         raise ContractError("checkout root/head/cleanliness provenance mismatch")
     build_dir = root / "build/h0_phase_a"
     if build_dir.exists():

@@ -85,6 +85,27 @@ def _controller() -> dict[str, object]:
     evidence = f"docs/modules/semantic/research/evidence/h0_phase_a_{head}"
     bound = _bound_inputs()
     return {
+        "authority_landing": {
+            "artifact_path": (
+                "docs/modules/semantic/research/evidence/"
+                f"h0_preseal_freeze_{head}/h0_preseal_freeze_v3.json"
+            ),
+            "declaration_path": (
+                "docs/modules/semantic/research/"
+                "headline_bridge_full_decision_capture_declaration_20260713.md"
+            ),
+            "post_head_allowed_paths": [
+                (
+                    "docs/modules/semantic/research/evidence/"
+                    f"h0_preseal_freeze_{head}/h0_preseal_freeze_v3.json"
+                ),
+                (
+                    "docs/modules/semantic/research/"
+                    "headline_bridge_full_decision_capture_declaration_20260713.md"
+                ),
+            ],
+            "schema": "h0_authority_landing_v1",
+        },
         "bound_inputs": bound,
         "document_type": "controller_input",
         "evidence_root": evidence,

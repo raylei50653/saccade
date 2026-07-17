@@ -122,12 +122,14 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "build_environment_algorithm", "build_environment_keys", "build_vectors", "c_paths", "checkpoints", "child_vectors", "d_paths",
+        "actual_loaded_input_attestation", "bound_input_algorithms", "build_environment_algorithm", "build_environment_keys", "build_vectors", "c_paths", "canonicalization", "checkpoints", "child_vectors", "child_environment_algorithm", "child_environment_template", "d_paths",
         "deadline_seconds", "environment_keys", "evaluator_argv_prefix", "inotify_mask",
         "model_inputs", "operator_vector", "ordered_run_plan", "required_repository_inputs", "result_enum", "result_matrix",
-        "trace_capacities", "v_paths"
+        "publication_rollback", "trace_capacities", "trace_lifecycle", "v_paths"
       ],
       "properties": {
+        "actual_loaded_input_attestation": {"const": "h0_runtime_inputs_v1"},
+        "bound_input_algorithms": {"const": {"actual_loaded_attestation": "h0_runtime_inputs_v1", "bound_inputs": "h0_bound_inputs_v1", "repository": "git_ls_tree_r_full_tree_z", "sequence": "h0_sequence_inputs_v1"}},
         "build_environment_algorithm": {"const": "h0_build_environment_v1"},
         "build_environment_keys": {"const": ["HOME", "LANG", "LC_ALL", "PATH", "PYTHONHASHSEED", "PYTHONNOUSERSITE", "TMPDIR", "TZ", "XDG_CACHE_HOME"]},
         "build_vectors": {
@@ -137,8 +139,11 @@
           ]
         },
         "c_paths": {"$ref": "#/$defs/path_set", "minItems": 25, "maxItems": 25},
+        "canonicalization": {"const": {"checksums": "lowercase_sha256_two_spaces_posix_path_sorted_utf8_bytes_v1", "json": "utf8_lexicographic_keys_compact_finite_trailing_lf_v1"}},
         "checkpoints": {"const": ["T0", "T1", "T2a_0", "T2b_0", "T2a_1", "T2b_1", "T2a_2", "T2b_2", "T2a_3", "T2b_3", "T3", "T4"]},
         "child_vectors": {"type": "array", "items": {"$ref": "#/$defs/command_vector"}, "minItems": 4, "maxItems": 4},
+        "child_environment_algorithm": {"const": "h0_child_environment_v1"},
+        "child_environment_template": {"const": {"CUDA_DEVICE_ORDER": "PCI_BUS_ID", "CUDA_VISIBLE_DEVICES": "<GPU_UUID>", "HOME": "<RUN_TMP>/home", "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8", "LD_LIBRARY_PATH": "<ROOT>/build/h0_phase_a:<TENSORRT_LIBRARY_DIR>:<PYTORCH_LIBRARY_DIR>:<CUDA_LIBRARY_DIR>", "PATH": "<ROOT>/.venv/bin:/usr/bin:/bin", "PYTHONHASHSEED": "0", "PYTHONNOUSERSITE": "1", "SACCADE_BUILD_PATH": "<ROOT>/build/h0_phase_a", "SACCADE_DETECT_BARRIER": "event", "SACCADE_DOUBLE_BUFFER": "1", "SACCADE_GPU_DECODE": "1", "SACCADE_MAIN_NMS_GRAPHED": "1", "TMPDIR": "<RUN_TMP>/tmp", "TZ": "UTC", "XDG_CACHE_HOME": "<RUN_TMP>/xdg-cache"}},
         "d_paths": {"$ref": "#/$defs/path_set", "minItems": 11, "maxItems": 11},
         "deadline_seconds": {"const": 3600},
         "environment_keys": {"const": ["CUDA_DEVICE_ORDER", "CUDA_VISIBLE_DEVICES", "HOME", "LANG", "LC_ALL", "LD_LIBRARY_PATH", "PATH", "PYTHONHASHSEED", "PYTHONNOUSERSITE", "SACCADE_BUILD_PATH", "SACCADE_DETECT_BARRIER", "SACCADE_DOUBLE_BUFFER", "SACCADE_GPU_DECODE", "SACCADE_MAIN_NMS_GRAPHED", "TMPDIR", "TZ", "XDG_CACHE_HOME"]},
@@ -147,10 +152,12 @@
         "model_inputs": {"const": ["models/yolo/mamba_head_26m.engine", "models/yolo/yolo26m.pt", "models/yolo/yolo26m_backbone_640_best.engine", "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt", "runs/mamba_gt_yolo26m_v14replica_t3_t1/best.ckpt"]},
         "operator_vector": {"const": ["uv", "run", "--frozen", "python", "scripts/tools/run_h0_phase_a.py"]},
         "ordered_run_plan": {"const": ["00_capture_off", "01_capture_on_1", "02_capture_on_2", "03_capture_on_3"]},
+        "publication_rollback": {"const": {"publication": "atomic_rename_incomplete_to_final_then_fsync_parent_v1", "rollback": "remove_partial_D_V_before_checksums_or_leave_incomplete_unpublished_v1"}},
         "required_repository_inputs": {"const": ["configs/presets/mamba_whole_graph_m.yaml", "docs/modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md", "docs/modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.policy.yaml", "scripts/tools/export_headline_bridge_decision_trace.py", "scripts/tools/h0_bridge_decision_trace_schema_v2.json", "scripts/tools/h0_phase_a_execution_schema_v1.json", "scripts/tools/h0_runtime_confinement.py", "scripts/tools/resolved_bridge_policy_config.py", "scripts/tools/run_h0_phase_a.py", "scripts/tools/run_h0_phase_a_child.py", "scripts/tools/verify_h0_phase_a.py", "scripts/tools/verify_headline_bridge_decision_trace.py", "uv.lock"]},
         "result_enum": {"const": ["provenance_invalid", "build_failed", "extension_load_failed", "runner_nonzero", "runner_timeout", "serialization_failed", "artifact_missing_or_unreadable", "unclassified_execution_failure", "capture_perturbs_policy", "packet_invalid", "phase_a_pass"]},
         "result_matrix": {"$ref": "#/$defs/result_matrix"},
         "trace_capacities": {"const": [65536, 16384, 16384, 16384]},
+        "trace_lifecycle": {"const": {"capture_off": ["set_research_h0_bridge_trace(false,65536,16384,16384,16384)"], "capture_on": ["set_research_h0_bridge_trace(true,65536,16384,16384,16384)", "clear_research_h0_bridge_trace()", "drain_research_h0_bridge_trace(seq=MOT17-04-SDP,capture_phase=phase_a,require_candidate_exposure=true,require_commit_exposure=false,capture_run_uuid=<CONTROLLER_UUID>)"], "schema": "h0_trace_lifecycle_v1"}},
         "v_paths": {"$ref": "#/$defs/path_set", "minItems": 3, "maxItems": 3}
       }
     },
@@ -158,11 +165,21 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "bound_inputs", "document_type", "evidence_root", "execution_constants", "gpu",
+        "authority_landing", "bound_inputs", "document_type", "evidence_root", "execution_constants", "gpu",
         "incomplete_root", "instrumentation_head", "library_dirs", "repository_root",
         "schema", "sequence_input_digest", "tool_paths"
       ],
       "properties": {
+        "authority_landing": {
+          "type": "object", "additionalProperties": false,
+          "required": ["schema", "artifact_path", "declaration_path", "post_head_allowed_paths"],
+          "properties": {
+            "schema": {"const": "h0_authority_landing_v1"},
+            "artifact_path": {"$ref": "#/$defs/relative_path"},
+            "declaration_path": {"const": "docs/modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md"},
+            "post_head_allowed_paths": {"type": "array", "items": {"$ref": "#/$defs/relative_path"}, "minItems": 2, "maxItems": 2, "uniqueItems": true}
+          }
+        },
         "bound_inputs": {"$ref": "#/$defs/bound_inputs"},
         "document_type": {"const": "controller_input"},
         "evidence_root": {"$ref": "#/$defs/relative_path"},

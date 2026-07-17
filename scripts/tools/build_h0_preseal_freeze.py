@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Assemble the H0 pre-seal freeze artifact (``h0_preseal_freeze_v2``).
+"""Assemble the sole H0 pre-seal artifact (``h0_preseal_freeze_v3``).
 
 Declaration authority: H0 declaration §2 / A2.2 / Amendment 6. This tool is a
 non-production offline input under the A2.1 allowance: it reads git history,
@@ -7,8 +7,10 @@ H0 sources, and the trace schema; it is never a build input or runtime-policy
 path. It runs no capture and can emit no H0 execution terminal — an incomplete
 result is the pre-seal engineering status that prohibits seal.
 
-The emitted artifact names the exact ``instrumentation_head`` it was produced
-at; that head is the only head an owner may seal (A2.2).
+RC2's landing topology deliberately separates the reviewed implementation head
+from the later artifact and owner-event commits.  This tool runs only at clean
+``instrumentation_head`` I and writes the one deterministic F-path; it never
+creates either commit, writes an owner event, or executes Phase A.
 """
 
 from __future__ import annotations
@@ -16,9 +18,13 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import platform
+import shutil
+import stat
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -38,9 +44,14 @@ from check_h0_bridge_decision_trace_contract import (  # noqa: E402
     coverage_report,
 )
 
-FREEZE_SCHEMA_VERSION = "h0_preseal_freeze_v2"
+FREEZE_SCHEMA_VERSION = "h0_preseal_freeze_v3"
 CAPTURE_SCHEMA_VERSION = "h0_bridge_decision_trace_v2"
 CLASSIFIER_VERSION = "h0_projection_path_class_v1"
+LANDING_SCHEMA_VERSION = "h0_authority_landing_v1"
+DECLARATION_PATH = (
+    "docs/modules/semantic/research/"
+    "headline_bridge_full_decision_capture_declaration_20260713.md"
+)
 
 # §2 frozen policy base (pre-H0 decision path).
 POLICY_BASE_HEAD = "7581c9720569e17593d1844ad494253ce664fed8"
@@ -96,6 +107,38 @@ NON_RUNTIME_PREFIXES = ("docs/", ".github/", "tests/", "scripts/")
 ASSEMBLER_PATH = Path(__file__).resolve()
 PRESET_PATH = ROOT / POLICY_TARGET_PRESET
 
+# A7/RC1 plus RC2.  This ordered table is intentionally the only producer-side
+# implementation universe.  The independent v3 verifier transcribes it rather
+# than importing this module, so coordinated implementation drift still fails.
+IMPLEMENTATION_IDENTITIES = (
+    ("scripts/tools/run_h0_phase_a.py", "h0_phase_a_controller_v1"),
+    ("scripts/tools/run_h0_phase_a_child.py", "h0_phase_a_child_v1"),
+    ("scripts/tools/h0_phase_a_execution_schema_v1.json", "h0_phase_a_execution_v1"),
+    ("scripts/tools/h0_runtime_confinement.py", "h0_runtime_confinement_plan_v1"),
+    ("scripts/tools/verify_h0_phase_a.py", "h0_phase_a_verifier_v1"),
+    (
+        "scripts/tools/export_headline_bridge_decision_trace.py",
+        "h0_bridge_decision_trace_v2",
+    ),
+    (
+        "scripts/tools/verify_headline_bridge_decision_trace.py",
+        "h0_bridge_decision_trace_v2",
+    ),
+    ("scripts/tools/build_h0_preseal_freeze.py", "h0_preseal_freeze_v3"),
+    (
+        "scripts/tools/check_h0_bridge_decision_trace_contract.py",
+        "h0_bridge_decision_trace_contract_v1",
+    ),
+    (
+        "scripts/tools/h0_bridge_decision_trace_schema_v2.json",
+        "h0_bridge_decision_trace_v2",
+    ),
+    ("scripts/tools/verify_h0_preseal_freeze.py", "h0_preseal_freeze_v3_verifier_v1"),
+)
+IMPLEMENTATION_PATHS = tuple(
+    ROOT / path for path, _identity in IMPLEMENTATION_IDENTITIES
+)
+
 # Every input whose bytes determine the seal decision. Coverage/mutations are
 # computed from these head blobs directly (never the working tree), and after
 # assembly the working tree must still be byte-identical to them — otherwise
@@ -111,7 +154,9 @@ CHECKER_INPUT_PATHS = (
     CHECKER_PATH,
     SCHEMA_PATH,
 )
-SEAL_RELEVANT_PATHS = CHECKER_INPUT_PATHS + (PRESET_PATH, ASSEMBLER_PATH)
+SEAL_RELEVANT_PATHS = tuple(
+    dict.fromkeys(CHECKER_INPUT_PATHS + (PRESET_PATH,) + IMPLEMENTATION_PATHS)
+)
 
 
 def classify_path(path: str) -> str:
@@ -183,6 +228,185 @@ def _head_blob(head: str, path: Path) -> bytes:
             f"is not in the tree of {head}; commit it before assembling"
         )
     return result.stdout
+
+
+def freeze_artifact_path(head: str) -> str:
+    """A7.RC2.2's sole producer destination, with no operator choice."""
+    if len(head) != 40 or any(char not in "0123456789abcdef" for char in head):
+        raise SystemExit(f"invalid instrumentation head for v3 path: {head!r}")
+    return (
+        "docs/modules/semantic/research/evidence/"
+        f"h0_preseal_freeze_{head}/h0_preseal_freeze_v3.json"
+    )
+
+
+def _tree_entry(head: str, path: str) -> tuple[str, str, str]:
+    raw = _git_bytes("ls-tree", "-z", head, "--", path)
+    entries = [entry for entry in raw.split(b"\0") if entry]
+    if len(entries) != 1:
+        raise SystemExit(f"missing or ambiguous implementation path at {head}: {path}")
+    try:
+        metadata, found_path = entries[0].split(b"\t", 1)
+        mode, git_type, object_id = metadata.decode("ascii").split(" ")
+        if found_path.decode("utf-8", errors="strict") != path:
+            raise ValueError
+    except (UnicodeDecodeError, ValueError) as exc:
+        raise SystemExit(
+            f"malformed Git tree entry for implementation path {path}"
+        ) from exc
+    return mode, git_type, object_id
+
+
+def implementation_bindings(head: str) -> list[dict[str, Any]]:
+    """Bind every A7/RC1 implementation blob from I, never the worktree."""
+    records: list[dict[str, Any]] = []
+    for path, identity in IMPLEMENTATION_IDENTITIES:
+        mode, git_type, object_id = _tree_entry(head, path)
+        blob = _git_bytes("show", f"{head}:{path}")
+        if mode not in {"100644", "100755"} or git_type != "blob":
+            raise SystemExit(
+                f"implementation path is not a regular Git blob: {path} {mode} {git_type}"
+            )
+        records.append(
+            {
+                "path": path,
+                "identity": identity,
+                "mode": mode,
+                "git_type": git_type,
+                "git_object": object_id,
+                "length": len(blob),
+                "sha256": _sha256_bytes(blob),
+            }
+        )
+    return records
+
+
+def _physical_executable(command: str) -> Path:
+    found = shutil.which(command)
+    if not found:
+        raise RuntimeError(f"required host executable is absent: {command}")
+    candidate = Path(found).resolve(strict=True)
+    details = candidate.stat(follow_symlinks=False)
+    if candidate.is_symlink() or not stat.S_ISREG(details.st_mode):
+        raise RuntimeError(f"host executable is not a physical regular file: {command}")
+    return candidate
+
+
+def _derive_controller_input(head: str) -> dict[str, Any]:
+    """Construct the host-specific RC1 input inventory without a CLI override.
+
+    This is intentionally pre-seal only.  Any unavailable GPU, model, tool, or
+    runtime library makes the prospective artifact incomplete instead of asking
+    an operator for a substitute path.
+    """
+    import run_h0_phase_a as controller  # local implementation, bound above
+
+    root = ROOT.resolve(strict=True)
+    if root != ROOT or root.is_symlink():
+        raise RuntimeError("repository root is not a physical canonical directory")
+    git = _physical_executable("git")
+    tool_paths = {
+        name: _physical_executable(name).as_posix()
+        for name in ("git", "ldd", "readelf", "uv")
+    }
+    python = root / ".venv/bin/python"
+    if not python.is_file() or python.is_symlink():
+        raise RuntimeError("frozen .venv/bin/python is absent or symlinked")
+    # The locations are read from the frozen interpreter itself; no environment
+    # variable or user argument can select an alternative runtime.
+    query = subprocess.run(
+        [
+            python.as_posix(),
+            "-I",
+            "-c",
+            "import pathlib,torch; print((pathlib.Path(torch.__file__).resolve().parent/'lib').as_posix()); import tensorrt_libs; print(pathlib.Path(tensorrt_libs.__file__).resolve().parent.as_posix())",
+        ],
+        cwd=root,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.splitlines()
+    if len(query) != 2:
+        raise RuntimeError(
+            "frozen Python did not derive the two runtime library directories"
+        )
+    cuda = _physical_executable("nvcc").parent.parent / "lib64"
+    libraries = {
+        "tensorrt_library_dir": Path(query[1]).resolve(strict=True).as_posix(),
+        "pytorch_library_dir": Path(query[0]).resolve(strict=True).as_posix(),
+        "cuda_library_dir": cuda.resolve(strict=True).as_posix(),
+    }
+    if any(
+        not Path(value).is_dir() or Path(value).is_symlink()
+        for value in libraries.values()
+    ):
+        raise RuntimeError(
+            "a derived runtime library directory is non-physical or absent"
+        )
+    gpu = controller.select_gpu_record(controller.nvml_gpu_inventory())
+    repository = controller.repository_inventory(
+        root, head, git, started=time.monotonic()
+    )
+    models = sorted(
+        (
+            controller.external_input_record(root, path)
+            for path in controller.MODEL_LOGICAL_PATHS
+        ),
+        key=lambda record: record["logical_path"].encode("utf-8"),
+    )
+    # Tool/runtime inventory starts from every executable and library directory
+    # named by RC1.  The controller's actual-loaded attestation remains the
+    # final admission for dependencies discovered while the frozen process runs.
+    tool_candidates = [Path(path) for path in tool_paths.values()] + [python]
+    for directory in libraries.values():
+        tool_candidates.extend(
+            sorted(
+                path
+                for path in Path(directory).rglob("*")
+                if path.is_file() and not path.is_symlink()
+            )
+        )
+    tools = sorted(
+        (
+            controller.external_input_record(root, path.as_posix())
+            for path in tool_candidates
+        ),
+        key=lambda record: record["logical_path"].encode("utf-8"),
+    )
+    if len({record["realpath"] for record in tools}) != len(tools):
+        raise RuntimeError("tool/runtime inventory has duplicate physical files")
+    bound_inputs: dict[str, Any] = {
+        "schema": controller.BOUND_INPUTS_SCHEMA,
+        "digest": "",
+        "repository": repository,
+        "models_engines": models,
+        "sequence": controller.sequence_input_inventory(root / controller.SEQUENCE_REL),
+        "tool_runtime": tools,
+    }
+    bound_inputs["digest"] = controller.bound_inventory_digest(bound_inputs)
+    controller.validate_bound_inventory(bound_inputs)
+    evidence_root = f"docs/modules/semantic/research/evidence/h0_phase_a_{head}"
+    landing = {
+        "schema": LANDING_SCHEMA_VERSION,
+        "artifact_path": freeze_artifact_path(head),
+        "declaration_path": DECLARATION_PATH,
+        "post_head_allowed_paths": [freeze_artifact_path(head), DECLARATION_PATH],
+    }
+    return {
+        "authority_landing": landing,
+        "bound_inputs": bound_inputs,
+        "document_type": "controller_input",
+        "evidence_root": evidence_root,
+        "execution_constants": controller.execution_constants(root),
+        "gpu": gpu,
+        "incomplete_root": evidence_root + ".incomplete",
+        "instrumentation_head": head,
+        "library_dirs": libraries,
+        "repository_root": root.as_posix(),
+        "schema": controller.CONTROLLER_SCHEMA,
+        "sequence_input_digest": bound_inputs["sequence"]["digest"],
+        "tool_paths": tool_paths,
+    }
 
 
 DIFF_FLAGS = ("--no-color", "--binary", "--full-index", "--no-renames")
@@ -280,7 +504,9 @@ def mutation_admission(
     return results, all_pass
 
 
-def build_artifact(command_line: list[str]) -> tuple[dict[str, Any], list[str]]:
+def build_artifact(
+    command_line: list[str], *, controller_input: dict[str, Any] | None = None
+) -> tuple[dict[str, Any], list[str]]:
     problems: list[str] = []
 
     if _git("status", "--porcelain"):
@@ -306,6 +532,7 @@ def build_artifact(command_line: list[str]) -> tuple[dict[str, Any], list[str]]:
         problems.append("policy_base_tree mismatch against §2")
 
     seal_inputs = {path: _head_blob(head, path) for path in SEAL_RELEVANT_PATHS}
+    bindings = implementation_bindings(head)
 
     diff_range = f"{POLICY_BASE_HEAD}..{head}"
     full_diff = _git_bytes("diff", *DIFF_FLAGS, diff_range)
@@ -414,6 +641,28 @@ def build_artifact(command_line: list[str]) -> tuple[dict[str, Any], list[str]]:
             "inputs: " + ", ".join(drifted)
         )
 
+    if controller_input is None:
+        try:
+            controller_input = _derive_controller_input(head)
+        except (OSError, RuntimeError, subprocess.SubprocessError) as exc:
+            problems.append(f"A7/RC1 controller-input inventory is unavailable: {exc}")
+            controller_input = {
+                "authority_landing": {
+                    "schema": LANDING_SCHEMA_VERSION,
+                    "artifact_path": freeze_artifact_path(head),
+                    "declaration_path": DECLARATION_PATH,
+                    "post_head_allowed_paths": [
+                        freeze_artifact_path(head),
+                        DECLARATION_PATH,
+                    ],
+                },
+                "unavailable": True,
+            }
+    if controller_input.get("instrumentation_head") != head:
+        problems.append(
+            "controller input does not bind the resolved instrumentation head"
+        )
+
     artifact = {
         "freeze_schema_version": FREEZE_SCHEMA_VERSION,
         "capture_schema_version": CAPTURE_SCHEMA_VERSION,
@@ -453,6 +702,14 @@ def build_artifact(command_line: list[str]) -> tuple[dict[str, Any], list[str]]:
             "platform": platform.platform(),
             "git": _git("--version"),
         },
+        "authority_landing": {
+            "schema": LANDING_SCHEMA_VERSION,
+            "artifact_path": freeze_artifact_path(head),
+            "declaration_path": DECLARATION_PATH,
+            "post_head_allowed_paths": [freeze_artifact_path(head), DECLARATION_PATH],
+        },
+        "implementation_bindings": bindings,
+        "phase_a_controller_input": controller_input,
         "complete": not problems,
         "problems": problems,
     }
@@ -461,16 +718,33 @@ def build_artifact(command_line: list[str]) -> tuple[dict[str, Any], list[str]]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output", type=Path, help="write canonical freeze JSON here")
-    args = parser.parse_args()
+    parser.parse_args()
     artifact, problems = build_artifact(sys.argv)
     payload = (
         json.dumps(artifact, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
         + "\n"
     ).encode("utf-8")
-    if args.output:
-        args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_bytes(payload)
+    output = ROOT / freeze_artifact_path(artifact["instrumentation_head"])
+    if output.exists() or output.is_symlink():
+        raise SystemExit(
+            f"refusing to replace deterministic v3 artifact path: {output}"
+        )
+    output.parent.mkdir(parents=True, exist_ok=False)
+    descriptor = os.open(
+        output,
+        os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC | os.O_NOFOLLOW,
+        0o644,
+    )
+    try:
+        view = memoryview(payload)
+        while view:
+            written = os.write(descriptor, view)
+            if written <= 0:
+                raise OSError("short v3 artifact write")
+            view = view[written:]
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
     print(f"instrumentation_head {artifact['instrumentation_head']}")
     print(
         f"projection_admitted  {artifact['runtime_policy_code_projection_v1']['projection_admitted']}"
