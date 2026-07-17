@@ -125,7 +125,7 @@
         "build_environment_algorithm", "build_environment_keys", "build_vectors", "c_paths", "checkpoints", "child_vectors", "d_paths",
         "deadline_seconds", "environment_keys", "evaluator_argv_prefix", "inotify_mask",
         "model_inputs", "operator_vector", "ordered_run_plan", "required_repository_inputs", "result_enum", "result_matrix",
-        "runtime_confinement_backend", "runtime_trace_scope", "trace_capacities", "v_paths"
+        "runtime_confinement_backend", "runtime_ingress_policy", "runtime_trace_scope", "trace_capacities", "v_paths"
       ],
       "properties": {
         "build_environment_algorithm": {"const": "h0_build_environment_v1"},
@@ -152,6 +152,7 @@
         "result_matrix": {"$ref": "#/$defs/result_matrix"},
         "trace_capacities": {"const": [65536, 16384, 16384, 16384]},
         "runtime_confinement_backend": {"const": "landlock_seccomp_ptrace_v1"},
+        "runtime_ingress_policy": {"const": "deny_external_bytes_v1"},
         "runtime_trace_scope": {"const": ["execve", "execveat", "mmap", "open", "openat", "openat2"]},
         "v_paths": {"$ref": "#/$defs/path_set", "minItems": 3, "maxItems": 3}
       }

@@ -16,6 +16,7 @@ sys.path.insert(0, TOOLS.as_posix())
 
 import run_h0_phase_a as parent  # noqa: E402
 import run_h0_phase_a_child as child  # noqa: E402
+import h0_runtime_confinement as runtime_confinement  # noqa: E402
 import verify_h0_phase_a as verifier  # noqa: E402
 
 
@@ -839,6 +840,34 @@ def test_parent_rejects_unexpected_exit_and_malformed_child_output(
         )
 
 
+def test_confinement_setup_failure_is_provenance_invalid(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    contract = _launch_contract(tmp_path)
+    monkeypatch.setattr(
+        runtime_confinement,
+        "build_plan",
+        lambda **_kwargs: {"digest": "1" * 64},
+    )
+
+    def reject_spawn(*_args, **_kwargs):
+        raise runtime_confinement.ConfinementError("forbidden inherited channel")
+
+    monkeypatch.setattr(runtime_confinement, "spawn_confined", reject_spawn)
+    with pytest.raises(parent.DriftError, match="runtime confinement setup failed"):
+        parent.launch_child(
+            contract,
+            "00_capture_off",
+            started=parent.time.monotonic(),
+            build_identity={},
+        )
+    invocation = parent.read_canonical_json(
+        tmp_path / "evidence.incomplete/runs/00_capture_off/invocation.json"
+    )
+    assert invocation["result"] == "provenance_invalid"
+    assert invocation["state"] == "failed"
+
+
 def test_unknown_result_is_never_classified() -> None:
     with pytest.raises(parent.ContractError, match="unrecognized"):
         parent.result_artifact_sets("unknown")
@@ -1021,6 +1050,24 @@ def test_active_wait_kills_process_group_on_continuous_mutation(
                 stage="child fixture",
             )
     assert terminated == [process]
+
+
+def test_termination_prefers_full_tracee_tree_cleanup() -> None:
+    calls: list[str] = []
+
+    class Process:
+        pid = 12345
+
+        @staticmethod
+        def poll() -> None:
+            return None
+
+        @staticmethod
+        def terminate_tree() -> None:
+            calls.append("tree")
+
+    parent._terminate_process_group(Process())
+    assert calls == ["tree"]
 
 
 @pytest.mark.parametrize("artifact_name", ["result.json", "checksums.sha256"])

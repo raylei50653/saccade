@@ -298,6 +298,7 @@ FORBIDDEN_SELECTOR_KEYS = frozenset(
     }
 )
 RUNTIME_CONFINEMENT_BACKEND = "landlock_seccomp_ptrace_v1"
+RUNTIME_INGRESS_POLICY = "deny_external_bytes_v1"
 RUNTIME_TRACE_SCOPE = ("execve", "execveat", "mmap", "open", "openat", "openat2")
 
 
@@ -951,6 +952,7 @@ def execution_constants(root: Path) -> dict[str, Any]:
         },
         "trace_capacities": list(TRACE_CAPACITIES),
         "runtime_confinement_backend": RUNTIME_CONFINEMENT_BACKEND,
+        "runtime_ingress_policy": RUNTIME_INGRESS_POLICY,
         "runtime_trace_scope": list(RUNTIME_TRACE_SCOPE),
         "v_paths": list(V_PATHS),
     }
@@ -1344,6 +1346,10 @@ def _create_build_environment(contract: Mapping[str, Any]) -> dict[str, str]:
 def _terminate_process_group(process: subprocess.Popen[bytes]) -> None:
     if process.poll() is not None:
         return
+    terminate_tree = getattr(process, "terminate_tree", None)
+    if callable(terminate_tree):
+        terminate_tree()
+        return
     try:
         os.killpg(process.pid, signal.SIGKILL)
     except ProcessLookupError:
@@ -1391,8 +1397,10 @@ def _collect_runtime_attestation(
         attestation.get("state") == "complete"
         and attestation.get("confinement_plan_digest") == runtime_plan["digest"]
         and attestation.get("backend") == RUNTIME_CONFINEMENT_BACKEND
+        and attestation.get("ingress_policy") == RUNTIME_INGRESS_POLICY
         and attestation.get("trace_scope") == list(RUNTIME_TRACE_SCOPE)
         and attestation.get("installed_before_exec") is True
+        and attestation.get("process_tree_terminal") is True
         and attestation.get("denial_probe_observed") is True
         and not attestation.get("violations")
     )
@@ -1463,6 +1471,7 @@ def launch_child(
             if log_path.is_symlink() or log_path.read_bytes() != b"NOT_RUN\n":
                 raise ContractError(f"child log placeholder drift: {log_path}")
             log_path.unlink()
+    confinement_error_type: Any = ()
     with (
         open(os.devnull, "rb", buffering=0) as stdin,
         open(stdout_path, "xb", buffering=0) as stdout,
@@ -1479,6 +1488,7 @@ def launch_child(
                 sys.path.insert(0, tools.as_posix())
             import h0_runtime_confinement
 
+            confinement_error_type = h0_runtime_confinement.ConfinementError
             denial_probe = incomplete / "_runtime_confinement_denial_probe"
             if not denial_probe.exists():
                 _write_bytes_fsync(denial_probe, b"MUST_BE_DENIED\n")
@@ -1577,6 +1587,16 @@ def launch_child(
             interrupted["state"] = "failed"
             _replace_canonical_fsync(invocation_path, interrupted)
             raise
+        except confinement_error_type as exc:
+            try:
+                _terminate_process_group(process)
+            except confinement_error_type:
+                pass
+            interrupted = dict(child_contract)
+            interrupted["result"] = "provenance_invalid"
+            interrupted["state"] = "failed"
+            _replace_canonical_fsync(invocation_path, interrupted)
+            raise DriftError(f"runtime confinement supervision failed: {exc}") from exc
     runtime_attestation: Mapping[str, Any] | None = None
     if runtime_plan is not None:
         runtime_attestation, runtime_digest, valid_runtime = (
@@ -2436,6 +2456,7 @@ def _finalize_bundle_once(
             "bound_inputs_digest": contract["bound_inputs"]["digest"],
             "child_runtime_inputs": child_runtime_inputs,
             "confinement_backend": RUNTIME_CONFINEMENT_BACKEND,
+            "ingress_policy": RUNTIME_INGRESS_POLICY,
             "library_dirs": contract["library_dirs"],
             "resolved_policy_fingerprint": POLICY_FINGERPRINT,
             "runtime_trace_scope": list(RUNTIME_TRACE_SCOPE),

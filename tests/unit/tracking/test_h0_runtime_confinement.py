@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import array
 import hashlib
 import os
 import re
 import shutil
+import socket
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -74,8 +77,10 @@ def native_fixture(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Path]:
     (root / ".venv/bin").mkdir(parents=True)
     plugin_source = root / "plugin.c"
     runner_source = root / "runner.c"
+    boundary_source = root / "boundary_runner.c"
     plugin = root / "native_plugin.so"
     runner = root / "native_runner"
+    boundary_runner = root / "boundary_runner"
     model = root / "model.bin"
     sequence = root / "sequence/frame.bin"
     probe = root / "evidence.incomplete/_runtime_confinement_denial_probe"
@@ -114,15 +119,62 @@ def native_fixture(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Path]:
         """,
         encoding="utf-8",
     )
+    boundary_source.write_text(
+        """
+        #define _GNU_SOURCE
+        #include <errno.h>
+        #include <fcntl.h>
+        #include <linux/io_uring.h>
+        #include <string.h>
+        #include <sys/socket.h>
+        #include <sys/syscall.h>
+        #include <sys/types.h>
+        #include <unistd.h>
+
+        int main(int argc, char **argv) {
+            if (argc < 3) return 90;
+            int denied = open(argv[1], O_RDONLY);
+            if (denied >= 0 || errno != EACCES) return 91;
+            if (!strcmp(argv[2], "socket")) {
+                syscall(SYS_socket, AF_UNIX, SOCK_STREAM, 0);
+            } else if (!strcmp(argv[2], "recvmsg")) {
+                struct msghdr message = {0};
+                syscall(SYS_recvmsg, -1, &message, 0);
+            } else if (!strcmp(argv[2], "memfd")) {
+                syscall(SYS_memfd_create, "h0-unbound", 0);
+            } else if (!strcmp(argv[2], "io_uring")) {
+                struct io_uring_params params = {0};
+                syscall(SYS_io_uring_setup, 1, &params);
+            } else if (!strcmp(argv[2], "fork-read")) {
+                if (argc != 4) return 92;
+                pid_t child = fork();
+                if (child < 0) return 93;
+                if (child > 0) return 0;
+                usleep(100000);
+                int fd = open(argv[3], O_RDONLY);
+                if (fd < 0) return 94;
+                char byte = 0;
+                if (read(fd, &byte, 1) != 1) return 95;
+                return byte == 'Z' ? 0 : 96;
+            } else {
+                return 97;
+            }
+            return 98;
+        }
+        """,
+        encoding="utf-8",
+    )
     subprocess.run(
         [compiler, "-shared", "-fPIC", plugin_source, "-o", plugin], check=True
     )
     subprocess.run([compiler, runner_source, "-ldl", "-o", runner], check=True)
+    subprocess.run([compiler, boundary_source, "-o", boundary_runner], check=True)
     model.write_bytes(b"Z-bound-model\n")
     sequence.parent.mkdir()
     sequence.write_bytes(b"Z-bound-sequence\n")
     probe.write_bytes(b"this read must be denied\n")
     return {
+        "boundary_runner": boundary_runner,
         "model": model,
         "plugin": plugin,
         "probe": probe,
@@ -199,8 +251,8 @@ def _run(
         fixture["plugin"].as_posix(),
         model_argument.as_posix(),
     ]
-    stdout_path = root / f"stdout-{os.urandom(8).hex()}"
-    stderr_path = root / f"stderr-{os.urandom(8).hex()}"
+    stdout_path = fixture["run_dir"] / f"stdout-{os.urandom(8).hex()}"
+    stderr_path = fixture["run_dir"] / f"stderr-{os.urandom(8).hex()}"
     with (
         open(os.devnull, "rb", buffering=0) as stdin,
         open(stdout_path, "xb", buffering=0) as stdout,
@@ -217,6 +269,81 @@ def _run(
         )
         returncode = process.wait(timeout=10)
         return returncode, process.runtime_attestation()
+
+
+def _boundary_plan(
+    fixture: dict[str, Path], *, bind_model: bool = False
+) -> dict[str, Any]:
+    root = fixture["root"]
+    runner_record = _identity(fixture["boundary_runner"])
+    return confinement.build_plan(
+        root=root,
+        incomplete=root / "evidence.incomplete",
+        inventory={
+            "models_engines": ([_identity(fixture["model"])] if bind_model else []),
+            "repository": [],
+            "sequence": {"files": [], "root": "sequence"},
+            "tool_runtime": _ldd_inputs(fixture["boundary_runner"]),
+        },
+        build_identity={
+            "artifacts": [],
+            "python": {
+                "length": runner_record["length"],
+                "path": runner_record["realpath"],
+                "sha256": runner_record["sha256"],
+            },
+        },
+        denial_probe=fixture["probe"],
+        run_ids=independent_verifier.RUN_IDS,
+    )
+
+
+def _run_boundary(
+    fixture: dict[str, Path],
+    mode: str,
+    *,
+    bind_model: bool = False,
+) -> tuple[int, dict[str, Any], confinement.ConfinedProcess]:
+    vector = [
+        fixture["boundary_runner"].as_posix(),
+        fixture["probe"].as_posix(),
+        mode,
+    ]
+    if mode == "fork-read":
+        vector.append(fixture["model"].as_posix())
+    token = os.urandom(8).hex()
+    with (
+        open(os.devnull, "rb", buffering=0) as stdin,
+        open(
+            fixture["run_dir"] / f"boundary-{token}.stdout", "xb", buffering=0
+        ) as stdout,
+        open(
+            fixture["run_dir"] / f"boundary-{token}.stderr", "xb", buffering=0
+        ) as stderr,
+    ):
+        process = confinement.spawn_confined(
+            vector,
+            cwd=fixture["root"],
+            env={"LANG": "C.UTF-8", "LC_ALL": "C.UTF-8"},
+            stdin=stdin,
+            stdout=stdout,
+            stderr=stderr,
+            plan=_boundary_plan(fixture, bind_model=bind_model),
+        )
+        if mode == "fork-read":
+            deadline = time.monotonic() + 2
+            while process._main_returncode is None and time.monotonic() < deadline:
+                assert process.poll() is None
+            assert process._main_returncode == 0
+            assert process.live_tracee_count > 0
+            assert process.poll() is None
+            with pytest.raises(
+                confinement.ConfinementError,
+                match="before process-tree terminal",
+            ):
+                process.runtime_attestation()
+        returncode = process.wait(timeout=10)
+        return returncode, process.runtime_attestation(), process
 
 
 def test_bound_native_plugin_model_and_mmap_are_attested(
@@ -315,6 +442,184 @@ def test_independent_verifier_rebuilds_the_native_runtime_inventory(
         independent_verifier._verify_runtime_inputs(
             tampered_resource, invocation, controller, build_identity
         )
+    premature = dict(attestation)
+    premature["process_tree_terminal"] = False
+    invocation["runtime_inputs_digest"] = independent_verifier.digest(premature)
+    with pytest.raises(
+        independent_verifier.VerificationError,
+        match="runtime OS boundary declaration",
+    ):
+        independent_verifier._verify_runtime_inputs(
+            premature, invocation, controller, build_identity
+        )
+    weakened = dict(attestation)
+    weakened_plan = dict(attestation["confinement_plan"])
+    weakened_plan["blocked_ingress_syscalls"] = [
+        syscall
+        for syscall in weakened_plan["blocked_ingress_syscalls"]
+        if syscall != "socket"
+    ]
+    weakened["confinement_plan"] = weakened_plan
+    weakened["confinement_plan_digest"] = independent_verifier.digest(weakened_plan)
+    invocation["confinement_plan_digest"] = weakened["confinement_plan_digest"]
+    invocation["runtime_inputs_digest"] = independent_verifier.digest(weakened)
+    with pytest.raises(
+        independent_verifier.VerificationError,
+        match="runtime confinement plan shape",
+    ):
+        independent_verifier._verify_runtime_inputs(
+            weakened, invocation, controller, build_identity
+        )
+
+
+def test_supervisor_waits_for_descendant_before_attesting_unbound_read(
+    native_fixture: dict[str, Path],
+) -> None:
+    returncode, attestation, process = _run_boundary(
+        native_fixture, "fork-read", bind_model=False
+    )
+    assert returncode == 0
+    assert process.live_tracee_count == 0
+    assert attestation["process_tree_terminal"] is True
+    assert attestation["state"] == "rejected"
+    assert any(
+        violation["path"] == native_fixture["model"].as_posix()
+        and violation["reason"] == "unbound_regular_file"
+        for violation in attestation["violations"]
+    )
+
+
+def test_success_attestation_has_no_tracee_or_process_group_residue(
+    native_fixture: dict[str, Path],
+) -> None:
+    returncode, attestation, process = _run_boundary(
+        native_fixture, "fork-read", bind_model=True
+    )
+    assert returncode == 0
+    assert process.live_tracee_count == 0
+    assert attestation["process_tree_terminal"] is True
+    assert attestation["state"] == "complete"
+    assert any(
+        record["realpath"] == native_fixture["model"].as_posix()
+        and "openat" in record["operations"]
+        for record in attestation["regular_files"]
+    )
+    with pytest.raises(ProcessLookupError):
+        os.killpg(process.pid, 0)
+
+
+@pytest.mark.parametrize(
+    ("mode", "operation"),
+    [
+        ("socket", "socket"),
+        ("recvmsg", "recvmsg"),
+        ("memfd", "memfd_create"),
+        ("io_uring", "io_uring_setup"),
+    ],
+)
+def test_non_file_runtime_ingress_syscalls_fail_closed(
+    native_fixture: dict[str, Path], mode: str, operation: str
+) -> None:
+    returncode, attestation, process = _run_boundary(native_fixture, mode)
+    assert returncode == -9
+    assert process.live_tracee_count == 0
+    assert attestation["state"] == "rejected"
+    assert any(
+        violation
+        == {
+            "operation": operation,
+            "path": f"syscall:{operation}",
+            "reason": "forbidden_runtime_ingress",
+        }
+        for violation in attestation["violations"]
+    )
+
+
+def test_scm_rights_channel_is_rejected_before_exec(
+    native_fixture: dict[str, Path],
+) -> None:
+    plan = _boundary_plan(native_fixture, bind_model=False)
+    token = os.urandom(8).hex()
+    receiver, sender = socket.socketpair()
+    with (
+        receiver,
+        sender,
+        open(native_fixture["model"], "rb", buffering=0) as unbound,
+        open(
+            native_fixture["run_dir"] / f"scm-{token}.stdout", "xb", buffering=0
+        ) as stdout,
+        open(
+            native_fixture["run_dir"] / f"scm-{token}.stderr", "xb", buffering=0
+        ) as stderr,
+    ):
+        sender.sendmsg(
+            [b"F"],
+            [
+                (
+                    socket.SOL_SOCKET,
+                    socket.SCM_RIGHTS,
+                    array.array("i", [unbound.fileno()]),
+                )
+            ],
+        )
+        with pytest.raises(
+            confinement.ConfinementError,
+            match="(?:non-physical stdin|stdin is not the admitted /dev/null)",
+        ):
+            confinement.spawn_confined(
+                [
+                    native_fixture["boundary_runner"].as_posix(),
+                    native_fixture["probe"].as_posix(),
+                    "recvmsg",
+                ],
+                cwd=native_fixture["root"],
+                env={"LANG": "C.UTF-8", "LC_ALL": "C.UTF-8"},
+                stdin=receiver,
+                stdout=stdout,
+                stderr=stderr,
+                plan=plan,
+            )
+
+
+def test_pipe_stdin_is_rejected_before_exec(native_fixture: dict[str, Path]) -> None:
+    read_fd, write_fd = os.pipe()
+    token = os.urandom(8).hex()
+    try:
+        with (
+            os.fdopen(read_fd, "rb", buffering=0) as pipe_input,
+            open(
+                native_fixture["run_dir"] / f"pipe-{token}.stdout",
+                "xb",
+                buffering=0,
+            ) as stdout,
+            open(
+                native_fixture["run_dir"] / f"pipe-{token}.stderr",
+                "xb",
+                buffering=0,
+            ) as stderr,
+        ):
+            read_fd = -1
+            with pytest.raises(
+                confinement.ConfinementError,
+                match="(?:non-physical stdin|stdin is not the admitted /dev/null)",
+            ):
+                confinement.spawn_confined(
+                    [
+                        native_fixture["boundary_runner"].as_posix(),
+                        native_fixture["probe"].as_posix(),
+                        "recvmsg",
+                    ],
+                    cwd=native_fixture["root"],
+                    env={"LANG": "C.UTF-8", "LC_ALL": "C.UTF-8"},
+                    stdin=pipe_input,
+                    stdout=stdout,
+                    stderr=stderr,
+                    plan=_boundary_plan(native_fixture),
+                )
+    finally:
+        if read_fd >= 0:
+            os.close(read_fd)
+        os.close(write_fd)
 
 
 @pytest.mark.parametrize("missing", ["plugin", "model"])
@@ -560,8 +865,8 @@ raise SystemExit(0 if module.VALUE in {7, 9} else 92)
         ]
         with (
             open(os.devnull, "rb", buffering=0) as stdin,
-            open(tmp_path / f"{module}.stdout", "xb", buffering=0) as stdout,
-            open(tmp_path / f"{module}.stderr", "xb", buffering=0) as stderr,
+            open(incomplete / f"runs/r/{module}.stdout", "xb", buffering=0) as stdout,
+            open(incomplete / f"runs/r/{module}.stderr", "xb", buffering=0) as stderr,
         ):
             process = confinement.spawn_confined(
                 vector,

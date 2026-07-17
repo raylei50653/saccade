@@ -209,6 +209,74 @@ V_PATHS = (
     "runs/02_capture_on_2/packet_verification.json",
     "runs/03_capture_on_3/packet_verification.json",
 )
+BLOCKED_RUNTIME_INGRESS_SYSCALLS = (
+    "pipe",
+    "shmget",
+    "shmat",
+    "shmctl",
+    "socket",
+    "connect",
+    "accept",
+    "sendto",
+    "recvfrom",
+    "sendmsg",
+    "recvmsg",
+    "shutdown",
+    "bind",
+    "listen",
+    "getsockname",
+    "getpeername",
+    "socketpair",
+    "setsockopt",
+    "getsockopt",
+    "semget",
+    "semop",
+    "semctl",
+    "shmdt",
+    "msgget",
+    "msgsnd",
+    "msgrcv",
+    "msgctl",
+    "ptrace",
+    "syslog",
+    "mq_open",
+    "mq_unlink",
+    "mq_timedsend",
+    "mq_timedreceive",
+    "mq_notify",
+    "mq_getsetattr",
+    "add_key",
+    "request_key",
+    "keyctl",
+    "inotify_init",
+    "inotify_add_watch",
+    "inotify_rm_watch",
+    "splice",
+    "tee",
+    "vmsplice",
+    "accept4",
+    "pipe2",
+    "inotify_init1",
+    "perf_event_open",
+    "recvmmsg",
+    "fanotify_init",
+    "fanotify_mark",
+    "name_to_handle_at",
+    "open_by_handle_at",
+    "sendmmsg",
+    "process_vm_readv",
+    "process_vm_writev",
+    "kcmp",
+    "memfd_create",
+    "bpf",
+    "userfaultfd",
+    "io_uring_setup",
+    "io_uring_enter",
+    "io_uring_register",
+    "pidfd_open",
+    "pidfd_getfd",
+    "process_madvise",
+)
 
 
 class VerificationError(RuntimeError):
@@ -419,16 +487,12 @@ def _verify_constants(controller: Mapping[str, Any]) -> None:
         raise VerificationError("resolved model/engine input set mismatch")
     if constants["required_repository_inputs"] != list(REQUIRED_REPOSITORY_INPUTS):
         raise VerificationError("required controller/runtime authority set mismatch")
-    if constants[
-        "runtime_confinement_backend"
-    ] != "landlock_seccomp_ptrace_v1" or constants["runtime_trace_scope"] != [
-        "execve",
-        "execveat",
-        "mmap",
-        "open",
-        "openat",
-        "openat2",
-    ]:
+    if (
+        constants["runtime_confinement_backend"] != "landlock_seccomp_ptrace_v1"
+        or constants["runtime_ingress_policy"] != "deny_external_bytes_v1"
+        or constants["runtime_trace_scope"]
+        != ["execve", "execveat", "mmap", "open", "openat", "openat2"]
+    ):
         raise VerificationError("runtime confinement declaration mismatch")
     if constants["checkpoints"] != list(CHECKPOINTS):
         raise VerificationError("bound-input checkpoint order mismatch")
@@ -1057,8 +1121,10 @@ def _verify_runtime_inputs(
         "confinement_plan",
         "confinement_plan_digest",
         "denial_probe_observed",
+        "ingress_policy",
         "installed_before_exec",
         "landlock_abi",
+        "process_tree_terminal",
         "regular_files",
         "resources",
         "schema",
@@ -1071,8 +1137,10 @@ def _verify_runtime_inputs(
     expected_scope = ["execve", "execveat", "mmap", "open", "openat", "openat2"]
     if (
         value["backend"] != "landlock_seccomp_ptrace_v1"
+        or value["ingress_policy"] != "deny_external_bytes_v1"
         or value["trace_scope"] != expected_scope
         or value["installed_before_exec"] is not True
+        or value["process_tree_terminal"] is not True
         or not isinstance(value["landlock_abi"], int)
         or value["landlock_abi"] < 3
     ):
@@ -1086,8 +1154,11 @@ def _verify_runtime_inputs(
         raise VerificationError("child/runtime input inventory digest mismatch")
     plan_members = {
         "backend",
+        "blocked_ingress_syscalls",
         "denial_probe",
         "files",
+        "ingress_policy",
+        "kernel_resources",
         "lookup_directories",
         "output_directories",
         "resource_rules",
@@ -1098,6 +1169,9 @@ def _verify_runtime_inputs(
         set(plan) != plan_members
         or plan["schema"] != "h0_runtime_confinement_plan_v1"
         or plan["backend"] != value["backend"]
+        or plan["blocked_ingress_syscalls"] != list(BLOCKED_RUNTIME_INGRESS_SYSCALLS)
+        or plan["ingress_policy"] != value["ingress_policy"]
+        or plan["kernel_resources"] != ["exec_auxv", "getrandom"]
         or plan["trace_scope"] != expected_scope
     ):
         raise VerificationError("runtime confinement plan shape mismatch")
@@ -1344,6 +1418,7 @@ def _verify_runtime_inputs(
     allowed_operations = {
         "execve",
         "execveat",
+        "getrandom",
         "mmap",
         "mmap_exec",
         "mmap_read",
@@ -1398,8 +1473,14 @@ def _verify_runtime_inputs(
             admitted = canonical and any(
                 candidate == root or root in candidate.parents for root in lookup_roots
             )
-        elif kind == "kernel_object":
-            admitted = path.startswith(("anon_inode:", "socket:", "pipe:", "/memfd:"))
+        elif kind == "kernel_random":
+            admitted = (
+                path == "syscall:getrandom" and "getrandom" in plan["kernel_resources"]
+            )
+        elif kind == "kernel_auxv":
+            admitted = (
+                path == "kernel:exec_auxv" and "exec_auxv" in plan["kernel_resources"]
+            )
         else:
             admitted = False
         if not admitted:
@@ -1573,6 +1654,7 @@ def verify_evidence_root(root: Path) -> dict[str, Any]:
                 )
             ],
             "confinement_backend": "landlock_seccomp_ptrace_v1",
+            "ingress_policy": "deny_external_bytes_v1",
             "library_dirs": manifest["controller_input"]["library_dirs"],
             "resolved_policy_fingerprint": "c7a6dbb35168cba75249b7f2c67d8455b6f634732493e455a4bb920aab6d7782",
             "runtime_trace_scope": [

@@ -26,6 +26,7 @@ from typing import Any, Mapping, Sequence
 PLAN_SCHEMA = "h0_runtime_confinement_plan_v1"
 ATTESTATION_SCHEMA = "h0_runtime_inputs_v1"
 BACKEND = "landlock_seccomp_ptrace_v1"
+INGRESS_POLICY = "deny_external_bytes_v1"
 TRACE_SCOPE = ("execve", "execveat", "mmap", "open", "openat", "openat2")
 
 _SYS_LANDLOCK_CREATE_RULESET = 444
@@ -96,14 +97,89 @@ _NR_CREAT = 85
 _NR_OPENAT = 257
 _NR_EXECVEAT = 322
 _NR_OPENAT2 = 437
+_BLOCKED_INGRESS_BY_NR = {
+    22: "pipe",
+    29: "shmget",
+    30: "shmat",
+    31: "shmctl",
+    41: "socket",
+    42: "connect",
+    43: "accept",
+    44: "sendto",
+    45: "recvfrom",
+    46: "sendmsg",
+    47: "recvmsg",
+    48: "shutdown",
+    49: "bind",
+    50: "listen",
+    51: "getsockname",
+    52: "getpeername",
+    53: "socketpair",
+    54: "setsockopt",
+    55: "getsockopt",
+    64: "semget",
+    65: "semop",
+    66: "semctl",
+    67: "shmdt",
+    68: "msgget",
+    69: "msgsnd",
+    70: "msgrcv",
+    71: "msgctl",
+    101: "ptrace",
+    103: "syslog",
+    240: "mq_open",
+    241: "mq_unlink",
+    242: "mq_timedsend",
+    243: "mq_timedreceive",
+    244: "mq_notify",
+    245: "mq_getsetattr",
+    248: "add_key",
+    249: "request_key",
+    250: "keyctl",
+    253: "inotify_init",
+    254: "inotify_add_watch",
+    255: "inotify_rm_watch",
+    275: "splice",
+    276: "tee",
+    278: "vmsplice",
+    288: "accept4",
+    293: "pipe2",
+    294: "inotify_init1",
+    298: "perf_event_open",
+    299: "recvmmsg",
+    300: "fanotify_init",
+    301: "fanotify_mark",
+    303: "name_to_handle_at",
+    304: "open_by_handle_at",
+    307: "sendmmsg",
+    310: "process_vm_readv",
+    311: "process_vm_writev",
+    312: "kcmp",
+    319: "memfd_create",
+    321: "bpf",
+    323: "userfaultfd",
+    425: "io_uring_setup",
+    426: "io_uring_enter",
+    427: "io_uring_register",
+    434: "pidfd_open",
+    438: "pidfd_getfd",
+    440: "process_madvise",
+}
+_EXPLICIT_KERNEL_RESOURCE_BY_NR = {318: "getrandom"}
+BLOCKED_INGRESS_SYSCALLS = tuple(_BLOCKED_INGRESS_BY_NR.values())
+KERNEL_RESOURCES = ("exec_auxv", "getrandom")
 _TRACED_SYSCALLS = (
-    _NR_OPEN,
-    _NR_MMAP,
-    _NR_EXECVE,
-    _NR_CREAT,
-    _NR_OPENAT,
-    _NR_EXECVEAT,
-    _NR_OPENAT2,
+    (
+        _NR_OPEN,
+        _NR_MMAP,
+        _NR_EXECVE,
+        _NR_CREAT,
+        _NR_OPENAT,
+        _NR_EXECVEAT,
+        _NR_OPENAT2,
+    )
+    + tuple(_BLOCKED_INGRESS_BY_NR)
+    + tuple(_EXPLICIT_KERNEL_RESOURCE_BY_NR)
 )
 _SYSCALL_NAMES = {
     _NR_OPEN: "open",
@@ -113,6 +189,8 @@ _SYSCALL_NAMES = {
     _NR_OPENAT: "openat",
     _NR_EXECVEAT: "execveat",
     _NR_OPENAT2: "openat2",
+    **_BLOCKED_INGRESS_BY_NR,
+    **_EXPLICIT_KERNEL_RESOURCE_BY_NR,
 }
 _AT_FDCWD = -100
 _O_ACCMODE = 3
@@ -366,8 +444,11 @@ def build_plan(
     public_files.sort(key=lambda item: item["realpath"].encode("utf-8"))
     public = {
         "backend": BACKEND,
+        "blocked_ingress_syscalls": list(BLOCKED_INGRESS_SYSCALLS),
         "denial_probe": denial_probe.absolute().as_posix(),
         "files": public_files,
+        "ingress_policy": INGRESS_POLICY,
+        "kernel_resources": list(KERNEL_RESOURCES),
         "lookup_directories": sorted(
             lookup_directories, key=lambda value: value.encode("utf-8")
         ),
@@ -738,16 +819,26 @@ class _Recorder:
             self._violate(operation, f"fd:{fd}", "unclassifiable_file_descriptor")
             return False
         if raw.startswith(("anon_inode:", "socket:", "pipe:", "/memfd:")):
-            self.observed_resources.setdefault(("kernel_object", raw), set()).add(
-                operation
-            )
-            return True
+            self._violate(operation, raw, "unplanned_kernel_object")
+            return False
         return self.observe_path(pid, raw, _AT_FDCWD, operation, write=write)
 
     def observe_syscall(self, pid: int, registers: _UserRegsStruct) -> bool:
         number = int(registers.orig_rax)
         operation = _SYSCALL_NAMES.get(number, f"syscall_{number}")
         try:
+            if number in _EXPLICIT_KERNEL_RESOURCE_BY_NR:
+                self.observed_resources.setdefault(
+                    ("kernel_random", f"syscall:{operation}"), set()
+                ).add(operation)
+                return True
+            if number in _BLOCKED_INGRESS_BY_NR:
+                self._violate(
+                    operation,
+                    f"syscall:{operation}",
+                    "forbidden_runtime_ingress",
+                )
+                return False
             if number == _NR_OPEN:
                 raw = _read_c_string(pid, int(registers.rdi))
                 flags = int(registers.rsi)
@@ -810,6 +901,9 @@ class _Recorder:
 
     def observe_startup_mappings(self, pid: int) -> bool:
         """Record ELF mappings created by the kernel itself during execve."""
+        self.observed_resources.setdefault(
+            ("kernel_auxv", "kernel:exec_auxv"), set()
+        ).add("execve")
         try:
             lines = Path(f"/proc/{pid}/maps").read_text(encoding="utf-8").splitlines()
         except (OSError, UnicodeError) as exc:
@@ -827,7 +921,11 @@ class _Recorder:
         return accepted
 
     def attestation(
-        self, *, landlock_abi: int, boundary_installed: bool
+        self,
+        *,
+        landlock_abi: int,
+        boundary_installed: bool,
+        process_tree_terminal: bool,
     ) -> dict[str, Any]:
         regular_files: list[dict[str, Any]] = []
         for realpath, operations in self.observed_files.items():
@@ -872,7 +970,11 @@ class _Recorder:
                 self.plan["denial_probe"],
                 f"expected_once_observed_{self.denial_probe_count}",
             )
-        state = "complete" if boundary_installed and not self.violations else "rejected"
+        state = (
+            "complete"
+            if boundary_installed and process_tree_terminal and not self.violations
+            else "rejected"
+        )
         return {
             "backend": BACKEND,
             "confinement_plan": {
@@ -880,8 +982,10 @@ class _Recorder:
             },
             "confinement_plan_digest": self.plan["digest"],
             "denial_probe_observed": self.denial_probe_count == 1,
+            "ingress_policy": INGRESS_POLICY,
             "installed_before_exec": boundary_installed,
             "landlock_abi": landlock_abi,
+            "process_tree_terminal": process_tree_terminal,
             "regular_files": regular_files,
             "resources": resources,
             "schema": ATTESTATION_SCHEMA,
@@ -909,11 +1013,16 @@ class ConfinedProcess:
             if exc.errno != errno.ESRCH:
                 raise
 
-    def _kill_on_violation(self) -> None:
+    def _kill_tree(self) -> None:
         try:
             os.killpg(self.pid, signal.SIGKILL)
         except ProcessLookupError:
             pass
+        for tracee in tuple(self._tracees):
+            try:
+                os.kill(tracee, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
 
     def _event(self, pid: int, status: int) -> None:
         if os.WIFEXITED(status):
@@ -934,7 +1043,7 @@ class ConfinedProcess:
             registers = _UserRegsStruct()
             _ptrace(_PTRACE_GETREGS, pid, 0, ctypes.byref(registers))
             if not self._recorder.observe_syscall(pid, registers):
-                self._kill_on_violation()
+                self._kill_tree()
             self._resume(pid)
             return
         if event in {_PTRACE_EVENT_FORK, _PTRACE_EVENT_VFORK, _PTRACE_EVENT_CLONE}:
@@ -945,7 +1054,7 @@ class ConfinedProcess:
             return
         if event == _PTRACE_EVENT_EXEC:
             if not self._recorder.observe_startup_mappings(pid):
-                self._kill_on_violation()
+                self._kill_tree()
             self._resume(pid)
             return
         self._resume(
@@ -953,40 +1062,107 @@ class ConfinedProcess:
         )
 
     def _pump(self, deadline: float | None) -> None:
-        while self._main_returncode is None:
-            if deadline is not None and time.monotonic() >= deadline:
+        first_pass = True
+        while self._tracees:
+            if not first_pass and deadline is not None and time.monotonic() >= deadline:
                 return
-            try:
-                pid, status = os.waitpid(-1, os.WNOHANG | _WAIT_WALL)
-            except ChildProcessError:
-                if self._main_returncode is None:
-                    self._main_returncode = -signal.SIGKILL
-                return
-            if pid == 0:
+            first_pass = False
+            progressed = False
+            for tracee in tuple(sorted(self._tracees)):
+                try:
+                    pid, status = os.waitpid(tracee, os.WNOHANG | _WAIT_WALL)
+                except ChildProcessError as exc:
+                    self._recorder._violate(
+                        "process_tree",
+                        f"pid:{tracee}",
+                        "unclassifiable_tracee_terminal",
+                    )
+                    try:
+                        os.kill(tracee, 0)
+                    except ProcessLookupError:
+                        self._tracees.discard(tracee)
+                        if tracee == self.pid and self._main_returncode is None:
+                            self._main_returncode = -signal.SIGKILL
+                        progressed = True
+                        continue
+                    self._kill_tree()
+                    raise ConfinementError(
+                        f"lost supervision of live tracee {tracee}"
+                    ) from exc
+                if pid == 0:
+                    continue
+                progressed = True
+                self._event(pid, status)
+            if not progressed:
                 time.sleep(0.001)
-                continue
-            self._event(pid, status)
+        if self._main_returncode is None:
+            self._recorder._violate(
+                "process_tree", f"pid:{self.pid}", "missing_main_terminal_status"
+            )
+            self._main_returncode = -signal.SIGKILL
 
     def poll(self) -> int | None:
         self._pump(time.monotonic())
-        return self._main_returncode
+        return self._main_returncode if not self._tracees else None
 
     def wait(self, timeout: float | None = None) -> int:
         deadline = None if timeout is None else time.monotonic() + timeout
         self._pump(deadline)
-        if self._main_returncode is None:
+        if self._tracees or self._main_returncode is None:
             import subprocess
 
             raise subprocess.TimeoutExpired(self.pid, timeout)
         return self._main_returncode
 
+    def terminate_tree(self) -> None:
+        self._kill_tree()
+        self._pump(None)
+
+    @property
+    def live_tracee_count(self) -> int:
+        return len(self._tracees)
+
     def runtime_attestation(self) -> dict[str, Any]:
-        if self._main_returncode is None:
-            raise ConfinementError("runtime attestation requested before child exit")
+        if self._tracees or self._main_returncode is None:
+            raise ConfinementError(
+                "runtime attestation requested before process-tree terminal"
+            )
         return self._recorder.attestation(
             landlock_abi=self._landlock_abi,
             boundary_installed=self._boundary_installed,
+            process_tree_terminal=True,
         )
+
+
+def _validate_standard_streams(
+    stdin: Any, stdout: Any, stderr: Any, plan: Mapping[str, Any]
+) -> None:
+    """Admit no inherited byte channel beyond /dev/null and evidence logs."""
+
+    def target(stream: Any, name: str) -> tuple[Path, os.stat_result]:
+        try:
+            fd = int(stream.fileno())
+            info = os.fstat(fd)
+            raw = os.readlink(f"/proc/self/fd/{fd}")
+        except (OSError, TypeError, ValueError) as exc:
+            raise ConfinementError(f"unclassifiable {name} stream: {exc}") from exc
+        path = Path(raw)
+        if not path.is_absolute() or raw.endswith(" (deleted)"):
+            raise ConfinementError(f"non-physical {name} stream: {raw}")
+        return path, info
+
+    stdin_path, stdin_info = target(stdin, "stdin")
+    if stdin_path != Path("/dev/null") or not stat.S_ISCHR(stdin_info.st_mode):
+        raise ConfinementError("stdin is not the admitted /dev/null device")
+    output_roots = tuple(Path(path) for path in plan["output_directories"])
+    for stream, name in ((stdout, "stdout"), (stderr, "stderr")):
+        path, info = target(stream, name)
+        if (
+            not stat.S_ISREG(info.st_mode)
+            or not any(path == root or root in path.parents for root in output_roots)
+            or path.resolve(strict=True) != path
+        ):
+            raise ConfinementError(f"{name} is not a physical regular evidence output")
 
 
 def spawn_confined(
@@ -1002,6 +1178,7 @@ def spawn_confined(
     """Fork, install the boundary, and exec the literal RC1.1 vector."""
     if os.uname().machine != "x86_64":
         raise ConfinementError("runtime syscall attestation requires x86_64")
+    _validate_standard_streams(stdin, stdout, stderr, plan)
     ready_read, ready_write = os.pipe2(os.O_CLOEXEC)
     pid = os.fork()
     if pid == 0:  # pragma: no cover - asserted through the supervising parent
