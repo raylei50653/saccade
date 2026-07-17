@@ -594,15 +594,28 @@ def external_input_record(root: Path, logical_path: str) -> dict[str, Any]:
     }
 
 
-def repository_inventory(root: Path, head: str, git_path: Path) -> list[dict[str, Any]]:
-    process = subprocess.run(
-        ["git", "ls-tree", "-r", "--full-tree", "-z", head],
-        executable=git_path,
-        cwd=root,
-        env={"PATH": "/usr/bin:/bin", "LC_ALL": "C.UTF-8"},
-        check=True,
-        capture_output=True,
-    )
+def repository_inventory(
+    root: Path,
+    head: str,
+    git_path: Path,
+    *,
+    started: float,
+    monitor: "BoundInputMonitor | None" = None,
+    clock: Callable[[], float] = time.monotonic,
+) -> list[dict[str, Any]]:
+    try:
+        process = _run_auxiliary_subprocess(
+            ["git", "ls-tree", "-r", "--full-tree", "-z", head],
+            executable=git_path,
+            cwd=root,
+            env={"PATH": "/usr/bin:/bin", "LC_ALL": "C.UTF-8"},
+            started=started,
+            monitor=monitor,
+            stage="git repository inventory",
+            clock=clock,
+        )
+    except subprocess.CalledProcessError as exc:
+        raise DriftError("git repository inventory exited nonzero") from exc
     records: list[dict[str, Any]] = []
     for raw in process.stdout.split(b"\0"):
         if not raw:
@@ -659,7 +672,13 @@ def repository_inventory(root: Path, head: str, git_path: Path) -> list[dict[str
     return records
 
 
-def recompute_bound_inventory(contract: Mapping[str, Any]) -> dict[str, Any]:
+def recompute_bound_inventory(
+    contract: Mapping[str, Any],
+    *,
+    started: float,
+    monitor: "BoundInputMonitor | None" = None,
+    clock: Callable[[], float] = time.monotonic,
+) -> dict[str, Any]:
     root = require_canonical_absolute(contract["repository_root"], directory=True)
     git_path = require_canonical_absolute(
         contract["tool_paths"]["git"], directory=False
@@ -683,7 +702,12 @@ def recompute_bound_inventory(contract: Mapping[str, Any]) -> dict[str, Any]:
         "digest": "",
         "models_engines": models,
         "repository": repository_inventory(
-            root, contract["instrumentation_head"], git_path
+            root,
+            contract["instrumentation_head"],
+            git_path,
+            started=started,
+            monitor=monitor,
+            clock=clock,
         ),
         "schema": BOUND_INPUTS_SCHEMA,
         "sequence": sequence_input_inventory(root / SEQUENCE_REL),
@@ -712,14 +736,21 @@ def bound_file_paths(contract: Mapping[str, Any]) -> tuple[Path, ...]:
 
 
 def verify_bound_checkpoint(
-    contract: Mapping[str, Any], monitor: "BoundInputMonitor", name: str
+    contract: Mapping[str, Any],
+    monitor: "BoundInputMonitor",
+    name: str,
+    *,
+    started: float,
+    clock: Callable[[], float] = time.monotonic,
 ) -> dict[str, Any]:
     if name not in CHECKPOINTS:
         raise ContractError(f"unknown checkpoint: {name}")
     before = monitor.drain()
     if before:
         raise DriftError(f"mutation events before {name}: {before!r}")
-    current = recompute_bound_inventory(contract)
+    current = recompute_bound_inventory(
+        contract, started=started, monitor=monitor, clock=clock
+    )
     after = monitor.drain()
     if after:
         raise DriftError(f"mutation events after {name}: {after!r}")
@@ -1238,7 +1269,15 @@ def _verify_owner_event(root: Path, instrumentation_head: str) -> None:
         )
 
 
-def preflight_controller_input(contract: Mapping[str, Any], root: Path) -> None:
+def preflight_controller_input(
+    contract: Mapping[str, Any],
+    root: Path,
+    *,
+    started: float | None = None,
+    clock: Callable[[], float] = time.monotonic,
+) -> None:
+    if started is None:
+        started = clock()
     physical_root = root.resolve(strict=True)
     if physical_root != root or Path.cwd().resolve(strict=True) != physical_root:
         raise ContractError("physical cwd does not equal repository root")
@@ -1261,32 +1300,38 @@ def preflight_controller_input(contract: Mapping[str, Any], root: Path) -> None:
     git_path = require_canonical_absolute(
         contract["tool_paths"]["git"], directory=False
     )
-    top = subprocess.run(
-        ["git", "rev-parse", "--show-toplevel"],
-        executable=git_path,
-        cwd=root,
-        check=True,
-        capture_output=True,
-        text=True,
-        env={"PATH": "/usr/bin:/bin", "LC_ALL": "C.UTF-8"},
-    ).stdout.strip()
-    actual_head = subprocess.run(
-        ["git", "rev-parse", "HEAD"],
-        executable=git_path,
-        cwd=root,
-        check=True,
-        capture_output=True,
-        text=True,
-        env={"PATH": "/usr/bin:/bin", "LC_ALL": "C.UTF-8"},
-    ).stdout.strip()
-    status_bytes = subprocess.run(
-        ["git", "status", "--porcelain=v1", "--untracked-files=normal"],
-        executable=git_path,
-        cwd=root,
-        check=True,
-        capture_output=True,
-        env={"PATH": "/usr/bin:/bin", "LC_ALL": "C.UTF-8"},
-    ).stdout
+    try:
+        top = _run_auxiliary_subprocess(
+            ["git", "rev-parse", "--show-toplevel"],
+            executable=git_path,
+            cwd=root,
+            env={"PATH": "/usr/bin:/bin", "LC_ALL": "C.UTF-8"},
+            started=started,
+            stage="git repository-root preflight",
+            clock=clock,
+            text=True,
+        ).stdout.strip()
+        actual_head = _run_auxiliary_subprocess(
+            ["git", "rev-parse", "HEAD"],
+            executable=git_path,
+            cwd=root,
+            env={"PATH": "/usr/bin:/bin", "LC_ALL": "C.UTF-8"},
+            started=started,
+            stage="git HEAD preflight",
+            clock=clock,
+            text=True,
+        ).stdout.strip()
+        status_bytes = _run_auxiliary_subprocess(
+            ["git", "status", "--porcelain=v1", "--untracked-files=normal"],
+            executable=git_path,
+            cwd=root,
+            env={"PATH": "/usr/bin:/bin", "LC_ALL": "C.UTF-8"},
+            started=started,
+            stage="git cleanliness preflight",
+            clock=clock,
+        ).stdout
+    except subprocess.CalledProcessError as exc:
+        raise ContractError("git provenance preflight exited nonzero") from exc
     if top != root.as_posix() or actual_head != head or status_bytes != b"":
         raise ContractError("checkout root/head/cleanliness provenance mismatch")
     build_dir = root / "build/h0_phase_a"
@@ -1344,12 +1389,14 @@ def _create_build_environment(contract: Mapping[str, Any]) -> dict[str, str]:
 
 
 def _terminate_process_group(process: subprocess.Popen[bytes]) -> None:
-    if process.poll() is not None:
-        return
     terminate_tree = getattr(process, "terminate_tree", None)
     if callable(terminate_tree):
         terminate_tree()
         return
+    # Every controller-owned subprocess starts a fresh session.  Kill the
+    # process group even when its leader has already exited: a helper can fork,
+    # close the captured pipes, and otherwise leave a descendant behind after
+    # the leader becomes waitable.
     try:
         os.killpg(process.pid, signal.SIGKILL)
     except ProcessLookupError:
@@ -1385,13 +1432,80 @@ def _wait_with_monitor(
             continue
 
 
-def _collect_runtime_attestation(
-    process: Any, runtime_plan: Mapping[str, Any], runtime_path: Path
+def _run_auxiliary_subprocess(
+    vector: Sequence[str],
+    *,
+    executable: Path,
+    cwd: Path,
+    env: Mapping[str, str],
+    started: float,
+    monitor: BoundInputMonitor | None = None,
+    stage: str,
+    clock: Callable[[], float] = time.monotonic,
+    text: bool = False,
+) -> subprocess.CompletedProcess[Any]:
+    """Run one bounded helper with captured output and no surviving process tree."""
+    _bounded_remaining(started, now=clock)
+    process = subprocess.Popen(
+        list(vector),
+        executable=executable,
+        cwd=cwd,
+        env=dict(env),
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        shell=False,
+        close_fds=True,
+        start_new_session=True,
+        text=text,
+    )
+    while True:
+        if monitor is not None:
+            events = monitor.drain()
+            if events:
+                _terminate_process_group(process)
+                raise DriftError(
+                    f"bound-input mutation while {stage} was active: {events!r}"
+                )
+        try:
+            remaining = _bounded_remaining(started, now=clock)
+        except TimeoutError:
+            _terminate_process_group(process)
+            raise
+        try:
+            stdout, stderr = process.communicate(timeout=min(remaining, 0.1))
+        except subprocess.TimeoutExpired:
+            continue
+        if monitor is not None:
+            events = monitor.drain()
+            if events:
+                _terminate_process_group(process)
+                raise DriftError(
+                    f"bound-input mutation while {stage} completed: {events!r}"
+                )
+        try:
+            _bounded_remaining(started, now=clock)
+        except TimeoutError:
+            _terminate_process_group(process)
+            raise
+        completed = subprocess.CompletedProcess(
+            list(vector), process.returncode, stdout, stderr
+        )
+        if process.returncode:
+            _terminate_process_group(process)
+            raise subprocess.CalledProcessError(
+                process.returncode,
+                list(vector),
+                output=stdout,
+                stderr=stderr,
+            )
+        return completed
+
+
+def _runtime_attestation_details(
+    process: Any, runtime_plan: Mapping[str, Any]
 ) -> tuple[Mapping[str, Any], str, bool]:
     attestation = process.runtime_attestation()
-    if runtime_path.exists() or runtime_path.is_symlink():
-        raise ContractError("duplicate or unsafe runtime input attestation")
-    _write_canonical_fsync(runtime_path, attestation)
     runtime_digest = sha256_bytes(canonical_json_bytes(attestation))
     valid = bool(
         attestation.get("state") == "complete"
@@ -1404,6 +1518,18 @@ def _collect_runtime_attestation(
         and attestation.get("denial_probe_observed") is True
         and not attestation.get("violations")
     )
+    return attestation, runtime_digest, valid
+
+
+def _collect_runtime_attestation(
+    process: Any, runtime_plan: Mapping[str, Any], runtime_path: Path
+) -> tuple[Mapping[str, Any], str, bool]:
+    attestation, runtime_digest, valid = _runtime_attestation_details(
+        process, runtime_plan
+    )
+    if runtime_path.exists() or runtime_path.is_symlink():
+        raise ContractError("duplicate or unsafe runtime input attestation")
+    _write_canonical_fsync(runtime_path, attestation)
     return attestation, runtime_digest, valid
 
 
@@ -1682,14 +1808,24 @@ def _run_build_vector(
             raise TimeoutError("build exceeded the single Phase-A deadline") from exc
 
 
-def _tool_version(path: Path) -> str:
-    result = subprocess.run(
+def _tool_version(
+    path: Path,
+    *,
+    root: Path,
+    started: float,
+    monitor: BoundInputMonitor | None,
+    clock: Callable[[], float],
+) -> str:
+    result = _run_auxiliary_subprocess(
         [path.as_posix(), "--version"],
         executable=path,
-        check=True,
-        capture_output=True,
-        text=True,
+        cwd=root,
         env={"PATH": "/usr/bin:/bin", "LC_ALL": "C.UTF-8"},
+        started=started,
+        monitor=monitor,
+        stage=f"tool version identity {path}",
+        clock=clock,
+        text=True,
     )
     value = (result.stdout + result.stderr).strip()
     if not value:
@@ -1697,14 +1833,25 @@ def _tool_version(path: Path) -> str:
     return value
 
 
-def _elf_build_id(path: Path, readelf: Path) -> str:
-    result = subprocess.run(
+def _elf_build_id(
+    path: Path,
+    readelf: Path,
+    *,
+    root: Path,
+    started: float,
+    monitor: BoundInputMonitor | None,
+    clock: Callable[[], float],
+) -> str:
+    result = _run_auxiliary_subprocess(
         ["readelf", "-n", path.as_posix()],
         executable=readelf,
-        check=True,
-        capture_output=True,
-        text=True,
+        cwd=root,
         env={"PATH": "/usr/bin:/bin", "LC_ALL": "C.UTF-8"},
+        started=started,
+        monitor=monitor,
+        stage=f"ELF build-id identity {path}",
+        clock=clock,
+        text=True,
     )
     matches = [
         line.split("Build ID:", 1)[1].strip()
@@ -1720,14 +1867,25 @@ def _elf_build_id(path: Path, readelf: Path) -> str:
     return matches[0].lower()
 
 
-def _dynamic_dependencies(path: Path, ldd: Path) -> list[dict[str, Any]]:
-    result = subprocess.run(
+def _dynamic_dependencies(
+    path: Path,
+    ldd: Path,
+    *,
+    root: Path,
+    started: float,
+    monitor: BoundInputMonitor | None,
+    clock: Callable[[], float],
+) -> list[dict[str, Any]]:
+    result = _run_auxiliary_subprocess(
         ["ldd", path.as_posix()],
         executable=ldd,
-        check=True,
-        capture_output=True,
-        text=True,
+        cwd=root,
         env={"PATH": "/usr/bin:/bin", "LC_ALL": "C.UTF-8"},
+        started=started,
+        monitor=monitor,
+        stage=f"dynamic dependency identity {path}",
+        clock=clock,
+        text=True,
     )
     records: list[dict[str, Any]] = []
     for line in result.stdout.splitlines():
@@ -1777,9 +1935,16 @@ def _cmake_cache_entries(cache: Path) -> dict[str, str]:
     return entries
 
 
-def _build_identity(contract: Mapping[str, Any], root: Path) -> dict[str, Any]:
+def _build_identity(
+    contract: Mapping[str, Any],
+    root: Path,
+    *,
+    started: float,
+    monitor: BoundInputMonitor | None,
+    clock: Callable[[], float] = time.monotonic,
+) -> dict[str, Any]:
     python = root / ".venv/bin/python"
-    query = subprocess.run(
+    query = _run_auxiliary_subprocess(
         [
             python.as_posix(),
             "-I",
@@ -1789,14 +1954,16 @@ def _build_identity(contract: Mapping[str, Any], root: Path) -> dict[str, Any]:
         ],
         executable=python,
         cwd=root,
-        check=True,
-        capture_output=True,
-        text=True,
         env={
             "PATH": f"{root}/.venv/bin:/usr/bin:/bin",
             "LANG": "C.UTF-8",
             "LC_ALL": "C.UTF-8",
         },
+        started=started,
+        monitor=monitor,
+        stage="Python EXT_SUFFIX identity",
+        clock=clock,
+        text=True,
     )
     suffix = query.stdout.strip()
     if not suffix or "/" in suffix or "\\" in suffix:
@@ -1812,8 +1979,22 @@ def _build_identity(contract: Mapping[str, Any], root: Path) -> dict[str, Any]:
     artifacts = []
     for artifact in artifact_paths:
         record = _regular_file_record(artifact, artifact.relative_to(root).as_posix())
-        record["dynamic_dependencies"] = _dynamic_dependencies(artifact, ldd)
-        record["elf_gnu_build_id"] = _elf_build_id(artifact, readelf)
+        record["dynamic_dependencies"] = _dynamic_dependencies(
+            artifact,
+            ldd,
+            root=root,
+            started=started,
+            monitor=monitor,
+            clock=clock,
+        )
+        record["elf_gnu_build_id"] = _elf_build_id(
+            artifact,
+            readelf,
+            root=root,
+            started=started,
+            monitor=monitor,
+            clock=clock,
+        )
         artifacts.append(record)
     cache = root / "build/h0_phase_a/CMakeCache.txt"
     if not cache.is_file() or cache.is_symlink():
@@ -1840,10 +2021,16 @@ def _build_identity(contract: Mapping[str, Any], root: Path) -> dict[str, Any]:
             "length": len(data),
             "path": executable.as_posix(),
             "sha256": sha256_bytes(data),
-            "version": _tool_version(executable),
+            "version": _tool_version(
+                executable,
+                root=root,
+                started=started,
+                monitor=monitor,
+                clock=clock,
+            ),
         }
     python_data = python.resolve(strict=True).read_bytes()
-    python_query = subprocess.run(
+    python_query = _run_auxiliary_subprocess(
         [
             python.as_posix(),
             "-I",
@@ -1853,14 +2040,16 @@ def _build_identity(contract: Mapping[str, Any], root: Path) -> dict[str, Any]:
         ],
         executable=python,
         cwd=root,
-        check=True,
-        capture_output=True,
-        text=True,
         env={
             "PATH": f"{root}/.venv/bin:/usr/bin:/bin",
             "LANG": "C.UTF-8",
             "LC_ALL": "C.UTF-8",
         },
+        started=started,
+        monitor=monitor,
+        stage="Python ABI identity",
+        clock=clock,
+        text=True,
     )
     try:
         python_identity = json.loads(python_query.stdout)
@@ -1882,7 +2071,13 @@ def _build_identity(contract: Mapping[str, Any], root: Path) -> dict[str, Any]:
             "length": len(cmake_data),
             "path": cmake_path.as_posix(),
             "sha256": sha256_bytes(cmake_data),
-            "version": _tool_version(cmake_path),
+            "version": _tool_version(
+                cmake_path,
+                root=root,
+                started=started,
+                monitor=monitor,
+                clock=clock,
+            ),
         },
         "compilers": compiler_records,
         "cuda_toolkit_root": Path(cache_entries["CMAKE_CUDA_COMPILER"])
@@ -1901,18 +2096,23 @@ def _build_identity(contract: Mapping[str, Any], root: Path) -> dict[str, Any]:
 
 
 def _verify_extension_load(
-    contract: Mapping[str, Any], identity: Mapping[str, Any]
-) -> None:
+    contract: Mapping[str, Any],
+    identity: Mapping[str, Any],
+    *,
+    started: float,
+    monitor: BoundInputMonitor,
+    clock: Callable[[], float] = time.monotonic,
+) -> dict[str, Any]:
     root = Path(contract["repository_root"])
+    incomplete = root / contract["incomplete_root"]
     python = root / ".venv/bin/python"
     extension = root / identity["artifacts"][0]["path"]
     plugin = root / identity["artifacts"][1]["path"]
     libraries = contract["library_dirs"]
     environment = {
+        **build_environment(contract),
         "CUDA_DEVICE_ORDER": "PCI_BUS_ID",
         "CUDA_VISIBLE_DEVICES": contract["gpu"]["uuid"],
-        "LANG": "C.UTF-8",
-        "LC_ALL": "C.UTF-8",
         "LD_LIBRARY_PATH": ":".join(
             (
                 (root / "build/h0_phase_a").as_posix(),
@@ -1921,27 +2121,105 @@ def _verify_extension_load(
                 libraries["cuda_library_dir"],
             )
         ),
-        "PATH": f"{root}/.venv/bin:/usr/bin:/bin",
-        "PYTHONHASHSEED": "0",
-        "PYTHONNOUSERSITE": "1",
         "SACCADE_BUILD_PATH": (root / "build/h0_phase_a").as_posix(),
-        "TZ": "UTC",
     }
+    workspace = incomplete / "_extension_load"
+    workspace.mkdir(exist_ok=False)
+    denial_probe = incomplete / "_runtime_confinement_denial_probe"
+    if not denial_probe.exists():
+        _write_bytes_fsync(denial_probe, b"MUST_BE_DENIED\n")
+    if denial_probe.is_symlink() or not denial_probe.is_file():
+        raise ContractError("runtime confinement denial probe is not regular")
     script = (
-        "import ctypes,pathlib,saccade_tracking_ext;"
+        "import ctypes,pathlib;"
+        f"p=pathlib.Path({denial_probe.as_posix()!r});"
+        "denied=False;"
+        "\ntry:p.read_bytes()"
+        "\nexcept PermissionError:denied=True"
+        "\nassert denied;"
+        "\nimport saccade_tracking_ext;"
         f"e=pathlib.Path({extension.as_posix()!r}).resolve(strict=True);"
         "a=pathlib.Path(saccade_tracking_ext.__file__).resolve(strict=True);"
         "assert a==e;"
         f"ctypes.CDLL({plugin.as_posix()!r},mode=ctypes.RTLD_LOCAL)"
     )
-    subprocess.run(
-        [python.as_posix(), "-I", "-B", "-c", script],
-        executable=python,
-        cwd=root,
-        env=environment,
-        check=True,
-        capture_output=True,
+    vector = [python.as_posix(), "-I", "-B", "-c", script]
+    tools = SCHEMA_PATH.parent
+    if tools.as_posix() not in sys.path:
+        sys.path.insert(0, tools.as_posix())
+    import h0_runtime_confinement
+
+    try:
+        runtime_plan = h0_runtime_confinement.build_plan(
+            root=root,
+            incomplete=incomplete,
+            inventory=contract["bound_inputs"],
+            build_identity=identity,
+            denial_probe=denial_probe,
+            output_directories=(workspace,),
+        )
+    except h0_runtime_confinement.ConfinementError as exc:
+        raise DriftError(f"extension-load confinement plan failed: {exc}") from exc
+    stdout_path = workspace / "stdout.log"
+    stderr_path = workspace / "stderr.log"
+    _bounded_remaining(started, now=clock)
+    with (
+        open(os.devnull, "rb", buffering=0) as stdin,
+        open(stdout_path, "xb", buffering=0) as stdout,
+        open(stderr_path, "xb", buffering=0) as stderr,
+    ):
+        try:
+            process = h0_runtime_confinement.spawn_confined(
+                vector,
+                cwd=root,
+                env=environment,
+                stdin=stdin,
+                stdout=stdout,
+                stderr=stderr,
+                plan=runtime_plan,
+            )
+        except h0_runtime_confinement.ConfinementError as exc:
+            raise DriftError(f"extension-load confinement setup failed: {exc}") from exc
+        try:
+            returncode = _wait_with_monitor(
+                process,
+                started=started,
+                monitor=monitor,
+                stage="confined extension/plugin load",
+                clock=clock,
+            )
+        except (subprocess.TimeoutExpired, TimeoutError):
+            _terminate_process_group(process)
+            raise
+    attestation, runtime_digest, valid_runtime = _runtime_attestation_details(
+        process, runtime_plan
     )
+    state = "complete"
+    result = "extension_loaded"
+    if not valid_runtime:
+        state = "rejected"
+        result = "provenance_invalid"
+    elif returncode != 0:
+        state = "failed"
+        result = "extension_load_failed"
+    observed = {record["realpath"] for record in attestation["regular_files"]}
+    if (
+        extension.resolve(strict=True).as_posix() not in observed
+        or plugin.resolve(strict=True).as_posix() not in observed
+    ):
+        raise DriftError("extension/plugin load is absent from runtime attestation")
+    return {
+        "confinement_plan_digest": runtime_plan["digest"],
+        "confinement_probe_passed": attestation.get("denial_probe_observed") is True,
+        "environment": environment,
+        "environment_digest": sha256_bytes(canonical_json_bytes(environment)),
+        "result": result,
+        "returncode": returncode,
+        "runtime_inputs": attestation,
+        "runtime_inputs_digest": runtime_digest,
+        "state": state,
+        "vector": vector,
+    }
 
 
 def _validate_build_tool_runtime_binding(
@@ -2302,14 +2580,13 @@ def _artifact_inventory(incomplete: Path) -> list[str]:
 
 def _remove_transient_run_trees(incomplete: Path) -> None:
     resolved_root = incomplete.resolve(strict=True)
-    build_environment_root = incomplete / "_build_env"
-    if build_environment_root.exists():
-        resolved = build_environment_root.resolve(strict=True)
-        if resolved_root not in resolved.parents or build_environment_root.is_symlink():
-            raise ContractError(
-                f"unsafe transient build environment tree: {build_environment_root}"
-            )
-        shutil.rmtree(build_environment_root)
+    for transient in ("_build_env", "_extension_load"):
+        transient_root = incomplete / transient
+        if transient_root.exists():
+            resolved = transient_root.resolve(strict=True)
+            if resolved_root not in resolved.parents or transient_root.is_symlink():
+                raise ContractError(f"unsafe transient tree: {transient_root}")
+            shutil.rmtree(transient_root)
     denial_probe = incomplete / "_runtime_confinement_denial_probe"
     if denial_probe.exists() or denial_probe.is_symlink():
         if denial_probe.is_symlink() or not denial_probe.is_file():
@@ -2698,10 +2975,12 @@ def execute_controller(
     *,
     popen_factory: Callable[..., subprocess.Popen[bytes]] = subprocess.Popen,
     clock: Callable[[], float] = time.monotonic,
+    started: float | None = None,
 ) -> str:
     """Execute A7 and publish RC1.4 only while the deadline remains valid."""
     root = Path(contract["repository_root"])
-    started = clock()
+    if started is None:
+        started = clock()
     incomplete = root / contract["incomplete_root"]
     checkpoints: list[dict[str, Any]] = []
     predicates = {
@@ -2723,7 +3002,7 @@ def execute_controller(
     monitor: BoundInputMonitor | None = None
     mutation_events: list[dict[str, Any]] = []
     try:
-        preflight_controller_input(contract, root)
+        preflight_controller_input(contract, root, started=started, clock=clock)
         tools = SCHEMA_PATH.parent
         if tools.as_posix() not in sys.path:
             sys.path.insert(0, tools.as_posix())
@@ -2734,7 +3013,11 @@ def execute_controller(
             bound_file_paths(contract),
             ignored_roots=(root / "build/h0_phase_a", incomplete),
         )
-        checkpoints.append(verify_bound_checkpoint(contract, monitor, "T0"))
+        checkpoints.append(
+            verify_bound_checkpoint(
+                contract, monitor, "T0", started=started, clock=clock
+            )
+        )
         stage = "build"
         incomplete.mkdir(parents=True, exist_ok=False)
         (incomplete / "logs").mkdir()
@@ -2769,15 +3052,44 @@ def execute_controller(
             result = "build_failed"
             raise ContractError("CMake build exited nonzero")
         try:
-            build_identity = _build_identity(contract, root)
+            build_identity = _build_identity(
+                contract,
+                root,
+                started=started,
+                monitor=monitor,
+                clock=clock,
+            )
         except (ContractError, OSError, subprocess.SubprocessError) as exc:
             predicates["build_ok"] = False
             result = "build_failed"
             raise ContractError(f"build identity failed: {exc}") from exc
         _validate_build_tool_runtime_binding(contract, build_identity)
-        checkpoints.append(verify_bound_checkpoint(contract, monitor, "T1"))
+        checkpoints.append(
+            verify_bound_checkpoint(
+                contract, monitor, "T1", started=started, clock=clock
+            )
+        )
         try:
-            _verify_extension_load(contract, build_identity)
+            extension_load = _verify_extension_load(
+                contract,
+                build_identity,
+                started=started,
+                monitor=monitor,
+                clock=clock,
+            )
+            build_identity = {**build_identity, "extension_load": extension_load}
+            if extension_load["state"] == "rejected":
+                raise DriftError(
+                    "extension/plugin load consumed an unbound runtime input"
+                )
+            if extension_load["state"] != "complete":
+                predicates["extension_ok"] = False
+                result = "extension_load_failed"
+                raise ContractError("confined extension/plugin load exited nonzero")
+        except DriftError:
+            raise
+        except (subprocess.TimeoutExpired, TimeoutError):
+            raise
         except (OSError, subprocess.SubprocessError, ContractError) as exc:
             predicates["extension_ok"] = False
             result = "extension_load_failed"
@@ -2785,7 +3097,13 @@ def execute_controller(
         stage = "runs"
         for index, run_id in enumerate(RUN_IDS):
             checkpoints.append(
-                verify_bound_checkpoint(contract, monitor, f"T2a_{index}")
+                verify_bound_checkpoint(
+                    contract,
+                    monitor,
+                    f"T2a_{index}",
+                    started=started,
+                    clock=clock,
+                )
             )
             child_error: BaseException | None = None
             returncode = -1
@@ -2816,7 +3134,13 @@ def execute_controller(
                 checkpoints.append(_failed_checkpoint(f"T2b_{index}", observed))
             else:
                 checkpoints.append(
-                    verify_bound_checkpoint(contract, monitor, f"T2b_{index}")
+                    verify_bound_checkpoint(
+                        contract,
+                        monitor,
+                        f"T2b_{index}",
+                        started=started,
+                        clock=clock,
+                    )
                 )
             if child_error is not None:
                 raise child_error
@@ -2828,7 +3152,11 @@ def execute_controller(
                 predicates["runners_ok"] = False
                 result = "runner_nonzero"
                 raise ContractError(f"child {run_id} exited nonzero")
-        checkpoints.append(verify_bound_checkpoint(contract, monitor, "T3"))
+        checkpoints.append(
+            verify_bound_checkpoint(
+                contract, monitor, "T3", started=started, clock=clock
+            )
+        )
         stage = "comparison"
         equal, comparison = _compare_policy_inventories(incomplete)
         predicates["policy_equal"] = equal
@@ -2838,7 +3166,11 @@ def execute_controller(
             packet_pass = _independent_packet_states(incomplete) == ["pass"] * 3
             predicates["packets_valid"] = packet_pass
             result = "phase_a_pass" if packet_pass else "packet_invalid"
-        checkpoints.append(verify_bound_checkpoint(contract, monitor, "T4"))
+        checkpoints.append(
+            verify_bound_checkpoint(
+                contract, monitor, "T4", started=started, clock=clock
+            )
+        )
         monitor.assert_clean()
         monitor.close()
         monitor = None
@@ -2927,6 +3259,7 @@ def execute_controller(
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    started = time.monotonic()
     values = tuple(sys.argv[1:] if argv is None else argv)
     try:
         should_execute = _parse_no_options(values)
@@ -2934,8 +3267,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             argparse.ArgumentParser(description=__doc__).print_help()
             return 0
         _freeze_path, contract = _discover_controller_input(ROOT)
-        preflight_controller_input(contract, ROOT)
-        result = execute_controller(contract)
+        result = execute_controller(contract, started=started)
         return 0 if result == "phase_a_pass" else 1
     except (ContractError, DriftError, OSError, subprocess.SubprocessError) as exc:
         print(f"H0 Phase-A controller rejected: {exc}", file=sys.stderr)
