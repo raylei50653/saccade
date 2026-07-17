@@ -538,6 +538,9 @@ def _independent_host_execution_inputs(root: Path) -> dict[str, Any]:
     python = root / ".venv/bin/python"
     if not python.is_file() or python.is_symlink():
         raise VerificationError("frozen .venv/bin/python is absent or symlinked")
+    pyvenv_config = root / ".venv/pyvenv.cfg"
+    if not pyvenv_config.is_file() or pyvenv_config.is_symlink():
+        raise VerificationError("frozen .venv/pyvenv.cfg is absent or symlinked")
     try:
         query = subprocess.run(
             [
@@ -572,7 +575,10 @@ def _independent_host_execution_inputs(root: Path) -> dict[str, Any]:
         raise VerificationError(
             "a independently derived runtime library directory is non-physical or absent"
         )
-    candidates = [Path(path) for path in tool_paths.values()] + [python]
+    candidates = [Path(path) for path in tool_paths.values()] + [
+        python,
+        pyvenv_config,
+    ]
     for directory in library_dirs.values():
         candidates.extend(
             sorted(

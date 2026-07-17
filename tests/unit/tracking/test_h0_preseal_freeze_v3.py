@@ -204,6 +204,100 @@ def test_host_execution_input_substitution_fails_against_independent_rebuild(
         verifier._verify_host_execution_inputs(controller, inventory, tmp_path)
 
 
+def _independent_host_fixture(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> tuple[Path, Path]:
+    root = tmp_path / "root"
+    python = root / ".venv/bin/python"
+    pyvenv_config = root / ".venv/pyvenv.cfg"
+    python.parent.mkdir(parents=True)
+    python.write_bytes(b"python\n")
+    pyvenv_config.write_bytes(b"home = /fixture/python\n")
+    tools = tmp_path / "tools"
+    tools.mkdir()
+    for name in ("git", "ldd", "readelf", "uv"):
+        (tools / name).write_bytes(name.encode("utf-8"))
+    nvcc = tmp_path / "cuda/bin/nvcc"
+    nvcc.parent.mkdir(parents=True)
+    nvcc.write_bytes(b"nvcc\n")
+    cuda_lib = tmp_path / "cuda/lib64"
+    cuda_lib.mkdir()
+    (cuda_lib / "cudart.so").write_bytes(b"cuda\n")
+    torch_lib = tmp_path / "torch/lib"
+    torch_lib.mkdir(parents=True)
+    (torch_lib / "torch.so").write_bytes(b"torch\n")
+    tensorrt_lib = tmp_path / "tensorrt"
+    tensorrt_lib.mkdir()
+    (tensorrt_lib / "nvinfer.so").write_bytes(b"tensorrt\n")
+
+    def physical(command: str) -> Path:
+        return nvcc if command == "nvcc" else tools / command
+
+    def run(*_args, **_kwargs) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(
+            args=[],
+            returncode=0,
+            stdout=f"{torch_lib}\n{tensorrt_lib}\n",
+        )
+
+    monkeypatch.setattr(verifier, "_physical_executable", physical)
+    monkeypatch.setattr(
+        verifier, "_independently_selected_gpu", lambda: {"uuid": "GPU"}
+    )
+    monkeypatch.setattr(verifier.subprocess, "run", run)
+    return root, pyvenv_config
+
+
+def test_independent_host_expansion_binds_physical_pyvenv_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root, pyvenv_config = _independent_host_fixture(tmp_path, monkeypatch)
+    host = verifier._independent_host_execution_inputs(root)
+    record = next(
+        item
+        for item in host["tool_runtime"]
+        if item["logical_path"] == pyvenv_config.as_posix()
+    )
+    assert record == verifier._host_file_record(pyvenv_config)
+
+
+@pytest.mark.parametrize("state", ["missing", "symlink"])
+def test_independent_host_expansion_rejects_missing_or_symlink_pyvenv_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, state: str
+) -> None:
+    root, pyvenv_config = _independent_host_fixture(tmp_path, monkeypatch)
+    if state == "missing":
+        pyvenv_config.unlink()
+    else:
+        target = tmp_path / "foreign-pyvenv.cfg"
+        target.write_bytes(b"foreign\n")
+        pyvenv_config.unlink()
+        pyvenv_config.symlink_to(target)
+    with pytest.raises(verifier.VerificationError, match=r"\.venv/pyvenv\.cfg"):
+        verifier._independent_host_execution_inputs(root)
+
+
+def test_independent_host_expansion_rejects_pyvenv_config_identity_mismatch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root, pyvenv_config = _independent_host_fixture(tmp_path, monkeypatch)
+    expected = verifier._independent_host_execution_inputs(root)
+    inventory = {"tool_runtime": [dict(record) for record in expected["tool_runtime"]]}
+    record = next(
+        item
+        for item in inventory["tool_runtime"]
+        if item["logical_path"] == pyvenv_config.as_posix()
+    )
+    record["sha256"] = "0" * 64
+    controller = {
+        "tool_paths": dict(expected["tool_paths"]),
+        "library_dirs": dict(expected["library_dirs"]),
+        "gpu": dict(expected["gpu"]),
+    }
+    with pytest.raises(verifier.VerificationError, match="host expansion"):
+        verifier._verify_host_execution_inputs(controller, inventory, root)
+
+
 def test_execution_checkout_must_be_exact_seal_commit(tmp_path: Path) -> None:
     root, _instrumentation, _freeze, seal, artifact = _chain(tmp_path)
     with pytest.raises(verifier.VerificationError):
