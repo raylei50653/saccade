@@ -10,6 +10,7 @@ import shutil
 import socket
 import subprocess
 import sys
+import sysconfig
 import time
 from pathlib import Path
 from typing import Any
@@ -794,9 +795,14 @@ raise SystemExit(0 if module.VALUE in {7, 9} else 92)
     locale_alias = Path("/usr/share/locale/locale.alias")
     if locale_alias.is_file():
         runtime_paths.append(locale_alias)
-    gconv_cache = Path("/usr/lib/gconv/gconv-modules.cache")
-    if gconv_cache.is_file():
-        runtime_paths.append(gconv_cache)
+    gconv_dirs = [Path("/usr/lib/gconv"), Path("/usr/lib64/gconv")]
+    multiarch = sysconfig.get_config_var("MULTIARCH")
+    if isinstance(multiarch, str) and multiarch:
+        gconv_dirs.append(Path("/usr/lib") / multiarch / "gconv")
+    for gconv_dir in gconv_dirs:
+        gconv_cache = gconv_dir / "gconv-modules.cache"
+        if gconv_cache.is_file():
+            runtime_paths.append(gconv_cache)
     utc_zone = Path("/usr/share/zoneinfo/UTC")
     if utc_zone.is_file():
         runtime_paths.append(utc_zone)
