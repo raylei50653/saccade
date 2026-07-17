@@ -387,22 +387,6 @@ B_{\text{motion}} = w_{\text{motion\_iou}} \cdot \operatorname{IoU}(\text{pred}_
 
 GPU 實作見 `relink_bidir_propose_kernel`（`tracker_gpu.cu`），C++/CPU 見 `SemanticRelinkerCpp::midpoint_bridge_dist()` 與 `regress_velocity_4()`（`tracker_gpu_python.cpp`）。
 
-> **Contract 邊界（勿混用）**：本節位於 SemanticRelinker（joint-score path）章節，但
-> headline **GPU foot-bridge**（`relink_bidir_propose_kernel`，`reid_mode: off` +
-> `relink_bridge_enabled`）是**另一條獨立 online contract**：joint score \(S(c,q)\)
-> 不參與；`bdist` 只作 candidate-local lost ranking（配 `relink_bridge_margin`
-> best-vs-second gate），多個 candidate
-> 搶同一 lost 由 quantized detection-score atomic claim 決勝（不重新比較 `bdist`），
-> 輸家不 retry second-best，非全局 assignment。另注意實作分歧：Python
-> `_midpoint_bridge_dist` 是 legacy gap/2 中點變體（與上式 full-gap 不同）；C++
-> `midpoint_bridge_dist` 名稱沿用「midpoint」但實作為 full-gap（`h_ref` 僅取
-> lost-side EMA，無 dir_bonus）；GPU kernel 的 `bdist` 在 s preset 另含
-> `dir_bonus=0.8` 方向 blend（cutoff/ranking 用 post-direction 值，見
-> `math_model.md` §10.4）。詳見
-> `docs/research/tracker-decision/relink_bridge.md`；source authority＝
-> `tracker_gpu.cu`（H0 declaration 為 pre-seal draft capture contract，非
-> description authority）。
-
 \[
 \begin{aligned}
 \mathbf{v}_{\text{lost}} &= \operatorname{Regress4}(\mathbf{p}_{-4}, \dots, \mathbf{p}_{-1}), \quad
