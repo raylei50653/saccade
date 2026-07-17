@@ -122,12 +122,14 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "build_vectors", "c_paths", "checkpoints", "child_vectors", "d_paths",
+        "build_environment_algorithm", "build_environment_keys", "build_vectors", "c_paths", "checkpoints", "child_vectors", "d_paths",
         "deadline_seconds", "environment_keys", "evaluator_argv_prefix", "inotify_mask",
         "model_inputs", "operator_vector", "ordered_run_plan", "required_repository_inputs", "result_enum", "result_matrix",
         "trace_capacities", "v_paths"
       ],
       "properties": {
+        "build_environment_algorithm": {"const": "h0_build_environment_v1"},
+        "build_environment_keys": {"const": ["HOME", "LANG", "LC_ALL", "PATH", "PYTHONHASHSEED", "PYTHONNOUSERSITE", "TMPDIR", "TZ", "XDG_CACHE_HOME"]},
         "build_vectors": {
           "const": [
             ["uv", "run", "--frozen", "cmake", "--fresh", "-S", ".", "-B", "build/h0_phase_a", "-DCMAKE_BUILD_TYPE=Release", "-DENABLE_NATIVE_TESTS=OFF", "-DSACCADE_ENABLE_NVTX=ON", "-DPython3_EXECUTABLE=.venv/bin/python"],

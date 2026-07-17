@@ -58,6 +58,17 @@ BUILD_VECTORS = (
         "1",
     ),
 )
+BUILD_ENVIRONMENT_KEYS = (
+    "HOME",
+    "LANG",
+    "LC_ALL",
+    "PATH",
+    "PYTHONHASHSEED",
+    "PYTHONNOUSERSITE",
+    "TMPDIR",
+    "TZ",
+    "XDG_CACHE_HOME",
+)
 EVALUATOR_PREFIX = (
     "--preset",
     "mamba_whole_graph_m",
@@ -352,6 +363,22 @@ def _expected_environment(controller: Mapping[str, Any], run_id: str) -> dict[st
     }
 
 
+def _expected_build_environment(controller: Mapping[str, Any]) -> dict[str, str]:
+    root = controller["repository_root"]
+    environment_root = f"{root}/{controller['incomplete_root']}/_build_env"
+    return {
+        "HOME": f"{environment_root}/home",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": f"{root}/.venv/bin:/usr/bin:/bin",
+        "PYTHONHASHSEED": "0",
+        "PYTHONNOUSERSITE": "1",
+        "TMPDIR": f"{environment_root}/tmp",
+        "TZ": "UTC",
+        "XDG_CACHE_HOME": f"{environment_root}/xdg-cache",
+    }
+
+
 def _verify_constants(controller: Mapping[str, Any]) -> None:
     root = controller["repository_root"]
     constants = controller["execution_constants"]
@@ -365,6 +392,12 @@ def _verify_constants(controller: Mapping[str, Any]) -> None:
         raise VerificationError("operator vector mismatch")
     if constants["build_vectors"] != [list(value) for value in BUILD_VECTORS]:
         raise VerificationError("build vector mismatch")
+    if constants[
+        "build_environment_algorithm"
+    ] != "h0_build_environment_v1" or constants["build_environment_keys"] != list(
+        BUILD_ENVIRONMENT_KEYS
+    ):
+        raise VerificationError("build environment declaration mismatch")
     if constants["ordered_run_plan"] != list(RUN_IDS):
         raise VerificationError("ordered run plan mismatch")
     if constants["child_vectors"] != [
@@ -815,10 +848,13 @@ def _verify_policy_inventory(run_id: str, inventory: Mapping[str, Any]) -> None:
 
 
 def _verify_complete_build_identity(
-    identity: Mapping[str, Any], repository_root: Path
+    identity: Mapping[str, Any], controller: Mapping[str, Any]
 ) -> None:
+    repository_root = Path(controller["repository_root"])
     top_members = {
         "artifacts",
+        "build_environment",
+        "build_environment_digest",
         "build_vectors",
         "cmake",
         "cmake_cache_sha256",
@@ -833,6 +869,11 @@ def _verify_complete_build_identity(
         raise VerificationError("build identity has missing or unknown members")
     if identity["build_vectors"] != [list(vector) for vector in BUILD_VECTORS]:
         raise VerificationError("build identity command vectors differ from A7.4")
+    expected_environment = _expected_build_environment(controller)
+    if identity["build_environment"] != expected_environment or identity[
+        "build_environment_digest"
+    ] != digest(expected_environment):
+        raise VerificationError("build identity environment table/digest mismatch")
     suffix = identity["python_ext_suffix"]
     if not isinstance(suffix, str) or not suffix or "/" in suffix or "\\" in suffix:
         raise VerificationError("build identity EXT_SUFFIX is non-canonical")
@@ -1078,8 +1119,7 @@ def verify_evidence_root(root: Path) -> dict[str, Any]:
         raise VerificationError("identity/comparison artifact is not an object")
     blocking_status = {"blocking_result": manifest["result"], "state": "not_produced"}
     if build_identity.get("state") == "complete":
-        repository_root = Path(manifest["controller_input"]["repository_root"])
-        _verify_complete_build_identity(build_identity, repository_root)
+        _verify_complete_build_identity(build_identity, manifest["controller_input"])
         expected_runtime = {
             "bound_inputs_digest": manifest["controller_input"]["bound_inputs"][
                 "digest"

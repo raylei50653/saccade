@@ -307,6 +307,127 @@ def test_environment_and_digests_rebuild() -> None:
         )
 
 
+def test_build_environment_is_exact_and_ignores_host_selectors(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    contract = _launch_contract(tmp_path)
+    contract["tool_paths"]["uv"] = "/usr/bin/true"
+    incomplete = tmp_path / contract["incomplete_root"]
+    (incomplete / "logs").mkdir(parents=True)
+    expected = parent._create_build_environment(contract)
+    selectors = {
+        "CC": "/host/cc",
+        "CFLAGS": "-DHOST",
+        "CMAKE_GENERATOR": "Host Generator",
+        "CMAKE_PREFIX_PATH": "/host/prefix",
+        "CMAKE_TOOLCHAIN_FILE": "/host/toolchain.cmake",
+        "CUDA_HOME": "/host/cuda",
+        "CUDACXX": "/host/nvcc",
+        "CXX": "/host/cxx",
+        "CXXFLAGS": "-DHOST_CXX",
+        "LDFLAGS": "-L/host/lib",
+        "LD_PRELOAD": "/host/inject.so",
+        "NVCC_PREPEND_FLAGS": "--host-flag",
+    }
+    for key, value in selectors.items():
+        monkeypatch.setenv(key, value)
+    captured: dict[str, object] = {}
+
+    class Process:
+        pid = 999999
+
+        def poll(self):
+            return None
+
+        def wait(self, timeout=None):
+            captured["timeout"] = timeout
+            return 0
+
+    def factory(*args, **kwargs):
+        captured["args"] = args
+        captured["kwargs"] = kwargs
+        return Process()
+
+    returncode = parent._run_build_vector(
+        contract,
+        parent.BUILD_VECTORS[0],
+        incomplete / "logs/configure.stdout.log",
+        incomplete / "logs/configure.stderr.log",
+        started=parent.time.monotonic(),
+        popen_factory=factory,
+    )
+    assert returncode == 0
+    environment = captured["kwargs"]["env"]
+    assert environment == expected
+    assert tuple(environment) == parent.BUILD_ENVIRONMENT_KEYS
+    assert not set(environment).intersection(selectors)
+    assert verifier._expected_build_environment(contract) == environment
+    assert parent.build_environment_digest(environment) == verifier.digest(environment)
+
+
+def test_independent_verifier_rejects_self_consistent_build_environment_drift(
+    tmp_path: Path,
+) -> None:
+    contract = _launch_contract(tmp_path)
+    artifact_values = {
+        "build/h0_phase_a/saccade_tracking_ext.so": b"extension",
+        "build/h0_phase_a/libsaccade_scan_plugin.so": b"plugin",
+    }
+    for relative, payload in artifact_values.items():
+        (tmp_path / relative).write_bytes(payload)
+    cache = tmp_path / "build/h0_phase_a/CMakeCache.txt"
+    cache.write_bytes(b"cache")
+    (tmp_path / "uv.lock").write_bytes(b"lock")
+
+    def tool_record(path: str) -> dict[str, object]:
+        return {
+            "length": 1,
+            "path": path,
+            "sha256": "1" * 64,
+            "version": "fixture",
+        }
+
+    artifacts = [
+        {
+            "dynamic_dependencies": [],
+            "elf_gnu_build_id": "a",
+            "length": len(payload),
+            "path": relative,
+            "sha256": hashlib.sha256(payload).hexdigest(),
+        }
+        for relative, payload in artifact_values.items()
+    ]
+    environment = parent.build_environment(contract)
+    identity = {
+        "artifacts": artifacts,
+        "build_environment": environment,
+        "build_environment_digest": verifier.digest(environment),
+        "build_vectors": [list(vector) for vector in parent.BUILD_VECTORS],
+        "cmake": {"generator": "fixture", **tool_record("/usr/bin/true")},
+        "cmake_cache_sha256": hashlib.sha256(cache.read_bytes()).hexdigest(),
+        "compilers": {
+            "c": tool_record("/usr/bin/true"),
+            "cxx": tool_record("/usr/bin/true"),
+            "cuda": tool_record("/usr/bin/true"),
+        },
+        "cuda_toolkit_root": "/opt/cuda",
+        "python": {
+            "abi": "fixture",
+            **tool_record("/usr/bin/true"),
+        },
+        "python_ext_suffix": ".so",
+        "state": "complete",
+        "uv_lock_sha256": hashlib.sha256(b"lock").hexdigest(),
+    }
+    verifier._verify_complete_build_identity(identity, contract)
+    drifted = dict(environment)
+    drifted["CC"] = "/host/cc"
+    identity["build_environment"] = drifted
+    identity["build_environment_digest"] = verifier.digest(drifted)
+    with pytest.raises(verifier.VerificationError, match="environment table/digest"):
+        verifier._verify_complete_build_identity(identity, contract)
+
+
 def test_gpu_selection_is_lexicographic_on_normalized_pci_bus_id() -> None:
     records = [
         {"normalized_pci_bus_id": "00000000:0a:00.0", "uuid": "GPU-b"},
@@ -835,3 +956,130 @@ def test_active_wait_kills_process_group_on_continuous_mutation(
                 stage="child fixture",
             )
     assert terminated == [process]
+
+
+@pytest.mark.parametrize("artifact_name", ["result.json", "checksums.sha256"])
+def test_final_artifact_fsync_crossing_deadline_is_rejected(
+    tmp_path: Path, artifact_name: str
+) -> None:
+    now = {"value": 3599.0}
+    path = tmp_path / artifact_name
+
+    def clock() -> float:
+        return now["value"]
+
+    if artifact_name == "result.json":
+
+        def crossing_write(target: Path, value: object) -> None:
+            parent._write_canonical_fsync(target, value)
+            now["value"] = 3600.0
+
+        action = crossing_write
+        payload: object = {"result": "phase_a_pass"}
+    else:
+
+        def crossing_write(target: Path, value: object) -> None:
+            assert isinstance(value, bytes)
+            parent._write_bytes_fsync(target, value)
+            now["value"] = 3600.0
+
+        action = crossing_write
+        payload = b"0" * 64 + b"  result.json\n"
+
+    with pytest.raises(TimeoutError, match="deadline exhausted"):
+        parent._deadline_checked_call(0.0, clock, action, path, payload)
+    assert path.is_file()
+
+
+def test_publication_rename_crossing_deadline_rolls_back(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    incomplete = tmp_path / "evidence.incomplete"
+    final = tmp_path / "evidence"
+    incomplete.mkdir()
+    (incomplete / "result.json").write_bytes(b"fixture")
+    now = {"value": 3599.0}
+    real_replace = parent.os.replace
+    replace_calls = 0
+
+    def crossing_replace(source: Path, destination: Path) -> None:
+        nonlocal replace_calls
+        replace_calls += 1
+        real_replace(source, destination)
+        if replace_calls == 1:
+            now["value"] = 3600.0
+
+    monkeypatch.setattr(parent.os, "replace", crossing_replace)
+    with pytest.raises(TimeoutError, match="deadline exhausted"):
+        parent._publish_evidence_root(
+            incomplete, final, started=0.0, clock=lambda: now["value"]
+        )
+    assert replace_calls == 2
+    assert incomplete.is_dir()
+    assert not final.exists()
+
+
+def test_parent_fsync_crossing_deadline_rolls_back_publication(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    incomplete = tmp_path / "evidence.incomplete"
+    final = tmp_path / "evidence"
+    incomplete.mkdir()
+    (incomplete / "result.json").write_bytes(b"fixture")
+    now = {"value": 3599.0}
+    real_fsync = parent._fsync_directory
+    fsync_calls = 0
+
+    def crossing_fsync(path: Path) -> None:
+        nonlocal fsync_calls
+        fsync_calls += 1
+        real_fsync(path)
+        if fsync_calls == 1:
+            now["value"] = 3600.0
+
+    monkeypatch.setattr(parent, "_fsync_directory", crossing_fsync)
+    with pytest.raises(TimeoutError, match="deadline exhausted"):
+        parent._publish_evidence_root(
+            incomplete, final, started=0.0, clock=lambda: now["value"]
+        )
+    assert fsync_calls == 2
+    assert incomplete.is_dir()
+    assert not final.exists()
+
+
+def test_expired_finalization_publishes_only_runner_timeout_envelope(
+    tmp_path: Path,
+) -> None:
+    contract = _launch_contract(tmp_path)
+    predicates = _predicates()
+    checkpoints = [
+        {
+            "digest": contract["bound_inputs"]["digest"],
+            "events_after": [],
+            "events_before": [],
+            "inventory_equal": True,
+            "monotonic_ns": 0,
+            "name": "T0",
+            "state": "completed",
+        }
+    ] + [parent._not_reached_checkpoint(name) for name in parent.CHECKPOINTS[1:]]
+    result = parent._finalize_bundle(
+        contract,
+        started=0.0,
+        result="phase_a_pass",
+        predicates=predicates,
+        checkpoints=checkpoints,
+        comparison=None,
+        build_identity=None,
+        mutation_events=[],
+        clock=lambda: 3600.0,
+    )
+    final = tmp_path / contract["evidence_root"]
+    assert result == "runner_timeout"
+    assert final.is_dir()
+    assert not (tmp_path / contract["incomplete_root"]).exists()
+    assert parent.read_canonical_json(final / "result.json")["result"] == result
+    assert parent._artifact_inventory(final) == sorted(
+        parent.C_PATHS, key=lambda value: value.encode("utf-8")
+    )
+    assert verifier.verify_evidence_root(final)["result"] == result
