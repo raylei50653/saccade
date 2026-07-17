@@ -1,10 +1,10 @@
 ---
 doc-status: proposed
-doc-promotion: none
+doc-promotion: navigation-only; not evidence
 doc-date: 2026-07-17
 doc-module: semantic
 owner-module: semantic
-work-class: online-intervention-evaluation
+work-class: mainline-study
 wip-role: non-wip
 activation-gate: "owner-accepted GCTM_B1_SCORE_DESIGN_CANDIDATE + frozen B1 policy package + sealed O1 declaration + separate owner scheduling"
 target-decision-layer: score-ranking
@@ -33,10 +33,11 @@ Authority is intentionally split:
   frozen policy-identity requirements, intervention and comparison semantics,
   validity gates, provisional terminal family, and deliverables;
 - the [synthesis core](../../modules/semantic/research/gctm_b1_o1_task_objectives_and_semantics_20260716.md)
-  owns the **shared** cross-task semantics (evidence chain and claim ownership
-  §1, shared semantic rules §2, outcome interpretation matrix §35, forbidden
-  inference shortcuts §36, final semantic summary §39) — this charter consumes
-  them and does not restate them as a second truth;
+  owns the **shared** cross-task semantics (§0 alignment boundary, including
+  the GPU foot-bridge hook scope and reserved-symbol renames; evidence chain
+  and claim ownership §1; shared semantic rules §2; outcome interpretation
+  matrix §35; forbidden inference shortcuts §36; final semantic summary §39) —
+  this charter consumes them and does not restate them as a second truth;
 - the [B1 task charter](gctm_b1_runtime_grounded_offline_attribution_task.md)
   owns the B1→O1 handoff object shape; O1 consumes the accepted B1 handoff and
   must not rewrite B1 semantics;
@@ -48,16 +49,12 @@ policy survives actual causal execution and changes the system outcome.
 
 ## Hook scope: GPU foot-bridge only
 
-O1's intervention contract is scoped end-to-end to the **GPU foot-bridge**
-two-stage winner
-([bridge decision semantics](../tracker-decision/relink_bridge.md)). The
-association (auction) stage is a different online contract and is **out of
-scope**: an association-stage variant would require its own substrate/fidelity
-owner and a separately declared synthesis/charter, not a reinterpretation of
-this one. Within the bridge, the legal insertion surface is the
-candidate-local (stage-1) lost ranking under fixed pair eligibility; claim
-arbitration, loser fallback, and commit mutation are separate online-contract
-problems.
+The cross-task hook scope is **owned by the
+[synthesis core §0](../../modules/semantic/research/gctm_b1_o1_task_objectives_and_semantics_20260716.md)**:
+O1's intervention contract is scoped end-to-end to the GPU foot-bridge
+two-stage winner, and the association (auction) stage is out of scope. This
+charter consumes that boundary and does not restate its full rules; see core
+§0 for the legal insertion surface and the association-stage exclusion.
 
 ## Task identity
 
@@ -657,7 +654,7 @@ before activation (route: declined, no execution).
 - start O1 from any B1 terminal other than owner-accepted
   `GCTM_B1_SCORE_DESIGN_CANDIDATE`.
 - rewrite B1 semantics or alter the frozen B1 handoff object.
-- restate shared §1/§2/§35/§36/§39 semantics as a second truth; link the
+- restate shared §0/§1/§2/§35/§36/§39 semantics as a second truth; link the
   synthesis core instead.
 - use `s0` to stand for a production quantity (registry inadmissibility).
 - reinterpret this task onto the association (auction) stage.
@@ -669,3 +666,8 @@ before activation (route: declined, no execution).
   objectives-and-semantics synthesis (landed in PR #178) per its §37
   repository split. Content carried over without semantic change. No
   activation, no seal, no registry/sole-active change.
+- 2026-07-17: Review fix (PR #179 blockers): the GPU foot-bridge hook scope is
+  owned by core §0 and only consumed here (full restatement removed).
+  Frontmatter aligned to the canonical thread schema
+  (`doc-promotion: navigation-only; not evidence`,
+  `work-class: mainline-study`).

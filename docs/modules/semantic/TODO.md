@@ -9,8 +9,8 @@
 
 ## Proposed（non-WIP）
 
-- **GCTM B1 — runtime-grounded offline attribution and score-ranking evaluation** → [task charter](../../research/threads/gctm_b1_runtime_grounded_offline_attribution_task.md) · activation: H0/GCTM acceptance + registry §7 score-layer contract 前置 + B1-slot 身份未決 + owner scheduling
-- **GCTM O1 — online score intervention and system-efficacy evaluation** → [task charter](../../research/threads/gctm_o1_online_intervention_efficacy_task.md) · activation: owner-accepted `GCTM_B1_SCORE_DESIGN_CANDIDATE` + owner scheduling
+- **GCTM B1 — runtime-grounded offline attribution and score-ranking evaluation** → [task charter](../../research/threads/gctm_b1_runtime_grounded_offline_attribution_task.md)
+- **GCTM O1 — online score intervention and system-efficacy evaluation** → [task charter](../../research/threads/gctm_o1_online_intervention_efficacy_task.md)
 
 ## Parked
 

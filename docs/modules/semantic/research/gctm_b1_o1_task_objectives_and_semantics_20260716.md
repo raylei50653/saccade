@@ -46,20 +46,12 @@ and re-decides nothing owned elsewhere.
   own the per-task boundaries; this core owns only the shared semantics. The
   charters are `doc-status: proposed`, `wip-role: non-wip`; the split grants
   no activation, no seal, and changes no registry or sole-active state.
-- **B1 identity is an open owner decision.** H0 declaration §7 and the
-  [O0 routing charter](../../../research/threads/bridge_frozen_evidence_o0_routing_20260716.md)
-  (route 5) name a "separately declared **B1 consumer-faithful operating-curve
-  study**". Whether the `GCTM_B1` study specified in the B1 charter occupies
-  that same B1 slot, coexists with it, or supersedes it is **not decided by
-  this document or by the split**. The B1 charter carries this as an explicit
-  activation prerequisite. Until an owner resolves that relation, `GCTM_B1_*`
-  must not be cited as the B1 that H0 route 5 makes candidate.
-- **Score-layer contract is a hard prerequisite.** B1 is an `L2 score` object.
-  Per [claim-state registry §7](../../../research/contracts/claim_state_registry.md),
-  the score-layer evidence contract (rank/margin/top-1 semantics and claim
-  ladder) does not exist yet, so no B1 object can enter the admissible
-  candidate set (`transition_semantics: unavailable`) regardless of H0/GCTM
-  outcomes. Writing that contract does not depend on H0.
+- **B1 activation prerequisites are owned by the
+  [B1 task charter](../../../research/threads/gctm_b1_runtime_grounded_offline_attribution_task.md)**
+  — in particular the open **B1-slot identity** question (its "Unresolved
+  B1-slot identity" section) and the **registry §7 score-layer contract**
+  prerequisite (its activation gate). This core only links them; it does not
+  restate or re-decide them.
 - **Hook scope: GPU foot-bridge only.** This synthesis is scoped end-to-end —
   B1's substrate/fidelity owner (the bridge-specific H0) and O1's intervention
   contract alike — to the **GPU foot-bridge** two-stage winner

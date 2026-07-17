@@ -183,8 +183,8 @@ frontmatter、搬移與索引要求。
 
 | Thread | Work class / WIP role | Current concrete work / Intent | Owner |
 |:--|:--|:--|:--|
-| [gctm_b1_runtime_grounded_offline_attribution_task.md](gctm_b1_runtime_grounded_offline_attribution_task.md) | offline-model-evaluation · **non-WIP** | Proposed task charter (split from B1/O1 synthesis §37); activation blocked on H0/GCTM acceptance, registry §7 score-layer contract, B1-slot identity resolution, owner scheduling | semantic |
-| [gctm_o1_online_intervention_efficacy_task.md](gctm_o1_online_intervention_efficacy_task.md) | online-intervention-evaluation · **non-WIP** | Proposed task charter (split from B1/O1 synthesis §37); activation blocked on owner-accepted `GCTM_B1_SCORE_DESIGN_CANDIDATE` + owner scheduling | semantic |
+| [gctm_b1_runtime_grounded_offline_attribution_task.md](gctm_b1_runtime_grounded_offline_attribution_task.md) | mainline-study · **non-WIP** | Proposed task charter — GCTM B1 runtime-grounded offline attribution and score-ranking evaluation (split from B1/O1 synthesis §37) | semantic |
+| [gctm_o1_online_intervention_efficacy_task.md](gctm_o1_online_intervention_efficacy_task.md) | mainline-study · **non-WIP** | Proposed task charter — GCTM O1 online score intervention and system-efficacy evaluation (split from B1/O1 synthesis §37) | semantic |
 
 ## Active threads
 
