@@ -135,6 +135,9 @@ IMPLEMENTATION_IDENTITIES = (
     ),
     ("scripts/tools/verify_h0_preseal_freeze.py", "h0_preseal_freeze_v3_verifier_v1"),
 )
+# Archive codecs and qualification harnesses are intentionally absent from this
+# list. They validate historical evidence or exercise pre-seal substrate paths
+# without changing the runtime authority sealed at I.
 IMPLEMENTATION_PATHS = tuple(
     ROOT / path for path, _identity in IMPLEMENTATION_IDENTITIES
 )

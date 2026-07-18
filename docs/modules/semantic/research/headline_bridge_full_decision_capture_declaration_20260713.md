@@ -1809,3 +1809,36 @@ these file records.
 | 2026-07-17 | `42121c064cd1a3c4202e114cc6f4d8866a9e6af0` | `839c3909bfbbfe8aa074371a0b4966bcac0cdc76` | `SEALED` |
 | 2026-07-18 | `1a8c13a890b3490bb7aa50dc2ab491db89b8b474` | `871c7013a85a3f8f0c6dcc52506f68bb92000479` | `SEALED` |
 | 2026-07-18 | `6ed30243554edfc898de32916298aa863673fced` | `ab468cff1e2341611da30192113a574ca6b82da9` | `SEALED` |
+
+## Prospective H0 repair and qualification gates
+
+This section governs the next fresh reseal only. It does not alter a historical
+packet, I/F/S relation, terminal, or owner event above.
+
+1. **Repair + qualification.** A normal Repair PR may contain packet admission,
+   controller/schema/verifier repairs, ordinary corrective commits, historical
+   archive verification and host-independent CI. Before owner review it must
+   pass `h0_repair_acceptance_matrix_v1`; a controlled host must run the
+   non-authoritative qualification harness and retain its report as a CI
+   artifact. The harness may exercise configure, build, identity, runtime
+   closure, extension load, T1, synthetic runner launch and failure-envelope
+   serialization, but must not read research inputs, capture scientific output,
+   create an H0 terminal, run Phase B, or write an H0 evidence root.
+2. **One acceptance matrix.** Owner review evaluates the complete matrix once.
+   At most one corrective batch may follow; it reruns the same matrix. A further
+   blocker closes the Repair PR and starts a new Repair PR instead of creating a
+   successor chain with partial re-acceptance.
+3. **Seal.** Only a qualified repair head becomes I. A separate Seal PR creates
+   F's sole freeze artifact and S's sole literal owner-event line, then lands
+   linearly by fast-forward as I -> F -> S. GitHub's `merged` label is a hosting
+   event; `SEALED` remains the literal S declaration event.
+4. **Authoritative execution.** Only clean S may pass independent preflight and
+   launch the controller exactly once. Qualification is never an authority
+   substitute. Phase B remains fail-closed until a valid terminal admits it.
+
+The execution implementation-binding universe remains the controller-facing
+runtime authority. The versioned archive verifier is deliberately outside that
+universe: it may add historical codecs or archive portability repairs without
+invalidating a prospective execution seal. Any change to an execution-bound
+controller, child, execution schema, confinement path, runtime packet verifier,
+or controller preflight verifier still requires a fresh I -> F -> S sequence.

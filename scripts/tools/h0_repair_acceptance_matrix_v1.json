@@ -1,0 +1,54 @@
+{
+  "algorithm": "h0_repair_acceptance_matrix_v1",
+  "correction_budget": "one_batch_then_restart",
+  "gates": [
+    {
+      "id": "repair_qualification",
+      "required": [
+        "packet_admission",
+        "historical_archive_verification",
+        "host_independent_ci",
+        "owner_acceptance_matrix",
+        "qualification_report"
+      ]
+    },
+    {
+      "id": "seal",
+      "required": [
+        "instrumentation_head",
+        "freeze_commit",
+        "seal_commit",
+        "exact_ifs_topology"
+      ]
+    },
+    {
+      "id": "authoritative_execution",
+      "required": [
+        "clean_seal_checkout",
+        "independent_preflight",
+        "controller_exactly_once",
+        "phase_b_fail_closed"
+      ]
+    }
+  ],
+  "qualification": {
+    "authority": "non_authoritative",
+    "forbidden": [
+      "phase_b",
+      "research_capture",
+      "research_inputs",
+      "terminal_claim"
+    ],
+    "required_steps": [
+      "configure",
+      "build",
+      "build_identity",
+      "runtime_closure",
+      "extension_load",
+      "t1",
+      "runner_launch_preflight",
+      "failure_envelope_serialization"
+    ]
+  },
+  "schema": "h0_repair_acceptance_matrix_v1"
+}

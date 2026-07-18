@@ -49,3 +49,11 @@ Mainline terminal mapping:      <terminal -> state transition per outcome, or "d
 ## Test plan
 
 - [ ] …
+
+## H0 repair gate (when touching H0 controller, seal, or evidence tooling)
+
+- [ ] Repair PR acceptance matrix passes: `uv run python scripts/tools/check_h0_repair_acceptance_matrix.py`
+- [ ] Historical immutable packets verify through `verify_h0_phase_a_archive.py`; no packet bytes were rewritten
+- [ ] Host-independent CI is green; controlled-host qualification artifact is attached when substrate paths changed
+- [ ] Owner reviewed the complete matrix once; any corrective work is one bounded batch, otherwise this Repair PR is restarted
+- [ ] No seal, controller invocation, H0 terminal, or Phase B action is claimed by this Repair PR

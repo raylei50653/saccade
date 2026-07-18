@@ -1,0 +1,57 @@
+name: H0 Qualification (Non-authoritative)
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Repair PR commit or branch to qualify
+        required: true
+        default: main
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  UV_EXTRA_INDEX_URL: https://pypi.nvidia.com/
+
+jobs:
+  substrate:
+    # This is intentionally separate from host-independent CI. The controlled
+    # runner supplies the real CUDA/tool/runtime closure, but the harness never
+    # reads research inputs or enters H0 authority.
+    runs-on: [self-hosted, linux, x64, h0-qualification]
+    env:
+      H0_QUALIFICATION_ROOT: ${{ runner.temp }}/h0-qualification-${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Sync qualification dependencies
+        run: uv sync --frozen
+      - name: Validate H0 acceptance matrix
+        run: uv run python scripts/tools/check_h0_repair_acceptance_matrix.py
+      - name: Run non-authoritative substrate qualification
+        run: uv run python scripts/tools/qualify_h0_phase_a.py --workspace "$H0_QUALIFICATION_ROOT"
+      - name: Publish qualification summary digest
+        run: |
+          report="$H0_QUALIFICATION_ROOT/qualification_summary.json"
+          test -f "$report"
+          {
+            echo '## H0 non-authoritative qualification'
+            echo
+            echo "\`\`\`text"
+            sha256sum "$report"
+            echo "\`\`\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Publish qualification report
+        uses: actions/upload-artifact@v4
+        with:
+          name: h0-qualification-${{ github.sha }}
+          path: ${{ env.H0_QUALIFICATION_ROOT }}
+          if-no-files-found: error
