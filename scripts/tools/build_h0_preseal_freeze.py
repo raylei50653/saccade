@@ -310,7 +310,7 @@ def _derive_controller_input(head: str) -> dict[str, Any]:
     git = _physical_executable("git")
     tool_paths = {
         name: _physical_executable(name).as_posix()
-        for name in ("git", "ldd", "nvcc", "readelf", "uv")
+        for name in ("git", "ldd", "readelf", "uv")
     }
     python = root / ".venv/bin/python"
     if not python.is_file() or python.is_symlink():
@@ -325,22 +325,28 @@ def _derive_controller_input(head: str) -> dict[str, Any]:
             python.as_posix(),
             "-I",
             "-c",
-            "import pathlib,torch; print((pathlib.Path(torch.__file__).resolve().parent/'lib').as_posix()); import tensorrt_libs; print(pathlib.Path(tensorrt_libs.__file__).resolve().parent.as_posix())",
+            "import pathlib,sysconfig,torch; print((pathlib.Path(torch.__file__).resolve().parent/'lib').as_posix()); import tensorrt_libs; print(pathlib.Path(tensorrt_libs.__file__).resolve().parent.as_posix()); print(pathlib.Path(sysconfig.get_path('purelib')).resolve().as_posix())",
         ],
         cwd=root,
         check=True,
         capture_output=True,
         text=True,
     ).stdout.splitlines()
-    if len(query) != 2:
+    if len(query) != 3:
         raise RuntimeError(
-            "frozen Python did not derive the two runtime library directories"
+            "frozen Python did not derive the three runtime library directories"
         )
-    cuda = Path(tool_paths["nvcc"]).parent.parent / "lib64"
+    # The CUDA build toolchain and runtime tree are uv-locked venv content
+    # (issue #214); the rolling system toolkit must never be the authority.
+    cuda_root = Path(query[2]).resolve(strict=True) / "nvidia/cu13"
+    nvcc = cuda_root / "bin/nvcc"
+    if nvcc.is_symlink() or not nvcc.is_file():
+        raise RuntimeError("frozen venv CUDA compiler is absent or non-physical")
+    tool_paths["nvcc"] = nvcc.as_posix()
     libraries = {
         "tensorrt_library_dir": Path(query[1]).resolve(strict=True).as_posix(),
         "pytorch_library_dir": Path(query[0]).resolve(strict=True).as_posix(),
-        "cuda_library_dir": cuda.resolve(strict=True).as_posix(),
+        "cuda_library_dir": (cuda_root / "lib").resolve(strict=True).as_posix(),
     }
     if any(
         not Path(value).is_dir() or Path(value).is_symlink()

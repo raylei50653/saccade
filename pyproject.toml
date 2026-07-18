@@ -36,6 +36,19 @@ dependencies = [
     "einops>=0.8.2",
     "onnxruntime-gpu>=1.24.4",
     "tensorrt-cu12==10.16.1.11",
+    # H0 substrate: frozen build-CUDA toolchain (issue #214). The extension must
+    # compile against the same venv cu13 tree the uv.lock runtime resolves to,
+    # not the rolling system /opt/cuda. nvcc/nvvm/crt move as one matched line;
+    # 13.3 (not the 13.0.x line of the torch-pinned runtime libs) because the
+    # 13.0 crt headers reject glibc >= 2.42 (C23 rsqrt collision). Compiling
+    # with a newer nvcc against the older pinned cudart/cublas is the supported
+    # direction and is verified by the extension_load qualification step.
+    "nvidia-cuda-nvcc==13.3.73",
+    "nvidia-nvvm==13.3.73",
+    "nvidia-cuda-crt==13.3.73",
+    # cccl pairs with nvcc (13.3); its exact nvcc==CUDART gate is disabled in
+    # CMakeLists because the runtime line is deliberately older (torch-pinned).
+    "nvidia-cuda-cccl==13.3.3.4.1",
     "pybind11>=3.0.3",
     "pytest-cov>=6.0.0",
     "optuna>=4.8.0",

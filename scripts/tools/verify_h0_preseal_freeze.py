@@ -538,7 +538,7 @@ def _independent_host_execution_inputs(root: Path) -> dict[str, Any]:
     """
     tool_paths = {
         name: _physical_executable(name).as_posix()
-        for name in ("git", "ldd", "nvcc", "readelf", "uv")
+        for name in ("git", "ldd", "readelf", "uv")
     }
     python = root / ".venv/bin/python"
     if not python.is_file() or python.is_symlink():
@@ -552,7 +552,7 @@ def _independent_host_execution_inputs(root: Path) -> dict[str, Any]:
                 python.as_posix(),
                 "-I",
                 "-c",
-                "import pathlib,torch; print((pathlib.Path(torch.__file__).resolve().parent/'lib').as_posix()); import tensorrt_libs; print(pathlib.Path(tensorrt_libs.__file__).resolve().parent.as_posix())",
+                "import pathlib,sysconfig,torch; print((pathlib.Path(torch.__file__).resolve().parent/'lib').as_posix()); import tensorrt_libs; print(pathlib.Path(tensorrt_libs.__file__).resolve().parent.as_posix()); print(pathlib.Path(sysconfig.get_path('purelib')).resolve().as_posix())",
             ],
             cwd=root,
             check=True,
@@ -563,15 +563,21 @@ def _independent_host_execution_inputs(root: Path) -> dict[str, Any]:
         raise VerificationError(
             "frozen Python could not derive runtime library directories"
         ) from exc
-    if len(query) != 2:
+    if len(query) != 3:
         raise VerificationError(
-            "frozen Python did not derive exactly two runtime library directories"
+            "frozen Python did not derive exactly three runtime library directories"
         )
-    cuda = Path(tool_paths["nvcc"]).parent.parent / "lib64"
+    # The CUDA toolchain is uv-locked venv content (issue #214); derive both
+    # the compiler and the runtime library authority from the venv tree.
+    cuda_root = Path(query[2]).resolve(strict=True) / "nvidia/cu13"
+    nvcc = cuda_root / "bin/nvcc"
+    if nvcc.is_symlink() or not nvcc.is_file():
+        raise VerificationError("frozen venv CUDA compiler is absent or non-physical")
+    tool_paths["nvcc"] = nvcc.as_posix()
     library_dirs = {
         "tensorrt_library_dir": Path(query[1]).resolve(strict=True).as_posix(),
         "pytorch_library_dir": Path(query[0]).resolve(strict=True).as_posix(),
-        "cuda_library_dir": cuda.resolve(strict=True).as_posix(),
+        "cuda_library_dir": (cuda_root / "lib").resolve(strict=True).as_posix(),
     }
     if any(
         not Path(value).is_dir() or Path(value).is_symlink()

@@ -1,5 +1,98 @@
 cmake_minimum_required(VERSION 3.18)
+
+# ─── H0 substrate (#214): frozen build-CUDA toolchain ───
+# The CUDA toolchain must come from the uv-locked venv tree (nvidia/cu13),
+# never the rolling system /opt/cuda. The venv python has to be resolved
+# before project() because CUDA compiler selection happens there.
+if(DEFINED PYTHON_EXECUTABLE AND NOT DEFINED Python3_EXECUTABLE)
+    set(Python3_EXECUTABLE "${PYTHON_EXECUTABLE}" CACHE FILEPATH "Python 3 executable" FORCE)
+endif()
+
+if(NOT DEFINED Python3_EXECUTABLE)
+    set(_repo_venv_python "${CMAKE_SOURCE_DIR}/.venv/bin/python3")
+    if(EXISTS "${_repo_venv_python}")
+        set(Python3_EXECUTABLE "${_repo_venv_python}" CACHE FILEPATH "Python 3 executable" FORCE)
+    endif()
+endif()
+
+if(NOT DEFINED Python3_EXECUTABLE AND DEFINED ENV{VIRTUAL_ENV})
+    set(_venv_python "$ENV{VIRTUAL_ENV}/bin/python")
+    if(EXISTS "${_venv_python}")
+        set(Python3_EXECUTABLE "${_venv_python}" CACHE FILEPATH "Python 3 executable" FORCE)
+    endif()
+endif()
+
+if(NOT DEFINED Python3_EXECUTABLE)
+    message(FATAL_ERROR "No venv python found; the frozen CUDA toolchain is derived from the venv (pass -DPYTHON_EXECUTABLE or run `uv sync --frozen`)")
+endif()
+
+execute_process(
+    COMMAND ${Python3_EXECUTABLE} -c "import sysconfig; print(sysconfig.get_path('purelib'))"
+    OUTPUT_VARIABLE _saccade_purelib
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    RESULT_VARIABLE _saccade_purelib_rc
+)
+if(NOT _saccade_purelib_rc EQUAL 0)
+    message(FATAL_ERROR "Could not query site-packages from ${Python3_EXECUTABLE}")
+endif()
+set(SACCADE_CUDA_VENV_ROOT "${_saccade_purelib}/nvidia/cu13")
+if(NOT EXISTS "${SACCADE_CUDA_VENV_ROOT}/bin/nvcc")
+    message(FATAL_ERROR "Frozen venv CUDA compiler is absent: ${SACCADE_CUDA_VENV_ROOT}/bin/nvcc — run `uv sync --frozen` (builds must not fall back to the rolling system CUDA, issue #214)")
+endif()
+if(NOT DEFINED CMAKE_CUDA_COMPILER AND NOT DEFINED ENV{CUDACXX})
+    set(CMAKE_CUDA_COMPILER "${SACCADE_CUDA_VENV_ROOT}/bin/nvcc")
+endif()
+# Without an explicit host compiler nvcc probes `gcc` from the ambient PATH
+# (e.g. /opt/cuda/bin/gcc → whatever the system CUDA pairs with), which is
+# environment-dependent. Select deterministically instead: the frozen crt
+# declares the newest GNU major nvcc accepts; use the default C++ compiler if
+# it is within that bound, else the newest installed versioned g++ inside it.
+if(NOT DEFINED CMAKE_CUDA_HOST_COMPILER AND NOT DEFINED ENV{CUDAHOSTCXX})
+    file(STRINGS "${SACCADE_CUDA_VENV_ROOT}/include/crt/host_config.h" _saccade_gnu_gate REGEX "__GNUC__ > [0-9]+")
+    if(NOT _saccade_gnu_gate)
+        message(FATAL_ERROR "Cannot read the supported GNU host-compiler bound from ${SACCADE_CUDA_VENV_ROOT}/include/crt/host_config.h")
+    endif()
+    list(GET _saccade_gnu_gate 0 _saccade_gnu_gate)
+    string(REGEX MATCH "[0-9]+" _saccade_gnu_max "${_saccade_gnu_gate}")
+    set(_saccade_cuda_host "")
+    find_program(_saccade_default_cxx NAMES c++ g++)
+    if(_saccade_default_cxx)
+        execute_process(COMMAND "${_saccade_default_cxx}" -dumpversion OUTPUT_VARIABLE _saccade_cxx_ver OUTPUT_STRIP_TRAILING_WHITESPACE)
+        string(REGEX MATCH "^[0-9]+" _saccade_cxx_major "${_saccade_cxx_ver}")
+        if(_saccade_cxx_major AND NOT _saccade_cxx_major GREATER "${_saccade_gnu_max}")
+            set(_saccade_cuda_host "${_saccade_default_cxx}")
+        endif()
+    endif()
+    if(NOT _saccade_cuda_host)
+        set(_saccade_gxx_candidates "")
+        foreach(_saccade_gxx_ver RANGE 10 ${_saccade_gnu_max})
+            list(PREPEND _saccade_gxx_candidates "${_saccade_gxx_ver}")
+        endforeach()
+        foreach(_saccade_gxx_ver IN LISTS _saccade_gxx_candidates)
+            if(EXISTS "/usr/bin/g++-${_saccade_gxx_ver}")
+                set(_saccade_cuda_host "/usr/bin/g++-${_saccade_gxx_ver}")
+                break()
+            endif()
+        endforeach()
+    endif()
+    if(NOT _saccade_cuda_host)
+        message(FATAL_ERROR "No host C++ compiler within the frozen nvcc's supported GNU range (<= ${_saccade_gnu_max}); install g++-${_saccade_gnu_max} or set CUDAHOSTCXX")
+    endif()
+    # CACHE so the selection lands in CMakeCache.txt, which the qualification
+    # harness hashes into the build identity.
+    set(CMAKE_CUDA_HOST_COMPILER "${_saccade_cuda_host}" CACHE FILEPATH "CUDA host C++ compiler (frozen-crt bound, issue #214)")
+endif()
+
 project(Saccade CXX CUDA)
+
+# Fail closed: however the CUDA compiler was selected (cache, -D, CUDACXX env),
+# it must be the frozen venv nvcc — a system nvcc would silently rebind the
+# whole toolkit to /opt/cuda.
+get_filename_component(_saccade_cuda_compiler_real "${CMAKE_CUDA_COMPILER}" REALPATH)
+get_filename_component(_saccade_venv_nvcc_real "${SACCADE_CUDA_VENV_ROOT}/bin/nvcc" REALPATH)
+if(NOT _saccade_cuda_compiler_real STREQUAL _saccade_venv_nvcc_real)
+    message(FATAL_ERROR "CUDA compiler escapes the frozen venv toolkit: ${CMAKE_CUDA_COMPILER} (expected ${SACCADE_CUDA_VENV_ROOT}/bin/nvcc, issue #214)")
+endif()
 
 # Suppress deprecation warning for FetchContent_Populate (we only need headers, not build TensorRT targets)
 cmake_policy(SET CMP0169 OLD)
@@ -19,6 +112,11 @@ endif()
 # 1. 全局編譯配置
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -fvisibility=hidden -O3 -Wall -fno-lto")
 set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -O3 -Xcompiler -fPIC,-fno-lto")
+# The frozen toolchain deliberately pairs nvcc/cccl 13.3 with the torch-pinned
+# 13.0 runtime headers/libs (issue #214). cccl's gate only accepts an exact
+# nvcc == CUDART_VERSION match; the mix stays safe because device code still
+# compiles against the 13.0 runtime declarations it links and loads.
+set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -DCCCL_DISABLE_CTK_COMPATIBILITY_CHECK")
 
 # 設置 RPATH 以支持動態連結
 set(CMAKE_SKIP_BUILD_RPATH FALSE)
@@ -34,31 +132,80 @@ function(enable_native_coverage target_name)
 endfunction()
 
 # 2. 依賴搜尋
+# pip CUDA wheels ship only SONAME'd libraries (libcudart.so.13); FindCUDAToolkit
+# and the linker need plain `.so` dev names. Materialise both name forms as
+# symlinks in the build tree and steer library discovery there. RUNPATH keeps
+# resolving into the frozen venv tree (symlink realpaths land in nvidia/cu13).
+set(SACCADE_CUDA_DEVLINK_DIR "${CMAKE_BINARY_DIR}/cuda_devlink")
+file(MAKE_DIRECTORY "${SACCADE_CUDA_DEVLINK_DIR}")
+file(GLOB _saccade_cu13_libs "${SACCADE_CUDA_VENV_ROOT}/lib/*")
+foreach(_lib IN LISTS _saccade_cu13_libs)
+    get_filename_component(_lib_name "${_lib}" NAME)
+    file(REMOVE "${SACCADE_CUDA_DEVLINK_DIR}/${_lib_name}")
+    file(CREATE_LINK "${_lib}" "${SACCADE_CUDA_DEVLINK_DIR}/${_lib_name}" SYMBOLIC)
+    if(_lib_name MATCHES "^(lib.+\\.so)\\.[0-9.]+$")
+        file(REMOVE "${SACCADE_CUDA_DEVLINK_DIR}/${CMAKE_MATCH_1}")
+        file(CREATE_LINK "${_lib}" "${SACCADE_CUDA_DEVLINK_DIR}/${CMAKE_MATCH_1}" SYMBOLIC)
+    endif()
+endforeach()
+list(PREPEND CMAKE_LIBRARY_PATH "${SACCADE_CUDA_DEVLINK_DIR}")
+list(APPEND CMAKE_BUILD_RPATH "${SACCADE_CUDA_VENV_ROOT}/lib")
+
+# Torch's Caffe2 config uses legacy find_package(CUDA), which hunts PATH /
+# /usr/local/cuda and would rebind to the rolling system toolkit. Give it a
+# complete toolkit-shaped root backed entirely by the venv tree.
+set(SACCADE_CUDA_SHIM_ROOT "${CMAKE_BINARY_DIR}/cuda_shim_root")
+file(MAKE_DIRECTORY "${SACCADE_CUDA_SHIM_ROOT}")
+foreach(_entry bin include nvvm)
+    file(REMOVE "${SACCADE_CUDA_SHIM_ROOT}/${_entry}")
+    file(CREATE_LINK "${SACCADE_CUDA_VENV_ROOT}/${_entry}" "${SACCADE_CUDA_SHIM_ROOT}/${_entry}" SYMBOLIC)
+endforeach()
+foreach(_entry lib lib64)
+    file(REMOVE "${SACCADE_CUDA_SHIM_ROOT}/${_entry}")
+    file(CREATE_LINK "${SACCADE_CUDA_DEVLINK_DIR}" "${SACCADE_CUDA_SHIM_ROOT}/${_entry}" SYMBOLIC)
+endforeach()
+set(CUDA_TOOLKIT_ROOT_DIR "${SACCADE_CUDA_SHIM_ROOT}" CACHE PATH "Frozen venv CUDA toolkit (issue #214)" FORCE)
+
+# The venv toolkit intentionally mixes a newer nvcc (13.3, needed for the
+# rolling host glibc/gcc) with the torch-pinned 13.0 runtime headers/libs —
+# the supported direction. Legacy FindCUDA derives its version from nvcc,
+# which would trip Caffe2's nvcc-vs-header sanity gate; seed it with the
+# runtime-header line, which is what links and loads.
+file(STRINGS "${SACCADE_CUDA_VENV_ROOT}/include/cuda.h" _saccade_cuda_hdr_ver REGEX "^#define CUDA_VERSION [0-9]+")
+string(REGEX MATCH "[0-9]+$" _saccade_cuda_hdr_ver "${_saccade_cuda_hdr_ver}")
+if(NOT _saccade_cuda_hdr_ver)
+    message(FATAL_ERROR "Could not read CUDA_VERSION from ${SACCADE_CUDA_VENV_ROOT}/include/cuda.h")
+endif()
+math(EXPR _saccade_cuda_hdr_major "${_saccade_cuda_hdr_ver} / 1000")
+math(EXPR _saccade_cuda_hdr_minor "(${_saccade_cuda_hdr_ver} / 10) % 100")
+set(CUDA_VERSION "${_saccade_cuda_hdr_major}.${_saccade_cuda_hdr_minor}" CACHE STRING "Frozen venv CUDA runtime header line (issue #214)" FORCE)
+# FindCUDA wipes a pre-seeded CUDA_VERSION whenever its recorded toolkit root
+# differs; record the shim root so the seed survives.
+set(CUDA_TOOLKIT_ROOT_DIR_INTERNAL "${CUDA_TOOLKIT_ROOT_DIR}" CACHE INTERNAL "CUDA_TOOLKIT_ROOT_DIR seed (issue #214)" FORCE)
+
 find_package(CUDAToolkit REQUIRED)
+
+# Fail closed: the discovered toolkit and the cudart the extension will link
+# must both resolve into the frozen venv tree, not /opt/cuda.
+get_filename_component(_saccade_ctk_bin_real "${CUDAToolkit_BIN_DIR}" REALPATH)
+get_filename_component(_saccade_venv_bin_real "${SACCADE_CUDA_VENV_ROOT}/bin" REALPATH)
+if(NOT _saccade_ctk_bin_real STREQUAL _saccade_venv_bin_real)
+    message(FATAL_ERROR "CUDAToolkit escaped the frozen venv: ${CUDAToolkit_BIN_DIR} (issue #214)")
+endif()
+get_filename_component(_saccade_venv_cuda_real "${SACCADE_CUDA_VENV_ROOT}" REALPATH)
+get_target_property(_saccade_cudart_loc CUDA::cudart IMPORTED_LOCATION)
+get_filename_component(_saccade_cudart_real "${_saccade_cudart_loc}" REALPATH)
+string(FIND "${_saccade_cudart_real}" "${_saccade_venv_cuda_real}/" _saccade_cudart_in_venv)
+if(NOT _saccade_cudart_in_venv EQUAL 0)
+    message(FATAL_ERROR "CUDA::cudart escaped the frozen venv: ${_saccade_cudart_real} (issue #214)")
+endif()
 find_package(OpenCV REQUIRED)
 find_package(PkgConfig REQUIRED)
 find_package(Threads REQUIRED)
 pkg_check_modules(GSTREAMER REQUIRED gstreamer-1.0 gstreamer-app-1.0 gstreamer-video-1.0)
 
 # 3. Python 基礎環境搜尋 (用於獲取 Pybind11 與 TensorRT 庫路徑)
-if(DEFINED PYTHON_EXECUTABLE AND NOT DEFINED Python3_EXECUTABLE)
-    set(Python3_EXECUTABLE "${PYTHON_EXECUTABLE}" CACHE FILEPATH "Python 3 executable" FORCE)
-endif()
-
-if(NOT DEFINED Python3_EXECUTABLE)
-    set(_repo_venv_python "${PROJECT_SOURCE_DIR}/.venv/bin/python3")
-    if(EXISTS "${_repo_venv_python}")
-        set(Python3_EXECUTABLE "${_repo_venv_python}" CACHE FILEPATH "Python 3 executable" FORCE)
-    endif()
-endif()
-
-if(NOT DEFINED Python3_EXECUTABLE AND DEFINED ENV{VIRTUAL_ENV})
-    set(_venv_python "$ENV{VIRTUAL_ENV}/bin/python")
-    if(EXISTS "${_venv_python}")
-        set(Python3_EXECUTABLE "${_venv_python}" CACHE FILEPATH "Python 3 executable" FORCE)
-    endif()
-endif()
-
+# Python3_EXECUTABLE 已在 project() 前解析 (frozen CUDA toolchain 推導需要)。
 find_package(Python3 3.12 EXACT REQUIRED COMPONENTS Interpreter Development.Module)
 
 # ─── Find LibTorch ───
@@ -69,6 +216,14 @@ execute_process(
 )
 list(APPEND CMAKE_PREFIX_PATH "${TORCH_CMAKE_DIR}")
 find_package(Torch REQUIRED)
+
+# Fail closed: Caffe2's legacy CUDA discovery must have stayed on the shim.
+if(DEFINED CUDA_NVCC_EXECUTABLE)
+    get_filename_component(_saccade_caffe2_nvcc_real "${CUDA_NVCC_EXECUTABLE}" REALPATH)
+    if(NOT _saccade_caffe2_nvcc_real STREQUAL _saccade_venv_nvcc_real)
+        message(FATAL_ERROR "Torch/Caffe2 CUDA escaped the frozen venv: ${CUDA_NVCC_EXECUTABLE} (issue #214)")
+    endif()
+endif()
 
 # Find PyTorch Python bindings library (torch_python) for pybind11 at::Tensor type-casting
 execute_process(
@@ -277,6 +432,18 @@ pybind11_add_module(saccade_tracking_ext NO_EXTRAS src/tracking/tracker_gpu_pyth
 target_link_libraries(saccade_tracking_ext PRIVATE
     saccade_tracking
     CUDA::cudart
+)
+# Pin the cublas/cublasLt pairing to the frozen venv tree (issue #214): the
+# extension does not call cublas itself, but system OpenCV's CUDA libraries
+# pull libcublas via their own /opt/cuda RUNPATH while torch pulls libcublasLt
+# from the venv — a mixed pair that breaks at load. Making both a direct
+# NEEDED of the extension resolves them through this target's RUNPATH first,
+# so every later requester reuses the frozen pair.
+target_link_libraries(saccade_tracking_ext PRIVATE
+    -Wl,--no-as-needed
+    CUDA::cublas
+    CUDA::cublasLt
+    -Wl,--as-needed
 )
 target_compile_options(saccade_tracking_ext PRIVATE -fno-lto)
 

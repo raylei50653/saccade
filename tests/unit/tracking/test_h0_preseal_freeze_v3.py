@@ -216,14 +216,15 @@ def _independent_host_fixture(
     pyvenv_config.write_bytes(b"home = /fixture/python\n")
     tools = tmp_path / "tools"
     tools.mkdir()
-    for name in ("git", "ldd", "nvcc", "readelf", "uv"):
+    for name in ("git", "ldd", "readelf", "uv"):
         (tools / name).write_bytes(name.encode("utf-8"))
-    nvcc = tmp_path / "cuda/bin/nvcc"
+    purelib = tmp_path / "purelib"
+    nvcc = purelib / "nvidia/cu13/bin/nvcc"
     nvcc.parent.mkdir(parents=True)
     nvcc.write_bytes(b"nvcc\n")
-    cuda_lib = tmp_path / "cuda/lib64"
+    cuda_lib = purelib / "nvidia/cu13/lib"
     cuda_lib.mkdir()
-    (cuda_lib / "cudart.so").write_bytes(b"cuda\n")
+    (cuda_lib / "libcudart.so.13").write_bytes(b"cuda\n")
     torch_lib = tmp_path / "torch/lib"
     torch_lib.mkdir(parents=True)
     (torch_lib / "torch.so").write_bytes(b"torch\n")
@@ -232,13 +233,13 @@ def _independent_host_fixture(
     (tensorrt_lib / "nvinfer.so").write_bytes(b"tensorrt\n")
 
     def physical(command: str) -> Path:
-        return nvcc if command == "nvcc" else tools / command
+        return tools / command
 
     def run(*_args, **_kwargs) -> subprocess.CompletedProcess[str]:
         return subprocess.CompletedProcess(
             args=[],
             returncode=0,
-            stdout=f"{torch_lib}\n{tensorrt_lib}\n",
+            stdout=f"{torch_lib}\n{tensorrt_lib}\n{purelib}\n",
         )
 
     monkeypatch.setattr(verifier, "_physical_executable", physical)
@@ -260,7 +261,7 @@ def test_independent_host_expansion_binds_physical_pyvenv_config(
         if item["logical_path"] == pyvenv_config.as_posix()
     )
     assert record == verifier._host_file_record(pyvenv_config)
-    nvcc = root.parent / "cuda/bin/nvcc"
+    nvcc = root.parent / "purelib/nvidia/cu13/bin/nvcc"
     assert host["tool_paths"]["nvcc"] == nvcc.as_posix()
     assert next(
         item for item in host["tool_runtime"] if item["logical_path"] == nvcc.as_posix()
