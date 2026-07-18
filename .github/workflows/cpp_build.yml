@@ -113,6 +113,7 @@ jobs:
             -DPYTHON_EXECUTABLE=$PYTHON_EXE \
             -Dpybind11_DIR=$(uv run python -c "import pybind11; print(pybind11.get_cmake_dir())") \
             -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_CUDA_ARCHITECTURES=75 \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CUDA_COMPILER_LAUNCHER=ccache
