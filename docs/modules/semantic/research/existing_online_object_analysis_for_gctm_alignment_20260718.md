@@ -1425,14 +1425,13 @@ GCTM 與 online 之間可用以下最小介面：
 $$
 P_j:
 \left(
-\Delta_j,
-x_{C_j},
-\{x_L^{(i)}\}_{i\in\mathcal I_{\mathrm{struct},j}},
+x_{C_j},q_j,
+\{(x_L^{(i)},\Delta_i)\}_{i\in\mathcal I_{\mathrm{struct},j}},
 m_{\mathrm{gate}},
 \theta
 \right)
 \longrightarrow
-\operatorname{proposal}_j.
+\left(z_{c,j},\operatorname{proposal}_j\right).
 $$
 
 ## Claim-arbitration interface
