@@ -22,9 +22,12 @@ jobs:
     # runner supplies the real CUDA/tool/runtime closure, but the harness never
     # reads research inputs or enters H0 authority.
     runs-on: [self-hosted, linux, x64, h0-qualification]
-    env:
-      H0_QUALIFICATION_ROOT: ${{ runner.temp }}/h0-qualification-${{ github.run_id }}
     steps:
+      - name: Resolve qualification workspace
+        # runner.temp is only available in step scope, not job-level env, so the
+        # workspace root is materialised here and exported for later steps.
+        run: |
+          echo "H0_QUALIFICATION_ROOT=${RUNNER_TEMP}/h0-qualification-${{ github.run_id }}" >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.ref }}
