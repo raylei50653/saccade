@@ -37,6 +37,12 @@ jobs:
             libcairo2-dev \
             libgirepository1.0-dev \
             pkg-config
+      - name: Free runner disk
+        run: |
+          # The CUDA/TensorRT Python closure is several GB. Remove toolchains
+          # unused by this job before setup-uv restores its package cache.
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          df -h
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
@@ -62,6 +68,10 @@ jobs:
             libcairo2-dev \
             libgirepository1.0-dev \
             pkg-config
+      - name: Free runner disk
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          df -h
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
@@ -85,6 +95,10 @@ jobs:
             libcairo2-dev \
             libgirepository1.0-dev \
             pkg-config
+      - name: Free runner disk
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          df -h
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
@@ -138,6 +152,10 @@ jobs:
             gstreamer1.0-tools \
             pkg-config
           pkg-config --modversion cairo
+      - name: Free runner disk
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          df -h
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true

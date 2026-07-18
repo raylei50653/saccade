@@ -1,7 +1,5 @@
 #include "perception/preprocessor.hpp"
 #include <cuda_runtime.h>
-#include <npp.h>
-#include <nppi.h>
 #include <iostream>
 
 namespace saccade {

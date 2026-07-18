@@ -12,14 +12,13 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import os
 import re
 import shutil
 import subprocess
 import sys
 import sysconfig
 import time
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -33,6 +32,7 @@ STEP_NAMES = (
     "build",
     "build_identity",
     "runtime_closure",
+    "cuda_runtime_confinement",
     "extension_load",
     "t1_verdict_semantics",
     "runner_launch_preflight",
@@ -135,6 +135,96 @@ def _tool(name: str) -> Path:
             f"qualification tool is not a physical regular file: {name}"
         )
     return path
+
+
+def _venv_runtime_libraries(python: Path) -> dict[str, Path]:
+    """Derive the frozen runtime library directories from the venv itself.
+
+    The CUDA toolchain and runtime tree are uv-locked venv content (issue
+    #214); nothing here may fall back to PATH or the rolling system toolkit.
+    Mirrors the controller-input derivation in build_h0_preseal_freeze.py.
+    """
+    result = subprocess.run(
+        [
+            python.as_posix(),
+            "-I",
+            "-B",
+            "-c",
+            "import pathlib,sysconfig,torch; print((pathlib.Path(torch.__file__).resolve().parent/'lib').as_posix()); import tensorrt_libs; print(pathlib.Path(tensorrt_libs.__file__).resolve().parent.as_posix()); print(pathlib.Path(sysconfig.get_path('purelib')).resolve().as_posix())",
+        ],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if result.returncode:
+        raise QualificationError(
+            "qualification venv could not derive the runtime library directories"
+        )
+    lines = result.stdout.decode("utf-8", errors="strict").splitlines()
+    if len(lines) != 3:
+        raise QualificationError(
+            "qualification venv derived an unexpected library-directory shape"
+        )
+    cuda_root = Path(lines[2]).resolve(strict=True) / "nvidia/cu13"
+    nvcc = cuda_root / "bin/nvcc"
+    if nvcc.is_symlink() or not nvcc.is_file():
+        raise QualificationError(
+            "frozen venv CUDA compiler is absent or unsafe (run `uv sync --frozen`)"
+        )
+    libraries = {
+        "tensorrt_library_dir": Path(lines[1]),
+        "pytorch_library_dir": Path(lines[0]),
+        "cuda_library_dir": cuda_root / "lib",
+        "nvcc": nvcc,
+    }
+    for name in ("tensorrt_library_dir", "pytorch_library_dir", "cuda_library_dir"):
+        directory = libraries[name]
+        if directory.is_symlink() or not directory.is_dir():
+            raise QualificationError(
+                f"qualification runtime library directory is absent or unsafe: {name}"
+            )
+    return libraries
+
+
+def _assert_cuda_confinement(
+    artifacts: Iterable[Path], cuda_library_dir: Path, library_path: str
+) -> None:
+    """Fail closed if a CUDA library the frozen venv provides resolves elsewhere.
+
+    Sonames the venv tree does not provide (e.g. system OpenCV's own CUDA-side
+    dependencies) are outside this check's authority and stay recorded in the
+    runtime closure instead.
+    """
+    cuda_library_dir = cuda_library_dir.resolve(strict=True)
+    provided = {entry.name for entry in cuda_library_dir.iterdir() if entry.is_file()}
+    environment = {"LD_LIBRARY_PATH": library_path, "PATH": "/usr/bin:/bin"}
+    for artifact in artifacts:
+        result = subprocess.run(
+            ["ldd", artifact.as_posix()],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=environment,
+            check=False,
+        )
+        if result.returncode:
+            raise QualificationError(
+                f"ldd rejected qualification artifact during CUDA confinement: {artifact}"
+            )
+        for line in result.stdout.decode("utf-8", errors="replace").splitlines():
+            if "=>" not in line:
+                continue
+            left, right = line.split("=>", 1)
+            soname = left.strip().split(" ", 1)[0]
+            target = right.strip().split(" ", 1)[0]
+            if soname not in provided or not target.startswith("/"):
+                continue
+            real = Path(target).resolve(strict=True)
+            if not real.is_relative_to(cuda_library_dir):
+                raise QualificationError(
+                    f"CUDA runtime dependency escaped the frozen venv tree: {soname} -> {real}"
+                )
 
 
 def _git_object_id(root: Path, revision: str) -> str:
@@ -356,10 +446,11 @@ def run_qualification(
     try:
         repository_identity = _repository_identity(root, requested_ref)
         uv = _tool("uv")
-        nvcc = _tool("nvcc")
         python = root / ".venv/bin/python"
         if python.is_symlink() or not python.is_file():
             raise QualificationError("qualification Python is absent or unsafe")
+        libraries = _venv_runtime_libraries(python)
+        nvcc = libraries["nvcc"]
         build = workspace / "build"
         environment = {
             "CUDACXX": nvcc.as_posix(),
@@ -434,6 +525,23 @@ def run_qualification(
         steps.append({"name": "runtime_closure", "state": "passed"})
         extension = Path(identity["artifacts"][0]["path"])
         plugin = Path(identity["artifacts"][1]["path"])
+        # Controller closure semantics (run_h0_phase_a BUILD template):
+        # build : tensorrt : pytorch : cuda — no ambient passthrough.
+        library_path = ":".join(
+            (
+                build.as_posix(),
+                libraries["tensorrt_library_dir"].as_posix(),
+                libraries["pytorch_library_dir"].as_posix(),
+                libraries["cuda_library_dir"].as_posix(),
+            )
+        )
+        _step(
+            "cuda_runtime_confinement",
+            lambda: _assert_cuda_confinement(
+                (extension, plugin), libraries["cuda_library_dir"], library_path
+            ),
+            steps,
+        )
         load_script = (
             "import ctypes,pathlib,sys;"
             f"sys.path.insert(0,{build.as_posix()!r});"
@@ -443,11 +551,7 @@ def run_qualification(
         )
         runtime_environment = {
             **environment,
-            "LD_LIBRARY_PATH": ":".join(
-                part
-                for part in (build.as_posix(), os.environ.get("LD_LIBRARY_PATH", ""))
-                if part
-            ),
+            "LD_LIBRARY_PATH": library_path,
             "SACCADE_BUILD_PATH": build.as_posix(),
             "H0_QUALIFICATION_MODE": "1",
         }
