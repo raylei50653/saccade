@@ -482,7 +482,12 @@ def _build_environment_algorithm(controller: Mapping[str, Any]) -> str:
 
 
 def _bound_nvcc_path(controller: Mapping[str, Any]) -> str:
-    """Reconstruct the frozen compiler from the controller's bound inventory."""
+    """Reconstruct the frozen compiler from the controller's bound inventory.
+
+    Archive verification is host-independent: the selected compiler identity
+    is proven by the frozen tool_runtime record alone, never by re-reading the
+    execution host's absolute paths.
+    """
     try:
         selected = str(controller["tool_paths"]["nvcc"])
         records = controller["bound_inputs"]["tool_runtime"]
@@ -493,20 +498,20 @@ def _bound_nvcc_path(controller: Mapping[str, Any]) -> str:
         raise VerificationError("selected nvcc is absent or ambiguous in tool_runtime")
     record = matches[0]
     try:
-        path = Path(str(record["realpath"]))
-        data = path.read_bytes()
-        expected = (int(record["length"]), str(record["sha256"]))
-    except (KeyError, TypeError, ValueError, OSError) as exc:
+        realpath = str(record["realpath"])
+        length = int(record["length"])
+        sha256_value = str(record["sha256"])
+    except (KeyError, TypeError, ValueError) as exc:
         raise VerificationError("selected nvcc bound identity is malformed") from exc
     if (
-        not path.is_absolute()
-        or path.is_symlink()
-        or path.resolve(strict=True) != path
-        or path.as_posix() != selected
-        or (len(data), hashlib.sha256(data).hexdigest()) != expected
+        not realpath.startswith("/")
+        or realpath != selected
+        or length < 0
+        or len(sha256_value) != 64
+        or any(char not in "0123456789abcdef" for char in sha256_value)
     ):
         raise VerificationError("selected nvcc differs from its bound identity")
-    return path.as_posix()
+    return realpath
 
 
 def _expected_extension_load_environment(
@@ -801,6 +806,22 @@ def _verify_input_binding(evidence: Mapping[str, Any]) -> None:
             raise VerificationError(
                 "input-binding final equality state is not mechanically derived"
             )
+    # Truthful-provenance packets carry the terminal stage/reason instead of a
+    # fabricated checkpoint observation; historical packets omit the member.
+    if "failure" in binding:
+        failure = binding["failure"]
+        if failure is not None:
+            if (
+                not isinstance(failure, Mapping)
+                or set(failure) != {"reason", "stage"}
+                or not all(
+                    isinstance(failure[key], str) and failure[key]
+                    for key in ("reason", "stage")
+                )
+            ):
+                raise VerificationError("input-binding failure record is malformed")
+            if evidence["result"] == "phase_a_pass":
+                raise VerificationError("phase_a_pass carries a failure record")
 
 
 def _verify_result(evidence: Mapping[str, Any]) -> None:
@@ -1191,22 +1212,18 @@ def _verify_complete_build_identity(
         "cuda_toolkit_root"
     ].startswith("/"):
         raise VerificationError("CUDA toolkit root is not absolute")
-    for artifact in artifacts:
-        path = repository_root / artifact["path"]
-        data = path.read_bytes()
-        if (
-            artifact["length"] != len(data)
-            or artifact["sha256"] != hashlib.sha256(data).hexdigest()
-        ):
-            raise VerificationError(
-                f"build artifact identity mismatch: {artifact['path']}"
-            )
-    cache = repository_root / "build/h0_phase_a/CMakeCache.txt"
-    if hashlib.sha256(cache.read_bytes()).hexdigest() != identity["cmake_cache_sha256"]:
-        raise VerificationError("CMake cache identity mismatch")
+    # Archive verification is host-independent: build artifacts and the CMake
+    # cache are execution-host products that are not part of the packet, so
+    # their identities are admitted as recorded; uv.lock is bound at I, so its
+    # recorded hash must equal the frozen repository record.
+    uv_lock_records = [
+        record
+        for record in controller["bound_inputs"]["repository"]
+        if record["path"] == "uv.lock"
+    ]
     if (
-        hashlib.sha256((repository_root / "uv.lock").read_bytes()).hexdigest()
-        != identity["uv_lock_sha256"]
+        len(uv_lock_records) != 1
+        or identity["uv_lock_sha256"] != uv_lock_records[0]["sha256"]
     ):
         raise VerificationError("uv.lock identity mismatch")
     extension_load = identity.get("extension_load")
@@ -1271,8 +1288,7 @@ def _verify_complete_build_identity(
         for record in extension_load["runtime_inputs"]["regular_files"]
     }
     expected_loaded = {
-        (repository_root / artifact["path"]).resolve(strict=True).as_posix()
-        for artifact in artifacts
+        (repository_root / artifact["path"]).as_posix() for artifact in artifacts
     }
     if not expected_loaded.issubset(observed):
         raise VerificationError(
@@ -1432,6 +1448,14 @@ def _verify_runtime_inputs(
             length=record["length"],
             sha256=record["sha256"],
         )
+        for dependency in record["dynamic_dependencies"]:
+            admit(
+                dependency["realpath"],
+                binding="build_runtime_closure",
+                logical_paths=(dependency["path"], dependency["realpath"]),
+                length=dependency["length"],
+                sha256=dependency["sha256"],
+            )
     python_identity = build_identity["python"]
     admit(
         python_identity["path"],

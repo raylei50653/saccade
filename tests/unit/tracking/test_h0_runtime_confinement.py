@@ -200,6 +200,7 @@ def _plan(
         plugin = _identity(fixture["plugin"])
         artifacts.append(
             {
+                "dynamic_dependencies": [],
                 "length": plugin["length"],
                 "path": fixture["plugin"].relative_to(root).as_posix(),
                 "sha256": plugin["sha256"],
@@ -381,6 +382,7 @@ def test_independent_verifier_rebuilds_the_native_runtime_inventory(
     build_identity = {
         "artifacts": [
             {
+                "dynamic_dependencies": [],
                 "length": plugin_record["length"],
                 "path": native_fixture["plugin"]
                 .relative_to(native_fixture["root"])
@@ -911,3 +913,83 @@ raise SystemExit(0 if module.VALUE in {7, 9} else 92)
         and violation["reason"] == "unbound_regular_file"
         for violation in unbound_attestation["violations"]
     )
+
+
+def test_build_runtime_closure_is_admitted_as_exact_files(tmp_path: Path) -> None:
+    root = tmp_path
+    for run_id in independent_verifier.RUN_IDS:
+        (root / "evidence.incomplete/runs" / run_id).mkdir(parents=True)
+    runner = root / "python"
+    runner.write_bytes(b"#!runner")
+    runner.chmod(0o755)
+    (root / "build/h0_phase_a").mkdir(parents=True)
+    plugin = root / "build/h0_phase_a/libsaccade_scan_plugin.so"
+    plugin.write_bytes(b"plugin")
+    dependency = root / "libclosure_member.so"
+    dependency.write_bytes(b"dependency")
+
+    def record(path: Path) -> dict[str, Any]:
+        data = path.read_bytes()
+        return {"length": len(data), "sha256": hashlib.sha256(data).hexdigest()}
+
+    inventory = {
+        "models_engines": [],
+        "repository": [],
+        "sequence": {"files": [], "root": "sequence"},
+        "tool_runtime": [],
+    }
+    build_identity = {
+        "artifacts": [
+            {
+                "dynamic_dependencies": [
+                    {
+                        "path": dependency.as_posix(),
+                        "realpath": dependency.as_posix(),
+                        **record(dependency),
+                    }
+                ],
+                "path": "build/h0_phase_a/libsaccade_scan_plugin.so",
+                **record(plugin),
+            }
+        ],
+        "python": {"path": runner.as_posix(), **record(runner)},
+    }
+    plan = confinement.build_plan(
+        root=root,
+        incomplete=root / "evidence.incomplete",
+        inventory=inventory,
+        build_identity=build_identity,
+        denial_probe=root / "probe",
+        run_ids=independent_verifier.RUN_IDS,
+    )
+    files = {entry["realpath"]: entry for entry in plan["files"]}
+    closure = files[dependency.as_posix()]
+    assert closure["bindings"] == ["build_runtime_closure"]
+    assert closure["length"] == len(b"dependency")
+    assert dependency.parent.as_posix() in plan["lookup_directories"]
+
+    drifted = {
+        "artifacts": [
+            {
+                **build_identity["artifacts"][0],
+                "dynamic_dependencies": [
+                    {
+                        "path": dependency.as_posix(),
+                        "realpath": dependency.as_posix(),
+                        "length": len(b"dependency"),
+                        "sha256": "0" * 64,
+                    }
+                ],
+            }
+        ],
+        "python": build_identity["python"],
+    }
+    with pytest.raises(confinement.ConfinementError, match="identity mismatch"):
+        confinement.build_plan(
+            root=root,
+            incomplete=root / "evidence.incomplete",
+            inventory=inventory,
+            build_identity=drifted,
+            denial_probe=root / "probe",
+            run_ids=independent_verifier.RUN_IDS,
+        )

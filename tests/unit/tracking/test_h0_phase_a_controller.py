@@ -691,7 +691,11 @@ def test_independent_verifier_rejects_self_consistent_build_environment_drift(
         },
         "python_ext_suffix": ".so",
         "state": "complete",
-        "uv_lock_sha256": hashlib.sha256(b"lock").hexdigest(),
+        "uv_lock_sha256": next(
+            record["sha256"]
+            for record in contract["bound_inputs"]["repository"]
+            if record["path"] == "uv.lock"
+        ),
     }
     extension_environment = verifier._expected_extension_load_environment(contract)
     identity["extension_load"] = {
@@ -2470,3 +2474,111 @@ def test_parent_fsync_timeout_after_four_completed_children_stages_valid_timeout
     assert not any((incomplete / relative).exists() for relative in parent.D_PATHS)
     assert not any((incomplete / relative).exists() for relative in parent.V_PATHS)
     assert real_verify(incomplete)["result"] == result
+
+
+def test_pre_checkpoint_failure_is_truthful_and_verifies(tmp_path: Path) -> None:
+    contract = _launch_contract(tmp_path)
+    digest_value = contract["bound_inputs"]["digest"]
+    checkpoints = [
+        {
+            "digest": digest_value,
+            "events_after": [],
+            "events_before": [],
+            "inventory_equal": True,
+            "monotonic_ns": 1,
+            "name": "T0",
+            "state": "completed",
+        }
+    ] + [parent._not_reached_checkpoint(name) for name in parent.CHECKPOINTS[1:]]
+    failure = {
+        "reason": "runtime-loaded tool/library absent from h0_bound_inputs_v1: ['/x']",
+        "stage": "build_binding",
+    }
+    predicates = _predicates()
+    predicates["provenance_ok"] = False
+    result = parent._finalize_bundle(
+        contract,
+        started=0.0,
+        result="provenance_invalid",
+        predicates=predicates,
+        checkpoints=checkpoints,
+        comparison=None,
+        build_identity=None,
+        mutation_events=[],
+        failure=failure,
+        clock=lambda: 1.0,
+    )
+    assert result == "provenance_invalid"
+    final = tmp_path / contract["evidence_root"]
+    binding = parent.read_canonical_json(final / "input_binding.json")
+    assert binding["failure"] == failure
+    assert [row["state"] for row in binding["checkpoints"]] == ["completed"] + [
+        "not_reached"
+    ] * (len(parent.CHECKPOINTS) - 1)
+    assert binding["mutation_events"] == []
+    assert binding["monitor_state"] == "closed_clean"
+    assert verifier.verify_evidence_root(final)["result"] == "provenance_invalid"
+
+
+def test_verifier_admits_failure_record_only_for_failure_results() -> None:
+    evidence = evidence_for("provenance_invalid")
+    evidence["input_binding"]["failure"] = {
+        "reason": "bound inventory mismatch at T1",
+        "stage": "build_binding",
+    }
+    assert verifier.verify_evidence(evidence)["valid"] is True
+    passed = evidence_for("phase_a_pass")
+    passed["input_binding"]["failure"] = {"reason": "x", "stage": "runs"}
+    with pytest.raises(verifier.VerificationError, match="carries a failure record"):
+        verifier.verify_evidence(passed)
+    malformed = evidence_for("provenance_invalid")
+    malformed["input_binding"]["failure"] = {"reason": "", "stage": "build_binding"}
+    with pytest.raises(verifier.VerificationError):
+        verifier.verify_evidence(malformed)
+
+
+def test_build_tool_binding_requires_toolchain_but_not_dynamic_closure(
+    tmp_path: Path,
+) -> None:
+    contract = _launch_contract(tmp_path)
+    contract["tool_paths"] = {
+        name: "/usr/bin/true" for name in ("git", "ldd", "nvcc", "readelf", "uv")
+    }
+    frozen_tool = contract["bound_inputs"]["tool_runtime"][0]
+    tool_record = {
+        "length": frozen_tool["length"],
+        "path": "/usr/bin/true",
+        "sha256": frozen_tool["sha256"],
+        "version": "fixture",
+    }
+    identity = {
+        "artifacts": [
+            {
+                "dynamic_dependencies": [
+                    {
+                        "length": 3,
+                        "path": "/usr/lib/libunfrozen.so",
+                        "realpath": "/usr/lib/libunfrozen.so",
+                        "sha256": "f" * 64,
+                    }
+                ],
+                "elf_gnu_build_id": "a",
+                "length": 1,
+                "path": "build/h0_phase_a/saccade_tracking_ext.so",
+                "sha256": "0" * 64,
+            }
+        ],
+        "cmake": {"generator": "fixture", **tool_record},
+        "compilers": {"cuda": dict(tool_record), "cxx": dict(tool_record)},
+        "python": {"abi": "fixture", **tool_record},
+    }
+    parent._validate_build_tool_runtime_binding(contract, identity)
+    drifted = {
+        **identity,
+        "compilers": {
+            "cuda": {**tool_record, "sha256": "0" * 64},
+            "cxx": dict(tool_record),
+        },
+    }
+    with pytest.raises(parent.DriftError, match="absent from h0_bound_inputs_v1"):
+        parent._validate_build_tool_runtime_binding(contract, drifted)

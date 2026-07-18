@@ -863,6 +863,10 @@ def _not_reached_checkpoint(name: str) -> dict[str, Any]:
     }
 
 
+def _failure_record(stage: str, exc: BaseException) -> dict[str, str]:
+    return {"reason": str(exc) or exc.__class__.__name__, "stage": stage}
+
+
 def child_argv(root: Path, run_id: str) -> tuple[str, ...]:
     if run_id not in RUN_IDS:
         raise ContractError(f"unknown run id: {run_id}")
@@ -2362,16 +2366,18 @@ def _verify_extension_load(
 def _validate_build_tool_runtime_binding(
     contract: Mapping[str, Any], identity: Mapping[str, Any]
 ) -> None:
+    """Require every toolchain identity to be pre-frozen in tool_runtime.
+
+    The build artifacts' dynamic-dependency closure is deliberately absent
+    here: it is build-derived, not freezable at F, and is bound as its own
+    ``build_runtime_closure`` class by the runtime confinement plan, which
+    admits each closure member as one exact physical file.
+    """
     frozen = {
         record["realpath"]: (record["length"], record["sha256"])
         for record in contract["bound_inputs"]["tool_runtime"]
     }
     required: list[tuple[str, int, str]] = []
-    for artifact in identity["artifacts"]:
-        required.extend(
-            (record["realpath"], record["length"], record["sha256"])
-            for record in artifact["dynamic_dependencies"]
-        )
     for compiler in identity["compilers"].values():
         required.append((compiler["path"], compiler["length"], compiler["sha256"]))
     for name in ("cmake", "python"):
@@ -2806,6 +2812,7 @@ def _finalize_bundle_once(
     comparison: Mapping[str, Any] | None,
     build_identity: Mapping[str, Any] | None,
     mutation_events: Sequence[Mapping[str, Any]],
+    failure: Mapping[str, str] | None = None,
     runtime_attestations: Mapping[str, Mapping[str, Any]] | None = None,
     clock: Callable[[], float] = time.monotonic,
     enforce_deadline: bool = True,
@@ -2913,6 +2920,7 @@ def _finalize_bundle_once(
     input_binding = {
         "algorithm": BOUND_INPUTS_SCHEMA,
         "checkpoints": checkpoints,
+        "failure": dict(failure) if failure is not None else None,
         "final_equal": final_equal,
         "inotify_mask": list(INOTIFY_MASK_NAMES),
         "monitor_state": monitor_state,
@@ -3048,6 +3056,7 @@ def _finalize_bundle(
     comparison: Mapping[str, Any] | None,
     build_identity: Mapping[str, Any] | None,
     mutation_events: Sequence[Mapping[str, Any]],
+    failure: Mapping[str, str] | None = None,
     runtime_attestations: Mapping[str, Mapping[str, Any]] | None = None,
     clock: Callable[[], float] = time.monotonic,
 ) -> str:
@@ -3062,6 +3071,7 @@ def _finalize_bundle(
             comparison=comparison,
             build_identity=build_identity,
             mutation_events=mutation_events,
+            failure=failure,
             runtime_attestations=runtime_attestations,
             clock=clock,
         )
@@ -3086,6 +3096,7 @@ def _finalize_bundle(
             comparison=None,
             build_identity=build_identity,
             mutation_events=mutation_events,
+            failure=failure,
             runtime_attestations=runtime_attestations,
             clock=clock,
             enforce_deadline=False,
@@ -3125,6 +3136,7 @@ def execute_controller(
     stage = "preflight"
     monitor: BoundInputMonitor | None = None
     mutation_events: list[dict[str, Any]] = []
+    failure: dict[str, str] | None = None
     runtime_attestations: dict[str, Mapping[str, Any]] = {}
     try:
         preflight_controller_input(contract, root, started=started, clock=clock)
@@ -3188,12 +3200,14 @@ def execute_controller(
             predicates["build_ok"] = False
             result = "build_failed"
             raise ContractError(f"build identity failed: {exc}") from exc
+        stage = "build_binding"
         _validate_build_tool_runtime_binding(contract, build_identity)
         checkpoints.append(
             verify_bound_checkpoint(
                 contract, monitor, "T1", started=started, clock=clock
             )
         )
+        stage = "extension_load"
         try:
             extension_load = _verify_extension_load(
                 contract,
@@ -3300,12 +3314,18 @@ def execute_controller(
         monitor.assert_clean()
         monitor.close()
         monitor = None
-    except TimeoutError:
+    except TimeoutError as exc:
         predicates["timed_out"] = True
         result = "runner_timeout"
+        failure = _failure_record(stage, exc)
     except DriftError as exc:
         predicates["provenance_ok"] = False
         result = "provenance_invalid"
+        failure = _failure_record(stage, exc)
+        # Only mutation events the monitor actually observed are recorded; a
+        # drift verdict with an empty history keeps every unreached checkpoint
+        # not_reached and preserves its mechanical cause in `failure` instead
+        # of fabricating an inventory_mismatch observation.
         if monitor is not None:
             mutation_events.extend(
                 {
@@ -3315,23 +3335,8 @@ def execute_controller(
                 }
                 for event in monitor.history
             )
-        if not mutation_events and monitor is None and "inotify" in str(exc):
-            mutation_events.append(
-                {"classification": "watch_failed", "mask": 0, "path": ""}
-            )
-        if not mutation_events and "runtime confinement" in str(exc):
-            mutation_events.append(
-                {
-                    "classification": "runtime_confinement_failed",
-                    "mask": 0,
-                    "path": "",
-                }
-            )
-        if not mutation_events:
-            mutation_events.append(
-                {"classification": "inventory_mismatch", "mask": 0, "path": ""}
-            )
-    except ContractError:
+    except ContractError as exc:
+        failure = _failure_record(stage, exc)
         if stage == "preflight":
             predicates["provenance_ok"] = False
             result = "provenance_invalid"
@@ -3343,9 +3348,10 @@ def execute_controller(
             result = "artifact_missing_or_unreadable"
         elif result == "unclassified_execution_failure":
             predicates["classified_execution"] = False
-    except BaseException:
+    except BaseException as exc:
         predicates["classified_execution"] = False
         result = "unclassified_execution_failure"
+        failure = _failure_record(stage, exc)
     finally:
         if monitor is not None:
             monitor.close()
@@ -3379,6 +3385,7 @@ def execute_controller(
         comparison=comparison,
         build_identity=build_identity,
         mutation_events=mutation_events,
+        failure=failure,
         runtime_attestations=runtime_attestations,
         clock=clock,
     )

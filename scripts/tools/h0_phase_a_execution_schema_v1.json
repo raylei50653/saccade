@@ -294,6 +294,19 @@
       "properties": {
         "algorithm": {"const": "h0_bound_inputs_v1"},
         "checkpoints": {"type": "array", "items": {"$ref": "#/$defs/checkpoint"}, "minItems": 12, "maxItems": 12},
+        "failure": {
+          "oneOf": [
+            {"type": "null"},
+            {
+              "type": "object", "additionalProperties": false,
+              "required": ["reason", "stage"],
+              "properties": {
+                "reason": {"type": "string", "minLength": 1},
+                "stage": {"type": "string", "minLength": 1}
+              }
+            }
+          ]
+        },
         "final_equal": {"type": ["boolean", "null"]},
         "inotify_mask": {"const": ["IN_CLOSE_WRITE", "IN_MODIFY", "IN_ATTRIB", "IN_DELETE_SELF", "IN_MOVE_SELF", "IN_CREATE", "IN_DELETE", "IN_MOVED_FROM", "IN_MOVED_TO"]},
         "monitor_state": {"enum": ["not_started", "closed_clean", "drift", "watch_failed", "queue_overflow", "ignored_watch"]},
