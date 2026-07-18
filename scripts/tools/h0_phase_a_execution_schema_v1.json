@@ -265,6 +265,7 @@
       "type": "object", "additionalProperties": false,
       "required": ["digest", "events_after", "events_before", "inventory_equal", "name", "monotonic_ns", "state"],
       "properties": {
+        "cause": {"enum": ["events_before", "recompute_failed", "events_after", "inventory_mismatch"]},
         "digest": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
         "events_after": {"type": "array", "items": {"$ref": "#/$defs/mutation_event"}},
         "events_before": {"type": "array", "items": {"$ref": "#/$defs/mutation_event"}},

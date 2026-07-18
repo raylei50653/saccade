@@ -2556,6 +2556,24 @@ def test_verifier_admits_failure_record_only_for_failure_results() -> None:
         verifier.verify_evidence(malformed)
 
 
+def test_verifier_rejects_new_provenance_packet_with_erased_failure_record() -> None:
+    evidence = evidence_for("provenance_invalid")
+    _truncate_checkpoints_after_t0(evidence)
+    binding = evidence["input_binding"]
+    binding["failure"] = {
+        "reason": "runtime-loaded tool/library absent from h0_bound_inputs_v1: ['/x']",
+        "stage": "build_binding",
+    }
+    assert verifier.verify_evidence(evidence)["valid"] is True
+
+    binding["failure"] = None
+    with pytest.raises(
+        verifier.VerificationError,
+        match="provenance_invalid lacks its failure record",
+    ):
+        verifier.verify_evidence(evidence)
+
+
 def _truncate_checkpoints_after_t0(evidence: dict[str, object]) -> None:
     binding = evidence["input_binding"]
     binding["checkpoints"] = binding["checkpoints"][:1] + [
@@ -2571,6 +2589,7 @@ def _failed_t1_inventory_comparison(evidence: dict[str, object]) -> None:
         + [
             parent._failed_checkpoint(
                 "T1",
+                cause="inventory_mismatch",
                 inventory_comparison_executed=True,
                 inventory_equal=False,
                 observed_digest="f" * 64,
@@ -2687,6 +2706,47 @@ def test_verifier_separates_checkpoint_verdicts_from_stage_failures() -> None:
     assert verifier.verify_evidence(surrounding_stage)["valid"] is True
 
 
+def test_verifier_rejects_tampered_checkpoint_failure_timing_and_state() -> None:
+    mutation = {"classification": "bound_mutation", "mask": 1, "path": "/x"}
+    evidence = evidence_for("provenance_invalid")
+    binding = evidence["input_binding"]
+    binding["checkpoints"] = (
+        binding["checkpoints"][:1]
+        + [
+            parent._failed_checkpoint(
+                "T1",
+                cause="events_before",
+                events_before=[parent.InotifyEvent("/x", 1, "bound_mutation")],
+                inventory_comparison_executed=False,
+                inventory_equal=None,
+                observed_digest=None,
+            )
+        ]
+        + [parent._not_reached_checkpoint(name) for name in parent.CHECKPOINTS[2:]]
+    )
+    binding.update(
+        {
+            "failure": {"reason": "mutation before T1", "stage": "checkpoint_T1"},
+            "final_equal": False,
+            "monitor_state": "drift",
+            "mutation_events": [mutation],
+        }
+    )
+    assert verifier.verify_evidence(evidence)["valid"] is True
+
+    row = binding["checkpoints"][1]
+    row["events_after"] = row["events_before"]
+    row["events_before"] = []
+    with pytest.raises(verifier.VerificationError, match="cause disagrees"):
+        verifier.verify_evidence(evidence)
+
+    row["events_before"] = row["events_after"]
+    row["events_after"] = []
+    row["inventory_comparison_executed"] = True
+    with pytest.raises(verifier.VerificationError, match="cause disagrees"):
+        verifier.verify_evidence(evidence)
+
+
 def test_checkpoint_drift_maps_to_its_own_failure_stage() -> None:
     checkpoint_error = parent.CheckpointDriftError(
         "T1", "bound inventory mismatch at T1"
@@ -2724,6 +2784,7 @@ def test_checkpoint_drift_record_preserves_before_and_after_timing(
         parent.verify_bound_checkpoint(contract, monitor, "T1", started=0.0)
     before_record = caught.value.checkpoint_record
     assert before_record is not None
+    assert before_record["cause"] == "events_before"
     assert before_record["events_before"] == [
         {"classification": "bound_mutation", "mask": 1, "path": "/before"}
     ]
@@ -2744,12 +2805,28 @@ def test_checkpoint_drift_record_preserves_before_and_after_timing(
         parent.verify_bound_checkpoint(contract, monitor, "T1", started=0.0)
     after_record = caught.value.checkpoint_record
     assert after_record is not None
+    assert after_record["cause"] == "events_after"
     assert after_record["events_before"] == []
     assert after_record["events_after"] == [
         {"classification": "bound_mutation", "mask": 2, "path": "/after"}
     ]
     assert after_record["inventory_comparison_executed"] is False
     assert after_record["observed_digest"] == contract["bound_inputs"]["digest"]
+
+    monitor = _CheckpointMonitor([], [])
+    monkeypatch.setattr(
+        parent,
+        "recompute_bound_inventory",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(parent.DriftError("failed")),
+    )
+    with pytest.raises(parent.CheckpointDriftError) as caught:
+        parent.verify_bound_checkpoint(contract, monitor, "T1", started=0.0)
+    recompute_record = caught.value.checkpoint_record
+    assert recompute_record is not None
+    assert recompute_record["cause"] == "recompute_failed"
+    assert recompute_record["events_before"] == []
+    assert recompute_record["events_after"] == []
+    assert recompute_record["observed_digest"] is None
 
 
 def test_checkpoint_inventory_inequality_without_inotify_has_failed_row(
@@ -2767,6 +2844,7 @@ def test_checkpoint_inventory_inequality_without_inotify_has_failed_row(
         parent.verify_bound_checkpoint(contract, monitor, "T1", started=0.0)
     record = caught.value.checkpoint_record
     assert record is not None
+    assert record["cause"] == "inventory_mismatch"
     assert record["state"] == "failed"
     assert record["events_before"] == []
     assert record["events_after"] == []
@@ -2784,6 +2862,7 @@ def test_finalized_unequal_checkpoint_without_inotify_verifies(
         + [
             parent._failed_checkpoint(
                 "T1",
+                cause="inventory_mismatch",
                 inventory_comparison_executed=True,
                 inventory_equal=False,
                 observed_digest="f" * 64,

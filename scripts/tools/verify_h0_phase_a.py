@@ -774,10 +774,19 @@ def _verify_input_binding(evidence: Mapping[str, Any]) -> None:
 
     # Packets emitted before the corrective failure envelope omit `failure`.
     # Preserve their schema and verifier behaviour verbatim.  New packets bind
-    # a checkpoint-stage failure to the one row that the operation recorded.
+    # their terminal failure and checkpoint operation state machine together.
     if new_format:
         failure = binding["failure"]
-        if failure is not None:
+        if failure is None:
+            if evidence["result"] == "provenance_invalid":
+                raise VerificationError(
+                    "new-format provenance_invalid lacks its failure record"
+                )
+            if failed_count:
+                raise VerificationError(
+                    "failed checkpoint lacks a checkpoint failure stage"
+                )
+        else:
             if (
                 not isinstance(failure, Mapping)
                 or set(failure) != {"reason", "stage"}
@@ -824,25 +833,62 @@ def _verify_input_binding(evidence: Mapping[str, Any]) -> None:
                     raise VerificationError(
                         "new-format failed checkpoint lacks its operation record"
                     )
+                cause = row.get("cause")
+                legal_causes = {
+                    "events_before",
+                    "recompute_failed",
+                    "events_after",
+                    "inventory_mismatch",
+                }
+                if cause not in legal_causes:
+                    raise VerificationError(
+                        "new-format failed checkpoint lacks a recognized cause"
+                    )
                 compared = row["inventory_comparison_executed"]
                 observed = row["observed_digest"]
-                if compared:
-                    if (
-                        row["inventory_equal"] is not False
-                        or not isinstance(observed, str)
-                        or observed == controller_digest
-                    ):
-                        raise VerificationError(
-                            "executed checkpoint comparison lacks an unequal observed digest"
-                        )
-                elif row["inventory_equal"] is not None:
-                    raise VerificationError(
-                        "unexecuted checkpoint comparison claims an equality verdict"
+                before = row["events_before"]
+                after = row["events_after"]
+                mutations = binding["mutation_events"]
+                if cause == "events_before":
+                    valid = (
+                        bool(before)
+                        and not after
+                        and not compared
+                        and row["inventory_equal"] is None
+                        and observed is None
+                        and mutations == before
                     )
-                row_events = row["events_before"] + row["events_after"]
-                if row_events != binding["mutation_events"]:
+                elif cause == "recompute_failed":
+                    valid = (
+                        not before
+                        and not after
+                        and not compared
+                        and row["inventory_equal"] is None
+                        and observed is None
+                        and not mutations
+                    )
+                elif cause == "events_after":
+                    valid = (
+                        not before
+                        and bool(after)
+                        and not compared
+                        and row["inventory_equal"] is None
+                        and (observed is None or isinstance(observed, str))
+                        and mutations == after
+                    )
+                else:
+                    valid = (
+                        not before
+                        and not after
+                        and compared
+                        and row["inventory_equal"] is False
+                        and isinstance(observed, str)
+                        and observed != controller_digest
+                        and not mutations
+                    )
+                if not valid:
                     raise VerificationError(
-                        "checkpoint failure event record disagrees with monitor history"
+                        "checkpoint failure cause disagrees with its operation record"
                     )
             else:
                 if failed_rows:
@@ -856,11 +902,6 @@ def _verify_input_binding(evidence: Mapping[str, Any]) -> None:
                     raise VerificationError(
                         "non-checkpoint failure did not leave later checkpoints not_reached"
                     )
-        elif failed_count:
-            raise VerificationError(
-                "failed checkpoint lacks a checkpoint failure stage"
-            )
-
     mutations = binding["mutation_events"]
     if mutations:
         if (
