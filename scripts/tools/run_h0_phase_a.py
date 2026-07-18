@@ -224,6 +224,14 @@ CHECKPOINTS = (
     "T3",
     "T4",
 )
+CHECKPOINT_FAILURE_CAUSES = frozenset(
+    {
+        "events_before",
+        "recompute_failed",
+        "events_after",
+        "inventory_mismatch",
+    }
+)
 INOTIFY_MASK_NAMES = (
     "IN_CLOSE_WRITE",
     "IN_MODIFY",
@@ -840,7 +848,10 @@ def verify_bound_checkpoint(
     before = monitor.drain()
     if before:
         return _checkpoint_inventory_verdict(
-            name, contract["bound_inputs"], None, events_before=before
+            name,
+            contract["bound_inputs"],
+            None,
+            events_before=before,
         )
     try:
         current = recompute_bound_inventory(
@@ -855,6 +866,7 @@ def verify_bound_checkpoint(
             str(exc) or exc.__class__.__name__,
             checkpoint_record=_failed_checkpoint(
                 name,
+                cause="events_after" if after else "recompute_failed",
                 events_after=after,
                 inventory_comparison_executed=False,
                 inventory_equal=None,
@@ -880,13 +892,17 @@ def _event_records(events: Sequence[InotifyEvent]) -> list[dict[str, Any]]:
 def _failed_checkpoint(
     name: str,
     *,
+    cause: str,
     events_before: Sequence[InotifyEvent] = (),
     events_after: Sequence[InotifyEvent] = (),
     inventory_comparison_executed: bool,
     inventory_equal: bool | None,
     observed_digest: str | None,
 ) -> dict[str, Any]:
+    if cause not in CHECKPOINT_FAILURE_CAUSES:
+        raise ContractError(f"unknown checkpoint failure cause: {cause}")
     return {
+        "cause": cause,
         "digest": None,
         "events_after": _event_records(events_after),
         "events_before": _event_records(events_before),
@@ -933,6 +949,7 @@ def _checkpoint_inventory_verdict(
             f"mutation events before {name}: {events_before!r}",
             checkpoint_record=_failed_checkpoint(
                 name,
+                cause="events_before",
                 events_before=events_before,
                 inventory_comparison_executed=False,
                 inventory_equal=None,
@@ -947,6 +964,7 @@ def _checkpoint_inventory_verdict(
             f"mutation events after {name}: {events_after!r}",
             checkpoint_record=_failed_checkpoint(
                 name,
+                cause="events_after",
                 events_after=events_after,
                 inventory_comparison_executed=False,
                 inventory_equal=None,
@@ -959,6 +977,7 @@ def _checkpoint_inventory_verdict(
             f"bound inventory mismatch at {name}",
             checkpoint_record=_failed_checkpoint(
                 name,
+                cause="inventory_mismatch",
                 inventory_comparison_executed=True,
                 inventory_equal=False,
                 observed_digest=current["digest"],

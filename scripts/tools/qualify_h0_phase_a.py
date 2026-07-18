@@ -242,6 +242,7 @@ def _failure_probe() -> dict[str, Any]:
 
     checkpoint = controller._failed_checkpoint(
         "T1",
+        cause="inventory_mismatch",
         inventory_comparison_executed=True,
         inventory_equal=False,
         observed_digest="0" * 64,

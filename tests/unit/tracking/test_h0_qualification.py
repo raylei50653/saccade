@@ -52,6 +52,7 @@ def test_qualification_failure_probe_is_truthful_but_non_authoritative() -> None
     assert {
         key: value for key, value in probe["row"].items() if key != "monotonic_ns"
     } == {
+        "cause": "inventory_mismatch",
         "digest": None,
         "events_after": [],
         "events_before": [],
