@@ -682,7 +682,11 @@ def test_independent_verifier_rejects_self_consistent_build_environment_drift(
         "cmake_cache_sha256": hashlib.sha256(cache.read_bytes()).hexdigest(),
         "compilers": {
             "cxx": tool_record("/usr/bin/true"),
-            "cuda": tool_record("/usr/bin/true"),
+            "cuda": {
+                **tool_record("/usr/bin/true"),
+                "length": contract["bound_inputs"]["tool_runtime"][0]["length"],
+                "sha256": contract["bound_inputs"]["tool_runtime"][0]["sha256"],
+            },
         },
         "cuda_toolkit_root": "/opt/cuda",
         "python": {
@@ -741,6 +745,21 @@ def test_independent_verifier_rejects_self_consistent_build_environment_drift(
     identity["build_environment_digest"] = verifier.digest(drifted)
     with pytest.raises(verifier.VerificationError, match="environment table/digest"):
         verifier._verify_complete_build_identity(identity, contract)
+    identity["build_environment"] = environment
+    identity["build_environment_digest"] = verifier.digest(environment)
+    frozen_cuda = dict(identity["compilers"]["cuda"])
+    for member, tampered in (
+        ("path", "/usr/bin/false"),
+        ("length", frozen_cuda["length"] + 1),
+        ("sha256", "0" * 64),
+    ):
+        identity["compilers"]["cuda"] = {**frozen_cuda, member: tampered}
+        with pytest.raises(
+            verifier.VerificationError, match="differs from the frozen nvcc record"
+        ):
+            verifier._verify_complete_build_identity(identity, contract)
+    identity["compilers"]["cuda"] = frozen_cuda
+    verifier._verify_complete_build_identity(identity, contract)
 
 
 def test_gpu_selection_is_lexicographic_on_normalized_pci_bus_id() -> None:
@@ -2523,7 +2542,7 @@ def test_pre_checkpoint_failure_is_truthful_and_verifies(tmp_path: Path) -> None
 def test_verifier_admits_failure_record_only_for_failure_results() -> None:
     evidence = evidence_for("provenance_invalid")
     evidence["input_binding"]["failure"] = {
-        "reason": "bound inventory mismatch at T1",
+        "reason": "runtime-loaded tool/library absent from h0_bound_inputs_v1: ['/x']",
         "stage": "build_binding",
     }
     assert verifier.verify_evidence(evidence)["valid"] is True
@@ -2535,6 +2554,69 @@ def test_verifier_admits_failure_record_only_for_failure_results() -> None:
     malformed["input_binding"]["failure"] = {"reason": "", "stage": "build_binding"}
     with pytest.raises(verifier.VerificationError):
         verifier.verify_evidence(malformed)
+
+
+def _truncate_checkpoints_after_t0(evidence: dict[str, object]) -> None:
+    binding = evidence["input_binding"]
+    binding["checkpoints"] = binding["checkpoints"][:1] + [
+        parent._not_reached_checkpoint(name) for name in parent.CHECKPOINTS[1:]
+    ]
+    binding["final_equal"] = None
+
+
+def test_verifier_separates_checkpoint_verdicts_from_stage_failures() -> None:
+    executed_t1 = evidence_for("provenance_invalid")
+    _truncate_checkpoints_after_t0(executed_t1)
+    executed_t1["input_binding"]["failure"] = {
+        "reason": "bound inventory mismatch at T1",
+        "stage": "checkpoint_T1",
+    }
+    assert verifier.verify_evidence(executed_t1)["valid"] is True
+
+    unknown_stage = evidence_for("provenance_invalid")
+    unknown_stage["input_binding"]["failure"] = {
+        "reason": "bound inventory mismatch at T1",
+        "stage": "somewhere_else",
+    }
+    with pytest.raises(verifier.VerificationError, match="not a controller stage"):
+        verifier.verify_evidence(unknown_stage)
+
+    contradicted = evidence_for("provenance_invalid")
+    contradicted["input_binding"]["failure"] = {
+        "reason": "bound inventory mismatch at T1",
+        "stage": "checkpoint_T1",
+    }
+    with pytest.raises(
+        verifier.VerificationError, match="contradicts its completed checkpoint row"
+    ):
+        verifier.verify_evidence(contradicted)
+
+    non_provenance = evidence_for("build_failed")
+    _truncate_checkpoints_after_t0(non_provenance)
+    non_provenance["input_binding"]["failure"] = {
+        "reason": "bound inventory mismatch at T1",
+        "stage": "checkpoint_T1",
+    }
+    with pytest.raises(
+        verifier.VerificationError, match="did not select provenance_invalid"
+    ):
+        verifier.verify_evidence(non_provenance)
+
+
+def test_checkpoint_drift_maps_to_its_own_failure_stage() -> None:
+    checkpoint_error = parent.CheckpointDriftError(
+        "T1", "bound inventory mismatch at T1"
+    )
+    assert parent._failure_record("build_binding", checkpoint_error) == {
+        "reason": "bound inventory mismatch at T1",
+        "stage": "checkpoint_T1",
+    }
+    stage_error = parent.DriftError(
+        "runtime-loaded tool/library absent from h0_bound_inputs_v1: ['/x']"
+    )
+    assert parent._failure_record("build_binding", stage_error)["stage"] == (
+        "build_binding"
+    )
 
 
 def test_build_tool_binding_requires_toolchain_but_not_dynamic_closure(

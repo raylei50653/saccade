@@ -481,7 +481,7 @@ def _build_environment_algorithm(controller: Mapping[str, Any]) -> str:
     return algorithm
 
 
-def _bound_nvcc_path(controller: Mapping[str, Any]) -> str:
+def _bound_nvcc_record(controller: Mapping[str, Any]) -> dict[str, Any]:
     """Reconstruct the frozen compiler from the controller's bound inventory.
 
     Archive verification is host-independent: the selected compiler identity
@@ -511,7 +511,11 @@ def _bound_nvcc_path(controller: Mapping[str, Any]) -> str:
         or any(char not in "0123456789abcdef" for char in sha256_value)
     ):
         raise VerificationError("selected nvcc differs from its bound identity")
-    return realpath
+    return {"length": length, "realpath": realpath, "sha256": sha256_value}
+
+
+def _bound_nvcc_path(controller: Mapping[str, Any]) -> str:
+    return str(_bound_nvcc_record(controller)["realpath"])
 
 
 def _expected_extension_load_environment(
@@ -822,6 +826,35 @@ def _verify_input_binding(evidence: Mapping[str, Any]) -> None:
                 raise VerificationError("input-binding failure record is malformed")
             if evidence["result"] == "phase_a_pass":
                 raise VerificationError("phase_a_pass carries a failure record")
+            stage = failure["stage"]
+            allowed_stages = {
+                "preflight",
+                "build",
+                "build_binding",
+                "extension_load",
+                "runs",
+                "comparison",
+            } | {f"checkpoint_{name}" for name in CHECKPOINTS}
+            if stage not in allowed_stages:
+                raise VerificationError("failure stage is not a controller stage")
+            if stage.startswith("checkpoint_"):
+                # An executed checkpoint verdict is drift-class by
+                # construction and contradicts a completed row for the same
+                # checkpoint; anything else was a surrounding-stage failure.
+                if evidence["result"] != "provenance_invalid":
+                    raise VerificationError(
+                        "checkpoint failure did not select provenance_invalid"
+                    )
+                named = stage.removeprefix("checkpoint_")
+                named_state = next(
+                    checkpoint["state"]
+                    for checkpoint in checkpoints
+                    if checkpoint["name"] == named
+                )
+                if named_state == "completed":
+                    raise VerificationError(
+                        "checkpoint failure contradicts its completed checkpoint row"
+                    )
 
 
 def _verify_result(evidence: Mapping[str, Any]) -> None:
@@ -1178,6 +1211,24 @@ def _verify_complete_build_identity(
     compilers = identity["compilers"]
     if not isinstance(compilers, dict) or set(compilers) != {"cxx", "cuda"}:
         raise VerificationError("compiler identity set mismatch")
+    if _build_environment_algorithm(controller) == "h0_build_environment_v2":
+        # Record-to-record binding: tool_paths.nvcc <-> unique frozen
+        # tool_runtime record <-> build_environment.CUDACXX (checked via the
+        # environment table above) <-> build_identity.compilers.cuda.
+        frozen_nvcc = _bound_nvcc_record(controller)
+        cuda = compilers["cuda"]
+        if not isinstance(cuda, dict) or (
+            cuda.get("path"),
+            cuda.get("length"),
+            cuda.get("sha256"),
+        ) != (
+            frozen_nvcc["realpath"],
+            frozen_nvcc["length"],
+            frozen_nvcc["sha256"],
+        ):
+            raise VerificationError(
+                "CUDA compiler identity differs from the frozen nvcc record"
+            )
     python_identity = identity["python"]
     if not isinstance(python_identity, dict) or set(python_identity) != {
         "abi",

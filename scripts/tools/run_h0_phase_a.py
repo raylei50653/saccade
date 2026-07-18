@@ -356,6 +356,19 @@ class DriftError(ContractError):
     """A bound-input mutation or inventory mismatch."""
 
 
+class CheckpointDriftError(DriftError):
+    """Drift proven while one named bound-input checkpoint was executing.
+
+    Carrying the checkpoint name separates an actually executed checkpoint
+    verdict (``failure.stage == "checkpoint_<name>"``) from a failure in the
+    surrounding controller stage, e.g. build-binding validation.
+    """
+
+    def __init__(self, checkpoint: str, message: str) -> None:
+        super().__init__(message)
+        self.checkpoint = checkpoint
+
+
 def canonical_json_bytes(value: object) -> bytes:
     """A7.8 canonical JSON bytes, excluding the required file trailing LF."""
     return json.dumps(
@@ -817,15 +830,15 @@ def verify_bound_checkpoint(
         raise ContractError(f"unknown checkpoint: {name}")
     before = monitor.drain()
     if before:
-        raise DriftError(f"mutation events before {name}: {before!r}")
+        raise CheckpointDriftError(name, f"mutation events before {name}: {before!r}")
     current = recompute_bound_inventory(
         contract, started=started, monitor=monitor, clock=clock
     )
     after = monitor.drain()
     if after:
-        raise DriftError(f"mutation events after {name}: {after!r}")
+        raise CheckpointDriftError(name, f"mutation events after {name}: {after!r}")
     if current != contract["bound_inputs"]:
-        raise DriftError(f"bound inventory mismatch at {name}")
+        raise CheckpointDriftError(name, f"bound inventory mismatch at {name}")
     return {
         "digest": current["digest"],
         "events_after": [],
@@ -864,6 +877,8 @@ def _not_reached_checkpoint(name: str) -> dict[str, Any]:
 
 
 def _failure_record(stage: str, exc: BaseException) -> dict[str, str]:
+    if isinstance(exc, CheckpointDriftError):
+        stage = f"checkpoint_{exc.checkpoint}"
     return {"reason": str(exc) or exc.__class__.__name__, "stage": stage}
 
 
