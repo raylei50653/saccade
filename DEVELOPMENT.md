@@ -11,6 +11,7 @@
 - 文件家 / research 索引 / 數字升格 → [docs/ownership/doc_structure_contract.md](docs/ownership/doc_structure_contract.md)（**O1.5**）
 - 跨子類連續研究任務 → [docs/research/threads/](docs/research/threads/) 建 navigation-only thread；不放長表、不取代 evidence_ledger / module research。
 - 接續任務 → [docs/research/threads/README.md](docs/research/threads/README.md)（先看 Active threads，再進單卡）
+- 目前 H0→GCTM 主線、blockers 與轉換 gate → [Current transition panel](docs/research/threads/README.md#current-transition-panel)（人工維護 projection；state 仍以 linked owner 為準）
 - **Research state / intent / execution 分離：**
   ```text
   registry       已接受的現在狀態        → 慢；state fact-owner

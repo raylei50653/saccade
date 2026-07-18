@@ -101,6 +101,12 @@ Additionally:
   (`transition_semantics: unavailable`) regardless of H0/GCTM outcomes.
   Writing that contract does not depend on H0. None of the eight conditions
   above substitutes for it.
+- **H0→GCTM consumer compatibility is a hard prerequisite for the
+  bridge-runtime path.** A sealed B1 declaration must bind an owner-accepted
+  compatibility verdict mapping every required runtime-observable GCTM object
+  to its accepted H0 guarantee/fidelity edge. This does not block
+  substrate-agnostic GCTM mathematics or alter H0's terminal; it blocks only a
+  bridge-runtime B1 claim when the required observation mapping is absent.
 - **B1-slot identity must be resolved** (previous section) before activation.
 
 A negative H0 terminal blocks bridge-runtime B1 unless a new evidence substrate
@@ -690,6 +696,8 @@ accepted B1 handoff and must not rewrite B1 semantics.
 ## Pre-activation checklist
 
 - [ ] accepted H0 runtime substrate exists;
+- [ ] H0→GCTM consumer compatibility verdict is accepted and bound to the
+      required runtime-observable objects;
 - [ ] accepted GCTM model specification exists;
 - [ ] score-layer evidence contract (registry §7) exists;
 - [ ] B1-slot identity relation resolved by owner;
@@ -708,6 +716,7 @@ accepted B1 handoff and must not rewrite B1 semantics.
 
 - [Synthesis core — shared B1/O1 semantics](../../modules/semantic/research/gctm_b1_o1_task_objectives_and_semantics_20260716.md)
 - [H0 declaration](../../modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md)
+- [H0→GCTM consumer compatibility requirements](../../modules/semantic/research/h0_gctm_consumer_compatibility_requirements_20260718.md)
 - [GCTM parked task charter](gap_conditioned_stochastic_transition_model_task.md)
 - [O0 routing charter](bridge_frozen_evidence_o0_routing_20260716.md)
 - [claim-state registry（§7 score layer / §8 候選集）](../contracts/claim_state_registry.md)
