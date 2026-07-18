@@ -265,17 +265,20 @@
       "type": "object", "additionalProperties": false,
       "required": ["digest", "events_after", "events_before", "inventory_equal", "name", "monotonic_ns", "state"],
       "properties": {
+        "cause": {"enum": ["events_before", "recompute_failed", "events_after", "inventory_mismatch"]},
         "digest": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
         "events_after": {"type": "array", "items": {"$ref": "#/$defs/mutation_event"}},
         "events_before": {"type": "array", "items": {"$ref": "#/$defs/mutation_event"}},
+        "inventory_comparison_executed": {"type": "boolean"},
         "inventory_equal": {"type": ["boolean", "null"]},
         "name": {"type": "string"},
         "monotonic_ns": {"type": ["integer", "null"], "minimum": 0},
+        "observed_digest": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
         "state": {"enum": ["completed", "failed", "not_reached"]}
       },
       "allOf": [
         {"if": {"properties": {"state": {"const": "completed"}}}, "then": {"properties": {"digest": {"$ref": "#/$defs/sha256"}, "inventory_equal": {"type": "boolean"}, "monotonic_ns": {"type": "integer", "minimum": 0}}}},
-        {"if": {"properties": {"state": {"const": "failed"}}}, "then": {"properties": {"digest": {"type": "null"}, "inventory_equal": {"const": false}, "monotonic_ns": {"type": "integer", "minimum": 0}}}},
+        {"if": {"properties": {"state": {"const": "failed"}}}, "then": {"properties": {"digest": {"type": "null"}, "inventory_equal": {"enum": [false, null]}, "monotonic_ns": {"type": "integer", "minimum": 0}}}},
         {"if": {"properties": {"state": {"const": "not_reached"}}}, "then": {"properties": {"digest": {"type": "null"}, "events_after": {"const": []}, "events_before": {"const": []}, "inventory_equal": {"type": "null"}, "monotonic_ns": {"type": "null"}}}}
       ]
     },
@@ -294,6 +297,19 @@
       "properties": {
         "algorithm": {"const": "h0_bound_inputs_v1"},
         "checkpoints": {"type": "array", "items": {"$ref": "#/$defs/checkpoint"}, "minItems": 12, "maxItems": 12},
+        "failure": {
+          "oneOf": [
+            {"type": "null"},
+            {
+              "type": "object", "additionalProperties": false,
+              "required": ["reason", "stage"],
+              "properties": {
+                "reason": {"type": "string", "minLength": 1},
+                "stage": {"type": "string", "minLength": 1}
+              }
+            }
+          ]
+        },
         "final_equal": {"type": ["boolean", "null"]},
         "inotify_mask": {"const": ["IN_CLOSE_WRITE", "IN_MODIFY", "IN_ATTRIB", "IN_DELETE_SELF", "IN_MOVE_SELF", "IN_CREATE", "IN_DELETE", "IN_MOVED_FROM", "IN_MOVED_TO"]},
         "monitor_state": {"enum": ["not_started", "closed_clean", "drift", "watch_failed", "queue_overflow", "ignored_watch"]},

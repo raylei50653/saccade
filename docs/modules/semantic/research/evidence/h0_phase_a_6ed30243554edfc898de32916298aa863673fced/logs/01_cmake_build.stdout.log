@@ -1,0 +1,38 @@
+[  3%] Building CXX object CMakeFiles/saccade_perception.dir/src/perception/trt_engine.cpp.o
+[  6%] Building CXX object CMakeFiles/saccade_perception.dir/src/perception/preprocessor.cpp.o
+[  9%] Building CUDA object CMakeFiles/saccade_perception.dir/src/perception/preprocessor_gpu.cu.o
+[ 12%] Building CUDA object CMakeFiles/saccade_perception.dir/src/perception/letterbox_kernel.cu.o
+[ 16%] Building CXX object CMakeFiles/saccade_perception.dir/src/perception/feature_extractor.cpp.o
+[ 19%] Building CXX object CMakeFiles/saccade_perception.dir/src/perception/mamba_gated_detector.cpp.o
+[ 22%] Building CXX object CMakeFiles/saccade_perception.dir/src/perception/batched_mamba_detector.cpp.o
+[ 25%] Linking CXX static library libsaccade_perception.a
+[ 25%] Built target saccade_perception
+[ 29%] Building CUDA object CMakeFiles/saccade_tracking.dir/src/tracking/tracker_gpu.cu.o
+[ 32%] Building CUDA object CMakeFiles/saccade_tracking.dir/src/tracking/relink_gate.cu.o
+[ 35%] Building CXX object CMakeFiles/saccade_tracking.dir/src/tracking/gmc.cpp.o
+[ 38%] Building CUDA object CMakeFiles/saccade_tracking.dir/src/tracking/gmc_kernel.cu.o
+[ 41%] Building CXX object CMakeFiles/saccade_tracking.dir/src/tracking/pipeline.cpp.o
+[ 45%] Building CXX object CMakeFiles/saccade_tracking.dir/src/tracking/crop_pool.cpp.o
+[ 48%] Building CXX object CMakeFiles/saccade_tracking.dir/src/tracking/crop_ring_store.cpp.o
+[ 51%] Building CXX object CMakeFiles/saccade_tracking.dir/src/tracking/frame_buffer.cpp.o
+[ 54%] Building CXX object CMakeFiles/saccade_tracking.dir/src/tracking/reid_queue.cpp.o
+[ 58%] Building CXX object CMakeFiles/saccade_tracking.dir/src/tracking/workbench.cpp.o
+[ 61%] Building CUDA object CMakeFiles/saccade_tracking.dir/src/tracking/quality_filter.cu.o
+[ 64%] Building CUDA object CMakeFiles/saccade_tracking.dir/src/tracking/copy_pad.cu.o
+[ 67%] Building CUDA object CMakeFiles/saccade_tracking.dir/src/tracking/mamba_scan.cu.o
+[ 70%] Building CUDA object CMakeFiles/saccade_tracking.dir/src/tracking/temporal_birth_pool.cu.o
+[ 74%] Building CUDA object CMakeFiles/saccade_tracking.dir/src/tracking/multi_signal_birth_pool.cu.o
+[ 77%] Building CXX object CMakeFiles/saccade_tracking.dir/src/tracking/seq_runner.cpp.o
+[ 80%] Building CXX object CMakeFiles/saccade_tracking.dir/src/tracking/eval_pool.cpp.o
+[ 83%] Building CXX object CMakeFiles/saccade_tracking.dir/src/tracking/cheb_gr_online.cpp.o
+[ 87%] Building CXX object CMakeFiles/saccade_tracking.dir/src/tracking/cheb_gr_kreciprocal.cpp.o
+[ 90%] Building CXX object CMakeFiles/saccade_tracking.dir/src/tracking/dynamic_reid_controller.cpp.o
+[ 93%] Linking CXX static library libsaccade_tracking.a
+[ 93%] Built target saccade_tracking
+[ 96%] Building CXX object CMakeFiles/saccade_tracking_ext.dir/src/tracking/tracker_gpu_python.cpp.o
+[100%] Linking CXX shared module saccade_tracking_ext.cpython-312-x86_64-linux-gnu.so
+[100%] Built target saccade_tracking_ext
+[ 33%] Building CXX object CMakeFiles/saccade_scan_plugin.dir/src/tracking/mamba_scan_plugin.cpp.o
+[ 66%] Building CUDA object CMakeFiles/saccade_scan_plugin.dir/src/tracking/mamba_scan.cu.o
+[100%] Linking CXX shared module libsaccade_scan_plugin.so
+[100%] Built target saccade_scan_plugin

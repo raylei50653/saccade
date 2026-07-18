@@ -1,0 +1,48 @@
+-- The CXX compiler identification is GNU 16.1.1
+-- The CUDA compiler identification is NVIDIA 13.3.73 with host compiler GNU 16.1.1
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Detecting CUDA compiler ABI info
+-- Detecting CUDA compiler ABI info - done
+-- Check for working CUDA compiler: /opt/cuda/bin/nvcc - skipped
+-- Detecting CUDA compile features
+-- Detecting CUDA compile features - done
+-- Found CUDAToolkit: /opt/cuda/targets/x86_64-linux/include;/opt/cuda/targets/x86_64-linux/include/cccl (found version "13.3.73")
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Success
+-- Found Threads: TRUE
+-- Found OpenCV: /usr (found version "5.0.0")
+-- Found PkgConfig: /usr/bin/pkg-config (found version "2.5.1")
+-- Checking for modules 'gstreamer-1.0;gstreamer-app-1.0;gstreamer-video-1.0'
+--   Found gstreamer-1.0, version 1.28.5
+--   Found gstreamer-app-1.0, version 1.28.5
+--   Found gstreamer-video-1.0, version 1.28.5
+-- Found Python3: /home/ray/developer/ai/saccade/.venv/bin/python3.12 (found suitable exact version "3.12.13") found components: Interpreter Development.Module
+-- Found CUDA: /opt/cuda (found version "13.3")
+-- Found CUDAToolkit: /opt/cuda/include (found version "13.3.73")
+-- PyTorch: CUDA detected: 13.3
+-- PyTorch: CUDA nvcc is: /opt/cuda/bin/nvcc
+-- PyTorch: CUDA toolkit directory: /opt/cuda
+-- PyTorch: Header version is: 13.3
+-- Found Python: /home/ray/developer/ai/saccade/.venv/bin/python3.12 (found version "3.12.13") found components: Interpreter
+-- /opt/cuda/targets/x86_64-linux/lib/libnvrtc.so shorthash is afff6fa2
+-- USE_CUDNN is set to 0. Compiling without cuDNN support
+-- USE_CUSPARSELT is set to 0. Compiling without cuSPARSELt support
+-- USE_CUDSS is set to 0. Compiling without cuDSS support
+-- USE_CUFILE is set to 0. Compiling without cuFile support
+-- Autodetected CUDA architecture(s):  12.0
+-- Added CUDA NVCC flags for: -gencode;arch=compute_120,code=sm_120
+-- Found Torch: /home/ray/developer/ai/saccade/.venv/lib/python3.12/site-packages/torch/lib/libtorch.so
+-- Found Python3: /home/ray/developer/ai/saccade/.venv/bin/python3.12 (found version "3.12.13") found components: Interpreter Development.Module
+-- Found Python: /home/ray/developer/ai/saccade/.venv/bin/python3.12 (found version "3.12.13") found components: Interpreter Development Development.Module Development.Embed
+-- Performing Test HAS_FLTO_AUTO
+-- Performing Test HAS_FLTO_AUTO - Failed
+-- Performing Test HAS_FLTO
+-- Performing Test HAS_FLTO - Success
+-- Found pybind11: /home/ray/developer/ai/saccade/.venv/lib/python3.12/site-packages/pybind11/include (found version "3.0.3")
+-- Configuring done (15.6s)
+-- Generating done (0.1s)
+-- Build files have been written to: /home/ray/developer/ai/saccade/build/h0_phase_a

@@ -224,6 +224,14 @@ CHECKPOINTS = (
     "T3",
     "T4",
 )
+CHECKPOINT_FAILURE_CAUSES = frozenset(
+    {
+        "events_before",
+        "recompute_failed",
+        "events_after",
+        "inventory_mismatch",
+    }
+)
 INOTIFY_MASK_NAMES = (
     "IN_CLOSE_WRITE",
     "IN_MODIFY",
@@ -354,6 +362,28 @@ class ContractError(RuntimeError):
 
 class DriftError(ContractError):
     """A bound-input mutation or inventory mismatch."""
+
+
+class CheckpointDriftError(DriftError):
+    """Drift proven while one named bound-input checkpoint was executing.
+
+    ``checkpoint_record`` is the operation's own terminal observation.  It
+    prevents the controller from inferring a failed row later from monitor
+    history that may belong to a surrounding stage instead.
+    """
+
+    def __init__(
+        self,
+        checkpoint: str,
+        message: str,
+        *,
+        checkpoint_record: Mapping[str, Any] | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.checkpoint = checkpoint
+        self.checkpoint_record = (
+            dict(checkpoint_record) if checkpoint_record is not None else None
+        )
 
 
 def canonical_json_bytes(value: object) -> bytes:
@@ -817,36 +847,110 @@ def verify_bound_checkpoint(
         raise ContractError(f"unknown checkpoint: {name}")
     before = monitor.drain()
     if before:
-        raise DriftError(f"mutation events before {name}: {before!r}")
-    current = recompute_bound_inventory(
-        contract, started=started, monitor=monitor, clock=clock
-    )
+        raise CheckpointDriftError(
+            name,
+            f"mutation events before {name}: {before!r}",
+            checkpoint_record=_failed_checkpoint(
+                name,
+                cause="events_before",
+                events_before=before,
+                inventory_comparison_executed=False,
+                inventory_equal=None,
+                observed_digest=None,
+            ),
+        )
+    try:
+        current = recompute_bound_inventory(
+            contract, started=started, monitor=monitor, clock=clock
+        )
+    except DriftError as exc:
+        # A recomputation failure did not yield an inventory that can be
+        # compared.  Preserve only events observed during that operation.
+        after = monitor.drain()
+        raise CheckpointDriftError(
+            name,
+            str(exc) or exc.__class__.__name__,
+            checkpoint_record=_failed_checkpoint(
+                name,
+                cause="events_after" if after else "recompute_failed",
+                events_after=after,
+                inventory_comparison_executed=False,
+                inventory_equal=None,
+                observed_digest=None,
+            ),
+        ) from exc
     after = monitor.drain()
     if after:
-        raise DriftError(f"mutation events after {name}: {after!r}")
+        raise CheckpointDriftError(
+            name,
+            f"mutation events after {name}: {after!r}",
+            checkpoint_record=_failed_checkpoint(
+                name,
+                cause="events_after",
+                events_after=after,
+                inventory_comparison_executed=False,
+                inventory_equal=None,
+                observed_digest=current["digest"],
+            ),
+        )
     if current != contract["bound_inputs"]:
-        raise DriftError(f"bound inventory mismatch at {name}")
+        raise CheckpointDriftError(
+            name,
+            f"bound inventory mismatch at {name}",
+            checkpoint_record=_failed_checkpoint(
+                name,
+                cause="inventory_mismatch",
+                inventory_comparison_executed=True,
+                inventory_equal=False,
+                observed_digest=current["digest"],
+            ),
+        )
     return {
         "digest": current["digest"],
         "events_after": [],
         "events_before": [],
+        "inventory_comparison_executed": True,
         "inventory_equal": True,
         "monotonic_ns": time.monotonic_ns(),
         "name": name,
+        "observed_digest": current["digest"],
         "state": "completed",
     }
 
 
+def _event_records(events: Sequence[InotifyEvent]) -> list[dict[str, Any]]:
+    return [
+        {
+            "classification": event.classification,
+            "mask": event.mask,
+            "path": event.path,
+        }
+        for event in events
+    ]
+
+
 def _failed_checkpoint(
-    name: str, events: Sequence[Mapping[str, Any]]
+    name: str,
+    *,
+    cause: str,
+    events_before: Sequence[InotifyEvent] = (),
+    events_after: Sequence[InotifyEvent] = (),
+    inventory_comparison_executed: bool,
+    inventory_equal: bool | None,
+    observed_digest: str | None,
 ) -> dict[str, Any]:
+    if cause not in CHECKPOINT_FAILURE_CAUSES:
+        raise ContractError(f"unknown checkpoint failure cause: {cause}")
     return {
+        "cause": cause,
         "digest": None,
-        "events_after": list(events),
-        "events_before": [],
-        "inventory_equal": False,
+        "events_after": _event_records(events_after),
+        "events_before": _event_records(events_before),
+        "inventory_comparison_executed": inventory_comparison_executed,
+        "inventory_equal": inventory_equal,
         "monotonic_ns": time.monotonic_ns(),
         "name": name,
+        "observed_digest": observed_digest,
         "state": "failed",
     }
 
@@ -856,11 +960,19 @@ def _not_reached_checkpoint(name: str) -> dict[str, Any]:
         "digest": None,
         "events_after": [],
         "events_before": [],
+        "inventory_comparison_executed": False,
         "inventory_equal": None,
         "monotonic_ns": None,
         "name": name,
+        "observed_digest": None,
         "state": "not_reached",
     }
+
+
+def _failure_record(stage: str, exc: BaseException) -> dict[str, str]:
+    if isinstance(exc, CheckpointDriftError):
+        stage = f"checkpoint_{exc.checkpoint}"
+    return {"reason": str(exc) or exc.__class__.__name__, "stage": stage}
 
 
 def child_argv(root: Path, run_id: str) -> tuple[str, ...]:
@@ -2362,16 +2474,18 @@ def _verify_extension_load(
 def _validate_build_tool_runtime_binding(
     contract: Mapping[str, Any], identity: Mapping[str, Any]
 ) -> None:
+    """Require every toolchain identity to be pre-frozen in tool_runtime.
+
+    The build artifacts' dynamic-dependency closure is deliberately absent
+    here: it is build-derived, not freezable at F, and is bound as its own
+    ``build_runtime_closure`` class by the runtime confinement plan, which
+    admits each closure member as one exact physical file.
+    """
     frozen = {
         record["realpath"]: (record["length"], record["sha256"])
         for record in contract["bound_inputs"]["tool_runtime"]
     }
     required: list[tuple[str, int, str]] = []
-    for artifact in identity["artifacts"]:
-        required.extend(
-            (record["realpath"], record["length"], record["sha256"])
-            for record in artifact["dynamic_dependencies"]
-        )
     for compiler in identity["compilers"].values():
         required.append((compiler["path"], compiler["length"], compiler["sha256"]))
     for name in ("cmake", "python"):
@@ -2806,6 +2920,7 @@ def _finalize_bundle_once(
     comparison: Mapping[str, Any] | None,
     build_identity: Mapping[str, Any] | None,
     mutation_events: Sequence[Mapping[str, Any]],
+    failure: Mapping[str, str] | None = None,
     runtime_attestations: Mapping[str, Mapping[str, Any]] | None = None,
     clock: Callable[[], float] = time.monotonic,
     enforce_deadline: bool = True,
@@ -2893,6 +3008,7 @@ def _finalize_bundle_once(
         if not path.exists():
             finish(_write_canonical_fsync, path, value)
     completed_all = all(item["state"] == "completed" for item in checkpoints)
+    failed_checkpoint = any(item["state"] == "failed" for item in checkpoints)
     if mutation_events:
         classifications = {str(item["classification"]) for item in mutation_events}
         if "queue_overflow" in classifications:
@@ -2904,6 +3020,12 @@ def _finalize_bundle_once(
         else:
             monitor_state = "drift"
         final_equal: bool | None = False
+    elif failed_checkpoint:
+        # A completed comparison may prove an unequal inventory even when
+        # inotify observed nothing.  Its failed checkpoint is the evidence;
+        # the monitor itself still closed cleanly.
+        monitor_state = "closed_clean"
+        final_equal = False
     elif all(item["state"] == "not_reached" for item in checkpoints):
         monitor_state = "not_started"
         final_equal = None
@@ -2913,6 +3035,7 @@ def _finalize_bundle_once(
     input_binding = {
         "algorithm": BOUND_INPUTS_SCHEMA,
         "checkpoints": checkpoints,
+        "failure": dict(failure) if failure is not None else None,
         "final_equal": final_equal,
         "inotify_mask": list(INOTIFY_MASK_NAMES),
         "monitor_state": monitor_state,
@@ -3048,6 +3171,7 @@ def _finalize_bundle(
     comparison: Mapping[str, Any] | None,
     build_identity: Mapping[str, Any] | None,
     mutation_events: Sequence[Mapping[str, Any]],
+    failure: Mapping[str, str] | None = None,
     runtime_attestations: Mapping[str, Mapping[str, Any]] | None = None,
     clock: Callable[[], float] = time.monotonic,
 ) -> str:
@@ -3062,6 +3186,7 @@ def _finalize_bundle(
             comparison=comparison,
             build_identity=build_identity,
             mutation_events=mutation_events,
+            failure=failure,
             runtime_attestations=runtime_attestations,
             clock=clock,
         )
@@ -3086,6 +3211,7 @@ def _finalize_bundle(
             comparison=None,
             build_identity=build_identity,
             mutation_events=mutation_events,
+            failure=failure,
             runtime_attestations=runtime_attestations,
             clock=clock,
             enforce_deadline=False,
@@ -3125,6 +3251,7 @@ def execute_controller(
     stage = "preflight"
     monitor: BoundInputMonitor | None = None
     mutation_events: list[dict[str, Any]] = []
+    failure: dict[str, str] | None = None
     runtime_attestations: dict[str, Mapping[str, Any]] = {}
     try:
         preflight_controller_input(contract, root, started=started, clock=clock)
@@ -3188,12 +3315,14 @@ def execute_controller(
             predicates["build_ok"] = False
             result = "build_failed"
             raise ContractError(f"build identity failed: {exc}") from exc
+        stage = "build_binding"
         _validate_build_tool_runtime_binding(contract, build_identity)
         checkpoints.append(
             verify_bound_checkpoint(
                 contract, monitor, "T1", started=started, clock=clock
             )
         )
+        stage = "extension_load"
         try:
             extension_load = _verify_extension_load(
                 contract,
@@ -3246,28 +3375,18 @@ def execute_controller(
                 )
             except BaseException as exc:
                 child_error = exc
-            # T2b is mandatory after the active process has been reaped.  A
-            # drift error here is earlier in A7.7 priority than the child exit.
-            if isinstance(child_error, DriftError):
-                observed = [
-                    {
-                        "classification": event.classification,
-                        "mask": event.mask,
-                        "path": event.path,
-                    }
-                    for event in monitor.history
-                ]
-                checkpoints.append(_failed_checkpoint(f"T2b_{index}", observed))
-            else:
-                checkpoints.append(
-                    verify_bound_checkpoint(
-                        contract,
-                        monitor,
-                        f"T2b_{index}",
-                        started=started,
-                        clock=clock,
-                    )
+            # T2b is mandatory after the active process has been reaped.  It
+            # performs (and, if necessary, records) its own terminal verdict
+            # before a child error is propagated.
+            checkpoints.append(
+                verify_bound_checkpoint(
+                    contract,
+                    monitor,
+                    f"T2b_{index}",
+                    started=started,
+                    clock=clock,
                 )
+            )
             if child_error is not None:
                 raise child_error
             if child_result.get("result") == "provenance_invalid":
@@ -3300,12 +3419,21 @@ def execute_controller(
         monitor.assert_clean()
         monitor.close()
         monitor = None
-    except TimeoutError:
+    except TimeoutError as exc:
         predicates["timed_out"] = True
         result = "runner_timeout"
+        failure = _failure_record(stage, exc)
     except DriftError as exc:
         predicates["provenance_ok"] = False
         result = "provenance_invalid"
+        failure = _failure_record(stage, exc)
+        # Only a checkpoint operation may emit its failed checkpoint row.  A
+        # surrounding-stage DriftError leaves later checkpoints not_reached,
+        # regardless of monitor history.
+        if isinstance(exc, CheckpointDriftError):
+            if exc.checkpoint_record is None:
+                raise ContractError("checkpoint drift lacks an operation record")
+            checkpoints.append(exc.checkpoint_record)
         if monitor is not None:
             mutation_events.extend(
                 {
@@ -3315,23 +3443,8 @@ def execute_controller(
                 }
                 for event in monitor.history
             )
-        if not mutation_events and monitor is None and "inotify" in str(exc):
-            mutation_events.append(
-                {"classification": "watch_failed", "mask": 0, "path": ""}
-            )
-        if not mutation_events and "runtime confinement" in str(exc):
-            mutation_events.append(
-                {
-                    "classification": "runtime_confinement_failed",
-                    "mask": 0,
-                    "path": "",
-                }
-            )
-        if not mutation_events:
-            mutation_events.append(
-                {"classification": "inventory_mismatch", "mask": 0, "path": ""}
-            )
-    except ContractError:
+    except ContractError as exc:
+        failure = _failure_record(stage, exc)
         if stage == "preflight":
             predicates["provenance_ok"] = False
             result = "provenance_invalid"
@@ -3343,21 +3456,13 @@ def execute_controller(
             result = "artifact_missing_or_unreadable"
         elif result == "unclassified_execution_failure":
             predicates["classified_execution"] = False
-    except BaseException:
+    except BaseException as exc:
         predicates["classified_execution"] = False
         result = "unclassified_execution_failure"
+        failure = _failure_record(stage, exc)
     finally:
         if monitor is not None:
             monitor.close()
-    # A failure envelope retains the fixed checkpoint cardinality without ever
-    # fabricating a hash pass for a checkpoint that execution did not reach.
-    if (
-        mutation_events
-        and len(checkpoints) < len(CHECKPOINTS)
-        and not any(checkpoint["state"] == "failed" for checkpoint in checkpoints)
-    ):
-        name = CHECKPOINTS[len(checkpoints)]
-        checkpoints.append(_failed_checkpoint(name, mutation_events))
     while len(checkpoints) < len(CHECKPOINTS):
         checkpoints.append(_not_reached_checkpoint(CHECKPOINTS[len(checkpoints)]))
     # The deadline includes all work preceding result/checksum publication.
@@ -3379,6 +3484,7 @@ def execute_controller(
         comparison=comparison,
         build_identity=build_identity,
         mutation_events=mutation_events,
+        failure=failure,
         runtime_attestations=runtime_attestations,
         clock=clock,
     )

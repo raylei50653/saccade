@@ -392,6 +392,20 @@ def build_plan(
             expected_length=record["length"],
             expected_sha256=record["sha256"],
         )
+        # The build-derived dynamic-dependency closure is its own binding
+        # class: each member is admitted as one exact physical file, never as
+        # a library-directory or venv-wide expansion.
+        for dependency in record["dynamic_dependencies"]:
+            admit(
+                Path(dependency["realpath"]),
+                binding="build_runtime_closure",
+                logical_paths=(
+                    Path(dependency["path"]),
+                    Path(dependency["realpath"]),
+                ),
+                expected_length=dependency["length"],
+                expected_sha256=dependency["sha256"],
+            )
     python_identity = build_identity["python"]
     admit(
         Path(python_identity["path"]),

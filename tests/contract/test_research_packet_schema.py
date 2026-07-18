@@ -8,6 +8,7 @@ tests/research/README.md).
 
 from __future__ import annotations
 
+import pathlib
 import re
 import sys
 
@@ -92,6 +93,39 @@ def test_h0_phase_a_execution_dirs_are_verified_by_the_dedicated_verifier() -> N
         isinstance(report, dict) and report.get("valid") is True
         for report in reports.values()
     )
+
+
+def test_h0_phase_a_archive_verification_is_execution_host_independent(
+    monkeypatch,
+) -> None:
+    """Archive verification must never read the execution host's payloads.
+
+    CI runners have no /opt/cuda, no build tree, and no dataset/model/venv
+    payloads, so every byte the verifier consumes must come from the packet
+    itself or repository code.
+    """
+    evidence_dirs = h0_phase_a_execution_dirs()
+    assert evidence_dirs, "no H0 Phase-A execution evidence directories were found"
+    repository = REPO.resolve()
+    absent_on_ci = tuple(
+        repository / name for name in ("build", ".venv", "datasets", "models", "runs")
+    )
+    real_read_bytes = pathlib.Path.read_bytes
+
+    def guarded_read_bytes(self: pathlib.Path) -> bytes:
+        absolute = pathlib.Path(self).absolute()
+        if not absolute.is_relative_to(repository) or any(
+            absolute.is_relative_to(prefix) for prefix in absent_on_ci
+        ):
+            raise FileNotFoundError(
+                f"host-coupled read during archive verification: {self}"
+            )
+        return real_read_bytes(self)
+
+    monkeypatch.setattr(pathlib.Path, "read_bytes", guarded_read_bytes)
+    for evidence_dir in evidence_dirs:
+        report = phase_a_verifier.verify_evidence_root(evidence_dir)
+        assert isinstance(report, dict) and report.get("valid") is True
 
 
 @pytest.mark.parametrize(
