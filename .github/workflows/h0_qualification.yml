@@ -48,21 +48,28 @@ jobs:
           enable-cache: true
       - name: Sync qualification dependencies
         run: uv sync --frozen
-      - name: Materialise venv interpreter as a regular file
+      - name: Materialise venv interpreters as regular files
         # The controlled-host qualification harness (qualify_h0_phase_a.py)
         # requires .venv/bin/python to be a concrete regular file, not a
         # symlink, so it can hash one deterministic interpreter for the build
-        # identity. uv materialises the venv interpreter as a symlink into the
-        # uv-managed python store, so dereference it into a copy here. This is
+        # identity. uv materialises the venv interpreters as symlinks into the
+        # uv-managed python store. Every python* entry (python, python3,
+        # python3.12) must be replaced by a real copy of the resolved
+        # interpreter: a python-build-standalone binary reached through a
+        # symlink cannot locate its stdlib (it falls back to the baked-in
+        # /install prefix and dies with "No module named 'encodings'"), and uv
+        # queries .venv/bin/python3 specifically. Copying every entry keeps
+        # each name a self-contained, working, hashable regular file. This is
         # controlled-host provisioning only; the qualified tree is never
         # touched, so the qualification candidate stays byte-for-byte unchanged.
         run: |
-          python_link=".venv/bin/python"
-          if [ -L "$python_link" ]; then
-            target="$(readlink -f "$python_link")"
-            rm "$python_link"
-            cp "$target" "$python_link"
-          fi
+          for link in .venv/bin/python .venv/bin/python3 .venv/bin/python3.*; do
+            if [ -L "$link" ]; then
+              target="$(readlink -f "$link")"
+              rm "$link"
+              cp "$target" "$link"
+            fi
+          done
       - name: Validate H0 acceptance matrix
         run: uv run python scripts/tools/check_h0_repair_acceptance_matrix.py
       - name: Run non-authoritative substrate qualification
