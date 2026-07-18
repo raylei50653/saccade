@@ -187,6 +187,8 @@ These have known repo references outside this README.
 | `check_doc_links.py` | Relative markdown link checker | `scripts/pre_push.sh` |
 | `check_gpu_contract.py` | GPU-first contract checker | `scripts/pre_push.sh` and docs |
 | `check_h0_bridge_decision_trace_contract.py` | Static H0 pre-seal field/sidecar coverage checker | H0 full-decision capture declaration |
+| `check_h0_phase_a_archives.py` | Verify every immutable H0 Phase-A evidence root through its archive codec | H0 Repair gate |
+| `check_h0_repair_acceptance_matrix.py` | Validate the prospective Repair/Seal/Execution gate matrix | H0 qualification CI and PR review |
 | `check_continuous_decimal_hash.py` | In-process ID-free final MOT decimal consistency probe | Continuous-run determinism primitive |
 | `check_decimal_chain_routine.py` | Fixed continuous chain `A,A,B,A,B,B` sentinel | Routine pre-push regression guard |
 | `check_decimal_matrix_2x2.py` | Forensic 2×2 order-contamination matrix | Post-failure directional diagnosis |
@@ -203,6 +205,9 @@ These have known repo references outside this README.
 | `migrate_legacy_mamba_cache_manifest.py` | Migrate old Mamba cache manifests | v14 parent refit runner |
 | `motion_norm_probe.py` | Motion-normalization probe | NO-GO registry |
 | `optimize_relink_weight.py` | Offline relink gate weight optimization | Offline relink candidate analysis |
+| `qualify_h0_phase_a.py` | Non-authoritative real-host build/runtime substrate qualification | H0 Repair gate |
+| `qualify_h0_phase_a_child.py` | Synthetic no-capture child for the qualification runner-launch check | H0 Repair gate |
+| `verify_h0_phase_a_archive.py` | Versioned immutable H0 Phase-A archive verifier | H0 Repair gate |
 | `render_diffusion_debug.py` | Render bidirectional relink debug events | Bidirectional relink roadmap |
 | `render_mot_result.py` | Render MOT result overlays to video | Imported by eval CLI |
 | `set_mamba_checkpoint_runtime.py` | Patch runtime semantics into Mamba checkpoints | v14 conversion ablation runner |

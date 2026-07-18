@@ -847,17 +847,11 @@ def verify_bound_checkpoint(
         raise ContractError(f"unknown checkpoint: {name}")
     before = monitor.drain()
     if before:
-        raise CheckpointDriftError(
+        return _checkpoint_inventory_verdict(
             name,
-            f"mutation events before {name}: {before!r}",
-            checkpoint_record=_failed_checkpoint(
-                name,
-                cause="events_before",
-                events_before=before,
-                inventory_comparison_executed=False,
-                inventory_equal=None,
-                observed_digest=None,
-            ),
+            contract["bound_inputs"],
+            None,
+            events_before=before,
         )
     try:
         current = recompute_bound_inventory(
@@ -879,43 +873,9 @@ def verify_bound_checkpoint(
                 observed_digest=None,
             ),
         ) from exc
-    after = monitor.drain()
-    if after:
-        raise CheckpointDriftError(
-            name,
-            f"mutation events after {name}: {after!r}",
-            checkpoint_record=_failed_checkpoint(
-                name,
-                cause="events_after",
-                events_after=after,
-                inventory_comparison_executed=False,
-                inventory_equal=None,
-                observed_digest=current["digest"],
-            ),
-        )
-    if current != contract["bound_inputs"]:
-        raise CheckpointDriftError(
-            name,
-            f"bound inventory mismatch at {name}",
-            checkpoint_record=_failed_checkpoint(
-                name,
-                cause="inventory_mismatch",
-                inventory_comparison_executed=True,
-                inventory_equal=False,
-                observed_digest=current["digest"],
-            ),
-        )
-    return {
-        "digest": current["digest"],
-        "events_after": [],
-        "events_before": [],
-        "inventory_comparison_executed": True,
-        "inventory_equal": True,
-        "monotonic_ns": time.monotonic_ns(),
-        "name": name,
-        "observed_digest": current["digest"],
-        "state": "completed",
-    }
+    return _checkpoint_inventory_verdict(
+        name, contract["bound_inputs"], current, events_after=monitor.drain()
+    )
 
 
 def _event_records(events: Sequence[InotifyEvent]) -> list[dict[str, Any]]:
@@ -966,6 +926,73 @@ def _not_reached_checkpoint(name: str) -> dict[str, Any]:
         "name": name,
         "observed_digest": None,
         "state": "not_reached",
+    }
+
+
+def _checkpoint_inventory_verdict(
+    name: str,
+    frozen: Mapping[str, Any],
+    current: Mapping[str, Any] | None,
+    *,
+    events_before: Sequence[InotifyEvent] = (),
+    events_after: Sequence[InotifyEvent] = (),
+) -> dict[str, Any]:
+    """Produce the one truthful row for an executed checkpoint operation.
+
+    The qualification harness calls this with synthetic inventories, so the
+    same producer owns both authoritative and non-authoritative checkpoint
+    row semantics without granting the latter an H0 terminal.
+    """
+    if events_before:
+        raise CheckpointDriftError(
+            name,
+            f"mutation events before {name}: {events_before!r}",
+            checkpoint_record=_failed_checkpoint(
+                name,
+                cause="events_before",
+                events_before=events_before,
+                inventory_comparison_executed=False,
+                inventory_equal=None,
+                observed_digest=None,
+            ),
+        )
+    if current is None:
+        raise ContractError("checkpoint verdict lacks a recomputed inventory")
+    if events_after:
+        raise CheckpointDriftError(
+            name,
+            f"mutation events after {name}: {events_after!r}",
+            checkpoint_record=_failed_checkpoint(
+                name,
+                cause="events_after",
+                events_after=events_after,
+                inventory_comparison_executed=False,
+                inventory_equal=None,
+                observed_digest=current["digest"],
+            ),
+        )
+    if current != frozen:
+        raise CheckpointDriftError(
+            name,
+            f"bound inventory mismatch at {name}",
+            checkpoint_record=_failed_checkpoint(
+                name,
+                cause="inventory_mismatch",
+                inventory_comparison_executed=True,
+                inventory_equal=False,
+                observed_digest=current["digest"],
+            ),
+        )
+    return {
+        "digest": current["digest"],
+        "events_after": [],
+        "events_before": [],
+        "inventory_comparison_executed": True,
+        "inventory_equal": True,
+        "monotonic_ns": time.monotonic_ns(),
+        "name": name,
+        "observed_digest": current["digest"],
+        "state": "completed",
     }
 
 
