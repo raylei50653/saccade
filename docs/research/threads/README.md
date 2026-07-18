@@ -41,6 +41,60 @@ WIP=1 **只綁 mainline charter**。工程 follow-up、資料補件、文件收�
 
 ---
 
+<a id="current-transition-panel"></a>
+
+## Current transition panel — H0 → GCTM
+
+**Manual navigation projection · reconciled 2026-07-18.** This panel owns no
+terminal, evidence, or WIP state: `ACTIVE` is projected from the module TODO;
+task lifecycle and gates remain owned by the linked charters/contracts. If a
+row conflicts with its owner, the owner wins. Update this panel in the same
+change as any terminal acceptance, WIP-pointer switch, owner scheduling
+decision, blocker change, or consumer-compatibility verdict.
+
+| Field | Current projection | Owner / read first |
+|:--|:--|:--|
+| **ACTIVE** | O0 — bridge frozen-evidence routing; its only in-scope unit is H0 pre-seal freeze completion for target `m`, then owner seal. | [semantic TODO](../../modules/semantic/TODO.md) · [O0 charter](bridge_frozen_evidence_o0_routing_20260716.md) |
+| **NEXT** | GCTM theory/model specification. It is **parked**, not scheduled; do not read this row as an automatic or direct H0 handoff. | [GCTM charter](gap_conditioned_stochastic_transition_model_task.md) |
+| **READINESS** | H0 is in pre-seal engineering with no accepted H0 terminal. GCTM has a stable problem boundary but no active canonical specification/proof. B1 and O1 are proposed only. | [H0 declaration](../../modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md) · [B1 charter](gctm_b1_runtime_grounded_offline_attribution_task.md) · [O1 charter](gctm_o1_online_intervention_efficacy_task.md) |
+
+### Blockers and transition gates
+
+```text
+ACTIVE → NEXT
+  H0: complete the pre-seal freeze artifact → owner records SEALED
+  → one ordered H0 terminal is owner-accepted
+  ∧ owner separately schedules GCTM
+  → GCTM charter may become active
+
+GCTM → bridge-runtime B1
+  accepted H0 runtime substrate or fidelity edge
+  ∧ B1 declaration owner accepts an H0→GCTM consumer compatibility verdict
+  ∧ sealable GCTM specification and proofs
+  ∧ score-layer L2 contract (rank / margin / top-1 semantics)
+  ∧ owner resolves the B1-slot identity
+  ∧ a sealed B1 declaration and separate owner scheduling
+  → B1 may become active
+```
+
+For any bridge-runtime consumer, the required compatibility check is limited to
+runtime-observable inputs:
+
+$$
+R_{\mathrm{consumer,obs}} \subseteq \Gamma_{\mathrm{H0}}.
+$$
+
+H0's guarantee envelope does not establish GCTM model adequacy, physical-time
+mapping, likelihood/ranking value, or L2 insertion semantics. Those remain
+GCTM/B1-owned blockers. The required consumer registration and compatibility
+verdict are defined in [H0→GCTM consumer compatibility requirements](../../modules/semantic/research/h0_gctm_consumer_compatibility_requirements_20260718.md).
+A full-faithful H0 terminal makes a separately declared B1 consumer study a
+candidate; it is never a direct handoff.
+
+**Sources for the blockers:** [H0 terminal boundary](../../modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md#7-terminal-and-post-terminal-boundary) · [GCTM activation boundary](gap_conditioned_stochastic_transition_model_task.md#activation-boundary) · [B1 activation gate](gctm_b1_runtime_grounded_offline_attribution_task.md#activation-gate) · [registry §7 score-layer gap](../contracts/claim_state_registry.md#7-架構缺口顯式化而不是假裝可編排).
+
+---
+
 ## 統一工作／交接匯報
 
 任何會改變 thread 狀態、WIP 指向或 handoff 的更新，先用下列四段

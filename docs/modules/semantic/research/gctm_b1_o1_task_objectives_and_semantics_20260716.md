@@ -79,6 +79,26 @@ and re-decides nothing owned elsewhere.
 
 ---
 
+### 0.1 Typed cross-layer object mapping
+
+This is a shared relation card, not a duplicate mathematical specification or
+an L2 policy. A relation type constrains what a downstream claim may inherit;
+it does not turn a proposed object into a production object.
+
+| Object | Authority | Relation to next object / runtime | Production role |
+|:--|:--|:--|:--|
+| Production bridge score `bdist` / \(s_\theta\) | CUDA implementation plus authoritative online decision semantics | `exact` relation to its runtime implementation | Current production baseline object |
+| Physical transition model \(M1/M2\) | Future GCTM canonical specification | `hypothesis` relation to the runtime pair process | None |
+| Runtime-aligned observation and innovation | Future GCTM observation/time interface | `hypothesis` from the physical model until mapping validation; `derived` or `proxy` to each named H0 field, declared per field | None |
+| GCTM score policy | Future GCTM/B1 declaration under the registry-owned L2 contract | `derived` from the runtime stochastic object; `augmentation_candidate` relative to `bdist`, and only a possible future `replacement_candidate` | None |
+
+The `L2` owner must separately freeze the cutoff, ranking, margin, claim-score,
+and candidate-universe semantics. This card therefore does not define an
+insertion policy or permit an eligibility, claim-arbitration, fallback, commit,
+or production change.
+
+---
+
 ## 1. Evidence chain
 
 ```text

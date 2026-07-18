@@ -71,6 +71,8 @@ O1
 - Offline effectiveness at B1 does not establish online effectiveness at O1.
 - A negative H0 terminal would not automatically invalidate substrate-agnostic
   mathematics.
+- H0 acceptance is a project-scheduling and bridge-runtime-claim gate; it is
+  not a logical prerequisite for substrate-agnostic transition mathematics.
 - Without an accepted runtime substrate or separately accepted fidelity edge,
   no bridge-runtime claim may be made.
 - No arrow is an automatic handoff. B1 and O1 require separately declared and
@@ -93,10 +95,13 @@ The future specification task asks whether a nested, observation-aware
 probabilistic meaning across gap lengths while keeping calibration,
 candidate-local ranking, and eventual system efficacy as different claims.
 
-The goal is not to replace `bridge_dist` with another uncalibrated distance. A
-future specification must separately account for deterministic mean evolution,
-gap-accumulated process uncertainty, exit-state estimation uncertainty, entry
-observation uncertainty, and any context-conditioned drift.
+The goal is not to replace the production CUDA bridge score `bdist`,
+equivalently \(s_\theta(X_\ell,X_c,\Delta_{\rm on})\), with another
+uncalibrated distance. Legacy midpoint `bridge_dist` naming and the offline
+`s0` proxy are not the production baseline object. A future specification must
+separately account for deterministic mean evolution, gap-accumulated process
+uncertainty, exit-state estimation uncertainty, entry observation uncertainty,
+and any context-conditioned drift.
 
 ## Conceptual model-family boundary
 
@@ -241,6 +246,37 @@ share the same \(S_\Delta\), dimension, gap, context, and observation mode,
 ordering only when its source and causal availability are explicitly declared.
 
 ## Activation-contract and model-seal obligations
+
+### Pre-activation boundary-normalization obligations
+
+The following interface obligations bound any future active GCTM declaration.
+They do not select a model, time convention, score policy, or terminal. They
+make the presently unresolved interfaces explicit so an active declaration
+cannot silently choose them.
+
+1. **Canonical observation/time interface.** The active declaration must name
+   `coordinate_substrate_id`, `frame_time_unit`, `physical_gap_definition`,
+   `online_horizon_definition`, `g_phys_to_delta_on_mapping`,
+   `bridge_at_convention`, `continuous_dt_conversion`,
+   `production_cv_null_offset`, and `null_offset_treatment`. In particular,
+   it must not silently equate \(g_{\rm phys}\) with
+   \(\Delta_{\rm on}\). GCTM owns the physical-to-runtime mapping; H0 may
+   supply only a runtime field or fidelity edge.
+2. **L2 score-insertion contract.** Any B1/O1 score-ranking path remains
+   blocked until the registry-owned L2 contract exists. That contract, not
+   this charter, must identify the cutoff, ranking, margin, and claim score
+   sources and preserve or explicitly redefine the candidate universe. This
+   charter neither selects those sources nor authorizes a second score policy.
+3. **Typed cross-layer mapping.** A future declaration must bind its physical
+   transition object, runtime-aligned observation/innovation, and score policy
+   through declared `exact`, `derived`, `proxy`, `hypothesis`, or candidate
+   relations. The shared mapping card is authoritative for the common B1/O1
+   vocabulary; it grants no production authority.
+
+For the bridge-runtime consumer registration that uses these obligations, see
+[H0→GCTM consumer compatibility requirements](../../modules/semantic/research/h0_gctm_consumer_compatibility_requirements_20260718.md).
+For the shared cross-layer mapping and L2 ownership boundary, see
+[GCTM downstream tasks — B1 / O1 objectives and semantics](../../modules/semantic/research/gctm_b1_o1_task_objectives_and_semantics_20260716.md).
 
 All four items below are unresolved mandatory activation-contract obligations,
 and all must be resolved before any future model-spec seal. Activation may
