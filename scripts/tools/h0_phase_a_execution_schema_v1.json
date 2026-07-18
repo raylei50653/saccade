@@ -268,14 +268,16 @@
         "digest": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
         "events_after": {"type": "array", "items": {"$ref": "#/$defs/mutation_event"}},
         "events_before": {"type": "array", "items": {"$ref": "#/$defs/mutation_event"}},
+        "inventory_comparison_executed": {"type": "boolean"},
         "inventory_equal": {"type": ["boolean", "null"]},
         "name": {"type": "string"},
         "monotonic_ns": {"type": ["integer", "null"], "minimum": 0},
+        "observed_digest": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
         "state": {"enum": ["completed", "failed", "not_reached"]}
       },
       "allOf": [
         {"if": {"properties": {"state": {"const": "completed"}}}, "then": {"properties": {"digest": {"$ref": "#/$defs/sha256"}, "inventory_equal": {"type": "boolean"}, "monotonic_ns": {"type": "integer", "minimum": 0}}}},
-        {"if": {"properties": {"state": {"const": "failed"}}}, "then": {"properties": {"digest": {"type": "null"}, "inventory_equal": {"const": false}, "monotonic_ns": {"type": "integer", "minimum": 0}}}},
+        {"if": {"properties": {"state": {"const": "failed"}}}, "then": {"properties": {"digest": {"type": "null"}, "inventory_equal": {"enum": [false, null]}, "monotonic_ns": {"type": "integer", "minimum": 0}}}},
         {"if": {"properties": {"state": {"const": "not_reached"}}}, "then": {"properties": {"digest": {"type": "null"}, "events_after": {"const": []}, "events_before": {"const": []}, "inventory_equal": {"type": "null"}, "monotonic_ns": {"type": "null"}}}}
       ]
     },

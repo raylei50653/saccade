@@ -721,6 +721,7 @@ def _verify_children(evidence: Mapping[str, Any]) -> None:
 def _verify_input_binding(evidence: Mapping[str, Any]) -> None:
     binding = evidence["input_binding"]
     controller_digest = evidence["controller_input"]["bound_inputs"]["digest"]
+    new_format = "failure" in binding
     if binding["t0_digest"] != controller_digest:
         raise VerificationError("T0 inventory digest differs from controller binding")
     if [checkpoint["name"] for checkpoint in binding["checkpoints"]] != list(
@@ -758,7 +759,11 @@ def _verify_input_binding(evidence: Mapping[str, Any]) -> None:
                 )
             terminal_seen = True
             failed_count += 1
-            if not checkpoint["events_before"] and not checkpoint["events_after"]:
+            if (
+                not new_format
+                and not checkpoint["events_before"]
+                and not checkpoint["events_after"]
+            ):
                 raise VerificationError(
                     "failed checkpoint has no mechanical mutation evidence"
                 )
@@ -767,52 +772,10 @@ def _verify_input_binding(evidence: Mapping[str, Any]) -> None:
     if failed_count > 1:
         raise VerificationError("input binding has multiple failed checkpoints")
 
-    mutations = binding["mutation_events"]
-    if mutations:
-        if (
-            evidence["result"] != "provenance_invalid"
-            or binding["final_equal"] is not False
-        ):
-            raise VerificationError(
-                "observed bound-input mutation did not select provenance_invalid"
-            )
-        classifications = {event["classification"] for event in mutations}
-        expected_monitor = (
-            "queue_overflow"
-            if "queue_overflow" in classifications
-            else "ignored_watch"
-            if "ignored_watch" in classifications
-            else "watch_failed"
-            if "watch_failed" in classifications
-            else "drift"
-        )
-        if binding["monitor_state"] != expected_monitor:
-            raise VerificationError(
-                "mutation classification and monitor state disagree"
-            )
-    elif completed_count == 0:
-        if (
-            evidence["result"] != "provenance_invalid"
-            or states != ["not_reached"] * len(CHECKPOINTS)
-            or binding["monitor_state"] != "not_started"
-            or binding["final_equal"] is not None
-        ):
-            raise VerificationError(
-                "unstarted monitor state is not a preflight provenance rejection"
-            )
-    else:
-        if failed_count or binding["monitor_state"] != "closed_clean":
-            raise VerificationError(
-                "clean checkpoint prefix has an inconsistent monitor state"
-            )
-        expected_final = True if completed_count == len(CHECKPOINTS) else None
-        if binding["final_equal"] is not expected_final:
-            raise VerificationError(
-                "input-binding final equality state is not mechanically derived"
-            )
-    # Truthful-provenance packets carry the terminal stage/reason instead of a
-    # fabricated checkpoint observation; historical packets omit the member.
-    if "failure" in binding:
+    # Packets emitted before the corrective failure envelope omit `failure`.
+    # Preserve their schema and verifier behaviour verbatim.  New packets bind
+    # a checkpoint-stage failure to the one row that the operation recorded.
+    if new_format:
         failure = binding["failure"]
         if failure is not None:
             if (
@@ -837,24 +800,119 @@ def _verify_input_binding(evidence: Mapping[str, Any]) -> None:
             } | {f"checkpoint_{name}" for name in CHECKPOINTS}
             if stage not in allowed_stages:
                 raise VerificationError("failure stage is not a controller stage")
+            failed_rows = [
+                checkpoint
+                for checkpoint in checkpoints
+                if checkpoint["state"] == "failed"
+            ]
             if stage.startswith("checkpoint_"):
-                # An executed checkpoint verdict is drift-class by
-                # construction and contradicts a completed row for the same
-                # checkpoint; anything else was a surrounding-stage failure.
                 if evidence["result"] != "provenance_invalid":
                     raise VerificationError(
                         "checkpoint failure did not select provenance_invalid"
                     )
                 named = stage.removeprefix("checkpoint_")
-                named_state = next(
-                    checkpoint["state"]
-                    for checkpoint in checkpoints
-                    if checkpoint["name"] == named
-                )
-                if named_state == "completed":
+                if len(failed_rows) != 1 or failed_rows[0]["name"] != named:
                     raise VerificationError(
-                        "checkpoint failure contradicts its completed checkpoint row"
+                        "checkpoint failure does not match its exact failed checkpoint row"
                     )
+                row = failed_rows[0]
+                required_failure_fields = {
+                    "inventory_comparison_executed",
+                    "observed_digest",
+                }
+                if not required_failure_fields.issubset(row):
+                    raise VerificationError(
+                        "new-format failed checkpoint lacks its operation record"
+                    )
+                compared = row["inventory_comparison_executed"]
+                observed = row["observed_digest"]
+                if compared:
+                    if (
+                        row["inventory_equal"] is not False
+                        or not isinstance(observed, str)
+                        or observed == controller_digest
+                    ):
+                        raise VerificationError(
+                            "executed checkpoint comparison lacks an unequal observed digest"
+                        )
+                elif row["inventory_equal"] is not None:
+                    raise VerificationError(
+                        "unexecuted checkpoint comparison claims an equality verdict"
+                    )
+                row_events = row["events_before"] + row["events_after"]
+                if row_events != binding["mutation_events"]:
+                    raise VerificationError(
+                        "checkpoint failure event record disagrees with monitor history"
+                    )
+            else:
+                if failed_rows:
+                    raise VerificationError(
+                        "non-checkpoint failure stage fabricates a failed checkpoint"
+                    )
+                if any(
+                    checkpoint["state"] != "not_reached"
+                    for checkpoint in checkpoints[completed_count:]
+                ):
+                    raise VerificationError(
+                        "non-checkpoint failure did not leave later checkpoints not_reached"
+                    )
+        elif failed_count:
+            raise VerificationError(
+                "failed checkpoint lacks a checkpoint failure stage"
+            )
+
+    mutations = binding["mutation_events"]
+    if mutations:
+        if (
+            evidence["result"] != "provenance_invalid"
+            or binding["final_equal"] is not False
+        ):
+            raise VerificationError(
+                "observed bound-input mutation did not select provenance_invalid"
+            )
+        classifications = {event["classification"] for event in mutations}
+        expected_monitor = (
+            "queue_overflow"
+            if "queue_overflow" in classifications
+            else "ignored_watch"
+            if "ignored_watch" in classifications
+            else "watch_failed"
+            if "watch_failed" in classifications
+            else "drift"
+        )
+        if binding["monitor_state"] != expected_monitor:
+            raise VerificationError(
+                "mutation classification and monitor state disagree"
+            )
+    elif failed_count:
+        if (
+            evidence["result"] != "provenance_invalid"
+            or binding["monitor_state"] != "closed_clean"
+            or binding["final_equal"] is not False
+        ):
+            raise VerificationError(
+                "failed inventory comparison has an inconsistent clean-monitor state"
+            )
+    elif completed_count == 0:
+        if (
+            evidence["result"] != "provenance_invalid"
+            or states != ["not_reached"] * len(CHECKPOINTS)
+            or binding["monitor_state"] != "not_started"
+            or binding["final_equal"] is not None
+        ):
+            raise VerificationError(
+                "unstarted monitor state is not a preflight provenance rejection"
+            )
+    else:
+        if binding["monitor_state"] != "closed_clean":
+            raise VerificationError(
+                "clean checkpoint prefix has an inconsistent monitor state"
+            )
+        expected_final = True if completed_count == len(CHECKPOINTS) else None
+        if binding["final_equal"] is not expected_final:
+            raise VerificationError(
+                "input-binding final equality state is not mechanically derived"
+            )
 
 
 def _verify_result(evidence: Mapping[str, Any]) -> None:
