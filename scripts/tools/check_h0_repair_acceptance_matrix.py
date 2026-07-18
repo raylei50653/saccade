@@ -17,13 +17,35 @@ GATES = (
     "seal",
     "authoritative_execution",
 )
+REQUIRED_BY_GATE = {
+    "repair_qualification": (
+        "packet_admission",
+        "historical_archive_verification",
+        "host_independent_ci",
+        "owner_acceptance_matrix",
+        "qualification_report",
+        "qualification_report_bound_head_sha",
+    ),
+    "seal": (
+        "instrumentation_head",
+        "freeze_commit",
+        "seal_commit",
+        "exact_ifs_topology",
+    ),
+    "authoritative_execution": (
+        "clean_seal_checkout",
+        "independent_preflight",
+        "controller_exactly_once",
+        "phase_b_fail_closed",
+    ),
+}
 QUALIFICATION_STEPS = (
     "configure",
     "build",
     "build_identity",
     "runtime_closure",
     "extension_load",
-    "t1",
+    "t1_verdict_semantics",
     "runner_launch_preflight",
     "failure_envelope_serialization",
 )
@@ -75,7 +97,14 @@ def validate_matrix(value: Mapping[str, Any]) -> None:
         gate_id = gate.get("id")
         if not isinstance(gate_id, str) or gate_id in by_id:
             raise MatrixError("acceptance matrix gate identity is malformed")
-        _require_strings(gate.get("required"), f"gate {gate_id} required")
+        required = tuple(
+            _require_strings(gate.get("required"), f"gate {gate_id} required")
+        )
+        expected_required = REQUIRED_BY_GATE.get(gate_id)
+        if expected_required is None or required != expected_required:
+            raise MatrixError(
+                f"gate {gate_id} requirements differ from the acceptance contract"
+            )
         by_id[gate_id] = gate
     if tuple(by_id) != GATES:
         raise MatrixError("acceptance matrix gate order differs from H0 process")

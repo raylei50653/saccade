@@ -13,6 +13,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -26,13 +27,14 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[2]
 SCHEMA = "h0_phase_a_qualification_v1"
 REPORT_NAME = "qualification_summary.json"
+GIT_OBJECT_ID = re.compile(r"^[0-9a-f]{40}$")
 STEP_NAMES = (
     "configure",
     "build",
     "build_identity",
     "runtime_closure",
     "extension_load",
-    "t1",
+    "t1_verdict_semantics",
     "runner_launch_preflight",
     "failure_envelope_serialization",
 )
@@ -75,6 +77,24 @@ def _regular_file_record(path: Path) -> dict[str, Any]:
 
 
 def _write_report(workspace: Path, report: Mapping[str, Any]) -> Path:
+    identity = {
+        "repository_head_sha",
+        "repository_tree_sha",
+        "requested_ref",
+    }
+    if not identity.issubset(report):
+        raise QualificationError("qualification report lacks repository identity")
+    if report.get("result") == "passed" and (
+        not isinstance(report.get("requested_ref"), str)
+        or not report["requested_ref"]
+        or not isinstance(report.get("repository_head_sha"), str)
+        or not GIT_OBJECT_ID.fullmatch(report["repository_head_sha"])
+        or not isinstance(report.get("repository_tree_sha"), str)
+        or not GIT_OBJECT_ID.fullmatch(report["repository_tree_sha"])
+    ):
+        raise QualificationError(
+            "successful qualification report lacks resolved identity"
+        )
     path = workspace / REPORT_NAME
     path.write_bytes(canonical_json_bytes(report) + b"\n")
     return path
@@ -115,6 +135,30 @@ def _tool(name: str) -> Path:
             f"qualification tool is not a physical regular file: {name}"
         )
     return path
+
+
+def _git_object_id(root: Path, revision: str) -> str:
+    result = subprocess.run(
+        ["git", "-C", root.as_posix(), "rev-parse", "--verify", revision],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    value = result.stdout.decode("utf-8", errors="strict").strip()
+    if result.returncode or not GIT_OBJECT_ID.fullmatch(value):
+        raise QualificationError(f"cannot resolve qualification {revision}")
+    return value
+
+
+def _repository_identity(root: Path, requested_ref: str) -> dict[str, str]:
+    if not requested_ref:
+        raise QualificationError("qualification requested ref is empty")
+    return {
+        "repository_head_sha": _git_object_id(root, "HEAD^{commit}"),
+        "repository_tree_sha": _git_object_id(root, "HEAD^{tree}"),
+        "requested_ref": requested_ref,
+    }
 
 
 def _run(
@@ -285,7 +329,13 @@ def _step(name: str, action: Callable[[], None], steps: list[dict[str, str]]) ->
     steps.append({"name": name, "state": "passed"})
 
 
-def run_qualification(root: Path, workspace: Path, *, timeout: float) -> dict[str, Any]:
+def run_qualification(
+    root: Path,
+    workspace: Path,
+    *,
+    requested_ref: str,
+    timeout: float,
+) -> dict[str, Any]:
     """Run every pre-seal substrate step without entering H0 authority."""
     root = root.resolve(strict=True)
     workspace = _workspace(root, workspace)
@@ -294,29 +344,35 @@ def run_qualification(root: Path, workspace: Path, *, timeout: float) -> dict[st
     environment_root = workspace / "environment"
     for name in ("home", "tmp", "xdg-cache"):
         (environment_root / name).mkdir(parents=True)
-    uv = _tool("uv")
-    nvcc = _tool("nvcc")
-    python = root / ".venv/bin/python"
-    if python.is_symlink() or not python.is_file():
-        raise QualificationError("qualification Python is absent or unsafe")
-    build = workspace / "build"
-    environment = {
-        "CUDACXX": nvcc.as_posix(),
-        "HOME": (environment_root / "home").as_posix(),
-        "LANG": "C.UTF-8",
-        "LC_ALL": "C.UTF-8",
-        "PATH": f"{root}/.venv/bin:/usr/bin:/bin",
-        "PYTHONHASHSEED": "0",
-        "PYTHONNOUSERSITE": "1",
-        "TMPDIR": (environment_root / "tmp").as_posix(),
-        "TZ": "UTC",
-        "XDG_CACHE_HOME": (environment_root / "xdg-cache").as_posix(),
-    }
     steps: list[dict[str, str]] = []
     identity: dict[str, Any] | None = None
     closure: dict[str, list[dict[str, Any]]] | None = None
-    t1: dict[str, Any] | None = None
+    t1_verdict_semantics: dict[str, Any] | None = None
+    repository_identity: dict[str, str | None] = {
+        "repository_head_sha": None,
+        "repository_tree_sha": None,
+        "requested_ref": requested_ref,
+    }
     try:
+        repository_identity = _repository_identity(root, requested_ref)
+        uv = _tool("uv")
+        nvcc = _tool("nvcc")
+        python = root / ".venv/bin/python"
+        if python.is_symlink() or not python.is_file():
+            raise QualificationError("qualification Python is absent or unsafe")
+        build = workspace / "build"
+        environment = {
+            "CUDACXX": nvcc.as_posix(),
+            "HOME": (environment_root / "home").as_posix(),
+            "LANG": "C.UTF-8",
+            "LC_ALL": "C.UTF-8",
+            "PATH": f"{root}/.venv/bin:/usr/bin:/bin",
+            "PYTHONHASHSEED": "0",
+            "PYTHONNOUSERSITE": "1",
+            "TMPDIR": (environment_root / "tmp").as_posix(),
+            "TZ": "UTC",
+            "XDG_CACHE_HOME": (environment_root / "xdg-cache").as_posix(),
+        }
         configure = [
             uv.as_posix(),
             "run",
@@ -412,8 +468,10 @@ def run_qualification(root: Path, workspace: Path, *, timeout: float) -> dict[st
 
         before = _qualification_inventory(root, identity)
         after = _qualification_inventory(root, identity)
-        t1 = controller._checkpoint_inventory_verdict("T1", before, after)
-        steps.append({"name": "t1", "state": "passed"})
+        t1_verdict_semantics = controller._checkpoint_inventory_verdict(
+            "T1", before, after
+        )
+        steps.append({"name": "t1_verdict_semantics", "state": "passed"})
         runner_preflight = qualification_runner_argv(build, extension, plugin)
         _step(
             "runner_launch_preflight",
@@ -438,6 +496,7 @@ def run_qualification(root: Path, workspace: Path, *, timeout: float) -> dict[st
             "error": str(exc) or exc.__class__.__name__,
             "phase_b": "forbidden",
             "research_inputs": "forbidden",
+            **repository_identity,
             "result": "failed",
             "schema": SCHEMA,
             "steps": steps,
@@ -454,12 +513,13 @@ def run_qualification(root: Path, workspace: Path, *, timeout: float) -> dict[st
         "capture": "forbidden",
         "failure_envelope_probe": failure_probe,
         "phase_b": "forbidden",
+        **repository_identity,
         "research_inputs": "forbidden",
         "result": "passed",
         "runtime_closure": closure,
         "schema": SCHEMA,
         "steps": steps,
-        "t1": t1,
+        "t1_verdict_semantics": t1_verdict_semantics,
         "terminal_claim": "forbidden",
         "workspace": workspace.as_posix(),
     }
@@ -470,13 +530,19 @@ def run_qualification(root: Path, workspace: Path, *, timeout: float) -> dict[st
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument("--workspace", required=True, type=Path)
+    parser.add_argument("--requested-ref", required=True)
     parser.add_argument("--timeout", type=float, default=3600.0)
     args = parser.parse_args(argv)
     if args.timeout <= 0:
         parser.error("--timeout must be positive")
     started = time.monotonic()
     try:
-        report = run_qualification(ROOT, args.workspace, timeout=args.timeout)
+        report = run_qualification(
+            ROOT,
+            args.workspace,
+            requested_ref=args.requested_ref,
+            timeout=args.timeout,
+        )
     except QualificationError as exc:
         print(f"H0 qualification rejected: {exc}", file=sys.stderr)
         return 1

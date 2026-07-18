@@ -1821,20 +1821,35 @@ packet, I/F/S relation, terminal, or owner event above.
    pass `h0_repair_acceptance_matrix_v1`; a controlled host must run the
    non-authoritative qualification harness and retain its report as a CI
    artifact. The harness may exercise configure, build, identity, runtime
-   closure, extension load, T1, synthetic runner launch and failure-envelope
-   serialization, but must not read research inputs, capture scientific output,
-   create an H0 terminal, run Phase B, or write an H0 evidence root.
+   closure, extension load, T1 verdict-producer semantics, synthetic runner
+   launch and failure-envelope serialization, but must not read research inputs,
+   capture scientific output, create an H0 terminal, run Phase B, or write an
+   H0 evidence root. The dispatch `ref` is only an acquisition instruction:
+   after checkout the harness records the resolved full 40-character
+   `repository_head_sha`, `repository_tree_sha`, and requested ref in its
+   report, and the artifact name and summary use that same resolved head SHA.
+   A report qualifies only its literal recorded head SHA, never a movable branch
+   name.
 2. **One acceptance matrix.** Owner review evaluates the complete matrix once.
    At most one corrective batch may follow; it reruns the same matrix. A further
    blocker closes the Repair PR and starts a new Repair PR instead of creating a
    successor chain with partial re-acceptance.
-3. **Seal.** Only a qualified repair head becomes I. A separate Seal PR creates
-   F's sole freeze artifact and S's sole literal owner-event line, then lands
-   linearly by fast-forward as I -> F -> S. GitHub's `merged` label is a hosting
-   event; `SEALED` remains the literal S declaration event.
+3. **Seal.** Only a qualified repair head becomes I. The Seal input must cite
+   the qualification report's full 40-character `repository_head_sha`, rather
+   than a branch or another movable ref. A separate Seal PR creates F's sole
+   freeze artifact and S's sole literal owner-event line, then lands linearly by
+   fast-forward as I -> F -> S. GitHub's `merged` label is a hosting event;
+   `SEALED` remains the literal S declaration event.
 4. **Authoritative execution.** Only clean S may pass independent preflight and
    launch the controller exactly once. Qualification is never an authority
    substitute. Phase B remains fail-closed until a valid terminal admits it.
+5. **Workflow bootstrap.** GitHub can dispatch this manual workflow only after
+   its YAML exists on the default branch. The merge that first introduces this
+   workflow is therefore a non-authoritative bootstrap: it cannot itself be an
+   I candidate or claim a qualification result. Once the workflow is available,
+   a controlled-host dispatch must check out the intended repair head and bind
+   its artifact/report to that resolved SHA before a later normal Repair/Seal
+   sequence may rely on it.
 
 The execution implementation-binding universe remains the controller-facing
 runtime authority. The versioned archive verifier is deliberately outside that

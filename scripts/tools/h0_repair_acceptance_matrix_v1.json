@@ -9,7 +9,8 @@
         "historical_archive_verification",
         "host_independent_ci",
         "owner_acceptance_matrix",
-        "qualification_report"
+        "qualification_report",
+        "qualification_report_bound_head_sha"
       ]
     },
     {
@@ -45,7 +46,7 @@
       "build_identity",
       "runtime_closure",
       "extension_load",
-      "t1",
+      "t1_verdict_semantics",
       "runner_launch_preflight",
       "failure_envelope_serialization"
     ]
