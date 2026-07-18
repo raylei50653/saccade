@@ -102,9 +102,10 @@ Additionally:
   Writing that contract does not depend on H0. None of the eight conditions
   above substitutes for it.
 - **H0→GCTM consumer compatibility is a hard prerequisite for the
-  bridge-runtime path.** A sealed B1 declaration must bind an owner-accepted
-  compatibility verdict mapping every required runtime-observable GCTM object
-  to its accepted H0 guarantee/fidelity edge. This does not block
+  bridge-runtime path.** A sealed B1 declaration must bind a
+  B1-declaration-owner-accepted compatibility verdict mapping every required
+  runtime-observable GCTM object to its accepted H0 guarantee/fidelity edge.
+  This does not block
   substrate-agnostic GCTM mathematics or alter H0's terminal; it blocks only a
   bridge-runtime B1 claim when the required observation mapping is absent.
 - **B1-slot identity must be resolved** (previous section) before activation.
@@ -696,8 +697,8 @@ accepted B1 handoff and must not rewrite B1 semantics.
 ## Pre-activation checklist
 
 - [ ] accepted H0 runtime substrate exists;
-- [ ] H0→GCTM consumer compatibility verdict is accepted and bound to the
-      required runtime-observable objects;
+- [ ] B1 declaration owner has accepted and bound an H0→GCTM consumer
+      compatibility verdict to the required runtime-observable objects;
 - [ ] accepted GCTM model specification exists;
 - [ ] score-layer evidence contract (registry §7) exists;
 - [ ] B1-slot identity relation resolved by owner;

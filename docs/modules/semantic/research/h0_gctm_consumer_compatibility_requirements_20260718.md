@@ -224,8 +224,8 @@ map must distinguish:
 | \(\mathcal I_{\mathrm{struct}}\) | Structural lost competitors scanned for one candidate; part of the event input. |
 | \(\mathcal I_{\mathrm{pre}}\) | Result of pre-score structural gates; not interchangeable with the structural set. |
 | \(\mathcal I_{\mathrm{rank}}\) | Final eligible set after score and post-score masks; it is an operator result, not a context prior. |
-| \(\mathcal J\) | Candidate competitors claiming the same lost after candidate-local ranking; it is distinct from \(\mathcal I\). |
-| detection/track score \(q_j\) | Claim-key input. Claim arbitration does not re-rank `bdist`; if outside a GCTM intervention, it must be declared unchanged rather than omitted. |
+| \(\mathcal J_L\) | Actual proposers of one lost \(L\), produced after candidate-local proposal; it is distinct from \(\mathcal I\) and is not a predeclared event input. |
+| detection/track score \(q_j\) | Claim-key input for each member of the full candidate universe. Claim arbitration consumes it with that candidate's proposal; it does not re-rank `bdist`. If outside a GCTM intervention, it must be declared unchanged rather than omitted. |
 
 In particular:
 
@@ -242,6 +242,49 @@ M_{\mathrm{pre}}
 
 Treating \(\mathcal I_{\mathrm{rank}}\) as a predeclared context silently
 conditions on a gate/cutoff outcome that belongs to the operator itself.
+
+The claim boundary has the same directionality. Let
+\(\mathcal U_{\mathrm{event}}\) be the full candidate universe at the bridge
+event. Candidate-local processing first produces one proposal (or no proposal)
+per candidate:
+
+\[
+P_j:
+\left(
+x_{C_j},\{x_L^{(i)}\}_{i\in\mathcal I_{\mathrm{struct},j}}
+\right)
+\longrightarrow
+\operatorname{proposal}_j.
+\]
+
+For one lost \(L\), the actual claim set is therefore the intermediate result
+
+\[
+\mathcal J_L
+=
+\{j\in\mathcal U_{\mathrm{event}}:
+\operatorname{proposal}_j=L\},
+\]
+
+not an input condition. Claim arbitration is a separate operator
+
+\[
+A_{\mathrm{claim}}:
+\{(\operatorname{proposal}_j,q_j,j)\}_{j\in\mathcal U_{\mathrm{event}}}
+\longrightarrow
+\text{claim/commit},
+\qquad
+F_{\mathrm{event}}
+=
+A_{\mathrm{claim}}
+\circ
+\prod_{j\in\mathcal U_{\mathrm{event}}}P_j.
+\]
+
+Thus a singular pair-local \(x_C\), or \(\{q_j\}_{j\in\mathcal J_L}\),
+cannot by itself determine cross-candidate claim or commit. A consumer either
+declares the full \(\mathcal U_{\mathrm{event}}\) and this composition, or
+declares claim/commit explicitly unchanged or audit-only.
 
 ### Continuous and discrete output correspondence
 
@@ -285,8 +328,9 @@ The map must include, where the declared model uses them:
 lost/candidate identities and event membership
 exit state, entry observation, and history-window provenance
 structural/pre-score/final-eligible competitor sets and mask provenance
-claim-participant set and detection-score-key semantics, or an explicit
-  unchanged-claim declaration
+full candidate-universe and detection-score-key semantics; actual
+  claim-proposer set \(\mathcal J_L\) as a proposal-composition output, or an
+  explicit unchanged-claim declaration
 online horizon Δ_on and physical endpoint gap g_phys
 bridge_at convention and g_phys ↔ Δ_on mapping
 frame-time unit and any continuous-dt conversion
@@ -314,8 +358,8 @@ induced null offset.
 
 ### Required composition declaration
 
-The future B1 declaration must choose one named relationship to the existing
-online operator:
+The future B1 declaration must choose one named relationship to a **named
+subcomponent** of the existing online operator:
 
 ```text
 augment named pair score
@@ -325,9 +369,13 @@ replace ranking under a frozen L2 contract
 shadow-only diagnostic
 ```
 
-It must not silently turn a score intervention into an eligibility change,
-claim-arbitration change, or commit redesign. The registry-owned L2 contract
-remains the sole authority for rank, margin, and top-1 semantics.
+It must not re-describe or silently replace the production baseline operator
+\(F_{\Delta\mid\mathcal C}\). A `replace` option means only an explicitly
+named pair-score or ranking-subcomponent intervention under a frozen L2
+contract; it must preserve or separately re-charter every other operator
+stage. It must not silently turn a score intervention into an eligibility
+change, claim-arbitration change, or commit redesign. The registry-owned L2
+contract remains the sole authority for rank, margin, and top-1 semantics.
 
 ## 5. Compatibility verdict
 
@@ -340,10 +388,41 @@ They are not H0 terminals and do not alter the H0 terminal partition.
 | `GCTM_H0_COMPATIBLE_WITH_CONSTRAINTS` | The declared model/claim is valid only under explicitly bound domain, state, timing, or availability constraints. | This blocker clears only for the constrained declaration. |
 | `GCTM_H0_GAP_REMAINS` | A required object has no adequate H0 guarantee or accepted fidelity edge. | Bridge-runtime B1 remains blocked; choose a latent/substrate-agnostic re-charter or a separately declared H0 delta. |
 
-An owner-accepted compatibility record must be bound in the sealed B1
-declaration together with its H0 and GCTM identities. A positive compatibility
-verdict does not select the B1 task, resolve the B1 slot, satisfy the L2
-score-layer contract, or grant online authority.
+### Verdict fact ownership and lifecycle
+
+A compatibility verdict is a **B1 preactivation record**, not an H0 terminal,
+GCTM model seal, or free-floating semantic state. Its fact owner and accepting
+authority are the owner of the future B1 declaration that consumes it (the
+**B1 declaration owner**). The authoritative record is the declaration's
+immutable `h0_gctm_compatibility` record; this protocol document defines its
+schema but owns no particular verdict.
+
+That record must include at least:
+
+```text
+compatibility_verdict_id
+consumer_declaration_id
+baseline_id and required_guarantee_ids
+gctm_specification_id
+required-object map and relation types
+selected verdict, constraints, and maximum claim layer
+accepted_by / accepted_at
+supersedes (if any)
+invalidation inputs and current disposition
+```
+
+The H0 owner remains the sole authority for the cited H0 terminal,
+baseline, and guarantee envelope; it does not decide consumer sufficiency. A
+change or invalidation of any cited H0 guarantee, GCTM specification, required
+object mapping, or consumer causal/domain rule makes the B1 record stale. Only
+the B1 declaration owner may accept a successor record, which must name the
+record it supersedes. A later sealed B1 declaration binds that accepted record;
+it references the verdict and does not re-adjudicate it.
+
+A B1-declaration-owner-accepted compatibility record must be bound in the
+sealed B1 declaration together with its H0 and GCTM identities. A positive
+compatibility verdict does not select the B1 task, resolve the B1 slot,
+satisfy the L2 score-layer contract, or grant online authority.
 
 ## 6. Registration and handoff procedure
 
@@ -352,9 +431,10 @@ score-layer contract, or grant online authority.
    edge and records the H0 baseline identity.
 2. GCTM/B1 consumer declares its required runtime-observable objects.
 3. Consumer maps each object to H0 using the required relation type.
-4. Owner accepts one compatibility verdict and records constraints or gaps.
-5. A later sealed B1 declaration binds that record, if all independent B1
-   activation gates also pass.
+4. The B1 declaration owner accepts one identified compatibility record and
+   records its constraints, gaps, invalidation inputs, and any predecessor.
+5. A later sealed B1 declaration binds that accepted record, if all independent
+   B1 activation gates also pass.
 ```
 
 The direct downstream target is therefore not “GCTM automatically starts.” It
@@ -378,5 +458,6 @@ This draft is complete as a **boundary/registration protocol** when owner review
 confirms that it does not change H0's terminal, GCTM model authority, B1 slot
 identity, L2 score semantics, or execution authorization. The proposed B1
 charter binds this protocol as a bridge-runtime prerequisite; a particular
-future sealed B1 declaration must additionally bind one owner-accepted
+future sealed B1 declaration must additionally bind one
+B1-declaration-owner-accepted
 compatibility verdict.

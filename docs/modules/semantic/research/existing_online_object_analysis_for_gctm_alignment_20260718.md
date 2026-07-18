@@ -1054,9 +1054,10 @@ $$
 
 # 10. Compatibility constraints
 
-## C1 — Do not replace the online operator
+## C1 — Preserve the production-operator boundary
 
-GCTM 不應把 existing $F_{\Delta\mid\mathcal C}$ 視為待取代的錯誤模型。
+GCTM 不應重新描述、或悄悄取代 existing
+$F_{\Delta\mid\mathcal C}$／production baseline operator。
 
 正確關係應是：
 
@@ -1069,6 +1070,11 @@ F_{\Delta\mid\mathcal C}
 \longrightarrow
 \text{online score／decision}.
 $$
+
+未來若有 frozen L2 contract，可**顯式提出** named pair-score 或 ranking
+subcomponent replacement intervention；這不等於取代整個
+$F_{\Delta\mid\mathcal C}$。其餘 gate、claim arbitration、fallback、commit
+stage 必須保留或另行 re-charter。
 
 ## C2 — Do not invent intrinsic runtime randomness
 
@@ -1342,20 +1348,59 @@ GCTM 對齊時逐項回答：
 
 GCTM 與 online 之間可用以下最小介面：
 
-## Input interface
+## Candidate-local proposal interface
+
+令 $\mathcal U_{\mathrm{event}}$ 為 bridge event 的完整 candidate universe。
+對每個 candidate $j$，先以其 own state 與 structural lost competitors
+形成 proposal（或 no proposal）：
 
 $$
-\mathrm{NativeEvent}
-=
+P_j:
 \left(
-\Delta,
-x_C,
-\{x_L^{(i)}\}_{i\in\mathcal I_{\mathrm{struct}}},
+\Delta_j,
+x_{C_j},
+\{x_L^{(i)}\}_{i\in\mathcal I_{\mathrm{struct},j}},
 m_{\mathrm{gate}},
-\{q_j\}_{j\in\mathcal J},
 \theta
-\right).
+\right)
+\longrightarrow
+\operatorname{proposal}_j.
 $$
+
+## Claim-arbitration interface
+
+對一個 lost $L$，actual claim set 是 candidate-local proposal 之後的中間產物：
+
+$$
+\mathcal J_L
+=
+\{j\in\mathcal U_{\mathrm{event}}:
+\operatorname{proposal}_j=L\}.
+$$
+
+它不是 predeclared NativeEvent input。claim arbitration 再消費完整 universe 的
+proposal、detection/track score、candidate identity：
+
+$$
+A_{\mathrm{claim}}:
+\left\{
+\left(\operatorname{proposal}_j,q_j,j\right)
+\right\}_{j\in\mathcal U_{\mathrm{event}}}
+\longrightarrow
+\text{claim/commit},
+$$
+
+$$
+F_{\mathrm{event}}
+=
+A_{\mathrm{claim}}
+\circ
+\prod_{j\in\mathcal U_{\mathrm{event}}}P_j.
+$$
+
+因此 singular $x_C$ 與 $\{q_j\}_{j\in\mathcal J_L}$ 都不足以單獨推導
+cross-candidate claim／commit；GCTM 若不建模此 composition，必須明示
+claim/commit unchanged 或 audit-only。
 
 ## GCTM output interface
 
@@ -1418,7 +1463,9 @@ replace ranking
 shadow-only diagnostic
 ```
 
-不能只說「GCTM 與 online 對接」，卻不指出插入位置。
+`replace` 只可表示 frozen L2 contract 下的 named subcomponent intervention，
+不可表示重寫或默默取代 $F_{\Delta\mid\mathcal C}$。不能只說「GCTM 與 online
+對接」，卻不指出插入位置。
 
 ---
 

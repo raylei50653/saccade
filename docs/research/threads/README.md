@@ -69,6 +69,7 @@ ACTIVE → NEXT
 
 GCTM → bridge-runtime B1
   accepted H0 runtime substrate or fidelity edge
+  ∧ B1 declaration owner accepts an H0→GCTM consumer compatibility verdict
   ∧ sealable GCTM specification and proofs
   ∧ score-layer L2 contract (rank / margin / top-1 semantics)
   ∧ owner resolves the B1-slot identity
