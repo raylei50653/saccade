@@ -21,11 +21,30 @@ $$
 P_\Delta(x,\cdot).
 $$
 
-它是一個在單次 bridge fire event 上執行的、gap-indexed、context-conditioned、deterministic hybrid decision operator：
+它是一個在單次 bridge fire event 上執行的、per-lost-gap-indexed、
+context-conditioned、deterministic hybrid decision operator。其 candidate-local
+proposal stage 與 full event operator 必須分開：
+
+$$
+P_j:
+\left(
+x_{C_j},q_j,
+\{(x_L^{(i)},\Delta_i)\}_{i\in\mathcal I_{\mathrm{struct},j}},
+m_{\mathrm{gate}},\theta
+\right)
+\longrightarrow
+\left(z_{c,j},\operatorname{proposal}_j\right),
+\qquad
+\Delta_i=\operatorname{age}[L_i],
+$$
 
 $$
 \boxed{
-F_{\Delta\mid\mathcal C}
+F_{\mathrm{event}}
+=
+A_{\mathrm{claim}}
+\circ
+\prod_{j\in\mathcal U_{\mathrm{event}}}P_j
 :
 \mathcal X_{\mathrm{event}}
 \longrightarrow
@@ -35,29 +54,47 @@ $$
 
 其中：
 
-- $\Delta$ 是 production `age[lost]`，亦即 score extrapolation 使用的 `la`；
-- $\mathcal X_{\mathrm{event}}$ 是 candidate、所有 structural lost competitors，以及 gate／claim 所需 runtime state 的完整事件輸入；
-- $\mathcal C$ 是固定 policy、competitor topology、claim topology 與不作為幾何擾動軸的外生條件；
+- $\Delta_i$ 是 lost $L_i$ 的 production `age[lost]`，亦即該 pair score extrapolation 使用的 `la`；
+- $\mathcal X_{\mathrm{event}}$ 是完整 candidate universe、每個 candidate 的 structural lost competitors、pair-specific horizons，以及 gate／claim 所需 runtime state；
+- $\mathcal C$ 是固定 policy 與不作為幾何擾動軸的外生條件；actual claim set 是上式的中間輸出，不是預先固定的 context；
 - $\mathcal Z_c$ 是連續或 piecewise-smooth 的 score quantities；
 - $\mathcal Z_d$ 是 gate、rank、claim、commit 等離散結果；
 - 固定 runtime input 時，輸出是確定的；
 - commit 只進行 identity adoption，不把 lost motion state merge 到 candidate motion state。
 
+candidate-local score/proposal family 可等價記為
+
+$$
+P_j
+\equiv
+F^{\mathrm{proposal}}_{j\mid\mathcal C_j}.
+$$
+
+它接收該 candidate 的 per-lost
+\(\{(x_L^{(i)},\Delta_i)\}_i\)，且不輸出 claim/commit；單一
+\(F_{\Delta\mid\mathcal C}\) 不得再同時指稱 full claim/commit event。
+
 最精確的 production decomposition 是：
 
 $$
 \boxed{
-R
+\left\{
+R_j
 \rightarrow
-M_{\mathrm{pre}}
+M_{\mathrm{pre},j}
 \rightarrow
-G_\Delta
+G_{\Delta_i}
 \rightarrow
-M_{\mathrm{post}}
+M_{\mathrm{post},j}
 \rightarrow
-S_{\mathrm{rank}}
+S_{\mathrm{rank},j}
 \rightarrow
-D_{\mathrm{margin/claim/commit}}
+\operatorname{proposal}_j
+\right\}_{j\in\mathcal U_{\mathrm{event}}}
+\rightarrow
+A_{\mathrm{claim}}
+\rightarrow
+\mathrm{commit}
 }
 $$
 
@@ -83,18 +120,25 @@ same-frame association completed
 
 事件輸入位於 commit 前；事件輸出包含 commit decision。
 
-自然的事件表示是：
+自然的完整事件表示是：
 
 $$
 \left(
-x_C^{\mathrm{entry}},
-\{x_L^{(i),\mathrm{exit}}\}_{i\in\mathcal I_{\mathrm{struct}}},
-\Delta,
+\left\{
+\left(
+x_{C_j}^{\mathrm{entry}},
+q_j,
+\{(x_L^{(i),\mathrm{exit}},\Delta_i)\}_{i\in\mathcal I_{\mathrm{struct},j}}
+\right)
+\right\}_{j\in\mathcal U_{\mathrm{event}}},
 \mathcal C
 \right)
 \longmapsto
 (z_c,z_d).
 $$
+
+其中 candidate-local $P_j$ 先產生 $\operatorname{proposal}_j$；只有完整
+universe 的 proposal 再經 $A_{\mathrm{claim}}$ 才能產生 claim/commit。
 
 它不是多幀 recurrent state evolution：
 
@@ -106,7 +150,7 @@ gap 的歷史效果已被壓入：
 
 - lost frozen native history；
 - candidate live entry history；
-- lost age $\Delta$；
+- 每個 lost 的 pair horizon $\Delta_i$；
 - same-frame competitor／claim context。
 
 ## 1.2 What the object is not
@@ -330,10 +374,10 @@ $$
 
 `gap_len` 只用於 occupancy／fidelity 路徑，不是 $G_\Delta$ 的 extrapolation factor。
 
-GCTM 應將 $\Delta$ 視為 operator-family index：
+GCTM 應將每個 pair 的 $\Delta_i$ 視為 pair-geometry family index：
 
 $$
-\{F_{\Delta\mid\mathcal C}\}_{\Delta}.
+\{G_{\Delta_i}\}_{\Delta_i}.
 $$
 
 不建議在第一層把 $\Delta$ 當成普通 geometry coordinate 塞入 $x$，因為這會混淆：
@@ -345,9 +389,9 @@ $$
 若 GCTM 要建 gap evolution path，可以另定義：
 
 $$
-\Delta
+\Delta_i
 \mapsto
-F_{\Delta\mid\mathcal C_\Delta}(x_\Delta),
+G_{\Delta_i}(x_{C_j},x_L^{(i)}),
 $$
 
 而不是抹平 operator family 與 state path 的區別。
@@ -636,32 +680,35 @@ i_{\mathrm{second}},
 \right).
 $$
 
-離散 map 可概括為：
+full-event 離散 map 可概括為：
 
 $$
-F_{\Delta\mid\mathcal C}^{(d)}
+F_{\mathrm{event}}^{(d)}
 =
-D_{\mathcal C}
+A_{\mathrm{claim}}
 \circ
-F_{\Delta\mid\mathcal C}^{(c)}
+\prod_{j\in\mathcal U_{\mathrm{event}}}P_j
 $$
 
 但更 production-faithful 的寫法應顯式保留 masks：
 
 $$
-F^{(d)}
+F_{\mathrm{event}}^{(d)}
 =
-D_{\mathrm{claim/commit}}
+A_{\mathrm{claim}}
 \circ
-D_{\mathrm{rank/margin}}
+\prod_{j\in\mathcal U_{\mathrm{event}}}
+\left(
+D_{\mathrm{rank/margin},j}
 \circ
-M_{\mathrm{post}}
+M_{\mathrm{post},j}
 \circ
-G_\Delta
+G_{\Delta_i}
 \circ
-M_{\mathrm{pre}}
+M_{\mathrm{pre},j}
 \circ
-R.
+R_j
+\right).
 $$
 
 ## 6.2 Claim semantics
@@ -740,11 +787,11 @@ $$
 定義 decision boundary：
 
 $$
-\mathcal B_{\Delta,\mathcal C}
+\mathcal B_{\mathrm{event},\mathcal C}
 =
 \left\{
 x:
-F_{\Delta\mid\mathcal C}^{(d)}
+F_{\mathrm{event}}^{(d)}
 \text{ 在 }x\text{ 不局部常數}
 \right\}.
 $$
@@ -754,8 +801,8 @@ $$
 $$
 d_c
 \left(
-F^{(c)}(x),
-F^{(c)}(y)
+F_{\mathrm{event}}^{(c)}(x),
+F_{\mathrm{event}}^{(c)}(y)
 \right)
 \ll1
 $$
@@ -763,9 +810,9 @@ $$
 但：
 
 $$
-F^{(d)}(x)
+F_{\mathrm{event}}^{(d)}(x)
 \neq
-F^{(d)}(y).
+F_{\mathrm{event}}^{(d)}(y).
 $$
 
 這就是：
@@ -779,11 +826,11 @@ score-stable / decision-unstable
 ### Continuous gain
 
 $$
-L_\Delta(x\mid\mathcal C)
+L_{\mathrm{event}}(x\mid\mathcal C)
 =
 \limsup_{y\to x}
 \frac{
-d_c(F^{(c)}(x),F^{(c)}(y))
+d_c(F_{\mathrm{event}}^{(c)}(x),F_{\mathrm{event}}^{(c)}(y))
 }{
 d_X(x,y)
 }.
@@ -792,12 +839,12 @@ $$
 ### Geometry-conditioned decision robustness radius
 
 $$
-\rho_\Delta^{\mathrm{geom}}(x\mid\mathcal C)
+\rho_{\mathrm{event}}^{\mathrm{geom}}(x\mid\mathcal C)
 =
 \inf
 \left\{
 d_X(x,y):
-F^{(d)}(x)\neq F^{(d)}(y)
+F_{\mathrm{event}}^{(d)}(x)\neq F_{\mathrm{event}}^{(d)}(y)
 \right\}.
 $$
 
@@ -815,13 +862,13 @@ claim-score perturbation不應偷偷放進 geometry radius；它應是：
 對固定：
 
 $$
-(x,\Delta,\mathcal C,\theta)
+(x_{\mathrm{event}},\mathcal C,\theta)
 $$
 
 production 輸出是確定的：
 
 $$
-F_{\Delta\mid\mathcal C}(x)
+F_{\mathrm{event}}(x_{\mathrm{event}})
 =
 z.
 $$
@@ -829,7 +876,7 @@ $$
 因此沒有內生：
 
 $$
-P_\Delta(x,\cdot)
+P_{\mathrm{event}}(x,\cdot)
 $$
 
 可直接被解釋為 production transition law。
@@ -837,9 +884,9 @@ $$
 若硬寫：
 
 $$
-P_\Delta(x,\cdot)
+P_{\mathrm{event}}(x,\cdot)
 =
-\delta_{F_\Delta(x)},
+\delta_{F_{\mathrm{event}}(x)},
 $$
 
 則：
@@ -870,9 +917,9 @@ GCTM 可以引入 stochasticity，但必須明確標來源。合法來源包括�
 例如：
 
 $$
-X_\Delta
+X_{\mathrm{event}}
 \sim
-K_\Delta(\cdot\mid s_0),
+K_{\boldsymbol{\Delta}}(\cdot\mid s_0),
 $$
 
 再由 existing operator產生：
@@ -880,14 +927,14 @@ $$
 $$
 Z
 =
-F_{\Delta\mid\mathcal C}(X_\Delta).
+F_{\mathrm{event}}(X_{\mathrm{event}}).
 $$
 
 此時 distribution：
 
 $$
-F_{\Delta\mid\mathcal C\#}
-K_\Delta(\cdot\mid s_0)
+F_{\mathrm{event}\#}
+K_{\boldsymbol{\Delta}}(\cdot\mid s_0)
 $$
 
 是 GCTM／population object，不是 production bridge 自帶的 transition kernel。
@@ -915,7 +962,7 @@ $$
 ### B. Native-state uncertainty
 
 $$
-Q_\Delta
+Q_{\boldsymbol{\Delta}}
 :
 s_0
 \mapsto
@@ -927,7 +974,7 @@ $$
 ### C. Score distribution
 
 $$
-(F_{\Delta\mid\mathcal C}^{(c)})_\#Q_\Delta.
+(F_{\mathrm{event}}^{(c)})_\#Q_{\boldsymbol{\Delta}}.
 $$
 
 回答 GCTM uncertainty 經 online score map 後形成什麼 score distribution。
@@ -935,9 +982,9 @@ $$
 ### D. Decision probability
 
 $$
-\Pr_{X\sim Q_\Delta}
+\Pr_{X\sim Q_{\boldsymbol{\Delta}}}
 \left[
-F_{\Delta\mid\mathcal C}^{(d)}(X)=z_d
+F_{\mathrm{event}}^{(d)}(X)=z_d
 \right].
 $$
 
@@ -1057,7 +1104,7 @@ $$
 ## C1 — Preserve the production-operator boundary
 
 GCTM 不應重新描述、或悄悄取代 existing
-$F_{\Delta\mid\mathcal C}$／production baseline operator。
+$F_{\mathrm{event}}$／production baseline operator。
 
 正確關係應是：
 
@@ -1066,14 +1113,14 @@ $$
 \longrightarrow
 \text{native event state／law}
 \longrightarrow
-F_{\Delta\mid\mathcal C}
+F_{\mathrm{event}}
 \longrightarrow
 \text{online score／decision}.
 $$
 
 未來若有 frozen L2 contract，可**顯式提出** named pair-score 或 ranking
 subcomponent replacement intervention；這不等於取代整個
-$F_{\Delta\mid\mathcal C}$。其餘 gate、claim arbitration、fallback、commit
+$F_{\mathrm{event}}$。其餘 gate、claim arbitration、fallback、commit
 stage 必須保留或另行 re-charter。
 
 ## C2 — Do not invent intrinsic runtime randomness
@@ -1135,16 +1182,16 @@ GCTM 可以研究自己定義的 stochastic process 是否 contraction，但不�
 若研究：
 
 $$
-(F_\Delta)_\#\mu,
+(F_{\mathrm{event}})_\#\mu,
 $$
 
 必須明確標示研究物件已變成：
 
 $$
-(F_\Delta,\mu).
+(F_{\mathrm{event}},\mu).
 $$
 
-這是 population-level property，不是 $F_\Delta$ 單獨的 operator property。
+這是 population-level property，不是 $F_{\mathrm{event}}$ 單獨的 operator property。
 
 ## C8 — Runtime-native reduction is authoritative
 
@@ -1234,7 +1281,7 @@ GCTM 可以研究：
 
 $$
 \Pr[
-F^{(d)}(X)=z_d
+F_{\mathrm{event}}^{(d)}(X)=z_d
 ]
 $$
 
@@ -1242,7 +1289,7 @@ $$
 
 $$
 \Pr[
-\rho_\Delta^{\mathrm{geom}}(X)<\varepsilon
+\rho_{\mathrm{event}}^{\mathrm{geom}}(X)<\varepsilon
 ].
 $$
 
@@ -1276,7 +1323,22 @@ Existing online operator and compatibility boundary
 ## 13.1 Online authority
 
 $$
-F_{\Delta\mid\mathcal C}
+P_j:
+\left(
+x_{C_j},q_j,
+\{(x_L^{(i)},\Delta_i)\}_{i\in\mathcal I_{\mathrm{struct},j}},
+m_{\mathrm{gate}},\theta
+\right)
+\to
+\left(z_{c,j},\operatorname{proposal}_j\right),
+$$
+
+$$
+F_{\mathrm{event}}
+=
+A_{\mathrm{claim}}
+\circ
+\prod_{j\in\mathcal U_{\mathrm{event}}}P_j
 :
 \mathcal X_{\mathrm{event}}
 \to
@@ -1286,17 +1348,23 @@ $$
 ## 13.2 Runtime composition
 
 $$
-R
+\left\{
+R_j
 \to
-M_{\mathrm{pre}}
+M_{\mathrm{pre},j}
 \to
-G_\Delta
+G_{\Delta_i}
 \to
-M_{\mathrm{post}}
+M_{\mathrm{post},j}
 \to
-S_{\mathrm{rank}}
+S_{\mathrm{rank},j}
 \to
-D_{\mathrm{margin/claim/commit}}.
+\operatorname{proposal}_j
+\right\}_{j\in\mathcal U_{\mathrm{event}}}
+\to
+A_{\mathrm{claim}}
+\to
+\mathrm{commit}.
 $$
 
 ## 13.3 GCTM correspondence obligations
@@ -1409,7 +1477,7 @@ claim/commit unchanged 或 audit-only。
 ### State law
 
 $$
-Q_\Delta
+Q_{\boldsymbol{\Delta}}
 \in
 \mathcal P(\mathcal X_{\mathrm{event}}).
 $$
@@ -1421,9 +1489,9 @@ $$
 =
 \log p
 \left(
-x_C,x_L^{(i)}
+x_{C_j},x_L^{(i)}
 \mid
-\Delta
+\Delta_i
 \right).
 $$
 
@@ -1436,7 +1504,7 @@ T_{\mathrm{GCTM}}
 \left(
 b_i,
 \ell_i,
-\Delta
+\Delta_i
 \right).
 $$
 
@@ -1445,9 +1513,9 @@ $$
 $$
 \pi(z_d)
 =
-\Pr_{X\sim Q_\Delta}
+\Pr_{X\sim Q_{\boldsymbol{\Delta}}}
 \left[
-F_{\Delta\mid\mathcal C}^{(d)}(X)=z_d
+F_{\mathrm{event}}^{(d)}(X)=z_d
 \right].
 $$
 
@@ -1464,7 +1532,7 @@ shadow-only diagnostic
 ```
 
 `replace` 只可表示 frozen L2 contract 下的 named subcomponent intervention，
-不可表示重寫或默默取代 $F_{\Delta\mid\mathcal C}$。不能只說「GCTM 與 online
+不可表示重寫或默默取代 $F_{\mathrm{event}}$。不能只說「GCTM 與 online
 對接」，卻不指出插入位置。
 
 ---
@@ -1475,9 +1543,13 @@ shadow-only diagnostic
 
 $$
 \boxed{
-F_{\Delta\mid\mathcal C}
+F_{\mathrm{event}}
 =
-\text{deterministic event-level hybrid operator}
+A_{\mathrm{claim}}
+\circ
+\prod_{j\in\mathcal U_{\mathrm{event}}}P_j
+=
+\text{deterministic full-event hybrid operator}
 }
 $$
 
@@ -1521,17 +1593,23 @@ $$
 若無法落回：
 
 $$
-R
+\left\{
+R_j
 \to
-M_{\mathrm{pre}}
+M_{\mathrm{pre},j}
 \to
-G_\Delta
+G_{\Delta_i}
 \to
-M_{\mathrm{post}}
+M_{\mathrm{post},j}
 \to
-S_{\mathrm{rank}}
+S_{\mathrm{rank},j}
 \to
-D_{\mathrm{claim/commit}},
+\operatorname{proposal}_j
+\right\}_{j\in\mathcal U_{\mathrm{event}}}
+\to
+A_{\mathrm{claim}}
+\to
+\mathrm{commit},
 $$
 
 則 GCTM 目前只是一個可能適用 online 的上層模型，尚未形成對 production online object 的實際對應。
