@@ -1,0 +1,27 @@
+{
+  "schema": "h0_gctm_guarantee_registration_v1",
+  "record_id": "fixture_h0_gctm_candidate_pair_identity_v1",
+  "record_scope": "fixture_only",
+  "record_state": "candidate-source",
+  "consumer": {
+    "consumer_id": "fixture_gctm_identity_registration",
+    "maximum_claim_layer": "gctm_model_specification",
+    "required_guarantee_ids": []
+  },
+  "candidate_sources": [
+    {
+      "source_id": "fixture_h0_pair_runtime_instance_key",
+      "consumer_object": "event_runtime_instance_identity",
+      "stream": "pair_record",
+      "key_fields": [
+        "seq",
+        "frame",
+        "cand_slot",
+        "cand_instance_uid",
+        "lost_slot",
+        "lost_instance_uid"
+      ],
+      "causal_availability": "online"
+    }
+  ]
+}
