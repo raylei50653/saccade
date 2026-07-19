@@ -83,11 +83,18 @@ def test_any_other_runtime_path_blocks_admission() -> None:
     assert violations == ["src/saccade/perception/eval/consumer_a_bridge_fidelity.py"]
 
 
-def test_admitted_set_is_exactly_the_declared_five() -> None:
+def test_admitted_set_is_exactly_the_declared_ten() -> None:
+    # Amendment 6 §A6.2 five trace paths plus the Amendment 6 Correction 1
+    # frozen-CUDA-substrate extension (#214/#216, #217).
     assert ADMITTED_RUNTIME_PATHS == {
         "include/tracking/tracker_gpu.hpp",
         "src/tracking/tracker_gpu.cu",
         "src/tracking/tracker_gpu_python.cpp",
         "src/saccade/perception/tracking/tracker_gpu.py",
         "src/saccade/perception/eval/stages.py",
+        "CMakeLists.txt",
+        "pyproject.toml",
+        "uv.lock",
+        "src/perception/preprocessor.cpp",
+        "DEVELOPMENT.md",
     }

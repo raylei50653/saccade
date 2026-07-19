@@ -1857,3 +1857,79 @@ universe: it may add historical codecs or archive portability repairs without
 invalidating a prospective execution seal. Any change to an execution-bound
 controller, child, execution schema, confinement path, runtime packet verifier,
 or controller preflight verifier still requires a fresh I -> F -> S sequence.
+
+## Amendment 6 Correction 1 — admitted runtime surface after the frozen CUDA substrate (2026-07-19; pre-seal)
+
+### A6.C1.1 The defect
+
+Amendment 6 froze `h0_admitted_runtime_paths_v1` at exactly the five H0 trace
+paths. The substrate-reproducibility repair (#214, landed through PR #216)
+then had to change the build/dependency manifests to bind the build CUDA
+toolchain to the frozen venv — `CMakeLists.txt`, `pyproject.toml`, `uv.lock`,
+and `src/perception/preprocessor.cpp` (removal of the NPP includes) — and #217
+edited the root documentation file `DEVELOPMENT.md`, which the fail-closed
+classifier deliberately classifies `runtime_build_consumable` because root
+paths match no non-runtime rule. Both landings were accepted on `main`, but no
+admitted-surface extension accompanied them. As a result every descendant of
+current `main` assembles `complete = false` (`projection not admitted`) and no
+valid `F` can exist — the same defect class as §A6.1: the admission rule, not
+the provenance record, is what must be repaired. The first head this blocked
+was the #209 qualification candidate
+`2702c932ef0c5192d05166de0a62642e2708e742` (qualified, then found unsealable
+at seal assembly on 2026-07-19).
+
+### A6.C1.2 Correction
+
+`h0_admitted_runtime_paths_v1` is extended append-only with exactly five
+members:
+
+```text
+CMakeLists.txt
+pyproject.toml
+uv.lock
+src/perception/preprocessor.cpp
+DEVELOPMENT.md
+```
+
+Admitted content scope:
+
+- `CMakeLists.txt`, `pyproject.toml`, `uv.lock`,
+  `src/perception/preprocessor.cpp`: exactly the frozen-CUDA-substrate changes
+  landed through PR #216 and its follow-ups on `main` (venv-bound CUDA
+  toolchain resolution, the `nvidia-cuda-nvcc-cu13` dependency pin, supported
+  CUDA architecture configuration, and the NPP include removal), plus future
+  build/dependency-manifest changes that land through ordinary reviewed PRs on
+  `main`. These paths remain `runtime_build_consumable`: they are recorded
+  with before/after content SHA-256 in the projection, and they never admit a
+  policy input, comparison, branch predicate, ordering, launch geometry, or
+  policy-state change.
+- `DEVELOPMENT.md`: documentation only. It must not be consumed by the
+  production build or the runtime import graph; introducing such an edge is a
+  classifier-breaking change exactly as in §A6.2 for `tests/` and `scripts/`.
+
+The classifier `h0_projection_path_class_v1` itself is unchanged, including
+its fail-closed default. The assembler and the independent verifier transcribe
+the extended set in the same commit; the assembler byte-hash change this
+correction causes is expected and, per §A6.2, returns the work to pre-seal
+engineering — which is where it already is (#209, restart candidate).
+
+### A6.C1.3 Qualification gate extension
+
+The non-authoritative qualification harness gains a final required step
+`preseal_freeze_assembly`: it assembles the v3 freeze artifact in-process at
+the resolved qualification head (no file is written) and passes only when the
+assembly reports `complete = true` with an empty problem list and binds the
+same head. This makes "qualified but unsealable" mechanically impossible for
+future candidates: a head whose freeze assembly cannot complete now fails
+qualification instead of failing at Stage D. The acceptance-matrix
+`required_steps` list and its checker are extended with the same literal in
+the same commit.
+
+### A6.C1.4 State effect
+
+This correction alters no historical packet, freeze artifact, I/F/S relation,
+terminal, or owner event. Historical v3 artifacts verify unchanged: their
+projections contain no path from the extension, so their recorded admission
+verdicts are invariant under the extended set. No `I` is selected, no `F` or
+`S` is created, and no execution authority is granted. H0 remains pre-seal
+engineering under Issue #209.

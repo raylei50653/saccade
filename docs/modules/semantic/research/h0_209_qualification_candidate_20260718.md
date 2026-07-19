@@ -107,3 +107,36 @@ qualification_passed                          → READY_FOR_SEAL
 qualification_failed_first_bounded_blocker    → ONE_CORRECTION_BATCH_ALLOWED
 qualification_failed_after_correction         → REPAIR_RESTART_REQUIRED
 ```
+
+## 7. Restart candidate (2026-07-19, append-only)
+
+The first candidate `R = 2702c932ef0c5192d05166de0a62642e2708e742` passed
+controlled-host qualification (run 29681971267, report SHA-256
+`8b4b46c33c41f70a7b604f5a3a5c3f8068c1b06e9cfd3ac5402770d56806c98c`) but was
+found **unsealable** at seal assembly: the pre-seal freeze assembles
+`complete = false` because the #214/#216 frozen-CUDA-substrate paths and the
+#217 root `DEVELOPMENT.md` edit fall outside the Amendment 6 §A6.2 frozen
+admitted runtime surface. Its single Stage-B correction batch was already
+spent, so per §4 and the declaration's repair gates the owner declared a
+repair restart. That candidate SHA is void as an authority identity and must
+not become `I`.
+
+This section declares the restart Repair PR as the new sole candidate. Its
+scope is exactly the Amendment 6 Correction 1 batch recorded in the
+declaration:
+
+- extend `h0_admitted_runtime_paths_v1` append-only with `CMakeLists.txt`,
+  `pyproject.toml`, `uv.lock`, `src/perception/preprocessor.cpp`,
+  `DEVELOPMENT.md` (assembler and independent verifier in the same commit);
+- add the required qualification step `preseal_freeze_assembly` (in-process
+  v3 assembly at the resolved head must report `complete = true`) to the
+  harness, the acceptance matrix, and its checker;
+- this restart declaration.
+
+All prior sections of this document continue to bind the new candidate, with
+`R` re-read as the exact final head of the restart Repair PR and the required
+step list extended with `preseal_freeze_assembly`. The new `R` is recorded in
+Issue #209 once the restart PR head is stable and its host-independent CI is
+green. Because the restart PR is cut from current `main`, the eventual
+`I → F → S` chain is fast-forward-reachable from `main`, restoring the
+preferred Stage-D landing.

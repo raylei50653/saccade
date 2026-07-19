@@ -48,7 +48,8 @@
       "extension_load",
       "t1_verdict_semantics",
       "runner_launch_preflight",
-      "failure_envelope_serialization"
+      "failure_envelope_serialization",
+      "preseal_freeze_assembly"
     ]
   },
   "schema": "h0_repair_acceptance_matrix_v1"

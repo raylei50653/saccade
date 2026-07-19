@@ -87,7 +87,9 @@ GOVERNANCE_ALLOWLIST = (
 GOVERNANCE_RENAME_SOURCE = "docs/modules/semantic/research/runtime_bridge_decision_path_identifiability_results_20260713.md"
 GOVERNANCE_RENAME_DESTINATION = "docs/modules/semantic/research/closed/runtime_bridge_decision_path_identifiability_results_20260713.md"
 
-# Amendment 6 §A6.2 — frozen admitted runtime surface.
+# Amendment 6 §A6.2 — frozen admitted runtime surface, extended append-only by
+# Amendment 6 Correction 1 (frozen CUDA substrate #214/#216 and the root
+# documentation file #217).
 ADMITTED_RUNTIME_PATHS = frozenset(
     {
         "include/tracking/tracker_gpu.hpp",
@@ -95,6 +97,11 @@ ADMITTED_RUNTIME_PATHS = frozenset(
         "src/tracking/tracker_gpu_python.cpp",
         "src/saccade/perception/tracking/tracker_gpu.py",
         "src/saccade/perception/eval/stages.py",
+        "CMakeLists.txt",
+        "pyproject.toml",
+        "uv.lock",
+        "src/perception/preprocessor.cpp",
+        "DEVELOPMENT.md",
     }
 )
 

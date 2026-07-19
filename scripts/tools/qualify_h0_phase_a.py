@@ -596,6 +596,22 @@ def run_qualification(
         if failure_probe["failure"]["stage"] != "checkpoint_T1":
             raise QualificationError("synthetic failure envelope stage drift")
         steps.append({"name": "failure_envelope_serialization", "state": "passed"})
+        import build_h0_preseal_freeze as freezer
+
+        artifact, problems = freezer.build_artifact(
+            ["qualify_h0_phase_a", "--preseal-freeze-dry-run"]
+        )
+        if problems or artifact["complete"] is not True:
+            raise QualificationError(
+                "pre-seal freeze assembly incomplete: "
+                + ("; ".join(problems) or "complete is not true")
+            )
+        if (
+            artifact["instrumentation_head"]
+            != repository_identity["repository_head_sha"]
+        ):
+            raise QualificationError("pre-seal freeze assembly binds a different head")
+        steps.append({"name": "preseal_freeze_assembly", "state": "passed"})
     except BaseException as exc:
         report = {
             "authority": "non_authoritative",

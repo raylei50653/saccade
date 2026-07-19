@@ -48,6 +48,7 @@ QUALIFICATION_STEPS = (
     "t1_verdict_semantics",
     "runner_launch_preflight",
     "failure_envelope_serialization",
+    "preseal_freeze_assembly",
 )
 
 

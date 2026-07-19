@@ -282,6 +282,11 @@ ADMITTED_RUNTIME_PATHS = {
     "src/tracking/tracker_gpu_python.cpp",
     "src/saccade/perception/tracking/tracker_gpu.py",
     "src/saccade/perception/eval/stages.py",
+    "CMakeLists.txt",
+    "pyproject.toml",
+    "uv.lock",
+    "src/perception/preprocessor.cpp",
+    "DEVELOPMENT.md",
 }
 
 
