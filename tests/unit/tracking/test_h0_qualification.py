@@ -74,6 +74,33 @@ def test_qualification_workspace_refuses_authoritative_or_ambiguous_paths(
     assert workspace.is_dir()
 
 
+def test_build_identity_matches_project_enabled_languages(tmp_path: Path) -> None:
+    build = tmp_path / "build"
+    build.mkdir()
+    suffix = qualification.sysconfig.get_config_var("EXT_SUFFIX")
+    assert isinstance(suffix, str) and suffix
+    extension = build / f"saccade_tracking_ext{suffix}"
+    plugin = build / "libsaccade_scan_plugin.so"
+    cxx = tmp_path / "cxx"
+    cuda = tmp_path / "nvcc"
+    for path in (extension, plugin, cxx, cuda):
+        path.write_bytes(b"fixture")
+    (build / "CMakeCache.txt").write_text(
+        "\n".join(
+            (
+                f"CMAKE_CXX_COMPILER:FILEPATH={cxx}",
+                f"CMAKE_CUDA_COMPILER:FILEPATH={cuda}",
+            )
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    identity = qualification._build_identity(build, build, Path(sys.executable))
+
+    assert set(identity["compilers"]) == {"cxx", "cuda"}
+
+
 def test_qualification_failure_probe_is_truthful_but_non_authoritative() -> None:
     probe = qualification._failure_probe()
     assert probe["qualification_only"] is True

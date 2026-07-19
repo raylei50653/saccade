@@ -108,6 +108,7 @@ Manifest: `docs/ownership/doc_migration_manifest.yaml`
 - `docs/modules/semantic/research/existing_online_object_analysis_for_gctm_alignment_20260718.md`
 - `docs/modules/semantic/research/gctm_b1_o1_task_objectives_and_semantics_20260716.md`
 - `docs/modules/semantic/research/gt_support_morphology_step0_20260711.md`
+- `docs/modules/semantic/research/h0_209_qualification_candidate_20260718.md`
 - `docs/modules/semantic/research/h0_gctm_consumer_compatibility_requirements_20260718.md`
 - `docs/modules/storage/README.md`
 - `docs/modules/storage/TODO.md`
@@ -317,6 +318,6 @@ Excluded from the active index and default search view.
 
 ## Inventory summary
 
-- documents: 267
-- active: 212
+- documents: 268
+- active: 213
 - grayed out: 55

@@ -332,9 +332,12 @@ def _build_identity(root: Path, build: Path, python: Path) -> dict[str, Any]:
     plugin = build / "libsaccade_scan_plugin.so"
     cache = build / "CMakeCache.txt"
     cache_values = _cmake_cache(cache)
-    compiler_keys = ("CMAKE_C_COMPILER", "CMAKE_CXX_COMPILER", "CMAKE_CUDA_COMPILER")
+    # The project declares `project(Saccade CXX CUDA)` and has no C sources,
+    # so CMake does not populate CMAKE_C_COMPILER. Match the authoritative
+    # controller's C++/CUDA build identity requirements.
+    compiler_keys = ("CMAKE_CXX_COMPILER", "CMAKE_CUDA_COMPILER")
     if any(not cache_values.get(key) for key in compiler_keys):
-        raise QualificationError("qualification CMake cache lacks C/C++/CUDA compilers")
+        raise QualificationError("qualification CMake cache lacks C++/CUDA compilers")
     compilers = {
         key.removeprefix("CMAKE_")
         .removesuffix("_COMPILER")
