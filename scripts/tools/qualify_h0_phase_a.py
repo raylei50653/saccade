@@ -37,6 +37,7 @@ STEP_NAMES = (
     "t1_verdict_semantics",
     "runner_launch_preflight",
     "failure_envelope_serialization",
+    "preseal_freeze_assembly",
 )
 
 
@@ -422,6 +423,35 @@ def _step(name: str, action: Callable[[], None], steps: list[dict[str, str]]) ->
     steps.append({"name": name, "state": "passed"})
 
 
+def _check_preseal_sealability(head: str | None) -> None:
+    """Amendment 6 Correction 1 — static sealability gate.
+
+    Calls only the assembler's head-static half: no controller-input
+    derivation, so no research sequence, model, engine, GPU probe, or
+    runtime-library inventory is touched and no file is written.
+    """
+    import build_h0_preseal_freeze as freezer
+
+    result = freezer.check_preseal_sealability(
+        ["qualify_h0_phase_a", "--preseal-static-sealability"]
+    )
+    if result["problems"] or result["sealable"] is not True:
+        raise QualificationError(
+            "pre-seal static sealability failed: "
+            + ("; ".join(result["problems"]) or "sealable is not true")
+        )
+    if head is None or result["instrumentation_head"] != head:
+        raise QualificationError("pre-seal static sealability binds a different head")
+
+
+def _require_canonical_steps(steps: list[dict[str, str]]) -> None:
+    """A passing qualification must have exactly the canonical step sequence."""
+    if [step["name"] for step in steps] != list(STEP_NAMES) or any(
+        step["state"] != "passed" for step in steps
+    ):
+        raise QualificationError("qualification step sequence drift")
+
+
 def run_qualification(
     root: Path,
     workspace: Path,
@@ -596,22 +626,9 @@ def run_qualification(
         if failure_probe["failure"]["stage"] != "checkpoint_T1":
             raise QualificationError("synthetic failure envelope stage drift")
         steps.append({"name": "failure_envelope_serialization", "state": "passed"})
-        import build_h0_preseal_freeze as freezer
-
-        artifact, problems = freezer.build_artifact(
-            ["qualify_h0_phase_a", "--preseal-freeze-dry-run"]
-        )
-        if problems or artifact["complete"] is not True:
-            raise QualificationError(
-                "pre-seal freeze assembly incomplete: "
-                + ("; ".join(problems) or "complete is not true")
-            )
-        if (
-            artifact["instrumentation_head"]
-            != repository_identity["repository_head_sha"]
-        ):
-            raise QualificationError("pre-seal freeze assembly binds a different head")
+        _check_preseal_sealability(repository_identity["repository_head_sha"])
         steps.append({"name": "preseal_freeze_assembly", "state": "passed"})
+        _require_canonical_steps(steps)
     except BaseException as exc:
         report = {
             "authority": "non_authoritative",

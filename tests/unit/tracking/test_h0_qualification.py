@@ -234,3 +234,97 @@ def test_archive_corpus_discovers_every_committed_phase_a_root() -> None:
         "h0_phase_a_42121c064cd1a3c4202e114cc6f4d8866a9e6af0",
         "h0_phase_a_6ed30243554edfc898de32916298aa863673fced",
     ]
+
+
+def test_preseal_sealability_gate_rejects_incomplete(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    head = "a" * 40
+
+    def unsealable(command_line: list[str]) -> dict[str, object]:
+        return {
+            "schema": "h0_preseal_static_sealability_v1",
+            "instrumentation_head": head,
+            "instrumentation_tree": "b" * 40,
+            "projection_admitted": False,
+            "sealable": False,
+            "problems": ["projection not admitted; runtime paths outside …"],
+        }
+
+    monkeypatch.setattr(freezer, "check_preseal_sealability", unsealable)
+    with pytest.raises(
+        qualification.QualificationError, match="static sealability failed"
+    ):
+        qualification._check_preseal_sealability(head)
+
+    def contradictory(command_line: list[str]) -> dict[str, object]:
+        # problems non-empty must fail even if sealable claims true.
+        return {
+            "schema": "h0_preseal_static_sealability_v1",
+            "instrumentation_head": head,
+            "instrumentation_tree": "b" * 40,
+            "projection_admitted": True,
+            "sealable": True,
+            "problems": ["policy_base_tree mismatch against §2"],
+        }
+
+    monkeypatch.setattr(freezer, "check_preseal_sealability", contradictory)
+    with pytest.raises(
+        qualification.QualificationError, match="static sealability failed"
+    ):
+        qualification._check_preseal_sealability(head)
+
+
+def test_preseal_sealability_gate_rejects_head_mismatch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def sealable_elsewhere(command_line: list[str]) -> dict[str, object]:
+        return {
+            "schema": "h0_preseal_static_sealability_v1",
+            "instrumentation_head": "c" * 40,
+            "instrumentation_tree": "b" * 40,
+            "projection_admitted": True,
+            "sealable": True,
+            "problems": [],
+        }
+
+    monkeypatch.setattr(freezer, "check_preseal_sealability", sealable_elsewhere)
+    with pytest.raises(qualification.QualificationError, match="different head"):
+        qualification._check_preseal_sealability("a" * 40)
+    with pytest.raises(qualification.QualificationError, match="different head"):
+        qualification._check_preseal_sealability(None)
+
+
+def test_passing_report_requires_canonical_step_sequence() -> None:
+    canonical = [{"name": name, "state": "passed"} for name in qualification.STEP_NAMES]
+    qualification._require_canonical_steps(canonical)
+
+    truncated = canonical[:-1]
+    with pytest.raises(qualification.QualificationError, match="step sequence drift"):
+        qualification._require_canonical_steps(truncated)
+
+    reordered = [canonical[1], canonical[0], *canonical[2:]]
+    with pytest.raises(qualification.QualificationError, match="step sequence drift"):
+        qualification._require_canonical_steps(reordered)
+
+    renamed = [dict(step) for step in canonical]
+    renamed[-1]["name"] = "freeze_assembly"
+    with pytest.raises(qualification.QualificationError, match="step sequence drift"):
+        qualification._require_canonical_steps(renamed)
+
+    failed_state = [dict(step) for step in canonical]
+    failed_state[3]["state"] = "failed"
+    with pytest.raises(qualification.QualificationError, match="step sequence drift"):
+        qualification._require_canonical_steps(failed_state)
+
+
+def test_canonical_steps_close_over_matrix_required_steps() -> None:
+    canonical = list(qualification.STEP_NAMES)
+    required = matrix.load_matrix()["qualification"]["required_steps"]
+    # Every matrix-required step is canonical, in the same order, and the
+    # sealability gate is both required and terminal.
+    positions = [canonical.index(name) for name in required]
+    assert positions == sorted(positions)
+    assert required[-1] == "preseal_freeze_assembly"
+    assert canonical[-1] == "preseal_freeze_assembly"
+    assert tuple(required) == matrix.QUALIFICATION_STEPS

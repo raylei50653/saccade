@@ -282,11 +282,20 @@ ADMITTED_RUNTIME_PATHS = {
     "src/tracking/tracker_gpu_python.cpp",
     "src/saccade/perception/tracking/tracker_gpu.py",
     "src/saccade/perception/eval/stages.py",
-    "CMakeLists.txt",
-    "pyproject.toml",
-    "uv.lock",
-    "src/perception/preprocessor.cpp",
-    "DEVELOPMENT.md",
+}
+# Amendment 6 Correction 1 — content-pinned admissions (exact after-blob
+# SHA-256 at the instrumentation head), transcribed from the assembler.
+ADMITTED_RUNTIME_BLOBS = {
+    "CMakeLists.txt": (
+        "3d5a576d632109255c2f0537fbd9b302b66d69a61ee90759301ae4da3960890e"
+    ),
+    "pyproject.toml": (
+        "85ec43e498adfdf0d433b6a8a621055a5b5232999ec8366e2616125d2cc8627b"
+    ),
+    "uv.lock": ("c45f37916351fd246eb54bb8bac7fd28df7816180b551c50574c189d85687923"),
+    "src/perception/preprocessor.cpp": (
+        "11aa959b94efc49e4bb4544beb1462757c229c2f5175980540636f61c1a98313"
+    ),
 }
 
 
@@ -385,6 +394,9 @@ def _blob_slot(root: Path, rev: str, path: str) -> dict[str, Any]:
 
 
 def _classify(path: str) -> str:
+    if path == "DEVELOPMENT.md":
+        # Amendment 6 Correction 1 — documentation-only root-file exception.
+        return "non_runtime_recorded"
     if path.startswith(("src/", "include/", "configs/", "cmake/")) or path in {
         "pyproject.toml",
         "uv.lock",
@@ -1183,10 +1195,16 @@ def _verify_v2_retained(value: Mapping[str, Any], root: Path, head: str) -> None
         ),
         "destination_blob_after": _blob_slot(root, head, RENAME_DESTINATION),
     }
+    after_sha = {entry["path"]: entry["after"]["sha256"] for entry in expected_paths}
     admitted = not [
         path
         for path, kind in classes.items()
-        if kind == "runtime_build_consumable" and path not in ADMITTED_RUNTIME_PATHS
+        if kind == "runtime_build_consumable"
+        and path not in ADMITTED_RUNTIME_PATHS
+        and (
+            path not in ADMITTED_RUNTIME_BLOBS
+            or ADMITTED_RUNTIME_BLOBS[path] != after_sha.get(path)
+        )
     ]
     if projection != {
         "classifier": "h0_projection_path_class_v1",

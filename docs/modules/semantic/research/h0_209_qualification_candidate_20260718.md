@@ -125,12 +125,21 @@ This section declares the restart Repair PR as the new sole candidate. Its
 scope is exactly the Amendment 6 Correction 1 batch recorded in the
 declaration:
 
-- extend `h0_admitted_runtime_paths_v1` append-only with `CMakeLists.txt`,
-  `pyproject.toml`, `uv.lock`, `src/perception/preprocessor.cpp`,
-  `DEVELOPMENT.md` (assembler and independent verifier in the same commit);
-- add the required qualification step `preseal_freeze_assembly` (in-process
-  v3 assembly at the resolved head must report `complete = true`) to the
-  harness, the acceptance matrix, and its checker;
+- keep `h0_admitted_runtime_paths_v1` at the five §A6.2 members and add the
+  content-pinned table `h0_admitted_runtime_blobs_v1` (exact after-blob
+  SHA-256 for `CMakeLists.txt`, `pyproject.toml`, `uv.lock`,
+  `src/perception/preprocessor.cpp`; any further change to these files
+  requires a fresh admission correction), assembler and independent verifier
+  in the same commit;
+- classify `DEVELOPMENT.md` as the sole explicit `non_runtime_recorded`
+  root-file exception (documentation only, no build/runtime-import edge);
+- split the assembler into a head-static sealability half and the
+  controller-input/artifact half, and add the required qualification step
+  `preseal_freeze_assembly` that calls only the static half (`sealable =
+  true`, empty problems, bound to the resolved head; no research input, GPU,
+  or inventory access, and no file written) to the harness, the acceptance
+  matrix, and its checker, with the passing report required to carry exactly
+  the canonical step sequence;
 - this restart declaration.
 
 All prior sections of this document continue to bind the new candidate, with

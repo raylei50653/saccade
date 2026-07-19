@@ -87,9 +87,7 @@ GOVERNANCE_ALLOWLIST = (
 GOVERNANCE_RENAME_SOURCE = "docs/modules/semantic/research/runtime_bridge_decision_path_identifiability_results_20260713.md"
 GOVERNANCE_RENAME_DESTINATION = "docs/modules/semantic/research/closed/runtime_bridge_decision_path_identifiability_results_20260713.md"
 
-# Amendment 6 §A6.2 — frozen admitted runtime surface, extended append-only by
-# Amendment 6 Correction 1 (frozen CUDA substrate #214/#216 and the root
-# documentation file #217).
+# Amendment 6 §A6.2 — frozen admitted runtime surface.
 ADMITTED_RUNTIME_PATHS = frozenset(
     {
         "include/tracking/tracker_gpu.hpp",
@@ -97,13 +95,26 @@ ADMITTED_RUNTIME_PATHS = frozenset(
         "src/tracking/tracker_gpu_python.cpp",
         "src/saccade/perception/tracking/tracker_gpu.py",
         "src/saccade/perception/eval/stages.py",
-        "CMakeLists.txt",
-        "pyproject.toml",
-        "uv.lock",
-        "src/perception/preprocessor.cpp",
-        "DEVELOPMENT.md",
     }
 )
+
+# Amendment 6 Correction 1 — content-pinned admissions for the frozen CUDA
+# substrate (#214/#216).  A path here is admitted only while its after-blob
+# SHA-256 at the instrumentation head equals the pinned value; any further
+# change to these files requires a fresh append-only admission extension, not
+# an ordinary review.
+ADMITTED_RUNTIME_BLOBS = {
+    "CMakeLists.txt": (
+        "3d5a576d632109255c2f0537fbd9b302b66d69a61ee90759301ae4da3960890e"
+    ),
+    "pyproject.toml": (
+        "85ec43e498adfdf0d433b6a8a621055a5b5232999ec8366e2616125d2cc8627b"
+    ),
+    "uv.lock": ("c45f37916351fd246eb54bb8bac7fd28df7816180b551c50574c189d85687923"),
+    "src/perception/preprocessor.cpp": (
+        "11aa959b94efc49e4bb4544beb1462757c229c2f5175980540636f61c1a98313"
+    ),
+}
 
 RUNTIME_PREFIXES = ("src/", "include/", "configs/", "cmake/")
 ROOT_BUILD_MANIFESTS = frozenset(
@@ -172,8 +183,12 @@ SEAL_RELEVANT_PATHS = tuple(
 def classify_path(path: str) -> str:
     """Amendment 6 ``h0_projection_path_class_v1`` — fail-closed.
 
-    Anything not explicitly non-runtime is runtime/build-consumable.
+    Anything not explicitly non-runtime is runtime/build-consumable.  The sole
+    root-file exception is ``DEVELOPMENT.md`` (Amendment 6 Correction 1):
+    documentation only, never a build or runtime-import input.
     """
+    if path == "DEVELOPMENT.md":
+        return "non_runtime_recorded"
     if path.startswith(RUNTIME_PREFIXES) or path in ROOT_BUILD_MANIFESTS:
         return "runtime_build_consumable"
     if path.startswith(NON_RUNTIME_PREFIXES):
@@ -181,12 +196,24 @@ def classify_path(path: str) -> str:
     return "runtime_build_consumable"
 
 
-def admission_verdict(classified: dict[str, str]) -> tuple[bool, list[str]]:
-    """Projection admitted iff every runtime path is in the admitted set."""
+def admission_verdict(
+    classified: dict[str, str], after_sha256: dict[str, str | None]
+) -> tuple[bool, list[str]]:
+    """Projection admitted iff every runtime path is admitted.
+
+    A runtime path is admitted either as a frozen §A6.2 member or through an
+    Amendment 6 Correction 1 content pin: its after-blob SHA-256 at the
+    instrumentation head must equal the pinned value exactly.
+    """
     violations = sorted(
         path
         for path, cls in classified.items()
-        if cls == "runtime_build_consumable" and path not in ADMITTED_RUNTIME_PATHS
+        if cls == "runtime_build_consumable"
+        and path not in ADMITTED_RUNTIME_PATHS
+        and (
+            path not in ADMITTED_RUNTIME_BLOBS
+            or ADMITTED_RUNTIME_BLOBS[path] != after_sha256.get(path)
+        )
     )
     return (not violations, violations)
 
@@ -526,9 +553,16 @@ def mutation_admission(
     return results, all_pass
 
 
-def build_artifact(
-    command_line: list[str], *, controller_input: dict[str, Any] | None = None
+def collect_static_evidence(
+    command_line: list[str],
 ) -> tuple[dict[str, Any], list[str]]:
+    """Head-static sealability evidence: no research input, GPU, model, engine,
+    sequence-inventory, or runtime-library enumeration is performed here.
+
+    Everything that requires the execution substrate lives in
+    ``_derive_controller_input`` and is reached only through
+    ``build_artifact`` at actual seal assembly (Amendment 6 Correction 1).
+    """
     problems: list[str] = []
 
     if _git("status", "--porcelain"):
@@ -565,13 +599,6 @@ def build_artifact(
     ).splitlines()
 
     classified = {path: classify_path(path) for path in projection_paths}
-    admitted, violations = admission_verdict(classified)
-    if not admitted:
-        problems.append(
-            "projection not admitted; runtime paths outside h0_admitted_runtime_paths_v1: "
-            + ", ".join(violations)
-        )
-
     path_records = [
         {
             "path": path,
@@ -581,6 +608,15 @@ def build_artifact(
         }
         for path in sorted(projection_paths)
     ]
+    admitted, violations = admission_verdict(
+        classified,
+        {record["path"]: record["after"]["sha256"] for record in path_records},
+    )
+    if not admitted:
+        problems.append(
+            "projection not admitted; runtime paths outside h0_admitted_runtime_paths_v1: "
+            + ", ".join(violations)
+        )
 
     excluded_records = [
         {
@@ -662,6 +698,67 @@ def build_artifact(
             "working-tree bytes differ from the head blobs for seal-relevant "
             "inputs: " + ", ".join(drifted)
         )
+
+    evidence = {
+        "head": head,
+        "tree_id": tree_id,
+        "tree_list": tree_list,
+        "seal_inputs": seal_inputs,
+        "bindings": bindings,
+        "full_diff": full_diff,
+        "projection_diff": projection_diff,
+        "path_records": path_records,
+        "excluded_records": excluded_records,
+        "rename_record": rename_record,
+        "admitted": admitted,
+        "coverage": coverage,
+        "mutation_results": mutation_results,
+        "mutations_pass": mutations_pass,
+        "preset_sha": preset_sha,
+        "resolved_sha": resolved_sha,
+    }
+    return evidence, problems
+
+
+def check_preseal_sealability(command_line: list[str]) -> dict[str, Any]:
+    """The static sealability gate for non-authoritative qualification.
+
+    Reads only git history, head blobs, and the working tree of the checked-out
+    head; never derives the A7/RC1 controller input, so no research sequence,
+    model, engine, GPU, or runtime-library inventory is touched and no file is
+    written.
+    """
+    evidence, problems = collect_static_evidence(command_line)
+    return {
+        "schema": "h0_preseal_static_sealability_v1",
+        "instrumentation_head": evidence["head"],
+        "instrumentation_tree": evidence["tree_id"],
+        "projection_admitted": evidence["admitted"],
+        "sealable": not problems,
+        "problems": problems,
+    }
+
+
+def build_artifact(
+    command_line: list[str], *, controller_input: dict[str, Any] | None = None
+) -> tuple[dict[str, Any], list[str]]:
+    evidence, problems = collect_static_evidence(command_line)
+    head = evidence["head"]
+    tree_id = evidence["tree_id"]
+    tree_list = evidence["tree_list"]
+    seal_inputs = evidence["seal_inputs"]
+    bindings = evidence["bindings"]
+    full_diff = evidence["full_diff"]
+    projection_diff = evidence["projection_diff"]
+    path_records = evidence["path_records"]
+    excluded_records = evidence["excluded_records"]
+    rename_record = evidence["rename_record"]
+    admitted = evidence["admitted"]
+    coverage = evidence["coverage"]
+    mutation_results = evidence["mutation_results"]
+    mutations_pass = evidence["mutations_pass"]
+    preset_sha = evidence["preset_sha"]
+    resolved_sha = evidence["resolved_sha"]
 
     if controller_input is None:
         try:

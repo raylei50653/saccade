@@ -1880,56 +1880,80 @@ at seal assembly on 2026-07-19).
 
 ### A6.C1.2 Correction
 
-`h0_admitted_runtime_paths_v1` is extended append-only with exactly five
-members:
+The frozen membership set `h0_admitted_runtime_paths_v1` is **unchanged** —
+it remains exactly the five §A6.2 trace paths. The correction adds two
+narrower mechanisms instead of path exemptions:
+
+**(a) Content-pinned admissions.** A second, separately transcribed table
+`h0_admitted_runtime_blobs_v1` admits a `runtime_build_consumable` path only
+while its after-blob SHA-256 at the instrumentation head equals the pinned
+value exactly:
 
 ```text
-CMakeLists.txt
-pyproject.toml
-uv.lock
-src/perception/preprocessor.cpp
-DEVELOPMENT.md
+CMakeLists.txt                    3d5a576d632109255c2f0537fbd9b302b66d69a61ee90759301ae4da3960890e
+pyproject.toml                    85ec43e498adfdf0d433b6a8a621055a5b5232999ec8366e2616125d2cc8627b
+uv.lock                           c45f37916351fd246eb54bb8bac7fd28df7816180b551c50574c189d85687923
+src/perception/preprocessor.cpp   11aa959b94efc49e4bb4544beb1462757c229c2f5175980540636f61c1a98313
 ```
 
-Admitted content scope:
+These are exactly the frozen-CUDA-substrate contents landed through PR #216
+and its follow-ups (venv-bound CUDA toolchain resolution, the
+`nvidia-cuda-nvcc-cu13` dependency pin, supported CUDA architecture
+configuration, the NPP include removal). Any further change to any of these
+files changes its after-blob SHA-256, makes the projection **not admitted**
+again, and therefore requires a fresh append-only admission correction to
+this declaration with new pinned values — an ordinary reviewed PR never
+substitutes for the frozen projection boundary. The paths remain
+`runtime_build_consumable` and remain recorded with before/after content
+SHA-256; nothing here admits a policy input, comparison, branch predicate,
+ordering, launch geometry, or policy-state change.
 
-- `CMakeLists.txt`, `pyproject.toml`, `uv.lock`,
-  `src/perception/preprocessor.cpp`: exactly the frozen-CUDA-substrate changes
-  landed through PR #216 and its follow-ups on `main` (venv-bound CUDA
-  toolchain resolution, the `nvidia-cuda-nvcc-cu13` dependency pin, supported
-  CUDA architecture configuration, and the NPP include removal), plus future
-  build/dependency-manifest changes that land through ordinary reviewed PRs on
-  `main`. These paths remain `runtime_build_consumable`: they are recorded
-  with before/after content SHA-256 in the projection, and they never admit a
-  policy input, comparison, branch predicate, ordering, launch geometry, or
-  policy-state change.
-- `DEVELOPMENT.md`: documentation only. It must not be consumed by the
-  production build or the runtime import graph; introducing such an edge is a
-  classifier-breaking change exactly as in §A6.2 for `tests/` and `scripts/`.
+**(b) Root documentation classification.** `DEVELOPMENT.md` is documentation
+only and becomes the sole explicit root-file exception inside
+`h0_projection_path_class_v1`: it classifies `non_runtime_recorded` (recorded
+with before/after content SHA-256, never excluded). It must not be consumed
+by the production build or the runtime import graph; introducing such an edge
+is a classifier-breaking change exactly as in §A6.2 for `tests/` and
+`scripts/`. The classifier's fail-closed default for every other unmatched
+path is unchanged.
 
-The classifier `h0_projection_path_class_v1` itself is unchanged, including
-its fail-closed default. The assembler and the independent verifier transcribe
-the extended set in the same commit; the assembler byte-hash change this
-correction causes is expected and, per §A6.2, returns the work to pre-seal
-engineering — which is where it already is (#209, restart candidate).
+The assembler and the independent verifier transcribe both mechanisms in the
+same commit; the assembler byte-hash change this correction causes is
+expected and, per §A6.2, returns the work to pre-seal engineering — which is
+where it already is (#209, restart candidate).
 
 ### A6.C1.3 Qualification gate extension
 
+The freeze assembler is split into two named halves:
+
+1. `collect_static_evidence` / `check_preseal_sealability` — head-static
+   sealability: projection classification and admission, implementation
+   bindings, coverage, mutation admission, preset and resolved-policy
+   fingerprints, and the working-tree agreement guards. It reads only git
+   history, head blobs, and the checked-out working tree. It performs **no**
+   controller-input derivation: no research sequence, model, engine, GPU
+   probe, or runtime/tool library inventory is touched and no file is
+   written.
+2. `_derive_controller_input` and full artifact assembly — reached only
+   through `build_artifact` at actual Seal (`F`) assembly.
+
 The non-authoritative qualification harness gains a final required step
-`preseal_freeze_assembly`: it assembles the v3 freeze artifact in-process at
-the resolved qualification head (no file is written) and passes only when the
-assembly reports `complete = true` with an empty problem list and binds the
-same head. This makes "qualified but unsealable" mechanically impossible for
-future candidates: a head whose freeze assembly cannot complete now fails
-qualification instead of failing at Stage D. The acceptance-matrix
-`required_steps` list and its checker are extended with the same literal in
-the same commit.
+`preseal_freeze_assembly` that calls only half (1) and passes only when the
+static sealability result is `sealable = true` with an empty problem list and
+binds the resolved qualification head. The qualification report's
+`research_inputs = forbidden` therefore remains literally true, and
+"qualified but unsealable" becomes mechanically impossible for the static
+sealability class of defects. A passing report must additionally carry
+exactly the canonical step sequence (the harness's `STEP_NAMES`, ending in
+`preseal_freeze_assembly`). The acceptance-matrix `required_steps` list and
+its checker are extended with the same literal in the same commit.
 
 ### A6.C1.4 State effect
 
 This correction alters no historical packet, freeze artifact, I/F/S relation,
 terminal, or owner event. Historical v3 artifacts verify unchanged: their
-projections contain no path from the extension, so their recorded admission
-verdicts are invariant under the extended set. No `I` is selected, no `F` or
-`S` is created, and no execution authority is granted. H0 remains pre-seal
-engineering under Issue #209.
+projections contain none of the content-pinned paths and no `DEVELOPMENT.md`
+entry, so their recorded classifications and admission verdicts are invariant
+under both new mechanisms. No `I` is selected, no `F` or `S` is created, and
+no execution authority is granted. H0 remains pre-seal engineering under
+Issue #209.
