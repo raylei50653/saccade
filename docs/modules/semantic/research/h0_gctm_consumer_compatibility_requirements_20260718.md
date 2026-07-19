@@ -87,6 +87,140 @@ The compatibility review is:
 | Substrate-agnostic GCTM mathematics | No — abstract M1/M2 feasibility is not an H0 consequence. |
 | Bridge-runtime GCTM/B1 | Yes — no runtime-grounded B1 claim without an accepted compatible baseline or a separately accepted fidelity edge. |
 
+## 0. Downstream guarantee envelope
+
+This section fixes the **only** H0 boundary that a downstream GCTM consumer may
+eventually use. It is a registration contract, not an H0 acceptance, a GCTM
+model specification, or a claim that any candidate field is already covered.
+
+For a named immutable H0 baseline \(R\), distinguish these two sets:
+
+\[
+\Gamma_{\mathrm{H0,candidate}}(R)
+=
+\{\text{native ABI sources that may be proposed for registration}\},
+\]
+
+\[
+\Gamma_{\mathrm{H0,usable}}(R)
+=
+\{\text{candidate sources bound to an accepted guarantee record}\}.
+\]
+
+The protocol itself names no baseline \(R\), so it contributes no usable
+guarantee: \(\Gamma_{\mathrm{H0,usable}}(R)=\varnothing\) until the H0 owner
+accepts that baseline and records the field-level envelope. A capture-ABI
+field, an implementation reading, or an offline export is therefore only a
+**candidate source**, never an implicit guarantee.
+
+### 0.1 Three consumer states
+
+| Consumer state | Meaning | Legal GCTM treatment |
+|:--|:--|:--|
+| `registered-guarantee` | An accepted H0 baseline binds the exact field or semantic relation, its domain, replay/non-perturbation basis, and invalidation inputs. | The declared consumer may use it only within that bound domain. |
+| `candidate-source` | The H0 capture ABI or native operator names a possible source, but no accepted field-level guarantee has been bound. | Record it as `available_unassured`; it cannot satisfy a bridge-runtime claim. |
+| `outside-envelope` | H0 does not define, guarantee, or supply the required object. | Declare it latent, remove it, obtain a separately accepted fidelity edge, or block the bridge-runtime claim. |
+
+`candidate-source` deliberately maps to neither `exact` nor `derived` in a
+sealed consumer declaration. Its eventual relation remains undecided until
+registration; a `proxy` is not a fallback for absent native semantics.
+
+### 0.2 Candidate sources that may enter an accepted envelope
+
+The following inventory is exhaustive for the H0-to-GCTM consumer boundary.
+It is not a promise that every future H0 baseline covers every row.
+
+| GCTM consumer object | Candidate H0 native source | Maximum relation after registration | Boundary / non-inference |
+|:--|:--|:--|:--|
+| Event and runtime-instance identity | `seq`, `frame`, schema version, `cand_instance_uid`, `lost_instance_uid`, and pair/candidate/claim/commit keys | `exact` identity only | Visible `track_id` is an observation, not a cross-record or trajectory identity. |
+| Native exit / entry snapshot | Pair-record anchors, velocities, ring lengths, EMA heights, `h_ref`, directional inputs, and other declared raw state fields | `exact` raw-field observation or explicitly declared `derived` observation | This does not establish a sufficient Markov state, latent state, trajectory continuity, or a global identity. |
+| Operational horizon and observation point | `la`, `bridge_at`, `seq`/`frame`, and the declared pair-record emission point | `exact` runtime timing only | `la` / \(\Delta_{\rm on}\) is not automatically physical endpoint gap \(g_{\rm phys}\), continuous time, or an observation-update model. |
+| Candidate competition and pair-score context | Structural/pre-score/final-eligible counts and masks; pair `bdist`; native best/second values; margin and proposal fields | `exact` event/operator observation only | Candidate-local likelihood does not determine the full claim/commit outcome without the declared universe and composition. |
+| Claim and commit audit boundary | Claim-record detection-score and claim-winner fields; commit identity/status fields | `exact` audit observation only | These are downstream decision observations, not a relink probability, feedback label, or authority to alter claim/commit behavior. |
+
+For every registered row, the consumer must name whether it observes the
+runtime value online, lagged, or offline-only. No field may be promoted from a
+different capture point, schema, preset, or runtime identity without a new
+registration.
+
+### 0.3 Objects outside the default H0 guarantee envelope
+
+The following are not omissions to be silently repaired by a consumer; they
+are explicit GCTM boundary lines. A row can move only through a separately
+declared and accepted H0 delta/fidelity edge, never through a consumer proxy.
+
+| Required object or claim | H0 disposition | Required GCTM/B1 disposition |
+|:--|:--|:--|
+| Physical gap \(g_{\rm phys}\), continuous-time conversion, and production-CV null-offset treatment | `outside-envelope` | GCTM defines and validates the mapping to the registered operational horizon; no temporary proxy. |
+| Delayed / continue / abstain transition substrate | `outside-envelope` | Treat as latent, remove it from the declared model, or seek a separately accepted fidelity edge. An ordered rejection reason is not this substrate. |
+| Latent/Markov-state correctness, M1/M2 well-posedness, PSD, nesting, or parameter identifiability | `outside-envelope` | GCTM model-specification and proof obligations. |
+| Feedback, GT/FP labels, or reveal protocol | `outside-envelope` | B1 fitting/blind/reveal protocol owns it. |
+| Calibration, likelihood interpretation, or candidate-local ranking value | `outside-envelope` | GCTM may define the quantity; B1 evaluates the empirical claim. |
+| Online causal retention, system efficacy, or production suitability | `outside-envelope` | O1 and production evaluation own these claims. |
+
+### 0.4 Making a candidate source usable
+
+The H0 owner may make one candidate-source row usable only by recording an
+immutable baseline and a field-level guarantee record containing:
+
+```text
+baseline_id
+guarantee_id
+guarantee_class
+covered field or semantic relation
+schema and runtime / instrumentation identity
+policy base, resolved preset, and event-key version
+declared domain and causal availability
+replay or shadow-nonperturbation basis
+invalidation inputs
+```
+
+The GCTM/B1 consumer then binds those identities, selects `exact`, `derived`,
+`proxy`, or `unavailable` for each required object, and records any constraints.
+If a required object remains outside the envelope, the only valid compatibility
+disposition is `unavailable` (or `extension` for a separately accepted fidelity
+edge); it must never be represented as a covered H0 guarantee.
+
+### 0.5 Static registration contract — identity example
+
+The registration process has one machine-checked, non-evidence example for
+event/runtime-instance identity. Identity-v1 accepts exactly one `identity`
+guarantee for the sealed pair key, with `pair_record`, `exact`, and `online`
+all fixed; it rejects every other guarantee class or consumer object. The
+[schema](../../../../scripts/tools/h0_gctm_guarantee_registration_schema_v1.json)
+and [validator](../../../../scripts/tools/verify_h0_gctm_guarantee_registration.py)
+enforce the distinction above: a `candidate-source` fixture is valid as a
+pre-registration object but must report `structurally_usable: false`; only an
+`actual`, owner-accepted `registered-guarantee` record with complete binding,
+basis, domain, causal availability, and the sealed identity-v1 invalidation set
+can report `structurally_usable: true`.
+
+That sealed set is exactly:
+
+```text
+runtime_instrumentation_identity
+policy_base_id
+resolved_preset_id
+h0_schema_version
+capture_mode
+event_key_version
+observation_state_semantics_version
+identity_lifecycle
+consumer_domain
+causal_availability
+```
+
+`structurally_usable` is deliberately not an owner-attestation result. The
+validator always reports `authority_verified: false` because it does not yet
+bind to an external owner-controlled acceptance registry or packet. No caller
+may treat this static result as an accepted H0 guarantee.
+
+The checked-in [identity fixture](../../../../tests/contract/fixtures/h0_gctm_guarantee_registration_candidate_identity_v1.json)
+therefore proves the fail-closed pre-registration path only. It is not an H0
+baseline, guarantee record, or compatibility verdict. The companion contract
+test exercises the positive `structurally_usable: true` branch only in memory,
+preventing a synthetic fixture from becoming a false H0 guarantee.
+
 ## 1. Baseline registration
 
 After an H0 terminal supplying a runtime substrate/fidelity edge is
@@ -99,6 +233,7 @@ h0_packet_hash
 h0_schema_version
 runtime / instrumentation identity
 policy-base and resolved-preset identities
+capture mode
 event-key version
 observation and state-semantics version
 dataset / sequence domain
