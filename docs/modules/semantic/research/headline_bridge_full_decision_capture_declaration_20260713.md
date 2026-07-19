@@ -1946,7 +1946,9 @@ binds the resolved qualification head. The qualification report's
 sealability class of defects. A passing report must additionally carry
 exactly the canonical step sequence (the harness's `STEP_NAMES`, ending in
 `preseal_freeze_assembly`). The acceptance-matrix `required_steps` list and
-its checker are extended with the same literal in the same commit.
+its checker transcription are the same exact tuple as the canonical harness
+sequence — including `cuda_runtime_confinement` — with no subsequence
+tolerance.
 
 ### A6.C1.4 State effect
 

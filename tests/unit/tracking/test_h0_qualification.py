@@ -319,12 +319,9 @@ def test_passing_report_requires_canonical_step_sequence() -> None:
 
 
 def test_canonical_steps_close_over_matrix_required_steps() -> None:
-    canonical = list(qualification.STEP_NAMES)
-    required = matrix.load_matrix()["qualification"]["required_steps"]
-    # Every matrix-required step is canonical, in the same order, and the
-    # sealability gate is both required and terminal.
-    positions = [canonical.index(name) for name in required]
-    assert positions == sorted(positions)
+    # Runner canonical sequence, matrix JSON, and matrix checker must be the
+    # same exact tuple — no subsequence tolerance.
+    required = tuple(matrix.load_matrix()["qualification"]["required_steps"])
+    assert required == qualification.STEP_NAMES
+    assert required == matrix.QUALIFICATION_STEPS
     assert required[-1] == "preseal_freeze_assembly"
-    assert canonical[-1] == "preseal_freeze_assembly"
-    assert tuple(required) == matrix.QUALIFICATION_STEPS

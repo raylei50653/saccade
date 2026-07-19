@@ -44,6 +44,7 @@ QUALIFICATION_STEPS = (
     "build",
     "build_identity",
     "runtime_closure",
+    "cuda_runtime_confinement",
     "extension_load",
     "t1_verdict_semantics",
     "runner_launch_preflight",

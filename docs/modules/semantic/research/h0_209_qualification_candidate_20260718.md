@@ -143,9 +143,14 @@ declaration:
 - this restart declaration.
 
 All prior sections of this document continue to bind the new candidate, with
-`R` re-read as the exact final head of the restart Repair PR and the required
-step list extended with `preseal_freeze_assembly`. The new `R` is recorded in
-Issue #209 once the restart PR head is stable and its host-independent CI is
-green. Because the restart PR is cut from current `main`, the eventual
+`R` re-read as the exact final head of the restart Repair PR and the §5
+required step list re-read as the canonical harness sequence — matrix
+`required_steps`, its checker transcription, and the runner's `STEP_NAMES`
+are the same exact ten-step tuple (`configure`, `build`, `build_identity`,
+`runtime_closure`, `cuda_runtime_confinement`, `extension_load`,
+`t1_verdict_semantics`, `runner_launch_preflight`,
+`failure_envelope_serialization`, `preseal_freeze_assembly`). The new `R` is
+recorded in Issue #209 once the restart PR head is stable and its
+host-independent CI is green. Because the restart PR is cut from current `main`, the eventual
 `I → F → S` chain is fast-forward-reachable from `main`, restoring the
 preferred Stage-D landing.
