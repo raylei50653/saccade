@@ -1959,3 +1959,4 @@ entry, so their recorded classifications and admission verdicts are invariant
 under both new mechanisms. No `I` is selected, no `F` or `S` is created, and
 no execution authority is granted. H0 remains pre-seal engineering under
 Issue #209.
+| 2026-07-19 | `9712e951bd4b8ce5e5382f48cd0b7ca68686a720` | `41b03f1c36efcb212f8413366e7361f5bd18f140` | `SEALED` |
