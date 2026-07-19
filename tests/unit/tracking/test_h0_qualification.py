@@ -233,6 +233,7 @@ def test_archive_corpus_discovers_every_committed_phase_a_root() -> None:
         "h0_phase_a_1a8c13a890b3490bb7aa50dc2ab491db89b8b474",
         "h0_phase_a_42121c064cd1a3c4202e114cc6f4d8866a9e6af0",
         "h0_phase_a_6ed30243554edfc898de32916298aa863673fced",
+        "h0_phase_a_9712e951bd4b8ce5e5382f48cd0b7ca68686a720",
     ]
 
 
