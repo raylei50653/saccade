@@ -221,6 +221,52 @@ baseline, guarantee record, or compatibility verdict. The companion contract
 test exercises the positive `structurally_usable: true` branch only in memory,
 preventing a synthetic fixture from becoming a false H0 guarantee.
 
+### 0.6 Static registration contract v2 — full candidate-row inventory
+
+Registration v2 extends the machine-checked contract from the identity row to
+the complete section 0.2 inventory, without changing identity-v1 (that schema
+and its validator path stay frozen). The
+[v2 schema](../../../../scripts/tools/h0_gctm_guarantee_registration_schema_v2.json)
+and the shared
+[validator](../../../../scripts/tools/verify_h0_gctm_guarantee_registration.py)
+accept one record carrying up to seven guarantees, one per
+`(guarantee_class, stream)` coordinate:
+
+| `guarantee_class` | Consumer object | Streams | Relation |
+|:--|:--|:--|:--|
+| `identity` | `event_runtime_instance_identity` | `pair_record` | `exact`, sealed pair instance key only (unchanged from v1) |
+| `snapshot` | `native_exit_entry_snapshot` | `pair_record` | `exact` or `derived` |
+| `timing` | `operational_horizon_observation_point` | `pair_record` | `exact` |
+| `competition` | `candidate_competition_pair_score_context` | `pair_record`, `candidate_record` | `exact` |
+| `audit` | `claim_commit_audit_boundary` | `claim_record`, `commit_record` | `exact` |
+
+The v2 contract adds these sealed rules on top of the v1 machinery:
+
+- **ABI anchoring.** Every non-identity `covered_fields` entry must come from
+  a sealed per-class allowlist, and the validator re-checks each allowlist
+  against `record_fields` in the
+  [`h0_bridge_decision_trace_v2` schema](../../../../scripts/tools/h0_bridge_decision_trace_schema_v2.json),
+  so registration fails closed if the capture ABI and the allowlists drift.
+- **Track-id ban scope.** `*track_id*` fields are registrable only inside the
+  `audit` class, where section 0.2 names claim-winner and commit identity
+  fields as audit observations; they remain banned as identities everywhere.
+- **Record keys.** The `competition`/`candidate_record` and both `audit`
+  allowlists carry their own record keys because identity-v1 binds only the
+  `pair_record` stream.
+- **Causal availability.** Non-identity guarantees must declare `online`,
+  `lagged`, or `offline_only` (section 0.2); identity stays `online`-only.
+- **Invalidation sets.** Every class requires the sealed shared set (the
+  identity-v1 set minus `identity_lifecycle`); `identity` re-adds
+  `identity_lifecycle`, and any `derived` relation additionally requires
+  `derivation_definition`.
+
+The checked-in [v2 candidate fixture](../../../../tests/contract/fixtures/h0_gctm_guarantee_registration_candidate_sources_v2.json)
+enumerates all seven candidate-source coordinates and, like the identity
+fixture, is valid only as a pre-registration object
+(`structurally_usable: false`). Everything in section 0.5 about
+`authority_verified: false`, owner acceptance, and in-memory-only positive
+branches applies unchanged to v2.
+
 ## 1. Baseline registration
 
 After an H0 terminal supplying a runtime substrate/fidelity edge is

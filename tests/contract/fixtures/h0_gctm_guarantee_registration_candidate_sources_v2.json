@@ -1,0 +1,161 @@
+{
+  "schema": "h0_gctm_guarantee_registration_v2",
+  "record_id": "fixture_h0_gctm_candidate_sources_v2",
+  "record_scope": "fixture_only",
+  "record_state": "candidate-source",
+  "consumer": {
+    "consumer_id": "fixture_gctm_registration_v2",
+    "maximum_claim_layer": "gctm_model_specification",
+    "required_guarantee_ids": []
+  },
+  "candidate_sources": [
+    {
+      "source_id": "fixture_h0_pair_runtime_instance_key",
+      "consumer_object": "event_runtime_instance_identity",
+      "stream": "pair_record",
+      "key_fields": [
+        "seq",
+        "frame",
+        "cand_slot",
+        "cand_instance_uid",
+        "lost_slot",
+        "lost_instance_uid"
+      ],
+      "causal_availability": "online"
+    },
+    {
+      "source_id": "fixture_h0_pair_exit_entry_snapshot",
+      "consumer_object": "native_exit_entry_snapshot",
+      "stream": "pair_record",
+      "key_fields": [
+        "lost_anchor_x",
+        "lost_anchor_y",
+        "cand_anchor_x",
+        "cand_anchor_y",
+        "lost_velocity_x",
+        "lost_velocity_y",
+        "cand_velocity_x",
+        "cand_velocity_y",
+        "cand_ring_length",
+        "lost_ring_length",
+        "ema_lost",
+        "ema_cand",
+        "h_ref",
+        "fwd_r",
+        "bwd_r",
+        "dist_h",
+        "s_lost",
+        "w",
+        "direction_cosine",
+        "directional_alpha",
+        "height_ratio",
+        "speed",
+        "spatial_distance"
+      ],
+      "causal_availability": "online"
+    },
+    {
+      "source_id": "fixture_h0_pair_operational_horizon",
+      "consumer_object": "operational_horizon_observation_point",
+      "stream": "pair_record",
+      "key_fields": [
+        "seq",
+        "frame",
+        "la",
+        "bridge_at"
+      ],
+      "causal_availability": "online"
+    },
+    {
+      "source_id": "fixture_h0_pair_score_context",
+      "consumer_object": "candidate_competition_pair_score_context",
+      "stream": "pair_record",
+      "key_fields": [
+        "directional_cross_bdist",
+        "bdist_before_direction",
+        "bdist_after_direction",
+        "height_verdict",
+        "speed_verdict",
+        "spatial_verdict",
+        "cutoff_verdict",
+        "occupancy_verdict",
+        "occupancy_coverage",
+        "appearance_verdict",
+        "appearance_cosine",
+        "portable_tail_verdict",
+        "portable_tail_mask",
+        "final_pair_eligible",
+        "reject_reason"
+      ],
+      "causal_availability": "online"
+    },
+    {
+      "source_id": "fixture_h0_candidate_competition_context",
+      "consumer_object": "candidate_competition_pair_score_context",
+      "stream": "candidate_record",
+      "key_fields": [
+        "seq",
+        "frame",
+        "cand_slot",
+        "cand_instance_uid",
+        "structural_competitors",
+        "pre_score_passes",
+        "final_pair_eligible_count",
+        "best_lost_slot",
+        "second_lost_slot",
+        "best_lost_instance_uid",
+        "second_lost_instance_uid",
+        "best_bdist",
+        "second_best_bdist",
+        "margin",
+        "no_second_competitor",
+        "margin_verdict",
+        "proposal_emitted",
+        "proposal_reject_reason",
+        "candidate_status"
+      ],
+      "causal_availability": "online"
+    },
+    {
+      "source_id": "fixture_h0_claim_audit_boundary",
+      "consumer_object": "claim_commit_audit_boundary",
+      "stream": "claim_record",
+      "key_fields": [
+        "seq",
+        "frame",
+        "proposing_cand_slot",
+        "proposed_lost_slot",
+        "proposing_cand_instance_uid",
+        "proposed_lost_instance_uid",
+        "detection_score",
+        "sq",
+        "packed_atomic_key",
+        "candidate_index_component",
+        "winning_cand_slot",
+        "winning_cand_instance_uid",
+        "claim_won"
+      ],
+      "causal_availability": "online"
+    },
+    {
+      "source_id": "fixture_h0_commit_audit_boundary",
+      "consumer_object": "claim_commit_audit_boundary",
+      "stream": "commit_record",
+      "key_fields": [
+        "seq",
+        "frame",
+        "cand_slot",
+        "lost_slot",
+        "cand_instance_uid",
+        "lost_instance_uid",
+        "cand_active_before",
+        "cand_active_after",
+        "lost_active_before",
+        "lost_active_after",
+        "commit_executed",
+        "lost_slot_deactivated"
+      ],
+      "causal_availability": "online"
+    }
+  ]
+}
