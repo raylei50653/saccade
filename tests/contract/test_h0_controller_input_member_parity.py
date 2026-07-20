@@ -95,60 +95,127 @@ def test_sealed_artifact_carries_the_canonical_member_set() -> None:
     assert set(_canonical_controller_input()) == LITERAL_CONTROLLER_INPUT_MEMBERS
 
 
-# The two member policies, exercised in isolation from the deep artifact
-# verification so parity is asserted independently of git/worktree state:
-#   * full/authoritative path -> exact-member gate over CONTROLLER_INPUT_MEMBERS
-#     (the first check inside ``_verify_controller_input``);
-#   * discovery header path -> ``_require_controller_member_envelope``.
-def _full_member_gate(value: object) -> None:
-    freeze_verifier._require_exact_members(
-        value, freeze_verifier.CONTROLLER_INPUT_MEMBERS, "phase_a_controller_input"
-    )
+# ── Wired-path exercises ──────────────────────────────────────────────────────
+# These drive the *actual* verifier functions, not the bare member helpers:
+#   * discovery header  -> freeze_verifier._verify_landing_candidate_header
+#     (which internally calls the discovery member envelope);
+#   * full/authoritative -> freeze_verifier._verify_controller_input
+#     (whose first check is the exact-14 member gate);
+#   * controller entry   -> run_h0_phase_a._discover_controller_input.
+# The full/authoritative host-fidelity tail (_verify_host_execution_inputs: nvml
+# GPU, ldd build-tool binding, the whole repository/model/sequence inventory, and
+# a physical .venv at ROOT) is only satisfiable in a real host-bound sealed
+# checkout, so a *positive* full-verify selection cannot be produced portably or
+# pre-seal; it is exercised by the controlled-host qualification step. The member
+# contract these tests target is fully reachable because it fires before that
+# tail.
 
 
-def test_both_paths_accept_the_canonical_artifact() -> None:
+def _write_landing_candidate(
+    tmp_root: Path, controller_input: dict[str, object]
+) -> tuple[Path, str]:
+    """Materialise a committed-shaped v3 artifact at its deterministic path.
+
+    Re-homes the sealed artifact under ``tmp_root`` (only ``repository_root`` is
+    host-specific) so ``_verify_landing_candidate_header`` — a git/host-free,
+    file-and-shape gate — runs end-to-end against a controlled member set.
+    """
+    artifact = json.loads(SEALED_ARTIFACT.read_text(encoding="utf-8"))
+    head = artifact["instrumentation_head"]
+    controller_input = dict(controller_input)
+    controller_input["repository_root"] = tmp_root.resolve().as_posix()
+    artifact["phase_a_controller_input"] = controller_input
+    path = tmp_root / freeze_verifier.freeze_path(head)
+    path.parent.mkdir(parents=True)
+    path.write_bytes(freeze_verifier.canonical_json(artifact) + b"\n")
+    return path, head
+
+
+def test_actual_landing_header_accepts_canonical_and_historical(tmp_path: Path) -> None:
+    # The real discovery header accepts both the current 14-member shape and the
+    # pre-#224 13-member (build_tool_binding-absent) shape.
     canonical = _canonical_controller_input()
-    _full_member_gate(canonical)
-    freeze_verifier._require_controller_member_envelope(canonical)
+    path, _head = _write_landing_candidate(tmp_path / "current", canonical)
+    freeze_verifier._verify_landing_candidate_header(path, tmp_path / "current")
+
+    historical = copy.deepcopy(canonical)
+    del historical["build_tool_binding"]
+    path, _head = _write_landing_candidate(tmp_path / "historical", historical)
+    freeze_verifier._verify_landing_candidate_header(path, tmp_path / "historical")
 
 
-def test_both_paths_reject_a_missing_base_member() -> None:
-    broken = copy.deepcopy(_canonical_controller_input())
-    del broken["gpu"]
-    with pytest.raises(freeze_verifier.VerificationError):
-        _full_member_gate(broken)
-    with pytest.raises(freeze_verifier.VerificationError):
-        freeze_verifier._require_controller_member_envelope(broken)
+def test_actual_landing_header_rejects_unknown_and_missing_base(tmp_path: Path) -> None:
+    unknown = copy.deepcopy(_canonical_controller_input())
+    unknown["surprise"] = True
+    path, _head = _write_landing_candidate(tmp_path / "unknown", unknown)
+    with pytest.raises(freeze_verifier.VerificationError, match="missing or unknown"):
+        freeze_verifier._verify_landing_candidate_header(path, tmp_path / "unknown")
+
+    missing = copy.deepcopy(_canonical_controller_input())
+    del missing["gpu"]
+    path, _head = _write_landing_candidate(tmp_path / "missing", missing)
+    with pytest.raises(freeze_verifier.VerificationError, match="missing or unknown"):
+        freeze_verifier._verify_landing_candidate_header(path, tmp_path / "missing")
 
 
-def test_both_paths_reject_an_unknown_member() -> None:
-    broken = copy.deepcopy(_canonical_controller_input())
-    broken["surprise"] = True
-    with pytest.raises(freeze_verifier.VerificationError):
-        _full_member_gate(broken)
-    with pytest.raises(freeze_verifier.VerificationError):
-        freeze_verifier._require_controller_member_envelope(broken)
+def test_actual_full_verifier_member_gate(tmp_path: Path) -> None:
+    # ``_verify_controller_input``'s exact-14 member gate is its first check, so
+    # it fires (and rejects) before any host-fidelity derivation. A missing base
+    # member, an unknown member, and a build_tool_binding omission are each
+    # rejected by the actual full/authoritative verifier.
+    head = _canonical_controller_input()["instrumentation_head"]
+    for mutate in (
+        lambda ci: ci.pop("gpu"),
+        lambda ci: ci.__setitem__("surprise", True),
+        lambda ci: ci.pop("build_tool_binding"),
+    ):
+        broken = copy.deepcopy(_canonical_controller_input())
+        mutate(broken)
+        with pytest.raises(
+            freeze_verifier.VerificationError, match="missing or unknown"
+        ):
+            freeze_verifier._verify_controller_input(broken, ROOT, head)
 
 
-def test_build_tool_binding_omission_is_full_strict_but_discovery_tolerant() -> None:
-    # The deliberate, documented cross-version asymmetry: the discovery header
-    # must accept a historical (build_tool_binding-absent) artifact so
-    # enumeration over the mixed-version evidence tree never aborts, while the
-    # full/authoritative path — which only ever runs on the selected current
-    # candidate — rejects the omission.
+def test_build_tool_binding_omission_is_full_strict_but_discovery_tolerant(
+    tmp_path: Path,
+) -> None:
+    # The deliberate, documented cross-version asymmetry, through the *actual*
+    # verifier entry points: the discovery header accepts a historical
+    # (build_tool_binding-absent) artifact so enumeration never aborts, while the
+    # full/authoritative gate rejects the omission.
+    head = _canonical_controller_input()["instrumentation_head"]
     historical = copy.deepcopy(_canonical_controller_input())
     del historical["build_tool_binding"]
-    with pytest.raises(freeze_verifier.VerificationError):
-        _full_member_gate(historical)
-    # Must NOT raise: this is exactly the pre-#224 shape discovery has to accept.
-    freeze_verifier._require_controller_member_envelope(historical)
+    path, _head = _write_landing_candidate(tmp_path / "historical", historical)
+    freeze_verifier._verify_landing_candidate_header(path, tmp_path / "historical")
+    with pytest.raises(freeze_verifier.VerificationError, match="missing or unknown"):
+        freeze_verifier._verify_controller_input(historical, ROOT, head)
+
+
+def test_actual_discover_controller_input_does_not_reject_binding_member() -> None:
+    # End-to-end regression for the Stage-E escape through the controller's real
+    # entry. Over the repo's mixed-version evidence tree (the current
+    # build_tool_binding-bearing artifact plus the four historical artifacts),
+    # _discover_controller_input either selects exactly one current landing and
+    # returns the canonical 14-member contract, or fail-closes with the canonical
+    # zero/one landing-count error — but it must NEVER again reject a candidate at
+    # the independent verifier over the build_tool_binding member.
+    try:
+        _path, contract = controller._discover_controller_input(ROOT)
+    except controller.ContractError as exc:
+        message = str(exc)
+        assert "rejected by independent verifier" not in message, message
+        assert "current-HEAD h0_preseal_freeze_v3 landing" in message, message
+    else:
+        assert set(contract) == LITERAL_CONTROLLER_INPUT_MEMBERS
+        assert "build_tool_binding" in contract
 
 
 def test_discovery_header_accepts_every_committed_artifact() -> None:
-    # End-to-end regression for the Stage-E escape: the discovery member gate
-    # must accept every committed v3 controller-input — the current
-    # build_tool_binding-bearing artifact and the four historical artifacts that
-    # predate it — so enumeration never aborts the way it did at exact S.
+    # The discovery member gate must accept every committed v3 controller-input —
+    # the current build_tool_binding-bearing artifact and the four historical
+    # artifacts that predate it — so enumeration never aborts the way it did at S.
     evidence = ROOT / "docs/modules/semantic/research/evidence"
     artifacts = sorted(evidence.glob("**/h0_preseal_freeze_v3.json"))
     assert artifacts, "expected committed v3 landing candidates"
@@ -160,7 +227,6 @@ def test_discovery_header_accepts_every_committed_artifact() -> None:
         freeze_verifier._require_controller_member_envelope(controller_input)
         if "build_tool_binding" in controller_input:
             saw_binding = True
-            _full_member_gate(controller_input)
         else:
             saw_without = True
     # The corpus must actually contain both shapes for this to be a real guard.

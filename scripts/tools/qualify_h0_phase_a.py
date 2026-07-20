@@ -525,13 +525,22 @@ def _check_preseal_sealability(head: str | None) -> None:
 def _landing_discovery_dry_run(root: Path) -> None:
     """Exercise the controller's real landing-discovery entry, non-authoritatively.
 
-    Discovery-only: this runs the exact per-candidate classification the
-    controller relies on (``_classify_landing_candidates`` -> the independent
-    ``verify_current_landing_candidate``) over the real, mixed-version evidence
-    tree.  It proves the current ``build_tool_binding``-bearing artifact and the
-    historical artifacts that predate it all classify without error, and that
-    discovery never selects more than one current landing.  It creates no packet
-    or terminal, consumes no execution authority, and leaves the tree unchanged.
+    Two real, non-authoritative passes over the checkout's evidence tree:
+
+    1. the mixed-version classification corpus (``_classify_landing_candidates``
+       -> the independent ``verify_current_landing_candidate``) must classify
+       every candidate without error — the current ``build_tool_binding``-bearing
+       artifact and the historical artifacts that predate it — and never see more
+       than one current landing;
+    2. the controller's actual entry, ``_discover_controller_input``, is invoked.
+       On an unsealed qualification checkout there is no current landing, so the
+       correct fail-closed outcome is the canonical zero-current-landing contract
+       error — NOT a verifier rejection of the current artifact, which is exactly
+       the Stage-E escape this repair removes.  If a real current landing does
+       exist, the selected contract must carry the canonical member set.
+
+    It runs no controller execution, enters no T0 checkpoint, creates no packet or
+    terminal, consumes no execution authority, and leaves the tree unchanged.
     """
     import run_h0_phase_a as controller
 
@@ -549,6 +558,28 @@ def _landing_discovery_dry_run(root: Path) -> None:
     if matches > 1:
         raise QualificationError(
             "landing-discovery dry-run selected multiple current landings"
+        )
+
+    selected: Mapping[str, Any] | None = None
+    try:
+        _freeze_path, selected = controller._discover_controller_input(root)
+    except controller.ContractError as exc:
+        message = str(exc)
+        if "rejected by independent verifier" in message:
+            raise QualificationError(
+                "landing discovery still rejects a candidate at the verifier: "
+                + message
+            ) from exc
+        if "expected exactly one current-HEAD" not in message:
+            raise QualificationError(
+                "landing discovery failed with an unexpected contract error: " + message
+            ) from exc
+    if selected is not None and (
+        set(selected) != controller.CONTROLLER_INPUT_MEMBERS
+        or "build_tool_binding" not in selected
+    ):
+        raise QualificationError(
+            "selected current controller input is not the canonical member set"
         )
 
 

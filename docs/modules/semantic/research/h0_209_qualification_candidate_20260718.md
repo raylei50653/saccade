@@ -180,22 +180,54 @@ non-authoritative step after `preseal_freeze_assembly`:
 `runner_launch_preflight`, `failure_envelope_serialization`,
 `preseal_freeze_assembly`, `landing_discovery_dry_run`.
 
-The new `landing_discovery_dry_run` step exercises the controller's real
-landing-discovery entry (`_classify_landing_candidates` → the independent
-`verify_current_landing_candidate`) over the checkout's mixed-version evidence
-tree, proving the current `build_tool_binding`-bearing artifact and the
-historical artifacts that predate it all classify without error and that no more
-than one current landing is selected. It performs no research capture, creates no
-evidence packet or terminal, consumes no execution authority, and leaves the
-candidate checkout and authoritative evidence tree unchanged.
+The new `landing_discovery_dry_run` step makes two real, non-authoritative
+passes over the checkout's mixed-version evidence tree. First it runs the
+per-candidate classification corpus (`_classify_landing_candidates` → the
+independent `verify_current_landing_candidate`), proving the current
+`build_tool_binding`-bearing artifact and the historical artifacts that predate
+it all classify without error and that no more than one current landing is seen.
+Second it invokes the controller's actual entry,
+`run_h0_phase_a._discover_controller_input`: on an unsealed qualification
+checkout the correct fail-closed outcome is the canonical zero-current-landing
+contract error (never a verifier rejection over the `build_tool_binding` member,
+which was the Stage-E escape); if a real current landing exists the selected
+contract must carry the canonical member set. The step performs no research
+capture, creates no evidence packet or terminal, consumes no execution
+authority, and leaves the candidate checkout and authoritative evidence tree
+unchanged.
 
-The repair further collapses the controller-input member set to one canonical
+**Member policy (owner-clarified, Issue #227).** The "each required-member
+omission rejected by both paths" rule binds the thirteen stable base members.
+`build_tool_binding` is the sole owner-approved cross-version exception:
+
+```text
+landing-discovery header (all candidates): build_tool_binding optional
+full / selected-current authoritative:     build_tool_binding mandatory
+```
+
+The repair collapses the controller-input member set to one canonical
 declaration mirrored across the freeze assembler, the controller's landing
 discovery, the full-artifact verifier, and the discovery header, with the
 execution schema keeping `build_tool_binding` optional so historical evidence
 still validates; equality across every runtime transcription, the schema, and an
-explicit literal is pinned by a dedicated contract regression. All prior sections
-of this document continue to bind. The Issue #227 candidate `R`, its exact
-`I → F → S` chain, and the authoritative re-execution remain gated on separate
-controlled-host qualification, owner acceptance of a fresh `I`, and a new
-exactly-once execution authorization; this amendment authorizes none of them.
+explicit literal is pinned by a dedicated contract regression that also drives
+the actual `_verify_landing_candidate_header`, `_verify_controller_input`, and
+`_discover_controller_input` entry points (not only their member helpers).
+
+**Positive-selection scope.** A *positive* `_discover_controller_input` selection
+runs the full artifact verification, whose host-fidelity tail
+(`_verify_host_execution_inputs`: live GPU/NVML identity, `ldd` build-tool
+binding, the entire repository/model/sequence inventory, and a physical `.venv`
+at the repository root) is satisfiable only in a real host-bound sealed checkout.
+It cannot be reproduced in an ephemeral worktree (which lacks the git-ignored
+runtime environment) nor synthesised portably, and an unsealed candidate checkout
+has zero current landings by construction. The positive full-verify selection is
+therefore intrinsically a controlled-host, post-seal capability, exercised by the
+`landing_discovery_dry_run` step when it runs on the qualification host; Stage A
+proves the member contract and discovery wiring through the actual entry points
+above.
+
+All prior sections of this document continue to bind. The Issue #227 candidate
+`R`, its exact `I → F → S` chain, and the authoritative re-execution remain gated
+on separate controlled-host qualification, owner acceptance of a fresh `I`, and a
+new exactly-once execution authorization; this amendment authorizes none of them.
