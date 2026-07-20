@@ -79,13 +79,14 @@ Sealed per-study terminals（labels verbatim；軸值照 reconciled map 的 slot
 **assignment / keying** 軸。三者不得互換（§20.9：keying ≠ not-identifiable；
 non-commuting ≠ not-exchangeable）。S0 / T2 不指派 §20.9 failure type。
 
-Live（依 ADR 020 §S1 不發 slot）：discrete-\(M\)
+Live（**historical snapshot at O0 opening / 2026-07-16**；現況見 Final status。
+依 ADR 020 §S1 不發 slot）：discrete-\(M\)
 [parked-unsealed](../../../modules/semantic/research/discrete_m_capability_declaration_20260712.md)；
 H0 [Amendment 7 pre-seal engineering](../../../modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md)
 ——舊 owner seal 保留為歷史事件但不是 execution authority；目前狀態不得被寫成
 sealed terminal。
 
-## Current boundary
+## Decision boundary at O0 opening（historical）
 
 在 frozen bridge evidence 上：offline→runtime transport 在 matched domain 已被
 否證（κ_D0）；packet 能否自證其 policy＝not identifiable（P0，cause＝provenance
@@ -93,9 +94,10 @@ incompleteness）；frozen packet 無 exact-key recoverable support（EK0）。�
 frozen evidence 上沒有第三種讀法：**要嘛取得可自證 provenance 的新證據基礎
 （H0），要嘛把 provenance 缺口留在帳上作為合法終局**。
 
-## Sole-active decision（O0）
+## Sole-active decision（O0；historical——unit consumed and lease closed）
 
-依 [registry §8](../../contracts/claim_state_registry.md)：合法候選集恰有一個成員＝
+依 2026-07-16 當時的 [registry §8](../../contracts/claim_state_registry.md)
+snapshot，合法候選集有一個成員＝
 H0（§4.3 dependency-typed，非 inadmissibility）。O0 決定：**取 H0，授予 WIP 鎖**。
 範圍嚴格＝H0 Amendment 7 已凍結的 Phase-A controller implementation（target＝
 **m**）→ 新 complete freeze artifact → 新 owner reseal。

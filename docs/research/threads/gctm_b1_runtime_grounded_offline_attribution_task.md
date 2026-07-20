@@ -49,7 +49,7 @@ Authority is intentionally split:
 ## Unresolved B1-slot identity (open owner decision)
 
 H0 declaration §7 and the
-[O0 routing charter](closed/bridge_frozen_evidence_o0_routing_20260716.md) (route 5)
+[O0 routing charter](closed/bridge_frozen_evidence_o0_routing_20260716.md)（its route-5 branch; O0 itself closed at route 1）
 name a "separately declared **B1 consumer-faithful operating-curve study**".
 Whether the `GCTM_B1` study specified here occupies that same B1 slot, coexists
 with it, or supersedes it is **not decided by this charter**. Resolving that
