@@ -1,25 +1,47 @@
 ---
-doc-status: active
+doc-status: closed
 doc-promotion: navigation-only; not evidence
 owner-module: semantic
 work-class: mainline-study
-wip-role: sole-active
 created: 2026-07-16
+closed: 2026-07-20
+closed-verdict: H0_PROVENANCE_INVALID
 ---
 
 # O0 — bridge frozen-evidence routing（薄編排 charter）
 
+> **One-line (CLOSED):** route 1 — 唯一授權的 sealed invocation（I=`9712e951`）
+> 到達 ordered terminal `H0_PROVENANCE_INVALID`，owner 於 2026-07-19 在
+> [issue #209](https://github.com/raylei50653/saccade/issues/209) 明示接受；
+> **H0 = CLOSED**，disposition = diagnostic-only；controller retry = forbidden；
+> Phase B = forbidden；**NEXT = none automatically**；GCTM 不因 H0 closure 自動啟動。
+
 ## Status
 
-**ACTIVE · sole-active**（WIP 鎖以 [semantic TODO](../../modules/semantic/TODO.md) 為準）。
-本卡是 O0 對 bridge-fidelity 線既有 terminal 狀態的**薄編排**：一個 sole-active
+**CLOSED（2026-07-20；terminal 見 Final status）**。
+本卡曾是 O0 對 bridge-fidelity 線既有 terminal 狀態的**薄編排**：一個 sole-active
 decision、一張薄狀態地圖、一張 exhaustive terminal routing map。本卡**不擁有任何
 verdict、不放任何數字**；所有 label 逐字照 owner doc（link-don't-relabel，
-[C5.1](../../ownership/doc_structure_contract.md)）。
+[C5.1](../../../ownership/doc_structure_contract.md)）。
 
-本輪輸入：contract v1.2 §20.9（PR #169）· [reconciled flagship map](../../modules/semantic/research/bridge_fidelity_reconciled_map_20260715.md) ·
-[terminal-slot schema v0](../../ownership/terminal_slot_fixtures.yaml)（[ADR 020](../../decisions/020-doc-lifecycle-new-nogo.md)）·
-[old-flagship per-study inventory](../../ownership/old_flagship_per_study_inventory.yaml)。
+## Final status
+
+| 項 | 值（labels verbatim） |
+|:--|:--|
+| terminal | `H0_PROVENANCE_INVALID`（A2.4 第一 ordered terminal；controller literal `provenance_invalid`） |
+| route | 1 — charter CLOSED（diagnostic-only） |
+| owner acceptance | 2026-07-19，[issue #209](https://github.com/raylei50653/saccade/issues/209) owner comment（Stage F）；H0 = CLOSED，#209 = COMPLETE |
+| evidence | packet `docs/modules/semantic/research/evidence/h0_phase_a_9712e951bd4b8ce5e5382f48cd0b7ca68686a720/`（landing `7ee6b1c6`；independent verifier `valid=true`）；本卡照舊不複寫其內容 |
+| controller retry | **forbidden**（declaration exactly-once；#209 明文） |
+| Phase B | **forbidden / not executed** |
+| direct handoff | **no receiver / no continuation** — NEXT = none automatically |
+| cross-thread consequence（非 handoff） | GCTM [#175](https://github.com/raylei50653/saccade/issues/175) 維持 **parked**，僅能由 owner 另行 scheduling 決定啟動；`quantity.bridge_capture_provenance` 的 provenance 缺口依 route-1 下游以 registry `open_limits` **永久留帳＝合法終局**（同 PR 已更新 registry） |
+| preset / production | 未改 |
+| 重進條件 | append-only declaration amendment ＋ 全新 I→F→S owner reseal ＋ owner scheduling；本卡不授權 |
+
+本輪輸入：contract v1.2 §20.9（PR #169）· [reconciled flagship map](../../../modules/semantic/research/bridge_fidelity_reconciled_map_20260715.md) ·
+[terminal-slot schema v0](../../../ownership/terminal_slot_fixtures.yaml)（[ADR 020](../../../decisions/020-doc-lifecycle-new-nogo.md)）·
+[old-flagship per-study inventory](../../../ownership/old_flagship_per_study_inventory.yaml)。
 
 本輪明確不做：新 capture、新統計公式、ε-bound 定義、bridge 實驗設計、舊資產
 disposal、contract / registry 語義改寫。
@@ -27,7 +49,7 @@ disposal、contract / registry 語義改寫。
 ## Thin status map（labels only；數字家＝reconciled map 與各 owner doc）
 
 空間符號與 typed-failure 語義家＝
-[contract v1.2 §20.9](../contracts/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)。
+[contract v1.2 §20.9](../../contracts/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)。
 
 ```text
 offline trajectory ─R_offline─> s0
@@ -45,12 +67,12 @@ Sealed per-study terminals（labels verbatim；軸值照 reconciled map 的 slot
 
 | study_id | owner terminal | claim_verdict · decision_outcome | owner doc |
 |:--|:--|:--|:--|
-| `kappa_d0_proxy_fidelity` | `T2_PROXY_UNFAITHFUL` | FALSIFIED · NOT_ASSESSED | [D0 results](../../modules/semantic/research/d0_runtime_shadow_fidelity_results_20260712.md) |
-| `kappa_r1_runtime_replay` | `R1_FAITHFUL` | VERIFIED · NOT_ASSESSED | [R1 results](../../modules/semantic/research/r1_temporal_reduction_capture_results_20260712.md) |
-| `rho_s0_safe_axis_transfer` | `S0_UNDECIDABLE` | NOT_IDENTIFIABLE · NOT_ASSESSED | [S0 results](../../modules/semantic/research/closed/safe_domain_runtime_transfer_results_20260713.md) |
-| `ek0_exact_key_recoverability` | `EK0_NO_RECOVERABLE_SUPPORT` | FALSIFIED · NOT_ASSESSED | [EK0 results](../../modules/semantic/research/frozen_packet_exact_key_recoverability_results_20260713.md) |
-| `p0_decision_path_identifiability` | `P0_CAPTURE_SEMANTICS_UNVERIFIABLE` | NOT_IDENTIFIABLE · NOT_ASSESSED | [registry](../contracts/claim_state_registry.md) |
-| `door0_t2_ranking_power` | `T2_NO_USABLE_RANKING_POWER_IN_CLASS` | FALSIFIED · NET_NEGATIVE | [T2 results](../../modules/semantic/research/door0_ranking_probe_results_20260712.md) |
+| `kappa_d0_proxy_fidelity` | `T2_PROXY_UNFAITHFUL` | FALSIFIED · NOT_ASSESSED | [D0 results](../../../modules/semantic/research/d0_runtime_shadow_fidelity_results_20260712.md) |
+| `kappa_r1_runtime_replay` | `R1_FAITHFUL` | VERIFIED · NOT_ASSESSED | [R1 results](../../../modules/semantic/research/r1_temporal_reduction_capture_results_20260712.md) |
+| `rho_s0_safe_axis_transfer` | `S0_UNDECIDABLE` | NOT_IDENTIFIABLE · NOT_ASSESSED | [S0 results](../../../modules/semantic/research/closed/safe_domain_runtime_transfer_results_20260713.md) |
+| `ek0_exact_key_recoverability` | `EK0_NO_RECOVERABLE_SUPPORT` | FALSIFIED · NOT_ASSESSED | [EK0 results](../../../modules/semantic/research/frozen_packet_exact_key_recoverability_results_20260713.md) |
+| `p0_decision_path_identifiability` | `P0_CAPTURE_SEMANTICS_UNVERIFIABLE` | NOT_IDENTIFIABLE · NOT_ASSESSED | [registry](../../contracts/claim_state_registry.md) |
+| `door0_t2_ranking_power` | `T2_NO_USABLE_RANKING_POWER_IN_CLASS` | FALSIFIED · NET_NEGATIVE | [T2 results](../../../modules/semantic/research/door0_ranking_probe_results_20260712.md) |
 
 §20.9 typing（routing 註記，非新 verdict）：κ_D0 的否證屬
 **transport-noncommuting**；P0 屬 **not-identifiable**；EK0 的否證位於
@@ -58,8 +80,8 @@ Sealed per-study terminals（labels verbatim；軸值照 reconciled map 的 slot
 non-commuting ≠ not-exchangeable）。S0 / T2 不指派 §20.9 failure type。
 
 Live（依 ADR 020 §S1 不發 slot）：discrete-\(M\)
-[parked-unsealed](../../modules/semantic/research/discrete_m_capability_declaration_20260712.md)；
-H0 [Amendment 7 pre-seal engineering](../../modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md)
+[parked-unsealed](../../../modules/semantic/research/discrete_m_capability_declaration_20260712.md)；
+H0 [Amendment 7 pre-seal engineering](../../../modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md)
 ——舊 owner seal 保留為歷史事件但不是 execution authority；目前狀態不得被寫成
 sealed terminal。
 
@@ -73,7 +95,7 @@ frozen evidence 上沒有第三種讀法：**要嘛取得可自證 provenance �
 
 ## Sole-active decision（O0）
 
-依 [registry §8](../contracts/claim_state_registry.md)：合法候選集恰有一個成員＝
+依 [registry §8](../../contracts/claim_state_registry.md)：合法候選集恰有一個成員＝
 H0（§4.3 dependency-typed，非 inadmissibility）。O0 決定：**取 H0，授予 WIP 鎖**。
 範圍嚴格＝H0 Amendment 7 已凍結的 Phase-A controller implementation（target＝
 **m**）→ 新 complete freeze artifact → 新 owner reseal。
@@ -86,7 +108,7 @@ H0（§4.3 dependency-typed，非 inadmissibility）。O0 決定：**取 H0，�
   capture，**不是** H0 terminal、不供給任何 result。
 - registry 不因本決定改寫（無 object state 轉移；registry §9）。
 
-## Expected state (lease)
+## Expected state (lease)（historical；lease 已於 close 失效，非 next step）
 
 Amendment 7 controller/schema/verifier implementation → 新 instrumentation head →
 新 complete freeze artifact 對 **m** 完成 → 新 owner literal `SEALED` → 單次固定
@@ -104,7 +126,7 @@ Phase A invocation（pass 只作 non-terminal progression，controller 不自動
 
 Routing 對象＝本 charter 的 decision question：「bridge-fidelity 線是否取得可自證
 provenance 的證據基礎？」每格語義逐字歸
-[H0 declaration](../../modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md)
+[H0 declaration](../../../modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md)
 的 **Amendment 2 §A2.4 sealed terminal partition**（先滿足者為準，不得後移；
 `H0_CAPTURE_PARTIAL` 已被 A2.4 退役——sealed invocation 下 there is no
 partial-capture reinterpretation；後續 amendments 依其 supersession 條款優先，
@@ -134,7 +156,7 @@ invocation 前才發現 sealed execution ABI 不完整，仍走 route 0′，不
   ⇒ 此路必然＝新 capture／新 identity observability，目前**不存在宣告** ⇒ 不在
   候選集；走它＝新 §20.2 宣告＋新 decision relevance。
 - **quantifier downgrade 到「commutes on representable subdomain」：不可用**——
-  κ_D0 在 matched（representable）domain 上本身已 FALSIFIED（[reconciled map](../../modules/semantic/research/bridge_fidelity_reconciled_map_20260715.md)
+  κ_D0 在 matched（representable）domain 上本身已 FALSIFIED（[reconciled map](../../../modules/semantic/research/bridge_fidelity_reconciled_map_20260715.md)
   Discrepancies）。殘餘的 downgrade 只剩 registry 既有 inadmissibility（s0 永不
   代表 production `bdist`）——那是既有狀態，不是新動作。
 
@@ -149,13 +171,13 @@ Discard 走 threads README 收尾流程，terminal＝declined，缺口留帳。
 
 ## Read first
 
-- [H0 declaration（含 Amendments 1–7）](../../modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md)
-- [claim-state registry（§8 候選集）](../contracts/claim_state_registry.md)
-- [reconciled flagship map（數字家）](../../modules/semantic/research/bridge_fidelity_reconciled_map_20260715.md)
-- [contract v1.2 §20.7 / §20.8 / §20.9](../contracts/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)
-- [ADR 020](../../decisions/020-doc-lifecycle-new-nogo.md) ＋ [terminal-slot fixtures](../../ownership/terminal_slot_fixtures.yaml)
-- [old-flagship per-study inventory](../../ownership/old_flagship_per_study_inventory.yaml)
-- [P0 declaration ＋ Correction 1](../../modules/semantic/research/runtime_bridge_decision_path_identifiability_declaration_20260713.md)
+- [H0 declaration（含 Amendments 1–7）](../../../modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md)
+- [claim-state registry（§8 候選集）](../../contracts/claim_state_registry.md)
+- [reconciled flagship map（數字家）](../../../modules/semantic/research/bridge_fidelity_reconciled_map_20260715.md)
+- [contract v1.2 §20.7 / §20.8 / §20.9](../../contracts/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)
+- [ADR 020](../../../decisions/020-doc-lifecycle-new-nogo.md) ＋ [terminal-slot fixtures](../../../ownership/terminal_slot_fixtures.yaml)
+- [old-flagship per-study inventory](../../../ownership/old_flagship_per_study_inventory.yaml)
+- [P0 declaration ＋ Correction 1](../../../modules/semantic/research/runtime_bridge_decision_path_identifiability_declaration_20260713.md)
 
 ## Artifacts
 
@@ -163,18 +185,13 @@ Discard 走 threads README 收尾流程，terminal＝declined，缺口留帳。
 
 ## Current step
 
-**Pre-seal execution-ABI engineering。** 舊 `h0_preseal_freeze_v2` 對
-`5996d83e` 的 coverage、projection、mutation admission 與 m fingerprints 仍是
-通過的歷史 artifact，但 Amendment 7 禁止把它和舊 §8 seal 當 execution
-authority。當前唯一下一步是按 A7 實作 controller/schema/verifier，選新
-instrumentation head，產出新 complete `h0_preseal_freeze_v3`，再由 owner 記新
-literal `SEALED`。本卡不實作 controller、不產 freeze、不 reseal；Phase A/B
-一步不得動。
+**none — closed。**
 
 ## Acceptance
 
-route 5 或任一 typed negative route（1–4，含 route 0 declined）被 owner 接受 →
-本卡照 threads README 收尾流程 close。
+已滿足：route 1（`H0_PROVENANCE_INVALID`）於 2026-07-19 被 owner 接受
+（[issue #209](https://github.com/raylei50653/saccade/issues/209)）→ 本卡照
+threads README 收尾流程 close（2026-07-20）。
 
 ## Must not
 
@@ -214,3 +231,16 @@ route 5 或任一 typed negative route（1–4，含 route 0 declined）被 owne
   authority, and returns H0 to route 0′ pre-seal engineering. No H0 terminal;
   routes 1–4 remain exclusive to an invocation that has actually launched under
   a new complete freeze and new literal `SEALED`.
+- 2026-07-19: Under the new complete freeze and new literal `SEALED`
+  (I=`9712e951` → F=`41b03f1c` → S=`bacb53e9`), the zero-argument controller was
+  launched exactly once from clean `S` and stopped fail-closed at the first
+  ordered terminal `provenance_invalid` → `H0_PROVENANCE_INVALID` (route 1).
+  Evidence packet landed at `7ee6b1c6`; independent verifier `valid=true`. The
+  owner explicitly accepted the terminal in issue #209 (Stage F): H0 = CLOSED,
+  controller retry forbidden, Phase B forbidden, NEXT none automatically, GCTM
+  #175 remains parked pending a separate owner scheduling decision.
+- 2026-07-20: Closed per the threads README close procedure (route 1,
+  diagnostic-only). Same-PR bookkeeping: threads README tables/panel, semantic
+  TODO sole-active cleared, claim-state registry
+  `quantity.bridge_capture_provenance` updated to the permanent
+  route-1 `open_limits` ledger form.
