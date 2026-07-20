@@ -38,6 +38,7 @@ STEP_NAMES = (
     "runner_launch_preflight",
     "failure_envelope_serialization",
     "preseal_freeze_assembly",
+    "landing_discovery_dry_run",
 )
 
 
@@ -521,6 +522,36 @@ def _check_preseal_sealability(head: str | None) -> None:
         raise QualificationError("pre-seal static sealability binds a different head")
 
 
+def _landing_discovery_dry_run(root: Path) -> None:
+    """Exercise the controller's real landing-discovery entry, non-authoritatively.
+
+    Discovery-only: this runs the exact per-candidate classification the
+    controller relies on (``_classify_landing_candidates`` -> the independent
+    ``verify_current_landing_candidate``) over the real, mixed-version evidence
+    tree.  It proves the current ``build_tool_binding``-bearing artifact and the
+    historical artifacts that predate it all classify without error, and that
+    discovery never selects more than one current landing.  It creates no packet
+    or terminal, consumes no execution authority, and leaves the tree unchanged.
+    """
+    import run_h0_phase_a as controller
+
+    classified = controller._classify_landing_candidates(root)
+    if not classified:
+        raise QualificationError("landing-discovery dry-run found no v3 candidates")
+    matches = 0
+    for path, report in classified:
+        if not isinstance(report, Mapping) or "matches_current_checkout" not in report:
+            raise QualificationError(
+                f"landing-discovery dry-run produced no verdict for {path}"
+            )
+        if report["matches_current_checkout"] is True:
+            matches += 1
+    if matches > 1:
+        raise QualificationError(
+            "landing-discovery dry-run selected multiple current landings"
+        )
+
+
 def _require_canonical_steps(steps: list[dict[str, str]]) -> None:
     """A passing qualification must have exactly the canonical step sequence."""
     if [step["name"] for step in steps] != list(STEP_NAMES) or any(
@@ -715,6 +746,8 @@ def run_qualification(
         steps.append({"name": "failure_envelope_serialization", "state": "passed"})
         _check_preseal_sealability(repository_identity["repository_head_sha"])
         steps.append({"name": "preseal_freeze_assembly", "state": "passed"})
+        _landing_discovery_dry_run(root)
+        steps.append({"name": "landing_discovery_dry_run", "state": "passed"})
         _require_canonical_steps(steps)
     except BaseException as exc:
         report = {

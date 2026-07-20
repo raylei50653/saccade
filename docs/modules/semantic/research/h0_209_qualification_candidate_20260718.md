@@ -154,3 +154,48 @@ recorded in Issue #209 once the restart PR head is stable and its
 host-independent CI is green. Because the restart PR is cut from current `main`, the eventual
 `I → F → S` chain is fast-forward-reachable from `main`, restoring the
 preferred Stage-D landing.
+
+## 8. Landing-discovery parity amendment (2026-07-20, append-only, Issue #227)
+
+The authorized Stage-E authoritative invocation from the sealed execution
+identity `S = 8970841d470371fd7c07df2bd5a367096538c228` (Issue #224) was
+**rejected pre-terminal** inside the controller's `_discover_controller_input`:
+the independent pre-seal verifier's landing-discovery header (`required_controller`)
+was never widened for the `build_tool_binding` member that the #224 assembler and
+the full-artifact verifier both carry, so the canonical current artifact was
+judged to hold an unknown member and discovery aborted before `execute_controller`
+and before T0. No ordered terminal was produced, no evidence packet was created,
+and the exactly-once authorization under that `S` is consumed and immutable. The
+defect is a controller-input member-declaration divergence, not a build-tool
+provenance defect, and is tracked as the bounded repair in Issue #227.
+
+This section extends the canonical qualification tuple for the Issue #227 repair
+candidate. The §5 required-step list is re-read as the same exact **eleven-step**
+tuple — matrix `required_steps`, its checker transcription, and the runner's
+`STEP_NAMES` remain byte-identical to one another — appending one final
+non-authoritative step after `preseal_freeze_assembly`:
+
+`configure`, `build`, `build_identity`, `runtime_closure`,
+`cuda_runtime_confinement`, `extension_load`, `t1_verdict_semantics`,
+`runner_launch_preflight`, `failure_envelope_serialization`,
+`preseal_freeze_assembly`, `landing_discovery_dry_run`.
+
+The new `landing_discovery_dry_run` step exercises the controller's real
+landing-discovery entry (`_classify_landing_candidates` → the independent
+`verify_current_landing_candidate`) over the checkout's mixed-version evidence
+tree, proving the current `build_tool_binding`-bearing artifact and the
+historical artifacts that predate it all classify without error and that no more
+than one current landing is selected. It performs no research capture, creates no
+evidence packet or terminal, consumes no execution authority, and leaves the
+candidate checkout and authoritative evidence tree unchanged.
+
+The repair further collapses the controller-input member set to one canonical
+declaration mirrored across the freeze assembler, the controller's landing
+discovery, the full-artifact verifier, and the discovery header, with the
+execution schema keeping `build_tool_binding` optional so historical evidence
+still validates; equality across every runtime transcription, the schema, and an
+explicit literal is pinned by a dedicated contract regression. All prior sections
+of this document continue to bind. The Issue #227 candidate `R`, its exact
+`I → F → S` chain, and the authoritative re-execution remain gated on separate
+controlled-host qualification, owner acceptance of a fresh `I`, and a new
+exactly-once execution authorization; this amendment authorizes none of them.

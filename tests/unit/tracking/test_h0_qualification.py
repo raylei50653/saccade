@@ -481,4 +481,5 @@ def test_canonical_steps_close_over_matrix_required_steps() -> None:
     required = tuple(matrix.load_matrix()["qualification"]["required_steps"])
     assert required == qualification.STEP_NAMES
     assert required == matrix.QUALIFICATION_STEPS
-    assert required[-1] == "preseal_freeze_assembly"
+    assert required[-2] == "preseal_freeze_assembly"
+    assert required[-1] == "landing_discovery_dry_run"

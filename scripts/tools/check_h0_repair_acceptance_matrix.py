@@ -51,6 +51,7 @@ QUALIFICATION_STEPS = (
     "runner_launch_preflight",
     "failure_envelope_serialization",
     "preseal_freeze_assembly",
+    "landing_discovery_dry_run",
 )
 REPAIR_UNITS = ("h0_build_tool_provenance_closure",)
 
