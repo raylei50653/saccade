@@ -5,11 +5,7 @@
 
 ## Sole active
 
-- **none**（2026-07-20 起）。O0 已於 route 1 關閉：owner 接受 ordered terminal
-  `H0_PROVENANCE_INVALID`（[#209](https://github.com/raylei50653/saccade/issues/209)，2026-07-19），
-  **H0 = CLOSED**（diagnostic-only）；controller retry / Phase B forbidden；
-  direct handoff＝no receiver，**NEXT = none automatically**；GCTM 不因 H0
-  closure 自動啟動 → [closed charter](../../research/threads/closed/bridge_frozen_evidence_o0_routing_20260716.md)。
+- **H0 re-entry repair — build-toolchain binding amendment → fresh I→F→S → exactly-once execution** → [Issue #224](https://github.com/raylei50653/saccade/issues/224)。Owner 於 2026-07-20 另行 scheduling；這是 #209 / PR #223 route-1 close-out 後的全新 authority cycle，**不是 retry / resume / reopen**。選定方案＝**(a) freeze-time pinning**：把實際 build toolchain 與必要 closure 納入 v3 bound-input universe，並在 controlled-host qualification 加入共用 resolver 的 binding dry-run。舊 `H0_PROVENANCE_INVALID` terminal、歷史 I/F/S 與 evidence packet 保持不可變；GCTM #175 仍 parked；Phase B forbidden；不得預寫 route 5。
 
 ## Proposed（non-WIP）
 
