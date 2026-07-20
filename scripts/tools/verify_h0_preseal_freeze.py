@@ -1671,11 +1671,18 @@ def _verify_landing_candidate_header(path: Path, root: Path) -> dict[str, Any]:
     ):
         raise VerificationError("landing candidate controller identity is malformed")
     _verify_landing_shape(controller_landing, head)
-    expected_root = root.resolve(strict=True).as_posix()
+    # Only the repo-relative derivation is path-portable and may be checked for
+    # every candidate.  ``repository_root`` is an absolute physical path bound to
+    # the checkout that sealed the artifact; a candidate whose ``repository_root``
+    # differs simply belongs to another checkout/clone and is a *non-current*
+    # landing (the topology check in ``verify_authority_landing`` classifies it),
+    # not a malformed artifact — checking it here would abort discovery over a
+    # foreign-root historical corpus (e.g. an Actions workspace clone).  The
+    # ``repository_root == checkout`` provenance binding is retained, enforced on
+    # the *selected current* candidate by ``_verify_controller_input``.
     evidence_root = f"docs/modules/semantic/research/evidence/h0_phase_a_{head}"
     if (
-        controller.get("repository_root") != expected_root
-        or controller.get("evidence_root") != evidence_root
+        controller.get("evidence_root") != evidence_root
         or controller.get("incomplete_root") != evidence_root + ".incomplete"
     ):
         raise VerificationError("landing candidate controller derivation is malformed")

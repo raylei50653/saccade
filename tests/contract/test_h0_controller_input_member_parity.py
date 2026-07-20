@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import copy
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -112,23 +113,65 @@ def test_sealed_artifact_carries_the_canonical_member_set() -> None:
 
 
 def _write_landing_candidate(
-    tmp_root: Path, controller_input: dict[str, object]
+    tmp_root: Path, controller_input: dict[str, object], *, rehome: bool = True
 ) -> tuple[Path, str]:
     """Materialise a committed-shaped v3 artifact at its deterministic path.
 
-    Re-homes the sealed artifact under ``tmp_root`` (only ``repository_root`` is
-    host-specific) so ``_verify_landing_candidate_header`` — a git/host-free,
-    file-and-shape gate — runs end-to-end against a controlled member set.
+    ``rehome=True`` sets ``repository_root`` to ``tmp_root`` (a same-root
+    candidate for this checkout); ``rehome=False`` keeps the sealed artifact's
+    original absolute ``repository_root`` (a foreign-root candidate relative to
+    ``tmp_root``).  ``_verify_landing_candidate_header`` is a git/host-free
+    file-and-shape gate, so it runs end-to-end against a controlled member set.
     """
     artifact = json.loads(SEALED_ARTIFACT.read_text(encoding="utf-8"))
     head = artifact["instrumentation_head"]
     controller_input = dict(controller_input)
-    controller_input["repository_root"] = tmp_root.resolve().as_posix()
+    if rehome:
+        controller_input["repository_root"] = tmp_root.resolve().as_posix()
     artifact["phase_a_controller_input"] = controller_input
     path = tmp_root / freeze_verifier.freeze_path(head)
     path.parent.mkdir(parents=True)
     path.write_bytes(freeze_verifier.canonical_json(artifact) + b"\n")
     return path, head
+
+
+def test_foreign_root_candidate_is_non_current_not_malformed(tmp_path: Path) -> None:
+    # Regression for the Stage-B failure: a candidate whose absolute
+    # repository_root belongs to another checkout/clone must NOT be treated as a
+    # malformed artifact by the discovery header — that aborted classification of
+    # the whole mixed-root corpus. The header (path-portable) accepts it; the
+    # topology / full-verify layers classify it as non-current.
+    foreign = _canonical_controller_input()  # sealed repository_root = original path
+    assert foreign["repository_root"] != (tmp_path / "wt").resolve().as_posix()
+    path, _head = _write_landing_candidate(tmp_path / "wt", foreign, rehome=False)
+    # Must not raise (previously raised "controller derivation is malformed").
+    freeze_verifier._verify_landing_candidate_header(path, tmp_path / "wt")
+
+
+def test_same_root_wrong_evidence_root_still_malformed(tmp_path: Path) -> None:
+    # Same-root malformed candidates stay fail-closed: the repo-relative
+    # derivation is still checked for every candidate.
+    broken = _canonical_controller_input()
+    broken["evidence_root"] = "docs/modules/semantic/research/evidence/h0_phase_a_wrong"
+    path, _head = _write_landing_candidate(tmp_path / "wt", broken, rehome=True)
+    with pytest.raises(
+        freeze_verifier.VerificationError, match="derivation is malformed"
+    ):
+        freeze_verifier._verify_landing_candidate_header(path, tmp_path / "wt")
+
+
+def test_full_verifier_retains_repository_root_binding() -> None:
+    # The repository_root == checkout provenance binding is not removed: it is
+    # enforced on the selected current candidate by _verify_controller_input.
+    ci = copy.deepcopy(_canonical_controller_input())
+    head = ci["instrumentation_head"]
+    if ci["repository_root"] != ROOT.resolve().as_posix():
+        pytest.skip("sealed artifact was not produced at this checkout root")
+    ci["repository_root"] = "/nonexistent/foreign/repository/root"
+    with pytest.raises(
+        freeze_verifier.VerificationError, match="repository root drift"
+    ):
+        freeze_verifier._verify_controller_input(ci, ROOT, head)
 
 
 def test_actual_landing_header_accepts_canonical_and_historical(tmp_path: Path) -> None:
@@ -210,6 +253,40 @@ def test_actual_discover_controller_input_does_not_reject_binding_member() -> No
     else:
         assert set(contract) == LITERAL_CONTROLLER_INPUT_MEMBERS
         assert "build_tool_binding" in contract
+
+
+def test_discover_in_foreign_checkout_reaches_zero_current_boundary(
+    tmp_path: Path,
+) -> None:
+    # Reproduces the Stage-B controlled-host failure locally: qualification runs
+    # in a git worktree whose physical root differs from the sealed
+    # repository_root, so every committed artifact is foreign-root. Over that
+    # foreign checkout, _discover_controller_input must reach the canonical
+    # zero-current landing-count boundary — NOT abort with the independent-verifier
+    # "controller derivation is malformed" error (the pre-repair behaviour).
+    worktree = tmp_path / "wt"
+    add = subprocess.run(
+        ["git", "worktree", "add", "--detach", worktree.as_posix(), "HEAD"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    if add.returncode != 0:
+        pytest.skip(f"git worktree unavailable: {add.stderr.strip()}")
+    try:
+        assert worktree.resolve() != ROOT.resolve()
+        with pytest.raises(controller.ContractError) as excinfo:
+            controller._discover_controller_input(worktree)
+        message = str(excinfo.value)
+        assert "rejected by independent verifier" not in message, message
+        assert "derivation is malformed" not in message, message
+        assert "current-HEAD h0_preseal_freeze_v3 landing" in message, message
+    finally:
+        subprocess.run(
+            ["git", "worktree", "remove", "--force", worktree.as_posix()],
+            cwd=ROOT,
+            capture_output=True,
+        )
 
 
 def test_discovery_header_accepts_every_committed_artifact() -> None:

@@ -268,3 +268,43 @@ All prior sections of this document continue to bind. The Issue #227 candidate
 `R`, its exact `I → F → S` chain, and the authoritative re-execution remain gated
 on separate controlled-host qualification, owner acceptance of a fresh `I`, and a
 new exactly-once execution authorization; this amendment authorizes none of them.
+
+## 9. Landing-discovery path-portability correction (2026-07-20, append-only, Issue #227)
+
+The first Stage-B controlled-host qualification of the §8 candidate (run
+`29735633364`) passed `configure` through `preseal_freeze_assembly` and **failed**
+at `landing_discovery_dry_run` with `landing candidate controller derivation is
+malformed`. Root cause: committed v3 artifacts bind their **absolute**
+`repository_root` to the checkout that sealed them (`/home/ray/developer/ai/saccade`),
+while controlled qualification runs from a different physical root (an Actions
+workspace clone). The discovery header treated any candidate whose
+`repository_root` differed from the current checkout as a globally malformed
+artifact and aborted classification of the whole corpus before reaching the
+intended member boundary.
+
+This correction distinguishes the two conditions:
+
+```text
+candidate bound to another physical repository_root
+  = non-current landing for this checkout
+  (classified by the I→F→S topology check; discovery does not abort)
+
+candidate bound to the current physical repository_root
+  = full member / shape / derivation / topology / selected-current verification
+  (same-root malformed candidates remain fail-closed)
+```
+
+The absolute `repository_root` comparison is removed only from the per-candidate
+discovery header (`_verify_landing_candidate_header`), which is path-portable and
+runs over every candidate; the repo-relative `evidence_root`/`incomplete_root`
+derivation is still checked there. The `repository_root == checkout` provenance
+binding is **not** removed — it remains enforced on the selected current
+candidate by `_verify_controller_input` (`controller input repository root
+drift`). Historical evidence is unchanged; no absolute path is rewritten.
+
+With this correction the truthful Stage-B `landing_discovery_dry_run` outcome on
+an unsealed foreign-root checkout is the canonical zero-current landing-count
+boundary (no independent-verifier derivation error), matching the §8 semantics.
+The correction supersedes the §8 candidate identity; the new exact `R` is
+recorded in Issue #227. Controlled-host qualification, `I₂`, `F₂`, `S₂`, the
+post-`S₂` readiness preflight, and execution remain separately gated.
