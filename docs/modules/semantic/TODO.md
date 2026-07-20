@@ -5,11 +5,11 @@
 
 ## Sole active
 
-- **none**（2026-07-20 起）。O0 已於 route 1 關閉：owner 接受 ordered terminal
-  `H0_PROVENANCE_INVALID`（[#209](https://github.com/raylei50653/saccade/issues/209)，2026-07-19），
-  **H0 = CLOSED**（diagnostic-only）；controller retry / Phase B forbidden；
-  direct handoff＝no receiver，**NEXT = none automatically**；GCTM 不因 H0
-  closure 自動啟動 → [closed charter](../../research/threads/closed/bridge_frozen_evidence_o0_routing_20260716.md)。
+- **H0 re-entry repair — build-tool provenance closure** → [Issue #224](https://github.com/raylei50653/saccade/issues/224)
+  （ACTIVE，2026-07-20 起）。#209 的 owner-accepted route-1
+  `H0_PROVENANCE_INVALID` 與歷史 I/F/S／evidence 不可變；#224 僅補齊
+  C++／CMake build-tool binding，必須重新 I→F→S。historical S retry、Phase B
+  forbidden；GCTM 不因修復工作自動啟動。
 
 ## Proposed（non-WIP）
 

@@ -1960,3 +1960,66 @@ under both new mechanisms. No `I` is selected, no `F` or `S` is created, and
 no execution authority is granted. H0 remains pre-seal engineering under
 Issue #209.
 | 2026-07-19 | `9712e951bd4b8ce5e5382f48cd0b7ca68686a720` | `41b03f1c36efcb212f8413366e7361f5bd18f140` | `SEALED` |
+
+## Amendment 8 — build-tool provenance closure (2026-07-20; pre-seal)
+
+### A8.1 Scope and historical boundary
+
+Issue #224 is the sole active H0 repair. It remedies only the route-1 defect
+recorded for the historical `I=9712e951bd4b8ce5e5382f48cd0b7ca68686a720`:
+the frozen `h0_bound_inputs_v1` omitted the actual C++ and CMake build tools.
+The historical I/F/S chain, its evidence root, its exactly-once invocation and
+its owner-accepted `H0_PROVENANCE_INVALID` terminal remain immutable. This
+amendment neither retries that S nor changes a historical freeze or packet.
+
+The sole admissible repair unit is
+`h0_build_tool_provenance_closure`. It is recorded as the one-member
+`repair_units` registry in `h0_repair_acceptance_matrix_v1`; any second unit,
+unlisted scope expansion, capture change, or Phase-B work is rejected. A fresh
+Repair candidate must therefore complete a new I -> F -> S chain before any
+future controller invocation.
+
+### A8.2 Freeze-time build-tool binding
+
+At F assembly the authoritative controller resolver
+`h0_build_tool_binding_resolver_v1` constructs one canonical
+`h0_build_tool_binding_v1` object. It resolves exactly the `c++` compiler
+driver and `cmake` through the build environment's literal
+`<ROOT>/.venv/bin:/usr/bin:/bin` PATH, records their canonical physical paths,
+lengths and SHA-256 values, and recursively records the actual `ldd`
+loader/shared-library closure of both tools. Every primary and closure record
+is a physical non-symlink file, is unique by realpath, and is also a member of
+the canonical `h0_bound_inputs_v1.tool_runtime` universe. Missing records,
+extra records, duplicate identities, unresolved dependencies, a path change,
+or a length/hash mismatch makes the freeze incomplete.
+
+`tool_paths.cxx` and `tool_paths.cmake` must equal the two primary records.
+The controller rebuilds the same binding before build; any rolling-host change
+(including `pacman -Syu`) is therefore `provenance_invalid` before either CMake
+vector can run. After configure/build, `CMAKE_COMMAND` and
+`CMAKE_CXX_COMPILER` from `CMakeCache.txt` must byte-identify the frozen CMake
+and C++ records. The controller copies the same binding into
+`build_identity.json`; the manifest's frozen controller input, packet
+transcription and independent Phase-A verifier must agree exactly. The
+independent preseal verifier transcribes the resolver and rebuilds the current
+host binding without importing either the assembler or controller.
+
+### A8.3 Qualification extension without a hidden step
+
+The existing canonical `build_identity` qualification step now calls the
+authoritative controller resolver, resolves the real CMake cache identities,
+and verifies both are a subset of its reported build-tool bound-input
+universe. It retains the canonical binding and input digest in the
+non-authoritative qualification report. It performs no research input read,
+capture, terminal emission, evidence-root write, or execution authorization.
+There is no eleventh qualification step: `STEP_NAMES`, matrix JSON, matrix
+checker and workflow retain the exact ten-step tuple, with the stronger
+build-tool assertion inside `build_identity`. The acceptance matrix requires
+the resulting `build_tool_binding_dry_run` in addition to its existing gates.
+
+### A8.4 State effect
+
+This is an append-only pre-seal engineering amendment, not an owner acceptance
+of I, F, S or a terminal. #224 remains ACTIVE; GCTM #175 is PARKED; Phase B is
+FORBIDDEN. A post-qualification commit invalidates qualification and any later
+execution-bound change still requires a completely fresh I -> F -> S chain.

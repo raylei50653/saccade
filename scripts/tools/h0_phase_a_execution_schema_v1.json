@@ -73,6 +73,33 @@
         "tool_runtime": {"type": "array", "items": {"$ref": "#/$defs/external_record"}}
       }
     },
+    "build_tool_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["build_environment_path", "digest", "loader_closure", "resolver", "schema", "tools"],
+      "properties": {
+        "build_environment_path": {"$ref": "#/$defs/absolute_path"},
+        "digest": {"$ref": "#/$defs/sha256"},
+        "loader_closure": {"type": "array", "items": {"$ref": "#/$defs/external_record"}, "minItems": 1, "uniqueItems": true},
+        "resolver": {"const": "h0_build_tool_binding_resolver_v1"},
+        "schema": {"const": "h0_build_tool_binding_v1"},
+        "tools": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["command", "record", "role"],
+            "properties": {
+              "command": {"enum": ["c++", "cmake"]},
+              "record": {"$ref": "#/$defs/external_record"},
+              "role": {"enum": ["cxx", "cmake"]}
+            }
+          }
+        }
+      }
+    },
     "run_id": {"enum": ["00_capture_off", "01_capture_on_1", "02_capture_on_2", "03_capture_on_3"]},
     "result": {
       "enum": [
@@ -132,6 +159,7 @@
         "bound_input_algorithms": {"const": {"actual_loaded_attestation": "h0_runtime_inputs_v1", "bound_inputs": "h0_bound_inputs_v1", "repository": "git_ls_tree_r_full_tree_z", "sequence": "h0_sequence_inputs_v1"}},
         "build_environment_algorithm": {"enum": ["h0_build_environment_v1", "h0_build_environment_v2"]},
         "build_environment_keys": {"oneOf": [{"const": ["HOME", "LANG", "LC_ALL", "PATH", "PYTHONHASHSEED", "PYTHONNOUSERSITE", "TMPDIR", "TZ", "XDG_CACHE_HOME"]}, {"const": ["CUDACXX", "HOME", "LANG", "LC_ALL", "PATH", "PYTHONHASHSEED", "PYTHONNOUSERSITE", "TMPDIR", "TZ", "XDG_CACHE_HOME"]}]},
+        "build_tool_binding_algorithm": {"const": "h0_build_tool_binding_resolver_v1"},
         "build_vectors": {
           "const": [
             ["uv", "run", "--frozen", "cmake", "--fresh", "-S", ".", "-B", "build/h0_phase_a", "-DCMAKE_BUILD_TYPE=Release", "-DENABLE_NATIVE_TESTS=OFF", "-DSACCADE_ENABLE_NVTX=ON", "-DPython3_EXECUTABLE=.venv/bin/python"],
@@ -185,6 +213,7 @@
           }
         },
         "bound_inputs": {"$ref": "#/$defs/bound_inputs"},
+        "build_tool_binding": {"$ref": "#/$defs/build_tool_binding"},
         "document_type": {"const": "controller_input"},
         "evidence_root": {"$ref": "#/$defs/relative_path"},
         "execution_constants": {"$ref": "#/$defs/execution_constants"},
@@ -213,7 +242,8 @@
         "tool_paths": {
           "oneOf": [
             {"type": "object", "additionalProperties": false, "required": ["git", "ldd", "readelf", "uv"], "properties": {"git": {"$ref": "#/$defs/absolute_path"}, "ldd": {"$ref": "#/$defs/absolute_path"}, "readelf": {"$ref": "#/$defs/absolute_path"}, "uv": {"$ref": "#/$defs/absolute_path"}}},
-            {"type": "object", "additionalProperties": false, "required": ["git", "ldd", "nvcc", "readelf", "uv"], "properties": {"git": {"$ref": "#/$defs/absolute_path"}, "ldd": {"$ref": "#/$defs/absolute_path"}, "nvcc": {"$ref": "#/$defs/absolute_path"}, "readelf": {"$ref": "#/$defs/absolute_path"}, "uv": {"$ref": "#/$defs/absolute_path"}}}
+            {"type": "object", "additionalProperties": false, "required": ["git", "ldd", "nvcc", "readelf", "uv"], "properties": {"git": {"$ref": "#/$defs/absolute_path"}, "ldd": {"$ref": "#/$defs/absolute_path"}, "nvcc": {"$ref": "#/$defs/absolute_path"}, "readelf": {"$ref": "#/$defs/absolute_path"}, "uv": {"$ref": "#/$defs/absolute_path"}}},
+            {"type": "object", "additionalProperties": false, "required": ["cmake", "cxx", "git", "ldd", "nvcc", "readelf", "uv"], "properties": {"cmake": {"$ref": "#/$defs/absolute_path"}, "cxx": {"$ref": "#/$defs/absolute_path"}, "git": {"$ref": "#/$defs/absolute_path"}, "ldd": {"$ref": "#/$defs/absolute_path"}, "nvcc": {"$ref": "#/$defs/absolute_path"}, "readelf": {"$ref": "#/$defs/absolute_path"}, "uv": {"$ref": "#/$defs/absolute_path"}}}
           ]
         }
       }

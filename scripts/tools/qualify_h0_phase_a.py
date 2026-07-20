@@ -345,9 +345,13 @@ def _build_identity(root: Path, build: Path, python: Path) -> dict[str, Any]:
         .lower(): _regular_file_record(Path(cache_values[key]).resolve(strict=True))
         for key in compiler_keys
     }
+    cmake_path = Path(cache_values.get("CMAKE_COMMAND", "")).resolve(strict=False)
+    if not cache_values.get("CMAKE_COMMAND") or not cmake_path.is_file():
+        raise QualificationError("qualification CMake cache lacks CMake executable")
     artifacts = [_regular_file_record(extension), _regular_file_record(plugin)]
     return {
         "artifacts": artifacts,
+        "cmake": _regular_file_record(cmake_path.resolve(strict=True)),
         "cmake_cache_sha256": sha256_file(cache),
         "compilers": compilers,
         "python": _regular_file_record(python.resolve(strict=True)),
@@ -355,7 +359,9 @@ def _build_identity(root: Path, build: Path, python: Path) -> dict[str, Any]:
     }
 
 
-def _qualification_inventory(root: Path, identity: Mapping[str, Any]) -> dict[str, Any]:
+def _qualification_inventory(
+    root: Path, identity: Mapping[str, Any], build_tool_binding: Mapping[str, Any]
+) -> dict[str, Any]:
     inputs = [
         _regular_file_record(root / "CMakeLists.txt"),
         _regular_file_record(root / "scripts/tools/run_h0_phase_a.py"),
@@ -363,15 +369,77 @@ def _qualification_inventory(root: Path, identity: Mapping[str, Any]) -> dict[st
             root / "scripts/tools/h0_phase_a_execution_schema_v1.json"
         ),
         *identity["artifacts"],
+        identity["cmake"],
         *identity["compilers"].values(),
         identity["python"],
     ]
-    records = sorted(inputs, key=lambda record: record["path"].encode("utf-8"))
+    for item in [*build_tool_binding["tools"], *build_tool_binding["loader_closure"]]:
+        frozen = item["record"] if "record" in item else item
+        current = _regular_file_record(Path(frozen["realpath"]))
+        if (
+            current["length"],
+            current["sha256"],
+        ) != (frozen["length"], frozen["sha256"]):
+            raise QualificationError(
+                "qualification build-tool input changed while materialising inventory"
+            )
+        inputs.append(current)
+    by_path: dict[str, dict[str, Any]] = {}
+    for record in inputs:
+        prior = by_path.setdefault(record["path"], record)
+        if prior != record:
+            raise QualificationError("qualification input has conflicting identities")
+    records = sorted(
+        by_path.values(), key=lambda record: record["path"].encode("utf-8")
+    )
     return {
         "algorithm": "h0_qualification_inputs_v1",
         "digest": sha256_bytes(canonical_json_bytes(records)),
         "records": records,
     }
+
+
+def _resolve_qualification_build_tool_binding(
+    root: Path,
+    identity: Mapping[str, Any],
+    *,
+    ldd: Path,
+) -> dict[str, Any]:
+    """Use the authoritative resolver, then prove actual CMake tools are bound.
+
+    This remains non-authoritative: the result lives only in the qualification
+    report and contains no sequence/model/research input.  The resolver and
+    identity comparison are nevertheless the exact controller functions so a
+    controlled host cannot qualify a parallel approximation.
+    """
+    import run_h0_phase_a as controller
+
+    binding = controller.resolve_build_tool_binding(root, ldd_path=ldd)
+    controller.validate_resolved_build_tool_identity(
+        binding,
+        cmake=identity["cmake"],
+        cxx=identity["compilers"]["cxx"],
+    )
+    identity_records = {
+        record["realpath"]: (record["length"], record["sha256"])
+        for item in binding["tools"]
+        for record in (item["record"],)
+    }
+    identity_records.update(
+        {
+            record["realpath"]: (record["length"], record["sha256"])
+            for record in binding["loader_closure"]
+        }
+    )
+    for observed in (identity["cmake"], identity["compilers"]["cxx"]):
+        if identity_records.get(observed["path"]) != (
+            observed["length"],
+            observed["sha256"],
+        ):
+            raise QualificationError(
+                "actual build tool is absent from qualification bound-input universe"
+            )
+    return binding
 
 
 def _failure_probe() -> dict[str, Any]:
@@ -469,6 +537,8 @@ def run_qualification(
         (environment_root / name).mkdir(parents=True)
     steps: list[dict[str, str]] = []
     identity: dict[str, Any] | None = None
+    build_tool_binding: dict[str, Any] | None = None
+    qualification_inputs: dict[str, Any] | None = None
     closure: dict[str, list[dict[str, Any]]] | None = None
     t1_verdict_semantics: dict[str, Any] | None = None
     repository_identity: dict[str, str | None] = {
@@ -479,6 +549,9 @@ def run_qualification(
     try:
         repository_identity = _repository_identity(root, requested_ref)
         uv = _tool("uv")
+        ldd = _tool("ldd")
+        import run_h0_phase_a as controller
+
         python = root / ".venv/bin/python"
         if python.is_symlink() or not python.is_file():
             raise QualificationError("qualification Python is absent or unsafe")
@@ -490,7 +563,7 @@ def run_qualification(
             "HOME": (environment_root / "home").as_posix(),
             "LANG": "C.UTF-8",
             "LC_ALL": "C.UTF-8",
-            "PATH": f"{root}/.venv/bin:/usr/bin:/bin",
+            "PATH": controller.build_tool_environment_path(root),
             "PYTHONHASHSEED": "0",
             "PYTHONNOUSERSITE": "1",
             "TMPDIR": (environment_root / "tmp").as_posix(),
@@ -550,6 +623,10 @@ def run_qualification(
             steps,
         )
         identity = _build_identity(root, build, python)
+        build_tool_binding = _resolve_qualification_build_tool_binding(
+            root, identity, ldd=ldd
+        )
+        identity = {**identity, "build_tool_binding": build_tool_binding}
         steps.append({"name": "build_identity", "state": "passed"})
         closure = {
             artifact["path"]: _dynamic_closure(Path(artifact["path"]))
@@ -601,10 +678,11 @@ def run_qualification(
             ),
             steps,
         )
-        import run_h0_phase_a as controller
-
-        before = _qualification_inventory(root, identity)
-        after = _qualification_inventory(root, identity)
+        qualification_inputs = _qualification_inventory(
+            root, identity, build_tool_binding
+        )
+        before = qualification_inputs
+        after = _qualification_inventory(root, identity, build_tool_binding)
         t1_verdict_semantics = controller._checkpoint_inventory_verdict(
             "T1", before, after
         )
@@ -650,12 +728,14 @@ def run_qualification(
     report = {
         "authority": "non_authoritative",
         "build_identity": identity,
+        "build_tool_binding": build_tool_binding,
         "capture": "forbidden",
         "failure_envelope_probe": failure_probe,
         "phase_b": "forbidden",
         **repository_identity,
         "research_inputs": "forbidden",
         "result": "passed",
+        "qualification_bound_inputs": qualification_inputs,
         "runtime_closure": closure,
         "schema": SCHEMA,
         "steps": steps,

@@ -84,6 +84,9 @@ BUILD_ENV_KEYS = (
     "TZ",
     "XDG_CACHE_HOME",
 )
+BUILD_TOOL_BINDING_SCHEMA = "h0_build_tool_binding_v1"
+BUILD_TOOL_BINDING_RESOLVER = "h0_build_tool_binding_resolver_v1"
+BUILD_TOOL_ROLES = (("cxx", "c++"), ("cmake", "cmake"))
 ENV_KEYS = (
     "CUDA_DEVICE_ORDER",
     "CUDA_VISIBLE_DEVICES",
@@ -457,9 +460,9 @@ def _mutation_cases(cuda: str) -> list[tuple[str, str, str]]:
     ]
 
 
-def _physical_executable(command: str) -> Path:
+def _physical_executable(command: str, *, search_path: str | None = None) -> Path:
     """Reproduce the assembler's sole host executable selection algorithm."""
-    found = shutil.which(command)
+    found = shutil.which(command, path=search_path)
     if not found:
         raise VerificationError(f"required host executable is absent: {command}")
     candidate = Path(found).resolve(strict=True)
@@ -485,6 +488,106 @@ def _host_file_record(path: Path) -> dict[str, Any]:
         "sha256": _sha(data),
         "symlink_chain": [],
     }
+
+
+def _independent_loader_closure(
+    root: Path, tools: Sequence[Path], ldd: Path
+) -> list[dict[str, Any]]:
+    """Independently transcribe the recursive ldd closure for CMake and C++."""
+    closure: dict[str, dict[str, Any]] = {}
+    tool_realpaths = {path.as_posix() for path in tools}
+    seen = set(tool_realpaths)
+    pending = list(tools)
+    while pending:
+        source = pending.pop(0)
+        try:
+            result = subprocess.run(
+                [ldd.as_posix(), source.as_posix()],
+                cwd=root,
+                env={"PATH": "/usr/bin:/bin", "LC_ALL": "C.UTF-8"},
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        except (OSError, subprocess.SubprocessError) as exc:
+            raise VerificationError(
+                f"independent build-tool closure could not resolve {source}"
+            ) from exc
+        for line in result.stdout.splitlines():
+            item = line.strip()
+            if not item or "linux-vdso" in item:
+                continue
+            if "not found" in item:
+                raise VerificationError(
+                    f"unresolved build-tool dependency for {source}: {item}"
+                )
+            candidate = (
+                item.split("=>", 1)[1].strip().split(" ", 1)[0]
+                if "=>" in item
+                else item.split(" ", 1)[0]
+            )
+            if not candidate.startswith("/"):
+                continue
+            path = Path(candidate).resolve(strict=True)
+            realpath = path.as_posix()
+            if realpath in tool_realpaths:
+                raise VerificationError(
+                    "build-tool loader closure duplicates a primary build tool"
+                )
+            record = _host_file_record(path)
+            prior = closure.setdefault(realpath, record)
+            if prior != record:
+                raise VerificationError(
+                    f"inconsistent build-tool loader identity: {realpath}"
+                )
+            if realpath not in seen:
+                seen.add(realpath)
+                pending.append(path)
+    records = sorted(
+        closure.values(), key=lambda item: item["logical_path"].encode("utf-8")
+    )
+    if not records:
+        raise VerificationError("build-tool loader/shared-library closure is empty")
+    return records
+
+
+def _independent_build_tool_binding(root: Path, ldd: Path) -> dict[str, Any]:
+    path_value = f"{root.resolve(strict=True)}/.venv/bin:/usr/bin:/bin"
+    tools = []
+    paths = []
+    for role, command in BUILD_TOOL_ROLES:
+        executable = _physical_executable(command, search_path=path_value)
+        paths.append(executable)
+        tools.append(
+            {
+                "command": command,
+                "record": _host_file_record(executable),
+                "role": role,
+            }
+        )
+    realpaths = [item["record"]["realpath"] for item in tools]
+    if len(realpaths) != len(set(realpaths)):
+        raise VerificationError("independent build-tool binding has duplicate tools")
+    binding: dict[str, Any] = {
+        "build_environment_path": path_value,
+        "digest": "",
+        "loader_closure": _independent_loader_closure(root, paths, ldd),
+        "resolver": BUILD_TOOL_BINDING_RESOLVER,
+        "schema": BUILD_TOOL_BINDING_SCHEMA,
+        "tools": tools,
+    }
+    binding["digest"] = _sha(
+        canonical_json(
+            {
+                "build_environment_path": binding["build_environment_path"],
+                "loader_closure": binding["loader_closure"],
+                "resolver": binding["resolver"],
+                "schema": binding["schema"],
+                "tools": binding["tools"],
+            }
+        )
+    )
+    return binding
 
 
 def _normalize_pci_bus_id(value: str) -> str:
@@ -557,6 +660,13 @@ def _independent_host_execution_inputs(root: Path) -> dict[str, Any]:
         name: _physical_executable(name).as_posix()
         for name in ("git", "ldd", "readelf", "uv")
     }
+    build_tool_binding = _independent_build_tool_binding(root, Path(tool_paths["ldd"]))
+    tool_paths.update(
+        {
+            item["role"]: item["record"]["realpath"]
+            for item in build_tool_binding["tools"]
+        }
+    )
     python = root / ".venv/bin/python"
     if not python.is_file() or python.is_symlink():
         raise VerificationError("frozen .venv/bin/python is absent or symlinked")
@@ -607,6 +717,9 @@ def _independent_host_execution_inputs(root: Path) -> dict[str, Any]:
         python,
         pyvenv_config,
     ]
+    candidates.extend(
+        Path(record["realpath"]) for record in build_tool_binding["loader_closure"]
+    )
     for directory in library_dirs.values():
         candidates.extend(
             sorted(
@@ -623,6 +736,7 @@ def _independent_host_execution_inputs(root: Path) -> dict[str, Any]:
         raise VerificationError("independent tool/runtime inventory has duplicates")
     return {
         "tool_paths": tool_paths,
+        "build_tool_binding": build_tool_binding,
         "library_dirs": library_dirs,
         "gpu": _independently_selected_gpu(),
         "tool_runtime": tool_runtime,
@@ -673,6 +787,7 @@ def expected_execution_constants(root: Path) -> dict[str, Any]:
         },
         "build_environment_algorithm": "h0_build_environment_v2",
         "build_environment_keys": list(BUILD_ENV_KEYS),
+        "build_tool_binding_algorithm": BUILD_TOOL_BINDING_RESOLVER,
         "build_vectors": [list(v) for v in BUILD_VECTORS],
         "c_paths": list(C_PATHS),
         "canonicalization": {
@@ -826,6 +941,10 @@ def _verify_host_execution_inputs(
     independent_host = _independent_host_execution_inputs(root)
     if controller["tool_paths"] != independent_host["tool_paths"]:
         raise VerificationError("tool paths differ from independent which() selection")
+    if controller["build_tool_binding"] != independent_host["build_tool_binding"]:
+        raise VerificationError(
+            "build-tool binding differs from independent resolver reconstruction"
+        )
     if controller["library_dirs"] != independent_host["library_dirs"]:
         raise VerificationError(
             "library directories differ from independent Python/nvcc derivation"
@@ -844,6 +963,7 @@ def _verify_controller_input(value: object, root: Path, head: str) -> None:
     required = {
         "authority_landing",
         "bound_inputs",
+        "build_tool_binding",
         "document_type",
         "evidence_root",
         "execution_constants",
@@ -904,6 +1024,8 @@ def _verify_controller_input(value: object, root: Path, head: str) -> None:
         ):
             raise VerificationError("library-directory identity is non-physical")
     if not isinstance(value["tool_paths"], dict) or set(value["tool_paths"]) != {
+        "cmake",
+        "cxx",
         "git",
         "ldd",
         "nvcc",

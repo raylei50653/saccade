@@ -7,6 +7,7 @@
       "required": [
         "packet_admission",
         "historical_archive_verification",
+        "build_tool_binding_dry_run",
         "host_independent_ci",
         "owner_acceptance_matrix",
         "qualification_report",
@@ -31,6 +32,9 @@
         "phase_b_fail_closed"
       ]
     }
+  ],
+  "repair_units": [
+    "h0_build_tool_provenance_closure"
   ],
   "qualification": {
     "authority": "non_authoritative",

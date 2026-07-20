@@ -82,6 +82,9 @@ BUILD_ENVIRONMENT_KEYS = (
     "TZ",
     "XDG_CACHE_HOME",
 )
+BUILD_TOOL_BINDING_SCHEMA = "h0_build_tool_binding_v1"
+BUILD_TOOL_BINDING_RESOLVER = "h0_build_tool_binding_resolver_v1"
+BUILD_TOOL_ROLES = (("cxx", "c++"), ("cmake", "cmake"))
 EVALUATOR_PREFIX = (
     "--preset",
     "mamba_whole_graph_m",
@@ -576,6 +579,12 @@ def _verify_constants(controller: Mapping[str, Any]) -> None:
         raise VerificationError("operator vector mismatch")
     if constants["build_vectors"] != [list(value) for value in BUILD_VECTORS]:
         raise VerificationError("build vector mismatch")
+    has_build_tool_binding = "build_tool_binding" in controller
+    if (
+        has_build_tool_binding
+        and constants.get("build_tool_binding_algorithm") != BUILD_TOOL_BINDING_RESOLVER
+    ):
+        raise VerificationError("build-tool binding resolver mismatch")
     algorithm = _build_environment_algorithm(controller)
     expected_tools = {
         "git",
@@ -585,6 +594,8 @@ def _verify_constants(controller: Mapping[str, Any]) -> None:
     }
     if algorithm == "h0_build_environment_v2":
         expected_tools.add("nvcc")
+    if has_build_tool_binding:
+        expected_tools.update({"cmake", "cxx"})
     if set(controller["tool_paths"]) != expected_tools:
         raise VerificationError("build tool-path declaration mismatch")
     if constants["ordered_run_plan"] != list(RUN_IDS):
@@ -622,6 +633,98 @@ def _verify_constants(controller: Mapping[str, Any]) -> None:
         raise VerificationError("C/D/V path set mismatch")
     if constants["result_matrix"] != expected_matrix():
         raise VerificationError("execution-constant C/D/V matrix mismatch")
+
+
+def _verify_build_tool_binding(controller: Mapping[str, Any]) -> None:
+    binding = controller.get("build_tool_binding")
+    if not isinstance(binding, Mapping) or set(binding) != {
+        "build_environment_path",
+        "digest",
+        "loader_closure",
+        "resolver",
+        "schema",
+        "tools",
+    }:
+        raise VerificationError("build-tool binding has missing or unknown members")
+    if (
+        binding["schema"] != BUILD_TOOL_BINDING_SCHEMA
+        or binding["resolver"] != BUILD_TOOL_BINDING_RESOLVER
+        or binding["build_environment_path"]
+        != f"{controller['repository_root']}/.venv/bin:/usr/bin:/bin"
+    ):
+        raise VerificationError("build-tool binding declaration drift")
+    expected_digest = digest(
+        {
+            "build_environment_path": binding["build_environment_path"],
+            "loader_closure": binding["loader_closure"],
+            "resolver": binding["resolver"],
+            "schema": binding["schema"],
+            "tools": binding["tools"],
+        }
+    )
+    if binding["digest"] != expected_digest:
+        raise VerificationError("build-tool binding digest mismatch")
+    tools = binding["tools"]
+    if (
+        not isinstance(tools, list)
+        or [item.get("role") if isinstance(item, Mapping) else None for item in tools]
+        != [role for role, _command in BUILD_TOOL_ROLES]
+        or [
+            item.get("command") if isinstance(item, Mapping) else None for item in tools
+        ]
+        != [command for _role, command in BUILD_TOOL_ROLES]
+    ):
+        raise VerificationError("build-tool primary role/command order mismatch")
+    records: list[Mapping[str, Any]] = []
+    for item in tools:
+        if not isinstance(item, Mapping) or set(item) != {"command", "record", "role"}:
+            raise VerificationError("build-tool primary record shape mismatch")
+        record = item["record"]
+        if not isinstance(record, Mapping):
+            raise VerificationError("build-tool primary record is malformed")
+        records.append(record)
+    closure = binding["loader_closure"]
+    if (
+        not isinstance(closure, list)
+        or not closure
+        or any(not isinstance(record, Mapping) for record in closure)
+    ):
+        raise VerificationError("build-tool loader/shared-library closure is malformed")
+    records.extend(closure)
+    frozen = {
+        record["realpath"]: (record["length"], record["sha256"])
+        for record in controller["bound_inputs"]["tool_runtime"]
+    }
+    realpaths: list[str] = []
+    for record in records:
+        if (
+            set(record)
+            != {
+                "length",
+                "logical_path",
+                "realpath",
+                "sha256",
+                "symlink_chain",
+            }
+            or record["logical_path"] != record["realpath"]
+            or record["symlink_chain"]
+        ):
+            raise VerificationError("build-tool record is not a physical identity")
+        realpath = str(record["realpath"])
+        if frozen.get(realpath) != (record["length"], record["sha256"]):
+            raise VerificationError("build-tool record is absent from bound inputs")
+        realpaths.append(realpath)
+    if len(realpaths) != len(set(realpaths)):
+        raise VerificationError("build-tool binding duplicates a physical identity")
+    closure_paths = [str(record["logical_path"]) for record in closure]
+    if closure_paths != sorted(closure_paths, key=lambda value: value.encode("utf-8")):
+        raise VerificationError("build-tool loader closure ordering mismatch")
+    expected_paths = {item["role"]: item["record"]["realpath"] for item in tools}
+    if {
+        "cxx": controller["tool_paths"].get("cxx"),
+        "cmake": controller["tool_paths"].get("cmake"),
+    } != expected_paths:
+        raise VerificationError("tool paths and build-tool binding differ")
 
 
 def _verify_bound_inputs(controller: Mapping[str, Any]) -> None:
@@ -1051,6 +1154,8 @@ def verify_evidence(evidence: Mapping[str, Any]) -> dict[str, Any]:
         raise VerificationError("not an execution_evidence document")
     _verify_constants(evidence["controller_input"])
     _verify_bound_inputs(evidence["controller_input"])
+    if "build_tool_binding" in evidence["controller_input"]:
+        _verify_build_tool_binding(evidence["controller_input"])
     _verify_children(evidence)
     _verify_input_binding(evidence)
     _verify_result(evidence)
@@ -1211,6 +1316,8 @@ def _verify_complete_build_identity(
         "state",
         "uv_lock_sha256",
     }
+    if "build_tool_binding" in controller:
+        base_members.add("build_tool_binding")
     if (
         set(identity) not in (base_members, base_members | {"extension_load"})
         or identity.get("state") != "complete"
@@ -1218,6 +1325,10 @@ def _verify_complete_build_identity(
         raise VerificationError("build identity has missing or unknown members")
     if identity["build_vectors"] != [list(vector) for vector in BUILD_VECTORS]:
         raise VerificationError("build identity command vectors differ from A7.4")
+    if "build_tool_binding" in controller and (
+        identity["build_tool_binding"] != controller["build_tool_binding"]
+    ):
+        raise VerificationError("packet build-tool binding differs from freeze input")
     expected_environment = _expected_build_environment(controller)
     if identity["build_environment"] != expected_environment or identity[
         "build_environment_digest"
@@ -1310,6 +1421,25 @@ def _verify_complete_build_identity(
     compilers = identity["compilers"]
     if not isinstance(compilers, dict) or set(compilers) != {"cxx", "cuda"}:
         raise VerificationError("compiler identity set mismatch")
+    if "build_tool_binding" in controller:
+        frozen_tools = {
+            item["role"]: item["record"]
+            for item in controller["build_tool_binding"]["tools"]
+        }
+        for role, observed in (("cmake", cmake), ("cxx", compilers["cxx"])):
+            frozen = frozen_tools.get(role)
+            if not isinstance(frozen, Mapping) or (
+                observed.get("path"),
+                observed.get("length"),
+                observed.get("sha256"),
+            ) != (
+                frozen.get("realpath"),
+                frozen.get("length"),
+                frozen.get("sha256"),
+            ):
+                raise VerificationError(
+                    f"build identity {role} differs from the frozen build-tool binding"
+                )
     if _build_environment_algorithm(controller) == "h0_build_environment_v2":
         # Record-to-record binding: tool_paths.nvcc <-> unique frozen
         # tool_runtime record <-> build_environment.CUDACXX (checked via the

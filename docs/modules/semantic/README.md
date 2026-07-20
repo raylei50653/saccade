@@ -87,7 +87,7 @@
 | 文件 | 這是什麼 |
 |------|------|
 | [research/bridge_fidelity_reconciled_map_20260715.md](research/bridge_fidelity_reconciled_map_20260715.md) | 🗺️ **總覽地圖**（draft, navigation-only）：D0/R1/S0/EK0/P0/T2 現況以 ADR 020 typed-terminal schema 重建；校正舊圖（D0=FALSIFIED 非 bit-exact）|
-| [research/headline_bridge_full_decision_capture_declaration_20260713.md](research/headline_bridge_full_decision_capture_declaration_20260713.md) | H0：headline-m full bridge-decision trace capture 宣告 |
+| [research/headline_bridge_full_decision_capture_declaration_20260713.md](research/headline_bridge_full_decision_capture_declaration_20260713.md) | H0：headline-m full bridge-decision trace capture 宣告；[#224](https://github.com/raylei50653/saccade/issues/224) build-tool provenance re-entry repair（ACTIVE） |
 | [research/h0_gctm_consumer_compatibility_requirements_20260718.md](research/h0_gctm_consumer_compatibility_requirements_20260718.md) | H0→GCTM consumer compatibility：H0 baseline/guarantee 的註冊與 bridge-runtime B1 blocker（draft；非 H0 terminal） |
 | [research/existing_online_object_analysis_for_gctm_alignment_20260718.md](research/existing_online_object_analysis_for_gctm_alignment_20260718.md) | GCTM existing-online-object 補充分析：production hybrid event operator、mask/rank/claim/commit 對應與 negative constraints（supplemental；不取代 runtime authority） |
 | [research/h0_209_qualification_candidate_20260718.md](research/h0_209_qualification_candidate_20260718.md) | H0 #209 Stage-A：post-bootstrap qualification candidate（task-local metadata，non-authoritative；綁定 Repair PR head R 與非權威 qualification report）|

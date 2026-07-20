@@ -71,21 +71,33 @@ def _bound_inputs() -> dict[str, object]:
         )
     nvcc = Path("/usr/bin/true").resolve(strict=True)
     nvcc_data = nvcc.read_bytes()
+    tools = [
+        {
+            "length": len(nvcc_data),
+            "logical_path": nvcc.as_posix(),
+            "realpath": nvcc.as_posix(),
+            "sha256": hashlib.sha256(nvcc_data).hexdigest(),
+            "symlink_chain": [],
+        },
+        *[
+            {
+                "length": 1,
+                "logical_path": path,
+                "realpath": path,
+                "sha256": hashlib.sha256(path.encode("utf-8")).hexdigest(),
+                "symlink_chain": [],
+            }
+            for path in ("/fixture/build-loader", "/fixture/cmake", "/fixture/cxx")
+        ],
+    ]
+    tools.sort(key=lambda record: str(record["logical_path"]).encode("utf-8"))
     value: dict[str, object] = {
         "digest": "0" * 64,
         "models_engines": models,
         "repository": repository,
         "schema": "h0_bound_inputs_v1",
         "sequence": _sequence(),
-        "tool_runtime": [
-            {
-                "length": len(nvcc_data),
-                "logical_path": nvcc.as_posix(),
-                "realpath": nvcc.as_posix(),
-                "sha256": hashlib.sha256(nvcc_data).hexdigest(),
-                "symlink_chain": [],
-            }
-        ],
+        "tool_runtime": tools,
     }
     value["digest"] = parent.bound_inventory_digest(value)
     return value
@@ -95,6 +107,19 @@ def _controller() -> dict[str, object]:
     head = "a" * 40
     evidence = f"docs/modules/semantic/research/evidence/h0_phase_a_{head}"
     bound = _bound_inputs()
+    records = {record["realpath"]: record for record in bound["tool_runtime"]}
+    build_tool_binding: dict[str, object] = {
+        "build_environment_path": f"{ROOT}/.venv/bin:/usr/bin:/bin",
+        "digest": "",
+        "loader_closure": [records["/fixture/build-loader"]],
+        "resolver": parent.BUILD_TOOL_BINDING_RESOLVER,
+        "schema": parent.BUILD_TOOL_BINDING_SCHEMA,
+        "tools": [
+            {"command": "c++", "record": records["/fixture/cxx"], "role": "cxx"},
+            {"command": "cmake", "record": records["/fixture/cmake"], "role": "cmake"},
+        ],
+    }
+    build_tool_binding["digest"] = parent._binding_digest(build_tool_binding)
     return {
         "authority_landing": {
             "artifact_path": (
@@ -118,6 +143,7 @@ def _controller() -> dict[str, object]:
             "schema": "h0_authority_landing_v1",
         },
         "bound_inputs": bound,
+        "build_tool_binding": build_tool_binding,
         "document_type": "controller_input",
         "evidence_root": evidence,
         "execution_constants": parent.execution_constants(ROOT),
@@ -141,6 +167,8 @@ def _controller() -> dict[str, object]:
         "schema": "h0_phase_a_controller_v1",
         "sequence_input_digest": bound["sequence"]["digest"],
         "tool_paths": {
+            "cmake": "/fixture/cmake",
+            "cxx": "/fixture/cxx",
             "git": "/usr/bin/git",
             "ldd": "/usr/bin/ldd",
             "nvcc": "/usr/bin/true",
@@ -546,9 +574,74 @@ def test_build_environment_rejects_unbound_or_drifted_nvcc() -> None:
         parent.build_environment(contract)
 
     contract = _controller()
-    contract["bound_inputs"]["tool_runtime"][0]["sha256"] = "0" * 64
+    next(
+        record
+        for record in contract["bound_inputs"]["tool_runtime"]
+        if record["logical_path"] == contract["tool_paths"]["nvcc"]
+    )["sha256"] = "0" * 64
     with pytest.raises(parent.DriftError, match="nvcc differs"):
         parent.build_environment(contract)
+
+
+def test_build_tool_resolver_closes_primary_tools_and_rejects_identity_drift(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "repo"
+    root.mkdir()
+    cxx = tmp_path / "cxx"
+    cmake = tmp_path / "cmake"
+    loader = tmp_path / "loader.so"
+    for path in (cxx, cmake, loader):
+        path.write_bytes(path.name.encode("utf-8"))
+    selected = iter((cxx, cmake))
+    monkeypatch.setattr(
+        parent,
+        "_physical_executable_in_path",
+        lambda *_args, **_kwargs: next(selected),
+    )
+
+    def dependencies(path: Path, *_args, **_kwargs):
+        if path in {cxx, cmake}:
+            data = loader.read_bytes()
+            return [
+                {
+                    "length": len(data),
+                    "path": loader.as_posix(),
+                    "realpath": loader.as_posix(),
+                    "sha256": hashlib.sha256(data).hexdigest(),
+                }
+            ]
+        return []
+
+    monkeypatch.setattr(parent, "_dynamic_dependencies", dependencies)
+    binding = parent.resolve_build_tool_binding(root, ldd_path=Path("/usr/bin/true"))
+    assert [item["role"] for item in binding["tools"]] == ["cxx", "cmake"]
+    assert binding["loader_closure"] == [
+        parent.external_input_record(root, str(loader))
+    ]
+    parent.validate_resolved_build_tool_identity(
+        binding,
+        cmake={
+            "length": len(cmake.read_bytes()),
+            "path": cmake.as_posix(),
+            "sha256": hashlib.sha256(cmake.read_bytes()).hexdigest(),
+        },
+        cxx={
+            "length": len(cxx.read_bytes()),
+            "path": cxx.as_posix(),
+            "sha256": hashlib.sha256(cxx.read_bytes()).hexdigest(),
+        },
+    )
+    with pytest.raises(parent.DriftError, match="outside the frozen"):
+        parent.validate_resolved_build_tool_identity(
+            binding,
+            cmake={
+                "length": 1,
+                "path": "/substituted/cmake",
+                "sha256": "0" * 64,
+            },
+            cxx=binding["tools"][0]["record"],
+        )
 
 
 def test_auxiliary_timeout_kills_and_reaps_the_complete_process_group(
@@ -673,19 +766,41 @@ def test_independent_verifier_rejects_self_consistent_build_environment_drift(
         for relative, payload in artifact_values.items()
     ]
     environment = parent.build_environment(contract)
+    frozen_build_tools = {
+        item["role"]: item["record"] for item in contract["build_tool_binding"]["tools"]
+    }
+
+    def frozen_build_tool(role: str) -> dict[str, object]:
+        record = frozen_build_tools[role]
+        return {
+            "length": record["length"],
+            "path": record["realpath"],
+            "sha256": record["sha256"],
+            "version": "fixture",
+        }
+
     identity = {
         "artifacts": artifacts,
         "build_environment": environment,
         "build_environment_digest": verifier.digest(environment),
         "build_vectors": [list(vector) for vector in parent.BUILD_VECTORS],
-        "cmake": {"generator": "fixture", **tool_record("/usr/bin/true")},
+        "build_tool_binding": contract["build_tool_binding"],
+        "cmake": {"generator": "fixture", **frozen_build_tool("cmake")},
         "cmake_cache_sha256": hashlib.sha256(cache.read_bytes()).hexdigest(),
         "compilers": {
-            "cxx": tool_record("/usr/bin/true"),
+            "cxx": frozen_build_tool("cxx"),
             "cuda": {
                 **tool_record("/usr/bin/true"),
-                "length": contract["bound_inputs"]["tool_runtime"][0]["length"],
-                "sha256": contract["bound_inputs"]["tool_runtime"][0]["sha256"],
+                "length": next(
+                    record["length"]
+                    for record in contract["bound_inputs"]["tool_runtime"]
+                    if record["logical_path"] == contract["tool_paths"]["nvcc"]
+                ),
+                "sha256": next(
+                    record["sha256"]
+                    for record in contract["bound_inputs"]["tool_runtime"]
+                    if record["logical_path"] == contract["tool_paths"]["nvcc"]
+                ),
             },
         },
         "cuda_toolkit_root": "/opt/cuda",
@@ -1190,6 +1305,10 @@ def _launch_contract(tmp_path: Path) -> dict[str, object]:
         (tmp_path / relative).mkdir(parents=True, exist_ok=True)
     controller = _controller()
     controller["repository_root"] = tmp_path.as_posix()
+    binding = controller["build_tool_binding"]
+    assert isinstance(binding, dict)
+    binding["build_environment_path"] = f"{tmp_path}/.venv/bin:/usr/bin:/bin"
+    binding["digest"] = parent._binding_digest(binding)
     controller["incomplete_root"] = "evidence.incomplete"
     controller["evidence_root"] = "evidence"
     controller["library_dirs"] = {
@@ -2903,10 +3022,51 @@ def test_build_tool_binding_requires_toolchain_but_not_dynamic_closure(
     tmp_path: Path,
 ) -> None:
     contract = _launch_contract(tmp_path)
-    contract["tool_paths"] = {
-        name: "/usr/bin/true" for name in ("git", "ldd", "nvcc", "readelf", "uv")
-    }
-    frozen_tool = contract["bound_inputs"]["tool_runtime"][0]
+    actual_paths = {"cxx": Path("/usr/bin/false"), "cmake": Path("/usr/bin/printf")}
+    closure_path = Path("/usr/bin/echo")
+    runtime = [
+        record
+        for record in contract["bound_inputs"]["tool_runtime"]
+        if record["logical_path"]
+        not in {"/fixture/build-loader", "/fixture/cmake", "/fixture/cxx"}
+    ]
+
+    def external(path: Path) -> dict[str, object]:
+        data = path.read_bytes()
+        return {
+            "length": len(data),
+            "logical_path": path.as_posix(),
+            "realpath": path.as_posix(),
+            "sha256": hashlib.sha256(data).hexdigest(),
+            "symlink_chain": [],
+        }
+
+    records = {role: external(path) for role, path in actual_paths.items()}
+    closure = external(closure_path)
+    runtime.extend([*records.values(), closure])
+    runtime.sort(key=lambda record: str(record["logical_path"]).encode("utf-8"))
+    contract["bound_inputs"]["tool_runtime"] = runtime
+    contract["bound_inputs"]["digest"] = parent.bound_inventory_digest(
+        contract["bound_inputs"]
+    )
+    binding = contract["build_tool_binding"]
+    binding["tools"] = [
+        {"command": "c++", "record": records["cxx"], "role": "cxx"},
+        {"command": "cmake", "record": records["cmake"], "role": "cmake"},
+    ]
+    binding["loader_closure"] = [closure]
+    binding["digest"] = parent._binding_digest(binding)
+    contract["tool_paths"].update(
+        {role: path.as_posix() for role, path in actual_paths.items()}
+    )
+    contract["tool_paths"].update(
+        {name: "/usr/bin/true" for name in ("git", "ldd", "nvcc", "readelf", "uv")}
+    )
+    frozen_tool = next(
+        record
+        for record in contract["bound_inputs"]["tool_runtime"]
+        if record["logical_path"] == contract["tool_paths"]["nvcc"]
+    )
     tool_record = {
         "length": frozen_tool["length"],
         "path": "/usr/bin/true",
@@ -2930,8 +3090,29 @@ def test_build_tool_binding_requires_toolchain_but_not_dynamic_closure(
                 "sha256": "0" * 64,
             }
         ],
-        "cmake": {"generator": "fixture", **tool_record},
-        "compilers": {"cuda": dict(tool_record), "cxx": dict(tool_record)},
+        "build_tool_binding": contract["build_tool_binding"],
+        "cmake": {
+            "generator": "fixture",
+            "length": contract["build_tool_binding"]["tools"][1]["record"]["length"],
+            "path": contract["build_tool_binding"]["tools"][1]["record"]["realpath"],
+            "sha256": contract["build_tool_binding"]["tools"][1]["record"]["sha256"],
+            "version": "fixture",
+        },
+        "compilers": {
+            "cuda": dict(tool_record),
+            "cxx": {
+                "length": contract["build_tool_binding"]["tools"][0]["record"][
+                    "length"
+                ],
+                "path": contract["build_tool_binding"]["tools"][0]["record"][
+                    "realpath"
+                ],
+                "sha256": contract["build_tool_binding"]["tools"][0]["record"][
+                    "sha256"
+                ],
+                "version": "fixture",
+            },
+        },
         "python": {"abi": "fixture", **tool_record},
     }
     parent._validate_build_tool_runtime_binding(contract, identity)
@@ -2939,7 +3120,7 @@ def test_build_tool_binding_requires_toolchain_but_not_dynamic_closure(
         **identity,
         "compilers": {
             "cuda": {**tool_record, "sha256": "0" * 64},
-            "cxx": dict(tool_record),
+            "cxx": dict(identity["compilers"]["cxx"]),
         },
     }
     with pytest.raises(parent.DriftError, match="absent from h0_bound_inputs_v1"):

@@ -346,6 +346,16 @@ def _derive_controller_input(head: str) -> dict[str, Any]:
         name: _physical_executable(name).as_posix()
         for name in ("git", "ldd", "readelf", "uv")
     }
+    build_tool_binding = controller.resolve_build_tool_binding(
+        root,
+        ldd_path=Path(tool_paths["ldd"]),
+    )
+    tool_paths.update(
+        {
+            item["role"]: item["record"]["realpath"]
+            for item in build_tool_binding["tools"]
+        }
+    )
     python = root / ".venv/bin/python"
     if not python.is_file() or python.is_symlink():
         raise RuntimeError("frozen .venv/bin/python is absent or symlinked")
@@ -407,6 +417,9 @@ def _derive_controller_input(head: str) -> dict[str, Any]:
         python,
         pyvenv_config,
     ]
+    tool_candidates.extend(
+        Path(record["realpath"]) for record in build_tool_binding["loader_closure"]
+    )
     for directory in libraries.values():
         tool_candidates.extend(
             sorted(
@@ -444,6 +457,7 @@ def _derive_controller_input(head: str) -> dict[str, Any]:
     return {
         "authority_landing": landing,
         "bound_inputs": bound_inputs,
+        "build_tool_binding": build_tool_binding,
         "document_type": "controller_input",
         "evidence_root": evidence_root,
         "execution_constants": controller.execution_constants(root),

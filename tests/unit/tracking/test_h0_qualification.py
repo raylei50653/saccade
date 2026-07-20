@@ -83,13 +83,15 @@ def test_build_identity_matches_project_enabled_languages(tmp_path: Path) -> Non
     plugin = build / "libsaccade_scan_plugin.so"
     cxx = tmp_path / "cxx"
     cuda = tmp_path / "nvcc"
-    for path in (extension, plugin, cxx, cuda):
+    cmake = tmp_path / "cmake"
+    for path in (extension, plugin, cxx, cuda, cmake):
         path.write_bytes(b"fixture")
     (build / "CMakeCache.txt").write_text(
         "\n".join(
             (
                 f"CMAKE_CXX_COMPILER:FILEPATH={cxx}",
                 f"CMAKE_CUDA_COMPILER:FILEPATH={cuda}",
+                f"CMAKE_COMMAND:INTERNAL={cmake}",
             )
         )
         + "\n",
@@ -99,6 +101,7 @@ def test_build_identity_matches_project_enabled_languages(tmp_path: Path) -> Non
     identity = qualification._build_identity(build, build, Path(sys.executable))
 
     assert set(identity["compilers"]) == {"cxx", "cuda"}
+    assert identity["cmake"]["path"] == cmake.as_posix()
 
 
 def test_qualification_failure_probe_is_truthful_but_non_authoritative() -> None:
@@ -137,6 +140,69 @@ def test_qualification_t1_verdict_semantics_uses_controller_producer() -> None:
     assert row["state"] == "completed"
     assert row["inventory_equal"] is True
     assert row["observed_digest"] == inventory["digest"]
+
+
+def test_qualification_build_tool_dry_run_uses_controller_resolver(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cmake = {
+        "length": 1,
+        "path": "/fixture/cmake",
+        "sha256": "a" * 64,
+    }
+    cxx = {
+        "length": 2,
+        "path": "/fixture/cxx",
+        "sha256": "b" * 64,
+    }
+    binding = {
+        "build_environment_path": f"{tmp_path}/.venv/bin:/usr/bin:/bin",
+        "digest": "fixture",
+        "loader_closure": [],
+        "resolver": controller.BUILD_TOOL_BINDING_RESOLVER,
+        "schema": controller.BUILD_TOOL_BINDING_SCHEMA,
+        "tools": [
+            {
+                "command": "c++",
+                "record": {
+                    **cxx,
+                    "realpath": cxx["path"],
+                    "logical_path": cxx["path"],
+                    "symlink_chain": [],
+                },
+                "role": "cxx",
+            },
+            {
+                "command": "cmake",
+                "record": {
+                    **cmake,
+                    "realpath": cmake["path"],
+                    "logical_path": cmake["path"],
+                    "symlink_chain": [],
+                },
+                "role": "cmake",
+            },
+        ],
+    }
+    calls: list[object] = []
+    monkeypatch.setattr(
+        controller,
+        "resolve_build_tool_binding",
+        lambda root, **kwargs: calls.append((root, kwargs)) or binding,
+    )
+    monkeypatch.setattr(
+        controller,
+        "validate_resolved_build_tool_identity",
+        lambda observed, **kwargs: calls.append((observed, kwargs)),
+    )
+    identity = {"cmake": cmake, "compilers": {"cxx": cxx}}
+    assert (
+        qualification._resolve_qualification_build_tool_binding(
+            tmp_path, identity, ldd=Path("/usr/bin/ldd")
+        )
+        == binding
+    )
+    assert len(calls) == 2
 
 
 def test_qualification_report_binds_resolved_repository_identity(

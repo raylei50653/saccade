@@ -21,6 +21,7 @@ REQUIRED_BY_GATE = {
     "repair_qualification": (
         "packet_admission",
         "historical_archive_verification",
+        "build_tool_binding_dry_run",
         "host_independent_ci",
         "owner_acceptance_matrix",
         "qualification_report",
@@ -51,6 +52,7 @@ QUALIFICATION_STEPS = (
     "failure_envelope_serialization",
     "preseal_freeze_assembly",
 )
+REPAIR_UNITS = ("h0_build_tool_provenance_closure",)
 
 
 class MatrixError(ValueError):
@@ -79,6 +81,7 @@ def validate_matrix(value: Mapping[str, Any]) -> None:
         "correction_budget",
         "gates",
         "qualification",
+        "repair_units",
         "schema",
     }
     if (
@@ -89,6 +92,11 @@ def validate_matrix(value: Mapping[str, Any]) -> None:
         raise MatrixError("acceptance matrix identity is malformed")
     if value.get("correction_budget") != "one_batch_then_restart":
         raise MatrixError("correction budget is not one batch then restart")
+    if (
+        tuple(_require_strings(value.get("repair_units"), "repair units"))
+        != REPAIR_UNITS
+    ):
+        raise MatrixError("admissible repair unit differs from the H0 repair contract")
     gates = value.get("gates")
     if not isinstance(gates, list) or len(gates) != len(GATES):
         raise MatrixError("acceptance matrix gate cardinality is malformed")

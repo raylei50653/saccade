@@ -156,6 +156,12 @@ def test_non_calendar_owner_event_date_fails_closed(
             "NVML selection",
         ),
         (
+            lambda controller, inventory: controller.update(
+                {"build_tool_binding": {"fixture": "substituted"}}
+            ),
+            "build-tool binding",
+        ),
+        (
             lambda controller, inventory: inventory.update({"tool_runtime": []}),
             "host expansion",
         ),
@@ -169,12 +175,15 @@ def test_host_execution_input_substitution_fails_against_independent_rebuild(
 ) -> None:
     expected = {
         "tool_paths": {
+            "cmake": "/selected/cmake",
+            "cxx": "/selected/cxx",
             "git": "/selected/git",
             "ldd": "/selected/ldd",
             "nvcc": "/selected/nvcc",
             "readelf": "/selected/readelf",
             "uv": "/selected/uv",
         },
+        "build_tool_binding": {"fixture": "binding"},
         "library_dirs": {
             "cuda_library_dir": "/selected/cuda",
             "pytorch_library_dir": "/selected/torch",
@@ -193,6 +202,7 @@ def test_host_execution_input_substitution_fails_against_independent_rebuild(
     }
     controller = {
         "tool_paths": dict(expected["tool_paths"]),
+        "build_tool_binding": dict(expected["build_tool_binding"]),
         "library_dirs": dict(expected["library_dirs"]),
         "gpu": dict(expected["gpu"]),
     }
@@ -216,8 +226,9 @@ def _independent_host_fixture(
     pyvenv_config.write_bytes(b"home = /fixture/python\n")
     tools = tmp_path / "tools"
     tools.mkdir()
-    for name in ("git", "ldd", "readelf", "uv"):
+    for name in ("git", "ldd", "readelf", "uv", "c++", "cmake"):
         (tools / name).write_bytes(name.encode("utf-8"))
+    (tools / "loader").write_bytes(b"loader\n")
     purelib = tmp_path / "purelib"
     nvcc = purelib / "nvidia/cu13/bin/nvcc"
     nvcc.parent.mkdir(parents=True)
@@ -232,7 +243,7 @@ def _independent_host_fixture(
     tensorrt_lib.mkdir()
     (tensorrt_lib / "nvinfer.so").write_bytes(b"tensorrt\n")
 
-    def physical(command: str) -> Path:
+    def physical(command: str, **_kwargs) -> Path:
         return tools / command
 
     def run(*_args, **_kwargs) -> subprocess.CompletedProcess[str]:
@@ -243,6 +254,11 @@ def _independent_host_fixture(
         )
 
     monkeypatch.setattr(verifier, "_physical_executable", physical)
+    monkeypatch.setattr(
+        verifier,
+        "_independent_loader_closure",
+        lambda *_args: [verifier._host_file_record(tools / "loader")],
+    )
     monkeypatch.setattr(
         verifier, "_independently_selected_gpu", lambda: {"uuid": "GPU"}
     )
@@ -298,6 +314,7 @@ def test_independent_host_expansion_rejects_pyvenv_config_identity_mismatch(
     record["sha256"] = "0" * 64
     controller = {
         "tool_paths": dict(expected["tool_paths"]),
+        "build_tool_binding": dict(expected["build_tool_binding"]),
         "library_dirs": dict(expected["library_dirs"]),
         "gpu": dict(expected["gpu"]),
     }

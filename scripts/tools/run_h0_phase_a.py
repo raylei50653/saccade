@@ -31,6 +31,8 @@ CONTROLLER_SCHEMA = "h0_phase_a_controller_v1"
 EXECUTION_SCHEMA = "h0_phase_a_execution_v1"
 CHILD_SCHEMA = "h0_phase_a_child_v1"
 BOUND_INPUTS_SCHEMA = "h0_bound_inputs_v1"
+BUILD_TOOL_BINDING_SCHEMA = "h0_build_tool_binding_v1"
+BUILD_TOOL_BINDING_RESOLVER = "h0_build_tool_binding_resolver_v1"
 SCHEMA_PATH = Path(__file__).with_name("h0_phase_a_execution_schema_v1.json")
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -77,6 +79,10 @@ BUILD_ENVIRONMENT_KEYS = (
     "TMPDIR",
     "TZ",
     "XDG_CACHE_HOME",
+)
+BUILD_TOOL_ROLES = (
+    ("cxx", "c++"),
+    ("cmake", "cmake"),
 )
 RUN_IDS = (
     "00_capture_off",
@@ -1174,6 +1180,7 @@ def execution_constants(root: Path) -> dict[str, Any]:
         "bound_input_algorithms": BOUND_INPUT_ALGORITHMS,
         "build_environment_algorithm": BUILD_ENVIRONMENT_SCHEMA,
         "build_environment_keys": list(BUILD_ENVIRONMENT_KEYS),
+        "build_tool_binding_algorithm": BUILD_TOOL_BINDING_RESOLVER,
         "build_vectors": [list(vector) for vector in BUILD_VECTORS],
         "c_paths": list(C_PATHS),
         "canonicalization": CANONICALIZATION,
@@ -1595,6 +1602,12 @@ def preflight_controller_input(
         raise ContractError("evidence-root derivation mismatch")
     if evidence_root.exists() or incomplete_root.exists():
         raise ContractError("stale final or incomplete evidence root")
+    validate_build_tool_binding(
+        contract,
+        root=root,
+        started=started,
+        clock=clock,
+    )
 
 
 def _create_run_directories(incomplete: Path, run_id: str) -> Path:
@@ -1614,7 +1627,7 @@ def build_environment(contract: Mapping[str, Any]) -> dict[str, str]:
         "HOME": (environment_root / "home").as_posix(),
         "LANG": "C.UTF-8",
         "LC_ALL": "C.UTF-8",
-        "PATH": f"{root}/.venv/bin:/usr/bin:/bin",
+        "PATH": build_tool_environment_path(root),
         "PYTHONHASHSEED": "0",
         "PYTHONNOUSERSITE": "1",
         "TMPDIR": (environment_root / "tmp").as_posix(),
@@ -2195,6 +2208,271 @@ def _dynamic_dependencies(
     return records
 
 
+def build_tool_environment_path(root: Path) -> str:
+    """Return the exact PATH visible to both authoritative build vectors.
+
+    This is intentionally not the controller process's ambient PATH.  CMake's
+    compiler discovery is therefore tied to the same namespace that `uv run
+    --frozen cmake` receives at execution time.
+    """
+    physical_root = require_canonical_absolute(root.as_posix(), directory=True)
+    return f"{physical_root}/.venv/bin:/usr/bin:/bin"
+
+
+def _physical_executable_in_path(command: str, search_path: str) -> Path:
+    found = shutil.which(command, path=search_path)
+    if not found:
+        raise ContractError(
+            f"required build tool is absent from authoritative PATH: {command}"
+        )
+    candidate = Path(found).resolve(strict=True)
+    details = candidate.stat(follow_symlinks=False)
+    if candidate.is_symlink() or not stat.S_ISREG(details.st_mode):
+        raise ContractError(
+            f"authoritative build tool is not a physical regular file: {command}"
+        )
+    return candidate
+
+
+def _binding_digest(value: Mapping[str, Any]) -> str:
+    return sha256_bytes(
+        canonical_json_bytes(
+            {
+                "build_environment_path": value["build_environment_path"],
+                "loader_closure": value["loader_closure"],
+                "resolver": value["resolver"],
+                "schema": value["schema"],
+                "tools": value["tools"],
+            }
+        )
+    )
+
+
+def resolve_build_tool_binding(
+    root: Path,
+    *,
+    ldd_path: Path,
+    started: float | None = None,
+    monitor: BoundInputMonitor | None = None,
+    clock: Callable[[], float] = time.monotonic,
+) -> dict[str, Any]:
+    """Resolve the exact CMake/C++ build-tool and loader closure at freeze time.
+
+    The same resolver is also called by controller preflight and controlled-host
+    qualification.  It resolves only the two commands that the admitted build
+    vectors delegate to (`cmake` and CMake's default `c++` compiler driver),
+    then recursively closes their actual `ldd` graph.  Every member is a
+    physical, hashed external input; an incomplete, duplicate, or substituted
+    closure is a provenance failure rather than a best-effort observation.
+    """
+    physical_root = require_canonical_absolute(root.as_posix(), directory=True)
+    ldd = require_canonical_absolute(ldd_path.as_posix(), directory=False)
+    if started is None:
+        started = clock()
+    search_path = build_tool_environment_path(physical_root)
+    tools: list[dict[str, Any]] = []
+    tool_paths: list[Path] = []
+    for role, command in BUILD_TOOL_ROLES:
+        path = _physical_executable_in_path(command, search_path)
+        tools.append(
+            {
+                "command": command,
+                "record": external_input_record(physical_root, path.as_posix()),
+                "role": role,
+            }
+        )
+        tool_paths.append(path)
+    if [tool["role"] for tool in tools] != [
+        role for role, _command in BUILD_TOOL_ROLES
+    ]:
+        raise ContractError("build-tool role order drift")
+    tool_realpaths = [tool["record"]["realpath"] for tool in tools]
+    if len(tool_realpaths) != len(set(tool_realpaths)):
+        raise ContractError("build-tool binding has duplicate physical tools")
+
+    closure_by_realpath: dict[str, dict[str, Any]] = {}
+    pending = list(tool_paths)
+    seen = {path.as_posix() for path in tool_paths}
+    while pending:
+        source = pending.pop(0)
+        for dependency in _dynamic_dependencies(
+            source,
+            ldd,
+            root=physical_root,
+            started=started,
+            monitor=monitor,
+            clock=clock,
+        ):
+            dependency_path = require_canonical_absolute(
+                str(dependency["realpath"]), directory=False
+            )
+            realpath = dependency_path.as_posix()
+            if realpath in tool_realpaths:
+                raise ContractError(
+                    "build-tool loader closure duplicates a primary build tool"
+                )
+            record = external_input_record(physical_root, realpath)
+            if (
+                record["length"],
+                record["sha256"],
+            ) != (dependency["length"], dependency["sha256"]):
+                raise DriftError(
+                    f"build-tool loader changed while resolving closure: {realpath}"
+                )
+            prior = closure_by_realpath.setdefault(realpath, record)
+            if prior != record:
+                raise DriftError(f"inconsistent build-tool loader identity: {realpath}")
+            if realpath not in seen:
+                seen.add(realpath)
+                pending.append(dependency_path)
+    closure = sorted(
+        closure_by_realpath.values(),
+        key=lambda record: record["logical_path"].encode("utf-8"),
+    )
+    if not closure:
+        raise ContractError("build-tool loader/shared-library closure is empty")
+    binding: dict[str, Any] = {
+        "build_environment_path": search_path,
+        "digest": "",
+        "loader_closure": closure,
+        "resolver": BUILD_TOOL_BINDING_RESOLVER,
+        "schema": BUILD_TOOL_BINDING_SCHEMA,
+        "tools": tools,
+    }
+    binding["digest"] = _binding_digest(binding)
+    return binding
+
+
+def _validate_build_tool_binding_shape(binding: Mapping[str, Any]) -> None:
+    required = {
+        "build_environment_path",
+        "digest",
+        "loader_closure",
+        "resolver",
+        "schema",
+        "tools",
+    }
+    if set(binding) != required:
+        raise ContractError("build-tool binding has missing or unknown members")
+    if (
+        binding.get("schema") != BUILD_TOOL_BINDING_SCHEMA
+        or binding.get("resolver") != BUILD_TOOL_BINDING_RESOLVER
+        or binding.get("digest") != _binding_digest(binding)
+    ):
+        raise ContractError("build-tool binding identity or digest drift")
+    if not isinstance(binding["build_environment_path"], str):
+        raise ContractError("build-tool binding PATH is malformed")
+    tools = binding["tools"]
+    if not isinstance(tools, list) or [
+        item.get("role") if isinstance(item, dict) else None for item in tools
+    ] != [role for role, _command in BUILD_TOOL_ROLES]:
+        raise ContractError("build-tool binding tool order differs from resolver")
+    expected_commands = [command for _role, command in BUILD_TOOL_ROLES]
+    if [
+        item.get("command") if isinstance(item, dict) else None for item in tools
+    ] != expected_commands:
+        raise ContractError("build-tool binding command set differs from resolver")
+    records: list[Mapping[str, Any]] = []
+    for item in tools:
+        if not isinstance(item, dict) or set(item) != {"command", "record", "role"}:
+            raise ContractError("build-tool primary record shape is malformed")
+        record = item["record"]
+        if not isinstance(record, Mapping):
+            raise ContractError("build-tool primary record is malformed")
+        records.append(record)
+    closure = binding["loader_closure"]
+    if not isinstance(closure, list) or not closure:
+        raise ContractError("build-tool loader/shared-library closure is malformed")
+    if any(not isinstance(record, Mapping) for record in closure):
+        raise ContractError("build-tool loader record is malformed")
+    records.extend(closure)
+    for record in records:
+        if set(record) != {
+            "length",
+            "logical_path",
+            "realpath",
+            "sha256",
+            "symlink_chain",
+        }:
+            raise ContractError("build-tool external record shape is malformed")
+        require_lexical_absolute(str(record["logical_path"]))
+        require_canonical_absolute(str(record["realpath"]), directory=False)
+        if record["logical_path"] != record["realpath"] or record["symlink_chain"]:
+            raise ContractError("build-tool record is not a physical resolved identity")
+    realpaths = [str(record["realpath"]) for record in records]
+    if len(realpaths) != len(set(realpaths)):
+        raise ContractError("build-tool binding contains duplicate physical identities")
+    closure_paths = [str(record["logical_path"]) for record in closure]
+    if closure_paths != sorted(closure_paths, key=lambda path: path.encode("utf-8")):
+        raise ContractError("build-tool loader closure is not canonically ordered")
+
+
+def validate_build_tool_binding(
+    contract: Mapping[str, Any],
+    *,
+    root: Path,
+    started: float,
+    monitor: BoundInputMonitor | None = None,
+    clock: Callable[[], float] = time.monotonic,
+) -> None:
+    """Prove the current build resolver is exactly the freeze-time binding."""
+    binding = contract.get("build_tool_binding")
+    if not isinstance(binding, Mapping):
+        raise ContractError("controller input has no build-tool binding")
+    _validate_build_tool_binding_shape(binding)
+    if binding["build_environment_path"] != build_tool_environment_path(root):
+        raise DriftError("build-tool PATH differs from the authoritative build PATH")
+    ldd = require_canonical_absolute(
+        str(contract["tool_paths"]["ldd"]), directory=False
+    )
+    current = resolve_build_tool_binding(
+        root, ldd_path=ldd, started=started, monitor=monitor, clock=clock
+    )
+    if dict(binding) != current:
+        raise DriftError("resolved build-tool binding differs from freeze-time binding")
+    frozen = {
+        record["realpath"]: (record["length"], record["sha256"])
+        for record in contract["bound_inputs"]["tool_runtime"]
+    }
+    for item in [*binding["tools"], *binding["loader_closure"]]:
+        record = item["record"] if "record" in item else item
+        if frozen.get(record["realpath"]) != (record["length"], record["sha256"]):
+            raise DriftError(
+                "build-tool binding member is absent from h0_bound_inputs_v1: "
+                + str(record["realpath"])
+            )
+    expected_paths = {
+        item["role"]: item["record"]["realpath"] for item in binding["tools"]
+    }
+    if {
+        "cxx": contract["tool_paths"].get("cxx"),
+        "cmake": contract["tool_paths"].get("cmake"),
+    } != expected_paths:
+        raise ContractError("tool_paths and build-tool binding differ")
+
+
+def validate_resolved_build_tool_identity(
+    binding: Mapping[str, Any], *, cmake: Mapping[str, Any], cxx: Mapping[str, Any]
+) -> None:
+    """Require CMake's recorded tools to be the pre-resolved primary records."""
+    _validate_build_tool_binding_shape(binding)
+    expected = {item["role"]: item["record"] for item in binding["tools"]}
+    for role, observed in (("cmake", cmake), ("cxx", cxx)):
+        frozen = expected.get(role)
+        if not isinstance(frozen, Mapping) or (
+            observed.get("path"),
+            observed.get("length"),
+            observed.get("sha256"),
+        ) != (
+            frozen.get("realpath"),
+            frozen.get("length"),
+            frozen.get("sha256"),
+        ):
+            raise DriftError(
+                f"CMake selected {role} outside the frozen build-tool binding"
+            )
+
+
 def _cmake_cache_entries(cache: Path) -> dict[str, str]:
     entries: dict[str, str] = {}
     for line in cache.read_text(encoding="utf-8").splitlines():
@@ -2305,6 +2583,9 @@ def _build_identity(
                 clock=clock,
             ),
         }
+    binding = contract.get("build_tool_binding")
+    if not isinstance(binding, Mapping):
+        raise ContractError("build identity has no frozen build-tool binding")
     python_data = python.resolve(strict=True).read_bytes()
     python_query = _run_auxiliary_subprocess(
         [
@@ -2334,6 +2615,14 @@ def _build_identity(
     uv_lock = root / "uv.lock"
     cmake_path = Path(cache_entries["CMAKE_COMMAND"]).resolve(strict=True)
     cmake_data = cmake_path.read_bytes()
+    cmake_identity = {
+        "length": len(cmake_data),
+        "path": cmake_path.as_posix(),
+        "sha256": sha256_bytes(cmake_data),
+    }
+    validate_resolved_build_tool_identity(
+        binding, cmake=cmake_identity, cxx=compiler_records["cxx"]
+    )
     return {
         "artifacts": artifacts,
         "build_environment": build_environment(contract),
@@ -2344,9 +2633,7 @@ def _build_identity(
         "cmake_cache_sha256": sha256_bytes(cache.read_bytes()),
         "cmake": {
             "generator": cache_entries["CMAKE_GENERATOR"],
-            "length": len(cmake_data),
-            "path": cmake_path.as_posix(),
-            "sha256": sha256_bytes(cmake_data),
+            **cmake_identity,
             "version": _tool_version(
                 cmake_path,
                 root=root,
@@ -2355,6 +2642,7 @@ def _build_identity(
                 clock=clock,
             ),
         },
+        "build_tool_binding": dict(binding),
         "compilers": compiler_records,
         "cuda_toolkit_root": Path(cache_entries["CMAKE_CUDA_COMPILER"])
         .resolve(strict=True)
@@ -2501,13 +2789,19 @@ def _verify_extension_load(
 def _validate_build_tool_runtime_binding(
     contract: Mapping[str, Any], identity: Mapping[str, Any]
 ) -> None:
-    """Require every toolchain identity to be pre-frozen in tool_runtime.
+    """Tie the observed build identity back to the freeze-time tool binding.
 
-    The build artifacts' dynamic-dependency closure is deliberately absent
-    here: it is build-derived, not freezable at F, and is bound as its own
-    ``build_runtime_closure`` class by the runtime confinement plan, which
-    admits each closure member as one exact physical file.
+    Build-artifact closure remains a distinct build-derived runtime class.  In
+    contrast, the CMake executable, C++ driver, and both tools' loader/shared
+    library closure are all pre-frozen in ``tool_runtime`` and copied verbatim
+    into the packet's build identity.
     """
+    binding = contract.get("build_tool_binding")
+    if not isinstance(binding, Mapping) or identity.get("build_tool_binding") != dict(
+        binding
+    ):
+        raise DriftError("build identity differs from the frozen build-tool binding")
+    _validate_build_tool_binding_shape(binding)
     frozen = {
         record["realpath"]: (record["length"], record["sha256"])
         for record in contract["bound_inputs"]["tool_runtime"]
