@@ -221,11 +221,48 @@ binding, the entire repository/model/sequence inventory, and a physical `.venv`
 at the repository root) is satisfiable only in a real host-bound sealed checkout.
 It cannot be reproduced in an ephemeral worktree (which lacks the git-ignored
 runtime environment) nor synthesised portably, and an unsealed candidate checkout
-has zero current landings by construction. The positive full-verify selection is
-therefore intrinsically a controlled-host, post-seal capability, exercised by the
-`landing_discovery_dry_run` step when it runs on the qualification host; Stage A
-proves the member contract and discovery wiring through the actual entry points
-above.
+has zero current landings by construction.
+
+Stage B qualifies the **unsealed** repair candidate `R₂`, which by ordering
+precedes owner acceptance of `I₂` and the `I₂ → F₂ → S₂` chain. Its truthful
+expected `landing_discovery_dry_run` outcome is therefore:
+
+```text
+Stage B / unsealed R₂:
+  mixed-version classification corpus : passes
+  actual _discover_controller_input   : invoked
+  current landing count               : zero
+  terminal boundary                   : canonical fail-closed landing-count error
+  independent-verifier rejection      : forbidden (qualification-fatal)
+```
+
+This proves the Stage-E escape does not recur; it does **not** exercise a
+positive selection. A positive `_discover_controller_input` selection becomes
+reachable only after an exact `S₂` exists, and is recorded here as a separate
+post-seal readiness gate:
+
+```text
+After exact S₂ is landed
+AND before any fresh exactly-once execution authorization:
+
+  run a discovery-only controlled-host preflight from exact S₂
+  using run_h0_phase_a._discover_controller_input
+
+  require:
+    exactly one current landing selected
+    selected artifact binds exact I₂ → F₂ → S₂
+    returned controller input has the exact canonical 14-member set
+    build_tool_binding is present
+    no execute_controller call
+    no T0 entry
+    no evidence packet or terminal
+    no exactly-once authorization consumed
+```
+
+This preflight is not Stage B qualification, is not the authoritative controller
+invocation, and authorizes no execution; it is a post-seal readiness check
+required before a separate execution-authorization decision. Stage A proves the
+member contract and discovery wiring through the actual entry points above.
 
 All prior sections of this document continue to bind. The Issue #227 candidate
 `R`, its exact `I → F → S` chain, and the authoritative re-execution remain gated
