@@ -48,6 +48,7 @@ FREEZE_SCHEMA_VERSION = "h0_preseal_freeze_v3"
 CAPTURE_SCHEMA_VERSION = "h0_bridge_decision_trace_v2"
 CLASSIFIER_VERSION = "h0_projection_path_class_v1"
 LANDING_SCHEMA_VERSION = "h0_authority_landing_v1"
+BUILD_TOOL_BOUND_INPUTS_SCHEMA = "h0_build_tool_bound_inputs_v1"
 DECLARATION_PATH = (
     "docs/modules/semantic/research/"
     "headline_bridge_full_decision_capture_declaration_20260713.md"
@@ -329,6 +330,56 @@ def _physical_executable(command: str) -> Path:
     return candidate
 
 
+def build_tool_bound_inputs_digest(value: dict[str, Any]) -> str:
+    """Digest the one canonical build-tool contribution to ``tool_runtime``."""
+    return _sha256_bytes(
+        json.dumps(
+            {
+                "build_tool_binding": value["build_tool_binding"],
+                "schema": value["schema"],
+                "tool_runtime": value["tool_runtime"],
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode("utf-8")
+    )
+
+
+def derive_build_tool_bound_inputs(root: Path, *, ldd_path: Path) -> dict[str, Any]:
+    """Produce the exact build-tool records contributed to a future freeze.
+
+    This is deliberately host-only: it resolves no research input, creates no
+    evidence state, and has no execution authority.  Both the pre-seal
+    assembler and controlled-host qualification consume this producer so the
+    latter proves membership in the former's actual ``tool_runtime`` universe,
+    rather than in a separately reconstructed equivalent inventory.
+    """
+    import run_h0_phase_a as controller  # local implementation, bound above
+
+    binding = controller.resolve_build_tool_binding(root, ldd_path=ldd_path)
+    controller._validate_build_tool_binding_shape(binding)
+    records = sorted(
+        [
+            *(item["record"] for item in binding["tools"]),
+            *binding["loader_closure"],
+        ],
+        key=lambda record: record["logical_path"].encode("utf-8"),
+    )
+    realpaths = [record["realpath"] for record in records]
+    if len(realpaths) != len(set(realpaths)):
+        raise RuntimeError("build-tool bound-input contribution has duplicates")
+    contribution: dict[str, Any] = {
+        "build_tool_binding": binding,
+        "digest": "",
+        "schema": BUILD_TOOL_BOUND_INPUTS_SCHEMA,
+        "tool_runtime": records,
+    }
+    contribution["digest"] = build_tool_bound_inputs_digest(contribution)
+    return contribution
+
+
 def _derive_controller_input(head: str) -> dict[str, Any]:
     """Construct the host-specific RC1 input inventory without a CLI override.
 
@@ -346,10 +397,11 @@ def _derive_controller_input(head: str) -> dict[str, Any]:
         name: _physical_executable(name).as_posix()
         for name in ("git", "ldd", "readelf", "uv")
     }
-    build_tool_binding = controller.resolve_build_tool_binding(
+    build_tool_bound_inputs = derive_build_tool_bound_inputs(
         root,
         ldd_path=Path(tool_paths["ldd"]),
     )
+    build_tool_binding = build_tool_bound_inputs["build_tool_binding"]
     tool_paths.update(
         {
             item["role"]: item["record"]["realpath"]
@@ -411,15 +463,15 @@ def _derive_controller_input(head: str) -> dict[str, Any]:
         key=lambda record: record["logical_path"].encode("utf-8"),
     )
     # Tool/runtime inventory starts from every executable and library directory
-    # named by RC1.  The controller's actual-loaded attestation remains the
-    # final admission for dependencies discovered while the frozen process runs.
-    tool_candidates = [Path(path) for path in tool_paths.values()] + [
-        python,
-        pyvenv_config,
-    ]
-    tool_candidates.extend(
-        Path(record["realpath"]) for record in build_tool_binding["loader_closure"]
-    )
+    # named by RC1.  The primary build tools and their loader closure enter
+    # directly from the shared producer: this is the exact universe consumed by
+    # controlled-host qualification.  The controller's actual-loaded
+    # attestation remains the final admission for dependencies discovered while
+    # the frozen process runs.
+    non_build_tool_candidates = [
+        Path(path) for name, path in tool_paths.items() if name not in {"cmake", "cxx"}
+    ] + [python, pyvenv_config]
+    tool_candidates = list(non_build_tool_candidates)
     for directory in libraries.values():
         tool_candidates.extend(
             sorted(
@@ -428,11 +480,12 @@ def _derive_controller_input(head: str) -> dict[str, Any]:
                 if path.is_file() and not path.is_symlink()
             )
         )
+    other_tools = [
+        controller.external_input_record(root, path.as_posix())
+        for path in tool_candidates
+    ]
     tools = sorted(
-        (
-            controller.external_input_record(root, path.as_posix())
-            for path in tool_candidates
-        ),
+        [*other_tools, *build_tool_bound_inputs["tool_runtime"]],
         key=lambda record: record["logical_path"].encode("utf-8"),
     )
     if len({record["realpath"] for record in tools}) != len(tools):

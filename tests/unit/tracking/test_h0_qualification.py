@@ -142,9 +142,9 @@ def test_qualification_t1_verdict_semantics_uses_controller_producer() -> None:
     assert row["observed_digest"] == inventory["digest"]
 
 
-def test_qualification_build_tool_dry_run_uses_controller_resolver(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def _build_tool_bound_inputs_fixture(
+    tmp_path: Path,
+) -> tuple[dict[str, object], dict[str, object]]:
     cmake = {
         "length": 1,
         "path": "/fixture/cmake",
@@ -184,6 +184,29 @@ def test_qualification_build_tool_dry_run_uses_controller_resolver(
             },
         ],
     }
+    binding["digest"] = controller._binding_digest(binding)
+    contribution: dict[str, object] = {
+        "build_tool_binding": binding,
+        "digest": "",
+        "schema": freezer.BUILD_TOOL_BOUND_INPUTS_SCHEMA,
+        "tool_runtime": sorted(
+            [
+                *(item["record"] for item in binding["tools"]),
+                *binding["loader_closure"],
+            ],
+            key=lambda record: record["logical_path"].encode("utf-8"),
+        ),
+    }
+    contribution["digest"] = freezer.build_tool_bound_inputs_digest(contribution)
+    return contribution, {"cmake": cmake, "compilers": {"cxx": cxx}}
+
+
+def test_freezer_build_tool_producer_returns_the_exact_tool_runtime_contribution(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    contribution, _identity = _build_tool_bound_inputs_fixture(tmp_path)
+    binding = contribution["build_tool_binding"]
+    assert isinstance(binding, dict)
     calls: list[object] = []
     monkeypatch.setattr(
         controller,
@@ -192,17 +215,62 @@ def test_qualification_build_tool_dry_run_uses_controller_resolver(
     )
     monkeypatch.setattr(
         controller,
+        "_validate_build_tool_binding_shape",
+        lambda observed: calls.append(observed),
+    )
+
+    result = freezer.derive_build_tool_bound_inputs(
+        tmp_path, ldd_path=Path("/usr/bin/ldd")
+    )
+
+    assert result == contribution
+    assert len(calls) == 2
+
+
+def test_qualification_build_tool_dry_run_uses_freezer_producer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    contribution, identity = _build_tool_bound_inputs_fixture(tmp_path)
+    calls: list[object] = []
+    monkeypatch.setattr(
+        freezer,
+        "derive_build_tool_bound_inputs",
+        lambda root, **kwargs: calls.append((root, kwargs)) or contribution,
+    )
+    monkeypatch.setattr(
+        controller,
         "validate_resolved_build_tool_identity",
         lambda observed, **kwargs: calls.append((observed, kwargs)),
     )
-    identity = {"cmake": cmake, "compilers": {"cxx": cxx}}
     assert (
-        qualification._resolve_qualification_build_tool_binding(
+        qualification._derive_qualification_build_tool_bound_inputs(
             tmp_path, identity, ldd=Path("/usr/bin/ldd")
         )
-        == binding
+        == contribution
     )
     assert len(calls) == 2
+
+
+@pytest.mark.parametrize("removed_member", ["primary", "closure"])
+def test_qualification_rejects_missing_assembler_build_tool_record(
+    tmp_path: Path, removed_member: str
+) -> None:
+    contribution, identity = _build_tool_bound_inputs_fixture(tmp_path)
+    mutated = copy.deepcopy(contribution)
+    records = mutated["tool_runtime"]
+    assert isinstance(records, list)
+    if removed_member == "primary":
+        records.pop(0)
+    else:
+        records.pop()
+    # The proof must fail even if a defective producer recomputed its own digest.
+    mutated["digest"] = freezer.build_tool_bound_inputs_digest(mutated)
+
+    with pytest.raises(
+        qualification.QualificationError,
+        match="does not exactly equal the binding contribution",
+    ):
+        qualification._validate_qualification_build_tool_bound_inputs(mutated, identity)
 
 
 def test_qualification_report_binds_resolved_repository_identity(

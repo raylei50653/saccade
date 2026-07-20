@@ -1981,10 +1981,12 @@ future controller invocation.
 
 ### A8.2 Freeze-time build-tool binding
 
-At F assembly the authoritative controller resolver
-`h0_build_tool_binding_resolver_v1` constructs one canonical
-`h0_build_tool_binding_v1` object. It resolves exactly the `c++` compiler
-driver and `cmake` through the build environment's literal
+At F assembly the host-only, no-research producer
+`derive_build_tool_bound_inputs(root, ldd)` calls the authoritative controller
+resolver `h0_build_tool_binding_resolver_v1` and constructs one canonical
+`h0_build_tool_binding_v1` object plus its canonical
+`h0_build_tool_bound_inputs_v1.tool_runtime` contribution. It resolves exactly
+the `c++` compiler driver and `cmake` through the build environment's literal
 `<ROOT>/.venv/bin:/usr/bin:/bin` PATH, records their canonical physical paths,
 lengths and SHA-256 values, and recursively records the actual `ldd`
 loader/shared-library closure of both tools. Every primary and closure record
@@ -2006,10 +2008,13 @@ host binding without importing either the assembler or controller.
 
 ### A8.3 Qualification extension without a hidden step
 
-The existing canonical `build_identity` qualification step now calls the
-authoritative controller resolver, resolves the real CMake cache identities,
-and verifies both are a subset of its reported build-tool bound-input
-universe. It retains the canonical binding and input digest in the
+The existing canonical `build_identity` qualification step now consumes that
+same freezer producer (rather than rebuilding an equivalent inventory),
+resolves the real CMake cache identities, and verifies both primary tools and
+every loader-closure record are exactly the producer's canonical future
+`h0_bound_inputs_v1.tool_runtime` contribution: no missing, extra, duplicate,
+or identity-mismatched record is admitted. It retains the canonical binding,
+producer contribution and generic qualification-input digest in the
 non-authoritative qualification report. It performs no research input read,
 capture, terminal emission, evidence-root write, or execution authorization.
 There is no eleventh qualification step: `STEP_NAMES`, matrix JSON, matrix

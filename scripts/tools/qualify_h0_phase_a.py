@@ -359,9 +359,7 @@ def _build_identity(root: Path, build: Path, python: Path) -> dict[str, Any]:
     }
 
 
-def _qualification_inventory(
-    root: Path, identity: Mapping[str, Any], build_tool_binding: Mapping[str, Any]
-) -> dict[str, Any]:
+def _qualification_inventory(root: Path, identity: Mapping[str, Any]) -> dict[str, Any]:
     inputs = [
         _regular_file_record(root / "CMakeLists.txt"),
         _regular_file_record(root / "scripts/tools/run_h0_phase_a.py"),
@@ -373,17 +371,6 @@ def _qualification_inventory(
         *identity["compilers"].values(),
         identity["python"],
     ]
-    for item in [*build_tool_binding["tools"], *build_tool_binding["loader_closure"]]:
-        frozen = item["record"] if "record" in item else item
-        current = _regular_file_record(Path(frozen["realpath"]))
-        if (
-            current["length"],
-            current["sha256"],
-        ) != (frozen["length"], frozen["sha256"]):
-            raise QualificationError(
-                "qualification build-tool input changed while materialising inventory"
-            )
-        inputs.append(current)
     by_path: dict[str, dict[str, Any]] = {}
     for record in inputs:
         prior = by_path.setdefault(record["path"], record)
@@ -399,47 +386,69 @@ def _qualification_inventory(
     }
 
 
-def _resolve_qualification_build_tool_binding(
+def _validate_qualification_build_tool_bound_inputs(
+    value: Mapping[str, Any], identity: Mapping[str, Any]
+) -> None:
+    """Prove the assembler producer's exact contribution binds this build."""
+    import build_h0_preseal_freeze as freezer
+    import run_h0_phase_a as controller
+
+    required = {"build_tool_binding", "digest", "schema", "tool_runtime"}
+    if (
+        set(value) != required
+        or value.get("schema") != freezer.BUILD_TOOL_BOUND_INPUTS_SCHEMA
+    ):
+        raise QualificationError("build-tool bound-input producer shape is malformed")
+    binding = value.get("build_tool_binding")
+    tool_runtime = value.get("tool_runtime")
+    if not isinstance(binding, Mapping) or not isinstance(tool_runtime, list):
+        raise QualificationError("build-tool bound-input producer is malformed")
+    try:
+        expected_records = sorted(
+            [
+                *(item["record"] for item in binding["tools"]),
+                *binding["loader_closure"],
+            ],
+            key=lambda record: record["logical_path"].encode("utf-8"),
+        )
+        realpaths = [record["realpath"] for record in expected_records]
+    except (KeyError, TypeError, AttributeError) as exc:
+        raise QualificationError(
+            "build-tool binding contribution is malformed"
+        ) from exc
+    if len(realpaths) != len(set(realpaths)):
+        raise QualificationError("build-tool binding contribution has duplicates")
+    if tool_runtime != expected_records:
+        raise QualificationError(
+            "assembler build-tool bound-input universe does not exactly equal "
+            "the binding contribution"
+        )
+    if value.get("digest") != freezer.build_tool_bound_inputs_digest(dict(value)):
+        raise QualificationError("build-tool bound-input producer digest drift")
+    try:
+        controller.validate_resolved_build_tool_identity(
+            binding,
+            cmake=identity["cmake"],
+            cxx=identity["compilers"]["cxx"],
+        )
+    except (KeyError, TypeError, controller.ContractError) as exc:
+        raise QualificationError(
+            "actual CMake/C++ identity differs from assembler build-tool binding"
+        ) from exc
+
+
+def _derive_qualification_build_tool_bound_inputs(
     root: Path,
     identity: Mapping[str, Any],
     *,
     ldd: Path,
 ) -> dict[str, Any]:
-    """Use the authoritative resolver, then prove actual CMake tools are bound.
+    """Consume the freezer's host-only producer, never an equivalent copy."""
+    import build_h0_preseal_freeze as freezer
 
-    This remains non-authoritative: the result lives only in the qualification
-    report and contains no sequence/model/research input.  The resolver and
-    identity comparison are nevertheless the exact controller functions so a
-    controlled host cannot qualify a parallel approximation.
-    """
-    import run_h0_phase_a as controller
-
-    binding = controller.resolve_build_tool_binding(root, ldd_path=ldd)
-    controller.validate_resolved_build_tool_identity(
-        binding,
-        cmake=identity["cmake"],
-        cxx=identity["compilers"]["cxx"],
-    )
-    identity_records = {
-        record["realpath"]: (record["length"], record["sha256"])
-        for item in binding["tools"]
-        for record in (item["record"],)
-    }
-    identity_records.update(
-        {
-            record["realpath"]: (record["length"], record["sha256"])
-            for record in binding["loader_closure"]
-        }
-    )
-    for observed in (identity["cmake"], identity["compilers"]["cxx"]):
-        if identity_records.get(observed["path"]) != (
-            observed["length"],
-            observed["sha256"],
-        ):
-            raise QualificationError(
-                "actual build tool is absent from qualification bound-input universe"
-            )
-    return binding
+    value = freezer.derive_build_tool_bound_inputs(root, ldd_path=ldd)
+    _validate_qualification_build_tool_bound_inputs(value, identity)
+    return value
 
 
 def _failure_probe() -> dict[str, Any]:
@@ -538,6 +547,7 @@ def run_qualification(
     steps: list[dict[str, str]] = []
     identity: dict[str, Any] | None = None
     build_tool_binding: dict[str, Any] | None = None
+    build_tool_bound_inputs: dict[str, Any] | None = None
     qualification_inputs: dict[str, Any] | None = None
     closure: dict[str, list[dict[str, Any]]] | None = None
     t1_verdict_semantics: dict[str, Any] | None = None
@@ -623,9 +633,10 @@ def run_qualification(
             steps,
         )
         identity = _build_identity(root, build, python)
-        build_tool_binding = _resolve_qualification_build_tool_binding(
+        build_tool_bound_inputs = _derive_qualification_build_tool_bound_inputs(
             root, identity, ldd=ldd
         )
+        build_tool_binding = build_tool_bound_inputs["build_tool_binding"]
         identity = {**identity, "build_tool_binding": build_tool_binding}
         steps.append({"name": "build_identity", "state": "passed"})
         closure = {
@@ -678,11 +689,9 @@ def run_qualification(
             ),
             steps,
         )
-        qualification_inputs = _qualification_inventory(
-            root, identity, build_tool_binding
-        )
+        qualification_inputs = _qualification_inventory(root, identity)
         before = qualification_inputs
-        after = _qualification_inventory(root, identity, build_tool_binding)
+        after = _qualification_inventory(root, identity)
         t1_verdict_semantics = controller._checkpoint_inventory_verdict(
             "T1", before, after
         )
@@ -729,13 +738,14 @@ def run_qualification(
         "authority": "non_authoritative",
         "build_identity": identity,
         "build_tool_binding": build_tool_binding,
+        "build_tool_bound_inputs": build_tool_bound_inputs,
         "capture": "forbidden",
         "failure_envelope_probe": failure_probe,
         "phase_b": "forbidden",
         **repository_identity,
         "research_inputs": "forbidden",
         "result": "passed",
-        "qualification_bound_inputs": qualification_inputs,
+        "qualification_input_inventory": qualification_inputs,
         "runtime_closure": closure,
         "schema": SCHEMA,
         "steps": steps,
