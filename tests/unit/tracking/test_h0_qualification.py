@@ -155,19 +155,27 @@ def _build_tool_bound_inputs_fixture(
         "path": "/fixture/cxx",
         "sha256": "b" * 64,
     }
+    loader = {
+        "length": 3,
+        "logical_path": "/fixture/libloader.so",
+        "realpath": "/fixture/libloader.so",
+        "sha256": "c" * 64,
+        "symlink_chain": [],
+    }
     binding = {
         "build_environment_path": f"{tmp_path}/.venv/bin:/usr/bin:/bin",
         "digest": "fixture",
-        "loader_closure": [],
+        "loader_closure": [loader],
         "resolver": controller.BUILD_TOOL_BINDING_RESOLVER,
         "schema": controller.BUILD_TOOL_BINDING_SCHEMA,
         "tools": [
             {
                 "command": "c++",
                 "record": {
-                    **cxx,
-                    "realpath": cxx["path"],
                     "logical_path": cxx["path"],
+                    "length": cxx["length"],
+                    "realpath": cxx["path"],
+                    "sha256": cxx["sha256"],
                     "symlink_chain": [],
                 },
                 "role": "cxx",
@@ -175,9 +183,10 @@ def _build_tool_bound_inputs_fixture(
             {
                 "command": "cmake",
                 "record": {
-                    **cmake,
-                    "realpath": cmake["path"],
                     "logical_path": cmake["path"],
+                    "length": cmake["length"],
+                    "realpath": cmake["path"],
+                    "sha256": cmake["sha256"],
                     "symlink_chain": [],
                 },
                 "role": "cmake",
@@ -256,13 +265,26 @@ def test_qualification_rejects_missing_assembler_build_tool_record(
     tmp_path: Path, removed_member: str
 ) -> None:
     contribution, identity = _build_tool_bound_inputs_fixture(tmp_path)
+    binding = contribution["build_tool_binding"]
+    assert isinstance(binding, dict)
+    tools = binding["tools"]
+    closure = binding["loader_closure"]
+    assert isinstance(tools, list) and isinstance(closure, list)
+    primary_record = tools[0]["record"]
+    closure_record = closure[0]
+    assert primary_record not in closure
+    assert closure_record in closure
     mutated = copy.deepcopy(contribution)
     records = mutated["tool_runtime"]
     assert isinstance(records, list)
+    expected_removed = primary_record if removed_member == "primary" else closure_record
+    assert expected_removed in records
+    removed = records.pop(records.index(expected_removed))
+    assert removed == expected_removed
     if removed_member == "primary":
-        records.pop(0)
+        assert removed == tools[0]["record"]
     else:
-        records.pop()
+        assert removed == closure[0]
     # The proof must fail even if a defective producer recomputed its own digest.
     mutated["digest"] = freezer.build_tool_bound_inputs_digest(mutated)
 
