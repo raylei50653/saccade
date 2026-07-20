@@ -49,7 +49,7 @@ Authority is intentionally split:
 ## Unresolved B1-slot identity (open owner decision)
 
 H0 declaration §7 and the
-[O0 routing charter](bridge_frozen_evidence_o0_routing_20260716.md) (route 5)
+[O0 routing charter](closed/bridge_frozen_evidence_o0_routing_20260716.md)（its route-5 branch; O0 itself closed at route 1）
 name a "separately declared **B1 consumer-faithful operating-curve study**".
 Whether the `GCTM_B1` study specified here occupies that same B1 slot, coexists
 with it, or supersedes it is **not decided by this charter**. Resolving that
@@ -719,7 +719,7 @@ accepted B1 handoff and must not rewrite B1 semantics.
 - [H0 declaration](../../modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md)
 - [H0→GCTM consumer compatibility requirements](../../modules/semantic/research/h0_gctm_consumer_compatibility_requirements_20260718.md)
 - [GCTM parked task charter](gap_conditioned_stochastic_transition_model_task.md)
-- [O0 routing charter](bridge_frozen_evidence_o0_routing_20260716.md)
+- [O0 routing charter](closed/bridge_frozen_evidence_o0_routing_20260716.md)
 - [claim-state registry（§7 score layer / §8 候選集）](../contracts/claim_state_registry.md)
 - [bridge decision semantics](../tracker-decision/relink_bridge.md)
 - [O1 task charter](gctm_o1_online_intervention_efficacy_task.md)

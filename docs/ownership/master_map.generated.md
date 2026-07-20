@@ -182,9 +182,9 @@ Manifest: `docs/ownership/doc_migration_manifest.yaml`
 - `docs/research/reid/appearance_ceiling_mot17.md`
 - `docs/research/threads/README.md`
 - `docs/research/threads/association_recovery_registry_20260709.md`
-- `docs/research/threads/bridge_frozen_evidence_o0_routing_20260716.md`
 - `docs/research/threads/closed/README.md`
 - `docs/research/threads/closed/ambiguous_band_ranking_power_probe_20260712.md`
+- `docs/research/threads/closed/bridge_frozen_evidence_o0_routing_20260716.md`
 - `docs/research/threads/closed/composition_grammar_coverage_program_20260710.md`
 - `docs/research/threads/closed/composition_grammar_safe_region.md`
 - `docs/research/threads/closed/gap_conditioned_probabilistic_motion_probe_20260711.md`

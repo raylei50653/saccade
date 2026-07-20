@@ -45,7 +45,7 @@ WIP=1 **只綁 mainline charter**。工程 follow-up、資料補件、文件收�
 
 ## Current transition panel — H0 → GCTM
 
-**Manual navigation projection · reconciled 2026-07-18.** This panel owns no
+**Manual navigation projection · reconciled 2026-07-20.** This panel owns no
 terminal, evidence, or WIP state: `ACTIVE` is projected from the module TODO;
 task lifecycle and gates remain owned by the linked charters/contracts. If a
 row conflicts with its owner, the owner wins. Update this panel in the same
@@ -54,18 +54,17 @@ decision, blocker change, or consumer-compatibility verdict.
 
 | Field | Current projection | Owner / read first |
 |:--|:--|:--|
-| **ACTIVE** | O0 — bridge frozen-evidence routing; its only in-scope unit is H0 pre-seal freeze completion for target `m`, then owner seal. | [semantic TODO](../../modules/semantic/TODO.md) · [O0 charter](bridge_frozen_evidence_o0_routing_20260716.md) |
-| **NEXT** | GCTM theory/model specification. It is **parked**, not scheduled; do not read this row as an automatic or direct H0 handoff. | [GCTM charter](gap_conditioned_stochastic_transition_model_task.md) |
-| **READINESS** | H0 is in pre-seal engineering with no accepted H0 terminal. GCTM has a stable problem boundary but no active canonical specification/proof. B1 and O1 are proposed only. | [H0 declaration](../../modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md) · [B1 charter](gctm_b1_runtime_grounded_offline_attribution_task.md) · [O1 charter](gctm_o1_online_intervention_efficacy_task.md) |
+| **ACTIVE** | none — O0 closed 2026-07-20 at route 1: the owner accepted the ordered terminal `H0_PROVENANCE_INVALID` (issue #209, 2026-07-19); **H0 = CLOSED**, disposition diagnostic-only; controller retry and Phase B forbidden; NEXT = none automatically. | [semantic TODO](../../modules/semantic/TODO.md) · [O0 charter (closed)](closed/bridge_frozen_evidence_o0_routing_20260716.md) |
+| **NEXT** | GCTM theory/model specification. It is **parked**, not scheduled; H0 closure does **not** activate it — only a separate owner scheduling decision can. | [GCTM charter](gap_conditioned_stochastic_transition_model_task.md) |
+| **READINESS** | H0 closed at the owner-accepted route-1 negative terminal `H0_PROVENANCE_INVALID`: no faithful capture was obtained, there is no accepted runtime-fidelity edge, and no actual H0 guarantee envelope exists. Re-entry requires an append-only declaration amendment plus a fresh I→F→S owner reseal plus owner scheduling. GCTM has a stable problem boundary but no active canonical specification/proof. B1 and O1 are proposed only. | [H0 declaration](../../modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md) · [B1 charter](gctm_b1_runtime_grounded_offline_attribution_task.md) · [O1 charter](gctm_o1_online_intervention_efficacy_task.md) |
 
 ### Blockers and transition gates
 
 ```text
 ACTIVE → NEXT
-  H0: complete the pre-seal freeze artifact → owner records SEALED
-  → one ordered H0 terminal is owner-accepted
-  ∧ owner separately schedules GCTM
-  → GCTM charter may become active
+  H0 closed at owner-accepted `H0_PROVENANCE_INVALID` (route 1; not full-faithful)
+  → no automatic transition; GCTM remains parked
+  ∧ only a separate owner scheduling decision may activate the GCTM charter
 
 GCTM → bridge-runtime B1
   accepted H0 runtime substrate or fidelity edge
@@ -244,7 +243,6 @@ frontmatter、搬移與索引要求。
 
 | Thread | Work class / WIP role | Current concrete work | Owner |
 |:--|:--|:--|:--|
-| [bridge_frozen_evidence_o0_routing_20260716.md](bridge_frozen_evidence_o0_routing_20260716.md) | mainline-study · **sole-active** | O0 thin orchestration: H0 pre-seal freeze artifact (target m) → owner seal is the sole pending gate; no execution pre-seal | semantic |
 | [association_recovery_registry_20260709.md](association_recovery_registry_20260709.md) | maintenance · **non-WIP** | Keep R/H ownership and path-health registry current | semantic |
 | [doc_structure_o15_followup_20260709.md](doc_structure_o15_followup_20260709.md) | governance · **non-WIP** | Pay down research-index debt; optional structure checks remain non-blocking | ownership |
 
@@ -261,6 +259,7 @@ frontmatter、搬移與索引要求。
 
 | Thread | Closed | Terminal (one-line) | Direct handoff disposition | Cross-thread consequence (not handoff) | Owner |
 |:--|:--|:--|:--|:--|:--|
+| [bridge_frozen_evidence_o0_routing_20260716.md](closed/bridge_frozen_evidence_o0_routing_20260716.md) | 2026-07-20 | **route 1 `H0_PROVENANCE_INVALID` owner-accepted**（[#209](https://github.com/raylei50653/saccade/issues/209)，2026-07-19）· H0 = CLOSED（diagnostic-only）· controller retry / Phase B forbidden | **no receiver / no continuation** — NEXT = none automatically | GCTM [#175](https://github.com/raylei50653/saccade/issues/175) remains parked（activation only by separate owner scheduling）; provenance gap becomes permanent registry `open_limits` | semantic |
 | [gap_conditioned_probabilistic_motion_probe_20260711.md](closed/gap_conditioned_probabilistic_motion_probe_20260711.md) | 2026-07-13 | **`V5 ACCEPTED_WITH_LIMITS`** · D0 follow-up closed at `T2_PROXY_UNFAITHFUL` | **no receiver / no continuation** | H0 observability is an independent proposed task, not a handoff | semantic |
 | [runtime_faithful_safe_domain_20260712.md](closed/runtime_faithful_safe_domain_20260712.md) | 2026-07-13 | **S0 `S0_UNDECIDABLE` ACCEPTED** · V7 has no offline-safe grid point, so runtime transfer is not assessed · [PR #152](https://github.com/raylei50653/saccade/pull/152) | **no receiver / no continuation** — wider runtime join requires a new decision-relevance and O0 decision | offline partial-order state unchanged; runtime transfer unaccepted and closure remains inadmissible | semantic |
 | [ambiguous_band_ranking_power_probe_20260712.md](closed/ambiguous_band_ranking_power_probe_20260712.md) | 2026-07-12 | **T2 `NO_USABLE_RANKING_POWER_IN_CLASS` ACCEPTED**（12-member class-scoped；step ⑤ 生效；step ④ 未開）· [PR #135](https://github.com/raylei50653/saccade/pull/135) seal／[PR #136](https://github.com/raylei50653/saccade/pull/136) acceptance | tested 12-member score class → **no receiver / no continuation** | morphology score branch is closed for this class; its gate branch remains parked in its own card | semantic |

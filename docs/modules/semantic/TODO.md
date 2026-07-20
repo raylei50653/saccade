@@ -5,7 +5,11 @@
 
 ## Sole active
 
-- **O0 bridge frozen-evidence routing** → [charter](../../research/threads/bridge_frozen_evidence_o0_routing_20260716.md)。唯一 in-scope unit＝H0 pre-seal freeze artifact（target＝**m**，Amendment 5）→ [declaration](research/headline_bridge_full_decision_capture_declaration_20260713.md)；**sole pending gate＝完成 pre-seal freeze artifact 後的 owner seal，未 seal 前不得執行或開下游 claim**。
+- **none**（2026-07-20 起）。O0 已於 route 1 關閉：owner 接受 ordered terminal
+  `H0_PROVENANCE_INVALID`（[#209](https://github.com/raylei50653/saccade/issues/209)，2026-07-19），
+  **H0 = CLOSED**（diagnostic-only）；controller retry / Phase B forbidden；
+  direct handoff＝no receiver，**NEXT = none automatically**；GCTM 不因 H0
+  closure 自動啟動 → [closed charter](../../research/threads/closed/bridge_frozen_evidence_o0_routing_20260716.md)。
 
 ## Proposed（non-WIP）
 
