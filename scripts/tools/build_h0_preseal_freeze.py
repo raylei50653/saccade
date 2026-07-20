@@ -507,7 +507,7 @@ def _derive_controller_input(head: str) -> dict[str, Any]:
         "declaration_path": DECLARATION_PATH,
         "post_head_allowed_paths": [freeze_artifact_path(head), DECLARATION_PATH],
     }
-    return {
+    controller_input = {
         "authority_landing": landing,
         "bound_inputs": bound_inputs,
         "build_tool_binding": build_tool_binding,
@@ -523,6 +523,14 @@ def _derive_controller_input(head: str) -> dict[str, Any]:
         "sequence_input_digest": bound_inputs["sequence"]["digest"],
         "tool_paths": tool_paths,
     }
+    # Pin the assembled member set to the canonical declaration so a hand-edited
+    # key here can never silently diverge from the controller and verifiers.
+    if set(controller_input) != controller.CONTROLLER_INPUT_MEMBERS:
+        raise RuntimeError(
+            "derived controller input has a non-canonical member set: "
+            f"{sorted(set(controller_input) ^ controller.CONTROLLER_INPUT_MEMBERS)}"
+        )
+    return controller_input
 
 
 DIFF_FLAGS = ("--no-color", "--binary", "--full-index", "--no-renames")

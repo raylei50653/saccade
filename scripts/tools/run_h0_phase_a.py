@@ -33,6 +33,30 @@ CHILD_SCHEMA = "h0_phase_a_child_v1"
 BOUND_INPUTS_SCHEMA = "h0_bound_inputs_v1"
 BUILD_TOOL_BINDING_SCHEMA = "h0_build_tool_binding_v1"
 BUILD_TOOL_BINDING_RESOLVER = "h0_build_tool_binding_resolver_v1"
+# Canonical controller-input member declaration for the authoritative current
+# v3 pre-seal artifact.  The freeze assembler builds exactly this set, the
+# execution schema enumerates it as its property universe, and the independent
+# pre-seal verifier holds a byte-identical transcription; equality across all of
+# them (plus an explicit literal) is pinned by
+# tests/contract/test_h0_controller_input_member_parity.py.
+CONTROLLER_INPUT_MEMBERS = frozenset(
+    {
+        "authority_landing",
+        "bound_inputs",
+        "build_tool_binding",
+        "document_type",
+        "evidence_root",
+        "execution_constants",
+        "gpu",
+        "incomplete_root",
+        "instrumentation_head",
+        "library_dirs",
+        "repository_root",
+        "schema",
+        "sequence_input_digest",
+        "tool_paths",
+    }
+)
 SCHEMA_PATH = Path(__file__).with_name("h0_phase_a_execution_schema_v1.json")
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -1437,30 +1461,48 @@ def _parse_no_options(argv: Sequence[str]) -> bool:
     return True
 
 
-def _discover_controller_input(root: Path) -> tuple[Path, dict[str, Any]]:
-    """Select the sole v3 artifact whose independently verified landing is HEAD."""
+def _classify_landing_candidates(root: Path) -> list[tuple[Path, dict[str, Any]]]:
+    """Independently classify every v3 landing candidate (discovery-only).
+
+    This is the exact per-candidate classification the controller relies on
+    during input discovery, factored out without the exactly-one-current-landing
+    requirement so the non-authoritative qualification dry-run can exercise the
+    real path over a mixed-version evidence tree.  Historical artifacts (which
+    predate ``build_tool_binding``) and the current authoritative artifact must
+    all classify without error; only a genuinely malformed candidate raises.
+    """
     evidence = root / "docs/modules/semantic/research/evidence"
     if evidence.is_symlink() or not evidence.is_dir():
         raise ContractError("evidence root is not a physical directory")
     candidates = sorted(evidence.glob("**/h0_preseal_freeze_v3.json"))
-    try:
-        import verify_h0_preseal_freeze
+    import verify_h0_preseal_freeze
 
-        current = []
-        for candidate in candidates:
-            report = verify_h0_preseal_freeze.verify_current_landing_candidate(
-                candidate, root
-            )
-            if report.get("matches_current_checkout") is True:
-                current.append(candidate)
+    return [
+        (
+            candidate,
+            verify_h0_preseal_freeze.verify_current_landing_candidate(candidate, root),
+        )
+        for candidate in candidates
+    ]
+
+
+def _discover_controller_input(root: Path) -> tuple[Path, dict[str, Any]]:
+    """Select the sole v3 artifact whose independently verified landing is HEAD."""
+    try:
+        classified = _classify_landing_candidates(root)
     except (OSError, RuntimeError, ValueError, subprocess.SubprocessError) as exc:
         raise ContractError(
             f"v3 landing candidate rejected by independent verifier: {exc}"
         ) from exc
+    current = [
+        candidate
+        for candidate, report in classified
+        if report.get("matches_current_checkout") is True
+    ]
     if len(current) != 1:
         raise ContractError(
             "expected exactly one current-HEAD h0_preseal_freeze_v3 landing, "
-            f"found {len(current)} among {len(candidates)} candidates"
+            f"found {len(current)} among {len(classified)} candidates"
         )
     freeze_path = current[0]
     if (
@@ -1479,6 +1521,15 @@ def _discover_controller_input(root: Path) -> tuple[Path, dict[str, Any]]:
     contract = freeze.get("phase_a_controller_input")
     validate_schema_document(contract, "controller_input")
     assert isinstance(contract, dict)
+    # The execution schema deliberately leaves ``build_tool_binding`` optional so
+    # historical evidence still validates; the authoritative current artifact
+    # must carry the full canonical member set, matching the independent
+    # pre-seal verifier's exact-member check on the selected candidate.
+    if set(contract) != CONTROLLER_INPUT_MEMBERS:
+        raise ContractError(
+            "selected controller input has a non-canonical member set: "
+            f"{sorted(set(contract) ^ CONTROLLER_INPUT_MEMBERS)}"
+        )
     if freeze.get("instrumentation_head") != contract.get("instrumentation_head"):
         raise ContractError("v3 freeze/controller instrumentation heads differ")
     landing = contract.get("authority_landing")

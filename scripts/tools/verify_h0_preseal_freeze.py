@@ -87,6 +87,38 @@ BUILD_ENV_KEYS = (
 BUILD_TOOL_BINDING_SCHEMA = "h0_build_tool_binding_v1"
 BUILD_TOOL_BINDING_RESOLVER = "h0_build_tool_binding_resolver_v1"
 BUILD_TOOL_ROLES = (("cxx", "c++"), ("cmake", "cmake"))
+# Canonical controller-input member declaration for the v3 pre-seal artifact.
+# One source drives both the full-artifact verifier and the cross-version
+# landing-discovery header, so the two paths can never diverge again.
+# ``build_tool_binding`` is the sole member introduced after the pre-#224
+# substrate: the authoritative current artifact must carry it, while historical
+# artifacts legitimately omit it.  Discovery therefore tolerates its absence and
+# the full/authoritative check requires it.  This independent runtime
+# transcription is pinned byte-for-byte to the controller, the execution schema,
+# and an explicit literal by
+# tests/contract/test_h0_controller_input_member_parity.py.
+CONTROLLER_INPUT_MEMBERS = frozenset(
+    {
+        "authority_landing",
+        "bound_inputs",
+        "build_tool_binding",
+        "document_type",
+        "evidence_root",
+        "execution_constants",
+        "gpu",
+        "incomplete_root",
+        "instrumentation_head",
+        "library_dirs",
+        "repository_root",
+        "schema",
+        "sequence_input_digest",
+        "tool_paths",
+    }
+)
+CONTROLLER_INPUT_CROSS_VERSION_OPTIONAL = frozenset({"build_tool_binding"})
+CONTROLLER_INPUT_REQUIRED_BASE = (
+    CONTROLLER_INPUT_MEMBERS - CONTROLLER_INPUT_CROSS_VERSION_OPTIONAL
+)
 ENV_KEYS = (
     "CUDA_DEVICE_ORDER",
     "CUDA_VISIBLE_DEVICES",
@@ -957,26 +989,28 @@ def _verify_host_execution_inputs(
         )
 
 
+def _require_controller_member_envelope(value: Mapping[str, Any]) -> None:
+    """Cross-version discovery gate for controller-input membership.
+
+    Every stable base member must be present and no member outside the canonical
+    declaration may appear; ``build_tool_binding`` may be present (current
+    substrate) or absent (historical artifacts).  The selected current candidate
+    additionally receives the exact-member check in ``_verify_controller_input``.
+    """
+    members = set(value)
+    missing = CONTROLLER_INPUT_REQUIRED_BASE - members
+    unknown = members - CONTROLLER_INPUT_MEMBERS
+    if missing or unknown:
+        raise VerificationError(
+            "phase_a_controller_input has missing or unknown members: "
+            f"{sorted(missing | unknown)}"
+        )
+
+
 def _verify_controller_input(value: object, root: Path, head: str) -> None:
     if not isinstance(value, dict):
         raise VerificationError("phase_a_controller_input is not an object")
-    required = {
-        "authority_landing",
-        "bound_inputs",
-        "build_tool_binding",
-        "document_type",
-        "evidence_root",
-        "execution_constants",
-        "gpu",
-        "incomplete_root",
-        "instrumentation_head",
-        "library_dirs",
-        "repository_root",
-        "schema",
-        "sequence_input_digest",
-        "tool_paths",
-    }
-    _require_exact_members(value, required, "phase_a_controller_input")
+    _require_exact_members(value, CONTROLLER_INPUT_MEMBERS, "phase_a_controller_input")
     if (
         value["schema"] != "h0_phase_a_controller_v1"
         or value["document_type"] != "controller_input"
@@ -1625,24 +1659,9 @@ def _verify_landing_candidate_header(path: Path, root: Path) -> dict[str, Any]:
     if path.absolute() != expected.absolute():
         raise VerificationError("v3 artifact is not at its deterministic RC2 path")
     controller = value["phase_a_controller_input"]
-    required_controller = {
-        "authority_landing",
-        "bound_inputs",
-        "document_type",
-        "evidence_root",
-        "execution_constants",
-        "gpu",
-        "incomplete_root",
-        "instrumentation_head",
-        "library_dirs",
-        "repository_root",
-        "schema",
-        "sequence_input_digest",
-        "tool_paths",
-    }
     if not isinstance(controller, Mapping):
         raise VerificationError("landing candidate controller input is not an object")
-    _require_exact_members(controller, required_controller, "phase_a_controller_input")
+    _require_controller_member_envelope(controller)
     controller_landing = controller["authority_landing"]
     if (
         controller.get("schema") != "h0_phase_a_controller_v1"
