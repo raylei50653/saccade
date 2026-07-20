@@ -25,6 +25,7 @@ SCHEMA_PATHS = {
     / "scripts/tools/h0_gctm_guarantee_registration_schema_v2.json",
 }
 CAPTURE_ABI_SCHEMA_PATH = ROOT / "scripts/tools/h0_bridge_decision_trace_schema_v2.json"
+CAPTURE_ABI_SCHEMA_ID = "h0_bridge_decision_trace_v2"
 
 PAIR_INSTANCE_KEY = (
     "seq",
@@ -232,9 +233,19 @@ def _schema_document(schema_id: str) -> Mapping[str, Any]:
     return value
 
 
+def _capture_abi_document() -> Mapping[str, Any]:
+    document_map = _as_mapping(load_json(CAPTURE_ABI_SCHEMA_PATH), "capture ABI schema")
+    declared = document_map.get("capture_schema_version")
+    if declared != CAPTURE_ABI_SCHEMA_ID:
+        raise RegistrationValidationError(
+            f"capture ABI document declares {declared!r}, "
+            f"expected {CAPTURE_ABI_SCHEMA_ID!r}"
+        )
+    return document_map
+
+
 def _capture_abi_fields(stream: str) -> frozenset[str]:
-    document = load_json(CAPTURE_ABI_SCHEMA_PATH)
-    document_map = _as_mapping(document, "capture ABI schema")
+    document_map = _capture_abi_document()
     record_fields = _as_mapping(document_map["record_fields"], "record_fields")
     key = f"{stream}s"
     if key not in record_fields:
@@ -425,7 +436,7 @@ def _validate_candidate_sources_v2(record: Mapping[str, Any]) -> None:
             )
         seen.add(coordinate)
         fields = _as_string_sequence(
-            source_map["key_fields"], f"candidate_sources[{index}].key_fields"
+            source_map["source_fields"], f"candidate_sources[{index}].source_fields"
         )
         _check_track_id_ban(fields, guarantee_class)
         if guarantee_class == "identity":
@@ -460,6 +471,13 @@ def _validate_registered_guarantees_v2(record: Mapping[str, Any]) -> None:
     baseline = _as_mapping(record["baseline"], "baseline")
     if baseline["accepted_by"] != "h0_owner":  # Schema repeats this intentionally.
         raise RegistrationValidationError("only h0_owner may accept a baseline")
+    _capture_abi_document()
+    if baseline["h0_schema_version"] != CAPTURE_ABI_SCHEMA_ID:
+        raise RegistrationValidationError(
+            "baseline h0_schema_version must match the capture ABI this validator "
+            f"anchors covered fields to ({CAPTURE_ABI_SCHEMA_ID!r}); a different "
+            "schema requires its own registration contract"
+        )
     expected_domain = {
         "preset_id": baseline["resolved_preset_id"],
         "runtime_identity": baseline["runtime_instrumentation_identity"],
@@ -514,6 +532,11 @@ def _validate_registered_guarantees_v2(record: Mapping[str, Any]) -> None:
                 )
 
         relation = guarantee_map["relation"]
+        # Schema couples relation and derivation; repeated here intentionally.
+        if relation == "derived" and "derivation" not in guarantee_map:
+            raise RegistrationValidationError(
+                "derived relation requires an immutable derivation binding"
+            )
         invalidation_inputs = frozenset(
             _as_string_sequence(
                 guarantee_map["invalidation_inputs"], "invalidation_inputs"

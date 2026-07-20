@@ -182,7 +182,7 @@ def test_every_fixture_field_exists_in_the_capture_abi() -> None:
     assert isinstance(sources, list)
     for source in sources:
         abi_fields = registration._capture_abi_fields(source["stream"])
-        assert set(source["key_fields"]) <= abi_fields
+        assert set(source["source_fields"]) <= abi_fields
 
 
 def test_fully_bound_multi_class_record_is_structurally_usable() -> None:
@@ -194,12 +194,20 @@ def test_fully_bound_multi_class_record_is_structurally_usable() -> None:
     assert report["disposition"] == "registered-guarantee"
 
 
+DERIVATION_BINDING = {
+    "definition_id": "contract_snapshot_derivation_v1",
+    "definition_version": "1",
+    "content_hash": "b" * 64,
+}
+
+
 def test_snapshot_derived_relation_requires_derivation_invalidation() -> None:
     record = _registered_record_v2()
     guarantees = record["guarantees"]
     assert isinstance(guarantees, list)
     snapshot = guarantees[1]
     snapshot["relation"] = "derived"
+    snapshot["derivation"] = dict(DERIVATION_BINDING)
 
     with pytest.raises(
         registration.RegistrationValidationError, match="snapshot invalidation_inputs"
@@ -211,6 +219,59 @@ def test_snapshot_derived_relation_requires_derivation_invalidation() -> None:
     )
     report = registration.validate_record(record)
     assert report["structurally_usable"] is True
+
+
+def test_derived_relation_requires_an_immutable_derivation_binding() -> None:
+    record = _registered_record_v2()
+    guarantees = record["guarantees"]
+    assert isinstance(guarantees, list)
+    snapshot = guarantees[1]
+    snapshot["relation"] = "derived"
+    snapshot["invalidation_inputs"] = sorted(
+        set(snapshot["invalidation_inputs"]) | {"derivation_definition"}
+    )
+
+    with pytest.raises(
+        registration.RegistrationValidationError, match="schema rejection"
+    ):
+        registration.validate_record(record)
+
+    incomplete = {"definition_id": "contract_snapshot_derivation_v1"}
+    snapshot["derivation"] = incomplete
+    with pytest.raises(
+        registration.RegistrationValidationError, match="schema rejection"
+    ):
+        registration.validate_record(record)
+
+    snapshot["derivation"] = dict(DERIVATION_BINDING)
+    report = registration.validate_record(record)
+    assert report["structurally_usable"] is True
+
+
+def test_exact_relation_forbids_a_derivation_binding() -> None:
+    record = _registered_record_v2()
+    guarantees = record["guarantees"]
+    assert isinstance(guarantees, list)
+    guarantees[1]["derivation"] = dict(DERIVATION_BINDING)
+
+    with pytest.raises(
+        registration.RegistrationValidationError, match="schema rejection"
+    ):
+        registration.validate_record(record)
+
+
+def test_baseline_schema_version_must_match_the_validated_capture_abi() -> None:
+    record = _registered_record_v2()
+    baseline = record["baseline"]
+    guarantees = record["guarantees"]
+    assert isinstance(baseline, dict)
+    assert isinstance(guarantees, list)
+    baseline["h0_schema_version"] = "some_other_schema"
+    for guarantee in guarantees:
+        guarantee["declared_domain"]["schema_id"] = "some_other_schema"
+
+    with pytest.raises(registration.RegistrationValidationError, match="capture ABI"):
+        registration.validate_record(record)
 
 
 def test_non_snapshot_classes_reject_derived_relation() -> None:

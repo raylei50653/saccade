@@ -270,7 +270,7 @@
         "source_id",
         "consumer_object",
         "stream",
-        "key_fields",
+        "source_fields",
         "causal_availability"
       ],
       "properties": {
@@ -284,7 +284,7 @@
         "stream": {
           "$ref": "#/$defs/stream"
         },
-        "key_fields": {
+        "source_fields": {
           "$ref": "#/$defs/field_list"
         },
         "causal_availability": {
@@ -429,6 +429,29 @@
             "offline_only"
           ]
         },
+        "derivation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "definition_id",
+            "definition_version",
+            "content_hash"
+          ],
+          "properties": {
+            "definition_id": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{2,127}$"
+            },
+            "definition_version": {
+              "type": "string",
+              "minLength": 1
+            },
+            "content_hash": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        },
         "declared_domain": {
           "type": "object",
           "additionalProperties": false,
@@ -481,6 +504,25 @@
       "allOf": [
         {
           "$ref": "#/$defs/object_stream_coupling"
+        },
+        {
+          "if": {
+            "properties": {
+              "relation": {
+                "const": "derived"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "derivation"
+            ]
+          },
+          "else": {
+            "properties": {
+              "derivation": false
+            }
+          }
         },
         {
           "if": {

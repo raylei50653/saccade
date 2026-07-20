@@ -247,6 +247,10 @@ The v2 contract adds these sealed rules on top of the v1 machinery:
   against `record_fields` in the
   [`h0_bridge_decision_trace_v2` schema](../../../../scripts/tools/h0_bridge_decision_trace_schema_v2.json),
   so registration fails closed if the capture ABI and the allowlists drift.
+  The validator also verifies the ABI document's own `capture_schema_version`
+  and requires `baseline.h0_schema_version` (and therefore every
+  `declared_domain.schema_id`) to equal it exactly; a different capture schema
+  needs its own registration contract, never a silent promotion.
 - **Track-id ban scope.** `*track_id*` fields are registrable only inside the
   `audit` class, where section 0.2 names claim-winner and commit identity
   fields as audit observations; they remain banned as identities everywhere.
@@ -259,6 +263,12 @@ The v2 contract adds these sealed rules on top of the v1 machinery:
   identity-v1 set minus `identity_lifecycle`); `identity` re-adds
   `identity_lifecycle`, and any `derived` relation additionally requires
   `derivation_definition`.
+- **Derivation binding.** A `derived` relation must also carry an immutable
+  `derivation` object (`definition_id`, `definition_version`, 64-hex
+  `content_hash`) naming exactly which derivation produced the covered
+  observation; `exact` guarantees must not carry one. The invalidation input
+  above then has a concrete referent: the guarantee dies when that bound
+  definition changes.
 
 The checked-in [v2 candidate fixture](../../../../tests/contract/fixtures/h0_gctm_guarantee_registration_candidate_sources_v2.json)
 enumerates all seven candidate-source coordinates and, like the identity

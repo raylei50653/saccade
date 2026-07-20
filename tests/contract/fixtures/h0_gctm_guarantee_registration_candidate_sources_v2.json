@@ -13,7 +13,7 @@
       "source_id": "fixture_h0_pair_runtime_instance_key",
       "consumer_object": "event_runtime_instance_identity",
       "stream": "pair_record",
-      "key_fields": [
+      "source_fields": [
         "seq",
         "frame",
         "cand_slot",
@@ -27,7 +27,7 @@
       "source_id": "fixture_h0_pair_exit_entry_snapshot",
       "consumer_object": "native_exit_entry_snapshot",
       "stream": "pair_record",
-      "key_fields": [
+      "source_fields": [
         "lost_anchor_x",
         "lost_anchor_y",
         "cand_anchor_x",
@@ -58,7 +58,7 @@
       "source_id": "fixture_h0_pair_operational_horizon",
       "consumer_object": "operational_horizon_observation_point",
       "stream": "pair_record",
-      "key_fields": [
+      "source_fields": [
         "seq",
         "frame",
         "la",
@@ -70,7 +70,7 @@
       "source_id": "fixture_h0_pair_score_context",
       "consumer_object": "candidate_competition_pair_score_context",
       "stream": "pair_record",
-      "key_fields": [
+      "source_fields": [
         "directional_cross_bdist",
         "bdist_before_direction",
         "bdist_after_direction",
@@ -93,7 +93,7 @@
       "source_id": "fixture_h0_candidate_competition_context",
       "consumer_object": "candidate_competition_pair_score_context",
       "stream": "candidate_record",
-      "key_fields": [
+      "source_fields": [
         "seq",
         "frame",
         "cand_slot",
@@ -120,7 +120,7 @@
       "source_id": "fixture_h0_claim_audit_boundary",
       "consumer_object": "claim_commit_audit_boundary",
       "stream": "claim_record",
-      "key_fields": [
+      "source_fields": [
         "seq",
         "frame",
         "proposing_cand_slot",
@@ -141,7 +141,7 @@
       "source_id": "fixture_h0_commit_audit_boundary",
       "consumer_object": "claim_commit_audit_boundary",
       "stream": "commit_record",
-      "key_fields": [
+      "source_fields": [
         "seq",
         "frame",
         "cand_slot",
