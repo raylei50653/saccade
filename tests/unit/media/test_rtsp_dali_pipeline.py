@@ -1,3 +1,9 @@
+"""Unit tests for the DALI RTSP pipeline optimizer (saccade.media.rtsp_dali_pipeline)."""
+
+# scope: media
+# function: behavior
+# lifecycle: active
+
 from __future__ import annotations
 
 from typing import Any

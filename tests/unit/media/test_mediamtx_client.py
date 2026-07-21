@@ -1,3 +1,9 @@
+"""Unit tests for the MediaMTX control client (saccade.media.mediamtx_client)."""
+
+# scope: media
+# function: behavior
+# lifecycle: active
+
 from __future__ import annotations
 
 from pathlib import Path

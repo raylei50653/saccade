@@ -1,3 +1,9 @@
+"""Unit tests for the RTSP ffmpeg streamer (saccade.media.ffmpeg_utils)."""
+
+# scope: media
+# function: behavior
+# lifecycle: active
+
 from __future__ import annotations
 
 from io import BytesIO
