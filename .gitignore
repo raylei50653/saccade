@@ -123,3 +123,6 @@ models/**/*.pth
 
 # R1 research device helper build artifacts (gitignored *.so already)
 src/saccade/perception/eval/_cuda/libr1_bridge_replay.build.json
+
+# Agent/session review scratch dumps (session scratchpad lives in /tmp)
+scratchpad/
