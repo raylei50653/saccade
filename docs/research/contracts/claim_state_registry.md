@@ -356,7 +356,8 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
       failing_predicate: provenance_ok=false（唯一 false;build_ok/extension_ok/artifacts_ok/classified_execution/packets_valid/policy_equal/runners_ok/serialization_ok 皆 true;timed_out=false）
       checkpoints: T0/T1 completed（inventory_equal;t0 bound_inputs_digest 4e3eb01f）; T2a_0→T4 not_reached
       capture_child_runs: NOT_RUN（00_capture_off / 01_capture_on_1 / 02_capture_on_2 / 03_capture_on_3;confinement_plan_digest=null）
-      build_runtime_gpu_identity_and_comparison: not_produced
+      build_runtime_gpu_identity: complete（build/runtime/GPU identity 已產生;四個 child runtime_inputs 因 blocking result 均為 not_produced）
+      comparison: not_produced
       capture_evidence: none
     evidence_packet: docs/modules/semantic/research/evidence/h0_phase_a_5a2d1de509fa64f2e5ce9a4db8182337da215968/
     digests:
