@@ -41,9 +41,13 @@ strips a directory's generated block if that directory becomes empty.
 
 ## Review Status
 
-First inventory pass: 2026-06-18. Count refresh: 2026-06-28.
+First inventory pass: 2026-06-18. **The file counts below are that frozen
+baseline and are no longer maintained** — live per-directory and per-label counts
+are in the generated
+[`docs/ownership/scripts_inventory.generated.md`](../docs/ownership/scripts_inventory.generated.md).
+This table is now a qualitative role map.
 
-| Area | Files | Current role | Review status |
+| Area | Files (2026-06-18 baseline) | Current role | Review status |
 |---|---:|---|---|
 | `eval/` | 134 tracked files / 123 Python | MOT17 eval, ablations, diagnostics, one-off analysis | Classified; first unused archive/prototype removal pass done 2026-06-18; 28 duplicate Python basenames still need triage |
 | `tools/` | 68 tracked files / 64 Python | Mixed maintenance checks, analysis probes, render/remap helpers | Classified 2026-06-18; unused tools removal passes in progress |
@@ -52,7 +56,7 @@ First inventory pass: 2026-06-18. Count refresh: 2026-06-28.
 | `train/` | 5 + 39 in `temporal_yolo/` | Training entrypoints and research run scripts | Classified 2026-06-18; `temporal_yolo/` reviewed against v14 protocol |
 | `ops/` | 5 | Local service and RTSP demo operations | Classified 2026-06-18; no files moved |
 | `native/` | 4 | Native build/coverage helpers | Reviewed 2026-06-18 |
-| root files | 10 | Stable hooks, one historical training runner, and dataset downloaders | Downloader role needs a separate manifest/runbook decision |
+| root files | 10 | Stable hooks and dataset downloaders | Downloader role needs a separate manifest/runbook decision |
 
 ## Triage Labels
 
@@ -100,7 +104,6 @@ and docs in the same change.
 | `download_motsynth.py` | MOTSynth downloader | diagnostic; root-surface cleanup candidate |
 | `pre_push.sh` | Local pre-push CI mirror | stable |
 | `test_native.sh` | Native C++/CUDA coverage test entrypoint | stable |
-| `train_option_d.sh` | Historical Option-D two-phase training runner | archive-candidate; uses old `train/temporal_yolo/...` path |
 
 ## Dataset Downloaders
 
@@ -185,6 +188,5 @@ Recommended next passes:
 | `download_motsynth.py` | diagnostic | cli | Download and setup MOTSynth dataset (Mini/Full). |
 | `pre_push.sh` | stable | cli | Mirror CI checks locally before pushing. |
 | `test_native.sh` | stable | - | Build native code with coverage and run native tests. |
-| `train_option_d.sh` | archive-candidate | - | Option D 兩階段訓練自動化腳本 |
 
 <!-- END generated script index -->
