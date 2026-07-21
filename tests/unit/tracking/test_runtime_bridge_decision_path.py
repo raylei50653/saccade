@@ -24,7 +24,7 @@ end-to-end split is asserted against the real sealed artifacts where they exist.
 """
 
 # scope: system
-# function: contract
+# function: regression
 # lifecycle: active
 
 from __future__ import annotations

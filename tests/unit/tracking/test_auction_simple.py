@@ -1,6 +1,6 @@
 """Unit tests for the temporal-YOLO auction matcher (perception.temporal_yolo.loss.AuctionMatcher)."""
 
-# scope: detection
+# scope: detection, tracking
 # function: behavior
 # lifecycle: active
 
