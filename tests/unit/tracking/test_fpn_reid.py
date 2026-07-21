@@ -6,6 +6,10 @@ compiler).  Verifies both the no-projection and projection+BN paths, the
 L2 normalisation invariant, and the out_dim guard.
 """
 
+# scope: reid
+# function: behavior
+# lifecycle: active
+
 from __future__ import annotations
 
 import sys

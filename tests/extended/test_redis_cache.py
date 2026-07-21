@@ -6,6 +6,10 @@ Covers:
     object CRUD, cleanup, publish_event
 """
 
+# scope: storage
+# function: behavior
+# lifecycle: active
+
 from __future__ import annotations
 
 import asyncio

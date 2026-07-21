@@ -9,6 +9,10 @@ higher-confidence incumbent keeps the canonical and the low-confidence fragment
 is the one that splits.
 """
 
+# scope: eval
+# function: regression
+# lifecycle: active
+
 from __future__ import annotations
 
 import sys

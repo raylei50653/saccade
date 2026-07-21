@@ -1,5 +1,9 @@
 """Tests for saccade.perception.eval.multi_birth (P5-1 multi-signal birth)."""
 
+# scope: eval
+# function: behavior
+# lifecycle: active
+
 from __future__ import annotations
 
 import pytest

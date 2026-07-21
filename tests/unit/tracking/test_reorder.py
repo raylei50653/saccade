@@ -1,3 +1,9 @@
+"""Unit tests for the tracker reordering buffer (perception.tracking.reorder)."""
+
+# scope: tracking
+# function: behavior
+# lifecycle: active
+
 from unittest.mock import patch
 
 from saccade.perception.tracking.reorder import ReorderingBuffer

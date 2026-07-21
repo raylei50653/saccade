@@ -1,3 +1,9 @@
+"""Unit tests for the temporal-YOLO auction matcher (perception.temporal_yolo.loss.AuctionMatcher)."""
+
+# scope: detection
+# function: behavior
+# lifecycle: active
+
 import numpy as np
 import pytest
 import sys

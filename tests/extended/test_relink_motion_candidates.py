@@ -1,3 +1,9 @@
+"""Tests for relink motion-candidate gating (perception.eval.relink)."""
+
+# scope: eval
+# function: behavior
+# lifecycle: active
+
 from __future__ import annotations
 
 import sys

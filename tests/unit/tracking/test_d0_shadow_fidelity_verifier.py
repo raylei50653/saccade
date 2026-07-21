@@ -10,6 +10,10 @@ setting `lost_exit_speed = 0` gives `w = 0` and `s0 = dist_h` exactly. Every
 fixture below uses that to control the proxy score directly.
 """
 
+# scope: system
+# function: contract
+# lifecycle: active
+
 from __future__ import annotations
 
 import csv

@@ -1,5 +1,9 @@
 """RC2 authority-chain and independent v3 JSON admissions; no Phase A runs."""
 
+# scope: system
+# function: contract
+# lifecycle: active
+
 from __future__ import annotations
 
 import subprocess

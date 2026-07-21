@@ -5,6 +5,10 @@ sync extract_reid fallback for numerical parity.  Also tests the ReIDQueue
 thread safety and pool exhaustion behavior.
 """
 
+# scope: tracking
+# function: behavior
+# lifecycle: active
+
 from __future__ import annotations
 
 import sys

@@ -1,5 +1,9 @@
 """Hermetic A7/RC1 controller, child-contract, and verifier admissions."""
 
+# scope: system
+# function: contract
+# lifecycle: active
+
 from __future__ import annotations
 
 import hashlib

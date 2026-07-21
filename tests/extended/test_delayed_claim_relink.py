@@ -1,3 +1,9 @@
+"""Tests for delayed-claim relink via post-merge deferred alias (perception.eval.relink/post_merge)."""
+
+# scope: eval
+# function: behavior
+# lifecycle: active
+
 from __future__ import annotations
 
 import sys

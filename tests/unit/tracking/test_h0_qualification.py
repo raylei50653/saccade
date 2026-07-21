@@ -1,5 +1,9 @@
 """Prospective H0 repair/qualification gate contracts."""
 
+# scope: system
+# function: contract
+# lifecycle: active
+
 from __future__ import annotations
 
 import copy

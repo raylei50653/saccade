@@ -10,6 +10,10 @@ Covers:
   - clear_history (single-track removal from all dicts)
 """
 
+# scope: perception
+# function: behavior
+# lifecycle: active
+
 from __future__ import annotations
 
 import time

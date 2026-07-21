@@ -5,6 +5,10 @@ Covers:
   - compute_bank_quality_score: scalar quality scoring
 """
 
+# scope: eval
+# function: behavior
+# lifecycle: active
+
 from __future__ import annotations
 
 

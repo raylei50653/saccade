@@ -1,3 +1,9 @@
+"""Unit tests for the GPU tracker bidirectional bridge (perception.tracking.tracker_gpu)."""
+
+# scope: tracking
+# function: behavior
+# lifecycle: active
+
 from __future__ import annotations
 
 import sys
