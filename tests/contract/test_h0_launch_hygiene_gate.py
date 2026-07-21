@@ -15,7 +15,7 @@ no authoritative writes, no authorization consumed.
 """
 
 # scope: system
-# function: contract
+# function: regression
 # lifecycle: active
 
 from __future__ import annotations

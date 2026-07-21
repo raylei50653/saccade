@@ -11,7 +11,7 @@ can never silently diverge again.
 """
 
 # scope: system
-# function: contract
+# function: regression
 # lifecycle: active
 
 from __future__ import annotations
