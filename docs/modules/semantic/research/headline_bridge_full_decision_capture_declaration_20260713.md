@@ -2030,3 +2030,58 @@ FORBIDDEN. A post-qualification commit invalidates qualification and any later
 execution-bound change still requires a completely fresh I -> F -> S chain.
 | 2026-07-20 | `6bc5192c228b752bce42173a058a24374180093c` | `4d3632c279112ad92d11c14ed36c0078b1b1b17f` | `SEALED` |
 | 2026-07-20 | `31c9eee83fc46f34ab0fd9218c4e1ba2ed545636` | `46539a2d490aeed63b7c9cea8a10e9bf2819a364` | `SEALED` |
+
+## Amendment 9 — one fresh re-entry of the build-tool provenance unit (2026-07-21; pre-seal)
+
+### A9.1 Scope: re-admission of the sole sealed unit for one attempt
+
+The sole admissible repair unit remains `h0_build_tool_provenance_closure`,
+exactly as frozen by Amendment 8 (A8.1) and recorded as the one-member
+`repair_units` registry in `h0_repair_acceptance_matrix_v1`. Its prior
+exactly-once authorization was consumed at the owner-accepted
+`H0_PROVENANCE_INVALID` terminal of the #224/#227 chain
+(`I=31c9eee83fc46f34ab0fd9218c4e1ba2ed545636`), which failed the controller's
+launch preflight on a pre-existing `build/h0_phase_a` tree before any capture
+checkpoint ran. This amendment re-admits that same unit for **one fresh
+`I -> F -> S` chain only**. It introduces no second unit and no scientific,
+engineering, capture, qualification, or Phase-B scope change: the acceptance
+matrix `h0_repair_acceptance_matrix_v1`, its checker and workflow step tuple,
+the qualification semantics, every historical amendment, and every historical
+sealed freeze and packet remain byte-unchanged. A further blocker after this
+single attempt closes it and requires a new owner-scheduled re-entry, not a
+partial re-acceptance.
+
+### A9.2 Launch-hygiene gate as a mandatory pre-authorization and pre-execution condition
+
+Both prior authorized invocations (#209 and #224/#227) spent their single
+exactly-once authorization only to terminate at
+`build/h0_phase_a exists at controller launch`, before any capture checkpoint.
+This re-entry binds the committed non-authoritative launch-hygiene gate
+`scripts/tools/h0_launch_hygiene_gate.py` as a mandatory condition that MUST
+report `clear` immediately before the owner grants the exactly-once
+authorization and again on the sealed checkout immediately before controller
+launch. The gate is not a controller mode and holds no execution authority: it
+reuses the controller's own single-source predicate
+`run_h0_phase_a.assert_no_preexisting_build_tree` — the sole origin of that
+preflight terminal, to which `preflight_controller_input` also delegates — so a
+`clear` gate is the controller's own verdict on that predicate and cannot drift
+from it. The gate consumes no authorization, reads no research input, writes no
+evidence root, and emits no terminal. It adds no eleventh qualification step and
+alters no matrix, checker, or workflow; it is a pre-authorization/pre-execution
+screen only.
+
+### A9.3 State effect
+
+This is an append-only pre-seal engineering amendment, not an owner acceptance
+of I, F, S or a terminal. It re-admits `h0_build_tool_provenance_closure` for a
+single fresh chain and records the launch-hygiene pre-condition; it grants no
+authorization, schedules nothing, and creates no S. GCTM #175 remains PARKED and
+Phase B remains FORBIDDEN. A post-qualification commit invalidates
+qualification, so `I` is the exact amended commit whose tree the final
+non-authoritative qualification report binds, and any later execution-bound
+change requires a completely fresh `I -> F -> S` chain. This amendment does not
+change the route-1 permanent-ledger conclusion recorded in
+`quantity.bridge_capture_provenance`: there is still no faithful capture, no
+accepted runtime-fidelity edge, and no actual H0 guarantee envelope. The owner
+records the sole `SEALED` event for this re-entry as the final appended row
+below.

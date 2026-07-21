@@ -336,6 +336,13 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
     ledger_effect: 上方 route-1 永久留帳結論不變（仍無 faithful capture / 無 accepted runtime-fidelity edge / 無 actual H0 guarantee envelope）;候選集仍空;Phase B / GCTM / B1 / O1 未啟動
     future_reentry_precondition: 另一 separate owner-scheduled task;須先把 launch hygiene 做成 machine-checked non-authoritative pre-authorization gate（複用 controller 真實 preflight predicate,在授權 exactly-once 前 fail-closed 拒 pre-existing `build/h0_phase_a` tree）;再 fresh qualified I→F→S 鏈 + 另行 exactly-once 授權
     issues: '#224 (closed on this closeout landing) / #227 (repair delivered; closed after linking accepted terminal)'
+pending_reentry:                          # append-only; pre-seal, no terminal claimed; route-1 永久留帳結論不變
+  - date: 2026-07-21
+    scheduling: owner-scheduled re-entry #3（滿足 line-337 future_reentry_precondition:launch-hygiene gate 先行）
+    declaration_amendment: "Amendment 9（headline_bridge_full_decision_capture_declaration_20260713.md;pre-seal, append-only）"
+    scope: "re-admit 既有 sealed unit h0_build_tool_provenance_closure 供單一 fresh I→F→S attempt（前次於 #224/#227 I=31c9eee8 被 PROVENANCE_INVALID 消費,capture 前失敗）;非第二 unit;acceptance matrix/checker/workflow tuple/qualification 語義/歷史 declaration/歷史 sealed evidence 全 byte 不變"
+    launch_hygiene_gate: "scripts/tools/h0_launch_hygiene_gate.py（非授權;複用單源 predicate run_h0_phase_a.assert_no_preexisting_build_tree）;mandatory:授權前與 sealed checkout controller launch 前皆須報 clear"
+    status: "pre-seal;owner S / exactly-once 授權 / scheduling 皆未授予;I/F chain SHA 與 final qualification report binding 見 owner-review packet"
 last_reviewed_at: 2026-07-21
 ```
 
