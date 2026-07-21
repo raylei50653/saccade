@@ -416,6 +416,32 @@ class CheckpointDriftError(DriftError):
         )
 
 
+# The controller's authoritative build subtree.  Its pre-existence at launch is
+# the first ordered-terminal (`provenance_invalid`) hazard: both prior
+# owner-authorized re-entries (#209 and #224/#227) consumed their exactly-once
+# authorization only to fail preflight here, never reaching the capture
+# checkpoints.  The predicate below is the single source of that check so the
+# non-authoritative launch-hygiene gate can reuse the controller's own verdict
+# *before* an authorization is spent — see scripts/tools/h0_launch_hygiene_gate.py.
+AUTHORITATIVE_BUILD_SUBTREE = "build/h0_phase_a"
+
+
+def assert_no_preexisting_build_tree(root: Path) -> None:
+    """Fail closed when the authoritative build subtree already exists.
+
+    This is the sole source of the ``build/h0_phase_a exists at controller
+    launch`` preflight terminal.  ``preflight_controller_input`` and the
+    non-authoritative launch-hygiene gate both call it, so the gate's verdict is
+    the controller's own verdict rather than a re-implementation that could
+    silently drift from it.
+    """
+    build_dir = root / AUTHORITATIVE_BUILD_SUBTREE
+    if build_dir.exists():
+        raise ContractError(
+            f"{AUTHORITATIVE_BUILD_SUBTREE} exists at controller launch"
+        )
+
+
 def canonical_json_bytes(value: object) -> bytes:
     """A7.8 canonical JSON bytes, excluding the required file trailing LF."""
     return json.dumps(
@@ -1640,9 +1666,7 @@ def preflight_controller_input(
         or status_bytes != b""
     ):
         raise ContractError("checkout root/head/cleanliness provenance mismatch")
-    build_dir = root / "build/h0_phase_a"
-    if build_dir.exists():
-        raise ContractError("build/h0_phase_a exists at controller launch")
+    assert_no_preexisting_build_tree(root)
     evidence_root = root / contract["evidence_root"]
     incomplete_root = root / contract["incomplete_root"]
     expected_root = f"docs/modules/semantic/research/evidence/h0_phase_a_{head}"
