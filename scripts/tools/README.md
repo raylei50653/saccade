@@ -339,6 +339,7 @@ deleting.
 | `build_h0_preseal_freeze.py` | stable | cli | Assemble the sole H0 pre-seal artifact (``h0_preseal_freeze_v3``). |
 | `build_r1_bridge_replay.sh` | stable | - | Build the research-only device replay helper used by R1 host R0. |
 | `build_relink_candidates.py` | stable | cli | Build a relink-candidate dataset from a no-relink / no-interp MOT dump. |
+| `build_scripts_index.py` | stable | cli | Generate the scripts/ discovery index from each script's own header. |
 | `cache_gt_tracks.py` | stable | cli | cache_gt_tracks.py — Phase 1 GT Oracle Cache Generator |
 | `check_api_layers.py` | stable | cli | Saccade API Layering Audit. |
 | `check_association_tools.py` | stable | cli | Check association recovery tools registry (R) against disk (D) and NO-GO (N). |
@@ -357,6 +358,7 @@ deleting.
 | `check_h0_repair_acceptance_matrix.py` | stable | - | Validate the prospective H0 repair/qualification acceptance matrix. |
 | `check_headline_decision_contract.py` | stable | cli | Static guard for the headline tracker-decision contract (no GPU). |
 | `check_scan_bwd.py` | experiment | - | Validate the CUDA selective-scan backward against the JIT autograd reference. |
+| `check_scripts_structure.py` | stable | cli | Scripts structure contract: every script self-documents, and the index is fresh. |
 | `classify_gap_cause.py` | experiment | cli | Classify relink gaps: person-person overlap vs non-person. |
 | `cold_start_transfer.py` | experiment | cli | Cold-start transfer test: do the normalized occ-gate landmarks hold on MOT20? |
 | `color_relink_features.py` | stable | cli | Offline AUC test: color-histogram appearance features for relink candidates. |

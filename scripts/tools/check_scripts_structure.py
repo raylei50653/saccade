@@ -16,6 +16,8 @@ Usage:
     .venv/bin/python scripts/tools/check_scripts_structure.py --strict   # exit 1 on violations
 """
 
+# status: stable
+
 from __future__ import annotations
 
 import argparse

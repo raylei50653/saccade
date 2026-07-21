@@ -17,6 +17,8 @@ Usage:
     .venv/bin/python scripts/tools/build_scripts_index.py --check    # verify, no write
 """
 
+# status: stable
+
 from __future__ import annotations
 
 import ast
@@ -62,6 +64,32 @@ def tracked_scripts() -> list[str]:
         text=True,
     )
     return sorted(out.split())
+
+
+def tracked_readmes() -> list[str]:
+    out = subprocess.check_output(
+        [
+            "git",
+            "-C",
+            str(REPO),
+            "ls-files",
+            "scripts/README.md",
+            "scripts/**/README.md",
+        ],
+        text=True,
+    )
+    return sorted(out.split())
+
+
+# A generated block plus an optional preceding "## Script index" heading, used to
+# strip orphan blocks from directories that no longer contain any script.
+STRIP_RE = re.compile(
+    r"(?ms)(?:^##\s*Script index\s*\n+)?"
+    + re.escape(BEGIN)
+    + r".*?^"
+    + re.escape(END)
+    + r"[ \t]*\n?"
+)
 
 
 def extract(path: str) -> tuple[str, str, str]:
@@ -152,6 +180,14 @@ def render_rollup(metas: dict[str, tuple[str, str, str]]) -> str:
         "Source of truth = each script's own docstring + `# status:` header; "
         "regenerate with `scripts/tools/build_scripts_index.py`.",
         "",
+        "> **Classification provenance (provisional).** Labels were seeded "
+        "mechanically from a one-time survey (wired-into-code → `stable`, hand-run "
+        "tool → `diagnostic`, concluded study → `experiment`, dead/duplicate → "
+        "`archive-candidate`) and spot-checked. The keep-vs-archive split is "
+        "authoritative, but the `stable`/`diagnostic` boundary is **provisional**: "
+        "`stable` currently also holds wired-in analysis tools that a semantic pass "
+        "may reclassify as `diagnostic`. Edit a script's `# status:` line to correct it.",
+        "",
         "## Status label counts",
         "",
         "| Label | Meaning | Count |",
@@ -186,6 +222,16 @@ def build() -> tuple[dict[Path, str], dict[str, tuple[str, str, str]]]:
         block = render_dir_block(d, rows)
         readme, new = upsert_readme(d, block)
         writes[readme] = new
+    # Orphan cleanup: a README whose directory no longer contains any script must
+    # not keep a stale generated block (e.g. after an archive cleanup empties a dir).
+    script_dirs = set(rows_by_dir)
+    for rel in tracked_readmes():
+        readme = REPO / rel
+        if readme in writes or str(Path(rel).parent) in script_dirs:
+            continue
+        content = readme.read_text(encoding="utf-8")
+        if STRIP_RE.search(content):
+            writes[readme] = STRIP_RE.sub("", content).rstrip("\n") + "\n"
     writes[ROLLUP] = render_rollup(metas)
     return writes, metas
 
