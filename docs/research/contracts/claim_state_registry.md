@@ -300,6 +300,9 @@ last_transition: 2026-07-14 — cause 由 foreign-capture 改為 provenance inco
                  open_limits 改寫為永久留帳形式
                  2026-07-21 — #224/#227 re-entry 第二個 owner-accepted `H0_PROVENANCE_INVALID`
                  （object state 不變;詳見 reentry_terminal_history）
+                 2026-07-21 — #235 re-entry #3 第三個 owner-accepted `H0_PROVENANCE_INVALID`
+                 （object state 不變;死因不同＝extension_load confinement-plan construction;
+                 詳見 reentry_terminal_history re-entry #3）
 admissible_units: []                   # H0 unit 已消費並於 route 1 關閉;現無宣告的補救動作。
                                        # 重進=append-only declaration amendment＋新 I→F→S
                                        # owner reseal＋owner scheduling（§9 重新 review 時再推導）
@@ -336,13 +339,45 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
     ledger_effect: 上方 route-1 永久留帳結論不變（仍無 faithful capture / 無 accepted runtime-fidelity edge / 無 actual H0 guarantee envelope）;候選集仍空;Phase B / GCTM / B1 / O1 未啟動
     future_reentry_precondition: 另一 separate owner-scheduled task;須先把 launch hygiene 做成 machine-checked non-authoritative pre-authorization gate（複用 controller 真實 preflight predicate,在授權 exactly-once 前 fail-closed 拒 pre-existing `build/h0_phase_a` tree）;再 fresh qualified I→F→S 鏈 + 另行 exactly-once 授權
     issues: '#224 (closed on this closeout landing) / #227 (repair delivered; closed after linking accepted terminal)'
+  - date: 2026-07-21
+    scheduling: separate owner-scheduled re-entry #3（滿足前次 future_reentry_precondition:launch-hygiene gate #234 先行;非本 registry 自動發生;O0 charter 仍 closed,候選集仍空）
+    declaration_amendment: "Amendment 9（headline_bridge_full_decision_capture_declaration_20260713.md;append-only;owner-sealed 進 S=3a6a9ec6）"
+    scope: "re-admit 既有 sealed unit h0_build_tool_provenance_closure 供單一 fresh I→F→S attempt;非第二 unit;acceptance matrix/checker/workflow tuple/qualification 語義/歷史 declaration/歷史 sealed evidence 全 byte 不變"
+    chain:
+      I3: 5a2d1de509fa64f2e5ce9a4db8182337da215968
+      F3: 7895704c298504b279ae8e1febf19ca2a715637f
+      S3: 3a6a9ec6348f1dccca6acabef8025159c3bec1d3
+    invocation: authoritative_count=1; exactly_once_authorization=consumed; exact_S_permanently_spent; retry/resume/second_invocation_under_S3=permanently_forbidden
+    terminal: H0_PROVENANCE_INVALID       # controller literal `provenance_invalid`;A2.4 第一 ordered terminal
+    independent_verifier: '{"result":"provenance_invalid","valid":true}' ; rc=0
+    factual_boundary:                      # 接受為 truthful negative ordered terminal
+      failure_stage: extension_load confinement-plan construction（capture 前）
+      failure_reason: "seal-event/runtime-binding identity incompatibility：declaration 既是 F 凍結的 runtime-bound input 又是 S 要 append SEALED 的目標 ⇒ seal mutation 被判 provenance mismatch"
+      failing_predicate: provenance_ok=false（唯一 false;build_ok/extension_ok/artifacts_ok/classified_execution/packets_valid/policy_equal/runners_ok/serialization_ok 皆 true;timed_out=false）
+      checkpoints: T0/T1 completed（inventory_equal;t0 bound_inputs_digest 4e3eb01f）; T2a_0→T4 not_reached
+      capture_child_runs: NOT_RUN（00_capture_off / 01_capture_on_1 / 02_capture_on_2 / 03_capture_on_3;confinement_plan_digest=null）
+      build_runtime_gpu_identity: complete（build/runtime/GPU identity 已產生;四個 child runtime_inputs 因 blocking result 均為 not_produced）
+      comparison: not_produced
+      capture_evidence: none
+    evidence_packet: docs/modules/semantic/research/evidence/h0_phase_a_5a2d1de509fa64f2e5ce9a4db8182337da215968/
+    digests:
+      inventory_digest: c797de0e28d3f325ecb2a7ae06f74a9169dfe2208426c434218e224fab76def9   # 25 members
+      manifest_json_sha256: 51ec6d0a223f378fd40aed71b9e9582afb14e071c0de78491e0663318816706d
+      result_json_sha256: 2c1cfa17c977ad02c6c1dee335810b9ee7ff37f1cbba1382d41a00f06b96529a
+      checksums_sha256_digest: 85dbca11a80691c78ba13eddaa385a2564a0b2811f2ced71d4738f68350dd600
+      verifier_report_aggregate_json_sha256: 0be12cc292773239d75604e9f2496787387ee8874395f4a3a9d723c615fe3f2e
+    owner_acceptance: 2026-07-21 — accepted as truthful negative ordered terminal（PR #235 comment 5032610430）;
+                      **not** `H0_FULL_COMMIT_CAPTURE_FAITHFUL`;不成立 actual H0 guarantee;不構成 guarantee registration 基礎
+    ledger_effect: 上方 route-1 永久留帳結論不變（仍無 faithful capture / 無 accepted runtime-fidelity edge / 無 actual H0 guarantee envelope）;候選集仍空;guarantee set 空;Phase B / GCTM / B1 / O1 未啟動
+    future_reentry_precondition: NONE — 本 acceptance 不授權任何 repair / reseal / 新 re-entry;exact S=3a6a9ec6 permanently spent
+    issues: '#235 (owner acceptance surface; remains UNMERGED; exact S=3a6a9ec6 immutable spent history; closeout landed via separate PR; no closing keyword)'
 pending_reentry:                          # append-only; pre-seal, no terminal claimed; route-1 永久留帳結論不變
   - date: 2026-07-21
     scheduling: owner-scheduled re-entry #3（滿足 line-337 future_reentry_precondition:launch-hygiene gate 先行）
     declaration_amendment: "Amendment 9（headline_bridge_full_decision_capture_declaration_20260713.md;pre-seal, append-only）"
     scope: "re-admit 既有 sealed unit h0_build_tool_provenance_closure 供單一 fresh I→F→S attempt（前次於 #224/#227 I=31c9eee8 被 PROVENANCE_INVALID 消費,capture 前失敗）;非第二 unit;acceptance matrix/checker/workflow tuple/qualification 語義/歷史 declaration/歷史 sealed evidence 全 byte 不變"
     launch_hygiene_gate: "scripts/tools/h0_launch_hygiene_gate.py（非授權;複用單源 predicate run_h0_phase_a.assert_no_preexisting_build_tree）;mandatory:授權前與 sealed checkout controller launch 前皆須報 clear"
-    status: "pre-seal;owner S / exactly-once 授權 / scheduling 皆未授予;I/F chain SHA 與 final qualification report binding 見 owner-review packet"
+    status: "RESOLVED 2026-07-21 — owner sealed（S=3a6a9ec6）＋ exactly-once authorized ＋ scheduled ＋ executed ⇒ 到達 owner-accepted ordered terminal H0_PROVENANCE_INVALID（見 reentry_terminal_history re-entry #3;PR #235 comment 5032610430）;exactly-once authorization consumed;exact S permanently spent;retry/resume/second invocation forbidden;無 repair / 新 re-entry 授權"
 last_reviewed_at: 2026-07-21
 ```
 

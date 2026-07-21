@@ -16,6 +16,17 @@
   precondition（先建 machine-checked launch-hygiene pre-authorization gate,再 fresh
   I→F→S＋另行 exactly-once 授權）見 [claim-state registry
   `quantity.bridge_capture_provenance`](../../research/contracts/claim_state_registry.md)。
+- **none**（re-entry #3）。owner 於 2026-07-21 授權 exactly-once 執行 re-entry #3
+  （I₃=`5a2d1de5`→F₃=`7895704c`→S₃=`3a6a9ec6`），到達第三個同型 owner-accepted
+  ordered terminal `H0_PROVENANCE_INVALID`（PR #235 comment 5032610430;independent
+  verifier `result=provenance_invalid, valid=true, rc=0`）。死因不同＝extension_load
+  confinement-plan construction（capture 前;`provenance_ok=false` 為唯一 false predicate;
+  capture children NOT_RUN;T0/T1 completed、T2a_0→T4 not_reached）;根因＝
+  seal-event／runtime-binding identity incompatibility。invocation count=1、exactly-once
+  授權永久消耗、exact S 永久 spent、retry／resume／second invocation forbidden。
+  **faithful capture = none;actual H0 guarantee = none;candidate／guarantee sets 空;
+  Phase B FORBIDDEN;GCTM #175 PARKED;無 repair／新 re-entry 授權**。詳見 [claim-state
+  registry `reentry_terminal_history` re-entry #3](../../research/contracts/claim_state_registry.md)。
 
 ## Proposed（non-WIP）
 
