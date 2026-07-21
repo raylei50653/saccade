@@ -1,3 +1,9 @@
+"""Cross-package unit tests for core media/storage/tracking helpers."""
+
+# scope: system
+# function: behavior
+# lifecycle: active
+
 import pytest  # noqa: E402
 import torch
 import numpy as np

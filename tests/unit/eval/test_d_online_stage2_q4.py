@@ -1,5 +1,9 @@
 """Unit tests for M-B1.5 Stage 2 Q4 separability audit."""
 
+# scope: eval
+# function: behavior
+# lifecycle: active
+
 from __future__ import annotations
 
 import numpy as np

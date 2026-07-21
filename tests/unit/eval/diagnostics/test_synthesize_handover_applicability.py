@@ -1,3 +1,9 @@
+"""Tests for the handover-applicability synthesis CLI (scripts.eval.diagnostics.synthesize_handover_applicability)."""
+
+# scope: eval
+# function: behavior
+# lifecycle: active
+
 import json
 import subprocess
 import sys

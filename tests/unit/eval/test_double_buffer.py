@@ -1,3 +1,9 @@
+"""Tests for the evaluator double-buffer path (perception.eval.evaluator)."""
+
+# scope: eval
+# function: behavior
+# lifecycle: active
+
 from __future__ import annotations
 
 from types import SimpleNamespace

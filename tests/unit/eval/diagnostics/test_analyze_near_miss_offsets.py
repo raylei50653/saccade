@@ -1,3 +1,9 @@
+"""Tests for the near-miss offsets analyzer (scripts.eval.diagnostics.analyze_near_miss_offsets)."""
+
+# scope: eval
+# function: behavior
+# lifecycle: active
+
 from pathlib import Path
 
 import pandas as pd

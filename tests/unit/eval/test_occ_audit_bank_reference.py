@@ -1,5 +1,9 @@
 """Tests for occ-exit audit with bank-sourced reference (Phase 2a, #55)."""
 
+# scope: eval
+# function: behavior
+# lifecycle: active
+
 from __future__ import annotations
 
 import torch

@@ -4,6 +4,10 @@ These tests validate the orchestration logic without requiring a full GPU
 sequence execution.  They reuse fixtures from ``test_decimal_hash.py``.
 """
 
+# scope: eval
+# function: behavior
+# lifecycle: active
+
 from __future__ import annotations
 
 from pathlib import Path

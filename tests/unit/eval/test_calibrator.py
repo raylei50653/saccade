@@ -7,6 +7,10 @@ Covers:
   - get_batch with mock images
 """
 
+# scope: perception
+# function: behavior
+# lifecycle: active
+
 from __future__ import annotations
 
 import os

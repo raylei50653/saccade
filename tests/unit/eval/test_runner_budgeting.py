@@ -1,3 +1,9 @@
+"""Tests for eval runner ReID candidate budgeting (perception.eval.helpers)."""
+
+# scope: eval
+# function: behavior
+# lifecycle: active
+
 import sys
 from pathlib import Path
 import torch

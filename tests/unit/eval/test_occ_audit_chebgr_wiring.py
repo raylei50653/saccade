@@ -1,5 +1,9 @@
 """WP1b: config / evaluator wiring for occ-exit Cheb-GR probe (default-off)."""
 
+# scope: eval
+# function: behavior
+# lifecycle: active
+
 from __future__ import annotations
 
 import inspect

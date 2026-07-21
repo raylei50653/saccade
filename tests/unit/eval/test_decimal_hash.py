@@ -1,3 +1,9 @@
+"""Tests for decimal-hash MOT canonicalization + hashing (perception.eval.decimal_hash)."""
+
+# scope: eval
+# function: behavior
+# lifecycle: active
+
 import pytest
 
 from saccade.perception.eval.decimal_hash import canonicalize_mot_lines, decimal_hash

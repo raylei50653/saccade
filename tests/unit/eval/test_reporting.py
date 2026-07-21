@@ -1,3 +1,9 @@
+"""Tests for MOT eval reporting output (perception.eval.reporting)."""
+
+# scope: eval
+# function: behavior
+# lifecycle: active
+
 import csv
 from types import SimpleNamespace
 from unittest.mock import MagicMock

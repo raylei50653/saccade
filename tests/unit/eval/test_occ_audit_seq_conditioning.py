@@ -1,5 +1,9 @@
 """WP2: occ-exit sequence conditioning classification (analysis only)."""
 
+# scope: eval
+# function: diagnostic
+# lifecycle: active
+
 from __future__ import annotations
 
 import json

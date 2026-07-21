@@ -1,3 +1,9 @@
+"""Tests for the offline Cheb-GR handover report CLI (scripts.eval.diagnostics.cheb_gr_offline_handover_report)."""
+
+# scope: eval
+# function: behavior
+# lifecycle: active
+
 import csv
 import json
 import subprocess

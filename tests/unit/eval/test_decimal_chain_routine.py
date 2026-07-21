@@ -5,6 +5,10 @@ semantics, path fail-closed detection, and independent usability of the
 2×2 / all-7 forensic tools.  No GPU sequence execution is required.
 """
 
+# scope: eval
+# function: behavior
+# lifecycle: active
+
 from __future__ import annotations
 
 from pathlib import Path

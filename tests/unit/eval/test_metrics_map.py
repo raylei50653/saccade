@@ -1,3 +1,9 @@
+"""Tests for the metrics mAP computation (perception.eval.metrics)."""
+
+# scope: eval
+# function: behavior
+# lifecycle: active
+
 from saccade.perception.eval.metrics import (
     _format_overall_metrics_from_counts,
     compute_detection_mean_ap,

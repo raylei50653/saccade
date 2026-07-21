@@ -1,3 +1,9 @@
+"""Tests for the MOT17 eval arg parser and runtime-env setup (scripts.eval.mot17_args)."""
+
+# scope: eval
+# function: behavior
+# lifecycle: active
+
 import pytest
 import torch
 from scripts.eval.mot17_args import build_parser, configure_runtime_env

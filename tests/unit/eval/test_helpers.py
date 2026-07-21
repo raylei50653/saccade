@@ -3,6 +3,10 @@
 Tests pure helper functions without requiring GPU or native extensions.
 """
 
+# scope: eval
+# function: behavior
+# lifecycle: active
+
 from __future__ import annotations
 
 import torch
