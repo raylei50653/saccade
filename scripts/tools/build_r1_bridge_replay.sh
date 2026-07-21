@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# status: stable
 # Build the research-only device replay helper used by R1 host R0.
 # The .so is gitignored (*.so); rebuild after a clean checkout when running
 # authority verify with --require-device.

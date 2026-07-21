@@ -11,6 +11,7 @@ Prerequisites:
     - ONNX file (from export_mamba_head_onnx.py)
     - build/libsaccade_scan_plugin.so
 """
+# status: stable
 
 from __future__ import annotations
 

@@ -25,6 +25,7 @@ Usage
 -----
   .venv/bin/python scripts/tools/horizon_window_probe.py --win 30 --step 15
 """
+# status: experiment
 
 from __future__ import annotations
 

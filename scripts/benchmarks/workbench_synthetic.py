@@ -1,3 +1,6 @@
+"""Synthetic workbench load generator for pipeline microbenches."""
+
+# status: diagnostic
 import torch
 import time
 import argparse

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Download and setup Market-1501 dataset from Hugging Face."""
+# status: diagnostic
 
 import argparse
 import zipfile

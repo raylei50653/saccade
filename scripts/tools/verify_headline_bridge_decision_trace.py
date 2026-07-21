@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Replay and validate the sealed H0 bridge-decision trace from capture alone."""
+# status: stable
 
 from __future__ import annotations
 

@@ -14,6 +14,7 @@ Usage:
         [--dancetrack-train datasets/DanceTrack/train] \\
         [--mot20-train datasets/MOT20/MOT20/train]
 """
+# status: stable
 
 from __future__ import annotations
 

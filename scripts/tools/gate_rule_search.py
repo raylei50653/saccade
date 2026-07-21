@@ -24,6 +24,7 @@ Usage
 
 Does NOT flip production presets. RESEARCH / default-off.
 """
+# status: stable
 
 from __future__ import annotations
 

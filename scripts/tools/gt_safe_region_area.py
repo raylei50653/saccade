@@ -24,6 +24,7 @@ Metrics
     --study-dir out/signal_study/m_gt_safe_area_<stamp> \\
     --all-default-pairs --n-grid 25
 """
+# status: stable
 
 from __future__ import annotations
 

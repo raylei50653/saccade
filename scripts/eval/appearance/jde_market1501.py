@@ -9,6 +9,7 @@ Usage:
         --proj-ckpt runs/jde_market_v2/best.ckpt \
         --market-root datasets/Market-1501-v15.09.15
 """
+# status: stable
 
 from __future__ import annotations
 

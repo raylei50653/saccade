@@ -1,3 +1,6 @@
+"""Export SigLIP model to ONNX for TRT build."""
+
+# status: stable
 import os
 import torch
 from transformers import AutoModel

@@ -1,4 +1,5 @@
 """Unit test: cpp_letterbox_gpu output matches PyTorch 3-op reference."""
+# status: diagnostic
 
 import sys
 from pathlib import Path

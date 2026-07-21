@@ -1,3 +1,6 @@
+"""Coordinate/param optimizer over mot17 CLI knobs (historical)."""
+
+# status: experiment
 import sys
 import json
 import time

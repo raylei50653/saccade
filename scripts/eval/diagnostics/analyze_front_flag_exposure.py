@@ -21,6 +21,7 @@ Usage
 -----
   .venv/bin/python scripts/eval/diagnostics/analyze_front_flag_exposure.py --substrate /tmp/occ2_off
 """
+# status: stable
 
 from __future__ import annotations
 

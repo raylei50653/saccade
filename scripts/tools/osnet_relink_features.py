@@ -13,6 +13,7 @@ Usage:
       --csv scripts/tools/out/relink_candidates.csv \
       --skip 3 --window 12 --topk 3
 """
+# status: stable
 
 from __future__ import annotations
 

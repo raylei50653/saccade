@@ -5,6 +5,7 @@ hand it one YAML mapping and receive a stable error class if it is invalid.
 That lets the canonical fixtures exercise the schema without making the
 reconciled map a special case.
 """
+# status: stable
 
 from __future__ import annotations
 

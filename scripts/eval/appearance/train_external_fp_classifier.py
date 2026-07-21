@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+
+"""Train logistic TP/FP classifier from external rows."""
+
+# status: stable
 import argparse
 import json
 import sys

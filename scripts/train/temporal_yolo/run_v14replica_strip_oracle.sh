@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# status: experiment
 # Strip detail routing (Phase 1, GT-driven oracle mask) on the clean replica
 # lineage. GT2 stage from replica GT1 with --detail-source strip-oracle:
 # fixed-budget GT-routed Detail Mamba reads raw original-image pixel strips at

@@ -8,6 +8,7 @@ state, horizon, and bridge configuration. It reports component errors,
 predicate agreement, and an event-local order check; the sealed R1 declaration
 defines how these measurements may be interpreted.
 """
+# status: stable
 
 from __future__ import annotations
 

@@ -7,6 +7,7 @@ reusing the probe's GT crossing-event extractor. Two AUCs:
       correct (separating right vs wrong predictions)?
 Contrast: appearance hard-pool AUC ~= 0.50 (registry #2/#32/#35).
 """
+# status: experiment
 
 import sys
 from pathlib import Path

@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+
+"""Detector-only mAP evaluation on MOT-format sequences."""
+
+# status: stable
 # mypy: ignore-errors
 import argparse
 import sys

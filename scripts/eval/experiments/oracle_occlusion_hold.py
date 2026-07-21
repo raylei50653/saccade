@@ -34,6 +34,7 @@ Usage
   .venv/bin/python scripts/eval/experiments/oracle_occlusion_hold.py \
       --substrate results/mamba_whole_graph_current_7seq_recheck
 """
+# status: experiment
 
 from __future__ import annotations
 

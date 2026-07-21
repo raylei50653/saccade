@@ -4,6 +4,7 @@
 Research-only packaging. Never mutates evaluator inputs, never reruns the
 evaluator, never searches thresholds, and never self-promotes A0→A1.
 """
+# status: stable
 
 from __future__ import annotations
 

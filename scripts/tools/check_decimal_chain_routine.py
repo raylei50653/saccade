@@ -24,6 +24,7 @@ directional contamination.  After a failure:
 
 All unrecognised options are forwarded to ``scripts/eval/mot17.py``.
 """
+# status: stable
 
 from __future__ import annotations
 

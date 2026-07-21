@@ -1,3 +1,7 @@
+"""Small shared helpers for eval config modules."""
+
+
+# status: stable
 def _help(
     text: str,
     *,

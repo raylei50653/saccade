@@ -30,6 +30,7 @@ Usage
   .venv/bin/python scripts/eval/probe_occ_separability.py \
       --output results/occ_separability/probe.json
 """
+# status: stable
 
 from __future__ import annotations
 

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# status: experiment
 # Held-out v2 downstream: rebuild cache + 4 mamba stages from the e30 PP22 teacher.
 # Mirrors the e5 run exactly (recipe recovered from embedded ckpt args), only the
 # teacher checkpoint and all run-dirs change (_e30 suffix) so the e5 baseline stays.

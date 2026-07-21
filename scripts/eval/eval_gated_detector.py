@@ -14,6 +14,7 @@ Usage:
         [--sequences MOT17-02-SDP,...] \
         [--score-thr 0.3] [--nms-iou 0.5] [--no-gate]
 """
+# status: archive-candidate
 
 from __future__ import annotations
 

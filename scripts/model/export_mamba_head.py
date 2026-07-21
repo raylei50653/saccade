@@ -4,6 +4,7 @@
 Usage:
     uv run scripts/model/export_mamba_head.py
 """
+# status: stable
 
 import sys
 import ctypes

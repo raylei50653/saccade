@@ -15,6 +15,7 @@ Exit code 1 if any stale path is found, else 0.
 
 Usage: uv run python3 scripts/tools/check_doc_stale_paths.py
 """
+# status: stable
 
 from __future__ import annotations
 

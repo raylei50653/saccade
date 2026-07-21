@@ -1,3 +1,6 @@
+"""Export YOLOE model with top-k embeddings."""
+
+# status: stable
 # mypy: ignore-errors
 import argparse
 import sys

@@ -1,3 +1,6 @@
+"""Manual GPU GMC correctness/perf smoke test."""
+
+# status: diagnostic
 import torch
 import numpy as np
 import cv2

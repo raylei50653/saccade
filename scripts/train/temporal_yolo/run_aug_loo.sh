@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# status: experiment
 # Parametric leave-one-out (LOO) augmentation experiment for the v14replica head.
 #
 # Tests whether GT1-stage augmentation reduces over-fit, measured OUT-OF-SAMPLE on

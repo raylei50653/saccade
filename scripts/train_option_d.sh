@@ -1,4 +1,5 @@
 #!/bin/bash
+# status: experiment
 set -e
 
 # Option D 兩階段訓練自動化腳本

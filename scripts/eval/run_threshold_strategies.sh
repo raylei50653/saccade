@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# status: stable
+# Thin redirect to experiments/run_threshold_strategies.sh.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"

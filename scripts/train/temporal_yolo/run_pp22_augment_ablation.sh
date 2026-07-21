@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# status: experiment
 # Augment single-factor ablation: e30 recipe + --augment, nothing else.
 #
 # Isolates the (now fixed, no-clip) augmentation from the lr/epochs/balance changes

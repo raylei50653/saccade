@@ -14,6 +14,7 @@ Usage:
         --cache-dir runs/trt_feat_cache \
         --from-scratch --batch-size 8 --lr 1e-4 --epochs 30
 """
+# status: archive-candidate
 
 import argparse
 import sys

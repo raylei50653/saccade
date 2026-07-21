@@ -15,6 +15,7 @@ Metrics JSON (optional) maps seq → idf1_delta / ids_delta (treatment − contr
 or control/treatment absolute pairs. Without metrics, rows classify as
 insufficient_evidence (or harmful if chebgr_only domination is extreme).
 """
+# status: stable
 
 from __future__ import annotations
 

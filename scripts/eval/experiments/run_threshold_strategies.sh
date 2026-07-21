@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# status: stable
 # Threshold-strategy sweep on the full MOT17 train SDP set.
 # Grounded in docs/modules/detection/research/mamba-score-distribution-20260613.md:
 # the tracker thresholds sit in the saturated left tail and act mainly as a

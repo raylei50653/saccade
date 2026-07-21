@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+
+"""Batch-run MOT17 SDP sequences through the standard eval path."""
+# status: stable
 # mypy: ignore-errors
 
 import argparse

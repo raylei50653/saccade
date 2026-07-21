@@ -19,6 +19,7 @@ Usage:
         --mamba-ckpt runs/mamba_distill_v1/best.ckpt \
         --epochs 30 --batch-size 4 --lr 1e-4
 """
+# status: stable
 
 from __future__ import annotations
 

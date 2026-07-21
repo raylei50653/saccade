@@ -20,6 +20,7 @@ preset (`b1b78318…`), which is what licenses it to compute new ones.
 Usage:
     python scripts/tools/resolved_bridge_policy_config.py --preset mamba_whole_graph_m
 """
+# status: stable
 
 from __future__ import annotations
 

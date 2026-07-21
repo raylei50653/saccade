@@ -6,6 +6,7 @@ example, pass ``--preset mamba_whole_graph --detector SDP --max-frames 120``
 after this tool's options.  The evaluator is invoked once with the complete
 sequence list, so repeated entries exercise the same detector and runtime.
 """
+# status: stable
 
 from __future__ import annotations
 

@@ -3,6 +3,7 @@
 
 Research-only. Does not touch production hooks/presets.
 """
+# status: stable
 
 from __future__ import annotations
 

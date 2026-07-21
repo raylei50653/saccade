@@ -20,6 +20,7 @@ Usage
 -----
   .venv/bin/python scripts/tools/gmc_rotation_probe.py
 """
+# status: experiment
 
 from __future__ import annotations
 

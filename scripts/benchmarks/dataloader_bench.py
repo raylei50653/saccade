@@ -4,6 +4,7 @@ DataLoader throughput benchmark: preload_to_ram vs num_workers.
 Usage:
     uv run scripts/benchmarks/dataloader_bench.py --data-root datasets/MOT17
 """
+# status: diagnostic
 
 import argparse
 import time

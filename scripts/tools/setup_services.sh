@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# status: stable
 # Saccade Systemd 服務安裝腳本
 
 set -e

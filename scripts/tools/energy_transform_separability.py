@@ -23,6 +23,7 @@ Usage
 Contract: docs/research/contracts/signal_table_schema.md §0.5
 Ledger:   docs/research/eval/signal_analysis_ledger.md
 """
+# status: stable
 
 from __future__ import annotations
 

@@ -20,6 +20,7 @@ Run:
     .venv/bin/python scripts/tools/bench_pipeline_halves.py \
         --seq MOT17-02-SDP --frames 200 --warmup 20
 """
+# status: experiment
 
 from __future__ import annotations
 

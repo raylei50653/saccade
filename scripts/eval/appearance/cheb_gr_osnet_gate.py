@@ -11,6 +11,7 @@ Usage:
     uv run python scripts/eval/appearance/cheb_gr_osnet_gate.py \
         --cheb-lambda 1.0 --gconv-layers 2
 """
+# status: stable
 
 from __future__ import annotations
 

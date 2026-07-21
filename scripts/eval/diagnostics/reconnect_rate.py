@@ -29,6 +29,7 @@ Usage:
       --label bridge_on --json-out out/signal_study/<id>/metrics_reconnect.json \\
       --events-out out/signal_study/<id>/events_reconnect.csv
 """
+# status: stable
 
 from __future__ import annotations
 

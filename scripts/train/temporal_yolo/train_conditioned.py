@@ -32,6 +32,7 @@ Option D：Track-Conditioned YOLO Neck 訓練
     uv run train/temporal_yolo/train_conditioned.py \\
         --data-root /path/to/MOT17 --seqs MOT17-02-SDP --phase 1 --epochs 2
 """
+# status: experiment
 
 from __future__ import annotations
 import argparse

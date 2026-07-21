@@ -13,6 +13,7 @@ are resolved.
 Usage:
     python scripts/tools/check_api_layers.py
 """
+# status: stable
 
 import ast
 import os

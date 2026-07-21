@@ -18,6 +18,7 @@ observed); kernel/graph spans are hardware timestamps and stay trustworthy.
 Compute the production bubble as (production wall/frame - GPU busy/frame here),
 never from the trace's own gaps. See docs/reference/runbooks/nsys_profiling.md.
 """
+# status: stable
 
 from __future__ import annotations
 

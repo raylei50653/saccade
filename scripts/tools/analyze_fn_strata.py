@@ -9,6 +9,7 @@ GT and FN by box height x visibility and report recall per cell.
 
 GT columns: frame,id,x,y,w,h,consider,class,visibility(0..1).
 """
+# status: experiment
 
 import sys
 from collections import defaultdict

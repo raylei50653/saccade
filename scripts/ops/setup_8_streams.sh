@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# status: stable
 #
 # setup_8_streams.sh — Launch 8 RTSP publisher streams (ffmpeg) into MediaMTX.
 #

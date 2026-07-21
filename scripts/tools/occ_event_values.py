@@ -14,6 +14,7 @@ Usage
 -----
   .venv/bin/python scripts/tools/occ_event_values.py --csv results/occ_tune/event_values.csv
 """
+# status: stable
 
 from __future__ import annotations
 

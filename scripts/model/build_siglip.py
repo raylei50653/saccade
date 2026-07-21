@@ -1,3 +1,6 @@
+"""Build TensorRT engine for SigLIP embedding model."""
+
+# status: stable
 import tensorrt as trt
 import os
 

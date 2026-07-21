@@ -9,6 +9,7 @@ remaining syscalls run at normal speed.  Landlock is the path-enforcing
 boundary and the supervisor is the independent recorder/fail-closed
 classifier.
 """
+# status: stable
 
 from __future__ import annotations
 

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# status: experiment
 # SR=2 (spatial_reduction 4->2) retrain — clean single-variable test vs the baseline.
 # Mirrors the baseline keyframe recipe EXACTLY (data, stages, hyperparams, B=4)
 # except --spatial-reduction 2 (halves the ÷downsample before the Mamba scan =

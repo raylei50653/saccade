@@ -10,6 +10,7 @@ sparse optical flow — detects sub-pixel motion on every frame pair.
 Usage:
     uv run scripts/train/temporal_yolo/precompute_gmc.py --data-root datasets/MOT17
 """
+# status: diagnostic
 
 import argparse
 import sys

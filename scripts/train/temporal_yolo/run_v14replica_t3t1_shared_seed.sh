@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# status: experiment
 # Explicit T3→T1 at an arbitrary seed, warm-started from the SHARED GT1
 # (runs/mamba_gt_v14replica_stage1/best.ckpt) — identical to run_v14replica_t3t1.sh
 # (the seed-42 run) except --seed is threaded and run-dirs are tagged. Use this

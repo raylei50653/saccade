@@ -26,6 +26,7 @@ Data layout after download:
             calib/       # Camera calibration (1 MB)
             label_02/    # Training labels (9 MB)
 """
+# status: diagnostic
 
 import argparse
 import getpass

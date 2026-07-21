@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# status: experiment
 # Controlled v14 causal probe:
 # historical Cross-Scan parent -> fixed N=16 -> frozen-SSM GT fine-tune.
 set -euo pipefail

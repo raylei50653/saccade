@@ -31,6 +31,7 @@ Avoided: unconstrained learned weights, raw sum, per-seq fit, MLP, FP-only Bayes
 CPU note: offline pairs.csv study — multi-process over packs (+ LOO folds
 threaded). GPU stays idle by design; use --jobs to fill cores.
 """
+# status: stable
 
 from __future__ import annotations
 

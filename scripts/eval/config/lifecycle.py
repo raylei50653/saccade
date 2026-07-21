@@ -1,3 +1,6 @@
+"""Track lifecycle (birth/death/confirm) config fields."""
+
+# status: stable
 from __future__ import annotations
 
 import argparse

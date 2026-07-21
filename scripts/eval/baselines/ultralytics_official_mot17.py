@@ -1,3 +1,6 @@
+"""Ultralytics official MOT17 tracker baseline runner."""
+
+# status: stable
 # mypy: ignore-errors
 from ultralytics import YOLO
 import time

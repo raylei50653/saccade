@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# status: experiment
 # T=3→T=1 GT2 variant: test "temporal enhances spatial consistency" hypothesis.
 # Phase A: 15ep GT2 with temporal (T=3), Phase B: 30ep GT2 T=1 re-adaptation.
 # Warm-start from replica GT1 best, same teacher/cache as replica.

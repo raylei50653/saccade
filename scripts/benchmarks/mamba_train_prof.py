@@ -29,6 +29,7 @@ Usage:
       --mamba-ckpt runs/mamba_distill_v1/best.ckpt \
       --phase 2 --batch-size 4
 """
+# status: diagnostic
 
 from __future__ import annotations
 

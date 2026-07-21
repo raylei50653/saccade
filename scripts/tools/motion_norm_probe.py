@@ -27,6 +27,7 @@ Usage
 -----
   .venv/bin/python scripts/tools/motion_norm_probe.py
 """
+# status: experiment
 
 from __future__ import annotations
 

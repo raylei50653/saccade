@@ -15,6 +15,7 @@ Usage:
         [--sequences MOT17-02-SDP,MOT17-04-SDP,...] \
         [--score-thr 0.3] [--nms-iou 0.5] [--img-size 640]
 """
+# status: stable
 
 from __future__ import annotations
 

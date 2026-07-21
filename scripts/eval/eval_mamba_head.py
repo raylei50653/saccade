@@ -20,6 +20,7 @@ Usage:
         [--score-thr 0.3] [--nms-iou 0.5] [--no-gate] \
         [--conf-thr 0.01] [--max-det 1000]
 """
+# status: archive-candidate
 
 from __future__ import annotations
 

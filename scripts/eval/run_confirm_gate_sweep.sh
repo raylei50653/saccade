@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# status: experiment
 # Confirmation-gate sweep: shorten establishment latency (the 57% "establish/
 # confirm" bucket of detected-but-untracked FN, see analyze_assoc_fn.py) while
 # guarding precision/IDs. Each strategy writes a full per-seq output dir so the

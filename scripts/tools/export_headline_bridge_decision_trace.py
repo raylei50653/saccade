@@ -5,6 +5,7 @@ The tool consumes H0 outputs and a caller-supplied sequence identity only. It
 neither opens GT/FP labels nor evaluates thresholds. Raw CUDA append order and
 capture-run UUID are provenance; the semantic digest uses canonical key order.
 """
+# status: stable
 
 from __future__ import annotations
 

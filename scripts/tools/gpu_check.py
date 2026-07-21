@@ -1,3 +1,6 @@
+"""Sanity-check PyTorch/CUDA/GPU environment."""
+
+# status: diagnostic
 import torch
 import tensorrt as trt
 import gi

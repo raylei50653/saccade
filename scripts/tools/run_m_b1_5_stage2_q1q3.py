@@ -11,6 +11,7 @@ Usage:
 Contract:
   docs/modules/semantic/research/m_b1_5_stage2_entry_contract_20260710.md
 """
+# status: stable
 
 from __future__ import annotations
 

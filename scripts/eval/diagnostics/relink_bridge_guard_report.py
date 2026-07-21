@@ -15,6 +15,7 @@ Usage:
       --baseline-dir results/baseline \
       --log results/guarded/run.log
 """
+# status: stable
 
 from __future__ import annotations
 

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# status: stable
 # Saccade 系統管理控制台 (Unified CLI)
 
 set -e

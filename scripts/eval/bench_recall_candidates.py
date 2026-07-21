@@ -10,6 +10,7 @@ This benchmark answers a narrow question before committing to training:
 It uses synthetic FPN tensors at the deploy shapes, so the numbers are latency
 and parameter evidence only. Accuracy still requires training/eval.
 """
+# status: stable
 
 from __future__ import annotations
 

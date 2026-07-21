@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# status: experiment
 # DFL reg_max=16 retrain — clean single-variable test vs the reg_max=1 baseline.
 # Mirrors the baseline keyframe recipe EXACTLY (data, stages, hyperparams, B=4)
 # except --reg-max 16. Reuses the teacher FPN-feature cache (reg_max-independent)

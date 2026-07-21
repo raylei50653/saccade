@@ -1,3 +1,6 @@
+"""Export YOLO detect model with person class-filtered top-k outputs."""
+
+# status: stable
 import argparse
 import sys
 from pathlib import Path

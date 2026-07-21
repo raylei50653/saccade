@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# status: diagnostic
 # Re-apply graphify CUDA (.cu/.cuh) AST support after a graphify upgrade.
 #
 # graphify (PyPI: graphifyy) has no built-in .cu support and no user-config for

@@ -7,6 +7,7 @@ the production decision graph.  In particular it never accesses pairs.csv or
 any GT/FP field.  It writes a field matrix, an explicitly unobserved funnel,
 and exactly one ordered terminal.
 """
+# status: stable
 
 from __future__ import annotations
 

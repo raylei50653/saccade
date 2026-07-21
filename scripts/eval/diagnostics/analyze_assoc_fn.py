@@ -18,6 +18,7 @@ miss to a cause:
 Also reports the FN distribution over visibility / max-overlap / height / gap so
 the headroom can be read directly.
 """
+# status: stable
 
 from __future__ import annotations
 

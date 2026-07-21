@@ -25,6 +25,7 @@ Worker 甜蜜點（RTX 3090 / 24 GB，yolo26s batch4）：
     uv run python scripts/eval/concurrent_mot17.py \\
         --sequences MOT17-02-SDP,MOT17-04-SDP --max-workers 2
 """
+# status: stable
 
 from __future__ import annotations
 

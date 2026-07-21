@@ -1,3 +1,6 @@
+"""Encode MOT17 image sequences to MP4 for visualization."""
+
+# status: diagnostic
 import subprocess
 from pathlib import Path
 import configparser

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Download and setup MOTSynth dataset (Mini/Full)."""
+# status: diagnostic
 
 import argparse
 import subprocess

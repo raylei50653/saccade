@@ -5,6 +5,7 @@ Answers: how much would 'reading in flipped order' (eliminating torch.flip copie
 actually save, vs the irreducible 4x-batch SSM compute that produces the 4
 directional results being averaged.
 """
+# status: diagnostic
 
 from __future__ import annotations
 

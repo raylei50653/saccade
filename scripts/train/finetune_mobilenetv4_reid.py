@@ -15,6 +15,7 @@ so numbers are directly comparable to the ImageNet baseline
 Usage:
   uv run scripts/train/finetune_mobilenetv4_reid.py --run-dir runs/reid_mnv4_ft
 """
+# status: stable
 
 from __future__ import annotations
 

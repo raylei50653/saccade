@@ -8,6 +8,7 @@ point, computes §§3–7, applies the ordered terminal mapping in §8, and emit
 evidence packet.  In particular, unjoined runtime events are a fail-closed
 coverage diagnostic; they never enter a track-level Clopper-Pearson bound.
 """
+# status: stable
 
 from __future__ import annotations
 

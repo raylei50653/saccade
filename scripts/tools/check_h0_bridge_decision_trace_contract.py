@@ -7,6 +7,7 @@ evidence, cursor separation, the fail-closed native envelope, and every H0
 source consumed by export or replay. It never runs a capture or emits an H0
 execution terminal.
 """
+# status: stable
 
 from __future__ import annotations
 

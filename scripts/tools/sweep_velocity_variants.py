@@ -27,6 +27,7 @@ Usage
   .venv/bin/python scripts/tools/sweep_velocity_variants.py
   .venv/bin/python scripts/tools/sweep_velocity_variants.py --csv scripts/tools/out/relink_candidates.csv
 """
+# status: experiment
 
 from __future__ import annotations
 

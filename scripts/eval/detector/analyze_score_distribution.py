@@ -13,6 +13,7 @@ Unmatched GT get matched_score = NaN (they contribute to detection-rate but not
 to the score distribution). Output: a JSON with binned summaries + Spearman
 correlations, and optionally the flat per-GT records for downstream plotting.
 """
+# status: stable
 
 from __future__ import annotations
 

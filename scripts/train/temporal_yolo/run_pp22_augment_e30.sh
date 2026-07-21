@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# status: experiment
 # Downstream pipeline from the augment teacher (gated_det_pp22_augment/best.ckpt).
 # Mirrors run_pp22_heldout_e30.sh exactly — only TEACHER, CACHE, and run-dirs differ
 # (_augment_e30 suffix) so the e30 baseline stays intact for comparison.

@@ -1,3 +1,6 @@
+"""Summarize end-to-end latency report from pipeline runs."""
+
+# status: diagnostic
 import sys
 from pathlib import Path
 

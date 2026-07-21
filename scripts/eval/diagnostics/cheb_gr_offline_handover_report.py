@@ -13,6 +13,7 @@ Usage:
     --baseline-dir results/no_handover \
     --pred-dir results/run
 """
+# status: stable
 
 from __future__ import annotations
 

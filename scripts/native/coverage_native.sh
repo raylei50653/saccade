@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# status: stable
+# Configure/build native targets with coverage instrumentation.
 
 set -euo pipefail
 

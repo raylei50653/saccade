@@ -34,6 +34,7 @@ Usage:
   uv run python scripts/tools/check_headline_decision_contract.py --quiet
   uv run python scripts/tools/check_headline_decision_contract.py --skip-inject
 """
+# status: stable
 
 from __future__ import annotations
 

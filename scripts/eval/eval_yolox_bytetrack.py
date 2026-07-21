@@ -11,6 +11,7 @@ Usage:
         --weights models/yolo/yolox_x.pth \
         [--conf-threshold 0.01] [--nms-threshold 0.65]
 """
+# status: experiment
 
 from __future__ import annotations
 

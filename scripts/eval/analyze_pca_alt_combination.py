@@ -13,6 +13,7 @@ express:
 Reuses the already-collected results/occ_separability/pca_full7.npz -- no
 re-run of detector inference needed.
 """
+# status: experiment
 
 from __future__ import annotations
 

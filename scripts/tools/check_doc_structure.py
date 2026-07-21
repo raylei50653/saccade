@@ -23,6 +23,7 @@ false positives (basename mentioned only in prose or stale paths).
 
 Usage: uv run python3 scripts/tools/check_doc_structure.py [--strict]
 """
+# status: stable
 
 from __future__ import annotations
 

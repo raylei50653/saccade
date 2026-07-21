@@ -11,6 +11,7 @@ Usage:
         --market-root datasets/Market-1501-v15.09.15 \
         --num-ids 50 --samples-per-id 6
 """
+# status: experiment
 
 from __future__ import annotations
 

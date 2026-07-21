@@ -12,6 +12,7 @@ We tabulate FN by height x best-det-score band. The small-height cells in the
 (over-counts: some FN are association/confirm failures a threshold won't fix,
 and the detection may belong to an already-tracked neighbour).
 """
+# status: experiment
 
 from __future__ import annotations
 

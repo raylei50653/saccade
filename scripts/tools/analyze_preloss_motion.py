@@ -16,6 +16,7 @@ Usage:
       --mot-dir results/MOT17_eval --img-root datasets/MOT17/train \
       --window 6 --out scripts/tools/out/preloss_motion
 """
+# status: stable
 
 from __future__ import annotations
 

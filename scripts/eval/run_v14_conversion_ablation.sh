@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# status: archive-candidate
 # Zero-training v14 conversion ablation.
 # A/B uses identical parent weights; only the selective-scan runtime changes.
 set -euo pipefail

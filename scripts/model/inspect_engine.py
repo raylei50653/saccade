@@ -1,3 +1,6 @@
+"""Inspect TensorRT engine bindings/shapes."""
+
+# status: stable
 import argparse
 from pathlib import Path
 

@@ -16,7 +16,7 @@ Review mark format:
 |---|---|---|---|
 | `configs/` | Runtime and evaluation configuration | Presets live in `configs/presets/`; `mamba_whole_graph.yaml` is the current frozen main-line preset. | Reviewed 2026-06-18 |
 | `include/` | C++ / CUDA public headers | Native tracking, media, perception, and package-facing headers. | Reviewed 2026-06-18 |
-| `scripts/` | Reusable command-line tools | Evaluation, training, native build helpers, benchmarks, and model tooling. See `scripts/README.md` for the script cleanup ledger. | Reviewed 2026-06-18 |
+| `scripts/` | Reusable command-line tools | Evaluation, training, native build helpers, benchmarks, and model tooling. Every script carries a `# status:` label and a docstring; see the generated `docs/ownership/scripts_inventory.generated.md` (or each dir's `README.md`) for the function/status index, and `scripts/README.md` for the cleanup ledger. | Reviewed 2026-07-21 |
 | `tests/` | Test suites | Unit, integration, native, benchmark, golden, and experimental tests. | Reviewed 2026-06-18 |
 | `third_party/` | Vendored external code | Currently includes TrackEval. Avoid mixing local experiment output here. | Reviewed 2026-06-18 |
 | `docker/`, `Dockerfile`, `docker-compose.yml` | Container entry points | Keep deployment/build container changes here. | Reviewed 2026-06-18 |

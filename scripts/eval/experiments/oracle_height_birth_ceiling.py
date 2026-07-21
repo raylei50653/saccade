@@ -8,6 +8,7 @@ motmetrics. This upper-bounds the precision gain of "kill large low-score
 boxes" -- a superset of what a height-ramped new_track_thresh could achieve
 (the filter removes such boxes at every frame, not only at birth).
 """
+# status: experiment
 
 from __future__ import annotations
 

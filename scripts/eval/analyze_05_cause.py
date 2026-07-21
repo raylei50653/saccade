@@ -17,6 +17,7 @@ Usage
 -----
   .venv/bin/python scripts/eval/analyze_05_cause.py --substrate /tmp/occ2_off
 """
+# status: experiment
 
 from __future__ import annotations
 

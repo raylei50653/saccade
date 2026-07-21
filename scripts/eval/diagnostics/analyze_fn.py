@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+
+"""General FN breakdown diagnostics."""
+
+# status: stable
 import argparse
 from pathlib import Path
 

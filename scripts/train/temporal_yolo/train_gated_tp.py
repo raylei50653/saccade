@@ -19,6 +19,7 @@ Usage:
         --resume runs/gated_det_v1/best.ckpt \\
         --epochs 30 --tp-weight 0.5 --gt-ratio 0.3
 """
+# status: experiment
 
 from __future__ import annotations
 

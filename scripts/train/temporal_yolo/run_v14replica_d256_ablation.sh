@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# status: experiment
 # d_model 128->256 capacity ablation for the v14replica (MOT17) main-line head.
 # Mirrors the v14replica curriculum EXACTLY (args recovered from the embedded
 # ckpt args of runs/mamba_distill_v14replica, runs/mamba_gt_v14replica_stage1,

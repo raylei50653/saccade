@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Build the legacy FPN ReID CUDA extension with setuptools."""
+# status: stable
 
 from pathlib import Path
 

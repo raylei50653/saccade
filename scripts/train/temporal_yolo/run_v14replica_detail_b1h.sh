@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# status: experiment
 # B1-H detail branch on the clean replica lineage (the dual-resolution plan's
 # prescribed "controlled v14-R retrain"). GT2 stage from replica GT1 with
 # --detail-source high (1280x768 bucket, 32ch shallow encoder, 3x3 token).

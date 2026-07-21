@@ -8,6 +8,7 @@ Just need CUDAGraph context manager to capture + replay.
 Usage:
     uv run scripts/tools/test_gmc_cudagraph.py --frames 30
 """
+# status: diagnostic
 
 import argparse
 import sys

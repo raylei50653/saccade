@@ -9,6 +9,7 @@ Usage:
         --head-ckpt runs/jde_market_v9a/best.ckpt \
         --market-root datasets/Market-1501-v15.09.15
 """
+# status: experiment
 
 from __future__ import annotations
 

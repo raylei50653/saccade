@@ -6,6 +6,7 @@ Usage:
         --teacher-ckpt runs/gated_det_v1/best.ckpt \
         --output models/yolo/yolo26s_backbone_640_v1.onnx
 """
+# status: stable
 
 import argparse
 import sys

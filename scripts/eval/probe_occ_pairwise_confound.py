@@ -33,6 +33,7 @@ Usage
   .venv/bin/python scripts/eval/probe_occ_pairwise_confound.py \
       --output results/occ_separability/pairwise_confound.json
 """
+# status: stable
 
 from __future__ import annotations
 

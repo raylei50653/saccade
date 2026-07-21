@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+
+"""Analyze spatial offsets of near-miss associations."""
+
+# status: stable
 from __future__ import annotations
 
 import argparse

@@ -21,6 +21,7 @@ Usage:
 mobilenetv4_* model types run eagerly via timm from local checkpoints listed in
 models/mobilenetv4/manifest.json (no TensorRT engine needed).
 """
+# status: stable
 
 from __future__ import annotations
 

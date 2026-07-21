@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# status: experiment
 # Frozen-YOLO teacher control arm for the v14 full-e30 lineage.
 #
 # Single controlled variable vs run_v14_full_e30_replication.sh: STAGE T trains

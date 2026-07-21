@@ -1,3 +1,6 @@
+"""Sweep A7/P5-2 quality-gate thresholds against MOT metrics."""
+
+# status: experiment
 import sys
 import subprocess
 import re

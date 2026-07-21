@@ -4,6 +4,7 @@
 Usage: _perseq_extract.py <output_dir> [<output_dir> ...]
 Reuses the vendored third_party/TrackEval on already-written <seq>.txt files.
 """
+# status: stable
 
 import os
 import sys

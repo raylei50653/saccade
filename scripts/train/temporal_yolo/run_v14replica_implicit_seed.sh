@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# status: experiment
 # Implicit-consistency baseline matched to T3→T1 (explicit), per v14 recipe (git 77fcc262:
 # clip_len=4 + all-frames loss + Cross-Scan N=16, "restore all-frames loss as default").
 #

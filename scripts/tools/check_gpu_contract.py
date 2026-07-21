@@ -13,6 +13,7 @@ Allows bypassing via:
     Python: # saccade-allow-cpu / # saccade-allow-numpy
     C++:    // saccade-allow-cpu
 """
+# status: stable
 
 import ast
 import os

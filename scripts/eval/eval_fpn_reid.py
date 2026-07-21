@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Compatibility wrapper for scripts/eval/appearance/eval_fpn_reid.py."""
+# status: stable
 
 try:
     from scripts.eval._redirect import run_eval_script

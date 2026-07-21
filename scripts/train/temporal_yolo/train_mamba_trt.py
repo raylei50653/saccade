@@ -20,6 +20,7 @@ Usage:
         --resume runs/mamba_trt_scratch/best.ckpt \
         --batch-size 32 --lr 1e-5 --epochs 20
 """
+# status: archive-candidate
 
 from __future__ import annotations
 

@@ -11,6 +11,7 @@ Each has:
 Outputs:
   stdout tables + matplotlib charts (saved as .png in --output dir)
 """
+# status: experiment
 
 import argparse
 import json

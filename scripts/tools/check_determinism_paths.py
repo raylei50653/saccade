@@ -7,6 +7,7 @@ routine continuous-chain sentinel.
 
 Exit codes: 0 = sensitive, 1 = not sensitive, 2 = error (fail-closed).
 """
+# status: stable
 
 from __future__ import annotations
 

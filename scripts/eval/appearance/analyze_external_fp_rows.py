@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+
+"""Analyze TP/FP distributions from external-rows CSV."""
+
+# status: stable
 import argparse
 import json
 import sys

@@ -1,3 +1,6 @@
+"""Convert/prepare MOT17 label layout for local eval trees."""
+
+# status: diagnostic
 from pathlib import Path
 
 

@@ -36,6 +36,7 @@ Usage
   .venv/bin/python scripts/tools/depth_ordering_probe.py
   .venv/bin/python scripts/tools/depth_ordering_probe.py --iou-hi 0.5 --max-occ 2
 """
+# status: experiment
 
 from __future__ import annotations
 

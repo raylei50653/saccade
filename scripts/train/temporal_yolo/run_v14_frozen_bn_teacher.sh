@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# status: experiment
 # BN-adapt teacher control arm for the v14 full-e30 lineage.
 #
 # Single controlled variable vs run_v14_frozen_yolo_teacher.sh: STAGE T trains

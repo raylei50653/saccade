@@ -9,6 +9,7 @@ Usage:
     uv run python scripts/tools/bench_bank_scatter.py
     uv run python scripts/tools/bench_bank_scatter.py --iters 500 --embed-dim 768
 """
+# status: stable
 
 import argparse
 import sys

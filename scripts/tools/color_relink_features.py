@@ -29,6 +29,7 @@ Usage:
       --mot-dir results/MOT17_eval --img-root datasets/MOT17/train \
       --out scripts/tools/out/color_relink_features.csv
 """
+# status: stable
 
 from __future__ import annotations
 

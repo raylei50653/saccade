@@ -10,6 +10,7 @@ Typical usage:
     uv run python scripts/eval/pipeline_contribution.py --list-profiles
     uv run python scripts/eval/pipeline_contribution.py --dry-run -- --match-thresh 0.78
 """
+# status: stable
 
 from __future__ import annotations
 

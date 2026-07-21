@@ -21,6 +21,7 @@ TemporalYOLOHybrid 訓練腳本
         --data-root /path/to/MOT17 \\
         --seqs MOT17-02-SDP,MOT17-04-SDP
 """
+# status: experiment
 
 import argparse
 import time

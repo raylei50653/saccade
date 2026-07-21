@@ -13,6 +13,7 @@ TP/FP by GT, and measure its nearest-neighbour distance normalised by box height
 (same convention as the spawn kernel's birth_prox_norm_thresh). If FP-new sit at
 small normalised distance and TP-new at large, a proximity gate has headroom.
 """
+# status: experiment
 
 from __future__ import annotations
 

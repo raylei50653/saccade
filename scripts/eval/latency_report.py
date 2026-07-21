@@ -6,6 +6,7 @@ Usage:
   python scripts/eval/latency_report.py <run_dir_or_json> --compare <other_dir_or_json>
   python scripts/eval/latency_report.py <run_dir_or_json> --seq MOT17-04-SDP
 """
+# status: stable
 
 import argparse
 import json

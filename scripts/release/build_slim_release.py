@@ -19,6 +19,7 @@ Usage:
     # Verify the manifest reproduces an existing tree/branch exactly
     build_slim_release.py --check release/slim-main
 """
+# status: diagnostic
 
 from __future__ import annotations
 

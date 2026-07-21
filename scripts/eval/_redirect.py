@@ -1,3 +1,6 @@
+"""Shared helper that runpy-executes a canonical scripts/eval path for compat wrappers."""
+
+# status: stable
 from __future__ import annotations
 
 import runpy

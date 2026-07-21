@@ -17,6 +17,7 @@ Usage:
     uv run python scripts/eval/validate_profiles.py --dry-run
     uv run python scripts/eval/validate_profiles.py --all
 """
+# status: diagnostic
 
 from __future__ import annotations
 

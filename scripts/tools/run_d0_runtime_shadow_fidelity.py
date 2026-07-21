@@ -17,6 +17,7 @@ Fail-closed by construction:
 This runner is **v2 only**. It never touches the v1 legacy sealed packet or its
 runner; that packet stays frozen under its original semantics.
 """
+# status: stable
 
 from __future__ import annotations
 

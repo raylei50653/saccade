@@ -1,3 +1,6 @@
+"""Stress multi-stream dispatcher timing (16 concurrent streams)."""
+
+# status: diagnostic
 import asyncio
 import time
 import torch

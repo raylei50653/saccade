@@ -7,6 +7,7 @@ Usage:
         --mamba-head models/yolo/mamba_head_best.pt \
         --seq MOT17-04-SDP --max-frames 100
 """
+# status: diagnostic
 
 import argparse
 import sys

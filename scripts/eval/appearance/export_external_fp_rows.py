@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+
+"""Export external dataset detection rows for FP/TP analysis."""
+
+# status: stable
 # mypy: ignore-errors
 import argparse
 import csv

@@ -10,6 +10,7 @@ Usage:
         --img-size 960 \
         --num-images 512
 """
+# status: stable
 
 import argparse
 import random

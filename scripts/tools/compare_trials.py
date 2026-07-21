@@ -1,3 +1,6 @@
+"""Compare a selected set of Optuna trial results."""
+
+# status: experiment
 import argparse
 
 

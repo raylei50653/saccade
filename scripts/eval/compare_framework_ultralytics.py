@@ -9,6 +9,7 @@ Usage:
         [--gt-root datasets/MOT17/train] \
         [--detector SDP]
 """
+# status: diagnostic
 
 import argparse
 import glob

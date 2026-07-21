@@ -20,6 +20,7 @@ Usage:
     uv run python scripts/eval/ablation_mot17.py --category detection,geometry
     uv run python scripts/eval/ablation_mot17.py --category all --detector SDP
 """
+# status: stable
 
 import argparse
 import os

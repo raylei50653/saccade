@@ -27,6 +27,7 @@ Usage
 -----
   .venv/bin/python scripts/tools/probe_relink_occlusion_signal.py
 """
+# status: stable
 
 from __future__ import annotations
 

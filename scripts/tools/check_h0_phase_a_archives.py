@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Verify every committed H0 Phase-A evidence root through archive codecs."""
+# status: stable
 
 from __future__ import annotations
 

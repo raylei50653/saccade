@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+
+"""Convert MP4 video into a MOT-compatible sequence folder."""
+
+# status: diagnostic
 import argparse
 import configparser
 from pathlib import Path

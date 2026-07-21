@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """RC1 fixed Phase-A runtime child (parent-only entry point)."""
+# status: stable
 
 from __future__ import annotations
 

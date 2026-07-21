@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+
+"""Profile CUDA kernel time for detector/tracker hot paths."""
+
+# status: diagnostic
 # mypy: ignore-errors
 import sys
 from pathlib import Path

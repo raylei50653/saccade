@@ -19,6 +19,7 @@ Option C：YOLO26s + Cross-Attention Decoder 聯合訓練
     # 快速驗證（單序列）
     uv run train/temporal_yolo/train_joint.py --data-root /path/to/MOT17 --seqs MOT17-02-SDP
 """
+# status: experiment
 
 from __future__ import annotations
 import argparse

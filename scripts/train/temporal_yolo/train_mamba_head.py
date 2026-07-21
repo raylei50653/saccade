@@ -15,6 +15,7 @@ Usage:
         --teacher-ckpt runs/gated_det_v1/best.ckpt \
         --epochs 20 --batch-size 8 --lr 1e-3
 """
+# status: stable
 
 from __future__ import annotations
 

@@ -10,6 +10,7 @@ field names, or merge order will cause a diff against the golden file.
 Usage:
     uv run python scripts/eval/config/gen_golden_snapshot.py
 """
+# status: stable
 
 from __future__ import annotations
 

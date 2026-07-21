@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Download CrowdHuman and CityPersons datasets for FP classifier training."""
+# status: diagnostic
 
 import argparse
 import subprocess

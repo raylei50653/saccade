@@ -1,3 +1,6 @@
+"""Benchmark YOLO TensorRT batch latency across batch sizes."""
+
+# status: stable
 import argparse
 import sys
 import time

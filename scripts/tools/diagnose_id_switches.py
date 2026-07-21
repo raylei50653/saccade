@@ -15,6 +15,7 @@ Gap buckets for gt_gap:
 Usage:
     uv run python scripts/tools/diagnose_id_switches.py [--results results/a2_candidate]
 """
+# status: experiment
 
 import argparse
 import sys

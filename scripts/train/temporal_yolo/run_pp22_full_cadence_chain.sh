@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# status: experiment
 # PP22 full-cadence + interp + live-teacher + GPU-decode training chain.
 # Reproduces docs/research/training/pp22_full_cadence_interp_training_plan.md §4.
 #

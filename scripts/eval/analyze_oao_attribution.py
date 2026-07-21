@@ -28,6 +28,7 @@ Outputs:
   oao_attribution.json (per-category counts)
   oao_attribution.csv (per-event details)
 """
+# status: experiment
 
 import argparse
 import csv
