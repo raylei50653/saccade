@@ -28,7 +28,7 @@ Usage:
       --mot-dir results/MOT17_eval --gt-root datasets/MOT17/train \
       --out scripts/tools/out/relink_candidates
 """
-# status: stable
+# status: diagnostic
 
 from __future__ import annotations
 

@@ -19,7 +19,7 @@ offline universe, add identity observability, or re-capture, and it carries
 no statistical exposure machinery: presence/absence of recoverable rows is
 the entire outcome.
 """
-# status: stable
+# status: diagnostic
 
 from __future__ import annotations
 

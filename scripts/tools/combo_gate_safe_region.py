@@ -29,7 +29,7 @@ Usage
 
 Contract: signal_table_schema §0.4 safe-reject asymmetry (GT hard / FP soft)
 """
-# status: stable
+# status: diagnostic
 
 from __future__ import annotations
 

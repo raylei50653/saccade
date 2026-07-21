@@ -5,7 +5,7 @@ Derives coordinate/mask area, productive capacity, cross-seq support geometry,
 component shape, dual boundary margins, and a fail-closed G7 contract-gap report
 from an existing Q4.5 atlas study. Never mutates inputs or reruns the evaluator.
 """
-# status: stable
+# status: diagnostic
 
 from __future__ import annotations
 

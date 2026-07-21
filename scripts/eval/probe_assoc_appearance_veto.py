@@ -33,7 +33,7 @@ Usage
   .venv/bin/python scripts/eval/probe_assoc_appearance_veto.py \
       --substrate results/analysis_m_semantic_delayed_claim_control_20260703
 """
-# status: stable
+# status: diagnostic
 
 from __future__ import annotations
 

@@ -25,7 +25,7 @@ per-seq min, LOO productive length. Rank by thickness not best FP alone.
     --portable out/signal_study/m_b1_repaired_eps0_loo_pass_20260709/portable_policy.json \\
     --study-dir out/signal_study/m_repaired_tail_region_<stamp>
 """
-# status: stable
+# status: diagnostic
 
 from __future__ import annotations
 

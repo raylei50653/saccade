@@ -113,7 +113,7 @@ manually or if their outputs support a retained report.
 | `export_yolo_person.py` | stable | cli | Export YOLO detect model with person class-filtered top-k outputs. |
 | `export_yolo_pose.py` | stable | cli | Export YOLO Pose model with person top-k outputs. |
 | `export_yoloe_embedding.py` | stable | cli | Export YOLOE model with top-k embeddings. |
-| `inspect_engine.py` | stable | cli | Inspect TensorRT engine bindings/shapes. |
+| `inspect_engine.py` | diagnostic | cli | Inspect TensorRT engine bindings/shapes. |
 | `make_onnx_dynamic.py` | stable | cli | Rewrite ONNX inputs to dynamic axes for TRT. |
 
 <!-- END generated script index -->

@@ -22,7 +22,7 @@ Usage
   .venv/bin/python scripts/eval/occ_tune.py --design star --detector SDP
   .venv/bin/python scripts/eval/occ_tune.py --design list --tags "1,3,2,1" --detector SDP
 """
-# status: stable
+# status: diagnostic
 
 from __future__ import annotations
 

@@ -11,7 +11,7 @@ after a failure use ``check_decimal_matrix_2x2.py``.
 
 All unrecognised options are forwarded to ``scripts/eval/mot17.py``.
 """
-# status: stable
+# status: diagnostic
 
 from __future__ import annotations
 

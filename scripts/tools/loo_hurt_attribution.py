@@ -23,7 +23,7 @@ For each held-out sequence S (same as gate_rule_search_loo):
     --study-dir out/signal_study/m_loo_attr_<stamp> \\
     --eps 0.0 --jobs 7 --run-repairs
 """
-# status: stable
+# status: diagnostic
 
 from __future__ import annotations
 

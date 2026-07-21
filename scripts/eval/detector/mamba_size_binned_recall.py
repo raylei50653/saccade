@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Detector-only Mamba recall stratified by ground-truth box size."""
-# status: stable
+# status: diagnostic
 
 from __future__ import annotations
 

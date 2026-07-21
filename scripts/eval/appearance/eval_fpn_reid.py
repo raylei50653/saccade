@@ -25,7 +25,7 @@ Usage:
         --mamba-ckpt runs/mamba_gt_960_v2/best.ckpt \
         --seq MOT17-04-SDP --max-frames 200 --no-reid
 """
-# status: stable
+# status: diagnostic
 
 from __future__ import annotations
 

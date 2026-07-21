@@ -10,7 +10,7 @@ uniform-noise level (~90 deg) marks the speed regime where direction is usable.
 
   .venv/bin/python scripts/tools/sweep_speed_turn.py
 """
-# status: stable
+# status: diagnostic
 
 from __future__ import annotations
 

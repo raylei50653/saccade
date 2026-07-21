@@ -23,7 +23,7 @@ Usage
   .venv/bin/python scripts/eval/diagnostics/analyze_crossing_swaps.py \
       --substrate results/mamba_whole_graph_current_7seq_recheck
 """
-# status: stable
+# status: diagnostic
 
 from __future__ import annotations
 

@@ -16,7 +16,7 @@ Usage
       --variant nbriou05 neighbor_iou_max=0.5 \
       --variant combined center_dist_veto=2.0 neighbor_iou_max=0.5
 """
-# status: stable
+# status: diagnostic
 
 from __future__ import annotations
 

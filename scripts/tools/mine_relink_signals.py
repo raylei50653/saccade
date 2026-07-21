@@ -19,7 +19,7 @@ Not covered here (need other universes / runs):
   - B2 reconnect (use reconnect_rate.py)
   - production GO / ledger promotion
 """
-# status: stable
+# status: diagnostic
 
 from __future__ import annotations
 

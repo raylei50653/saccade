@@ -6,9 +6,9 @@
 | Script | Status | Usage | Function |
 |--------|--------|-------|----------|
 | `__init__.py` | stable | - | Small, standalone documentation lifecycle tools. |
-| `build_master_map.py` | stable | cli | Build the v0 master-map inventory with quarantined clusters grayed out. |
+| `build_master_map.py` | diagnostic | cli | Build the v0 master-map inventory with quarantined clusters grayed out. |
 | `migration_manifest.py` | stable | cli | Parser for the migration manifest's frozen, resolved-file sets. |
-| `old_flagship_inventory.py` | stable | cli | Validate and summarize the old-flagship per-study lifecycle inventory. |
+| `old_flagship_inventory.py` | diagnostic | cli | Validate and summarize the old-flagship per-study lifecycle inventory. |
 | `strict_yaml.py` | stable | - | Strict YAML loading shared by documentation lifecycle tooling. |
 | `terminal_slot_schema.py` | stable | cli | Fail-closed validator for the ADR 020 terminal-slot schema v0. |
 

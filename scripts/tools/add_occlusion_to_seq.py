@@ -2,7 +2,7 @@
 
 """Inject simulated occlusion boxes into MOT sequences."""
 
-# status: stable
+# status: diagnostic
 import argparse
 from pathlib import Path
 import cv2

@@ -5,9 +5,9 @@
 
 | Script | Status | Usage | Function |
 |--------|--------|-------|----------|
-| `analyze_score_distribution.py` | stable | cli | Mamba detector score distribution vs box height / crowd density / visibility. |
-| `mamba_size_binned_recall.py` | stable | cli | Detector-only Mamba recall stratified by ground-truth box size. |
-| `probe_motion_private_candidate_separability.py` | stable | cli | Probe CenterTrack-lite motion signal on private suppressed candidates. |
-| `probe_private_candidate_separability.py` | stable | cli | Probe detector-side separability for private suppressed candidates. |
+| `analyze_score_distribution.py` | diagnostic | cli | Mamba detector score distribution vs box height / crowd density / visibility. |
+| `mamba_size_binned_recall.py` | diagnostic | cli | Detector-only Mamba recall stratified by ground-truth box size. |
+| `probe_motion_private_candidate_separability.py` | diagnostic | cli | Probe CenterTrack-lite motion signal on private suppressed candidates. |
+| `probe_private_candidate_separability.py` | diagnostic | cli | Probe detector-side separability for private suppressed candidates. |
 
 <!-- END generated script index -->

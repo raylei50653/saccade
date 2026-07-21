@@ -19,7 +19,7 @@ Usage:
       --substrate results/diag_m_no_reid_current_20260704 \\
       --out-dir results/occ_exit_p55_wp3
 """
-# status: stable
+# status: diagnostic
 
 from __future__ import annotations
 

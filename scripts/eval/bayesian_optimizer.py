@@ -1,6 +1,6 @@
 """Bayesian hyperparameter optimizer over MOT eval objectives."""
 
-# status: stable
+# status: diagnostic
 import os
 import sys
 import copy

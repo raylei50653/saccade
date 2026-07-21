@@ -3,7 +3,7 @@
 
 Research-only. Does not touch production hooks/presets.
 """
-# status: stable
+# status: experiment
 
 from __future__ import annotations
 

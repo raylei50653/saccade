@@ -216,7 +216,7 @@ Outputs: `results/module_benchmark/<timestamp>/`（含 `summary.txt`、`commands
 | `analyze_confirm_prev_confirmed.py` | experiment | cli | Do cst040's new confirmations sit on a PREVIOUS-frame confirmed track? |
 | `analyze_confirm_proximity.py` | experiment | cli | Does nearest-box distance separate the TP from the FP that cst040 newly confirms? |
 | `analyze_crossing_swaps.py` | stable | - | Compatibility wrapper for scripts/eval/diagnostics/analyze_crossing_swaps.py. |
-| `analyze_detection_fp_by_height.py` | stable | cli | Detection-centric TP/FP split by box height x score band. |
+| `analyze_detection_fp_by_height.py` | diagnostic | cli | Detection-centric TP/FP split by box height x score band. |
 | `analyze_external_fp_rows.py` | stable | - | Compatibility wrapper for scripts/eval/appearance/analyze_external_fp_rows.py. |
 | `analyze_fn.py` | stable | - | Compatibility wrapper for scripts/eval/diagnostics/analyze_fn.py. |
 | `analyze_fpn_dims.py` | experiment | cli | Analyze FPN feature dimension importance for ReID discrimination. |
@@ -227,16 +227,16 @@ Outputs: `results/module_benchmark/<timestamp>/`（含 `summary.txt`、`commands
 | `analyze_near_miss_stage_attribution.py` | stable | - | Compatibility wrapper for diagnostics/analyze_near_miss_stage_attribution.py. |
 | `analyze_oao_attribution.py` | experiment | cli | OAO causal attribution: classify FP/FN changes between baseline (τ=0) and OAO (τ=0.3). |
 | `analyze_oao_sweep.py` | experiment | cli | OAO (Occlusion-Aware Object) τ sweep analysis: metrics trend + per-sequence breakdown. |
-| `analyze_occ_size.py` | stable | cli | Attribution: cue-conflict — does box SIZE confirm the foot-y "front" call? |
-| `analyze_occlusion_events.py` | stable | cli | Frame-level occlusion event analysis: label every tracker→GT pair by occlusion state. |
+| `analyze_occ_size.py` | diagnostic | cli | Attribution: cue-conflict — does box SIZE confirm the foot-y "front" call? |
+| `analyze_occlusion_events.py` | diagnostic | cli | Frame-level occlusion event analysis: label every tracker→GT pair by occlusion state. |
 | `analyze_pca_alt_combination.py` | experiment | - | Offline follow-up to probe_private_continuation_assignment.py: the hand-picked |
 | `analyze_roi_dim_importance.py` | stable | - | Compatibility wrapper for scripts/eval/appearance/analyze_roi_dim_importance.py. |
 | `analyze_score_distribution.py` | stable | - | Compatibility wrapper for scripts/eval/detector/analyze_score_distribution.py. |
-| `bayesian_optimizer.py` | stable | cli | Bayesian hyperparameter optimizer over MOT eval objectives. |
-| `bench_recall_candidates.py` | stable | cli | Head-only latency probes for recall-recovery architecture candidates. |
-| `bench_reduction_bypass.py` | stable | cli | Forward-latency: current head (spatial_reduction down/up) vs "no down/up". |
-| `bench_yolo_batch.py` | stable | cli | Benchmark YOLO TensorRT batch latency across batch sizes. |
-| `bootstrap_mamba_size_recall.py` | stable | cli | Paired moving-block bootstrap for size-binned detector recall. |
+| `bayesian_optimizer.py` | diagnostic | cli | Bayesian hyperparameter optimizer over MOT eval objectives. |
+| `bench_recall_candidates.py` | diagnostic | cli | Head-only latency probes for recall-recovery architecture candidates. |
+| `bench_reduction_bypass.py` | diagnostic | cli | Forward-latency: current head (spatial_reduction down/up) vs "no down/up". |
+| `bench_yolo_batch.py` | diagnostic | cli | Benchmark YOLO TensorRT batch latency across batch sizes. |
+| `bootstrap_mamba_size_recall.py` | diagnostic | cli | Paired moving-block bootstrap for size-binned detector recall. |
 | `calculate_mota.py` | stable | cli | Compute MOTA/related metrics from tracker output vs GT. |
 | `cheb_gr_osnet_gate.py` | stable | - | Compatibility wrapper for scripts/eval/appearance/cheb_gr_osnet_gate.py. |
 | `compare_framework_ultralytics.py` | diagnostic | cli | Side-by-side MOTA comparison: Saccade vs Ultralytics (or any two result sets). |
@@ -265,22 +265,22 @@ Outputs: `results/module_benchmark/<timestamp>/`（含 `summary.txt`、`commands
 | `mot17_all_sdp.py` | stable | cli | Batch-run MOT17 SDP sequences through the standard eval path. |
 | `mot17_args.py` | stable | cli | Shared argparse argument groups used by mot17 eval entrypoints. |
 | `mot17_public.py` | stable | - | Compatibility wrapper for scripts/eval/baselines/mot17_public.py. |
-| `occ_rank.py` | stable | cli | Post-hoc ranker over the tag-indexed occ-tune store — zero eval. |
-| `occ_tune.py` | stable | cli | Tag-indexed, incremental tuner for the same-height occlusion gate. |
+| `occ_rank.py` | diagnostic | cli | Post-hoc ranker over the tag-indexed occ-tune store — zero eval. |
+| `occ_tune.py` | diagnostic | cli | Tag-indexed, incremental tuner for the same-height occlusion gate. |
 | `oracle_height_birth_ceiling.py` | stable | - | Compatibility wrapper for experiments/oracle_height_birth_ceiling.py. |
 | `oracle_occlusion_hold.py` | stable | - | Compatibility wrapper for scripts/eval/experiments/oracle_occlusion_hold.py. |
 | `oracle_small_birth_ceiling.py` | stable | - | Compatibility wrapper for experiments/oracle_small_birth_ceiling.py. |
-| `pipeline_contribution.py` | stable | cli | Run cumulative pipeline cutoff experiments for MOT17 and summarize the |
-| `print_assoc_basis.py` | stable | cli | Print the resolved *association basis* (height / IoU / velocity / cost-weight |
-| `probe_assoc_appearance_veto.py` | stable | cli | mnv4 appearance-veto separability at PRIMARY association decision points. |
+| `pipeline_contribution.py` | diagnostic | cli | Run cumulative pipeline cutoff experiments for MOT17 and summarize the |
+| `print_assoc_basis.py` | diagnostic | cli | Print the resolved *association basis* (height / IoU / velocity / cost-weight |
+| `probe_assoc_appearance_veto.py` | diagnostic | cli | mnv4 appearance-veto separability at PRIMARY association decision points. |
 | `probe_camera_motion.py` | experiment | - | Capstone: per-sequence camera-motion magnitude. |
 | `probe_ghost_rate_by_score.py` | experiment | - | Ghost-rate-by-score probe. |
 | `probe_ghost_source.py` | experiment | - | Decompose low-score 'ghost' boxes by source. |
-| `probe_lowiou_occ_gate.py` | stable | cli | Can an OCCLUSION signal SAFELY relax the low-IoU association gate? |
-| `probe_occ_activation_separability.py` | stable | cli | Feasibility probe: can the Mamba HEAD ACTIVATION separate occluded from visible GT? |
-| `probe_occ_pairwise_confound.py` | stable | cli | Follow-up to registry #46 (probe_occ_activation_separability.py): does the |
-| `probe_occ_separability.py` | stable | cli | Feasibility probe: does the Mamba head's SCORE separate occluded from visible GT? |
-| `probe_occ_swap_disambiguation.py` | stable | cli | At occluder-ABSORB crossing-swaps: does an OCCLUSION signal disambiguate the |
+| `probe_lowiou_occ_gate.py` | diagnostic | cli | Can an OCCLUSION signal SAFELY relax the low-IoU association gate? |
+| `probe_occ_activation_separability.py` | diagnostic | cli | Feasibility probe: can the Mamba HEAD ACTIVATION separate occluded from visible GT? |
+| `probe_occ_pairwise_confound.py` | diagnostic | cli | Follow-up to registry #46 (probe_occ_activation_separability.py): does the |
+| `probe_occ_separability.py` | diagnostic | cli | Feasibility probe: does the Mamba head's SCORE separate occluded from visible GT? |
+| `probe_occ_swap_disambiguation.py` | diagnostic | cli | At occluder-ABSORB crossing-swaps: does an OCCLUSION signal disambiguate the |
 | `probe_private_continuation_assignment.py` | experiment | cli | Does the geometric pairwise-position signal (gap_h/dx_norm, from the #46 |
 | `probe_redundancy.py` | experiment | - | Redundancy probe for low-score REAL_BADBOX boxes. |
 | `profile_analyze.py` | diagnostic | cli | Analyse per-frame CSV ledger from --profile-frame-csv. |
@@ -297,8 +297,8 @@ Outputs: `results/module_benchmark/<timestamp>/`（含 `summary.txt`、`commands
 | `run_native_pr_sweep.sh` | experiment | cli | Native precision/recall operating-point sweep. |
 | `run_native_s_speed.sh` | experiment | cli | Native S-speed variant sweep. |
 | `run_nopost_eval.sh` | experiment | - | Implicit vs explicit (matched seeds 42/43/44) re-evaluated with the post-processing |
-| `run_occ_audit_offline.py` | stable | cli | Offline occ-exit-audit ablation on an existing substrate's output files. |
-| `run_offline_handover_ablation.py` | stable | cli | Offline Cheb-GR handover ablation on an existing substrate's output files. |
+| `run_occ_audit_offline.py` | diagnostic | cli | Offline occ-exit-audit ablation on an existing substrate's output files. |
+| `run_offline_handover_ablation.py` | diagnostic | cli | Offline Cheb-GR handover ablation on an existing substrate's output files. |
 | `run_teacher_head_matched_baseline.sh` | experiment | cli | Matched-baseline: original YOLO detect head (teacher) vs Mamba head through the |
 | `run_threshold_strategies.sh` | stable | - | Thin redirect to experiments/run_threshold_strategies.sh. |
 | `run_v14_conversion_ablation.sh` | archive-candidate | cli | Zero-training v14 conversion ablation. |
@@ -307,7 +307,7 @@ Outputs: `results/module_benchmark/<timestamp>/`（含 `summary.txt`、`commands
 | `sportsmot.py` | stable | cli | Run SportsMOT dataset eval through the saccade tracker pipeline. |
 | `summarize_ablation_mot17.py` | stable | cli | Summarize MOT17 ablation experiment folders against a shared baseline. |
 | `sweep_a7_quality.py` | experiment | - | Sweep A7/P5-2 quality-gate thresholds against MOT metrics. |
-| `sweep_density_gating.py` | stable | cli | Sweep: 局部軌跡密度自適應門控 (Density-Gating) 超參數搜索 |
+| `sweep_density_gating.py` | diagnostic | cli | Sweep: 局部軌跡密度自適應門控 (Density-Gating) 超參數搜索 |
 | `sweep_external_fp_classifier.py` | experiment | cli | Sweep logistic TP/FP filters on CrowdHuman external rows. |
 | `sweep_low_mt.sh` | experiment | - | Sweep low match_thresh values and collect overall metrics. |
 | `train_cascade_stage2.py` | stable | - | Compatibility wrapper for scripts/eval/appearance/train_cascade_stage2.py. |

@@ -25,7 +25,7 @@ Usage
       --dump results/occ_tune/occ_candidates_cur.csv \
       --hyp-dir results/occ_nointerp_cur
 """
-# status: stable
+# status: diagnostic
 
 from __future__ import annotations
 

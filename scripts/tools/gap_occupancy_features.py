@@ -25,7 +25,7 @@ Usage:
   .venv/bin/python scripts/tools/gap_occupancy_features.py \
       --csv scripts/tools/out/color_relink_bgsub.csv
 """
-# status: stable
+# status: diagnostic
 
 from __future__ import annotations
 

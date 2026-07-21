@@ -9,7 +9,7 @@ both, so we can tell a real pre-loss maneuver from velocity-shrink angle noise.
 
   .venv/bin/python scripts/tools/analyze_turn_baseline.py --window 8
 """
-# status: stable
+# status: diagnostic
 
 from __future__ import annotations
 

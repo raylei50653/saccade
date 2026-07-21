@@ -2,7 +2,7 @@
 
 """Train logistic TP/FP classifier from external rows."""
 
-# status: stable
+# status: diagnostic
 import argparse
 import json
 import sys

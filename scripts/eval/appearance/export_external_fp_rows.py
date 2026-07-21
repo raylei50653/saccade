@@ -2,7 +2,7 @@
 
 """Export external dataset detection rows for FP/TP analysis."""
 
-# status: stable
+# status: diagnostic
 # mypy: ignore-errors
 import argparse
 import csv

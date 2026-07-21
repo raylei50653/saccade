@@ -11,7 +11,7 @@ Usage:
         --ckpt runs/gated_det_v1/best.ckpt \
         --sequences MOT17-09-SDP,MOT17-02-SDP
 """
-# status: stable
+# status: diagnostic
 
 from __future__ import annotations
 

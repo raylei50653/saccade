@@ -48,7 +48,7 @@ Usage
       --substrate results/diag_m_no_reid_current_20260704 \
       --out-json results/probe_sparse_bank_m.json
 """
-# status: stable
+# status: diagnostic
 
 from __future__ import annotations
 

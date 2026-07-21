@@ -30,7 +30,7 @@ Usage:
   uv run python3 scripts/tools/check_association_tools.py --list
   uv run python3 scripts/tools/check_association_tools.py --print-recipe R-A
 """
-# status: stable
+# status: diagnostic
 
 from __future__ import annotations
 

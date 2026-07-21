@@ -2,7 +2,7 @@
 
 """General FN breakdown diagnostics."""
 
-# status: stable
+# status: diagnostic
 import argparse
 from pathlib import Path
 

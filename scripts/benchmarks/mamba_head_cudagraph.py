@@ -6,7 +6,7 @@ If the head is launch-bound, graph replay (one launch for the whole subgraph)
 should be substantially faster than eager. If compute-bound, ~no change.
 Pure measurement; identical math.
 """
-# status: stable
+# status: diagnostic
 
 from __future__ import annotations
 

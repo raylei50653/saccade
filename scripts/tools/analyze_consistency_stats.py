@@ -9,7 +9,7 @@ Usage:
     .venv/bin/python scripts/tools/analyze_consistency_stats.py \
         --data-root datasets/MOT17 --clip-len 3 --clip-stride 6 --batch-size 4
 """
-# status: stable
+# status: diagnostic
 
 from __future__ import annotations
 

@@ -11,7 +11,7 @@ plain dist_h, overall and split by slow/fast exit speed.
 
   .venv/bin/python scripts/tools/validate_reach_gate.py
 """
-# status: stable
+# status: diagnostic
 
 from __future__ import annotations
 

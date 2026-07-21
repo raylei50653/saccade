@@ -10,7 +10,7 @@ Usage:
     results/run_m/parameter_summary.json results/run_s/parameter_summary.json \
     --out-md results/applicability.md --out-json results/applicability.json
 """
-# status: stable
+# status: diagnostic
 
 from __future__ import annotations
 

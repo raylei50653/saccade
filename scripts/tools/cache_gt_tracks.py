@@ -27,7 +27,7 @@ cache_gt_tracks.py — Phase 1 GT Oracle Cache Generator
         --out-dir datasets/mot17_gt_cache \\
         --verify
 """
-# status: stable
+# status: diagnostic
 
 from __future__ import annotations
 

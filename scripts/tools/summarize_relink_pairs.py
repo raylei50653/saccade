@@ -15,7 +15,7 @@ Usage:
       --study-dir out/signal_study/m_b1_demo \\
       --hard-dist 1.0
 """
-# status: stable
+# status: diagnostic
 
 from __future__ import annotations
 

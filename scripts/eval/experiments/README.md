@@ -9,7 +9,7 @@
 | `oracle_occlusion_hold.py` | experiment | cli | Phase-0 oracle ceiling for the `Occluded(by=A)` state policy. |
 | `oracle_small_birth_ceiling.py` | experiment | cli | Recall-side oracle for LOWERING new_track_thresh on small boxes. |
 | `run_nopost_eval.sh` | archive-candidate | - | Implicit vs explicit (matched seeds 42/43/44) re-evaluated with the post-processing |
-| `run_threshold_strategies.sh` | stable | cli | Threshold-strategy sweep on the full MOT17 train SDP set. |
+| `run_threshold_strategies.sh` | experiment | cli | Threshold-strategy sweep on the full MOT17 train SDP set. |
 | `run_v14_conversion_ablation.sh` | experiment | cli | Zero-training v14 conversion ablation. |
 
 <!-- END generated script index -->

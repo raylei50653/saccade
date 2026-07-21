@@ -2,7 +2,7 @@
 
 """Analyze TP/FP distributions from external-rows CSV."""
 
-# status: stable
+# status: diagnostic
 import argparse
 import json
 import sys

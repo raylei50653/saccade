@@ -5,25 +5,25 @@
 
 | Script | Status | Usage | Function |
 |--------|--------|-------|----------|
-| `analyze_assoc_fn.py` | stable | cli | Why are detected GT still missed? Reason distribution for association-failure FN. |
-| `analyze_crossing_swaps.py` | stable | cli | Attribution: what does the tracker physically DO at each occlusion crossing-swap? |
-| `analyze_fn.py` | stable | cli | General FN breakdown diagnostics. |
-| `analyze_front_flag_exposure.py` | stable | cli | Attribution: why does the occluder-side mechanism regress MOT17-05? |
-| `analyze_near_miss_final_output.py` | stable | cli | Analyze near-miss events in final tracker output CSVs. |
-| `analyze_near_miss_offsets.py` | stable | cli | Analyze spatial offsets of near-miss associations. |
-| `analyze_near_miss_stage_attribution.py` | stable | cli | Attribute near-misses to pipeline stages. |
-| `analyze_occ_audit_seq_conditioning.py` | stable | cli | Aggregate occ-exit audit logs into a per-seq / scene-type applicability map. |
-| `cheb_gr_offline_handover_report.py` | stable | cli | Label and analyze Cheb-GR offline handover decisions. |
-| `compare_detector_suffix_runs.py` | stable | cli | Audit whether two MOT17 detector-suffix runs contain distinct evidence. |
-| `compare_handover_summaries.py` | stable | cli | Compare Cheb-GR offline handover parameter summary JSON files. |
-| `label_boosted_birth_rows.py` | stable | cli | Label and export birth rows boosted by GT for diagnostics. |
-| `probe_forwarded_embedding_assoc_cost.py` | stable | cli | Probe: online assoc cost via forwarded (copy) clean-FIFO embeddings. |
-| `probe_occ_audit_bank_reference.py` | stable | cli | Probe: occ-exit audit with bank-sourced reference vs post-hoc re-extract. |
-| `probe_sparse_bank_equivalence.py` | stable | cli | Probe: can a sparse per-ID key-embedding bank replace the dense Cheb-GR bank? |
-| `probe_track_bank_fifo_replacement.py` | stable | cli | Probe: TrackAppearanceBank / OutputAppearanceBank FIFO replacement. |
-| `reconnect_rate.py` | stable | cli | Lost-and-recover (reconnection) success-rate analysis. |
-| `relink_bridge_guard_report.py` | stable | cli | Summarize guarded native bridge relink runs. |
-| `run_occ_audit_wp3_promotion.py` | stable | cli | WP3: frozen-substrate occ-exit control/treatment + promotion decision inputs. |
-| `synthesize_handover_applicability.py` | stable | cli | Synthesize Cheb-GR handover applicability evidence across summaries. |
+| `analyze_assoc_fn.py` | diagnostic | cli | Why are detected GT still missed? Reason distribution for association-failure FN. |
+| `analyze_crossing_swaps.py` | diagnostic | cli | Attribution: what does the tracker physically DO at each occlusion crossing-swap? |
+| `analyze_fn.py` | diagnostic | cli | General FN breakdown diagnostics. |
+| `analyze_front_flag_exposure.py` | diagnostic | cli | Attribution: why does the occluder-side mechanism regress MOT17-05? |
+| `analyze_near_miss_final_output.py` | diagnostic | cli | Analyze near-miss events in final tracker output CSVs. |
+| `analyze_near_miss_offsets.py` | diagnostic | cli | Analyze spatial offsets of near-miss associations. |
+| `analyze_near_miss_stage_attribution.py` | diagnostic | cli | Attribute near-misses to pipeline stages. |
+| `analyze_occ_audit_seq_conditioning.py` | diagnostic | cli | Aggregate occ-exit audit logs into a per-seq / scene-type applicability map. |
+| `cheb_gr_offline_handover_report.py` | diagnostic | cli | Label and analyze Cheb-GR offline handover decisions. |
+| `compare_detector_suffix_runs.py` | diagnostic | cli | Audit whether two MOT17 detector-suffix runs contain distinct evidence. |
+| `compare_handover_summaries.py` | diagnostic | cli | Compare Cheb-GR offline handover parameter summary JSON files. |
+| `label_boosted_birth_rows.py` | diagnostic | cli | Label and export birth rows boosted by GT for diagnostics. |
+| `probe_forwarded_embedding_assoc_cost.py` | diagnostic | cli | Probe: online assoc cost via forwarded (copy) clean-FIFO embeddings. |
+| `probe_occ_audit_bank_reference.py` | diagnostic | cli | Probe: occ-exit audit with bank-sourced reference vs post-hoc re-extract. |
+| `probe_sparse_bank_equivalence.py` | diagnostic | cli | Probe: can a sparse per-ID key-embedding bank replace the dense Cheb-GR bank? |
+| `probe_track_bank_fifo_replacement.py` | diagnostic | cli | Probe: TrackAppearanceBank / OutputAppearanceBank FIFO replacement. |
+| `reconnect_rate.py` | diagnostic | cli | Lost-and-recover (reconnection) success-rate analysis. |
+| `relink_bridge_guard_report.py` | diagnostic | cli | Summarize guarded native bridge relink runs. |
+| `run_occ_audit_wp3_promotion.py` | diagnostic | cli | WP3: frozen-substrate occ-exit control/treatment + promotion decision inputs. |
+| `synthesize_handover_applicability.py` | diagnostic | cli | Synthesize Cheb-GR handover applicability evidence across summaries. |
 
 <!-- END generated script index -->

@@ -2,7 +2,7 @@
 
 """Analyze spatial offsets of near-miss associations."""
 
-# status: stable
+# status: diagnostic
 from __future__ import annotations
 
 import argparse

@@ -4,7 +4,7 @@ This first slice intentionally produces only inventory and active/search views.
 It does not attempt version-lag analysis, seal enforcement, freeze guarding, or
 any process-document move.
 """
-# status: stable
+# status: diagnostic
 
 from __future__ import annotations
 

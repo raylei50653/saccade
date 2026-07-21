@@ -2,7 +2,7 @@
 
 """Analyze near-miss events in final tracker output CSVs."""
 
-# status: stable
+# status: diagnostic
 from __future__ import annotations
 
 import argparse

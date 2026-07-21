@@ -13,7 +13,7 @@ Usage:
     results/sweep_density_gating.csv   — 完整結果表
     results/sweep_density_gating.md    — Markdown 摘要（最佳 Top-5）
 """
-# status: stable
+# status: diagnostic
 
 from __future__ import annotations
 

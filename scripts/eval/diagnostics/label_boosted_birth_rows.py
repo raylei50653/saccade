@@ -2,7 +2,7 @@
 
 """Label and export birth rows boosted by GT for diagnostics."""
 
-# status: stable
+# status: diagnostic
 from __future__ import annotations
 
 import argparse

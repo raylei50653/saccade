@@ -180,13 +180,12 @@ def render_rollup(metas: dict[str, tuple[str, str, str]]) -> str:
         "Source of truth = each script's own docstring + `# status:` header; "
         "regenerate with `scripts/tools/build_scripts_index.py`.",
         "",
-        "> **Classification provenance (provisional).** Labels were seeded "
-        "mechanically from a one-time survey (wired-into-code → `stable`, hand-run "
-        "tool → `diagnostic`, concluded study → `experiment`, dead/duplicate → "
-        "`archive-candidate`) and spot-checked. The keep-vs-archive split is "
-        "authoritative, but the `stable`/`diagnostic` boundary is **provisional**: "
-        "`stable` currently also holds wired-in analysis tools that a semantic pass "
-        "may reclassify as `diagnostic`. Edit a script's `# status:` line to correct it.",
+        "> **Classification provenance.** Labels were seeded from a one-time survey, "
+        "then the `stable` set was given a semantic role review (2026-07-21) that "
+        "moved wired-in analysis/debug tools to `diagnostic` and named study runners "
+        "to `experiment`, so `stable` means a supported workflow entrypoint or "
+        "path-stability infra — not merely wired-into-code. The source of truth is "
+        "each script's `# status:` header; edit that line to correct a label.",
         "",
         "## Status label counts",
         "",

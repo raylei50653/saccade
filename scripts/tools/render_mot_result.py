@@ -10,7 +10,7 @@ Usage:
         [--start  1]  [--end 600] \
         [--fps    30] [--scale 0.5]
 """
-# status: stable
+# status: diagnostic
 
 from __future__ import annotations
 

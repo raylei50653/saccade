@@ -10,7 +10,7 @@ Absolute ms will NOT match the CUDA-graph production figure (this is eager fp32)
 the RATIO bypass/production is the answer to the speed question. The bypass path
 is gated by head._bypass_reduction (default off, bit-exact when unset).
 """
-# status: stable
+# status: diagnostic
 
 from __future__ import annotations
 

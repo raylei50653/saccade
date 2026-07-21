@@ -8,7 +8,7 @@ high GT visibility) vs OCCLUDED, then reports:
   (2) gap distribution clean vs occluded  (claim: clean ~= short gap)
   (3) geometry separability inside clean vs occluded (does clean even need color?)
 """
-# status: stable
+# status: diagnostic
 
 from __future__ import annotations
 import csv

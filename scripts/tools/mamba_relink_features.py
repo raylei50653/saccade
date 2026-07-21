@@ -18,7 +18,7 @@ Usage:
       --col t3t1_cos --skip 3 --window 12 --topk 3 \
       --out scripts/tools/out/mamba_relink_t3t1.csv
 """
-# status: stable
+# status: diagnostic
 
 from __future__ import annotations
 

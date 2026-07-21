@@ -20,7 +20,7 @@ Examples
     # diff two configs side by side
     python scripts/eval/print_assoc_basis.py --preset speed --diff --preset2 accuracy
 """
-# status: stable
+# status: diagnostic
 
 from __future__ import annotations
 

@@ -19,7 +19,7 @@ Usage:
       --substrate results/diag_m_no_reid_current_20260704 \
       --data-root datasets/MOT17 --split train
 """
-# status: stable
+# status: diagnostic
 
 from __future__ import annotations
 

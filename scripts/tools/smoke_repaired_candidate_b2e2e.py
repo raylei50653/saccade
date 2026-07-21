@@ -35,7 +35,7 @@ Questions answered
     --b2-study out/signal_study/m_b2_bridge_ab_20260709T094646Z \\
     --study-dir out/signal_study/m_b2e2e_smoke_<stamp>
 """
-# status: stable
+# status: experiment
 
 from __future__ import annotations
 

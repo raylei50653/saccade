@@ -13,7 +13,7 @@ Usage
   .venv/bin/python scripts/eval/occ_rank.py --axis occ_foot_gap     # main-effect slice
   .venv/bin/python scripts/eval/occ_rank.py --pareto idf1,assa
 """
-# status: stable
+# status: diagnostic
 
 from __future__ import annotations
 

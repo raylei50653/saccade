@@ -2,7 +2,7 @@
 
 """Attribute near-misses to pipeline stages."""
 
-# status: stable
+# status: diagnostic
 from __future__ import annotations
 
 import argparse

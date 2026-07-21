@@ -18,7 +18,7 @@ The key readout is not final MOT accuracy. It is whether the private candidate
 pool is rankable enough to justify a tracker-private continuation path without
 opening a broad FP birth channel.
 """
-# status: stable
+# status: diagnostic
 
 from __future__ import annotations
 

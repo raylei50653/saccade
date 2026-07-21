@@ -1,6 +1,6 @@
 """Remap track IDs after GPU relink using global ID mapping."""
 
-# status: stable
+# status: diagnostic
 import numpy as np
 from pathlib import Path
 from collections import defaultdict

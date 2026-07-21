@@ -32,17 +32,17 @@
 | `benchmark_association.py` | diagnostic | cli | Benchmark GPU association/auction stage latency and throughput. |
 | `bottleneck_annealer.py` | diagnostic | - | End-to-end bottleneck annealer: find pipeline stage time sinks. |
 | `dataloader_bench.py` | diagnostic | cli | DataLoader throughput benchmark: preload_to_ram vs num_workers. |
-| `latency_breakdown.py` | stable | - | Break down per-stage latency of the perception pipeline. |
+| `latency_breakdown.py` | diagnostic | - | Break down per-stage latency of the perception pipeline. |
 | `latency_e2e_report.py` | diagnostic | - | Summarize end-to-end latency report from pipeline runs. |
 | `mamba_crossscan_breakdown.py` | diagnostic | - | Decompose _cross_scan_mamba: flip/stack prep vs MambaBlock(4B) vs unflip/mean. |
 | `mamba_detect_breakdown.py` | diagnostic | - | Attribute the eval `detect` stage (mamba_optimal/SDP ~7.45ms) into sub-components. |
 | `mamba_flip_alloc.py` | diagnostic | - | Test the hypothesis: cross-scan flip cost = allocating new tensors, not the |
 | `mamba_head_breakdown.py` | diagnostic | - | Sub-attribute the mamba_head (~3ms of detect) into its module groups. |
-| `mamba_head_cudagraph.py` | stable | - | Test the launch-bound hypothesis for the mamba_head: capture head.forward in a |
+| `mamba_head_cudagraph.py` | diagnostic | - | Test the launch-bound hypothesis for the mamba_head: capture head.forward in a |
 | `mamba_head_kernelcount.py` | diagnostic | - | Count CUDA kernel launches in one mamba_head.forward, to locate the |
 | `mamba_train_prof.py` | diagnostic | cli | Mamba head training latency profiler. |
-| `multistream_mamba.py` | stable | cli | Multi-stream Mamba benchmark. |
-| `nsys_frame_attribution.py` | stable | cli | Per-frame overhead attribution from an nsys trace (node-mode CUDA graph trace). |
+| `multistream_mamba.py` | diagnostic | cli | Multi-stream Mamba benchmark. |
+| `nsys_frame_attribution.py` | diagnostic | cli | Per-frame overhead attribution from an nsys trace (node-mode CUDA graph trace). |
 | `train_bottleneck_prof.py` | diagnostic | cli | Profile training-step bottlenecks via conditioned-train proxy path. |
 | `workbench_synthetic.py` | diagnostic | cli | Synthetic workbench load generator for pipeline microbenches. |
 
