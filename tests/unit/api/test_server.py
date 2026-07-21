@@ -1,7 +1,7 @@
 """Unit tests for the FastAPI inference/state server (saccade.api.server)."""
 
 # scope: api
-# function: behavior
+# function: contract
 # lifecycle: active
 
 from __future__ import annotations
