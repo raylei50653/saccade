@@ -1,7 +1,7 @@
 """Unit tests for the mamba-head teacher-cache training logic (scripts.train.temporal_yolo.train_mamba_head)."""
 
 # scope: detection
-# function: behavior
+# function: contract
 # lifecycle: active
 
 import json
