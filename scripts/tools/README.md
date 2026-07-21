@@ -339,6 +339,7 @@ deleting.
 | `build_r1_bridge_replay.sh` | stable | - | Build the research-only device replay helper used by R1 host R0. |
 | `build_relink_candidates.py` | diagnostic | cli | Build a relink-candidate dataset from a no-relink / no-interp MOT dump. |
 | `build_scripts_index.py` | stable | cli | Generate the scripts/ discovery index from each script's own header. |
+| `build_tests_index.py` | stable | cli | Generate the tests/ discovery index from each test file's own header tags. |
 | `cache_gt_tracks.py` | diagnostic | cli | cache_gt_tracks.py — Phase 1 GT Oracle Cache Generator |
 | `check_api_layers.py` | stable | cli | Saccade API Layering Audit. |
 | `check_association_tools.py` | diagnostic | cli | Check association recovery tools registry (R) against disk (D) and NO-GO (N). |
@@ -358,6 +359,7 @@ deleting.
 | `check_headline_decision_contract.py` | stable | cli | Static guard for the headline tracker-decision contract (no GPU). |
 | `check_scan_bwd.py` | diagnostic | - | Validate the CUDA selective-scan backward against the JIT autograd reference. |
 | `check_scripts_structure.py` | stable | cli | Scripts structure contract: every script self-documents, and the index is fresh. |
+| `check_tests_structure.py` | stable | cli | Tests structure contract: every test self-documents, and the index is fresh. |
 | `classify_gap_cause.py` | diagnostic | cli | Classify relink gaps: person-person overlap vs non-person. |
 | `cold_start_transfer.py` | experiment | cli | Cold-start transfer test: do the normalized occ-gate landmarks hold on MOT20? |
 | `color_relink_features.py` | diagnostic | cli | Offline AUC test: color-histogram appearance features for relink candidates. |
