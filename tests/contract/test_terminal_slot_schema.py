@@ -1,3 +1,9 @@
+"""Contract for the terminal-slot YAML schema validator."""
+
+# scope: system
+# function: contract
+# lifecycle: active
+
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence

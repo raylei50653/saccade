@@ -14,6 +14,10 @@ hazard and clean otherwise; and (4) it stays non-authoritative — no build tree
 no authoritative writes, no authorization consumed.
 """
 
+# scope: system
+# function: contract
+# lifecycle: active
+
 from __future__ import annotations
 
 import inspect

@@ -5,6 +5,10 @@ the packet and that its sha256 still matches — i.e. the sealed evidence has
 not silently rotted or been edited without re-sealing.
 """
 
+# scope: system
+# function: contract
+# lifecycle: active
+
 from __future__ import annotations
 
 import hashlib

@@ -1,3 +1,9 @@
+"""Contract for the H0 GCTM guarantee-registration verifier (candidate-sources v2)."""
+
+# scope: system
+# function: contract
+# lifecycle: active
+
 from __future__ import annotations
 
 from copy import deepcopy

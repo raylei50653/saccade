@@ -1,3 +1,9 @@
+"""Contract for the old-flagship per-study inventory parser."""
+
+# scope: system
+# function: contract
+# lifecycle: active
+
 from __future__ import annotations
 
 from pathlib import Path

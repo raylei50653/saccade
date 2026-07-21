@@ -6,6 +6,10 @@ validation, not by packet-specific regression tests (see
 tests/research/README.md).
 """
 
+# scope: system
+# function: contract
+# lifecycle: active
+
 from __future__ import annotations
 
 import pathlib
