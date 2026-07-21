@@ -5,11 +5,17 @@
 
 ## Sole active
 
-- **H0 re-entry repair — build-tool provenance closure** → [Issue #224](https://github.com/raylei50653/saccade/issues/224)
-  （ACTIVE，2026-07-20 起）。#209 的 owner-accepted route-1
-  `H0_PROVENANCE_INVALID` 與歷史 I/F/S／evidence 不可變；#224 僅補齊
-  C++／CMake build-tool binding，必須重新 I→F→S。historical S retry、Phase B
-  forbidden；GCTM 不因修復工作自動啟動。
+- **none**。H0 re-entry repair（#224 amendment：build-tool binding → #227 repair：
+  canonical controller-input member parity）於 2026-07-21 由 owner 授權 exactly-once
+  執行,到達第二個同型 owner-accepted ordered terminal `H0_PROVENANCE_INVALID`
+  （I₂=`31c9eee8`→F₂=`46539a2d`→S₂=`0da082a9`；死因＝preflight launch hygiene:
+  `build/h0_phase_a exists at controller launch`,T0 未進、零 capture;independent
+  verifier `valid=true`）。#224／#227 已關閉;歷史 I/F/S 與 evidence 不可變;
+  controller retry／second invocation under S₂／Phase B forbidden;GCTM #175 維持
+  PARKED（不因此自動啟動）;actual H0 guarantee = none。永久留帳結論與 re-entry
+  precondition（先建 machine-checked launch-hygiene pre-authorization gate,再 fresh
+  I→F→S＋另行 exactly-once 授權）見 [claim-state registry
+  `quantity.bridge_capture_provenance`](../../research/contracts/claim_state_registry.md)。
 
 ## Proposed（non-WIP）
 
