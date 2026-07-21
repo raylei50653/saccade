@@ -7,6 +7,10 @@ Skipped automatically when any of the following are unavailable:
   - datasets/MOT17/train/MOT17-04-SDP/
 """
 
+# scope: system
+# function: behavior
+# lifecycle: active
+
 import re
 import sys
 from collections import defaultdict
