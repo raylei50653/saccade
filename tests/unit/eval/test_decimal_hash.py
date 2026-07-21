@@ -1,7 +1,7 @@
 """Tests for decimal-hash MOT canonicalization + hashing (perception.eval.decimal_hash)."""
 
 # scope: eval
-# function: behavior
+# function: contract
 # lifecycle: active
 
 import pytest

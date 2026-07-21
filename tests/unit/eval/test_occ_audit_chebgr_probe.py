@@ -1,7 +1,7 @@
 """WP1: occ-exit Cheb-GR graph decision probe (diagnostic / default-off)."""
 
 # scope: eval
-# function: diagnostic
+# function: contract
 # lifecycle: active
 
 from __future__ import annotations

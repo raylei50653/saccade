@@ -1,6 +1,6 @@
 """Cross-package unit tests for core media/storage/tracking helpers."""
 
-# scope: system
+# scope: media, storage, perception, tracking
 # function: behavior
 # lifecycle: active
 
