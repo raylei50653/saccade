@@ -8,6 +8,10 @@ expected (B, T, 3, S, S) float tensor in [0, 255], regardless of source aspect
 ratio (stretch-resize matches the non-letterbox loader's GT scaling).
 """
 
+# scope: detection
+# function: behavior
+# lifecycle: active
+
 import pytest
 import torch
 

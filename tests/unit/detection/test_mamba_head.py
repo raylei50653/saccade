@@ -1,3 +1,9 @@
+"""Unit tests for the temporal-YOLO mamba detection head (perception.temporal_yolo.mamba_head)."""
+
+# scope: detection
+# function: behavior
+# lifecycle: active
+
 import torch
 import torch.nn as nn
 import pytest

@@ -1,3 +1,9 @@
+"""Unit tests for the TRT YOLO detector and batched proxy (perception.detector_trt)."""
+
+# scope: perception
+# function: behavior
+# lifecycle: active
+
 from __future__ import annotations
 
 from typing import Optional

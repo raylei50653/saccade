@@ -1,3 +1,9 @@
+"""Unit tests for the mamba-head teacher-cache training logic (scripts.train.temporal_yolo.train_mamba_head)."""
+
+# scope: detection
+# function: behavior
+# lifecycle: active
+
 import json
 from pathlib import Path
 

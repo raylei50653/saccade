@@ -1,3 +1,9 @@
+"""Unit tests for the async embedding dispatcher (perception.embedding_dispatcher)."""
+
+# scope: perception
+# function: behavior
+# lifecycle: active
+
 from __future__ import annotations
 
 import asyncio

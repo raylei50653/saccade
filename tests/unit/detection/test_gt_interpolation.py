@@ -7,6 +7,10 @@ while the loss is masked to real keyframes (is_keyframe). These tests exercise
 the interpolation math directly without any dataset on disk.
 """
 
+# scope: detection
+# function: behavior
+# lifecycle: active
+
 import torch
 
 from saccade.perception.temporal_yolo.dataset import _interpolate_gt_for_frame

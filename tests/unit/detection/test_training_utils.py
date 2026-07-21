@@ -1,3 +1,9 @@
+"""Unit tests for temporal-YOLO training utilities (perception.temporal_yolo.training_utils)."""
+
+# scope: detection
+# function: behavior
+# lifecycle: active
+
 import pytest
 import torch
 

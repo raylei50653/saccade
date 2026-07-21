@@ -8,6 +8,10 @@ The training module imports the C++ tracking extension at top level, which is
 unavailable on the no-GPU CI runner, so the import is guarded.
 """
 
+# scope: detection
+# function: behavior
+# lifecycle: active
+
 from __future__ import annotations
 
 import pytest
