@@ -248,8 +248,6 @@ Outputs: `results/module_benchmark/<timestamp>/`（含 `summary.txt`、`commands
 | `eval_conditioned.py` | stable | - | Compatibility wrapper for scripts/eval/baselines/eval_conditioned.py. |
 | `eval_fpn_reid.py` | stable | - | Compatibility wrapper for scripts/eval/appearance/eval_fpn_reid.py. |
 | `eval_gated_bytetrack.py` | stable | - | Compatibility wrapper for scripts/eval/baselines/eval_gated_bytetrack.py. |
-| `eval_gated_detector.py` | archive-candidate | cli | Eval script for GatedYOLODetector (Method B). |
-| `eval_mamba_head.py` | archive-candidate | cli | Eval script for MambaGatedDetector (Option F). |
 | `eval_reid_1x1.py` | experiment | cli | Market-1501 ReID eval for 1×1 Conv dimension-reduction heads. |
 | `eval_yolox_bytetrack.py` | experiment | cli | Eval: YOLOX-X detector + our GPUByteTracker. |
 | `export_external_fp_rows.py` | stable | - | Compatibility wrapper for scripts/eval/appearance/export_external_fp_rows.py. |

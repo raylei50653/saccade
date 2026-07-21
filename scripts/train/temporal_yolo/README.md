@@ -61,12 +61,14 @@ less directly tied to the accepted main-line protocol.
 |---|---|
 | `cache_trt_feats.py` | Support utility; keep until cache workflows are retired |
 | `precompute_gmc.py` | Support utility; keep if GMC precompute remains useful |
-| `train_mamba_trt.py` | Experimental TRT-feature training path |
-| `train_mamba_cached.py` | Experimental cached-feature training path |
-| `train_conditioned.py`, `configs/conditioned.yaml` | Older conditioned training path; archive-candidate |
-| `train_joint.py`, `configs/joint.yaml` | Older joint training path; archive-candidate |
-| `train_gated_tp.py` | Older gated-TP training path; archive-candidate |
-| `train_jde_distill.py`, `train_jde_market.py`, `train_reid_1x1.py` | ReID/JDE experiments; archive-candidate for main-line MOT work |
+| `train_conditioned.py`, `configs/conditioned.yaml` | Older conditioned training path; archive-candidate (kept: cited by docs/archive/option-d) |
+| `train_joint.py`, `configs/joint.yaml` | Older joint training path; archive-candidate (kept: cited by docs/archive/option-d) |
+| `train_gated_tp.py` | Older gated-TP training path; archive-candidate (kept: cited by detection/README) |
+| `train_jde_market.py` | Market-1501 JDE embedding; archive-candidate (kept: cited by research/training/jde-market-1501) |
+
+`train_mamba_trt.py`, `train_mamba_cached.py`, `train_jde_distill.py`, and
+`train_reid_1x1.py` were disposed (deleted) once unreferenced; they remain in git
+history.
 
 ## Cleanup Policy
 
@@ -120,13 +122,9 @@ less directly tied to the accepted main-line protocol.
 | `train_conditioned.py` | archive-candidate | cli | Option D：Track-Conditioned YOLO Neck 訓練 |
 | `train_gated_detector.py` | stable | cli | Option D (revised): GatedYOLODetector training. |
 | `train_gated_tp.py` | archive-candidate | cli | GatedYOLODetector training with Track-guided TP Recall Loss. |
-| `train_jde_distill.py` | archive-candidate | cli | OSNet → JDE embedding head knowledge distillation. |
 | `train_jde_market.py` | archive-candidate | cli | JDE-style embedding training on Market-1501 — Pipeline Convention ===========================================… |
 | `train_joint.py` | archive-candidate | cli | Option C：YOLO26s + Cross-Attention Decoder 聯合訓練 |
-| `train_mamba_cached.py` | archive-candidate | cli | Train Mamba head from cached TRT backbone features (Phase 2 GT supervision). |
 | `train_mamba_gt.py` | stable | cli | Option F: MambaDetectionHead GT fine-tuning (Phase 2). |
 | `train_mamba_head.py` | stable | cli | Option F: MambaDetectionHead distillation training. |
-| `train_mamba_trt.py` | archive-candidate | cli | Mamba head training on TRT backbone features. |
-| `train_reid_1x1.py` | archive-candidate | cli | Train lightweight 1×1 Conv dimension-reduction head on Market-1501. |
 
 <!-- END generated script index -->

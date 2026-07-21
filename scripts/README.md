@@ -100,7 +100,6 @@ and docs in the same change.
 | `download_motsynth.py` | MOTSynth downloader | diagnostic; root-surface cleanup candidate |
 | `pre_push.sh` | Local pre-push CI mirror | stable |
 | `test_native.sh` | Native C++/CUDA coverage test entrypoint | stable |
-| `train_option_d.sh` | Historical Option-D two-phase training runner | archive-candidate; uses old `train/temporal_yolo/...` path |
 
 ## Dataset Downloaders
 
@@ -185,6 +184,5 @@ Recommended next passes:
 | `download_motsynth.py` | diagnostic | cli | Download and setup MOTSynth dataset (Mini/Full). |
 | `pre_push.sh` | stable | cli | Mirror CI checks locally before pushing. |
 | `test_native.sh` | stable | - | Build native code with coverage and run native tests. |
-| `train_option_d.sh` | archive-candidate | - | Option D 兩階段訓練自動化腳本 |
 
 <!-- END generated script index -->

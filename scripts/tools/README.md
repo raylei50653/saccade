@@ -224,7 +224,6 @@ These have known repo references outside this README.
 | `check_doc_links.py` | Markdown relative-link checker |
 | `check_gpu_contract.py` | GPU-first host-roundtrip scanner |
 | `gpu_check.py` | Local GPU environment check |
-| `vram_monitor.sh` | Local VRAM monitor |
 
 ## Internal Support
 
@@ -377,7 +376,6 @@ deleting.
 | `export_d0_runtime_capture.py` | stable | cli | Merge per-sequence Issue #112 native captures into D0's CSV contract. |
 | `export_headline_bridge_decision_trace.py` | stable | cli | Canonicalize H0 records plus its independent native-universe sidecar. |
 | `export_r1_temporal_reduction_capture.py` | stable | cli | Seal native shadow observations into the R1 temporal-reduction payload. |
-| `format_tables.py` | archive-candidate | - | Format benchmark/eval stage tables for reports. |
 | `gap_occupancy_features.py` | diagnostic | cli | Gap-occupancy (exclusion) features for relink candidates. |
 | `gate_clean_color.py` | diagnostic | - | Test the 'use color ReID only on non-occluded relink candidates' gate. |
 | `gate_rule_search.py` | diagnostic | cli | Constrained multi-gate rule search (not combinatorial thrashing). |
@@ -407,7 +405,6 @@ deleting.
 | `probe_relink_occlusion_signal.py` | diagnostic | cli | Does an explicit OCCLUSION signal separate true vs false relink bridges? |
 | `qualify_h0_phase_a.py` | stable | cli | Run the repeatable, non-authoritative H0 substrate qualification gate. |
 | `qualify_h0_phase_a_child.py` | stable | cli | Synthetic no-capture child used only by H0 substrate qualification. |
-| `remap_aligned.py` | archive-candidate | - | Remap/dedupe aligned track IDs (keep highest score per frame-id). |
 | `remap_gpu_relinks.py` | diagnostic | - | Remap track IDs after GPU relink using global ID mapping. |
 | `render_diffusion_debug.py` | diagnostic | cli | Render bidirectional relink debug events emitted by ``mot17.py``. |
 | `render_mot_result.py` | diagnostic | cli | Render a MOT-format tracking result onto the source frames and encode a video. |
@@ -445,7 +442,6 @@ deleting.
 | `verify_h0_preseal_freeze.py` | stable | cli | Independently verify a canonical ``h0_preseal_freeze_v3`` artifact. |
 | `verify_headline_bridge_decision_trace.py` | stable | cli | Replay and validate the sealed H0 bridge-decision trace from capture alone. |
 | `verify_r1_temporal_reduction_replay.py` | stable | cli | Verify R1's estimator replay without reading labels or fitting a score. |
-| `vram_monitor.sh` | archive-candidate | - | Empty stub (no implementation) for VRAM monitoring. |
 | `weight_method_safe_region.py` | diagnostic | cli | Compare weighting methods by GT-safe *productive region* (not best FP). |
 
 <!-- END generated script index -->
