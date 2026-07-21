@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# status: archive-candidate
 # Implicit vs explicit (matched seeds 42/43/44) re-evaluated with the post-processing
 # crutches OFF: interpolation (--no-interpolate-tracklets) + bidir relink bridge
 # (--no-relink-bridge-enabled). Tests whether §6's +1.8/+3.0 survives without them,

@@ -1,3 +1,6 @@
+"""End-to-end bottleneck annealer: find pipeline stage time sinks."""
+
+# status: diagnostic
 import asyncio
 import time
 import torch

@@ -16,6 +16,7 @@ Usage:
         --yolo-weights models/yolo/yolo26s.pt \\
         --epochs 30 --gt-ratio 0.5
 """
+# status: stable
 
 from __future__ import annotations
 

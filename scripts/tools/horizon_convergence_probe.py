@@ -40,6 +40,7 @@ Usage
   .venv/bin/python scripts/tools/horizon_convergence_probe.py
   .venv/bin/python scripts/tools/horizon_convergence_probe.py --tau 0.20 --boot 200
 """
+# status: experiment
 
 from __future__ import annotations
 

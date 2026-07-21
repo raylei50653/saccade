@@ -8,6 +8,7 @@ completely bypassing the TorchScript JIT interpreter and running at pure native 
 Usage:
     uv run scripts/model/compile_mamba_head_aot.py
 """
+# status: stable
 
 import sys
 from pathlib import Path

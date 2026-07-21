@@ -27,6 +27,7 @@ Usage:
         --dumps-dir ../saccade-rescreen/rescreen_logs/dumps \
         --gt-root ../saccade-rescreen/datasets/MOT17/train
 """
+# status: diagnostic
 
 from __future__ import annotations
 

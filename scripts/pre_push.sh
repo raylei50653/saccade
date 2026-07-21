@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# status: stable
 # Mirror CI checks locally before pushing.
 # Usage: bash scripts/pre_push.sh [--fix]
 #   --fix  auto-apply ruff fixes before checking
@@ -105,6 +106,14 @@ if uv run python3 scripts/tools/check_doc_structure.py --strict 2>&1; then
   ok "doc structure"
 else
   fail "doc structure — C6.4 lifecycle violation(s); see docs/ownership/doc_structure_contract.md"
+  ERRORS=$((ERRORS + 1))
+fi
+
+echo "── scripts structure check (status header + fresh index; fail-closed)"
+if uv run python3 scripts/tools/check_scripts_structure.py --strict 2>&1; then
+  ok "scripts structure"
+else
+  fail "scripts structure — missing '# status:' / docstring, or stale index; run scripts/tools/build_scripts_index.py"
   ERRORS=$((ERRORS + 1))
 fi
 

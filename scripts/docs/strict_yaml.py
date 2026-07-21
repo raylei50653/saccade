@@ -4,6 +4,7 @@ PyYAML's default safe loader silently keeps the last value for duplicate map
 keys.  Schema validators receive only that collapsed mapping, so duplicate-key
 rejection must happen while the YAML node tree is constructed.
 """
+# status: stable
 
 from __future__ import annotations
 

@@ -15,6 +15,7 @@ Exit code 1 if any link is broken, else 0.
 
 Usage: uv run python3 scripts/tools/check_doc_links.py
 """
+# status: stable
 
 from __future__ import annotations
 

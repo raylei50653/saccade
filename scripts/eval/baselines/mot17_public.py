@@ -1,3 +1,6 @@
+"""Public-detection MOT17 baseline (tracker-only on public dets)."""
+
+# status: stable
 import argparse
 import configparser
 from collections import defaultdict

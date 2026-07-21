@@ -11,6 +11,7 @@ Usage:
 Output:
     models/yolo/mamba_head.onnx
 """
+# status: stable
 
 from __future__ import annotations
 

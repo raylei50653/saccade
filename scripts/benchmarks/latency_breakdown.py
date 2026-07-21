@@ -1,3 +1,6 @@
+"""Break down per-stage latency of the perception pipeline."""
+
+# status: diagnostic
 import asyncio
 import time
 import torch

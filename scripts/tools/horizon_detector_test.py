@@ -19,6 +19,7 @@ Usage
   .venv/bin/python scripts/tools/horizon_detector_test.py \
       --pred scripts/eval/output/ablation_mot17/baseline
 """
+# status: experiment
 
 from __future__ import annotations
 

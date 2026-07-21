@@ -16,6 +16,7 @@ Covers a couple of short sequences under the production whole-graph preset.
 Add presets/sequences to CASES to widen branch coverage as the refactor moves
 into other paths.
 """
+# status: diagnostic
 
 from __future__ import annotations
 

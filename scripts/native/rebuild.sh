@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# status: stable
 # Saccade C++/CUDA Extension Rebuild Script
 
 set -e

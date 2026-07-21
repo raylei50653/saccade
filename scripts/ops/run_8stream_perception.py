@@ -1,3 +1,6 @@
+"""Run multi-stream (8-stream) perception demo."""
+
+# status: stable
 import argparse
 import asyncio
 import time

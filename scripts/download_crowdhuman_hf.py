@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Download CrowdHuman dataset from Hugging Face."""
+# status: diagnostic
 
 import argparse
 import shutil

@@ -7,6 +7,7 @@ and the new estimate_into_direct (caller stream, no cross-stream sync).
 Usage:
     uv run scripts/tools/verify_gmc_direct.py [--frames N] [--downscale D] [--seq NAME]
 """
+# status: diagnostic
 
 import argparse
 import sys

@@ -22,6 +22,7 @@ Raw-data columns (see RAW_COLS in tracker_gpu.cu):
   7 lost_id  8 cand_id  9 cand_hit_streak  10 lost_hit_streak
   11 fwd_eucl  12 bwd_eucl  13 bwd_maha(-1 if none)
 """
+# status: diagnostic
 
 import sys
 from collections import defaultdict

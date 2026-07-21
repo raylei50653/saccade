@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Compatibility wrapper for scripts/eval/appearance/cheb_gr_osnet_gate.py."""
+# status: stable
 
 try:
     from scripts.eval._redirect import run_eval_script

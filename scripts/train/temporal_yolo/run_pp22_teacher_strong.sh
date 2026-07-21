@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# status: experiment
 # Strengthened PP22 teacher — strategies A + B (held-out plan §11). NOT yet run.
 #
 #   A (schedule/LR, the directly-evidenced lever): lr-yolo 1e-5 → 1e-4 (the loss was

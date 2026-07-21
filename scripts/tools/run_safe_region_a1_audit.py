@@ -20,6 +20,7 @@ Usage:
     --q45-evidence docs/modules/semantic/research/evidence/m_b1_5_stage2_q45_20260710 \
     --out out/signal_study/safe_region_a1_audit_20260711
 """
+# status: stable
 
 from __future__ import annotations
 

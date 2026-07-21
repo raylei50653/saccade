@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+
+"""Sweep logistic TP/FP filters on CrowdHuman external rows."""
+
+# status: diagnostic
 import argparse
 import json
 import sys

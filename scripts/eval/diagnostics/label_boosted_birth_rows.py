@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+
+"""Label and export birth rows boosted by GT for diagnostics."""
+
+# status: diagnostic
 from __future__ import annotations
 
 import argparse

@@ -1,3 +1,6 @@
+"""Build TensorRT engine from YOLO ONNX."""
+
+# status: stable
 import tensorrt as trt
 import os
 import argparse

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# status: experiment
 # Route 3 of mamba-t3t1-curriculum-20260613.md §5: explicit consistency protection.
 #
 # Context (§4.1): full-grad SSM-ft from the T3→T1 checkpoint ERASES the shaping

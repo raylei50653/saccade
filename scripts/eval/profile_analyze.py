@@ -8,6 +8,7 @@ Usage:
     uv run scripts/eval/profile_analyze.py path/to/_frame_ledger_MOT17-04-SDP.csv
     uv run scripts/eval/profile_analyze.py path.csv --top-n 10 --out-json out.json
 """
+# status: diagnostic
 
 import argparse
 import csv

@@ -6,6 +6,7 @@ the actual detections still come from the same learned detector. This tool
 normalizes sequence suffixes and provenance paths, then compares MOT result
 files, Cheb-GR handover logs, labeled decision CSVs, and registries/summaries.
 """
+# status: diagnostic
 
 from __future__ import annotations
 

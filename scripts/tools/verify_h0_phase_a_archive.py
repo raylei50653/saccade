@@ -6,6 +6,7 @@ universe. The controller continues to use ``verify_h0_phase_a.py`` as its
 sealed execution verifier; archive-only compatibility repairs add codecs here
 without changing a prospective execution authority.
 """
+# status: stable
 
 from __future__ import annotations
 

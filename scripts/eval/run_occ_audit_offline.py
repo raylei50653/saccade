@@ -11,6 +11,7 @@ Usage
       --substrate results/analysis_m_semantic_delayed_claim_control_20260703 \
       --taus 0.386 0.45 0.498
 """
+# status: diagnostic
 
 from __future__ import annotations
 

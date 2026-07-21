@@ -5,6 +5,7 @@ It connects the frozen ``old-flagship`` resolved-file set to the terminal or
 live owner of each underlying study.  A shared-support file is explicit, but
 cannot supply terminal coverage or authorize disposal.
 """
+# status: diagnostic
 
 from __future__ import annotations
 

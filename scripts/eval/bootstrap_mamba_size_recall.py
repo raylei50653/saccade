@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Paired moving-block bootstrap for size-binned detector recall."""
+# status: diagnostic
 
 from __future__ import annotations
 

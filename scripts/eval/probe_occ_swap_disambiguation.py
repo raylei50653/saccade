@@ -30,6 +30,7 @@ Usage
   .venv/bin/python scripts/eval/probe_occ_swap_disambiguation.py \
       --substrate results/mamba_whole_graph_current_7seq_recheck
 """
+# status: diagnostic
 
 from __future__ import annotations
 

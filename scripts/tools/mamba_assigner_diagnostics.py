@@ -1,4 +1,5 @@
 """Measure real TaskAlignedAssigner capacity for the v14 Mamba detector."""
+# status: diagnostic
 
 from __future__ import annotations
 

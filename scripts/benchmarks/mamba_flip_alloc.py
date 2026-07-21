@@ -8,6 +8,7 @@ flip arithmetic. Compares producing the (4B,C,H,W) flipped stack three ways:
 
 Plus an empty_cache() variant of A to expose cudaMalloc vs cached-reuse cost.
 """
+# status: diagnostic
 
 from __future__ import annotations
 

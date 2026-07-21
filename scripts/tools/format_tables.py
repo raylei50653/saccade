@@ -1,3 +1,6 @@
+"""Format benchmark/eval stage tables for reports."""
+
+# status: archive-candidate
 from pathlib import Path
 
 file_path = Path("src/saccade/perception/eval/runner.py")

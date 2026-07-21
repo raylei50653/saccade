@@ -12,6 +12,7 @@ GT *also* covered by a HIGH-score (>=0.5) box at IoU>=0.5 this frame?
 
 Hypothesis: MOT17-10 (fw GO) -> mostly REDUNDANT; MOT17-13 (fw NOGO) -> UNIQUE.
 """
+# status: experiment
 
 import sys
 from pathlib import Path

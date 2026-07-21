@@ -12,6 +12,7 @@ For current 18-column raw dumps, the event frame is inferred from the candidate
 track's ``cand_hit``-th emitted box. If a future raw dump appends an event-frame
 column, this renderer uses it directly.
 """
+# status: diagnostic
 
 from __future__ import annotations
 

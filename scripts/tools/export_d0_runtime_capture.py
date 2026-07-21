@@ -37,6 +37,7 @@ Usage (v2):
 This tool only creates an input artifact; the D0 verifier remains responsible
 for the fidelity verdict and its coverage gates.
 """
+# status: stable
 
 from __future__ import annotations
 

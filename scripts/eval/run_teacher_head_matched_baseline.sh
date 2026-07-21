@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# status: experiment
 # Matched-baseline: original YOLO detect head (teacher) vs Mamba head through the
 # IDENTICAL tracker on the SAME PyTorch backbone (gated_det_v14replica/epoch_0012).
 # Single variable = detection head. See docs/reference/ (findings write-up).

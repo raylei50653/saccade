@@ -7,6 +7,7 @@ Usage:
     # check determinism for all configs (6 runs each)
     .venv/bin/python scripts/tools/determinism_check.py check
 """
+# status: diagnostic
 
 from __future__ import annotations
 

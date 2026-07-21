@@ -37,6 +37,7 @@ Usage
   .venv/bin/python scripts/eval/probe_occ_activation_separability.py \
       --output results/occ_separability/activation.json
 """
+# status: diagnostic
 
 from __future__ import annotations
 

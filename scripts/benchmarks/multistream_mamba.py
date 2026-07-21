@@ -18,6 +18,7 @@ Usage:
     # baseline (no coalescing):
     uv run python scripts/benchmarks/multistream_mamba.py ... --max-batch 1
 """
+# status: diagnostic
 
 from __future__ import annotations
 

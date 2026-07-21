@@ -30,6 +30,7 @@ unless --no-prod-shaped. 7-seq MOT is cheap (~30s); re-run substrate freely.
 
 Contract: docs/research/contracts/signal_table_schema.md §0.4
 """
+# status: diagnostic
 
 from __future__ import annotations
 

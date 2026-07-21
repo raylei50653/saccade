@@ -6,6 +6,7 @@ freeze, reads a research sequence, writes an H0 evidence root, or produces an
 H0 terminal.  It exercises the same host build and extension substrate with a
 synthetic runner so ordinary engineering failures are found before a seal.
 """
+# status: stable
 
 from __future__ import annotations
 

@@ -12,6 +12,7 @@ Usage:
         [--seqs MOT17-02-SDP,MOT17-04-SDP] \
         [--batch-size 8]
 """
+# status: stable
 
 import argparse
 import sys

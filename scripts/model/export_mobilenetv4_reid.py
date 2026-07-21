@@ -12,6 +12,7 @@ Usage:
         --engine models/embedding/mobilenetv4_reid_visclean_224.engine \
         --input-hw 224 224
 """
+# status: stable
 
 from __future__ import annotations
 

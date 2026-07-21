@@ -26,6 +26,7 @@ Usage:
   .venv/bin/python scripts/eval/appearance/mnv4_spatial_dilution_probe.py \
       [--ckpt runs/reid_mnv4_ft_visclean/best.ckpt] [--gt-root datasets/MOT17/train]
 """
+# status: experiment
 
 from __future__ import annotations
 

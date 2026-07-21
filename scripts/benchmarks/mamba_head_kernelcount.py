@@ -3,6 +3,7 @@
 launch-bound cost. The 4-direction cross-scan SSM is already 1 launch/scale
 (well-batched); this shows how many OTHER small ops surround it.
 """
+# status: diagnostic
 
 from __future__ import annotations
 

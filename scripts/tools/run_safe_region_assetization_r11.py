@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Run R1.1 Transfer Failure Attribution Pack (authorized research only)."""
+# status: experiment
 
 from __future__ import annotations
 

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# status: experiment
 # §4.1 attribution discriminator: frozen-SSM + T=1-only continued training from the
 # shaped t3_t1 checkpoint. The missing 2×2 cell that separates the AssA-collapse cause.
 #

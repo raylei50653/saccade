@@ -17,6 +17,7 @@ Checks:
 
 Usage: uv run python3 scripts/tools/check_doc_freshness.py [--strict]
 """
+# status: stable
 
 from __future__ import annotations
 

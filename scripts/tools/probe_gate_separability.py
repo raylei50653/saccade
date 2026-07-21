@@ -11,6 +11,7 @@ output feeds the bottom-up path into 19/22, so P3 gating may propagate. Measure
 the per-scale residual between the live gated feature and the cache-reconstructed
 feature. ~0 => separable (fast variant is bit-equivalent); large => NO-GO.
 """
+# status: experiment
 
 from __future__ import annotations
 

@@ -30,6 +30,7 @@ runs survived directional cross-contamination at the record level.
 
 All unrecognised options are forwarded to ``scripts/eval/mot17.py``.
 """
+# status: diagnostic
 
 from __future__ import annotations
 

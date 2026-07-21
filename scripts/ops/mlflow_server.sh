@@ -1,4 +1,6 @@
 #!/bin/bash
+# status: stable
+# Start local MLflow tracking server (Postgres-backed).
 set -euo pipefail
 
 DB_HOST="${DB_HOST:-localhost}"

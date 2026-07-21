@@ -5,6 +5,7 @@ Uses forward pre/post hooks (sync-free CUDA events) on the head's submodule
 ModuleLists + patches the module-level _cross_scan_mamba to isolate the SSM.
 Mirrors eval: single-frame, gate_input=None, v14 cross-scan + pixel-shuffle.
 """
+# status: diagnostic
 
 from __future__ import annotations
 

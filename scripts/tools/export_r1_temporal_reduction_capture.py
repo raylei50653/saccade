@@ -25,6 +25,7 @@ missing state, non-shadow input, overflow, unresolved IDs, duplicate events,
 or any stale/non-R1 capture provenance. It never drops a native event merely
 because an output-layer global id is unavailable.
 """
+# status: stable
 
 from __future__ import annotations
 

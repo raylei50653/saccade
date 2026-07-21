@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+
+"""Flagship MOT17 eval entry: detector+tracker under presets, report metrics."""
+
+# status: stable
 # mypy: ignore-errors
 import argparse
 import os

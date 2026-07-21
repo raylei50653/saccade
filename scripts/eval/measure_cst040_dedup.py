@@ -9,6 +9,7 @@ has the SHORTER total lifespan (the likely duplicate), keeping the established
 track. Recomputes real motmetrics so we see whether de-dup buys back precision/
 AssA without giving up the recall.
 """
+# status: experiment
 
 from __future__ import annotations
 

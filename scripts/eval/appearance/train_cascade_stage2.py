@@ -15,6 +15,7 @@ Usage:
         --rule-min-height 72 --rule-medium-height 96 --rule-min-aspect 1.6 \
         --log-threshold 0.50 --log-max-score 0.18 --log-penalty 0.4
 """
+# status: diagnostic
 
 import argparse
 import json

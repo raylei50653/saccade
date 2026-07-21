@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# status: experiment
 # Full v14 lineage rebuild with a teacher trained through epoch 30:
 # yolo26s -> gated teacher e30 -> cache -> legacy N=1 distill -> legacy N=1
 # GT warm-start -> fixed N=16 GT adaptation -> detector/tracking evaluation.

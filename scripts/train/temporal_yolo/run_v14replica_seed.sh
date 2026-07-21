@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# status: experiment
 # v14replica student-chain reseed: distill -> GT1(live) -> GT2(cache) -> eval.
 # Teacher (gated_det_v14replica/epoch_0012) and cache stay fixed; this measures
 # the student-chain seed noise band for the replication comparison.

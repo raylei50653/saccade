@@ -1,3 +1,6 @@
+"""Historical multi-ablation experiment harness over MOT metrics tables."""
+
+# status: experiment
 _METRICS = [
     "idf1",
     "recall",

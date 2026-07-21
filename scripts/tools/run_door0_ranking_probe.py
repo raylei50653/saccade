@@ -12,6 +12,7 @@ Usage:
   .venv/bin/python scripts/tools/run_door0_ranking_probe.py \
       --study-dir out/signal_study/door0_ranking_probe_20260712
 """
+# status: experiment
 
 from __future__ import annotations
 

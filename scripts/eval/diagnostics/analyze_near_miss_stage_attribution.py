@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+
+"""Attribute near-misses to pipeline stages."""
+
+# status: diagnostic
 from __future__ import annotations
 
 import argparse

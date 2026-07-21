@@ -17,6 +17,7 @@ transfer?
     --study-dir out/signal_study/m_gate_rule_loo_<stamp> \\
     --eps 0.0
 """
+# status: diagnostic
 
 from __future__ import annotations
 

@@ -1,3 +1,6 @@
+"""Benchmark GPU association/auction stage latency and throughput."""
+
+# status: diagnostic
 import torch
 import numpy as np
 import time

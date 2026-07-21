@@ -1,3 +1,6 @@
+"""Core argparse/config assembly for mot17 eval."""
+
+# status: stable
 from __future__ import annotations
 
 import argparse

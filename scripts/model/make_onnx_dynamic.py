@@ -1,3 +1,6 @@
+"""Rewrite ONNX inputs to dynamic axes for TRT."""
+
+# status: stable
 import onnx
 import sys
 

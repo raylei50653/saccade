@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Synthetic no-capture child used only by H0 substrate qualification."""
+# status: stable
 
 from __future__ import annotations
 

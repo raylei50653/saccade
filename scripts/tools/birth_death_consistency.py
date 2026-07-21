@@ -15,6 +15,7 @@ confirmed independently of occlusion/fragment quality.
 Usage:
   .venv/bin/python scripts/tools/birth_death_consistency.py
 """
+# status: experiment
 
 from __future__ import annotations
 

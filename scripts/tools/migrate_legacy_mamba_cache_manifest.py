@@ -1,4 +1,5 @@
 """Add a validated lineage manifest to a legacy feature-only Mamba cache."""
+# status: diagnostic
 
 from __future__ import annotations
 

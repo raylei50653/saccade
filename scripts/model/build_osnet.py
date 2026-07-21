@@ -15,6 +15,7 @@ Usage:
     uv run python scripts/model/build_osnet.py
     uv run python scripts/model/build_osnet.py --onnx /path/to/osnet.onnx
 """
+# status: stable
 
 from __future__ import annotations
 

@@ -12,6 +12,7 @@ from the later artifact and owner-event commits.  This tool runs only at clean
 ``instrumentation_head`` I and writes the one deterministic F-path; it never
 creates either commit, writes an owner event, or executes Phase A.
 """
+# status: stable
 
 from __future__ import annotations
 

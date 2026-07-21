@@ -17,6 +17,7 @@ The script uses ground truth only to label the offline experiment:
 No ReID feature is used. Private candidates are evaluated as continuation-only
 candidates; they are not allowed to start new IDs.
 """
+# status: diagnostic
 
 from __future__ import annotations
 

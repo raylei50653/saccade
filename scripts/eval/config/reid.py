@@ -1,3 +1,6 @@
+"""ReID/appearance config fields for mot17 eval."""
+
+# status: stable
 from __future__ import annotations
 
 import argparse

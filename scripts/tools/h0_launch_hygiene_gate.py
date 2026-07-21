@@ -18,6 +18,7 @@ own ``assert_no_preexisting_build_tree`` predicate — the single source of the
 means the controller's own verdict on that predicate is clear.  A red gate means
 the operator must clean the workspace before spending an authorization on it.
 """
+# status: stable
 
 from __future__ import annotations
 

@@ -1,3 +1,6 @@
+"""Remap/dedupe aligned track IDs (keep highest score per frame-id)."""
+
+# status: archive-candidate
 from pathlib import Path
 from collections import defaultdict
 

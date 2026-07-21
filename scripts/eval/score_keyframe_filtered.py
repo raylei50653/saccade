@@ -12,6 +12,7 @@ Usage:
   score_keyframe_filtered.py --results-dir out/<run> \
       --data-root datasets/PersonPath22 --split mot_test_full [--sequences a,b,c]
 """
+# status: stable
 
 from __future__ import annotations
 

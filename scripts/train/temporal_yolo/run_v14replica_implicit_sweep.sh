@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# status: experiment
 # Train the implicit-consistency baseline at 3 seeds paired to T3→T1 (explicit).
 # See run_v14replica_implicit_seed.sh for the recipe rationale (v14 git 77fcc262).
 set -euo pipefail

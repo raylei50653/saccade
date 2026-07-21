@@ -42,6 +42,7 @@ Usage
   .venv/bin/python scripts/tools/horizon_homothety_probe.py
   .venv/bin/python scripts/tools/horizon_homothety_probe.py --ratio 1.30 --boot 200
 """
+# status: experiment
 
 from __future__ import annotations
 

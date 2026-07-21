@@ -15,6 +15,7 @@ Usage:
     # All 7 SDP sequences:
     uv run scripts/eval/analyze_fpn_embeddings.py --seq all --max-frames 100
 """
+# status: diagnostic
 
 from __future__ import annotations
 

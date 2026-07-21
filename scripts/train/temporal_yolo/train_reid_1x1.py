@@ -19,6 +19,7 @@ Usage:
         --mamba-ckpt runs/mamba_gt_960_v2/best.ckpt \
         --run-dir runs/jde_market_v9b --scales p3p4p5 --epochs 30
 """
+# status: archive-candidate
 
 from __future__ import annotations
 

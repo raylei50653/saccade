@@ -1,3 +1,6 @@
+"""Profile training-step bottlenecks via conditioned-train proxy path."""
+
+# status: diagnostic
 import torch
 import time
 import argparse

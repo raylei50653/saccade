@@ -14,6 +14,7 @@ for each ghost box, its best-overlapping GT *of any class* and classify:
 
 MOT17 GT cols: frame,id,x,y,w,h,consider,class,visibility.
 """
+# status: experiment
 
 import sys
 from pathlib import Path

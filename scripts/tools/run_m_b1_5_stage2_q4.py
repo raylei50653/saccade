@@ -8,6 +8,7 @@ Usage:
     --q1q3-study out/signal_study/m_b1_5_stage2_q1q3_20260710 \\
     --out out/signal_study/m_b1_5_stage2_q4_20260710
 """
+# status: experiment
 
 from __future__ import annotations
 

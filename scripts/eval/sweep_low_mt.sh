@@ -1,4 +1,6 @@
 #!/bin/bash
+# status: experiment
+# Sweep low match_thresh values and collect overall metrics.
 set -e
 
 LOG_FILE="results/sweep_low_mt.log"

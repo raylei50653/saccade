@@ -15,6 +15,7 @@ baseline to beat, especially at gap >= 31 frames (where motion fails).
 Usage:
   uv run scripts/train/reid_domain_probe.py --cache-dir runs/reid_probe
 """
+# status: diagnostic
 
 from __future__ import annotations
 

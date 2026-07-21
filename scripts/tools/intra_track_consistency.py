@@ -21,6 +21,7 @@ feature cannot support relink gating no matter how endpoints are sampled.
 Usage:
   .venv/bin/python scripts/tools/intra_track_consistency.py --osnet
 """
+# status: experiment
 
 from __future__ import annotations
 

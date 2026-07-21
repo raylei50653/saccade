@@ -13,6 +13,7 @@ Examples:
     uv run python scripts/eval/summarize_ablation_mot17.py --sort-by mota_delta
     uv run python scripts/eval/summarize_ablation_mot17.py --csv output/ablation.csv
 """
+# status: stable
 
 from __future__ import annotations
 

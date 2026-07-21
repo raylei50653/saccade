@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Compatibility wrapper for experiments/oracle_height_birth_ceiling.py."""
+# status: stable
 
 try:
     from scripts.eval._redirect import run_eval_script

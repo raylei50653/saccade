@@ -1,3 +1,6 @@
+"""Helper to log eval/train metrics and git identity to MLflow."""
+
+# status: diagnostic
 from __future__ import annotations
 
 import os

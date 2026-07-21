@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Validate the prospective H0 repair/qualification acceptance matrix."""
+# status: stable
 
 from __future__ import annotations
 

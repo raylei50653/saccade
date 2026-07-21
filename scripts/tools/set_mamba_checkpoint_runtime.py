@@ -1,4 +1,5 @@
 """Create a weight-identical Mamba checkpoint with explicit runtime semantics."""
+# status: stable
 
 from __future__ import annotations
 

@@ -12,6 +12,7 @@ Usage:
         --ckpt runs/gated_det_v1/best.ckpt \
         [--no-gate] [--roi-reid] [--reid-cos-thr 0.5] [--reid-weight 0.5]
 """
+# status: stable
 
 from __future__ import annotations
 

@@ -1,3 +1,6 @@
+"""Compute MOTA/related metrics from tracker output vs GT."""
+
+# status: stable
 # mypy: ignore-errors
 import os
 import glob

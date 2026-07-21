@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# status: stable
+# Build mamba teacher feature cache used by distill/GT training.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"

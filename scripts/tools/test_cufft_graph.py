@@ -8,6 +8,7 @@ If this passes, the GMC graph-capture failure has a different root cause.
 Usage:
     uv run scripts/tools/test_cufft_graph.py [--size W] [--size H]
 """
+# status: diagnostic
 
 import argparse
 import sys

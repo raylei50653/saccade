@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+
+"""Inject simulated occlusion boxes into MOT sequences."""
+
+# status: diagnostic
 import argparse
 from pathlib import Path
 import cv2

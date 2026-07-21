@@ -17,6 +17,7 @@ Usage
 -----
   .venv/bin/python scripts/eval/analyze_occ_size.py --substrate /tmp/occ2_off
 """
+# status: diagnostic
 
 from __future__ import annotations
 

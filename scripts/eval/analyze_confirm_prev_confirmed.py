@@ -11,6 +11,7 @@ a genuine new person enters empty space (low IoU / large distance).
 If TP-new and FP-new separate on max_iou_prev, a gate "relax confirm only when
 the candidate does NOT overlap a previously-confirmed track" has headroom.
 """
+# status: experiment
 
 from __future__ import annotations
 

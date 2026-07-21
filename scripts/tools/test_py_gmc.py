@@ -7,6 +7,7 @@ that support CUDA graph capture (including torch.fft).
 Usage test:
     uv run scripts/tools/test_py_gmc.py --frames 30
 """
+# status: diagnostic
 
 import argparse
 import sys

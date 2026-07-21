@@ -5,6 +5,7 @@ This verifier intentionally does not import the assembler or the Phase-A
 controller.  Its declaration literals, Git/tree reconstruction, byte hashing,
 and I -> F -> S landing checks are a separate authority path.
 """
+# status: stable
 
 from __future__ import annotations
 

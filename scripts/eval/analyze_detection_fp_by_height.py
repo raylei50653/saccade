@@ -11,6 +11,7 @@ This is detector-only (no tracker). It approximates births by detections; it
 does NOT model association, so treat the numbers as an upper-bound sanity check
 on whether a height-conditioned birth gate can help BEFORE touching C++.
 """
+# status: diagnostic
 
 from __future__ import annotations
 

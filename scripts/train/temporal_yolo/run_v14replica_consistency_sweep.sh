@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# status: experiment
 # Sweep the consistency-protection weight (route 3, mamba-t3t1-curriculum-20260613.md).
 #
 # Runs run_v14replica_consistency.sh for each weight sequentially. Order puts the

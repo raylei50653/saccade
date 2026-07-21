@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Independent A7/RC1 aggregate verifier for Phase-A execution evidence."""
+# status: stable
 
 from __future__ import annotations
 

@@ -1,3 +1,6 @@
+"""Package re-export of eval config submodules."""
+
+# status: stable
 from .core import CoreConfig, add_core_args
 from .detection import DetectionConfig, add_detection_args
 from .geometry import GeometryConfig, add_geometry_args

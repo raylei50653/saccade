@@ -22,6 +22,7 @@ Usage
   .venv/bin/python scripts/tools/depth_ordering_gate_sweep.py
   .venv/bin/python scripts/tools/depth_ordering_gate_sweep.py --iou-grid 0.40,0.45,0.50
 """
+# status: experiment
 
 from __future__ import annotations
 

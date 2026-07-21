@@ -10,6 +10,7 @@ IoU to any OTHER box in the same frame of the SAME tracker).
 Prints, per seq: counts + mean occ-coeff of suppressed/added boxes, split by
 TP/FP, vs the kept-box baseline. Confirms whether OAO drops high-overlap FPs.
 """
+# status: experiment
 
 import sys
 from collections import defaultdict

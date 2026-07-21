@@ -13,6 +13,7 @@ Usage:
         --engine models/embedding/transreid_256x128.engine \\
         --input-hw 256 128
 """
+# status: stable
 
 import argparse
 import os

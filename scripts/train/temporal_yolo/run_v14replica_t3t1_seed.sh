@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# status: experiment
 # T3->T1 GT2 multi-seed validation: paired comparison against each seed's
 # plain GT2 baseline (mamba_gt_v14replica_${TAG}_final). Warm-starts from the
 # same seed's GT1 checkpoint so the only difference is the GT2 curriculum.

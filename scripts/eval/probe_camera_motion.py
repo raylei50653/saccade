@@ -7,6 +7,7 @@ displacement in *original* pixels. Tests the attribution that fw helps on
 slow-camera seqs (10) and hurts on fast-camera seqs (13): a suppressed
 low-score box is recoverable next frame iff the camera barely moved.
 """
+# status: experiment
 
 from pathlib import Path
 

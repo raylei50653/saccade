@@ -8,6 +8,7 @@ if low-score boxes are mostly ghosts -> penalty helps (FP down), if mostly real
 -> penalty hurts (FN up). We test whether low-score ghost-rate separates the
 fw-helps seqs {09,10} from the fw-hurts seqs {11,13}.
 """
+# status: experiment
 
 import sys
 from pathlib import Path

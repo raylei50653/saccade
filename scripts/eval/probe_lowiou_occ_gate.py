@@ -23,6 +23,7 @@ Usage
   .venv/bin/python scripts/eval/probe_lowiou_occ_gate.py \
       --output results/occ_separability/lowiou_gate.json
 """
+# status: diagnostic
 
 from __future__ import annotations
 

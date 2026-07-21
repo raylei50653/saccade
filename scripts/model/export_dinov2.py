@@ -5,6 +5,7 @@ Usage:
 
 Then compile with trtexec (printed at end of script).
 """
+# status: stable
 
 import os
 import torch

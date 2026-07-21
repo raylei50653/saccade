@@ -21,6 +21,7 @@ Usage:
       --splits datasets/PersonPath22/annotation/splits.json --split train \
       --out-dir datasets/PersonPath22/mot_train [--vids uid_vid_00000.mp4 ...]
 """
+# status: stable
 
 import argparse
 import json

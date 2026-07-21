@@ -9,6 +9,7 @@ Usage:
         --weights models/yolo/yolo26s.pt \
         --output models/yolo/yolo26s_backbone_640.onnx
 """
+# status: stable
 
 import argparse
 import sys

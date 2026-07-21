@@ -16,6 +16,7 @@ Outputs:
   occlusion_events.csv (per-track-per-frame occlusion annotation)
   occlusion_metrics.json (stratified metrics)
 """
+# status: diagnostic
 
 import argparse
 import csv

@@ -4,6 +4,7 @@ Only ``resolved_files`` determines a cluster's set.  ``process_globs`` and
 ``snapshot.frozen_at_commit`` remain parsed provenance metadata, but this
 module never expands a glob or invokes Git to make normal execution work.
 """
+# status: stable
 
 from __future__ import annotations
 

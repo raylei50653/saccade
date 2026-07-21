@@ -6,6 +6,7 @@ operator entry point accepts no arguments and will not execute unless exactly
 one complete, canonical v3 freeze supplies a conforming ``controller_input``
 contract for the current, clean, sealed head.
 """
+# status: stable
 
 from __future__ import annotations
 

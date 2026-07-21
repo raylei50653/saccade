@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Analyze missed relinks: GT-labeled distributions of all features."""
+# status: diagnostic
 
 import numpy as np
 from pathlib import Path

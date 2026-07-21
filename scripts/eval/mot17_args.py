@@ -1,3 +1,6 @@
+"""Shared argparse argument groups used by mot17 eval entrypoints."""
+
+# status: stable
 import argparse
 import os
 import sys

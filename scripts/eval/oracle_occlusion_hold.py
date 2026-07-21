@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Compatibility wrapper for scripts/eval/experiments/oracle_occlusion_hold.py."""
+# status: stable
 
 try:
     from scripts.eval._redirect import run_eval_script

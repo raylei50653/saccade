@@ -45,6 +45,7 @@ Usage
   .venv/bin/python scripts/eval/probe_private_continuation_assignment.py \
       --output results/occ_separability/private_continuation_assignment.json
 """
+# status: experiment
 
 from __future__ import annotations
 

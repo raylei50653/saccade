@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# status: stable
+# Build native code with coverage and run native tests.
 
 set -euo pipefail
 

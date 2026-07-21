@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+
+"""Analyze near-miss events in final tracker output CSVs."""
+
+# status: diagnostic
 from __future__ import annotations
 
 import argparse

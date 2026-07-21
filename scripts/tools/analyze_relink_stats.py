@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Analyze relink feature stats: Gaussian separation per gap bin."""
+# status: diagnostic
 
 import struct
 import sys

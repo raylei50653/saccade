@@ -21,6 +21,7 @@ Usage:
 Contract:
   docs/modules/semantic/research/m_b1_to_m_b1_5_two_stage_plan_20260710.md §Stage 1
 """
+# status: experiment
 
 from __future__ import annotations
 

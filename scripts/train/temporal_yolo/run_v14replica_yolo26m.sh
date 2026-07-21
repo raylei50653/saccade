@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# status: experiment
 # Rebuild the v14 replica lineage on YOLO26m:
 # teacher -> cache -> distill -> GT1 -> plain GT2 control -> T3 -> T1 -> eval.
 set -euo pipefail

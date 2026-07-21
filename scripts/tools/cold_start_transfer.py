@@ -18,6 +18,7 @@ Usage
   .venv/bin/python scripts/tools/cold_start_transfer.py --dataset mot17
   .venv/bin/python scripts/tools/cold_start_transfer.py --dataset mot20
 """
+# status: experiment
 
 from __future__ import annotations
 

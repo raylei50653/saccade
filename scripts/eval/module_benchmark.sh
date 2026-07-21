@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# status: stable
+# Shell driver for per-module latency/accuracy benchmarks.
 
 set -euo pipefail
 

@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+
+"""Run SportsMOT dataset eval through the saccade tracker pipeline."""
+
+# status: stable
 # mypy: ignore-errors
 import argparse
 import sys

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Compatibility wrapper for scripts/eval/appearance/train_cascade_stage2.py."""
+# status: stable
 
 try:
     from scripts.eval._redirect import run_eval_script

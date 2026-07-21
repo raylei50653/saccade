@@ -4,6 +4,7 @@ Runs the same inputs through `_SelectiveScanCudaFn` (CUDA fwd + analytic CUDA
 bwd) and `_selective_scan_jit` (pure-PyTorch, exact autograd), and compares the
 forward output plus gradients w.r.t. every input.
 """
+# status: diagnostic
 
 from __future__ import annotations
 

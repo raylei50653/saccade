@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# status: experiment
 # Matched reduction-variant experiment for the Mamba recall bottleneck.
 #
 # Arms:

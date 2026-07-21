@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# status: experiment
 # Route 2 (§5): joint T-clip + T=1 loss in a SINGLE phase — keep cross-frame pressure
 # (T=3 all-frames) AND deploy-T=1 quality (--t1-weight aux) simultaneously every step,
 # vs T3→T1's sequential A→B staging. Tests whether simultaneous beats sequential and

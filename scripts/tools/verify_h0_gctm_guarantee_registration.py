@@ -7,6 +7,7 @@ identity-v1 contract or the registration-v2 candidate-row inventory. A
 synthetic candidate-source record is deliberately valid but can never produce
 ``structurally_usable: true``.
 """
+# status: stable
 
 from __future__ import annotations
 

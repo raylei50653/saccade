@@ -14,6 +14,7 @@ curve looks non-unimodal you can see it and widen.
 The winner is copied to <run-dir>/best_recall.ckpt; the train-loss
 best.ckpt is left untouched for comparison.
 """
+# status: stable
 
 from __future__ import annotations
 

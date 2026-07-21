@@ -7,6 +7,7 @@ MambaGatedDetector.forward(frame, gate_input=None). Wraps the 4 heavy sub-calls
 events and reports per-component mean + the residual (inline temporal-buffer/flow
 Python glue). Pure measurement; no tracking logic touched.
 """
+# status: diagnostic
 
 from __future__ import annotations
 
