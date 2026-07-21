@@ -10,12 +10,16 @@ conditions, each cheap to fix by editing the offending ``test_*.py``:
   S2  every test file has a module docstring (so the index has a Summary line).
   S3  the generated index (per-dir README blocks + roll-up) is current, i.e.
       ``build_tests_index.py`` would not change anything on disk.
-  S4  cross-axis consistency: ``lifecycle: quarantined`` iff the file lives under
-      ``tests/research/`` (and vice versa).
-  S5  a non-steady lifecycle (legacy/quarantined/deprecated/remove) must carry a
+  S5  a note-required lifecycle (legacy/quarantined/deprecated/remove) must carry a
       non-empty ``# lifecycle-note:`` reason or tracking Issue (rule 5).
   S6  a newly-added test file (vs the upstream base) may not be
       ``lifecycle: unclassified`` (rule 4); skipped when no base resolves.
+
+Each of scope/function/lifecycle must appear exactly once (scope carries multiple
+values via commas, not repeated lines), lifecycle-note at most once — enforced
+under S1. Lifecycle is intentionally NOT tied to directory: a test's location
+(e.g. tests/research/) is organisation, not governance state; keep quarantined
+out of the formal suite via markers/collection, not a path rule.
 
 Usage:
     .venv/bin/python scripts/tools/check_tests_structure.py            # report, exit 0
@@ -36,8 +40,7 @@ import build_tests_index as idx  # noqa: E402
 VALID_SCOPE = set(idx.SCOPES)
 VALID_FUNCTION = set(idx.FUNCTIONS)
 VALID_LIFECYCLE = set(idx.LIFECYCLES)
-NON_STEADY = set(idx.NON_STEADY)
-RESEARCH_PREFIX = "tests/research/"
+NOTE_REQUIRED = set(idx.NOTE_REQUIRED_LIFECYCLES)
 
 
 def check_self_documentation() -> list[str]:
@@ -45,6 +48,18 @@ def check_self_documentation() -> list[str]:
     added = idx.added_tests()  # None => rule 4 (S6) not enforceable here
     for path in idx.tracked_tests():
         scopes, function, lifecycle, note, desc = idx.extract(path)
+        counts = idx.tag_multiplicity(path)
+
+        # Exactly-once: scope/function/lifecycle once; lifecycle-note at most once.
+        for key in ("scope", "function", "lifecycle"):
+            if counts[key] > 1:
+                problems.append(
+                    f"{path}: `# {key}:` appears {counts[key]}× (must appear exactly once) [S1]"
+                )
+        if counts["lifecycle-note"] > 1:
+            problems.append(
+                f"{path}: `# lifecycle-note:` appears {counts['lifecycle-note']}× (at most once) [S1]"
+            )
 
         if not scopes:
             problems.append(f"{path}: missing `# scope:` header [S1]")
@@ -54,6 +69,9 @@ def check_self_documentation() -> list[str]:
                 problems.append(
                     f"{path}: invalid scope {bad} (want {sorted(VALID_SCOPE)}) [S1]"
                 )
+            dupes = sorted({s for s in scopes if scopes.count(s) > 1})
+            if dupes:
+                problems.append(f"{path}: duplicate scope value(s) {dupes} [S1]")
 
         if not function:
             problems.append(f"{path}: missing `# function:` header [S1]")
@@ -72,19 +90,8 @@ def check_self_documentation() -> list[str]:
         if not desc:
             problems.append(f"{path}: missing module docstring [S2]")
 
-        # S4: quarantined <=> lives under tests/research/
-        in_research = path.startswith(RESEARCH_PREFIX)
-        if lifecycle == "quarantined" and not in_research:
-            problems.append(
-                f"{path}: lifecycle 'quarantined' but not under {RESEARCH_PREFIX} [S4]"
-            )
-        elif in_research and lifecycle and lifecycle != "quarantined":
-            problems.append(
-                f"{path}: under {RESEARCH_PREFIX} but lifecycle '{lifecycle}' != 'quarantined' [S4]"
-            )
-
-        # S5: non-steady lifecycle must carry a reason/Issue.
-        if lifecycle in NON_STEADY and not note:
+        # S5: note-required lifecycle must carry a reason/Issue.
+        if lifecycle in NOTE_REQUIRED and not note:
             problems.append(
                 f"{path}: lifecycle '{lifecycle}' needs a non-empty `# lifecycle-note:` reason/Issue [S5]"
             )

@@ -84,9 +84,18 @@ LIFECYCLE_DESC = {
     "remove": "confirmed removable; awaiting disposal",
     "unclassified": "migration only; forbidden for newly added tests",
 }
-# Lifecycles that are not a steady state (surfaced in the disposition queue) and
-# that must carry a `# lifecycle-note:` reason/Issue (rule 5).
-NON_STEADY = ["legacy", "quarantined", "deprecated", "remove"]
+# Lifecycles surfaced in the migration/disposition queue — includes `unclassified`
+# (the state that most needs to stay visible during migration).
+DISPOSITION_LIFECYCLES = [
+    "legacy",
+    "quarantined",
+    "deprecated",
+    "remove",
+    "unclassified",
+]
+# Lifecycles that must carry a `# lifecycle-note:` reason/Issue (rule 5).
+# `unclassified` is deliberately excluded: it is a transient migration marker.
+NOTE_REQUIRED_LIFECYCLES = ["legacy", "quarantined", "deprecated", "remove"]
 
 TAG_RES = {
     "scope": re.compile(r"^#\s*scope:\s*(.+?)\s*$"),
@@ -192,14 +201,14 @@ def _first_paragraph(doc: str) -> str:
     return " ".join(para)
 
 
-def _py_tags(text: str) -> dict[str, str]:
-    """Raw tag values from real header COMMENT tokens only.
+def _tag_occurrences(text: str) -> dict[str, list[str]]:
+    """All header-COMMENT matches per tag key, in order (for duplicate detection).
 
     A ``# scope: ...`` line that happens to sit inside a module docstring (a
     STRING token, not a COMMENT) must not satisfy the contract, so we tokenize
     rather than scan raw lines. Falls back to a raw scan on tokenizer errors.
     """
-    found: dict[str, str] = {}
+    found: dict[str, list[str]] = {k: [] for k in TAG_RES}
     try:
         for tok in tokenize.generate_tokens(io.StringIO(text).readline):
             if tok.start[0] > HEADER_SCAN_LINES:
@@ -207,18 +216,27 @@ def _py_tags(text: str) -> dict[str, str]:
             if tok.type == tokenize.COMMENT:
                 s = tok.string.strip()
                 for key, rx in TAG_RES.items():
-                    if key not in found:
-                        m = rx.match(s)
-                        if m:
-                            found[key] = m.group(1)
+                    m = rx.match(s)
+                    if m:
+                        found[key].append(m.group(1))
     except (tokenize.TokenError, IndentationError, SyntaxError):
         for ln in text.splitlines()[:HEADER_SCAN_LINES]:
             for key, rx in TAG_RES.items():
-                if key not in found:
-                    m = rx.match(ln)
-                    if m:
-                        found[key] = m.group(1)
+                m = rx.match(ln)
+                if m:
+                    found[key].append(m.group(1))
     return found
+
+
+def _py_tags(text: str) -> dict[str, str]:
+    """First value per tag key (the value the index renders)."""
+    return {k: v[0] for k, v in _tag_occurrences(text).items() if v}
+
+
+def tag_multiplicity(path: str) -> dict[str, int]:
+    """How many times each tag appears in the header (for exactly-once checks)."""
+    text = (REPO / path).read_text(encoding="utf-8", errors="replace")
+    return {k: len(v) for k, v in _tag_occurrences(text).items()}
 
 
 def _split_scope(raw: str) -> tuple[str, ...]:
@@ -344,11 +362,11 @@ def render_rollup(metas: dict[str, tuple[tuple[str, ...], str, str, str, str]]) 
         "Governance state per module. A multi-scope test counts once per scope.",
     )
 
-    # Disposition queue: anything not in the `active` steady state.
+    # Disposition queue: every non-active lifecycle, incl. unclassified.
     queue = sorted(
         (path, ",".join(sc), lc, note)
         for path, (sc, _fn, lc, note, _d) in metas.items()
-        if lc in NON_STEADY
+        if lc in DISPOSITION_LIFECYCLES
     )
     out += ["", "## Disposition queue", ""]
     if queue:
