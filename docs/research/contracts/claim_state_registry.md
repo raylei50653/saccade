@@ -298,13 +298,45 @@ last_transition: 2026-07-14 — cause 由 foreign-capture 改為 provenance inco
                  terminal **重判型別** INVALID → UNVERIFIABLE（owner review）
                  2026-07-20 — H0 admissible unit 依 route 1 關閉（object state 不變）;
                  open_limits 改寫為永久留帳形式
+                 2026-07-21 — #224/#227 re-entry 第二個 owner-accepted `H0_PROVENANCE_INVALID`
+                 （object state 不變;詳見 reentry_terminal_history）
 admissible_units: []                   # H0 unit 已消費並於 route 1 關閉;現無宣告的補救動作。
                                        # 重進=append-only declaration amendment＋新 I→F→S
                                        # owner reseal＋owner scheduling（§9 重新 review 時再推導）
 derived_from: §4.3 dependency 已消費:H0 exactly-once sealed invocation terminal=
               `H0_PROVENANCE_INVALID`（owner-accepted,#209）⇒ 候選集回空,
               缺口以 open_limits 永久留帳（O0 route-1 下游;合法終局,非待辦）
-last_reviewed_at: 2026-07-20
+reentry_terminal_history:                 # append-only;不改上面 route-1 永久留帳結論
+  - date: 2026-07-21
+    scheduling: separate owner-scheduled re-entry（非本 registry 自動發生;O0 charter 仍 closed,候選集仍空）
+    scope: "#224 append-only amendment（build-tool binding 進 h0_bound_inputs_v1）→ #227 repair（canonical CONTROLLER_INPUT_MEMBERS 14 單源 across full/landing/discovery verifiers）"
+    chain:
+      I2: 31c9eee83fc46f34ab0fd9218c4e1ba2ed545636
+      F2: 46539a2d490aeed63b7c9cea8a10e9bf2819a364
+      S2: 0da082a9c5366092334bd140c76f54dc4b904423
+    invocation: authoritative_count=1; exactly_once_authorization=consumed; retry/second_invocation_under_S2=permanently_forbidden
+    terminal: H0_PROVENANCE_INVALID       # controller literal `provenance_invalid`;A2.4 第一 ordered terminal
+    independent_verifier: '{"result":"provenance_invalid","valid":true}' ; rc=0
+    factual_boundary:                      # 接受為 truthful negative ordered terminal
+      failure_stage: preflight
+      failure_reason: "build/h0_phase_a exists at controller launch"
+      checkpoints_T0_T4: not_reached
+      monitor: not_started
+      capture_child_runs: NOT_RUN（00_capture_off / 01_capture_on_1 / 02_capture_on_2 / 03_capture_on_3）
+      build_runtime_gpu_identity_and_comparison: not_produced
+      capture_evidence: none
+    evidence_packet: docs/modules/semantic/research/evidence/h0_phase_a_31c9eee83fc46f34ab0fd9218c4e1ba2ed545636/
+    digests:
+      manifest_json_sha256: ff9fea3e9150ca90da9cba21064ca4428b6d9ebcf5fda4a35168d7365e29b578
+      result_json_sha256: 2c1cfa17c977ad02c6c1dee335810b9ee7ff37f1cbba1382d41a00f06b96529a
+      checksums_sha256_digest: c1e9d2a4fc06f8a6bad12152c6833f29729e0865eeb9697b0a7d99a06705549a
+      verifier_report_aggregate_json_sha256: 0be12cc292773239d75604e9f2496787387ee8874395f4a3a9d723c615fe3f2e
+    owner_acceptance: 2026-07-21 — accepted as truthful negative ordered terminal;
+                      **not** `H0_FULL_COMMIT_CAPTURE_FAITHFUL`;不成立 actual H0 guarantee;不構成 guarantee registration 基礎
+    ledger_effect: 上方 route-1 永久留帳結論不變（仍無 faithful capture / 無 accepted runtime-fidelity edge / 無 actual H0 guarantee envelope）;候選集仍空;Phase B / GCTM / B1 / O1 未啟動
+    future_reentry_precondition: 另一 separate owner-scheduled task;須先把 launch hygiene 做成 machine-checked non-authoritative pre-authorization gate（複用 controller 真實 preflight predicate,在授權 exactly-once 前 fail-closed 拒 pre-existing `build/h0_phase_a` tree）;再 fresh qualified I→F→S 鏈 + 另行 exactly-once 授權
+    issues: '#224 (closed on this closeout landing) / #227 (repair delivered; closed after linking accepted terminal)'
+last_reviewed_at: 2026-07-21
 ```
 
 #### ADR 020 terminal slot (per-study owner)
