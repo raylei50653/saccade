@@ -78,8 +78,10 @@ history.
   - `docs/modules/detection/mamba-v14-replication-protocol.md`
   - `docs/modules/detection/research/mamba-t3t1-curriculum-20260613.md`
   - any report-data provenance table that cites the old path
-- Archive candidates should move as a family, not one file at a time, so related
-  configs and run scripts stay together.
+- Move or rename referenced families together, so related configs and run
+  scripts stay in sync. Individual archive candidates may be *deleted* only after
+  an exact reference and provenance audit (0 test / live-code / active-doc
+  dependency); git history preserves them.
 
 ## Script index
 
