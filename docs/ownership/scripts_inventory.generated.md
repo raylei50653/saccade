@@ -3,16 +3,16 @@
 
 Total tracked scripts: **403**. Source of truth = each script's own docstring + `# status:` header; regenerate with `scripts/tools/build_scripts_index.py`.
 
-> **Classification provenance.** Labels were seeded from a one-time survey, then the `stable` set was given a semantic role review (2026-07-21) that moved wired-in analysis/debug tools to `diagnostic` and named study runners to `experiment`, so `stable` means a supported workflow entrypoint or path-stability infra — not merely wired-into-code. The source of truth is each script's `# status:` header; edit that line to correct a label.
+> **Classification provenance.** Labels were seeded from a one-time survey, then given semantic role reviews (2026-07-21): the `stable` set was audited so `stable` means a supported workflow entrypoint or path-stability infra (not merely wired-into-code), and the `diagnostic`/`experiment` split was audited so `experiment` means a driver bound to a named study/sweep while reusable analysis tools are `diagnostic`; superseded/one-shot scripts were moved to `archive-candidate`. The source of truth is each script's `# status:` header; edit that line to correct a label.
 
 ## Status label counts
 
 | Label | Meaning | Count |
 |-------|---------|------:|
 | `stable` | supported workflow entrypoint; keep path stable | 140 |
-| `diagnostic` | reusable analysis/debug tool, not a main workflow | 150 |
-| `experiment` | tied to a named experiment or historical sweep | 106 |
-| `archive-candidate` | no longer active; keep only if referenced by docs/results | 7 |
+| `diagnostic` | reusable analysis/debug tool, not a main workflow | 155 |
+| `experiment` | tied to a named experiment or historical sweep | 90 |
+| `archive-candidate` | no longer active; keep only if referenced by docs/results | 18 |
 | `generated` | output or cache; should be ignored, not tracked | 0 |
 
 ## By directory
@@ -29,7 +29,7 @@ Total tracked scripts: **403**. Source of truth = each script's own docstring + 
 | `download_motsynth.py` | diagnostic | cli | Download and setup MOTSynth dataset (Mini/Full). |
 | `pre_push.sh` | stable | cli | Mirror CI checks locally before pushing. |
 | `test_native.sh` | stable | - | Build native code with coverage and run native tests. |
-| `train_option_d.sh` | experiment | - | Option D 兩階段訓練自動化腳本 |
+| `train_option_d.sh` | archive-candidate | - | Option D 兩階段訓練自動化腳本 |
 
 ### `scripts/benchmarks/`
 
@@ -81,8 +81,8 @@ Total tracked scripts: **403**. Source of truth = each script's own docstring + 
 | `analyze_detection_fp_by_height.py` | diagnostic | cli | Detection-centric TP/FP split by box height x score band. |
 | `analyze_external_fp_rows.py` | stable | - | Compatibility wrapper for scripts/eval/appearance/analyze_external_fp_rows.py. |
 | `analyze_fn.py` | stable | - | Compatibility wrapper for scripts/eval/diagnostics/analyze_fn.py. |
-| `analyze_fpn_dims.py` | experiment | cli | Analyze FPN feature dimension importance for ReID discrimination. |
-| `analyze_fpn_embeddings.py` | experiment | cli | Analyze FPN embedding discriminability: intra-ID vs inter-ID cosine similarity. |
+| `analyze_fpn_dims.py` | diagnostic | cli | Analyze FPN feature dimension importance for ReID discrimination. |
+| `analyze_fpn_embeddings.py` | diagnostic | cli | Analyze FPN embedding discriminability: intra-ID vs inter-ID cosine similarity. |
 | `analyze_front_flag_exposure.py` | stable | - | Compatibility wrapper for scripts/eval/diagnostics/analyze_front_flag_exposure.py. |
 | `analyze_near_miss_final_output.py` | stable | - | Compatibility wrapper for diagnostics/analyze_near_miss_final_output.py. |
 | `analyze_near_miss_offsets.py` | stable | - | Compatibility wrapper for scripts/eval/diagnostics/analyze_near_miss_offsets.py. |
@@ -170,7 +170,7 @@ Total tracked scripts: **403**. Source of truth = each script's own docstring + 
 | `summarize_ablation_mot17.py` | stable | cli | Summarize MOT17 ablation experiment folders against a shared baseline. |
 | `sweep_a7_quality.py` | experiment | - | Sweep A7/P5-2 quality-gate thresholds against MOT metrics. |
 | `sweep_density_gating.py` | diagnostic | cli | Sweep: 局部軌跡密度自適應門控 (Density-Gating) 超參數搜索 |
-| `sweep_external_fp_classifier.py` | experiment | cli | Sweep logistic TP/FP filters on CrowdHuman external rows. |
+| `sweep_external_fp_classifier.py` | diagnostic | cli | Sweep logistic TP/FP filters on CrowdHuman external rows. |
 | `sweep_low_mt.sh` | experiment | - | Sweep low match_thresh values and collect overall metrics. |
 | `train_cascade_stage2.py` | stable | - | Compatibility wrapper for scripts/eval/appearance/train_cascade_stage2.py. |
 | `train_external_fp_classifier.py` | stable | - | Compatibility wrapper for appearance/train_external_fp_classifier.py. |
@@ -332,7 +332,7 @@ Total tracked scripts: **403**. Source of truth = each script's own docstring + 
 | `audit_frozen_packet_exact_key_recoverability.py` | diagnostic | cli | EK0 frozen-packet exact-key recoverability audit (pure consistency audit). |
 | `audit_relink_safe_reject.py` | diagnostic | cli | Offline B1 safe-reject audit: max FP removal under GT_hurt <= ε. |
 | `audit_runtime_bridge_decision_path.py` | diagnostic | cli | P0: outcome-blind runtime bridge decision-path identifiability audit. |
-| `average_top_trials.py` | experiment | cli | Print top Optuna trials and mean of their parameters. |
+| `average_top_trials.py` | diagnostic | cli | Print top Optuna trials and mean of their parameters. |
 | `bench_bank_scatter.py` | diagnostic | cli | Benchmark: P0/P1 bank scatter hot-path gain. |
 | `bench_pipeline_halves.py` | experiment | cli | Measure the GPU-time split between the two per-frame pipeline halves. |
 | `birth_death_consistency.py` | experiment | cli | Birth-vs-death appearance consistency for long-lived tracks. |
@@ -357,13 +357,13 @@ Total tracked scripts: **403**. Source of truth = each script's own docstring + 
 | `check_h0_phase_a_archives.py` | stable | - | Verify every committed H0 Phase-A evidence root through archive codecs. |
 | `check_h0_repair_acceptance_matrix.py` | stable | - | Validate the prospective H0 repair/qualification acceptance matrix. |
 | `check_headline_decision_contract.py` | stable | cli | Static guard for the headline tracker-decision contract (no GPU). |
-| `check_scan_bwd.py` | experiment | - | Validate the CUDA selective-scan backward against the JIT autograd reference. |
+| `check_scan_bwd.py` | diagnostic | - | Validate the CUDA selective-scan backward against the JIT autograd reference. |
 | `check_scripts_structure.py` | stable | cli | Scripts structure contract: every script self-documents, and the index is fresh. |
-| `classify_gap_cause.py` | experiment | cli | Classify relink gaps: person-person overlap vs non-person. |
+| `classify_gap_cause.py` | diagnostic | cli | Classify relink gaps: person-person overlap vs non-person. |
 | `cold_start_transfer.py` | experiment | cli | Cold-start transfer test: do the normalized occ-gate landmarks hold on MOT20? |
 | `color_relink_features.py` | diagnostic | cli | Offline AUC test: color-histogram appearance features for relink candidates. |
 | `combo_gate_safe_region.py` | diagnostic | cli | 2D combination-gate surface + safe-region audit. |
-| `compare_trials.py` | experiment | cli | Compare a selected set of Optuna trial results. |
+| `compare_trials.py` | diagnostic | cli | Compare a selected set of Optuna trial results. |
 | `convert_mot17_to_mp4.py` | diagnostic | - | Encode MOT17 image sequences to MP4 for visualization. |
 | `convert_safe_region_asset_r1.py` | stable | cli | R1: Deterministic RegionAsset conversion from sealed Q4.5 + T0 evidence. |
 | `convert_video_to_mot.py` | diagnostic | cli | Convert MP4 video into a MOT-compatible sequence folder. |
@@ -377,7 +377,7 @@ Total tracked scripts: **403**. Source of truth = each script's own docstring + 
 | `export_d0_runtime_capture.py` | stable | cli | Merge per-sequence Issue #112 native captures into D0's CSV contract. |
 | `export_headline_bridge_decision_trace.py` | stable | cli | Canonicalize H0 records plus its independent native-universe sidecar. |
 | `export_r1_temporal_reduction_capture.py` | stable | cli | Seal native shadow observations into the R1 temporal-reduction payload. |
-| `format_tables.py` | diagnostic | - | Format benchmark/eval stage tables for reports. |
+| `format_tables.py` | archive-candidate | - | Format benchmark/eval stage tables for reports. |
 | `gap_occupancy_features.py` | diagnostic | cli | Gap-occupancy (exclusion) features for relink candidates. |
 | `gate_clean_color.py` | diagnostic | - | Test the 'use color ReID only on non-occluded relink candidates' gate. |
 | `gate_rule_search.py` | diagnostic | cli | Constrained multi-gate rule search (not combinatorial thrashing). |
@@ -407,7 +407,7 @@ Total tracked scripts: **403**. Source of truth = each script's own docstring + 
 | `probe_relink_occlusion_signal.py` | diagnostic | cli | Does an explicit OCCLUSION signal separate true vs false relink bridges? |
 | `qualify_h0_phase_a.py` | stable | cli | Run the repeatable, non-authoritative H0 substrate qualification gate. |
 | `qualify_h0_phase_a_child.py` | stable | cli | Synthetic no-capture child used only by H0 substrate qualification. |
-| `remap_aligned.py` | diagnostic | - | Remap/dedupe aligned track IDs (keep highest score per frame-id). |
+| `remap_aligned.py` | archive-candidate | - | Remap/dedupe aligned track IDs (keep highest score per frame-id). |
 | `remap_gpu_relinks.py` | diagnostic | - | Remap track IDs after GPU relink using global ID mapping. |
 | `render_diffusion_debug.py` | diagnostic | cli | Render bidirectional relink debug events emitted by ``mot17.py``. |
 | `render_mot_result.py` | diagnostic | cli | Render a MOT-format tracking result onto the source frames and encode a video. |
@@ -455,8 +455,8 @@ Total tracked scripts: **403**. Source of truth = each script's own docstring + 
 | `cache_fpn_embeddings.py` | diagnostic | cli | Phase 1: Pre-extract FPN embeddings for all training sequences. |
 | `finetune_mobilenetv4_reid.py` | stable | cli | Full-backbone MobileNetV4 ReID fine-tune on Market1501 + MOT-domain crops. |
 | `reid_domain_probe.py` | diagnostic | cli | MOT-domain ReID projection-head probe (leak-free). |
-| `train_reid_head.py` | experiment | cli | Train ReID projection head from pre-extracted FPN embedding cache. |
-| `train_temporal_yolo.py` | experiment | cli | TemporalYOLOHybrid 訓練腳本 |
+| `train_reid_head.py` | archive-candidate | cli | Train ReID projection head from pre-extracted FPN embedding cache. |
+| `train_temporal_yolo.py` | archive-candidate | cli | TemporalYOLOHybrid 訓練腳本 |
 
 ### `scripts/train/temporal_yolo/`
 
@@ -493,14 +493,14 @@ Total tracked scripts: **403**. Source of truth = each script's own docstring + 
 | `run_v14replica_t3t1_seed.sh` | experiment | cli | T3->T1 GT2 multi-seed validation: paired comparison against each seed's |
 | `run_v14replica_t3t1_shared_seed.sh` | experiment | cli | Explicit T3→T1 at an arbitrary seed, warm-started from the SHARED GT1 |
 | `run_v14replica_yolo26m.sh` | experiment | - | Rebuild the v14 replica lineage on YOLO26m: |
-| `train_conditioned.py` | experiment | cli | Option D：Track-Conditioned YOLO Neck 訓練 |
+| `train_conditioned.py` | archive-candidate | cli | Option D：Track-Conditioned YOLO Neck 訓練 |
 | `train_gated_detector.py` | stable | cli | Option D (revised): GatedYOLODetector training. |
-| `train_gated_tp.py` | experiment | cli | GatedYOLODetector training with Track-guided TP Recall Loss. |
-| `train_jde_distill.py` | experiment | cli | OSNet → JDE embedding head knowledge distillation. |
-| `train_jde_market.py` | experiment | cli | JDE-style embedding training on Market-1501 — Pipeline Convention |
-| `train_joint.py` | experiment | cli | Option C：YOLO26s + Cross-Attention Decoder 聯合訓練 |
+| `train_gated_tp.py` | archive-candidate | cli | GatedYOLODetector training with Track-guided TP Recall Loss. |
+| `train_jde_distill.py` | archive-candidate | cli | OSNet → JDE embedding head knowledge distillation. |
+| `train_jde_market.py` | archive-candidate | cli | JDE-style embedding training on Market-1501 — Pipeline Convention |
+| `train_joint.py` | archive-candidate | cli | Option C：YOLO26s + Cross-Attention Decoder 聯合訓練 |
 | `train_mamba_cached.py` | archive-candidate | cli | Train Mamba head from cached TRT backbone features (Phase 2 GT supervision). |
 | `train_mamba_gt.py` | stable | cli | Option F: MambaDetectionHead GT fine-tuning (Phase 2). |
 | `train_mamba_head.py` | stable | cli | Option F: MambaDetectionHead distillation training. |
 | `train_mamba_trt.py` | archive-candidate | cli | Mamba head training on TRT backbone features. |
-| `train_reid_1x1.py` | experiment | cli | Train lightweight 1×1 Conv dimension-reduction head on Market-1501. |
+| `train_reid_1x1.py` | archive-candidate | cli | Train lightweight 1×1 Conv dimension-reduction head on Market-1501. |

@@ -50,7 +50,7 @@ Usage
         --run-dir runs/jde_market_v5 \
         --loss supcon --train-emb-head --epochs 30 --batch-size 64
 """
-# status: experiment
+# status: archive-candidate
 
 from __future__ import annotations
 

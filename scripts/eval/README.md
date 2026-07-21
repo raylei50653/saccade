@@ -219,8 +219,8 @@ Outputs: `results/module_benchmark/<timestamp>/`（含 `summary.txt`、`commands
 | `analyze_detection_fp_by_height.py` | diagnostic | cli | Detection-centric TP/FP split by box height x score band. |
 | `analyze_external_fp_rows.py` | stable | - | Compatibility wrapper for scripts/eval/appearance/analyze_external_fp_rows.py. |
 | `analyze_fn.py` | stable | - | Compatibility wrapper for scripts/eval/diagnostics/analyze_fn.py. |
-| `analyze_fpn_dims.py` | experiment | cli | Analyze FPN feature dimension importance for ReID discrimination. |
-| `analyze_fpn_embeddings.py` | experiment | cli | Analyze FPN embedding discriminability: intra-ID vs inter-ID cosine similarity. |
+| `analyze_fpn_dims.py` | diagnostic | cli | Analyze FPN feature dimension importance for ReID discrimination. |
+| `analyze_fpn_embeddings.py` | diagnostic | cli | Analyze FPN embedding discriminability: intra-ID vs inter-ID cosine similarity. |
 | `analyze_front_flag_exposure.py` | stable | - | Compatibility wrapper for scripts/eval/diagnostics/analyze_front_flag_exposure.py. |
 | `analyze_near_miss_final_output.py` | stable | - | Compatibility wrapper for diagnostics/analyze_near_miss_final_output.py. |
 | `analyze_near_miss_offsets.py` | stable | - | Compatibility wrapper for scripts/eval/diagnostics/analyze_near_miss_offsets.py. |
@@ -308,7 +308,7 @@ Outputs: `results/module_benchmark/<timestamp>/`（含 `summary.txt`、`commands
 | `summarize_ablation_mot17.py` | stable | cli | Summarize MOT17 ablation experiment folders against a shared baseline. |
 | `sweep_a7_quality.py` | experiment | - | Sweep A7/P5-2 quality-gate thresholds against MOT metrics. |
 | `sweep_density_gating.py` | diagnostic | cli | Sweep: 局部軌跡密度自適應門控 (Density-Gating) 超參數搜索 |
-| `sweep_external_fp_classifier.py` | experiment | cli | Sweep logistic TP/FP filters on CrowdHuman external rows. |
+| `sweep_external_fp_classifier.py` | diagnostic | cli | Sweep logistic TP/FP filters on CrowdHuman external rows. |
 | `sweep_low_mt.sh` | experiment | - | Sweep low match_thresh values and collect overall metrics. |
 | `train_cascade_stage2.py` | stable | - | Compatibility wrapper for scripts/eval/appearance/train_cascade_stage2.py. |
 | `train_external_fp_classifier.py` | stable | - | Compatibility wrapper for appearance/train_external_fp_classifier.py. |

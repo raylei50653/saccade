@@ -26,7 +26,7 @@
 | `cache_fpn_embeddings.py` | diagnostic | cli | Phase 1: Pre-extract FPN embeddings for all training sequences. |
 | `finetune_mobilenetv4_reid.py` | stable | cli | Full-backbone MobileNetV4 ReID fine-tune on Market1501 + MOT-domain crops. |
 | `reid_domain_probe.py` | diagnostic | cli | MOT-domain ReID projection-head probe (leak-free). |
-| `train_reid_head.py` | experiment | cli | Train ReID projection head from pre-extracted FPN embedding cache. |
-| `train_temporal_yolo.py` | experiment | cli | TemporalYOLOHybrid 訓練腳本 |
+| `train_reid_head.py` | archive-candidate | cli | Train ReID projection head from pre-extracted FPN embedding cache. |
+| `train_temporal_yolo.py` | archive-candidate | cli | TemporalYOLOHybrid 訓練腳本 |
 
 <!-- END generated script index -->

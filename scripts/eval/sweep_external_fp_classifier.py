@@ -2,7 +2,7 @@
 
 """Sweep logistic TP/FP filters on CrowdHuman external rows."""
 
-# status: experiment
+# status: diagnostic
 import argparse
 import json
 import sys

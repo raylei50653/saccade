@@ -1,6 +1,6 @@
 """Print top Optuna trials and mean of their parameters."""
 
-# status: experiment
+# status: diagnostic
 import argparse
 
 

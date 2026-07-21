@@ -165,6 +165,6 @@ Recommended next passes:
 | `download_motsynth.py` | diagnostic | cli | Download and setup MOTSynth dataset (Mini/Full). |
 | `pre_push.sh` | stable | cli | Mirror CI checks locally before pushing. |
 | `test_native.sh` | stable | - | Build native code with coverage and run native tests. |
-| `train_option_d.sh` | experiment | - | Option D 兩階段訓練自動化腳本 |
+| `train_option_d.sh` | archive-candidate | - | Option D 兩階段訓練自動化腳本 |
 
 <!-- END generated script index -->

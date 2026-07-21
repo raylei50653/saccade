@@ -20,7 +20,7 @@ Usage:
         --run-dir runs/reid_head_v1 \\
         [--epochs 30] [--lr 3e-4]
 """
-# status: experiment
+# status: archive-candidate
 
 from __future__ import annotations
 

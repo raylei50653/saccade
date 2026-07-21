@@ -332,7 +332,7 @@ deleting.
 | `audit_frozen_packet_exact_key_recoverability.py` | diagnostic | cli | EK0 frozen-packet exact-key recoverability audit (pure consistency audit). |
 | `audit_relink_safe_reject.py` | diagnostic | cli | Offline B1 safe-reject audit: max FP removal under GT_hurt <= ε. |
 | `audit_runtime_bridge_decision_path.py` | diagnostic | cli | P0: outcome-blind runtime bridge decision-path identifiability audit. |
-| `average_top_trials.py` | experiment | cli | Print top Optuna trials and mean of their parameters. |
+| `average_top_trials.py` | diagnostic | cli | Print top Optuna trials and mean of their parameters. |
 | `bench_bank_scatter.py` | diagnostic | cli | Benchmark: P0/P1 bank scatter hot-path gain. |
 | `bench_pipeline_halves.py` | experiment | cli | Measure the GPU-time split between the two per-frame pipeline halves. |
 | `birth_death_consistency.py` | experiment | cli | Birth-vs-death appearance consistency for long-lived tracks. |
@@ -357,13 +357,13 @@ deleting.
 | `check_h0_phase_a_archives.py` | stable | - | Verify every committed H0 Phase-A evidence root through archive codecs. |
 | `check_h0_repair_acceptance_matrix.py` | stable | - | Validate the prospective H0 repair/qualification acceptance matrix. |
 | `check_headline_decision_contract.py` | stable | cli | Static guard for the headline tracker-decision contract (no GPU). |
-| `check_scan_bwd.py` | experiment | - | Validate the CUDA selective-scan backward against the JIT autograd reference. |
+| `check_scan_bwd.py` | diagnostic | - | Validate the CUDA selective-scan backward against the JIT autograd reference. |
 | `check_scripts_structure.py` | stable | cli | Scripts structure contract: every script self-documents, and the index is fresh. |
-| `classify_gap_cause.py` | experiment | cli | Classify relink gaps: person-person overlap vs non-person. |
+| `classify_gap_cause.py` | diagnostic | cli | Classify relink gaps: person-person overlap vs non-person. |
 | `cold_start_transfer.py` | experiment | cli | Cold-start transfer test: do the normalized occ-gate landmarks hold on MOT20? |
 | `color_relink_features.py` | diagnostic | cli | Offline AUC test: color-histogram appearance features for relink candidates. |
 | `combo_gate_safe_region.py` | diagnostic | cli | 2D combination-gate surface + safe-region audit. |
-| `compare_trials.py` | experiment | cli | Compare a selected set of Optuna trial results. |
+| `compare_trials.py` | diagnostic | cli | Compare a selected set of Optuna trial results. |
 | `convert_mot17_to_mp4.py` | diagnostic | - | Encode MOT17 image sequences to MP4 for visualization. |
 | `convert_safe_region_asset_r1.py` | stable | cli | R1: Deterministic RegionAsset conversion from sealed Q4.5 + T0 evidence. |
 | `convert_video_to_mot.py` | diagnostic | cli | Convert MP4 video into a MOT-compatible sequence folder. |
@@ -377,7 +377,7 @@ deleting.
 | `export_d0_runtime_capture.py` | stable | cli | Merge per-sequence Issue #112 native captures into D0's CSV contract. |
 | `export_headline_bridge_decision_trace.py` | stable | cli | Canonicalize H0 records plus its independent native-universe sidecar. |
 | `export_r1_temporal_reduction_capture.py` | stable | cli | Seal native shadow observations into the R1 temporal-reduction payload. |
-| `format_tables.py` | diagnostic | - | Format benchmark/eval stage tables for reports. |
+| `format_tables.py` | archive-candidate | - | Format benchmark/eval stage tables for reports. |
 | `gap_occupancy_features.py` | diagnostic | cli | Gap-occupancy (exclusion) features for relink candidates. |
 | `gate_clean_color.py` | diagnostic | - | Test the 'use color ReID only on non-occluded relink candidates' gate. |
 | `gate_rule_search.py` | diagnostic | cli | Constrained multi-gate rule search (not combinatorial thrashing). |
@@ -407,7 +407,7 @@ deleting.
 | `probe_relink_occlusion_signal.py` | diagnostic | cli | Does an explicit OCCLUSION signal separate true vs false relink bridges? |
 | `qualify_h0_phase_a.py` | stable | cli | Run the repeatable, non-authoritative H0 substrate qualification gate. |
 | `qualify_h0_phase_a_child.py` | stable | cli | Synthetic no-capture child used only by H0 substrate qualification. |
-| `remap_aligned.py` | diagnostic | - | Remap/dedupe aligned track IDs (keep highest score per frame-id). |
+| `remap_aligned.py` | archive-candidate | - | Remap/dedupe aligned track IDs (keep highest score per frame-id). |
 | `remap_gpu_relinks.py` | diagnostic | - | Remap track IDs after GPU relink using global ID mapping. |
 | `render_diffusion_debug.py` | diagnostic | cli | Render bidirectional relink debug events emitted by ``mot17.py``. |
 | `render_mot_result.py` | diagnostic | cli | Render a MOT-format tracking result onto the source frames and encode a video. |

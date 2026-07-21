@@ -117,16 +117,16 @@ less directly tied to the accepted main-line protocol.
 | `run_v14replica_t3t1_seed.sh` | experiment | cli | T3->T1 GT2 multi-seed validation: paired comparison against each seed's |
 | `run_v14replica_t3t1_shared_seed.sh` | experiment | cli | Explicit T3→T1 at an arbitrary seed, warm-started from the SHARED GT1 |
 | `run_v14replica_yolo26m.sh` | experiment | - | Rebuild the v14 replica lineage on YOLO26m: |
-| `train_conditioned.py` | experiment | cli | Option D：Track-Conditioned YOLO Neck 訓練 |
+| `train_conditioned.py` | archive-candidate | cli | Option D：Track-Conditioned YOLO Neck 訓練 |
 | `train_gated_detector.py` | stable | cli | Option D (revised): GatedYOLODetector training. |
-| `train_gated_tp.py` | experiment | cli | GatedYOLODetector training with Track-guided TP Recall Loss. |
-| `train_jde_distill.py` | experiment | cli | OSNet → JDE embedding head knowledge distillation. |
-| `train_jde_market.py` | experiment | cli | JDE-style embedding training on Market-1501 — Pipeline Convention |
-| `train_joint.py` | experiment | cli | Option C：YOLO26s + Cross-Attention Decoder 聯合訓練 |
+| `train_gated_tp.py` | archive-candidate | cli | GatedYOLODetector training with Track-guided TP Recall Loss. |
+| `train_jde_distill.py` | archive-candidate | cli | OSNet → JDE embedding head knowledge distillation. |
+| `train_jde_market.py` | archive-candidate | cli | JDE-style embedding training on Market-1501 — Pipeline Convention |
+| `train_joint.py` | archive-candidate | cli | Option C：YOLO26s + Cross-Attention Decoder 聯合訓練 |
 | `train_mamba_cached.py` | archive-candidate | cli | Train Mamba head from cached TRT backbone features (Phase 2 GT supervision). |
 | `train_mamba_gt.py` | stable | cli | Option F: MambaDetectionHead GT fine-tuning (Phase 2). |
 | `train_mamba_head.py` | stable | cli | Option F: MambaDetectionHead distillation training. |
 | `train_mamba_trt.py` | archive-candidate | cli | Mamba head training on TRT backbone features. |
-| `train_reid_1x1.py` | experiment | cli | Train lightweight 1×1 Conv dimension-reduction head on Market-1501. |
+| `train_reid_1x1.py` | archive-candidate | cli | Train lightweight 1×1 Conv dimension-reduction head on Market-1501. |
 
 <!-- END generated script index -->

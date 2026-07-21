@@ -25,7 +25,7 @@ After training, evaluate with:
         --proj-ckpt runs/jde_distill_v1/best.ckpt \\
         --market-root datasets/Market-1501-v15.09.15
 """
-# status: experiment
+# status: archive-candidate
 
 from __future__ import annotations
 

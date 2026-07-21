@@ -1,5 +1,5 @@
 #!/bin/bash
-# status: experiment
+# status: archive-candidate
 set -e
 
 # Option D 兩階段訓練自動化腳本

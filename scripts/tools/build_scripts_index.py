@@ -181,11 +181,13 @@ def render_rollup(metas: dict[str, tuple[str, str, str]]) -> str:
         "regenerate with `scripts/tools/build_scripts_index.py`.",
         "",
         "> **Classification provenance.** Labels were seeded from a one-time survey, "
-        "then the `stable` set was given a semantic role review (2026-07-21) that "
-        "moved wired-in analysis/debug tools to `diagnostic` and named study runners "
-        "to `experiment`, so `stable` means a supported workflow entrypoint or "
-        "path-stability infra — not merely wired-into-code. The source of truth is "
-        "each script's `# status:` header; edit that line to correct a label.",
+        "then given semantic role reviews (2026-07-21): the `stable` set was audited "
+        "so `stable` means a supported workflow entrypoint or path-stability infra "
+        "(not merely wired-into-code), and the `diagnostic`/`experiment` split was "
+        "audited so `experiment` means a driver bound to a named study/sweep while "
+        "reusable analysis tools are `diagnostic`; superseded/one-shot scripts were "
+        "moved to `archive-candidate`. The source of truth is each script's "
+        "`# status:` header; edit that line to correct a label.",
         "",
         "## Status label counts",
         "",
