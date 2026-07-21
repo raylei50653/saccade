@@ -100,8 +100,8 @@ manually or if their outputs support a retained report.
 | `build_reid.py` | stable | cli | Generic TensorRT FP16 engine builder for ReID models. |
 | `build_siglip.py` | stable | - | Build TensorRT engine for SigLIP embedding model. |
 | `build_yolo.py` | stable | cli | Build TensorRT engine from YOLO ONNX. |
-| `calibrate_yolo_int8.py` | stable | cli | INT8 static quantization for YOLO ONNX via onnxruntime. |
-| `compile_mamba_head_aot.py` | stable | cli | Example script demonstrating how to compile the PyTorch Mamba Head |
+| `calibrate_yolo_int8.py` | stable | cli | INT8 static quantization for YOLO ONNX via onnxruntime. Produces a QDQ-annotated ONNX that TRT 10.x (explicit… |
+| `compile_mamba_head_aot.py` | stable | cli | Example script demonstrating how to compile the PyTorch Mamba Head into a standalone C++ Shared/Static Librar… |
 | `export_dinov2.py` | stable | cli | Export facebook/dinov2-base (ViT-B/14, 768-dim) to ONNX for TRT compilation. |
 | `export_mamba_head.py` | stable | cli | Export PyTorch Mamba Head to TorchScript via wrapper. |
 | `export_mamba_head_onnx.py` | stable | cli | Export PyTorch MambaHead to ONNX with custom SelectiveScan op. |

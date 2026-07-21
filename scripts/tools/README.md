@@ -322,7 +322,7 @@ deleting.
 | `add_occlusion_to_seq.py` | diagnostic | cli | Inject simulated occlusion boxes into MOT sequences. |
 | `analyze_bidir_relink.py` | diagnostic | - | Per-candidate analysis of the bidirectional bridge-relink dumps. |
 | `analyze_consistency_stats.py` | diagnostic | cli | GT-level statistics for the cross-frame consistency term (route 3). |
-| `analyze_fn_strata.py` | experiment | - | False-negative stratification: is the recall gap resolution-limited (small boxes, |
+| `analyze_fn_strata.py` | experiment | - | False-negative stratification: is the recall gap resolution-limited (small boxes, visible -> a high-res P2 he… |
 | `analyze_kalman_h_signal.py` | diagnostic | cli | NSA/Kalman h-conditioned noise analysis + Phase-0 fits. |
 | `analyze_m_b1_5_t0_region_interpretation.py` | diagnostic | cli | T0-B: Existing Atlas Region Interpretation Pack (read-only derivation). |
 | `analyze_missed_relinks.py` | diagnostic | - | Analyze missed relinks: GT-labeled distributions of all features. |
@@ -367,9 +367,9 @@ deleting.
 | `convert_mot17_to_mp4.py` | diagnostic | - | Encode MOT17 image sequences to MP4 for visualization. |
 | `convert_safe_region_asset_r1.py` | stable | cli | R1: Deterministic RegionAsset conversion from sealed Q4.5 + T0 evidence. |
 | `convert_video_to_mot.py` | diagnostic | cli | Convert MP4 video into a MOT-compatible sequence folder. |
-| `depth_ordering_auc.py` | experiment | - | Compute discrimination AUC for the depth-ordering (occlusion front/back) signal, |
+| `depth_ordering_auc.py` | experiment | - | Compute discrimination AUC for the depth-ordering (occlusion front/back) signal, reusing the probe's GT cross… |
 | `depth_ordering_gate_sweep.py` | experiment | cli | Tier-1 offline gate sweep for the same-height occlusion gate (GT-only, free). |
-| `depth_ordering_probe.py` | experiment | cli | Depth-ordering probe — can pre-occlusion geometry tell which of two crossing |
+| `depth_ordering_probe.py` | experiment | cli | Depth-ordering probe — can pre-occlusion geometry tell which of two crossing boxes is in FRONT? |
 | `determinism_check.py` | diagnostic | cli | Determinism gate: run N evals per config and verify byte-identical output. |
 | `diagnose_id_switches.py` | experiment | cli | Diagnose ID switches by gap type to determine P3-B (Dormant Bank + HNSW) value. |
 | `energy_transform_separability.py` | diagnostic | cli | Energy transform separability audit (raw / log1p / sqrt / rank). |
@@ -388,9 +388,9 @@ deleting.
 | `gt_safe_region_area.py` | diagnostic | cli | GT-safe region area in GT-CDF / tail-mass coordinates (not raw thr). |
 | `h0_launch_hygiene_gate.py` | stable | cli | Non-authoritative launch-hygiene pre-authorization gate for H0 Phase A. |
 | `h0_runtime_confinement.py` | stable | - | Linux fail-closed runtime confinement and file-input attestation. |
-| `horizon_convergence_probe.py` | experiment | cli | Horizon-convergence probe — does the pedestrian bbox scale field actually |
-| `horizon_detector_test.py` | experiment | cli | Horizon homothety on REAL detections vs GT — does the vertex-homothety horizon |
-| `horizon_homothety_probe.py` | experiment | cli | Horizon-convergence probe via VERTEX HOMOTHETY (design §3) — does the |
+| `horizon_convergence_probe.py` | experiment | cli | Horizon-convergence probe — does the pedestrian bbox scale field actually converge to a stable horizon line? … |
+| `horizon_detector_test.py` | experiment | cli | Horizon homothety on REAL detections vs GT — does the vertex-homothety horizon survive detector truncation / … |
+| `horizon_homothety_probe.py` | experiment | cli | Horizon-convergence probe via VERTEX HOMOTHETY (design §3) — does the construction "connect the 4 correspondi… |
 | `horizon_window_probe.py` | experiment | cli | Frame-to-frame horizon motion — the GMC signal test. |
 | `intra_track_consistency.py` | experiment | cli | Intra-track appearance consistency: how stable is a feature on the SAME id? |
 | `loo_hurt_attribution.py` | diagnostic | cli | LOO GT-hurt attribution → atom classification → repair LOO compare. |
@@ -398,7 +398,7 @@ deleting.
 | `mamba_relink_features.py` | diagnostic | cli | Mamba-head feature probe for relink-candidate association matching. |
 | `migrate_legacy_mamba_cache_manifest.py` | diagnostic | cli | Add a validated lineage manifest to a legacy feature-only Mamba cache. |
 | `mine_relink_signals.py` | diagnostic | cli | Batch deep-mine continuous relink signals on a B1 pairs CSV. |
-| `motion_norm_probe.py` | experiment | cli | §8.4 motion normalization — does scale-normalizing displacement improve the |
+| `motion_norm_probe.py` | experiment | cli | §8.4 motion normalization — does scale-normalizing displacement improve the true-vs-false association/relink … |
 | `occ_candidate_analyze.py` | diagnostic | cli | Phase B: threshold discriminability + GT-movement from the real-run candidate dump. |
 | `occ_event_values.py` | diagnostic | cli | Per-event ACTUAL-VALUE table for the same-height occlusion gate (one run, no thresholding). |
 | `optimize_relink_weight.py` | diagnostic | cli | Offline optimisation of the speed-weighted relink gate score. |
@@ -430,14 +430,14 @@ deleting.
 | `smoke_repaired_candidate_b2e2e.py` | experiment | cli | Narrow B2/e2e smoke contract for frozen repaired candidate only. |
 | `summarize_relink_pairs.py` | diagnostic | cli | Summarize offline relink candidate pairs into a B1 study directory. |
 | `sweep_href_variants.py` | experiment | cli | Offline sweep of h_ref normalization variants for the bridge score. |
-| `sweep_speed_turn.py` | diagnostic | cli | Sweep per-step speed vs turning: at what move-speed/box-height ratio does |
+| `sweep_speed_turn.py` | diagnostic | cli | Sweep per-step speed vs turning: at what move-speed/box-height ratio does heading stop being noise? |
 | `sweep_velocity_variants.py` | experiment | cli | Offline sweep of lost-track exit velocity estimation schemes for the bridge score. |
 | `test_cufft_graph.py` | diagnostic | cli | Minimal cuFFT CUDA graph capture test. |
 | `test_gmc_cudagraph.py` | diagnostic | cli | Capture C++ estimate_into_direct in torch.cuda.CUDAGraph. |
 | `test_gpu_gmc.py` | diagnostic | - | Manual GPU GMC correctness/perf smoke test. |
 | `test_letterbox_gpu.py` | diagnostic | - | Unit test: cpp_letterbox_gpu output matches PyTorch 3-op reference. |
 | `test_py_gmc.py` | diagnostic | cli | Pure-Python GMC with PyTorch FFT, designed for CUDA graph capture. |
-| `validate_reach_gate.py` | diagnostic | cli | Validate the reach-gate model R_total(G) = s*G + R_search(G) against the |
+| `validate_reach_gate.py` | diagnostic | cli | Validate the reach-gate model R_total(G) = s*G + R_search(G) against the plain bridge / spatial gates on the … |
 | `verify_gmc_direct.py` | diagnostic | cli | Verify GMC estimate_into_direct produces identical warp as estimate_into. |
 | `verify_h0_gctm_guarantee_registration.py` | stable | cli | Fail-closed validator for H0-to-GCTM guarantee registration records. |
 | `verify_h0_phase_a.py` | stable | cli | Independent A7/RC1 aggregate verifier for Phase-A execution evidence. |

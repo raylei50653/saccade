@@ -43,10 +43,10 @@ Total tracked scripts: **403**. Source of truth = each script's own docstring + 
 | `latency_e2e_report.py` | diagnostic | - | Summarize end-to-end latency report from pipeline runs. |
 | `mamba_crossscan_breakdown.py` | diagnostic | - | Decompose _cross_scan_mamba: flip/stack prep vs MambaBlock(4B) vs unflip/mean. |
 | `mamba_detect_breakdown.py` | diagnostic | - | Attribute the eval `detect` stage (mamba_optimal/SDP ~7.45ms) into sub-components. |
-| `mamba_flip_alloc.py` | diagnostic | - | Test the hypothesis: cross-scan flip cost = allocating new tensors, not the |
+| `mamba_flip_alloc.py` | diagnostic | - | Test the hypothesis: cross-scan flip cost = allocating new tensors, not the flip arithmetic. Compares produci… |
 | `mamba_head_breakdown.py` | diagnostic | - | Sub-attribute the mamba_head (~3ms of detect) into its module groups. |
-| `mamba_head_cudagraph.py` | diagnostic | - | Test the launch-bound hypothesis for the mamba_head: capture head.forward in a |
-| `mamba_head_kernelcount.py` | diagnostic | - | Count CUDA kernel launches in one mamba_head.forward, to locate the |
+| `mamba_head_cudagraph.py` | diagnostic | - | Test the launch-bound hypothesis for the mamba_head: capture head.forward in a CUDA graph (fixed shapes, sing… |
+| `mamba_head_kernelcount.py` | diagnostic | - | Count CUDA kernel launches in one mamba_head.forward, to locate the launch-bound cost. The 4-direction cross-… |
 | `mamba_train_prof.py` | diagnostic | cli | Mamba head training latency profiler. |
 | `multistream_mamba.py` | diagnostic | cli | Multi-stream Mamba benchmark. |
 | `nsys_frame_attribution.py` | diagnostic | cli | Per-frame overhead attribution from an nsys trace (node-mode CUDA graph trace). |
@@ -73,7 +73,7 @@ Total tracked scripts: **403**. Source of truth = each script's own docstring + 
 | `_redirect.py` | stable | - | Shared helper that runpy-executes a canonical scripts/eval path for compat wrappers. |
 | `ablation_experiments.py` | experiment | - | Historical multi-ablation experiment harness over MOT metrics tables. |
 | `ablation_mot17.py` | stable | cli | Unified ablation runner for scripts/eval/mot17.py. |
-| `analyze_05_cause.py` | experiment | cli | Attribution: is MOT17-05's occluder-mechanism regression from inaccurate boxes |
+| `analyze_05_cause.py` | experiment | cli | Attribution: is MOT17-05's occluder-mechanism regression from inaccurate boxes (框不准) or from too many simulta… |
 | `analyze_assoc_fn.py` | stable | - | Compatibility wrapper for scripts/eval/diagnostics/analyze_assoc_fn.py. |
 | `analyze_confirm_prev_confirmed.py` | experiment | cli | Do cst040's new confirmations sit on a PREVIOUS-frame confirmed track? |
 | `analyze_confirm_proximity.py` | experiment | cli | Does nearest-box distance separate the TP from the FP that cst040 newly confirms? |
@@ -91,7 +91,7 @@ Total tracked scripts: **403**. Source of truth = each script's own docstring + 
 | `analyze_oao_sweep.py` | experiment | cli | OAO (Occlusion-Aware Object) τ sweep analysis: metrics trend + per-sequence breakdown. |
 | `analyze_occ_size.py` | diagnostic | cli | Attribution: cue-conflict — does box SIZE confirm the foot-y "front" call? |
 | `analyze_occlusion_events.py` | diagnostic | cli | Frame-level occlusion event analysis: label every tracker→GT pair by occlusion state. |
-| `analyze_pca_alt_combination.py` | experiment | - | Offline follow-up to probe_private_continuation_assignment.py: the hand-picked |
+| `analyze_pca_alt_combination.py` | experiment | - | Offline follow-up to probe_private_continuation_assignment.py: the hand-picked additive combination `cost + w… |
 | `analyze_roi_dim_importance.py` | stable | - | Compatibility wrapper for scripts/eval/appearance/analyze_roi_dim_importance.py. |
 | `analyze_score_distribution.py` | stable | - | Compatibility wrapper for scripts/eval/detector/analyze_score_distribution.py. |
 | `bayesian_optimizer.py` | diagnostic | cli | Bayesian hyperparameter optimizer over MOT eval objectives. |
@@ -132,18 +132,18 @@ Total tracked scripts: **403**. Source of truth = each script's own docstring + 
 | `oracle_height_birth_ceiling.py` | stable | - | Compatibility wrapper for experiments/oracle_height_birth_ceiling.py. |
 | `oracle_occlusion_hold.py` | stable | - | Compatibility wrapper for scripts/eval/experiments/oracle_occlusion_hold.py. |
 | `oracle_small_birth_ceiling.py` | stable | - | Compatibility wrapper for experiments/oracle_small_birth_ceiling.py. |
-| `pipeline_contribution.py` | diagnostic | cli | Run cumulative pipeline cutoff experiments for MOT17 and summarize the |
-| `print_assoc_basis.py` | diagnostic | cli | Print the resolved *association basis* (height / IoU / velocity / cost-weight |
+| `pipeline_contribution.py` | diagnostic | cli | Run cumulative pipeline cutoff experiments for MOT17 and summarize the "raw uplift" of each downstream module… |
+| `print_assoc_basis.py` | diagnostic | cli | Print the resolved *association basis* (height / IoU / velocity / cost-weight primitives + shared physical co… |
 | `probe_assoc_appearance_veto.py` | diagnostic | cli | mnv4 appearance-veto separability at PRIMARY association decision points. |
 | `probe_camera_motion.py` | experiment | - | Capstone: per-sequence camera-motion magnitude. |
 | `probe_ghost_rate_by_score.py` | experiment | - | Ghost-rate-by-score probe. |
 | `probe_ghost_source.py` | experiment | - | Decompose low-score 'ghost' boxes by source. |
 | `probe_lowiou_occ_gate.py` | diagnostic | cli | Can an OCCLUSION signal SAFELY relax the low-IoU association gate? |
 | `probe_occ_activation_separability.py` | diagnostic | cli | Feasibility probe: can the Mamba HEAD ACTIVATION separate occluded from visible GT? |
-| `probe_occ_pairwise_confound.py` | diagnostic | cli | Follow-up to registry #46 (probe_occ_activation_separability.py): does the |
+| `probe_occ_pairwise_confound.py` | diagnostic | cli | Follow-up to registry #46 (probe_occ_activation_separability.py): does the "non-geometric" activation residua… |
 | `probe_occ_separability.py` | diagnostic | cli | Feasibility probe: does the Mamba head's SCORE separate occluded from visible GT? |
-| `probe_occ_swap_disambiguation.py` | diagnostic | cli | At occluder-ABSORB crossing-swaps: does an OCCLUSION signal disambiguate the |
-| `probe_private_continuation_assignment.py` | experiment | cli | Does the geometric pairwise-position signal (gap_h/dx_norm, from the #46 |
+| `probe_occ_swap_disambiguation.py` | diagnostic | cli | At occluder-ABSORB crossing-swaps: does an OCCLUSION signal disambiguate the occludee's box where foot-line g… |
+| `probe_private_continuation_assignment.py` | experiment | cli | Does the geometric pairwise-position signal (gap_h/dx_norm, from the #46 follow-up in probe_occ_pairwise_conf… |
 | `probe_redundancy.py` | experiment | - | Redundancy probe for low-score REAL_BADBOX boxes. |
 | `profile_analyze.py` | diagnostic | cli | Analyse per-frame CSV ledger from --profile-frame-csv. |
 | `profile_cuda_kernels.py` | diagnostic | - | Profile CUDA kernel time for detector/tracker hot paths. |
@@ -169,13 +169,13 @@ Total tracked scripts: **403**. Source of truth = each script's own docstring + 
 | `sportsmot.py` | stable | cli | Run SportsMOT dataset eval through the saccade tracker pipeline. |
 | `summarize_ablation_mot17.py` | stable | cli | Summarize MOT17 ablation experiment folders against a shared baseline. |
 | `sweep_a7_quality.py` | experiment | - | Sweep A7/P5-2 quality-gate thresholds against MOT metrics. |
-| `sweep_density_gating.py` | diagnostic | cli | Sweep: 局部軌跡密度自適應門控 (Density-Gating) 超參數搜索 |
+| `sweep_density_gating.py` | diagnostic | cli | Sweep: 局部軌跡密度自適應門控 (Density-Gating) 超參數搜索 ============================================================= 掃描 --… |
 | `sweep_external_fp_classifier.py` | diagnostic | cli | Sweep logistic TP/FP filters on CrowdHuman external rows. |
 | `sweep_low_mt.sh` | experiment | - | Sweep low match_thresh values and collect overall metrics. |
 | `train_cascade_stage2.py` | stable | - | Compatibility wrapper for scripts/eval/appearance/train_cascade_stage2.py. |
 | `train_external_fp_classifier.py` | stable | - | Compatibility wrapper for appearance/train_external_fp_classifier.py. |
 | `ultralytics_official_mot17.py` | stable | - | Compatibility wrapper for scripts/eval/baselines/ultralytics_official_mot17.py. |
-| `validate_profiles.py` | diagnostic | cli | Validate that pipeline_contribution.py profiles correctly map to pipeline stages |
+| `validate_profiles.py` | diagnostic | cli | Validate that pipeline_contribution.py profiles correctly map to pipeline stages described in docs/DATAFLOW.m… |
 | `validate_roi_embeddings.py` | stable | - | Compatibility wrapper for scripts/eval/appearance/validate_roi_embeddings.py. |
 | `verify_cpp_detector.py` | diagnostic | cli | Validation and benchmark script for C++ LibTorch + TensorRT MambaGatedDetector. |
 
@@ -276,8 +276,8 @@ Total tracked scripts: **403**. Source of truth = each script's own docstring + 
 | `build_reid.py` | stable | cli | Generic TensorRT FP16 engine builder for ReID models. |
 | `build_siglip.py` | stable | - | Build TensorRT engine for SigLIP embedding model. |
 | `build_yolo.py` | stable | cli | Build TensorRT engine from YOLO ONNX. |
-| `calibrate_yolo_int8.py` | stable | cli | INT8 static quantization for YOLO ONNX via onnxruntime. |
-| `compile_mamba_head_aot.py` | stable | cli | Example script demonstrating how to compile the PyTorch Mamba Head |
+| `calibrate_yolo_int8.py` | stable | cli | INT8 static quantization for YOLO ONNX via onnxruntime. Produces a QDQ-annotated ONNX that TRT 10.x (explicit… |
+| `compile_mamba_head_aot.py` | stable | cli | Example script demonstrating how to compile the PyTorch Mamba Head into a standalone C++ Shared/Static Librar… |
 | `export_dinov2.py` | stable | cli | Export facebook/dinov2-base (ViT-B/14, 768-dim) to ONNX for TRT compilation. |
 | `export_mamba_head.py` | stable | cli | Export PyTorch Mamba Head to TorchScript via wrapper. |
 | `export_mamba_head_onnx.py` | stable | cli | Export PyTorch MambaHead to ONNX with custom SelectiveScan op. |
@@ -322,7 +322,7 @@ Total tracked scripts: **403**. Source of truth = each script's own docstring + 
 | `add_occlusion_to_seq.py` | diagnostic | cli | Inject simulated occlusion boxes into MOT sequences. |
 | `analyze_bidir_relink.py` | diagnostic | - | Per-candidate analysis of the bidirectional bridge-relink dumps. |
 | `analyze_consistency_stats.py` | diagnostic | cli | GT-level statistics for the cross-frame consistency term (route 3). |
-| `analyze_fn_strata.py` | experiment | - | False-negative stratification: is the recall gap resolution-limited (small boxes, |
+| `analyze_fn_strata.py` | experiment | - | False-negative stratification: is the recall gap resolution-limited (small boxes, visible -> a high-res P2 he… |
 | `analyze_kalman_h_signal.py` | diagnostic | cli | NSA/Kalman h-conditioned noise analysis + Phase-0 fits. |
 | `analyze_m_b1_5_t0_region_interpretation.py` | diagnostic | cli | T0-B: Existing Atlas Region Interpretation Pack (read-only derivation). |
 | `analyze_missed_relinks.py` | diagnostic | - | Analyze missed relinks: GT-labeled distributions of all features. |
@@ -367,9 +367,9 @@ Total tracked scripts: **403**. Source of truth = each script's own docstring + 
 | `convert_mot17_to_mp4.py` | diagnostic | - | Encode MOT17 image sequences to MP4 for visualization. |
 | `convert_safe_region_asset_r1.py` | stable | cli | R1: Deterministic RegionAsset conversion from sealed Q4.5 + T0 evidence. |
 | `convert_video_to_mot.py` | diagnostic | cli | Convert MP4 video into a MOT-compatible sequence folder. |
-| `depth_ordering_auc.py` | experiment | - | Compute discrimination AUC for the depth-ordering (occlusion front/back) signal, |
+| `depth_ordering_auc.py` | experiment | - | Compute discrimination AUC for the depth-ordering (occlusion front/back) signal, reusing the probe's GT cross… |
 | `depth_ordering_gate_sweep.py` | experiment | cli | Tier-1 offline gate sweep for the same-height occlusion gate (GT-only, free). |
-| `depth_ordering_probe.py` | experiment | cli | Depth-ordering probe — can pre-occlusion geometry tell which of two crossing |
+| `depth_ordering_probe.py` | experiment | cli | Depth-ordering probe — can pre-occlusion geometry tell which of two crossing boxes is in FRONT? |
 | `determinism_check.py` | diagnostic | cli | Determinism gate: run N evals per config and verify byte-identical output. |
 | `diagnose_id_switches.py` | experiment | cli | Diagnose ID switches by gap type to determine P3-B (Dormant Bank + HNSW) value. |
 | `energy_transform_separability.py` | diagnostic | cli | Energy transform separability audit (raw / log1p / sqrt / rank). |
@@ -388,9 +388,9 @@ Total tracked scripts: **403**. Source of truth = each script's own docstring + 
 | `gt_safe_region_area.py` | diagnostic | cli | GT-safe region area in GT-CDF / tail-mass coordinates (not raw thr). |
 | `h0_launch_hygiene_gate.py` | stable | cli | Non-authoritative launch-hygiene pre-authorization gate for H0 Phase A. |
 | `h0_runtime_confinement.py` | stable | - | Linux fail-closed runtime confinement and file-input attestation. |
-| `horizon_convergence_probe.py` | experiment | cli | Horizon-convergence probe — does the pedestrian bbox scale field actually |
-| `horizon_detector_test.py` | experiment | cli | Horizon homothety on REAL detections vs GT — does the vertex-homothety horizon |
-| `horizon_homothety_probe.py` | experiment | cli | Horizon-convergence probe via VERTEX HOMOTHETY (design §3) — does the |
+| `horizon_convergence_probe.py` | experiment | cli | Horizon-convergence probe — does the pedestrian bbox scale field actually converge to a stable horizon line? … |
+| `horizon_detector_test.py` | experiment | cli | Horizon homothety on REAL detections vs GT — does the vertex-homothety horizon survive detector truncation / … |
+| `horizon_homothety_probe.py` | experiment | cli | Horizon-convergence probe via VERTEX HOMOTHETY (design §3) — does the construction "connect the 4 correspondi… |
 | `horizon_window_probe.py` | experiment | cli | Frame-to-frame horizon motion — the GMC signal test. |
 | `intra_track_consistency.py` | experiment | cli | Intra-track appearance consistency: how stable is a feature on the SAME id? |
 | `loo_hurt_attribution.py` | diagnostic | cli | LOO GT-hurt attribution → atom classification → repair LOO compare. |
@@ -398,7 +398,7 @@ Total tracked scripts: **403**. Source of truth = each script's own docstring + 
 | `mamba_relink_features.py` | diagnostic | cli | Mamba-head feature probe for relink-candidate association matching. |
 | `migrate_legacy_mamba_cache_manifest.py` | diagnostic | cli | Add a validated lineage manifest to a legacy feature-only Mamba cache. |
 | `mine_relink_signals.py` | diagnostic | cli | Batch deep-mine continuous relink signals on a B1 pairs CSV. |
-| `motion_norm_probe.py` | experiment | cli | §8.4 motion normalization — does scale-normalizing displacement improve the |
+| `motion_norm_probe.py` | experiment | cli | §8.4 motion normalization — does scale-normalizing displacement improve the true-vs-false association/relink … |
 | `occ_candidate_analyze.py` | diagnostic | cli | Phase B: threshold discriminability + GT-movement from the real-run candidate dump. |
 | `occ_event_values.py` | diagnostic | cli | Per-event ACTUAL-VALUE table for the same-height occlusion gate (one run, no thresholding). |
 | `optimize_relink_weight.py` | diagnostic | cli | Offline optimisation of the speed-weighted relink gate score. |
@@ -430,14 +430,14 @@ Total tracked scripts: **403**. Source of truth = each script's own docstring + 
 | `smoke_repaired_candidate_b2e2e.py` | experiment | cli | Narrow B2/e2e smoke contract for frozen repaired candidate only. |
 | `summarize_relink_pairs.py` | diagnostic | cli | Summarize offline relink candidate pairs into a B1 study directory. |
 | `sweep_href_variants.py` | experiment | cli | Offline sweep of h_ref normalization variants for the bridge score. |
-| `sweep_speed_turn.py` | diagnostic | cli | Sweep per-step speed vs turning: at what move-speed/box-height ratio does |
+| `sweep_speed_turn.py` | diagnostic | cli | Sweep per-step speed vs turning: at what move-speed/box-height ratio does heading stop being noise? |
 | `sweep_velocity_variants.py` | experiment | cli | Offline sweep of lost-track exit velocity estimation schemes for the bridge score. |
 | `test_cufft_graph.py` | diagnostic | cli | Minimal cuFFT CUDA graph capture test. |
 | `test_gmc_cudagraph.py` | diagnostic | cli | Capture C++ estimate_into_direct in torch.cuda.CUDAGraph. |
 | `test_gpu_gmc.py` | diagnostic | - | Manual GPU GMC correctness/perf smoke test. |
 | `test_letterbox_gpu.py` | diagnostic | - | Unit test: cpp_letterbox_gpu output matches PyTorch 3-op reference. |
 | `test_py_gmc.py` | diagnostic | cli | Pure-Python GMC with PyTorch FFT, designed for CUDA graph capture. |
-| `validate_reach_gate.py` | diagnostic | cli | Validate the reach-gate model R_total(G) = s*G + R_search(G) against the |
+| `validate_reach_gate.py` | diagnostic | cli | Validate the reach-gate model R_total(G) = s*G + R_search(G) against the plain bridge / spatial gates on the … |
 | `verify_gmc_direct.py` | diagnostic | cli | Verify GMC estimate_into_direct produces identical warp as estimate_into. |
 | `verify_h0_gctm_guarantee_registration.py` | stable | cli | Fail-closed validator for H0-to-GCTM guarantee registration records. |
 | `verify_h0_phase_a.py` | stable | cli | Independent A7/RC1 aggregate verifier for Phase-A execution evidence. |
@@ -497,7 +497,7 @@ Total tracked scripts: **403**. Source of truth = each script's own docstring + 
 | `train_gated_detector.py` | stable | cli | Option D (revised): GatedYOLODetector training. |
 | `train_gated_tp.py` | archive-candidate | cli | GatedYOLODetector training with Track-guided TP Recall Loss. |
 | `train_jde_distill.py` | archive-candidate | cli | OSNet → JDE embedding head knowledge distillation. |
-| `train_jde_market.py` | archive-candidate | cli | JDE-style embedding training on Market-1501 — Pipeline Convention |
+| `train_jde_market.py` | archive-candidate | cli | JDE-style embedding training on Market-1501 — Pipeline Convention ===========================================… |
 | `train_joint.py` | archive-candidate | cli | Option C：YOLO26s + Cross-Attention Decoder 聯合訓練 |
 | `train_mamba_cached.py` | archive-candidate | cli | Train Mamba head from cached TRT backbone features (Phase 2 GT supervision). |
 | `train_mamba_gt.py` | stable | cli | Option F: MambaDetectionHead GT fine-tuning (Phase 2). |

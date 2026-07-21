@@ -211,7 +211,7 @@ Outputs: `results/module_benchmark/<timestamp>/`（含 `summary.txt`、`commands
 | `_redirect.py` | stable | - | Shared helper that runpy-executes a canonical scripts/eval path for compat wrappers. |
 | `ablation_experiments.py` | experiment | - | Historical multi-ablation experiment harness over MOT metrics tables. |
 | `ablation_mot17.py` | stable | cli | Unified ablation runner for scripts/eval/mot17.py. |
-| `analyze_05_cause.py` | experiment | cli | Attribution: is MOT17-05's occluder-mechanism regression from inaccurate boxes |
+| `analyze_05_cause.py` | experiment | cli | Attribution: is MOT17-05's occluder-mechanism regression from inaccurate boxes (框不准) or from too many simulta… |
 | `analyze_assoc_fn.py` | stable | - | Compatibility wrapper for scripts/eval/diagnostics/analyze_assoc_fn.py. |
 | `analyze_confirm_prev_confirmed.py` | experiment | cli | Do cst040's new confirmations sit on a PREVIOUS-frame confirmed track? |
 | `analyze_confirm_proximity.py` | experiment | cli | Does nearest-box distance separate the TP from the FP that cst040 newly confirms? |
@@ -229,7 +229,7 @@ Outputs: `results/module_benchmark/<timestamp>/`（含 `summary.txt`、`commands
 | `analyze_oao_sweep.py` | experiment | cli | OAO (Occlusion-Aware Object) τ sweep analysis: metrics trend + per-sequence breakdown. |
 | `analyze_occ_size.py` | diagnostic | cli | Attribution: cue-conflict — does box SIZE confirm the foot-y "front" call? |
 | `analyze_occlusion_events.py` | diagnostic | cli | Frame-level occlusion event analysis: label every tracker→GT pair by occlusion state. |
-| `analyze_pca_alt_combination.py` | experiment | - | Offline follow-up to probe_private_continuation_assignment.py: the hand-picked |
+| `analyze_pca_alt_combination.py` | experiment | - | Offline follow-up to probe_private_continuation_assignment.py: the hand-picked additive combination `cost + w… |
 | `analyze_roi_dim_importance.py` | stable | - | Compatibility wrapper for scripts/eval/appearance/analyze_roi_dim_importance.py. |
 | `analyze_score_distribution.py` | stable | - | Compatibility wrapper for scripts/eval/detector/analyze_score_distribution.py. |
 | `bayesian_optimizer.py` | diagnostic | cli | Bayesian hyperparameter optimizer over MOT eval objectives. |
@@ -270,18 +270,18 @@ Outputs: `results/module_benchmark/<timestamp>/`（含 `summary.txt`、`commands
 | `oracle_height_birth_ceiling.py` | stable | - | Compatibility wrapper for experiments/oracle_height_birth_ceiling.py. |
 | `oracle_occlusion_hold.py` | stable | - | Compatibility wrapper for scripts/eval/experiments/oracle_occlusion_hold.py. |
 | `oracle_small_birth_ceiling.py` | stable | - | Compatibility wrapper for experiments/oracle_small_birth_ceiling.py. |
-| `pipeline_contribution.py` | diagnostic | cli | Run cumulative pipeline cutoff experiments for MOT17 and summarize the |
-| `print_assoc_basis.py` | diagnostic | cli | Print the resolved *association basis* (height / IoU / velocity / cost-weight |
+| `pipeline_contribution.py` | diagnostic | cli | Run cumulative pipeline cutoff experiments for MOT17 and summarize the "raw uplift" of each downstream module… |
+| `print_assoc_basis.py` | diagnostic | cli | Print the resolved *association basis* (height / IoU / velocity / cost-weight primitives + shared physical co… |
 | `probe_assoc_appearance_veto.py` | diagnostic | cli | mnv4 appearance-veto separability at PRIMARY association decision points. |
 | `probe_camera_motion.py` | experiment | - | Capstone: per-sequence camera-motion magnitude. |
 | `probe_ghost_rate_by_score.py` | experiment | - | Ghost-rate-by-score probe. |
 | `probe_ghost_source.py` | experiment | - | Decompose low-score 'ghost' boxes by source. |
 | `probe_lowiou_occ_gate.py` | diagnostic | cli | Can an OCCLUSION signal SAFELY relax the low-IoU association gate? |
 | `probe_occ_activation_separability.py` | diagnostic | cli | Feasibility probe: can the Mamba HEAD ACTIVATION separate occluded from visible GT? |
-| `probe_occ_pairwise_confound.py` | diagnostic | cli | Follow-up to registry #46 (probe_occ_activation_separability.py): does the |
+| `probe_occ_pairwise_confound.py` | diagnostic | cli | Follow-up to registry #46 (probe_occ_activation_separability.py): does the "non-geometric" activation residua… |
 | `probe_occ_separability.py` | diagnostic | cli | Feasibility probe: does the Mamba head's SCORE separate occluded from visible GT? |
-| `probe_occ_swap_disambiguation.py` | diagnostic | cli | At occluder-ABSORB crossing-swaps: does an OCCLUSION signal disambiguate the |
-| `probe_private_continuation_assignment.py` | experiment | cli | Does the geometric pairwise-position signal (gap_h/dx_norm, from the #46 |
+| `probe_occ_swap_disambiguation.py` | diagnostic | cli | At occluder-ABSORB crossing-swaps: does an OCCLUSION signal disambiguate the occludee's box where foot-line g… |
+| `probe_private_continuation_assignment.py` | experiment | cli | Does the geometric pairwise-position signal (gap_h/dx_norm, from the #46 follow-up in probe_occ_pairwise_conf… |
 | `probe_redundancy.py` | experiment | - | Redundancy probe for low-score REAL_BADBOX boxes. |
 | `profile_analyze.py` | diagnostic | cli | Analyse per-frame CSV ledger from --profile-frame-csv. |
 | `profile_cuda_kernels.py` | diagnostic | - | Profile CUDA kernel time for detector/tracker hot paths. |
@@ -307,13 +307,13 @@ Outputs: `results/module_benchmark/<timestamp>/`（含 `summary.txt`、`commands
 | `sportsmot.py` | stable | cli | Run SportsMOT dataset eval through the saccade tracker pipeline. |
 | `summarize_ablation_mot17.py` | stable | cli | Summarize MOT17 ablation experiment folders against a shared baseline. |
 | `sweep_a7_quality.py` | experiment | - | Sweep A7/P5-2 quality-gate thresholds against MOT metrics. |
-| `sweep_density_gating.py` | diagnostic | cli | Sweep: 局部軌跡密度自適應門控 (Density-Gating) 超參數搜索 |
+| `sweep_density_gating.py` | diagnostic | cli | Sweep: 局部軌跡密度自適應門控 (Density-Gating) 超參數搜索 ============================================================= 掃描 --… |
 | `sweep_external_fp_classifier.py` | diagnostic | cli | Sweep logistic TP/FP filters on CrowdHuman external rows. |
 | `sweep_low_mt.sh` | experiment | - | Sweep low match_thresh values and collect overall metrics. |
 | `train_cascade_stage2.py` | stable | - | Compatibility wrapper for scripts/eval/appearance/train_cascade_stage2.py. |
 | `train_external_fp_classifier.py` | stable | - | Compatibility wrapper for appearance/train_external_fp_classifier.py. |
 | `ultralytics_official_mot17.py` | stable | - | Compatibility wrapper for scripts/eval/baselines/ultralytics_official_mot17.py. |
-| `validate_profiles.py` | diagnostic | cli | Validate that pipeline_contribution.py profiles correctly map to pipeline stages |
+| `validate_profiles.py` | diagnostic | cli | Validate that pipeline_contribution.py profiles correctly map to pipeline stages described in docs/DATAFLOW.m… |
 | `validate_roi_embeddings.py` | stable | - | Compatibility wrapper for scripts/eval/appearance/validate_roi_embeddings.py. |
 | `verify_cpp_detector.py` | diagnostic | cli | Validation and benchmark script for C++ LibTorch + TensorRT MambaGatedDetector. |
 

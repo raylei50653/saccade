@@ -73,8 +73,43 @@ def test_build_indexes_every_tracked_script(tmp_path, monkeypatch):
 def test_marker_mention_in_prose_is_not_treated_as_a_block():
     prose = f"See the `{idx.BEGIN}` block near the end.\n\nmore text\n"
     assert idx.BLOCK_RE.search(prose) is None
+    assert idx.STRIP_RE.search(prose) is None
     real = f"{idx.BEGIN}\nrow\n{idx.END}\n"
     assert idx.BLOCK_RE.search(real) is not None
+    assert idx.STRIP_RE.search(real) is not None
+
+
+def test_status_inside_docstring_is_not_a_valid_header(tmp_path, monkeypatch):
+    """A `# status:` line living inside the module docstring must not count."""
+    monkeypatch.setattr(idx, "REPO", tmp_path)
+    body = '"""Do a thing.\n\n# status: stable\n"""\n\nimport os\n'
+    _mkfile(tmp_path / "scripts/fake.py", body)
+    status, _desc, _usage = idx.extract("scripts/fake.py")
+    assert status == "", (
+        "docstring-embedded status must not satisfy the header contract"
+    )
+    # a real header comment after the docstring is picked up
+    _mkfile(tmp_path / "scripts/real.py", '"""Do a thing."""\n# status: stable\n')
+    assert idx.extract("scripts/real.py")[0] == "stable"
+
+
+def test_description_is_the_first_paragraph_not_a_wrapped_fragment(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(idx, "REPO", tmp_path)
+    body = (
+        '"""Test the hypothesis that a wrapped summary\n'
+        "continues onto a second line.\n\n"
+        'Details paragraph that must be excluded."""\n'
+        "# status: diagnostic\n"
+    )
+    _mkfile(tmp_path / "scripts/wrap.py", body)
+    _status, desc, _usage = idx.extract("scripts/wrap.py")
+    assert (
+        desc
+        == "Test the hypothesis that a wrapped summary continues onto a second line."
+    )
+    assert "Details paragraph" not in desc
 
 
 def test_orphan_block_is_removed_when_directory_has_no_scripts(tmp_path, monkeypatch):

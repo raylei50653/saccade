@@ -121,7 +121,7 @@ less directly tied to the accepted main-line protocol.
 | `train_gated_detector.py` | stable | cli | Option D (revised): GatedYOLODetector training. |
 | `train_gated_tp.py` | archive-candidate | cli | GatedYOLODetector training with Track-guided TP Recall Loss. |
 | `train_jde_distill.py` | archive-candidate | cli | OSNet → JDE embedding head knowledge distillation. |
-| `train_jde_market.py` | archive-candidate | cli | JDE-style embedding training on Market-1501 — Pipeline Convention |
+| `train_jde_market.py` | archive-candidate | cli | JDE-style embedding training on Market-1501 — Pipeline Convention ===========================================… |
 | `train_joint.py` | archive-candidate | cli | Option C：YOLO26s + Cross-Attention Decoder 聯合訓練 |
 | `train_mamba_cached.py` | archive-candidate | cli | Train Mamba head from cached TRT backbone features (Phase 2 GT supervision). |
 | `train_mamba_gt.py` | stable | cli | Option F: MambaDetectionHead GT fine-tuning (Phase 2). |
