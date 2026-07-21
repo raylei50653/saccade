@@ -2085,3 +2085,4 @@ change the route-1 permanent-ledger conclusion recorded in
 accepted runtime-fidelity edge, and no actual H0 guarantee envelope. The owner
 records the sole `SEALED` event for this re-entry as the final appended row
 below.
+| 2026-07-21 | `5a2d1de509fa64f2e5ce9a4db8182337da215968` | `7895704c298504b279ae8e1febf19ca2a715637f` | `SEALED` |
