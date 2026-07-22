@@ -6,6 +6,10 @@ top-level files. Reproduction against a git ref is exercised via the
 build_slim_release.py --check flow, not here.
 """
 
+# scope: system
+# function: contract
+# lifecycle: active
+
 from pathlib import Path
 
 import yaml

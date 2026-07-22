@@ -4,6 +4,10 @@ No GPU. Uses live registry by default plus a tiny synthetic registry for
 schema/error paths.
 """
 
+# scope: eval
+# function: contract
+# lifecycle: active
+
 from __future__ import annotations
 
 import importlib.util

@@ -117,6 +117,14 @@ else
   ERRORS=$((ERRORS + 1))
 fi
 
+echo "── tests structure check (three-axis header + fresh index; fail-closed)"
+if uv run python3 scripts/tools/check_tests_structure.py --strict 2>&1; then
+  ok "tests structure"
+else
+  fail "tests structure — missing scope/function/lifecycle header or docstring, or stale index; run scripts/tools/build_tests_index.py"
+  ERRORS=$((ERRORS + 1))
+fi
+
 # ── 5. pytest ────────────────────────────────────────────────────────────────
 echo "── pytest"
 if uv run pytest tests/ -q --ignore=tests/benchmarks 2>&1; then

@@ -1,3 +1,14 @@
+"""Pin the scripts/eval compat wrappers to their relocated implementations.
+
+Every legacy top-level ``scripts/eval/*.py`` name must still resolve (via the
+COMPAT_WRAPPERS map) to the module it was moved to, so renames don't break
+callers that import the old path.
+"""
+
+# scope: eval
+# function: contract
+# lifecycle: active
+
 import importlib.util
 import runpy
 import sys

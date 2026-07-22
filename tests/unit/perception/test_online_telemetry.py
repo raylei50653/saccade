@@ -1,3 +1,9 @@
+"""Unit tests for saccade.perception.online_telemetry.OnlineTelemetry."""
+
+# scope: perception
+# function: behavior
+# lifecycle: active
+
 from __future__ import annotations
 
 import subprocess

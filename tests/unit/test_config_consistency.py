@@ -13,6 +13,10 @@ PHASE 1C additions (2026-07-08):
   * EvalConfig field differences must be explicitly categorised in whitelists
 """
 
+# scope: eval
+# function: contract
+# lifecycle: active
+
 from __future__ import annotations
 
 import dataclasses
