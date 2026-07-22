@@ -373,6 +373,17 @@ not only as a residual-state narrative. The state definition, \(A_\Delta\),
 \(d_\Delta(c)\), \(Q_\Delta\), domains, and units must form one complete and
 reviewable interface.
 
+*Resolved by WP-A2 (2026-07-22):* frozen as
+[D1 §4](../models/gap_conditioned_stochastic_transition_spec_v1.md) — canonical
+state \(z=[x;v]\in\mathbb R^{2d}\) (coordinate dim \(d\); concretizes §2
+substrate \(\mathbb R^k\), \(k=2d\)), M2 SDE, \(A_\Delta\), \(d_\Delta(c)\),
+\(Q_\Delta\) (noise-integral + closed form), \(\gamma=0\) continuous extension,
+parameter domains, causal assumptions, and units as one interface. Resolving
+this obligation does **not** discharge WP-A3 (PSD/nesting/asymptotics proofs,
+D2), WP-A4 (obligation 3), or WP-A5 (obligation 2); D1 §4 defers those and the
+production operator-layer offset \(\pm(\mathrm{bridge\_at}-1)v\) is kept out of
+canonical \(d_\Delta(c)\) and out of M2 drift.
+
 ## Non-scope
 
 This task authorizes none of the following:
@@ -483,6 +494,12 @@ acceptance records it.
 table above is retained as the WP-A0 snapshot. Obligations 2–4 remain
 unresolved.
 
+*Update (WP-A2, 2026-07-22):* obligation 4 (canonical-state affine M2
+transition) is **resolved** — frozen in
+[D1 §4](../models/gap_conditioned_stochastic_transition_spec_v1.md). Obligations
+2 and 3 remain **unresolved** (their owning packets WP-A5 / WP-A4); the
+sealable terminal still requires them plus the WP-A3 proof appendix (D2).
+
 Even the sealable terminal would grant no automatic B1, O1, online, mainline,
 or production authority.
 
@@ -513,8 +530,9 @@ WP-A4  independence vs explicit cross-covariance C (obligation 3)
 WP-A5  calibration vs ranking claim definitions (obligation 2) + terminal review
 ```
 
-**Current step:** WP-A1 landed (D1 §2–§3 frozen; declaration sealed). WP-A2
-not started.
+**Current step:** WP-A2 landed (D1 §4 frozen: canonical-state affine M2 +
+\(Q_\Delta\) interface; obligation 4 resolved). Next = WP-A3 (nesting / PSD /
+asymptotics proofs; D2). WP-A3 not started.
 
 ## History
 
@@ -533,3 +551,14 @@ not started.
   nine-field canonical observation/time interface + observation modes frozen
   (D1 §2–§3); obligation 1 resolved; obligations 2–4 remain unresolved; next
   packet WP-A2 (canonical-state affine M2 + \(Q_\Delta\)).
+- 2026-07-22 — **WP-A2: canonical-state affine M2 + \(Q_\Delta\) frozen**.
+  [D1 §4](../models/gap_conditioned_stochastic_transition_spec_v1.md) freezes
+  the full affine transition interface
+  \(K_\Delta(z_0,c)=\mathcal N(A_\Delta z_0+d_\Delta(c),Q_\Delta)\) at
+  \(\Delta=g_{\mathrm{phys}}\): canonical state, M2 SDE, \(A_\Delta\),
+  \(d_\Delta(c)\), \(Q_\Delta\) (noise-integral + closed form), \(\gamma=0\)
+  continuous extension to M1, parameter domains, causal assumptions, units.
+  Obligation 4 resolved; obligations 2–3 remain unresolved; canonical drift /
+  M2 mean / production operator-layer offset \(\pm(\mathrm{bridge\_at}-1)v\)
+  kept strictly separate; no WP-A3–A5 obligation claimed complete. Next packet
+  WP-A3 (nesting / PSD / asymptotics proofs; D2).
