@@ -1,3 +1,9 @@
+"""Contract for the doc migration manifest parser and master-map generator."""
+
+# scope: system
+# function: contract
+# lifecycle: active
+
 from __future__ import annotations
 
 from pathlib import Path

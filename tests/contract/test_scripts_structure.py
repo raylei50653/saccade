@@ -6,6 +6,10 @@ detect the failure modes they claim to (missing status, un-indexed script,
 orphan block left behind after a directory is emptied).
 """
 
+# scope: system
+# function: contract
+# lifecycle: active
+
 import sys
 from pathlib import Path
 

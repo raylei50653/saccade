@@ -19,6 +19,10 @@ field's own vocabulary has already drifted (`sealed-execution`,
 it would pin the guard to a string that rots.
 """
 
+# scope: system
+# function: contract
+# lifecycle: active
+
 from __future__ import annotations
 
 import subprocess

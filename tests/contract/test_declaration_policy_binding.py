@@ -47,6 +47,10 @@ body cannot change by a single byte; history can still be appended below it; and
 the check needs to understand nothing about the document's structure to say so.
 """
 
+# scope: system
+# function: contract
+# lifecycle: active
+
 from __future__ import annotations
 
 import hashlib

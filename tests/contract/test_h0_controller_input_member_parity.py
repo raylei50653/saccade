@@ -10,6 +10,10 @@ explicit literal, and lock the full/discovery parity behaviour so the two paths
 can never silently diverge again.
 """
 
+# scope: system
+# function: regression
+# lifecycle: active
+
 from __future__ import annotations
 
 import copy
