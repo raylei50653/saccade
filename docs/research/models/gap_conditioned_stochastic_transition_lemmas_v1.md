@@ -329,12 +329,25 @@ q_{xx}=\frac{\Delta^3}{3}+O(\gamma\Delta^4),
 \]
 \[
 a=\Delta-\frac{\gamma\Delta^2}{2}+O(\gamma^2\Delta^3),\qquad
-d_\Delta(c)=\Big[\tfrac{\gamma\Delta^2}{2}\bar v;\ \gamma\Delta\,\bar v\Big]+O(\Delta^3)
-=O(\Delta^2)\ \text{（首項 velocity 分量 }O(\Delta)\text{）}.
+d_\Delta(c)=\begin{bmatrix}\tfrac{\gamma\Delta^2}{2}\bar v+O(\Delta^3)\\[2pt]
+\gamma\Delta\,\bar v+O(\Delta^2)\end{bmatrix},\qquad d_\Delta(c)=O(\Delta)
 \]
-**leading order 即 M1**（\(Q_{M1}\) blocks \(\tfrac{\Delta^3}{3}D,\tfrac{\Delta^2}{2}D,
-\Delta D\)），與 \(\gamma\) 無關。**詮釋：** 短 gap 內 mean-reversion（\(\gamma\) 效應）
-為高階小量，M1 是**普適**短-gap 極限；OU 與 CV 在短 gap 不可區分。
+（drift 的 velocity 分量本身是 \(O(\Delta)\)，故整體 \(d_\Delta(c)=O(\Delta)\)，
+**不是** \(O(\Delta^2)\)；只有 position 分量是 \(O(\Delta^2)\)。）
+
+**covariance leading blocks 即 M1**（\(Q_{M1}\) blocks \(\tfrac{\Delta^3}{3}D,
+\tfrac{\Delta^2}{2}D,\Delta D\)），與 \(\gamma\) 無關。**詮釋（限縮至 covariance
+leading blocks）：** 就 process-noise 的 covariance leading blocks 而言，
+mean-reversion（\(\gamma\) 效應）為高階小量，M1 是普適短-gap 極限；OU 與 CV 的
+process noise 在短 gap 不可區分。
+
+**此結論不涵蓋 state mean。** 完整 M2 mean 相對 M1 的 velocity 差為
+\[
+m_\Delta^v-v_0=-\gamma\Delta\big(v_0-\bar v(c)\big)+O(\Delta^2),
+\]
+即 velocity mean 的 mean-reversion 是**一階**效應（position mean 差為
+\(-\tfrac{\gamma\Delta^2}{2}\big(v_0-\bar v(c)\big)+O(\Delta^3)\)，二階）。故「短 gap
+不可區分」僅適用於 covariance leading blocks，**不**延伸到 velocity state mean。
 
 ### §5.2 Long gap（\(\gamma>0\) 固定，\(\Delta\to\infty\)，\(b=e^{-\gamma\Delta}\to0\)）
 
@@ -350,12 +363,20 @@ q_{vv}D\to\frac{D}{2\gamma},\qquad
 q_{xv}D\to\frac{D}{2\gamma^2},\qquad
 q_{xx}D=\frac{\Delta}{\gamma^2}D+O(1)\ \text{（block，隨 }\Delta\text{ 線性成長）}.
 \]
-**Mean：** \(b\to0,\ a\to1/\gamma\)，故
+**Mean：** \(b\to0,\ a=1/\gamma+O(e^{-\gamma\Delta})\to1/\gamma\)，故 \(A_\Delta\) 收斂
+（entrywise，指數快）：
 \[
-A_\Delta\to\begin{bmatrix}I&\tfrac1\gamma I\\0&0\end{bmatrix},\qquad
-d_\Delta(c)\to\begin{bmatrix}(\Delta-\tfrac1\gamma)\bar v(c)\\ \bar v(c)\end{bmatrix}.
+A_\Delta\to\begin{bmatrix}I&\tfrac1\gamma I\\0&0\end{bmatrix}.
 \]
-velocity 分量的 \(v_0\) 記憶被 \(b\to0\) 抹去、reversion 至 \(\bar v(c)\)。
+drift **不**收斂為有限矩陣（position 分量在 \(\bar v(c)\neq0\) 時線性發散），只能寫成
+漸近式：
+\[
+d_\Delta(c)=\begin{bmatrix}\big(\Delta-\tfrac1\gamma\big)\bar v(c)+O(e^{-\gamma\Delta})\\[2pt]
+\bar v(c)+O(e^{-\gamma\Delta})\end{bmatrix}.
+\]
+即 **velocity 分量收斂**至 \(\bar v(c)\)（\(v_0\) 記憶被 \(b\to0\) 抹去、reversion 至
+context mean）；**position 分量隨 \(\Delta\) 線性成長，不收斂**（\(\bar v(c)\neq0\) 時
+無有限極限）。
 
 **詮釋與 M1 對比：** velocity covariance 飽和到 OU stationary 值 \(D/(2\gamma)\)；
 position covariance block \(\sim(\Delta/\gamma^2)D\) 隨 \(\Delta\)**線性**成長
@@ -443,3 +464,18 @@ WP-A2 驗證），全部通過：
   Selects no terminal; introduces no WP-A4/A5 object; makes no interface,
   runtime, data, or production change. Frozen D1 §2–§4 untouched (byte-frozen;
   no append-only correction). Symbolic cross-checks in Appendix A all pass.
+- 2026-07-22 — L4 bounded corrections per #253 owner review (COMMENT verdict
+  = changes required; pre-merge, nothing frozen, WP-A3 scope unchanged, frozen
+  D1 untouched): (1) **§5.1 short-gap drift order** fixed — the velocity
+  component of \(d_\Delta(c)\) is \(O(\Delta)\), so \(d_\Delta(c)=O(\Delta)\)
+  (not \(O(\Delta^2)\); only the position component is \(O(\Delta^2)\)); the
+  "OU/CV indistinguishable at short gap" statement is now restricted to the
+  covariance leading blocks, and the first-order velocity-mean reversion
+  \(m_\Delta^v-v_0=-\gamma\Delta(v_0-\bar v(c))+O(\Delta^2)\) is stated
+  explicitly (excluded from the indistinguishability claim). (2) **§5.2
+  long-gap drift** changed from an (illegitimate) limit arrow to an asymptotic:
+  \(d_\Delta(c)=[(\Delta-1/\gamma)\bar v(c)+O(e^{-\gamma\Delta});\,\bar v(c)
+  +O(e^{-\gamma\Delta})]\), noting the velocity component converges to
+  \(\bar v(c)\) while the position component grows linearly and does not
+  converge. \(A_\Delta\) limit unchanged (entrywise convergent). Verified
+  symbolically.
