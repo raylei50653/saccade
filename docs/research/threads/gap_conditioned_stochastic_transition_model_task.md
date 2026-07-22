@@ -43,13 +43,22 @@ only**. It does not change any H0 state: faithful capture = none, actual H0
 guarantee = none, candidate/guarantee sets empty, Phase B forbidden, and no
 H0 repair or re-entry is authorized by this activation.
 
-**Activation ≠ active-declaration seal.** The active declaration is **not
+**Activation ≠ active-declaration seal.** The active declaration was **not
 sealed** by WP-A0. Pre-activation obligation 1 (the canonical
 observation/time interface named below) is the active-declaration seal
-condition and is deferred to WP-A1; until WP-A1 lands, the active declaration
-remains a draft, and obligations 2–4 remain unresolved work before any
-`GCTM_MODEL_SPEC_SEALABLE` selection. WP-A0 resolves none of the four
-obligations and creates neither D1 nor D2.
+condition and was deferred to WP-A1; WP-A0 resolved none of the four
+obligations and created neither D1 nor D2.
+
+**Active-declaration seal (WP-A1, 2026-07-22).** Obligation 1 is resolved by
+WP-A1: the nine-field canonical observation/time interface and the
+observation-mode/causal-availability rules are frozen in
+[D1 §2–§3](../models/gap_conditioned_stochastic_transition_spec_v1.md). With
+the WP-A0 freezes (scope, ordered terminal partition, decision procedure,
+encoded obligations) this completes every pre-seal condition, and the active
+declaration is **sealed as of the WP-A1 merge**. Obligations 2–4 remain
+unresolved work before any `GCTM_MODEL_SPEC_SEALABLE` selection; the seal
+grants no runtime, data, B1/O1, online, or production authority and changes
+no H0 state.
 
 ### Bindings frozen at activation
 
@@ -391,9 +400,10 @@ production-behavior change.
 
 ## Future deliverables — create only after activation
 
-The following files do not exist yet. WP-A0 (activation) must not create
-them; they are created by the post-activation work packets, starting with
-WP-A1 (D1 observation/time interface freeze).
+WP-A0 (activation) created none of these. **D1 exists as a seed since WP-A1**
+([gap_conditioned_stochastic_transition_spec_v1.md](../models/gap_conditioned_stochastic_transition_spec_v1.md):
+§2–§3 frozen, §4–§6 reserved); D2 does not exist yet and is created by its
+owning packet (WP-A3).
 
 ### D1 — canonical model specification
 
@@ -468,6 +478,11 @@ acceptance records it.
 | 3 · independence or explicit cross-covariance \(C\) | **unresolved** | before `GCTM_MODEL_SPEC_SEALABLE` |
 | 4 · canonical-state affine M2 transition (complete interface) | **unresolved** | before `GCTM_MODEL_SPEC_SEALABLE` |
 
+*Update (WP-A1, 2026-07-22):* obligation 1 is **resolved** — frozen in
+[D1 §2–§3](../models/gap_conditioned_stochastic_transition_spec_v1.md); the
+table above is retained as the WP-A0 snapshot. Obligations 2–4 remain
+unresolved.
+
 Even the sealable terminal would grant no automatic B1, O1, online, mainline,
 or production authority.
 
@@ -498,7 +513,8 @@ WP-A4  independence vs explicit cross-covariance C (obligation 3)
 WP-A5  calibration vs ranking claim definitions (obligation 2) + terminal review
 ```
 
-**Current step:** WP-A1 not started.
+**Current step:** WP-A1 landed (D1 §2–§3 frozen; declaration sealed). WP-A2
+not started.
 
 ## History
 
@@ -511,3 +527,9 @@ WP-A5  calibration vs ranking claim definitions (obligation 2) + terminal review
   `doc-status: active`, `wip-role: sole-active`; terminal partition and
   decision procedure frozen; four obligations recorded unresolved; active
   declaration not sealed (obligation 1 → WP-A1); no D1/D2 created.
+  Landed via PR #250 (merge `f5cda311`).
+- 2026-07-22 — **WP-A1: active declaration sealed**. D1 seed created
+  ([spec v1](../models/gap_conditioned_stochastic_transition_spec_v1.md));
+  nine-field canonical observation/time interface + observation modes frozen
+  (D1 §2–§3); obligation 1 resolved; obligations 2–4 remain unresolved; next
+  packet WP-A2 (canonical-state affine M2 + \(Q_\Delta\)).
