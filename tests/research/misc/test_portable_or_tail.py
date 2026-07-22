@@ -1,5 +1,9 @@
 """Unit tests for frozen portable OR-tail policy loader / evaluator."""
 
+# scope: eval
+# function: contract
+# lifecycle: active
+
 from __future__ import annotations
 
 import json

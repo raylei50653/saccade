@@ -1,5 +1,11 @@
 """Synthetic tests for R1.1 transfer-failure attribution."""
 
+# scope: eval
+# function: behavior
+# lifecycle: quarantined
+# lifecycle-note: R1.1 attribution study CLOSED (apparatus module retained);
+#   DISPOSITION.md proposes T2 — consolidate or delete with the assetization apparatus.
+
 from __future__ import annotations
 
 

@@ -1,5 +1,12 @@
 """R1 capture-contract tests: nested windows, fail-closed export, label-free replay."""
 
+# scope: eval
+# function: contract
+# lifecycle: quarantined
+# lifecycle-note: R1 temporal-reduction capture contract sealed (dfd3e0d9); a live
+#   fail-closed capture/replay contract, candidate for T1 promotion to tests/contract/;
+#   currently held in the research quarantine (excluded from default collection).
+
 from __future__ import annotations
 
 import copy

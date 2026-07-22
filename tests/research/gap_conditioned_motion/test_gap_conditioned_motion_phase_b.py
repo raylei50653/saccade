@@ -1,3 +1,13 @@
+"""Phase B gap-conditioned-motion tests: sealed-packet V5 verdict, role firewall,
+and the frozen A1–A8 criteria (retention / separability / pooled-FP) computed by
+the sealed runner — not snapshot comparisons."""
+
+# scope: eval
+# function: contract
+# lifecycle: quarantined
+# lifecycle-note: gap-motion Phase B design SEALED (PR #116); DISPOSITION.md proposes
+#   T4 (delete) once the gap-motion line closes — the line is still warm, so retained.
+
 from __future__ import annotations
 
 import importlib.util

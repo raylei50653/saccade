@@ -5,6 +5,12 @@ and asserts the corresponding audit section flips to FAIL. Skipped when the
 pack is not present (out/ is untracked, so CI skips; run locally / pre-push).
 """
 
+# scope: eval
+# function: contract
+# lifecycle: quarantined
+# lifecycle-note: safe-region A1 study CLOSED (A1_ACCEPTED_WITH_LIMITS);
+#   DISPOSITION.md proposes T3 — generic packet checkers + the sealed pack supersede it.
+
 from __future__ import annotations
 
 import importlib.util

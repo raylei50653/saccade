@@ -1,5 +1,11 @@
 """Focused contract tests for R1 RegionAsset converter."""
 
+# scope: eval
+# function: contract
+# lifecycle: quarantined
+# lifecycle-note: R1 safe-region conversion study CLOSED; DISPOSITION.md proposes T3/T4
+#   (pack-shape checks → generic checkers; frozen-number replays → delete).
+
 from __future__ import annotations
 
 import importlib.util

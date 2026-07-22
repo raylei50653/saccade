@@ -1,5 +1,11 @@
 """Unit tests for D0 Consumer-A bridge estimator fidelity audit."""
 
+# scope: eval
+# function: contract
+# lifecycle: quarantined
+# lifecycle-note: D0 bridge-fidelity packet sealed (PR #115, d0_bridge_estimator_fidelity_20260711);
+#   DISPOSITION.md proposes T4 (delete) — recipe + sealed packet preserve it.
+
 from __future__ import annotations
 
 import importlib.util
