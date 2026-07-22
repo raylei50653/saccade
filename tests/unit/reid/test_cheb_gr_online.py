@@ -1,5 +1,9 @@
 """Unit tests for the causal online Cheb-GR ID handover (numeric core)."""
 
+# scope: eval, reid
+# function: behavior
+# lifecycle: active
+
 from __future__ import annotations
 
 import numpy as np

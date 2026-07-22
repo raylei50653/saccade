@@ -1,5 +1,9 @@
 """Unit tests for the causal occ-exit identity audit (numeric core)."""
 
+# scope: eval
+# function: behavior
+# lifecycle: active
+
 from __future__ import annotations
 
 import torch

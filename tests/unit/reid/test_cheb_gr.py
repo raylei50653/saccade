@@ -1,5 +1,9 @@
 """Unit tests for Cheb-GR re-ranking core (CPU, no GPU required)."""
 
+# scope: reid
+# function: behavior
+# lifecycle: active
+
 from __future__ import annotations
 
 import torch
