@@ -947,16 +947,36 @@ S_\Delta=\underbrace{(P_{xx}+R_1)}_{\text{shape }1}
 a^2(\gamma,\Delta),q_{xx}(\gamma,\Delta)\}\) 由 frozen §4／已證 D2 lemma 提供（\(q_{xx}\)：
 D2 §4.6／L2，OU 飽和 D2 L4），非本節新證。
 
-**可分離的是 coefficient matrices，不是完整 \(P_0,R_1\)。** 這四個 shape scalar 對相異
-\(\Delta\) **線性獨立**（數值 sanity：over \(\ge4\) 相異 gap 的 shape 矩陣 rank \(=4\)），故
-在**共享參數 population**（同一 \(P_0,\gamma,D,R_1\) 跨 events）且足夠多相異 \(\Delta\) 下，
-family \(\{S_\Delta\}_\Delta\) generically 識別出**四個係數矩陣**
+**可分離的是 coefficient matrices，不是完整 \(P_0,R_1\)——而且要 \(\gamma\) 已知。** 這四個
+shape scalar 對相異 \(\Delta\) **線性獨立**（數值 sanity：over \(\ge4\) 相異 gap 的 shape
+矩陣 rank \(=4\)）；因此 **在 \(\gamma\) 已知／固定的前提下**，共享參數 population
+（同一 \(P_0,\gamma,D,R_1\) 跨 events）且 \(\ge4\) 相異 \(\Delta\) 使 family
+\(\{S_\Delta\}_\Delta\) generically 識別出**四個係數矩陣**
 \[
-\{\,P_{xx}+R_1,\ \operatorname{sym}(P_{xv}),\ P_{vv},\ D\,\}
+\{\,P_{xx}+R_1,\ \operatorname{sym}(P_{xv}),\ P_{vv},\ D\,\}.
 \]
-以及 \(\gamma\)（由 shape 的 \(\Delta\)-函數形狀）。**但這不是完整的 \(\{P_0,R_1\}\)。**
+**但這不是完整的 \(\{P_0,R_1\}\)（見下兩個 gauge），且 \(\gamma\) 本身另有一層
+non-identifiability（見下段）。**
 
-**兩個結構性不可識別方向（\(H_x\) 下，任意多 gap 皆不可識別）：**
+**\(\gamma\) unknown 時，4 個 gap 不足以識別 \(\gamma\)（自由度計數）。** rank-4 論證預設
+shapes \(a(\gamma,\cdot),q_{xx}(\gamma,\cdot)\) 的 \(\gamma\) 已知；當 \(\gamma\) 也是 unknown，
+它**非線性**地進入 shapes。以每個 covariance 有 \(r=d(d+1)/2\) 自由度計，**恰 4 個 gap**：
+\[
+\text{observations}=4r,\qquad \text{unknowns}=4r+1\ (\text{多出的 }1=\gamma).
+\]
+故對任一候選 \(\gamma'\)，shape 矩陣 \(M(\gamma')\) 仍可逆，重解得四個係數矩陣
+\(C'_j=M(\gamma')^{-1}O\)，在這 4 個 gap 上**精確**重現同一組 \(S_\Delta\)；且對 \(\gamma\)
+鄰域內的 \(\gamma'\)，重解矩陣仍 PSD-admissible（interior），PSD 約束**不**消除此自由度
+（數值 sanity G3：真 \(\gamma=0.6\) 下，\(\gamma'\in[0.40,0.68]\) 皆 exact-refit 且
+admissible，構成 continuum ⇒ \(\gamma\) 由 4 gap **不可識別**）。**因此不得把「\(\ge5\)
+gaps」寫成充分條件**——它只是自由度計數上的**必要**修正。\(\gamma\) 的識別需要
+（i）\(>4\) 相異 gap，且（ii）joint nonlinear map \((\gamma,C_1,\dots,C_4)\mapsto
+\{S_\Delta\}\) 的 **injectivity／full-Jacobian-rank + non-degenerate coefficients**——
+本規格**不證明**此條件，故**保守地不宣稱本規格已識別 \(\gamma\)**（數值上 \(\ge7\) gap 時
+wrong-\(\gamma'\) best-fit 殘差非零、真 \(\gamma\) 殘差為零，僅為 generic identifiability 的
+illustrative，非 sufficiency 證明）。
+
+**兩個結構性不可識別方向（\(H_x\) 下，任意多 gap 皆不可識別；與 \(\gamma\) 是否已知無關）：**
 
 1. **\(P_{xx}\leftrightarrow R_1\) gauge。** \(P_{xx}\) 與 \(R_1\) **同乘 constant shape \(1\)**，
    故 \(P_{xx}\mapsto P_{xx}+E,\ R_1\mapsto R_1-E\) 對**所有** \(\Delta\) 保持相同
@@ -967,10 +987,12 @@ family \(\{S_\Delta\}_\Delta\) generically 識別出**四個係數矩陣**
    出現），故對任意多 gap invisible（數值 sanity G2：對加反對稱擾動的 \(P_0\)，\(H_x\)
    observable 零變動）。
 
-因此 **\(H_x\) multi-gap 最多識別 quotient** \(\{\gamma,D,P_{vv},\operatorname{sym}(P_{xv}),
-P_{xx}+R_1\}\)；完整 \(P_0\)（其 \(P_{xx}\) vs \(R_1\) split 與 \(\operatorname{asym}P_{xv}\)）
-**不可識別**。原始 C2 sanity 只證「某一組選定反例會被其他 gap 分開」，**不**證 mapping
-injective——此處以 gauge 論證與 G1/G2 更正。
+因此 **\(H_x\) multi-gap（\(\gamma\) 已知時）最多識別 quotient**
+\(\{D,P_{vv},\operatorname{sym}(P_{xv}),P_{xx}+R_1\}\)；完整 \(P_0\)（其 \(P_{xx}\) vs
+\(R_1\) split 與 \(\operatorname{asym}P_{xv}\)）**不可識別**，而 \(\gamma\) 本身在 unknown
+時另需上段的 \(>4\)-gap + joint-injectivity 條件（本規格不宣稱）。原始 C2 sanity 只證
+「某一組選定反例會被其他 gap 分開」，**不**證 mapping injective——此處以 gauge 論證、
+G1/G2 與 G3（joint-\(\gamma\) DOF）更正。
 
 **joint mode（\(H_{xv}\)）能救什麼、不能救什麼。** \(H_{xv}=I\) 觀測全 state：cross-block
 \(bP_{xv}+ab\,P_{vv}(+R_1^{xv})\) 含**完整** \(P_{xv}\)，故
@@ -1023,7 +1045,7 @@ claim-level 三塊。
 | Contributor 對 | 在哪混淆 | Leak? | 阻斷條件 |
 |:--|:--|:--:|:--|
 | \(\operatorname{sym}(P_{xv})\)／\(P_{vv}\)／\(D\) 三者 ↔ 彼此 | \(S_\Delta\) position block @ 單一 \(\Delta\) | **L**（單一 \(\Delta\)） | **multi-gap 可阻斷**：shapes \(a,a^2,q_{xx}\) 線性獨立（§7.4） |
-| \(\gamma\) ↔ \(D\) | \(Q_\Delta=\text{scalar}(\gamma,\Delta)\,D\) | **L**（單一 \(\Delta\) 只見乘積） | **multi-gap 可阻斷**：OU scalar 的 \(\Delta\)-shape 定 \(\gamma\)，係數矩陣定 \(D\)（§7.4） |
+| \(\gamma\) ↔ \(D\)（及全體 coeff matrices） | \(Q_\Delta=\text{scalar}(\gamma,\Delta)\,D\)；\(\gamma\) 非線性入 shapes | **L** | **\(\gamma\) 已知**：\(D\)=\(q_{xx}\)-shape 係數，可識別。**\(\gamma\) unknown**：4 gap 有 1 個 DOF（\(=\gamma\)），任意 \(\gamma'\) 可 exact-refit（§7.4 G3）⇒ 需 \(>4\) gap + joint-injectivity（本規格不證）；「\(\ge5\) gaps」只是**必要**非充分 |
 | \(P_{xx}\) ↔ \(R_1\)（position initial-state vs measurement noise） | 兩者同乘 constant shape \(1\) | **L（結構性）** | **multi-gap 不可阻斷、\(H_{xv}\) 亦不可**（只識別和 \(P_{xx}+R_1\)，§7.4 G1）；僅由**額外宣告獨立資訊**固定（已知 \(R_1\) 或 \(P_{xx}\) gauge） |
 | \(\operatorname{asym}(P_{xv})\) ↔ observable | 反對稱部分不進 \(H_x\) map | **L（結構性，\(H_x\)）** | **\(H_x\) 下任意多 gap invisible**；\(H_{xv}\) cross-block 可識別（§7.4 G2） |
 
@@ -1051,13 +1073,17 @@ claim-level 三塊。
 separation 結構下，primary object A 的 intended claims 的 identifiability 為
 **conditionally specified**：
 
-1. **covariance 參數只在 quotient 意義下可識別。** \(H_x\) multi-gap population
-   （共享參數、足夠 gap spread）generically 識別 \(\{\gamma,D,P_{vv},
-   \operatorname{sym}(P_{xv}),P_{xx}+R_1\}\)；**完整 \(\{P_0,R_1\}\) 不可識別**——存在
-   兩個結構性 gauge：\(P_{xx}\leftrightarrow R_1\)（\(H_{xv}\) 亦不可破，僅由額外宣告的
-   已知 \(R_1\)／\(P_{xx}\) 固定）與 \(\operatorname{asym}(P_{xv})\)（\(H_x\) invisible，
-   \(H_{xv}\) 可識別）（§7.4／§7.6）。single position-only event 更強：連 quotient 都不可
-   識別（§7.3）。
+1. **covariance 參數只在 quotient 意義下可識別，且要 \(\gamma\) 已知。**
+   在 **\(\gamma\) 已知／固定** 的前提下，\(H_x\) multi-gap population（共享參數、
+   \(\ge4\) 相異 gap）generically 識別 \(\{D,P_{vv},\operatorname{sym}(P_{xv}),
+   P_{xx}+R_1\}\)；**完整 \(\{P_0,R_1\}\) 仍不可識別**——存在兩個結構性 gauge：
+   \(P_{xx}\leftrightarrow R_1\)（\(H_{xv}\) 亦不可破，僅由額外宣告的已知 \(R_1\)／
+   \(P_{xx}\) 固定）與 \(\operatorname{asym}(P_{xv})\)（\(H_x\) invisible，\(H_{xv}\)
+   可識別）（§7.4／§7.6）。**\(\gamma\) unknown** 時 4 gap 有一個 DOF 使 \(\gamma\)
+   **不可識別**（任意 \(\gamma'\) exact-refit，§7.4 G3）；其識別需 \(>4\) gap +
+   joint-injectivity／full-Jacobian-rank + non-degenerate coefficients，**本規格不證明、
+   不宣稱已識別 \(\gamma\)**（「\(\ge5\) gaps」只是必要非充分）。single position-only
+   event 更強：連 quotient 都不可識別（§7.3）。
 2. \(\bar v(c)\) 於 **宣告且變化的 exit-causal context** 可識別，否則與常數 mean／
    operator offset 混淆（§7.4／§7.6）。
 3. \(H_{xv}\) velocity-相關識別需 §3.3 causal-availability 宣告；overlap 導出的 entry
@@ -1085,7 +1111,8 @@ review 依 charter frozen decision procedure 的機械判定；本節只提供�
 
 | 量 | 可識別所需最小 regime | 未達 regime 時的地位 |
 |:--|:--|:--|
-| \(\gamma,D,P_{vv},\operatorname{sym}(P_{xv}),P_{xx}+R_1\)（identifiable quotient） | \(H_x\) multi-gap population，\(\ge4\) 相異 \(\Delta\)，共享參數 | single \(\Delta\)：加性混淆，連 quotient 都不可識別（§7.3） |
+| \(\{D,P_{vv},\operatorname{sym}(P_{xv}),P_{xx}+R_1\}\)（identifiable quotient，**\(\gamma\) 已知時**） | \(H_x\) multi-gap population，\(\ge4\) 相異 \(\Delta\)，共享參數，**\(\gamma\) 已知** | single \(\Delta\)：加性混淆，連 quotient 都不可識別（§7.3） |
+| \(\gamma\)（unknown） | \(>4\) 相異 gap **且** joint-injectivity／full-Jacobian-rank + non-degenerate coeffs（**本規格不證**） | 恰 4 gap：1 個 DOF，任意 \(\gamma'\) exact-refit ⇒ 不可識別（§7.4 G3）；「\(\ge5\)」僅必要非充分 |
 | \(P_{xx}\) vs \(R_1\) split | **額外宣告獨立資訊**（已知 \(R_1\) 或 \(P_{xx}\)） | multi-gap／\(H_{xv}\) 皆**不可**識別（結構性 gauge，§7.4 G1） |
 | \(\operatorname{asym}(P_{xv})\) | \(H_{xv}\)（cross-block） | \(H_x\) 任意多 gap invisible（§7.4 G2） |
 | \(\bar v(c)\) | 宣告、變化、exit-causal context | 否則與常數 bias／offset 混淆 |
@@ -1296,9 +1323,12 @@ schema-only B1 input interface（WP-A7 planned）。
   \(Q_\Delta\), \(R_1\) are additively conflated at one \(\Delta\)), the multi-gap
   separation **as a 4-shape decomposition**
   (\(S_\Delta=(P_{xx}+R_1)+a\,\mathrm{sym}(P_{xv})+a^2P_{vv}+q_{xx}D\), reusing frozen
-  §4.6/D2 L2/L4) — so \(H_x\) multi-gap identifies only the **quotient**
-  \(\{\gamma,D,P_{vv},\mathrm{sym}(P_{xv}),P_{xx}+R_1\}\), leaving **two structural
-  non-identifiable directions** (the \(P_{xx}\leftrightarrow R_1\) gauge, not broken
+  §4.6/D2 L2/L4) — so, **given \(\gamma\) known**, \(H_x\) multi-gap identifies only
+  the **quotient** \(\{D,P_{vv},\mathrm{sym}(P_{xv}),P_{xx}+R_1\}\) (with \(\gamma\)
+  **unknown**, 4 gaps leave a degree of freedom so \(\gamma\) is unidentified —
+  identifying it needs \(>4\) gaps + joint-injectivity, not claimed proven), leaving
+  **two structural non-identifiable directions** (the \(P_{xx}\leftrightarrow R_1\)
+  gauge, not broken
   even by \(H_{xv}\), only by declared known \(R_1\)/\(P_{xx}\); and
   \(\mathrm{asym}(P_{xv})\), \(H_x\)-invisible but \(H_{xv}\)-identifiable) — the
   claim-level result (CAL and RANK are **mutually non-identifying** — ranking does
@@ -1315,8 +1345,8 @@ schema-only B1 input interface（WP-A7 planned）。
   superseded via an append-only status note after the §1 table (no in-place edit).
   No new file ⇒ no master_map regeneration. Claims numerically sanity-checked
   (single-gap non-identifiability; the multi-gap quotient + the two structural
-  gauges G1/G2 including \(H_{xv}\)-persistence; offset/drift mean confounding;
-  CAL/RANK mutual non-identification).
+  gauges G1/G2 including \(H_{xv}\)-persistence; the joint-\(\gamma\) 4-gap DOF
+  ambiguity G3; offset/drift mean confounding; CAL/RANK mutual non-identification).
 - 2026-07-22 — bounded correction per #256 owner review (BLOCKED → fixed
   pre-merge; §7 not yet frozen; §2–§6 byte-frozen): the §7.4 multi-gap claim that
   the **full** \(\{P_0,\gamma,D,R_1\}\) is generically identifiable under \(H_x\) was
@@ -1331,3 +1361,21 @@ schema-only B1 input interface（WP-A7 planned）。
   the §7.7 verdict item 1 + honesty boundary, and the §7.8 regime summary. The old
   C2 sanity (one chosen pair separates) does not prove injectivity; replaced by the
   gauge argument and the G1/G2 numeric checks.
+- 2026-07-22 — second bounded correction per #256 owner re-review (still
+  pre-merge; §7 not yet frozen; §2–§6 byte-frozen): the §7.4 rank-4 argument
+  silently assumed \(\gamma\) **known** (the shapes \(a(\gamma,\cdot),q_{xx}(\gamma,\cdot)\)
+  depend on \(\gamma\)). With \(\gamma\) **unknown** and exactly 4 gaps the DOF count
+  is \(4r\) observations vs \(4r+1\) unknowns (\(r=d(d+1)/2\), the \(+1=\gamma\)), so
+  \(\gamma\) is **not identifiable**: any \(\gamma'\) re-solves the invertible
+  \(4\times4\) shape system and refits the same four \(S_\Delta\) exactly, staying
+  PSD-admissible for \(\gamma'\) near \(\gamma\) (numeric G3: a continuum of exact
+  admissible refits). Corrected to make coefficient-matrix identifiability
+  **conditional on \(\gamma\) known** (quotient \(\{D,P_{vv},\mathrm{sym}(P_{xv}),
+  P_{xx}+R_1\}\)); \(\gamma\) identification now requires \(>4\) gaps **and** joint
+  nonlinear-map injectivity / full-Jacobian-rank + non-degenerate coefficients,
+  **not proven here** (so the spec does not claim \(\gamma\) identified; "\(\ge5\)
+  gaps" is only the DOF-necessary correction, not sufficient). Updated §7.4 (γ-DOF
+  paragraph), the §7.6 \(\gamma\!\leftrightarrow\! D\) row, §7.7 verdict item 1, §7.8
+  regime summary (dedicated \(\gamma\)-unknown row), plus charter status/History. New
+  numeric check G3 (verify_wp_a6_gamma.py). The \(P_{xx}\leftrightarrow R_1\) and
+  \(\mathrm{asym}(P_{xv})\) structural gauges from round 1 are unchanged.

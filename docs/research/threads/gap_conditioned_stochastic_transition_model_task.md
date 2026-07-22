@@ -572,14 +572,17 @@ revised accordingly.
 in [D1 §7](../models/gap_conditioned_stochastic_transition_spec_v1.md) — the
 **terminal-3 predicate object** (`GCTM_IDENTIFIABILITY_UNRESOLVED`). It specifies
 the identifiability target set, observation/data-design regimes, the core
-single-event confounding, the multi-gap **quotient** identifiability (only
-\(\{\gamma,D,P_{vv},\mathrm{sym}(P_{xv}),P_{xx}+R_1\}\) under \(H_x\), with two
-**structural** non-identifiable gauges — \(P_{xx}\!\leftrightarrow\!R_1\), not broken
-even by \(H_{xv}\), and \(\mathrm{asym}(P_{xv})\), \(H_x\)-invisible), the CAL/RANK
-mutual-non-identifiability result, and a frozen leakage matrix; its verdict is
-conditional (identifiability **specified**, not empirically established — no data
-authorized; a claim is non-identifiable exactly when it must rely on an
-unidentifiable gauge component) and it **selects no terminal**. This is a D1 deliverable, **not** a
+single-event confounding, the multi-gap **quotient** identifiability (**given
+\(\gamma\) known**, only \(\{D,P_{vv},\mathrm{sym}(P_{xv}),P_{xx}+R_1\}\) under
+\(H_x\), with two **structural** non-identifiable gauges — \(P_{xx}\!\leftrightarrow\!R_1\),
+not broken even by \(H_{xv}\), and \(\mathrm{asym}(P_{xv})\), \(H_x\)-invisible; and
+with \(\gamma\) **unknown**, 4 gaps leave a degree of freedom so \(\gamma\) is
+unidentified — its identification needs \(>4\) gaps + joint-injectivity, **not
+claimed proven**), the CAL/RANK mutual-non-identifiability result, and a frozen
+leakage matrix; its verdict is conditional (identifiability **specified**, not
+empirically established — no data authorized; a claim is non-identifiable exactly
+when it must rely on an unidentifiable gauge component) and it **selects no
+terminal**. This is a D1 deliverable, **not** a
 numbered obligation (all four remain resolved). One D1 deliverable remains — the
 schema-only B1 input interface (D1 §8, WP-A7) — plus terminal review (WP-A8), so
 terminal review still could not yet reach the sealable terminal.
@@ -728,10 +731,13 @@ reachable until WP-A7–A8 complete.
   non-identifiable — \(P_0\)-propagation, \(Q_\Delta\), \(R_1\) are additively
   conflated at one \(\Delta\)), the multi-gap separation as a **4-shape
   decomposition** (\(S_\Delta=(P_{xx}+R_1)+a\,\mathrm{sym}(P_{xv})+a^2P_{vv}+q_{xx}D\),
-  reusing frozen §4.6 / D2 L2/L4) — so \(H_x\) multi-gap identifies only the
-  **quotient** \(\{\gamma,D,P_{vv},\mathrm{sym}(P_{xv}),P_{xx}+R_1\}\), leaving two
-  **structural** non-identifiable gauges (\(P_{xx}\!\leftrightarrow\!R_1\), not broken
-  even by \(H_{xv}\), fixable only by declared known \(R_1\)/\(P_{xx}\); and
+  reusing frozen §4.6 / D2 L2/L4) — so, **given \(\gamma\) known**, \(H_x\) multi-gap
+  identifies only the **quotient** \(\{D,P_{vv},\mathrm{sym}(P_{xv}),P_{xx}+R_1\}\)
+  (with \(\gamma\) **unknown**, 4 gaps leave one DOF ⇒ \(\gamma\) unidentified;
+  identifying it needs \(>4\) gaps + joint-injectivity, **not claimed proven** —
+  "\(\ge5\) gaps" is necessary not sufficient), leaving two **structural**
+  non-identifiable gauges (\(P_{xx}\!\leftrightarrow\!R_1\), not broken even by
+  \(H_{xv}\), fixable only by declared known \(R_1\)/\(P_{xx}\); and
   \(\mathrm{asym}(P_{xv})\), \(H_x\)-invisible / \(H_{xv}\)-identifiable) — the
   **CAL/RANK mutual-non-identifiability**
   result (ranking does not identify the calibration scale \(\alpha_\Delta\); a uniform
@@ -743,8 +749,10 @@ reachable until WP-A7–A8 complete.
   claim is non-identifiable exactly when it must rely on an unidentifiable gauge
   component. §7 **selects no terminal** (that is WP-A8). The §7.4 draft that claimed
   the *full* \(\{P_0,\gamma,D,R_1\}\) generically identifiable under \(H_x\) was
-  corrected pre-merge per #256 owner review (the quotient/structural-gauge statement
-  above). Frozen §2–§6 kept byte-frozen; stale
+  corrected pre-merge per #256 owner review — round 1 (the two structural
+  \(P_{xx}\!\leftrightarrow\!R_1\) / \(\mathrm{asym}P_{xv}\) gauges) and round 2 (the
+  joint-\(\gamma\) 4-gap DOF ambiguity, making the quotient conditional on \(\gamma\)
+  known). Frozen §2–§6 kept byte-frozen; stale
   `reserved`/`unresolved` identifiability references in §5.7/§6.6 superseded via an
   append-only status note. Also cleared the WP-A5 roll-forward nit (the obligation-2
   summary note now carries the non-trivial \(\alpha_\Delta\neq1\) qualifier). All
