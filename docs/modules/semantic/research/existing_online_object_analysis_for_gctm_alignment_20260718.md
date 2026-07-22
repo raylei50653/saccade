@@ -992,6 +992,24 @@ $$
 
 這四個 object 不應混成單一「transition likelihood」。
 
+> **Conditional scope qualification — IN FORCE (owner-accepted 2026-07-22).**
+>
+> Per owner acceptance of `gctm_primary_object_a_scope_and_plan_20260722.md`
+> §1.3 (acceptance recorded on PR #248; landed via PR #249), the §§9.2–9.4
+> correspondence obligations below are **conditioned on claim scope** as follows,
+> and are **not** a single unconditional A-layer model-spec seal obligation:
+>
+> | Claim scope | Applicable obligation |
+> |:--|:--|
+> | A-layer model-spec seal | 完成 A、observation／time interface，以及指向 B/C/D 的 typed boundary；**不**要求 §§9.2–9.4 的 event competition／full correspondence |
+> | 宣稱 B／C／D 或 existing-online correspondence | 必須滿足 §§9.2–9.4 中與該 claim 有關的 state／output／context correspondence |
+> | `replace-ranking`、decision probability 或 commit-related claim | 必須另有 frozen L2、event operator 與相應 B1／online charter；不得由 A seal 推出 |
+>
+> 讀法：下方各 §§9.2–9.4 的「GCTM 必須」按上表依 claim scope 條件化適用。此
+> qualification 僅界定 correspondence 義務的適用範圍；它**不** activate GCTM、不選
+> terminal、不改 lifecycle／sole-active WIP，也不授權 data／fitting／H0／B1／O1／
+> runtime／online／production（owner acceptance 2026-07-22 明列之限制）。
+
 ## 9.2 Required state correspondence
 
 GCTM 必須提供 mapping：
