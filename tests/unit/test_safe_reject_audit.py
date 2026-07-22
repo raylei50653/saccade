@@ -1,5 +1,9 @@
 """Tests for constrained FP pruning / safe-reject metrics."""
 
+# scope: eval
+# function: behavior
+# lifecycle: active
+
 from __future__ import annotations
 
 import numpy as np

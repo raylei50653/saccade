@@ -12,6 +12,10 @@ the producer derives from the preset it names. (The repo-wide scanner that holds
 specific values H0 froze.)
 """
 
+# scope: system
+# function: contract
+# lifecycle: active
+
 from __future__ import annotations
 
 import sys

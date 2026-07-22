@@ -4,6 +4,10 @@ No GPU. Uses pure ``check_presets`` / ``check_inject_map`` helpers plus live
 repo presets and inject sources.
 """
 
+# scope: eval
+# function: behavior
+# lifecycle: active
+
 from __future__ import annotations
 
 import importlib.util

@@ -1,5 +1,9 @@
 """Unit tests for B2 reconnect_rate summarization / export."""
 
+# scope: eval
+# function: behavior
+# lifecycle: active
+
 from __future__ import annotations
 
 import json

@@ -1,5 +1,9 @@
 """Tests for scripts/tools/summarize_relink_pairs.py B1 output contract."""
 
+# scope: eval
+# function: contract
+# lifecycle: active
+
 from __future__ import annotations
 
 import csv

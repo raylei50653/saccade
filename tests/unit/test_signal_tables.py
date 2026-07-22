@@ -1,5 +1,9 @@
 """Unit tests for signal_tables schema helpers."""
 
+# scope: eval
+# function: contract
+# lifecycle: active
+
 from __future__ import annotations
 
 import json

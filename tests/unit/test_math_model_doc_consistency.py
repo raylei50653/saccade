@@ -30,6 +30,10 @@ re-derivable here without a GPU, so this guards the part that realistically rots
 the cited constants.
 """
 
+# scope: eval, tracking
+# function: contract
+# lifecycle: active
+
 from __future__ import annotations
 
 import re

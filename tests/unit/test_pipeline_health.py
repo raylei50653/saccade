@@ -1,3 +1,9 @@
+"""Unit tests for saccade.pipeline.health.check_redis (mocked aioredis)."""
+
+# scope: pipeline
+# function: behavior
+# lifecycle: active
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
