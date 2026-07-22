@@ -5,6 +5,10 @@ Requires: CUDA device + nvidia-dali-cuda120 installed.
 Run:  pytest tests/test_dali_pipeline.py -m dali -v
 """
 
+# scope: media
+# function: behavior
+# lifecycle: active
+
 import pytest
 import torch
 

@@ -1,3 +1,9 @@
+"""Integration tests for the entropy-trigger + pipeline orchestrator event flow (perception.entropy + cognition.orchestrator)."""
+
+# scope: perception, cognition
+# function: behavior
+# lifecycle: active
+
 import pytest  # noqa: E402
 import json
 from unittest.mock import patch, AsyncMock, MagicMock

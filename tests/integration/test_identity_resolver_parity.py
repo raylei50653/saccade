@@ -1,6 +1,10 @@
 """Parity test: IdentityResolver.resolve_pass must be byte-equal to the legacy
 _resolve_frame_tracks path (relink → lifecycle) for every candidate across every frame."""
 
+# scope: eval
+# function: contract
+# lifecycle: active
+
 from __future__ import annotations
 
 import sys

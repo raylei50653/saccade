@@ -11,6 +11,10 @@ Covers the correctness contract of cross-stream batching:
 All tests are skipped without CUDA / the C++ extension / model artifacts.
 """
 
+# scope: detection, perception, cross-module
+# function: contract
+# lifecycle: active
+
 from __future__ import annotations
 
 import ctypes
