@@ -1,5 +1,5 @@
 <!-- doc-status: draft -->
-<!-- doc-promotion: none; D1 canonical model specification (seed); §2–§3 frozen at WP-A1, §4 frozen at WP-A2 -->
+<!-- doc-promotion: none; D1 canonical model specification (seed); §2–§3 frozen at WP-A1, §4 frozen at WP-A2, §5 frozen at WP-A4 -->
 <!-- doc-date: 2026-07-22 -->
 <!-- doc-module: semantic -->
 
@@ -27,13 +27,16 @@ correction 修改**。
 | §2 Canonical observation/time interface (nine fields) | **frozen** | WP-A1 (owner merge) |
 | §3 Observation modes and causal availability | **frozen** | WP-A1 (owner merge) |
 | §4 Canonical state, affine M2 transition \(K_\Delta\), \(Q_\Delta\), parameter domains | **frozen** | WP-A2 (owner merge) |
-| §5 Identifiability and leakage matrix | reserved — not yet specified | WP-A3+ |
-| §6 Schema-only interface for a future B1 input | reserved — not yet specified | after WP-A5 gates |
+| §5 Innovation composition (\(P_0\)/\(P^-_\Delta\)/\(R_1\)/\(S_\Delta\); independence vs explicit \(C\)) | **frozen** | WP-A4 (owner merge) |
+| §6 Identifiability and leakage matrix | reserved — not yet specified | WP-A5+ |
+| §7 Schema-only interface for a future B1 input | reserved — not yet specified | after WP-A5 gates |
 
 Reserved sections carry no obligations-resolved claim. WP-A2 resolves charter
-obligation 4 (canonical-state affine M2 transition); obligations 2 and 3 remain
-unresolved until their owning packets (WP-A4 / WP-A5) land, and §4 makes no
-claim about them.
+obligation 4 (canonical-state affine M2 transition); WP-A4 resolves charter
+obligation 3 (independence vs explicit cross-covariance \(C\); §5). Obligation 2
+(calibration vs ranking claim-space) remains unresolved until its owning packet
+WP-A5 lands; §4 makes no claim about obligations 2–3, and §5 makes no claim
+about obligation 2.
 
 ## §2 Canonical observation/time interface（obligation 1 — nine fields, frozen）
 
@@ -339,7 +342,220 @@ Dimensional consistency（sanity，非 D2 lemma）：\(A_\Delta\) 的 \(aI\) blo
 | reverse-time / candidate-backward atom 的 canonical 地位 | 後續 | typed boundary only（boundary 3） |
 | B1/O1、H0、runtime、online、production、data、fitting | — | 不授權（charter Non-scope） |
 
-## §5–§6 Reserved
+## §5 Innovation composition and total innovation covariance（obligation 3 — frozen）
+
+本節在 frozen D1 §4 forward transition kernel \(K_\Delta\) 之上，凍結 prediction /
+entry-observation / innovation 的 uncertainty composition：四個必須分開的
+uncertainty object \(P_0,Q_\Delta,R_1,S_\Delta\)、prediction-error 符號約定、
+innovation residual，以及 charter obligation 3 要求的「**declare independence 或
+define explicit cross-covariance \(C\)**」二選一決定。這是 charter obligation 3 的
+落點。
+
+### §5.0 本節做什麼／不做什麼（typed boundary）
+
+**做（frozen）：** 定義 \(P_0\)（exit-state estimation uncertainty）、\(P^-_\Delta\)
+（prediction-error covariance）、\(R_1\)（entry-observation uncertainty）、
+\(S_\Delta\)（total innovation covariance）四個 object 與其 composition；固定
+prediction-error 符號 \(e^-=z_\Delta-m^-_\Delta\)；**決定 canonical A 層採
+independence（\(C=0\)）**，並凍結 dependent-error 情形所必須改用的 expanded
+\(S_\Delta\) 形狀與其符號。
+
+**不做（留給後續 WP）：** 不計算 standardized innovation \(q=r^\top S_\Delta^{-1}r\)、
+\(\log\det S_\Delta\)、NLL 或任何 ranking／calibration claim（那是 obligation 2 =
+WP-A5；其 shared-\(S_\Delta\) 下 \(q\)/NLL 同序證明屬後續 D2 增量，見 D2 §7）；不做
+identifiability／leakage matrix（§6，reserved）；不選 model 參數（\(P_0,R_1\) 的
+數值）；不做 reverse-time atom、data、fitting、runtime、online、production；不建立
+任何 fidelity edge。
+
+沿用 §4.0 的四條 canonical boundary（永不逾越），本節額外強調兩點：
+
+- **Innovation 形成於 canonical index \(\Delta=g_{\mathrm{phys}}\)**（exit→entry，
+  §2 field 5）：entry observation \(y_1\)、其不確定度 \(R_1\) 都活在 entry endpoint
+  （§2 field 5、§3.2）；prediction \(m^-_\Delta\) 由 exit-time 資訊經 \(K_\Delta\)
+  推到 entry endpoint。
+- **Operator-layer offset \(\pm(\mathrm{bridge\_at}-1)v\)（§2 rows 8–9、§4.4）不進
+  \(m^-_\Delta\)、不進 \(e^-\)、不進 \(S_\Delta\)。** 它是 operator layer 的
+  deterministic anchor/horizon mismatch，任何 production-corresponding instantiation
+  另行重現（§2 field 5），**不得**被 innovation composition 靜默吸收（§4.0
+  boundary 2）。
+
+### §5.1 四個必須分開的 uncertainty object（沿用 charter，凍結地位）
+
+| Object | 定義 | Layer / 來源 |
+|:--|:--|:--|
+| \(P_0\) | **exit-state estimation uncertainty** = exit-endpoint canonical state \(z_0\) 的估計 covariance，\(P_0=\operatorname{Cov}(\delta z_0)\)、\(\delta z_0=z_0-\hat z_0\)、\(P_0\in\mathbb R^{2d\times2d}\)、\(P_0\succeq0\)；僅依 exit-time 資訊（§4.0 boundary 4）。 | canonical · initial condition |
+| \(Q_\Delta\) | **process uncertainty accumulated over the gap** = §4.5 的 process covariance（noise-integral／closed form）。**不重定義**，直接引 §4.5。 | canonical · frozen §4.5 |
+| \(R_1\) | **entry-observation uncertainty** = entry endpoint 觀測 \(y_1\) 的 noise covariance，\(\epsilon_1\sim\mathcal N(0,R_1)\)、\(R_1\succeq0\)。維度隨 observation mode：\(H_x\) 下 \(R_1\in\mathbb R^{d\times d}\)（position-space），\(H_{xv}\) 下 \(\in\mathbb R^{2d\times2d}\)。 | canonical · entry-time measurement |
+| \(S_\Delta\) | **total innovation covariance** = innovation residual \(r\) 的 covariance（§5.3–§5.4）。 | canonical · derived from 上三者 |
+
+**分離規則（frozen）：** 上四者是**不同 layer 的不同量**，永不得互相冒充或合併記為
+單一 scalar（呼應 §2.4 混層禁令與 charter「uncertainty objects must remain
+separate」）。\(P_0\) 是 initial-condition covariance、\(Q_\Delta\) 是 transition
+noise、\(R_1\) 是 measurement noise、\(S_\Delta\) 是三者經 propagation 後的
+innovation covariance；四者不得壓成單一量。
+
+### §5.2 Prediction 與 prediction error（符號約定 frozen）
+
+給定 exit-state 估計 \(\hat z_0\)（\(\operatorname{Cov}(\delta z_0)=P_0\)），canonical
+prediction mean 於 entry endpoint 為
+
+\[
+m^-_\Delta:=A_\Delta\hat z_0+d_\Delta(c),
+\]
+
+即把 §4.3 的 affine transition 套在估計 \(\hat z_0\) 上。**Prediction-error 符號約定
+（frozen）：**
+
+\[
+\boxed{\,e^-:=z_\Delta-m^-_\Delta\,}
+\qquad(\text{state minus prediction；charter obligation 3 / plan Step 3 convention}).
+\]
+
+由 \(z_\Delta=A_\Delta z_0+d_\Delta(c)+\eta_\Delta\)（§4.3，\(\eta_\Delta\sim
+\mathcal N(0,Q_\Delta)\)）與上式，
+
+\[
+e^-=A_\Delta\,\delta z_0+\eta_\Delta .
+\]
+
+**Initial-state／process-noise 假設（obligation 3 明列項）：** \(\eta_\Delta\perp
+\delta z_0\)。因 \(\eta_\Delta=\int_0^\Delta e^{F(\Delta-s)}B\,\mathrm dW_s\) 只依
+\((0,\Delta]\) 的 Brownian increments，而 \(\delta z_0\) 為 exit-time
+（\(\mathcal F_0\)-measurable）量；§4.7 已宣告 \(\{W_t\}_{(0,\Delta]}\perp z_0\)，故
+\(\operatorname{Cov}(\delta z_0,\eta_\Delta)=0\)。於是 prediction-error covariance 無
+cross term：
+
+\[
+\boxed{\,P^-_\Delta:=\operatorname{Cov}(e^-)=A_\Delta\,P_0\,A_\Delta^\top+Q_\Delta\,}
+\qquad(P^-_\Delta\succeq0).
+\]
+
+（此即 charter「observation and uncertainty boundary」的 \(P^-_\Delta=\Phi P_0\Phi^\top
++Q_\Delta\)，以 canonical \(A_\Delta=e^{F\Delta}\)（§4.3）具體化。）\(P^-_\Delta\) 一般
+可能 singular（\(P_0\) 或 \(Q_\Delta\) 退化時；\(Q_\Delta\) 的退化刻畫見 D2 L1），故
+\(P^-_\Delta\) 亦為 possibly-degenerate covariance。
+
+### §5.3 Entry observation 與 innovation residual
+
+Entry endpoint 觀測（§3；production-corresponding 綁 \(H_x\)，§3.2）：
+
+\[
+y_1=Hz_\Delta+\epsilon_1,\qquad \epsilon_1\sim\mathcal N(0,R_1),
+\qquad H\in\{H_x,H_{xv}\}\ (\text{§3}).
+\]
+
+Innovation residual \(r:=y_1-Hm^-_\Delta\)：
+
+\[
+r=H(z_\Delta-m^-_\Delta)+\epsilon_1=He^-+\epsilon_1 .
+\]
+
+**Null 下的均值。** Canonical layer 的 exact-CV matched-identity null（§2 row 9(i)、
+§4.4）下，估計無偏（\(\mathbb E[\delta z_0]=0\)）、\(\mathbb E[\eta_\Delta]=0\)、
+\(\mathbb E[\epsilon_1]=0\)，故 \(\mathbb E[e^-]=0\)、\(\mathbb E[r]=0\)：canonical
+innovation 於 \(\Delta=g_{\mathrm{phys}}\) 是 **zero-mean**。這與 operator-layer 的
+deterministic offset \(\pm(\mathrm{bridge\_at}-1)v\) 是**兩回事**（後者非 innovation
+mean；§4.0 boundary 2 / §4.4）。
+
+### §5.4 Obligation 3 的決定：canonical independence（\(C=0\)），與 dependent-error 的 expanded 形狀
+
+Innovation covariance 的一般式（不預設 independence）：以 \(C:=\operatorname{Cov}
+(e^-,\epsilon_1)\)，
+
+\[
+S_\Delta=\operatorname{Cov}(r)=\operatorname{Cov}(He^-+\epsilon_1)
+=HP^-_\Delta H^\top+R_1+HC+C^\top H^\top .
+\]
+
+（符號綁定於 frozen 約定 \(e^-=z_\Delta-m^-_\Delta\)、\(r=He^-+\epsilon_1\)；若改用
+相反的 prediction-error 定義 \(m^-_\Delta-z_\Delta\)，\(r\) 與 \(HC+C^\top H^\top\)
+的符號**必須一起改**，不得只留半邊——本節已凍結前一約定。）
+
+**決定（frozen，二選一取 independence）：**
+
+\[
+\boxed{\;\text{Canonical A 層宣告 }e^-\perp\epsilon_1\ (\Rightarrow C=0)\;}
+\qquad\Longrightarrow\qquad
+\boxed{\;S_\Delta=HP^-_\Delta H^\top+R_1\;}
+\]
+
+**理由（declared assumption，非定理）：** \(\epsilon_1\) 是 entry endpoint 的
+detection／measurement noise（entry frame 的一次獨立觀測），與 (i) exit-side 估計誤差
+\(\delta z_0\)（不同 frame 的 measurement／filtering，屬 \(\mathcal F_0\)）、(ii)
+process noise \(\eta_\Delta\)（trajectory 的物理隨機加速，§4.2）皆為不同物理來源，故取
+\(e^-=A_\Delta\delta z_0+\eta_\Delta\perp\epsilon_1\)。此為標準 Kalman
+measurement-noise independence，於此**顯式宣告**而非默認。合此與 §5.2 的
+\(\eta_\Delta\perp\delta z_0\)，canonical innovation composition 完整為
+
+\[
+P^-_\Delta=A_\Delta P_0A_\Delta^\top+Q_\Delta,\qquad
+S_\Delta=HP^-_\Delta H^\top+R_1 .
+\]
+
+**Dependent-error path（frozen deviation，非 canonical default）：** 若某
+instantiation 的 \(\epsilon_1\) 與 \(e^-\) **不**獨立（例如 entry／exit 共用
+detector／preprocessing 狀態而耦合，或 \(H_{xv}\) 下 entry velocity 由與 transition
+window 重疊的 frames 導出），則**不得**沿用 \(C=0\)；必須**顯式宣告**
+\(C=\operatorname{Cov}(e^-,\epsilon_1)\) 並改用
+
+\[
+S_\Delta=HP^-_\Delta H^\top+R_1+HC+C^\top H^\top
+\]
+
+（符號如上）。此 deviation 必須是**顯式宣告的 model component**，與 §3.3 對
+\(H_{xv}\) 的 causal-availability 宣告一致，**不得**被靜默繼承（呼應 §2 row 9「任何
+其他非零 additive offset／偏移結構必須顯式宣告」的精神）。canonical default 仍是
+\(C=0\)。
+
+### §5.5 \(S_\Delta\) 的結構性質（interface-level sanity，正式 PSD／inv 論證屬 D2）
+
+在 canonical \(C=0\) 下：
+
+- **PSD：** \(P^-_\Delta=A_\Delta P_0A_\Delta^\top+Q_\Delta\succeq0\)（\(P_0\succeq0\)、
+  \(Q_\Delta\succeq0\)，後者見 §4.5／D2 L1），故 \(HP^-_\Delta H^\top\succeq0\)，加
+  \(R_1\succeq0\) 得 \(S_\Delta\succeq0\)。
+- **\(R_1\) 下界與可逆性：** \(S_\Delta=HP^-_\Delta H^\top+R_1\succeq R_1\)，故
+  \(\boxed{R_1\succ0\Rightarrow S_\Delta\succ0}\)（可逆），**即使** \(Q_\Delta\)／
+  \(P^-_\Delta\) degenerate（D2 L1：\(Q_\Delta\) singular \(\iff D\) singular）。即
+  entry-observation noise \(R_1\succ0\) 對 innovation covariance 具**正則化**作用，與
+  transition-noise 是否退化無關。
+
+上述為 interface-level sanity（如 §4.7 的 dimensional-consistency note，非 D2
+lemma）：本節**不**計算 \(q=r^\top S_\Delta^{-1}r\)、\(\log\det S_\Delta\) 或 NLL
+（obligation 2 = WP-A5；shared-\(S_\Delta\) 下的 \(q\)/NLL 同序證明於後續 D2 增量，
+D2 §7）；此處僅宣告「\(R_1\succ0\) 時 \(S_\Delta^{-1}\) 存在，故那些量 well-defined」
+的**充分條件**，不作任何 ranking claim。
+
+### §5.6 Parameter domains, causal availability, units
+
+| Symbol | Domain | Causal availability | Units |
+|:--|:--|:--|:--|
+| \(P_0\) | \(\{M\in\mathbb R^{2d\times2d}:M\succeq0\}\) | exit-time（§4.0 boundary 4） | block: \(xx\):\(\ell^2\)；\(xv\):\(\ell^2\,\mathrm{frame}^{-1}\)；\(vv\):\(\ell^2\,\mathrm{frame}^{-2}\) |
+| \(P^-_\Delta\) | \(\succeq0\)（\(2d\times2d\)） | derived @ entry endpoint | 同 \(P_0\) |
+| \(R_1\) | \(\succeq0\)；\(H_x\):\(d\times d\)、\(H_{xv}\):\(2d\times2d\) | entry-time（\(y_1\) 到達時） | \(H_x\): \(\ell^2\)（position-space）；\(H_{xv}\): 同 state |
+| \(S_\Delta\) | \(\succeq0\)（維度 \(=R_1\)）；\(R_1\succ0\Rightarrow\succ0\) | derived @ entry endpoint | 同 \(R_1\) |
+| \(C\) | \(\mathbb R^{2d\times\dim\epsilon_1}\)（canonical \(=0\)） | 僅 dependent-error path 顯式宣告 | \(\operatorname{Cov}(e^-,\epsilon_1)\) 對應 units |
+
+\(\ell\) = §2 field 1 的 \(S_A\) 高度正規化位置單位；\(H_x=[\,I_d\ 0\,]\)（§3、§4.1）。
+Dimensional consistency（sanity）：\(HP^-_\Delta H^\top\) 於 \(H_x\) 取 \(P^-_\Delta\)
+的位置 block \(\sim\ell^2\)，與 \(R_1\sim\ell^2\)、\(S_\Delta\sim\ell^2\) 一致。
+
+### §5.7 本節顯式不解決（typed deferrals）
+
+| 項目 | 擁有 WP | 狀態 |
+|:--|:--|:--|
+| \(q=r^\top S_\Delta^{-1}r\)、\(\log\det S_\Delta\)、NLL 定義與 shared-\(S_\Delta\) 下 \(q\)/NLL 同序（obligation 2 的 ranking 面） | WP-A5（claim）＋後續 D2 增量（proof，D2 §7） | unresolved |
+| calibration-only gain vs candidate-local ranking gain 為不同 claim（obligation 2） | WP-A5 | unresolved |
+| identifiability／leakage matrix（terminal 3 predicate 對象） | §6（reserved） | unresolved |
+| reverse-time／candidate-backward atom | 後續 | typed boundary only（§4.0 boundary 3） |
+| B1/O1、H0、runtime、online、production、data、fitting | — | 不授權（charter Non-scope） |
+
+**Freeze 邊界：** 本節凍結的是 uncertainty composition 的**定義、prediction-error
+符號約定與 independence 決定**。它不宣稱任何 runtime 擷取值、不建立 fidelity edge、
+不選 \(P_0/R_1\) 數值、不解除 obligation 2。修改須 append-only correction（原文保留、
+註記 superseded）。
+
+## §6–§7 Reserved
 
 `GCTM_MODEL_SPEC_SEALABLE` 之前必須完成（見 charter frozen terminal partition
 與 obligation-status table）；在各自 work packet 落地前，本檔不預先陳述。
@@ -389,3 +605,27 @@ Dimensional consistency（sanity，非 D2 lemma）：\(A_\Delta\) 的 \(aI\) blo
   \(\bar v:\mathcal C_{\mathrm{exit}}\to\mathbb R^d\) measurable, and
   \(\mathcal N(m_\Delta,Q_\Delta)\) noted as a possibly-degenerate Gaussian
   measure since \(D\succeq0\) (no \(Q_\Delta^{-1}\) required at this layer).
+- 2026-07-22 — **§5 frozen by WP-A4** (charter obligation 3): innovation
+  composition over the frozen §4 kernel. Four uncertainty objects kept
+  separate — \(P_0\) (exit-state estimation, \(\succeq0\)), \(Q_\Delta\)
+  (§4.5, unchanged), \(R_1\) (entry-observation, \(\succeq0\)), \(S_\Delta\)
+  (total innovation). Prediction-error sign convention frozen as
+  \(e^-=z_\Delta-m^-_\Delta\) with \(m^-_\Delta=A_\Delta\hat z_0+d_\Delta(c)\),
+  giving \(e^-=A_\Delta\delta z_0+\eta_\Delta\) and (via \(\eta_\Delta\perp
+  \delta z_0\) from §4.7) \(P^-_\Delta=A_\Delta P_0A_\Delta^\top+Q_\Delta\);
+  innovation residual \(r=y_1-Hm^-_\Delta=He^-+\epsilon_1\), canonically
+  zero-mean at \(\Delta=g_{\mathrm{phys}}\) (distinct from the operator-layer
+  offset \(\pm(\mathrm{bridge\_at}-1)v\), which stays out of
+  \(m^-_\Delta/e^-/S_\Delta\)). **Obligation-3 decision (exactly one, chosen):**
+  canonical A-layer declares independence \(e^-\perp\epsilon_1\Rightarrow C=0\),
+  so \(S_\Delta=HP^-_\Delta H^\top+R_1\); the dependent-error path is a frozen,
+  explicitly-declared deviation using
+  \(S_\Delta=HP^-_\Delta H^\top+R_1+HC+C^\top H^\top\),
+  \(C=\operatorname{Cov}(e^-,\epsilon_1)\), with signs tied to the frozen
+  \(e^-\) convention. Interface-level sanity: \(S_\Delta\succeq R_1\), so
+  \(R_1\succ0\Rightarrow S_\Delta\succ0\) even when \(Q_\Delta\) is degenerate
+  (D2 L1) — no \(q\)/\(\log\det S\)/NLL computed here (obligation 2 = WP-A5;
+  \(q\)/NLL ordering proof = later D2 increment, D2 §7). Reserved sections
+  renumbered (§5→§6 identifiability/leakage, §6→§7 B1 schema). §2–§4 untouched
+  (byte-frozen; no append-only correction); no fidelity edge, no \(P_0/R_1\)
+  value selected, no runtime/data/production change.
