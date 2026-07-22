@@ -1,3 +1,12 @@
+"""Synthetic tests for the external-FP model apparatus: rule baseline, logistic /
+banded-logistic / softmax fit-evaluate-round-trip, and low-score cascade filters."""
+
+# scope: eval
+# function: behavior
+# lifecycle: quarantined
+# lifecycle-note: external-FP study line inactive; DISPOSITION.md proposes T4 (delete)
+#   — one-shot research apparatus, recipe/git history preserve it.
+
 from pathlib import Path
 
 from saccade.perception.eval.external_fp_model import (

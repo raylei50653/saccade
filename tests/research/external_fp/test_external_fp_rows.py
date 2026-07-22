@@ -1,3 +1,12 @@
+"""Synthetic tests for the external-FP row apparatus: CrowdHuman record loading,
+ignore-region handling, TP/ignore/FP row labelling, and structural feature rows."""
+
+# scope: eval
+# function: behavior
+# lifecycle: quarantined
+# lifecycle-note: external-FP study line inactive; DISPOSITION.md proposes T4 (delete)
+#   — row-extraction apparatus for the concluded study, preserved by recipe/git.
+
 from pathlib import Path
 
 from saccade.perception.eval.external_fp_rows import (

@@ -1,5 +1,11 @@
 """Synthetic contract tests for Safe-Region Assetization R1 (T1–T10)."""
 
+# scope: eval
+# function: contract
+# lifecycle: quarantined
+# lifecycle-note: safe-region assetization study CLOSED (apparatus module retained);
+#   DISPOSITION.md proposes T2 — keep only while the apparatus serves the gt_support line.
+
 from __future__ import annotations
 
 import numpy as np
