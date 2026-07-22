@@ -1,5 +1,5 @@
 <!-- doc-status: draft -->
-<!-- doc-promotion: none; D1 canonical model specification (seed); §2–§3 frozen at WP-A1, §4 frozen at WP-A2, §5 frozen at WP-A4 -->
+<!-- doc-promotion: none; D1 canonical model specification (seed); §2–§3 frozen at WP-A1, §4 frozen at WP-A2, §5 frozen at WP-A4, §6 frozen at WP-A5 -->
 <!-- doc-date: 2026-07-22 -->
 <!-- doc-module: semantic -->
 
@@ -28,15 +28,29 @@ correction 修改**。
 | §3 Observation modes and causal availability | **frozen** | WP-A1 (owner merge) |
 | §4 Canonical state, affine M2 transition \(K_\Delta\), \(Q_\Delta\), parameter domains | **frozen** | WP-A2 (owner merge) |
 | §5 Innovation composition (\(P_0\)/\(P^-_\Delta\)/\(R_1\)/\(S_\Delta\); independence vs explicit \(C\)) | **frozen** | WP-A4 (owner merge) |
-| §6 Identifiability and leakage matrix | reserved — not yet specified | WP-A5+ |
-| §7 Schema-only interface for a future B1 input | reserved — not yet specified | after WP-A5 gates |
+| §6 Calibration vs candidate-local ranking claim space (obligation 2) | **frozen** | WP-A5 (owner merge) |
+| §7 Identifiability and leakage matrix | reserved — not yet specified | WP-A6 (planned) |
+| §8 Schema-only interface for a future B1 input | reserved — not yet specified | WP-A7 (planned) |
 
 Reserved sections carry no obligations-resolved claim. WP-A2 resolves charter
-obligation 4 (canonical-state affine M2 transition); WP-A4 resolves charter
-obligation 3 (independence vs explicit cross-covariance \(C\); §5). Obligation 2
-(calibration vs ranking claim-space) remains unresolved until its owning packet
-WP-A5 lands; §4 makes no claim about obligations 2–3, and §5 makes no claim
-about obligation 2.
+obligation 4 (canonical-state affine M2 transition; §4); WP-A4 resolves charter
+obligation 3 (independence vs explicit cross-covariance \(C\); §5); WP-A5
+resolves charter obligation 2 (calibration-only gain vs candidate-local ranking
+gain as distinct claims; §6). **All four numbered activation-contract
+obligations are now resolved.** A sealable terminal
+(`GCTM_MODEL_SPEC_SEALABLE`) additionally requires the remaining D1 deliverables
+— identifiability/leakage matrix (§7) and the schema-only B1 input interface
+(§8) — plus terminal review; those remain reserved. §4 makes no claim about
+obligations 2–3, §5 makes no claim about obligation 2, and §6 makes no claim
+about identifiability/leakage or any B1/O1/runtime/production quantity.
+
+> **Append-only renumber correction (WP-A5).** WP-A5 inserts §6 (calibration vs
+> ranking) directly after frozen §5, so the former reserved §6/§7 shift to §7/§8.
+> Frozen §5 is kept **byte-frozen**; its two in-body references to the
+> identifiability/leakage section as "§6" (in §5.0 and the §5.7 deferral table)
+> are therefore **superseded — read them as §7**. This note is the append-only
+> correction of record for that renumber; the frozen §5 text is not edited in
+> place.
 
 ## §2 Canonical observation/time interface（obligation 1 — nine fields, frozen）
 
@@ -610,10 +624,173 @@ Dimensional consistency（sanity）：\(HP^-_\Delta H^\top\) 於 \(H_x\) 取 \(P
 不選 \(P_0/R_1\) 數值、不解除 obligation 2。修改須 append-only correction（原文保留、
 註記 superseded）。
 
-## §6–§7 Reserved
+## §6 Calibration vs candidate-local ranking claim space（obligation 2 — frozen）
+
+本節落地 charter obligation 2：把 **calibration-only gain** 與 **candidate-local
+ranking gain** 定義為**兩個不同的 claim**，各有**不同的 null、metric family、
+evaluation unit 與 consequence**，並凍結兩者之間的 **invariance／separation 結構**
+（為何一者的 gain 不蘊含另一者）。它建立在 frozen §5 的 innovation \(r\) 與 total
+innovation covariance \(S_\Delta\) 之上，不重定義任何 §5 物件。這是 obligation 2 的
+落點；charter 的「Score and probability semantics」段落是其上位敘述。
+
+### §6.0 本節做什麼／不做什麼（typed boundary）
+
+**做（frozen）：** (i) 定義 score 量 \(q\)、\(\log\det S_\Delta\)、Gaussian NLL、
+candidate-region probability，並固定其 well-defined 的 regime；(ii) 定義 claim
+**CAL**（cross-event calibration）與 claim **RANK**（candidate-local ranking），各附
+null／metric family／evaluation unit／consequence；(iii) 凍結 separation 結構——
+shared-\(S_\Delta\) 下 \(q\) 與 NLL 同序、isotropic／shared gap-scaling 對
+candidate-local order **不變**（僅改 calibration）、ranking 對 per-candidate 嚴格單調
+重參數化不變（故 ranking gain 不蘊含 calibration gain），以及 candidate-specific
+covariance 何時**可**改變 order。
+
+**不做（留給後續 WP 或本 packet 的 D2 增量）：** 不做 identifiability／leakage
+matrix（reserved，見 §1 表 §7）；不寫 schema-only B1 interface（§8，reserved）；
+不選 terminal（terminal review 為後續 packet，依 charter frozen decision procedure）；
+**不執行任何 data／fitting／calibration 量測、不選 threshold／metric 參數、不宣稱任何
+gain 數值**（本節只給 claim-space 定義與 invariance 結構，皆為 §5 之上的純數學）。
+shared-\(S_\Delta\) 下 \(q\)/NLL 同序的**正式證明**是本 packet 的 D2 增量（D2 §7，
+Lemma L5），本節只**陳述** claim 並指向該證明。不建立 fidelity edge、不做 bridge-runtime
+claim。
+
+沿用 §4.0／§5.0 的 canonical boundary（永不逾越），本節額外固定一條：
+
+- **CAL 與 RANK 是不同 capability，永不得互相冒充或彼此替代。** 一個評估必須先宣告它
+  測的是 CAL 還是 RANK；CAL 的結論**不**轉移為 RANK，反之亦然（這正是 obligation 2 的
+  要求）。這與 §5.1 的「uncertainty objects 必須分開」同一治理精神。
+
+### §6.1 Score 量（定義，over frozen §5 innovation；well-defined regime）
+
+沿用 §5.3 的 innovation \(r=He^-+\epsilon_1\)、其 covariance \(S_\Delta\)（§5.4）、
+prediction mean \(Hm^-_\Delta\)（§5.2），令 \(k=\dim r\)（\(H_x\):\(k=d\)；\(H_{xv}\):
+\(k=2d\)）。**Regime（frozen）：** 需要 \(S_\Delta^{-1}\) 的量只在 \(S_\Delta\succ0\)
+定義；由 §5.5，**canonical \(C=0\) 且 \(R_1\succ0\)** 即保 \(S_\Delta\succ0\)。退化
+\(S_\Delta\)（dependent path、或 \(R_1\) singular）下這些量須改用 support-subspace 上的
+pseudo-inverse／degenerate-Gaussian 形式——**本節不處理，亦不作任何 claim**。
+
+| 量 | 定義 | 說明 |
+|:--|:--|:--|
+| **standardized innovation（Mahalanobis）** | \(q:=r^\top S_\Delta^{-1}r\ (\ge0)\) | residual 相對於宣告不確定度的大小；canonical zero-mean Gaussian null（§5.3）下 \(q\sim\chi^2_k\)。 |
+| **predictive log-volume** | \(\log\det S_\Delta\) | 預測不確定度的體積尺度；與 \(r\) **無關**（不含 alignment 資訊）。 |
+| **Gaussian NLL（per candidate）** | \(E:=\tfrac12 q+\tfrac12\log\det S_\Delta+\tfrac{k}{2}\log(2\pi)=-\log\mathcal N\!\big(y_1;Hm^-_\Delta,S_\Delta\big)\) | 合併 residual fit（\(q\)）與 uncertainty volume（\(\log\det S_\Delta\)）。 |
+| **candidate-region probability** | \(\Pi(\Omega):=\int_\Omega\mathcal N\!\big(y;Hm^-_\Delta,S_\Delta\big)\,\mathrm dy\)，\(\Omega\subseteq\) obs space | 在宣告 region \(\Omega\) 上積分密度；**依賴 \(\Omega\) 的 geometry／volume**，不只 alignment。 |
+
+以上皆為**定義**：不選 \(P_0/R_1\) 數值、不選 \(\Omega\)、不選任何 threshold。四者
+不得壓成單一 scalar（承 §5.1）。特別地 \(\log\det S_\Delta\) 與 \(q\) 度量**不同**的
+東西（volume vs alignment），\(\Pi(\Omega)\) 又混入 region volume——這三者的**不可
+互換**正是 CAL/RANK 分離的來源。
+
+### §6.2 兩個不同的 claim（凍結定義）
+
+**Candidate event \(\mathcal E\)（frozen 定義）：** 一條 lost track（固定 exit
+anchor 與其 state 估計 \(\hat z_0,P_0\)）與一組有限的 entry candidates
+\(\{i\}_{i\in\mathcal E}\)；candidate \(i\) 有自身的 entry endpoint，故自身的 gap
+\(\Delta_i=g_{\mathrm{phys},i}\)、context \(c_i\)、observation mode \(H_i\)、
+covariance \(S_{\Delta,i}\)、innovation \(r_i\) 與 score \((q_i,E_i,\Pi_i)\)。**注意
+generically candidates 不共用 \(\Delta_i\)**（不同 entry frame），故 \(S_{\Delta,i}\)
+generically candidate-specific（§6.4）。
+
+| | **CAL — cross-event calibration** | **RANK — candidate-local ranking** |
+|:--|:--|:--|
+| **性質（property）** | 預測律 \(\mathcal N(Hm^-_\Delta,S_\Delta)\) 在 events／gaps 的**母體**上校準（true match 的 \(q\) 服從名目 \(\chi^2_k\)；credible-region coverage／PIT uniformity／proper-score calibration） | 在**單一** event \(\mathcal E\) **內**，score 把 true match 排在 distractors **之上**（event-local ordering） |
+| **null** | \(H_0^{\mathrm{CAL}}\)：reference model 已校準（無 calibration gain） | \(H_0^{\mathrm{RANK}}\)：candidate-local ordering 不優於 baseline（如 raw distance／M0） |
+| **metric family** | calibration／coverage／PIT／log-score error，跨 events + gaps **聚合** | event-local ordering metric（true-match rank、top-1、event-conditional AUC），**event 內**計算後再跨 event 平均 |
+| **evaluation unit** | 母體（cross-event, cross-gap） | event 內 ordering（再平均） |
+| **一個 "gain" 的意義** | 更好的**絕對機率語義** | 更好的 **event-local 判別** |
+| **consequence** | 關於 probability semantics；**不**蘊含 ordering 改善 | 關於 event-local discrimination；**不**蘊含 calibration 改善 |
+
+（此表為 charter「Calibration and candidate-local ranking must be evaluated as
+different capabilities」的凍結落點。metric family 只**命名族類**，不選具體 metric／
+threshold／data。）
+
+### §6.3 Separation（invariance 結構）—— 兩 claim 為何邏輯獨立
+
+**(I) Calibration 改變而 ranking 不變（shared-covariance rescaling）。** 設 event
+\(\mathcal E\) 內所有 candidate 共用 \(S_{\Delta,i}=S\)（同 \(\Delta,c,k,H\)）。則
+\(E_i=\tfrac12 q_i+\kappa(S)\)，其中 \(\kappa(S)=\tfrac12\log\det S+\tfrac k2\log2\pi\)
+**與 \(i\) 無關**，故 \(q\) 與 \(E\) 在 event 內誘導**相同** ordering（rank-equivalent；
+正式證明 D2 §7 L5）。又 gap-conditioned rescaling \(S\mapsto\alpha_\Delta S\)
+（\(\alpha_\Delta>0\) 只依 event）給 \(q_i\mapsto q_i/\alpha_\Delta\)（正的、candidate-
+independent 縮放，order-preserving）、\(E_i\mapsto\tfrac12 q_i/\alpha_\Delta+
+\kappa(\alpha_\Delta S)\)（candidate-independent 的仿射重參數化），故 **event-local
+order 不變**，但 \(q\) 的絕對分佈與 NLL 的 level **改變** ⇒ **calibration 改變**。
+特例 \(S=\alpha_\Delta I\)（isotropic）：\(q_i=\lVert r_i\rVert^2/\alpha_\Delta\)，
+order \(=\lVert r_i\rVert^2\) order，與 \(\alpha_\Delta\) 無關 ⇒ **isotropic
+gap-conditioned scaling 對 candidate-local order 是 calibration-only**（charter 的
+\(S_\Delta=\alpha_\Delta I\) 陳述）。
+
+**(II) Ranking 改變而 calibration 不隨之改變（ranking 對單調重參數化不變）。** 任何對
+per-candidate score 施加的嚴格遞增變換 \(\varphi\)（如 \(q_i\mapsto\varphi(q_i)\)）
+保持 event-local ordering，卻一般**破壞** calibration（\(\varphi(q)\) 不再 \(\chi^2_k\)）；
+反之兩個 event-local ordering 完全相同的 model 可有任意不同的 calibration。故 **ranking
+gain 不蘊含 calibration gain**。
+
+**Region-probability caveat（凍結）：** \(\Pi_i(\Omega_i)\) 依賴 region 的 volume／
+geometry；若 candidates 用**非全等**的 region \(\Omega_i\)，\(\Pi\)-order 可與
+\(q\)-order **不一致**（較大 region 可因 probability mass 勝出，儘管 alignment 較差）。
+故 candidate-region probability **不是**純 alignment／ranking score，除非 regions 全等
+——這正是 charter 把它與 \(q\)/NLL **分列**的原因。（數值 sanity 見 D2 §7 註。）
+
+**小結（frozen）：** (I) 給「calibration gain ⇏ ranking gain」；(II) 給「ranking gain
+⇏ calibration gain」。兩方向合起來即 obligation 2 要求的「兩個不同 claim，各有不同
+null／metric／consequence，互不蘊含」。
+
+### §6.4 何時 candidate-specific covariance **可**改變 ordering（宣告門檻）
+
+Generically（§6.2）candidates **不**共用 \(\Delta_i\)（各自 entry endpoint）或
+\(c_i\)，故 \(S_{\Delta,i}\) candidate-specific。此時
+\[
+E_i=\tfrac12 q_i+\tfrac12\log\det S_{\Delta,i}+\tfrac k2\log2\pi,
+\]
+其中 \(\tfrac12\log\det S_{\Delta,i}\) 為 **candidate-dependent** 項，故 \(q\) 與 \(E\)
+可誘導**不同** ordering，且 \(S_{\Delta,i}\) 真實影響 ranking（predictive covariance
+較大的 candidate 在 NLL 被 \(\log\det\) 罰）。正式的 tightness／counterexample 見 D2 §7
+（L5.2）。
+
+**宣告門檻（frozen）：** candidate-specific covariance 只有在其**來源與 causal
+availability 顯式宣告**時，才可在 ranking claim 中改變 order（承 §3.3 的 causal-
+availability 紀律：如 candidate-specific \(\Delta_i\) 於 entry 可得、\(c_i\) 於 exit
+可得）。**未宣告來源的 candidate-specific covariance 不得靜默驅動 ranking**（承 §2 row 9
+「任何偏移／結構須顯式宣告」的精神）。這是 charter「Candidate-specific covariance can
+alter ordering only when its source and causal availability are explicitly
+declared」的凍結落點。
+
+### §6.5 Domains, causal availability, units
+
+| 量 | Domain | Causal availability | Units |
+|:--|:--|:--|:--|
+| \(q\) | \([0,\infty)\)（需 \(S_\Delta\succ0\)，§6.1 regime） | derived @ entry endpoint | dimensionless |
+| \(\log\det S_\Delta\) | \(\mathbb R\)（\(S_\Delta\succ0\)） | derived @ entry endpoint | \(=\log\) of \(\det\) units（volume scale） |
+| \(E\) | \(\mathbb R\) | derived @ entry endpoint | nats |
+| \(\Pi(\Omega)\) | \([0,1]\) | derived @ entry endpoint；\(\Omega\) 須顯式宣告 | dimensionless |
+| \(\alpha_\Delta\)（§6.3） | \((0,\infty)\)，只依 event | event-level | 依 \(S_\Delta\) 的 scaling |
+
+\(S_\Delta,r,H,P^-_\Delta,R_1\) 的 domains／units 沿用 §5.6，不重定義。所有量在
+\(S_\Delta\) 退化時的定義另屬 pseudo-inverse／degenerate 形式（§6.1，不處理）。
+
+### §6.6 本節顯式不解決（typed deferrals）
+
+| 項目 | 擁有 WP | 狀態 |
+|:--|:--|:--|
+| shared-\(S_\Delta\) 下 \(q\)/NLL 同序、isotropic-scaling ranking invariance、candidate-specific tightness 的**正式證明** | 本 packet 的 D2 增量（D2 §7，L5／L5.1／L5.2） | **本 packet 提供** |
+| identifiability／leakage matrix（terminal 3 predicate 對象） | §7（reserved；WP-A6 planned） | unresolved |
+| schema-only B1 input interface | §8（reserved；WP-A7 planned） | unresolved |
+| terminal review（checklist artifact + terminal selection） | 後續 packet（WP-A8 planned） | unresolved |
+| CAL／RANK 的實際量測、gain 數值、metric／threshold 選擇 | — | 不授權（charter Non-scope；需 data/B1/O1 授權） |
+| reverse-time／candidate-backward atom | 後續 | typed boundary only（§4.0 boundary 3） |
+| B1/O1、H0、runtime、online、production、data、fitting | — | 不授權（charter Non-scope） |
+
+**Freeze 邊界：** 本節凍結的是 **calibration/ranking claim-space 的定義與 invariance
+結構**。它不宣稱任何 runtime 擷取值、不建立 fidelity edge、不選 \(P_0/R_1/\Omega\)／
+metric／threshold、不量測任何 gain、不選 terminal。修改須 append-only correction
+（原文保留、註記 superseded）。
+
+## §7–§8 Reserved
 
 `GCTM_MODEL_SPEC_SEALABLE` 之前必須完成（見 charter frozen terminal partition
-與 obligation-status table）；在各自 work packet 落地前，本檔不預先陳述。
+與 obligation-status table）；在各自 work packet 落地前，本檔不預先陳述。**§7**
+identifiability／leakage matrix（terminal 3 predicate 對象；WP-A6 planned）、**§8**
+schema-only B1 input interface（WP-A7 planned）。
 
 ## History
 
@@ -709,3 +886,31 @@ Dimensional consistency（sanity）：\(HP^-_\Delta H^\top\) 於 \(H_x\) 取 \(P
   \(S_\Delta\succeq0\) (counterexample \(H=1,P^-_\Delta=R_1=1,C=-1\Rightarrow
   S_\Delta=0\)), so its invertibility needs an extra nondegeneracy assumption.
   Independence decision and the PSD (\(\succeq0\)) results unchanged.
+- 2026-07-22 — **§6 frozen by WP-A5** (charter obligation 2): calibration vs
+  candidate-local ranking claim space over the frozen §5 innovation. Defines the
+  score quantities \(q=r^\top S_\Delta^{-1}r\) (\(\sim\chi^2_k\) under the
+  canonical null), \(\log\det S_\Delta\), Gaussian NLL
+  \(E=\tfrac12 q+\tfrac12\log\det S_\Delta+\tfrac k2\log2\pi\), and
+  candidate-region probability \(\Pi(\Omega)\), all in the invertible regime
+  (canonical \(C=0\), \(R_1\succ0\Rightarrow S_\Delta\succ0\); degenerate
+  \(S_\Delta\) out of scope). Freezes **two distinct claims** — CAL (cross-event
+  calibration) and RANK (candidate-local ranking) — each with its own null,
+  metric family, evaluation unit, and consequence, and the **separation
+  structure**: (I) shared-\(S_\Delta\) rescaling / isotropic \(S=\alpha_\Delta I\)
+  changes calibration but **not** candidate-local order (calibration gain ⇏
+  ranking gain); (II) ranking is invariant to any strictly-monotone per-candidate
+  reparametrization, which generally breaks calibration (ranking gain ⇏
+  calibration gain); plus the region-probability caveat (non-congruent regions
+  make \(\Pi\)-order disagree with \(q\)-order) and the rule that
+  candidate-specific covariance may alter ordering **only** when its source and
+  causal availability are explicitly declared (§3.3). The shared-\(S_\Delta\)
+  \(q\)/NLL ordering-equivalence **proof** is the D2 increment of this packet (D2
+  §7, Lemma L5). **All four numbered obligations are now resolved;** a sealable
+  terminal still needs §7 (identifiability/leakage), §8 (B1 schema), and terminal
+  review. No data/fitting/calibration measurement, no metric/threshold selection,
+  no gain value, no terminal selected. Reserved sections renumbered (former §6
+  identifiability/leakage → §7, former §7 B1 schema → §8); frozen §5's two
+  in-body "§6" references to identifiability are superseded (read as §7) via the
+  append-only renumber note after the §1 table — §5 kept byte-frozen. §2–§5
+  untouched (byte-frozen; no in-place edit); no fidelity edge, no \(P_0/R_1\)
+  value, no runtime/data/production change.

@@ -354,6 +354,25 @@ nulls, metrics, and terminal consequences. Better coverage or cross-gap
 likelihood calibration does not imply better event-local ordering, and ranking
 gain does not establish calibrated probability.
 
+*Resolved by WP-A5 (2026-07-22):* frozen as
+[D1 §6](../models/gap_conditioned_stochastic_transition_spec_v1.md) — two distinct
+claims **CAL** (cross-event calibration) and **RANK** (candidate-local ranking),
+each with its own null, metric family, evaluation unit, and consequence, over the
+frozen §5 score quantities (\(q=r^\top S_\Delta^{-1}r\), \(\log\det S_\Delta\),
+Gaussian NLL, candidate-region probability; invertible regime canonical
+\(C=0\), \(R_1\succ0\)). The separation is frozen both directions: shared-\(S_\Delta\)
+/ isotropic \(S=\alpha_\Delta I\) rescaling changes calibration but **not**
+candidate-local order (calibration gain ⇏ ranking gain), and ranking is invariant
+to any strictly-monotone per-candidate reparametrization, which generally breaks
+calibration (ranking gain ⇏ calibration gain); candidate-specific covariance may
+alter ordering **only** when its source and causal availability are explicitly
+declared. The shared-\(S_\Delta\) \(q\)/NLL ordering-equivalence **proof** is
+[D2 §7 (Lemma L5)](../models/gap_conditioned_stochastic_transition_lemmas_v1.md).
+D1 §6 measures no gain, selects no metric/threshold, and makes no ranking or
+calibration data claim. This resolves the **last** of the four numbered
+obligations; a sealable terminal still requires the D1 identifiability/leakage
+matrix (§7), the schema-only B1 input interface (§8), and terminal review.
+
 ### 3. Independence or explicit cross-covariance
 
 The future specification must declare independence between prediction error
@@ -525,6 +544,20 @@ independence decision (\(C=0\)). Obligation 2 (calibration vs ranking) remains
 terminal still requires obligation 2 plus the later D2 \(q\)/NLL-ordering
 increment (D2 §7) and terminal review.
 
+*Update (WP-A5, 2026-07-22):* obligation 2 (calibration-only gain vs
+candidate-local ranking gain as distinct claims) is **resolved** — frozen in
+[D1 §6](../models/gap_conditioned_stochastic_transition_spec_v1.md), with the
+\(q\)/NLL ordering-equivalence proof filled in
+[D2 §7 (L5)](../models/gap_conditioned_stochastic_transition_lemmas_v1.md).
+**All four numbered activation-contract obligations are now resolved.** The
+sealable terminal still requires the remaining D1 deliverables — the
+identifiability/leakage matrix (D1 §7) and the schema-only B1 input interface
+(D1 §8) — plus terminal review; these are **not** numbered obligations but are
+charter D1 deliverable items and terminal-review checklist rows, so terminal
+review cannot yet reach `GCTM_MODEL_SPEC_SEALABLE` (it would select terminal 4,
+`GCTM_SPECIFICATION_INCOMPLETE`, on those incomplete rows). The lease below is
+revised accordingly.
+
 Even the sealable terminal would grant no automatic B1, O1, online, mainline,
 or production authority.
 
@@ -552,15 +585,29 @@ WP-A1  freeze canonical observation/time interface (obligation 1; D1 seed)
 WP-A2  canonical-state affine M2 + Q_Δ interface (obligation 4)
 WP-A3  nesting / PSD / asymptotics proofs (D2)
 WP-A4  independence vs explicit cross-covariance C (obligation 3)
-WP-A5  calibration vs ranking claim definitions (obligation 2) + terminal review
+WP-A5  calibration vs ranking claim definitions (obligation 2; D1 §6)
+       + D2 §7 q/NLL ordering-equivalence proof (L5)
+WP-A6  identifiability & leakage matrix (D1 §7) — terminal-3 predicate object
+WP-A7  schema-only B1 input interface (D1 §8)
+WP-A8  terminal review (checklist artifact + mechanical terminal selection)
 ```
 
-**Current step:** WP-A4 landed (D1 §5 frozen: innovation composition; obligation
-3 resolved with the independence decision \(C=0\)). Prior packets: WP-A2 (D1 §4,
-obligation 4) and WP-A3 (D2 proof appendix: PSD / nesting / semigroup /
-asymptotics; PR #253) both landed. Next = WP-A5 (calibration vs ranking
-claim-space definitions, obligation 2) + the later D2 \(q\)/NLL-ordering
-increment (D2 §7) + terminal review.
+*Lease revision (WP-A5):* the earlier lease folded "terminal review" into WP-A5,
+but terminal review's checklist requires **every** D1 deliverable complete,
+including the identifiability/leakage matrix and the B1 schema, which remain
+reserved (D1 §7/§8). With those incomplete the mechanical decision procedure
+would select terminal 4 (`GCTM_SPECIFICATION_INCOMPLETE`), not the sealable
+terminal. Terminal review is therefore split off to WP-A8, with WP-A6/WP-A7
+resolving the two remaining D1 deliverables first. (This lease is replaceable
+without a registry or WIP change.)
+
+**Current step:** WP-A5 landed (D1 §6 frozen: calibration vs candidate-local
+ranking claim space; obligation 2 resolved; D2 §7 Lemma L5 proof of shared-\(S_\Delta\)
+\(q\)/NLL ordering equivalence filled). **All four numbered obligations
+(1/WP-A1, 4/WP-A2, 3/WP-A4, 2/WP-A5) are now resolved**, and D2 (WP-A3) has
+landed. Next = WP-A6 (identifiability & leakage matrix, D1 §7), then WP-A7
+(schema-only B1 input interface, D1 §8), then WP-A8 (terminal review). A sealable
+terminal is not reachable until WP-A6–A8 complete.
 
 ## History
 
@@ -614,3 +661,28 @@ increment (D2 §7) + terminal review.
   \(\pm(\mathrm{bridge\_at}-1)v\) kept out of \(m^-_\Delta/e^-/S_\Delta\); no
   \(q\)/NLL/ranking claim; §2–§4 byte-frozen. Next packet WP-A5 (obligation 2 +
   terminal review).
+- 2026-07-22 — **WP-A5: calibration vs candidate-local ranking claim space
+  frozen** (obligation 2 — the **last** numbered obligation).
+  [D1 §6](../models/gap_conditioned_stochastic_transition_spec_v1.md) freezes two
+  distinct claims — **CAL** (cross-event calibration) and **RANK** (candidate-local
+  ranking) — each with its own null, metric family, evaluation unit, and
+  consequence, over the frozen §5 score quantities (\(q=r^\top S_\Delta^{-1}r\),
+  \(\log\det S_\Delta\), Gaussian NLL, candidate-region probability; invertible
+  regime canonical \(C=0\), \(R_1\succ0\)). Separation frozen both directions:
+  shared-\(S_\Delta\)/isotropic rescaling is calibration-only (calibration gain ⇏
+  ranking gain); ranking is invariant to strictly-monotone per-candidate
+  reparametrization (ranking gain ⇏ calibration gain); candidate-region
+  probability depends on region volume (non-congruent regions disagree with
+  \(q\)-order); candidate-specific covariance may change order only with declared
+  source/causal-availability. The \(q\)/NLL ordering-equivalence **proof** is
+  filled in [D2 §7 (Lemma L5, + L5.1/L5.2)](../models/gap_conditioned_stochastic_transition_lemmas_v1.md).
+  D1 §6 measures no gain, selects no metric/threshold/data, selects no terminal.
+  Reserved sections renumbered (identifiability/leakage → D1 §7, B1 schema → D1
+  §8); frozen §5 kept byte-frozen (its two "§6" identifiability references
+  superseded via an append-only renumber note). Obligation 2 resolved ⇒ all four
+  numbered obligations resolved. **Lease revised:** terminal review split off
+  (WP-A8) behind WP-A6 (identifiability, D1 §7) and WP-A7 (B1 schema, D1 §8),
+  since terminal review's checklist can't reach the sealable terminal while those
+  D1 deliverables are reserved. Also fixed the #253 owner-flagged non-blocking D2
+  §5.2 nit (矩陣→向量) under review. No B1/O1/runtime/online/production authority
+  granted.

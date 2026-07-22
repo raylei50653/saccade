@@ -13,6 +13,11 @@ frozen D1 §4 transition kernel 的**內部數學性質**，不引入任何 D1 �
 nesting（L2）、transition semigroup 與 covariance composition（L3）、short-/long-gap
 asymptotics（L4）。
 
+**由 WP-A5 填入（本次增量）：** §7 的 `q`/NLL ranking-equivalence lemma（L5）及其
+corollary／tightness boundary（L5.1／L5.2），建立在 frozen D1 §5 的 `S_Δ` 與 D1 §6 的
+claim 定義之上（obligation 2 的 proof 面）。L1–L4（§2–§5）除一處 owner-flagged 文字
+更正外**不變**；本檔仍**不選** terminal。
+
 **Authority 邊界：**
 
 - Model authority：frozen
@@ -96,6 +101,23 @@ covariance composition）、L4（short-/long-gap asymptotics）。
 **型別約定（本檔全程遵守）：** \(q_{xx},q_{xv},q_{vv}\) 是 **scalar**；covariance
 **block** 是 \(q_{\bullet\bullet}D\)（\(d\times d\)）。極限與 asymptotics 對 scalar 與
 block 分開陳述，兩者不混寫。
+
+### §1.3 WP-A5 增量與 scope 更新（本次）
+
+§1.1 的「做／不做」是 **WP-A3 acceptance** 的 scope 快照。本次 **WP-A5** 增量在
+**§7** 填入 `q`/NLL ranking-equivalence lemma（L5），其依賴的 \(S_\Delta\) 已由 frozen
+D1 §5（WP-A4）定義、claim-space 已由 frozen D1 §6（WP-A5）定義，故 §1.1「不證明
+`q`/NLL ranking equivalence（見 §7）」一項對 WP-A3 仍為真、但**現已由 WP-A5 於 §7 完成**。
+本增量：
+
+- **只**引用 frozen D1 §5 的 \(S_\Delta\)（canonical \(C=0\)、\(S_\Delta\succ0\) regime）
+  與 D1 §6 的 score 定義（\(q,\,\log\det S_\Delta,\,E\)），**不重定義**，也**不**引入
+  D1 §4 以外的新 transition 物件。
+- L1–L4（§2–§5）數學內容**byte 不變**，唯一例外是一處 owner-flagged 文字更正
+  （§5.2「有限矩陣」→「有限向量」，`d_Δ` 為 vector \(\in\mathbb R^{2d}\)；#253 review
+  non-blocking nit，owner 指示於下次 touch D2 時受 review 修正）。
+- **不**選 terminal（terminal review 為後續 packet）；**不**做 calibration/ranking 的
+  實際量測、gain 數值、metric／threshold 選擇（那需 data/B1/O1 授權，非本檔）。
 
 ## §2 Lemma L1 — \(Q_\Delta\succeq0\)（PSD），含退化 rank 刻畫
 
@@ -368,7 +390,7 @@ q_{xx}D=\frac{\Delta}{\gamma^2}D+O(1)\ \text{（block，隨 }\Delta\text{ 線性
 \[
 A_\Delta\to\begin{bmatrix}I&\tfrac1\gamma I\\0&0\end{bmatrix}.
 \]
-drift **不**收斂為有限矩陣（position 分量在 \(\bar v(c)\neq0\) 時線性發散），只能寫成
+drift **不**收斂為有限向量（position 分量在 \(\bar v(c)\neq0\) 時線性發散），只能寫成
 漸近式：
 \[
 d_\Delta(c)=\begin{bmatrix}\big(\Delta-\tfrac1\gamma\big)\bar v(c)+O(e^{-\gamma\Delta})\\[2pt]
@@ -402,32 +424,90 @@ Dimensional / unit consistency 已在 frozen **D1 §4.7** 以 sanity 形式陳�
 故不重複證明，僅 cross-reference D1 §4.7。此為 charter D2 列「dimensional consistency」
 一項的落點。
 
-## §7 Reserved dependency boundary — **not part of WP-A3 acceptance**
+## §7 Lemma L5 — \(q\) / NLL ranking equivalence under shared covariance（WP-A5 增量）
 
-本節**沒有** theorem、proof 或 acceptance obligation，僅記錄一個依賴邊界，避免空白
-reserved section 在 terminal review 被誤判為未完成 deliverable。
+**Status.** 本節此前為 WP-A3 的 reserved dependency boundary（無 theorem）；\(S_\Delta\)
+現由 frozen D1 §5（WP-A4）定義、claim-space 由 frozen D1 §6（WP-A5）定義，故本次
+**WP-A5** 於此填入 lemma。charter D2 列項「`q`/NLL ranking equivalence under shared
+covariance」的落點即此。**本節不選 terminal、不引入 D1 §4/§5/§6 以外的物件、不修改
+frozen D1。**
 
-**\(q\) / NLL ranking equivalence under shared covariance（charter D2 列項）：**
+**Imported notation（沿用 frozen D1 §5/§6，不重定義）.** Candidate event
+\(\mathcal E\)（D1 §6.2）內 candidate \(i\)：innovation \(r_i\)（D1 §5.3）、total
+innovation covariance \(S_{\Delta,i}\)（D1 §5.4）、\(k_i=\dim r_i\)、standardized
+innovation \(q_i=r_i^\top S_{\Delta,i}^{-1}r_i\)、Gaussian NLL
+\(E_i=\tfrac12 q_i+\tfrac12\log\det S_{\Delta,i}+\tfrac{k_i}{2}\log2\pi\)（D1 §6.1）。
+全程假設所涉 \(S_{\Delta,i}\succ0\)（D1 §6.1 regime：canonical \(C=0\)、\(R_1\succ0\)；
+退化情形不在本節範圍）。
 
-- 依賴 \(S_\Delta\)（total innovation covariance），而 \(S_\Delta\) 由
-  \(P_0,Q_\Delta,R_1\)（及 independence／cross-covariance \(C\)）組成——這些是
-  **WP-A4**（obligation 3）才定義的物件，**不在** frozen D1 §4、也**不在** WP-A3 範圍。
-- 其**實質 claim**（calibration-only gain vs candidate-local ranking gain 為不同
-  capability；shared \(S_\Delta\) 下 \(q\) 與 NLL 同序）由 **WP-A5 / obligation 2**
-  承接。
-- 因此本節在 WP-A3 **無** theorem/proof/acceptance obligation；待 WP-A4 定義
-  \(S_\Delta\) 後，於後續 D2 增量填入。WP-A3 的 acceptance **不**包含本節。
+> **Lemma L5（shared-covariance ordering equivalence）.** 固定一個 candidate event
+> \(\mathcal E\)。若所有 candidate 共用同一 covariance \(S_{\Delta,i}=S\succ0\)（等價地
+> 共用 \(\Delta,c,k,H\)，D1 §6.3(I)），則對任意 \(i,j\in\mathcal E\)：
+> \[
+> q_i\le q_j\iff E_i\le E_j .
+> \]
+> 即在 event 內，\(q\) 與 NLL 誘導**相同**的 total preorder（ranking-equivalent）。
 
-其餘 D1 §4.8 typed deferrals（\(P_0/R_1/S_\Delta/C\)、reverse-time atom、B1/O1、
-runtime、online、production、data、fitting）同樣不在本檔範圍。
+**Proof.** 由 \(S_{\Delta,i}=S\)，log-volume 項 \(\tfrac12\log\det S\) 與 additive
+常數 \(\tfrac k2\log2\pi\) 皆與 \(i\) **無關**。記
+\(\kappa:=\tfrac12\log\det S+\tfrac k2\log2\pi\)（candidate-independent），則
+\[
+E_i=\tfrac12 q_i+\kappa\qquad\forall i\in\mathcal E,
+\]
+故 \(E_i-E_j=\tfrac12(q_i-q_j)\)，兩差同號。因 \(\tfrac12>0\)，\(q_i\le q_j\iff
+E_i\le E_j\)（嚴格不等亦然）。∎
+
+> **Corollary L5.1（shared／isotropic gap-scaling ranking invariance）.** 承 L5 的
+> shared-\(S\) 設定：對任意 event-level scalar \(\alpha>0\)，把 \(S\mapsto\alpha S\)
+> **不改變** event 內 \(q\)- 與 NLL-order；特別地 \(S=\alpha I\)（isotropic）時
+> \(q_i=\lVert r_i\rVert^2/\alpha\)，order \(=\lVert r_i\rVert^2\)-order，與
+> \(\alpha\) 無關。故 gap-conditioned shared／isotropic scaling 對 candidate-local
+> ranking **不變**，只改 calibration（D1 §6.3(I)）。
+
+**Proof.** \(S\mapsto\alpha S\Rightarrow q_i=r_i^\top S^{-1}r_i\mapsto q_i/\alpha\)：
+因 \(1/\alpha>0\) 且與 \(i\) 無關，\(q_i/\alpha\) 與 \(q_i\) 同 order。NLL 變為
+\(\tfrac12 q_i/\alpha+\kappa(\alpha S)\)，仍為 \(q_i\) 的 candidate-independent 遞增
+仿射函數，order 不變。isotropic \(S=\alpha I\Rightarrow S^{-1}=\alpha^{-1}I\Rightarrow
+q_i=\lVert r_i\rVert^2/\alpha\)。∎
+
+> **Boundary L5.2（tightness：candidate-specific covariance 可改變 order）.** 若
+> candidates **不**共用 covariance（\(S_{\Delta,i}\) 隨 \(i\) 變，如 candidate-specific
+> \(\Delta_i,c_i\)，D1 §6.4），則
+> \[
+> E_i-E_j=\tfrac12(q_i-q_j)+\tfrac12\big(\log\det S_{\Delta,i}-\log\det S_{\Delta,j}\big),
+> \]
+> 第二項 candidate-dependent，可與第一項反號，故 \(q\)- 與 NLL-order **可不同**。因此
+> L5 的 shared-\(S\) 前提是必要的，不能省。
+
+**Proof（constructive counterexample，\(k=1\)）.** 取兩 candidate：
+\((r_1,S_1)=(1,\,1)\Rightarrow q_1=1,\ \log\det S_1=0\)；
+\((r_2,S_2)=(1.2,\,4)\Rightarrow q_2=0.36,\ \log\det S_2=\log4\)。去掉共同常數
+\(\tfrac k2\log2\pi\) 後比較 \(\tfrac12 q+\tfrac12\log\det S\)：candidate 1 得 \(0.5\)、
+candidate 2 得 \(0.18+\tfrac12\log4\approx0.873\)。故 \(q_2<q_1\)（\(q\) 偏好 candidate
+2）但 \(E_1<E_2\)（NLL 偏好 candidate 1）——orders 相反。∎
+
+**Region-probability 註（型別提醒，非本 lemma 的一部分）.** D1 §6.1 的 candidate-region
+probability \(\Pi_i(\Omega_i)\) 依賴 region volume／geometry，故即使 shared \(S\)，
+**非全等** regions 下 \(\Pi\)-order 可與 \(q\)-order 不一致（較大 region 因 probability
+mass 勝出）。此為 D1 §6.3 caveat 的重述，不改 L5（L5 只斷言 \(q\) 與 NLL 同序）。
+
+**Consequence（不選 terminal）.** L5＋L5.1 給出 D1 §6.3(I)「calibration gain ⇏
+ranking gain」在 \(q\)/NLL 上的精確形式；L5.2 給出其 tightness。此為 charter obligation 2
+的 proof 面，**支持** obligation 2 於 terminal review 被記為 complete，但 terminal
+選擇僅於 terminal review 依 charter frozen decision procedure 進行，本檔不代行。
+
+其餘 D1 §4.8/§5.7/§6.6 typed deferrals（identifiability／leakage、B1/O1、
+reverse-time atom、runtime、online、production、data、fitting）不在本檔範圍。
 
 ## §8 Scope / terminal note
 
 本檔**不選** terminal。L1（PSD、rank 刻畫）與 L3（compositional consistency）的
 well-posedness 內容**支持** charter terminal 1/2 不因這些性質被觸發；L2（nesting）滿足
 charter §M2 的 \(\gamma\to0\) mean+covariance nesting 要求；L4 為 diagnostic
-asymptotics。terminal 選擇僅於 terminal review 依 charter frozen decision procedure
-進行（WP-A5 收尾），本檔不代行，也不修改 frozen D1 interface。
+asymptotics；L5（§7）為 charter obligation 2 `q`/NLL ranking-equivalence 的 proof 面
+（**支持** obligation 2 被記為 complete）。terminal 選擇僅於 terminal review 依 charter
+frozen decision procedure 進行（**後續 terminal-review packet**，非本檔亦非 WP-A5），
+本檔不代行，也不修改 frozen D1 interface。
 
 ## Appendix A — 符號／數值驗證
 
@@ -440,7 +520,14 @@ WP-A2 驗證），全部通過：
 - semigroup \(a\)-composition \(a_{s+t}=a_s+a_tb_s\)（L3）；
 - \(\det M_\Delta=q_{xx}q_{vv}-q_{xv}^2\ge0\)，且 \(\gamma\to0\) 時 \(\to\Delta^4/12\)（L1）。
 
-驗證為 appendix-level sanity，不改任何 frozen 定義；proof 的權威來自 §2–§5 的推導。
+**WP-A5 增量（§7 L5）的數值 sanity（elementary algebra）：** shared-\(S\) 下
+\(\operatorname{argsort}(q)=\operatorname{argsort}(E)\) 且 \(E-\tfrac12 q\) 為常數
+（L5）；isotropic \(S=\alpha I\) 下 \(q\)-order \(=\lVert r\rVert^2\)-order，與
+\(\alpha\in\{0.1,1,7.3,100\}\) 無關（L5.1）；\((r,S)=(1,1),(1.2,4)\) 給 \(q\)-order 與
+NLL-order 相反（L5.2 counterexample）；non-congruent region 下 \(\Pi\)-order 與
+\(q\)-order 可相反（§6.3 caveat）。四項全部通過。
+
+驗證為 appendix-level sanity，不改任何 frozen 定義；proof 的權威來自 §2–§5、§7 的推導。
 
 ## History
 
@@ -479,3 +566,22 @@ WP-A2 驗證），全部通過：
   \(\bar v(c)\) while the position component grows linearly and does not
   converge. \(A_\Delta\) limit unchanged (entrywise convergent). Verified
   symbolically.
+- 2026-07-22 — **§7 filled by WP-A5** (charter obligation 2, proof side): added
+  Lemma **L5** (\(q\)/NLL ranking equivalence under shared covariance — within an
+  event with \(S_{\Delta,i}=S\succ0\), \(E_i=\tfrac12 q_i+\kappa\) with \(\kappa\)
+  candidate-independent, so \(q\) and NLL induce identical orderings), Corollary
+  **L5.1** (shared/isotropic gap-scaling \(S\mapsto\alpha S\) is ranking-invariant
+  — calibration-only), and Boundary **L5.2** (candidate-specific covariance can
+  flip \(q\) vs NLL order; \(k=1\) counterexample \((r,S)=(1,1),(1.2,4)\)), plus
+  the region-probability caveat. Uses only frozen D1 §5 \(S_\Delta\) (canonical
+  \(C=0\), \(S_\Delta\succ0\) regime) and D1 §6 score definitions; introduces no
+  new transition object; selects no terminal. §7 was a reserved boundary (no
+  theorem) under WP-A3, so this is a fill, not a modification of an accepted
+  lemma. Also: **one owner-flagged non-blocking nit fixed** from the #253 review
+  — §5.2 "drift 不收斂為有限矩陣" → "有限向量" (\(d_\Delta\) is a vector
+  \(\in\mathbb R^{2d}\)), applied under review as the owner directed. §1.1's
+  WP-A3 "不證明 q/NLL... 見 §7" is now completed by WP-A5 (scope note §1.3); §8
+  terminal-review pointer corrected (terminal review is a later packet, not
+  WP-A5). L1–L4 mathematically byte-unchanged; frozen D1 §2–§5 untouched.
+  Symbolic/numeric cross-checks (L5/L5.1/L5.2 + region-probability) in Appendix A
+  all pass.
