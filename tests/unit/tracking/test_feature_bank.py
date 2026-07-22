@@ -1,3 +1,9 @@
+"""Unit tests for the ReID feature bank (perception.feature_bank)."""
+
+# scope: perception
+# function: behavior
+# lifecycle: active
+
 import torch
 
 from saccade.perception.feature_bank import FeatureBank

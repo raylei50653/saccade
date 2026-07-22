@@ -1,5 +1,9 @@
 """Outcome-blind contracts for H0's full bridge-decision trace packet."""
 
+# scope: system
+# function: contract
+# lifecycle: active
+
 from __future__ import annotations
 
 import importlib.util

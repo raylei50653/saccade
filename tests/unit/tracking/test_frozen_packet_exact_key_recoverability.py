@@ -1,5 +1,9 @@
 """Contracts for the single-phase EK0 frozen-packet consistency audit."""
 
+# scope: system
+# function: contract
+# lifecycle: active
+
 from __future__ import annotations
 
 import gzip

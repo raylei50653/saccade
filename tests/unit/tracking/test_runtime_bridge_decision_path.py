@@ -23,6 +23,10 @@ policy comparison. So the mechanism is pinned hermetically here, and the
 end-to-end split is asserted against the real sealed artifacts where they exist.
 """
 
+# scope: system
+# function: regression
+# lifecycle: active
+
 from __future__ import annotations
 
 import csv

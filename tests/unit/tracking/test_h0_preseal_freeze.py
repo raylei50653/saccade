@@ -7,6 +7,10 @@ runtime surface, because a wrong `non_runtime` classification would hide a
 runtime-policy change from the projection admission.
 """
 
+# scope: system
+# function: contract
+# lifecycle: active
+
 from __future__ import annotations
 
 import sys

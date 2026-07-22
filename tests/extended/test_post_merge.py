@@ -1,5 +1,9 @@
 """Tests for saccade.perception.eval.post_merge."""
 
+# scope: eval
+# function: behavior
+# lifecycle: active
+
 from __future__ import annotations
 
 import pytest

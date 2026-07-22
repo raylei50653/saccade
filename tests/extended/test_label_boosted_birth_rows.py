@@ -1,3 +1,9 @@
+"""Tests for label-boosted birth-row scoring (scripts.eval.label_boosted_birth_rows + perception.eval.external_fp_rows)."""
+
+# scope: eval
+# function: behavior
+# lifecycle: active
+
 from __future__ import annotations
 
 import pandas as pd

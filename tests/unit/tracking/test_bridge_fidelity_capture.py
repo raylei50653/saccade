@@ -1,5 +1,9 @@
 """CPU contracts for Issue #112 native-capture export normalization."""
 
+# scope: eval, tracking, cross-module
+# function: contract
+# lifecycle: active
+
 from __future__ import annotations
 
 import csv

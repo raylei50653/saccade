@@ -1,3 +1,9 @@
+"""Unit tests for GPU tracker track-UID generation (perception.tracking.tracker_gpu)."""
+
+# scope: tracking
+# function: behavior
+# lifecycle: active
+
 from __future__ import annotations
 
 import sys

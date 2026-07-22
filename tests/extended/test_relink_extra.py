@@ -1,3 +1,9 @@
+"""Additional tests for the Python semantic relinker (perception.eval.relink)."""
+
+# scope: eval
+# function: behavior
+# lifecycle: active
+
 from __future__ import annotations
 
 import sys

@@ -1,3 +1,9 @@
+"""Unit tests for the native auction matcher at real training scale (saccade_tracking_ext)."""
+
+# scope: tracking
+# function: behavior
+# lifecycle: active
+
 import numpy as np
 import pytest
 import sys

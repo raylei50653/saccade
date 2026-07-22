@@ -4,6 +4,10 @@ Tests the dispatcher's stream management, batch processing logic,
 and resource-aware degradation without requiring actual TensorRT models.
 """
 
+# scope: perception
+# function: behavior
+# lifecycle: active
+
 from __future__ import annotations
 
 import asyncio

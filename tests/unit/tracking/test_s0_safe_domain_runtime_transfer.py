@@ -1,5 +1,9 @@
 """Contracts for the sealed S0 Amendment 1 terminal runner."""
 
+# scope: system
+# function: contract
+# lifecycle: active
+
 from __future__ import annotations
 
 import importlib.util

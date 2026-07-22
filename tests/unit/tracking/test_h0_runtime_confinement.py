@@ -1,5 +1,9 @@
 """Kernel-level runtime input confinement and native loader admissions."""
 
+# scope: system
+# function: contract
+# lifecycle: active
+
 from __future__ import annotations
 
 import array
