@@ -371,12 +371,14 @@ S_\Delta=H P^-_\Delta H^\top+R_1+HC+C^\top H^\top.
 separate uncertainty objects (\(P_0\) exit-state, \(Q_\Delta\) §4.5, \(R_1\)
 entry-observation, \(S_\Delta\) total innovation); prediction-error convention
 \(e^-=z_\Delta-m^-_\Delta\Rightarrow P^-_\Delta=A_\Delta P_0A_\Delta^\top+Q_\Delta\)
-(using \(\eta_\Delta\perp\delta z_0\)); innovation \(r=He^-+\epsilon_1\). The
+(under the **declared** assumption \(\eta_\Delta\perp\delta z_0\), not a §4.7
+consequence); innovation \(r=He^-+\epsilon_1\). The
 **exactly-one decision is independence**: canonical A-layer declares
 \(e^-\perp\epsilon_1\) (with the named initial-state/process-noise assumption),
 giving \(S_\Delta=HP^-_\Delta H^\top+R_1\); the dependent-error case is a frozen,
 explicitly-declared deviation using the expanded form above with
-\(C=\operatorname{Cov}(e^-,\epsilon_1)\) (signs tied to the frozen \(e^-\)
+\(C=\operatorname{Cov}(e^-,\epsilon_1)\) constrained to genuine cross-covariances
+(\([P^-_\Delta,C;C^\top,R_1]\succeq0\); signs tied to the frozen \(e^-\)
 convention). Resolving this obligation discharges neither WP-A5 (obligation 2)
 nor the later D2 \(q\)/NLL-ordering increment; D1 §5 computes no \(q\)/NLL and
 makes no ranking claim.

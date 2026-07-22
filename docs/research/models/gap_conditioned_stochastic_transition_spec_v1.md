@@ -351,6 +351,11 @@ innovation residual，以及 charter obligation 3 要求的「**declare independ
 define explicit cross-covariance \(C\)**」二選一決定。這是 charter obligation 3 的
 落點。
 
+> **狀態來源註：** frozen §4.8 的 typed-deferral 表（列 WP-A3／WP-A4 `unresolved`）是
+> **WP-A2 freeze-time 的快照**，依 byte-frozen 規則**不修改**；GCTM 的現行全域狀態以
+> §1 document-state 表、本 §5 與 charter updates 為準（WP-A3/D2 已 landed、obligation
+> 3 由本節 resolved）。同一文件不因此並存兩個「現行」狀態來源。
+
 ### §5.0 本節做什麼／不做什麼（typed boundary）
 
 **做（frozen）：** 定義 \(P_0\)（exit-state estimation uncertainty）、\(P^-_\Delta\)
@@ -418,11 +423,23 @@ m^-_\Delta:=A_\Delta\hat z_0+d_\Delta(c),
 e^-=A_\Delta\,\delta z_0+\eta_\Delta .
 \]
 
-**Initial-state／process-noise 假設（obligation 3 明列項）：** \(\eta_\Delta\perp
-\delta z_0\)。因 \(\eta_\Delta=\int_0^\Delta e^{F(\Delta-s)}B\,\mathrm dW_s\) 只依
-\((0,\Delta]\) 的 Brownian increments，而 \(\delta z_0\) 為 exit-time
-（\(\mathcal F_0\)-measurable）量；§4.7 已宣告 \(\{W_t\}_{(0,\Delta]}\perp z_0\)，故
-\(\operatorname{Cov}(\delta z_0,\eta_\Delta)=0\)。於是 prediction-error covariance 無
+**Initial-state／process-noise 假設（obligation 3 明列項；declared assumption，非
+定理）：**
+
+\[
+\boxed{\,\eta_\Delta\perp\delta z_0\,}
+\qquad(\text{estimator }\hat z_0\text{ 不攜帶 gap 內 process noise 的資訊}).
+\]
+
+**注意這不是 §4.7 的推論。** §4.7 只宣告 \(\{W_t\}_{(0,\Delta]}\perp z_0\)（與
+\(\perp\bar v(c)\)）；而 \(W\perp z_0\) **並不**蘊含 \(W\perp\delta z_0\)——
+\(\hat z_0\) 是另一個 estimator，其與 process noise 的相關結構須**另行宣告**，不能
+從 \(W\perp z_0\) 免費得到。本節因此把 \(\eta_\Delta\perp\delta z_0\) 作為 charter
+obligation 3 明列的「required initial-state/process-noise assumption」**顯式凍結**。
+（等價的較強寫法：宣告 exit-time sigma-field \(\mathcal F_0\) 使 \(z_0,\hat z_0,c\)
+皆 \(\mathcal F_0\)-measurable 且 \(\{W_t-W_0:0<t\le\Delta\}\perp\mathcal F_0\)，本
+假設為其推論；本節取較小的直接宣告即足以滿足 obligation 3。）於是
+\(\operatorname{Cov}(\delta z_0,\eta_\Delta)=0\)，prediction-error covariance 無
 cross term：
 
 \[
@@ -504,12 +521,24 @@ S_\Delta=HP^-_\Delta H^\top+R_1+HC+C^\top H^\top
 
 （符號如上）。此 deviation 必須是**顯式宣告的 model component**，與 §3.3 對
 \(H_{xv}\) 的 causal-availability 宣告一致，**不得**被靜默繼承（呼應 §2 row 9「任何
-其他非零 additive offset／偏移結構必須顯式宣告」的精神）。canonical default 仍是
-\(C=0\)。
+其他非零 additive offset／偏移結構必須顯式宣告」的精神）。
+
+**合法 \(C\) 的約束（非任意矩陣）：** 作為真實 cross-covariance，\((e^-,\epsilon_1)\)
+的 joint covariance 必須 PSD：
+
+\[
+\boxed{\;
+\begin{bmatrix}P^-_\Delta & C\\ C^\top & R_1\end{bmatrix}\succeq0
+\;}
+\qquad(\text{§5.6 domain}).
+\]
+
+此約束保證 expanded \(S_\Delta\) 仍 PSD（§5.5，congruence）。canonical default 仍是
+\(C=0\)（block-diagonal，自動滿足此約束）。
 
 ### §5.5 \(S_\Delta\) 的結構性質（interface-level sanity，正式 PSD／inv 論證屬 D2）
 
-在 canonical \(C=0\) 下：
+**Canonical \(C=0\) 下：**
 
 - **PSD：** \(P^-_\Delta=A_\Delta P_0A_\Delta^\top+Q_\Delta\succeq0\)（\(P_0\succeq0\)、
   \(Q_\Delta\succeq0\)，後者見 §4.5／D2 L1），故 \(HP^-_\Delta H^\top\succeq0\)，加
@@ -519,6 +548,22 @@ S_\Delta=HP^-_\Delta H^\top+R_1+HC+C^\top H^\top
   \(P^-_\Delta\) degenerate（D2 L1：\(Q_\Delta\) singular \(\iff D\) singular）。即
   entry-observation noise \(R_1\succ0\) 對 innovation covariance 具**正則化**作用，與
   transition-noise 是否退化無關。
+
+**Dependent-error path（\(C\neq0\)）下的 PSD：** expanded \(S_\Delta\) 是 joint
+covariance 的 congruence，
+
+\[
+S_\Delta=HP^-_\Delta H^\top+R_1+HC+C^\top H^\top
+=\begin{bmatrix}H&I\end{bmatrix}
+\begin{bmatrix}P^-_\Delta&C\\ C^\top&R_1\end{bmatrix}
+\begin{bmatrix}H^\top\\ I\end{bmatrix},
+\]
+
+故只要 §5.4／§5.6 的 joint-PSD 約束
+\(\big[\begin{smallmatrix}P^-_\Delta&C\\ C^\top&R_1\end{smallmatrix}\big]\succeq0\)
+成立，即 \(S_\Delta\succeq0\)（對任意 \(H\)）；canonical \(C=0\) 是其 block-diagonal
+特例。這也說明為何 §5.6 的 \(C\) domain 不能放寬為任意矩陣：joint covariance 若非
+PSD，expanded \(S_\Delta\) 可能不是合法 covariance。
 
 上述為 interface-level sanity（如 §4.7 的 dimensional-consistency note，非 D2
 lemma）：本節**不**計算 \(q=r^\top S_\Delta^{-1}r\)、\(\log\det S_\Delta\) 或 NLL
@@ -534,7 +579,7 @@ D2 §7）；此處僅宣告「\(R_1\succ0\) 時 \(S_\Delta^{-1}\) 存在，故�
 | \(P^-_\Delta\) | \(\succeq0\)（\(2d\times2d\)） | derived @ entry endpoint | 同 \(P_0\) |
 | \(R_1\) | \(\succeq0\)；\(H_x\):\(d\times d\)、\(H_{xv}\):\(2d\times2d\) | entry-time（\(y_1\) 到達時） | \(H_x\): \(\ell^2\)（position-space）；\(H_{xv}\): 同 state |
 | \(S_\Delta\) | \(\succeq0\)（維度 \(=R_1\)）；\(R_1\succ0\Rightarrow\succ0\) | derived @ entry endpoint | 同 \(R_1\) |
-| \(C\) | \(\mathbb R^{2d\times\dim\epsilon_1}\)（canonical \(=0\)） | 僅 dependent-error path 顯式宣告 | \(\operatorname{Cov}(e^-,\epsilon_1)\) 對應 units |
+| \(C\) | \(\Big\{C\in\mathbb R^{2d\times p}:\big[\begin{smallmatrix}P^-_\Delta&C\\ C^\top&R_1\end{smallmatrix}\big]\succeq0\Big\}\)，\(p=\dim\epsilon_1\)（canonical \(=0\)，自動滿足） | 僅 dependent-error path 顯式宣告 | \(\operatorname{Cov}(e^-,\epsilon_1)\) 對應 units |
 
 \(\ell\) = §2 field 1 的 \(S_A\) 高度正規化位置單位；\(H_x=[\,I_d\ 0\,]\)（§3、§4.1）。
 Dimensional consistency（sanity）：\(HP^-_\Delta H^\top\) 於 \(H_x\) 取 \(P^-_\Delta\)
@@ -629,3 +674,18 @@ Dimensional consistency（sanity）：\(HP^-_\Delta H^\top\) 於 \(H_x\) 取 \(P
   renumbered (§5→§6 identifiability/leakage, §6→§7 B1 schema). §2–§4 untouched
   (byte-frozen; no append-only correction); no fidelity edge, no \(P_0/R_1\)
   value selected, no runtime/data/production change.
+- 2026-07-22 — bounded corrections per #254 owner review (REQUEST CHANGES →
+  fixed pre-merge; §5 not yet frozen; §2–§4 untouched, byte-frozen): (1)
+  **§5.2 initial-state/process-noise assumption** — \(\eta_\Delta\perp\delta z_0\)
+  is now **declared and frozen** as the required assumption, **not** derived
+  from §4.7 (which gives only \(\{W_t\}_{(0,\Delta]}\perp z_0\); \(W\perp z_0\)
+  does not imply \(W\perp\delta z_0\), since \(\hat z_0\) is a separate
+  estimator), with the fuller \(\mathcal F_0\)-measurable formulation noted as
+  an equivalent stronger option. (2) **§5.4/§5.6 dependent-path \(C\) domain**
+  — narrowed from all of \(\mathbb R^{2d\times p}\) to the genuine-cross-covariance
+  set \(\{C:[P^-_\Delta,C;C^\top,R_1]\succeq0\}\), which keeps the expanded
+  \(S_\Delta\) PSD via the congruence
+  \(S_\Delta=[H\ I]\,[P^-_\Delta,C;C^\top,R_1]\,[H^\top;I]\) (§5.5). (3) **§5
+  intro status note** — §4.8's frozen deferral table marked as the WP-A2
+  freeze-time snapshot; current status source = §1 table + §5 + charter. The
+  canonical \(C=0\) independence decision is unchanged.
