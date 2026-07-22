@@ -635,7 +635,7 @@ registration. H0's closure remains valid even if no such consumer is scheduled.
 ## Read first
 
 - [H0 declaration — observability and ordered terminal](headline_bridge_full_decision_capture_declaration_20260713.md)
-- [GCTM parked charter — transition-family boundary](../../../research/threads/gap_conditioned_stochastic_transition_model_task.md)
+- [GCTM task charter — transition-family boundary](../../../research/threads/gap_conditioned_stochastic_transition_model_task.md)
 - [GCTM B1 charter — activation and frozen inputs](../../../research/threads/gctm_b1_runtime_grounded_offline_attribution_task.md)
 - [B1/O1 shared semantics — evidence chain and target layer](gctm_b1_o1_task_objectives_and_semantics_20260716.md)
 - [Claim-state registry §7 — L2 score-layer gap](../../../research/contracts/claim_state_registry.md#7-架構缺口顯式化而不是假裝可編排)

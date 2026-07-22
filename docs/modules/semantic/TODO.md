@@ -5,28 +5,19 @@
 
 ## Sole active
 
-- **none**。H0 re-entry repair（#224 amendment：build-tool binding → #227 repair：
-  canonical controller-input member parity）於 2026-07-21 由 owner 授權 exactly-once
-  執行,到達第二個同型 owner-accepted ordered terminal `H0_PROVENANCE_INVALID`
-  （I₂=`31c9eee8`→F₂=`46539a2d`→S₂=`0da082a9`；死因＝preflight launch hygiene:
-  `build/h0_phase_a exists at controller launch`,T0 未進、零 capture;independent
-  verifier `valid=true`）。#224／#227 已關閉;歷史 I/F/S 與 evidence 不可變;
-  controller retry／second invocation under S₂／Phase B forbidden;GCTM #175 維持
-  PARKED（不因此自動啟動）;actual H0 guarantee = none。永久留帳結論與 re-entry
-  precondition（先建 machine-checked launch-hygiene pre-authorization gate,再 fresh
-  I→F→S＋另行 exactly-once 授權）見 [claim-state registry
-  `quantity.bridge_capture_provenance`](../../research/contracts/claim_state_registry.md)。
-- **none**（re-entry #3）。owner 於 2026-07-21 授權 exactly-once 執行 re-entry #3
-  （I₃=`5a2d1de5`→F₃=`7895704c`→S₃=`3a6a9ec6`），到達第三個同型 owner-accepted
-  ordered terminal `H0_PROVENANCE_INVALID`（PR #235 comment 5032610430;independent
-  verifier `result=provenance_invalid, valid=true, rc=0`）。死因不同＝extension_load
-  confinement-plan construction（capture 前;`provenance_ok=false` 為唯一 false predicate;
-  capture children NOT_RUN;T0/T1 completed、T2a_0→T4 not_reached）;根因＝
-  seal-event／runtime-binding identity incompatibility。invocation count=1、exactly-once
-  授權永久消耗、exact S 永久 spent、retry／resume／second invocation forbidden。
-  **faithful capture = none;actual H0 guarantee = none;candidate／guarantee sets 空;
-  Phase B FORBIDDEN;GCTM #175 PARKED;無 repair／新 re-entry 授權**。詳見 [claim-state
-  registry `reentry_terminal_history` re-entry #3](../../research/contracts/claim_state_registry.md)。
+- **Gap-conditioned stochastic transition model — task charter**（GCTM,A 層
+  theory/model specification）→ [task charter](../../research/threads/gap_conditioned_stochastic_transition_model_task.md)
+  · [Issue #175](https://github.com/raylei50653/saccade/issues/175)。
+  2026-07-22 owner scheduling decision（#175 activation comment）啟動（WP-A0）。
+  primary object = A;active declaration **未 seal**（obligation 1 = WP-A1 seal
+  condition）;四項 activation-contract obligations 均 unresolved;terminal
+  partition 與 decision procedure 已凍結。不授權 data／fitting／H0／B1／O1／
+  runtime／online／production;H0 狀態不因此改變。
+- H0 closure（三個 owner-accepted ordered terminal `H0_PROVENANCE_INVALID`;
+  faithful capture = none;actual H0 guarantee = none;Phase B forbidden;
+  任何未來 re-entry 前置＝machine-checked launch-hygiene pre-authorization
+  gate＋fresh I→F→S＋另行 exactly-once 授權）：state fact-owner 見
+  [claim-state registry](../../research/contracts/claim_state_registry.md)。
 
 ## Proposed（non-WIP）
 
@@ -35,7 +26,6 @@
 
 ## Parked
 
-- **PARKED — Gap-conditioned stochastic transition model task** → [Issue #175](https://github.com/raylei50653/saccade/issues/175) · activation: accepted H0 ordered terminal + owner scheduling · [task charter](../../research/threads/gap_conditioned_stochastic_transition_model_task.md)
 - Score temporal-to-stable-domain → [charter](../../research/threads/score_temporal_to_stable_domain_20260712.md)
 - GT-support morphology → [charter](../../research/threads/gt_support_morphology_20260711.md)
 - Occ-exit intervention modeling → [charter](../../research/threads/occ_exit_audit_20260709.md)
