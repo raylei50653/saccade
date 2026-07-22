@@ -1,3 +1,9 @@
+"""Tests for the near-miss final-output analyzer (scripts.eval.diagnostics.analyze_near_miss_final_output)."""
+
+# scope: eval
+# function: behavior
+# lifecycle: active
+
 from __future__ import annotations
 
 import pandas as pd

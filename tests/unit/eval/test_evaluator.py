@@ -1,3 +1,9 @@
+"""Tests for the MOT evaluator and stages (perception.eval.evaluator)."""
+
+# scope: eval
+# function: behavior
+# lifecycle: active
+
 import os
 import pytest
 import torch

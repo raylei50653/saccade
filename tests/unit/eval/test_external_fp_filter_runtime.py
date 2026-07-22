@@ -1,3 +1,9 @@
+"""Tests for the runtime external-FP filter (perception.eval.evaluator._apply_external_fp_filter)."""
+
+# scope: eval
+# function: behavior
+# lifecycle: active
+
 import torch
 
 from saccade.perception.eval.evaluator import _apply_external_fp_filter

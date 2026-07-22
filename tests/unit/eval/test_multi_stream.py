@@ -1,3 +1,9 @@
+"""Tests for multi-stream evaluation orchestration (perception.eval.multi_stream)."""
+
+# scope: eval
+# function: behavior
+# lifecycle: active
+
 from __future__ import annotations
 
 import threading

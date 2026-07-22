@@ -1,3 +1,9 @@
+"""Tests for eval runner batch helpers (perception.eval relink/lifecycle/output_bank/helpers)."""
+
+# scope: eval
+# function: behavior
+# lifecycle: active
+
 from __future__ import annotations
 
 import sys

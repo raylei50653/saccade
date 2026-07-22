@@ -1,5 +1,9 @@
 """Unit tests for CleanFifoBank — the reusable clean-FIFO embedding substrate."""
 
+# scope: eval
+# function: behavior
+# lifecycle: active
+
 from __future__ import annotations
 
 import torch

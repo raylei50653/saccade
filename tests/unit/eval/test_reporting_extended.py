@@ -6,6 +6,10 @@ Covers additional branches not tested in test_reporting.py:
   - print_sequence_summary: tile diagnostics, lazy reid, post counts
 """
 
+# scope: eval
+# function: behavior
+# lifecycle: active
+
 from __future__ import annotations
 
 import csv

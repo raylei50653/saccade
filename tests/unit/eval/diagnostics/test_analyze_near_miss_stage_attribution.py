@@ -1,3 +1,9 @@
+"""Tests for the near-miss stage-attribution analyzer (scripts.eval.diagnostics.analyze_near_miss_stage_attribution)."""
+
+# scope: eval
+# function: behavior
+# lifecycle: active
+
 import pandas as pd
 
 from scripts.eval.diagnostics.analyze_near_miss_stage_attribution import (

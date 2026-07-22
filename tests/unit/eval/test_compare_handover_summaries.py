@@ -1,3 +1,9 @@
+"""Tests for the compare-handover-summaries diagnostics CLI (scripts/eval/diagnostics)."""
+
+# scope: eval
+# function: behavior
+# lifecycle: active
+
 import json
 import subprocess
 import sys

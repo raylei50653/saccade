@@ -1,3 +1,9 @@
+"""Tests for eval runner result materialization (perception.eval.helpers)."""
+
+# scope: eval
+# function: behavior
+# lifecycle: active
+
 from __future__ import annotations
 
 import sys

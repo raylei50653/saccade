@@ -1,5 +1,9 @@
 """Unit tests for M-B1.5 Stage 2 Q1–Q3 D_online audit."""
 
+# scope: eval
+# function: behavior
+# lifecycle: active
+
 from __future__ import annotations
 
 from pathlib import Path

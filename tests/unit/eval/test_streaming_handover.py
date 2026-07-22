@@ -1,5 +1,9 @@
 """Unit tests for the streaming (live) online Cheb-GR handover substrate."""
 
+# scope: eval
+# function: behavior
+# lifecycle: active
+
 from __future__ import annotations
 
 import numpy as np

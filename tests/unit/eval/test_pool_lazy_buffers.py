@@ -7,6 +7,10 @@ release_tiling_buffers() so single- and double-buffer 640 eval never pays for
 VRAM it does not use.
 """
 
+# scope: eval
+# function: behavior
+# lifecycle: active
+
 import pytest
 import torch
 

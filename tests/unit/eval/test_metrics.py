@@ -1,3 +1,9 @@
+"""Tests for TrackEval metrics discovery (perception.eval.metrics)."""
+
+# scope: eval
+# function: behavior
+# lifecycle: active
+
 import importlib
 import sys
 

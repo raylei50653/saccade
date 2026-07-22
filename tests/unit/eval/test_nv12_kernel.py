@@ -1,3 +1,9 @@
+"""Tests for the NV12->CHW letterbox preprocessing kernel (saccade_tracking_ext)."""
+
+# scope: tracking
+# function: behavior
+# lifecycle: active
+
 import pytest
 import torch
 
