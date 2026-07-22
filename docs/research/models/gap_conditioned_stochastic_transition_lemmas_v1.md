@@ -441,8 +441,10 @@ innovation \(q_i=r_i^\top S_{\Delta,i}^{-1}r_i\)、Gaussian NLL
 退化情形不在本節範圍）。
 
 > **Lemma L5（shared-covariance ordering equivalence）.** 固定一個 candidate event
-> \(\mathcal E\)。若所有 candidate 共用同一 covariance \(S_{\Delta,i}=S\succ0\)（等價地
-> 共用 \(\Delta,c,k,H\)，D1 §6.3(I)），則對任意 \(i,j\in\mathcal E\)：
+> \(\mathcal E\)。若所有 candidate 共用同一 covariance \(S_{\Delta,i}=S\succ0\)（此即
+> 唯一前提；共用同一矩陣 \(S\) 已蘊含共用維度 \(k\)。**不**要求同 \(\Delta,c,H\) 或同
+> \(R_1\)：\(S_\Delta=HP^-_\Delta H^\top+R_1\) 含 entry-time 的 \(R_1\)、且 \(c\) 只入
+> drift mean 不入 covariance，故那些來源既不必要也不充分），則對任意 \(i,j\in\mathcal E\)：
 > \[
 > q_i\le q_j\iff E_i\le E_j .
 > \]
@@ -477,7 +479,9 @@ q_i=\lVert r_i\rVert^2/\alpha\)。∎
 > E_i-E_j=\tfrac12(q_i-q_j)+\tfrac12\big(\log\det S_{\Delta,i}-\log\det S_{\Delta,j}\big),
 > \]
 > 第二項 candidate-dependent，可與第一項反號，故 \(q\)- 與 NLL-order **可不同**。因此
-> L5 的 shared-\(S\) 前提是必要的，不能省。
+> **shared-\(S\) 前提不能從 universal ordering-equivalence guarantee 移除**（此
+> counterexample 只證「移除 shared-\(S\) 後，同序不再對所有情形成立」；它**不**宣稱
+> \(S_i\neq S_j\) 就**必然**異序——特定 \(S_i\neq S_j\) 下 \(q\) 與 NLL 仍可能碰巧同序）。
 
 **Proof（constructive counterexample，\(k=1\)）.** 取兩 candidate：
 \((r_1,S_1)=(1,\,1)\Rightarrow q_1=1,\ \log\det S_1=0\)；
@@ -525,7 +529,11 @@ WP-A2 驗證），全部通過：
 （L5）；isotropic \(S=\alpha I\) 下 \(q\)-order \(=\lVert r\rVert^2\)-order，與
 \(\alpha\in\{0.1,1,7.3,100\}\) 無關（L5.1）；\((r,S)=(1,1),(1.2,4)\) 給 \(q\)-order 與
 NLL-order 相反（L5.2 counterexample）；non-congruent region 下 \(\Pi\)-order 與
-\(q\)-order 可相反（§6.3 caveat）。四項全部通過。
+\(q\)-order 可相反（§6.3 caveat）。另（#255 review 對應）：CAL Gaussian working null
+下 Gaussian \(r\) 給 \(q\sim\chi^2_k\)（KS 一致），**同 covariance 但 non-Gaussian**
+（\(t_3\)）則被 \(\chi^2_k\) 拒斥——確認 \(q\sim\chi^2_k\) 需 Gaussianity 而非僅正確
+covariance；event 內**統一**單調 \(\varphi_{\mathcal E}\) 保序、**per-candidate 不同**
+\(\varphi_i\) 可改序。全部通過。
 
 驗證為 appendix-level sanity，不改任何 frozen 定義；proof 的權威來自 §2–§5、§7 的推導。
 
@@ -585,3 +593,13 @@ NLL-order 相反（L5.2 counterexample）；non-congruent region 下 \(\Pi\)-ord
   WP-A5). L1–L4 mathematically byte-unchanged; frozen D1 §2–§5 untouched.
   Symbolic/numeric cross-checks (L5/L5.1/L5.2 + region-probability) in Appendix A
   all pass.
+- 2026-07-22 — bounded corrections per #255 owner review (pre-merge; §7 not yet
+  frozen; L1–L4/§2–§5 byte-unchanged): (1) **L5 condition** — dropped the wrong
+  "等價地共用 \(\Delta,c,k,H\)" equivalence; L5's sole premise is
+  \(S_{\Delta,i}=S\) (sharing the matrix \(S\) already fixes the dimension \(k\);
+  \(R_1\) is entry-time and \(c\) enters drift mean, not covariance, so those
+  sources are neither necessary nor sufficient). (2) **L5.2 necessity softened** —
+  the counterexample shows shared-\(S\) cannot be removed from the *universal*
+  ordering-equivalence guarantee; it does **not** claim \(S_i\neq S_j\) forces a
+  different order (specific unequal \(S\) may still coincide in order). Core L5/L5.1
+  algebra and the \(k=1\) counterexample unchanged.

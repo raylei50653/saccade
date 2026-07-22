@@ -640,9 +640,11 @@ candidate-region probability，並固定其 well-defined 的 regime；(ii) 定�
 **CAL**（cross-event calibration）與 claim **RANK**（candidate-local ranking），各附
 null／metric family／evaluation unit／consequence；(iii) 凍結 separation 結構——
 shared-\(S_\Delta\) 下 \(q\) 與 NLL 同序、isotropic／shared gap-scaling 對
-candidate-local order **不變**（僅改 calibration）、ranking 對 per-candidate 嚴格單調
-重參數化不變（故 ranking gain 不蘊含 calibration gain），以及 candidate-specific
-covariance 何時**可**改變 order。
+candidate-local order **不變**（僅改 calibration）、ranking 對 event 內**統一**套用的
+共同嚴格遞增重參數化不變（per-candidate 不同 \(\varphi_i\) 可改序；統一變換破壞
+calibration ⇒ ranking gain 不蘊含 calibration gain），以及 candidate-specific
+covariance 何時**可**改變 order。分佈層（Gaussian／\(\chi^2\)）敘述需 §6.1 的 CAL
+Gaussian working null。
 
 **不做（留給後續 WP 或本 packet 的 D2 增量）：** 不做 identifiability／leakage
 matrix（reserved，見 §1 表 §7）；不寫 schema-only B1 interface（§8，reserved）；
@@ -668,15 +670,38 @@ prediction mean \(Hm^-_\Delta\)（§5.2），令 \(k=\dim r\)（\(H_x\):\(k=d\)�
 \(S_\Delta\)（dependent path、或 \(R_1\) singular）下這些量須改用 support-subspace 上的
 pseudo-inverse／degenerate-Gaussian 形式——**本節不處理，亦不作任何 claim**。
 
+**CAL Gaussian working null（declared，additional to frozen §5；frozen 於本節）.**
+Frozen §5 只給 innovation 的**一二階矩**：\(\mathbb E[r]=0\)（§5.3 zero-mean）、
+\(\operatorname{Cov}(r)=S_\Delta\)（§5.4）；它**未**宣告 \(\delta z_0\) 的分佈，只把
+\(P_0=\operatorname{Cov}(\delta z_0)\) 定為 covariance。因此 predictive law 為
+\(\mathcal N(Hm^-_\Delta,S_\Delta)\)、\(q\sim\chi^2_k\)、Gaussian NLL 為**絕對
+probability semantics** 等**分佈層**敘述，**不是** frozen §5 的推論。CAL claim 因此在下列
+**額外宣告的 Gaussian working null** 下才 well-defined：
+
+\[
+\boxed{\;\delta z_0\mid\hat z_0\sim\mathcal N(0,P_0),\qquad
+\delta z_0\perp\eta_\Delta\perp\epsilon_1\;}
+\]
+
+（此處 \(\eta_\Delta\sim\mathcal N(0,Q_\Delta)\) 已 Gaussian，§4.3；\(\epsilon_1\sim
+\mathcal N(0,R_1)\) 已 Gaussian，§5.1；\(\eta_\Delta\perp\delta z_0\) 已凍結於 §5.2、
+\(e^-\perp\epsilon_1\) 已凍結於 §5.4——**唯一新增**的是 \(\delta z_0\) 的 Gaussianity）。
+於此 working null，\(r=A_\Delta\delta z_0+\eta_\Delta+\epsilon_1\) 為 independent
+Gaussians 之和 ⇒ \(r\sim\mathcal N(0,S_\Delta)\) ⇒ \(q\sim\chi^2_k\)。**若 \(\delta z_0\)
+非 Gaussian**，\(S_\Delta\) 仍是正確 covariance，但 \(r\) 一般**非** Gaussian、
+\(q\not\sim\chi^2_k\)，故此 working null 是 CAL 分佈層 claim 的**必要**宣告，非默認。
+下表四量作為 \(r,S_\Delta\) 的**函數**始終 well-defined（不需 working null）；只有其
+**機率解釋**（density、\(\chi^2\)、coverage）需此 working null。
+
 | 量 | 定義 | 說明 |
 |:--|:--|:--|
-| **standardized innovation（Mahalanobis）** | \(q:=r^\top S_\Delta^{-1}r\ (\ge0)\) | residual 相對於宣告不確定度的大小；canonical zero-mean Gaussian null（§5.3）下 \(q\sim\chi^2_k\)。 |
+| **standardized innovation（Mahalanobis）** | \(q:=r^\top S_\Delta^{-1}r\ (\ge0)\) | residual 相對於宣告不確定度的大小；**在上述 CAL Gaussian working null 下** \(q\sim\chi^2_k\)（frozen §5 只保 \(\mathbb E[r]=0\)、\(\operatorname{Cov}(r)=S_\Delta\)，不含分佈）。 |
 | **predictive log-volume** | \(\log\det S_\Delta\) | 預測不確定度的體積尺度；與 \(r\) **無關**（不含 alignment 資訊）。 |
-| **Gaussian NLL（per candidate）** | \(E:=\tfrac12 q+\tfrac12\log\det S_\Delta+\tfrac{k}{2}\log(2\pi)=-\log\mathcal N\!\big(y_1;Hm^-_\Delta,S_\Delta\big)\) | 合併 residual fit（\(q\)）與 uncertainty volume（\(\log\det S_\Delta\)）。 |
-| **candidate-region probability** | \(\Pi(\Omega):=\int_\Omega\mathcal N\!\big(y;Hm^-_\Delta,S_\Delta\big)\,\mathrm dy\)，\(\Omega\subseteq\) obs space | 在宣告 region \(\Omega\) 上積分密度；**依賴 \(\Omega\) 的 geometry／volume**，不只 alignment。 |
+| **Gaussian NLL（per candidate）** | \(E:=\tfrac12 q+\tfrac12\log\det S_\Delta+\tfrac{k}{2}\log(2\pi)\)（\(=-\log\mathcal N(y_1;Hm^-_\Delta,S_\Delta)\)，其密度解釋需 working null） | 合併 residual fit（\(q\)）與 uncertainty volume（\(\log\det S_\Delta\)）。 |
+| **candidate-region probability** | \(\Pi(\Omega):=\int_\Omega\mathcal N\!\big(y;Hm^-_\Delta,S_\Delta\big)\,\mathrm dy\)，\(\Omega\subseteq\) obs space（Gaussian model 下） | 在宣告 region \(\Omega\) 上積分密度；**依賴 \(\Omega\) 的 geometry／volume**，不只 alignment。 |
 
-以上皆為**定義**：不選 \(P_0/R_1\) 數值、不選 \(\Omega\)、不選任何 threshold。四者
-不得壓成單一 scalar（承 §5.1）。特別地 \(\log\det S_\Delta\) 與 \(q\) 度量**不同**的
+以上四量作為函數皆為**定義**：不選 \(P_0/R_1\) 數值、不選 \(\Omega\)、不選任何 threshold。
+四者不得壓成單一 scalar（承 §5.1）。特別地 \(\log\det S_\Delta\) 與 \(q\) 度量**不同**的
 東西（volume vs alignment），\(\Pi(\Omega)\) 又混入 region volume——這三者的**不可
 互換**正是 CAL/RANK 分離的來源。
 
@@ -692,9 +717,9 @@ generically candidate-specific（§6.4）。
 
 | | **CAL — cross-event calibration** | **RANK — candidate-local ranking** |
 |:--|:--|:--|
-| **性質（property）** | 預測律 \(\mathcal N(Hm^-_\Delta,S_\Delta)\) 在 events／gaps 的**母體**上校準（true match 的 \(q\) 服從名目 \(\chi^2_k\)；credible-region coverage／PIT uniformity／proper-score calibration） | 在**單一** event \(\mathcal E\) **內**，score 把 true match 排在 distractors **之上**（event-local ordering） |
+| **性質（property）** | 預測律 \(\mathcal N(Hm^-_\Delta,S_\Delta)\) 在 events／gaps 的**母體**上校準（在 §6.1 CAL Gaussian working null 下 true match 的 \(q\) 服從名目 \(\chi^2_k\)；credible-region coverage／PIT uniformity／conditional calibration error 的正確性） | 在**單一** event \(\mathcal E\) **內**，score 把 true match 排在 distractors **之上**（event-local ordering） |
 | **null** | \(H_0^{\mathrm{CAL}}\)：reference model 已校準（無 calibration gain） | \(H_0^{\mathrm{RANK}}\)：candidate-local ordering 不優於 baseline（如 raw distance／M0） |
-| **metric family** | calibration／coverage／PIT／log-score error，跨 events + gaps **聚合** | event-local ordering metric（true-match rank、top-1、event-conditional AUC），**event 內**計算後再跨 event 平均 |
+| **metric family** | **coverage／PIT uniformity／conditional calibration error**，跨 events + gaps **聚合**（**不含** generic log／proper score——見下註） | event-local ordering metric（true-match rank、top-1、event-conditional AUC），**event 內**計算後再跨 event 平均 |
 | **evaluation unit** | 母體（cross-event, cross-gap） | event 內 ordering（再平均） |
 | **一個 "gain" 的意義** | 更好的**絕對機率語義** | 更好的 **event-local 判別** |
 | **consequence** | 關於 probability semantics；**不**蘊含 ordering 改善 | 關於 event-local discrimination；**不**蘊含 calibration 改善 |
@@ -703,10 +728,19 @@ generically candidate-specific（§6.4）。
 different capabilities」的凍結落點。metric family 只**命名族類**，不選具體 metric／
 threshold／data。）
 
+**log／proper score 不屬 CAL metric family（凍結界定）：** generic log score／NLL
+（及其他 proper scoring rules）評估的是**整個 predictive distribution**，同時受
+**calibration 與 sharpness** 影響；改善 NLL **不等於** calibration-only gain（可由更
+sharp 但同樣校準、甚至校準更差但更 sharp 而得）。故 log／proper score 另列為
+**distribution-quality metric**，**不得單獨支持** CAL claim；CAL 的判定用 coverage／
+PIT／conditional calibration error 這類**純 calibration** 診斷。
+
 ### §6.3 Separation（invariance 結構）—— 兩 claim 為何邏輯獨立
 
 **(I) Calibration 改變而 ranking 不變（shared-covariance rescaling）。** 設 event
-\(\mathcal E\) 內所有 candidate 共用 \(S_{\Delta,i}=S\)（同 \(\Delta,c,k,H\)）。則
+\(\mathcal E\) 內所有 candidate 共用同一 covariance \(S_{\Delta,i}=S\)（此即 lemma 的
+充要條件；**不**要求同 \(\Delta,c,k,H\)——\(R_1\) 是 entry-time quantity、\(c\) 只影響
+drift mean 不影響 covariance，故那些來源既不必要也不充分）。則
 \(E_i=\tfrac12 q_i+\kappa(S)\)，其中 \(\kappa(S)=\tfrac12\log\det S+\tfrac k2\log2\pi\)
 **與 \(i\) 無關**，故 \(q\) 與 \(E\) 在 event 內誘導**相同** ordering（rank-equivalent；
 正式證明 D2 §7 L5）。又 gap-conditioned rescaling \(S\mapsto\alpha_\Delta S\)
@@ -719,11 +753,17 @@ order \(=\lVert r_i\rVert^2\) order，與 \(\alpha_\Delta\) 無關 ⇒ **isotrop
 gap-conditioned scaling 對 candidate-local order 是 calibration-only**（charter 的
 \(S_\Delta=\alpha_\Delta I\) 陳述）。
 
-**(II) Ranking 改變而 calibration 不隨之改變（ranking 對單調重參數化不變）。** 任何對
-per-candidate score 施加的嚴格遞增變換 \(\varphi\)（如 \(q_i\mapsto\varphi(q_i)\)）
-保持 event-local ordering，卻一般**破壞** calibration（\(\varphi(q)\) 不再 \(\chi^2_k\)）；
-反之兩個 event-local ordering 完全相同的 model 可有任意不同的 calibration。故 **ranking
-gain 不蘊含 calibration gain**。
+**(II) Ranking 保持不變而 calibration 可被改變（uniform monotone reparametrization）。**
+在同一 event \(\mathcal E\) 內對**所有** candidates **統一**套用**同一個**嚴格遞增函數
+\(\varphi_{\mathcal E}\)（\(q_i\mapsto\varphi_{\mathcal E}(q_i)\) for all \(i\in\mathcal E\)）
+保持 event-local ordering，卻一般**破壞** calibration（\(\varphi_{\mathcal E}(q)\) 不再
+\(\chi^2_k\)）。**量詞要緊：** 若每個 candidate 用**不同**的 \(\varphi_i\)（即使各自嚴格
+遞增），ordering **可被改變**；保持 order 的是 event 內**統一**的 \(\varphi_{\mathcal E}\)，
+非 per-candidate 變換。**完整非蘊含論證：** 取任一已具 **ranking gain** 的 score，對其在
+每個 event 內統一套用一個破壞 calibration 的嚴格遞增 \(\varphi_{\mathcal E}\)——ordering
+不變故 ranking gain **仍存在**，但 calibration 被破壞；故 **ranking gain 不保證
+calibration gain**（兩個 event-local ordering 完全相同的 model 可有任意不同的
+calibration）。
 
 **Region-probability caveat（凍結）：** \(\Pi_i(\Omega_i)\) 依賴 region 的 volume／
 geometry；若 candidates 用**非全等**的 region \(\Omega_i\)，\(\Pi\)-order 可與
@@ -898,12 +938,19 @@ schema-only B1 input interface（WP-A7 planned）。
   metric family, evaluation unit, and consequence, and the **separation
   structure**: (I) shared-\(S_\Delta\) rescaling / isotropic \(S=\alpha_\Delta I\)
   changes calibration but **not** candidate-local order (calibration gain ⇏
-  ranking gain); (II) ranking is invariant to any strictly-monotone per-candidate
-  reparametrization, which generally breaks calibration (ranking gain ⇏
-  calibration gain); plus the region-probability caveat (non-congruent regions
-  make \(\Pi\)-order disagree with \(q\)-order) and the rule that
-  candidate-specific covariance may alter ordering **only** when its source and
-  causal availability are explicitly declared (§3.3). The shared-\(S_\Delta\)
+  ranking gain); (II) ranking is invariant to a **common** strictly-increasing
+  reparametrization applied **uniformly** across candidates within an event
+  (per-candidate distinct \(\varphi_i\) can reorder), which generally breaks
+  calibration (ranking gain ⇏ calibration gain); plus the region-probability
+  caveat (non-congruent regions make \(\Pi\)-order disagree with \(q\)-order) and
+  the rule that candidate-specific covariance may alter ordering **only** when its
+  source and causal availability are explicitly declared (§3.3). The
+  \(\chi^2_k\)/Gaussian distributional statements hold only under an explicitly
+  declared **CAL Gaussian working null** (\(\delta z_0\mid\hat z_0\sim
+  \mathcal N(0,P_0)\), \(\delta z_0\perp\eta_\Delta\perp\epsilon_1\); §6.1) — an
+  addition beyond frozen §5 (which gives only zero-mean + covariance); generic
+  log/proper score is a distribution-quality metric (calibration+sharpness),
+  excluded from the CAL metric family. The shared-\(S_\Delta\)
   \(q\)/NLL ordering-equivalence **proof** is the D2 increment of this packet (D2
   §7, Lemma L5). **All four numbered obligations are now resolved;** a sealable
   terminal still needs §7 (identifiability/leakage), §8 (B1 schema), and terminal
@@ -914,3 +961,24 @@ schema-only B1 input interface（WP-A7 planned）。
   append-only renumber note after the §1 table — §5 kept byte-frozen. §2–§5
   untouched (byte-frozen; no in-place edit); no fidelity edge, no \(P_0/R_1\)
   value, no runtime/data/production change.
+- 2026-07-22 — bounded corrections per #255 owner review (BLOCKED → fixed
+  pre-merge; §6 not yet frozen; §2–§5 byte-frozen): (1) **CAL Gaussian working
+  null** — §6.1 now declares \(\delta z_0\mid\hat z_0\sim\mathcal N(0,P_0)\),
+  \(\delta z_0\perp\eta_\Delta\perp\epsilon_1\) as an **additional** assumption
+  beyond frozen §5 (which supplies only \(\mathbb E[r]=0\) + \(\operatorname{Cov}
+  (r)=S_\Delta\)); the \(q\sim\chi^2_k\)/Gaussian-predictive-law/absolute-probability
+  statements are scoped to this working null (the four score quantities remain
+  defined as functions of \(r,S_\Delta\) without it, only their probabilistic
+  interpretation needs it). (2) **§6.3(II) title + quantifier** — retitled
+  "Ranking 保持不變而 calibration 可被改變"; the order-preserving transform is a
+  **common** strictly-increasing \(\varphi_{\mathcal E}\) applied **uniformly**
+  across candidates in an event (distinct per-candidate \(\varphi_i\) can reorder),
+  with the full non-implication argument (start from a ranking-gain score, apply a
+  uniform calibration-breaking monotone map, ranking gain persists ⇒ ranking gain
+  ⇏ calibration gain). (3) **CAL metric family** — generic log/proper score
+  removed from CAL (it mixes calibration + sharpness) and listed as a separate
+  distribution-quality metric; CAL keeps coverage/PIT/conditional calibration
+  error. (4) **§6.3(I) shared-\(S\) condition** — dropped the incorrect
+  "同 \(\Delta,c,k,H\)" equivalence; the lemma's condition is exactly
+  \(S_{\Delta,i}=S\) (\(R_1\) is entry-time, \(c\) enters drift mean not
+  covariance). CAL/RANK separation and the invertible regime unchanged.

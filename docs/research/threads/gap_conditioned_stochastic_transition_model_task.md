@@ -360,13 +360,21 @@ claims **CAL** (cross-event calibration) and **RANK** (candidate-local ranking),
 each with its own null, metric family, evaluation unit, and consequence, over the
 frozen §5 score quantities (\(q=r^\top S_\Delta^{-1}r\), \(\log\det S_\Delta\),
 Gaussian NLL, candidate-region probability; invertible regime canonical
-\(C=0\), \(R_1\succ0\)). The separation is frozen both directions: shared-\(S_\Delta\)
-/ isotropic \(S=\alpha_\Delta I\) rescaling changes calibration but **not**
-candidate-local order (calibration gain ⇏ ranking gain), and ranking is invariant
-to any strictly-monotone per-candidate reparametrization, which generally breaks
-calibration (ranking gain ⇏ calibration gain); candidate-specific covariance may
-alter ordering **only** when its source and causal availability are explicitly
-declared. The shared-\(S_\Delta\) \(q\)/NLL ordering-equivalence **proof** is
+\(C=0\), \(R_1\succ0\)). The \(\chi^2_k\)/Gaussian distributional statements hold
+under an explicitly declared **CAL Gaussian working null**
+(\(\delta z_0\mid\hat z_0\sim\mathcal N(0,P_0)\),
+\(\delta z_0\perp\eta_\Delta\perp\epsilon_1\); §6.1) — an addition beyond frozen §5,
+which supplies only zero-mean and covariance. The separation is frozen both
+directions: shared-\(S_\Delta\) / isotropic \(S=\alpha_\Delta I\) rescaling changes
+calibration but **not** candidate-local order (calibration gain ⇏ ranking gain),
+and ranking is invariant to a **common** strictly-increasing reparametrization
+applied **uniformly** across candidates within an event (distinct per-candidate
+\(\varphi_i\) can reorder), which generally breaks calibration (ranking gain ⇏
+calibration gain); candidate-specific covariance may alter ordering **only** when
+its source and causal availability are explicitly declared. Generic log/proper
+score is a distribution-quality metric (calibration+sharpness) and is **excluded**
+from the CAL metric family (coverage/PIT/conditional calibration error). The
+shared-\(S_\Delta\) \(q\)/NLL ordering-equivalence **proof** is
 [D2 §7 (Lemma L5)](../models/gap_conditioned_stochastic_transition_lemmas_v1.md).
 D1 §6 measures no gain, selects no metric/threshold, and makes no ranking or
 calibration data claim. This resolves the **last** of the four numbered
@@ -670,11 +678,16 @@ terminal is not reachable until WP-A6–A8 complete.
   \(\log\det S_\Delta\), Gaussian NLL, candidate-region probability; invertible
   regime canonical \(C=0\), \(R_1\succ0\)). Separation frozen both directions:
   shared-\(S_\Delta\)/isotropic rescaling is calibration-only (calibration gain ⇏
-  ranking gain); ranking is invariant to strictly-monotone per-candidate
-  reparametrization (ranking gain ⇏ calibration gain); candidate-region
-  probability depends on region volume (non-congruent regions disagree with
-  \(q\)-order); candidate-specific covariance may change order only with declared
-  source/causal-availability. The \(q\)/NLL ordering-equivalence **proof** is
+  ranking gain); ranking is invariant to a common strictly-increasing
+  reparametrization applied uniformly across candidates in an event — distinct
+  per-candidate \(\varphi_i\) can reorder — and such a reparametrization breaks
+  calibration (ranking gain ⇏ calibration gain); candidate-region probability
+  depends on region volume (non-congruent regions disagree with \(q\)-order);
+  candidate-specific covariance may change order only with declared
+  source/causal-availability. The \(\chi^2_k\)/Gaussian statements hold under a
+  declared **CAL Gaussian working null** (\(\delta z_0\mid\hat z_0\sim
+  \mathcal N(0,P_0)\), \(\delta z_0\perp\eta_\Delta\perp\epsilon_1\); §6.1) beyond
+  frozen §5; generic log/proper score excluded from the CAL metric family. The \(q\)/NLL ordering-equivalence **proof** is
   filled in [D2 §7 (Lemma L5, + L5.1/L5.2)](../models/gap_conditioned_stochastic_transition_lemmas_v1.md).
   D1 §6 measures no gain, selects no metric/threshold/data, selects no terminal.
   Reserved sections renumbered (identifiability/leakage → D1 §7, B1 schema → D1
