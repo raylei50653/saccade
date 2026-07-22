@@ -436,9 +436,12 @@ e^-=A_\Delta\,\delta z_0+\eta_\Delta .
 \(\hat z_0\) 是另一個 estimator，其與 process noise 的相關結構須**另行宣告**，不能
 從 \(W\perp z_0\) 免費得到。本節因此把 \(\eta_\Delta\perp\delta z_0\) 作為 charter
 obligation 3 明列的「required initial-state/process-noise assumption」**顯式凍結**。
-（等價的較強寫法：宣告 exit-time sigma-field \(\mathcal F_0\) 使 \(z_0,\hat z_0,c\)
-皆 \(\mathcal F_0\)-measurable 且 \(\{W_t-W_0:0<t\le\Delta\}\perp\mathcal F_0\)，本
-假設為其推論；本節取較小的直接宣告即足以滿足 obligation 3。）於是
+（可**推出**本假設的較強**充分條件**（**非**等價）：宣告 exit-time sigma-field
+\(\mathcal F_0\) 使 \(z_0,\hat z_0,c\) 皆 \(\mathcal F_0\)-measurable 且
+\(\{W_t-W_0:0<t\le\Delta\}\perp\mathcal F_0\)——此條件蘊含 \(\eta_\Delta\perp
+\delta z_0\)，但反向不成立（\(\eta_\Delta\) 可只與 \(\delta z_0\) 獨立而仍與其他
+\(\mathcal F_0\)-measurable 量相關）。本節取較小的直接宣告即足以滿足 obligation 3。）
+於是
 \(\operatorname{Cov}(\delta z_0,\eta_\Delta)=0\)，prediction-error covariance 無
 cross term：
 
@@ -563,13 +566,20 @@ S_\Delta=HP^-_\Delta H^\top+R_1+HC+C^\top H^\top
 \(\big[\begin{smallmatrix}P^-_\Delta&C\\ C^\top&R_1\end{smallmatrix}\big]\succeq0\)
 成立，即 \(S_\Delta\succeq0\)（對任意 \(H\)）；canonical \(C=0\) 是其 block-diagonal
 特例。這也說明為何 §5.6 的 \(C\) domain 不能放寬為任意矩陣：joint covariance 若非
-PSD，expanded \(S_\Delta\) 可能不是合法 covariance。
+PSD，expanded \(S_\Delta\) 可能不是合法 covariance。**但此 constraint 只保
+\(S_\Delta\succeq0\)，不保可逆：** 即使 \(R_1\succ0\)，反相關的 \(C\) 仍可令
+\(S_\Delta\) singular（最小反例 \(H=1,\;P^-_\Delta=R_1=1,\;C=-1\)：joint
+\(\big[\begin{smallmatrix}1&-1\\-1&1\end{smallmatrix}\big]\succeq0\)、\(R_1\succ0\)，
+卻 \(S_\Delta=1+1-1-1=0\)——measurement error 與 prediction error 完全反相關而抵消
+innovation）。故 dependent path 的可逆性需**額外 nondegeneracy 假設或直接要求
+\(S_\Delta\succ0\)**，不能由 \(R_1\succ0\) 推得。
 
 上述為 interface-level sanity（如 §4.7 的 dimensional-consistency note，非 D2
 lemma）：本節**不**計算 \(q=r^\top S_\Delta^{-1}r\)、\(\log\det S_\Delta\) 或 NLL
 （obligation 2 = WP-A5；shared-\(S_\Delta\) 下的 \(q\)/NLL 同序證明於後續 D2 增量，
-D2 §7）；此處僅宣告「\(R_1\succ0\) 時 \(S_\Delta^{-1}\) 存在，故那些量 well-defined」
-的**充分條件**，不作任何 ranking claim。
+D2 §7）；此處僅宣告「**canonical \(C=0\) 下** \(R_1\succ0\Rightarrow S_\Delta\succ0\)，故
+\(S_\Delta^{-1}\) 存在、那些量 well-defined」的**充分條件**（dependent-error path 的
+joint-PSD 只保 \(S_\Delta\succeq0\)，可逆性需上段的額外假設），不作任何 ranking claim。
 
 ### §5.6 Parameter domains, causal availability, units
 
@@ -578,7 +588,7 @@ D2 §7）；此處僅宣告「\(R_1\succ0\) 時 \(S_\Delta^{-1}\) 存在，故�
 | \(P_0\) | \(\{M\in\mathbb R^{2d\times2d}:M\succeq0\}\) | exit-time（§4.0 boundary 4） | block: \(xx\):\(\ell^2\)；\(xv\):\(\ell^2\,\mathrm{frame}^{-1}\)；\(vv\):\(\ell^2\,\mathrm{frame}^{-2}\) |
 | \(P^-_\Delta\) | \(\succeq0\)（\(2d\times2d\)） | derived @ entry endpoint | 同 \(P_0\) |
 | \(R_1\) | \(\succeq0\)；\(H_x\):\(d\times d\)、\(H_{xv}\):\(2d\times2d\) | entry-time（\(y_1\) 到達時） | \(H_x\): \(\ell^2\)（position-space）；\(H_{xv}\): 同 state |
-| \(S_\Delta\) | \(\succeq0\)（維度 \(=R_1\)）；\(R_1\succ0\Rightarrow\succ0\) | derived @ entry endpoint | 同 \(R_1\) |
+| \(S_\Delta\) | \(\succeq0\)（維度 \(=R_1\)）；**canonical \(C=0\) only:** \(R_1\succ0\Rightarrow\succ0\)（dependent path 只保 \(\succeq0\)，可逆需額外假設，§5.5） | derived @ entry endpoint | 同 \(R_1\) |
 | \(C\) | \(\Big\{C\in\mathbb R^{2d\times p}:\big[\begin{smallmatrix}P^-_\Delta&C\\ C^\top&R_1\end{smallmatrix}\big]\succeq0\Big\}\)，\(p=\dim\epsilon_1\)（canonical \(=0\)，自動滿足） | 僅 dependent-error path 顯式宣告 | \(\operatorname{Cov}(e^-,\epsilon_1)\) 對應 units |
 
 \(\ell\) = §2 field 1 的 \(S_A\) 高度正規化位置單位；\(H_x=[\,I_d\ 0\,]\)（§3、§4.1）。
@@ -689,3 +699,13 @@ Dimensional consistency（sanity）：\(HP^-_\Delta H^\top\) 於 \(H_x\) 取 \(P
   intro status note** — §4.8's frozen deferral table marked as the WP-A2
   freeze-time snapshot; current status source = §1 table + §5 + charter. The
   canonical \(C=0\) independence decision is unchanged.
+- 2026-07-22 — second bounded correction per #254 owner review (still
+  pre-merge; §5 not yet frozen; §2–§4 byte-frozen): (1) **§5.2** — the
+  \(\mathcal F_0\) formulation relabelled a **stronger sufficient condition
+  (not equivalent)**: it implies \(\eta_\Delta\perp\delta z_0\) but not
+  conversely. (2) **§5.5/§5.6** — the invertibility claim
+  \(R_1\succ0\Rightarrow S_\Delta\succ0\) restricted to **canonical
+  \(C=0\)**; the dependent-error joint-PSD constraint guarantees only
+  \(S_\Delta\succeq0\) (counterexample \(H=1,P^-_\Delta=R_1=1,C=-1\Rightarrow
+  S_\Delta=0\)), so its invertibility needs an extra nondegeneracy assumption.
+  Independence decision and the PSD (\(\succeq0\)) results unchanged.
