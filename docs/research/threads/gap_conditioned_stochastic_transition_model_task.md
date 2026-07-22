@@ -572,10 +572,14 @@ revised accordingly.
 in [D1 §7](../models/gap_conditioned_stochastic_transition_spec_v1.md) — the
 **terminal-3 predicate object** (`GCTM_IDENTIFIABILITY_UNRESOLVED`). It specifies
 the identifiability target set, observation/data-design regimes, the core
-single-event confounding, the multi-gap separation conditions, the CAL/RANK
+single-event confounding, the multi-gap **quotient** identifiability (only
+\(\{\gamma,D,P_{vv},\mathrm{sym}(P_{xv}),P_{xx}+R_1\}\) under \(H_x\), with two
+**structural** non-identifiable gauges — \(P_{xx}\!\leftrightarrow\!R_1\), not broken
+even by \(H_{xv}\), and \(\mathrm{asym}(P_{xv})\), \(H_x\)-invisible), the CAL/RANK
 mutual-non-identifiability result, and a frozen leakage matrix; its verdict is
 conditional (identifiability **specified**, not empirically established — no data
-authorized) and it **selects no terminal**. This is a D1 deliverable, **not** a
+authorized; a claim is non-identifiable exactly when it must rely on an
+unidentifiable gauge component) and it **selects no terminal**. This is a D1 deliverable, **not** a
 numbered obligation (all four remain resolved). One D1 deliverable remains — the
 schema-only B1 input interface (D1 §8, WP-A7) — plus terminal review (WP-A8), so
 terminal review still could not yet reach the sealable terminal.
@@ -722,15 +726,25 @@ reachable until WP-A7–A8 complete.
   axes (\(H_x\)/\(H_{xv}\), single-event vs multi-gap population, context
   observability, labels), the core confounding (a single position-only event is
   non-identifiable — \(P_0\)-propagation, \(Q_\Delta\), \(R_1\) are additively
-  conflated at one \(\Delta\)), the multi-gap separation conditions (distinct-\(\Delta\)
-  shapes, reusing frozen §4.6 / D2 L2/L4), the **CAL/RANK mutual-non-identifiability**
+  conflated at one \(\Delta\)), the multi-gap separation as a **4-shape
+  decomposition** (\(S_\Delta=(P_{xx}+R_1)+a\,\mathrm{sym}(P_{xv})+a^2P_{vv}+q_{xx}D\),
+  reusing frozen §4.6 / D2 L2/L4) — so \(H_x\) multi-gap identifies only the
+  **quotient** \(\{\gamma,D,P_{vv},\mathrm{sym}(P_{xv}),P_{xx}+R_1\}\), leaving two
+  **structural** non-identifiable gauges (\(P_{xx}\!\leftrightarrow\!R_1\), not broken
+  even by \(H_{xv}\), fixable only by declared known \(R_1\)/\(P_{xx}\); and
+  \(\mathrm{asym}(P_{xv})\), \(H_x\)-invisible / \(H_{xv}\)-identifiable) — the
+  **CAL/RANK mutual-non-identifiability**
   result (ranking does not identify the calibration scale \(\alpha_\Delta\); a uniform
   monotone reparam leaves order fixed but breaks calibration), and a frozen
-  **leakage matrix** (covariance-/mean-/claim-level, each with the blocking
-  declaration/observation/data-design condition). Verdict is **conditional** —
-  identifiability is *specified*, not empirically established (no data authorized);
-  no intended claim is unidentifiable *as a specification*. §7 **selects no
-  terminal** (that is WP-A8). Frozen §2–§6 kept byte-frozen; stale
+  **leakage matrix** (covariance-/mean-/claim-level, separating multi-gap-blockable
+  leaks from the structural gauges, each with its blocking condition). Verdict is
+  **conditional** — identifiability is *specified*, not empirically established (no
+  data authorized); the structural non-identifiability is a declared fact, and a
+  claim is non-identifiable exactly when it must rely on an unidentifiable gauge
+  component. §7 **selects no terminal** (that is WP-A8). The §7.4 draft that claimed
+  the *full* \(\{P_0,\gamma,D,R_1\}\) generically identifiable under \(H_x\) was
+  corrected pre-merge per #256 owner review (the quotient/structural-gauge statement
+  above). Frozen §2–§6 kept byte-frozen; stale
   `reserved`/`unresolved` identifiability references in §5.7/§6.6 superseded via an
   append-only status note. Also cleared the WP-A5 roll-forward nit (the obligation-2
   summary note now carries the non-trivial \(\alpha_\Delta\neq1\) qualifier). All

@@ -926,33 +926,67 @@ S_\Delta=H_x\big(A_\Delta P_0 A_\Delta^\top+Q_\Delta(\gamma,D)\big)H_x^\top+R_1 
 （§7.6）。故 **single position-only event 對 \(\{P_0,\gamma,D,R_1,\bar v\}\) 不可
 識別**——這是 leakage boundary 的最強收縮點。
 
-### §7.4 Multi-gap population 下的 separation（identifiability 條件）
+### §7.4 Multi-gap population 下的 separation（identifiability 條件；含結構性不可識別方向）
 
-分離的槓桿是**加項對 \(\Delta\) 的不同 shape**（皆由 frozen §4／已證 D2 lemma 提供，
-非本節新證）：
+寫 \(P_0=\big[\begin{smallmatrix}P_{xx}&P_{xv}\\ P_{xv}^\top&P_{vv}\end{smallmatrix}\big]\)
+（\(P_{xv}\) 為一般 cross-block，**未必對稱**）。由 \(A_\Delta=\big[\begin{smallmatrix}
+I&aI\\0&bI\end{smallmatrix}\big]\)（§4.3），position-only（\(H_x\)）observable 展開為
+**四個 \(\Delta\)-shape 的線性組合**：
 
-- \(R_1\) 對 \(\Delta\) **常數**；
-- \(Q_\Delta\) 的 position block \(q_{xx}(\gamma,\Delta)\,D\) 隨 \(\Delta\) 成長（\(\gamma\to0\)
-  時 \(\sim\tfrac{\Delta^3}{3}D\)，D2 §4.6／L2；OU 飽和見 D2 L4）；
-- \(A_\Delta P_0A_\Delta^\top\) 的 position block 經 \(a(\gamma,\Delta)\)（\(a\in[0,\Delta]\)）
-  以另一 shape 進入。
+\[
+\boxed{\;
+S_\Delta=\underbrace{(P_{xx}+R_1)}_{\text{shape }1}
++\underbrace{\operatorname{sym}(P_{xv})}_{\text{shape }a}\cdot a
++\underbrace{P_{vv}}_{\text{shape }a^2}\cdot a^2
++\underbrace{D}_{\text{shape }q_{xx}}\cdot q_{xx}(\gamma,\Delta)
+\;}
+\]
 
-**結論（interface-level）：** 在**共享參數的 population** 假設下（同一 \(P_0,\gamma,D,
-R_1\) 跨 events）且涵蓋足夠多**相異** \(\Delta\)，family \(\{S_\Delta\}_\Delta\) 一般
-（generically）可分離這些加項，使 \(\{P_0,\gamma,D,R_1\}\) 可識別（數值 sanity C2：
-§7.3 中在單一 \(\Delta_0\) 不可分的兩組參數，跨 gaps 的 \(S_\Delta\) 相對差達 \(O(1)\)）。
-所需相異 \(\Delta\) 個數隨欲識別的自由度增加；gap spread 過小則接近退化、識別條件
-**病態**（weakly identified）。
+其中 \(\operatorname{sym}(P_{xv})=P_{xv}+P_{xv}^\top\)（\(H_xA_\Delta P_0A_\Delta^\top H_x^\top
+=P_{xx}+a\,\operatorname{sym}(P_{xv})+a^2P_{vv}\)），shape scalars \(\{1,a(\gamma,\Delta),
+a^2(\gamma,\Delta),q_{xx}(\gamma,\Delta)\}\) 由 frozen §4／已證 D2 lemma 提供（\(q_{xx}\)：
+D2 §4.6／L2，OU 飽和 D2 L4），非本節新證。
 
-**position-only leakage（\(H_x\)）：** \(H_x\) 從不直接觀測 velocity，故 \(P_0\) 的
-velocity block 與「position innovation 中屬 \(P_0\)-propagation vs 屬 \(Q_\Delta\)」的
-拆分**全靠** \(\Delta\)-shape；某些方向（尤其 gap spread 小時）保持 weakly identified。
-這是 position-only 的 identifiability 代價。
+**可分離的是 coefficient matrices，不是完整 \(P_0,R_1\)。** 這四個 shape scalar 對相異
+\(\Delta\) **線性獨立**（數值 sanity：over \(\ge4\) 相異 gap 的 shape 矩陣 rank \(=4\)），故
+在**共享參數 population**（同一 \(P_0,\gamma,D,R_1\) 跨 events）且足夠多相異 \(\Delta\) 下，
+family \(\{S_\Delta\}_\Delta\) generically 識別出**四個係數矩陣**
+\[
+\{\,P_{xx}+R_1,\ \operatorname{sym}(P_{xv}),\ P_{vv},\ D\,\}
+\]
+以及 \(\gamma\)（由 shape 的 \(\Delta\)-函數形狀）。**但這不是完整的 \(\{P_0,R_1\}\)。**
 
-**joint mode（\(H_{xv}\)）：** 於 entry 觀測 velocity 增方程式、改善 conditioning；但
-須 §3.3 宣告 causal availability，且若 entry velocity 由與 transition window 重疊的
-frames 導出，則進入 §5.4 的 dependent-error path（\(C\neq0\)），\(C\) 成為**額外**待
-識別／宣告量，其 joint-PSD domain（§5.6）與可逆性 caveat（§5.5）一併適用。
+**兩個結構性不可識別方向（\(H_x\) 下，任意多 gap 皆不可識別）：**
+
+1. **\(P_{xx}\leftrightarrow R_1\) gauge。** \(P_{xx}\) 與 \(R_1\) **同乘 constant shape \(1\)**，
+   故 \(P_{xx}\mapsto P_{xx}+E,\ R_1\mapsto R_1-E\) 對**所有** \(\Delta\) 保持相同
+   \(S_\Delta\)（數值 sanity G1：max \(\lVert\Delta S\rVert\approx10^{-15}\)）。只有**和**
+   \(P_{xx}+R_1\) 可識別，split 不可。
+2. **\(\operatorname{asym}(P_{xv})\) 不可觀測。** cross-block 的反對稱部分
+   \(\tfrac12(P_{xv}-P_{xv}^\top)\) 完全**不進入** \(H_x\) map（只有 \(\operatorname{sym}\)
+   出現），故對任意多 gap invisible（數值 sanity G2：對加反對稱擾動的 \(P_0\)，\(H_x\)
+   observable 零變動）。
+
+因此 **\(H_x\) multi-gap 最多識別 quotient** \(\{\gamma,D,P_{vv},\operatorname{sym}(P_{xv}),
+P_{xx}+R_1\}\)；完整 \(P_0\)（其 \(P_{xx}\) vs \(R_1\) split 與 \(\operatorname{asym}P_{xv}\)）
+**不可識別**。原始 C2 sanity 只證「某一組選定反例會被其他 gap 分開」，**不**證 mapping
+injective——此處以 gauge 論證與 G1/G2 更正。
+
+**joint mode（\(H_{xv}\)）能救什麼、不能救什麼。** \(H_{xv}=I\) 觀測全 state：cross-block
+\(bP_{xv}+ab\,P_{vv}(+R_1^{xv})\) 含**完整** \(P_{xv}\)，故
+\(\operatorname{asym}(P_{xv})\) **變得可識別**（數值 sanity G2-Hxv：cross-block 隨反對稱
+擾動變動）。**但 \(P_{xx}\leftrightarrow R_1\) 的 position initial-state vs
+measurement-noise confound 在 \(H_{xv}\) 下仍持續**：\(E\) 僅置於 \(xx\) 角、以 \(R_1\)
+補償，對全 state \(A_\Delta E A_\Delta^\top\) 亦 \(\Delta\)-constant（數值 sanity G1-Hxv：
+max \(\lVert\Delta S_{\text{full}}\rVert\approx10^{-15}\)）。此 gauge 只能由**額外宣告的
+獨立資訊**固定——例如 detector 的已知 measurement-noise model 給定 \(R_1\)，或獨立宣告
+position initial-state covariance \(P_{xx}\)——**不能**由 innovation family 單獨識別。此外
+\(H_{xv}\) 若 entry velocity 由與 transition window 重疊的 frames 導出，進入 §5.4 的
+dependent-error path（\(C\neq0\)），\(C\) 成為**額外**待宣告量（joint-PSD domain §5.6、
+可逆性 caveat §5.5）。
+
+**gap spread 病態：** 相異 \(\Delta\) 過少或過密則 shape 矩陣接近退化，quotient 亦僅
+weakly identified。
 
 **context \(\bar v(c)\)：** 只有在 \(c\) 被**宣告／觀測**且在 population 中**變化**、且為
 exit-causally available（§4.0 boundary 4）時，\(\bar v(c)\) 才可與常數 mean 分離而
@@ -982,14 +1016,16 @@ exit-causally available（§4.0 boundary 4）時，\(\bar v(c)\) 才可與常數
 observation／data-design 移除該 leakage）。分 covariance-level、mean-level、
 claim-level 三塊。
 
-**Covariance-level（皆加性進入 \(S_\Delta\)，§7.3）：**
+**Covariance-level（皆加性進入 \(S_\Delta\)；§7.4 shape 分解）。** 依 §7.4，\(H_x\) 下四個
+\(\Delta\)-shape 只給四個係數矩陣 \(\{P_{xx}+R_1,\operatorname{sym}(P_{xv}),P_{vv},D\}\)+\(\gamma\)。
+下表區分 **multi-gap 可阻斷** 的 leak 與 **結構性（任意多 gap 仍在）** 的 leak：
 
 | Contributor 對 | 在哪混淆 | Leak? | 阻斷條件 |
 |:--|:--|:--:|:--|
-| \(P_0\)-propagation ↔ \(Q_\Delta\) | \(S_\Delta\) position block @ 單一 \(\Delta\) | **L** | multi-gap 相異 \(\Delta\) 的 \(a(\gamma,\Delta)\) vs \(q_{xx}(\gamma,\Delta)\) shape（§7.4）；\(H_{xv}\) 增條件 |
-| \(Q_\Delta\) ↔ \(R_1\) | \(S_\Delta\) @ 單一 \(\Delta\) | **L** | multi-gap：\(Q_\Delta\) 隨 \(\Delta\) 成長 vs \(R_1\) 常數（§7.4；D2 L2/L4） |
-| \(P_0\) ↔ \(R_1\) | \(S_\Delta\) @ 單一 \(\Delta\) | **L** | multi-gap \(\Delta\)-shape；\(P_0\) velocity block 於 \(H_x\) 僅 weakly identified |
-| \(\gamma\) ↔ \(D\) | \(Q_\Delta=\text{scalar}(\gamma,\Delta)\,D\) | **L**（單一 \(\Delta\) 只見乘積） | multi-gap：OU scalar 的 \(\Delta\)-shape 定 \(\gamma\)，整體尺度定 \(D\)（§7.4） |
+| \(\operatorname{sym}(P_{xv})\)／\(P_{vv}\)／\(D\) 三者 ↔ 彼此 | \(S_\Delta\) position block @ 單一 \(\Delta\) | **L**（單一 \(\Delta\)） | **multi-gap 可阻斷**：shapes \(a,a^2,q_{xx}\) 線性獨立（§7.4） |
+| \(\gamma\) ↔ \(D\) | \(Q_\Delta=\text{scalar}(\gamma,\Delta)\,D\) | **L**（單一 \(\Delta\) 只見乘積） | **multi-gap 可阻斷**：OU scalar 的 \(\Delta\)-shape 定 \(\gamma\)，係數矩陣定 \(D\)（§7.4） |
+| \(P_{xx}\) ↔ \(R_1\)（position initial-state vs measurement noise） | 兩者同乘 constant shape \(1\) | **L（結構性）** | **multi-gap 不可阻斷、\(H_{xv}\) 亦不可**（只識別和 \(P_{xx}+R_1\)，§7.4 G1）；僅由**額外宣告獨立資訊**固定（已知 \(R_1\) 或 \(P_{xx}\) gauge） |
+| \(\operatorname{asym}(P_{xv})\) ↔ observable | 反對稱部分不進 \(H_x\) map | **L（結構性，\(H_x\)）** | **\(H_x\) 下任意多 gap invisible**；\(H_{xv}\) cross-block 可識別（§7.4 G2） |
 
 **Mean-level（皆進入 apparent \(\mathbb E[r]\)／residual bias）：**
 
@@ -1015,8 +1051,13 @@ claim-level 三塊。
 separation 結構下，primary object A 的 intended claims 的 identifiability 為
 **conditionally specified**：
 
-1. \(\{P_0,\gamma,D,R_1\}\) 於 **multi-gap population（共享參數、足夠 gap spread）**
-   generically 可識別；於 **single position-only event 不可識別**（§7.3–§7.4）。
+1. **covariance 參數只在 quotient 意義下可識別。** \(H_x\) multi-gap population
+   （共享參數、足夠 gap spread）generically 識別 \(\{\gamma,D,P_{vv},
+   \operatorname{sym}(P_{xv}),P_{xx}+R_1\}\)；**完整 \(\{P_0,R_1\}\) 不可識別**——存在
+   兩個結構性 gauge：\(P_{xx}\leftrightarrow R_1\)（\(H_{xv}\) 亦不可破，僅由額外宣告的
+   已知 \(R_1\)／\(P_{xx}\) 固定）與 \(\operatorname{asym}(P_{xv})\)（\(H_x\) invisible，
+   \(H_{xv}\) 可識別）（§7.4／§7.6）。single position-only event 更強：連 quotient 都不可
+   識別（§7.3）。
 2. \(\bar v(c)\) 於 **宣告且變化的 exit-causal context** 可識別，否則與常數 mean／
    operator offset 混淆（§7.4／§7.6）。
 3. \(H_{xv}\) velocity-相關識別需 §3.3 causal-availability 宣告；overlap 導出的 entry
@@ -1026,12 +1067,15 @@ separation 結構下，primary object A 的 intended claims 的 identifiability 
 
 **性質界定（誠實邊界）：** 上述皆為 **specification of the identifiability boundary**，
 非**已建立**的 empirical identification——本檔不授權 data，故不 demonstrate 任何識別。
-沒有任何 intended claim 被證為「作為 specification 不可識別」；non-identifiability 只
-發生在**違反宣告條件**的 instantiation（single position-only event、未宣告 offset／
-context、gap spread 過小的病態設計）。因此本節**specify** 了 terminal-3 predicate 所讀的
-identifiability／leakage boundary：intended claim 在宣告 observation 下**於所列條件成立
-時可識別**；當這些條件不可滿足時，對應 claim 在該 instantiation **被宣告 non-identifiable**，
-落入 terminal review 的 terminal-3 rejection region。
+本節**不**宣稱完整 \(\{P_0,R_1\}\) generically identifiable；相反，它**明列**了即使
+multi-gap（甚至 \(H_{xv}\)）仍在的**結構性不可識別方向**（item 1 的兩個 gauge），以及
+identifiable 的 quotient。因此 identifiability boundary 是：某 intended claim 若**只**
+依賴 identifiable quotient（例如 innovation 的 \(S_\Delta\) 本身、或 CAL/RANK 這類不依賴
+\(P_{xx}\) vs \(R_1\) split 的量），則於所列條件下可識別；若某 instantiation 的 claim
+**必須**依賴不可識別的 gauge 分量（未宣告 gauge-fixing 而要求 \(P_{xx}\) 與 \(R_1\) 分離、
+或 \(H_x\) 下要求 \(\operatorname{asym}P_{xv}\)），則該 claim 在該 instantiation
+**non-identifiable**，落入 terminal review 的 terminal-3 rejection region。此結構性
+non-identifiability 是**宣告事實**（gauge 論證 + G1/G2），非有待 data 建立。
 
 **本節不選 terminal。** 是否對某具體 instantiation 觸發 `GCTM_IDENTIFIABILITY_UNRESOLVED`
 （或標 identifiability row 為 `complete`／`rejection-established`）是 WP-A8 terminal
@@ -1041,9 +1085,9 @@ review 依 charter frozen decision procedure 的機械判定；本節只提供�
 
 | 量 | 可識別所需最小 regime | 未達 regime 時的地位 |
 |:--|:--|:--|
-| \(R_1,Q_\Delta(\gamma,D),P_0\) | multi-gap population，\(\ge\) 足夠相異 \(\Delta\)，共享參數 | single \(\Delta\)：加性混淆，不可識別（§7.3） |
-| \(\gamma\) vs \(D\) | 同上（OU scalar 的 \(\Delta\)-shape） | 單一 \(\Delta\)：只見乘積 |
-| \(P_0\) velocity block | 更佳於 \(H_{xv}\)；\(H_x\) 僅靠 \(\Delta\)-shape | \(H_x\)+小 gap spread：weakly identified |
+| \(\gamma,D,P_{vv},\operatorname{sym}(P_{xv}),P_{xx}+R_1\)（identifiable quotient） | \(H_x\) multi-gap population，\(\ge4\) 相異 \(\Delta\)，共享參數 | single \(\Delta\)：加性混淆，連 quotient 都不可識別（§7.3） |
+| \(P_{xx}\) vs \(R_1\) split | **額外宣告獨立資訊**（已知 \(R_1\) 或 \(P_{xx}\)） | multi-gap／\(H_{xv}\) 皆**不可**識別（結構性 gauge，§7.4 G1） |
+| \(\operatorname{asym}(P_{xv})\) | \(H_{xv}\)（cross-block） | \(H_x\) 任意多 gap invisible（§7.4 G2） |
 | \(\bar v(c)\) | 宣告、變化、exit-causal context | 否則與常數 bias／offset 混淆 |
 | CAL scale \(\alpha_\Delta\) | CAL 路徑（coverage/PIT + label + working null） | RANK 路徑不識別它 |
 | RANK order | event-local ordering + label | CAL 路徑不識別它 |
@@ -1250,19 +1294,40 @@ schema-only B1 input interface（WP-A7 planned）。
   single-event vs multi-gap population, context observability, labels), the core
   confounding (single position-only event is non-identifiable — \(P_0\)-propagation,
   \(Q_\Delta\), \(R_1\) are additively conflated at one \(\Delta\)), the multi-gap
-  separation conditions (distinct-\(\Delta\) shapes of \(a(\gamma,\Delta)\) vs
-  \(q_{xx}(\gamma,\Delta)\) vs constant \(R_1\), reusing frozen §4.6/D2 L2/L4), the
+  separation **as a 4-shape decomposition**
+  (\(S_\Delta=(P_{xx}+R_1)+a\,\mathrm{sym}(P_{xv})+a^2P_{vv}+q_{xx}D\), reusing frozen
+  §4.6/D2 L2/L4) — so \(H_x\) multi-gap identifies only the **quotient**
+  \(\{\gamma,D,P_{vv},\mathrm{sym}(P_{xv}),P_{xx}+R_1\}\), leaving **two structural
+  non-identifiable directions** (the \(P_{xx}\leftrightarrow R_1\) gauge, not broken
+  even by \(H_{xv}\), only by declared known \(R_1\)/\(P_{xx}\); and
+  \(\mathrm{asym}(P_{xv})\), \(H_x\)-invisible but \(H_{xv}\)-identifiable) — the
   claim-level result (CAL and RANK are **mutually non-identifying** — ranking does
   not identify the calibration scale \(\alpha_\Delta\); a uniform monotone reparam
   leaves order fixed but breaks calibration), and a frozen **leakage matrix**
-  (covariance-/mean-/claim-level, each with the declaration/observation/data-design
-  condition that blocks the leak). The verdict is conditional: identifiability is
-  **specified**, not empirically established (no data authorized); no intended claim
-  is unidentifiable **as a specification** — non-identifiability arises only for
-  instantiations violating the declared conditions. §7 selects **no terminal** — it
-  is the predicate object for WP-A8 terminal review. Frozen §2–§6 kept byte-frozen;
+  (covariance-/mean-/claim-level, separating multi-gap-blockable leaks from the
+  structural gauges, each with its blocking condition). The verdict is conditional:
+  identifiability is **specified**, not empirically established (no data authorized);
+  the structural non-identifiability is a declared fact (gauge argument + numerics),
+  and a claim is non-identifiable exactly when it must rely on an unidentifiable
+  gauge component. §7 selects **no terminal** — it is the predicate object for WP-A8
+  terminal review. Frozen §2–§6 kept byte-frozen;
   the stale `reserved`/`unresolved` identifiability references in §5.7/§6.6 are
   superseded via an append-only status note after the §1 table (no in-place edit).
   No new file ⇒ no master_map regeneration. Claims numerically sanity-checked
-  (single-gap non-identifiability, multi-gap separation, offset/drift mean
-  confounding, CAL/RANK mutual non-identification).
+  (single-gap non-identifiability; the multi-gap quotient + the two structural
+  gauges G1/G2 including \(H_{xv}\)-persistence; offset/drift mean confounding;
+  CAL/RANK mutual non-identification).
+- 2026-07-22 — bounded correction per #256 owner review (BLOCKED → fixed
+  pre-merge; §7 not yet frozen; §2–§6 byte-frozen): the §7.4 multi-gap claim that
+  the **full** \(\{P_0,\gamma,D,R_1\}\) is generically identifiable under \(H_x\) was
+  **wrong**. Corrected via the shape decomposition
+  \(S_\Delta=(P_{xx}+R_1)+a\,\mathrm{sym}(P_{xv})+a^2P_{vv}+q_{xx}D\): \(H_x\)
+  multi-gap identifies only the quotient \(\{\gamma,D,P_{vv},\mathrm{sym}(P_{xv}),
+  P_{xx}+R_1\}\); the \(P_{xx}\leftrightarrow R_1\) split and \(\mathrm{asym}(P_{xv})\)
+  are structurally non-identifiable (the former even under \(H_{xv}\), fixable only
+  by declared independent \(R_1\)/\(P_{xx}\); the latter \(H_x\)-invisible,
+  \(H_{xv}\)-identifiable). Updated §7.4, the §7.6 covariance leakage table (split
+  the old \(P_0\!\leftrightarrow\! R_1\) row into multi-gap-blockable vs structural),
+  the §7.7 verdict item 1 + honesty boundary, and the §7.8 regime summary. The old
+  C2 sanity (one chosen pair separates) does not prove injectivity; replaced by the
+  gauge argument and the G1/G2 numeric checks.
