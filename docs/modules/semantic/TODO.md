@@ -8,11 +8,13 @@
 - **Gap-conditioned stochastic transition model — task charter**（GCTM,A 層
   theory/model specification）→ [task charter](../../research/threads/gap_conditioned_stochastic_transition_model_task.md)
   · [Issue #175](https://github.com/raylei50653/saccade/issues/175)。
-  2026-07-22 owner scheduling decision（#175 activation comment）啟動（WP-A0）。
-  primary object = A;active declaration **未 seal**（obligation 1 = WP-A1 seal
-  condition）;四項 activation-contract obligations 均 unresolved;terminal
-  partition 與 decision procedure 已凍結。不授權 data／fitting／H0／B1／O1／
-  runtime／online／production;H0 狀態不因此改變。
+  2026-07-22 owner scheduling decision（[#175 comment 5043900665](https://github.com/raylei50653/saccade/issues/175#issuecomment-5043900665)）
+  啟動（WP-A0,PR #250）。primary object = A;terminal partition 與 decision
+  procedure 已凍結;**active declaration 已 seal（WP-A1）**：九欄位
+  observation/time interface 凍結於 [D1 §2–§3](../../research/models/gap_conditioned_stochastic_transition_spec_v1.md),
+  obligation 1 resolved,obligations 2–4 仍 unresolved(於
+  `GCTM_MODEL_SPEC_SEALABLE` 前解);current step = WP-A2。不授權 data／
+  fitting／H0／B1／O1／runtime／online／production;H0 狀態不因此改變。
 - H0 closure（三個 owner-accepted ordered terminal `H0_PROVENANCE_INVALID`;
   faithful capture = none;actual H0 guarantee = none;Phase B forbidden;
   任何未來 re-entry 前置＝machine-checked launch-hygiene pre-authorization

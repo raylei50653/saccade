@@ -54,8 +54,8 @@ decision, blocker change, or consumer-compatibility verdict.
 
 | Field | Current projection | Owner / read first |
 |:--|:--|:--|
-| **ACTIVE** | **GCTM task charter** — activated 2026-07-22 (WP-A0) by the owner scheduling decision on [#175](https://github.com/raylei50653/saccade/issues/175); substrate-agnostic A-layer theory/specification only (primary object = A). Active declaration **not sealed** (observation/time interface = WP-A1 seal condition); four activation-contract obligations unresolved; no D1/D2 yet. H0 state unchanged by activation. | [semantic TODO](../../modules/semantic/TODO.md) · [GCTM charter](gap_conditioned_stochastic_transition_model_task.md) |
-| **NEXT** | WP-A1 — freeze the canonical observation/time interface (charter expected-state lease). B1 and O1 remain **proposed / non-WIP**, blocked by the gates below. | [GCTM charter](gap_conditioned_stochastic_transition_model_task.md) · [B1 charter](gctm_b1_runtime_grounded_offline_attribution_task.md) · [O1 charter](gctm_o1_online_intervention_efficacy_task.md) |
+| **ACTIVE** | **GCTM task charter** — activated 2026-07-22 (WP-A0, PR #250) by the owner scheduling decision on [#175](https://github.com/raylei50653/saccade/issues/175); substrate-agnostic A-layer theory/specification only (primary object = A). Active declaration **sealed at WP-A1** (nine-field observation/time interface frozen in [D1 §2–§3](../models/gap_conditioned_stochastic_transition_spec_v1.md)); obligations 2–4 unresolved; D2 not created. H0 state unchanged. | [semantic TODO](../../modules/semantic/TODO.md) · [GCTM charter](gap_conditioned_stochastic_transition_model_task.md) |
+| **NEXT** | WP-A2 — canonical-state affine M2 + \(Q_\Delta\) interface (charter expected-state lease). B1 and O1 remain **proposed / non-WIP**, blocked by the gates below. | [GCTM charter](gap_conditioned_stochastic_transition_model_task.md) · [B1 charter](gctm_b1_runtime_grounded_offline_attribution_task.md) · [O1 charter](gctm_o1_online_intervention_efficacy_task.md) |
 | **READINESS** | H0 remains closed at owner-accepted `H0_PROVENANCE_INVALID` (three same-type ordered terminals): no faithful capture, no accepted runtime-fidelity edge, no actual H0 guarantee envelope; Phase B forbidden; any future re-entry requires a machine-checked launch-hygiene pre-authorization gate plus a fresh I→F→S owner reseal plus separate exactly-once authorization. Positive H0 blocks only bridge-runtime B1, not A-layer GCTM work. | [H0 declaration](../../modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md) · [claim-state registry](../contracts/claim_state_registry.md) |
 
 ### Blockers and transition gates
@@ -243,7 +243,7 @@ frontmatter、搬移與索引要求。
 
 | Thread | Work class / WIP role | Current concrete work | Owner |
 |:--|:--|:--|:--|
-| [gap_conditioned_stochastic_transition_model_task.md](gap_conditioned_stochastic_transition_model_task.md) | theory-model-specification · **sole-active** | WP-A0 activation contract landed (terminal partition + decision procedure frozen; four obligations unresolved); next = WP-A1 canonical observation/time interface | semantic |
+| [gap_conditioned_stochastic_transition_model_task.md](gap_conditioned_stochastic_transition_model_task.md) | theory-model-specification · **sole-active** | WP-A1 landed: declaration sealed, D1 §2–§3 interface frozen; next = WP-A2 canonical-state affine M2 + \(Q_\Delta\) | semantic |
 | [association_recovery_registry_20260709.md](association_recovery_registry_20260709.md) | maintenance · **non-WIP** | Keep R/H ownership and path-health registry current | semantic |
 | [doc_structure_o15_followup_20260709.md](doc_structure_o15_followup_20260709.md) | governance · **non-WIP** | Pay down research-index debt; optional structure checks remain non-blocking | ownership |
 
