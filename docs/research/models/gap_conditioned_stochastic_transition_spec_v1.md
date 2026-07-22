@@ -159,9 +159,11 @@ Velocity 分解 \(v_t=\bar v(c)+u_t\)，residual velocity \(u_t\) 為 OU：
 \mathrm dx_t=v_t\,\mathrm dt,
 \]
 
-等價地 \(\mathrm du_t=-\gamma u_t\,\mathrm dt+L\,\mathrm dW_t\)。其中 \(\gamma\ge0\)、
-\(D=LL^\top\in\mathbb R^{d\times d}\succeq0\)、\(W_t\) 為 standard \(d\)-dim
-Brownian motion，\(\{W_t\}_{t\in(0,\Delta]}\) 與 \(z_0\)、\(\bar v(c)\) 獨立。堆成
+等價地 \(\mathrm du_t=-\gamma u_t\,\mathrm dt+L\,\mathrm dW_t\)。其中 \(\gamma\ge0\)；
+noise dimension \(m\ge1\)、\(W_t\in\mathbb R^{m}\) 為 standard \(m\)-dim Brownian
+motion、\(L\in\mathbb R^{d\times m}\)、\(D=LL^\top\in\mathbb R^{d\times d}\succeq0\)
+（\(m\) 為自由參數，只有 \(D=LL^\top\) 進入 transition covariance；\(m<d\) 時 \(D\)
+rank-deficient）；\(\{W_t\}_{t\in(0,\Delta]}\) 與 \(z_0\)、\(\bar v(c)\) 獨立。堆成
 \(z\)：
 
 \[
@@ -169,16 +171,17 @@ Brownian motion，\(\{W_t\}_{t\in(0,\Delta]}\) 與 \(z_0\)、\(\bar v(c)\) 獨�
 \quad
 F=\begin{bmatrix}0&I\\0&-\gamma I\end{bmatrix},\;
 G(c)=\begin{bmatrix}0\\ \gamma\,\bar v(c)\end{bmatrix},\;
-B=\begin{bmatrix}0\\ L\end{bmatrix}.
+B=\begin{bmatrix}0\\ L\end{bmatrix}\in\mathbb R^{2d\times m},
 \]
+
+其中 \(BB^\top=\Sigma=\begin{bmatrix}0&0\\0&D\end{bmatrix}\)（§4.5）。
 
 \(\gamma=0\)（\(F\) nilpotent 上三角、drift \(=0\)）即 M1 constant-velocity /
 white-acceleration family（§4.6）。
 
 ### §4.3 Discrete affine transition — \(A_\Delta\) 與 \(d_\Delta(c)\)
 
-在 \([0,\Delta]\)（\(\Delta\in\mathbb N\) frames）上的 exact integration 給出
-affine transition
+在 \([0,\Delta]\) 上的 exact integration 給出 affine transition
 
 \[
 z_\Delta=A_\Delta z_0+d_\Delta(c)+\eta_\Delta,
@@ -199,6 +202,20 @@ d_\Delta(c)=\begin{bmatrix}(\Delta-a)\,\bar v(c)\\ (1-b)\,\bar v(c)\end{bmatrix}
 「\(\bar v(c)\neq0\) 的 context drift」）；\(\bar v(c)=0\) 時 \(d_\Delta(c)=0\)，
 \(\gamma\to0\) 時 \(d_\Delta(c)\to0\)（§4.6）。它**不**含、也**不得**吸收任何
 operator-layer horizon offset（boundary 2）。
+
+**\(\Delta\) domain 與 \(\Delta=0\) boundary。** 兩個 domain 明確分開：**bridge
+evaluation** 取 \(\Delta\in\mathbb N_{\ge1}\)（canonical index \(=g_{\mathrm{phys}}\ge1\)，
+§2 field 3）；**analytic family** 取 \(\Delta\in\mathbb R_{\ge0}\)（closed form 與
+noise integral 對此連續，且對 §4.6 的 \(\gamma\ge0\) 皆定義）。\(\Delta=0\)
+（empty interval）邊界由直接代入 \(b=e^{0}=1\)、\(a=(1-b)/\gamma=0\) 閉合，全部
+well-defined：
+
+\[
+a_0=0,\quad b_0=1,\quad A_0=I,\quad d_0=0,\quad Q_0=0.
+\]
+
+（此邊界對 \(\gamma\ge0\) 一致：\(\gamma=0\) 的極限式在 \(\Delta=0\) 同樣給
+\(a=\Delta=0\)、\(Q=0\)。）
 
 ### §4.4 M2 mean evolution 與三個必須分離的量
 
@@ -258,6 +275,14 @@ q_{xx}=\frac{1}{\gamma^2}\!\left(\Delta-\frac{2(1-b)}{\gamma}+\frac{1-b^2}{2\gam
 \(D=LL^\top\) 與三個 scalar 完全決定。（\(Q_\Delta\succeq0\) 的**正式 PSD 論證**
 屬 WP-A3／D2，本節不宣稱其完成，見 §4.8。）
 
+**Degenerate Gaussian。** 因 \(D=LL^\top\succeq0\)（未必 \(\succ0\)），\(Q_\Delta\)
+一般可能 singular，故 kernel \(K_\Delta(z_0,c)=\mathcal N(A_\Delta z_0+d_\Delta(c),Q_\Delta)\)
+是**(可能退化的) Gaussian measure**：rank-deficient 時支撐於一個 affine subspace，
+對 Lebesgue 無密度。其 well-posed 定義取 Gaussian measure／characteristic
+function \(\hat K(\xi)=\exp\!\big(i\xi^\top m_\Delta-\tfrac12\xi^\top Q_\Delta\xi\big)\)，
+**不**要求 \(Q_\Delta\) 可逆；任何需要 \(Q_\Delta^{-1}\) 的 innovation／NLL 量另屬
+WP-A4（§4.8）。
+
 ### §4.6 \(\gamma=0\) continuous extension（M1 boundary）
 
 \(q_{xx},q_{xv},q_{vv},a\) 在 \(\gamma\to0^+\) 皆為 removable singularity
@@ -285,12 +310,15 @@ white-acceleration family。**注意界線：** 上述極限值是**介面的定
 | Symbol | Domain | Units | Note |
 |:--|:--|:--|:--|
 | \(d\) | \(\mathbb N_{\ge1}\) | — | coordinate dim；production-corresponding \(=2\)（\(\Rightarrow\) §2 substrate \(k=2d=4\)） |
+| \(m\) | \(\mathbb N_{\ge1}\) | — | noise dimension；只有 \(D=LL^\top\) 進 covariance |
 | \(z_0=[x_0;v_0]\) | \(\mathbb R^{2d}\) | \(x\):\(\ell\)；\(v\):\(\ell/\mathrm{frame}\) | exit-endpoint canonical state；\(\ell=S_A\) 高度正規化位置單位（§2 field 1） |
+| \(c\) | \(\mathcal C_{\mathrm{exit}}\) | — | exit-time context set；kernel argument；僅 exit-causally-available 資訊（boundary 4） |
+| \(\bar v\) | \(\bar v:\mathcal C_{\mathrm{exit}}\to\mathbb R^{d}\)（measurable） | \(\ell/\mathrm{frame}\) | context mean velocity map；\(\bar v(c)\) interval-fixed（boundary 4） |
 | \(\gamma\) | \([0,\infty)\) | \(\mathrm{frame}^{-1}\) | mean-reversion rate（scalar，作用為 \(\gamma I_d\)）；\(\gamma=0\)=M1 boundary（§4.6） |
-| \(D=LL^\top\) | \(\{M\in\mathbb R^{d\times d}:M\succeq0\}\) | \(\ell^2\,\mathrm{frame}^{-3}\) | white-acceleration diffusion；\(L\in\mathbb R^{d\times m}\)，units \(\ell\,\mathrm{frame}^{-3/2}\) |
-| \(\bar v(c)\) | \(\mathbb R^{d}\) | \(\ell/\mathrm{frame}\) | context mean velocity；interval-fixed、exit-time causally available（boundary 4） |
-| \(\Delta\) | \(\mathbb N\)（積分對 \([0,\infty)\) 有效） | frame | canonical transition index \(=g_{\mathrm{phys}}\)（boundary 1） |
-| \(b,a\) | \(b\in(0,1]\)；\(a\in(0,\Delta]\) | \(b\):—；\(a\):frame | \(b=e^{-\gamma\Delta}\)，\(a=(1-b)/\gamma\)（\(\gamma=0\):\(b=1,a=\Delta\)） |
+| \(L\) | \(\mathbb R^{d\times m}\) | \(\ell\,\mathrm{frame}^{-3/2}\) | diffusion factor |
+| \(D=LL^\top\) | \(\{M\in\mathbb R^{d\times d}:M\succeq0\}\) | \(\ell^2\,\mathrm{frame}^{-3}\) | white-acceleration diffusion（\(\succeq0\)，未必 \(\succ0\)） |
+| \(\Delta\) | bridge eval \(\mathbb N_{\ge1}\)；analytic family \(\mathbb R_{\ge0}\) | frame | canonical transition index \(=g_{\mathrm{phys}}\)（boundary 1）；\(\Delta=0\) boundary §4.3 |
+| \(b,a\) | \(b\in(0,1]\)；\(a\in[0,\Delta]\) | \(b\):—；\(a\):frame | \(b=e^{-\gamma\Delta}\)，\(a=(1-b)/\gamma\)（\(\Delta=0\):\(a=0,b=1\)；\(\gamma=0\):\(b=1,a=\Delta\)） |
 
 Dimensional consistency（sanity，非 D2 lemma）：\(A_\Delta\) 的 \(aI\) block 把
 \(\ell/\mathrm{frame}\) 映到 \(\ell\)；\(Q_\Delta\) 的 \(q_{xx}D\sim\ell^2\)、
@@ -349,3 +377,15 @@ Dimensional consistency（sanity，非 D2 lemma）：\(A_\Delta\) 的 \(aI\) blo
   §2–§3 unchanged. Closed forms verified: \(A_\Delta\) = matrix exponential,
   both \(q_{xx}\) forms = numerical gramian, blocks nest to \(Q_{M1}\) as
   \(\gamma\to0\).
+- 2026-07-22 — bounded interface corrections per #252 owner review (BLOCKED →
+  fixed pre-merge; §4 not yet frozen; §2–§3 untouched, no append-only
+  correction; WP-A3–A5 boundaries unchanged): (1) **noise dimension** made
+  consistent — \(m\ge1\), \(W_t\in\mathbb R^m\), \(L\in\mathbb R^{d\times m}\),
+  \(B\in\mathbb R^{2d\times m}\), \(BB^\top=\Sigma\), \(D=LL^\top\); (2)
+  **\(\Delta=0\) domain closed** — split bridge evaluation
+  \(\Delta\in\mathbb N_{\ge1}\) vs analytic family \(\Delta\in\mathbb R_{\ge0}\),
+  with \(A_0=I,\,d_0=0,\,Q_0=0,\,a_0=0,\,b_0=1\) and \(a\in[0,\Delta]\); (3)
+  **context argument given a formal domain** — \(c\in\mathcal C_{\mathrm{exit}}\),
+  \(\bar v:\mathcal C_{\mathrm{exit}}\to\mathbb R^d\) measurable, and
+  \(\mathcal N(m_\Delta,Q_\Delta)\) noted as a possibly-degenerate Gaussian
+  measure since \(D\succeq0\) (no \(Q_\Delta^{-1}\) required at this layer).
