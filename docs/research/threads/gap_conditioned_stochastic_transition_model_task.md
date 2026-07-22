@@ -366,6 +366,23 @@ expression of the form
 S_\Delta=H P^-_\Delta H^\top+R_1+HC+C^\top H^\top.
 \]
 
+*Resolved by WP-A4 (2026-07-22):* frozen as
+[D1 §5](../models/gap_conditioned_stochastic_transition_spec_v1.md) — four
+separate uncertainty objects (\(P_0\) exit-state, \(Q_\Delta\) §4.5, \(R_1\)
+entry-observation, \(S_\Delta\) total innovation); prediction-error convention
+\(e^-=z_\Delta-m^-_\Delta\Rightarrow P^-_\Delta=A_\Delta P_0A_\Delta^\top+Q_\Delta\)
+(under the **declared** assumption \(\eta_\Delta\perp\delta z_0\), not a §4.7
+consequence); innovation \(r=He^-+\epsilon_1\). The
+**exactly-one decision is independence**: canonical A-layer declares
+\(e^-\perp\epsilon_1\) (with the named initial-state/process-noise assumption),
+giving \(S_\Delta=HP^-_\Delta H^\top+R_1\); the dependent-error case is a frozen,
+explicitly-declared deviation using the expanded form above with
+\(C=\operatorname{Cov}(e^-,\epsilon_1)\) constrained to genuine cross-covariances
+(\([P^-_\Delta,C;C^\top,R_1]\succeq0\); signs tied to the frozen \(e^-\)
+convention). Resolving this obligation discharges neither WP-A5 (obligation 2)
+nor the later D2 \(q\)/NLL-ordering increment; D1 §5 computes no \(q\)/NLL and
+makes no ranking claim.
+
 ### 4. Canonical-state affine M2 transition
 
 M2 must be written as an explicit affine transition on the canonical state,
@@ -500,6 +517,14 @@ transition) is **resolved** — frozen in
 2 and 3 remain **unresolved** (their owning packets WP-A5 / WP-A4); the
 sealable terminal still requires them plus the WP-A3 proof appendix (D2).
 
+*Update (WP-A4, 2026-07-22):* obligation 3 (independence vs explicit
+cross-covariance \(C\)) is **resolved** — frozen in
+[D1 §5](../models/gap_conditioned_stochastic_transition_spec_v1.md) with the
+independence decision (\(C=0\)). Obligation 2 (calibration vs ranking) remains
+**unresolved** (WP-A5). The WP-A3 proof appendix (D2) has landed; the sealable
+terminal still requires obligation 2 plus the later D2 \(q\)/NLL-ordering
+increment (D2 §7) and terminal review.
+
 Even the sealable terminal would grant no automatic B1, O1, online, mainline,
 or production authority.
 
@@ -530,9 +555,12 @@ WP-A4  independence vs explicit cross-covariance C (obligation 3)
 WP-A5  calibration vs ranking claim definitions (obligation 2) + terminal review
 ```
 
-**Current step:** WP-A2 landed (D1 §4 frozen: canonical-state affine M2 +
-\(Q_\Delta\) interface; obligation 4 resolved). Next = WP-A3 (nesting / PSD /
-asymptotics proofs; D2). WP-A3 not started.
+**Current step:** WP-A4 landed (D1 §5 frozen: innovation composition; obligation
+3 resolved with the independence decision \(C=0\)). Prior packets: WP-A2 (D1 §4,
+obligation 4) and WP-A3 (D2 proof appendix: PSD / nesting / semigroup /
+asymptotics; PR #253) both landed. Next = WP-A5 (calibration vs ranking
+claim-space definitions, obligation 2) + the later D2 \(q\)/NLL-ordering
+increment (D2 §7) + terminal review.
 
 ## History
 
@@ -562,3 +590,27 @@ asymptotics proofs; D2). WP-A3 not started.
   M2 mean / production operator-layer offset \(\pm(\mathrm{bridge\_at}-1)v\)
   kept strictly separate; no WP-A3–A5 obligation claimed complete. Next packet
   WP-A3 (nesting / PSD / asymptotics proofs; D2).
+- 2026-07-22 — **WP-A3: D2 proof appendix landed** (PR #253, merge
+  `4b41b582`). Created
+  [D2](../models/gap_conditioned_stochastic_transition_lemmas_v1.md) proving
+  internal properties of the frozen D1 §4 kernel only: L1 (\(Q_\Delta\succeq0\);
+  rank \(=2\operatorname{rank}D\) for \(\Delta>0\)), L2 (\(\gamma\to0\) mean +
+  covariance nesting to M1, with proven \(\gamma\)-continuity), L3 (semigroup /
+  Chapman–Kolmogorov covariance composition, valid for degenerate \(Q\)), L4
+  (short-/long-gap asymptotics). Resolves no numbered obligation (proof
+  appendix), selects no terminal, and left frozen D1 §2–§4 byte-frozen. Next
+  packet WP-A4 (obligation 3).
+- 2026-07-22 — **WP-A4: innovation composition frozen** (obligation 3).
+  [D1 §5](../models/gap_conditioned_stochastic_transition_spec_v1.md) freezes
+  \(P_0\)/\(P^-_\Delta\)/\(R_1\)/\(S_\Delta\) composition over the §4 kernel:
+  prediction-error convention \(e^-=z_\Delta-m^-_\Delta\),
+  \(P^-_\Delta=A_\Delta P_0A_\Delta^\top+Q_\Delta\), innovation
+  \(r=He^-+\epsilon_1\). The exactly-one obligation-3 decision is **independence**
+  (\(e^-\perp\epsilon_1\Rightarrow C=0\), \(S_\Delta=HP^-_\Delta H^\top+R_1\)),
+  with the dependent-error expanded form
+  \(S_\Delta=HP^-_\Delta H^\top+R_1+HC+C^\top H^\top\) frozen as an
+  explicitly-declared deviation. Obligation 3 resolved; obligation 2 remains
+  unresolved. Four uncertainty objects kept separate; operator-layer offset
+  \(\pm(\mathrm{bridge\_at}-1)v\) kept out of \(m^-_\Delta/e^-/S_\Delta\); no
+  \(q\)/NLL/ranking claim; §2–§4 byte-frozen. Next packet WP-A5 (obligation 2 +
+  terminal review).
