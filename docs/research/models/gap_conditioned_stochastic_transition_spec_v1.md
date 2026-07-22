@@ -1108,9 +1108,14 @@ separation 結構下，primary object A 的 intended claims 的 identifiability 
 
 **性質界定（誠實邊界）：** 上述皆為 **specification of the identifiability boundary**，
 非**已建立**的 empirical identification——本檔不授權 data，故不 demonstrate 任何識別。
-本節**不**宣稱完整 \(\{P_0,R_1\}\) generically identifiable；相反，它**明列**了即使
-multi-gap（甚至 \(H_{xv}\)）仍在的**結構性不可識別方向**（item 1 的兩個 gauge），以及
-identifiable 的 quotient。因此 identifiability boundary 是：某 intended claim 若**只**
+本節**不**宣稱完整 \(\{P_0,R_1\}\) generically identifiable；相反，它**明列**了不可
+識別成分，各自 scope 不同：**(i)** \(P_{xx}\leftrightarrow R_1\) gauge 是**結構性
+不可識別**，即使在 \(H_{xv}\) 下仍在（僅由額外宣告的已知 \(R_1\)／\(P_{xx}\) 固定）；
+**(ii)** \(\operatorname{asym}(P_{xv})\) 只在 \(H_x\) 下 structural invisible——進入
+\(H_{xv}\) 後**變為 observable**（不再 structural invisible），但其識別仍需 multi-gap、
+共享參數與相應的 \(\gamma\) regime；**(iii)** \(\gamma\) unknown 是**未滿足的
+identifiability regime**（需 \(>4\)-gap + joint-map 條件）。此外明列 identifiable 的
+quotient。因此 identifiability boundary 是：某 intended claim 若**只**
 依賴 identifiable quotient（例如 innovation 的 \(S_\Delta\) 本身、或 CAL/RANK 這類不依賴
 \(P_{xx}\) vs \(R_1\) split 的量），且其所需 regime（\(\gamma\) 已知或滿足 \(>4\)-gap
 joint-map 條件、multi-gap、共享參數、宣告 context）**成立**，則可識別；若某 instantiation
@@ -1422,3 +1427,13 @@ schema-only B1 input interface（WP-A7 planned）。
   ⇒ only local identification; the "\(/\)" was replaced by the explicit
   global/local distinction in §7.4, §7.6, §7.7, §7.8. New numeric check
   verify_wp_a6_hxv.py (G4a/G4b). Round-1/round-2 results otherwise unchanged.
+- 2026-07-22 — fourth (sentence-level) bounded correction per #256 owner re-review
+  (still pre-merge; §7 not yet frozen; §2–§6 byte-frozen): the §7.7 honesty summary
+  still said the **two** structural directions persist "even under \(H_{xv}\)", which
+  is true only for \(P_{xx}\leftrightarrow R_1\); it contradicted the round-3 body for
+  \(\operatorname{asym}(P_{xv})\) (which becomes **observable** under \(H_{xv}\)). Rewrote
+  the sentence to scope each direction separately: (i) \(P_{xx}\leftrightarrow R_1\)
+  structural, persists under \(H_{xv}\); (ii) \(\operatorname{asym}(P_{xv})\) invisible
+  only under \(H_x\), observable under \(H_{xv}\) (identification still needs multi-gap +
+  shared params + \(\gamma\) regime); (iii) \(\gamma\) unknown = unmet regime. No other
+  change.
