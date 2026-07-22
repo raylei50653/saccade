@@ -1,5 +1,5 @@
 <!-- doc-status: draft -->
-<!-- doc-promotion: none; D1 canonical model specification (seed); §2–§3 frozen at WP-A1, §4 frozen at WP-A2, §5 frozen at WP-A4, §6 frozen at WP-A5 -->
+<!-- doc-promotion: none; D1 canonical model specification (seed); §2–§3 frozen at WP-A1, §4 frozen at WP-A2, §5 frozen at WP-A4, §6 frozen at WP-A5, §7 frozen at WP-A6 -->
 <!-- doc-date: 2026-07-22 -->
 <!-- doc-module: semantic -->
 
@@ -29,7 +29,7 @@ correction 修改**。
 | §4 Canonical state, affine M2 transition \(K_\Delta\), \(Q_\Delta\), parameter domains | **frozen** | WP-A2 (owner merge) |
 | §5 Innovation composition (\(P_0\)/\(P^-_\Delta\)/\(R_1\)/\(S_\Delta\); independence vs explicit \(C\)) | **frozen** | WP-A4 (owner merge) |
 | §6 Calibration vs candidate-local ranking claim space (obligation 2) | **frozen** | WP-A5 (owner merge) |
-| §7 Identifiability and leakage matrix | reserved — not yet specified | WP-A6 (planned) |
+| §7 Identifiability and leakage matrix (terminal-3 predicate object) | **frozen** | WP-A6 (owner merge) |
 | §8 Schema-only interface for a future B1 input | reserved — not yet specified | WP-A7 (planned) |
 
 Reserved sections carry no obligations-resolved claim. WP-A2 resolves charter
@@ -37,12 +37,14 @@ obligation 4 (canonical-state affine M2 transition; §4); WP-A4 resolves charter
 obligation 3 (independence vs explicit cross-covariance \(C\); §5); WP-A5
 resolves charter obligation 2 (calibration-only gain vs candidate-local ranking
 gain as distinct claims; §6). **All four numbered activation-contract
-obligations are now resolved.** A sealable terminal
-(`GCTM_MODEL_SPEC_SEALABLE`) additionally requires the remaining D1 deliverables
-— identifiability/leakage matrix (§7) and the schema-only B1 input interface
-(§8) — plus terminal review; those remain reserved. §4 makes no claim about
-obligations 2–3, §5 makes no claim about obligation 2, and §6 makes no claim
-about identifiability/leakage or any B1/O1/runtime/production quantity.
+obligations are now resolved.** WP-A6 additionally freezes the D1
+identifiability/leakage matrix (§7; the terminal-3 predicate object). A sealable
+terminal (`GCTM_MODEL_SPEC_SEALABLE`) additionally requires the remaining D1
+deliverable — the schema-only B1 input interface (§8) — plus terminal review;
+that section remains reserved. §4 makes no claim about obligations 2–3, §5 makes
+no claim about obligation 2, §6 makes no claim about identifiability/leakage, and
+§7 measures no data and selects no terminal — it specifies the identifiability
+boundary only, and makes no B1/O1/runtime/production quantity claim.
 
 > **Append-only renumber correction (WP-A5).** WP-A5 inserts §6 (calibration vs
 > ranking) directly after frozen §5, so the former reserved §6/§7 shift to §7/§8.
@@ -51,6 +53,14 @@ about identifiability/leakage or any B1/O1/runtime/production quantity.
 > are therefore **superseded — read them as §7**. This note is the append-only
 > correction of record for that renumber; the frozen §5 text is not edited in
 > place.
+
+> **Append-only status correction (WP-A6).** WP-A6 freezes §7
+> (identifiability/leakage matrix). The frozen §5.7 and §6.6 typed-deferral tables
+> list the identifiability/leakage matrix as `reserved`/`unresolved` — a
+> **freeze-time snapshot** that is now **superseded**: §7 is **frozen by WP-A6**
+> (the terminal-3 predicate object). Frozen §5 and §6 are kept **byte-frozen** and
+> are not edited in place; the current section status is the §1 document-state
+> table above. This note is the append-only correction of record.
 
 ## §2 Canonical observation/time interface（obligation 1 — nine fields, frozen）
 
@@ -839,11 +849,224 @@ declared」的凍結落點。
 metric／threshold、不量測任何 gain、不選 terminal。修改須 append-only correction
 （原文保留、註記 superseded）。
 
-## §7–§8 Reserved
+## §7 Identifiability and leakage matrix（terminal-3 predicate object — frozen）
+
+本節落地 charter D1 deliverable「identifiability and leakage matrix」，並作為
+terminal partition 第 3 順位 predicate `GCTM_IDENTIFIABILITY_UNRESOLVED`（"the
+intended claim cannot be identified under the declared observations or leakage
+boundary"）的**predicate object**：它精確界定 primary object A 及其 §6 claim
+（CAL／RANK）的**identifiability target**、可識別所需的 **observation／data-design
+regime**、以及各量之間的 **leakage（confounding）結構**，使 terminal review 能對
+identifiability row 作機械判定。它建立在 frozen §4 kernel、§5 innovation composition
+與 §6 claim space 之上，不重定義任何既有物件。
+
+### §7.0 本節做什麼／不做什麼（typed boundary）
+
+**做（frozen）：** (i) 定義 identifiability target set（要識別哪些量／claim，從哪些
+observable）；(ii) 定義 observation／data-design regime 軸（\(H_x\) vs \(H_{xv}\)、
+single-event vs multi-gap population、context 是否宣告、label 是否可得）；(iii) 陳述
+core confounding（為何 single position-only event 不可識別）與 multi-gap 下的
+separation 條件；(iv) 凍結 **leakage matrix**（各 latent contributor 混入哪個
+apparent observable、以及**阻斷**該 leakage 的宣告／observation／data-design 條件）；
+(v) 陳述 identifiability boundary／verdict 作為 terminal-3 predicate object。
+
+**不做（明確不授權／留給後續）：** **不執行任何 data、fitting、estimation、
+identification 量測**（本檔不授權 data，charter Non-scope）；不宣稱任何 empirical
+identifiability 已被**建立**（只**specify** boundary，不 demonstrate）；不選
+\(P_0/R_1/\gamma/D/\bar v\) 的數值；不寫 schema-only B1 interface（§8，reserved）；
+**不選 terminal**（terminal selection 屬 WP-A8 terminal review，依 charter frozen
+decision procedure；本節只提供 predicate object）；不建立 fidelity edge、不做
+bridge-runtime claim、不做 reverse-time atom。
+
+沿用 §4.0／§5.0／§6.0 的 canonical boundary（永不逾越），本節額外固定一條：
+
+- **Identifiability 是 conditional statement，永遠綁定其宣告的 observation／
+  data-design／declaration 前提。** 「可識別」不得脫離其 regime 被引用；某量在
+  multi-gap population 可識別**不**蘊含它在 single event 可識別。任何 instantiation
+  引用某 identifiability 結論時，必須同時滿足該結論所列的前提。
+
+### §7.1 Identifiability target set（要識別的量／claim）
+
+| 類 | Target | 來源／定義 | 性質 |
+|:--|:--|:--|:--|
+| 轉移參數 | \(\gamma\)（mean-reversion rate）、\(D=LL^\top\)（diffusion）、\(\bar v(\cdot)\)（context mean-velocity map） | §4.2／§4.7 | \(Q_\Delta\) 由 \((\gamma,D,\Delta)\) 決定（§4.5，derived，非獨立 target）；\(\bar v(c)\) 驅動 context drift \(d_\Delta(c)\)（§4.3） |
+| 不確定度物件 | \(P_0\)（exit-state est cov）、\(R_1\)（entry-obs cov） | §5.1 | \(\succeq0\)；\(S_\Delta=H(A_\Delta P_0A_\Delta^\top+Q_\Delta)H^\top+R_1\)（canonical \(C=0\)，§5.4）為 derived |
+| deterministic mean | operator-layer offset \(\pm(\mathrm{bridge\_at}-1)v\)（§2 rows 8–9／§4.4） | declared operator quantity | **非** fitted target：由 known `bridge_at`+\(v\) 決定；此處只問「未宣告時它是否混入 apparent mean」 |
+| claim | **CAL**（cross-event calibration）、**RANK**（candidate-local ranking）（§6.2） | §6 | 各自的 identifiability 見 §7.5 |
+
+**Observable channel（可據以識別的量）：** 於 entry endpoint 由 §5 得到 innovation
+\(r\)（其實現）與（在宣告 population／null 下）其一二階矩 \(\mathbb E[r]=Hm^-_\Delta\)、
+\(\operatorname{Cov}(r)=S_\Delta\)；跨 events 得到 family \(\{(\mathbb E[r_\Delta],
+S_\Delta)\}_\Delta\)；在有 true-match label 時得到 true match 的 \(q\) 分佈（CAL）與
+event-local ordering（RANK）。label 之取得屬 data／B1 路徑，本節列為**前提**，不執行。
+
+### §7.2 Observation / data-design regime（identifiability 的條件軸）
+
+| 軸 | 值 | 對 identifiability 的作用 |
+|:--|:--|:--|
+| observation mode | \(H_x\)（position-only）／\(H_{xv}\)（joint，需 §3.3 宣告 causal availability） | \(H_x\) 只觀測 position block；velocity-相關參數只能靠 \(\Delta\)-shape 間接識別。\(H_{xv}\) 增方程式但 entry velocity 若由重疊 frames 得出⇒dependent-error path（\(C\neq0\)，§5.4），\(C\) 成為額外 unknown |
+| data design | single event（單一 \(\Delta\)、單一 lost track）／multi-gap population（跨 events、涵蓋 \(\ge\) 若干**相異** \(\Delta\)、共享參數） | single event 的 observable 遠少於 unknown（§7.3）；multi-gap 用 \(\Delta\)-shape 分離加項（§7.4） |
+| context 可觀測性 | \(c\)（及 \(\bar v(c)\)）是否宣告／觀測且**變化** | 未宣告或不變的 \(\bar v\) 與常數 mean bias／operator offset 混淆（§7.6 mean-level） |
+| label | true-match label 是否可得 | CAL／RANK 皆需 label 條件化「true match」（前提，屬 data／B1） |
+
+### §7.3 Core confounding：single position-only event 不可識別
+
+在**單一** \(\Delta\)、\(H_x\) 下，covariance 通道只給**一個** \(d\times d\) 矩陣
+
+\[
+S_\Delta=H_x\big(A_\Delta P_0 A_\Delta^\top+Q_\Delta(\gamma,D)\big)H_x^\top+R_1 ,
+\]
+
+而未知量為 \(P_0\)（\(2d\times2d\)，\(\succeq0\)）、\((\gamma,D)\)、\(R_1\)（\(d\times d\)，
+\(\succeq0\)）——自由度遠多於方程式。三個加項 \(H_xA_\Delta P_0A_\Delta^\top H_x^\top\)、
+\(H_xQ_\Delta H_x^\top\)、\(R_1\) 在**同一** \(\Delta\) 只以**和**出現，彼此**加性
+混淆**：任一 \(S_\Delta\) 可由結構迥異的 \((P_0,\gamma,D,R_1)\) 實現（數值 sanity C1：
+不同 \((\gamma,D,P_0,R_1)\) 給同一 \(S_\Delta\)）。mean 通道 \(\mathbb E[r]=y_1\) 的
+期望同理把 exit-state 估計、\(\bar v(c)\) 與（若未宣告）operator offset 混在一起
+（§7.6）。故 **single position-only event 對 \(\{P_0,\gamma,D,R_1,\bar v\}\) 不可
+識別**——這是 leakage boundary 的最強收縮點。
+
+### §7.4 Multi-gap population 下的 separation（identifiability 條件）
+
+分離的槓桿是**加項對 \(\Delta\) 的不同 shape**（皆由 frozen §4／已證 D2 lemma 提供，
+非本節新證）：
+
+- \(R_1\) 對 \(\Delta\) **常數**；
+- \(Q_\Delta\) 的 position block \(q_{xx}(\gamma,\Delta)\,D\) 隨 \(\Delta\) 成長（\(\gamma\to0\)
+  時 \(\sim\tfrac{\Delta^3}{3}D\)，D2 §4.6／L2；OU 飽和見 D2 L4）；
+- \(A_\Delta P_0A_\Delta^\top\) 的 position block 經 \(a(\gamma,\Delta)\)（\(a\in[0,\Delta]\)）
+  以另一 shape 進入。
+
+**結論（interface-level）：** 在**共享參數的 population** 假設下（同一 \(P_0,\gamma,D,
+R_1\) 跨 events）且涵蓋足夠多**相異** \(\Delta\)，family \(\{S_\Delta\}_\Delta\) 一般
+（generically）可分離這些加項，使 \(\{P_0,\gamma,D,R_1\}\) 可識別（數值 sanity C2：
+§7.3 中在單一 \(\Delta_0\) 不可分的兩組參數，跨 gaps 的 \(S_\Delta\) 相對差達 \(O(1)\)）。
+所需相異 \(\Delta\) 個數隨欲識別的自由度增加；gap spread 過小則接近退化、識別條件
+**病態**（weakly identified）。
+
+**position-only leakage（\(H_x\)）：** \(H_x\) 從不直接觀測 velocity，故 \(P_0\) 的
+velocity block 與「position innovation 中屬 \(P_0\)-propagation vs 屬 \(Q_\Delta\)」的
+拆分**全靠** \(\Delta\)-shape；某些方向（尤其 gap spread 小時）保持 weakly identified。
+這是 position-only 的 identifiability 代價。
+
+**joint mode（\(H_{xv}\)）：** 於 entry 觀測 velocity 增方程式、改善 conditioning；但
+須 §3.3 宣告 causal availability，且若 entry velocity 由與 transition window 重疊的
+frames 導出，則進入 §5.4 的 dependent-error path（\(C\neq0\)），\(C\) 成為**額外**待
+識別／宣告量，其 joint-PSD domain（§5.6）與可逆性 caveat（§5.5）一併適用。
+
+**context \(\bar v(c)\)：** 只有在 \(c\) 被**宣告／觀測**且在 population 中**變化**、且為
+exit-causally available（§4.0 boundary 4）時，\(\bar v(c)\) 才可與常數 mean 分離而
+識別；否則常數 \(\bar v\) 與常數 mean bias／operator offset 混淆（§7.6）。
+
+### §7.5 Claim-level identifiability（CAL vs RANK，承 §6 separation）
+
+§6.3 的 separation 直接給出 claim-level 的**互不識別**：
+
+- **RANK identifiable** 自 event-local ordering + label（true-match rank／top-1／
+  event-conditional AUC）。但 ordering 對 shared-scale \(\alpha_\Delta\)（§6.3(I)）與
+  event 內**統一**的嚴格遞增重參數化（§6.3(II)）**不變**⇒ **ranking 資料不能識別
+  calibration scale \(\alpha_\Delta\)**（數值 sanity C4a：\(\alpha\) 變動時 order 不變）。
+- **CAL identifiable** 自 population 的 coverage／PIT／conditional calibration error +
+  label + §6.1 CAL Gaussian working null；calibration 能**pin 住**絕對 level（含
+  \(\alpha_\Delta\)）。但 calibration **不**識別 event-local ordering 改善：一個完美
+  校準的 model 可以 rank 得並不更好（數值 sanity C4a/C4b：uniform monotone reparam 令
+  order 不變卻破壞 \(\chi^2\) 校準）。
+- ⇒ **CAL 與 RANK 互不識別（mutually non-identifying）：** 各自對一個會移動另一者的
+  變換保持不變。這是 §6 separation 的 identifiability 面重述，也正是 obligation 2 要求
+  兩者為**不同 claim** 的根據。兩者皆以 true-match label 為前提（data／B1，本節不執行）。
+
+### §7.6 Leakage matrix（凍結）
+
+「Leakage」:= 某 latent contributor 的變動被**吸收／混淆**進某個 apparent observable，
+使後者無法唯一歸因。下表凍結 leakage 結構與其**阻斷條件**（哪個 declaration／
+observation／data-design 移除該 leakage）。分 covariance-level、mean-level、
+claim-level 三塊。
+
+**Covariance-level（皆加性進入 \(S_\Delta\)，§7.3）：**
+
+| Contributor 對 | 在哪混淆 | Leak? | 阻斷條件 |
+|:--|:--|:--:|:--|
+| \(P_0\)-propagation ↔ \(Q_\Delta\) | \(S_\Delta\) position block @ 單一 \(\Delta\) | **L** | multi-gap 相異 \(\Delta\) 的 \(a(\gamma,\Delta)\) vs \(q_{xx}(\gamma,\Delta)\) shape（§7.4）；\(H_{xv}\) 增條件 |
+| \(Q_\Delta\) ↔ \(R_1\) | \(S_\Delta\) @ 單一 \(\Delta\) | **L** | multi-gap：\(Q_\Delta\) 隨 \(\Delta\) 成長 vs \(R_1\) 常數（§7.4；D2 L2/L4） |
+| \(P_0\) ↔ \(R_1\) | \(S_\Delta\) @ 單一 \(\Delta\) | **L** | multi-gap \(\Delta\)-shape；\(P_0\) velocity block 於 \(H_x\) 僅 weakly identified |
+| \(\gamma\) ↔ \(D\) | \(Q_\Delta=\text{scalar}(\gamma,\Delta)\,D\) | **L**（單一 \(\Delta\) 只見乘積） | multi-gap：OU scalar 的 \(\Delta\)-shape 定 \(\gamma\)，整體尺度定 \(D\)（§7.4） |
+
+**Mean-level（皆進入 apparent \(\mathbb E[r]\)／residual bias）：**
+
+| Contributor 對 | Leak? | 阻斷條件 |
+|:--|:--:|:--|
+| operator-offset \(\pm(\mathrm{bridge\_at}-1)v\) ↔ context drift \(\bar v(c)\)／常數 bias | **L**（未宣告時） | **顯式宣告** operator offset（§2 row 9，known `bridge_at`+\(v\)）即從 residual 減除（數值 sanity C3）；否則與常數 mean 混淆 |
+| context drift \(\bar v(c)\) ↔ 常數 mean bias | **L**（\(c\) 未觀測／不變時） | 宣告且**變化**的 exit-causal context（§7.4） |
+| exit-state 估計 bias ↔ 上二者 | **L**（單一 event） | population + null（\(\mathbb E[\delta z_0]=0\)，§5.3）；multi-gap |
+
+**Claim-level（§7.5）：**
+
+| From → To | Leak? | 說明 |
+|:--|:--:|:--|
+| CAL-scale \(\alpha_\Delta\) → RANK order | **—**（不 leak） | ranking 對 \(\alpha_\Delta\) 不變 ⇒ 反過來 ranking **不識別** \(\alpha_\Delta\)（單向 blindness） |
+| RANK order（uniform monotone reparam）→ CAL | **—**（order 不動） | order 不變卻破壞 calibration ⇒ order **不識別** CAL |
+
+（"—" 在 claim-level 指「不互相污染 order／calibration 之**不變量**」，其後果正是
+**互不識別**：一者對移動另一者的變換保持不變，故觀測一者無法定另一者。）
+
+### §7.7 Identifiability boundary / verdict（terminal-3 predicate object）
+
+**Verdict（frozen，conditional）：** 在宣告的 observation interface（§2–§3）與 §6
+separation 結構下，primary object A 的 intended claims 的 identifiability 為
+**conditionally specified**：
+
+1. \(\{P_0,\gamma,D,R_1\}\) 於 **multi-gap population（共享參數、足夠 gap spread）**
+   generically 可識別；於 **single position-only event 不可識別**（§7.3–§7.4）。
+2. \(\bar v(c)\) 於 **宣告且變化的 exit-causal context** 可識別，否則與常數 mean／
+   operator offset 混淆（§7.4／§7.6）。
+3. \(H_{xv}\) velocity-相關識別需 §3.3 causal-availability 宣告；overlap 導出的 entry
+   velocity 引入 dependent-\(C\)（§5.4）作為額外待宣告量。
+4. **CAL 與 RANK 互不識別**，各需 true-match label（data／B1 前提）；shared-scale
+   \(\alpha_\Delta\) 由 CAL 而非 RANK 決定（§7.5）。
+
+**性質界定（誠實邊界）：** 上述皆為 **specification of the identifiability boundary**，
+非**已建立**的 empirical identification——本檔不授權 data，故不 demonstrate 任何識別。
+沒有任何 intended claim 被證為「作為 specification 不可識別」；non-identifiability 只
+發生在**違反宣告條件**的 instantiation（single position-only event、未宣告 offset／
+context、gap spread 過小的病態設計）。因此本節**specify** 了 terminal-3 predicate 所讀的
+identifiability／leakage boundary：intended claim 在宣告 observation 下**於所列條件成立
+時可識別**；當這些條件不可滿足時，對應 claim 在該 instantiation **被宣告 non-identifiable**，
+落入 terminal review 的 terminal-3 rejection region。
+
+**本節不選 terminal。** 是否對某具體 instantiation 觸發 `GCTM_IDENTIFIABILITY_UNRESOLVED`
+（或標 identifiability row 為 `complete`／`rejection-established`）是 WP-A8 terminal
+review 依 charter frozen decision procedure 的機械判定；本節只提供其 predicate object。
+
+### §7.8 Domains / regime summary
+
+| 量 | 可識別所需最小 regime | 未達 regime 時的地位 |
+|:--|:--|:--|
+| \(R_1,Q_\Delta(\gamma,D),P_0\) | multi-gap population，\(\ge\) 足夠相異 \(\Delta\)，共享參數 | single \(\Delta\)：加性混淆，不可識別（§7.3） |
+| \(\gamma\) vs \(D\) | 同上（OU scalar 的 \(\Delta\)-shape） | 單一 \(\Delta\)：只見乘積 |
+| \(P_0\) velocity block | 更佳於 \(H_{xv}\)；\(H_x\) 僅靠 \(\Delta\)-shape | \(H_x\)+小 gap spread：weakly identified |
+| \(\bar v(c)\) | 宣告、變化、exit-causal context | 否則與常數 bias／offset 混淆 |
+| CAL scale \(\alpha_\Delta\) | CAL 路徑（coverage/PIT + label + working null） | RANK 路徑不識別它 |
+| RANK order | event-local ordering + label | CAL 路徑不識別它 |
+
+### §7.9 本節顯式不解決（typed deferrals）
+
+| 項目 | 擁有 WP | 狀態 |
+|:--|:--|:--|
+| schema-only B1 input interface | §8（reserved；WP-A7 planned） | unresolved |
+| terminal review（checklist artifact + terminal selection；含對 identifiability row 的機械判定） | 後續 packet（WP-A8 planned） | unresolved |
+| 實際 identification／estimation／fitting／data、label 取得、任何 gain／參數數值 | — | 不授權（charter Non-scope；需 data/B1/O1 授權） |
+| reverse-time／candidate-backward atom | 後續 | typed boundary only（§4.0 boundary 3） |
+| B1/O1、H0、runtime、online、production | — | 不授權（charter Non-scope） |
+
+**Freeze 邊界：** 本節凍結的是 **identifiability target、regime、leakage 結構與
+boundary verdict** 之**定義**。它不宣稱任何 runtime 擷取值、不建立 fidelity edge、不
+執行 identification、不選參數／metric／threshold、不選 terminal。修改須 append-only
+correction（原文保留、註記 superseded）。
+
+## §8 Reserved
 
 `GCTM_MODEL_SPEC_SEALABLE` 之前必須完成（見 charter frozen terminal partition
-與 obligation-status table）；在各自 work packet 落地前，本檔不預先陳述。**§7**
-identifiability／leakage matrix（terminal 3 predicate 對象；WP-A6 planned）、**§8**
+與 obligation-status table）；在其 work packet 落地前，本檔不預先陳述。**§8**
 schema-only B1 input interface（WP-A7 planned）。
 
 ## History
@@ -1020,3 +1243,26 @@ schema-only B1 input interface（WP-A7 planned）。
   for **non-trivial** \(\alpha_\Delta\neq1\) (identity changes nothing); D1 §6.3(I)
   and D2 L5.1 wording softened to "may affect calibration, not ranking." Core L5
   algebra, counterexample, separation, and lease unchanged.
+- 2026-07-22 — **§7 frozen by WP-A6** (D1 identifiability/leakage matrix; the
+  terminal-3 predicate object). Specifies the identifiability target set
+  (\(\{\gamma,D,\bar v,P_0,R_1\}\), the deterministic operator offset, and the two
+  §6 claims), the observation/data-design regime axes (\(H_x\)/\(H_{xv}\),
+  single-event vs multi-gap population, context observability, labels), the core
+  confounding (single position-only event is non-identifiable — \(P_0\)-propagation,
+  \(Q_\Delta\), \(R_1\) are additively conflated at one \(\Delta\)), the multi-gap
+  separation conditions (distinct-\(\Delta\) shapes of \(a(\gamma,\Delta)\) vs
+  \(q_{xx}(\gamma,\Delta)\) vs constant \(R_1\), reusing frozen §4.6/D2 L2/L4), the
+  claim-level result (CAL and RANK are **mutually non-identifying** — ranking does
+  not identify the calibration scale \(\alpha_\Delta\); a uniform monotone reparam
+  leaves order fixed but breaks calibration), and a frozen **leakage matrix**
+  (covariance-/mean-/claim-level, each with the declaration/observation/data-design
+  condition that blocks the leak). The verdict is conditional: identifiability is
+  **specified**, not empirically established (no data authorized); no intended claim
+  is unidentifiable **as a specification** — non-identifiability arises only for
+  instantiations violating the declared conditions. §7 selects **no terminal** — it
+  is the predicate object for WP-A8 terminal review. Frozen §2–§6 kept byte-frozen;
+  the stale `reserved`/`unresolved` identifiability references in §5.7/§6.6 are
+  superseded via an append-only status note after the §1 table (no in-place edit).
+  No new file ⇒ no master_map regeneration. Claims numerically sanity-checked
+  (single-gap non-identifiability, multi-gap separation, offset/drift mean
+  confounding, CAL/RANK mutual non-identification).
