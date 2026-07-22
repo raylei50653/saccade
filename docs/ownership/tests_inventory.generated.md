@@ -17,11 +17,11 @@ Guarantee coverage per module (behavior/contract/regression/acceptance/diagnosti
 | `perception` | 11 | 1 | 0 | 0 | 0 | 12 |
 | `detection` | 15 | 2 | 0 | 0 | 0 | 17 |
 | `reid` | 3 | 0 | 0 | 0 | 0 | 3 |
-| `eval` | 49 | 18 | 1 | 0 | 0 | 68 |
-| `tracking` | 8 | 3 | 0 | 0 | 0 | 11 |
-| `cross-module` | 0 | 3 | 0 | 0 | 0 | 3 |
+| `eval` | 47 | 20 | 1 | 0 | 0 | 68 |
+| `tracking` | 8 | 4 | 0 | 0 | 0 | 12 |
+| `cross-module` | 0 | 4 | 0 | 0 | 0 | 4 |
 | `system` | 0 | 21 | 3 | 1 | 0 | 25 |
-| **Total** | 96 | 49 | 4 | 1 | 0 | **150** |
+| **Total** | 94 | 53 | 4 | 1 | 0 | **152** |
 
 ## Scope × lifecycle
 
@@ -38,10 +38,10 @@ Governance state per module. A multi-scope test counts once per scope.
 | `detection` | 17 | 0 | 0 | 0 | 0 | 0 | 17 |
 | `reid` | 3 | 0 | 0 | 0 | 0 | 0 | 3 |
 | `eval` | 59 | 0 | 9 | 0 | 0 | 0 | 68 |
-| `tracking` | 11 | 0 | 0 | 0 | 0 | 0 | 11 |
-| `cross-module` | 3 | 0 | 0 | 0 | 0 | 0 | 3 |
+| `tracking` | 12 | 0 | 0 | 0 | 0 | 0 | 12 |
+| `cross-module` | 4 | 0 | 0 | 0 | 0 | 0 | 4 |
 | `system` | 25 | 0 | 0 | 0 | 0 | 0 | 25 |
-| **Total** | 141 | 0 | 9 | 0 | 0 | 0 | **150** |
+| **Total** | 143 | 0 | 9 | 0 | 0 | 0 | **152** |
 
 ## Disposition queue
 
@@ -138,10 +138,10 @@ Governance state per module. A multi-scope test counts once per scope.
 
 | Test | Scope | Function | Lifecycle | Summary |
 |------|-------|----------|-----------|---------|
-| `test_check_association_tools.py` | eval | behavior | active | Unit tests for scripts/tools/check_association_tools.py. |
+| `test_check_association_tools.py` | eval | contract | active | Unit tests for scripts/tools/check_association_tools.py. |
 | `test_config_consistency.py` | eval | contract | active | Guard against silent divergence across the three config layers. |
 | `test_eval_script_paths.py` | eval | contract | active | Pin the scripts/eval compat wrappers to their relocated implementations. |
-| `test_headline_decision_contract.py` | eval | behavior | active | Unit tests for scripts/tools/check_headline_decision_contract.py. |
+| `test_headline_decision_contract.py` | eval,tracking,cross-module | contract | active | Unit tests for scripts/tools/check_headline_decision_contract.py. |
 | `test_math_model_doc_consistency.py` | eval,tracking | contract | active | Pin the LaTeX math-model document (``docs/latex``) to the code it describes. |
 | `test_pipeline_health.py` | pipeline | behavior | active | Unit tests for saccade.pipeline.health.check_redis (mocked aioredis). |
 | `test_reconnect_rate.py` | eval | behavior | active | Unit tests for B2 reconnect_rate summarization / export. |

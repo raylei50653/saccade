@@ -4,8 +4,8 @@ No GPU. Uses pure ``check_presets`` / ``check_inject_map`` helpers plus live
 repo presets and inject sources.
 """
 
-# scope: eval
-# function: behavior
+# scope: eval, tracking, cross-module
+# function: contract
 # lifecycle: active
 
 from __future__ import annotations

@@ -5,7 +5,7 @@ schema/error paths.
 """
 
 # scope: eval
-# function: behavior
+# function: contract
 # lifecycle: active
 
 from __future__ import annotations
