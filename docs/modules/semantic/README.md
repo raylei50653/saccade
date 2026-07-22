@@ -120,6 +120,7 @@
 | [research/gap_conditioned_motion_e3_signals_20260711.md](research/gap_conditioned_motion_e3_signals_20260711.md) | E3 LOO fold 訊號（sealed cube） |
 | [research/gap_conditioned_motion_phase_b_design_20260711.md](research/gap_conditioned_motion_phase_b_design_20260711.md) | Phase B 預宣告設計（A1–A8） |
 | [research/gap_conditioned_motion_phase_b_20260711.md](research/gap_conditioned_motion_phase_b_20260711.md) | Phase B 執行結果 |
+| [research/gctm_primary_object_a_scope_and_plan_20260722.md](research/gctm_primary_object_a_scope_and_plan_20260722.md) | GCTM primary-object=A 範圍與方案 memo（draft、planning-only、無執行權；提出 A-layer seal 與 B/C/D downstream construction 的條件式 scope amendment） |
 | [research/gctm_b1_o1_task_objectives_and_semantics_20260716.md](research/gctm_b1_o1_task_objectives_and_semantics_20260716.md) | GCTM 下游 B1/O1 shared-semantics core（draft、無執行權；§37 拆分已於 2026-07-17 執行，任務本體在 threads 兩張 proposed task charter；本檔留 §0 防飄移邊界、§1 evidence chain、§2 shared rules、§35/§36/§39） |
 
 ### occ-exit / m_b1 hook（closed 線的參考）
