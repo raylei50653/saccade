@@ -671,27 +671,36 @@ prediction mean \(Hm^-_\Delta\)（§5.2），令 \(k=\dim r\)（\(H_x\):\(k=d\)�
 pseudo-inverse／degenerate-Gaussian 形式——**本節不處理，亦不作任何 claim**。
 
 **CAL Gaussian working null（declared，additional to frozen §5；frozen 於本節）.**
-Frozen §5 只給 innovation 的**一二階矩**：\(\mathbb E[r]=0\)（§5.3 zero-mean）、
-\(\operatorname{Cov}(r)=S_\Delta\)（§5.4）；它**未**宣告 \(\delta z_0\) 的分佈，只把
-\(P_0=\operatorname{Cov}(\delta z_0)\) 定為 covariance。因此 predictive law 為
-\(\mathcal N(Hm^-_\Delta,S_\Delta)\)、\(q\sim\chi^2_k\)、Gaussian NLL 為**絕對
-probability semantics** 等**分佈層**敘述，**不是** frozen §5 的推論。CAL claim 因此在下列
-**額外宣告的 Gaussian working null** 下才 well-defined：
+Frozen §5 已有的是 innovation 的**一二階矩**與**兩條 independence**：
+\(\mathbb E[r]=0\)（§5.3 zero-mean）、\(\operatorname{Cov}(r)=S_\Delta\)（§5.4）、
+\(\mathbb E[\delta z_0]=0\)、\(P_0=\operatorname{Cov}(\delta z_0)\)（§5.1/§5.3），以及
+\(\eta_\Delta\perp\delta z_0\)（§5.2）、\(e^-\perp\epsilon_1\)（§5.4）。它**未**宣告
+\(\delta z_0\) 的**分佈**。因此 predictive law 為 \(\mathcal N(Hm^-_\Delta,S_\Delta)\)、
+\(q\sim\chi^2_k\)、Gaussian NLL 為**絕對 probability semantics** 等**分佈層**敘述，
+**不是** frozen §5 的推論。CAL claim 因此在下列**額外宣告的 Gaussian working null** 下才
+well-defined：
 
 \[
-\boxed{\;\delta z_0\mid\hat z_0\sim\mathcal N(0,P_0),\qquad
-\delta z_0\perp\eta_\Delta\perp\epsilon_1\;}
+\boxed{\;\delta z_0\sim\mathcal N(0,P_0),\qquad
+\eta_\Delta\perp\delta z_0\ (\text{§5.2}),\qquad
+e^-\perp\epsilon_1\ (\text{§5.4})\;}
 \]
 
-（此處 \(\eta_\Delta\sim\mathcal N(0,Q_\Delta)\) 已 Gaussian，§4.3；\(\epsilon_1\sim
-\mathcal N(0,R_1)\) 已 Gaussian，§5.1；\(\eta_\Delta\perp\delta z_0\) 已凍結於 §5.2、
-\(e^-\perp\epsilon_1\) 已凍結於 §5.4——**唯一新增**的是 \(\delta z_0\) 的 Gaussianity）。
-於此 working null，\(r=A_\Delta\delta z_0+\eta_\Delta+\epsilon_1\) 為 independent
-Gaussians 之和 ⇒ \(r\sim\mathcal N(0,S_\Delta)\) ⇒ \(q\sim\chi^2_k\)。**若 \(\delta z_0\)
-非 Gaussian**，\(S_\Delta\) 仍是正確 covariance，但 \(r\) 一般**非** Gaussian、
-\(q\not\sim\chi^2_k\)，故此 working null 是 CAL 分佈層 claim 的**必要**宣告，非默認。
-下表四量作為 \(r,S_\Delta\) 的**函數**始終 well-defined（不需 working null）；只有其
-**機率解釋**（density、\(\chi^2\)、coverage）需此 working null。
+其中後兩條 independence 就是 frozen §5 既有的兩條（非三 primitive 的 chain
+independence），此處只重述；**唯一新增**的是 \(\delta z_0\) 的 Gaussianity（其
+unconditional zero-mean 與 covariance \(P_0\) 已在 §5.1/§5.3）。推導：
+
+1. \(\delta z_0\sim\mathcal N(0,P_0)\) 與 \(\eta_\Delta\sim\mathcal N(0,Q_\Delta)\)
+   （§4.3 已 Gaussian）independent（§5.2）\(\Rightarrow e^-=A_\Delta\delta z_0+\eta_\Delta\)
+   為 Gaussian；
+2. frozen §5.4 已宣告 \(e^-\perp\epsilon_1\)，且 \(\epsilon_1\sim\mathcal N(0,R_1)\)
+   （§5.1 已 Gaussian）；
+3. \(\Rightarrow r=He^-+\epsilon_1\sim\mathcal N(0,S_\Delta)\Rightarrow q\sim\chi^2_k\)。
+
+**若 \(\delta z_0\) 非 Gaussian**，\(S_\Delta\) 仍是正確 covariance，但 \(r\) 一般**非**
+Gaussian、\(q\not\sim\chi^2_k\)，故此 working null 是 CAL 分佈層 claim 的**必要**宣告，
+非默認。下表四量作為 \(r,S_\Delta\) 的**函數**始終 well-defined（不需 working null）；
+只有其**機率解釋**（density、\(\chi^2\)、coverage）需此 working null。
 
 | 量 | 定義 | 說明 |
 |:--|:--|:--|
@@ -737,17 +746,22 @@ PIT／conditional calibration error 這類**純 calibration** 診斷。
 
 ### §6.3 Separation（invariance 結構）—— 兩 claim 為何邏輯獨立
 
-**(I) Calibration 改變而 ranking 不變（shared-covariance rescaling）。** 設 event
-\(\mathcal E\) 內所有 candidate 共用同一 covariance \(S_{\Delta,i}=S\)（此即 lemma 的
-充要條件；**不**要求同 \(\Delta,c,k,H\)——\(R_1\) 是 entry-time quantity、\(c\) 只影響
-drift mean 不影響 covariance，故那些來源既不必要也不充分）。則
+**(I) Ranking 不變而 calibration 可被改變（shared-covariance rescaling）。** 設 event
+\(\mathcal E\) 內所有 candidate 共用同一 covariance \(S_{\Delta,i}=S\)（這是 L5 採用的
+**唯一顯式前提與充分條件，不宣稱為必要條件**；universal \(q\)/NLL 同序真正需要的只是
+additive 項 \(\tfrac12\log\det S_{\Delta,i}+\tfrac{k_i}2\log2\pi\) 在 candidates 間相同，
+完整矩陣 \(S_{\Delta,i}=S\) 相同是易檢查的充分條件，且 \(S_i\neq S_j\) 時 \(q\) 與 NLL
+仍可能碰巧同序，見 §6.4／D2 L5.2。**不**要求同 \(\Delta,c,H\)——\(R_1\) 是 entry-time
+quantity、\(c\) 只影響 drift mean 不影響 covariance）。則
 \(E_i=\tfrac12 q_i+\kappa(S)\)，其中 \(\kappa(S)=\tfrac12\log\det S+\tfrac k2\log2\pi\)
 **與 \(i\) 無關**，故 \(q\) 與 \(E\) 在 event 內誘導**相同** ordering（rank-equivalent；
 正式證明 D2 §7 L5）。又 gap-conditioned rescaling \(S\mapsto\alpha_\Delta S\)
 （\(\alpha_\Delta>0\) 只依 event）給 \(q_i\mapsto q_i/\alpha_\Delta\)（正的、candidate-
 independent 縮放，order-preserving）、\(E_i\mapsto\tfrac12 q_i/\alpha_\Delta+
 \kappa(\alpha_\Delta S)\)（candidate-independent 的仿射重參數化），故 **event-local
-order 不變**，但 \(q\) 的絕對分佈與 NLL 的 level **改變** ⇒ **calibration 改變**。
+order 不變**；**非平凡的** rescaling（\(\alpha_\Delta\neq1\)）**可以**改變 \(q\) 的絕對
+分佈與 NLL 的 level ⇒ **可影響／改善 calibration**（\(\alpha_\Delta=1\) 為 identity，
+什麼都不改）。
 特例 \(S=\alpha_\Delta I\)（isotropic）：\(q_i=\lVert r_i\rVert^2/\alpha_\Delta\)，
 order \(=\lVert r_i\rVert^2\) order，與 \(\alpha_\Delta\) 無關 ⇒ **isotropic
 gap-conditioned scaling 對 candidate-local order 是 calibration-only**（charter 的
@@ -946,9 +960,11 @@ schema-only B1 input interface（WP-A7 planned）。
   the rule that candidate-specific covariance may alter ordering **only** when its
   source and causal availability are explicitly declared (§3.3). The
   \(\chi^2_k\)/Gaussian distributional statements hold only under an explicitly
-  declared **CAL Gaussian working null** (\(\delta z_0\mid\hat z_0\sim
-  \mathcal N(0,P_0)\), \(\delta z_0\perp\eta_\Delta\perp\epsilon_1\); §6.1) — an
-  addition beyond frozen §5 (which gives only zero-mean + covariance); generic
+  declared **CAL Gaussian working null** (\(\delta z_0\sim\mathcal N(0,P_0)\), with
+  the two independences \(\eta_\Delta\perp\delta z_0\) (§5.2) and
+  \(e^-\perp\epsilon_1\) (§5.4) already frozen in §5, so only \(\delta z_0\)'s
+  Gaussianity is new; §6.1) — an addition beyond frozen §5 (which gives only
+  zero-mean + covariance); generic
   log/proper score is a distribution-quality metric (calibration+sharpness),
   excluded from the CAL metric family. The shared-\(S_\Delta\)
   \(q\)/NLL ordering-equivalence **proof** is the D2 increment of this packet (D2
@@ -963,13 +979,17 @@ schema-only B1 input interface（WP-A7 planned）。
   value, no runtime/data/production change.
 - 2026-07-22 — bounded corrections per #255 owner review (BLOCKED → fixed
   pre-merge; §6 not yet frozen; §2–§5 byte-frozen): (1) **CAL Gaussian working
-  null** — §6.1 now declares \(\delta z_0\mid\hat z_0\sim\mathcal N(0,P_0)\),
-  \(\delta z_0\perp\eta_\Delta\perp\epsilon_1\) as an **additional** assumption
-  beyond frozen §5 (which supplies only \(\mathbb E[r]=0\) + \(\operatorname{Cov}
-  (r)=S_\Delta\)); the \(q\sim\chi^2_k\)/Gaussian-predictive-law/absolute-probability
-  statements are scoped to this working null (the four score quantities remain
-  defined as functions of \(r,S_\Delta\) without it, only their probabilistic
-  interpretation needs it). (2) **§6.3(II) title + quantifier** — retitled
+  null** — §6.1 declares \(\delta z_0\sim\mathcal N(0,P_0)\) with the two
+  independences \(\eta_\Delta\perp\delta z_0\) (§5.2) and \(e^-\perp\epsilon_1\)
+  (§5.4) — the ones **already frozen** in §5, restated (not a 3-primitive chain);
+  the **only** new assumption is \(\delta z_0\)'s Gaussianity (its unconditional
+  zero-mean + covariance \(P_0\) are already in §5.1/§5.3). Derivation: \(e^-=
+  A_\Delta\delta z_0+\eta_\Delta\) Gaussian (indep. Gaussians), \(e^-\perp\epsilon_1\)
+  + \(\epsilon_1\) Gaussian ⇒ \(r\sim\mathcal N(0,S_\Delta)\) ⇒ \(q\sim\chi^2_k\).
+  The \(\chi^2_k\)/Gaussian-predictive-law/absolute-probability statements are
+  scoped to this working null (the four score quantities remain defined as
+  functions of \(r,S_\Delta\) without it, only their probabilistic interpretation
+  needs it). (2) **§6.3(II) title + quantifier** — retitled
   "Ranking 保持不變而 calibration 可被改變"; the order-preserving transform is a
   **common** strictly-increasing \(\varphi_{\mathcal E}\) applied **uniformly**
   across candidates in an event (distinct per-candidate \(\varphi_i\) can reorder),
@@ -982,3 +1002,21 @@ schema-only B1 input interface（WP-A7 planned）。
   "同 \(\Delta,c,k,H\)" equivalence; the lemma's condition is exactly
   \(S_{\Delta,i}=S\) (\(R_1\) is entry-time, \(c\) enters drift mean not
   covariance). CAL/RANK separation and the invertible regime unchanged.
+- 2026-07-22 — second bounded correction per #255 owner re-review (still
+  pre-merge; §6 not yet frozen; §2–§5 byte-frozen): (1) **working-null
+  self-consistency** — the boxed null rewritten as \(\delta z_0\sim\mathcal N(0,P_0)\)
+  plus the two **already-frozen** independences \(\eta_\Delta\perp\delta z_0\)
+  (§5.2), \(e^-\perp\epsilon_1\) (§5.4), replacing the earlier 3-primitive chain
+  \(\delta z_0\perp\eta_\Delta\perp\epsilon_1\) and the conditional
+  \(\delta z_0\mid\hat z_0\) form (which had silently added conditional
+  centering/covariance); this keeps "only \(\delta z_0\) Gaussianity is new" honest,
+  and the derivation now routes through the frozen \(e^-\perp\epsilon_1\). Same
+  notation fixed in the charter note/History and PR body. (2) **§6.3(I)
+  sufficient-not-necessary** — "充要條件" corrected: \(S_{\Delta,i}=S\) is L5's sole
+  explicit premise and a **sufficient** condition, not necessary (the true
+  requirement is a candidate-independent \(\tfrac12\log\det S_{\Delta,i}+
+  \tfrac{k_i}2\log2\pi\); unequal \(S_i\) may still coincide in order — consistent
+  with L5.2). (3) **\(\alpha_\Delta=1\) nit** — rescaling changes calibration only
+  for **non-trivial** \(\alpha_\Delta\neq1\) (identity changes nothing); D1 §6.3(I)
+  and D2 L5.1 wording softened to "may affect calibration, not ranking." Core L5
+  algebra, counterexample, separation, and lease unchanged.

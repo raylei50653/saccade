@@ -464,7 +464,8 @@ E_i\le E_j\)（嚴格不等亦然）。∎
 > **不改變** event 內 \(q\)- 與 NLL-order；特別地 \(S=\alpha I\)（isotropic）時
 > \(q_i=\lVert r_i\rVert^2/\alpha\)，order \(=\lVert r_i\rVert^2\)-order，與
 > \(\alpha\) 無關。故 gap-conditioned shared／isotropic scaling 對 candidate-local
-> ranking **不變**，只改 calibration（D1 §6.3(I)）。
+> ranking **不變**，只**可能影響** calibration 而**不**影響 ranking（\(\alpha=1\) 為
+> identity，什麼都不改；D1 §6.3(I)）。
 
 **Proof.** \(S\mapsto\alpha S\Rightarrow q_i=r_i^\top S^{-1}r_i\mapsto q_i/\alpha\)：
 因 \(1/\alpha>0\) 且與 \(i\) 無關，\(q_i/\alpha\) 與 \(q_i\) 同 order。NLL 變為
@@ -603,3 +604,10 @@ covariance；event 內**統一**單調 \(\varphi_{\mathcal E}\) 保序、**per-c
   ordering-equivalence guarantee; it does **not** claim \(S_i\neq S_j\) forces a
   different order (specific unequal \(S\) may still coincide in order). Core L5/L5.1
   algebra and the \(k=1\) counterexample unchanged.
+- 2026-07-22 — second bounded correction per #255 owner re-review (pre-merge;
+  §7 not yet frozen; L1–L4/§2–§5 byte-unchanged): L5.1 wording softened —
+  shared/isotropic rescaling "may affect calibration, not ranking" (identity
+  \(\alpha=1\) changes nothing), matching D1 §6.3(I). L5's "唯一前提" wording kept
+  (it names the premise list, not a mathematical necessity), and the L5 statement
+  already flags \(S_{\Delta,i}=S\) as sufficient (sharing \(S\) fixes \(k\); \(R_1\)
+  entry-time, \(c\)→drift mean). Core L5/L5.1/L5.2 unchanged.

@@ -362,9 +362,10 @@ frozen §5 score quantities (\(q=r^\top S_\Delta^{-1}r\), \(\log\det S_\Delta\),
 Gaussian NLL, candidate-region probability; invertible regime canonical
 \(C=0\), \(R_1\succ0\)). The \(\chi^2_k\)/Gaussian distributional statements hold
 under an explicitly declared **CAL Gaussian working null**
-(\(\delta z_0\mid\hat z_0\sim\mathcal N(0,P_0)\),
-\(\delta z_0\perp\eta_\Delta\perp\epsilon_1\); §6.1) — an addition beyond frozen §5,
-which supplies only zero-mean and covariance. The separation is frozen both
+(\(\delta z_0\sim\mathcal N(0,P_0)\), with \(\eta_\Delta\perp\delta z_0\) (§5.2) and
+\(e^-\perp\epsilon_1\) (§5.4) — the two independences already frozen in §5, so the
+**only** addition is \(\delta z_0\)'s Gaussianity; §6.1) — beyond frozen §5, which
+supplies only zero-mean and covariance. The separation is frozen both
 directions: shared-\(S_\Delta\) / isotropic \(S=\alpha_\Delta I\) rescaling changes
 calibration but **not** candidate-local order (calibration gain ⇏ ranking gain),
 and ranking is invariant to a **common** strictly-increasing reparametrization
@@ -685,9 +686,11 @@ terminal is not reachable until WP-A6–A8 complete.
   depends on region volume (non-congruent regions disagree with \(q\)-order);
   candidate-specific covariance may change order only with declared
   source/causal-availability. The \(\chi^2_k\)/Gaussian statements hold under a
-  declared **CAL Gaussian working null** (\(\delta z_0\mid\hat z_0\sim
-  \mathcal N(0,P_0)\), \(\delta z_0\perp\eta_\Delta\perp\epsilon_1\); §6.1) beyond
-  frozen §5; generic log/proper score excluded from the CAL metric family. The \(q\)/NLL ordering-equivalence **proof** is
+  declared **CAL Gaussian working null** (\(\delta z_0\sim\mathcal N(0,P_0)\); the
+  two independences \(\eta_\Delta\perp\delta z_0\) and \(e^-\perp\epsilon_1\) are the
+  ones already frozen in §5.2/§5.4, so only \(\delta z_0\)'s Gaussianity is new;
+  §6.1) beyond frozen §5; generic log/proper score excluded from the CAL metric
+  family. The \(q\)/NLL ordering-equivalence **proof** is
   filled in [D2 §7 (Lemma L5, + L5.1/L5.2)](../models/gap_conditioned_stochastic_transition_lemmas_v1.md).
   D1 §6 measures no gain, selects no metric/threshold/data, selects no terminal.
   Reserved sections renumbered (identifiability/leakage → D1 §7, B1 schema → D1
