@@ -575,14 +575,19 @@ the identifiability target set, observation/data-design regimes, the core
 single-event confounding, the multi-gap **quotient** identifiability (**given
 \(\gamma\) known**, only \(\{D,P_{vv},\mathrm{sym}(P_{xv}),P_{xx}+R_1\}\) under
 \(H_x\), with two **structural** non-identifiable gauges — \(P_{xx}\!\leftrightarrow\!R_1\),
-not broken even by \(H_{xv}\), and \(\mathrm{asym}(P_{xv})\), \(H_x\)-invisible; and
+not broken even by \(H_{xv}\), and \(\mathrm{asym}(P_{xv})\), \(H_x\)-invisible —
+under \(H_{xv}\) it becomes **observable** but its identification still needs
+multi-gap + shared params + known \(\gamma\), not a single \(H_{xv}\) event; and
 with \(\gamma\) **unknown**, 4 gaps leave a degree of freedom so \(\gamma\) is
-unidentified — its identification needs \(>4\) gaps + joint-injectivity, **not
-claimed proven**), the CAL/RANK mutual-non-identifiability result, and a frozen
-leakage matrix; its verdict is conditional (identifiability **specified**, not
-empirically established — no data authorized; a claim is non-identifiable exactly
-when it must rely on an unidentifiable gauge component) and it **selects no
-terminal**. This is a D1 deliverable, **not** a
+unidentified — its identification needs \(>4\) gaps + a joint-map identifiability
+condition (**global injectivity** ⇒ global id, or at least **full-Jacobian-rank** ⇒
+local id; not equivalent), **not claimed proven**), the CAL/RANK
+mutual-non-identifiability result, and a frozen leakage matrix; its verdict is
+conditional (identifiability **specified**, not empirically established — no data
+authorized; a claim is non-identifiable exactly when it must rely on an
+unidentifiable component **or an unmet identifiability regime** — the two structural
+gauges, or \(\gamma\) unknown without the \(>4\)-gap joint-map condition) and it
+**selects no terminal**. This is a D1 deliverable, **not** a
 numbered obligation (all four remain resolved). One D1 deliverable remains — the
 schema-only B1 input interface (D1 §8, WP-A7) — plus terminal review (WP-A8), so
 terminal review still could not yet reach the sealable terminal.
@@ -734,25 +739,30 @@ reachable until WP-A7–A8 complete.
   reusing frozen §4.6 / D2 L2/L4) — so, **given \(\gamma\) known**, \(H_x\) multi-gap
   identifies only the **quotient** \(\{D,P_{vv},\mathrm{sym}(P_{xv}),P_{xx}+R_1\}\)
   (with \(\gamma\) **unknown**, 4 gaps leave one DOF ⇒ \(\gamma\) unidentified;
-  identifying it needs \(>4\) gaps + joint-injectivity, **not claimed proven** —
-  "\(\ge5\) gaps" is necessary not sufficient), leaving two **structural**
-  non-identifiable gauges (\(P_{xx}\!\leftrightarrow\!R_1\), not broken even by
-  \(H_{xv}\), fixable only by declared known \(R_1\)/\(P_{xx}\); and
-  \(\mathrm{asym}(P_{xv})\), \(H_x\)-invisible / \(H_{xv}\)-identifiable) — the
-  **CAL/RANK mutual-non-identifiability**
+  identifying it needs \(>4\) gaps + a joint-map identifiability condition (**global
+  injectivity** ⇒ global id, or at least **full-Jacobian-rank** ⇒ local id; not
+  equivalent), **not claimed proven** — "\(\ge5\) gaps" is necessary not sufficient),
+  leaving two **structural** non-identifiable gauges (\(P_{xx}\!\leftrightarrow\!R_1\),
+  not broken even by \(H_{xv}\), fixable only by declared known \(R_1\)/\(P_{xx}\); and
+  \(\mathrm{asym}(P_{xv})\), \(H_x\)-invisible — under \(H_{xv}\) **observable** but its
+  identification still needs multi-gap + shared params + known \(\gamma\), not a single
+  \(H_{xv}\) event) — the **CAL/RANK mutual-non-identifiability**
   result (ranking does not identify the calibration scale \(\alpha_\Delta\); a uniform
   monotone reparam leaves order fixed but breaks calibration), and a frozen
   **leakage matrix** (covariance-/mean-/claim-level, separating multi-gap-blockable
   leaks from the structural gauges, each with its blocking condition). Verdict is
   **conditional** — identifiability is *specified*, not empirically established (no
-  data authorized); the structural non-identifiability is a declared fact, and a
-  claim is non-identifiable exactly when it must rely on an unidentifiable gauge
-  component. §7 **selects no terminal** (that is WP-A8). The §7.4 draft that claimed
+  data authorized); a claim is non-identifiable exactly when it must rely on an
+  unidentifiable component **or an unmet identifiability regime** (the two gauges, or
+  \(\gamma\) unknown without the \(>4\)-gap joint-map condition). §7 **selects no
+  terminal** (that is WP-A8). The §7.4 draft that claimed
   the *full* \(\{P_0,\gamma,D,R_1\}\) generically identifiable under \(H_x\) was
   corrected pre-merge per #256 owner review — round 1 (the two structural
-  \(P_{xx}\!\leftrightarrow\!R_1\) / \(\mathrm{asym}P_{xv}\) gauges) and round 2 (the
+  \(P_{xx}\!\leftrightarrow\!R_1\) / \(\mathrm{asym}P_{xv}\) gauges), round 2 (the
   joint-\(\gamma\) 4-gap DOF ambiguity, making the quotient conditional on \(\gamma\)
-  known). Frozen §2–§6 kept byte-frozen; stale
+  known), and round 3 (\(H_{xv}\) makes \(\mathrm{asym}P_{xv}\) observable-not-identifiable;
+  honesty boundary widened to "unmet identifiability regime"; injectivity ≠
+  full-Jacobian-rank). Frozen §2–§6 kept byte-frozen; stale
   `reserved`/`unresolved` identifiability references in §5.7/§6.6 superseded via an
   append-only status note. Also cleared the WP-A5 roll-forward nit (the obligation-2
   summary note now carries the non-trivial \(\alpha_\Delta\neq1\) qualifier). All
