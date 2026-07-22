@@ -209,6 +209,7 @@ Manifest: `docs/ownership/doc_migration_manifest.yaml`
 - `docs/research/tracker-decision/audit/dual_stability_ablation_results_2026-07-09.md`
 - `docs/research/tracker-decision/audit/dual_stability_cleanup.md`
 - `docs/research/tracker-decision/audit/math_model_drift_2026-07-09.md`
+- `docs/research/tracker-decision/audit/matrix_representation_feasibility_2026-07-20.md`
 - `docs/research/tracker-decision/audit/native_bridge.md`
 - `docs/research/tracker-decision/audit/no_go_guardrails.md`
 - `docs/research/tracker-decision/failure_modes.md`
@@ -320,6 +321,6 @@ Excluded from the active index and default search view.
 
 ## Inventory summary
 
-- documents: 270
-- active: 215
+- documents: 271
+- active: 216
 - grayed out: 55
