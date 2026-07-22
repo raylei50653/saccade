@@ -1,3 +1,9 @@
+"""Unit tests for the YOLO gated detector (perception.temporal_yolo.yolo_gated_detector)."""
+
+# scope: detection
+# function: behavior
+# lifecycle: active
+
 import torch.nn as nn
 
 from saccade.perception.temporal_yolo.yolo_gated_detector import (

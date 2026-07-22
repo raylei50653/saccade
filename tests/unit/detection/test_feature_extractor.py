@@ -1,3 +1,9 @@
+"""Unit tests for the ReID feature extractor (perception.feature_extractor)."""
+
+# scope: perception
+# function: behavior
+# lifecycle: active
+
 from __future__ import annotations
 
 import pytest

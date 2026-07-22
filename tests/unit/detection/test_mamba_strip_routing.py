@@ -1,3 +1,9 @@
+"""Unit tests for mamba-head strip routing (perception.temporal_yolo.mamba_head)."""
+
+# scope: detection
+# function: behavior
+# lifecycle: active
+
 import torch
 
 from saccade.perception.temporal_yolo.mamba_head import (

@@ -1,3 +1,9 @@
+"""Unit tests for mamba gated-detector level routing (perception.temporal_yolo.mamba_gated_detector)."""
+
+# scope: detection
+# function: behavior
+# lifecycle: active
+
 import torch
 
 from saccade.perception.temporal_yolo.mamba_gated_detector import (

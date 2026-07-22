@@ -4,6 +4,10 @@ These run without any dataset on disk — they exercise the box/frame transform
 math directly with deterministic parameters.
 """
 
+# scope: detection
+# function: behavior
+# lifecycle: active
+
 import random
 
 import torch

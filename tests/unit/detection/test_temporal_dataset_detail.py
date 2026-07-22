@@ -1,3 +1,9 @@
+"""Unit tests for the temporal-YOLO dataset detail-view loader (perception.temporal_yolo.dataset)."""
+
+# scope: detection
+# function: behavior
+# lifecycle: active
+
 import torch
 import torchvision.io as tv_io
 

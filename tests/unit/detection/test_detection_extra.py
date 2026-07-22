@@ -5,6 +5,10 @@ _get_detector_static_batch_size.
 These cover the Python-side pure functions that were previously untested.
 """
 
+# scope: eval
+# function: behavior
+# lifecycle: active
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock

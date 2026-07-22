@@ -1,3 +1,9 @@
+"""Unit tests for the teacher-head detector (perception.temporal_yolo.teacher_head_detector)."""
+
+# scope: detection
+# function: behavior
+# lifecycle: active
+
 from __future__ import annotations
 
 from types import SimpleNamespace

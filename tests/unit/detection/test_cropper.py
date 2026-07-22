@@ -9,6 +9,10 @@ Covers:
   - cpp_ptr raises when C++ not available
 """
 
+# scope: perception
+# function: behavior
+# lifecycle: active
+
 from __future__ import annotations
 
 import pytest

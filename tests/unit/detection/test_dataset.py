@@ -1,3 +1,9 @@
+"""Unit tests for the temporal-YOLO MOT17 clip dataset loader (perception.temporal_yolo.dataset)."""
+
+# scope: detection
+# function: behavior
+# lifecycle: active
+
 import pytest
 import torch
 from pathlib import Path
