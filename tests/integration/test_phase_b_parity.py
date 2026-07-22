@@ -1,7 +1,7 @@
 """Phase B parity: C++ TrackletLifecycleMerger and IdentityResolver must produce
 byte-equal IDs, alias, and stats as the Python counterparts for identical inputs."""
 
-# scope: eval, tracking
+# scope: eval, tracking, cross-module
 # function: contract
 # lifecycle: active
 

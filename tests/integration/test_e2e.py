@@ -8,7 +8,7 @@ Skipped automatically when any of the following are unavailable:
 """
 
 # scope: system
-# function: behavior
+# function: acceptance
 # lifecycle: active
 
 import re
