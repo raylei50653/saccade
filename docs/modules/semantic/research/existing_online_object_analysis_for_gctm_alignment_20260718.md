@@ -992,16 +992,12 @@ $$
 
 這四個 object 不應混成單一「transition likelihood」。
 
-> **Proposed conditional scope qualification — PENDING owner acceptance (non-controlling).**
+> **Conditional scope qualification — IN FORCE (owner-accepted 2026-07-22).**
 >
-> `gctm_primary_object_a_scope_and_plan_20260722.md` §1.3 提出一項 normative scope
-> qualification：以下 §§9.2–9.4 的 correspondence 義務應**按 claim scope 條件化**，而非
-> 一律作為無條件的 A-layer model-spec seal 義務。該 memo 已合併（PR #248），但其僅
-> **記錄提案**；**owner 尚未接受此 qualification**。在其 landed 之前，本節下方現行的
-> 無條件「GCTM 必須」文字**仍然控制**（memo §1.3、§5：*existing unconditional wording
-> still controls until landed*）。
->
-> 提案的條件化對照（引自 memo §1.3，**尚未生效**）：
+> Per owner acceptance of `gctm_primary_object_a_scope_and_plan_20260722.md`
+> §1.3 (acceptance recorded on PR #248; landed via PR #249), the §§9.2–9.4
+> correspondence obligations below are **conditioned on claim scope** as follows,
+> and are **not** a single unconditional A-layer model-spec seal obligation:
 >
 > | Claim scope | Applicable obligation |
 > |:--|:--|
@@ -1009,8 +1005,10 @@ $$
 > | 宣稱 B／C／D 或 existing-online correspondence | 必須滿足 §§9.2–9.4 中與該 claim 有關的 state／output／context correspondence |
 > | `replace-ranking`、decision probability 或 commit-related claim | 必須另有 frozen L2、event operator 與相應 B1／online charter；不得由 A seal 推出 |
 >
-> 此 note 僅記錄提案，不修改、不弱化下方義務；acceptance 與 landing 為 owner-only 後續
-> 步驟（memo §9 recommended next actions）。
+> 讀法：下方各 §§9.2–9.4 的「GCTM 必須」按上表依 claim scope 條件化適用。此
+> qualification 僅界定 correspondence 義務的適用範圍；它**不** activate GCTM、不選
+> terminal、不改 lifecycle／sole-active WIP，也不授權 data／fitting／H0／B1／O1／
+> runtime／online／production（owner acceptance 2026-07-22 明列之限制）。
 
 ## 9.2 Required state correspondence
 

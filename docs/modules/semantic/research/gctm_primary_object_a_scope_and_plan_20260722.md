@@ -518,3 +518,4 @@ This document is successful if and only if a reader can answer:
 |:--|:--|
 | 2026-07-22 | Initial planning memo: correct H0 framing; rename blockers; select primary A; reorder plan; propose deferring competition to B1. |
 | 2026-07-22 | Review repair: make the authority conflict explicit; add conditional scope amendment, event-level lift/dependence, distinct native-law notation, H0 gate split, covariance sign convention, and ranking clarification. |
+| 2026-07-22 | Owner accepted both scope decisions (primary object = A; conditional scope qualification for existing-online §§9.2–9.4). The qualification is landed in-force in `existing_online_object_analysis_for_gctm_alignment_20260718.md` §§9.2–9.4 via PR #249. Acceptance authorizes only the authority qualification; it does not activate GCTM, select a terminal, modify lifecycle/sole-active WIP, or authorize data/fitting/H0/B1/O1/runtime/online/production work. |
