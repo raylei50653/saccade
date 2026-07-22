@@ -45,7 +45,7 @@ WIP=1 **只綁 mainline charter**。工程 follow-up、資料補件、文件收�
 
 ## Current transition panel — H0 → GCTM
 
-**Manual navigation projection · reconciled 2026-07-20.** This panel owns no
+**Manual navigation projection · reconciled 2026-07-22.** This panel owns no
 terminal, evidence, or WIP state: `ACTIVE` is projected from the module TODO;
 task lifecycle and gates remain owned by the linked charters/contracts. If a
 row conflicts with its owner, the owner wins. Update this panel in the same
@@ -54,9 +54,9 @@ decision, blocker change, or consumer-compatibility verdict.
 
 | Field | Current projection | Owner / read first |
 |:--|:--|:--|
-| **ACTIVE** | none — O0 closed 2026-07-20 at route 1: the owner accepted the ordered terminal `H0_PROVENANCE_INVALID` (issue #209, 2026-07-19); **H0 = CLOSED**, disposition diagnostic-only; controller retry and Phase B forbidden; NEXT = none automatically. | [semantic TODO](../../modules/semantic/TODO.md) · [O0 charter (closed)](closed/bridge_frozen_evidence_o0_routing_20260716.md) |
-| **NEXT** | GCTM theory/model specification. It is **parked**, not scheduled; H0 closure does **not** activate it — only a separate owner scheduling decision can. | [GCTM charter](gap_conditioned_stochastic_transition_model_task.md) |
-| **READINESS** | H0 closed at the owner-accepted route-1 negative terminal `H0_PROVENANCE_INVALID`: no faithful capture was obtained, there is no accepted runtime-fidelity edge, and no actual H0 guarantee envelope exists. Re-entry requires an append-only declaration amendment plus a fresh I→F→S owner reseal plus owner scheduling. GCTM has a stable problem boundary but no active canonical specification/proof. B1 and O1 are proposed only. | [H0 declaration](../../modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md) · [B1 charter](gctm_b1_runtime_grounded_offline_attribution_task.md) · [O1 charter](gctm_o1_online_intervention_efficacy_task.md) |
+| **ACTIVE** | **GCTM task charter** — activated 2026-07-22 (WP-A0) by the owner scheduling decision on [#175](https://github.com/raylei50653/saccade/issues/175); substrate-agnostic A-layer theory/specification only (primary object = A). Active declaration **not sealed** (observation/time interface = WP-A1 seal condition); four activation-contract obligations unresolved; no D1/D2 yet. H0 state unchanged by activation. | [semantic TODO](../../modules/semantic/TODO.md) · [GCTM charter](gap_conditioned_stochastic_transition_model_task.md) |
+| **NEXT** | WP-A1 — freeze the canonical observation/time interface (charter expected-state lease). B1 and O1 remain **proposed / non-WIP**, blocked by the gates below. | [GCTM charter](gap_conditioned_stochastic_transition_model_task.md) · [B1 charter](gctm_b1_runtime_grounded_offline_attribution_task.md) · [O1 charter](gctm_o1_online_intervention_efficacy_task.md) |
+| **READINESS** | H0 remains closed at owner-accepted `H0_PROVENANCE_INVALID` (three same-type ordered terminals): no faithful capture, no accepted runtime-fidelity edge, no actual H0 guarantee envelope; Phase B forbidden; any future re-entry requires a machine-checked launch-hygiene pre-authorization gate plus a fresh I→F→S owner reseal plus separate exactly-once authorization. Positive H0 blocks only bridge-runtime B1, not A-layer GCTM work. | [H0 declaration](../../modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md) · [claim-state registry](../contracts/claim_state_registry.md) |
 
 ### Blockers and transition gates
 
@@ -243,6 +243,7 @@ frontmatter、搬移與索引要求。
 
 | Thread | Work class / WIP role | Current concrete work | Owner |
 |:--|:--|:--|:--|
+| [gap_conditioned_stochastic_transition_model_task.md](gap_conditioned_stochastic_transition_model_task.md) | theory-model-specification · **sole-active** | WP-A0 activation contract landed (terminal partition + decision procedure frozen; four obligations unresolved); next = WP-A1 canonical observation/time interface | semantic |
 | [association_recovery_registry_20260709.md](association_recovery_registry_20260709.md) | maintenance · **non-WIP** | Keep R/H ownership and path-health registry current | semantic |
 | [doc_structure_o15_followup_20260709.md](doc_structure_o15_followup_20260709.md) | governance · **non-WIP** | Pay down research-index debt; optional structure checks remain non-blocking | ownership |
 
@@ -250,7 +251,6 @@ frontmatter、搬移與索引要求。
 
 | Thread | Work class / WIP role | Pause / resume boundary | Owner |
 |:--|:--|:--|:--|
-| [gap_conditioned_stochastic_transition_model_task.md](gap_conditioned_stochastic_transition_model_task.md) | theory-model-specification · **parked** | Issue #175; resume only after accepted H0 ordered terminal and separate owner scheduling; no automatic activation | semantic |
 | [score_temporal_to_stable_domain_20260712.md](score_temporal_to_stable_domain_20260712.md) | mainline-study · **parked** | `R1_FAITHFUL` closed (it is what made runtime coordinates auditable); discrete-\(M\) follow-on **reclassified as a score-ranking feature, not a gate** → parked unsealed. | semantic |
 | [gt_support_morphology_20260711.md](gt_support_morphology_20260711.md) | mainline-study · **parked** | Score continuation is closed for Door 0's tested class; gate direction remains parked pending explicit re-charter and WIP authorization | semantic |
 | [occ_exit_audit_20260709.md](occ_exit_audit_20260709.md) | mainline-study · **parked** | WP1–WP3 complete; waits for a RegionAsset producer/intervention consumer after the assetization gate | semantic |

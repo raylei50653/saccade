@@ -1,12 +1,12 @@
 ---
-doc-status: parked
+doc-status: active
 doc-promotion: none
-doc-date: 2026-07-16
+doc-date: 2026-07-22
 doc-module: semantic
 owner-module: semantic
 work-class: theory-model-specification
-wip-role: parked
-activation-gate: "H0 ordered terminal owner acceptance + owner scheduling"
+wip-role: sole-active
+activation-gate: "H0 ordered terminal owner acceptance + owner scheduling — both satisfied 2026-07-22; see Activation record"
 issue: 175
 target-decision-layer: score-ranking
 primary-intent: capability-map
@@ -14,25 +14,58 @@ output-class: diagnostic-only
 mainline-transition: none
 ---
 
-# Gap-conditioned stochastic transition model — parked task charter
+# Gap-conditioned stochastic transition model — task charter
 
 ## Status and authority
 
-**PROPOSED / PARKED.** This charter records the stable problem boundary for
-[Issue #175](https://github.com/raylei50653/saccade/issues/175). It is **not
-active**, **not sealed**, **not sole-active**, and does not occupy semantic WIP.
-Issue #175 does not activate automatically.
+**ACTIVE (WP-A0, 2026-07-22).** This charter records the stable problem
+boundary for
+[Issue #175](https://github.com/raylei50653/saccade/issues/175) and, since
+WP-A0, the activation contract. It is sole-active in semantic WIP
+(projection: [`docs/modules/semantic/TODO.md`](../../modules/semantic/TODO.md)).
 
-Activation requires both:
+### Activation record
 
-1. owner acceptance of an H0 ordered terminal; and
-2. a separate owner scheduling decision.
+The activation gate required both:
 
-This gate states a prerequisite; it does not declare H0's instantaneous
-lifecycle state. Satisfying the prerequisite would not itself activate this
-task.
+1. owner acceptance of an H0 ordered terminal — **satisfied**: three
+   owner-accepted ordered terminals `H0_PROVENANCE_INVALID` exist
+   ([#209](https://github.com/raylei50653/saccade/issues/209) accepted
+   2026-07-19; re-entry #2 and re-entry #3 accepted 2026-07-21; state
+   fact-owner: [claim-state
+   registry](../contracts/claim_state_registry.md)); and
+2. a separate owner scheduling decision — **satisfied**: recorded by the
+   owner on Issue #175 (2026-07-22, activation comment; linked from the
+   activation PR).
 
-This document is a parked task charter / problem specification, **not** a
+Activation authorizes **substrate-agnostic A-layer theory/specification work
+only**. It does not change any H0 state: faithful capture = none, actual H0
+guarantee = none, candidate/guarantee sets empty, Phase B forbidden, and no
+H0 repair or re-entry is authorized by this activation.
+
+**Activation ≠ active-declaration seal.** The active declaration is **not
+sealed** by WP-A0. Pre-activation obligation 1 (the canonical
+observation/time interface named below) is the active-declaration seal
+condition and is deferred to WP-A1; until WP-A1 lands, the active declaration
+remains a draft, and obligations 2–4 remain unresolved work before any
+`GCTM_MODEL_SPEC_SEALABLE` selection. WP-A0 resolves none of the four
+obligations and creates neither D1 nor D2.
+
+### Bindings frozen at activation
+
+- **Primary claim object = A** (latent state transition \(K_\Delta\)), per the
+  owner-accepted primary-object decision (2026-07-22; planning memo:
+  [GCTM primary object A — scope and plan](../../modules/semantic/research/gctm_primary_object_a_scope_and_plan_20260722.md)).
+- **B / C / D are downstream constructible**, reached only through typed
+  boundaries; they are not part of the A-layer claim identity.
+- The **conditional scope qualification** of existing-online §§9.2–9.4
+  (owner-accepted, landed in-force via PR #249 in
+  [existing-online object analysis](../../modules/semantic/research/existing_online_object_analysis_for_gctm_alignment_20260718.md))
+  governs which correspondence/competition obligations attach to which claim
+  scope. An A-layer model-spec seal requires A, the observation/time
+  interface, and typed B/C/D boundaries — not event competition.
+
+This document remains a task charter / problem specification, **not** a
 canonical mathematical specification. It selects no model or terminal and
 claims no completed proof, identifiability result, checklist pass, or
 `GCTM_MODEL_SPEC_SEALABLE` result. It authorizes no data, fitting, capture,
@@ -294,7 +327,9 @@ The timing is split explicitly:
   items 2–4 and every remaining proof or specification obligation required for
   a model-spec seal.
 
-This PR resolves none of the four items.
+Neither the charter PR nor the WP-A0 activation PR resolves any of the four
+items; the Obligation-status table in the frozen terminal-partition section
+records all four as unresolved at activation.
 
 ### 1. Exhaustive specification-incomplete outcome
 
@@ -356,7 +391,9 @@ production-behavior change.
 
 ## Future deliverables — create only after activation
 
-The following files do not exist and must not be created by this parked task.
+The following files do not exist yet. WP-A0 (activation) must not create
+them; they are created by the post-activation work packets, starting with
+WP-A1 (D1 observation/time interface freeze).
 
 ### D1 — canonical model specification
 
@@ -384,21 +421,48 @@ Intended future path:
 Completion must write the selected terminal and task lifecycle back to this
 task and Issue #175. It must not create an empty D5-equivalent peer document.
 
-## Provisional terminal family
+## Terminal partition — frozen at activation (WP-A0)
 
-This is a **provisional, not sealed** terminal shape. Its exhaustive order,
-decision procedure, and dispositions must be completed before the active
-declaration is sealed. That active contract must also carry the four mandatory
-obligations above without claiming that the post-activation work is complete.
-No terminal is selected by this charter.
+The former provisional terminal family is **frozen** by WP-A0 as the ordered,
+mechanically exhaustive terminal partition of this task. No terminal is
+selected by this charter; selection happens only at terminal review, and owner
+acceptance records it.
 
-| Provisional terminal | Required future coverage |
-|:--|:--|
-| `GCTM_OBSERVATION_INTERFACE_UNDEFINED` | state, observation, time, coordinate, covariance, or causal-availability interface remains undefined |
-| `GCTM_TRANSITION_FAMILY_NOT_WELL_POSED` | the admitted transition family is dimensionally, probabilistically, or compositionally ill-posed |
-| `GCTM_IDENTIFIABILITY_UNRESOLVED` | the intended claim cannot be identified under the declared observations or leakage boundary |
-| `GCTM_SPECIFICATION_INCOMPLETE` | no earlier rejection applies, but required definitions, proofs, or decision items remain incomplete |
-| `GCTM_MODEL_SPEC_SEALABLE` | every future specification and proof obligation required for a diagnostic-only seal is satisfied |
+| Order | Terminal | Predicate coverage |
+|:--|:--|:--|
+| 1 | `GCTM_OBSERVATION_INTERFACE_UNDEFINED` | state, observation, time, coordinate, covariance, or causal-availability interface remains undefined |
+| 2 | `GCTM_TRANSITION_FAMILY_NOT_WELL_POSED` | the admitted transition family is dimensionally, probabilistically, or compositionally ill-posed |
+| 3 | `GCTM_IDENTIFIABILITY_UNRESOLVED` | the intended claim cannot be identified under the declared observations or leakage boundary |
+| 4 | `GCTM_SPECIFICATION_INCOMPLETE` | no earlier rejection applies, but required definitions, proofs, or decision items remain incomplete |
+| 5 | `GCTM_MODEL_SPEC_SEALABLE` | every specification and proof obligation required for a diagnostic-only seal is satisfied |
+
+### Decision procedure (frozen)
+
+1. Terminal review evaluates the predicates **in the order above**; the first
+   applicable predicate is the terminal. No later terminal may be substituted
+   for an earlier applicable one.
+2. Each predicate is decided against a **checklist artifact** committed in the
+   terminal-review change: a table mapping every obligation of this contract
+   (the four mandatory obligations, the D1/D2 deliverable items, and the typed
+   B/C/D boundary) to its owning section or artifact, each marked exactly one
+   of `complete` / `incomplete` / `rejection-established` (with the rejection
+   argument linked). Any `rejection-established` row selects terminal 1–3 by
+   its obligation class; otherwise any `incomplete` row selects terminal 4;
+   otherwise terminal 5.
+3. The partition is exhaustive by construction: terminals 4 and 5 cover every
+   state not captured by rejections 1–3.
+4. Owner acceptance of the recorded terminal closes the task; completion
+   writes the terminal back to this charter and Issue #175 per the
+   terminal-closure rule above.
+
+### Obligation status at activation
+
+| Obligation | Status at WP-A0 | Resolution point |
+|:--|:--|:--|
+| 1 · canonical observation/time interface (nine named fields) | **unresolved** | WP-A1 — active-declaration seal condition |
+| 2 · calibration-only gain vs candidate-local ranking gain as distinct claims | **unresolved** | before `GCTM_MODEL_SPEC_SEALABLE` |
+| 3 · independence or explicit cross-covariance \(C\) | **unresolved** | before `GCTM_MODEL_SPEC_SEALABLE` |
+| 4 · canonical-state affine M2 transition (complete interface) | **unresolved** | before `GCTM_MODEL_SPEC_SEALABLE` |
 
 Even the sealable terminal would grant no automatic B1, O1, online, mainline,
 or production authority.
@@ -411,7 +475,34 @@ accepted H0 ordered terminal
 → explicit activation of GCTM theory/specification work
 ```
 
-No arrow is automatic. If the accepted H0 terminal does not provide the needed
-runtime substrate, the abstract mathematics is not thereby refuted, but no
+No arrow is automatic. Both gates were satisfied on 2026-07-22 (see the
+Activation record above). The accepted H0 terminals provide **no** runtime
+substrate: the abstract mathematics is not thereby refuted, but no
 bridge-runtime claim is admissible without a separately accepted substrate or
 re-charter.
+
+## Expected state (lease — replaceable, not accepted state)
+
+Planned work-packet order after WP-A0; each packet is a separate PR, and this
+lease may be replaced within this charter without a registry or WIP change:
+
+```text
+WP-A1  freeze canonical observation/time interface (obligation 1; D1 seed)
+WP-A2  canonical-state affine M2 + Q_Δ interface (obligation 4)
+WP-A3  nesting / PSD / asymptotics proofs (D2)
+WP-A4  independence vs explicit cross-covariance C (obligation 3)
+WP-A5  calibration vs ranking claim definitions (obligation 2) + terminal review
+```
+
+**Current step:** WP-A1 not started.
+
+## History
+
+- 2026-07-16 — parked task charter created (problem boundary; Issue #175).
+- 2026-07-17 — B1/O1 split into their own proposed charters (PR #179).
+- 2026-07-22 — owner accepted primary object = A and the existing-online
+  §§9.2–9.4 conditional scope qualification (landed via PR #249).
+- 2026-07-22 — **activated (WP-A0)**: owner scheduling decision on Issue
+  #175; `doc-status: active`, `wip-role: sole-active`; terminal partition and
+  decision procedure frozen; four obligations recorded unresolved; active
+  declaration not sealed (obligation 1 → WP-A1); no D1/D2 created.

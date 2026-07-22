@@ -39,7 +39,7 @@ and re-decides nothing owned elsewhere.
 - **Upstream owners (unchanged).**
   [H0 declaration](headline_bridge_full_decision_capture_declaration_20260713.md)
   owns runtime observability / evidence fidelity;
-  the [GCTM parked charter](../../../research/threads/gap_conditioned_stochastic_transition_model_task.md)
+  the [GCTM task charter](../../../research/threads/gap_conditioned_stochastic_transition_model_task.md)
   owns the transition-family specification boundary. This document consumes
   both and re-decides neither.
 - **Split executed (2026-07-17).** The two proposed task charters above now

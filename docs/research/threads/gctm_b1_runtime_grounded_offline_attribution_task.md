@@ -41,7 +41,7 @@ Authority is intentionally split:
   this charter consumes them and does not restate them as a second truth;
 - the [H0 declaration](../../modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md)
   owns runtime observability / evidence fidelity;
-- the [GCTM parked charter](gap_conditioned_stochastic_transition_model_task.md)
+- the [GCTM task charter](gap_conditioned_stochastic_transition_model_task.md)
   owns the transition-family specification boundary;
 - [`docs/modules/semantic/TODO.md`](../../modules/semantic/TODO.md) owns only a
   one-line navigation pointer and the module WIP projection.
@@ -718,7 +718,7 @@ accepted B1 handoff and must not rewrite B1 semantics.
 - [Synthesis core — shared B1/O1 semantics](../../modules/semantic/research/gctm_b1_o1_task_objectives_and_semantics_20260716.md)
 - [H0 declaration](../../modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md)
 - [H0→GCTM consumer compatibility requirements](../../modules/semantic/research/h0_gctm_consumer_compatibility_requirements_20260718.md)
-- [GCTM parked task charter](gap_conditioned_stochastic_transition_model_task.md)
+- [GCTM task charter](gap_conditioned_stochastic_transition_model_task.md)
 - [O0 routing charter](closed/bridge_frozen_evidence_o0_routing_20260716.md)
 - [claim-state registry（§7 score layer / §8 候選集）](../contracts/claim_state_registry.md)
 - [bridge decision semantics](../tracker-decision/relink_bridge.md)
