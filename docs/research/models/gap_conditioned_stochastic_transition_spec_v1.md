@@ -1,5 +1,5 @@
 <!-- doc-status: draft -->
-<!-- doc-promotion: none; D1 canonical model specification (seed); §2–§3 frozen at WP-A1, §4 frozen at WP-A2, §5 frozen at WP-A4, §6 frozen at WP-A5 -->
+<!-- doc-promotion: none; D1 canonical model specification (seed); §2–§3 frozen at WP-A1, §4 frozen at WP-A2, §5 frozen at WP-A4, §6 frozen at WP-A5, §7 frozen at WP-A6 -->
 <!-- doc-date: 2026-07-22 -->
 <!-- doc-module: semantic -->
 
@@ -29,7 +29,7 @@ correction 修改**。
 | §4 Canonical state, affine M2 transition \(K_\Delta\), \(Q_\Delta\), parameter domains | **frozen** | WP-A2 (owner merge) |
 | §5 Innovation composition (\(P_0\)/\(P^-_\Delta\)/\(R_1\)/\(S_\Delta\); independence vs explicit \(C\)) | **frozen** | WP-A4 (owner merge) |
 | §6 Calibration vs candidate-local ranking claim space (obligation 2) | **frozen** | WP-A5 (owner merge) |
-| §7 Identifiability and leakage matrix | reserved — not yet specified | WP-A6 (planned) |
+| §7 Identifiability and leakage matrix (terminal-3 predicate object) | **frozen** | WP-A6 (owner merge) |
 | §8 Schema-only interface for a future B1 input | reserved — not yet specified | WP-A7 (planned) |
 
 Reserved sections carry no obligations-resolved claim. WP-A2 resolves charter
@@ -37,12 +37,14 @@ obligation 4 (canonical-state affine M2 transition; §4); WP-A4 resolves charter
 obligation 3 (independence vs explicit cross-covariance \(C\); §5); WP-A5
 resolves charter obligation 2 (calibration-only gain vs candidate-local ranking
 gain as distinct claims; §6). **All four numbered activation-contract
-obligations are now resolved.** A sealable terminal
-(`GCTM_MODEL_SPEC_SEALABLE`) additionally requires the remaining D1 deliverables
-— identifiability/leakage matrix (§7) and the schema-only B1 input interface
-(§8) — plus terminal review; those remain reserved. §4 makes no claim about
-obligations 2–3, §5 makes no claim about obligation 2, and §6 makes no claim
-about identifiability/leakage or any B1/O1/runtime/production quantity.
+obligations are now resolved.** WP-A6 additionally freezes the D1
+identifiability/leakage matrix (§7; the terminal-3 predicate object). A sealable
+terminal (`GCTM_MODEL_SPEC_SEALABLE`) additionally requires the remaining D1
+deliverable — the schema-only B1 input interface (§8) — plus terminal review;
+that section remains reserved. §4 makes no claim about obligations 2–3, §5 makes
+no claim about obligation 2, §6 makes no claim about identifiability/leakage, and
+§7 measures no data and selects no terminal — it specifies the identifiability
+boundary only, and makes no B1/O1/runtime/production quantity claim.
 
 > **Append-only renumber correction (WP-A5).** WP-A5 inserts §6 (calibration vs
 > ranking) directly after frozen §5, so the former reserved §6/§7 shift to §7/§8.
@@ -51,6 +53,14 @@ about identifiability/leakage or any B1/O1/runtime/production quantity.
 > are therefore **superseded — read them as §7**. This note is the append-only
 > correction of record for that renumber; the frozen §5 text is not edited in
 > place.
+
+> **Append-only status correction (WP-A6).** WP-A6 freezes §7
+> (identifiability/leakage matrix). The frozen §5.7 and §6.6 typed-deferral tables
+> list the identifiability/leakage matrix as `reserved`/`unresolved` — a
+> **freeze-time snapshot** that is now **superseded**: §7 is **frozen by WP-A6**
+> (the terminal-3 predicate object). Frozen §5 and §6 are kept **byte-frozen** and
+> are not edited in place; the current section status is the §1 document-state
+> table above. This note is the append-only correction of record.
 
 ## §2 Canonical observation/time interface（obligation 1 — nine fields, frozen）
 
@@ -839,11 +849,320 @@ declared」的凍結落點。
 metric／threshold、不量測任何 gain、不選 terminal。修改須 append-only correction
 （原文保留、註記 superseded）。
 
-## §7–§8 Reserved
+## §7 Identifiability and leakage matrix（terminal-3 predicate object — frozen）
+
+本節落地 charter D1 deliverable「identifiability and leakage matrix」，並作為
+terminal partition 第 3 順位 predicate `GCTM_IDENTIFIABILITY_UNRESOLVED`（"the
+intended claim cannot be identified under the declared observations or leakage
+boundary"）的**predicate object**：它精確界定 primary object A 及其 §6 claim
+（CAL／RANK）的**identifiability target**、可識別所需的 **observation／data-design
+regime**、以及各量之間的 **leakage（confounding）結構**，使 terminal review 能對
+identifiability row 作機械判定。它建立在 frozen §4 kernel、§5 innovation composition
+與 §6 claim space 之上，不重定義任何既有物件。
+
+### §7.0 本節做什麼／不做什麼（typed boundary）
+
+**做（frozen）：** (i) 定義 identifiability target set（要識別哪些量／claim，從哪些
+observable）；(ii) 定義 observation／data-design regime 軸（\(H_x\) vs \(H_{xv}\)、
+single-event vs multi-gap population、context 是否宣告、label 是否可得）；(iii) 陳述
+core confounding（為何 single position-only event 不可識別）與 multi-gap 下的
+separation 條件；(iv) 凍結 **leakage matrix**（各 latent contributor 混入哪個
+apparent observable、以及**阻斷**該 leakage 的宣告／observation／data-design 條件）；
+(v) 陳述 identifiability boundary／verdict 作為 terminal-3 predicate object。
+
+**不做（明確不授權／留給後續）：** **不執行任何 data、fitting、estimation、
+identification 量測**（本檔不授權 data，charter Non-scope）；不宣稱任何 empirical
+identifiability 已被**建立**（只**specify** boundary，不 demonstrate）；不選
+\(P_0/R_1/\gamma/D/\bar v\) 的數值；不寫 schema-only B1 interface（§8，reserved）；
+**不選 terminal**（terminal selection 屬 WP-A8 terminal review，依 charter frozen
+decision procedure；本節只提供 predicate object）；不建立 fidelity edge、不做
+bridge-runtime claim、不做 reverse-time atom。
+
+沿用 §4.0／§5.0／§6.0 的 canonical boundary（永不逾越），本節額外固定一條：
+
+- **Identifiability 是 conditional statement，永遠綁定其宣告的 observation／
+  data-design／declaration 前提。** 「可識別」不得脫離其 regime 被引用；某量在
+  multi-gap population 可識別**不**蘊含它在 single event 可識別。任何 instantiation
+  引用某 identifiability 結論時，必須同時滿足該結論所列的前提。
+
+### §7.1 Identifiability target set（要識別的量／claim）
+
+| 類 | Target | 來源／定義 | 性質 |
+|:--|:--|:--|:--|
+| 轉移參數 | \(\gamma\)（mean-reversion rate）、\(D=LL^\top\)（diffusion）、\(\bar v(\cdot)\)（context mean-velocity map） | §4.2／§4.7 | \(Q_\Delta\) 由 \((\gamma,D,\Delta)\) 決定（§4.5，derived，非獨立 target）；\(\bar v(c)\) 驅動 context drift \(d_\Delta(c)\)（§4.3） |
+| 不確定度物件 | \(P_0\)（exit-state est cov）、\(R_1\)（entry-obs cov） | §5.1 | \(\succeq0\)；\(S_\Delta=H(A_\Delta P_0A_\Delta^\top+Q_\Delta)H^\top+R_1\)（canonical \(C=0\)，§5.4）為 derived |
+| deterministic mean | operator-layer offset \(\pm(\mathrm{bridge\_at}-1)v\)（§2 rows 8–9／§4.4） | declared operator quantity | **非** fitted target：由 known `bridge_at`+\(v\) 決定；此處只問「未宣告時它是否混入 apparent mean」 |
+| claim | **CAL**（cross-event calibration）、**RANK**（candidate-local ranking）（§6.2） | §6 | 各自的 identifiability 見 §7.5 |
+
+**Observable channel（可據以識別的量）：** 於 entry endpoint 由 §5 得到 innovation
+\(r\)（其實現）與（在宣告 population／null 下）其一二階矩 \(\mathbb E[r]=Hm^-_\Delta\)、
+\(\operatorname{Cov}(r)=S_\Delta\)；跨 events 得到 family \(\{(\mathbb E[r_\Delta],
+S_\Delta)\}_\Delta\)；在有 true-match label 時得到 true match 的 \(q\) 分佈（CAL）與
+event-local ordering（RANK）。label 之取得屬 data／B1 路徑，本節列為**前提**，不執行。
+
+### §7.2 Observation / data-design regime（identifiability 的條件軸）
+
+| 軸 | 值 | 對 identifiability 的作用 |
+|:--|:--|:--|
+| observation mode | \(H_x\)（position-only）／\(H_{xv}\)（joint，需 §3.3 宣告 causal availability） | \(H_x\) 只觀測 position block；velocity-相關參數只能靠 \(\Delta\)-shape 間接識別。\(H_{xv}\) 增方程式但 entry velocity 若由重疊 frames 得出⇒dependent-error path（\(C\neq0\)，§5.4），\(C\) 成為額外 unknown |
+| data design | single event（單一 \(\Delta\)、單一 lost track）／multi-gap population（跨 events、涵蓋 \(\ge\) 若干**相異** \(\Delta\)、共享參數） | single event 的 observable 遠少於 unknown（§7.3）；multi-gap 用 \(\Delta\)-shape 分離加項（§7.4） |
+| context 可觀測性 | \(c\)（及 \(\bar v(c)\)）是否宣告／觀測且**變化** | 未宣告或不變的 \(\bar v\) 與常數 mean bias／operator offset 混淆（§7.6 mean-level） |
+| label | true-match label 是否可得 | CAL／RANK 皆需 label 條件化「true match」（前提，屬 data／B1） |
+
+### §7.3 Core confounding：single position-only event 不可識別
+
+在**單一** \(\Delta\)、\(H_x\) 下，covariance 通道只給**一個** \(d\times d\) 矩陣
+
+\[
+S_\Delta=H_x\big(A_\Delta P_0 A_\Delta^\top+Q_\Delta(\gamma,D)\big)H_x^\top+R_1 ,
+\]
+
+而未知量為 \(P_0\)（\(2d\times2d\)，\(\succeq0\)）、\((\gamma,D)\)、\(R_1\)（\(d\times d\)，
+\(\succeq0\)）——自由度遠多於方程式。三個加項 \(H_xA_\Delta P_0A_\Delta^\top H_x^\top\)、
+\(H_xQ_\Delta H_x^\top\)、\(R_1\) 在**同一** \(\Delta\) 只以**和**出現，彼此**加性
+混淆**：任一 \(S_\Delta\) 可由結構迥異的 \((P_0,\gamma,D,R_1)\) 實現（數值 sanity C1：
+不同 \((\gamma,D,P_0,R_1)\) 給同一 \(S_\Delta\)）。mean 通道 \(\mathbb E[r]=y_1\) 的
+期望同理把 exit-state 估計、\(\bar v(c)\) 與（若未宣告）operator offset 混在一起
+（§7.6）。故 **single position-only event 對 \(\{P_0,\gamma,D,R_1,\bar v\}\) 不可
+識別**——這是 leakage boundary 的最強收縮點。
+
+### §7.4 Multi-gap population 下的 separation（identifiability 條件；含結構性不可識別方向）
+
+寫 \(P_0=\big[\begin{smallmatrix}P_{xx}&P_{xv}\\ P_{xv}^\top&P_{vv}\end{smallmatrix}\big]\)
+（\(P_{xv}\) 為一般 cross-block，**未必對稱**）。由 \(A_\Delta=\big[\begin{smallmatrix}
+I&aI\\0&bI\end{smallmatrix}\big]\)（§4.3），position-only（\(H_x\)）observable 展開為
+**四個 \(\Delta\)-shape 的線性組合**：
+
+\[
+\boxed{\;
+S_\Delta=\underbrace{(P_{xx}+R_1)}_{\text{shape }1}
++\underbrace{\operatorname{sym}(P_{xv})}_{\text{shape }a}\cdot a
++\underbrace{P_{vv}}_{\text{shape }a^2}\cdot a^2
++\underbrace{D}_{\text{shape }q_{xx}}\cdot q_{xx}(\gamma,\Delta)
+\;}
+\]
+
+其中 \(\operatorname{sym}(P_{xv})=P_{xv}+P_{xv}^\top\)（\(H_xA_\Delta P_0A_\Delta^\top H_x^\top
+=P_{xx}+a\,\operatorname{sym}(P_{xv})+a^2P_{vv}\)），shape scalars \(\{1,a(\gamma,\Delta),
+a^2(\gamma,\Delta),q_{xx}(\gamma,\Delta)\}\) 由 frozen §4／已證 D2 lemma 提供（\(q_{xx}\)：
+D2 §4.6／L2，OU 飽和 D2 L4），非本節新證。
+
+**可分離的是 coefficient matrices，不是完整 \(P_0,R_1\)——而且要 \(\gamma\) 已知。** 這四個
+shape scalar 對相異 \(\Delta\) **線性獨立**（數值 sanity：over \(\ge4\) 相異 gap 的 shape
+矩陣 rank \(=4\)）；因此 **在 \(\gamma\) 已知／固定的前提下**，共享參數 population
+（同一 \(P_0,\gamma,D,R_1\) 跨 events）且 \(\ge4\) 相異 \(\Delta\) 使 family
+\(\{S_\Delta\}_\Delta\) generically 識別出**四個係數矩陣**
+\[
+\{\,P_{xx}+R_1,\ \operatorname{sym}(P_{xv}),\ P_{vv},\ D\,\}.
+\]
+**但這不是完整的 \(\{P_0,R_1\}\)（見下兩個 gauge），且 \(\gamma\) 本身另有一層
+non-identifiability（見下段）。**
+
+**\(\gamma\) unknown 時，4 個 gap 不足以識別 \(\gamma\)（自由度計數）。** rank-4 論證預設
+shapes \(a(\gamma,\cdot),q_{xx}(\gamma,\cdot)\) 的 \(\gamma\) 已知；當 \(\gamma\) 也是 unknown，
+它**非線性**地進入 shapes。以每個 covariance 有 \(r=d(d+1)/2\) 自由度計，**恰 4 個 gap**：
+\[
+\text{observations}=4r,\qquad \text{unknowns}=4r+1\ (\text{多出的 }1=\gamma).
+\]
+故對任一候選 \(\gamma'\)，shape 矩陣 \(M(\gamma')\) 仍可逆，重解得四個係數矩陣
+\(C'_j=M(\gamma')^{-1}O\)，在這 4 個 gap 上**精確**重現同一組 \(S_\Delta\)；且對 \(\gamma\)
+鄰域內的 \(\gamma'\)，重解矩陣仍 PSD-admissible（interior），PSD 約束**不**消除此自由度
+（數值 sanity G3：真 \(\gamma=0.6\) 下，\(\gamma'\in[0.40,0.68]\) 皆 exact-refit 且
+admissible，構成 continuum ⇒ \(\gamma\) 由 4 gap **不可識別**）。**因此不得把「\(\ge5\)
+gaps」寫成充分條件**——它只是自由度計數上的**必要**修正。\(\gamma\) 的識別需要
+（i）\(>4\) 相異 gap，且（ii）joint nonlinear map \((\gamma,C_1,\dots,C_4)\mapsto
+\{S_\Delta\}\) 的識別性條件——**global injectivity**（\(\Rightarrow\) **global**
+identification）或**至少** **full-Jacobian-rank**（只 \(\Rightarrow\) **local**
+identification）——加 non-degenerate coefficients。**注意這兩者不等價**：full-Jacobian-rank
+是較弱的 local 條件，不蘊含 global injectivity（可有分離的 \(\gamma\) 解共享同一
+observable），故不得以「\(/\)」當同義詞混用。本規格**不證明**任一條件，故**保守地不宣稱
+已識別 \(\gamma\)**（數值上 \(\ge7\) gap 時 wrong-\(\gamma'\) best-fit 殘差非零、真 \(\gamma\)
+殘差為零，僅為 generic identifiability 的 illustrative，非 sufficiency 證明）。
+
+**兩個結構性不可識別方向（\(H_x\) 下，任意多 gap 皆不可識別；與 \(\gamma\) 是否已知無關）：**
+
+1. **\(P_{xx}\leftrightarrow R_1\) gauge。** \(P_{xx}\) 與 \(R_1\) **同乘 constant shape \(1\)**，
+   故 \(P_{xx}\mapsto P_{xx}+E,\ R_1\mapsto R_1-E\) 對**所有** \(\Delta\) 保持相同
+   \(S_\Delta\)（數值 sanity G1：max \(\lVert\Delta S\rVert\approx10^{-15}\)）。只有**和**
+   \(P_{xx}+R_1\) 可識別，split 不可。
+2. **\(\operatorname{asym}(P_{xv})\) 不可觀測。** cross-block 的反對稱部分
+   \(\tfrac12(P_{xv}-P_{xv}^\top)\) 完全**不進入** \(H_x\) map（只有 \(\operatorname{sym}\)
+   出現），故對任意多 gap invisible（數值 sanity G2：對加反對稱擾動的 \(P_0\)，\(H_x\)
+   observable 零變動）。
+
+因此 **\(H_x\) multi-gap（\(\gamma\) 已知時）最多識別 quotient**
+\(\{D,P_{vv},\operatorname{sym}(P_{xv}),P_{xx}+R_1\}\)；完整 \(P_0\)（其 \(P_{xx}\) vs
+\(R_1\) split 與 \(\operatorname{asym}P_{xv}\)）**不可識別**，而 \(\gamma\) 本身在 unknown
+時另需上段的 \(>4\)-gap + joint-map global-injectivity（或至少 full-Jacobian-rank）條件
+（本規格不宣稱）。原始 C2 sanity 只證「某一組選定反例會被其他 gap 分開」，**不**證 mapping
+injective——此處以 gauge 論證、G1/G2 與 G3（joint-\(\gamma\) DOF）更正。
+
+**joint mode（\(H_{xv}\)）能救什麼、不能救什麼。** \(H_{xv}=I\) 觀測全 state，cross-block
+\[
+S_{xv}(\Delta)=bP_{xv}+ab\,P_{vv}+q_{xv}(\gamma,\Delta)D+R_1^{xv}
+\]
+含 \(P_{xv}\)（連同其反對稱部分），故 \(\operatorname{asym}(P_{xv})\) **不再是 \(H_x\) 下的
+結構性 invisible、變得可觀測**（數值 sanity G2-Hxv：cross-block 隨反對稱擾動變動）。
+**但「可觀測」\(\neq\)「單一 event 即可識別」：** 上式 cross-block 同時含 process
+covariance \(q_{xv}(\gamma,\Delta)D\) 與 measurement covariance \(R_1^{xv}\)，單一
+\(H_{xv}\) event 仍**無法唯一分離** \(P_{xv}\)——\(\operatorname{asym}(P_{xv})\) 於單一
+event 與 \(R_1^{xv}\) 互換（數值 sanity G4a：\(\operatorname{asym}(P_{xv})+N\)、
+\(R_1^{xv}-bN\) 給同一 \(S_{xv}\)）。其**真正識別**仍需 multi-gap、共享參數、\(\gamma\) 已知
+（或未來另建的 joint nonlinear identifiability），multi-gap+已知 \(\gamma\) 下 \(bN\)（隨
+\(\Delta\) 變）與常數 \(R_1^{xv}\)-shift 的 shape 相異方可分離（數值 sanity G4b）。
+**但 \(P_{xx}\leftrightarrow R_1\) 的 position initial-state vs
+measurement-noise confound 在 \(H_{xv}\) 下仍持續**：\(E\) 僅置於 \(xx\) 角、以 \(R_1\)
+補償，對全 state \(A_\Delta E A_\Delta^\top\) 亦 \(\Delta\)-constant（數值 sanity G1-Hxv：
+max \(\lVert\Delta S_{\text{full}}\rVert\approx10^{-15}\)）。此 gauge 只能由**額外宣告的
+獨立資訊**固定——例如 detector 的已知 measurement-noise model 給定 \(R_1\)，或獨立宣告
+position initial-state covariance \(P_{xx}\)——**不能**由 innovation family 單獨識別。此外
+\(H_{xv}\) 若 entry velocity 由與 transition window 重疊的 frames 導出，進入 §5.4 的
+dependent-error path（\(C\neq0\)），\(C\) 成為**額外**待宣告量（joint-PSD domain §5.6、
+可逆性 caveat §5.5）。
+
+**gap spread 病態：** 相異 \(\Delta\) 過少或過密則 shape 矩陣接近退化，quotient 亦僅
+weakly identified。
+
+**context \(\bar v(c)\)：** 只有在 \(c\) 被**宣告／觀測**且在 population 中**變化**、且為
+exit-causally available（§4.0 boundary 4）時，\(\bar v(c)\) 才可與常數 mean 分離而
+識別；否則常數 \(\bar v\) 與常數 mean bias／operator offset 混淆（§7.6）。
+
+### §7.5 Claim-level identifiability（CAL vs RANK，承 §6 separation）
+
+§6.3 的 separation 直接給出 claim-level 的**互不識別**：
+
+- **RANK identifiable** 自 event-local ordering + label（true-match rank／top-1／
+  event-conditional AUC）。但 ordering 對 shared-scale \(\alpha_\Delta\)（§6.3(I)）與
+  event 內**統一**的嚴格遞增重參數化（§6.3(II)）**不變**⇒ **ranking 資料不能識別
+  calibration scale \(\alpha_\Delta\)**（數值 sanity C4a：\(\alpha\) 變動時 order 不變）。
+- **CAL identifiable** 自 population 的 coverage／PIT／conditional calibration error +
+  label + §6.1 CAL Gaussian working null；calibration 能**pin 住**絕對 level（含
+  \(\alpha_\Delta\)）。但 calibration **不**識別 event-local ordering 改善：一個完美
+  校準的 model 可以 rank 得並不更好（數值 sanity C4a/C4b：uniform monotone reparam 令
+  order 不變卻破壞 \(\chi^2\) 校準）。
+- ⇒ **CAL 與 RANK 互不識別（mutually non-identifying）：** 各自對一個會移動另一者的
+  變換保持不變。這是 §6 separation 的 identifiability 面重述，也正是 obligation 2 要求
+  兩者為**不同 claim** 的根據。兩者皆以 true-match label 為前提（data／B1，本節不執行）。
+
+### §7.6 Leakage matrix（凍結）
+
+「Leakage」:= 某 latent contributor 的變動被**吸收／混淆**進某個 apparent observable，
+使後者無法唯一歸因。下表凍結 leakage 結構與其**阻斷條件**（哪個 declaration／
+observation／data-design 移除該 leakage）。分 covariance-level、mean-level、
+claim-level 三塊。
+
+**Covariance-level（皆加性進入 \(S_\Delta\)；§7.4 shape 分解）。** 依 §7.4，\(H_x\) 下四個
+\(\Delta\)-shape 只給四個係數矩陣 \(\{P_{xx}+R_1,\operatorname{sym}(P_{xv}),P_{vv},D\}\)+\(\gamma\)。
+下表區分 **multi-gap 可阻斷** 的 leak 與 **結構性（任意多 gap 仍在）** 的 leak：
+
+| Contributor 對 | 在哪混淆 | Leak? | 阻斷條件 |
+|:--|:--|:--:|:--|
+| \(\operatorname{sym}(P_{xv})\)／\(P_{vv}\)／\(D\) 三者 ↔ 彼此 | \(S_\Delta\) position block @ 單一 \(\Delta\) | **L**（單一 \(\Delta\)） | **multi-gap 可阻斷**：shapes \(a,a^2,q_{xx}\) 線性獨立（§7.4） |
+| \(\gamma\) ↔ \(D\)（及全體 coeff matrices） | \(Q_\Delta=\text{scalar}(\gamma,\Delta)\,D\)；\(\gamma\) 非線性入 shapes | **L** | **\(\gamma\) 已知**：\(D\)=\(q_{xx}\)-shape 係數，可識別。**\(\gamma\) unknown**：4 gap 有 1 個 DOF（\(=\gamma\)），任意 \(\gamma'\) 可 exact-refit（§7.4 G3）⇒ 需 \(>4\) gap + joint-map global-injectivity（global id）或至少 full-Jacobian-rank（local id；二者不等價）（本規格不證）；「\(\ge5\) gaps」只是**必要**非充分 |
+| \(P_{xx}\) ↔ \(R_1\)（position initial-state vs measurement noise） | 兩者同乘 constant shape \(1\) | **L（結構性）** | **multi-gap 不可阻斷、\(H_{xv}\) 亦不可**（只識別和 \(P_{xx}+R_1\)，§7.4 G1）；僅由**額外宣告獨立資訊**固定（已知 \(R_1\) 或 \(P_{xx}\) gauge） |
+| \(\operatorname{asym}(P_{xv})\) ↔ observable | 反對稱部分不進 \(H_x\) map | **L（結構性，\(H_x\)）** | **\(H_x\) 下任意多 gap invisible**；\(H_{xv}\) 使其**可觀測**（脫離 null space，非單一 event 即識別——cross-block 尚含 \(q_{xv}D+R_1^{xv}\)），識別仍需 multi-gap+共享參數+\(\gamma\) 已知（§7.4 G2/G4） |
+
+**Mean-level（皆進入 apparent \(\mathbb E[r]\)／residual bias）：**
+
+| Contributor 對 | Leak? | 阻斷條件 |
+|:--|:--:|:--|
+| operator-offset \(\pm(\mathrm{bridge\_at}-1)v\) ↔ context drift \(\bar v(c)\)／常數 bias | **L**（未宣告時） | **顯式宣告** operator offset（§2 row 9，known `bridge_at`+\(v\)）即從 residual 減除（數值 sanity C3）；否則與常數 mean 混淆 |
+| context drift \(\bar v(c)\) ↔ 常數 mean bias | **L**（\(c\) 未觀測／不變時） | 宣告且**變化**的 exit-causal context（§7.4） |
+| exit-state 估計 bias ↔ 上二者 | **L**（單一 event） | population + null（\(\mathbb E[\delta z_0]=0\)，§5.3）；multi-gap |
+
+**Claim-level（§7.5）：**
+
+| From → To | Leak? | 說明 |
+|:--|:--:|:--|
+| CAL-scale \(\alpha_\Delta\) → RANK order | **—**（不 leak） | ranking 對 \(\alpha_\Delta\) 不變 ⇒ 反過來 ranking **不識別** \(\alpha_\Delta\)（單向 blindness） |
+| RANK order（uniform monotone reparam）→ CAL | **—**（order 不動） | order 不變卻破壞 calibration ⇒ order **不識別** CAL |
+
+（"—" 在 claim-level 指「不互相污染 order／calibration 之**不變量**」，其後果正是
+**互不識別**：一者對移動另一者的變換保持不變，故觀測一者無法定另一者。）
+
+### §7.7 Identifiability boundary / verdict（terminal-3 predicate object）
+
+**Verdict（frozen，conditional）：** 在宣告的 observation interface（§2–§3）與 §6
+separation 結構下，primary object A 的 intended claims 的 identifiability 為
+**conditionally specified**：
+
+1. **covariance 參數只在 quotient 意義下可識別，且要 \(\gamma\) 已知。**
+   在 **\(\gamma\) 已知／固定** 的前提下，\(H_x\) multi-gap population（共享參數、
+   \(\ge4\) 相異 gap）generically 識別 \(\{D,P_{vv},\operatorname{sym}(P_{xv}),
+   P_{xx}+R_1\}\)；**完整 \(\{P_0,R_1\}\) 仍不可識別**——存在兩個結構性 gauge：
+   \(P_{xx}\leftrightarrow R_1\)（\(H_{xv}\) 亦不可破，僅由額外宣告的已知 \(R_1\)／
+   \(P_{xx}\) 固定）與 \(\operatorname{asym}(P_{xv})\)（\(H_x\) 結構性 invisible；\(H_{xv}\)
+   使其**可觀測**，但識別仍需 multi-gap+共享參數+\(\gamma\) 已知，非單一 \(H_{xv}\) event
+   即得，§7.4/G4）（§7.4／§7.6）。**\(\gamma\) unknown** 時 4 gap 有一個 DOF 使 \(\gamma\)
+   **不可識別**（任意 \(\gamma'\) exact-refit，§7.4 G3）；其識別需 \(>4\) gap +
+   joint-map **global injectivity**（global id）或至少 **full-Jacobian-rank**（local id；
+   二者不等價）+ non-degenerate coefficients，**本規格不證明、不宣稱已識別 \(\gamma\)**
+   （「\(\ge5\) gaps」只是必要非充分）。single position-only event 更強：連 quotient 都
+   不可識別（§7.3）。
+2. \(\bar v(c)\) 於 **宣告且變化的 exit-causal context** 可識別，否則與常數 mean／
+   operator offset 混淆（§7.4／§7.6）。
+3. \(H_{xv}\) velocity-相關識別需 §3.3 causal-availability 宣告；overlap 導出的 entry
+   velocity 引入 dependent-\(C\)（§5.4）作為額外待宣告量。
+4. **CAL 與 RANK 互不識別**，各需 true-match label（data／B1 前提）；shared-scale
+   \(\alpha_\Delta\) 由 CAL 而非 RANK 決定（§7.5）。
+
+**性質界定（誠實邊界）：** 上述皆為 **specification of the identifiability boundary**，
+非**已建立**的 empirical identification——本檔不授權 data，故不 demonstrate 任何識別。
+本節**不**宣稱完整 \(\{P_0,R_1\}\) generically identifiable；相反，它**明列**了不可
+識別成分，各自 scope 不同：**(i)** \(P_{xx}\leftrightarrow R_1\) gauge 是**結構性
+不可識別**，即使在 \(H_{xv}\) 下仍在（僅由額外宣告的已知 \(R_1\)／\(P_{xx}\) 固定）；
+**(ii)** \(\operatorname{asym}(P_{xv})\) 只在 \(H_x\) 下 structural invisible——進入
+\(H_{xv}\) 後**變為 observable**（不再 structural invisible），但其識別仍需 multi-gap、
+共享參數與相應的 \(\gamma\) regime；**(iii)** \(\gamma\) unknown 是**未滿足的
+identifiability regime**（需 \(>4\)-gap + joint-map 條件）。此外明列 identifiable 的
+quotient。因此 identifiability boundary 是：某 intended claim 若**只**
+依賴 identifiable quotient（例如 innovation 的 \(S_\Delta\) 本身、或 CAL/RANK 這類不依賴
+\(P_{xx}\) vs \(R_1\) split 的量），且其所需 regime（\(\gamma\) 已知或滿足 \(>4\)-gap
+joint-map 條件、multi-gap、共享參數、宣告 context）**成立**，則可識別；若某 instantiation
+的 claim **必須**依賴一個**不可識別的分量或未滿足的 identifiability regime**——包括
+（a）未宣告 gauge-fixing 而要求 \(P_{xx}\) 與 \(R_1\) 分離、（b）\(H_x\) 下要求
+\(\operatorname{asym}P_{xv}\)、或（c）**\(\gamma\) unknown 且缺 \(>4\)-gap 與 joint-map
+（global-injectivity／local full-Jacobian-rank）條件**——則該 claim 在該 instantiation
+**non-identifiable**，落入 terminal review 的 terminal-3 rejection region。上述 (a)(b) 的
+結構性 non-identifiability 是**宣告事實**（gauge 論證 + G1/G2）；(c) 的 \(\gamma\) 情形是
+**未經證明的 identifiability regime**（DOF 必要條件已知、充分性未證，G3），本規格保守地
+不宣稱其成立——兩類皆非有待本檔 data 建立。
+
+**本節不選 terminal。** 是否對某具體 instantiation 觸發 `GCTM_IDENTIFIABILITY_UNRESOLVED`
+（或標 identifiability row 為 `complete`／`rejection-established`）是 WP-A8 terminal
+review 依 charter frozen decision procedure 的機械判定；本節只提供其 predicate object。
+
+### §7.8 Domains / regime summary
+
+| 量 | 可識別所需最小 regime | 未達 regime 時的地位 |
+|:--|:--|:--|
+| \(\{D,P_{vv},\operatorname{sym}(P_{xv}),P_{xx}+R_1\}\)（identifiable quotient，**\(\gamma\) 已知時**） | \(H_x\) multi-gap population，\(\ge4\) 相異 \(\Delta\)，共享參數，**\(\gamma\) 已知** | single \(\Delta\)：加性混淆，連 quotient 都不可識別（§7.3） |
+| \(\gamma\)（unknown） | \(>4\) 相異 gap **且** joint-map global-injectivity（global id）或至少 full-Jacobian-rank（local id；二者不等價）+ non-degenerate coeffs（**本規格不證**） | 恰 4 gap：1 個 DOF，任意 \(\gamma'\) exact-refit ⇒ 不可識別（§7.4 G3）；「\(\ge5\)」僅必要非充分 |
+| \(P_{xx}\) vs \(R_1\) split | **額外宣告獨立資訊**（已知 \(R_1\) 或 \(P_{xx}\)） | multi-gap／\(H_{xv}\) 皆**不可**識別（結構性 gauge，§7.4 G1） |
+| \(\operatorname{asym}(P_{xv})\) | \(H_{xv}\)（使其可觀測）**＋** multi-gap＋共享參數＋\(\gamma\) 已知 | \(H_x\)：任意多 gap invisible（§7.4 G2）；單一 \(H_{xv}\) event：與 \(R_1^{xv}\) 互換不可分（§7.4 G4） |
+| \(\bar v(c)\) | 宣告、變化、exit-causal context | 否則與常數 bias／offset 混淆 |
+| CAL scale \(\alpha_\Delta\) | CAL 路徑（coverage/PIT + label + working null） | RANK 路徑不識別它 |
+| RANK order | event-local ordering + label | CAL 路徑不識別它 |
+
+### §7.9 本節顯式不解決（typed deferrals）
+
+| 項目 | 擁有 WP | 狀態 |
+|:--|:--|:--|
+| schema-only B1 input interface | §8（reserved；WP-A7 planned） | unresolved |
+| terminal review（checklist artifact + terminal selection；含對 identifiability row 的機械判定） | 後續 packet（WP-A8 planned） | unresolved |
+| 實際 identification／estimation／fitting／data、label 取得、任何 gain／參數數值 | — | 不授權（charter Non-scope；需 data/B1/O1 授權） |
+| reverse-time／candidate-backward atom | 後續 | typed boundary only（§4.0 boundary 3） |
+| B1/O1、H0、runtime、online、production | — | 不授權（charter Non-scope） |
+
+**Freeze 邊界：** 本節凍結的是 **identifiability target、regime、leakage 結構與
+boundary verdict** 之**定義**。它不宣稱任何 runtime 擷取值、不建立 fidelity edge、不
+執行 identification、不選參數／metric／threshold、不選 terminal。修改須 append-only
+correction（原文保留、註記 superseded）。
+
+## §8 Reserved
 
 `GCTM_MODEL_SPEC_SEALABLE` 之前必須完成（見 charter frozen terminal partition
-與 obligation-status table）；在各自 work packet 落地前，本檔不預先陳述。**§7**
-identifiability／leakage matrix（terminal 3 predicate 對象；WP-A6 planned）、**§8**
+與 obligation-status table）；在其 work packet 落地前，本檔不預先陳述。**§8**
 schema-only B1 input interface（WP-A7 planned）。
 
 ## History
@@ -1020,3 +1339,101 @@ schema-only B1 input interface（WP-A7 planned）。
   for **non-trivial** \(\alpha_\Delta\neq1\) (identity changes nothing); D1 §6.3(I)
   and D2 L5.1 wording softened to "may affect calibration, not ranking." Core L5
   algebra, counterexample, separation, and lease unchanged.
+- 2026-07-22 — **§7 frozen by WP-A6** (D1 identifiability/leakage matrix; the
+  terminal-3 predicate object). Specifies the identifiability target set
+  (\(\{\gamma,D,\bar v,P_0,R_1\}\), the deterministic operator offset, and the two
+  §6 claims), the observation/data-design regime axes (\(H_x\)/\(H_{xv}\),
+  single-event vs multi-gap population, context observability, labels), the core
+  confounding (single position-only event is non-identifiable — \(P_0\)-propagation,
+  \(Q_\Delta\), \(R_1\) are additively conflated at one \(\Delta\)), the multi-gap
+  separation **as a 4-shape decomposition**
+  (\(S_\Delta=(P_{xx}+R_1)+a\,\mathrm{sym}(P_{xv})+a^2P_{vv}+q_{xx}D\), reusing frozen
+  §4.6/D2 L2/L4) — so, **given \(\gamma\) known**, \(H_x\) multi-gap identifies only
+  the **quotient** \(\{D,P_{vv},\mathrm{sym}(P_{xv}),P_{xx}+R_1\}\) (with \(\gamma\)
+  **unknown**, 4 gaps leave a degree of freedom so \(\gamma\) is unidentified —
+  identifying it needs \(>4\) gaps + joint-map global injectivity (global id) or at
+  least full-Jacobian-rank (local id; not equivalent), not claimed proven), leaving
+  **two structural non-identifiable directions** (the \(P_{xx}\leftrightarrow R_1\)
+  gauge, not broken
+  even by \(H_{xv}\), only by declared known \(R_1\)/\(P_{xx}\); and
+  \(\mathrm{asym}(P_{xv})\), \(H_x\)-invisible — under \(H_{xv}\) it becomes
+  **observable** but its identification still needs multi-gap + shared params +
+  known \(\gamma\), not a single \(H_{xv}\) event) — the
+  claim-level result (CAL and RANK are **mutually non-identifying** — ranking does
+  not identify the calibration scale \(\alpha_\Delta\); a uniform monotone reparam
+  leaves order fixed but breaks calibration), and a frozen **leakage matrix**
+  (covariance-/mean-/claim-level, separating multi-gap-blockable leaks from the
+  structural gauges, each with its blocking condition). The verdict is conditional:
+  identifiability is **specified**, not empirically established (no data authorized);
+  a claim is non-identifiable exactly when it must rely on an unidentifiable
+  component **or an unmet identifiability regime** (the two structural gauges, or
+  \(\gamma\) unknown without the \(>4\)-gap joint-map condition). §7 selects **no
+  terminal** — it is the predicate object for WP-A8
+  terminal review. Frozen §2–§6 kept byte-frozen;
+  the stale `reserved`/`unresolved` identifiability references in §5.7/§6.6 are
+  superseded via an append-only status note after the §1 table (no in-place edit).
+  No new file ⇒ no master_map regeneration. Claims numerically sanity-checked
+  (single-gap non-identifiability; the multi-gap quotient + the two structural
+  gauges G1/G2 including \(H_{xv}\)-persistence; the joint-\(\gamma\) 4-gap DOF
+  ambiguity G3; offset/drift mean confounding; CAL/RANK mutual non-identification).
+- 2026-07-22 — bounded correction per #256 owner review (BLOCKED → fixed
+  pre-merge; §7 not yet frozen; §2–§6 byte-frozen): the §7.4 multi-gap claim that
+  the **full** \(\{P_0,\gamma,D,R_1\}\) is generically identifiable under \(H_x\) was
+  **wrong**. Corrected via the shape decomposition
+  \(S_\Delta=(P_{xx}+R_1)+a\,\mathrm{sym}(P_{xv})+a^2P_{vv}+q_{xx}D\): \(H_x\)
+  multi-gap identifies only the quotient \(\{\gamma,D,P_{vv},\mathrm{sym}(P_{xv}),
+  P_{xx}+R_1\}\); the \(P_{xx}\leftrightarrow R_1\) split and \(\mathrm{asym}(P_{xv})\)
+  are structurally non-identifiable (the former even under \(H_{xv}\), fixable only
+  by declared independent \(R_1\)/\(P_{xx}\); the latter \(H_x\)-invisible,
+  \(H_{xv}\)-identifiable). Updated §7.4, the §7.6 covariance leakage table (split
+  the old \(P_0\!\leftrightarrow\! R_1\) row into multi-gap-blockable vs structural),
+  the §7.7 verdict item 1 + honesty boundary, and the §7.8 regime summary. The old
+  C2 sanity (one chosen pair separates) does not prove injectivity; replaced by the
+  gauge argument and the G1/G2 numeric checks.
+- 2026-07-22 — second bounded correction per #256 owner re-review (still
+  pre-merge; §7 not yet frozen; §2–§6 byte-frozen): the §7.4 rank-4 argument
+  silently assumed \(\gamma\) **known** (the shapes \(a(\gamma,\cdot),q_{xx}(\gamma,\cdot)\)
+  depend on \(\gamma\)). With \(\gamma\) **unknown** and exactly 4 gaps the DOF count
+  is \(4r\) observations vs \(4r+1\) unknowns (\(r=d(d+1)/2\), the \(+1=\gamma\)), so
+  \(\gamma\) is **not identifiable**: any \(\gamma'\) re-solves the invertible
+  \(4\times4\) shape system and refits the same four \(S_\Delta\) exactly, staying
+  PSD-admissible for \(\gamma'\) near \(\gamma\) (numeric G3: a continuum of exact
+  admissible refits). Corrected to make coefficient-matrix identifiability
+  **conditional on \(\gamma\) known** (quotient \(\{D,P_{vv},\mathrm{sym}(P_{xv}),
+  P_{xx}+R_1\}\)); \(\gamma\) identification now requires \(>4\) gaps **and** the
+  joint-map identifiability condition + non-degenerate coefficients (see round 3 for
+  the injectivity-vs-Jacobian precision), **not proven here** (so the spec does not
+  claim \(\gamma\) identified; "\(\ge5\) gaps" is only the DOF-necessary correction,
+  not sufficient). Updated §7.4 (γ-DOF paragraph), the §7.6 \(\gamma\!\leftrightarrow\! D\)
+  row, §7.7 verdict item 1, §7.8 regime summary (dedicated \(\gamma\)-unknown row),
+  plus charter status/History. New numeric check G3 (verify_wp_a6_gamma.py). The
+  \(P_{xx}\leftrightarrow R_1\) and \(\mathrm{asym}(P_{xv})\) structural gauges from
+  round 1 are unchanged.
+- 2026-07-22 — third bounded correction per #256 owner re-review (still pre-merge;
+  §7 not yet frozen; §2–§6 byte-frozen): three precision fixes. (1) **\(H_{xv}\) makes
+  \(\operatorname{asym}(P_{xv})\) observable, not single-event identifiable** — the
+  canonical cross-block \(S_{xv}(\Delta)=bP_{xv}+ab\,P_{vv}+q_{xv}(\gamma,\Delta)D+R_1^{xv}\)
+  also carries process + measurement covariance, so a single \(H_{xv}\) event cannot
+  separate \(P_{xv}\) (\(\operatorname{asym}(P_{xv})\) trades with \(R_1^{xv}\), numeric
+  G4a); identification still needs multi-gap + shared params + known \(\gamma\) (G4b).
+  Reworded §7.4 joint-mode paragraph, the §7.6 \(\operatorname{asym}\) row, §7.7 item 1,
+  and the §7.8 \(\operatorname{asym}\) regime (no longer "\(H_{xv}\) cross-block" alone).
+  (2) **honesty boundary widened** — "non-identifiable exactly when it must rely on an
+  unidentifiable **gauge component**" → "an unidentifiable component **or an unmet
+  identifiability regime**", explicitly listing \(\gamma\) unknown (without the
+  \(>4\)-gap joint-map condition) as a terminal-3 case, alongside the two gauges (§7.7;
+  same fix in charter). (3) **injectivity ≠ full-Jacobian-rank** — the two are not
+  synonyms: joint-map **global injectivity** ⇒ global identification, **full-Jacobian-rank**
+  ⇒ only local identification; the "\(/\)" was replaced by the explicit
+  global/local distinction in §7.4, §7.6, §7.7, §7.8. New numeric check
+  verify_wp_a6_hxv.py (G4a/G4b). Round-1/round-2 results otherwise unchanged.
+- 2026-07-22 — fourth (sentence-level) bounded correction per #256 owner re-review
+  (still pre-merge; §7 not yet frozen; §2–§6 byte-frozen): the §7.7 honesty summary
+  still said the **two** structural directions persist "even under \(H_{xv}\)", which
+  is true only for \(P_{xx}\leftrightarrow R_1\); it contradicted the round-3 body for
+  \(\operatorname{asym}(P_{xv})\) (which becomes **observable** under \(H_{xv}\)). Rewrote
+  the sentence to scope each direction separately: (i) \(P_{xx}\leftrightarrow R_1\)
+  structural, persists under \(H_{xv}\); (ii) \(\operatorname{asym}(P_{xv})\) invisible
+  only under \(H_x\), observable under \(H_{xv}\) (identification still needs multi-gap +
+  shared params + \(\gamma\) regime); (iii) \(\gamma\) unknown = unmet regime. No other
+  change.

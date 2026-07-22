@@ -366,8 +366,9 @@ under an explicitly declared **CAL Gaussian working null**
 \(e^-\perp\epsilon_1\) (§5.4) — the two independences already frozen in §5, so the
 **only** addition is \(\delta z_0\)'s Gaussianity; §6.1) — beyond frozen §5, which
 supplies only zero-mean and covariance. The separation is frozen both
-directions: shared-\(S_\Delta\) / isotropic \(S=\alpha_\Delta I\) rescaling changes
-calibration but **not** candidate-local order (calibration gain ⇏ ranking gain),
+directions: shared-\(S_\Delta\) / isotropic \(S=\alpha_\Delta I\) rescaling (a
+non-trivial \(\alpha_\Delta\neq1\)) may change calibration but **not** candidate-local
+order (calibration gain ⇏ ranking gain),
 and ranking is invariant to a **common** strictly-increasing reparametrization
 applied **uniformly** across candidates within an event (distinct per-candidate
 \(\varphi_i\) can reorder), which generally breaks calibration (ranking gain ⇏
@@ -458,8 +459,8 @@ production-behavior change.
 
 WP-A0 (activation) created none of these. **D1 exists as a seed since WP-A1**
 ([gap_conditioned_stochastic_transition_spec_v1.md](../models/gap_conditioned_stochastic_transition_spec_v1.md):
-§2–§3 frozen, §4–§6 reserved); D2 does not exist yet and is created by its
-owning packet (WP-A3).
+§2–§7 frozen through WP-A6, §8 reserved); D2 exists since WP-A3
+([lemmas v1](../models/gap_conditioned_stochastic_transition_lemmas_v1.md)).
 
 ### D1 — canonical model specification
 
@@ -567,6 +568,30 @@ review cannot yet reach `GCTM_MODEL_SPEC_SEALABLE` (it would select terminal 4,
 `GCTM_SPECIFICATION_INCOMPLETE`, on those incomplete rows). The lease below is
 revised accordingly.
 
+*Update (WP-A6, 2026-07-22):* the D1 identifiability/leakage matrix is **frozen**
+in [D1 §7](../models/gap_conditioned_stochastic_transition_spec_v1.md) — the
+**terminal-3 predicate object** (`GCTM_IDENTIFIABILITY_UNRESOLVED`). It specifies
+the identifiability target set, observation/data-design regimes, the core
+single-event confounding, the multi-gap **quotient** identifiability (**given
+\(\gamma\) known**, only \(\{D,P_{vv},\mathrm{sym}(P_{xv}),P_{xx}+R_1\}\) under
+\(H_x\), with two **structural** non-identifiable gauges — \(P_{xx}\!\leftrightarrow\!R_1\),
+not broken even by \(H_{xv}\), and \(\mathrm{asym}(P_{xv})\), \(H_x\)-invisible —
+under \(H_{xv}\) it becomes **observable** but its identification still needs
+multi-gap + shared params + known \(\gamma\), not a single \(H_{xv}\) event; and
+with \(\gamma\) **unknown**, 4 gaps leave a degree of freedom so \(\gamma\) is
+unidentified — its identification needs \(>4\) gaps + a joint-map identifiability
+condition (**global injectivity** ⇒ global id, or at least **full-Jacobian-rank** ⇒
+local id; not equivalent), **not claimed proven**), the CAL/RANK
+mutual-non-identifiability result, and a frozen leakage matrix; its verdict is
+conditional (identifiability **specified**, not empirically established — no data
+authorized; a claim is non-identifiable exactly when it must rely on an
+unidentifiable component **or an unmet identifiability regime** — the two structural
+gauges, or \(\gamma\) unknown without the \(>4\)-gap joint-map condition) and it
+**selects no terminal**. This is a D1 deliverable, **not** a
+numbered obligation (all four remain resolved). One D1 deliverable remains — the
+schema-only B1 input interface (D1 §8, WP-A7) — plus terminal review (WP-A8), so
+terminal review still could not yet reach the sealable terminal.
+
 Even the sealable terminal would grant no automatic B1, O1, online, mainline,
 or production authority.
 
@@ -610,13 +635,12 @@ terminal. Terminal review is therefore split off to WP-A8, with WP-A6/WP-A7
 resolving the two remaining D1 deliverables first. (This lease is replaceable
 without a registry or WIP change.)
 
-**Current step:** WP-A5 landed (D1 §6 frozen: calibration vs candidate-local
-ranking claim space; obligation 2 resolved; D2 §7 Lemma L5 proof of shared-\(S_\Delta\)
-\(q\)/NLL ordering equivalence filled). **All four numbered obligations
-(1/WP-A1, 4/WP-A2, 3/WP-A4, 2/WP-A5) are now resolved**, and D2 (WP-A3) has
-landed. Next = WP-A6 (identifiability & leakage matrix, D1 §7), then WP-A7
-(schema-only B1 input interface, D1 §8), then WP-A8 (terminal review). A sealable
-terminal is not reachable until WP-A6–A8 complete.
+**Current step:** WP-A6 landed (D1 §7 frozen: identifiability & leakage matrix;
+the terminal-3 predicate object). **All four numbered obligations (1/WP-A1,
+4/WP-A2, 3/WP-A4, 2/WP-A5) remain resolved**, and D2 (WP-A3) has landed. Next =
+WP-A7 (schema-only B1 input interface, D1 §8), then WP-A8 (terminal review). One
+D1 deliverable (§8) remains before terminal review; a sealable terminal is not
+reachable until WP-A7–A8 complete.
 
 ## History
 
@@ -702,3 +726,46 @@ terminal is not reachable until WP-A6–A8 complete.
   D1 deliverables are reserved. Also fixed the #253 owner-flagged non-blocking D2
   §5.2 nit (矩陣→向量) under review. No B1/O1/runtime/online/production authority
   granted.
+- 2026-07-22 — **WP-A6: identifiability & leakage matrix frozen** (D1 deliverable;
+  the terminal-3 predicate object, **not** a numbered obligation).
+  [D1 §7](../models/gap_conditioned_stochastic_transition_spec_v1.md) specifies the
+  identifiability target set (\(\{\gamma,D,\bar v,P_0,R_1\}\), the deterministic
+  operator offset, and the CAL/RANK claims), the observation/data-design regime
+  axes (\(H_x\)/\(H_{xv}\), single-event vs multi-gap population, context
+  observability, labels), the core confounding (a single position-only event is
+  non-identifiable — \(P_0\)-propagation, \(Q_\Delta\), \(R_1\) are additively
+  conflated at one \(\Delta\)), the multi-gap separation as a **4-shape
+  decomposition** (\(S_\Delta=(P_{xx}+R_1)+a\,\mathrm{sym}(P_{xv})+a^2P_{vv}+q_{xx}D\),
+  reusing frozen §4.6 / D2 L2/L4) — so, **given \(\gamma\) known**, \(H_x\) multi-gap
+  identifies only the **quotient** \(\{D,P_{vv},\mathrm{sym}(P_{xv}),P_{xx}+R_1\}\)
+  (with \(\gamma\) **unknown**, 4 gaps leave one DOF ⇒ \(\gamma\) unidentified;
+  identifying it needs \(>4\) gaps + a joint-map identifiability condition (**global
+  injectivity** ⇒ global id, or at least **full-Jacobian-rank** ⇒ local id; not
+  equivalent), **not claimed proven** — "\(\ge5\) gaps" is necessary not sufficient),
+  leaving two **structural** non-identifiable gauges (\(P_{xx}\!\leftrightarrow\!R_1\),
+  not broken even by \(H_{xv}\), fixable only by declared known \(R_1\)/\(P_{xx}\); and
+  \(\mathrm{asym}(P_{xv})\), \(H_x\)-invisible — under \(H_{xv}\) **observable** but its
+  identification still needs multi-gap + shared params + known \(\gamma\), not a single
+  \(H_{xv}\) event) — the **CAL/RANK mutual-non-identifiability**
+  result (ranking does not identify the calibration scale \(\alpha_\Delta\); a uniform
+  monotone reparam leaves order fixed but breaks calibration), and a frozen
+  **leakage matrix** (covariance-/mean-/claim-level, separating multi-gap-blockable
+  leaks from the structural gauges, each with its blocking condition). Verdict is
+  **conditional** — identifiability is *specified*, not empirically established (no
+  data authorized); a claim is non-identifiable exactly when it must rely on an
+  unidentifiable component **or an unmet identifiability regime** (the two gauges, or
+  \(\gamma\) unknown without the \(>4\)-gap joint-map condition). §7 **selects no
+  terminal** (that is WP-A8). The §7.4 draft that claimed
+  the *full* \(\{P_0,\gamma,D,R_1\}\) generically identifiable under \(H_x\) was
+  corrected pre-merge per #256 owner review — round 1 (the two structural
+  \(P_{xx}\!\leftrightarrow\!R_1\) / \(\mathrm{asym}P_{xv}\) gauges), round 2 (the
+  joint-\(\gamma\) 4-gap DOF ambiguity, making the quotient conditional on \(\gamma\)
+  known), and round 3 (\(H_{xv}\) makes \(\mathrm{asym}P_{xv}\) observable-not-identifiable;
+  honesty boundary widened to "unmet identifiability regime"; injectivity ≠
+  full-Jacobian-rank). Frozen §2–§6 kept byte-frozen; stale
+  `reserved`/`unresolved` identifiability references in §5.7/§6.6 superseded via an
+  append-only status note. Also cleared the WP-A5 roll-forward nit (the obligation-2
+  summary note now carries the non-trivial \(\alpha_\Delta\neq1\) qualifier). All
+  four numbered obligations remain resolved; remaining before terminal review = WP-A7
+  (B1 schema, D1 §8). No new file ⇒ no master_map regeneration. No
+  B1/O1/runtime/online/production authority granted. Next packet WP-A7.
