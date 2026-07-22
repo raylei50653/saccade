@@ -35,8 +35,8 @@ The activation gate required both:
    fact-owner: [claim-state
    registry](../contracts/claim_state_registry.md)); and
 2. a separate owner scheduling decision — **satisfied**: recorded by the
-   owner on Issue #175 (2026-07-22, activation comment; linked from the
-   activation PR).
+   owner on Issue #175, 2026-07-22 —
+   [**GCTM ACTIVATION AUTHORIZED** (comment 5043900665)](https://github.com/raylei50653/saccade/issues/175#issuecomment-5043900665).
 
 Activation authorizes **substrate-agnostic A-layer theory/specification work
 only**. It does not change any H0 state: faithful capture = none, actual H0
@@ -446,9 +446,13 @@ acceptance records it.
    (the four mandatory obligations, the D1/D2 deliverable items, and the typed
    B/C/D boundary) to its owning section or artifact, each marked exactly one
    of `complete` / `incomplete` / `rejection-established` (with the rejection
-   argument linked). Any `rejection-established` row selects terminal 1–3 by
-   its obligation class; otherwise any `incomplete` row selects terminal 4;
-   otherwise terminal 5.
+   argument linked). Every `rejection-established` row must additionally fill
+   a mandatory `rejection_terminal` field constrained to `{1, 2, 3}` (the
+   terminal its rejection establishes); rows with any other status leave the
+   field empty. Selection is then mechanical: if any `rejection-established`
+   row exists, the terminal is the **smallest** `rejection_terminal` value
+   among them (first match in terminal order); otherwise any `incomplete` row
+   selects terminal 4; otherwise terminal 5.
 3. The partition is exhaustive by construction: terminals 4 and 5 cover every
    state not captured by rejections 1–3.
 4. Owner acceptance of the recorded terminal closes the task; completion
@@ -503,6 +507,7 @@ WP-A5  calibration vs ranking claim definitions (obligation 2) + terminal review
 - 2026-07-22 — owner accepted primary object = A and the existing-online
   §§9.2–9.4 conditional scope qualification (landed via PR #249).
 - 2026-07-22 — **activated (WP-A0)**: owner scheduling decision on Issue
-  #175; `doc-status: active`, `wip-role: sole-active`; terminal partition and
+  #175 ([comment 5043900665](https://github.com/raylei50653/saccade/issues/175#issuecomment-5043900665));
+  `doc-status: active`, `wip-role: sole-active`; terminal partition and
   decision procedure frozen; four obligations recorded unresolved; active
   declaration not sealed (obligation 1 → WP-A1); no D1/D2 created.
