@@ -12,6 +12,7 @@
 | `test_h0_controller_input_member_parity.py` | system | regression | active | Contract regression for the H0 controller-input member declaration. |
 | `test_h0_gctm_guarantee_registration.py` | system | contract | active | Contract for the H0 GCTM guarantee-registration verifier (candidate-identity v1). |
 | `test_h0_gctm_guarantee_registration_v2.py` | system | contract | active | Contract for the H0 GCTM guarantee-registration verifier (candidate-sources v2). |
+| `test_h0_gctm_static_feasibility_v1.py` | system | contract | active | Contract tests for the bounded H0 to GCTM static feasibility audit. |
 | `test_h0_launch_hygiene_gate.py` | system | regression | active | Contract regression for the H0 launch-hygiene pre-authorization gate. |
 | `test_migration_manifest_v0.py` | system | contract | active | Contract for the doc migration manifest parser and master-map generator. |
 | `test_old_flagship_inventory.py` | system | contract | active | Contract for the old-flagship per-study inventory parser. |
