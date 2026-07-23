@@ -11,6 +11,7 @@
     "contract_binding",
     "policy",
     "spaces",
+    "calibration_claim",
     "claim",
     "rung_obligations",
     "conservation",
@@ -37,6 +38,9 @@
     },
     "spaces": {
       "$ref": "#/$defs/spaces"
+    },
+    "calibration_claim": {
+      "$ref": "#/$defs/calibration_claim"
     },
     "claim": {
       "$ref": "#/$defs/claim"
@@ -481,6 +485,63 @@
         }
       }
     },
+    "calibration_claim": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind"
+          ],
+          "properties": {
+            "kind": {
+              "const": "none"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "reference_id",
+            "calibration_unit_id",
+            "estimator_id",
+            "proper_score_id",
+            "held_out_rule_id",
+            "minimum_exposure"
+          ],
+          "properties": {
+            "kind": {
+              "enum": [
+                "distributional",
+                "probabilistic",
+                "scale_comparability"
+              ]
+            },
+            "reference_id": {
+              "$ref": "#/$defs/id"
+            },
+            "calibration_unit_id": {
+              "$ref": "#/$defs/id"
+            },
+            "estimator_id": {
+              "$ref": "#/$defs/id"
+            },
+            "proper_score_id": {
+              "$ref": "#/$defs/nullable_id"
+            },
+            "held_out_rule_id": {
+              "$ref": "#/$defs/id"
+            },
+            "minimum_exposure": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        }
+      ]
+    },
     "claim": {
       "type": "object",
       "additionalProperties": false,
@@ -489,6 +550,7 @@
         "claim_space",
         "kappa",
         "primary_ranking_metric",
+        "metric_parameters",
         "target_metric_id",
         "minimum_exposure",
         "minimum_effect",
@@ -526,6 +588,9 @@
             "correct_assignment_rate"
           ]
         },
+        "metric_parameters": {
+          "type": "object"
+        },
         "target_metric_id": {
           "$ref": "#/$defs/id"
         },
@@ -560,7 +625,47 @@
         "short_gap_retention_rule_id": {
           "$ref": "#/$defs/id"
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "primary_ranking_metric": {
+                "const": "top_k_gt_recall"
+              }
+            },
+            "required": [
+              "primary_ranking_metric"
+            ]
+          },
+          "then": {
+            "properties": {
+              "metric_parameters": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "top_k"
+                ],
+                "properties": {
+                  "top_k": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                }
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "metric_parameters": {
+                "type": "object",
+                "additionalProperties": false,
+                "maxProperties": 0
+              }
+            }
+          }
+        }
+      ]
     },
     "kappa": {
       "type": "object",
@@ -627,7 +732,8 @@
       "additionalProperties": false,
       "required": [
         "rung",
-        "obligation_ids"
+        "obligation_ids",
+        "artifact_bindings"
       ],
       "properties": {
         "rung": {
@@ -635,6 +741,15 @@
         },
         "obligation_ids": {
           "$ref": "#/$defs/id_array"
+        },
+        "artifact_bindings": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/id"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/id"
+          }
         }
       }
     },

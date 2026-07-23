@@ -75,6 +75,9 @@
     "system_space_id": null,
     "reductions": []
   },
+  "calibration_claim": {
+    "kind": "none"
+  },
   "claim": {
     "target_rung": "SR3",
     "claim_space": "ranking",
@@ -84,6 +87,7 @@
       "decision_rule_id": "fixture_sr3_minimum_effect_rule_v1"
     },
     "primary_ranking_metric": "gt_best_negative_margin",
+    "metric_parameters": {},
     "target_metric_id": "fixture_gt_best_negative_margin_v1",
     "minimum_exposure": 100,
     "minimum_effect": {
@@ -115,7 +119,8 @@
         "orientation_transform_tie",
         "policy_identity",
         "space_identity"
-      ]
+      ],
+      "artifact_bindings": {}
     },
     {
       "rung": "SR1",
@@ -125,7 +130,8 @@
         "fit_selection_data",
         "policy_search_space",
         "primary_metric_effect"
-      ]
+      ],
+      "artifact_bindings": {}
     },
     {
       "rung": "SR2",
@@ -135,7 +141,8 @@
         "disjoint_partitions",
         "no_refit",
         "per_fold_result"
-      ]
+      ],
+      "artifact_bindings": {}
     },
     {
       "rung": "SR3",
@@ -146,7 +153,8 @@
         "gap_context_stability",
         "protected_stratum_retention",
         "short_gap_retention"
-      ]
+      ],
+      "artifact_bindings": {}
     }
   ],
   "conservation": {

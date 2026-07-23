@@ -60,13 +60,19 @@ def _active_sr6() -> dict[str, Any]:
     claim["claim_space"] = "system"
     claim["kappa"]["quantification_space"] = "system"
     claim["primary_ranking_metric"] = "correct_assignment_rate"
+    claim["metric_parameters"] = {}
     claim["target_metric_id"] = "fixture_track_sequence_system_metric_v1"
 
     for rung in ("SR4", "SR5", "SR6"):
+        obligation_ids = sorted(score_contract.RUNG_OBLIGATIONS[rung])
         declaration["rung_obligations"].append(
             {
                 "rung": rung,
-                "obligation_ids": sorted(score_contract.RUNG_OBLIGATIONS[rung]),
+                "obligation_ids": obligation_ids,
+                "artifact_bindings": {
+                    obligation_id: f"fixture_{obligation_id}_binding_v1"
+                    for obligation_id in obligation_ids
+                },
             }
         )
     declaration["terminals"][-1]["state_transition"]["target_state"] = "SR6"
@@ -150,6 +156,32 @@ def test_duplicate_json_member_fails_before_schema(tmp_path: Path) -> None:
     assert raised.value.error_class == "duplicate_json_key"
 
 
+def _assert_json_non_finite_fails(tmp_path: Path, value: float) -> None:
+    declaration = _valid()
+    declaration["claim"]["minimum_effect"]["value"] = value
+    path = tmp_path / "non_finite.json"
+    path.write_text(json.dumps(declaration), encoding="utf-8")
+
+    with pytest.raises(score_contract.ScoreRankingValidationError) as raised:
+        score_contract.load_json(path)
+
+    assert raised.value.error_class == "non_finite_number"
+
+
+def test_nan_minimum_effect_fails_closed(tmp_path: Path) -> None:
+    _assert_json_non_finite_fails(tmp_path, float("nan"))
+
+
+def test_positive_infinity_minimum_effect_fails_closed(tmp_path: Path) -> None:
+    _assert_json_non_finite_fails(tmp_path, float("inf"))
+
+
+def test_in_memory_non_finite_number_fails_closed() -> None:
+    declaration = _valid()
+    declaration["claim"]["minimum_effect"]["value"] = float("-inf")
+    _assert_error(declaration, "non_finite_number")
+
+
 def test_identity_transform_cannot_hide_multiple_components() -> None:
     declaration = _valid()
     declaration["policy"]["score"]["transform_kind"] = "identity"
@@ -202,6 +234,58 @@ def test_assignment_metric_requires_assignment_space() -> None:
     _assert_error(declaration, "claim_space")
 
 
+def test_top_k_metric_requires_predeclared_positive_k() -> None:
+    declaration = _valid()
+    declaration["claim"]["primary_ranking_metric"] = "top_k_gt_recall"
+    _assert_error(declaration, "schema_rejection")
+
+    declaration["claim"]["metric_parameters"] = {"top_k": 0}
+    _assert_error(declaration, "schema_rejection")
+
+
+def test_top_k_metric_accepts_predeclared_positive_k() -> None:
+    declaration = _valid()
+    declaration["claim"]["primary_ranking_metric"] = "top_k_gt_recall"
+    declaration["claim"]["metric_parameters"] = {"top_k": 5}
+
+    assert score_contract.validate_declaration(declaration)["valid"] is True
+
+
+def test_non_top_k_metric_rejects_unused_top_k_parameter() -> None:
+    declaration = _valid()
+    declaration["claim"]["metric_parameters"] = {"top_k": 5}
+    _assert_error(declaration, "schema_rejection")
+
+
+def test_calibration_claim_discriminator_is_required() -> None:
+    declaration = _valid()
+    del declaration["calibration_claim"]
+    _assert_error(declaration, "schema_rejection")
+
+
+def test_no_calibration_claim_rejects_unbound_evidence_fields() -> None:
+    declaration = _valid()
+    declaration["calibration_claim"]["reference_id"] = "fixture_reference_v1"
+    _assert_error(declaration, "schema_rejection")
+
+
+def test_typed_calibration_claim_requires_complete_evidence_binding() -> None:
+    declaration = _valid()
+    declaration["calibration_claim"] = {"kind": "probabilistic"}
+    _assert_error(declaration, "schema_rejection")
+
+    declaration["calibration_claim"] = {
+        "kind": "probabilistic",
+        "reference_id": "fixture_gt_probability_target_v1",
+        "calibration_unit_id": "fixture_candidate_event_unit_v1",
+        "estimator_id": "fixture_isotonic_estimator_v1",
+        "proper_score_id": "fixture_brier_score_v1",
+        "held_out_rule_id": "fixture_held_out_calibration_v1",
+        "minimum_exposure": 100,
+    }
+    assert score_contract.validate_declaration(declaration)["valid"] is True
+
+
 def test_target_rung_requires_exact_lower_rung_prefix() -> None:
     declaration = _valid()
     declaration["rung_obligations"].pop(2)
@@ -212,6 +296,27 @@ def test_each_rung_uses_the_frozen_obligation_set() -> None:
     declaration = _valid()
     declaration["rung_obligations"][1]["obligation_ids"].pop()
     _assert_error(declaration, "rung_obligations")
+
+
+def test_sr4_through_sr6_require_one_artifact_binding_per_obligation() -> None:
+    declaration = _active_sr6()
+    del declaration["rung_obligations"][4]["artifact_bindings"]["quantity_fidelity"]
+    _assert_error(declaration, "rung_bindings")
+
+
+def test_high_rung_obligations_cannot_share_one_artifact_identity() -> None:
+    declaration = _active_sr6()
+    bindings = declaration["rung_obligations"][4]["artifact_bindings"]
+    bindings["quantity_fidelity"] = bindings["substrate_identity"]
+    _assert_error(declaration, "duplicate_identity")
+
+
+def test_sr0_through_sr3_reject_unscoped_artifact_bindings() -> None:
+    declaration = _valid()
+    declaration["rung_obligations"][3]["artifact_bindings"] = {
+        "candidate_universe_invariance": "fixture_unscoped_binding_v1"
+    }
+    _assert_error(declaration, "rung_bindings")
 
 
 def test_conservation_claim_cannot_be_false() -> None:

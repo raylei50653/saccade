@@ -216,7 +216,9 @@ unless the declaration supplies a justified common scale.
 
 Top-1 success means the declared correct candidate is selected by the frozen
 tie-aware argmax over the unchanged \(C_e\). Top-k success uses the same
-ordering and a predeclared \(k\).
+ordering and a predeclared integer \(k\geq1\). The machine-readable
+declaration records this as `metric_parameters.top_k`; a non-top-k primary
+metric must reject that parameter rather than silently ignore it.
 
 Every top-1/top-k report must include:
 
@@ -256,6 +258,11 @@ The declaration must state which claim is made:
 - probabilistic calibration of a discriminative match probability;
 - scale comparability across gaps, contexts, or components;
 - no calibration claim; diagnostics only.
+
+The machine-readable discriminator is mandatory even when its value is
+`kind: none`. A typed calibration claim must additionally bind its reference,
+calibration unit, estimator, held-out rule, minimum exposure, and proper score
+when one is used. Absence of the object never implies `none`.
 
 A transition likelihood
 \(p(y_1\mid z_0,\Delta,c,M)\) is not automatically
@@ -341,18 +348,19 @@ establish.
 
 The same policy interpretation survives the declared substrate change.
 
-Required beyond SR3: quantity-fidelity acceptance, score and hook semantic
-equivalence, runtime-causal field availability, candidate-universe parity, and
-no silent transform or fallback change.
+Required beyond SR3: source/target substrate identity, quantity-fidelity
+acceptance, score and hook semantic equivalence, runtime-causal field
+availability, candidate-universe parity, and no silent transform or fallback
+change.
 
 ### SR5 — Online assignment-retained score policy
 
 The portable policy is executed at the declared online hook and retains its
 assignment-space effect.
 
-Required beyond SR4: default-off A/B, applied/rejected audit, online state
-provenance, actual fallback/abstention behavior, and unchanged disabled
-baseline.
+Required beyond SR4: online-hook identity, default-off A/B, applied/rejected
+audit, online state provenance, actual fallback/abstention behavior, and
+unchanged disabled baseline.
 
 ### SR6 — Production score-policy candidate
 
@@ -425,6 +433,7 @@ source, event, calibration, assignment, and system space identities
 candidate-universe, GT partition, duplicate, empty, and singleton rules
 tie, cutoff role, fallback, abstention, and missing-value behavior
 target rung and every lower-rung obligation
+for `SR4`–`SR6`, one artifact or contract binding per named obligation
 claim kappa, exposure, effect, dependence, fold, and no-refit fields
 conservation identities
 exhaustive validity / valid-negative / valid-positive terminals
@@ -435,6 +444,12 @@ The validator must reject missing required fields, unknown enum values,
 duplicate identities, incomplete terminal mappings, and claims above their
 declared rung. Positive fixtures alone are insufficient: acceptance requires
 negative fixtures for each fail-closed class above.
+
+`SR0`–`SR3` obligation entries freeze the declaration vocabulary. `SR4`–`SR6`
+entries are machine-bound: every canonical obligation name must map one-to-one
+to a non-null artifact, rule, acceptance, or contract identity. Listing the
+obligation words without those bindings is structurally incomplete and must
+fail closed.
 
 The proposed v1 implementation surface is:
 

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
@@ -56,6 +57,7 @@ RUNG_OBLIGATIONS: dict[str, frozenset[str]] = {
     ),
     "SR4": frozenset(
         {
+            "substrate_identity",
             "quantity_fidelity",
             "hook_semantic_equivalence",
             "runtime_causal_availability",
@@ -65,6 +67,7 @@ RUNG_OBLIGATIONS: dict[str, frozenset[str]] = {
     ),
     "SR5": frozenset(
         {
+            "online_hook",
             "default_off_ab",
             "applied_rejected_audit",
             "online_state_provenance",
@@ -120,15 +123,38 @@ def _pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     return result
 
 
+def _reject_non_finite(token: str) -> None:
+    raise ScoreRankingValidationError(
+        "non_finite_number", f"non-standard JSON numeric token {token!r}"
+    )
+
+
 def load_json(path: Path) -> Any:
     try:
-        return json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=_pairs)
+        return json.loads(
+            path.read_text(encoding="utf-8"),
+            object_pairs_hook=_pairs,
+            parse_constant=_reject_non_finite,
+        )
     except ScoreRankingValidationError:
         raise
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise ScoreRankingValidationError(
             "malformed_json", f"malformed JSON {path}: {exc}"
         ) from exc
+
+
+def _validate_finite_numbers(value: object, path: str = "<root>") -> None:
+    if isinstance(value, float) and not math.isfinite(value):
+        raise ScoreRankingValidationError(
+            "non_finite_number", f"non-finite numeric value at {path}"
+        )
+    if isinstance(value, Mapping):
+        for key, item in value.items():
+            _validate_finite_numbers(item, f"{path}/{key}")
+    elif isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+        for index, item in enumerate(value):
+            _validate_finite_numbers(item, f"{path}/{index}")
 
 
 def _mapping(value: object, name: str) -> Mapping[str, Any]:
@@ -345,6 +371,26 @@ def _validate_rungs(record: Mapping[str, Any]) -> None:
                 f"{rung} obligation set mismatch "
                 f"(missing={missing}, unexpected={unexpected})",
             )
+        bindings = _mapping(
+            item["artifact_bindings"],
+            f"rung_obligations[{index}].artifact_bindings",
+        )
+        expected_binding_keys = expected if rung in {"SR4", "SR5", "SR6"} else set()
+        declared_binding_keys = set(bindings)
+        if declared_binding_keys != expected_binding_keys:
+            missing = sorted(expected_binding_keys - declared_binding_keys)
+            unexpected = sorted(declared_binding_keys - expected_binding_keys)
+            raise ScoreRankingValidationError(
+                "rung_bindings",
+                f"{rung} artifact binding set mismatch "
+                f"(missing={missing}, unexpected={unexpected})",
+            )
+        binding_ids = tuple(bindings.values())
+        if len(binding_ids) != len(set(binding_ids)):
+            raise ScoreRankingValidationError(
+                "duplicate_identity",
+                f"{rung} artifact bindings must use distinct identities",
+            )
     if tuple(declared_rungs) != expected_rungs:
         raise ScoreRankingValidationError(
             "rung_prefix",
@@ -397,6 +443,7 @@ def _validate_terminals(record: Mapping[str, Any]) -> None:
 
 def validate_declaration(record: object) -> dict[str, object]:
     """Validate one declaration without asserting owner or registry authority."""
+    _validate_finite_numbers(record)
     record_map = _mapping(record, "declaration")
     if record_map.get("schema") != SCHEMA_ID:
         raise ScoreRankingValidationError(
