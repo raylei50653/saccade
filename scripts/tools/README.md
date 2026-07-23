@@ -414,6 +414,7 @@ deleting.
 | `resolved_bridge_policy_config.py` | stable | cli | Single authority for `resolved_bridge_policy_config_v1` fingerprints. |
 | `run_d0_runtime_shadow_fidelity.py` | stable | cli | D0 runtime shadow bridge fidelity — terminal verifier (Issue #112, v2). |
 | `run_door0_ranking_probe.py` | experiment | cli | Door 0 — ambiguous-band ranking-power probe runner. |
+| `run_gctm_d1_diagnostic.py` | experiment | cli | GCTM D1 substrate-agnostic ranking diagnostic runner. |
 | `run_h0_phase_a.py` | stable | cli | A7/RC1 fail-closed Phase-A parent controller. |
 | `run_h0_phase_a_child.py` | stable | - | RC1 fixed Phase-A runtime child (parent-only entry point). |
 | `run_m_b1_5_stage2_q1q3.py` | experiment | cli | M-B1.5 Stage 2 Q1–Q3 runner: D_online label join + safe-negative mass audit. |

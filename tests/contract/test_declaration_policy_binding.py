@@ -138,6 +138,12 @@ NO_POLICY_BINDING = {
     # policy target. The declaration itself freezes no policy — its only mention of
     # a preset is the row declaring preset changes unauthorized.
     "r1_temporal_reduction_capture_declaration_20260712.md": "capture declaration; freezes no policy table",
+    # GCTM D1 is substrate-agnostic diagnostic-only; synthetic fixtures and a
+    # future-runtime consumer interface. It freezes no bridge preset / production
+    # policy table and cannot satisfy runtime activation authority.
+    "gctm_d1_ranking_diagnostic_declaration_20260723.md": (
+        "GCTM D1 diagnostic declaration; freezes no bridge policy table"
+    ),
 }
 
 

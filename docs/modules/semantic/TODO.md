@@ -27,8 +27,13 @@
   `GCTM_B1`, `proposed`, `blocked_by: h0_runtime_substrate`; it does not alias
   or supersede `H0_ROUTE5_B1` → [task charter](../../research/threads/gctm_b1_runtime_grounded_offline_attribution_task.md)
 - **GCTM D1 — substrate-agnostic ranking diagnostic** — `GCTM_D1`,
-  `proposed`, diagnostic-only, `blocked_by: charter_owner_acceptance`; no
-  diagnostic terminal unlocks B1/O1 or WIP → [task charter](../../research/threads/gctm_d1_substrate_agnostic_ranking_diagnostic_task.md)
+  `proposed` / non-WIP, diagnostic-only, `blocked_by: charter_owner_acceptance`;
+  pre-activation synthetic **seal-candidate** with provisional terminal
+  **`GCTM_D1_INTERFACE_READY`** (canonical registry `state: none`); no unlock of
+  B1/O1 or WIP →
+  [declaration](research/gctm_d1_ranking_diagnostic_declaration_20260723.md) ·
+  [terminal](research/gctm_d1_ranking_diagnostic_terminal_20260723.md) ·
+  [charter](../../research/threads/gctm_d1_substrate_agnostic_ranking_diagnostic_task.md)
 - **GCTM O1 — online score intervention and system-efficacy evaluation** → [task charter](../../research/threads/gctm_o1_online_intervention_efficacy_task.md)
 
 ## Parked

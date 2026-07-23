@@ -66,6 +66,33 @@ The charter may define and compare:
 The charter may not freeze a runtime observation mode or runtime
 parameterization. A diagnostic family definition is not a runtime freeze.
 
+### Pre-activation seal-candidate generation (explicitly allowed)
+
+Before charter owner acceptance and before any WIP/scheduling decision, the
+repository may generate a **pre-activation synthetic seal-candidate package**:
+
+```text
+generation_kind = pre_activation_synthetic_seal_candidate
+substrate        = synthetic fixtures only
+status           = SEAL_CANDIDATE_GENERATED
+authority        = owner-reviewable proposal, not charter execution
+```
+
+This generation:
+
+- **may** run machine-checkable invariants on synthetic fixtures;
+- **may** emit a provisional selected terminal string for owner review;
+- **must not** be recorded as an owner-accepted charter execution;
+- **must not** perform a canonical registry terminal state transition;
+- **must not** acquire WIP or unlock B1/O1/H0.
+
+Owner-accepted charter **execution** remains gated by:
+
+1. owner acceptance of the sealed D1 declaration and bounded terminal procedure;
+2. a separate owner scheduling decision that assigns WIP.
+
+Seal-candidate generation and owner-accepted execution are distinct authorities.
+
 ## Allowed evidence
 
 Only the following evidence classes are admissible:
@@ -245,3 +272,22 @@ This charter never authorizes:
 `GCTM_D1` is a proposed, isolated diagnostic charter. Its allowed inputs and
 claims are substrate-agnostic, its runtime-consumption gate is fail-closed,
 and its creation leaves the candidate set and semantic WIP lock empty.
+
+### Seal-candidate package status (2026-07-23)
+
+A **pre-activation synthetic seal-candidate** package has been generated
+(`status: SEAL_CANDIDATE_GENERATED`). Provisional mechanical terminal string:
+**`GCTM_D1_INTERFACE_READY`** (pending owner acceptance; **not** a canonical
+registry state transition).
+
+- declaration:
+  [`gctm_d1_ranking_diagnostic_declaration_20260723.md`](../../modules/semantic/research/gctm_d1_ranking_diagnostic_declaration_20260723.md)
+- terminal (seal-candidate report):
+  [`gctm_d1_ranking_diagnostic_terminal_20260723.md`](../../modules/semantic/research/gctm_d1_ranking_diagnostic_terminal_20260723.md)
+- packet:
+  [`evidence/gctm_d1_substrate_agnostic_ranking_20260723/`](../../modules/semantic/research/evidence/gctm_d1_substrate_agnostic_ranking_20260723/)
+
+This is **not** owner-accepted charter execution. It does **not** acquire WIP,
+unlock B1/O1, satisfy any runtime compatibility gate, or move the canonical
+registry `state` off `none` / seal-candidate bookkeeping. Charter activation
+still requires owner acceptance of the declaration **and** separate scheduling.
