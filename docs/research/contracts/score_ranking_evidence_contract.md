@@ -1,5 +1,5 @@
-<!-- doc-status: proposed -->
-<!-- doc-promotion: none; draft normative contract, not yet transition authority -->
+<!-- doc-status: active -->
+<!-- doc-promotion: normative cross-study L2 transition authority -->
 <!-- doc-date: 2026-07-23 -->
 <!-- doc-module: cross -->
 <!-- contract-owner: cross-study L2 score evidence contract -->
@@ -9,25 +9,18 @@
 
 ## 0. Status, authority, and activation
 
-This document is the proposed cross-study contract for `layer: L2 score`.
-It supplies the missing semantics for event-local rank, margin, top-1,
-calibration, and the score claim ladder. It is a **draft** until an owner
-accepts and freezes it.
+This document is the owner-accepted and frozen cross-study contract for
+`layer: L2 score`. Contract identity
+`score_ranking_evidence_contract_v1` was accepted on 2026-07-23 under
+`score_ranking_contract_owner_acceptance_20260723` and bound into
+[`claim_state_registry.md`](claim_state_registry.md) under
+`claim_state_registry_score_ranking_v1`.
 
-While this file remains `doc-status: proposed`:
-
-- every registry object whose only missing transition authority is this
-  contract remains `transition_semantics: unavailable`;
-- this file does not activate B1 or O1, admit a score object to the candidate
-  set, authorize data access, select a score, or change runtime behavior;
-- a study may review this draft, but may not cite it as satisfied activation
-  authority.
-
-Promotion requires an owner review that freezes this contract, updates
-[`claim_state_registry.md`](claim_state_registry.md), and re-derives affected
-objects. Before that review, a versioned machine-readable declaration schema
-and fail-closed validator must implement the acceptance gate in §8.1. PR merge
-alone is not acceptance.
+Acceptance makes the `SR0`–`SR6` transition semantics defined. It does **not**
+activate B1 or O1, admit any score object to the candidate set, authorize data
+access, select a score, advance an existing object, or change runtime behavior.
+Each consumer must still bind a valid declaration and satisfy its own
+dependencies, decision-relevance test, seal, and scheduling gate.
 
 Authority remains split: this contract owns L2 transition rules and evidence
 semantics; the registry binds an accepted contract identity and owns only each
@@ -423,9 +416,9 @@ terminal selected by the sealed decision procedure
 
 ### 8.1 Machine-readable owner-acceptance gate
 
-This prose draft may merge as `proposed`, but it must not become active or
-owner-accepted until a separately versioned declaration schema and validator
-exist. They must fail closed over at least:
+This contract became active only after the separately versioned declaration
+schema and validator existed and passed owner review. They fail closed over at
+least:
 
 ```text
 the complete policy tuple, including s_components -> T -> orientation
@@ -451,16 +444,17 @@ to a non-null artifact, rule, acceptance, or contract identity. Listing the
 obligation words without those bindings is structurally incomplete and must
 fail closed.
 
-The proposed v1 implementation surface is:
+The accepted v1 implementation surface is:
 
 - [declaration schema](../../../scripts/tools/score_ranking_declaration_schema_v1.json);
 - [fail-closed validator](../../../scripts/tools/validate_score_ranking_declaration.py);
 - [positive fixture](../../../tests/contract/fixtures/score_ranking_declaration_valid_v1.json)
   and [per-class negative contract tests](../../../tests/contract/test_score_ranking_declaration_v1.py).
 
-These artifacts make the draft mechanically reviewable. Their merge does not
-check any box in §11 by itself: owner review must still accept their coverage,
-freeze the contract identity, and bind it into the registry.
+These artifacts are the mechanically reviewed declaration surface. They do not
+verify external owner or registry authority: an actual declaration must bind
+the accepted identities from §0, and the registry remains the fact-owner for
+effective object state.
 
 ## 9. Forbidden shortcuts
 
@@ -479,7 +473,7 @@ PR merge               => contract acceptance or rung advancement
 
 ## 10. Initial consumer boundary: GCTM B1
 
-The proposed
+The
 [`GCTM B1` charter](../threads/gctm_b1_runtime_grounded_offline_attribution_task.md)
 is an intended consumer, not this contract's authority. Its future declaration
 must instantiate this contract and additionally satisfy its H0 substrate,
@@ -497,13 +491,13 @@ For GCTM B1 specifically:
 
 ## 11. Promotion checklist
 
-- [ ] owner accepts the object, space, and candidate-universe definitions;
-- [ ] owner accepts rank, tie, margin, top-1/top-k, and cutoff semantics;
-- [ ] owner accepts calibration separation and transition-likelihood boundary;
-- [ ] owner accepts `SR0`–`SR6` and non-inheritance rules;
-- [ ] versioned declaration schema and fail-closed validator implement §8.1;
-- [ ] positive and per-class negative fixtures pass the validator;
-- [ ] registry §7 is updated from absent to the accepted contract identity;
-- [ ] affected L2 objects are individually re-derived; none auto-advance;
-- [ ] B1 remains non-WIP unless all of its other gates and separate scheduling
+- [x] owner accepts the object, space, and candidate-universe definitions;
+- [x] owner accepts rank, tie, margin, top-1/top-k, and cutoff semantics;
+- [x] owner accepts calibration separation and transition-likelihood boundary;
+- [x] owner accepts `SR0`–`SR6` and non-inheritance rules;
+- [x] versioned declaration schema and fail-closed validator implement §8.1;
+- [x] positive and per-class negative fixtures pass the validator;
+- [x] registry §7 is updated from absent to the accepted contract identity;
+- [x] affected L2 objects are individually re-derived; none auto-advance;
+- [x] B1 remains non-WIP unless all of its other gates and separate scheduling
       are satisfied.

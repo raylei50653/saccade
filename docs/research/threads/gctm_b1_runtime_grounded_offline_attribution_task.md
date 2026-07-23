@@ -22,7 +22,8 @@ created: 2026-07-17
 [B1/O1 objectives-and-semantics synthesis](../../modules/semantic/research/gctm_b1_o1_task_objectives_and_semantics_20260716.md)
 on 2026-07-17, executing that document's §37 repository split. It is **not
 active**, **not sealed**, **not sole-active**, and does not occupy semantic WIP
-(sole active is O0, per [semantic TODO](../../modules/semantic/TODO.md)). It
+(the WIP lock is currently free, per
+[semantic TODO](../../modules/semantic/TODO.md)). It
 does not activate B1, select a model, freeze numerical thresholds, authorize
 data access, modify runtime behavior, or promote a production policy.
 
@@ -101,22 +102,22 @@ and condition 4's specification/proof identities are available as frozen
 [D1](../models/gap_conditioned_stochastic_transition_spec_v1.md) §2–§8 and
 [D2](../models/gap_conditioned_stochastic_transition_lemmas_v1.md) L1–L5 (they
 still have to be **named and frozen in a B1 declaration**, which does not exist).
-Conditions 1, 3, 5–8 are **unmet**, and the score-layer contract below has only
-a [proposed draft](../contracts/score_ranking_evidence_contract.md), not owner
-acceptance or transition authority. The GCTM seal is diagnostic-only: it
-carries no runtime substrate or fidelity edge, its identifiability verdict is
-*specified, not established*, and it grants B1 no authority.
+Conditions 1, 3, 5–8 are **unmet**. The separate score-layer prerequisite is
+now **satisfied** by the owner-accepted and registry-bound
+[`score_ranking_evidence_contract_v1`](../contracts/score_ranking_evidence_contract.md).
+The GCTM seal is diagnostic-only: it carries no runtime substrate or fidelity
+edge, its identifiability verdict is *specified, not established*, and it
+grants B1 no authority.
 
 Additionally:
 
 - **Score-layer contract is a hard prerequisite.** B1 is an `L2 score` object.
-  Per [claim-state registry §7](../contracts/claim_state_registry.md), the
-  [score-layer evidence contract draft](../contracts/score_ranking_evidence_contract.md)
-  now proposes rank/margin/top-1 semantics and a claim ladder, but has not been
-  owner-accepted, so no B1 object can enter the admissible candidate set
-  (`transition_semantics: unavailable`) regardless of H0/GCTM outcomes. Drafting
-  and accepting that contract do not depend on H0. None of the eight conditions
-  above substitutes for it.
+  Per [claim-state registry §7](../contracts/claim_state_registry.md), this
+  prerequisite was satisfied on 2026-07-23 by the owner-accepted
+  [score-layer evidence contract v1](../contracts/score_ranking_evidence_contract.md).
+  L2 transition semantics are now defined, but no B1 object auto-enters the
+  admissible candidate set. None of the eight conditions above is relaxed by
+  contract acceptance.
 - **H0→GCTM consumer compatibility is a hard prerequisite for the
   bridge-runtime path.** A sealed B1 declaration must bind a
   B1-declaration-owner-accepted compatibility verdict mapping every required
@@ -716,7 +717,7 @@ accepted B1 handoff and must not rewrite B1 semantics.
 - [ ] B1 declaration owner has accepted and bound an H0→GCTM consumer
       compatibility verdict to the required runtime-observable objects;
 - [ ] accepted GCTM model specification exists;
-- [ ] score-layer evidence contract (registry §7) is owner-accepted and bound
+- [x] score-layer evidence contract (registry §7) is owner-accepted and bound
       into the registry;
 - [ ] B1-slot identity relation resolved by owner;
 - [ ] exact observation mode selected;
@@ -763,7 +764,8 @@ before activation (route: declined, no execution).
 - cite `GCTM_B1_*` as the B1 that H0 route 5 makes candidate before the owner
   resolves the B1-slot identity.
 - treat this charter as satisfying the registry §7 score-layer contract
-  prerequisite.
+  prerequisite; that authority belongs to the accepted contract and registry
+  binding.
 - restate shared §0/§1/§2/§35/§36/§39 semantics as a second truth; link the
   synthesis core instead.
 - use `s0` to stand for a production quantity (registry inadmissibility).
@@ -773,6 +775,10 @@ before activation (route: declined, no execution).
 
 ## History
 
+- 2026-07-23: `score_ranking_evidence_contract_v1` owner-accepted and bound into
+  registry §7. The score-layer prerequisite is satisfied and L2 transition
+  semantics are defined; B1 remains proposed / non-WIP because the other
+  activation prerequisites and separate scheduling remain unmet.
 - 2026-07-23: Linked the first cross-study
   [score-layer contract draft](../contracts/score_ranking_evidence_contract.md).
   It is intended for registry binding but has no transition authority; the

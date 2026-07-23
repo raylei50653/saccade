@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from decimal import Decimal
+import hashlib
 import json
 from pathlib import Path
 import sys
@@ -36,8 +37,9 @@ def _active_sr6() -> dict[str, Any]:
     declaration["record_scope"] = "actual"
     binding = declaration["contract_binding"]
     binding["contract_status"] = "active"
-    binding["owner_acceptance_id"] = "fixture_owner_acceptance_v1"
-    binding["registry_binding_id"] = "fixture_registry_binding_v1"
+    binding["contract_sha256"] = score_contract.ACCEPTED_CONTRACT_SHA256
+    binding["owner_acceptance_id"] = score_contract.OWNER_ACCEPTANCE_ID
+    binding["registry_binding_id"] = score_contract.REGISTRY_BINDING_ID
 
     policy = declaration["policy"]
     spaces = declaration["spaces"]
@@ -94,6 +96,34 @@ def test_schema_is_valid_draft_2020_12() -> None:
     jsonschema.Draft202012Validator.check_schema(schema)
     assert schema["$id"] == score_contract.SCHEMA_ID
     assert schema["additionalProperties"] is False
+
+
+def test_active_binding_identity_matches_frozen_contract() -> None:
+    contract = (
+        ROOT / "docs" / "research" / "contracts" / "score_ranking_evidence_contract.md"
+    )
+    registry = (
+        ROOT / "docs" / "research" / "contracts" / "claim_state_registry.md"
+    ).read_text(encoding="utf-8")
+    digest = hashlib.sha256(contract.read_bytes()).hexdigest()
+    schema = score_contract.load_json(score_contract.SCHEMA_PATH)
+    active_properties = schema["$defs"]["contract_binding"]["allOf"][1]["then"][
+        "properties"
+    ]
+
+    assert digest == score_contract.ACCEPTED_CONTRACT_SHA256
+    assert active_properties["contract_sha256"]["const"] == digest
+    assert (
+        active_properties["owner_acceptance_id"]["const"]
+        == score_contract.OWNER_ACCEPTANCE_ID
+    )
+    assert (
+        active_properties["registry_binding_id"]["const"]
+        == score_contract.REGISTRY_BINDING_ID
+    )
+    assert score_contract.OWNER_ACCEPTANCE_ID in registry
+    assert score_contract.REGISTRY_BINDING_ID in registry
+    assert digest in registry
 
 
 def test_checked_in_fixture_is_structurally_complete_but_never_authoritative() -> None:
@@ -379,8 +409,9 @@ def test_fixture_cannot_claim_active_owner_and_registry_authority() -> None:
     declaration = _valid()
     binding = declaration["contract_binding"]
     binding["contract_status"] = "active"
-    binding["owner_acceptance_id"] = "fixture_owner_acceptance_v1"
-    binding["registry_binding_id"] = "fixture_registry_binding_v1"
+    binding["contract_sha256"] = score_contract.ACCEPTED_CONTRACT_SHA256
+    binding["owner_acceptance_id"] = score_contract.OWNER_ACCEPTANCE_ID
+    binding["registry_binding_id"] = score_contract.REGISTRY_BINDING_ID
     _assert_error(declaration, "fixture_authority")
 
 
@@ -388,5 +419,22 @@ def test_active_binding_requires_both_acceptance_identities() -> None:
     declaration = _valid()
     binding = declaration["contract_binding"]
     binding["contract_status"] = "active"
-    binding["owner_acceptance_id"] = "fixture_owner_acceptance_v1"
+    binding["contract_sha256"] = score_contract.ACCEPTED_CONTRACT_SHA256
+    binding["owner_acceptance_id"] = score_contract.OWNER_ACCEPTANCE_ID
+    _assert_error(declaration, "schema_rejection")
+
+
+@pytest.mark.parametrize(
+    ("field", "wrong_value"),
+    [
+        ("contract_sha256", "b" * 64),
+        ("owner_acceptance_id", "wrong_owner_acceptance_v1"),
+        ("registry_binding_id", "wrong_registry_binding_v1"),
+    ],
+)
+def test_active_binding_requires_exact_accepted_identity(
+    field: str, wrong_value: str
+) -> None:
+    declaration = _active_sr6()
+    declaration["contract_binding"][field] = wrong_value
     _assert_error(declaration, "schema_rejection")
