@@ -176,6 +176,7 @@ Manifest: `docs/ownership/doc_migration_manifest.yaml`
 - `docs/research/evidence_ledger.md`
 - `docs/research/models/gap_conditioned_stochastic_transition_lemmas_v1.md`
 - `docs/research/models/gap_conditioned_stochastic_transition_spec_v1.md`
+- `docs/research/models/gap_conditioned_stochastic_transition_terminal_review_v1.md`
 - `docs/research/paper_outline.md`
 - `docs/research/pipeline/CPU_BOUND_ANALYSIS.md`
 - `docs/research/pipeline/cpu_overhead_analysis_20260707.md`
@@ -324,6 +325,6 @@ Excluded from the active index and default search view.
 
 ## Inventory summary
 
-- documents: 274
-- active: 219
+- documents: 275
+- active: 220
 - grayed out: 55

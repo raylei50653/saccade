@@ -40,9 +40,11 @@ gain as distinct claims; §6). **All four numbered activation-contract
 obligations are now resolved.** WP-A6 additionally freezes the D1
 identifiability/leakage matrix (§7; the terminal-3 predicate object), and WP-A7
 freezes the last D1 deliverable — the schema-only B1 input interface (§8). **All
-D1 deliverable items are therefore complete**; a sealable terminal
-(`GCTM_MODEL_SPEC_SEALABLE`) still requires terminal review (WP-A8), which is
-where any terminal is selected. §4 makes no claim about obligations 2–3, §5 makes
+D1 deliverable items are therefore complete**; WP-A8 terminal review has since
+selected **`GCTM_MODEL_SPEC_SEALABLE`** against the charter's frozen decision
+procedure (owner acceptance pending; see the WP-A8 append-only note below — the
+terminal is selected by that review, not by this document). §4 makes no claim
+about obligations 2–3, §5 makes
 no claim about obligation 2, §6 makes no claim about identifiability/leakage, §7
 measures no data and selects no terminal — it specifies the identifiability
 boundary only — and §8 is schema-only: it defines what a future B1 input would
@@ -73,6 +75,23 @@ B1/O1/runtime/production quantity claim.
 > status is the §1 document-state table above. This note is the append-only
 > correction of record. §8 resolves no numbered obligation (all four remain
 > resolved by WP-A1/A2/A4/A5) and selects no terminal.
+
+> **Append-only status correction (WP-A8).** Terminal review has been performed
+> by WP-A8 (charter decision procedure; checklist artifact:
+> [terminal review v1](gap_conditioned_stochastic_transition_terminal_review_v1.md)),
+> and the selected terminal is **`GCTM_MODEL_SPEC_SEALABLE`** (owner acceptance
+> pending). The frozen §7.9 and §8.8 typed-deferral tables list *terminal review
+> (checklist artifact + mechanical terminal selection)* as `unresolved` — a
+> **freeze-time snapshot** that is now **superseded**. In particular, the §7.7
+> sentence assigning to WP-A8 the mechanical decision of whether the
+> identifiability row is `complete` or `rejection-established` is answered:
+> **`complete`** — §7 specifies a boundary with a non-empty identifiable side and
+> exports per-instantiation rejection fail-closed through §8 (W6, §8.7), so no
+> `rejection-established` row exists and terminal 3 is not selected. This changes
+> **no** §7 content: the verdict remains *identifiability specified, not
+> established*. Frozen §2–§8 are kept **byte-frozen** and are not edited in place;
+> the current section status is the §1 document-state table above. This note is
+> the append-only correction of record.
 
 ## §2 Canonical observation/time interface（obligation 1 — nine fields, frozen）
 
@@ -1969,3 +1988,20 @@ claim-restriction map。它不宣稱任何 runtime 擷取值、不建立 fidelit
   plus the previous 43); **fifteen** legality cases correctly pass, now including
   the case this round is about — a **single-gap, multi-event, varying-context**
   population supporting `vbar_context_drift`. Scratchpad only; no code committed.
+- 2026-07-23 — **WP-A8 terminal review** (no §2–§8 content edited; §2–§8 remain
+  byte-frozen). The charter's terminal review was performed against this
+  document and D2; the checklist artifact is
+  [terminal review v1](gap_conditioned_stochastic_transition_terminal_review_v1.md)
+  and the selected terminal is **`GCTM_MODEL_SPEC_SEALABLE`** (ordered terminal
+  5; owner acceptance pending). All four D1 deliverable rows (§4 equations +
+  domains, §3 observation interfaces, §7 identifiability/leakage matrix, §8 B1
+  schema) are recorded `complete`; the §7.7 question left to WP-A8 — whether the
+  identifiability row is `complete` or `rejection-established` — is answered
+  `complete`, because §7 specifies a boundary with a non-empty identifiable side,
+  declares its structural gauges and unmet \(\gamma\) regime, and exports
+  per-instantiation rejection fail-closed via §8 W6/§8.7, while no data, fitting
+  or identification is authorised, so no in-scope claim must rely on an
+  unidentifiable component. The identifiability verdict is unchanged
+  (*specified, not established*) and is carried as a limit of the selected
+  terminal. This entry and the WP-A8 append-only note in §1 are the only changes
+  to this document.

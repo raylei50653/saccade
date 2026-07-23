@@ -13,9 +13,11 @@
   procedure 已凍結;**active declaration 已 seal（WP-A1）**：九欄位
   observation/time interface 凍結於 [D1 §2–§3](../../research/models/gap_conditioned_stochastic_transition_spec_v1.md)。
   **WP-A2–A7 已 land**：D1 §2–§8 全數凍結、D2（WP-A3）已在,四個 numbered
-  obligation 全 resolved,D1 deliverable items 全 complete;current step =
-  WP-A8（terminal review：checklist artifact + 機械 terminal selection）。
-  尚未選任何 terminal;逐項狀態以 charter 為準（本欄只作 WIP 投影）。
+  obligation 全 resolved,D1 deliverable items 全 complete。**WP-A8（terminal
+  review）已執行**：checklist artifact＝[terminal review v1](../../research/models/gap_conditioned_stochastic_transition_terminal_review_v1.md),
+  機械選出 terminal `GCTM_MODEL_SPEC_SEALABLE`（15/15 scoring row `complete`）,
+  **owner acceptance 未決**;acceptance 才關閉此 task。
+  逐項狀態與 terminal 記錄以 charter 為準（本欄只作 WIP 投影）。
   不授權 data／fitting／H0／B1／O1／runtime／online／production;H0 狀態不因此改變。
 - H0 closure（三個 owner-accepted ordered terminal `H0_PROVENANCE_INVALID`;
   faithful capture = none;actual H0 guarantee = none;Phase B forbidden;
