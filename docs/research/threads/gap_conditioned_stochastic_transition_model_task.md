@@ -926,3 +926,20 @@ no B1/O1/online/production authority.
   domain. Re-checked: **45** injected violations each caught, **fourteen**
   legality cases correctly pass. Scratchpad only, no code committed. Boundary
   unchanged: schema-only, no B1 activation, no terminal.
+- 2026-07-23 — fifth bounded correction per #258 owner re-review (still
+  pre-merge; D1 §8 not yet frozen; §2–§7 byte-frozen). One blocker: the §8.7
+  "single-event" row equated **one event** with **one distinct \(\Delta\)**, but a
+  population can be single-gap and multi-event, and frozen §7.4/§7.6 condition
+  \(\bar v(c)\) identification on declared, **varying**, exit-causal context —
+  not on distinct gaps (those are needed by the covariance shapes and by
+  exit-state bias separation). W6(e) was already correct, so a legal single-gap
+  multi-event context study passed the predicate and was rejected by the map.
+  Row renamed **single-gap population** and its forbidden set narrowed to
+  \(\mathcal A_{\mathrm{cov}}\cup\{\)`exit_state_bias_separation`\(\}\);
+  `vbar_context_drift` removed (a true single event has `context_varies=false`
+  and is fail-closed by W6(e), so no duplicate block is needed). Also fixed a
+  round-3 rename typo (the old atom name is `quotient_only`). Re-checked: **46**
+  injected violations each caught, **fifteen** legality cases pass, including a
+  single-gap multi-event varying-context population supporting
+  `vbar_context_drift`. Scratchpad only, no code committed. Boundary unchanged:
+  schema-only, no B1 activation, no terminal.

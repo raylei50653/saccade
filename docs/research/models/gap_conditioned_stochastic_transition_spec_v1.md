@@ -1311,7 +1311,7 @@ Atom 分**三類**（承 §7.6 的 covariance-level／mean-level 分層，**不�
 2. `no_parameter_identification` **必須單獨出現**，不得與任何其他 atom 併列。
 3. 其餘 atom 可自由併列（`covariance_quotient` **無**排他性語意：它只表示 claim
    *使用* quotient 成分，需要超越 quotient 者另列 `Pxx_R1_split`／`asym_Pxv`，各自
-   由其分支判定——舊名 `covariance_quotient` 的 "only" 與併列規則相矛盾，故改名）。
+   由其分支判定——舊名 `quotient_only` 的 "only" 與併列規則相矛盾，故改名）。
 4. **層別不互相蘊含**：\(\mathcal A_{\mathrm{cov}}\) 依賴共享 covariance 參數，
    \(\mathcal A_{\mathrm{mean}}\) 依賴 varying exit-causal context／operator-offset
    宣告／population-null——**W6(f) 只適用於 \(\mathcal A_{\mathrm{cov}}\)**（§7.6 的
@@ -1420,7 +1420,7 @@ X-b 的存在只保證 §5 的 moment 結構有定義，**不**構成 record-lev
 | `label_true_match` 不可得 | **CAL 與 RANK 皆不可主張**（兩者皆以 true-match label 為前提） | 僅 model-side 的定義性敘述（無 claim） | §7.5 |
 | `cal_working_null` 未宣告 | CAL 的**分佈層** claim（\(q\sim\chi^2_k\)、coverage／PIT） | \(q,\log\det S_\Delta,E,\Pi\) 作為 \(r,S_\Delta\) 的**函數**仍 well-defined | §6.1 |
 | `region_definition` 未宣告（卻使用 \(\Pi\)） | 任何 \(\Pi\)-based claim | \(q\)／NLL-based claim | §6.1／§6.3 |
-| single-event population（`parameter_sharing_scope` 只含一個 \(\Delta\)） | \(\mathcal A_{\mathrm{cov}}\cup\{\)`vbar_context_drift`, `exit_state_bias_separation`\(\}\)（§7.3：連 quotient 都不可；\(\bar v(c)\) 需 varying context；exit-state bias 需 multi-gap，§7.6） | `no_parameter_identification`；以及 `mean_bias_attribution`——它已縮窄為**已宣告** operator offset 的分離，§7.6 mean 表的阻斷條件就是「顯式宣告 offset」，**不需 multi-gap**（交由 W6(g) 判；若 drift 非 `vbar_zero`，W6(g) 強制併列 `vbar_context_drift`，該 atom 仍被本列擋下） | §7.3／§7.6 |
+| **single-gap population**（`parameter_sharing_scope` 只含一個 distinct \(\Delta\)） | \(\mathcal A_{\mathrm{cov}}\cup\{\)`exit_state_bias_separation`\(\}\)（§7.3：連 quotient 都不可；exit-state bias 需 multi-gap，§7.6 mean 表第 3 列） | `no_parameter_identification`；`mean_bias_attribution`（已縮窄為**已宣告** operator offset 的分離，阻斷條件是該宣告本身而非 multi-gap，交由 W6(g)）；**以及 `vbar_context_drift`**——§7.4／§7.6 對 \(\bar v(c)\) 的條件是「\(c\) 已宣告／觀測、在 population 中**變化**、exit-causally available」，**不含**多個相異 \(\Delta\)；single-gap 但 multi-event 且 context 變化的 population 合法。真正的 single **event** 無法讓 context 變化，由 W6(e)（`context_varies=false`）fail-closed，本列不重複攔截 | §7.3／§7.4／§7.6 |
 | `error_dependence=dependent` 但 \(S_\Delta\succ0\) 未另行確立 | 任何需 \(S_\Delta^{-1}\) 的 claim（\(q/E/\Pi\)） | \(S_\Delta\succeq0\) 層級的敘述 | §5.5／§6.1 |
 
 **跨欄位的合成規則（frozen）：** 多個缺席同時發生時，禁止的 atom 集合為各列的
@@ -1943,3 +1943,29 @@ claim-restriction map。它不宣稱任何 runtime 擷取值、不建立 fidelit
   evidence blocking a `global` claim for `covariance_quotient` and
   `Pxx_R1_split` (not just the \(\gamma\) atoms). Scratchpad only; no code
   committed.
+- 2026-07-23 — fifth bounded correction per #258 owner re-review (still
+  pre-merge; **§8 not yet frozen**; §2–§7 byte-frozen). One blocker plus one
+  non-blocking typo; sanity figures supersede all earlier entries. **The §8.7
+  "single-event" row conflated "one event" with "one distinct \(\Delta\)"** — a
+  population may be single-gap yet multi-event (e.g. three events all at
+  \(\Delta=4\) with contexts \(A,B,C\)), and frozen §7.4/§7.6 condition
+  \(\bar v(c)\) identification on **declared, varying, exit-causal context
+  only** — never on distinct \(\Delta\)s (distinct gaps are required by the
+  covariance shapes, §7.4, and by exit-state bias separation, §7.6 mean row 3,
+  not by context drift). W6(e) was already correct (it checks `context_varies`),
+  so the row contradicted the predicate: a legal single-gap multi-event context
+  study passed W6(e) and was then rejected by §8.7. Renamed the row to
+  **single-gap population (one distinct \(\Delta\) in scope)** and narrowed its
+  forbidden set to \(\mathcal A_{\mathrm{cov}}\cup\{\)`exit_state_bias_separation`\(\}\),
+  dropping `vbar_context_drift`: a genuine single **event** cannot vary its
+  context, so W6(e) fail-closes on `context_varies=false` without this row
+  duplicating the block. `mean_bias_attribution` remains outside the set (round 4).
+  Also fixed a typo introduced by the round-3 rename — the combination rule cited
+  the superseded name as `covariance_quotient`; the old name is `quotient_only`.
+  Re-checked on synthetic records: conforming declaration passes all ten
+  predicates; **46** injected violations each caught (a true single event with
+  `context_varies=false` claiming `vbar_context_drift`; the same with
+  `mean_bias_attribution` co-listed; single-gap `exit_state_bias_separation`;
+  plus the previous 43); **fifteen** legality cases correctly pass, now including
+  the case this round is about — a **single-gap, multi-event, varying-context**
+  population supporting `vbar_context_drift`. Scratchpad only; no code committed.
