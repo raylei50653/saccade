@@ -443,6 +443,61 @@ derived_from: §4.1 錯層 + score_ranking_evidence_contract_v1 §2.3/§5 + regi
 last_reviewed_at: 2026-07-23
 ```
 
+### `quantity.h0_gctm_interface_static_feasibility`
+
+```yaml
+layer: quantity（cross-module static producer→consumer feasibility；非 runtime compatibility object，非 B1 candidate）
+ladder: ordered H0_GCTM static-feasibility terminal family
+transition_semantics: defined
+lifecycle_state: terminal
+state: H0_GCTM_INTERFACE_STRUCTURALLY_INSUFFICIENT
+terminal_acceptance:
+  owner_acceptance_id: h0_gctm_static_audit_terminal_owner_acceptance_20260723
+  acceptance_date: 2026-07-23
+  acceptance_mechanism: PR merge of the exact mechanically validated packet
+substrate: none（static ABI/schema/interface identities only；no H0 capture）
+target_substrate: future H0→GCTM bridge-runtime evidence path
+authority_class: static_feasibility_only
+frozen_inputs:
+  - GCTM_D1_INTERFACE_READY / gctm_d1_terminal_owner_acceptance_20260723
+  - gctm_d1_substrate_agnostic_ranking_v1_consumer_interface @ 45c16a6c8cf50d098b12cc8e4f1acbdcc846d0d431ad77f9fbe64bdb60bb57ce
+  - h0_bridge_decision_trace_v2 @ 5ea8bea16ab6f6916baebd486c3256100427ae823e2f7bac021ff1284254f9a2
+  - h0_gctm_guarantee_registration_v2 @ 63af2eba012a248d769cde225ce28db404cefe592edc995a12d86af307419ff2
+result:
+  physical_gap: legal GCTM_DERIVED relation g_phys = la - bridge_at + 1；la / g_phys / bridge_at / operator offset 保持分離
+  residual: legal GCTM_DERIVED M1/Hx construction with M2 inactive；fwd_r/bwd_r 不作 proxy
+  covariance: GCTM_DERIVED from declared P0/gamma/D/R1 artifacts；非 H0 guarantee
+  context: M2 inactive / null drift only；nonzero context source unavailable
+  unresolved_runtime_objects: [candidate_universe, event_membership]
+  terminal_reason: accepted D1 universe 是 synthetic_event_candidate_set_v1；registration-v2 無 envelope/native-universe completeness binding
+blockers:
+  - type: inadmissibility
+    what: 以 unchanged ABI + registration-v2 重複 H0 capture 來解鎖 runtime B1
+    clause: static producer→consumer evidence path 在 candidate universe / event membership 前已中斷；增加 capture rows 不補 semantic/registration edge
+  - type: dependency
+    what: 未來重新評估 H0 runtime-substrate re-entry
+    clause: owner 先選 minimal H0 registration/fidelity-edge delta 或 GCTM runtime consumer re-charter
+decision_relevance:
+  status: terminal decision-changing mainline — feasible 才可考慮新 H0 runtime-substrate path；insufficient ⇒ unchanged-interface re-entry 不可排程
+  selected_consequence: do not authorize new capture under unchanged ABI/registration-v2
+runtime_consumer_gates:
+  H0_ROUTE5_B1: missing（unchanged）
+  GCTM_B1: missing（unchanged；與前者獨立）
+not_established:
+  - accepted H0 baseline
+  - field-level runtime guarantees
+  - runtime fidelity / compatibility / substrate
+  - H0_ROUTE5_B1 / GCTM_B1 / O1 activation
+wip_history: 2026-07-23 sole-active acquired for bounded audit → terminal selected → WIP released
+supporting_charter: ../threads/closed/h0_gctm_interface_static_feasibility_audit_20260723.md
+supporting_packet: ../../modules/semantic/research/evidence/h0_gctm_interface_static_feasibility_20260723/
+accepting_review: h0_gctm_static_audit_terminal_owner_acceptance_20260723
+last_transition: 2026-07-23 — mechanical static terminal structurally insufficient；no capture/re-entry/registration/compatibility/gate/activation effect
+admissible_units: []
+derived_from: frozen responsibility matrix + immutable derivations + coverage conservation + ordered terminal
+last_reviewed_at: 2026-07-23
+```
+
 ### `quantity.gap_conditioned_transition_model.a_layer_spec`
 
 ```yaml
@@ -639,7 +694,7 @@ last_reviewed_at: 2026-07-23
 |---|---|
 | **score-layer transition semantics** | **RESOLVED 2026-07-23.** [`score_ranking_evidence_contract_v1`](score_ranking_evidence_contract.md) 已由 owner 接受並凍結；`owner_acceptance_id: score_ranking_contract_owner_acceptance_20260723`；`registry_binding_id: claim_state_registry_score_ranking_v1`；`contract_sha256: 7dbc2d965079fa3fc13f7802a4a083b1c4cbf49d658ffe3728b6c405364a13b4`。本 binding 只使 L2 admissibility 可判定；不自動推進 object、產生候選、啟動 B1/O1 或授權 runtime 行為。 |
 | **B1-slot identity** | **RESOLVED 2026-07-23.** [`gctm_b1_slot_identity_decision_v1`](gctm_b1_slot_identity_decision_v1.json) 固定 `GCTM_B1 != H0_ROUTE5_B1`、`relation: coexist`、非 alias、非 supersede、不可共享 activation authority；未來改寫關係須另開 owner-accepted transition。Identity resolution 不解除任何 runtime gate。 |
-| **H0 runtime substrate / compatibility** | **OPEN / fail closed.** 三次 `H0_PROVENANCE_INVALID` 後仍無 valid runtime substrate、stable evidence identity、canonical checksum 或 owner-accepted H0→GCTM compatibility verdict。`H0_ROUTE5_B1` 與 `GCTM_B1` 均保持 proposed；`GCTM_D1` diagnostic evidence 不可補此缺口。 |
+| **H0 runtime substrate / compatibility** | **OPEN / fail closed；unchanged-interface re-entry blocked.** 三次 `H0_PROVENANCE_INVALID` 後仍無 valid runtime substrate、stable evidence identity、canonical checksum 或 owner-accepted H0→GCTM compatibility verdict。2026-07-23 bounded static audit 又選出 `H0_GCTM_INTERFACE_STRUCTURALLY_INSUFFICIENT`：D1 candidate universe 仍是 synthetic，registration-v2 也不能 bind trace-v2 native-universe completeness。`H0_ROUTE5_B1` 與 `GCTM_B1` 均保持 proposed；兩個 compatibility gate 各自 `missing`。下一個 owner charter 只能先選 minimal registration/fidelity-edge delta 或 runtime consumer re-charter，不得在 unchanged interface 下重複 capture。 |
 
 ---
 
@@ -658,6 +713,7 @@ last_reviewed_at: 2026-07-23
 | *(仍全空，2026-07-23 D1 declaration acceptance 後重推)* | `GCTM_D1` | Declaration 已 `GCTM_D1_DECLARATION_ACCEPTED`（`gctm_d1_declaration_owner_acceptance_20260723`）；execution contract 凍結；`blocked_by: owner_scheduling`；canonical `state` 仍 `none`。**declaration acceptance ≠ execution**；**不**產生 decision-relevant candidate；**不**取得 WIP；runtime gates 仍 `missing`。 |
 | *(仍非 decision-relevant，2026-07-23 D1 owner scheduling 後重推)* | `GCTM_D1` | Owner scheduling 已接受（`gctm_d1_owner_scheduling_20260723` / `gctm_d1_activation_owner_acceptance_20260723`）；slot **active**；`active_wip: [GCTM_D1]`；one canonical execution authorized。canonical `state` 仍 `none`；**不**進入 `decision_relevant_candidates`；runtime gates 仍 `missing`；execution / terminal / closure 屬後續獨立 PR。 |
 | *(仍全空，2026-07-23 D1 canonical execution closure 後重推)* | `GCTM_D1` | Canonical execution 完成；mechanical terminal **`GCTM_D1_INTERFACE_READY`** owner-accepted（`gctm_d1_terminal_owner_acceptance_20260723`）；`lifecycle_state: terminal`；`active_wip: []`。**不**進入 `decision_relevant_candidates`；runtime gates 仍 `missing`；**不**授權 H0 re-entry 或 B1/O1 activation。 |
+| *(仍全空，2026-07-23 H0→GCTM static audit closure 後重推)* | `quantity.h0_gctm_interface_static_feasibility` | Decision-changing mainline 已完成並選出 **`H0_GCTM_INTERFACE_STRUCTURALLY_INSUFFICIENT`**；WIP 已釋放，object 本身不是 runtime compatibility object 或 B1 candidate。結論阻止 unchanged-interface H0 capture/re-entry 自動排程，但不產生新的 decision-relevant implementation candidate；owner 必須另選 registration/fidelity-edge delta 或 consumer re-charter。 |
 
 **Machine projection:** `gctm_b1_slot_identity_decision_v1.json` 的
 `registry_projection` 已重推為 `decision_relevant_candidates: []`、

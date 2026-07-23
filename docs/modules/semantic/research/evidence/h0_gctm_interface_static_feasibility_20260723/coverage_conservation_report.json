@@ -1,0 +1,56 @@
+{
+  "schema": "h0_gctm_static_audit_coverage_conservation_v1",
+  "report_id": "h0_gctm_static_audit_coverage_conservation_20260723",
+  "matrix_id": "h0_gctm_interface_static_feasibility_20260723",
+  "total_rows": 18,
+  "required_consumer_objects": 17,
+  "additional_boundary_objects": [
+    "operator_offset_position"
+  ],
+  "responsibility_counts": {
+    "H0_EXACT": 1,
+    "H0_DERIVED": 1,
+    "GCTM_DERIVED": 6,
+    "DECLARATION_CONSTANT": 8,
+    "B1_OFFLINE": 1,
+    "OUTSIDE_ENVELOPE": 1,
+    "UNAVAILABLE": 0
+  },
+  "runtime_observable_count": 17,
+  "offline_count": 1,
+  "unresolved_runtime_objects": [
+    {
+      "consumer_object": "candidate_universe",
+      "reason": "accepted D1 candidate_universe is synthetic_event_candidate_set_v1 and has no legal H0 runtime mapping",
+      "owner_route": "GCTM consumer re-charter or runtime observation-family restriction"
+    },
+    {
+      "consumer_object": "event_membership",
+      "reason": "trace-v2 native-universe sidecars exist but registration-v2 cannot bind envelope completeness or native-universe semantics",
+      "owner_route": "minimal H0 registration/fidelity-edge delta"
+    }
+  ],
+  "runtime_consumer_gates": [
+    {
+      "gate_id": "gctm_d1_to_h0_route5_b1_compatibility_v1",
+      "consumer_slot_id": "H0_ROUTE5_B1",
+      "status_before": "missing",
+      "status_after": "missing",
+      "independent": true
+    },
+    {
+      "gate_id": "gctm_d1_to_gctm_b1_compatibility_v1",
+      "consumer_slot_id": "GCTM_B1",
+      "status_before": "missing",
+      "status_after": "missing",
+      "independent": true
+    }
+  ],
+  "conservation_equations": {
+    "rows_equal_responsibility_sum": "18 = 1 + 1 + 6 + 8 + 1 + 1 + 0",
+    "rows_equal_runtime_plus_offline": "18 = 17 + 1",
+    "required_objects_have_exactly_one_disposition": true,
+    "two_runtime_gates_conserved_independently": true
+  },
+  "conservation_complete": true
+}

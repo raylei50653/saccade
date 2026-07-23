@@ -1,0 +1,73 @@
+{
+  "schema": "h0_gctm_static_audit_boundary_ownership_v1",
+  "report_id": "h0_gctm_static_audit_boundary_ownership_20260723",
+  "physical_gap": {
+    "verdict": "legal_gctm_derived_relation",
+    "responsibility_class": "GCTM_DERIVED",
+    "h0_candidate_inputs": [
+      "pair_record.la",
+      "pair_record.bridge_at"
+    ],
+    "immutable_derivation_id": "gctm_physical_gap_from_operational_timing_v1",
+    "formula": "g_phys = la - bridge_at + 1",
+    "distinctions": {
+      "la": "Delta_on, the production score-extrapolation horizon",
+      "g_phys": "exit-to-entry physical frame intervals",
+      "bridge_at": "candidate hit-streak fire convention",
+      "operator_offset": "plus/minus (bridge_at-1) times endpoint velocity, separate from canonical residual",
+      "pair_record_emission": "bridge fire after candidate entry; not the exit endpoint"
+    },
+    "proxy_used": false,
+    "h0_guarantee_claimed": false
+  },
+  "residual": {
+    "verdict": "legal_gctm_derived_relation_with_m1_m2_inactive_restriction",
+    "responsibility_class": "GCTM_DERIVED",
+    "y1_source": "pair_record cand_anchor_x/cand_anchor_y at candidate head-4 endpoint 0",
+    "exit_state_source": "pair_record lost_anchor_x/lost_anchor_y and lost_velocity_x/lost_velocity_y",
+    "mean_model_identity": "gctm_m1_position_innovation_from_h0_snapshot_v1",
+    "gap_time_mapping": "canonical Delta equals g_phys; la is not substituted",
+    "operator_offset_treatment": "derived separately; not absorbed into m^-_Delta or context drift",
+    "coordinate_normalization": "divide pixel-space innovation by pair_record.h_ref",
+    "runtime_fidelity_established": false
+  },
+  "innovation_covariance": {
+    "verdict": "legal_gctm_owned_derivation_not_h0_guarantee",
+    "responsibility_class": "GCTM_DERIVED",
+    "h0_raw_observation_state_inputs": "none beyond g_phys and the residual-side observations",
+    "gctm_transition_covariance": "Q_g(gamma,D)",
+    "exit_state_covariance": "P0 parameter artifact",
+    "observation_covariance": "R1 parameter artifact",
+    "composition": "S = H_x(A_g P0 A_g^T + Q_g)H_x^T + R1 under canonical C=0",
+    "candidate_specific_source": "absent; candidate-specific mode rejects unless separately declared and causal",
+    "causal_availability": "P0 exit-causal; R1 entry-causal source class; all artifacts frozen before scoring",
+    "validity": "component PSD plus resulting S SPD required; otherwise reject before inversion",
+    "h0_guarantee_claimed": false
+  },
+  "context": {
+    "verdict": "nonzero_m2_unavailable_currently_m1_fallback_legal",
+    "responsibility_class": "DECLARATION_CONSTANT",
+    "selected_disposition": "M2 inactive; context_drift_position null",
+    "exit_causal": true,
+    "available_at_declared_decision_point": true,
+    "entry_future_leakage": false,
+    "identifiable_nonzero_source_from_current_h0_fields": false,
+    "future_proxy_fallback_allowed": false
+  },
+  "labels": {
+    "verdict": "b1_offline_only",
+    "responsibility_class": "B1_OFFLINE",
+    "objects": [
+      "true_match_label",
+      "GT/FP",
+      "fold",
+      "blind/reveal"
+    ],
+    "inside_h0_guarantee_envelope": false
+  },
+  "hardest_boundary": {
+    "kind": "other",
+    "object": "candidate_universe_and_event_membership",
+    "reason": "The sealed D1 universe is synthetic and registration-v2 cannot bind trace-v2 native-universe completeness, so the evidence chain cannot reach either runtime consumer."
+  }
+}

@@ -1,0 +1,283 @@
+{
+  "schema": "h0_gctm_static_feasibility_fixture_catalog_v1",
+  "canonical_audit": "docs/modules/semantic/research/evidence/h0_gctm_interface_static_feasibility_20260723/responsibility_coverage_matrix.json",
+  "fixtures": [
+    {
+      "fixture_id": "positive_canonical_structurally_insufficient",
+      "category": "positive",
+      "mutations": [],
+      "expected_valid": true,
+      "expected_terminal": "H0_GCTM_INTERFACE_STRUCTURALLY_INSUFFICIENT"
+    },
+    {
+      "fixture_id": "negative_exact_relation",
+      "category": "exact_source_relation",
+      "mutations": [
+        {
+          "op": "replace",
+          "path": [
+            "rows",
+            1,
+            "relation"
+          ],
+          "value": "derived"
+        }
+      ],
+      "expected_valid": false,
+      "expected_error_class": "responsibility_relation"
+    },
+    {
+      "fixture_id": "negative_h0_derived_binding",
+      "category": "h0_derived_identity",
+      "mutations": [
+        {
+          "op": "remove",
+          "path": [
+            "rows",
+            16,
+            "derivation_binding"
+          ]
+        }
+      ],
+      "expected_valid": false,
+      "expected_error_class": "derivation_identity"
+    },
+    {
+      "fixture_id": "negative_gctm_derived_hash",
+      "category": "gctm_derived_identity",
+      "mutations": [
+        {
+          "op": "replace",
+          "path": [
+            "rows",
+            2,
+            "derivation_binding",
+            "content_hash"
+          ],
+          "value": "0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      ],
+      "expected_valid": false,
+      "expected_error_class": "derivation_identity"
+    },
+    {
+      "fixture_id": "negative_declaration_runtime_promotion",
+      "category": "declaration_constant_boundary",
+      "mutations": [
+        {
+          "op": "replace",
+          "path": [
+            "rows",
+            5,
+            "producer_sources",
+            0,
+            "field"
+          ],
+          "value": "la"
+        },
+        {
+          "op": "replace",
+          "path": [
+            "rows",
+            5,
+            "producer_sources",
+            0,
+            "stream"
+          ],
+          "value": "pair_record"
+        },
+        {
+          "op": "replace",
+          "path": [
+            "rows",
+            5,
+            "producer_sources",
+            0,
+            "source_state"
+          ],
+          "value": "candidate-source"
+        }
+      ],
+      "expected_valid": false,
+      "expected_error_class": "declaration_promotion"
+    },
+    {
+      "fixture_id": "negative_b1_label_enters_h0",
+      "category": "b1_offline_boundary",
+      "mutations": [
+        {
+          "op": "replace",
+          "path": [
+            "rows",
+            14,
+            "producer_sources",
+            0,
+            "field"
+          ],
+          "value": "cand_instance_uid"
+        },
+        {
+          "op": "replace",
+          "path": [
+            "rows",
+            14,
+            "producer_sources",
+            0,
+            "stream"
+          ],
+          "value": "pair_record"
+        },
+        {
+          "op": "replace",
+          "path": [
+            "rows",
+            14,
+            "producer_sources",
+            0,
+            "source_state"
+          ],
+          "value": "candidate-source"
+        },
+        {
+          "op": "replace",
+          "path": [
+            "rows",
+            14,
+            "requires_b1_only_treatment"
+          ],
+          "value": false
+        }
+      ],
+      "expected_valid": false,
+      "expected_error_class": "b1_boundary"
+    },
+    {
+      "fixture_id": "negative_outside_envelope_covered",
+      "category": "outside_envelope_boundary",
+      "mutations": [
+        {
+          "op": "replace",
+          "path": [
+            "rows",
+            15,
+            "disposition_status"
+          ],
+          "value": "structurally_covered"
+        }
+      ],
+      "expected_valid": false,
+      "expected_error_class": "outside_envelope_promotion"
+    },
+    {
+      "fixture_id": "negative_unavailable_covered",
+      "category": "unavailable_boundary",
+      "mutations": [
+        {
+          "op": "replace",
+          "path": [
+            "rows",
+            15,
+            "responsibility_class"
+          ],
+          "value": "UNAVAILABLE"
+        },
+        {
+          "op": "replace",
+          "path": [
+            "rows",
+            15,
+            "disposition_status"
+          ],
+          "value": "structurally_covered"
+        }
+      ],
+      "expected_valid": false,
+      "expected_error_class": "outside_envelope_promotion"
+    },
+    {
+      "fixture_id": "negative_candidate_source_claims_guarantee",
+      "category": "candidate_source_boundary",
+      "mutations": [
+        {
+          "op": "replace",
+          "path": [
+            "rows",
+            1,
+            "producer_sources",
+            0,
+            "registered_guarantee_claimed"
+          ],
+          "value": true
+        }
+      ],
+      "expected_valid": false,
+      "expected_error_class": "schema_rejection"
+    },
+    {
+      "fixture_id": "negative_shape_unit_drift",
+      "category": "shape_unit_availability_causality",
+      "mutations": [
+        {
+          "op": "replace",
+          "path": [
+            "rows",
+            2,
+            "unit"
+          ],
+          "value": "seconds"
+        }
+      ],
+      "expected_valid": false,
+      "expected_error_class": "consumer_semantics"
+    },
+    {
+      "fixture_id": "negative_coverage_conservation",
+      "category": "coverage_conservation",
+      "mutations": [
+        {
+          "op": "replace",
+          "path": [
+            "coverage_conservation",
+            "responsibility_counts",
+            "H0_EXACT"
+          ],
+          "value": 2
+        }
+      ],
+      "expected_valid": false,
+      "expected_error_class": "coverage_conservation"
+    },
+    {
+      "fixture_id": "negative_gate_conflation",
+      "category": "independent_runtime_gates",
+      "mutations": [
+        {
+          "op": "replace",
+          "path": [
+            "runtime_consumer_gates",
+            0,
+            "independent"
+          ],
+          "value": false
+        }
+      ],
+      "expected_valid": false,
+      "expected_error_class": "schema_rejection"
+    },
+    {
+      "fixture_id": "negative_terminal_order_selection",
+      "category": "terminal_selection",
+      "mutations": [
+        {
+          "op": "replace",
+          "path": [
+            "selected_terminal"
+          ],
+          "value": "H0_GCTM_INTERFACE_STRUCTURALLY_FEASIBLE"
+        }
+      ],
+      "expected_valid": false,
+      "expected_error_class": "terminal_selection"
+    }
+  ]
+}

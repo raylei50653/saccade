@@ -1,0 +1,1586 @@
+{
+  "schema": "h0_gctm_interface_static_feasibility_audit_v1",
+  "audit_id": "h0_gctm_interface_static_feasibility_20260723",
+  "audit_scope": "static_feasibility_only_no_runtime_authority",
+  "terminal_order": [
+    "H0_GCTM_STATIC_AUDIT_INVALID",
+    "H0_GCTM_INTERFACE_STRUCTURALLY_INSUFFICIENT",
+    "H0_GCTM_INTERFACE_STRUCTURALLY_FEASIBLE"
+  ],
+  "frozen_inputs": [
+    {
+      "role": "gctm_d1_terminal_acceptance",
+      "identity_id": "gctm_d1_terminal_owner_acceptance_20260723",
+      "path": "docs/modules/semantic/research/evidence/gctm_d1_canonical_execution_20260723/terminal_acceptance.json",
+      "sha256": "1aa779f6d8e15f08ec9c3fa722a27b42efc1a8ec2129a431a76bc67cfe9e67e5"
+    },
+    {
+      "role": "gctm_consumer_interface",
+      "identity_id": "gctm_d1_substrate_agnostic_ranking_v1_consumer_interface",
+      "path": "docs/modules/semantic/research/evidence/gctm_d1_substrate_agnostic_ranking_20260723/consumer_interface.json",
+      "sha256": "45c16a6c8cf50d098b12cc8e4f1acbdcc846d0d431ad77f9fbe64bdb60bb57ce"
+    },
+    {
+      "role": "gctm_compatibility_requirements",
+      "identity_id": "gctm_d1_substrate_agnostic_ranking_v1_compatibility_requirements_v1",
+      "path": "docs/modules/semantic/research/evidence/gctm_d1_substrate_agnostic_ranking_20260723/compatibility_requirements_matrix.json",
+      "sha256": "25a2ca49dbfd6d9d8985681967beb3f4df51e2fc51901444f246c94e49fa7ddd"
+    },
+    {
+      "role": "h0_consumer_compatibility_contract",
+      "identity_id": "h0_gctm_consumer_compatibility_requirements_20260718",
+      "path": "docs/modules/semantic/research/h0_gctm_consumer_compatibility_requirements_20260718.md",
+      "sha256": "6cb37366a14129461e68c24e17cbeaada80d0cd7dccf1d0ea75ac102e997151a"
+    },
+    {
+      "role": "h0_capture_abi",
+      "identity_id": "h0_bridge_decision_trace_v2",
+      "path": "scripts/tools/h0_bridge_decision_trace_schema_v2.json",
+      "sha256": "5ea8bea16ab6f6916baebd486c3256100427ae823e2f7bac021ff1284254f9a2"
+    },
+    {
+      "role": "h0_guarantee_registration_schema",
+      "identity_id": "h0_gctm_guarantee_registration_v2",
+      "path": "scripts/tools/h0_gctm_guarantee_registration_schema_v2.json",
+      "sha256": "63af2eba012a248d769cde225ce28db404cefe592edc995a12d86af307419ff2"
+    },
+    {
+      "role": "h0_guarantee_registration_validator",
+      "identity_id": "verify_h0_gctm_guarantee_registration_9039587c",
+      "path": "scripts/tools/verify_h0_gctm_guarantee_registration.py",
+      "sha256": "9039587ce06698295f964740d97b0304afbd72bab671fa492339bd7e906f652a"
+    },
+    {
+      "role": "h0_guarantee_candidate_fixture",
+      "identity_id": "h0_gctm_guarantee_registration_candidate_sources_v2_fixture",
+      "path": "tests/contract/fixtures/h0_gctm_guarantee_registration_candidate_sources_v2.json",
+      "sha256": "dc8db5007832c68fd91ff980fac667c990cad0abd0e31cfb2373d387e277401b"
+    },
+    {
+      "role": "gctm_theory",
+      "identity_id": "gap_conditioned_stochastic_transition_spec_v1",
+      "path": "docs/research/models/gap_conditioned_stochastic_transition_spec_v1.md",
+      "sha256": "8401c90d8fe2766eb314a0f4eb55cad86d9a1ca3bbfacde8535b8eb55bc3ff6e"
+    },
+    {
+      "role": "h0_capture_semantic_declaration",
+      "identity_id": "headline_bridge_full_decision_capture_declaration_20260713",
+      "path": "docs/modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md",
+      "sha256": "602994a3a49f2fbb0e27bfe3f43a023064dff9df8bd9457f733628176c3ac816"
+    },
+    {
+      "role": "h0_capture_record_types",
+      "identity_id": "tracker_gpu_h0_record_types_898fa631",
+      "path": "include/tracking/tracker_gpu.hpp",
+      "sha256": "898fa631c40352c9bd1a9280ee0443113096bf2317c9be524af278ea71338de2"
+    },
+    {
+      "role": "h0_capture_writer",
+      "identity_id": "tracker_gpu_h0_capture_writer_e89934f6",
+      "path": "src/tracking/tracker_gpu.cu",
+      "sha256": "e89934f6a0dabcd1fa8359d4dc033330cdacfb75899f45e5b721bd2d55d92e45"
+    }
+  ],
+  "derivation_definitions": [
+    {
+      "definition_id": "gctm_runtime_event_id_from_pair_key_v1",
+      "definition_version": "1",
+      "owner_class": "GCTM_DERIVED",
+      "content_hash": "8eff05bfc1da00d1ea7654bfe89db659ef073c5d02bffa39ef6591a485fb5846",
+      "expression": "event_id := canonical_tuple(seq, frame, lost_slot, lost_instance_uid); it groups all candidate pair rows for one lost runtime instance at one bridge event and is not a cross-event trajectory identity",
+      "inputs": [
+        {
+          "name": "seq",
+          "source_kind": "h0_candidate_field",
+          "shape": "scalar",
+          "unit": "opaque sequence id",
+          "availability": "pair-record emission"
+        },
+        {
+          "name": "frame",
+          "source_kind": "h0_candidate_field",
+          "shape": "scalar",
+          "unit": "frame index",
+          "availability": "pair-record emission"
+        },
+        {
+          "name": "lost_slot",
+          "source_kind": "h0_candidate_field",
+          "shape": "scalar",
+          "unit": "slot index",
+          "availability": "pair-record emission"
+        },
+        {
+          "name": "lost_instance_uid",
+          "source_kind": "h0_candidate_field",
+          "shape": "scalar",
+          "unit": "opaque runtime-instance id",
+          "availability": "pair-record emission"
+        }
+      ],
+      "output": {
+        "shape": "scalar",
+        "unit": "opaque string id"
+      },
+      "causal_rule": "Uses only the current pair key at event formation; no label, entry-future, claim, or commit field participates.",
+      "invalidation_set": [
+        "h0_capture_abi_sha256",
+        "h0_event_key_version",
+        "lost_instance_uid_lifecycle",
+        "gctm_runtime_event_grouping_definition"
+      ]
+    },
+    {
+      "definition_id": "gctm_physical_gap_from_operational_timing_v1",
+      "definition_version": "1",
+      "owner_class": "GCTM_DERIVED",
+      "content_hash": "9a9901c03b401d0b46772f5ceacd2091ae22c4b7b89a8ff511b09975d14c7a7a",
+      "expression": "g_phys := la - bridge_at + 1; require integer la >= bridge_at >= 1 and g_phys >= 1; la remains Delta_on and is never relabelled as g_phys",
+      "inputs": [
+        {
+          "name": "la",
+          "source_kind": "h0_candidate_field",
+          "shape": "scalar integer",
+          "unit": "frames",
+          "availability": "pair-record emission at bridge fire"
+        },
+        {
+          "name": "bridge_at",
+          "source_kind": "h0_candidate_field",
+          "shape": "scalar integer",
+          "unit": "frames",
+          "availability": "pair-record emission at bridge fire"
+        }
+      ],
+      "output": {
+        "shape": "scalar >= 1",
+        "unit": "frames"
+      },
+      "causal_rule": "Both timing values exist no later than the candidate entry/bridge event; the formula is the frozen GCTM mapping and does not use a future-derived proxy.",
+      "invalidation_set": [
+        "h0_capture_abi_sha256",
+        "h0_timing_semantics",
+        "gctm_theory_sha256",
+        "entry_endpoint_convention",
+        "frame_time_unit"
+      ]
+    },
+    {
+      "definition_id": "gctm_m1_position_innovation_from_h0_snapshot_v1",
+      "definition_version": "1",
+      "owner_class": "GCTM_DERIVED",
+      "content_hash": "a5da28845c68f4d0b24b2ace9424892dd832d459b8bd2bc35152a5186bba8c98",
+      "expression": "For d=2, H=H_x, M1/CV and M2 inactive: residual_position := ([cand_anchor_x,cand_anchor_y] - ([lost_anchor_x,lost_anchor_y] + g_phys*[lost_velocity_x,lost_velocity_y])) / h_ref. The production operator offset from la is kept separate and fwd_r/bwd_r are not used as proxies.",
+      "inputs": [
+        {
+          "name": "cand_anchor_position",
+          "source_kind": "h0_candidate_field",
+          "shape": "(2,)",
+          "unit": "image pixels",
+          "availability": "candidate entry endpoint, emitted at bridge fire"
+        },
+        {
+          "name": "lost_anchor_position",
+          "source_kind": "h0_candidate_field",
+          "shape": "(2,)",
+          "unit": "image pixels",
+          "availability": "lost exit endpoint, emitted at bridge fire"
+        },
+        {
+          "name": "lost_velocity",
+          "source_kind": "h0_candidate_field",
+          "shape": "(2,)",
+          "unit": "image pixels per frame",
+          "availability": "lost exit-causal snapshot, emitted at bridge fire"
+        },
+        {
+          "name": "g_phys",
+          "source_kind": "derived_object",
+          "shape": "scalar >= 1",
+          "unit": "frames",
+          "availability": "derived at candidate entry endpoint"
+        },
+        {
+          "name": "h_ref",
+          "source_kind": "h0_candidate_field",
+          "shape": "scalar > 0",
+          "unit": "image pixels",
+          "availability": "pair-record emission at bridge fire"
+        },
+        {
+          "name": "mean_model_identity",
+          "source_kind": "declaration_constant",
+          "shape": "scalar identity",
+          "unit": "enum",
+          "availability": "declaration time before scoring"
+        }
+      ],
+      "output": {
+        "shape": "(d,)",
+        "unit": "coordinate units of declared substrate"
+      },
+      "causal_rule": "The exit state is lost-side causal, y1 is the entry anchor, g_phys is exit-to-entry time, and M2 is explicitly inactive; no entry-future frame enters the mean.",
+      "invalidation_set": [
+        "h0_capture_abi_sha256",
+        "h0_snapshot_semantics",
+        "gctm_theory_sha256",
+        "mean_model_identity",
+        "coordinate_normalization_identity",
+        "operator_offset_treatment"
+      ]
+    },
+    {
+      "definition_id": "gctm_total_innovation_covariance_canonical_c0_v1",
+      "definition_version": "1",
+      "owner_class": "GCTM_DERIVED",
+      "content_hash": "69a553f016dfd7aa34f0c9dfe627610969dcd4a6a9d18afd69f2f6cc31b50066",
+      "expression": "S_innovation := H_x (A_g P0 A_g^T + Q_g(gamma,D)) H_x^T + R1 under canonical C=0; accept for scoring only when component domains hold and the resulting S is symmetric positive definite",
+      "inputs": [
+        {
+          "name": "g_phys",
+          "source_kind": "derived_object",
+          "shape": "scalar >= 1",
+          "unit": "frames",
+          "availability": "candidate entry endpoint"
+        },
+        {
+          "name": "H_x",
+          "source_kind": "declaration_constant",
+          "shape": "(d,2d)",
+          "unit": "linear observation operator",
+          "availability": "declaration time"
+        },
+        {
+          "name": "P0_artifact",
+          "source_kind": "gctm_parameter_artifact",
+          "shape": "(2d,2d) PSD",
+          "unit": "state covariance",
+          "availability": "exit-causal and frozen before scoring"
+        },
+        {
+          "name": "gamma_D_artifact",
+          "source_kind": "gctm_parameter_artifact",
+          "shape": "scalar gamma plus (d,d) PSD D",
+          "unit": "per-frame and transition diffusion units",
+          "availability": "frozen before scoring"
+        },
+        {
+          "name": "R1_artifact",
+          "source_kind": "gctm_parameter_artifact",
+          "shape": "(d,d) PSD",
+          "unit": "coordinate_units^2",
+          "availability": "entry-causal source class frozen before scoring"
+        }
+      ],
+      "output": {
+        "shape": "(d,d) SPD",
+        "unit": "coordinate_units^2"
+      },
+      "causal_rule": "H0 supplies no covariance guarantee. GCTM owns the transition and observation covariance artifacts; missing, singular, non-PSD, non-SPD, or undeclared candidate-specific sources reject the record.",
+      "invalidation_set": [
+        "gctm_theory_sha256",
+        "g_phys_derivation_identity",
+        "observation_mode",
+        "P0_artifact_hash",
+        "gamma_D_artifact_hash",
+        "R1_artifact_hash",
+        "error_dependence_declaration",
+        "covariance_sharing_scope"
+      ]
+    },
+    {
+      "definition_id": "gctm_protected_stratum_application_v1",
+      "definition_version": "1",
+      "owner_class": "GCTM_DERIVED",
+      "content_hash": "37fff60551d913a173f41743b84323780f380c510aa3399c1247fbc588f6a1f2",
+      "expression": "stratum_id := frozen_stratum_policy(g_phys); the policy artifact must include a short_gap partition and be immutable before scoring or fitting",
+      "inputs": [
+        {
+          "name": "g_phys",
+          "source_kind": "derived_object",
+          "shape": "scalar >= 1",
+          "unit": "frames",
+          "availability": "candidate entry endpoint"
+        },
+        {
+          "name": "stratum_policy_artifact",
+          "source_kind": "gctm_parameter_artifact",
+          "shape": "finite partition mapping",
+          "unit": "enum policy",
+          "availability": "declaration time before scoring"
+        }
+      ],
+      "output": {
+        "shape": "scalar",
+        "unit": "enum string"
+      },
+      "causal_rule": "The mapping consumes only g_phys and a pre-frozen policy; labels and reveal state may not define runtime strata.",
+      "invalidation_set": [
+        "g_phys_derivation_identity",
+        "stratum_policy_artifact_hash",
+        "protected_strata_definition"
+      ]
+    },
+    {
+      "definition_id": "gctm_operator_horizon_offset_from_h0_timing_v1",
+      "definition_version": "1",
+      "owner_class": "GCTM_DERIVED",
+      "content_hash": "fdebfc83ec21d8258be68e4cd9e0cdb505ee0046132217b910a252ae95e76787",
+      "expression": "operator_offset_forward := +(bridge_at-1)*lost_velocity/h_ref and operator_offset_backward := -(bridge_at-1)*candidate_velocity/h_ref; keep both outside canonical m^-_g and context drift",
+      "inputs": [
+        {
+          "name": "bridge_at",
+          "source_kind": "h0_candidate_field",
+          "shape": "scalar integer",
+          "unit": "frames",
+          "availability": "pair-record emission"
+        },
+        {
+          "name": "lost_velocity",
+          "source_kind": "h0_candidate_field",
+          "shape": "(2,)",
+          "unit": "image pixels per frame",
+          "availability": "lost exit-causal snapshot"
+        },
+        {
+          "name": "candidate_velocity",
+          "source_kind": "h0_candidate_field",
+          "shape": "(2,)",
+          "unit": "image pixels per frame",
+          "availability": "candidate entry snapshot"
+        },
+        {
+          "name": "h_ref",
+          "source_kind": "h0_candidate_field",
+          "shape": "scalar > 0",
+          "unit": "image pixels",
+          "availability": "pair-record emission"
+        }
+      ],
+      "output": {
+        "shape": "signed pair of (d,) vectors",
+        "unit": "coordinate units"
+      },
+      "causal_rule": "Uses only declared endpoint snapshots at the bridge event; it is an operator-layer deterministic offset, never M2 drift or canonical innovation.",
+      "invalidation_set": [
+        "h0_capture_abi_sha256",
+        "bridge_at_semantics",
+        "velocity_semantics",
+        "coordinate_normalization_identity",
+        "gctm_theory_sha256"
+      ]
+    },
+    {
+      "definition_id": "h0_native_universe_event_membership_v1",
+      "definition_version": "1",
+      "owner_class": "H0_DERIVED",
+      "content_hash": "33bb1f6e52a769477249f60b060f066fd6adb633083de3ff4bf2d6ec13ea84df",
+      "expression": "event_membership := group complete native candidate and pair keys by canonical (seq,frame,lost_slot,lost_instance_uid), after exact observed-record equality, zero overflow, total conservation, and bridge-attempt exposure checks",
+      "inputs": [
+        {
+          "name": "native_candidate_keys",
+          "source_kind": "h0_candidate_envelope",
+          "shape": "set of candidate keys",
+          "unit": "opaque runtime identities",
+          "availability": "capture drain after bridge event"
+        },
+        {
+          "name": "native_pair_keys",
+          "source_kind": "h0_candidate_envelope",
+          "shape": "set of pair keys",
+          "unit": "opaque runtime identities",
+          "availability": "capture drain after bridge event"
+        },
+        {
+          "name": "candidate_records",
+          "source_kind": "h0_candidate_envelope",
+          "shape": "array of candidate records",
+          "unit": "records",
+          "availability": "capture drain after bridge event"
+        },
+        {
+          "name": "pair_records",
+          "source_kind": "h0_candidate_envelope",
+          "shape": "array of pair records",
+          "unit": "records",
+          "availability": "capture drain after bridge event"
+        },
+        {
+          "name": "native_totals_and_overflows",
+          "source_kind": "h0_candidate_envelope",
+          "shape": "scalar counters",
+          "unit": "counts",
+          "availability": "capture drain"
+        },
+        {
+          "name": "bridge_attempt_count",
+          "source_kind": "h0_candidate_envelope",
+          "shape": "scalar",
+          "unit": "count",
+          "availability": "capture drain"
+        }
+      ],
+      "output": {
+        "shape": "finite set of cand_id per event_id",
+        "unit": "opaque membership relation"
+      },
+      "causal_rule": "Membership uses only native pre-decision universe sidecars and observed records. It does not use claim winners, commits, labels, or reveal state.",
+      "invalidation_set": [
+        "h0_capture_abi_sha256",
+        "native_universe_v2_semantics",
+        "event_key_version",
+        "candidate_record_key",
+        "pair_record_key",
+        "capture_completeness_predicates"
+      ]
+    }
+  ],
+  "rows": [
+    {
+      "consumer_object": "event_id",
+      "consumer_binding": {
+        "binding_kind": "required_runtime_field",
+        "source_key": "event_id"
+      },
+      "consumer_required_semantics": "Stable event key grouping one lost exit with its candidate set",
+      "shape": "scalar",
+      "unit": "opaque string id",
+      "sharing": "event_shared",
+      "required_availability_time": "at event formation / exit endpoint",
+      "causal_requirement": {
+        "required_information_set": "current bridge-event pair key only",
+        "future_info_leak_allowed": false,
+        "causal_status": "satisfied"
+      },
+      "responsibility_class": "GCTM_DERIVED",
+      "producer_sources": [
+        {
+          "field": "seq",
+          "stream": "pair_record",
+          "capture_point": "pair record at structural pair evaluation",
+          "source_state": "candidate-source",
+          "registered_guarantee_claimed": false
+        },
+        {
+          "field": "frame",
+          "stream": "pair_record",
+          "capture_point": "pair record at structural pair evaluation",
+          "source_state": "candidate-source",
+          "registered_guarantee_claimed": false
+        },
+        {
+          "field": "lost_slot",
+          "stream": "pair_record",
+          "capture_point": "pair record at structural pair evaluation",
+          "source_state": "candidate-source",
+          "registered_guarantee_claimed": false
+        },
+        {
+          "field": "lost_instance_uid",
+          "stream": "pair_record",
+          "capture_point": "pair record at structural pair evaluation",
+          "source_state": "candidate-source",
+          "registered_guarantee_claimed": false
+        }
+      ],
+      "producer_stream": "pair_record",
+      "capture_point": "pair-record emission during one bridge event",
+      "relation": "derived",
+      "derivation_binding": {
+        "definition_id": "gctm_runtime_event_id_from_pair_key_v1",
+        "definition_version": "1",
+        "content_hash": "8eff05bfc1da00d1ea7654bfe89db659ef073c5d02bffa39ef6591a485fb5846"
+      },
+      "derivation_inputs": [
+        "seq",
+        "frame",
+        "lost_slot",
+        "lost_instance_uid"
+      ],
+      "derivation_invalidation_set": [
+        "h0_capture_abi_sha256",
+        "h0_event_key_version",
+        "lost_instance_uid_lifecycle",
+        "gctm_runtime_event_grouping_definition"
+      ],
+      "current_abi_coverage": "candidate_source_available",
+      "current_registration_v2_coverage": "candidate_source_eligible",
+      "missing_semantics": [],
+      "requires_h0_delta": false,
+      "requires_gctm_restriction": false,
+      "requires_b1_only_treatment": false,
+      "runtime_observable": true,
+      "disposition_status": "structurally_covered",
+      "notes": "This is a consumer-owned event key derived from H0 candidate identity fields, not an H0 exact event_id guarantee."
+    },
+    {
+      "consumer_object": "cand_id",
+      "consumer_binding": {
+        "binding_kind": "required_runtime_field",
+        "source_key": "cand_id"
+      },
+      "consumer_required_semantics": "Stable candidate identity inside an event",
+      "shape": "scalar",
+      "unit": "opaque string id",
+      "sharing": "candidate_specific",
+      "required_availability_time": "at candidate entry endpoint",
+      "causal_requirement": {
+        "required_information_set": "candidate runtime-instance identity",
+        "future_info_leak_allowed": false,
+        "causal_status": "satisfied"
+      },
+      "responsibility_class": "H0_EXACT",
+      "producer_sources": [
+        {
+          "field": "cand_instance_uid",
+          "stream": "pair_record",
+          "capture_point": "pair record after candidate entry and before pair gates",
+          "source_state": "candidate-source",
+          "registered_guarantee_claimed": false
+        }
+      ],
+      "producer_stream": "pair_record",
+      "capture_point": "pair-record emission",
+      "relation": "exact",
+      "derivation_inputs": [],
+      "derivation_invalidation_set": [],
+      "current_abi_coverage": "candidate_source_available",
+      "current_registration_v2_coverage": "candidate_source_eligible",
+      "missing_semantics": [],
+      "requires_h0_delta": false,
+      "requires_gctm_restriction": false,
+      "requires_b1_only_treatment": false,
+      "runtime_observable": true,
+      "disposition_status": "structurally_covered",
+      "notes": "cand_instance_uid can serve as the opaque within-event cand_id candidate; this audit registers no guarantee."
+    },
+    {
+      "consumer_object": "g_phys",
+      "consumer_binding": {
+        "binding_kind": "required_runtime_field",
+        "source_key": "g_phys"
+      },
+      "consumer_required_semantics": "Physical exit→entry gap in frame intervals (canonical Δ)",
+      "shape": "scalar >= 1",
+      "unit": "frames",
+      "sharing": "candidate_specific",
+      "required_availability_time": "at candidate entry endpoint (exit already known)",
+      "causal_requirement": {
+        "required_information_set": "la and bridge_at at the bridge event",
+        "future_info_leak_allowed": false,
+        "causal_status": "satisfied"
+      },
+      "responsibility_class": "GCTM_DERIVED",
+      "producer_sources": [
+        {
+          "field": "la",
+          "stream": "pair_record",
+          "capture_point": "pair record at bridge fire",
+          "source_state": "candidate-source",
+          "registered_guarantee_claimed": false
+        },
+        {
+          "field": "bridge_at",
+          "stream": "pair_record",
+          "capture_point": "pair record at bridge fire",
+          "source_state": "candidate-source",
+          "registered_guarantee_claimed": false
+        }
+      ],
+      "producer_stream": "pair_record",
+      "capture_point": "pair-record emission at bridge fire",
+      "relation": "derived",
+      "derivation_binding": {
+        "definition_id": "gctm_physical_gap_from_operational_timing_v1",
+        "definition_version": "1",
+        "content_hash": "9a9901c03b401d0b46772f5ceacd2091ae22c4b7b89a8ff511b09975d14c7a7a"
+      },
+      "derivation_inputs": [
+        "la",
+        "bridge_at"
+      ],
+      "derivation_invalidation_set": [
+        "h0_capture_abi_sha256",
+        "h0_timing_semantics",
+        "gctm_theory_sha256",
+        "entry_endpoint_convention",
+        "frame_time_unit"
+      ],
+      "current_abi_coverage": "candidate_source_available",
+      "current_registration_v2_coverage": "candidate_source_eligible",
+      "missing_semantics": [],
+      "requires_h0_delta": false,
+      "requires_gctm_restriction": false,
+      "requires_b1_only_treatment": false,
+      "runtime_observable": true,
+      "disposition_status": "structurally_covered",
+      "notes": "la is Delta_on, not g_phys. The unique frozen derivation is g_phys=la-bridge_at+1; neither la nor bridge_at is relabelled as the physical gap."
+    },
+    {
+      "consumer_object": "residual_position",
+      "consumer_binding": {
+        "binding_kind": "required_runtime_field",
+        "source_key": "residual_position"
+      },
+      "consumer_required_semantics": "Position innovation r = y1 - H m^-_Δ under declared mean model; Hx observation mode only",
+      "shape": "(d,)",
+      "unit": "coordinate units of declared substrate",
+      "sharing": "candidate_specific",
+      "required_availability_time": "at entry endpoint after mean prediction from exit-causal state",
+      "causal_requirement": {
+        "required_information_set": "lost exit anchor/velocity, candidate entry anchor, g_phys, h_ref, and frozen M1 mean identity",
+        "future_info_leak_allowed": false,
+        "causal_status": "satisfied_by_restriction"
+      },
+      "responsibility_class": "GCTM_DERIVED",
+      "producer_sources": [
+        {
+          "field": "cand_anchor_x",
+          "stream": "pair_record",
+          "capture_point": "candidate head-4 endpoint 0 captured in pair record",
+          "source_state": "candidate-source",
+          "registered_guarantee_claimed": false
+        },
+        {
+          "field": "cand_anchor_y",
+          "stream": "pair_record",
+          "capture_point": "candidate head-4 endpoint 0 captured in pair record",
+          "source_state": "candidate-source",
+          "registered_guarantee_claimed": false
+        },
+        {
+          "field": "lost_anchor_x",
+          "stream": "pair_record",
+          "capture_point": "lost last endpoint captured in pair record",
+          "source_state": "candidate-source",
+          "registered_guarantee_claimed": false
+        },
+        {
+          "field": "lost_anchor_y",
+          "stream": "pair_record",
+          "capture_point": "lost last endpoint captured in pair record",
+          "source_state": "candidate-source",
+          "registered_guarantee_claimed": false
+        },
+        {
+          "field": "lost_velocity_x",
+          "stream": "pair_record",
+          "capture_point": "lost exit-causal snapshot in pair record",
+          "source_state": "candidate-source",
+          "registered_guarantee_claimed": false
+        },
+        {
+          "field": "lost_velocity_y",
+          "stream": "pair_record",
+          "capture_point": "lost exit-causal snapshot in pair record",
+          "source_state": "candidate-source",
+          "registered_guarantee_claimed": false
+        },
+        {
+          "field": "h_ref",
+          "stream": "pair_record",
+          "capture_point": "pair record before score computation",
+          "source_state": "candidate-source",
+          "registered_guarantee_claimed": false
+        },
+        {
+          "field": "g_phys",
+          "stream": "gctm_model",
+          "capture_point": "derived at the candidate entry endpoint",
+          "source_state": "gctm-owned",
+          "registered_guarantee_claimed": false
+        },
+        {
+          "field": "gctm_m1_cv_mean_v1",
+          "stream": "declaration",
+          "capture_point": "frozen before scoring",
+          "source_state": "declaration-only",
+          "registered_guarantee_claimed": false
+        }
+      ],
+      "producer_stream": "pair_record plus GCTM model declaration",
+      "capture_point": "derived at entry endpoint from pair snapshot",
+      "relation": "derived",
+      "derivation_binding": {
+        "definition_id": "gctm_m1_position_innovation_from_h0_snapshot_v1",
+        "definition_version": "1",
+        "content_hash": "a5da28845c68f4d0b24b2ace9424892dd832d459b8bd2bc35152a5186bba8c98"
+      },
+      "derivation_inputs": [
+        "cand_anchor_position",
+        "lost_anchor_position",
+        "lost_velocity",
+        "g_phys",
+        "h_ref",
+        "mean_model_identity"
+      ],
+      "derivation_invalidation_set": [
+        "h0_capture_abi_sha256",
+        "h0_snapshot_semantics",
+        "gctm_theory_sha256",
+        "mean_model_identity",
+        "coordinate_normalization_identity",
+        "operator_offset_treatment"
+      ],
+      "current_abi_coverage": "candidate_source_available",
+      "current_registration_v2_coverage": "candidate_source_eligible",
+      "missing_semantics": [],
+      "requires_h0_delta": false,
+      "requires_gctm_restriction": true,
+      "requires_b1_only_treatment": false,
+      "runtime_observable": true,
+      "disposition_status": "covered_with_restriction",
+      "notes": "The legal construction is the canonical forward M1/CV residual with M2 inactive. Runtime fwd_r/bwd_r use la and are not substituted for this residual."
+    },
+    {
+      "consumer_object": "S_innovation",
+      "consumer_binding": {
+        "binding_kind": "required_runtime_field",
+        "source_key": "S_innovation"
+      },
+      "consumer_required_semantics": "Total innovation covariance S_Δ used for Mahalanobis/NLL. Must declare whether event-shared or candidate-specific and the source",
+      "shape": "(d,d) SPD",
+      "unit": "coordinate_units^2",
+      "sharing": "either; must be declared",
+      "required_availability_time": "no later than entry endpoint; parameters used to form S must be exit-causal or entry-causal as declared",
+      "causal_requirement": {
+        "required_information_set": "g_phys plus frozen GCTM P0/gamma/D/R1 artifacts under Hx and C=0",
+        "future_info_leak_allowed": false,
+        "causal_status": "satisfied_by_restriction"
+      },
+      "responsibility_class": "GCTM_DERIVED",
+      "producer_sources": [
+        {
+          "field": "g_phys",
+          "stream": "gctm_model",
+          "capture_point": "derived at candidate entry endpoint",
+          "source_state": "gctm-owned",
+          "registered_guarantee_claimed": false
+        },
+        {
+          "field": "P0_gamma_D_R1_parameter_artifacts",
+          "stream": "gctm_model",
+          "capture_point": "frozen model inputs before scoring",
+          "source_state": "gctm-owned",
+          "registered_guarantee_claimed": false
+        },
+        {
+          "field": "H_x_and_C0",
+          "stream": "declaration",
+          "capture_point": "declaration time",
+          "source_state": "declaration-only",
+          "registered_guarantee_claimed": false
+        }
+      ],
+      "producer_stream": "GCTM model artifacts, not an H0 stream",
+      "capture_point": "GCTM derivation no later than entry endpoint",
+      "relation": "derived",
+      "derivation_binding": {
+        "definition_id": "gctm_total_innovation_covariance_canonical_c0_v1",
+        "definition_version": "1",
+        "content_hash": "69a553f016dfd7aa34f0c9dfe627610969dcd4a6a9d18afd69f2f6cc31b50066"
+      },
+      "derivation_inputs": [
+        "g_phys",
+        "H_x",
+        "P0_artifact",
+        "gamma_D_artifact",
+        "R1_artifact"
+      ],
+      "derivation_invalidation_set": [
+        "gctm_theory_sha256",
+        "g_phys_derivation_identity",
+        "observation_mode",
+        "P0_artifact_hash",
+        "gamma_D_artifact_hash",
+        "R1_artifact_hash",
+        "error_dependence_declaration",
+        "covariance_sharing_scope"
+      ],
+      "current_abi_coverage": "gctm_owned_not_abi",
+      "current_registration_v2_coverage": "not_applicable_gctm",
+      "missing_semantics": [
+        "no parameter values or runtime covariance fidelity are established by this audit"
+      ],
+      "requires_h0_delta": false,
+      "requires_gctm_restriction": true,
+      "requires_b1_only_treatment": false,
+      "runtime_observable": true,
+      "disposition_status": "covered_with_restriction",
+      "notes": "H0 supplies raw candidate observations only. GCTM owns Q, R1, P0, composition, PSD/SPD checks, and inversion rejection. Candidate-specific covariance remains forbidden without a separately declared causal source."
+    },
+    {
+      "consumer_object": "covariance_semantics",
+      "consumer_binding": {
+        "binding_kind": "required_runtime_field",
+        "source_key": "covariance_semantics"
+      },
+      "consumer_required_semantics": "Enum: isotropic_shared | anisotropic_shared | candidate_specific; source and causal availability of each component",
+      "shape": "scalar enum + provenance object",
+      "unit": "enum + declaration text",
+      "sharing": "event_shared declaration",
+      "required_availability_time": "declaration time before scoring",
+      "causal_requirement": {
+        "required_information_set": "frozen covariance sharing and provenance declaration",
+        "future_info_leak_allowed": false,
+        "causal_status": "satisfied_by_restriction"
+      },
+      "responsibility_class": "DECLARATION_CONSTANT",
+      "producer_sources": [
+        {
+          "field": "shared_anisotropic_with_declared_parameter_provenance",
+          "stream": "declaration",
+          "capture_point": "declaration time before scoring",
+          "source_state": "declaration-only",
+          "registered_guarantee_claimed": false
+        }
+      ],
+      "producer_stream": "declaration",
+      "capture_point": "before scoring",
+      "relation": "declaration",
+      "derivation_inputs": [],
+      "derivation_invalidation_set": [],
+      "current_abi_coverage": "declaration_not_abi",
+      "current_registration_v2_coverage": "not_applicable_declaration",
+      "missing_semantics": [],
+      "requires_h0_delta": false,
+      "requires_gctm_restriction": true,
+      "requires_b1_only_treatment": false,
+      "runtime_observable": true,
+      "disposition_status": "covered_with_restriction",
+      "notes": "The primary D1 ordering-active family can use event-shared anisotropic S; no H0 covariance guarantee is asserted."
+    },
+    {
+      "consumer_object": "coordinate_dim_d",
+      "consumer_binding": {
+        "binding_kind": "required_runtime_field",
+        "source_key": "coordinate_dim_d"
+      },
+      "consumer_required_semantics": "Coordinate dimension d for residual and covariance",
+      "shape": "scalar integer >= 1",
+      "unit": "dimensionless",
+      "sharing": "event_shared",
+      "required_availability_time": "declaration time",
+      "causal_requirement": {
+        "required_information_set": "frozen observation declaration",
+        "future_info_leak_allowed": false,
+        "causal_status": "satisfied"
+      },
+      "responsibility_class": "DECLARATION_CONSTANT",
+      "producer_sources": [
+        {
+          "field": "d_equals_2",
+          "stream": "declaration",
+          "capture_point": "declaration time",
+          "source_state": "declaration-only",
+          "registered_guarantee_claimed": false
+        }
+      ],
+      "producer_stream": "declaration",
+      "capture_point": "before scoring",
+      "relation": "declaration",
+      "derivation_inputs": [],
+      "derivation_invalidation_set": [],
+      "current_abi_coverage": "declaration_not_abi",
+      "current_registration_v2_coverage": "not_applicable_declaration",
+      "missing_semantics": [],
+      "requires_h0_delta": false,
+      "requires_gctm_restriction": false,
+      "requires_b1_only_treatment": false,
+      "runtime_observable": true,
+      "disposition_status": "structurally_covered",
+      "notes": "The accepted production-corresponding target has d=2; dimension is policy, not a runtime H0 field."
+    },
+    {
+      "consumer_object": "observation_mode",
+      "consumer_binding": {
+        "binding_kind": "required_runtime_field",
+        "source_key": "observation_mode"
+      },
+      "consumer_required_semantics": "Must be H_x for this interface family (position-only)",
+      "shape": "scalar",
+      "unit": "enum",
+      "sharing": "event_shared",
+      "required_availability_time": "declaration time",
+      "causal_requirement": {
+        "required_information_set": "frozen observation declaration",
+        "future_info_leak_allowed": false,
+        "causal_status": "satisfied"
+      },
+      "responsibility_class": "DECLARATION_CONSTANT",
+      "producer_sources": [
+        {
+          "field": "H_x",
+          "stream": "declaration",
+          "capture_point": "declaration time",
+          "source_state": "declaration-only",
+          "registered_guarantee_claimed": false
+        }
+      ],
+      "producer_stream": "declaration",
+      "capture_point": "before scoring",
+      "relation": "declaration",
+      "derivation_inputs": [],
+      "derivation_invalidation_set": [],
+      "current_abi_coverage": "declaration_not_abi",
+      "current_registration_v2_coverage": "not_applicable_declaration",
+      "missing_semantics": [],
+      "requires_h0_delta": false,
+      "requires_gctm_restriction": false,
+      "requires_b1_only_treatment": false,
+      "runtime_observable": true,
+      "disposition_status": "structurally_covered",
+      "notes": "H_x is frozen policy and may not be inferred from the presence or absence of velocity fields."
+    },
+    {
+      "consumer_object": "stratum_id",
+      "consumer_binding": {
+        "binding_kind": "required_runtime_field",
+        "source_key": "stratum_id"
+      },
+      "consumer_required_semantics": "Protected-stratum label (must include short_gap partition)",
+      "shape": "scalar",
+      "unit": "enum string",
+      "sharing": "event_shared",
+      "required_availability_time": "at event formation from g_phys",
+      "causal_requirement": {
+        "required_information_set": "g_phys plus a pre-frozen protected-stratum policy",
+        "future_info_leak_allowed": false,
+        "causal_status": "satisfied_by_restriction"
+      },
+      "responsibility_class": "GCTM_DERIVED",
+      "producer_sources": [
+        {
+          "field": "g_phys",
+          "stream": "gctm_model",
+          "capture_point": "derived at event formation",
+          "source_state": "gctm-owned",
+          "registered_guarantee_claimed": false
+        },
+        {
+          "field": "protected_stratum_policy_artifact",
+          "stream": "gctm_model",
+          "capture_point": "frozen before scoring",
+          "source_state": "gctm-owned",
+          "registered_guarantee_claimed": false
+        }
+      ],
+      "producer_stream": "GCTM policy artifact",
+      "capture_point": "event formation",
+      "relation": "derived",
+      "derivation_binding": {
+        "definition_id": "gctm_protected_stratum_application_v1",
+        "definition_version": "1",
+        "content_hash": "37fff60551d913a173f41743b84323780f380c510aa3399c1247fbc588f6a1f2"
+      },
+      "derivation_inputs": [
+        "g_phys",
+        "stratum_policy_artifact"
+      ],
+      "derivation_invalidation_set": [
+        "g_phys_derivation_identity",
+        "stratum_policy_artifact_hash",
+        "protected_strata_definition"
+      ],
+      "current_abi_coverage": "gctm_owned_not_abi",
+      "current_registration_v2_coverage": "not_applicable_gctm",
+      "missing_semantics": [
+        "the future runtime declaration must freeze the short_gap boundary before scoring"
+      ],
+      "requires_h0_delta": false,
+      "requires_gctm_restriction": true,
+      "requires_b1_only_treatment": false,
+      "runtime_observable": true,
+      "disposition_status": "covered_with_restriction",
+      "notes": "The dynamic value is GCTM-derived; the partition policy is not a label and may not be fitted or changed after reveal."
+    },
+    {
+      "consumer_object": "context_drift_position",
+      "consumer_binding": {
+        "binding_kind": "required_runtime_field",
+        "source_key": "context_drift_position"
+      },
+      "consumer_required_semantics": "Optional M2 only: H d_Δ(c) position correction; exit-causal context only",
+      "shape": "(d,) or null when M2 inactive",
+      "unit": "coordinate units",
+      "sharing": "candidate_specific values; mapping exit-shared",
+      "required_availability_time": "must be computable from exit-causal context only",
+      "causal_requirement": {
+        "required_information_set": "declaration selects M2 inactive and null context drift",
+        "future_info_leak_allowed": false,
+        "causal_status": "satisfied_by_restriction"
+      },
+      "responsibility_class": "DECLARATION_CONSTANT",
+      "producer_sources": [
+        {
+          "field": "M2_inactive_context_drift_null",
+          "stream": "declaration",
+          "capture_point": "declaration time before scoring",
+          "source_state": "declaration-only",
+          "registered_guarantee_claimed": false
+        }
+      ],
+      "producer_stream": "declaration",
+      "capture_point": "before scoring",
+      "relation": "declaration",
+      "derivation_inputs": [],
+      "derivation_invalidation_set": [],
+      "current_abi_coverage": "declaration_not_abi",
+      "current_registration_v2_coverage": "not_applicable_declaration",
+      "missing_semantics": [
+        "nonzero M2 context has no identifiable exit-causal source in the current H0 fields"
+      ],
+      "requires_h0_delta": false,
+      "requires_gctm_restriction": true,
+      "requires_b1_only_treatment": false,
+      "runtime_observable": true,
+      "disposition_status": "covered_with_restriction",
+      "notes": "The accepted interface explicitly permits M2 inactive with null drift. Any nonzero drift remains unavailable; future or entry-derived proxies are forbidden."
+    },
+    {
+      "consumer_object": "score_orientation",
+      "consumer_binding": {
+        "binding_kind": "required_runtime_field",
+        "source_key": "score_orientation"
+      },
+      "consumer_required_semantics": "Frozen lower_better for q and NLL native scores",
+      "shape": "scalar",
+      "unit": "enum",
+      "sharing": "event_shared",
+      "required_availability_time": "declaration time",
+      "causal_requirement": {
+        "required_information_set": "frozen score declaration",
+        "future_info_leak_allowed": false,
+        "causal_status": "satisfied"
+      },
+      "responsibility_class": "DECLARATION_CONSTANT",
+      "producer_sources": [
+        {
+          "field": "lower_better",
+          "stream": "declaration",
+          "capture_point": "declaration time",
+          "source_state": "declaration-only",
+          "registered_guarantee_claimed": false
+        }
+      ],
+      "producer_stream": "declaration",
+      "capture_point": "before scoring",
+      "relation": "declaration",
+      "derivation_inputs": [],
+      "derivation_invalidation_set": [],
+      "current_abi_coverage": "declaration_not_abi",
+      "current_registration_v2_coverage": "not_applicable_declaration",
+      "missing_semantics": [],
+      "requires_h0_delta": false,
+      "requires_gctm_restriction": false,
+      "requires_b1_only_treatment": false,
+      "runtime_observable": true,
+      "disposition_status": "structurally_covered",
+      "notes": "Score orientation is frozen policy."
+    },
+    {
+      "consumer_object": "score_transform",
+      "consumer_binding": {
+        "binding_kind": "top_level_policy",
+        "source_key": "score_transform"
+      },
+      "consumer_required_semantics": "identity_after_declared_score",
+      "shape": "scalar enum",
+      "unit": "enum",
+      "sharing": "event_shared declaration",
+      "required_availability_time": "declaration time",
+      "causal_requirement": {
+        "required_information_set": "frozen score declaration",
+        "future_info_leak_allowed": false,
+        "causal_status": "satisfied"
+      },
+      "responsibility_class": "DECLARATION_CONSTANT",
+      "producer_sources": [
+        {
+          "field": "identity_after_declared_score",
+          "stream": "declaration",
+          "capture_point": "declaration time",
+          "source_state": "declaration-only",
+          "registered_guarantee_claimed": false
+        }
+      ],
+      "producer_stream": "declaration",
+      "capture_point": "before scoring",
+      "relation": "declaration",
+      "derivation_inputs": [],
+      "derivation_invalidation_set": [],
+      "current_abi_coverage": "declaration_not_abi",
+      "current_registration_v2_coverage": "not_applicable_declaration",
+      "missing_semantics": [],
+      "requires_h0_delta": false,
+      "requires_gctm_restriction": false,
+      "requires_b1_only_treatment": false,
+      "runtime_observable": true,
+      "disposition_status": "structurally_covered",
+      "notes": "Score transform is frozen policy and is not read from H0."
+    },
+    {
+      "consumer_object": "normalization",
+      "consumer_binding": {
+        "binding_kind": "top_level_policy",
+        "source_key": "normalization"
+      },
+      "consumer_required_semantics": "frozen_identity_no_free_scale",
+      "shape": "scalar enum",
+      "unit": "enum",
+      "sharing": "event_shared declaration",
+      "required_availability_time": "declaration time",
+      "causal_requirement": {
+        "required_information_set": "frozen score declaration",
+        "future_info_leak_allowed": false,
+        "causal_status": "satisfied"
+      },
+      "responsibility_class": "DECLARATION_CONSTANT",
+      "producer_sources": [
+        {
+          "field": "frozen_identity_no_free_scale",
+          "stream": "declaration",
+          "capture_point": "declaration time",
+          "source_state": "declaration-only",
+          "registered_guarantee_claimed": false
+        }
+      ],
+      "producer_stream": "declaration",
+      "capture_point": "before scoring",
+      "relation": "declaration",
+      "derivation_inputs": [],
+      "derivation_invalidation_set": [],
+      "current_abi_coverage": "declaration_not_abi",
+      "current_registration_v2_coverage": "not_applicable_declaration",
+      "missing_semantics": [],
+      "requires_h0_delta": false,
+      "requires_gctm_restriction": false,
+      "requires_b1_only_treatment": false,
+      "runtime_observable": true,
+      "disposition_status": "structurally_covered",
+      "notes": "Normalization policy is frozen and does not become an H0 field."
+    },
+    {
+      "consumer_object": "tie_rule",
+      "consumer_binding": {
+        "binding_kind": "required_runtime_field",
+        "source_key": "tie_rule"
+      },
+      "consumer_required_semantics": "Frozen stable_cand_id_asc",
+      "shape": "scalar",
+      "unit": "enum",
+      "sharing": "event_shared",
+      "required_availability_time": "declaration time",
+      "causal_requirement": {
+        "required_information_set": "frozen score declaration and stable cand_id",
+        "future_info_leak_allowed": false,
+        "causal_status": "satisfied"
+      },
+      "responsibility_class": "DECLARATION_CONSTANT",
+      "producer_sources": [
+        {
+          "field": "stable_cand_id_asc",
+          "stream": "declaration",
+          "capture_point": "declaration time",
+          "source_state": "declaration-only",
+          "registered_guarantee_claimed": false
+        }
+      ],
+      "producer_stream": "declaration",
+      "capture_point": "before scoring",
+      "relation": "declaration",
+      "derivation_inputs": [],
+      "derivation_invalidation_set": [],
+      "current_abi_coverage": "declaration_not_abi",
+      "current_registration_v2_coverage": "not_applicable_declaration",
+      "missing_semantics": [],
+      "requires_h0_delta": false,
+      "requires_gctm_restriction": false,
+      "requires_b1_only_treatment": false,
+      "runtime_observable": true,
+      "disposition_status": "structurally_covered",
+      "notes": "Tie behavior is a declaration constant; cand_id stability is audited separately."
+    },
+    {
+      "consumer_object": "true_match_label",
+      "consumer_binding": {
+        "binding_kind": "required_runtime_field",
+        "source_key": "true_match_label"
+      },
+      "consumer_required_semantics": "Diagnostic-only label for RANK metrics on synthetic/sealed non-runtime inputs; not a runtime producer field for online scoring",
+      "shape": "scalar",
+      "unit": "boolean",
+      "sharing": "candidate_specific",
+      "required_availability_time": "offline diagnostic labels only",
+      "causal_requirement": {
+        "required_information_set": "B1 blind/fold/reveal authority only",
+        "future_info_leak_allowed": false,
+        "causal_status": "offline_only"
+      },
+      "responsibility_class": "B1_OFFLINE",
+      "producer_sources": [
+        {
+          "field": "true_match_label",
+          "stream": "b1_offline",
+          "capture_point": "offline after the sealed blind/fold boundary",
+          "source_state": "b1-offline-only",
+          "registered_guarantee_claimed": false
+        }
+      ],
+      "producer_stream": "B1 offline label authority",
+      "capture_point": "offline only",
+      "relation": "offline",
+      "derivation_inputs": [],
+      "derivation_invalidation_set": [],
+      "current_abi_coverage": "b1_offline_not_abi",
+      "current_registration_v2_coverage": "not_applicable_b1",
+      "missing_semantics": [],
+      "requires_h0_delta": false,
+      "requires_gctm_restriction": false,
+      "requires_b1_only_treatment": true,
+      "runtime_observable": false,
+      "disposition_status": "offline_only",
+      "notes": "GT/FP, label, fold, blind, and reveal objects are excluded from every H0 guarantee requirement."
+    },
+    {
+      "consumer_object": "candidate_universe",
+      "consumer_binding": {
+        "binding_kind": "top_level_policy",
+        "source_key": "candidate_universe"
+      },
+      "consumer_required_semantics": "synthetic_event_candidate_set_v1",
+      "shape": "finite set of cand_id per event_id",
+      "unit": "opaque membership relation",
+      "sharing": "event_shared set with candidate-specific members",
+      "required_availability_time": "at event formation before event-local ranking",
+      "causal_requirement": {
+        "required_information_set": "one frozen runtime universe definition",
+        "future_info_leak_allowed": false,
+        "causal_status": "unavailable"
+      },
+      "responsibility_class": "OUTSIDE_ENVELOPE",
+      "producer_sources": [
+        {
+          "field": "runtime_mapping_for_synthetic_event_candidate_set_v1",
+          "stream": "none",
+          "capture_point": "no legal capture point",
+          "source_state": "outside-envelope",
+          "registered_guarantee_claimed": false
+        }
+      ],
+      "producer_stream": "none",
+      "capture_point": "unavailable",
+      "relation": "unavailable",
+      "derivation_inputs": [],
+      "derivation_invalidation_set": [],
+      "current_abi_coverage": "outside_envelope",
+      "current_registration_v2_coverage": "outside_envelope",
+      "missing_semantics": [
+        "accepted D1 fixes synthetic_event_candidate_set_v1 rather than an H0 runtime universe",
+        "no immutable mapping selects structural, pre-score, rank-eligible, proposer, or full native candidate universe for runtime consumption"
+      ],
+      "requires_h0_delta": false,
+      "requires_gctm_restriction": true,
+      "requires_b1_only_treatment": false,
+      "runtime_observable": true,
+      "disposition_status": "outside_envelope",
+      "notes": "Changing this top-level value would reopen or re-charter the runtime observation family. H0 cannot manufacture membership in the sealed synthetic universe."
+    },
+    {
+      "consumer_object": "event_membership",
+      "consumer_binding": {
+        "binding_kind": "compatibility_contract_requirement",
+        "source_key": "lost_candidate_identities_and_event_membership"
+      },
+      "consumer_required_semantics": "Complete event membership over the declared candidate universe, with expected native keys reconciled to observed candidate and pair records",
+      "shape": "finite set of cand_id per event_id",
+      "unit": "opaque membership relation",
+      "sharing": "event_shared set with candidate-specific members",
+      "required_availability_time": "after native event formation and before a runtime ranking claim",
+      "causal_requirement": {
+        "required_information_set": "native candidate/pair universe sidecars, observed streams, totals, overflows, and exposure counters",
+        "future_info_leak_allowed": false,
+        "causal_status": "satisfied"
+      },
+      "responsibility_class": "H0_DERIVED",
+      "producer_sources": [
+        {
+          "field": "native_candidate_keys",
+          "stream": "capture_envelope",
+          "capture_point": "native candidate loop before candidate-record append",
+          "source_state": "candidate-source",
+          "registered_guarantee_claimed": false
+        },
+        {
+          "field": "native_pair_keys",
+          "stream": "capture_envelope",
+          "capture_point": "native structural pair evaluation before pair-record append",
+          "source_state": "candidate-source",
+          "registered_guarantee_claimed": false
+        },
+        {
+          "field": "candidate_records",
+          "stream": "capture_envelope",
+          "capture_point": "capture drain",
+          "source_state": "candidate-source",
+          "registered_guarantee_claimed": false
+        },
+        {
+          "field": "pair_records",
+          "stream": "capture_envelope",
+          "capture_point": "capture drain",
+          "source_state": "candidate-source",
+          "registered_guarantee_claimed": false
+        },
+        {
+          "field": "total_native_candidate_keys",
+          "stream": "capture_envelope",
+          "capture_point": "capture drain",
+          "source_state": "candidate-source",
+          "registered_guarantee_claimed": false
+        },
+        {
+          "field": "total_native_pair_keys",
+          "stream": "capture_envelope",
+          "capture_point": "capture drain",
+          "source_state": "candidate-source",
+          "registered_guarantee_claimed": false
+        },
+        {
+          "field": "overflow_native_candidate_keys",
+          "stream": "capture_envelope",
+          "capture_point": "capture drain",
+          "source_state": "candidate-source",
+          "registered_guarantee_claimed": false
+        },
+        {
+          "field": "overflow_native_pair_keys",
+          "stream": "capture_envelope",
+          "capture_point": "capture drain",
+          "source_state": "candidate-source",
+          "registered_guarantee_claimed": false
+        },
+        {
+          "field": "bridge_attempt_count",
+          "stream": "capture_envelope",
+          "capture_point": "capture drain",
+          "source_state": "candidate-source",
+          "registered_guarantee_claimed": false
+        }
+      ],
+      "producer_stream": "capture envelope plus native universe sidecars",
+      "capture_point": "native pre-decision sidecars reconciled at capture drain",
+      "relation": "derived",
+      "derivation_binding": {
+        "definition_id": "h0_native_universe_event_membership_v1",
+        "definition_version": "1",
+        "content_hash": "33bb1f6e52a769477249f60b060f066fd6adb633083de3ff4bf2d6ec13ea84df"
+      },
+      "derivation_inputs": [
+        "native_candidate_keys",
+        "native_pair_keys",
+        "candidate_records",
+        "pair_records",
+        "native_totals_and_overflows",
+        "bridge_attempt_count"
+      ],
+      "derivation_invalidation_set": [
+        "h0_capture_abi_sha256",
+        "native_universe_v2_semantics",
+        "event_key_version",
+        "candidate_record_key",
+        "pair_record_key",
+        "capture_completeness_predicates"
+      ],
+      "current_abi_coverage": "candidate_source_available",
+      "current_registration_v2_coverage": "not_registrable_current_v2",
+      "missing_semantics": [
+        "registration-v2 has no envelope/native-universe guarantee class or completeness binding"
+      ],
+      "requires_h0_delta": true,
+      "requires_gctm_restriction": false,
+      "requires_b1_only_treatment": false,
+      "runtime_observable": true,
+      "disposition_status": "outside_envelope",
+      "notes": "Trace-v2 contains the necessary native sidecars, but registration-v2 can bind only pair/candidate/claim/commit record fields. The producer-to-consumer evidence path therefore stops before a usable membership guarantee."
+    },
+    {
+      "consumer_object": "operator_offset_position",
+      "consumer_binding": {
+        "binding_kind": "audit_boundary",
+        "source_key": "production_cv_null_offset_treatment"
+      },
+      "consumer_required_semantics": "Production operator horizon mismatch offset must remain separate from canonical residual mean and M2 context drift",
+      "shape": "signed pair of (d,) vectors",
+      "unit": "coordinate units",
+      "sharing": "candidate_specific",
+      "required_availability_time": "at candidate entry/bridge event",
+      "causal_requirement": {
+        "required_information_set": "bridge_at, endpoint velocities, and h_ref",
+        "future_info_leak_allowed": false,
+        "causal_status": "satisfied"
+      },
+      "responsibility_class": "GCTM_DERIVED",
+      "producer_sources": [
+        {
+          "field": "bridge_at",
+          "stream": "pair_record",
+          "capture_point": "pair record at bridge fire",
+          "source_state": "candidate-source",
+          "registered_guarantee_claimed": false
+        },
+        {
+          "field": "lost_velocity_x",
+          "stream": "pair_record",
+          "capture_point": "lost exit-causal snapshot",
+          "source_state": "candidate-source",
+          "registered_guarantee_claimed": false
+        },
+        {
+          "field": "lost_velocity_y",
+          "stream": "pair_record",
+          "capture_point": "lost exit-causal snapshot",
+          "source_state": "candidate-source",
+          "registered_guarantee_claimed": false
+        },
+        {
+          "field": "cand_velocity_x",
+          "stream": "pair_record",
+          "capture_point": "candidate entry snapshot",
+          "source_state": "candidate-source",
+          "registered_guarantee_claimed": false
+        },
+        {
+          "field": "cand_velocity_y",
+          "stream": "pair_record",
+          "capture_point": "candidate entry snapshot",
+          "source_state": "candidate-source",
+          "registered_guarantee_claimed": false
+        },
+        {
+          "field": "h_ref",
+          "stream": "pair_record",
+          "capture_point": "pair record before score computation",
+          "source_state": "candidate-source",
+          "registered_guarantee_claimed": false
+        }
+      ],
+      "producer_stream": "pair_record plus frozen GCTM operator mapping",
+      "capture_point": "derived at bridge event",
+      "relation": "derived",
+      "derivation_binding": {
+        "definition_id": "gctm_operator_horizon_offset_from_h0_timing_v1",
+        "definition_version": "1",
+        "content_hash": "fdebfc83ec21d8258be68e4cd9e0cdb505ee0046132217b910a252ae95e76787"
+      },
+      "derivation_inputs": [
+        "bridge_at",
+        "lost_velocity",
+        "candidate_velocity",
+        "h_ref"
+      ],
+      "derivation_invalidation_set": [
+        "h0_capture_abi_sha256",
+        "bridge_at_semantics",
+        "velocity_semantics",
+        "coordinate_normalization_identity",
+        "gctm_theory_sha256"
+      ],
+      "current_abi_coverage": "candidate_source_available",
+      "current_registration_v2_coverage": "candidate_source_eligible",
+      "missing_semantics": [],
+      "requires_h0_delta": false,
+      "requires_gctm_restriction": false,
+      "requires_b1_only_treatment": false,
+      "runtime_observable": true,
+      "disposition_status": "structurally_covered",
+      "notes": "The offset is reproducible without assuming la==g_phys. It is not folded into residual_position, context drift, or an H0 guarantee."
+    }
+  ],
+  "coverage_conservation": {
+    "required_consumer_objects": [
+      "event_id",
+      "cand_id",
+      "g_phys",
+      "residual_position",
+      "S_innovation",
+      "covariance_semantics",
+      "coordinate_dim_d",
+      "observation_mode",
+      "stratum_id",
+      "context_drift_position",
+      "score_orientation",
+      "score_transform",
+      "normalization",
+      "tie_rule",
+      "true_match_label",
+      "candidate_universe",
+      "event_membership"
+    ],
+    "audited_consumer_objects": [
+      "event_id",
+      "cand_id",
+      "g_phys",
+      "residual_position",
+      "S_innovation",
+      "covariance_semantics",
+      "coordinate_dim_d",
+      "observation_mode",
+      "stratum_id",
+      "context_drift_position",
+      "score_orientation",
+      "score_transform",
+      "normalization",
+      "tie_rule",
+      "true_match_label",
+      "candidate_universe",
+      "event_membership",
+      "operator_offset_position"
+    ],
+    "responsibility_counts": {
+      "H0_EXACT": 1,
+      "H0_DERIVED": 1,
+      "GCTM_DERIVED": 6,
+      "DECLARATION_CONSTANT": 8,
+      "B1_OFFLINE": 1,
+      "OUTSIDE_ENVELOPE": 1,
+      "UNAVAILABLE": 0
+    },
+    "total_rows": 18,
+    "runtime_observable_count": 17,
+    "offline_count": 1,
+    "unresolved_runtime_objects": [
+      "candidate_universe",
+      "event_membership"
+    ],
+    "conservation_complete": true
+  },
+  "runtime_consumer_gates": [
+    {
+      "gate_id": "gctm_d1_to_h0_route5_b1_compatibility_v1",
+      "consumer_slot_id": "H0_ROUTE5_B1",
+      "input_status": "missing",
+      "output_status": "missing",
+      "independent": true,
+      "changed_by_audit": false
+    },
+    {
+      "gate_id": "gctm_d1_to_gctm_b1_compatibility_v1",
+      "consumer_slot_id": "GCTM_B1",
+      "input_status": "missing",
+      "output_status": "missing",
+      "independent": true,
+      "changed_by_audit": false
+    }
+  ],
+  "fixed_non_authority": {
+    "authority_verified": false,
+    "runtime_compatibility_established": false,
+    "h0_runtime_substrate_established": false,
+    "activation_eligible": false,
+    "guarantee_registration_performed": false,
+    "h0_capture_performed": false,
+    "gctm_d1_reopened": false
+  },
+  "selected_terminal": "H0_GCTM_INTERFACE_STRUCTURALLY_INSUFFICIENT"
+}

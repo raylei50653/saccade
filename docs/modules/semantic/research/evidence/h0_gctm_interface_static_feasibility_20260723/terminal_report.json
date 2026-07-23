@@ -1,0 +1,102 @@
+{
+  "schema": "h0_gctm_static_audit_terminal_report_v1",
+  "report_id": "h0_gctm_static_audit_terminal_report_20260723",
+  "audit_id": "h0_gctm_interface_static_feasibility_20260723",
+  "record_scope": "mechanical_terminal_candidate",
+  "terminal_procedure_id": "h0_gctm_static_feasibility_ordered_terminal_v1",
+  "terminal_order": [
+    "H0_GCTM_STATIC_AUDIT_INVALID",
+    "H0_GCTM_INTERFACE_STRUCTURALLY_INSUFFICIENT",
+    "H0_GCTM_INTERFACE_STRUCTURALLY_FEASIBLE"
+  ],
+  "selected_terminal": "H0_GCTM_INTERFACE_STRUCTURALLY_INSUFFICIENT",
+  "selection_basis": {
+    "audit_valid": true,
+    "coverage_conservation_complete": true,
+    "unresolved_runtime_objects": [
+      "candidate_universe",
+      "event_membership"
+    ],
+    "candidate_universe_reason": "accepted D1 fixes synthetic_event_candidate_set_v1 and supplies no legal runtime mapping to an H0 native universe",
+    "event_membership_reason": "trace-v2 has native-universe sidecars but registration-v2 cannot bind envelope completeness or native-universe semantics"
+  },
+  "current_abi_structurally_sufficient": false,
+  "maximum_supported_conclusion": "The current trace-v2 timing and snapshot fields are structurally capable of supporting immutable GCTM derivations for physical gap, M1 position residual, operator offset, and GCTM-owned innovation covariance, but the complete producer-to-consumer evidence path is structurally insufficient because the accepted D1 candidate universe is synthetic and registration-v2 cannot register runtime native-universe membership/completeness.",
+  "coverage": {
+    "H0_EXACT": 1,
+    "H0_DERIVED": 1,
+    "GCTM_DERIVED": 6,
+    "DECLARATION_CONSTANT": 8,
+    "B1_OFFLINE": 1,
+    "OUTSIDE_ENVELOPE": 1,
+    "UNAVAILABLE": 0
+  },
+  "hardest_boundary": "candidate_universe_and_event_membership",
+  "physical_gap_verdict": "legal GCTM-derived relation g_phys=la-bridge_at+1; la and g_phys remain distinct; no H0 guarantee",
+  "not_established": [
+    "accepted H0 baseline",
+    "field-level runtime guarantees",
+    "runtime fidelity",
+    "runtime compatibility",
+    "H0 runtime substrate",
+    "H0 re-entry authority",
+    "H0_ROUTE5_B1 activation",
+    "GCTM_B1 activation",
+    "O1 activation",
+    "production claim"
+  ],
+  "fixed_validator_output": {
+    "authority_verified": false,
+    "runtime_compatibility_established": false,
+    "h0_runtime_substrate_established": false,
+    "activation_eligible": false
+  },
+  "runtime_consumer_gates": [
+    {
+      "gate_id": "gctm_d1_to_h0_route5_b1_compatibility_v1",
+      "status": "missing",
+      "changed": false
+    },
+    {
+      "gate_id": "gctm_d1_to_gctm_b1_compatibility_v1",
+      "status": "missing",
+      "changed": false
+    }
+  ],
+  "forbidden_effects_confirmed_absent": [
+    "H0 capture",
+    "H0 re-entry",
+    "exactly-once authorization",
+    "historical H0 packet reinterpretation",
+    "actual guarantee registration",
+    "runtime compatibility verdict",
+    "compatibility gate status change",
+    "H0_ROUTE5_B1 activation",
+    "GCTM_B1 activation",
+    "O1 activation",
+    "production/runtime behavior change",
+    "GCTM_D1 reopening"
+  ],
+  "next_owner_decision": {
+    "allowed_choices": [
+      "minimal H0 registration/fidelity-edge delta that can bind native-universe and event-membership completeness",
+      "GCTM runtime consumer re-charter that freezes a runtime candidate universe and its event composition"
+    ],
+    "forbidden_choice": "repeat H0 capture under unchanged ABI and registration-v2",
+    "h0_runtime_substrate_reentry_may_be_considered_now": false
+  },
+  "artifact_bindings": {
+    "schema_sha256": "523fc01b1d95ca013083a5d1c7f6f4e1badd0b34aca603047773509b1f312095",
+    "validator_sha256": "9aedaa5e04a1273af381dbd15de05cfebcc85a1c24bdf7943218847f9884eeed",
+    "responsibility_matrix_sha256": "c2b41b0124141dd56b13024585786b4d2491c82619db7f98e3f99301a88a2665",
+    "frozen_input_record_sha256": "fdaee307cc0af99cb18c0f393771b4aafd96ff9ac655ba69ee771355b244dd58",
+    "coverage_report_sha256": "d51dae3d8b3eeb03501ffe563c293bea9f493820c62c45d0fb578ce007f9e536",
+    "boundary_verdicts_sha256": "687b4dfe5da3c6ac1a1ccbbf0797980fe14b22fb6e4465d81d52fe9c37cd067a",
+    "fixture_catalog_sha256": "659a0d1ee5c4904624c6b38bee44dec182832425fe184c0a0d03af283a2943f9"
+  },
+  "acceptance": {
+    "owner_acceptance_id": "h0_gctm_static_audit_terminal_owner_acceptance_20260723",
+    "acceptance_mechanism": "PR merge constitutes owner acceptance of this exact mechanically validated packet",
+    "pending_until_merge": true
+  }
+}

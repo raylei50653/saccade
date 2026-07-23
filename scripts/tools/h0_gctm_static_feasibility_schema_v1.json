@@ -1,0 +1,697 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "h0_gctm_interface_static_feasibility_audit_v1",
+  "title": "Bounded H0 to GCTM consumer-interface static feasibility audit",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "audit_id",
+    "audit_scope",
+    "terminal_order",
+    "frozen_inputs",
+    "derivation_definitions",
+    "rows",
+    "coverage_conservation",
+    "runtime_consumer_gates",
+    "fixed_non_authority",
+    "selected_terminal"
+  ],
+  "properties": {
+    "schema": {
+      "const": "h0_gctm_interface_static_feasibility_audit_v1"
+    },
+    "audit_id": {
+      "type": "string",
+      "pattern": "^h0_gctm_[a-z0-9_]{8,127}$"
+    },
+    "audit_scope": {
+      "const": "static_feasibility_only_no_runtime_authority"
+    },
+    "terminal_order": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "prefixItems": [
+        {
+          "const": "H0_GCTM_STATIC_AUDIT_INVALID"
+        },
+        {
+          "const": "H0_GCTM_INTERFACE_STRUCTURALLY_INSUFFICIENT"
+        },
+        {
+          "const": "H0_GCTM_INTERFACE_STRUCTURALLY_FEASIBLE"
+        }
+      ],
+      "items": false
+    },
+    "frozen_inputs": {
+      "type": "array",
+      "minItems": 8,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/frozen_input"
+      }
+    },
+    "derivation_definitions": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/derivation_definition"
+      }
+    },
+    "rows": {
+      "type": "array",
+      "minItems": 16,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/coverage_row"
+      }
+    },
+    "coverage_conservation": {
+      "$ref": "#/$defs/coverage_conservation"
+    },
+    "runtime_consumer_gates": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/runtime_gate"
+      }
+    },
+    "fixed_non_authority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "authority_verified",
+        "runtime_compatibility_established",
+        "h0_runtime_substrate_established",
+        "activation_eligible",
+        "guarantee_registration_performed",
+        "h0_capture_performed",
+        "gctm_d1_reopened"
+      ],
+      "properties": {
+        "authority_verified": {
+          "const": false
+        },
+        "runtime_compatibility_established": {
+          "const": false
+        },
+        "h0_runtime_substrate_established": {
+          "const": false
+        },
+        "activation_eligible": {
+          "const": false
+        },
+        "guarantee_registration_performed": {
+          "const": false
+        },
+        "h0_capture_performed": {
+          "const": false
+        },
+        "gctm_d1_reopened": {
+          "const": false
+        }
+      }
+    },
+    "selected_terminal": {
+      "enum": [
+        "H0_GCTM_INTERFACE_STRUCTURALLY_INSUFFICIENT",
+        "H0_GCTM_INTERFACE_STRUCTURALLY_FEASIBLE"
+      ]
+    }
+  },
+  "$defs": {
+    "nonempty_string_array": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "string_array": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "responsibility_class": {
+      "enum": [
+        "H0_EXACT",
+        "H0_DERIVED",
+        "GCTM_DERIVED",
+        "DECLARATION_CONSTANT",
+        "B1_OFFLINE",
+        "OUTSIDE_ENVELOPE",
+        "UNAVAILABLE"
+      ]
+    },
+    "frozen_input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "role",
+        "identity_id",
+        "path",
+        "sha256"
+      ],
+      "properties": {
+        "role": {
+          "enum": [
+            "gctm_d1_terminal_acceptance",
+            "gctm_consumer_interface",
+            "gctm_compatibility_requirements",
+            "h0_consumer_compatibility_contract",
+            "h0_capture_abi",
+            "h0_guarantee_registration_schema",
+            "h0_guarantee_registration_validator",
+            "h0_guarantee_candidate_fixture",
+            "gctm_theory",
+            "h0_capture_semantic_declaration",
+            "h0_capture_record_types",
+            "h0_capture_writer"
+          ]
+        },
+        "identity_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^(docs|scripts|tests|include|src)/"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "derivation_input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "source_kind",
+        "shape",
+        "unit",
+        "availability"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_kind": {
+          "enum": [
+            "h0_candidate_field",
+            "h0_candidate_envelope",
+            "gctm_parameter_artifact",
+            "declaration_constant",
+            "derived_object"
+          ]
+        },
+        "shape": {
+          "type": "string",
+          "minLength": 1
+        },
+        "unit": {
+          "type": "string",
+          "minLength": 1
+        },
+        "availability": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "derivation_output": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "shape",
+        "unit"
+      ],
+      "properties": {
+        "shape": {
+          "type": "string",
+          "minLength": 1
+        },
+        "unit": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "derivation_definition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "definition_id",
+        "definition_version",
+        "owner_class",
+        "content_hash",
+        "expression",
+        "inputs",
+        "output",
+        "causal_rule",
+        "invalidation_set"
+      ],
+      "properties": {
+        "definition_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{2,127}$"
+        },
+        "definition_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "owner_class": {
+          "enum": [
+            "H0_DERIVED",
+            "GCTM_DERIVED"
+          ]
+        },
+        "content_hash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "expression": {
+          "type": "string",
+          "minLength": 1
+        },
+        "inputs": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/derivation_input"
+          }
+        },
+        "output": {
+          "$ref": "#/$defs/derivation_output"
+        },
+        "causal_rule": {
+          "type": "string",
+          "minLength": 1
+        },
+        "invalidation_set": {
+          "$ref": "#/$defs/nonempty_string_array"
+        }
+      }
+    },
+    "producer_source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "field",
+        "stream",
+        "capture_point",
+        "source_state",
+        "registered_guarantee_claimed"
+      ],
+      "properties": {
+        "field": {
+          "type": "string",
+          "minLength": 1
+        },
+        "stream": {
+          "enum": [
+            "pair_record",
+            "candidate_record",
+            "claim_record",
+            "commit_record",
+            "capture_envelope",
+            "gctm_model",
+            "declaration",
+            "b1_offline",
+            "none"
+          ]
+        },
+        "capture_point": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_state": {
+          "enum": [
+            "candidate-source",
+            "gctm-owned",
+            "declaration-only",
+            "b1-offline-only",
+            "outside-envelope",
+            "unavailable"
+          ]
+        },
+        "registered_guarantee_claimed": {
+          "const": false
+        }
+      }
+    },
+    "causal_requirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "required_information_set",
+        "future_info_leak_allowed",
+        "causal_status"
+      ],
+      "properties": {
+        "required_information_set": {
+          "type": "string",
+          "minLength": 1
+        },
+        "future_info_leak_allowed": {
+          "type": "boolean"
+        },
+        "causal_status": {
+          "enum": [
+            "satisfied",
+            "satisfied_by_restriction",
+            "offline_only",
+            "unavailable"
+          ]
+        }
+      }
+    },
+    "derivation_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "definition_id",
+        "definition_version",
+        "content_hash"
+      ],
+      "properties": {
+        "definition_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{2,127}$"
+        },
+        "definition_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "content_hash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "consumer_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "binding_kind",
+        "source_key"
+      ],
+      "properties": {
+        "binding_kind": {
+          "enum": [
+            "required_runtime_field",
+            "top_level_policy",
+            "compatibility_contract_requirement",
+            "audit_boundary"
+          ]
+        },
+        "source_key": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "coverage_row": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "consumer_object",
+        "consumer_binding",
+        "consumer_required_semantics",
+        "shape",
+        "unit",
+        "sharing",
+        "required_availability_time",
+        "causal_requirement",
+        "responsibility_class",
+        "producer_sources",
+        "producer_stream",
+        "capture_point",
+        "relation",
+        "derivation_inputs",
+        "derivation_invalidation_set",
+        "current_abi_coverage",
+        "current_registration_v2_coverage",
+        "missing_semantics",
+        "requires_h0_delta",
+        "requires_gctm_restriction",
+        "requires_b1_only_treatment",
+        "runtime_observable",
+        "disposition_status",
+        "notes"
+      ],
+      "properties": {
+        "consumer_object": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_]+$"
+        },
+        "consumer_binding": {
+          "$ref": "#/$defs/consumer_binding"
+        },
+        "consumer_required_semantics": {
+          "type": "string",
+          "minLength": 1
+        },
+        "shape": {
+          "type": "string",
+          "minLength": 1
+        },
+        "unit": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sharing": {
+          "type": "string",
+          "minLength": 1
+        },
+        "required_availability_time": {
+          "type": "string",
+          "minLength": 1
+        },
+        "causal_requirement": {
+          "$ref": "#/$defs/causal_requirement"
+        },
+        "responsibility_class": {
+          "$ref": "#/$defs/responsibility_class"
+        },
+        "producer_sources": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/producer_source"
+          }
+        },
+        "producer_stream": {
+          "type": "string",
+          "minLength": 1
+        },
+        "capture_point": {
+          "type": "string",
+          "minLength": 1
+        },
+        "relation": {
+          "enum": [
+            "exact",
+            "derived",
+            "declaration",
+            "offline",
+            "unavailable"
+          ]
+        },
+        "derivation_binding": {
+          "$ref": "#/$defs/derivation_binding"
+        },
+        "derivation_inputs": {
+          "$ref": "#/$defs/string_array"
+        },
+        "derivation_invalidation_set": {
+          "$ref": "#/$defs/string_array"
+        },
+        "current_abi_coverage": {
+          "enum": [
+            "candidate_source_available",
+            "gctm_owned_not_abi",
+            "declaration_not_abi",
+            "b1_offline_not_abi",
+            "outside_envelope",
+            "unavailable"
+          ]
+        },
+        "current_registration_v2_coverage": {
+          "enum": [
+            "candidate_source_eligible",
+            "not_registrable_current_v2",
+            "not_applicable_gctm",
+            "not_applicable_declaration",
+            "not_applicable_b1",
+            "outside_envelope",
+            "unavailable"
+          ]
+        },
+        "missing_semantics": {
+          "$ref": "#/$defs/string_array"
+        },
+        "requires_h0_delta": {
+          "type": "boolean"
+        },
+        "requires_gctm_restriction": {
+          "type": "boolean"
+        },
+        "requires_b1_only_treatment": {
+          "type": "boolean"
+        },
+        "runtime_observable": {
+          "type": "boolean"
+        },
+        "disposition_status": {
+          "enum": [
+            "structurally_covered",
+            "covered_with_restriction",
+            "outside_envelope",
+            "unavailable",
+            "offline_only"
+          ]
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "responsibility_counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "H0_EXACT",
+        "H0_DERIVED",
+        "GCTM_DERIVED",
+        "DECLARATION_CONSTANT",
+        "B1_OFFLINE",
+        "OUTSIDE_ENVELOPE",
+        "UNAVAILABLE"
+      ],
+      "properties": {
+        "H0_EXACT": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "H0_DERIVED": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "GCTM_DERIVED": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "DECLARATION_CONSTANT": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "B1_OFFLINE": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "OUTSIDE_ENVELOPE": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "UNAVAILABLE": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "coverage_conservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "required_consumer_objects",
+        "audited_consumer_objects",
+        "responsibility_counts",
+        "total_rows",
+        "runtime_observable_count",
+        "offline_count",
+        "unresolved_runtime_objects",
+        "conservation_complete"
+      ],
+      "properties": {
+        "required_consumer_objects": {
+          "$ref": "#/$defs/nonempty_string_array"
+        },
+        "audited_consumer_objects": {
+          "$ref": "#/$defs/nonempty_string_array"
+        },
+        "responsibility_counts": {
+          "$ref": "#/$defs/responsibility_counts"
+        },
+        "total_rows": {
+          "type": "integer",
+          "minimum": 16
+        },
+        "runtime_observable_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "offline_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unresolved_runtime_objects": {
+          "$ref": "#/$defs/string_array"
+        },
+        "conservation_complete": {
+          "const": true
+        }
+      }
+    },
+    "runtime_gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "gate_id",
+        "consumer_slot_id",
+        "input_status",
+        "output_status",
+        "independent",
+        "changed_by_audit"
+      ],
+      "properties": {
+        "gate_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "consumer_slot_id": {
+          "enum": [
+            "H0_ROUTE5_B1",
+            "GCTM_B1"
+          ]
+        },
+        "input_status": {
+          "const": "missing"
+        },
+        "output_status": {
+          "const": "missing"
+        },
+        "independent": {
+          "const": true
+        },
+        "changed_by_audit": {
+          "const": false
+        }
+      }
+    }
+  }
+}
