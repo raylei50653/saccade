@@ -863,3 +863,24 @@ no B1/O1/online/production authority.
   predicate; a `local` claim under a local-only condition correctly passes).
   Scratchpad only, no code committed. Authority boundary unchanged: still
   schema-only, no B1 activation, no runtime-availability claim, no terminal.
+- 2026-07-23 — second bounded correction per #258 owner re-review (still
+  pre-merge; D1 §8 not yet frozen; §2–§7 byte-frozen). Two blockers: (1) the
+  \(\bar v(c)\) binding was **self-contradictory** (Block D required the drift
+  model to be per-event evaluable while Block E's `vbar_value` was required-if it
+  is not, making that branch unreachable) and W5′(b)'s "same value" reading would
+  have outlawed the legal \(c_1\neq c_2\Rightarrow\bar v(c_1)\neq\bar v(c_2)\)
+  case — fixed by separating **mapping identity** (`context_drift_model_id`,
+  shared) from **evaluability** (new `context_drift_model_evaluable`) and
+  per-event values (`vbar_value`), with new **W5′(a′)** requiring each event to
+  resolve \(\bar v(c)\) by at least one of the two paths and the two to agree when
+  both exist; (2) the **claim set was not machine-readable** — `claim_target`
+  (CAL/RANK) cannot tell W6 which branch to fire, so the restriction map was
+  complete in prose but not mechanically decidable; fixed by a required
+  **`claim_dependency_set`** over a closed atom vocabulary (D1 §8.2.1) listing
+  only §7 identifiability dependencies (no metric/threshold/score-ladder
+  semantics, so no B1-charter authority is taken), with W6 restated per atom
+  (branches (a)–(g), including the new `mean_bias_attribution` ⇒
+  `operator_offset_declared` rule) and §8.7 judging atoms via a set-intersection
+  test. Re-checked on synthetic records: **38** injected violations each caught,
+  three legality cases correctly pass. Scratchpad only, no code committed.
+  Boundary unchanged: schema-only, no B1 activation, no terminal.
