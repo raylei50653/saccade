@@ -1262,7 +1262,7 @@ identifiability／separation 結論（§6／§7 的結論永遠綁其 regime 前
 | `context_drift_model_id` | required | \(\bar v:\mathcal C_{\mathrm{exit}}\to\mathbb R^d\) 這個 **mapping 的 identity**（**不**預設 consumer 能執行它）；宣告 \(\bar v\equiv0\)（無 context drift）須以**保留值** `vbar_zero` 明寫（機械可判定，供 W6(g) 引用）。**共享的是 mapping identity，不是值**——\(c_1\neq c_2\Rightarrow\bar v(c_1)\neq\bar v(c_2)\) 完全合法（正是 `context_varies=true` 的情形） | §4.3／§4.7 |
 | `context_drift_model_evaluable` | required | 布林：consumer 是否可**逐 event 執行**該 mapping。`false` ⇒ 每個 event 必須帶 `vbar_value`（§8.3；解析路徑見 W5′(a′)） | §4.3；W5′ |
 | `gauge_fixing` | required | \(\in\{\texttt{R1\_declared},\ \texttt{Pxx\_declared},\ \texttt{none}\}\)（固定 \(P_{xx}\!\leftrightarrow\!R_1\) gauge 的**額外獨立資訊**） | §7.4 G1／§7.6 |
-| `parameter_sharing_scope` | required | 哪些 events 共享同一 \((P_0,\gamma,D,R_1)\)（identifiability 的 population 定義） | §7.4 |
+| `parameter_sharing_scope` | required | **Conditional scope（frozen）**：定義 claim population，以及該 population 共用的 \(\gamma,D\) 與 \(\bar v\)-mapping identity（W5′(b)，計分所需的最小集）。**若** `claim_dependency_set` 與 \(\mathcal A_{\mathrm{cov}}\) 有交集，同一 scope **另須**共享 \(P_0,R_1\)（W6(f)，§7.4 shared-parameter 前提）；純 \(\mathcal A_{\mathrm{mean}}\)／`no_parameter_identification` 的 declaration **不**要求 \(P_0/R_1\) 為同一 artifact，故其 population 可含 \(P_0/R_1\) 相異的 events（mean-level 的阻斷條件見 §7.6 mean 表） | §7.4／§7.6；W5′(b)／W6(f) |
 | `context_definition` | required | \(\mathcal C_{\mathrm{exit}}\) 的定義；須僅含 exit-causal 資訊 | §4.0 boundary 4／§4.7 |
 | `context_varies` | required | 布林：\(c\) 在 population 中是否**變化**（決定 \(\bar v(c)\) 可否與常數 mean 分離） | §7.4／§7.6 mean-level |
 | `claim_target` | required | 恰一個 \(\in\{\texttt{CAL},\ \texttt{RANK}\}\)；兩者須**各自**一份宣告 | §6.2（CAL/RANK 永不互相冒充） |
@@ -1411,7 +1411,7 @@ X-b 的存在只保證 §5 的 moment 結構有定義，**不**構成 record-lev
 |:--|:--|:--|:--|
 | `gauge_fixing=none` | `Pxx_R1_split`（結構性 gauge，\(H_{xv}\) 亦不可破） | `covariance_quotient`（只用 \(P_{xx}+R_1\) 之和） | §7.4 G1／§7.6 |
 | `gamma_status=unknown` 且（\(\le4\) 相異 \(\Delta\) 或 `joint_map_condition_status=not_established`） | **全部 \(\mathcal A_{\mathrm{cov}}\)**——`gamma_identification`、`gamma_D_separation`、`covariance_quotient`、`Pxx_R1_split`、`asym_Pxv`（quotient 在 \(\gamma\) unknown 時同樣要過 \(\gamma\) regime，§7.4） | 給定 \(\gamma\)（`gamma_estimate_id`）條件下的 score／quotient claim（須明寫其 conditional 前提：**供應可計分的 \(\gamma\) 值不等於已識別 \(\gamma\)**） | §7.4 G3／§7.6／§7.7 |
-| 只有 `local_full_rank_established`（無 global injectivity） | `identification_scope=global` 下的 `gamma_identification`／`gamma_D_separation`；local 結論**不得**被轉述為 global identification | `identification_scope=local` 的 claim（須標明只 local） | §7.4／§7.7（二者不等價） |
+| 只有 `local_full_rank_established`（無 global injectivity） | `identification_scope=global` 下的**全部 \(\mathcal A_{\mathrm{cov}}\)**（`gamma_identification`／`gamma_D_separation`／`covariance_quotient`／`Pxx_R1_split`／`asym_Pxv`——W6(b) 對整個 class 檢查 scope，判定域因此與 map 一致）；local 結論**不得**被轉述為 global identification | `identification_scope=local` 的 claim（須標明只 local） | §7.4／§7.7（二者不等價） |
 | 參數 binding 不可解析（\(\gamma\)／\(D\)／\(P_0\)／\(R_1\)／dependent 的 \(C\) 任一缺；或某 event 的 \(\bar v(c)\) 兩條路徑皆無、或兩者不一致） | **全部** atom（含 `no_parameter_identification`）——Block X-a 無法重算 ⇒ 該 declaration **根本不是**本 D1 的 instantiation（非「部分受限」） | 無 | W5′(a)/(a′)／§8.5 X-a |
 | `parameter_sharing_scope` 內 \(P_0\)／\(R_1\) 未解析到同一 artifact | **\(\mathcal A_{\mathrm{cov}}\) 全部**（§7.4 shared-parameter 前提不成立） | `no_parameter_identification` 與 **\(\mathcal A_{\mathrm{mean}}\)**（mean-level 不依賴 \(P_0/R_1\) artifact identity，§7.6 分表） | §7.4／W6(f) |
 | `observation_mode=`\(H_x\) | `asym_Pxv`（\(H_x\) 下 structural invisible） | `covariance_quotient`（\(\operatorname{sym}(P_{xv})\)／\(P_{vv}\)／\(D\)，在 W6(a) regime 下） | §7.4 G2／§7.6 |
@@ -1420,7 +1420,7 @@ X-b 的存在只保證 §5 的 moment 結構有定義，**不**構成 record-lev
 | `label_true_match` 不可得 | **CAL 與 RANK 皆不可主張**（兩者皆以 true-match label 為前提） | 僅 model-side 的定義性敘述（無 claim） | §7.5 |
 | `cal_working_null` 未宣告 | CAL 的**分佈層** claim（\(q\sim\chi^2_k\)、coverage／PIT） | \(q,\log\det S_\Delta,E,\Pi\) 作為 \(r,S_\Delta\) 的**函數**仍 well-defined | §6.1 |
 | `region_definition` 未宣告（卻使用 \(\Pi\)） | 任何 \(\Pi\)-based claim | \(q\)／NLL-based claim | §6.1／§6.3 |
-| single-event population（`parameter_sharing_scope` 只含一個 \(\Delta\)） | **除** `no_parameter_identification` **外的全部** atom（連 `covariance_quotient` 與 `exit_state_bias_separation` 都不可，§7.3／§7.6） | `no_parameter_identification` | §7.3／§7.6 |
+| single-event population（`parameter_sharing_scope` 只含一個 \(\Delta\)） | \(\mathcal A_{\mathrm{cov}}\cup\{\)`vbar_context_drift`, `exit_state_bias_separation`\(\}\)（§7.3：連 quotient 都不可；\(\bar v(c)\) 需 varying context；exit-state bias 需 multi-gap，§7.6） | `no_parameter_identification`；以及 `mean_bias_attribution`——它已縮窄為**已宣告** operator offset 的分離，§7.6 mean 表的阻斷條件就是「顯式宣告 offset」，**不需 multi-gap**（交由 W6(g) 判；若 drift 非 `vbar_zero`，W6(g) 強制併列 `vbar_context_drift`，該 atom 仍被本列擋下） | §7.3／§7.6 |
 | `error_dependence=dependent` 但 \(S_\Delta\succ0\) 未另行確立 | 任何需 \(S_\Delta^{-1}\) 的 claim（\(q/E/\Pi\)） | \(S_\Delta\succeq0\) 層級的敘述 | §5.5／§6.1 |
 
 **跨欄位的合成規則（frozen）：** 多個缺席同時發生時，禁止的 atom 集合為各列的
@@ -1906,3 +1906,40 @@ claim-restriction map。它不宣稱任何 runtime 擷取值、不建立 fidelit
   \(P_0/R_1\), a mixed covariance+mean set, `mean_bias_attribution` alone under
   `vbar_zero`, and the scope `required-if` firing for an unknown-\(\gamma\)
   quotient claim. Scratchpad only; no code committed.
+- 2026-07-23 — fourth bounded correction per #258 owner re-review (still
+  pre-merge; **§8 not yet frozen**; §2–§7 byte-frozen). Two blockers plus one
+  map/predicate domain mismatch, all consequences of the previous round's atom
+  typing; sanity figures supersede all earlier entries. (1) **`parameter_sharing_scope`
+  still promised unconditional \((P_0,\gamma,D,R_1)\) sharing**, contradicting the
+  typed W6(f) (only \(\mathcal A_{\mathrm{cov}}\) needs shared \(P_0/R_1\)) and the
+  §8.7 row that lets mean atoms survive unshared \(P_0/R_1\): a mean-only
+  declaration either violated the field definition or had to split its scope,
+  which would then starve `exit_state_bias_separation` of the \(\ge2\) gaps it
+  needs. Rewritten as a **conditional scope**: the field defines the claim
+  population plus the shared \(\gamma,D\) and \(\bar v\)-mapping identity
+  (W5′(b), the minimum needed to score), and **only if** the atom set meets
+  \(\mathcal A_{\mathrm{cov}}\) does the same scope additionally require shared
+  \(P_0,R_1\) (W6(f)) — no new field; the row now matches what W5′/W6 already
+  implemented. (2) **The single-event row over-blocked `mean_bias_attribution`** —
+  after narrowing that atom to *declared*-operator-offset separation, its §7.6
+  blocking condition is the explicit offset declaration, **not** multi-gap, so
+  `{mean_bias_attribution}` with `operator_offset_declared=true` and
+  `context_drift_model_id=vbar_zero` passed W6(g) but was rejected by §8.7. The
+  single-event row now forbids \(\mathcal A_{\mathrm{cov}}\cup\{\)`vbar_context_drift`,
+  `exit_state_bias_separation`\(\}\) and leaves `mean_bias_attribution` to W6(g);
+  a non-zero drift still forces `vbar_context_drift` to be co-listed, which the
+  same row then blocks, so the single-event escape hatch stays closed. (3)
+  **Map/predicate domain mismatch** — W6(b) checks local-vs-global scope for the
+  whole \(\mathcal A_{\mathrm{cov}}\), but the §8.7 local-full-rank row still named
+  only the two \(\gamma\) atoms. Since §8.7 is declared to be *the* atom-set
+  decision procedure, the row now forbids `identification_scope=global` for the
+  entire class (fail-closed behaviour was already correct; the stated domain was
+  not). Re-checked on synthetic records: conforming declaration passes all ten
+  predicates; **45** injected violations each caught (previous 43 plus
+  single-event `vbar_context_drift` and single-event `mean_bias_attribution`
+  under a non-zero drift); **fourteen** legality cases correctly pass, now
+  including single-event `mean_bias_attribution` under `vbar_zero`, a mean-only
+  declaration over events with different \(P_0/R_1\) artifacts, and local-only
+  evidence blocking a `global` claim for `covariance_quotient` and
+  `Pxx_R1_split` (not just the \(\gamma\) atoms). Scratchpad only; no code
+  committed.

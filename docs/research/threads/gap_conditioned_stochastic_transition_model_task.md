@@ -906,3 +906,23 @@ no B1/O1/online/production authority.
   **43** injected violations each caught, **ten** legality cases correctly pass.
   Scratchpad only, no code committed. Boundary unchanged: schema-only, no B1
   activation, no terminal.
+- 2026-07-23 — fourth bounded correction per #258 owner re-review (still
+  pre-merge; D1 §8 not yet frozen; §2–§7 byte-frozen). Two blockers + one
+  map/predicate domain mismatch, all fallout from the atom typing: (1)
+  `parameter_sharing_scope` still promised unconditional \((P_0,\gamma,D,R_1)\)
+  sharing, contradicting typed W6(f) and stranding mean-only declarations (split
+  the scope and `exit_state_bias_separation` loses its \(\ge2\) gaps) — rewritten
+  as a **conditional scope** (population + shared \(\gamma,D,\bar v\)-mapping
+  always; shared \(P_0,R_1\) **only if** the atom set meets
+  \(\mathcal A_{\mathrm{cov}}\)), no new field; (2) the §8.7 single-event row
+  over-blocked `mean_bias_attribution`, whose §7.6 blocking condition after
+  narrowing is the explicit offset declaration, not multi-gap — the row now
+  forbids \(\mathcal A_{\mathrm{cov}}\cup\{\)`vbar_context_drift`,
+  `exit_state_bias_separation`\(\}\) and leaves that atom to W6(g) (a non-zero
+  drift still forces the `vbar_context_drift` co-listing, which the same row
+  blocks); (3) the §8.7 local-full-rank row named only the two \(\gamma\) atoms
+  while W6(b) checks scope for the whole \(\mathcal A_{\mathrm{cov}}\) — the row now
+  covers the class, so the declared decision procedure and the predicate share one
+  domain. Re-checked: **45** injected violations each caught, **fourteen**
+  legality cases correctly pass. Scratchpad only, no code committed. Boundary
+  unchanged: schema-only, no B1 activation, no terminal.
