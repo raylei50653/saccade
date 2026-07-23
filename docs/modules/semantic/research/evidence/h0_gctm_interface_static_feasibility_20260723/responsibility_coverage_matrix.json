@@ -440,6 +440,7 @@
       "consumer_object": "event_id",
       "consumer_binding": {
         "binding_kind": "required_runtime_field",
+        "frozen_input_role": "gctm_consumer_interface",
         "source_key": "event_id"
       },
       "consumer_required_semantics": "Stable event key grouping one lost exit with its candidate set",
@@ -517,6 +518,7 @@
       "consumer_object": "cand_id",
       "consumer_binding": {
         "binding_kind": "required_runtime_field",
+        "frozen_input_role": "gctm_consumer_interface",
         "source_key": "cand_id"
       },
       "consumer_required_semantics": "Stable candidate identity inside an event",
@@ -558,6 +560,7 @@
       "consumer_object": "g_phys",
       "consumer_binding": {
         "binding_kind": "required_runtime_field",
+        "frozen_input_role": "gctm_consumer_interface",
         "source_key": "g_phys"
       },
       "consumer_required_semantics": "Physical exit→entry gap in frame intervals (canonical Δ)",
@@ -620,6 +623,7 @@
       "consumer_object": "residual_position",
       "consumer_binding": {
         "binding_kind": "required_runtime_field",
+        "frozen_input_role": "gctm_consumer_interface",
         "source_key": "residual_position"
       },
       "consumer_required_semantics": "Position innovation r = y1 - H m^-_Δ under declared mean model; Hx observation mode only",
@@ -736,6 +740,7 @@
       "consumer_object": "S_innovation",
       "consumer_binding": {
         "binding_kind": "required_runtime_field",
+        "frozen_input_role": "gctm_consumer_interface",
         "source_key": "S_innovation"
       },
       "consumer_required_semantics": "Total innovation covariance S_Δ used for Mahalanobis/NLL. Must declare whether event-shared or candidate-specific and the source",
@@ -813,6 +818,7 @@
       "consumer_object": "covariance_semantics",
       "consumer_binding": {
         "binding_kind": "required_runtime_field",
+        "frozen_input_role": "gctm_consumer_interface",
         "source_key": "covariance_semantics"
       },
       "consumer_required_semantics": "Enum: isotropic_shared | anisotropic_shared | candidate_specific; source and causal availability of each component",
@@ -854,6 +860,7 @@
       "consumer_object": "coordinate_dim_d",
       "consumer_binding": {
         "binding_kind": "required_runtime_field",
+        "frozen_input_role": "gctm_consumer_interface",
         "source_key": "coordinate_dim_d"
       },
       "consumer_required_semantics": "Coordinate dimension d for residual and covariance",
@@ -895,6 +902,7 @@
       "consumer_object": "observation_mode",
       "consumer_binding": {
         "binding_kind": "required_runtime_field",
+        "frozen_input_role": "gctm_consumer_interface",
         "source_key": "observation_mode"
       },
       "consumer_required_semantics": "Must be H_x for this interface family (position-only)",
@@ -936,6 +944,7 @@
       "consumer_object": "stratum_id",
       "consumer_binding": {
         "binding_kind": "required_runtime_field",
+        "frozen_input_role": "gctm_consumer_interface",
         "source_key": "stratum_id"
       },
       "consumer_required_semantics": "Protected-stratum label (must include short_gap partition)",
@@ -998,6 +1007,7 @@
       "consumer_object": "context_drift_position",
       "consumer_binding": {
         "binding_kind": "required_runtime_field",
+        "frozen_input_role": "gctm_consumer_interface",
         "source_key": "context_drift_position"
       },
       "consumer_required_semantics": "Optional M2 only: H d_Δ(c) position correction; exit-causal context only",
@@ -1041,6 +1051,7 @@
       "consumer_object": "score_orientation",
       "consumer_binding": {
         "binding_kind": "required_runtime_field",
+        "frozen_input_role": "gctm_consumer_interface",
         "source_key": "score_orientation"
       },
       "consumer_required_semantics": "Frozen lower_better for q and NLL native scores",
@@ -1082,6 +1093,7 @@
       "consumer_object": "score_transform",
       "consumer_binding": {
         "binding_kind": "top_level_policy",
+        "frozen_input_role": "gctm_consumer_interface",
         "source_key": "score_transform"
       },
       "consumer_required_semantics": "identity_after_declared_score",
@@ -1123,6 +1135,7 @@
       "consumer_object": "normalization",
       "consumer_binding": {
         "binding_kind": "top_level_policy",
+        "frozen_input_role": "gctm_consumer_interface",
         "source_key": "normalization"
       },
       "consumer_required_semantics": "frozen_identity_no_free_scale",
@@ -1164,6 +1177,7 @@
       "consumer_object": "tie_rule",
       "consumer_binding": {
         "binding_kind": "required_runtime_field",
+        "frozen_input_role": "gctm_consumer_interface",
         "source_key": "tie_rule"
       },
       "consumer_required_semantics": "Frozen stable_cand_id_asc",
@@ -1205,6 +1219,7 @@
       "consumer_object": "true_match_label",
       "consumer_binding": {
         "binding_kind": "required_runtime_field",
+        "frozen_input_role": "gctm_consumer_interface",
         "source_key": "true_match_label"
       },
       "consumer_required_semantics": "Diagnostic-only label for RANK metrics on synthetic/sealed non-runtime inputs; not a runtime producer field for online scoring",
@@ -1246,6 +1261,7 @@
       "consumer_object": "candidate_universe",
       "consumer_binding": {
         "binding_kind": "top_level_policy",
+        "frozen_input_role": "gctm_consumer_interface",
         "source_key": "candidate_universe"
       },
       "consumer_required_semantics": "synthetic_event_candidate_set_v1",
@@ -1290,6 +1306,7 @@
       "consumer_object": "event_membership",
       "consumer_binding": {
         "binding_kind": "compatibility_contract_requirement",
+        "frozen_input_role": "h0_consumer_compatibility_contract",
         "source_key": "lost_candidate_identities_and_event_membership"
       },
       "consumer_required_semantics": "Complete event membership over the declared candidate universe, with expected native keys reconciled to observed candidate and pair records",
@@ -1408,7 +1425,8 @@
       "consumer_object": "operator_offset_position",
       "consumer_binding": {
         "binding_kind": "audit_boundary",
-        "source_key": "production_cv_null_offset_treatment"
+        "frozen_input_role": "gctm_theory",
+        "source_key": "production_cv_null_offset"
       },
       "consumer_required_semantics": "Production operator horizon mismatch offset must remain separate from canonical residual mean and M2 context drift",
       "shape": "signed pair of (d,) vectors",

@@ -407,6 +407,7 @@
       "additionalProperties": false,
       "required": [
         "binding_kind",
+        "frozen_input_role",
         "source_key"
       ],
       "properties": {
@@ -421,6 +422,13 @@
         "source_key": {
           "type": "string",
           "minLength": 1
+        },
+        "frozen_input_role": {
+          "enum": [
+            "gctm_consumer_interface",
+            "h0_consumer_compatibility_contract",
+            "gctm_theory"
+          ]
         }
       }
     },

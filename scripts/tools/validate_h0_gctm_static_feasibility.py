@@ -90,6 +90,64 @@ FIXED_NON_AUTHORITY = {
     "activation_eligible": False,
 }
 
+CONSUMER_INTERFACE_ROLE = "gctm_consumer_interface"
+H0_COMPATIBILITY_CONTRACT_ROLE = "h0_consumer_compatibility_contract"
+GCTM_THEORY_ROLE = "gctm_theory"
+
+# These projections are part of the validator identity.  Each projection names
+# exact text that must exist in the already path/hash-frozen source and fixes
+# the only row semantics and availability that the source key may entail.
+COMPATIBILITY_REQUIREMENT_PROJECTIONS = {
+    "lost_candidate_identities_and_event_membership": {
+        "frozen_input_role": H0_COMPATIBILITY_CONTRACT_ROLE,
+        "consumer_object": "event_membership",
+        "consumer_required_semantics": (
+            "Complete event membership over the declared candidate universe, "
+            "with expected native keys reconciled to observed candidate and "
+            "pair records"
+        ),
+        "required_availability_time": (
+            "after native event formation and before a runtime ranking claim"
+        ),
+        "source_markers": (
+            "lost/candidate identities and event membership",
+            "A pair-local state alone cannot determine an online decision.",
+            "be the full candidate universe at the bridge\nevent.",
+        ),
+    },
+    "production_cv_null_offset_treatment": {
+        "frozen_input_role": H0_COMPATIBILITY_CONTRACT_ROLE,
+        "consumer_object": "operator_offset_position",
+        "consumer_required_semantics": (
+            "Production operator horizon mismatch offset must remain separate "
+            "from canonical residual mean and M2 context drift"
+        ),
+        "required_availability_time": "at candidate entry/bridge event",
+        "source_markers": (
+            "production-CV null offset and its declared treatment",
+            "GCTM owns the physical-time mapping and the treatment of any\n"
+            "induced null offset.",
+        ),
+    },
+}
+
+AUDIT_BOUNDARY_PROJECTIONS = {
+    "production_cv_null_offset": {
+        "frozen_input_role": GCTM_THEORY_ROLE,
+        "consumer_object": "operator_offset_position",
+        "consumer_required_semantics": (
+            "Production operator horizon mismatch offset must remain separate "
+            "from canonical residual mean and M2 context drift"
+        ),
+        "required_availability_time": "at candidate entry/bridge event",
+        "source_markers": (
+            "| 8 | `production_cv_null_offset` |",
+            "| 9 | `null_offset_treatment` |",
+            "`operator_offset` | required-if `operator_offset_declared=true`",
+        ),
+    },
+}
+
 
 class AuditValidationError(ValueError):
     """The static audit is structurally invalid."""
@@ -184,6 +242,17 @@ def _input_by_role(record: Mapping[str, Any], role: str) -> Mapping[str, Any]:
             f"frozen input role {role!r} must occur exactly once",
         )
     return matches[0]
+
+
+def _frozen_text(record: Mapping[str, Any], role: str) -> str:
+    frozen_input = _input_by_role(record, role)
+    path = ROOT / str(frozen_input["path"])
+    try:
+        return path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise AuditValidationError(
+            "frozen_identity", f"cannot read frozen input {path}: {exc}"
+        ) from exc
 
 
 def _validate_frozen_inputs(record: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:
@@ -386,13 +455,66 @@ def _validate_source_fields(row: Mapping[str, Any]) -> None:
         )
 
 
+def _validate_projected_binding(
+    *,
+    row: Mapping[str, Any],
+    record: Mapping[str, Any],
+    source_key: str,
+    projections: Mapping[str, Mapping[str, Any]],
+) -> None:
+    projection = projections.get(source_key)
+    if projection is None:
+        raise AuditValidationError(
+            "consumer_binding",
+            f"{row['consumer_object']} binds unknown frozen source {source_key!r}",
+        )
+    binding = _as_mapping(row["consumer_binding"], "consumer_binding")
+    expected_role = str(projection["frozen_input_role"])
+    if binding["frozen_input_role"] != expected_role:
+        raise AuditValidationError(
+            "consumer_binding",
+            f"{row['consumer_object']} binds {source_key!r} to the wrong frozen input",
+        )
+
+    source_text = _frozen_text(record, expected_role)
+    missing_markers = [
+        marker
+        for marker in _as_sequence(projection["source_markers"], "source_markers")
+        if str(marker) not in source_text
+    ]
+    if missing_markers:
+        raise AuditValidationError(
+            "consumer_binding",
+            f"{row['consumer_object']} frozen source {source_key!r} is absent or drifted",
+        )
+
+    for key in (
+        "consumer_object",
+        "consumer_required_semantics",
+        "required_availability_time",
+    ):
+        if row[key] != projection[key]:
+            raise AuditValidationError(
+                "consumer_binding",
+                f"{row['consumer_object']} {key} does not match frozen "
+                f"projection {source_key!r}",
+            )
+
+
 def _validate_consumer_binding(
-    row: Mapping[str, Any], consumer: Mapping[str, Any]
+    row: Mapping[str, Any],
+    record: Mapping[str, Any],
+    consumer: Mapping[str, Any],
 ) -> None:
     binding = _as_mapping(row["consumer_binding"], "consumer_binding")
     binding_kind = binding["binding_kind"]
     source_key = str(binding["source_key"])
     if binding_kind == "required_runtime_field":
+        if binding["frozen_input_role"] != CONSUMER_INTERFACE_ROLE:
+            raise AuditValidationError(
+                "consumer_binding",
+                f"{row['consumer_object']} runtime field binds the wrong frozen input",
+            )
         fields = _as_sequence(
             consumer.get("required_runtime_fields"), "consumer.required_runtime_fields"
         )
@@ -421,11 +543,39 @@ def _validate_consumer_binding(
                     f"{row['consumer_object']} {key} drifted from D1 interface",
                 )
     elif binding_kind == "top_level_policy":
-        if source_key not in consumer:
+        if (
+            binding["frozen_input_role"] != CONSUMER_INTERFACE_ROLE
+            or source_key not in consumer
+            or row["consumer_object"] != source_key
+        ):
             raise AuditValidationError(
                 "consumer_coverage",
                 f"{row['consumer_object']} binds absent D1 policy {source_key}",
             )
+        if row["consumer_required_semantics"] != consumer[source_key]:
+            raise AuditValidationError(
+                "consumer_semantics",
+                f"{row['consumer_object']} semantic value drifted from D1 policy",
+            )
+    elif binding_kind == "compatibility_contract_requirement":
+        _validate_projected_binding(
+            row=row,
+            record=record,
+            source_key=source_key,
+            projections=COMPATIBILITY_REQUIREMENT_PROJECTIONS,
+        )
+    elif binding_kind == "audit_boundary":
+        _validate_projected_binding(
+            row=row,
+            record=record,
+            source_key=source_key,
+            projections=AUDIT_BOUNDARY_PROJECTIONS,
+        )
+    else:
+        raise AuditValidationError(
+            "consumer_binding",
+            f"{row['consumer_object']} uses unsupported binding kind {binding_kind!r}",
+        )
 
 
 def _validate_relation_and_responsibility(
@@ -689,7 +839,7 @@ def validate_record(record: object) -> dict[str, object]:
         for index, item in enumerate(_as_sequence(record_map["rows"], "rows"))
     ]
     for row in rows:
-        _validate_consumer_binding(row, consumer)
+        _validate_consumer_binding(row, record_map, consumer)
         _validate_relation_and_responsibility(row, definitions)
         _validate_source_fields(row)
     _validate_conservation(record_map, rows)

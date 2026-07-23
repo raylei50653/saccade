@@ -8,25 +8,25 @@
     "boundary_ownership_verdicts.json": "687b4dfe5da3c6ac1a1ccbbf0797980fe14b22fb6e4465d81d52fe9c37cd067a",
     "coverage_conservation_report.json": "d51dae3d8b3eeb03501ffe563c293bea9f493820c62c45d0fb578ce007f9e536",
     "frozen_input_identities.json": "fdaee307cc0af99cb18c0f393771b4aafd96ff9ac655ba69ee771355b244dd58",
-    "responsibility_coverage_matrix.json": "c2b41b0124141dd56b13024585786b4d2491c82619db7f98e3f99301a88a2665",
-    "terminal_report.json": "7dd588553767b6f3bb01e86a0c7bb7b9c4a266d52108f5dd79bbfe6749365dbc"
+    "responsibility_coverage_matrix.json": "31d55305e6e33441955931558c602ba49d5ba4924495a32c593dabbfea394513",
+    "terminal_report.json": "e43e6e1ddb58e58e94222b1ae3b79ebe720d3b5a0bc65218cae0d4f9cfbd2914"
   },
   "tooling": {
     "schema": {
       "path": "scripts/tools/h0_gctm_static_feasibility_schema_v1.json",
-      "sha256": "523fc01b1d95ca013083a5d1c7f6f4e1badd0b34aca603047773509b1f312095"
+      "sha256": "f4688d36a5e9db633f0db254d9d2c0e5201c9f6d1db9ca191a9c3c691cffa02f"
     },
     "validator": {
       "path": "scripts/tools/validate_h0_gctm_static_feasibility.py",
-      "sha256": "9aedaa5e04a1273af381dbd15de05cfebcc85a1c24bdf7943218847f9884eeed"
+      "sha256": "fa78c5598f9cabc10a8450bc1066a4a147126e2193967e923cd60f1e878bdc37"
     },
     "fixture_catalog": {
       "path": "tests/contract/fixtures/h0_gctm_static_feasibility_fixture_catalog_v1.json",
-      "sha256": "659a0d1ee5c4904624c6b38bee44dec182832425fe184c0a0d03af283a2943f9"
+      "sha256": "8b7a1edfcd89cb14d7a84fee90ae3809b9558dcba7fab91fb02a7147b1cd2413"
     },
     "targeted_tests": {
       "path": "tests/contract/test_h0_gctm_static_feasibility_v1.py",
-      "sha256": "1e336007e0fc73f3bd23144c8ee2f085b81e82a71abe0c6bdb840460b58a2d5c"
+      "sha256": "45a76d733869ff864b9b3b61b16e7c3637524e80b9084b8864922276c772ac12"
     }
   },
   "authority_verified": false,

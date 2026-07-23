@@ -231,6 +231,95 @@
       "expected_error_class": "consumer_semantics"
     },
     {
+      "fixture_id": "negative_event_membership_source_key_absent",
+      "category": "compatibility_contract_binding",
+      "mutations": [
+        {
+          "op": "replace",
+          "path": [
+            "rows",
+            16,
+            "consumer_binding",
+            "source_key"
+          ],
+          "value": "missing_event_membership_requirement"
+        }
+      ],
+      "expected_valid": false,
+      "expected_error_class": "consumer_binding"
+    },
+    {
+      "fixture_id": "negative_event_membership_wrong_requirement",
+      "category": "compatibility_contract_binding",
+      "mutations": [
+        {
+          "op": "replace",
+          "path": [
+            "rows",
+            16,
+            "consumer_binding",
+            "source_key"
+          ],
+          "value": "production_cv_null_offset_treatment"
+        }
+      ],
+      "expected_valid": false,
+      "expected_error_class": "consumer_binding"
+    },
+    {
+      "fixture_id": "negative_candidate_universe_semantic_value_drift",
+      "category": "top_level_policy_binding",
+      "mutations": [
+        {
+          "op": "replace",
+          "path": [
+            "rows",
+            15,
+            "consumer_required_semantics"
+          ],
+          "value": "runtime_native_event_candidate_set_v1"
+        }
+      ],
+      "expected_valid": false,
+      "expected_error_class": "consumer_semantics"
+    },
+    {
+      "fixture_id": "negative_audit_boundary_identity_absent",
+      "category": "audit_boundary_binding",
+      "mutations": [
+        {
+          "op": "replace",
+          "path": [
+            "rows",
+            17,
+            "consumer_binding",
+            "source_key"
+          ],
+          "value": "missing_operator_offset_boundary"
+        }
+      ],
+      "expected_valid": false,
+      "expected_error_class": "consumer_binding"
+    },
+    {
+      "fixture_id": "negative_unknown_consumer_binding_kind",
+      "category": "binding_kind_exhaustiveness",
+      "mutations": [
+        {
+          "op": "replace",
+          "path": [
+            "rows",
+            16,
+            "consumer_binding",
+            "binding_kind"
+          ],
+          "value": "future_unimplemented_binding"
+        }
+      ],
+      "expected_valid": false,
+      "expected_error_class": "schema_rejection"
+    },
+    {
       "fixture_id": "negative_coverage_conservation",
       "category": "coverage_conservation",
       "mutations": [

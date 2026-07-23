@@ -269,10 +269,12 @@ The fail-closed schema and validator are:
 - [`validate_h0_gctm_static_feasibility.py`](../../../../scripts/tools/validate_h0_gctm_static_feasibility.py)
 
 They enforce one responsibility per row, frozen file hashes, immutable
-derivation hashes, shape/unit/availability/causality bindings, candidate-source
-non-promotion, label and declaration boundaries, complete coverage
-conservation, and independent runtime gates. Every successful or invalid CLI
-result fixes these outputs:
+derivation hashes, shape/unit/availability/causality bindings, exhaustive
+consumer-binding kinds, direct D1 top-level-policy value equality, frozen
+compatibility-requirement semantic/availability projections, explicit audit
+boundary identities, candidate-source non-promotion, label and declaration
+boundaries, complete coverage conservation, and independent runtime gates.
+Every successful or invalid CLI result fixes these outputs:
 
 ```text
 authority_verified: false
@@ -283,8 +285,10 @@ activation_eligible: false
 
 The fixture catalog includes one valid canonical packet and negative cases for
 exact/derived sources, each responsibility boundary, immutable derivations,
-shape/unit semantics, candidate-source promotion, coverage conservation, gate
-independence, and terminal selection.
+shape/unit semantics, absent/wrong compatibility requirements, top-level
+policy-value drift, absent audit-boundary identity, unknown binding kinds,
+candidate-source promotion, coverage conservation, gate independence, and
+terminal selection.
 
 ## Bounded next-owner decision
 

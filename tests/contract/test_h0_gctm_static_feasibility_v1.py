@@ -168,6 +168,28 @@ def test_candidate_source_fixture_remains_unusable_registration_input() -> None:
     assert report["disposition"] == "candidate-source"
 
 
+def test_consumer_bindings_name_and_entail_their_frozen_sources() -> None:
+    rows = {row["consumer_object"]: row for row in _load(MATRIX)["rows"]}
+    bindings = {name: row["consumer_binding"] for name, row in rows.items()}
+
+    assert all(binding["frozen_input_role"] for binding in bindings.values())
+    assert bindings["candidate_universe"] == {
+        "binding_kind": "top_level_policy",
+        "frozen_input_role": "gctm_consumer_interface",
+        "source_key": "candidate_universe",
+    }
+    assert bindings["event_membership"] == {
+        "binding_kind": "compatibility_contract_requirement",
+        "frozen_input_role": "h0_consumer_compatibility_contract",
+        "source_key": "lost_candidate_identities_and_event_membership",
+    }
+    assert bindings["operator_offset_position"] == {
+        "binding_kind": "audit_boundary",
+        "frozen_input_role": "gctm_theory",
+        "source_key": "production_cv_null_offset",
+    }
+
+
 def test_fixture_catalog_positive_and_per_category_negatives() -> None:
     catalog = _load(FIXTURES)
     assert catalog["schema"] == "h0_gctm_static_feasibility_fixture_catalog_v1"
@@ -183,6 +205,10 @@ def test_fixture_catalog_positive_and_per_category_negatives() -> None:
         "unavailable_boundary",
         "candidate_source_boundary",
         "shape_unit_availability_causality",
+        "compatibility_contract_binding",
+        "top_level_policy_binding",
+        "audit_boundary_binding",
+        "binding_kind_exhaustiveness",
         "coverage_conservation",
         "independent_runtime_gates",
         "terminal_selection",
