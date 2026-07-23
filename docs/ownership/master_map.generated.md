@@ -176,6 +176,7 @@ Manifest: `docs/ownership/doc_migration_manifest.yaml`
 - `docs/research/evidence_ledger.md`
 - `docs/research/models/gap_conditioned_stochastic_transition_lemmas_v1.md`
 - `docs/research/models/gap_conditioned_stochastic_transition_spec_v1.md`
+- `docs/research/models/gap_conditioned_stochastic_transition_terminal_review_v1.md`
 - `docs/research/paper_outline.md`
 - `docs/research/pipeline/CPU_BOUND_ANALYSIS.md`
 - `docs/research/pipeline/cpu_overhead_analysis_20260707.md`
@@ -193,11 +194,11 @@ Manifest: `docs/ownership/doc_migration_manifest.yaml`
 - `docs/research/threads/closed/composition_grammar_coverage_program_20260710.md`
 - `docs/research/threads/closed/composition_grammar_safe_region.md`
 - `docs/research/threads/closed/gap_conditioned_probabilistic_motion_probe_20260711.md`
+- `docs/research/threads/closed/gap_conditioned_stochastic_transition_model_task.md`
 - `docs/research/threads/closed/m_b1_online_hook_20260709.md`
 - `docs/research/threads/closed/runtime_faithful_safe_domain_20260712.md`
 - `docs/research/threads/closed/safe_region_assetization_20260710.md`
 - `docs/research/threads/doc_structure_o15_followup_20260709.md`
-- `docs/research/threads/gap_conditioned_stochastic_transition_model_task.md`
 - `docs/research/threads/gctm_b1_runtime_grounded_offline_attribution_task.md`
 - `docs/research/threads/gctm_o1_online_intervention_efficacy_task.md`
 - `docs/research/threads/gt_support_morphology_20260711.md`
@@ -324,6 +325,6 @@ Excluded from the active index and default search view.
 
 ## Inventory summary
 
-- documents: 274
-- active: 219
+- documents: 275
+- active: 220
 - grayed out: 55

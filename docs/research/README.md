@@ -88,6 +88,7 @@
 |------|------|------|
 | [threads/](threads/README.md) | [threads/README.md](threads/README.md) | **連續任務母線**（navigation-only；不放長表 / 不取代 ledger） |
 | [pipeline/](pipeline/) | 見下表（本目錄無獨立 README） | Runtime 路徑、perf、sync、CPU |
+| [models/](models/) | 見下表（本目錄無獨立 README） | Canonical model specification（D1）、proof appendix（D2）、terminal review artifact |
 | **[contracts/](contracts/README.md)** | **[contracts/README.md](contracts/README.md)** | **跨研究規範層（先讀，勿自造統計）**：feasible-set 數學框架（ε／independence unit／claim ladder L0–L6／forbidden shortcuts）· runtime-quantity fidelity protocol · gate-vs-score 分層 · Boolean 組合語義 · RegionAsset 打包契約 |
 | [eval/](eval/README.md) | [eval/README.md](eval/README.md) · **[signal_analysis_ledger](eval/signal_analysis_ledger.md)** | Eval / ablation 筆記；**深度訊號總帳**（規範層見 contracts/） |
 | [training/](training/README.md) | [training/README.md](training/README.md) | 訓練實驗 |
@@ -105,6 +106,17 @@
 | [cpu_overhead_analysis_20260707.md](pipeline/cpu_overhead_analysis_20260707.md) | CPU overhead（2026-07） |
 | [optimization_redundant_computations_20260620.md](pipeline/optimization_redundant_computations_20260620.md) | 冗餘計算優化筆記 |
 | [sync_audit_20260706.md](pipeline/sync_audit_20260706.md) | Sync audit |
+
+### models/（全表）
+
+Canonical model specifications and their proof/review artifacts；lifecycle 與
+terminal 由 owning charter（[threads/](threads/README.md)）決定，本表只索引。
+
+| 文件 | 內容 |
+|------|------|
+| [gap_conditioned_stochastic_transition_spec_v1.md](models/gap_conditioned_stochastic_transition_spec_v1.md) | **GCTM D1** — canonical model specification（§2–§8 frozen；observation/time interface、affine M2 + \(Q_\Delta\)、innovation composition、CAL/RANK claim space、identifiability & leakage matrix、schema-only B1 input interface） |
+| [gap_conditioned_stochastic_transition_lemmas_v1.md](models/gap_conditioned_stochastic_transition_lemmas_v1.md) | **GCTM D2** — lemma / proof appendix（L1 PSD、L2 \(\gamma\to0\) nesting、L3 semigroup + CK、L4 asymptotics、L5 \(q\)/NLL ranking equivalence） |
+| [gap_conditioned_stochastic_transition_terminal_review_v1.md](models/gap_conditioned_stochastic_transition_terminal_review_v1.md) | **GCTM terminal review（WP-A8）** — checklist artifact + 機械 terminal selection（`GCTM_MODEL_SPEC_SEALABLE`，owner-accepted 2026-07-23）；不授權 B1/O1/runtime/production |
 
 ### reid/（本樹）
 

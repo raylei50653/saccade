@@ -41,7 +41,7 @@ Authority is intentionally split:
   this charter consumes them and does not restate them as a second truth;
 - the [H0 declaration](../../modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md)
   owns runtime observability / evidence fidelity;
-- the [GCTM task charter](gap_conditioned_stochastic_transition_model_task.md)
+- the [GCTM task charter](closed/gap_conditioned_stochastic_transition_model_task.md)
   owns the transition-family specification boundary;
 - [`docs/modules/semantic/TODO.md`](../../modules/semantic/TODO.md) owns only a
   one-line navigation pointer and the module WIP projection.
@@ -91,6 +91,20 @@ frozen:
 8. a separate owner scheduling decision.
 
 No condition auto-activates B1.
+
+*Gate status (2026-07-23, projection — owners are the linked documents):*
+condition 2 is **satisfied** — the GCTM charter closed at the owner-accepted
+ordered terminal `GCTM_MODEL_SPEC_SEALABLE`
+([closed charter](closed/gap_conditioned_stochastic_transition_model_task.md) ·
+[terminal review](../models/gap_conditioned_stochastic_transition_terminal_review_v1.md)),
+and condition 4's specification/proof identities are available as frozen
+[D1](../models/gap_conditioned_stochastic_transition_spec_v1.md) §2–§8 and
+[D2](../models/gap_conditioned_stochastic_transition_lemmas_v1.md) L1–L5 (they
+still have to be **named and frozen in a B1 declaration**, which does not exist).
+Conditions 1, 3, 5–8 are **unmet**, and the score-layer contract below remains
+absent. The GCTM seal is diagnostic-only: it carries no runtime substrate or
+fidelity edge, its identifiability verdict is *specified, not established*, and
+it grants B1 no authority.
 
 Additionally:
 
@@ -718,7 +732,7 @@ accepted B1 handoff and must not rewrite B1 semantics.
 - [Synthesis core — shared B1/O1 semantics](../../modules/semantic/research/gctm_b1_o1_task_objectives_and_semantics_20260716.md)
 - [H0 declaration](../../modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md)
 - [H0→GCTM consumer compatibility requirements](../../modules/semantic/research/h0_gctm_consumer_compatibility_requirements_20260718.md)
-- [GCTM task charter](gap_conditioned_stochastic_transition_model_task.md)
+- [GCTM task charter](closed/gap_conditioned_stochastic_transition_model_task.md)
 - [O0 routing charter](closed/bridge_frozen_evidence_o0_routing_20260716.md)
 - [claim-state registry（§7 score layer / §8 候選集）](../contracts/claim_state_registry.md)
 - [bridge decision semantics](../tracker-decision/relink_bridge.md)

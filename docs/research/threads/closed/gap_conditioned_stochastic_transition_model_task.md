@@ -1,28 +1,55 @@
 ---
-doc-status: active
+doc-status: closed
 doc-promotion: none
 doc-date: 2026-07-22
 doc-module: semantic
 owner-module: semantic
 work-class: theory-model-specification
-wip-role: sole-active
+wip-role: non-wip
 activation-gate: "H0 ordered terminal owner acceptance + owner scheduling — both satisfied 2026-07-22; see Activation record"
 issue: 175
 target-decision-layer: score-ranking
 primary-intent: capability-map
 output-class: diagnostic-only
 mainline-transition: none
+closed: 2026-07-23
+closed-verdict: GCTM_MODEL_SPEC_SEALABLE
 ---
 
 # Gap-conditioned stochastic transition model — task charter
 
+> **One-line (CLOSED):** WP-A0 … WP-A8 completed the A-layer specification —
+> [D1](../../models/gap_conditioned_stochastic_transition_spec_v1.md) §2–§8
+> frozen and [D2](../../models/gap_conditioned_stochastic_transition_lemmas_v1.md)
+> L1–L5 proved — and terminal review selected the ordered terminal
+> **`GCTM_MODEL_SPEC_SEALABLE`**, owner-accepted 2026-07-23. The seal is
+> **diagnostic-only**: no runtime substrate or fidelity edge, identifiability
+> **specified not established**, no measured calibration/ranking gain, and **no**
+> B1/O1/online/mainline/production authority. **Direct handoff = no receiver.**
+
 ## Status and authority
 
-**ACTIVE (WP-A0, 2026-07-22).** This charter records the stable problem
-boundary for
-[Issue #175](https://github.com/raylei50653/saccade/issues/175) and, since
-WP-A0, the activation contract. It is sole-active in semantic WIP
-(projection: [`docs/modules/semantic/TODO.md`](../../modules/semantic/TODO.md)).
+**CLOSED (2026-07-23; terminal in *Final status* below).** This charter recorded
+the stable problem boundary for
+[Issue #175](https://github.com/raylei50653/saccade/issues/175) and, from WP-A0,
+the activation contract; it held semantic sole-active WIP from 2026-07-22 until
+closure and holds none now
+(projection: [`docs/modules/semantic/TODO.md`](../../../modules/semantic/TODO.md)).
+
+## Final status
+
+| 項 | 值（labels verbatim） |
+|:--|:--|
+| terminal | **`GCTM_MODEL_SPEC_SEALABLE`** — ordered terminal 5 of the WP-A0 frozen partition |
+| selection | WP-A8 terminal review, [checklist artifact](../../models/gap_conditioned_stochastic_transition_terminal_review_v1.md): 15/15 scoring rows `complete`, 0 `rejection-established`, 0 `incomplete` ⇒ frozen decision procedure selects terminal 5 |
+| owner acceptance | 2026-07-23 (WP-A8 merge; the same change carries this write-back and the closure tidy) |
+| artifacts | [D1 spec v1](../../models/gap_conditioned_stochastic_transition_spec_v1.md) §2–§8 frozen · [D2 lemmas v1](../../models/gap_conditioned_stochastic_transition_lemmas_v1.md) L1–L5 · [terminal review v1](../../models/gap_conditioned_stochastic_transition_terminal_review_v1.md) |
+| scope of the seal | **diagnostic-only, substrate-agnostic A-layer specification** (primary object = A, latent transition \(K_\Delta\)); B/C/D remain downstream constructible |
+| carried limits | no runtime substrate / fidelity edge (H0 unchanged: no faithful capture, no guarantee envelope) · identifiability **specified, not established** (\(\gamma\) regime unproven; \(P_{xx}\!\leftrightarrow\!R_1\) gauge and \(H_x\)-invisible \(\mathrm{asym}(P_{xv})\) structural) · no measured CAL/RANK gain · canonical \(C=0\) is a declared decision · D1 §8 states requirements, not availability · full list in the terminal review §8 |
+| direct handoff | **no receiver / no continuation** — a sealable A-layer spec is not an entry gate for anything |
+| cross-thread consequence（非 handoff） | B1 / O1 remain **proposed**, each behind its own charter, an accepted substrate or fidelity edge, the **still-absent** registry-owned L2 score-layer contract, the B1-slot identity, and separate owner scheduling; substrate does not inherit ([registry §4.2](../../contracts/claim_state_registry.md)) |
+| preset / production | 未改；no data, fitting, capture, runtime, online, or production work was authorized or performed |
+| 重開條件 | a new declaration + separate owner scheduling; frozen D1 §2–§8 may change only by append-only correction |
 
 ### Activation record
 
@@ -33,7 +60,7 @@ The activation gate required both:
    ([#209](https://github.com/raylei50653/saccade/issues/209) accepted
    2026-07-19; re-entry #2 and re-entry #3 accepted 2026-07-21; state
    fact-owner: [claim-state
-   registry](../contracts/claim_state_registry.md)); and
+   registry](../../contracts/claim_state_registry.md)); and
 2. a separate owner scheduling decision — **satisfied**: recorded by the
    owner on Issue #175, 2026-07-22 —
    [**GCTM ACTIVATION AUTHORIZED** (comment 5043900665)](https://github.com/raylei50653/saccade/issues/175#issuecomment-5043900665).
@@ -52,33 +79,38 @@ obligations and created neither D1 nor D2.
 **Active-declaration seal (WP-A1, 2026-07-22).** Obligation 1 is resolved by
 WP-A1: the nine-field canonical observation/time interface and the
 observation-mode/causal-availability rules are frozen in
-[D1 §2–§3](../models/gap_conditioned_stochastic_transition_spec_v1.md). With
+[D1 §2–§3](../../models/gap_conditioned_stochastic_transition_spec_v1.md). With
 the WP-A0 freezes (scope, ordered terminal partition, decision procedure,
 encoded obligations) this completes every pre-seal condition, and the active
-declaration is **sealed as of the WP-A1 merge**. Obligations 2–4 remain
-unresolved work before any `GCTM_MODEL_SPEC_SEALABLE` selection; the seal
-grants no runtime, data, B1/O1, online, or production authority and changes
-no H0 state.
+declaration is **sealed as of the WP-A1 merge**. Obligations 2–4 were, at that
+point, unresolved work before any `GCTM_MODEL_SPEC_SEALABLE` selection (all
+four are resolved as of WP-A5; the obligation-status updates below are the
+status source of record); the seal grants no runtime, data, B1/O1, online, or
+production authority and changes no H0 state.
 
 ### Bindings frozen at activation
 
 - **Primary claim object = A** (latent state transition \(K_\Delta\)), per the
   owner-accepted primary-object decision (2026-07-22; planning memo:
-  [GCTM primary object A — scope and plan](../../modules/semantic/research/gctm_primary_object_a_scope_and_plan_20260722.md)).
+  [GCTM primary object A — scope and plan](../../../modules/semantic/research/gctm_primary_object_a_scope_and_plan_20260722.md)).
 - **B / C / D are downstream constructible**, reached only through typed
   boundaries; they are not part of the A-layer claim identity.
 - The **conditional scope qualification** of existing-online §§9.2–9.4
   (owner-accepted, landed in-force via PR #249 in
-  [existing-online object analysis](../../modules/semantic/research/existing_online_object_analysis_for_gctm_alignment_20260718.md))
+  [existing-online object analysis](../../../modules/semantic/research/existing_online_object_analysis_for_gctm_alignment_20260718.md))
   governs which correspondence/competition obligations attach to which claim
   scope. An A-layer model-spec seal requires A, the observation/time
   interface, and typed B/C/D boundaries — not event competition.
 
 This document remains a task charter / problem specification, **not** a
-canonical mathematical specification. It selects no model or terminal and
-claims no completed proof, identifiability result, checklist pass, or
-`GCTM_MODEL_SPEC_SEALABLE` result. It authorizes no data, fitting, capture,
-runtime, online, or production work.
+canonical mathematical specification: it selects no model, proves nothing,
+establishes no identifiability result, and owns no mathematical content — D1
+and D2 do. Since WP-A8 it **records** the terminal selected by terminal review
+(`GCTM_MODEL_SPEC_SEALABLE`, owner-accepted 2026-07-23; see *Final status* and
+*Terminal review and selection (WP-A8)*), which is the one thing the frozen decision procedure
+requires it to carry — the selection itself is made in the checklist artifact,
+not here. It authorizes no data, fitting, capture, runtime, online, or
+production work.
 
 Authority is intentionally split:
 
@@ -87,7 +119,7 @@ Authority is intentionally split:
   expected deliverables, and provisional terminal family;
 - Issue #175 owns parked/active workflow, scheduling, discussion, and PR
   linkage;
-- [`docs/modules/semantic/TODO.md`](../../modules/semantic/TODO.md) owns only a
+- [`docs/modules/semantic/TODO.md`](../../../modules/semantic/TODO.md) owns only a
   one-line navigation pointer and the module WIP projection.
 
 ## Research and evidence layers
@@ -316,9 +348,9 @@ cannot silently choose them.
    vocabulary; it grants no production authority.
 
 For the bridge-runtime consumer registration that uses these obligations, see
-[H0→GCTM consumer compatibility requirements](../../modules/semantic/research/h0_gctm_consumer_compatibility_requirements_20260718.md).
+[H0→GCTM consumer compatibility requirements](../../../modules/semantic/research/h0_gctm_consumer_compatibility_requirements_20260718.md).
 For the shared cross-layer mapping and L2 ownership boundary, see
-[GCTM downstream tasks — B1 / O1 objectives and semantics](../../modules/semantic/research/gctm_b1_o1_task_objectives_and_semantics_20260716.md).
+[GCTM downstream tasks — B1 / O1 objectives and semantics](../../../modules/semantic/research/gctm_b1_o1_task_objectives_and_semantics_20260716.md).
 
 All four items below are unresolved mandatory activation-contract obligations,
 and all must be resolved before any future model-spec seal. Activation may
@@ -355,7 +387,7 @@ likelihood calibration does not imply better event-local ordering, and ranking
 gain does not establish calibrated probability.
 
 *Resolved by WP-A5 (2026-07-22):* frozen as
-[D1 §6](../models/gap_conditioned_stochastic_transition_spec_v1.md) — two distinct
+[D1 §6](../../models/gap_conditioned_stochastic_transition_spec_v1.md) — two distinct
 claims **CAL** (cross-event calibration) and **RANK** (candidate-local ranking),
 each with its own null, metric family, evaluation unit, and consequence, over the
 frozen §5 score quantities (\(q=r^\top S_\Delta^{-1}r\), \(\log\det S_\Delta\),
@@ -377,7 +409,7 @@ its source and causal availability are explicitly declared. Generic log/proper
 score is a distribution-quality metric (calibration+sharpness) and is **excluded**
 from the CAL metric family (coverage/PIT/conditional calibration error). The
 shared-\(S_\Delta\) \(q\)/NLL ordering-equivalence **proof** is
-[D2 §7 (Lemma L5)](../models/gap_conditioned_stochastic_transition_lemmas_v1.md).
+[D2 §7 (Lemma L5)](../../models/gap_conditioned_stochastic_transition_lemmas_v1.md).
 D1 §6 measures no gain, selects no metric/threshold, and makes no ranking or
 calibration data claim. This resolves the **last** of the four numbered
 obligations; a sealable terminal still requires the D1 identifiability/leakage
@@ -399,7 +431,7 @@ S_\Delta=H P^-_\Delta H^\top+R_1+HC+C^\top H^\top.
 \]
 
 *Resolved by WP-A4 (2026-07-22):* frozen as
-[D1 §5](../models/gap_conditioned_stochastic_transition_spec_v1.md) — four
+[D1 §5](../../models/gap_conditioned_stochastic_transition_spec_v1.md) — four
 separate uncertainty objects (\(P_0\) exit-state, \(Q_\Delta\) §4.5, \(R_1\)
 entry-observation, \(S_\Delta\) total innovation); prediction-error convention
 \(e^-=z_\Delta-m^-_\Delta\Rightarrow P^-_\Delta=A_\Delta P_0A_\Delta^\top+Q_\Delta\)
@@ -423,7 +455,7 @@ not only as a residual-state narrative. The state definition, \(A_\Delta\),
 reviewable interface.
 
 *Resolved by WP-A2 (2026-07-22):* frozen as
-[D1 §4](../models/gap_conditioned_stochastic_transition_spec_v1.md) — canonical
+[D1 §4](../../models/gap_conditioned_stochastic_transition_spec_v1.md) — canonical
 state \(z=[x;v]\in\mathbb R^{2d}\) (coordinate dim \(d\); concretizes §2
 substrate \(\mathbb R^k\), \(k=2d\)), M2 SDE, \(A_\Delta\), \(d_\Delta(c)\),
 \(Q_\Delta\) (noise-integral + closed form), \(\gamma=0\) continuous extension,
@@ -456,14 +488,20 @@ no mainline transition
 
 It also makes no PSD proof, nesting proof, identifiability resolution,
 acceptance-checklist pass, model seal, research claim-state transition, or
-production-behavior change.
+production-behavior change. *(WP-A8 note: the proofs live in D2 and the
+identifiability boundary in D1 §7 — neither is made by this document, and
+neither is an identifiability *resolution*. The terminal-review checklist
+required by the frozen decision procedure is a different object from the
+acceptance checklist named here: it decides which terminal applies, and it
+still confers no model seal, claim-state transition, or production change —
+owner acceptance of the recorded terminal is what closes the task.)*
 
 ## Future deliverables — create only after activation
 
 WP-A0 (activation) created none of these. **D1 exists as a seed since WP-A1**
-([gap_conditioned_stochastic_transition_spec_v1.md](../models/gap_conditioned_stochastic_transition_spec_v1.md):
+([gap_conditioned_stochastic_transition_spec_v1.md](../../models/gap_conditioned_stochastic_transition_spec_v1.md):
 §2–§8 frozen through WP-A7 — all D1 deliverable items complete); D2 exists since WP-A3
-([lemmas v1](../models/gap_conditioned_stochastic_transition_lemmas_v1.md)).
+([lemmas v1](../../models/gap_conditioned_stochastic_transition_lemmas_v1.md)).
 
 ### D1 — canonical model specification
 
@@ -490,6 +528,13 @@ Intended future path:
 
 Completion must write the selected terminal and task lifecycle back to this
 task and Issue #175. It must not create an empty D5-equivalent peer document.
+
+*Landed (WP-A8):* the checklist artifact required by the decision procedure is
+[gap_conditioned_stochastic_transition_terminal_review_v1.md](../../models/gap_conditioned_stochastic_transition_terminal_review_v1.md)
+— the review's fact-owner (rows, predicate evaluation, judgement points,
+carried limits). The terminal write-back to this document is the *Terminal
+review and selection (WP-A8)* section; the Issue #175 write-back and the
+closure tidy are owner-acceptance obligations.
 
 ## Terminal partition — frozen at activation (WP-A0)
 
@@ -539,19 +584,19 @@ acceptance records it.
 | 4 · canonical-state affine M2 transition (complete interface) | **unresolved** | before `GCTM_MODEL_SPEC_SEALABLE` |
 
 *Update (WP-A1, 2026-07-22):* obligation 1 is **resolved** — frozen in
-[D1 §2–§3](../models/gap_conditioned_stochastic_transition_spec_v1.md); the
+[D1 §2–§3](../../models/gap_conditioned_stochastic_transition_spec_v1.md); the
 table above is retained as the WP-A0 snapshot. Obligations 2–4 remain
 unresolved.
 
 *Update (WP-A2, 2026-07-22):* obligation 4 (canonical-state affine M2
 transition) is **resolved** — frozen in
-[D1 §4](../models/gap_conditioned_stochastic_transition_spec_v1.md). Obligations
+[D1 §4](../../models/gap_conditioned_stochastic_transition_spec_v1.md). Obligations
 2 and 3 remain **unresolved** (their owning packets WP-A5 / WP-A4); the
 sealable terminal still requires them plus the WP-A3 proof appendix (D2).
 
 *Update (WP-A4, 2026-07-22):* obligation 3 (independence vs explicit
 cross-covariance \(C\)) is **resolved** — frozen in
-[D1 §5](../models/gap_conditioned_stochastic_transition_spec_v1.md) with the
+[D1 §5](../../models/gap_conditioned_stochastic_transition_spec_v1.md) with the
 independence decision (\(C=0\)). Obligation 2 (calibration vs ranking) remains
 **unresolved** (WP-A5). The WP-A3 proof appendix (D2) has landed; the sealable
 terminal still requires obligation 2 plus the later D2 \(q\)/NLL-ordering
@@ -559,9 +604,9 @@ increment (D2 §7) and terminal review.
 
 *Update (WP-A5, 2026-07-22):* obligation 2 (calibration-only gain vs
 candidate-local ranking gain as distinct claims) is **resolved** — frozen in
-[D1 §6](../models/gap_conditioned_stochastic_transition_spec_v1.md), with the
+[D1 §6](../../models/gap_conditioned_stochastic_transition_spec_v1.md), with the
 \(q\)/NLL ordering-equivalence proof filled in
-[D2 §7 (L5)](../models/gap_conditioned_stochastic_transition_lemmas_v1.md).
+[D2 §7 (L5)](../../models/gap_conditioned_stochastic_transition_lemmas_v1.md).
 **All four numbered activation-contract obligations are now resolved.** The
 sealable terminal still requires the remaining D1 deliverables — the
 identifiability/leakage matrix (D1 §7) and the schema-only B1 input interface
@@ -572,7 +617,7 @@ review cannot yet reach `GCTM_MODEL_SPEC_SEALABLE` (it would select terminal 4,
 revised accordingly.
 
 *Update (WP-A6, 2026-07-22):* the D1 identifiability/leakage matrix is **frozen**
-in [D1 §7](../models/gap_conditioned_stochastic_transition_spec_v1.md) — the
+in [D1 §7](../../models/gap_conditioned_stochastic_transition_spec_v1.md) — the
 **terminal-3 predicate object** (`GCTM_IDENTIFIABILITY_UNRESOLVED`). It specifies
 the identifiability target set, observation/data-design regimes, the core
 single-event confounding, the multi-gap **quotient** identifiability (**given
@@ -596,7 +641,7 @@ schema-only B1 input interface (D1 §8, WP-A7) — plus terminal review (WP-A8),
 terminal review still could not yet reach the sealable terminal.
 
 *Update (WP-A7, 2026-07-23):* the schema-only B1 input interface is **frozen** in
-[D1 §8](../models/gap_conditioned_stochastic_transition_spec_v1.md) — the **last**
+[D1 §8](../../models/gap_conditioned_stochastic_transition_spec_v1.md) — the **last**
 D1 deliverable item. It fixes only the *interface shape* a separately declared
 future B1 input must have: the fail-closed consumption rule (an input instantiates
 D1 **iff** it supplies every `required`/triggered `required-if` field, passes the
@@ -608,7 +653,7 @@ leakage-blocking conditions into per-field mechanical verdicts. It is **not** a
 numbered obligation (all four remain resolved), and it **grants no B1 authority**:
 the **B1-slot identity**, the **score-layer contract**, B1's activation gate and
 frozen inputs, and all evaluation design remain owned by the
-[B1 charter](gctm_b1_runtime_grounded_offline_attribution_task.md) — D1 §8 links
+[B1 charter](../gctm_b1_runtime_grounded_offline_attribution_task.md) — D1 §8 links
 them and does not restate or pre-decide them. Fields are *requirements*, not
 availability claims: no runtime observability is asserted and no fidelity edge is
 created. **All D1 deliverable items are now complete**; the remaining step before
@@ -618,6 +663,50 @@ update selects none.
 
 Even the sealable terminal would grant no automatic B1, O1, online, mainline,
 or production authority.
+
+### Terminal review and selection (WP-A8, 2026-07-23)
+
+Terminal review has been performed against the frozen decision procedure above.
+The checklist artifact required by step 2 is
+[GCTM terminal review — checklist artifact and mechanical terminal
+selection](../../models/gap_conditioned_stochastic_transition_terminal_review_v1.md);
+it is the review's fact-owner and this section does not restate its rows.
+
+```text
+selected_terminal: GCTM_MODEL_SPEC_SEALABLE      # ordered terminal 5
+selection_basis:   15/15 scoring rows `complete`; 0 `rejection-established`;
+                   0 `incomplete`  (checklist §3)
+status:            selected by terminal review (WP-A8); **owner-accepted 2026-07-23**
+                   (step 4) — task CLOSED
+```
+
+The scoring rows are exactly this contract's enumeration — the mandatory
+obligations (scored under **both** of this document's own numberings: the four
+section headings and the four obligation-status rows, five distinct
+requirements in union), the D1 and D2 deliverable items, and the typed B/C/D
+boundary. Predicates were evaluated in the frozen order: terminals 1 and 2 are
+not applicable (interfaces frozen with domains/units; PSD, nesting, semigroup /
+Chapman–Kolmogorov and dimensional consistency proved or declared, with the
+\(\Delta=0\) and dependent-error degeneracies bounded and declared), and
+terminal 3 is not applicable because D1 §7 specifies a boundary with a
+**non-empty identifiable side**, declares its non-identifiable components, and
+exports per-instantiation rejection fail-closed through D1 §8 (W6 + §8.7) —
+while this charter authorises no data, no fitting and no identification, so no
+in-scope claim must rely on an unidentifiable component. The identifiability
+verdict therefore stays **specified, not established**, recorded as a carried
+limit rather than a rejection. The checklist records three judgement points
+(J-1 dimensional consistency by cross-reference, J-2 typed B/C/D boundary as a
+pointer, J-3 identifiability) and the terminal each would select if the owner
+reads it the other way (4, 4, and 3 respectively).
+
+Selection is not acceptance. Owner acceptance (step 4) — recorded 2026-07-23 —
+is what closed the task; it triggers the terminal-closure write-back to this
+document (*Final status*) and to Issue #175, the same-change closure tidy, and
+the first accepted-state registry record for this object. The accepted terminal is **diagnostic-only** and carries the checklist's
+recorded limits — no runtime substrate or fidelity edge (H0 state unchanged),
+identifiability specified but not established, no measured calibration or
+ranking gain, D1 §8 requirements are not availability claims — and grants no
+B1, O1, online, mainline, or production authority.
 
 ## Activation boundary
 
@@ -659,13 +748,12 @@ terminal. Terminal review is therefore split off to WP-A8, with WP-A6/WP-A7
 resolving the two remaining D1 deliverables first. (This lease is replaceable
 without a registry or WIP change.)
 
-**Current step:** WP-A7 landed (D1 §8 frozen: schema-only B1 input interface —
-the last D1 deliverable). **All four numbered obligations (1/WP-A1, 4/WP-A2,
-3/WP-A4, 2/WP-A5) remain resolved**, D2 (WP-A3) has landed, and **every D1
-deliverable item is complete** (§2–§8 frozen). Next = **WP-A8 (terminal review)**:
-the checklist artifact plus the charter's mechanical terminal selection. No
-terminal is selected until that review, and even the sealable terminal would grant
-no B1/O1/online/production authority.
+**Current step: none — closed.** The lease is exhausted: WP-A0 … WP-A8 all
+landed, all four numbered obligations are resolved, every D1 deliverable item is
+complete (§2–§8 frozen), D2 carries L1–L5, and WP-A8 terminal review's
+`GCTM_MODEL_SPEC_SEALABLE` was owner-accepted 2026-07-23. No next packet exists
+and none is authorized; reopening requires a new declaration plus separate owner
+scheduling.
 
 ## History
 
@@ -680,12 +768,12 @@ no B1/O1/online/production authority.
   declaration not sealed (obligation 1 → WP-A1); no D1/D2 created.
   Landed via PR #250 (merge `f5cda311`).
 - 2026-07-22 — **WP-A1: active declaration sealed**. D1 seed created
-  ([spec v1](../models/gap_conditioned_stochastic_transition_spec_v1.md));
+  ([spec v1](../../models/gap_conditioned_stochastic_transition_spec_v1.md));
   nine-field canonical observation/time interface + observation modes frozen
   (D1 §2–§3); obligation 1 resolved; obligations 2–4 remain unresolved; next
   packet WP-A2 (canonical-state affine M2 + \(Q_\Delta\)).
 - 2026-07-22 — **WP-A2: canonical-state affine M2 + \(Q_\Delta\) frozen**.
-  [D1 §4](../models/gap_conditioned_stochastic_transition_spec_v1.md) freezes
+  [D1 §4](../../models/gap_conditioned_stochastic_transition_spec_v1.md) freezes
   the full affine transition interface
   \(K_\Delta(z_0,c)=\mathcal N(A_\Delta z_0+d_\Delta(c),Q_\Delta)\) at
   \(\Delta=g_{\mathrm{phys}}\): canonical state, M2 SDE, \(A_\Delta\),
@@ -697,7 +785,7 @@ no B1/O1/online/production authority.
   WP-A3 (nesting / PSD / asymptotics proofs; D2).
 - 2026-07-22 — **WP-A3: D2 proof appendix landed** (PR #253, merge
   `4b41b582`). Created
-  [D2](../models/gap_conditioned_stochastic_transition_lemmas_v1.md) proving
+  [D2](../../models/gap_conditioned_stochastic_transition_lemmas_v1.md) proving
   internal properties of the frozen D1 §4 kernel only: L1 (\(Q_\Delta\succeq0\);
   rank \(=2\operatorname{rank}D\) for \(\Delta>0\)), L2 (\(\gamma\to0\) mean +
   covariance nesting to M1, with proven \(\gamma\)-continuity), L3 (semigroup /
@@ -706,7 +794,7 @@ no B1/O1/online/production authority.
   appendix), selects no terminal, and left frozen D1 §2–§4 byte-frozen. Next
   packet WP-A4 (obligation 3).
 - 2026-07-22 — **WP-A4: innovation composition frozen** (obligation 3).
-  [D1 §5](../models/gap_conditioned_stochastic_transition_spec_v1.md) freezes
+  [D1 §5](../../models/gap_conditioned_stochastic_transition_spec_v1.md) freezes
   \(P_0\)/\(P^-_\Delta\)/\(R_1\)/\(S_\Delta\) composition over the §4 kernel:
   prediction-error convention \(e^-=z_\Delta-m^-_\Delta\),
   \(P^-_\Delta=A_\Delta P_0A_\Delta^\top+Q_\Delta\), innovation
@@ -721,7 +809,7 @@ no B1/O1/online/production authority.
   terminal review).
 - 2026-07-22 — **WP-A5: calibration vs candidate-local ranking claim space
   frozen** (obligation 2 — the **last** numbered obligation).
-  [D1 §6](../models/gap_conditioned_stochastic_transition_spec_v1.md) freezes two
+  [D1 §6](../../models/gap_conditioned_stochastic_transition_spec_v1.md) freezes two
   distinct claims — **CAL** (cross-event calibration) and **RANK** (candidate-local
   ranking) — each with its own null, metric family, evaluation unit, and
   consequence, over the frozen §5 score quantities (\(q=r^\top S_\Delta^{-1}r\),
@@ -740,7 +828,7 @@ no B1/O1/online/production authority.
   ones already frozen in §5.2/§5.4, so only \(\delta z_0\)'s Gaussianity is new;
   §6.1) beyond frozen §5; generic log/proper score excluded from the CAL metric
   family. The \(q\)/NLL ordering-equivalence **proof** is
-  filled in [D2 §7 (Lemma L5, + L5.1/L5.2)](../models/gap_conditioned_stochastic_transition_lemmas_v1.md).
+  filled in [D2 §7 (Lemma L5, + L5.1/L5.2)](../../models/gap_conditioned_stochastic_transition_lemmas_v1.md).
   D1 §6 measures no gain, selects no metric/threshold/data, selects no terminal.
   Reserved sections renumbered (identifiability/leakage → D1 §7, B1 schema → D1
   §8); frozen §5 kept byte-frozen (its two "§6" identifiability references
@@ -753,7 +841,7 @@ no B1/O1/online/production authority.
   granted.
 - 2026-07-22 — **WP-A6: identifiability & leakage matrix frozen** (D1 deliverable;
   the terminal-3 predicate object, **not** a numbered obligation).
-  [D1 §7](../models/gap_conditioned_stochastic_transition_spec_v1.md) specifies the
+  [D1 §7](../../models/gap_conditioned_stochastic_transition_spec_v1.md) specifies the
   identifiability target set (\(\{\gamma,D,\bar v,P_0,R_1\}\), the deterministic
   operator offset, and the CAL/RANK claims), the observation/data-design regime
   axes (\(H_x\)/\(H_{xv}\), single-event vs multi-gap population, context
@@ -796,7 +884,7 @@ no B1/O1/online/production authority.
   B1/O1/runtime/online/production authority granted. Next packet WP-A7.
 - 2026-07-23 — **WP-A7: schema-only B1 input interface frozen** (the **last** D1
   deliverable; **not** a numbered obligation — all four remain resolved).
-  [D1 §8](../models/gap_conditioned_stochastic_transition_spec_v1.md) fixes the
+  [D1 §8](../../models/gap_conditioned_stochastic_transition_spec_v1.md) fixes the
   *interface shape* a separately declared future B1 input must have for the A-layer
   objects to be instantiated unambiguously: a fail-closed **consumption rule** (an
   input instantiates this D1 **iff** it supplies every `required` / triggered
@@ -807,8 +895,8 @@ no B1/O1/online/production authority.
   **score-layer contract**, B1's activation gate and frozen-inputs list, all
   evaluation design (folds, trial unit, minimum exposure, metrics, thresholds,
   blind/reveal) and the reserved-symbol rules stay owned by the
-  [B1 charter](gctm_b1_runtime_grounded_offline_attribution_task.md) /
-  [synthesis core](../../modules/semantic/research/gctm_b1_o1_task_objectives_and_semantics_20260716.md),
+  [B1 charter](../gctm_b1_runtime_grounded_offline_attribution_task.md) /
+  [synthesis core](../../../modules/semantic/research/gctm_b1_o1_task_objectives_and_semantics_20260716.md),
   linked and **not** restated, with same-named fields (`observation_mode`,
   `causal_availability`, `context_definition`, `P0_exit_cov_id`, `R1_obs_cov_id`, …)
   reused as the same objects; four field blocks (**D** declaration-level, **E**
@@ -943,3 +1031,50 @@ no B1/O1/online/production authority.
   single-gap multi-event varying-context population supporting
   `vbar_context_drift`. Scratchpad only, no code committed. Boundary unchanged:
   schema-only, no B1 activation, no terminal.
+- 2026-07-23 — **WP-A8: terminal review performed; terminal
+  `GCTM_MODEL_SPEC_SEALABLE` selected** (ordered terminal 5), owner acceptance
+  pending. The checklist artifact required by the frozen decision procedure is
+  [terminal review v1](../../models/gap_conditioned_stochastic_transition_terminal_review_v1.md):
+  **15 scoring rows** — the mandatory obligations under the union of this
+  document's two numberings (the four section headings **and** the four
+  obligation-status rows, five distinct requirements: exhaustive
+  specification-incomplete outcome, observation/time interface, CAL-vs-RANK,
+  independence/\(C\), affine M2), the four D1 deliverable items, the five D2
+  deliverable items, and the typed B/C/D boundary — all `complete`, with **no**
+  `rejection-established` and **no** `incomplete` row, so the frozen rule selects
+  terminal 5. Predicates were evaluated in order: terminal 1 not applicable
+  (state/observation/time/coordinate/covariance/causal-availability all frozen with
+  domains and units); terminal 2 not applicable (PSD + rank characterisation,
+  \(\gamma\to0\) nesting with continuity, semigroup / Chapman–Kolmogorov
+  composition, dimensional consistency; the \(\Delta=0\) and dependent-error
+  degeneracies are declared and fenced by D1 §8 W4); terminal 3 not applicable
+  (D1 §7 specifies a boundary with a **non-empty identifiable side**, declares its
+  structural gauges and the unmet \(\gamma\) regime, and exports per-instantiation
+  rejection fail-closed via W6/§8.7, while this charter authorises no data,
+  fitting or identification, so no in-scope claim must rely on an unidentifiable
+  component — the verdict stays *specified, not established*, a carried limit, not
+  a rejection); terminal 4 not applicable (no `incomplete` row). Three judgement
+  points are recorded with the terminal each would select if read the other way:
+  **J-1** dimensional consistency satisfied by cross-reference (⇒ 4), **J-2**
+  typed B/C/D boundary as a pointer rather than a construction (⇒ 4), **J-3**
+  identifiability read as requiring identification of \(\gamma\) and full
+  \(\{P_0,R_1\}\) (⇒ 3). Non-scoring items recorded with reasons (the L2
+  score-insertion contract and the score-policy leg of the typed cross-layer
+  mapping stay outside the A-layer seal and remain unresolved; terminal review and
+  the closure write-back are acts, not rows; D2 L3 is extra). D1 §2–§8 kept
+  byte-frozen (only an append-only §1 status note + History added); D2 untouched.
+  New file ⇒ master_map regenerated. The selection grants no
+  B1/O1/online/mainline/production authority and changes no H0 state; acceptance
+  (decision-procedure step 4) is what closes the task.
+- 2026-07-23 — **CLOSED: owner accepted `GCTM_MODEL_SPEC_SEALABLE`** (WP-A8
+  merge). Terminal and lifecycle written back here (*Final status*); the
+  matching write-back comment is posted on
+  [Issue #175](https://github.com/raylei50653/saccade/issues/175) with the
+  acceptance. Charter moved
+  to `threads/closed/`, removed from the threads Active table and from the
+  semantic TODO sole-active slot (semantic WIP lock now free), and the object's
+  first accepted-state record added to the
+  [claim-state registry](../../contracts/claim_state_registry.md) carrying the
+  seal's limits and the substrate boundary. Direct handoff = **no receiver**;
+  the seal grants no B1/O1/online/mainline/production authority and changes no
+  H0 state.

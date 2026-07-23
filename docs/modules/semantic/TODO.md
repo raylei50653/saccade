@@ -5,18 +5,13 @@
 
 ## Sole active
 
-- **Gap-conditioned stochastic transition model — task charter**（GCTM,A 層
-  theory/model specification）→ [task charter](../../research/threads/gap_conditioned_stochastic_transition_model_task.md)
-  · [Issue #175](https://github.com/raylei50653/saccade/issues/175)。
-  2026-07-22 owner scheduling decision（[#175 comment 5043900665](https://github.com/raylei50653/saccade/issues/175#issuecomment-5043900665)）
-  啟動（WP-A0,PR #250）。primary object = A;terminal partition 與 decision
-  procedure 已凍結;**active declaration 已 seal（WP-A1）**：九欄位
-  observation/time interface 凍結於 [D1 §2–§3](../../research/models/gap_conditioned_stochastic_transition_spec_v1.md)。
-  **WP-A2–A7 已 land**：D1 §2–§8 全數凍結、D2（WP-A3）已在,四個 numbered
-  obligation 全 resolved,D1 deliverable items 全 complete;current step =
-  WP-A8（terminal review：checklist artifact + 機械 terminal selection）。
-  尚未選任何 terminal;逐項狀態以 charter 為準（本欄只作 WIP 投影）。
-  不授權 data／fitting／H0／B1／O1／runtime／online／production;H0 狀態不因此改變。
+- ⏸️ **無 active**（2026-07-23 起）。GCTM charter 已於 owner 接受 ordered terminal
+  `GCTM_MODEL_SPEC_SEALABLE` 後關閉 → [closed charter](../../research/threads/closed/gap_conditioned_stochastic_transition_model_task.md)
+  · [Issue #175](https://github.com/raylei50653/saccade/issues/175);terminal 與
+  limits 以該卡 *Final status* 與 [claim-state registry](../../research/contracts/claim_state_registry.md) 為準
+  （本欄只作 WIP 投影,不複述 terminal 內容）。**該 seal 是 diagnostic-only**,
+  不授權 data／fitting／H0／B1／O1／runtime／online／production,亦不改 H0 狀態;
+  B1／O1 仍是 proposed,各自另有 gate。
 - H0 closure（三個 owner-accepted ordered terminal `H0_PROVENANCE_INVALID`;
   faithful capture = none;actual H0 guarantee = none;Phase B forbidden;
   任何未來 re-entry 前置＝machine-checked launch-hygiene pre-authorization

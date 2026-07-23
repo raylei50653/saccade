@@ -45,7 +45,7 @@ WIP=1 **只綁 mainline charter**。工程 follow-up、資料補件、文件收�
 
 ## Current transition panel — H0 → GCTM
 
-**Manual navigation projection · reconciled 2026-07-22.** This panel owns no
+**Manual navigation projection · reconciled 2026-07-23.** This panel owns no
 terminal, evidence, or WIP state: `ACTIVE` is projected from the module TODO;
 task lifecycle and gates remain owned by the linked charters/contracts. If a
 row conflicts with its owner, the owner wins. Update this panel in the same
@@ -54,22 +54,23 @@ decision, blocker change, or consumer-compatibility verdict.
 
 | Field | Current projection | Owner / read first |
 |:--|:--|:--|
-| **ACTIVE** | **GCTM task charter** — activated 2026-07-22 (WP-A0, PR #250) by the owner scheduling decision on [#175](https://github.com/raylei50653/saccade/issues/175); substrate-agnostic A-layer theory/specification only (primary object = A). Active declaration **sealed at WP-A1** (nine-field observation/time interface frozen in [D1 §2–§3](../models/gap_conditioned_stochastic_transition_spec_v1.md)); **WP-A2 landed** — canonical-state affine M2 + \(Q_\Delta\) interface frozen in [D1 §4](../models/gap_conditioned_stochastic_transition_spec_v1.md), obligation 4 resolved; obligations 2–3 unresolved; D2 not created. H0 state unchanged. | [semantic TODO](../../modules/semantic/TODO.md) · [GCTM charter](gap_conditioned_stochastic_transition_model_task.md) |
-| **NEXT** | WP-A3 — nesting / PSD / asymptotics proofs (D2 appendix; charter expected-state lease). B1 and O1 remain **proposed / non-WIP**, blocked by the gates below. | [GCTM charter](gap_conditioned_stochastic_transition_model_task.md) · [B1 charter](gctm_b1_runtime_grounded_offline_attribution_task.md) · [O1 charter](gctm_o1_online_intervention_efficacy_task.md) |
+| **ACTIVE** | **none** — the semantic WIP lock is free. The GCTM task charter closed 2026-07-23 at the owner-accepted ordered terminal `GCTM_MODEL_SPEC_SEALABLE` (WP-A0…WP-A8; [D1](../models/gap_conditioned_stochastic_transition_spec_v1.md) §2–§8 frozen, [D2](../models/gap_conditioned_stochastic_transition_lemmas_v1.md) L1–L5 proved, [terminal review](../models/gap_conditioned_stochastic_transition_terminal_review_v1.md)). The seal is **diagnostic-only** and grants no B1/O1/online/production authority; H0 state unchanged. | [semantic TODO](../../modules/semantic/TODO.md) · [GCTM charter (closed)](closed/gap_conditioned_stochastic_transition_model_task.md) |
+| **NEXT** | **none automatically.** A sealable A-layer model spec is not an entry gate: B1 and O1 remain **proposed / non-WIP** behind their own gates below (accepted runtime substrate or fidelity edge, the still-absent registry-owned L2 score-layer contract, the B1-slot identity, a sealed B1 declaration, and separate owner scheduling). | [GCTM charter (closed)](closed/gap_conditioned_stochastic_transition_model_task.md) · [B1 charter](gctm_b1_runtime_grounded_offline_attribution_task.md) · [O1 charter](gctm_o1_online_intervention_efficacy_task.md) |
 | **READINESS** | H0 remains closed at owner-accepted `H0_PROVENANCE_INVALID` (three same-type ordered terminals): no faithful capture, no accepted runtime-fidelity edge, no actual H0 guarantee envelope; Phase B forbidden; any future re-entry requires a machine-checked launch-hygiene pre-authorization gate plus a fresh I→F→S owner reseal plus separate exactly-once authorization. Positive H0 blocks only bridge-runtime B1, not A-layer GCTM work. | [H0 declaration](../../modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md) · [claim-state registry](../contracts/claim_state_registry.md) |
 
 ### Blockers and transition gates
 
 ```text
-ACTIVE → NEXT
+H0 → GCTM (history; both gates consumed)
   H0 closed at owner-accepted `H0_PROVENANCE_INVALID` (route 1; not full-faithful)
-  → no automatic transition; GCTM remains parked
-  ∧ only a separate owner scheduling decision may activate the GCTM charter
+  ∧ separate owner scheduling decision (#175, 2026-07-22) activated the GCTM charter
+  → GCTM ran WP-A0…WP-A8 and closed at `GCTM_MODEL_SPEC_SEALABLE` (2026-07-23)
+  → substrate-agnostic A-layer only; H0 state unchanged by it
 
 GCTM → bridge-runtime B1
-  accepted H0 runtime substrate or fidelity edge
+  accepted H0 runtime substrate or fidelity edge          ← still absent
   ∧ B1 declaration owner accepts an H0→GCTM consumer compatibility verdict
-  ∧ sealable GCTM specification and proofs
+  ∧ sealable GCTM specification and proofs                ← satisfied 2026-07-23
   ∧ score-layer L2 contract (rank / margin / top-1 semantics)
   ∧ owner resolves the B1-slot identity
   ∧ a sealed B1 declaration and separate owner scheduling
@@ -90,7 +91,7 @@ verdict are defined in [H0→GCTM consumer compatibility requirements](../../mod
 A full-faithful H0 terminal makes a separately declared B1 consumer study a
 candidate; it is never a direct handoff.
 
-**Sources for the blockers:** [H0 terminal boundary](../../modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md#7-terminal-and-post-terminal-boundary) · [GCTM activation boundary](gap_conditioned_stochastic_transition_model_task.md#activation-boundary) · [B1 activation gate](gctm_b1_runtime_grounded_offline_attribution_task.md#activation-gate) · [registry §7 score-layer gap](../contracts/claim_state_registry.md#7-架構缺口顯式化而不是假裝可編排).
+**Sources for the blockers:** [H0 terminal boundary](../../modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md#7-terminal-and-post-terminal-boundary) · [GCTM activation boundary](closed/gap_conditioned_stochastic_transition_model_task.md#activation-boundary) · [B1 activation gate](gctm_b1_runtime_grounded_offline_attribution_task.md#activation-gate) · [registry §7 score-layer gap](../contracts/claim_state_registry.md#7-架構缺口顯式化而不是假裝可編排).
 
 ---
 
@@ -243,7 +244,6 @@ frontmatter、搬移與索引要求。
 
 | Thread | Work class / WIP role | Current concrete work | Owner |
 |:--|:--|:--|:--|
-| [gap_conditioned_stochastic_transition_model_task.md](gap_conditioned_stochastic_transition_model_task.md) | theory-model-specification · **sole-active** | WP-A2 landed: D1 §4 canonical-state affine M2 + \(Q_\Delta\) frozen (obligation 4 resolved); next = WP-A3 nesting / PSD / asymptotics proofs (D2) | semantic |
 | [association_recovery_registry_20260709.md](association_recovery_registry_20260709.md) | maintenance · **non-WIP** | Keep R/H ownership and path-health registry current | semantic |
 | [doc_structure_o15_followup_20260709.md](doc_structure_o15_followup_20260709.md) | governance · **non-WIP** | Pay down research-index debt; optional structure checks remain non-blocking | ownership |
 
@@ -259,6 +259,7 @@ frontmatter、搬移與索引要求。
 
 | Thread | Closed | Terminal (one-line) | Direct handoff disposition | Cross-thread consequence (not handoff) | Owner |
 |:--|:--|:--|:--|:--|:--|
+| [gap_conditioned_stochastic_transition_model_task.md](closed/gap_conditioned_stochastic_transition_model_task.md) | 2026-07-23 | **`GCTM_MODEL_SPEC_SEALABLE` owner-accepted** (ordered terminal 5; selected by WP-A8 terminal review, [checklist artifact](../models/gap_conditioned_stochastic_transition_terminal_review_v1.md)) · diagnostic-only A-layer model-spec seal · D1 §2–§8 + D2 L1–L5 frozen | **no receiver / no continuation** — the seal grants no B1/O1/online/production authority; B1 and O1 need separate activation | H0 state unchanged (no faithful capture, no fidelity edge, empty guarantee set); the registry-owned L2 score-layer contract is still absent and keeps every B1/O1 score-ranking path blocked; substrate does not inherit (registry §4.2) | semantic |
 | [bridge_frozen_evidence_o0_routing_20260716.md](closed/bridge_frozen_evidence_o0_routing_20260716.md) | 2026-07-20 | **route 1 `H0_PROVENANCE_INVALID` owner-accepted**（[#209](https://github.com/raylei50653/saccade/issues/209)，2026-07-19）· H0 = CLOSED（diagnostic-only）· controller retry / Phase B forbidden | **no receiver / no continuation** — NEXT = none automatically | GCTM [#175](https://github.com/raylei50653/saccade/issues/175) remains parked（activation only by separate owner scheduling）; provenance gap becomes permanent registry `open_limits` | semantic |
 | [gap_conditioned_probabilistic_motion_probe_20260711.md](closed/gap_conditioned_probabilistic_motion_probe_20260711.md) | 2026-07-13 | **`V5 ACCEPTED_WITH_LIMITS`** · D0 follow-up closed at `T2_PROXY_UNFAITHFUL` | **no receiver / no continuation** | H0 observability is an independent proposed task, not a handoff | semantic |
 | [runtime_faithful_safe_domain_20260712.md](closed/runtime_faithful_safe_domain_20260712.md) | 2026-07-13 | **S0 `S0_UNDECIDABLE` ACCEPTED** · V7 has no offline-safe grid point, so runtime transfer is not assessed · [PR #152](https://github.com/raylei50653/saccade/pull/152) | **no receiver / no continuation** — wider runtime join requires a new decision-relevance and O0 decision | offline partial-order state unchanged; runtime transfer unaccepted and closure remains inadmissible | semantic |
