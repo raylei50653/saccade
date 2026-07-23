@@ -1,0 +1,429 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "research_slot_governance_v1",
+  "title": "Research slot identity, authority, compatibility, and registry projection",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "record_id",
+    "record_scope",
+    "owner_decision",
+    "slots",
+    "relations",
+    "compatibility_gates",
+    "terminal_policies",
+    "registry_projection"
+  ],
+  "properties": {
+    "schema": {
+      "const": "research_slot_governance_v1"
+    },
+    "record_id": {
+      "$ref": "#/$defs/id"
+    },
+    "record_scope": {
+      "enum": ["fixture_only", "actual"]
+    },
+    "owner_decision": {
+      "$ref": "#/$defs/owner_decision"
+    },
+    "slots": {
+      "type": "array",
+      "minItems": 2,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/slot"
+      }
+    },
+    "relations": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/relation"
+      }
+    },
+    "compatibility_gates": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/compatibility_gate"
+      }
+    },
+    "terminal_policies": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/terminal_policy"
+      }
+    },
+    "registry_projection": {
+      "$ref": "#/$defs/registry_projection"
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z][A-Za-z0-9_.-]{2,127}$"
+    },
+    "path": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 512,
+      "pattern": "^[A-Za-z0-9_./#-]+$"
+    },
+    "id_list": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/id"
+      }
+    },
+    "owner_decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "decision_id",
+        "status",
+        "accepted_at",
+        "authority",
+        "future_relation_change_requires_separate_owner_transition"
+      ],
+      "properties": {
+        "decision_id": {
+          "$ref": "#/$defs/id"
+        },
+        "status": {
+          "enum": ["proposed", "accepted"]
+        },
+        "accepted_at": {
+          "type": ["string", "null"],
+          "format": "date"
+        },
+        "authority": {
+          "enum": ["owner", "fixture"]
+        },
+        "future_relation_change_requires_separate_owner_transition": {
+          "const": true
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "accepted"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "accepted_at": {
+                "type": "string"
+              },
+              "authority": {
+                "const": "owner"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "slot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "slot_id",
+        "title",
+        "charter_ref",
+        "state",
+        "authority_class",
+        "owner_acceptance_id",
+        "blocked_by",
+        "activation_requirements",
+        "satisfied_activation_requirements",
+        "activation_evidence_bindings",
+        "allowed_evidence_classes",
+        "cannot_satisfy_gate_classes"
+      ],
+      "properties": {
+        "slot_id": {
+          "$ref": "#/$defs/id"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 256
+        },
+        "charter_ref": {
+          "$ref": "#/$defs/path"
+        },
+        "state": {
+          "enum": ["proposed", "active", "terminal", "failed", "superseded"]
+        },
+        "authority_class": {
+          "enum": ["runtime_grounded", "diagnostic_only"]
+        },
+        "owner_acceptance_id": {
+          "type": ["string", "null"],
+          "pattern": "^[A-Za-z][A-Za-z0-9_.-]{2,127}$"
+        },
+        "blocked_by": {
+          "$ref": "#/$defs/id_list"
+        },
+        "activation_requirements": {
+          "$ref": "#/$defs/id_list"
+        },
+        "satisfied_activation_requirements": {
+          "$ref": "#/$defs/id_list"
+        },
+        "activation_evidence_bindings": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/activation_evidence_binding"
+          }
+        },
+        "allowed_evidence_classes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "h0_runtime_evidence",
+              "gctm_theory_seal",
+              "accepted_score_contract",
+              "synthetic_fixture",
+              "sealed_non_runtime_dataset",
+              "machine_checkable_invariant",
+              "bounded_counterexample",
+              "schema_validation",
+              "runtime_consumer_compatibility_verdict",
+              "owner_accepted_runtime_freeze",
+              "sealed_runtime_declaration",
+              "owner_scheduling_decision",
+              "owner_accepted_governance"
+            ]
+          }
+        },
+        "cannot_satisfy_gate_classes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "runtime_substrate",
+              "runtime_provenance",
+              "runtime_evidence_identity",
+              "runtime_checksum",
+              "runtime_consumer_compatibility",
+              "runtime_activation_authority"
+            ]
+          }
+        }
+      }
+    },
+    "activation_evidence_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requirement_id",
+        "evidence_id",
+        "evidence_class",
+        "artifact_sha256",
+        "owner_acceptance_id"
+      ],
+      "properties": {
+        "requirement_id": {
+          "$ref": "#/$defs/id"
+        },
+        "evidence_id": {
+          "$ref": "#/$defs/id"
+        },
+        "evidence_class": {
+          "enum": [
+            "h0_runtime_evidence",
+            "gctm_theory_seal",
+            "accepted_score_contract",
+            "synthetic_fixture",
+            "sealed_non_runtime_dataset",
+            "machine_checkable_invariant",
+            "bounded_counterexample",
+            "schema_validation",
+            "runtime_consumer_compatibility_verdict",
+            "owner_accepted_runtime_freeze",
+            "sealed_runtime_declaration",
+            "owner_scheduling_decision",
+            "owner_accepted_governance"
+          ]
+        },
+        "artifact_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "owner_acceptance_id": {
+          "$ref": "#/$defs/id"
+        }
+      }
+    },
+    "relation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_slot_id",
+        "target_slot_id",
+        "relation",
+        "aliases",
+        "supersedes",
+        "shares_activation_authority",
+        "change_requires_owner_transition"
+      ],
+      "properties": {
+        "source_slot_id": {
+          "$ref": "#/$defs/id"
+        },
+        "target_slot_id": {
+          "$ref": "#/$defs/id"
+        },
+        "relation": {
+          "enum": ["coexist", "isolated", "equal", "supersede"]
+        },
+        "aliases": {
+          "type": "boolean"
+        },
+        "supersedes": {
+          "type": "boolean"
+        },
+        "shares_activation_authority": {
+          "type": "boolean"
+        },
+        "change_requires_owner_transition": {
+          "type": "boolean"
+        }
+      }
+    },
+    "compatibility_gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "gate_id",
+        "producer_slot_id",
+        "consumer_slot_id",
+        "status",
+        "fail_closed",
+        "required_checks",
+        "verdict_owner_acceptance_id",
+        "incompatible_behavior"
+      ],
+      "properties": {
+        "gate_id": {
+          "$ref": "#/$defs/id"
+        },
+        "producer_slot_id": {
+          "$ref": "#/$defs/id"
+        },
+        "consumer_slot_id": {
+          "$ref": "#/$defs/id"
+        },
+        "status": {
+          "enum": ["missing", "compatible", "incompatible"]
+        },
+        "fail_closed": {
+          "const": true
+        },
+        "required_checks": {
+          "$ref": "#/$defs/id_list"
+        },
+        "verdict_owner_acceptance_id": {
+          "type": ["string", "null"],
+          "pattern": "^[A-Za-z][A-Za-z0-9_.-]{2,127}$"
+        },
+        "incompatible_behavior": {
+          "const": "reject_runtime_consumption"
+        }
+      }
+    },
+    "terminal_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "slot_id",
+        "allowed_terminals",
+        "may_transition_slot_ids",
+        "unlocks_slot_ids",
+        "generates_decision_relevant_candidate"
+      ],
+      "properties": {
+        "slot_id": {
+          "$ref": "#/$defs/id"
+        },
+        "allowed_terminals": {
+          "$ref": "#/$defs/id_list"
+        },
+        "may_transition_slot_ids": {
+          "$ref": "#/$defs/id_list"
+        },
+        "unlocks_slot_ids": {
+          "$ref": "#/$defs/id_list"
+        },
+        "generates_decision_relevant_candidate": {
+          "type": "boolean"
+        }
+      }
+    },
+    "slot_projection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["slot_id", "state", "blocked_by"],
+      "properties": {
+        "slot_id": {
+          "$ref": "#/$defs/id"
+        },
+        "state": {
+          "enum": ["proposed", "active", "terminal", "failed", "superseded"]
+        },
+        "blocked_by": {
+          "$ref": "#/$defs/id_list"
+        }
+      }
+    },
+    "registry_projection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repushed_at",
+        "slot_states",
+        "decision_relevant_candidates",
+        "active_wip",
+        "o1_state",
+        "h0_reentry_authorized"
+      ],
+      "properties": {
+        "repushed_at": {
+          "type": "string",
+          "format": "date"
+        },
+        "slot_states": {
+          "type": "array",
+          "minItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/slot_projection"
+          }
+        },
+        "decision_relevant_candidates": {
+          "$ref": "#/$defs/id_list"
+        },
+        "active_wip": {
+          "$ref": "#/$defs/id_list"
+        },
+        "o1_state": {
+          "const": "proposed"
+        },
+        "h0_reentry_authorized": {
+          "const": false
+        }
+      }
+    }
+  }
+}

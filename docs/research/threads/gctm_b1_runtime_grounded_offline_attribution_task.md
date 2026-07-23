@@ -6,7 +6,7 @@ doc-module: semantic
 owner-module: semantic
 work-class: mainline-study
 wip-role: non-wip
-activation-gate: "eight frozen owner-accepted conditions + registry §7 score-layer contract + B1-slot identity resolution + separate owner scheduling"
+activation-gate: "eight frozen owner-accepted runtime conditions + registry §7 score-layer contract + separate owner scheduling"
 target-decision-layer: score-ranking
 primary-intent: design-evaluation
 output-class: "design candidate | diagnostic result | unexplained residual set"
@@ -29,11 +29,13 @@ data access, modify runtime behavior, or promote a production policy.
 
 Authority is intentionally split:
 
-- **this charter** owns B1's task identity, activation prerequisites —
-  including the **B1-slot identity question** and the **registry §7
-  score-layer prerequisite** (sole owner; other surfaces link here) — scope,
+- **this charter** owns `GCTM_B1`'s task identity, activation prerequisites —
+  including the **registry §7 score-layer prerequisite** — scope,
   frozen degrees of freedom, evidence-space and validity semantics, provisional
   terminal family, deliverables, and the B1→O1 handoff object shape;
+- the machine-readable
+  [B1-slot identity decision](../contracts/gctm_b1_slot_identity_decision_v1.json)
+  owns the cross-slot relation and activation-authority separation;
 - the [synthesis core](../../modules/semantic/research/gctm_b1_o1_task_objectives_and_semantics_20260716.md)
   owns the **shared** cross-task semantics (§0 alignment boundary, including
   the GPU foot-bridge hook scope and reserved-symbol renames; evidence chain
@@ -47,15 +49,31 @@ Authority is intentionally split:
 - [`docs/modules/semantic/TODO.md`](../../modules/semantic/TODO.md) owns only a
   one-line navigation pointer and the module WIP projection.
 
-## Unresolved B1-slot identity (open owner decision)
+## Resolved B1-slot identity
 
 H0 declaration §7 and the
 [O0 routing charter](closed/bridge_frozen_evidence_o0_routing_20260716.md)（its route-5 branch; O0 itself closed at route 1）
 name a "separately declared **B1 consumer-faithful operating-curve study**".
-Whether the `GCTM_B1` study specified here occupies that same B1 slot, coexists
-with it, or supersedes it is **not decided by this charter**. Resolving that
-relation is an explicit activation prerequisite below. Until an owner resolves
-it, `GCTM_B1_*` must not be cited as the B1 that H0 route 5 makes candidate.
+The owner-accepted machine record fixes that slot as `H0_ROUTE5_B1` and fixes
+this charter's slot as `GCTM_B1`:
+
+```text
+GCTM_B1 != H0_ROUTE5_B1
+relation = coexist
+aliases = false
+supersedes = false
+shares_activation_authority = false
+```
+
+`GCTM_B1` therefore does not occupy, alias, supersede, or activate the H0
+route-5 slot. Neither slot may consume the other's activation authority. A
+future merge, replacement, or relation rewrite requires a separate
+owner-accepted transition.
+
+The independent substrate-agnostic line is named `GCTM_D1` and is owned by its
+[proposed diagnostic charter](gctm_d1_substrate_agnostic_ranking_diagnostic_task.md).
+Its evidence cannot satisfy either runtime B1's substrate, provenance,
+identity, checksum, compatibility, or activation gates.
 
 ## Hook scope: GPU foot-bridge only
 
@@ -125,7 +143,9 @@ Additionally:
   This does not block
   substrate-agnostic GCTM mathematics or alter H0's terminal; it blocks only a
   bridge-runtime B1 claim when the required observation mapping is absent.
-- **B1-slot identity must be resolved** (previous section) before activation.
+- **B1-slot identity is resolved but grants no activation authority.** The
+  accepted `coexist` decision removes ambiguity only. It satisfies none of
+  conditions 1, 3, or 5–8 and cannot make this charter a registry candidate.
 
 A negative H0 terminal blocks bridge-runtime B1 unless a new evidence substrate
 or explicit substrate-agnostic re-charter is accepted.
@@ -719,7 +739,8 @@ accepted B1 handoff and must not rewrite B1 semantics.
 - [ ] accepted GCTM model specification exists;
 - [x] score-layer evidence contract (registry §7) is owner-accepted and bound
       into the registry;
-- [ ] B1-slot identity relation resolved by owner;
+- [x] B1-slot identity relation resolved by owner as `coexist`, with no alias,
+      supersession, or shared activation authority;
 - [ ] exact observation mode selected;
 - [ ] one parameterization family selected;
 - [ ] source/decision spaces and reductions defined;
@@ -738,6 +759,8 @@ accepted B1 handoff and must not rewrite B1 semantics.
 - [H0→GCTM consumer compatibility requirements](../../modules/semantic/research/h0_gctm_consumer_compatibility_requirements_20260718.md)
 - [GCTM task charter](closed/gap_conditioned_stochastic_transition_model_task.md)
 - [O0 routing charter](closed/bridge_frozen_evidence_o0_routing_20260716.md)
+- [B1-slot identity decision](../contracts/gctm_b1_slot_identity_decision_v1.json)
+- [GCTM D1 diagnostic charter](gctm_d1_substrate_agnostic_ranking_diagnostic_task.md)
 - [claim-state registry（§7 score layer / §8 候選集）](../contracts/claim_state_registry.md)
 - [bridge decision semantics](../tracker-decision/relink_bridge.md)
 - [O1 task charter](gctm_o1_online_intervention_efficacy_task.md)
@@ -761,8 +784,8 @@ before activation (route: declined, no execution).
 
 - activate, execute, fit, or reveal anything from this charter; **proposed ≠
   scheduled**; PR merge ≠ research acceptance.
-- cite `GCTM_B1_*` as the B1 that H0 route 5 makes candidate before the owner
-  resolves the B1-slot identity.
+- cite `GCTM_B1_*` as the `H0_ROUTE5_B1` terminal family or consume H0 route-5
+  activation authority; the slots coexist and are not aliases.
 - treat this charter as satisfying the registry §7 score-layer contract
   prerequisite; that authority belongs to the accepted contract and registry
   binding.
@@ -775,6 +798,11 @@ before activation (route: declined, no execution).
 
 ## History
 
+- 2026-07-23: owner resolved `GCTM_B1 != H0_ROUTE5_B1` with machine-readable
+  `relation: coexist`; neither supersedes or shares activation authority with
+  the other. Added a separate proposed `GCTM_D1` diagnostic charter. This
+  identity-only transition does not activate B1/O1, produce a candidate, or
+  acquire WIP.
 - 2026-07-23: `score_ranking_evidence_contract_v1` owner-accepted and bound into
   registry §7. The score-layer prerequisite is satisfied and L2 transition
   semantics are defined; B1 remains proposed / non-WIP because the other

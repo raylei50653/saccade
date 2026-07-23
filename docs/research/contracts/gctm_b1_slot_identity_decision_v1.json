@@ -1,0 +1,230 @@
+{
+  "schema": "research_slot_governance_v1",
+  "record_id": "gctm_b1_slot_identity_decision_v1",
+  "record_scope": "actual",
+  "owner_decision": {
+    "decision_id": "gctm_b1_slot_identity_owner_decision_20260723",
+    "status": "accepted",
+    "accepted_at": "2026-07-23",
+    "authority": "owner",
+    "future_relation_change_requires_separate_owner_transition": true
+  },
+  "slots": [
+    {
+      "slot_id": "H0_ROUTE5_B1",
+      "title": "H0 route-5 runtime-grounded offline ranking B1",
+      "charter_ref": "docs/research/threads/closed/bridge_frozen_evidence_o0_routing_20260716.md#route-5",
+      "state": "proposed",
+      "authority_class": "runtime_grounded",
+      "owner_acceptance_id": null,
+      "blocked_by": [
+        "h0_runtime_substrate"
+      ],
+      "activation_requirements": [
+        "valid_h0_runtime_substrate",
+        "stable_evidence_identity",
+        "canonical_checksum",
+        "h0_gctm_consumer_compatibility_verdict",
+        "observation_freeze",
+        "parameterization_freeze",
+        "sealed_b1_declaration",
+        "owner_scheduling"
+      ],
+      "satisfied_activation_requirements": [],
+      "activation_evidence_bindings": [],
+      "allowed_evidence_classes": [
+        "h0_runtime_evidence",
+        "accepted_score_contract",
+        "schema_validation",
+        "runtime_consumer_compatibility_verdict",
+        "owner_accepted_runtime_freeze",
+        "sealed_runtime_declaration",
+        "owner_scheduling_decision"
+      ],
+      "cannot_satisfy_gate_classes": []
+    },
+    {
+      "slot_id": "GCTM_B1",
+      "title": "GCTM runtime-grounded offline attribution and score-ranking B1",
+      "charter_ref": "docs/research/threads/gctm_b1_runtime_grounded_offline_attribution_task.md",
+      "state": "proposed",
+      "authority_class": "runtime_grounded",
+      "owner_acceptance_id": null,
+      "blocked_by": [
+        "h0_runtime_substrate"
+      ],
+      "activation_requirements": [
+        "valid_h0_runtime_substrate",
+        "stable_evidence_identity",
+        "canonical_checksum",
+        "h0_gctm_consumer_compatibility_verdict",
+        "observation_freeze",
+        "parameterization_freeze",
+        "sealed_b1_declaration",
+        "owner_scheduling"
+      ],
+      "satisfied_activation_requirements": [],
+      "activation_evidence_bindings": [],
+      "allowed_evidence_classes": [
+        "h0_runtime_evidence",
+        "gctm_theory_seal",
+        "accepted_score_contract",
+        "schema_validation",
+        "runtime_consumer_compatibility_verdict",
+        "owner_accepted_runtime_freeze",
+        "sealed_runtime_declaration",
+        "owner_scheduling_decision"
+      ],
+      "cannot_satisfy_gate_classes": []
+    },
+    {
+      "slot_id": "GCTM_D1",
+      "title": "Substrate-agnostic GCTM ranking diagnostic",
+      "charter_ref": "docs/research/threads/gctm_d1_substrate_agnostic_ranking_diagnostic_task.md",
+      "state": "proposed",
+      "authority_class": "diagnostic_only",
+      "owner_acceptance_id": null,
+      "blocked_by": [
+        "charter_owner_acceptance"
+      ],
+      "activation_requirements": [
+        "charter_owner_acceptance",
+        "owner_scheduling"
+      ],
+      "satisfied_activation_requirements": [],
+      "activation_evidence_bindings": [],
+      "allowed_evidence_classes": [
+        "gctm_theory_seal",
+        "accepted_score_contract",
+        "synthetic_fixture",
+        "sealed_non_runtime_dataset",
+        "machine_checkable_invariant",
+        "bounded_counterexample",
+        "schema_validation",
+        "owner_accepted_governance"
+      ],
+      "cannot_satisfy_gate_classes": [
+        "runtime_substrate",
+        "runtime_provenance",
+        "runtime_evidence_identity",
+        "runtime_checksum",
+        "runtime_consumer_compatibility",
+        "runtime_activation_authority"
+      ]
+    }
+  ],
+  "relations": [
+    {
+      "source_slot_id": "GCTM_B1",
+      "target_slot_id": "H0_ROUTE5_B1",
+      "relation": "coexist",
+      "aliases": false,
+      "supersedes": false,
+      "shares_activation_authority": false,
+      "change_requires_owner_transition": true
+    },
+    {
+      "source_slot_id": "GCTM_D1",
+      "target_slot_id": "H0_ROUTE5_B1",
+      "relation": "isolated",
+      "aliases": false,
+      "supersedes": false,
+      "shares_activation_authority": false,
+      "change_requires_owner_transition": true
+    },
+    {
+      "source_slot_id": "GCTM_D1",
+      "target_slot_id": "GCTM_B1",
+      "relation": "isolated",
+      "aliases": false,
+      "supersedes": false,
+      "shares_activation_authority": false,
+      "change_requires_owner_transition": true
+    }
+  ],
+  "compatibility_gates": [
+    {
+      "gate_id": "gctm_d1_to_h0_route5_b1_compatibility_v1",
+      "producer_slot_id": "GCTM_D1",
+      "consumer_slot_id": "H0_ROUTE5_B1",
+      "status": "missing",
+      "fail_closed": true,
+      "required_checks": [
+        "canonical_h0_evidence_manifest",
+        "stable_evidence_identity",
+        "checksum_verification",
+        "producer_consumer_schema_compatibility",
+        "observation_semantics_compatibility",
+        "parameterization_compatibility",
+        "score_transformation_normalization_compatibility",
+        "ordering_preservation_verdict"
+      ],
+      "verdict_owner_acceptance_id": null,
+      "incompatible_behavior": "reject_runtime_consumption"
+    },
+    {
+      "gate_id": "gctm_d1_to_gctm_b1_compatibility_v1",
+      "producer_slot_id": "GCTM_D1",
+      "consumer_slot_id": "GCTM_B1",
+      "status": "missing",
+      "fail_closed": true,
+      "required_checks": [
+        "canonical_h0_evidence_manifest",
+        "stable_evidence_identity",
+        "checksum_verification",
+        "producer_consumer_schema_compatibility",
+        "observation_semantics_compatibility",
+        "parameterization_compatibility",
+        "score_transformation_normalization_compatibility",
+        "ordering_preservation_verdict"
+      ],
+      "verdict_owner_acceptance_id": null,
+      "incompatible_behavior": "reject_runtime_consumption"
+    }
+  ],
+  "terminal_policies": [
+    {
+      "slot_id": "GCTM_D1",
+      "allowed_terminals": [
+        "GCTM_D1_DIAGNOSTIC_SEAL",
+        "GCTM_D1_BOUNDED_NO_GO",
+        "GCTM_D1_INTERFACE_READY"
+      ],
+      "may_transition_slot_ids": [
+        "GCTM_D1"
+      ],
+      "unlocks_slot_ids": [],
+      "generates_decision_relevant_candidate": false
+    }
+  ],
+  "registry_projection": {
+    "repushed_at": "2026-07-23",
+    "slot_states": [
+      {
+        "slot_id": "H0_ROUTE5_B1",
+        "state": "proposed",
+        "blocked_by": [
+          "h0_runtime_substrate"
+        ]
+      },
+      {
+        "slot_id": "GCTM_B1",
+        "state": "proposed",
+        "blocked_by": [
+          "h0_runtime_substrate"
+        ]
+      },
+      {
+        "slot_id": "GCTM_D1",
+        "state": "proposed",
+        "blocked_by": [
+          "charter_owner_acceptance"
+        ]
+      }
+    ],
+    "decision_relevant_candidates": [],
+    "active_wip": [],
+    "o1_state": "proposed",
+    "h0_reentry_authorized": false
+  }
+}

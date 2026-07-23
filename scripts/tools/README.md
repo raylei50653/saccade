@@ -437,6 +437,7 @@ deleting.
 | `test_letterbox_gpu.py` | diagnostic | - | Unit test: cpp_letterbox_gpu output matches PyTorch 3-op reference. |
 | `test_py_gmc.py` | diagnostic | cli | Pure-Python GMC with PyTorch FFT, designed for CUDA graph capture. |
 | `validate_reach_gate.py` | diagnostic | cli | Validate the reach-gate model R_total(G) = s*G + R_search(G) against the plain bridge / spatial gates on the … |
+| `validate_research_slot_governance.py` | stable | cli | Fail-closed validator for research slot identity and authority records. |
 | `validate_score_ranking_declaration.py` | stable | cli | Fail-closed validator for L2 score-ranking declaration v1 records. |
 | `verify_gmc_direct.py` | diagnostic | cli | Verify GMC estimate_into_direct produces identical warp as estimate_into. |
 | `verify_h0_gctm_guarantee_registration.py` | stable | cli | Fail-closed validator for H0-to-GCTM guarantee registration records. |
