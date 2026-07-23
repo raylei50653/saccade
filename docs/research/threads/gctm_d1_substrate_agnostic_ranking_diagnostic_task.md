@@ -6,7 +6,7 @@ doc-module: semantic
 owner-module: semantic
 work-class: mainline-study
 wip-role: non-wip
-activation-gate: "separate charter owner acceptance + separate owner scheduling"
+activation-gate: "separate owner scheduling"
 target-decision-layer: diagnostic-only
 primary-intent: model-and-interface-diagnostic
 output-class: "diagnostic seal | bounded no-go | interface-ready"
@@ -18,11 +18,22 @@ created: 2026-07-23
 
 ## Status and authority
 
-**PROPOSED / non-WIP / not owner-accepted.** `GCTM_D1` is an independent,
-substrate-agnostic diagnostic slot. It is not active, sealed, scheduled, or a
-decision-relevant registry candidate, and it does not occupy the semantic WIP
-lock. Creating this charter does not authorize data access, fitting, runtime
-capture, H0 re-entry, B1/O1 activation, or a production-facing claim.
+**PROPOSED / non-WIP / declaration owner-accepted / execution unscheduled.**
+`GCTM_D1` is an independent, substrate-agnostic diagnostic slot. Its sealed
+declaration is owner-accepted as a frozen execution contract
+(`gctm_d1_declaration_owner_acceptance_20260723`). The charter itself is **not
+active**, **not closed**, and does **not** occupy the semantic WIP lock.
+Canonical registry `state` remains **`none`**. Creating or accepting the
+declaration does not authorize data access, fitting, runtime capture, H0
+re-entry, B1/O1 activation, or a production-facing claim.
+
+```text
+declaration accepted     = yes (execution contract frozen)
+execution unscheduled    = yes
+WIP not acquired         = yes
+canonical state          = none
+blocked_by               = owner_scheduling
+```
 
 The machine-readable identity and authority boundary is owned by
 [`gctm_b1_slot_identity_decision_v1`](../contracts/gctm_b1_slot_identity_decision_v1.json):
@@ -35,7 +46,6 @@ GCTM_D1 is isolated from both runtime-grounded slots
 
 `GCTM_D1` was chosen instead of a second `B1` name so its diagnostic-only
 authority cannot be mistaken for runtime-grounded B1 activation authority.
-The accepted identity decision does **not** owner-accept this proposed charter.
 
 ## Research question
 
@@ -68,7 +78,7 @@ parameterization. A diagnostic family definition is not a runtime freeze.
 
 ### Pre-activation seal-candidate generation (explicitly allowed)
 
-Before charter owner acceptance and before any WIP/scheduling decision, the
+Before charter activation and before any WIP/scheduling decision, the
 repository may generate a **pre-activation synthetic seal-candidate package**:
 
 ```text
@@ -86,12 +96,18 @@ This generation:
 - **must not** perform a canonical registry terminal state transition;
 - **must not** acquire WIP or unlock B1/O1/H0.
 
-Owner-accepted charter **execution** remains gated by:
+Owner-accepted charter **execution** remains gated by machine activation
+requirements (exact evidence-class typing):
 
-1. owner acceptance of the sealed D1 declaration and bounded terminal procedure;
-2. a separate owner scheduling decision that assigns WIP.
+1. ~~`declaration_owner_acceptance`~~ **satisfied** —
+   evidence_class `owner_accepted_governance` bound to
+   `gctm_d1_declaration_owner_acceptance_20260723`;
+2. `owner_scheduling` (**remaining gate**) —
+   evidence_class must be `owner_scheduling_decision`
+   (generic `owner_accepted_governance` fails closed).
 
-Seal-candidate generation and owner-accepted execution are distinct authorities.
+Seal-candidate generation, declaration acceptance, and owner-accepted execution
+are distinct authorities.
 
 ## Allowed evidence
 
@@ -146,7 +162,7 @@ Any ambiguous or missing classification fails closed as diagnostic-only.
 
 ## Diagnostic protocol requirements
 
-A future sealed D1 declaration must freeze:
+The sealed D1 declaration freezes:
 
 ```text
 diagnostic_id
@@ -213,11 +229,11 @@ gctm_d1_to_gctm_b1_compatibility_v1
 
 A future verdict artifact may be referenced by both gates only when it
 explicitly binds both exact consumer identities. Acceptance on one gate never
-implies acceptance on the other.
+implies acceptance on the other. Both gates remain `missing`.
 
 ## Ordered terminal family
 
-A future sealed D1 declaration must select exactly one bounded terminal:
+A sealed D1 declaration must select exactly one bounded terminal:
 
 ### `GCTM_D1_DIAGNOSTIC_SEAL`
 
@@ -241,17 +257,27 @@ These terminals may transition only `GCTM_D1`. They cannot alter
 `H0_ROUTE5_B1`, `GCTM_B1`, or `GCTM_O1`; cannot create a decision-relevant
 candidate; cannot acquire WIP; and cannot authorize H0 re-entry.
 
+Mechanical selection order (frozen by declaration acceptance):
+
+1. `GCTM_D1_BOUNDED_NO_GO`
+2. `GCTM_D1_DIAGNOSTIC_SEAL`
+3. `GCTM_D1_INTERFACE_READY`
+
 ## Activation and exit
 
 This charter may become active only after:
 
-1. owner acceptance of a sealed D1 declaration and its bounded terminal
-   procedure; and
-2. a separate owner scheduling decision that assigns WIP.
+1. `declaration_owner_acceptance` — **satisfied**
+   (`gctm_d1_declaration_owner_acceptance_20260723` /
+   evidence_class `owner_accepted_governance`); and
+2. `owner_scheduling` — **not satisfied**
+   (requires evidence_class `owner_scheduling_decision`).
 
-Neither condition exists in this change. If a future active D1 selects one of
-the three terminals, it exits and releases WIP. No exit condition performs a
-cross-slot state transition.
+Slot-level `owner_acceptance_id` remains `null` until activation; it is not
+the declaration acceptance id. Declaration acceptance does not activate or
+close this charter. If a future active D1 selects one of the three terminals,
+it exits and releases WIP. No exit condition performs a cross-slot state
+transition.
 
 ## Prohibited actions
 
@@ -269,25 +295,37 @@ This charter never authorizes:
 
 ## Current verdict
 
-`GCTM_D1` is a proposed, isolated diagnostic charter. Its allowed inputs and
-claims are substrate-agnostic, its runtime-consumption gate is fail-closed,
-and its creation leaves the candidate set and semantic WIP lock empty.
+`GCTM_D1` is a proposed, isolated diagnostic charter whose declaration is
+owner-accepted as a frozen execution contract. Execution remains unscheduled;
+canonical state remains `none`; runtime-consumption gates remain fail-closed
+`missing`; candidate set and semantic WIP lock remain empty.
+
+### Declaration acceptance status (2026-07-23)
+
+```text
+acceptance_terminal  = GCTM_D1_DECLARATION_ACCEPTED
+owner_acceptance_id  = gctm_d1_declaration_owner_acceptance_20260723
+declaration frozen   = yes
+execution unscheduled = yes
+state remains none   = yes
+next gate            = owner_scheduling
+```
 
 ### Seal-candidate package status (2026-07-23)
 
 A **pre-activation synthetic seal-candidate** package has been generated
 (`status: SEAL_CANDIDATE_GENERATED`). Provisional mechanical terminal string:
-**`GCTM_D1_INTERFACE_READY`** (pending owner acceptance; **not** a canonical
-registry state transition).
+**`GCTM_D1_INTERFACE_READY`** (not a canonical registry state transition;
+declaration acceptance does not promote it).
 
-- declaration:
+- declaration (owner-accepted):
   [`gctm_d1_ranking_diagnostic_declaration_20260723.md`](../../modules/semantic/research/gctm_d1_ranking_diagnostic_declaration_20260723.md)
 - terminal (seal-candidate report):
   [`gctm_d1_ranking_diagnostic_terminal_20260723.md`](../../modules/semantic/research/gctm_d1_ranking_diagnostic_terminal_20260723.md)
-- packet:
+- packet (immutable PR #265 identities):
   [`evidence/gctm_d1_substrate_agnostic_ranking_20260723/`](../../modules/semantic/research/evidence/gctm_d1_substrate_agnostic_ranking_20260723/)
 
 This is **not** owner-accepted charter execution. It does **not** acquire WIP,
 unlock B1/O1, satisfy any runtime compatibility gate, or move the canonical
-registry `state` off `none` / seal-candidate bookkeeping. Charter activation
-still requires owner acceptance of the declaration **and** separate scheduling.
+registry `state` off `none`. Charter activation still requires separate owner
+scheduling.

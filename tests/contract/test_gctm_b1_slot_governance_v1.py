@@ -76,11 +76,17 @@ def _activate_diagnostic(record: dict[str, Any]) -> None:
     slot = _slot(record, "GCTM_D1")
     requirements = list(slot["activation_requirements"])
     slot["state"] = "active"
+    # Slot-level owner_acceptance_id is activation acceptance only, not
+    # declaration acceptance.
     slot["owner_acceptance_id"] = "fixture_d1_activation_acceptance"
     slot["blocked_by"] = []
     slot["satisfied_activation_requirements"] = requirements
     slot["activation_evidence_bindings"] = [
-        _activation_binding(requirement_id, "owner_accepted_governance", index)
+        _activation_binding(
+            requirement_id,
+            governance.DIAGNOSTIC_ACTIVATION_EVIDENCE_CLASS[requirement_id],
+            index,
+        )
         for index, requirement_id in enumerate(requirements)
     ]
     projected = _projected_slot(record, "GCTM_D1")
@@ -254,6 +260,79 @@ def test_runtime_requirement_rejects_wrong_evidence_class() -> None:
     _assert_error(invalid, "runtime_evidence_boundary")
 
 
+def test_diagnostic_activation_requirements_are_declaration_plus_scheduling() -> None:
+    record = _record()
+    diagnostic = _slot(record, "GCTM_D1")
+    assert set(diagnostic["activation_requirements"]) == (
+        governance.DIAGNOSTIC_ACTIVATION_REQUIREMENTS
+    )
+    assert diagnostic["satisfied_activation_requirements"] == [
+        "declaration_owner_acceptance"
+    ]
+    assert diagnostic["blocked_by"] == ["owner_scheduling"]
+    assert "owner_scheduling_decision" in diagnostic["allowed_evidence_classes"]
+    assert diagnostic["owner_acceptance_id"] is None
+
+    binding = diagnostic["activation_evidence_bindings"][0]
+    assert binding["requirement_id"] == "declaration_owner_acceptance"
+    assert binding["evidence_class"] == "owner_accepted_governance"
+
+
+def test_complete_diagnostic_activation_bindings_are_machine_eligible() -> None:
+    record = _record()
+    _activate_diagnostic(record)
+
+    report = governance.validate_record(record)
+
+    assert report["activation_eligible_slots"] == ["GCTM_D1"]
+    assert report["decision_relevant_candidates"] == []
+    assert report["active_wip"] == []
+
+
+def test_diagnostic_owner_scheduling_rejects_owner_accepted_governance() -> None:
+    """Scheduling cannot be satisfied by a generic governance acceptance."""
+    invalid = _record()
+    _activate_diagnostic(invalid)
+    binding = next(
+        item
+        for item in _slot(invalid, "GCTM_D1")["activation_evidence_bindings"]
+        if item["requirement_id"] == "owner_scheduling"
+    )
+    binding["evidence_class"] = "owner_accepted_governance"
+
+    _assert_error(invalid, "diagnostic_evidence_boundary")
+
+
+def test_diagnostic_declaration_acceptance_rejects_scheduling_evidence_class() -> None:
+    invalid = _record()
+    binding = _slot(invalid, "GCTM_D1")["activation_evidence_bindings"][0]
+    binding["evidence_class"] = "owner_scheduling_decision"
+
+    _assert_error(invalid, "diagnostic_evidence_boundary")
+
+
+def test_diagnostic_cannot_drop_owner_scheduling_requirement() -> None:
+    invalid = _record()
+    diagnostic = _slot(invalid, "GCTM_D1")
+    diagnostic["activation_requirements"] = ["declaration_owner_acceptance"]
+    diagnostic["blocked_by"] = []
+    _projected_slot(invalid, "GCTM_D1")["blocked_by"] = []
+
+    _assert_error(invalid, "diagnostic_activation_requirements")
+
+
+def test_diagnostic_must_admit_owner_scheduling_decision_evidence_class() -> None:
+    invalid = _record()
+    diagnostic = _slot(invalid, "GCTM_D1")
+    diagnostic["allowed_evidence_classes"] = [
+        cls
+        for cls in diagnostic["allowed_evidence_classes"]
+        if cls != "owner_scheduling_decision"
+    ]
+
+    _assert_error(invalid, "diagnostic_evidence_boundary")
+
+
 def test_accepted_score_contract_alone_produces_no_b1_candidate() -> None:
     record = _record()
     assert (
@@ -376,6 +455,10 @@ def test_registry_todo_and_charter_project_the_machine_record() -> None:
     assert "無 active" in todo
     assert "decision_relevant_candidates: []" in registry
     assert "active_wip: []" in registry
-    assert "PROPOSED / non-WIP / not owner-accepted" in charter
+    assert (
+        "PROPOSED / non-WIP / declaration owner-accepted / execution unscheduled"
+        in charter
+    )
+    assert "gctm_d1_declaration_owner_acceptance_20260723" in charter
     assert "runtime faithful" in charter
     assert "reject_runtime_consumption" in charter

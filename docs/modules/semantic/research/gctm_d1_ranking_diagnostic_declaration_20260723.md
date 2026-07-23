@@ -1,22 +1,59 @@
-<!-- doc-status: proposed -->
-<!-- doc-promotion: owner-reviewable sealed diagnostic declaration; not runtime evidence -->
+<!-- doc-status: active -->
+<!-- doc-promotion: owner-accepted frozen diagnostic execution contract; not charter execution; not runtime evidence -->
 <!-- doc-date: 2026-07-23 -->
 <!-- doc-module: semantic -->
+<!--
+  Status vocabulary (fixed):
+    doc-status: active
+      = this declaration document is in force as a frozen execution contract.
+      ≠ semantic WIP active, ≠ GCTM_D1 slot active, ≠ charter execution.
+    slot.lifecycle_state / state (registry): proposed / none
+      = diagnostic slot not activated; no WIP; no candidate.
+    slot.owner_acceptance_id
+      = slot *activation* acceptance only; remains null until activation.
+      ≠ declaration_owner_acceptance (bound under activation_evidence_bindings).
+-->
 
 # GCTM D1 — substrate-agnostic ranking diagnostic declaration (v1)
 
 ## Status
 
-**Pre-activation synthetic seal-candidate declaration** (owner-reviewable).
-Not charter execution. Not canonical registry terminal transition. Not WIP.
-Not runtime evidence. Not an H0 compatibility verdict.
+**Owner-accepted / frozen execution contract** for the sealed D1 diagnostic
+declaration. Canonical registry diagnostic `state` remains **`none`**.
+Execution is **unscheduled**. WIP is **not** acquired.
 
 ```text
-generation_kind = pre_activation_synthetic_seal_candidate
-status          = SEAL_CANDIDATE_GENERATED
+generation_kind              = pre_activation_synthetic_seal_candidate
+sealed_packet_status         = SEAL_CANDIDATE_GENERATED
+declaration_status           = GCTM_D1_DECLARATION_ACCEPTED
+owner_acceptance_id          = gctm_d1_declaration_owner_acceptance_20260723
+acceptance_date              = 2026-07-23
+next_gate                    = owner_scheduling
+canonical_registry_state     = none
+charter_execution            = not authorized by this acceptance
+doc-status:active            = document in force (not WIP / not slot active)
+slot.owner_acceptance_id     = null until slot activation (distinct field)
 ```
 
-Machine sidecar:
+This acceptance freezes the diagnostic family, runner, fixtures, consumer
+interface, invariants, compatibility-requirements identity, and exhaustive
+terminal procedure. It does **not** execute the charter, select a canonical
+diagnostic terminal for registry transition, schedule WIP, or authorize any
+runtime claim.
+
+Machine gate (slot governance):
+
+```text
+activation_requirements =
+  declaration_owner_acceptance  → evidence_class owner_accepted_governance
+  owner_scheduling              → evidence_class owner_scheduling_decision
+```
+
+`declaration_owner_acceptance` is satisfied by this PR. `owner_scheduling` is
+**not** satisfied by another generic governance acceptance; it requires a
+distinct `owner_scheduling_decision` evidence binding.
+
+Machine sidecar (immutable sealed packet; PR #265):
 [`evidence/gctm_d1_substrate_agnostic_ranking_20260723/declaration_sidecar.json`](evidence/gctm_d1_substrate_agnostic_ranking_20260723/declaration_sidecar.json)
 
 Charter:
@@ -24,6 +61,32 @@ Charter:
 
 Slot identity:
 [`gctm_b1_slot_identity_decision_v1`](../../../research/contracts/gctm_b1_slot_identity_decision_v1.json)
+
+## Owner acceptance metadata (immutable)
+
+| Field | Frozen value |
+|:--|:--|
+| `owner_acceptance_id` | `gctm_d1_declaration_owner_acceptance_20260723` |
+| `acceptance_terminal` | `GCTM_D1_DECLARATION_ACCEPTED` |
+| `acceptance_date` | `2026-07-23` |
+| `accepted_declaration_hash` | `33dda22efffe3f1d8cfceec66400ef7549b1b9ba692bcffbb0eabe78dee355e0` |
+| `accepted_declaration_sidecar_hash` | `6799e09a5cc39e6bc05e2970d55fe15c59081b814937bafcb6ab4fefc1e99809` |
+| `accepted_packet_manifest_hash` | `9efb9005711b1f9f08c6ae06ffc03cad49e7489fda56c7129d04c844fecd9bc2` |
+| `accepted_packet_id` | `gctm_d1_substrate_agnostic_ranking_20260723` |
+| `accepted_runner_identity` | `scripts/tools/run_gctm_d1_diagnostic.py` |
+| `accepted_core_library_identity` | `scripts/tools/gctm_d1/` |
+| `accepted_terminal_procedure_id` | `gctm_d1_mechanical_three_way_terminal_v1` |
+| `accepted_fixture_pack_id` | `gctm_d1_synthetic_fixture_pack_v1` |
+| `accepted_fixture_sha256` | `92dafcd0acc33642b2eaddb1c6178d2d2d519b1e40ea3160069155c9150151bd` |
+| `accepted_consumer_interface_hash` | `45c16a6c8cf50d098b12cc8e4f1acbdcc846d0d431ad77f9fbe64bdb60bb57ce` |
+| `accepted_compatibility_matrix_hash` | `25a2ca49dbfd6d9d8985681967beb3f4df51e2fc51901444f246c94e49fa7ddd` |
+| `accepted_invariant_report_hash` | `f9ca3e64f7c4937686e3efa2d2661c068803f1aa48883013212a84b6ed3f940d` |
+| `accepted_terminal_report_hash` | `c31e774d3497c8729cb9f1f01c135251a3a8b1a043ec02dfa7edef1ce2c27e0c` |
+| `accepted_identities_hash` | `c913f1d17f36acb54b08a209b4ecb62b540c0f55e54c994035bcdc1ebe39125e` |
+
+`accepted_declaration_hash` is the SHA-256 of the PR #265 sealed declaration
+body (pre-acceptance-metadata). All packet hashes bind the immutable PR #265
+evidence packet; fresh runner emit must remain bit-identical to that packet.
 
 ## Authority boundary
 
@@ -43,14 +106,45 @@ This declaration freezes a **diagnostic family** and consumer interface. It does
 **not** freeze a production runtime observation mode, authorize H0 re-entry,
 activate either runtime B1, or unlock O1.
 
+### Established by this acceptance
+
+```text
+owner acceptance of:
+  sealed D1 declaration
+  diagnostic policy identity
+  synthetic input identity
+  I1–I12 invariant set
+  consumer-interface identity
+  compatibility-requirements identity
+  exhaustive terminal procedure
+```
+
+### Not established by this acceptance
+
+```text
+charter execution
+GCTM_D1 terminal acceptance (canonical registry)
+GCTM_D1_INTERFACE_READY as canonical diagnostic state
+semantic WIP scheduling
+H0 compatibility verdict
+runtime substrate
+H0_ROUTE5_B1 activation
+GCTM_B1 activation
+GCTM_O1 activation
+production claim
+```
+
 ## Frozen identities
 
 | Field | Frozen value |
 |:--|:--|
 | `diagnostic_id` | `gctm_d1_substrate_agnostic_ranking_v1` |
-| `accepted_gctm_theory_identity` | `docs/research/models/gap_conditioned_stochastic_transition_spec_v1.md` (+ sha in sidecar) |
-| `accepted_gctm_lemmas_identity` | `docs/research/models/gap_conditioned_stochastic_transition_lemmas_v1.md` (+ sha in sidecar) |
-| `accepted_score_contract_identity` | `score_ranking_evidence_contract_v1` (+ sha in sidecar) |
+| `accepted_gctm_theory_identity` | `docs/research/models/gap_conditioned_stochastic_transition_spec_v1.md` |
+| `accepted_gctm_theory_sha256` | `8401c90d8fe2766eb314a0f4eb55cad86d9a1ca3bbfacde8535b8eb55bc3ff6e` |
+| `accepted_gctm_lemmas_identity` | `docs/research/models/gap_conditioned_stochastic_transition_lemmas_v1.md` |
+| `accepted_gctm_lemmas_sha256` | `0c880466e73e1d2b34af018113b7ec866895996fbeb03a4e62d0c5d712aba2bd` |
+| `accepted_score_contract_identity` | `score_ranking_evidence_contract_v1` |
+| `accepted_score_contract_sha256` | `7dbc2d965079fa3fc13f7802a4a083b1c4cbf49d658ffe3728b6c405364a13b4` |
 | `input_substrate_class` | `synthetic` |
 | `input_identity` | `gctm_d1_synthetic_fixture_pack_v1` |
 | `input_schema` | `gctm_d1_fixture_pack_v1` |
@@ -102,6 +196,10 @@ and [`manifest.json`](evidence/gctm_d1_substrate_agnostic_ranking_20260723/manif
 **Primary ordering-active mechanism sealed by this declaration:**
 `anisotropic_shared_innovation_covariance`.
 
+`shared_isotropic_scalar_covariance` is **calibration-only** and is not ranking
+evidence. Candidate-specific covariance must not be used for ranking without a
+declared source and causal availability (fail closed otherwise).
+
 Not treated as ranking evidence: lower mean distance alone, pooled AUC, raw
 cross-event NLL improvement, overall pooled pair accuracy.
 
@@ -124,6 +222,10 @@ Implemented and executed by
 10. Undefined inverse / det / covariance / missing / tie behavior fails closed.
 11. Non-identifiable quantities are explicitly listed.
 12. Constructive counterexamples are retained, not averaged away.
+
+Machine binding of all twelve is recorded in
+[`invariant_report.json`](evidence/gctm_d1_substrate_agnostic_ranking_20260723/invariant_report.json)
+(`n_invariants=12`, `n_passed=12`, `all_passed=true`).
 
 ## Identifiability limits (explicit)
 
@@ -150,11 +252,16 @@ gctm_d1_to_h0_route5_b1_compatibility_v1
 gctm_d1_to_gctm_b1_compatibility_v1
 ```
 
-Missing / partial / rejected verdicts select `reject_runtime_consumption`.
+Both gates remain **`missing`**. Missing / partial / rejected verdicts select
+`reject_runtime_consumption`. The two runtime consumers are independent;
+acceptance on one gate never implies acceptance on the other.
 
 ## Terminal procedure (three-way, mechanical)
 
-Exactly one of:
+`accepted_terminal_procedure_id` =
+`gctm_d1_mechanical_three_way_terminal_v1`
+
+Exactly one of (mechanical selection order):
 
 1. `GCTM_D1_BOUNDED_NO_GO` — invariants fail **or** ranking-active/calibration
    distinction falsified
@@ -166,7 +273,11 @@ Exactly one of:
 Selection is mechanical via `select_terminal(..., interface_complete=...)`.
 A provisional terminal string from seal-candidate generation is **not** an
 owner-accepted charter execution and does **not** move canonical registry
-`state` off `none`.
+`state` off `none`. Declaration acceptance does **not** promote
+`GCTM_D1_INTERFACE_READY` to a canonical diagnostic terminal.
+
+Validators report structural validity only; they do not assert owner authority,
+runtime compatibility, or activation eligibility.
 
 ## Prohibited actions (reaffirmed)
 
@@ -176,6 +287,7 @@ owner-accepted charter execution and does **not** move canonical registry
 - Fit after held-out reveal
 - Candidate-universe change between M0/M1/M2
 - Runtime B1 registry updates
+- Treating declaration acceptance as charter execution or WIP acquisition
 
 ## Artifacts
 
