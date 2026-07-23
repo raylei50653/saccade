@@ -20,7 +20,15 @@
 
 ## Proposed（non-WIP）
 
-- **GCTM B1 — runtime-grounded offline attribution and score-ranking evaluation** → [task charter](../../research/threads/gctm_b1_runtime_grounded_offline_attribution_task.md)
+- **H0 route-5 B1 — runtime-grounded consumer-faithful operating curve** —
+  `H0_ROUTE5_B1`, `proposed`, `blocked_by: h0_runtime_substrate`; it is distinct
+  from and coexists with `GCTM_B1` → [machine identity decision](../../research/contracts/gctm_b1_slot_identity_decision_v1.json)
+- **GCTM B1 — runtime-grounded offline attribution and score-ranking evaluation** —
+  `GCTM_B1`, `proposed`, `blocked_by: h0_runtime_substrate`; it does not alias
+  or supersede `H0_ROUTE5_B1` → [task charter](../../research/threads/gctm_b1_runtime_grounded_offline_attribution_task.md)
+- **GCTM D1 — substrate-agnostic ranking diagnostic** — `GCTM_D1`,
+  `proposed`, diagnostic-only, `blocked_by: charter_owner_acceptance`; no
+  diagnostic terminal unlocks B1/O1 or WIP → [task charter](../../research/threads/gctm_d1_substrate_agnostic_ranking_diagnostic_task.md)
 - **GCTM O1 — online score intervention and system-efficacy evaluation** → [task charter](../../research/threads/gctm_o1_online_intervention_efficacy_task.md)
 
 ## Parked

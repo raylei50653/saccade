@@ -22,7 +22,7 @@ created: 2026-07-17
 [B1/O1 objectives-and-semantics synthesis](../../modules/semantic/research/gctm_b1_o1_task_objectives_and_semantics_20260716.md)
 on 2026-07-17, executing that document's §37 repository split. It is **not
 active**, **not sealed**, **not sole-active**, and does not occupy semantic WIP
-(sole active is O0, per [semantic TODO](../../modules/semantic/TODO.md)). It
+(the WIP lock is empty, per [semantic TODO](../../modules/semantic/TODO.md)). It
 does not activate O1, implement any hook, freeze numerical thresholds,
 authorize data access, modify runtime behavior, or promote a production
 policy.
@@ -81,6 +81,9 @@ variant must return to B1 and earn a positive design terminal under the
 online-compatible observation interface.
 
 No B1 terminal auto-activates O1.
+No `GCTM_D1_*` diagnostic terminal is a B1 terminal, policy handoff, O1
+prerequisite, or authority source. Diagnostic seal, bounded no-go, and
+interface-ready outcomes leave O1 `proposed`.
 
 ## Research question
 

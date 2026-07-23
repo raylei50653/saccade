@@ -477,6 +477,99 @@ derived_from: §4.2（substrate 不繼承,無 L4）＋ score_ranking_evidence_co
 last_reviewed_at: 2026-07-23
 ```
 
+### `score.h0_route5_runtime_b1`
+
+```yaml
+slot_id: H0_ROUTE5_B1
+layer: L2 score
+ladder: score_ranking_evidence_contract_v1
+transition_semantics: defined
+lifecycle_state: proposed
+state: none                              # proposed 不是 accepted rung
+substrate: none
+target_substrate: H0 runtime capture
+authority_class: runtime_grounded
+blocked_by: h0_runtime_substrate
+blockers:
+  - type: inadmissibility
+    what: activation 或 decision-relevant candidate transition
+    clause: 缺 valid H0 runtime substrate、stable evidence identity、canonical checksum 與 owner-accepted H0→GCTM consumer compatibility verdict
+activation_forbidden_until:
+  - valid_h0_runtime_substrate
+  - stable_evidence_identity
+  - canonical_checksum
+  - h0_gctm_consumer_compatibility_verdict
+  - observation_freeze
+  - parameterization_freeze
+  - sealed_b1_declaration
+  - owner_scheduling
+decision_relevance:
+  status: zero（目前）— route-5 positive substrate 不存在;score contract acceptance 不建立 substrate 或候選
+supporting_declaration: ../threads/closed/bridge_frozen_evidence_o0_routing_20260716.md（route 5）
+accepting_review: gctm_b1_slot_identity_decision_v1.json（identity/coexist only;非 charter acceptance）
+last_transition: 2026-07-23 — owner 接受 slot identity/coexist 關係;slot lifecycle 不變
+admissible_units: []
+derived_from: §4.2 substrate 不繼承 + score_ranking_evidence_contract_v1 §10 + machine identity record
+last_reviewed_at: 2026-07-23
+```
+
+### `score.gctm_b1_runtime_grounded_ranking`
+
+```yaml
+slot_id: GCTM_B1
+layer: L2 score
+ladder: score_ranking_evidence_contract_v1
+transition_semantics: defined
+lifecycle_state: proposed
+state: none
+substrate: none
+target_substrate: H0 runtime capture
+authority_class: runtime_grounded
+blocked_by: h0_runtime_substrate
+blockers:
+  - type: inadmissibility
+    what: activation 或 decision-relevant candidate transition
+    clause: 與 H0_ROUTE5_B1 coexist 但不共享 authority;缺 runtime substrate、identity、checksum 與 compatibility verdict
+decision_relevance:
+  status: zero（目前）— theory seal 與 score contract 均不提供 runtime substrate
+supporting_declaration: ../threads/gctm_b1_runtime_grounded_offline_attribution_task.md
+accepting_review: gctm_b1_slot_identity_decision_v1.json（identity/coexist only）
+last_transition: 2026-07-23 — identity ambiguity resolved;proposed lifecycle 不變
+admissible_units: []
+derived_from: machine identity record + §4.2 + score_ranking_evidence_contract_v1 §10
+last_reviewed_at: 2026-07-23
+```
+
+### `diagnostic.gctm_d1_substrate_agnostic_ranking`
+
+```yaml
+slot_id: GCTM_D1
+layer: diagnostic-only（非 runtime decision layer）
+ladder: proposed charter terminal family
+transition_semantics: defined（只允許 local diagnostic terminal）
+lifecycle_state: proposed
+state: none
+substrate: substrate-agnostic synthetic 或 sealed non-runtime input
+target_substrate: none
+authority_class: diagnostic_only
+blocked_by: charter_owner_acceptance
+blockers:
+  - type: inadmissibility
+    what: runtime claim、runtime B1 transition、O1 unlock 或 decision-relevant candidate
+    clause: diagnostic evidence 不可滿足 runtime substrate/provenance/identity/checksum/compatibility/activation authority
+  - type: dependency
+    what: charter activation
+    clause: 需另行 owner-accepted sealed D1 declaration ＋ owner scheduling
+decision_relevance:
+  status: zero（目前）— proposed diagnostic charter;所有 terminal 僅能轉移 GCTM_D1 自身
+supporting_declaration: ../threads/gctm_d1_substrate_agnostic_ranking_diagnostic_task.md
+accepting_review: none（charter 尚未 owner-accept）
+last_transition: 2026-07-23 — slot/charter proposed;未 activation
+admissible_units: []
+derived_from: gctm_b1_slot_identity_decision_v1.json terminal policy + §5 relevance
+last_reviewed_at: 2026-07-23
+```
+
 ---
 
 ## 7. 架構缺口（顯式化，而不是假裝可編排）
@@ -484,6 +577,8 @@ last_reviewed_at: 2026-07-23
 | 缺口 | 影響 |
 |---|---|
 | **score-layer transition semantics** | **RESOLVED 2026-07-23.** [`score_ranking_evidence_contract_v1`](score_ranking_evidence_contract.md) 已由 owner 接受並凍結；`owner_acceptance_id: score_ranking_contract_owner_acceptance_20260723`；`registry_binding_id: claim_state_registry_score_ranking_v1`；`contract_sha256: 7dbc2d965079fa3fc13f7802a4a083b1c4cbf49d658ffe3728b6c405364a13b4`。本 binding 只使 L2 admissibility 可判定；不自動推進 object、產生候選、啟動 B1/O1 或授權 runtime 行為。 |
+| **B1-slot identity** | **RESOLVED 2026-07-23.** [`gctm_b1_slot_identity_decision_v1`](gctm_b1_slot_identity_decision_v1.json) 固定 `GCTM_B1 != H0_ROUTE5_B1`、`relation: coexist`、非 alias、非 supersede、不可共享 activation authority；未來改寫關係須另開 owner-accepted transition。Identity resolution 不解除任何 runtime gate。 |
+| **H0 runtime substrate / compatibility** | **OPEN / fail closed.** 三次 `H0_PROVENANCE_INVALID` 後仍無 valid runtime substrate、stable evidence identity、canonical checksum 或 owner-accepted H0→GCTM compatibility verdict。`H0_ROUTE5_B1` 與 `GCTM_B1` 均保持 proposed；`GCTM_D1` diagnostic evidence 不可補此缺口。 |
 
 ---
 
@@ -496,6 +591,13 @@ last_reviewed_at: 2026-07-23
 | *(全空)* | 所有 object | 已達 terminal／被 inadmissibility 排除／依賴未解／relevance zero。前次唯一成員（H0 pre-seal，`quantity.bridge_capture_provenance` 的 §4.3 dependency）已被 O0 取用並執行完畢：exactly-once sealed invocation 的 ordered terminal＝`H0_PROVENANCE_INVALID`，owner-accepted（#209，2026-07-19）⇒ unit 消費、候選集回空。 |
 | *(仍全空，2026-07-23 L2 binding 後重推)* | `score.anchor_propagation` | Transition semantics 現已 defined，但保留域／candidate universe 尚未定義，且 §5 decision relevance 仍為 zero；不得因契約生效而取得 WIP 鎖。 |
 | *(仍全空，2026-07-23 L2 binding 後重推)* | `quantity.gap_conditioned_transition_model.a_layer_spec` | Accepted state 仍是 diagnostic-only spec seal。L2 contract blocker 已解除，但 consumers 仍受 §4.2（substrate 不繼承、無 fidelity edge）、consumer compatibility、B1-slot、declaration／seal／scheduling 與 §5 relevance zero 阻擋。GCTM charter 已關閉，semantic WIP 鎖維持空。 |
+| *(仍全空，2026-07-23 identity decision 後重推)* | `H0_ROUTE5_B1` / `GCTM_B1` | Relation 已固定為 coexist，但兩者仍各自 `proposed`，不共享 authority，且明確 `blocked_by: h0_runtime_substrate`。缺 substrate／identity／checksum／compatibility verdict／freeze／declaration／scheduling；identity 與 L2 contract acceptance 均不產生候選。 |
+| *(仍全空，2026-07-23 D1 charter 建立後重推)* | `GCTM_D1` | 新 charter 仍 `proposed`、`blocked_by: charter_owner_acceptance`、diagnostic-only。其 terminal policy 不解鎖 runtime B1/O1、不產生 decision-relevant candidate；owner-accept 與另行 scheduling 前不得取得 WIP。 |
+
+**Machine projection:** `gctm_b1_slot_identity_decision_v1.json` 的
+`registry_projection` 已重推為 `decision_relevant_candidates: []`、
+`active_wip: []`、`o1_state: proposed`、`h0_reentry_authorized: false`。
+該 projection 由 `validate_research_slot_governance.py` fail closed 驗證。
 
 **O0 的選擇（歷史）：** O0 於 2026-07-16 取 H0 為唯一 active，2026-07-20 依
 route 1 關閉（[closed charter](../threads/closed/bridge_frozen_evidence_o0_routing_20260716.md)）。

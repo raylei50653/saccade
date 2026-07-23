@@ -201,6 +201,7 @@ Manifest: `docs/ownership/doc_migration_manifest.yaml`
 - `docs/research/threads/closed/safe_region_assetization_20260710.md`
 - `docs/research/threads/doc_structure_o15_followup_20260709.md`
 - `docs/research/threads/gctm_b1_runtime_grounded_offline_attribution_task.md`
+- `docs/research/threads/gctm_d1_substrate_agnostic_ranking_diagnostic_task.md`
 - `docs/research/threads/gctm_o1_online_intervention_efficacy_task.md`
 - `docs/research/threads/gt_support_morphology_20260711.md`
 - `docs/research/threads/occ_exit_audit_20260709.md`
@@ -326,6 +327,6 @@ Excluded from the active index and default search view.
 
 ## Inventory summary
 
-- documents: 276
-- active: 221
+- documents: 277
+- active: 222
 - grayed out: 55
