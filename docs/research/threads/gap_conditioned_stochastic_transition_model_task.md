@@ -837,3 +837,29 @@ no B1/O1/online/production authority.
   terminal is **WP-A8 terminal review** (checklist artifact + mechanical terminal
   selection). No new file ⇒ no master_map regeneration. No B1/O1/runtime/online/
   production authority granted. Next packet WP-A8.
+- 2026-07-23 — bounded corrections per #258 owner review (REQUEST CHANGES → fixed
+  pre-merge; **D1 §8 not yet frozen**; §2–§7 byte-frozen; the WP-A7 entry above is
+  superseded on the predicate count and sanity figures). Three blockers closed the
+  gap between §8's promise and its fields: (1) **Block X was not computable from
+  D/E/P** — no field supplied \(D\), \(\bar v(c)\), or the \(\gamma\) used for
+  scoring under `gamma_status=unknown`, so a record could pass every check and
+  still be unrecomputable; added `transition_diffusion_D_id`,
+  `context_drift_model_id`, `gamma_estimate_id`, event-level `vbar_value`, and a
+  new **closure predicate W5′** (binding completeness ⇒ otherwise **not an
+  instantiation at all**, since CAL and RANK both need a computable score; plus
+  same-artifact sharing of \(\gamma,D,\bar v\) inside `parameter_sharing_scope`,
+  with \(P_0/R_1\) sharing additionally required for identification claims,
+  W6(f)); (2) **\(e^-\) is latent** — Block X split into **X-a** (computable) and
+  **X-b** (\(z_\Delta,\delta z_0,\eta_\Delta,e^-\), symbolic only), since the
+  schema never supplies \(z_\Delta\); the observable counterpart is \(r\), and
+  adding `z_delta_true`-style inputs is forbidden as a W8 label-isolation
+  violation; (3) **missing transpose** — dependent-\(C\) row corrected to
+  \(S_\Delta=HP^-_\Delta H^\top+R_1+HC+C^\top H^\top\) per frozen §5.4. Plus a
+  scope strengthening: **`identification_scope`** \(\in\{\)`local`,`global`\(\}\)
+  — a `local_full_rank_established` condition supports only local claims and may
+  not be restated as global identification (§7.4/§7.7). Predicate count is now
+  **ten** (W1–W9 + W5′); re-checked on synthetic records (conforming declaration
+  passes all ten; **27** injected violations each caught by the intended
+  predicate; a `local` claim under a local-only condition correctly passes).
+  Scratchpad only, no code committed. Authority boundary unchanged: still
+  schema-only, no B1 activation, no runtime-availability claim, no terminal.

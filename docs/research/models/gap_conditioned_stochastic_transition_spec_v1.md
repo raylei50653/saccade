@@ -1188,9 +1188,10 @@ threshold／fold／file format，也**不**建立 fidelity edge。
 
 **做（frozen）：** (i) 定義 schema 的 consumption rule（何謂「本 D1 的合法
 instantiation」）與 authority 分工；(ii) 定義四個 block 的欄位集——declaration-level
-（Block D）、event-level（Block E）、pair-level（Block P）、derived（Block X）——各附
+（Block D）、event-level（Block E）、pair-level（Block P）、derived（Block X：可計算的
+**X-a** 與 latent-only 的 **X-b**）——各附
 required/optional 標記、domain、單位、causal availability 與其 frozen 來源 §；(iii)
-凍結 **well-formedness predicates**（W1–W9，fail-closed、機械可判定）；(iv) 凍結
+凍結 **well-formedness predicates**（W1–W9＋W5′，共十條，fail-closed、機械可判定）；(iv) 凍結
 **claim-restriction map**：某欄位／宣告缺席時，哪些 claim 因 §7 leakage 而**不可主張**。
 
 **不做（明確不授權／留給後續）：** **不執行任何 data、capture、fitting、evaluation**；
@@ -1218,7 +1219,7 @@ D1，當且僅當
 
 1. 提供 Block D／E／P 的**全部 `required` 欄位**，並對每個 `required-if` 欄位滿足其
    觸發條件；且
-2. 通過 §8.6 的**全部** well-formedness predicates（W1–W9）；且
+2. 通過 §8.6 的**全部**十條 well-formedness predicates（W1–W9＋W5′）；且
 3. 其宣稱的 claim 集合落在 §8.7 claim-restriction map 依**實際宣告到的欄位**所允許的
    範圍內。
 
@@ -1254,7 +1255,11 @@ identifiability／separation 結論（§6／§7 的結論永遠綁其 regime 前
 | `C_cross_cov_id` | required-if `error_dependence=dependent` | \(C\) 的來源；須落在 joint-PSD domain | §5.4／§5.6 |
 | `gamma_status` | required | \(\in\{\texttt{known},\ \texttt{unknown}\}\) | §7.4 |
 | `gamma_value` | required-if `gamma_status=known` | \(\gamma\in[0,\infty)\)，單位 \(\mathrm{frame}^{-1}\)（\(\gamma=0\)=M1 boundary） | §4.6／§4.7 |
+| `gamma_estimate_id` | required-if `gamma_status=unknown` | **實際用於計分**的 \(\gamma\) estimate／artifact 之來源（Block X 需要一個具體 \(\gamma\) 才能重算）；其**識別地位**另受 W6(b) 限制——供應可計分的值**不等於**已識別 | §4.7；W6(b) |
 | `joint_map_condition_status` | required-if `gamma_status=unknown` | \(\in\{\texttt{global\_injectivity\_established},\ \texttt{local\_full\_rank\_established},\ \texttt{not\_established}\}\)＋證據來源；**本規格不證明任一者** | §7.4／§7.7 |
+| `identification_scope` | required-if 宣告依賴 \(\gamma\) 的識別（即 `gamma_status=unknown` 且主張任何 \(\gamma\)/\(D\)-separation 結論） | \(\in\{\texttt{local},\ \texttt{global}\}\)；**global claim 需 `global_injectivity_established`；`local_full_rank_established` 只支持 local claim，且 local 結論不得被轉述為 global identification** | §7.4／§7.7（二者不等價） |
+| `transition_diffusion_D_id` | required | \(D=LL^\top\succeq0\)（\(d\times d\)，\(\ell^2\mathrm{frame}^{-3}\)）之來源／識別；\(Q_\Delta\) 由 \((\gamma,D,\Delta)\) 唯一決定 | §4.5／§4.7 |
+| `context_drift_model_id` | required | \(\bar v:\mathcal C_{\mathrm{exit}}\to\mathbb R^d\) 的來源／識別，且必須**可逐 event 求值**；宣告 \(\bar v\equiv0\)（無 context drift）亦須明寫為此欄位的合法值 | §4.3／§4.7 |
 | `gauge_fixing` | required | \(\in\{\texttt{R1\_declared},\ \texttt{Pxx\_declared},\ \texttt{none}\}\)（固定 \(P_{xx}\!\leftrightarrow\!R_1\) gauge 的**額外獨立資訊**） | §7.4 G1／§7.6 |
 | `parameter_sharing_scope` | required | 哪些 events 共享同一 \((P_0,\gamma,D,R_1)\)（identifiability 的 population 定義） | §7.4 |
 | `context_definition` | required | \(\mathcal C_{\mathrm{exit}}\) 的定義；須僅含 exit-causal 資訊 | §4.0 boundary 4／§4.7 |
@@ -1277,6 +1282,7 @@ Candidate event \(\mathcal E\) 的定義沿用 §6.2（一條 lost track 的固�
 | `z0_hat` | required | \(\hat z_0=[\hat x_0;\hat v_0]\in\mathbb R^{2d}\)；\(x\):\(\ell\)、\(v\):\(\ell/\mathrm{frame}\) | exit-time | §5.2 |
 | `P0_exit_cov_id` | required | \(P_0\succeq0\)（\(2d\times2d\)）之來源／識別 | exit-time | §5.1／§5.6 |
 | `context_c` | required | \(c\in\mathcal C_{\mathrm{exit}}\) | exit-time | §4.7 |
+| `vbar_value` | required-if `context_drift_model_id` 不可由 consumer 逐 event 求值 | \(\bar v(c)\in\mathbb R^d\)，單位 \(\ell/\mathrm{frame}\)；在 \([0,\Delta]\) 內固定 | exit-time（boundary 4） | §4.3／§4.7 |
 | `candidate_count` | required | \(\lvert\mathcal E\rvert\in\mathbb N_{\ge1}\) | — | §6.2 |
 
 ### §8.4 Block P — pair-level 欄位（每個 (event, candidate) 一列）
@@ -1297,23 +1303,40 @@ Candidate event \(\mathcal E\) 的定義沿用 §6.2（一條 lost track 的固�
 | `label_true_match` | required-if 進行 CAL 或 RANK 評估 | 布林／候選標記；**evaluation-only** | post-hoc（**不得**進入任何 score 欄位） | §6.2／§7.5（W8 label isolation） |
 | `admissibility` | required | \(\in\{\texttt{admitted},\ \texttt{dropped}\}\)；`dropped` 須附**恰一個**列舉理由 | — | W9 |
 
-### §8.5 Block X — derived 量（由 D1 計算；**不得**由 input 冒充）
+### §8.5 Block X — derived 量（**X-a** 由 D1 計算；**X-b** latent，不可 row-level 計算）
 
-下列量**不是** input：它們由 Block D/E/P 的欄位依 frozen §4–§6 唯一決定。schema 允許
-input 附帶它們**僅作為 cross-check**；若附帶，其值必須與依 frozen 公式重算者一致
-（W5），否則該 record inadmissible。**任何以外部值取代重算的做法，即脫離本 D1 的
-instantiation。**
+本 block 分兩類，**不得混為一談**：
 
-| Derived 量 | 由誰決定 | 來源 § |
+**X-a — computable derived fields（由 Block D/E/P 唯一決定）。** 這些量**不是**
+input：它們由已宣告欄位依 frozen §4–§6 唯一決定。schema 允許 input 附帶它們**僅作為
+cross-check**；若附帶，其值必須與依 frozen 公式重算者一致（W5），否則該 record
+inadmissible。**任何以外部值取代重算的做法，即脫離本 D1 的 instantiation。**
+
+| X-a 量 | 由誰決定（皆為已宣告欄位） | 來源 § |
 |:--|:--|:--|
-| \(a,b\)、\(A_\Delta\) | \((\gamma,\Delta)\) | §4.3 |
-| \(d_\Delta(c)\) | \((\gamma,\Delta,\bar v(c))\) | §4.3；**不含** operator offset（§4.4） |
-| \(Q_\Delta\) | \((\gamma,D,\Delta)\) | §4.5（\(\gamma=0\)：§4.6） |
-| \(m^-_\Delta=A_\Delta\hat z_0+d_\Delta(c)\)、\(e^-=z_\Delta-m^-_\Delta\) | Block E＋上列 | §5.2（符號約定 frozen） |
-| \(P^-_\Delta=A_\Delta P_0A_\Delta^\top+Q_\Delta\) | \(P_0,A_\Delta,Q_\Delta\) | §5.2 |
-| \(r=y_1-Hm^-_\Delta\) | Block P＋上列 | §5.3 |
-| \(S_\Delta=HP^-_\Delta H^\top+R_1\)（canonical \(C=0\)）／＋\(HC+C^\top H\)（dependent） | `error_dependence` | §5.4 |
+| \(a,b\)、\(A_\Delta\) | \(\gamma\)（`gamma_value`／`gamma_estimate_id`）、\(\Delta\)=`g_phys` | §4.3 |
+| \(d_\Delta(c)\) | \(\gamma,\Delta\)、\(\bar v(c)\)（`context_drift_model_id`／`vbar_value`） | §4.3；**不含** operator offset（§4.4） |
+| \(Q_\Delta\) | \(\gamma\)、\(D\)（`transition_diffusion_D_id`）、\(\Delta\) | §4.5（\(\gamma=0\)：§4.6） |
+| \(m^-_\Delta=A_\Delta\hat z_0+d_\Delta(c)\) | `z0_hat`＋上列 | §5.2（符號約定 frozen） |
+| \(P^-_\Delta=A_\Delta P_0A_\Delta^\top+Q_\Delta\) | `P0_exit_cov_id`、\(A_\Delta,Q_\Delta\) | §5.2 |
+| \(r=y_1-Hm^-_\Delta\) | `y1_obs`、\(H\)、\(m^-_\Delta\) | §5.3（**可觀測** innovation） |
+| \(S_\Delta=HP^-_\Delta H^\top+R_1\)（canonical \(C=0\)）／\(+HC+C^\top H^\top\)（dependent） | `error_dependence`、`R1_obs_cov_id`、`C_cross_cov_id` | §5.4 |
 | \(q,\ \log\det S_\Delta,\ E,\ \Pi(\Omega)\) | \(r,S_\Delta,\Omega\) | §6.1（需 \(S_\Delta\succ0\) regime） |
+
+**X-b — latent symbolic quantities（**不可** row-level 計算，**不得**作為 input）。**
+下列量只存在於 model 定義與 moment derivation 中，**不是**任何 record 可計算或可
+cross-check 的輸出：
+
+| X-b 量 | 為何不可 row-level 計算 | 只用於 |
+|:--|:--|:--|
+| \(z_\Delta\)（entry-time latent state） | schema 只提供 \(y_1=Hz_\Delta+\epsilon_1\)（`y1_obs`），一般**不可反解** \(z_\Delta\) | model 定義（§4.3 kernel） |
+| \(\delta z_0=z_0-\hat z_0\)、\(\eta_\Delta\) | 皆含 latent \(z\)；schema 只提供估計量 \(\hat z_0\) 與其 covariance \(P_0\) | \(P^-_\Delta\) 的 moment derivation（§5.2） |
+| \(e^-=z_\Delta-m^-_\Delta\) | latent prediction error；**可觀測／可計算的對應量是 \(r=y_1-Hm^-_\Delta\)**（\(r=He^-+\epsilon_1\)，§5.3） | 符號約定與 \(P^-_\Delta,S_\Delta\) 的推導（§5.2／§5.4） |
+
+**禁止（frozen）：** 不得為了「讓 X-b 可 cross-check」而新增 `z_delta_true`／
+`e_minus_observed` 之類的欄位。任何 latent／GT 導出的 entry-time 真值一旦進入
+record，即違反 W8 的 **label isolation**（evaluation-only 資訊不得進入 score 層）。
+X-b 的存在只保證 §5 的 moment 結構有定義，**不**構成 record-level 可用性 claim。
 
 ### §8.6 Well-formedness predicates（frozen；fail-closed、機械可判定）
 
@@ -1323,8 +1346,9 @@ instantiation。**
 | **W2** | **Anchor 宣告與 offset 分離**：每列 `anchor_pair` 明寫；production-corresponding instantiation 必須為 exit→entry 並**重現** \(\pm(\mathrm{bridge\_at}-1)v\)，且該 offset 只能出現在 `operator_offset` 欄位——**不得**折進 \(d_\Delta(c)\)、\(m^-_\Delta\) 或 \(e^-\) | record inadmissible；折入者為 layer 混淆 | §2 rows 8–9／§4.4 |
 | **W3** | **Observation mode 一致性**：全 study 恰一個 \(H\)，且每列 `H_i` 與之相同；\(H_{xv}\) 須有 `causal_availability`；若 entry velocity 由與 \((0,\Delta]\) **重疊**的 frames 導出 ⇒ `error_dependence` 必須為 `dependent` 且 `C_cross_cov_id` 已宣告 | declaration inadmissible | §3.3／§5.4／§7.2 |
 | **W4** | **PSD／可逆性**：\(P_0\succeq0\)、\(R_1\succeq0\)、\(D\succeq0\)；dependent path 另需 \(\big[\begin{smallmatrix}P^-_\Delta&C\\ C^\top&R_1\end{smallmatrix}\big]\succeq0\)。使用 \(q/E/\Pi\) 的列另需 \(S_\Delta\succ0\)（canonical \(C=0\)＋\(R_1\succ0\) 即足；dependent path 需額外 nondegeneracy） | 違反 PSD ⇒ inadmissible；\(S_\Delta\) 退化 ⇒ 該列不得產生 \(q/E/\Pi\) | §5.5／§5.6／§6.1 |
-| **W5** | **維度／單位／derived 一致性**：所有矩陣維度與 `coordinate_dim_d` 及 \(H\) 相容；單位依 §4.7／§5.6／§6.5；附帶的 Block X 值必須與依 frozen 公式重算者一致 | record inadmissible | §4.7／§5.6／§8.5 |
-| **W6** | **Identifiability regime**（承 §7，逐項機械判定）：(a) `gamma_status=known` 時，quotient claim 需 `parameter_sharing_scope` 內 **\(\ge4\) 相異 \(\Delta\)**；single-\(\Delta\) population 連 quotient 都不可識別。(b) `gamma_status=unknown` 時，任何依賴 \(\gamma\)（或 \(D\) 與 \(\gamma\) 分離）的 claim 需 **\(>4\) 相異 \(\Delta\)** **且** `joint_map_condition_status`\(\neq\)`not_established`；「\(\ge5\) gaps」只是**必要**非充分。(c) 需要 \(P_{xx}\) 與 \(R_1\) **分離**的 claim 需 `gauge_fixing`\(\neq\)`none`。(d) 需要 \(\operatorname{asym}(P_{xv})\) 的 claim 需 \(H_{xv}\) ＋ multi-gap ＋ 共享參數 ＋ \(\gamma\) regime 滿足。(e) 需要 \(\bar v(c)\) 的 claim 需 `context_varies=true` 且 context 為 exit-causal | 對應 claim **non-identifiable**（§8.7；落入 terminal-3 rejection region 的判定屬 WP-A8） | §7.3／§7.4／§7.6／§7.7 |
+| **W5** | **維度／單位／derived 一致性**：所有矩陣維度與 `coordinate_dim_d` 及 \(H\) 相容；單位依 §4.7／§5.6／§6.5；附帶的 **X-a** 值必須與依 frozen 公式重算者一致；**X-b（latent）不得作為 input 出現** | record inadmissible | §4.7／§5.6／§8.5 |
+| **W5′** | **Parameter-binding 完備性與 sharing 一致性**（closure predicate）：(a) **完備性**——每個 **X-a** 量的所有決定欄位必須實際可解析：\(\gamma\)（`gamma_value` 或 `gamma_estimate_id`）、\(D\)（`transition_diffusion_D_id`）、\(\bar v(c)\)（`context_drift_model_id` 可逐 event 求值，否則每 event 的 `vbar_value`）、\(P_0\)（`P0_exit_cov_id`）、\(R_1\)（`R1_obs_cov_id`）、dependent path 的 \(C\)（`C_cross_cov_id`）。**任一不可解析 ⇒ Block X 無法重算 ⇒ 該 declaration 不是本 D1 的 instantiation**（不得以「參數待識別」含混帶過：CAL 與 RANK 皆需可計算的 score）。(b) **sharing 一致性**——`parameter_sharing_scope` 內所有 record 的 \(\gamma\)、\(D\)、\(\bar v\) 綁定必須解析到**同一** artifact／值，不得只在宣告層寫「共享」 | declaration inadmissible | §4.3／§4.5／§4.7／§5.6／§8.5 X-a |
+| **W6** | **Identifiability regime**（承 §7，逐項機械判定）：(a) `gamma_status=known` 時，quotient claim 需 `parameter_sharing_scope` 內 **\(\ge4\) 相異 \(\Delta\)**；single-\(\Delta\) population 連 quotient 都不可識別。(b) `gamma_status=unknown` 時，任何依賴 \(\gamma\)（或 \(D\) 與 \(\gamma\) 分離）的 claim 需 **\(>4\) 相異 \(\Delta\)** **且** `joint_map_condition_status`\(\neq\)`not_established`，**且 claim 的 `identification_scope` 不得強於已確立的條件**：`global` claim 需 `global_injectivity_established`；`local_full_rank_established` 只支持 `local` claim，**local 結論不得被轉述為 global identification**（二者不等價，§7.4／§7.7）；「\(\ge5\) gaps」只是**必要**非充分。(c) 需要 \(P_{xx}\) 與 \(R_1\) **分離**的 claim 需 `gauge_fixing`\(\neq\)`none`。(d) 需要 \(\operatorname{asym}(P_{xv})\) 的 claim 需 \(H_{xv}\) ＋ multi-gap ＋ 共享參數 ＋ \(\gamma\) regime 滿足。(e) 需要 \(\bar v(c)\) 的 claim 需 `context_varies=true` 且 context 為 exit-causal。(f) **任何** parameter-identification claim 另需 `parameter_sharing_scope` 內 \(P_0\) 與 \(R_1\) 也解析到**同一** artifact（§7.4 的 shared-parameter 前提；W5′(b) 只要求 \(\gamma,D,\bar v\) 共享，那是計分所需的最小集） | 對應 claim **non-identifiable**（§8.7；落入 terminal-3 rejection region 的判定屬 WP-A8） | §7.3／§7.4／§7.6／§7.7 |
 | **W7** | **Claim／evaluation-unit 一致性**：`claim_target=CAL` 的評估只在 \(\{(e,i^\star)\}\)（true match）上做且需 `cal_working_null`；`claim_target=RANK` 只做 event-local ordering（event 內計算後再跨 event 平均）。**同一份宣告不得同時主張兩者**；CAL 結論不得轉述為 RANK，反之亦然 | claim inadmissible | §6.2／§6.0 |
 | **W8** | **Conservation 與 label isolation**（A 層最小集）：每個 admitted pair 屬**恰一個** event；每個 event 恰一個 exit anchor 與一組不重複 candidates；`label_true_match` 與任何 GT 導出量為 **evaluation-only**，**不得**作為 Block D/E/P 任一 score-relevant 欄位的輸入。（fold／partition／trial-unit／blind-reveal 的完整 conservation 由 B1 charter 所有，本節不複寫） | record 或 study inadmissible | §6.2；B1 charter conservation identities |
 | **W9** | **Fail-closed missing-value**：缺任一 `required`（或已觸發的 `required-if`）欄位 ⇒ 該 record／declaration **inadmissible**，**不得**以預設值、鄰值或全域常數補齊；`dropped` 列須附**恰一個**列舉理由；optional 欄位缺席須**明確記錄**，其後果見 §8.7 | inadmissible；靜默補值即脫離本 D1 | §2 row 9 精神（不得靜默繼承） |
@@ -1337,7 +1361,10 @@ claim 因 leakage／未滿足 regime 而**不可主張**（其餘 claim 不受�
 | 缺席的宣告／欄位 | 因此**不可主張**的 claim | 仍可主張者 | 依據 |
 |:--|:--|:--|:--|
 | `gauge_fixing=none` | 任何需要 \(P_{xx}\) 與 \(R_1\) **分離**的 claim（結構性 gauge，\(H_{xv}\) 亦不可破） | 只依 \(P_{xx}+R_1\) 之和的 quotient claim | §7.4 G1／§7.6 |
-| `gamma_status=unknown` 且（\(\le4\) 相異 \(\Delta\) 或 `joint_map_condition_status=not_established`） | 任何識別 \(\gamma\)、或需 \(\gamma\) 與 \(D\) 分離的 claim | 給定 \(\gamma\) 條件下的 quotient claim（須明寫其 conditional 前提） | §7.4 G3／§7.6／§7.7 |
+| `gamma_status=unknown` 且（\(\le4\) 相異 \(\Delta\) 或 `joint_map_condition_status=not_established`） | 任何識別 \(\gamma\)、或需 \(\gamma\) 與 \(D\) 分離的 claim | 給定 \(\gamma\)（`gamma_estimate_id`）條件下的 score／quotient claim（須明寫其 conditional 前提：**供應可計分的 \(\gamma\) 值不等於已識別 \(\gamma\)**） | §7.4 G3／§7.6／§7.7 |
+| 只有 `local_full_rank_established`（無 global injectivity） | 任何 `identification_scope=global` 的 \(\gamma\) claim；local 結論**不得**被轉述為 global identification | `identification_scope=local` 的 claim（須標明只 local） | §7.4／§7.7（二者不等價） |
+| 參數 binding 不可解析（\(\gamma\)／\(D\)／\(\bar v\)／\(P_0\)／\(R_1\)／dependent 的 \(C\) 任一缺） | **全部** claim——Block X-a 無法重算 ⇒ 該 declaration **根本不是**本 D1 的 instantiation（非「部分受限」） | 無 | W5′(a)／§8.5 X-a |
+| `parameter_sharing_scope` 內 \(P_0\)／\(R_1\) 未解析到同一 artifact | 任何 parameter-identification claim（§7.4 shared-parameter 前提不成立） | 逐 event 的 score 計算（CAL/RANK 不需跨 event 共享 \(P_0/R_1\)） | §7.4／W6(f) |
 | `observation_mode=`\(H_x\) | 任何需要 \(\operatorname{asym}(P_{xv})\) 的 claim（\(H_x\) 下 structural invisible） | \(\operatorname{sym}(P_{xv})\)／\(P_{vv}\)／\(D\)（在 W6(a) regime 下） | §7.4 G2／§7.6 |
 | `context_varies=false` 或 `context_definition` 未宣告 | 任何 \(\bar v(c)\)（context drift）claim | 常數-mean 層級的敘述（須標明混淆） | §7.4／§7.6 mean-level |
 | `operator_offset_declared=false` | 任何 mean／residual-bias claim（operator offset 與 \(\bar v(c)\)／常數 bias 混淆） | 純 covariance-level claim | §7.6 mean-level／§2 row 9 |
@@ -1684,3 +1711,55 @@ claim-restriction map。它不宣稱任何 runtime 擷取值、不建立 fidelit
   pair key, unfilled `required-if`) are each caught by the intended predicate,
   and the §8.7 union rule leaves the quotient claim admissible while forbidding
   the three blocked ones. No code committed.
+- 2026-07-23 — bounded corrections per #258 owner review (REQUEST CHANGES → fixed
+  pre-merge; **§8 not yet frozen**; §2–§7 untouched, byte-frozen). Three blockers
+  plus one scope strengthening; the round-1 entry above is **superseded** on the
+  predicate count and sanity figures. (1) **Block X was not computable from
+  D/E/P** — §8.5 claimed every derived quantity is determined by declared fields,
+  but no field supplied \(D\), \(\bar v(c)\), or the \(\gamma\) actually used for
+  scoring when `gamma_status=unknown`; a record could satisfy every `required`
+  field and still be unrecomputable, breaking the consumption rule's core promise.
+  Added Block-D bindings `transition_diffusion_D_id`, `context_drift_model_id`
+  (must be per-event evaluable; \(\bar v\equiv0\) is a legal explicit value) and
+  `gamma_estimate_id` (supplying a scorable \(\gamma\) is explicitly **not**
+  identification), Block-E `vbar_value` (required-if the drift model is not
+  per-event evaluable), and a new **closure predicate W5′**: (a) every X-a
+  quantity's determining bindings must actually resolve — otherwise the
+  declaration is **not** an instantiation at all (a "parameters still to be
+  identified" declaration is inadmissible, since both CAL and RANK need a
+  computable score); (b) \(\gamma,D,\bar v\) must resolve to the **same**
+  artifact inside `parameter_sharing_scope`, not merely be declared shared.
+  W6(f) adds the stronger requirement for identification claims: \(P_0\) and
+  \(R_1\) must also resolve to one artifact across the scope (the §7.4
+  shared-parameter premise), which scoring alone does not need. (2) **\(e^-\) is
+  latent, not a row-level derived field** — the schema supplies \(\hat z_0\) and
+  \(y_1=Hz_\Delta+\epsilon_1\), never \(z_\Delta\), so \(e^-=z_\Delta-m^-_\Delta\)
+  cannot be computed or cross-checked per record. Block X split into **X-a**
+  (computable: \(a,b,A_\Delta,d_\Delta,Q_\Delta,m^-_\Delta,P^-_\Delta,r,S_\Delta,
+  q,\log\det S_\Delta,E,\Pi\)) and **X-b** (latent symbolic: \(z_\Delta,\delta z_0,
+  \eta_\Delta,e^-\)), which exist only for the §5 moment derivation; the
+  observable counterpart of \(e^-\) is \(r=He^-+\epsilon_1\). Adding
+  `z_delta_true`/`e_minus_observed` inputs is explicitly **forbidden** — latent/GT
+  entry-time truth in a record violates W8 label isolation. (3) **Missing
+  transpose** — the §8.5 dependent-\(C\) row read
+  \(S_\Delta=HP^-_\Delta H^\top+R_1+HC+C^\top H\); corrected to
+  \(+HC+C^\top H^\top\) per frozen §5.4 (as written the term is not even
+  dimensionally valid). (4) **local vs global identification scope** — W6(b)
+  previously let any `joint_map_condition_status`\(\neq\)`not_established` carry a
+  \(\gamma\) claim, so a `local_full_rank_established` declaration could state a
+  global result. Added Block-D `identification_scope` \(\in\{\)`local`,`global`\(\}\)
+  (required-if the claim depends on identifying \(\gamma\)): `global` needs
+  `global_injectivity_established`; `local_full_rank_established` supports only
+  `local`, and a local conclusion may not be restated as global identification
+  (§7.4/§7.7: the two are not equivalent). §8.7 gains four rows (unresolvable
+  bindings ⇒ **no** claim at all, not partial restriction; unshared \(P_0/R_1\) ⇒
+  no identification claim; local-only condition ⇒ no global claim; scorable
+  \(\gamma\) ≠ identified \(\gamma\)). Predicate count is now **ten** (W1–W9 plus
+  W5′). Re-checked on synthetic records: the conforming declaration passes all
+  ten, and **27** injected violations are each caught by the intended predicate
+  (the round-1 17 plus absent \(D\)/\(\bar v\)/\(\gamma\)-estimate/\(C\) bindings,
+  a mismatched \(D\) inside the sharing scope, latent \(e^-\) or \(z_\Delta\)
+  supplied as input, a global claim on a local-only condition, an unset scope, and
+  unshared \(P_0\) under an identification claim), while a `local` claim under
+  `local_full_rank_established` correctly passes. Scratchpad only; no code
+  committed.
