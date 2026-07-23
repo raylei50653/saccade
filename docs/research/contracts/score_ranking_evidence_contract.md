@@ -2,7 +2,8 @@
 <!-- doc-promotion: none; draft normative contract, not yet transition authority -->
 <!-- doc-date: 2026-07-23 -->
 <!-- doc-module: cross -->
-<!-- contract-owner: claim-state registry score layer -->
+<!-- contract-owner: cross-study L2 score evidence contract -->
+<!-- registry-binding: claim_state_registry -->
 
 # Score-ranking evidence contract（L2）
 
@@ -24,7 +25,13 @@ While this file remains `doc-status: proposed`:
 
 Promotion requires an owner review that freezes this contract, updates
 [`claim_state_registry.md`](claim_state_registry.md), and re-derives affected
-objects. PR merge alone is not acceptance.
+objects. Before that review, a versioned machine-readable declaration schema
+and fail-closed validator must implement the acceptance gate in §8.1. PR merge
+alone is not acceptance.
+
+Authority remains split: this contract owns L2 transition rules and evidence
+semantics; the registry binds an accepted contract identity and owns only each
+research object's current effective state.
 
 ## 1. Scope and precedence
 
@@ -67,7 +74,8 @@ A score-policy object is the complete tuple
 
 \[
 \mathcal P =
-(U_{\mathrm{src}}, U_{\mathrm{evt}}, \rho, C, s, o, T, \tau, \pi),
+(U_{\mathrm{src}}, U_{\mathrm{evt}}, \rho, C,
+ s_{\mathrm{components}}, T, o, \tau, \pi),
 \]
 
 where:
@@ -76,9 +84,13 @@ where:
 - \(U_{\mathrm{evt}}\) is the candidate-event space;
 - \(\rho\) maps pairs to exactly one event;
 - \(C_e\) is the candidate universe for event \(e\);
-- \(s(e,i)\) is the pair score;
-- \(o\in\{\texttt{higher\_better},\texttt{lower\_better}\}\) is orientation;
-- \(T\) is the declared score transform and composition;
+- \(s_{\mathrm{components}}(e,i)\) is the declared vector or scalar of raw
+  pair-score components;
+- \(T\) is the complete declared composition, normalization, and transform
+  from \(s_{\mathrm{components}}\) to one evaluated native-domain score
+  \(\tilde s(e,i)\);
+- \(o\in\{\texttt{higher\_better},\texttt{lower\_better}\}\) is the orientation
+  applied to \(\tilde s\), after \(T\);
 - \(\tau\) is the complete tie rule;
 - \(\pi\) is the frozen selection or abstention rule, if the claim reaches
   assignment space.
@@ -128,23 +140,31 @@ comparison and must report support change separately.
 
 ### 3.1 Orientation and canonical utility
 
-Every score field declares exactly one orientation. For comparison only, define
-canonical utility
+The evaluated score and canonical utility are, in order,
 
 \[
+\tilde s(e,i)=T\!\left(s_{\mathrm{components}}(e,i)\right),
+\qquad
 u(e,i)=
 \begin{cases}
-s(e,i), & o=\texttt{higher\_better},\\
--s(e,i), & o=\texttt{lower\_better}.
+\tilde s(e,i), & o=\texttt{higher\_better},\\
+-\tilde s(e,i), & o=\texttt{lower\_better}.
 \end{cases}
 \]
+
+Every evaluated score declares exactly one orientation, and orientation always
+acts **after** \(T\). Rank, margin, top-k, cutoff, and assignment calculations
+must consume \(\tilde s\) or its oriented utility \(u\), never an undeclared raw
+component. An implementation that ranks raw \(s_{\mathrm{components}}\) while
+declaring a non-identity \(T\) is invalid.
 
 Rank and top-k are computed from \(u\). Reported margins must name their native
 domain as well as their sign convention. A cost margin, affinity margin, and
 softmin-probability margin are different quantities.
 
-A strictly increasing transform of \(u\) preserves strict rank but does not
-preserve margin magnitude or calibration. Therefore:
+A strictly increasing reparameterization of \(\tilde s\), under the same
+orientation, preserves strict rank but does not preserve margin magnitude or
+calibration. Therefore:
 
 ```text
 same rank under monotone transform
@@ -393,6 +413,29 @@ assignment/system results only when separately authorized
 terminal selected by the sealed decision procedure
 ```
 
+### 8.1 Machine-readable owner-acceptance gate
+
+This prose draft may merge as `proposed`, but it must not become active or
+owner-accepted until a separately versioned declaration schema and validator
+exist. They must fail closed over at least:
+
+```text
+the complete policy tuple, including s_components -> T -> orientation
+source, event, calibration, assignment, and system space identities
+candidate-universe, GT partition, duplicate, empty, and singleton rules
+tie, cutoff role, fallback, abstention, and missing-value behavior
+target rung and every lower-rung obligation
+claim kappa, exposure, effect, dependence, fold, and no-refit fields
+conservation identities
+exhaustive validity / valid-negative / valid-positive terminals
+exactly one state transition or explicit none for every terminal
+```
+
+The validator must reject missing required fields, unknown enum values,
+duplicate identities, incomplete terminal mappings, and claims above their
+declared rung. Positive fixtures alone are insufficient: acceptance requires
+negative fixtures for each fail-closed class above.
+
 ## 9. Forbidden shortcuts
 
 The following inferences are forbidden:
@@ -432,7 +475,8 @@ For GCTM B1 specifically:
 - [ ] owner accepts rank, tie, margin, top-1/top-k, and cutoff semantics;
 - [ ] owner accepts calibration separation and transition-likelihood boundary;
 - [ ] owner accepts `SR0`–`SR6` and non-inheritance rules;
-- [ ] fail-closed validity and conservation rules are mechanically instantiable;
+- [ ] versioned declaration schema and fail-closed validator implement §8.1;
+- [ ] positive and per-class negative fixtures pass the validator;
 - [ ] registry §7 is updated from absent to the accepted contract identity;
 - [ ] affected L2 objects are individually re-derived; none auto-advance;
 - [ ] B1 remains non-WIP unless all of its other gates and separate scheduling

@@ -11,7 +11,7 @@
 > ／PR #249 landing），GCTM 隨後於 2026-07-22 activate（WP-A0）、2026-07-23 關閉於
 > owner-accepted ordered terminal **`GCTM_MODEL_SPEC_SEALABLE`**。**其餘平行建議
 > 不屬於 GCTM closure，也未因此執行或取得 authority**——特別是 §4 的 `WP-L2∥`
-> （registry L2 contract）與 `WP-B1`（B1 declaration）：**registry-owned L2
+> （cross-study L2 contract, registry-bound）與 `WP-B1`（B1 declaration）：**L2
 > [score-layer contract draft](../../../research/contracts/score_ranking_evidence_contract.md)
 > 已開始，但尚未 owner-accepted**（[registry §7 架構缺口](../../../research/contracts/claim_state_registry.md)），
 > B1 仍是 proposed。因此文中一切「parked」「keep GCTM
@@ -117,7 +117,7 @@ pair→event→score 語義），但下列三點必須修正。
 | 項目 | 權責邊界現狀 | 真正缺的是 |
 |:--|:--|:--|
 | \(g_{\mathrm{phys}}\) 不得默認等於 \(\Delta_{\mathrm{on}}\) | **清楚** — 映射由 GCTM 定義 | 內容決策（convention + map） |
-| L2 contract 不存在時 B1/O1 score-ranking blocked | **清楚** — registry fail-closed | 另建 registry-owned L2 契約 |
+| L2 contract 不存在時 B1/O1 score-ranking blocked | **清楚** — registry fail-closed | 另建 cross-study L2 契約並綁入 registry |
 | prediction / observation error 獨立或顯式 \(C\) | **清楚** — 二選一義務 | 內容決策 |
 | M2 必須 canonical affine，不能只講 residual narrative | **清楚** — seal 條件 | 完整 interface + proofs |
 
@@ -393,7 +393,7 @@ Empirical ranking value is **B1**, not GCTM seal.
 
 ### Step 5 — Parallel: L2 contract（not GCTM math）
 
-Independently (registry-owned):
+Independently (cross-study contract; registry-bound):
 
 - freeze cutoff / ranking / margin / top-1 / candidate-universe semantics;
 - keep all `layer: L2 score` objects fail-closed until then;

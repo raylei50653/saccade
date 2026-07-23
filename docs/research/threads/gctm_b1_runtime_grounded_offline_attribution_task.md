@@ -773,11 +773,11 @@ before activation (route: declined, no execution).
 
 ## History
 
-- 2026-07-23: Linked the first registry-owned
+- 2026-07-23: Linked the first cross-study
   [score-layer contract draft](../contracts/score_ranking_evidence_contract.md).
-  The draft has no transition authority; the activation prerequisite remains
-  unmet pending owner acceptance and registry binding. B1 stays proposed /
-  non-WIP, with no execution authorized.
+  It is intended for registry binding but has no transition authority; the
+  activation prerequisite remains unmet pending owner acceptance and that
+  binding. B1 stays proposed / non-WIP, with no execution authorized.
 - 2026-07-17: Opened as a proposed task charter by splitting the B1/O1
   objectives-and-semantics synthesis (landed in PR #178) per its §37
   repository split. Content carried over without semantic change; the B1-slot
