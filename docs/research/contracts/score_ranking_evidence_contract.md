@@ -436,6 +436,17 @@ duplicate identities, incomplete terminal mappings, and claims above their
 declared rung. Positive fixtures alone are insufficient: acceptance requires
 negative fixtures for each fail-closed class above.
 
+The proposed v1 implementation surface is:
+
+- [declaration schema](../../../scripts/tools/score_ranking_declaration_schema_v1.json);
+- [fail-closed validator](../../../scripts/tools/validate_score_ranking_declaration.py);
+- [positive fixture](../../../tests/contract/fixtures/score_ranking_declaration_valid_v1.json)
+  and [per-class negative contract tests](../../../tests/contract/test_score_ranking_declaration_v1.py).
+
+These artifacts make the draft mechanically reviewable. Their merge does not
+check any box in §11 by itself: owner review must still accept their coverage,
+freeze the contract identity, and bind it into the registry.
+
 ## 9. Forbidden shortcuts
 
 The following inferences are forbidden:
