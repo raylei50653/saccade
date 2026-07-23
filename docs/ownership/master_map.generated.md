@@ -160,6 +160,7 @@ Manifest: `docs/ownership/doc_migration_manifest.yaml`
 - `docs/research/contracts/claim_state_registry.md`
 - `docs/research/contracts/runtime_quantity_fidelity_protocol.md`
 - `docs/research/contracts/safe_region_asset_contract.md`
+- `docs/research/contracts/score_ranking_evidence_contract.md`
 - `docs/research/contracts/signal_table_schema.md`
 - `docs/research/contracts/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md`
 - `docs/research/eval/README.md`
@@ -325,6 +326,6 @@ Excluded from the active index and default search view.
 
 ## Inventory summary
 
-- documents: 275
-- active: 220
+- documents: 276
+- active: 221
 - grayed out: 55

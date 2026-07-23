@@ -101,19 +101,21 @@ and condition 4's specification/proof identities are available as frozen
 [D1](../models/gap_conditioned_stochastic_transition_spec_v1.md) §2–§8 and
 [D2](../models/gap_conditioned_stochastic_transition_lemmas_v1.md) L1–L5 (they
 still have to be **named and frozen in a B1 declaration**, which does not exist).
-Conditions 1, 3, 5–8 are **unmet**, and the score-layer contract below remains
-absent. The GCTM seal is diagnostic-only: it carries no runtime substrate or
-fidelity edge, its identifiability verdict is *specified, not established*, and
-it grants B1 no authority.
+Conditions 1, 3, 5–8 are **unmet**, and the score-layer contract below has only
+a [proposed draft](../contracts/score_ranking_evidence_contract.md), not owner
+acceptance or transition authority. The GCTM seal is diagnostic-only: it
+carries no runtime substrate or fidelity edge, its identifiability verdict is
+*specified, not established*, and it grants B1 no authority.
 
 Additionally:
 
 - **Score-layer contract is a hard prerequisite.** B1 is an `L2 score` object.
   Per [claim-state registry §7](../contracts/claim_state_registry.md), the
-  score-layer evidence contract (rank/margin/top-1 semantics and claim ladder)
-  does not exist yet, so no B1 object can enter the admissible candidate set
-  (`transition_semantics: unavailable`) regardless of H0/GCTM outcomes.
-  Writing that contract does not depend on H0. None of the eight conditions
+  [score-layer evidence contract draft](../contracts/score_ranking_evidence_contract.md)
+  now proposes rank/margin/top-1 semantics and a claim ladder, but has not been
+  owner-accepted, so no B1 object can enter the admissible candidate set
+  (`transition_semantics: unavailable`) regardless of H0/GCTM outcomes. Drafting
+  and accepting that contract do not depend on H0. None of the eight conditions
   above substitutes for it.
 - **H0→GCTM consumer compatibility is a hard prerequisite for the
   bridge-runtime path.** A sealed B1 declaration must bind a
@@ -714,7 +716,8 @@ accepted B1 handoff and must not rewrite B1 semantics.
 - [ ] B1 declaration owner has accepted and bound an H0→GCTM consumer
       compatibility verdict to the required runtime-observable objects;
 - [ ] accepted GCTM model specification exists;
-- [ ] score-layer evidence contract (registry §7) exists;
+- [ ] score-layer evidence contract (registry §7) is owner-accepted and bound
+      into the registry;
 - [ ] B1-slot identity relation resolved by owner;
 - [ ] exact observation mode selected;
 - [ ] one parameterization family selected;
@@ -770,6 +773,11 @@ before activation (route: declined, no execution).
 
 ## History
 
+- 2026-07-23: Linked the first registry-owned
+  [score-layer contract draft](../contracts/score_ranking_evidence_contract.md).
+  The draft has no transition authority; the activation prerequisite remains
+  unmet pending owner acceptance and registry binding. B1 stays proposed /
+  non-WIP, with no execution authorized.
 - 2026-07-17: Opened as a proposed task charter by splitting the B1/O1
   objectives-and-semantics synthesis (landed in PR #178) per its §37
   repository split. Content carried over without semantic change; the B1-slot
