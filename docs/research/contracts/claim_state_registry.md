@@ -428,15 +428,15 @@ blockers:
     clause: §4.1 evidence 型別錯層（margin/rank ≠ gate 證據）
   - type: dependency
     what: 作為 score feature 執行
-    clause: §4.4 — score layer 無契約,transition semantics unavailable
-    depends_on: [score-layer contract（不存在）, 保留域先被定義]
+    clause: §4.4 — score-layer contract draft 尚未被 owner 接受,transition semantics unavailable
+    depends_on: [score-layer contract owner acceptance＋registry 回寫, 保留域先被定義]
 decision_relevance:
   status: **zero（目前）** — 保留域尚未定義,排序無意義;正反結果都不改變任何 production 決策
   # ⇒ §5 反事實測試不通過 ⇒ 不得取得 WIP 鎖
 supporting_declaration: ../../modules/semantic/research/discrete_m_capability_declaration_20260712.md（parked, unsealed）
 last_transition: 2026-07-12 — reclassified gate → score feature;parked
 admissible_units: []                     # [cached derivation]
-derived_from: §4.1 錯層 + §4.4 契約缺席 + §5 relevance zero
+derived_from: §4.1 錯層 + §4.4 契約未取得 owner acceptance + §5 relevance zero
 last_reviewed_at: 2026-07-12
 ```
 
@@ -462,15 +462,15 @@ blockers:
     clause: §4.2 substrate 不繼承（substrate ≠ target_substrate,且無 accepted fidelity edge / L4）
   - type: dependency
     what: 作為 score-ranking 層模型進入 B1/O1
-    clause: §4.4 — score-layer 契約不存在（§7 架構缺口）;另需 B1-slot identity ＋ sealed B1 declaration ＋ owner scheduling
+    clause: §4.4 — score-layer contract draft 尚未被 owner 接受（§7 架構缺口）;另需 B1-slot identity ＋ sealed B1 declaration ＋ owner scheduling
 decision_relevance:
-  status: **zero（目前）** — 無 runtime substrate 且 L2 契約缺席;terminal 5 與 terminal 3/4 在當前狀態下**都不**改變任何 production 決策 ⇒ §5 反事實測試不通過 ⇒ 不得取得 WIP 鎖
+  status: **zero（目前）** — 無 runtime substrate 且 L2 契約未取得 owner acceptance;terminal 5 與 terminal 3/4 在當前狀態下**都不**改變任何 production 決策 ⇒ §5 反事實測試不通過 ⇒ 不得取得 WIP 鎖
   role: enabling precondition only — 它固定的是「未來若被授權,B1 可引用哪一份 frozen 模型介面與其 regime」,不是 production 行為
 supporting_declaration: ../models/gap_conditioned_stochastic_transition_spec_v1.md（D1,§2–§8 frozen）· ../models/gap_conditioned_stochastic_transition_lemmas_v1.md（D2,L1–L5）
 accepting_review: ../models/gap_conditioned_stochastic_transition_terminal_review_v1.md（WP-A8 checklist ＋ 機械 selection）· charter *Final status*: ../threads/closed/gap_conditioned_stochastic_transition_model_task.md
 last_transition: 2026-07-23 — 本 object 第一個被接受的 terminal（WP-A8;Issue #175）
 admissible_units: []                     # [cached derivation]
-derived_from: §4.2（substrate 不繼承,無 L4）＋ §4.4（score-layer 契約缺席）＋ §5（relevance zero）
+derived_from: §4.2（substrate 不繼承,無 L4）＋ §4.4（score-layer 契約未取得 owner acceptance）＋ §5（relevance zero）
 last_reviewed_at: 2026-07-23
 ```
 
@@ -480,7 +480,7 @@ last_reviewed_at: 2026-07-23
 
 | 缺口 | 影響 |
 |---|---|
-| **score-layer 契約不存在** | 所有 `layer: L2 score` 的 object 只能是 `transition_semantics: unavailable`；**score 半邊無法自動判定 admissibility**。這是合法狀態，不是 schema 缺陷。score 線開啟**前**必須補上（rank/margin/top-1 的證據語義與 claim ladder）；**現在不憑空寫**。 |
+| **score-layer 契約尚未被 owner 接受** | [draft](score_ranking_evidence_contract.md) 已開始定義 rank/margin/top-1、calibration 與 `SR0`–`SR6`，但 `doc-status: proposed` 不具 transition authority。所有 `layer: L2 score` 的 object 仍只能是 `transition_semantics: unavailable`；**score 半邊仍無法自動判定 admissibility**。這是合法狀態，不是 schema 缺陷；只有 owner acceptance＋本 registry 回寫後才算補上。 |
 
 ---
 

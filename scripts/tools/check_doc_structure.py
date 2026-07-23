@@ -166,6 +166,7 @@ CONTRACTS_ALLOWED = frozenset(
         "statistical_robust_feasible_set_estimation_under_asymmetric_loss.md",
         "runtime_quantity_fidelity_protocol.md",
         "signal_table_schema.md",
+        "score_ranking_evidence_contract.md",
         "boolean_composition_semantics_contract.md",
         "safe_region_asset_contract.md",
     }
