@@ -376,6 +376,10 @@ def test_registry_todo_and_charter_project_the_machine_record() -> None:
     assert "無 active" in todo
     assert "decision_relevant_candidates: []" in registry
     assert "active_wip: []" in registry
-    assert "PROPOSED / non-WIP / not owner-accepted" in charter
+    assert (
+        "PROPOSED / non-WIP / declaration owner-accepted / execution unscheduled"
+        in charter
+    )
+    assert "gctm_d1_declaration_owner_acceptance_20260723" in charter
     assert "runtime faithful" in charter
     assert "reject_runtime_consumption" in charter

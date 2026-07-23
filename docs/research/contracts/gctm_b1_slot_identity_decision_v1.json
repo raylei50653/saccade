@@ -85,14 +85,24 @@
       "authority_class": "diagnostic_only",
       "owner_acceptance_id": null,
       "blocked_by": [
-        "charter_owner_acceptance"
+        "owner_scheduling"
       ],
       "activation_requirements": [
         "charter_owner_acceptance",
         "owner_scheduling"
       ],
-      "satisfied_activation_requirements": [],
-      "activation_evidence_bindings": [],
+      "satisfied_activation_requirements": [
+        "charter_owner_acceptance"
+      ],
+      "activation_evidence_bindings": [
+        {
+          "requirement_id": "charter_owner_acceptance",
+          "evidence_id": "gctm_d1_declaration_owner_acceptance_20260723",
+          "evidence_class": "owner_accepted_governance",
+          "artifact_sha256": "33dda22efffe3f1d8cfceec66400ef7549b1b9ba692bcffbb0eabe78dee355e0",
+          "owner_acceptance_id": "gctm_d1_declaration_owner_acceptance_20260723"
+        }
+      ],
       "allowed_evidence_classes": [
         "gctm_theory_seal",
         "accepted_score_contract",
@@ -218,7 +228,7 @@
         "slot_id": "GCTM_D1",
         "state": "proposed",
         "blocked_by": [
-          "charter_owner_acceptance"
+          "owner_scheduling"
         ]
       }
     ],

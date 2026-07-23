@@ -546,38 +546,46 @@ last_reviewed_at: 2026-07-23
 slot_id: GCTM_D1
 layer: diagnostic-only（非 runtime decision layer）
 ladder: proposed charter terminal family
-transition_semantics: defined（只允許 local diagnostic terminal；canonical transition 需 owner acceptance）
+transition_semantics: defined（只允許 local diagnostic terminal；canonical transition 需 owner scheduling 後 execution）
 lifecycle_state: proposed
 state: none
+declaration_acceptance:
+  terminal: GCTM_D1_DECLARATION_ACCEPTED
+  owner_acceptance_id: gctm_d1_declaration_owner_acceptance_20260723
+  acceptance_date: 2026-07-23
+  freezes: sealed declaration + diagnostic policy + synthetic input + I1–I12 + consumer interface + compatibility-requirements identity + exhaustive terminal procedure
+  does_not_equal_execution: true
+  does_not_create_decision_relevant_candidate: true
+  does_not_promote_provisional_terminal: true
 seal_candidate:
   status: SEAL_CANDIDATE_GENERATED
   generation_kind: pre_activation_synthetic_seal_candidate
   provisional_terminal: GCTM_D1_INTERFACE_READY
-  authority: owner-reviewable proposal only; not charter execution; not canonical state transition
+  authority: sealed packet identities frozen by declaration acceptance; not charter execution; not canonical state transition
   packet: ../../modules/semantic/research/evidence/gctm_d1_substrate_agnostic_ranking_20260723/
   declaration: ../../modules/semantic/research/gctm_d1_ranking_diagnostic_declaration_20260723.md
   terminal_report: ../../modules/semantic/research/gctm_d1_ranking_diagnostic_terminal_20260723.md
 substrate: synthetic fixture pack gctm_d1_synthetic_fixture_pack_v1（non-runtime）
 target_substrate: none
 authority_class: diagnostic_only
-blocked_by: charter_owner_acceptance
+blocked_by: owner_scheduling
 blockers:
   - type: inadmissibility
     what: runtime claim、runtime B1 transition、O1 unlock 或 decision-relevant candidate
     clause: diagnostic evidence 不可滿足 runtime substrate/provenance/identity/checksum/compatibility/activation authority
   - type: dependency
     what: charter activation / WIP / canonical terminal acceptance
-    clause: seal-candidate 已產出供 owner review；canonical state 仍 none；WIP 需 owner acceptance ＋ separate scheduling
+    clause: declaration 已 owner-accept 並凍結 execution contract；execution 尚未 scheduling；canonical state 仍 none；WIP 需 separate owner scheduling
 decision_relevance:
-  status: zero — seal-candidate 不產生 decision-relevant candidate；不取得 WIP
+  status: zero — declaration acceptance does not equal execution；does not create decision-relevant candidate；不取得 WIP
 supporting_declaration: ../../modules/semantic/research/gctm_d1_ranking_diagnostic_declaration_20260723.md
 supporting_terminal: ../../modules/semantic/research/gctm_d1_ranking_diagnostic_terminal_20260723.md
 supporting_packet: ../../modules/semantic/research/evidence/gctm_d1_substrate_agnostic_ranking_20260723/
 charter_ref: ../threads/gctm_d1_substrate_agnostic_ranking_diagnostic_task.md
-accepting_review: pending_owner_review（seal-candidate only; charter activation 仍未 owner-accept）
-last_transition: 2026-07-23 — pre-activation synthetic seal-candidate generated; provisional terminal GCTM_D1_INTERFACE_READY; canonical state remains none; no B1/O1/H0 change
+accepting_review: gctm_d1_declaration_owner_acceptance_20260723
+last_transition: 2026-07-23 — GCTM_D1_DECLARATION_ACCEPTED; declaration frozen; execution unscheduled; blocked_by owner_scheduling; canonical state remains none; no B1/O1/H0 change
 admissible_units: []
-derived_from: gctm_b1_slot_identity_decision_v1.json terminal policy + seal-candidate packet + §5 relevance
+derived_from: gctm_b1_slot_identity_decision_v1.json terminal policy + owner-accepted declaration + seal-candidate packet + §5 relevance
 last_reviewed_at: 2026-07-23
 ```
 ---
@@ -602,8 +610,9 @@ last_reviewed_at: 2026-07-23
 | *(仍全空，2026-07-23 L2 binding 後重推)* | `score.anchor_propagation` | Transition semantics 現已 defined，但保留域／candidate universe 尚未定義，且 §5 decision relevance 仍為 zero；不得因契約生效而取得 WIP 鎖。 |
 | *(仍全空，2026-07-23 L2 binding 後重推)* | `quantity.gap_conditioned_transition_model.a_layer_spec` | Accepted state 仍是 diagnostic-only spec seal。L2 contract blocker 已解除，但 consumers 仍受 §4.2（substrate 不繼承、無 fidelity edge）、consumer compatibility、B1-slot、declaration／seal／scheduling 與 §5 relevance zero 阻擋。GCTM charter 已關閉，semantic WIP 鎖維持空。 |
 | *(仍全空，2026-07-23 identity decision 後重推)* | `H0_ROUTE5_B1` / `GCTM_B1` | Relation 已固定為 coexist，但兩者仍各自 `proposed`，不共享 authority，且明確 `blocked_by: h0_runtime_substrate`。缺 substrate／identity／checksum／compatibility verdict／freeze／declaration／scheduling；identity 與 L2 contract acceptance 均不產生候選。 |
-| *(仍全空，2026-07-23 D1 charter 建立後重推)* | `GCTM_D1` | 新 charter 仍 `proposed`、`blocked_by: charter_owner_acceptance`、diagnostic-only。其 terminal policy 不解鎖 runtime B1/O1、不產生 decision-relevant candidate；owner-accept 與另行 scheduling 前不得取得 WIP。 |
-| *(仍全空，2026-07-23 D1 seal-candidate 後重推)* | `GCTM_D1` | 僅有 pre-activation synthetic **seal-candidate**（provisional terminal string `GCTM_D1_INTERFACE_READY`）；canonical `state` 仍 `none`。**不**滿足 runtime gates；**不**進入決策候選集；owner acceptance ＋ scheduling 前不得 WIP / 不得視為已執行 charter。 |
+| *(仍全空，2026-07-23 D1 charter 建立後重推)* | `GCTM_D1` | 新 charter 仍 `proposed`、diagnostic-only。其 terminal policy 不解鎖 runtime B1/O1、不產生 decision-relevant candidate。 |
+| *(仍全空，2026-07-23 D1 seal-candidate 後重推)* | `GCTM_D1` | 僅有 pre-activation synthetic **seal-candidate**（provisional terminal string `GCTM_D1_INTERFACE_READY`）；canonical `state` 仍 `none`。**不**滿足 runtime gates；**不**進入決策候選集。 |
+| *(仍全空，2026-07-23 D1 declaration acceptance 後重推)* | `GCTM_D1` | Declaration 已 `GCTM_D1_DECLARATION_ACCEPTED`（`gctm_d1_declaration_owner_acceptance_20260723`）；execution contract 凍結；`blocked_by: owner_scheduling`；canonical `state` 仍 `none`。**declaration acceptance ≠ execution**；**不**產生 decision-relevant candidate；**不**取得 WIP；runtime gates 仍 `missing`。 |
 
 **Machine projection:** `gctm_b1_slot_identity_decision_v1.json` 的
 `registry_projection` 已重推為 `decision_relevant_candidates: []`、
