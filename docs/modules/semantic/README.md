@@ -122,6 +122,9 @@
 | [research/gap_conditioned_motion_phase_b_20260711.md](research/gap_conditioned_motion_phase_b_20260711.md) | Phase B 執行結果 |
 | [research/gctm_primary_object_a_scope_and_plan_20260722.md](research/gctm_primary_object_a_scope_and_plan_20260722.md) | GCTM primary-object=A 範圍與方案 memo（draft、planning-only、無執行權；提出 A-layer seal 與 B/C/D downstream construction 的條件式 scope amendment） |
 | [research/gctm_b1_o1_task_objectives_and_semantics_20260716.md](research/gctm_b1_o1_task_objectives_and_semantics_20260716.md) | GCTM 下游 B1/O1 shared-semantics core（draft、無執行權；§37 拆分已於 2026-07-17 執行，任務本體在 threads 兩張 proposed task charter；本檔留 §0 防飄移邊界、§1 evidence chain、§2 shared rules、§35/§36/§39） |
+| [research/gctm_d1_ranking_diagnostic_declaration_20260723.md](research/gctm_d1_ranking_diagnostic_declaration_20260723.md) | GCTM D1：substrate-agnostic ranking diagnostic 宣告（owner-reviewable；synthetic；非 runtime） |
+| [research/gctm_d1_ranking_diagnostic_terminal_20260723.md](research/gctm_d1_ranking_diagnostic_terminal_20260723.md) | GCTM D1 terminal report：`GCTM_D1_INTERFACE_READY`（diagnostic-only；不解鎖 B1/O1） |
+| [research/evidence/gctm_d1_substrate_agnostic_ranking_20260723/](research/evidence/gctm_d1_substrate_agnostic_ranking_20260723/) | GCTM D1 sealed synthetic packet（fixtures / invariants / consumer interface / terminal） |
 
 ### occ-exit / m_b1 hook（closed 線的參考）
 

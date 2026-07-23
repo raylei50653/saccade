@@ -245,3 +245,20 @@ This charter never authorizes:
 `GCTM_D1` is a proposed, isolated diagnostic charter. Its allowed inputs and
 claims are substrate-agnostic, its runtime-consumption gate is fail-closed,
 and its creation leaves the candidate set and semantic WIP lock empty.
+
+### Diagnostic package status (2026-07-23)
+
+A sealed, owner-reviewable diagnostic package has been executed on the
+synthetic fixture pack and selected terminal **`GCTM_D1_INTERFACE_READY`**:
+
+- declaration:
+  [`gctm_d1_ranking_diagnostic_declaration_20260723.md`](../../modules/semantic/research/gctm_d1_ranking_diagnostic_declaration_20260723.md)
+- terminal:
+  [`gctm_d1_ranking_diagnostic_terminal_20260723.md`](../../modules/semantic/research/gctm_d1_ranking_diagnostic_terminal_20260723.md)
+- packet:
+  [`evidence/gctm_d1_substrate_agnostic_ranking_20260723/`](../../modules/semantic/research/evidence/gctm_d1_substrate_agnostic_ranking_20260723/)
+
+This does **not** owner-accept the charter, acquire WIP, unlock B1/O1, or
+satisfy any runtime compatibility gate. Charter activation still requires
+owner acceptance of the sealed declaration **and** a separate scheduling
+decision.
