@@ -107,6 +107,8 @@ Manifest: `docs/ownership/doc_migration_manifest.yaml`
 - `docs/modules/semantic/research/escape_tail_forensic_20260711.md`
 - `docs/modules/semantic/research/existing_online_object_analysis_for_gctm_alignment_20260718.md`
 - `docs/modules/semantic/research/gctm_b1_o1_task_objectives_and_semantics_20260716.md`
+- `docs/modules/semantic/research/gctm_d1_ranking_diagnostic_declaration_20260723.md`
+- `docs/modules/semantic/research/gctm_d1_ranking_diagnostic_terminal_20260723.md`
 - `docs/modules/semantic/research/gctm_primary_object_a_scope_and_plan_20260722.md`
 - `docs/modules/semantic/research/gt_support_morphology_step0_20260711.md`
 - `docs/modules/semantic/research/h0_209_qualification_candidate_20260718.md`
@@ -327,6 +329,6 @@ Excluded from the active index and default search view.
 
 ## Inventory summary
 
-- documents: 277
-- active: 222
+- documents: 279
+- active: 224
 - grayed out: 55
