@@ -88,15 +88,15 @@
         "owner_scheduling"
       ],
       "activation_requirements": [
-        "charter_owner_acceptance",
+        "declaration_owner_acceptance",
         "owner_scheduling"
       ],
       "satisfied_activation_requirements": [
-        "charter_owner_acceptance"
+        "declaration_owner_acceptance"
       ],
       "activation_evidence_bindings": [
         {
-          "requirement_id": "charter_owner_acceptance",
+          "requirement_id": "declaration_owner_acceptance",
           "evidence_id": "gctm_d1_declaration_owner_acceptance_20260723",
           "evidence_class": "owner_accepted_governance",
           "artifact_sha256": "33dda22efffe3f1d8cfceec66400ef7549b1b9ba692bcffbb0eabe78dee355e0",
@@ -111,7 +111,8 @@
         "machine_checkable_invariant",
         "bounded_counterexample",
         "schema_validation",
-        "owner_accepted_governance"
+        "owner_accepted_governance",
+        "owner_scheduling_decision"
       ],
       "cannot_satisfy_gate_classes": [
         "runtime_substrate",

@@ -2,6 +2,17 @@
 <!-- doc-promotion: owner-accepted frozen diagnostic execution contract; not charter execution; not runtime evidence -->
 <!-- doc-date: 2026-07-23 -->
 <!-- doc-module: semantic -->
+<!--
+  Status vocabulary (fixed):
+    doc-status: active
+      = this declaration document is in force as a frozen execution contract.
+      ≠ semantic WIP active, ≠ GCTM_D1 slot active, ≠ charter execution.
+    slot.lifecycle_state / state (registry): proposed / none
+      = diagnostic slot not activated; no WIP; no candidate.
+    slot.owner_acceptance_id
+      = slot *activation* acceptance only; remains null until activation.
+      ≠ declaration_owner_acceptance (bound under activation_evidence_bindings).
+-->
 
 # GCTM D1 — substrate-agnostic ranking diagnostic declaration (v1)
 
@@ -20,6 +31,8 @@ acceptance_date              = 2026-07-23
 next_gate                    = owner_scheduling
 canonical_registry_state     = none
 charter_execution            = not authorized by this acceptance
+doc-status:active            = document in force (not WIP / not slot active)
+slot.owner_acceptance_id     = null until slot activation (distinct field)
 ```
 
 This acceptance freezes the diagnostic family, runner, fixtures, consumer
@@ -27,6 +40,18 @@ interface, invariants, compatibility-requirements identity, and exhaustive
 terminal procedure. It does **not** execute the charter, select a canonical
 diagnostic terminal for registry transition, schedule WIP, or authorize any
 runtime claim.
+
+Machine gate (slot governance):
+
+```text
+activation_requirements =
+  declaration_owner_acceptance  → evidence_class owner_accepted_governance
+  owner_scheduling              → evidence_class owner_scheduling_decision
+```
+
+`declaration_owner_acceptance` is satisfied by this PR. `owner_scheduling` is
+**not** satisfied by another generic governance acceptance; it requires a
+distinct `owner_scheduling_decision` evidence binding.
 
 Machine sidecar (immutable sealed packet; PR #265):
 [`evidence/gctm_d1_substrate_agnostic_ranking_20260723/declaration_sidecar.json`](evidence/gctm_d1_substrate_agnostic_ranking_20260723/declaration_sidecar.json)

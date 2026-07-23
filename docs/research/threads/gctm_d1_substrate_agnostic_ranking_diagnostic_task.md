@@ -96,12 +96,15 @@ This generation:
 - **must not** perform a canonical registry terminal state transition;
 - **must not** acquire WIP or unlock B1/O1/H0.
 
-Owner-accepted charter **execution** remains gated by:
+Owner-accepted charter **execution** remains gated by machine activation
+requirements (exact evidence-class typing):
 
-1. ~~owner acceptance of the sealed D1 declaration and bounded terminal procedure~~
-   **satisfied** — `gctm_d1_declaration_owner_acceptance_20260723`;
-2. a separate owner scheduling decision that assigns WIP
-   (**remaining gate**).
+1. ~~`declaration_owner_acceptance`~~ **satisfied** —
+   evidence_class `owner_accepted_governance` bound to
+   `gctm_d1_declaration_owner_acceptance_20260723`;
+2. `owner_scheduling` (**remaining gate**) —
+   evidence_class must be `owner_scheduling_decision`
+   (generic `owner_accepted_governance` fails closed).
 
 Seal-candidate generation, declaration acceptance, and owner-accepted execution
 are distinct authorities.
@@ -264,14 +267,17 @@ Mechanical selection order (frozen by declaration acceptance):
 
 This charter may become active only after:
 
-1. owner acceptance of a sealed D1 declaration and its bounded terminal
-   procedure — **satisfied**
-   (`gctm_d1_declaration_owner_acceptance_20260723`); and
-2. a separate owner scheduling decision that assigns WIP — **not satisfied**.
+1. `declaration_owner_acceptance` — **satisfied**
+   (`gctm_d1_declaration_owner_acceptance_20260723` /
+   evidence_class `owner_accepted_governance`); and
+2. `owner_scheduling` — **not satisfied**
+   (requires evidence_class `owner_scheduling_decision`).
 
-Declaration acceptance does not activate or close this charter. If a future
-active D1 selects one of the three terminals, it exits and releases WIP. No
-exit condition performs a cross-slot state transition.
+Slot-level `owner_acceptance_id` remains `null` until activation; it is not
+the declaration acceptance id. Declaration acceptance does not activate or
+close this charter. If a future active D1 selects one of the three terminals,
+it exits and releases WIP. No exit condition performs a cross-slot state
+transition.
 
 ## Prohibited actions
 

@@ -64,6 +64,16 @@ RUNTIME_ACTIVATION_EVIDENCE_CLASS = {
     "sealed_b1_declaration": "sealed_runtime_declaration",
     "owner_scheduling": "owner_scheduling_decision",
 }
+DIAGNOSTIC_ACTIVATION_REQUIREMENTS = frozenset(
+    {
+        "declaration_owner_acceptance",
+        "owner_scheduling",
+    }
+)
+DIAGNOSTIC_ACTIVATION_EVIDENCE_CLASS = {
+    "declaration_owner_acceptance": "owner_accepted_governance",
+    "owner_scheduling": "owner_scheduling_decision",
+}
 
 
 class SlotGovernanceValidationError(ValueError):
@@ -223,6 +233,28 @@ def _validate_slots(slots: Mapping[str, Mapping[str, Any]]) -> None:
                     "diagnostic_evidence_boundary",
                     f"diagnostic slot {slot_id} must disclaim every runtime gate class",
                 )
+            if requirements != DIAGNOSTIC_ACTIVATION_REQUIREMENTS:
+                raise SlotGovernanceValidationError(
+                    "diagnostic_activation_requirements",
+                    f"diagnostic slot {slot_id} must declare the complete "
+                    "diagnostic activation gate "
+                    "(declaration_owner_acceptance + owner_scheduling)",
+                )
+            required_classes = set(DIAGNOSTIC_ACTIVATION_EVIDENCE_CLASS.values())
+            if not required_classes <= evidence:
+                raise SlotGovernanceValidationError(
+                    "diagnostic_evidence_boundary",
+                    f"diagnostic slot {slot_id} does not admit every required "
+                    "activation evidence class",
+                )
+            for requirement_id, binding in bindings.items():
+                expected_class = DIAGNOSTIC_ACTIVATION_EVIDENCE_CLASS[requirement_id]
+                if binding["evidence_class"] != expected_class:
+                    raise SlotGovernanceValidationError(
+                        "diagnostic_evidence_boundary",
+                        f"diagnostic slot {slot_id} requirement {requirement_id} "
+                        f"requires {expected_class}",
+                    )
         if authority == "runtime_grounded":
             if requirements != RUNTIME_ACTIVATION_REQUIREMENTS:
                 raise SlotGovernanceValidationError(

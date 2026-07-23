@@ -553,10 +553,14 @@ declaration_acceptance:
   terminal: GCTM_D1_DECLARATION_ACCEPTED
   owner_acceptance_id: gctm_d1_declaration_owner_acceptance_20260723
   acceptance_date: 2026-07-23
+  activation_requirement_id: declaration_owner_acceptance
+  evidence_class: owner_accepted_governance
   freezes: sealed declaration + diagnostic policy + synthetic input + I1–I12 + consumer interface + compatibility-requirements identity + exhaustive terminal procedure
   does_not_equal_execution: true
   does_not_create_decision_relevant_candidate: true
   does_not_promote_provisional_terminal: true
+  does_not_satisfy_owner_scheduling: true
+  note: slot.owner_acceptance_id remains null until activation; it is not this declaration acceptance id
 seal_candidate:
   status: SEAL_CANDIDATE_GENERATED
   generation_kind: pre_activation_synthetic_seal_candidate
@@ -575,7 +579,7 @@ blockers:
     clause: diagnostic evidence 不可滿足 runtime substrate/provenance/identity/checksum/compatibility/activation authority
   - type: dependency
     what: charter activation / WIP / canonical terminal acceptance
-    clause: declaration 已 owner-accept 並凍結 execution contract；execution 尚未 scheduling；canonical state 仍 none；WIP 需 separate owner scheduling
+    clause: declaration_owner_acceptance 已滿足（owner_accepted_governance）；owner_scheduling 仍缺且必須是 owner_scheduling_decision；canonical state 仍 none
 decision_relevance:
   status: zero — declaration acceptance does not equal execution；does not create decision-relevant candidate；不取得 WIP
 supporting_declaration: ../../modules/semantic/research/gctm_d1_ranking_diagnostic_declaration_20260723.md
@@ -583,7 +587,7 @@ supporting_terminal: ../../modules/semantic/research/gctm_d1_ranking_diagnostic_
 supporting_packet: ../../modules/semantic/research/evidence/gctm_d1_substrate_agnostic_ranking_20260723/
 charter_ref: ../threads/gctm_d1_substrate_agnostic_ranking_diagnostic_task.md
 accepting_review: gctm_d1_declaration_owner_acceptance_20260723
-last_transition: 2026-07-23 — GCTM_D1_DECLARATION_ACCEPTED; declaration frozen; execution unscheduled; blocked_by owner_scheduling; canonical state remains none; no B1/O1/H0 change
+last_transition: 2026-07-23 — GCTM_D1_DECLARATION_ACCEPTED; requirement declaration_owner_acceptance bound; owner_scheduling still requires owner_scheduling_decision; canonical state remains none; no B1/O1/H0 change
 admissible_units: []
 derived_from: gctm_b1_slot_identity_decision_v1.json terminal policy + owner-accepted declaration + seal-candidate packet + §5 relevance
 last_reviewed_at: 2026-07-23
