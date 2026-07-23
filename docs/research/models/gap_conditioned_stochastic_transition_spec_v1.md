@@ -1,6 +1,6 @@
 <!-- doc-status: draft -->
-<!-- doc-promotion: none; D1 canonical model specification (seed); §2–§3 frozen at WP-A1, §4 frozen at WP-A2, §5 frozen at WP-A4, §6 frozen at WP-A5, §7 frozen at WP-A6 -->
-<!-- doc-date: 2026-07-22 -->
+<!-- doc-promotion: none; D1 canonical model specification (seed); §2–§3 frozen at WP-A1, §4 frozen at WP-A2, §5 frozen at WP-A4, §6 frozen at WP-A5, §7 frozen at WP-A6, §8 frozen at WP-A7 -->
+<!-- doc-date: 2026-07-23 -->
 <!-- doc-module: semantic -->
 
 # Gap-conditioned stochastic transition model — canonical specification (D1, v1)
@@ -30,7 +30,7 @@ correction 修改**。
 | §5 Innovation composition (\(P_0\)/\(P^-_\Delta\)/\(R_1\)/\(S_\Delta\); independence vs explicit \(C\)) | **frozen** | WP-A4 (owner merge) |
 | §6 Calibration vs candidate-local ranking claim space (obligation 2) | **frozen** | WP-A5 (owner merge) |
 | §7 Identifiability and leakage matrix (terminal-3 predicate object) | **frozen** | WP-A6 (owner merge) |
-| §8 Schema-only interface for a future B1 input | reserved — not yet specified | WP-A7 (planned) |
+| §8 Schema-only interface for a future B1 input | **frozen** | WP-A7 (owner merge) |
 
 Reserved sections carry no obligations-resolved claim. WP-A2 resolves charter
 obligation 4 (canonical-state affine M2 transition; §4); WP-A4 resolves charter
@@ -38,13 +38,16 @@ obligation 3 (independence vs explicit cross-covariance \(C\); §5); WP-A5
 resolves charter obligation 2 (calibration-only gain vs candidate-local ranking
 gain as distinct claims; §6). **All four numbered activation-contract
 obligations are now resolved.** WP-A6 additionally freezes the D1
-identifiability/leakage matrix (§7; the terminal-3 predicate object). A sealable
-terminal (`GCTM_MODEL_SPEC_SEALABLE`) additionally requires the remaining D1
-deliverable — the schema-only B1 input interface (§8) — plus terminal review;
-that section remains reserved. §4 makes no claim about obligations 2–3, §5 makes
-no claim about obligation 2, §6 makes no claim about identifiability/leakage, and
-§7 measures no data and selects no terminal — it specifies the identifiability
-boundary only, and makes no B1/O1/runtime/production quantity claim.
+identifiability/leakage matrix (§7; the terminal-3 predicate object), and WP-A7
+freezes the last D1 deliverable — the schema-only B1 input interface (§8). **All
+D1 deliverable items are therefore complete**; a sealable terminal
+(`GCTM_MODEL_SPEC_SEALABLE`) still requires terminal review (WP-A8), which is
+where any terminal is selected. §4 makes no claim about obligations 2–3, §5 makes
+no claim about obligation 2, §6 makes no claim about identifiability/leakage, §7
+measures no data and selects no terminal — it specifies the identifiability
+boundary only — and §8 is schema-only: it defines what a future B1 input would
+have to supply, activates no B1, asserts no runtime availability, and makes no
+B1/O1/runtime/production quantity claim.
 
 > **Append-only renumber correction (WP-A5).** WP-A5 inserts §6 (calibration vs
 > ranking) directly after frozen §5, so the former reserved §6/§7 shift to §7/§8.
@@ -61,6 +64,15 @@ boundary only, and makes no B1/O1/runtime/production quantity claim.
 > (the terminal-3 predicate object). Frozen §5 and §6 are kept **byte-frozen** and
 > are not edited in place; the current section status is the §1 document-state
 > table above. This note is the append-only correction of record.
+
+> **Append-only status correction (WP-A7).** WP-A7 freezes §8 (schema-only B1
+> input interface). The frozen §6.6, §7.9 typed-deferral tables and the §6.0/§7.0
+> boundary paragraphs describe §8 as `reserved`/`unresolved` — **freeze-time
+> snapshots** that are now **superseded**: §8 is **frozen by WP-A7**. Frozen
+> §5–§7 are kept **byte-frozen** and are not edited in place; the current section
+> status is the §1 document-state table above. This note is the append-only
+> correction of record. §8 resolves no numbered obligation (all four remain
+> resolved by WP-A1/A2/A4/A5) and selects no terminal.
 
 ## §2 Canonical observation/time interface（obligation 1 — nine fields, frozen）
 
@@ -1159,11 +1171,205 @@ boundary verdict** 之**定義**。它不宣稱任何 runtime 擷取值、不建
 執行 identification、不選參數／metric／threshold、不選 terminal。修改須 append-only
 correction（原文保留、註記 superseded）。
 
-## §8 Reserved
+## §8 Schema-only interface for a future B1 input（D1 deliverable — frozen）
 
-`GCTM_MODEL_SPEC_SEALABLE` 之前必須完成（見 charter frozen terminal partition
-與 obligation-status table）；在其 work packet 落地前，本檔不預先陳述。**§8**
-schema-only B1 input interface（WP-A7 planned）。
+本節落地 charter D1 的最後一項 deliverable「**schema-only interface for a
+separately declared future B1 input**」。它規定：一個**未來**的 B1 input 若宣稱
+instantiate 本 D1，必須提供哪些**欄位**、各欄位的**型別／domain／單位／causal
+availability**、哪些量是 **input** 而哪些是 **derived（不得由 input 冒充）**、以及
+哪些 **well-formedness predicate** 必須 fail-closed 通過。它建立在 frozen §2–§7 之上，
+不重定義任何既有物件。
+
+**Schema-only 的意思（凍結）：** 只定義 *interface shape*——欄位存在性、語意綁定與
+可機械判定的合法性條件。它**不**啟用 B1、不取 data、不 fit、不選任何數值／metric／
+threshold／fold／file format，也**不**建立 fidelity edge。
+
+### §8.0 本節做什麼／不做什麼（typed boundary）
+
+**做（frozen）：** (i) 定義 schema 的 consumption rule（何謂「本 D1 的合法
+instantiation」）與 authority 分工；(ii) 定義四個 block 的欄位集——declaration-level
+（Block D）、event-level（Block E）、pair-level（Block P）、derived（Block X）——各附
+required/optional 標記、domain、單位、causal availability 與其 frozen 來源 §；(iii)
+凍結 **well-formedness predicates**（W1–W9，fail-closed、機械可判定）；(iv) 凍結
+**claim-restriction map**：某欄位／宣告缺席時，哪些 claim 因 §7 leakage 而**不可主張**。
+
+**不做（明確不授權／留給後續）：** **不執行任何 data、capture、fitting、evaluation**；
+不宣稱任何 runtime 擷取值可得（本 schema 的欄位是 *requirement*，不是 *availability
+claim*）；不選 storage format／serialization／schema-version 機制；不定義 evaluation
+design（fold、trial unit、minimum exposure、metric、threshold、blind/reveal 協定——皆
+B1 charter 所有）；不決定 **B1-slot identity**、不寫 **score-layer contract**（兩者皆為
+B1 charter 的 owner 前置，本節只 link，不複寫）；**不選 terminal**（WP-A8）；不建立
+fidelity edge、不做 bridge-runtime claim。
+
+沿用 §4.0／§5.0／§6.0／§7.0 的 canonical boundary（永不逾越），本節額外固定兩條：
+
+- **Schema ≠ activation。** 一個滿足本 schema 的 input **不因此**成為 accepted B1
+  evidence：B1 的 activation gate、frozen inputs、slot identity 與 score-layer 前置
+  由 [B1 charter](../threads/gctm_b1_runtime_grounded_offline_attribution_task.md)
+  獨占；滿足本 schema 只表示「A 層物件可被無歧義 instantiate」。
+- **Schema ≠ fidelity。** 欄位指名 production 對象時，其地位仍是 §2 的
+  *declared-target*；runtime 忠實性須 H0／fidelity-edge 路徑另行建立。本 schema 的
+  任何欄位都不得被引用為 runtime-fidelity 證據。
+
+### §8.1 Consumption rule 與 authority 分工（frozen）
+
+**Consumption rule（frozen，fail-closed）：** 一個未來 B1 input 宣稱 instantiate 本
+D1，當且僅當
+
+1. 提供 Block D／E／P 的**全部 `required` 欄位**，並對每個 `required-if` 欄位滿足其
+   觸發條件；且
+2. 通過 §8.6 的**全部** well-formedness predicates（W1–W9）；且
+3. 其宣稱的 claim 集合落在 §8.7 claim-restriction map 依**實際宣告到的欄位**所允許的
+   範圍內。
+
+三者任一不成立 ⇒ 該 input **不是**本 D1 的 instantiation，**不得**引用 D1 的任何
+identifiability／separation 結論（§6／§7 的結論永遠綁其 regime 前提，§7.0）。
+不合法 record 一律 **inadmissible**，**不得**以預設值補齊（W9）。
+
+**Authority 分工（link, don't restate）：**
+
+| 對象 | 擁有者 | 本節的關係 |
+|:--|:--|:--|
+| A 層 canonical 物件（obs/time interface、transition、innovation、claim space、identifiability） | 本檔 §2–§7（frozen） | 本節**綁定**，不重定義 |
+| B1 activation gate、frozen inputs 清單、**B1-slot identity**、**score-layer contract**、evaluation design（fold／trial unit／metric／threshold／blind-reveal） | [B1 charter](../threads/gctm_b1_runtime_grounded_offline_attribution_task.md) | 本節只**指向**，不複寫、不預決 |
+| 跨 task 共享語意（hook scope、reserved-symbol 規則，如 base score 寫 \(s_{\mathrm{base}}\) 而 `s0` 為保留名） | [B1/O1 synthesis core](../../modules/semantic/research/gctm_b1_o1_task_objectives_and_semantics_20260716.md) §0／§2.1 | 本節只**指向** |
+| runtime observability／evidence fidelity | H0 declaration | 本節只**指向** |
+
+**欄位命名（frozen）：** 與 B1 charter frozen-inputs 同名的欄位（如
+`coordinate_substrate_id`、`observation_mode`、`causal_availability`、
+`context_definition`、`P0_exit_cov_id`、`R1_obs_cov_id`）即**同一物件**，沿用其名，
+**不另造名**；本節新增的欄位只補 A 層 instantiation 所必需者。
+
+### §8.2 Block D — declaration-level 欄位（每個 study 宣告一次）
+
+| 欄位 | 必要性 | 值域／型別 | 綁定 |
+|:--|:--|:--|:--|
+| `gctm_spec_id` | required | 本檔的 exact identity（path + commit/hash） | 指名被 instantiate 的 frozen §2–§8 |
+| `coordinate_substrate_id` | required | substrate 識別；A 層 latent state 於 \(\mathbb R^{2d}\) | §2 field 1（declared-target 地位不變） |
+| `coordinate_dim_d` | required | \(d\in\mathbb N_{\ge1}\)（production-corresponding \(d=2\)） | §4.1／§4.7 |
+| `frame_time_unit` | required | canonical = 1 frame interval；秒級須另附映射 | §2 field 2／field 7 |
+| `observation_mode` | required | 恰一個 \(\in\{H_x,H_{xv}\}\) | §3；production-corresponding 綁 \(H_x\) |
+| `causal_availability` | required-if `observation_mode=`\(H_{xv}\) | entry velocity 的**可得時點與來源**宣告 | §3.3 |
+| `error_dependence` | required | \(\in\{\texttt{independent},\ \texttt{dependent}\}\)；canonical = `independent`（\(C=0\)） | §5.4 |
+| `C_cross_cov_id` | required-if `error_dependence=dependent` | \(C\) 的來源；須落在 joint-PSD domain | §5.4／§5.6 |
+| `gamma_status` | required | \(\in\{\texttt{known},\ \texttt{unknown}\}\) | §7.4 |
+| `gamma_value` | required-if `gamma_status=known` | \(\gamma\in[0,\infty)\)，單位 \(\mathrm{frame}^{-1}\)（\(\gamma=0\)=M1 boundary） | §4.6／§4.7 |
+| `joint_map_condition_status` | required-if `gamma_status=unknown` | \(\in\{\texttt{global\_injectivity\_established},\ \texttt{local\_full\_rank\_established},\ \texttt{not\_established}\}\)＋證據來源；**本規格不證明任一者** | §7.4／§7.7 |
+| `gauge_fixing` | required | \(\in\{\texttt{R1\_declared},\ \texttt{Pxx\_declared},\ \texttt{none}\}\)（固定 \(P_{xx}\!\leftrightarrow\!R_1\) gauge 的**額外獨立資訊**） | §7.4 G1／§7.6 |
+| `parameter_sharing_scope` | required | 哪些 events 共享同一 \((P_0,\gamma,D,R_1)\)（identifiability 的 population 定義） | §7.4 |
+| `context_definition` | required | \(\mathcal C_{\mathrm{exit}}\) 的定義；須僅含 exit-causal 資訊 | §4.0 boundary 4／§4.7 |
+| `context_varies` | required | 布林：\(c\) 在 population 中是否**變化**（決定 \(\bar v(c)\) 可否與常數 mean 分離） | §7.4／§7.6 mean-level |
+| `claim_target` | required | 恰一個 \(\in\{\texttt{CAL},\ \texttt{RANK}\}\)；兩者須**各自**一份宣告 | §6.2（CAL/RANK 永不互相冒充） |
+| `cal_working_null` | required-if `claim_target=CAL` | §6.1 的 Gaussian working null（\(\delta z_0\sim\mathcal N(0,P_0)\)）之顯式宣告 | §6.1 |
+| `region_definition` | required-if 使用 \(\Pi(\Omega)\) | \(\Omega\) 的定義；candidates 間是否全等須寫明 | §6.1／§6.3 region caveat |
+| `operator_offset_declared` | required | 布林＋其構成（`bridge_at` 與所用 \(v\) 的來源） | §2 rows 8–9／§4.4 |
+| `missing_value_rule` | required | 必須為 fail-closed（缺 required 欄位 ⇒ record inadmissible），**不得**為 imputation | W9 |
+
+### §8.3 Block E — event-level 欄位（每個 candidate event 一列）
+
+Candidate event \(\mathcal E\) 的定義沿用 §6.2（一條 lost track 的固定 exit anchor
+＋一組有限 entry candidates），不重定義。
+
+| 欄位 | 必要性 | 值域／型別 | Causal availability | 綁定 |
+|:--|:--|:--|:--|:--|
+| `event_key` | required | 全域唯一 | — | §6.2；RANK 的 evaluation unit |
+| `exit_anchor_frame` | required | frame index（lost track 最後被觀測 frame） | exit-time | §2 field 3（exit endpoint） |
+| `z0_hat` | required | \(\hat z_0=[\hat x_0;\hat v_0]\in\mathbb R^{2d}\)；\(x\):\(\ell\)、\(v\):\(\ell/\mathrm{frame}\) | exit-time | §5.2 |
+| `P0_exit_cov_id` | required | \(P_0\succeq0\)（\(2d\times2d\)）之來源／識別 | exit-time | §5.1／§5.6 |
+| `context_c` | required | \(c\in\mathcal C_{\mathrm{exit}}\) | exit-time | §4.7 |
+| `candidate_count` | required | \(\lvert\mathcal E\rvert\in\mathbb N_{\ge1}\) | — | §6.2 |
+
+### §8.4 Block P — pair-level 欄位（每個 (event, candidate) 一列）
+
+| 欄位 | 必要性 | 值域／型別 | Causal availability | 綁定 |
+|:--|:--|:--|:--|:--|
+| `event_key` | required | 指向 Block E | — | conservation（W8） |
+| `candidate_key` | required | event 內唯一 | — | §6.2 |
+| `entry_anchor_frame` | required | frame index（candidate 第一次被觀測 frame＝entry endpoint） | entry-time | §2 field 5／field 6 |
+| `g_phys` | required | \(g_{\mathrm{phys}}=\Delta\in\mathbb N_{\ge1}\)，單位 frame | 兩 endpoint 皆定後 | §2 field 3；canonical transition index |
+| `bridge_at` | required | event 當下綁定的 runtime 值（**不**凍結常數） | 宣告時 | §2 field 6 |
+| `delta_on` | required | \(\Delta_{\mathrm{on}}=\mathrm{la}\in\mathbb N\)，單位 frame | entry-time | §2 field 4 |
+| `anchor_pair` | required | 明寫本列 transition 的兩個 anchor（canonical＝exit endpoint → entry endpoint） | — | §2 field 5（W2） |
+| `y1_obs` | required | entry observation；\(H_x\):\(\mathbb R^{d}\)（\(\ell\)）、\(H_{xv}\):\(\mathbb R^{2d}\) | entry-time | §5.3 |
+| `R1_obs_cov_id` | required | \(R_1\succeq0\)，維度隨 \(H\) | entry-time | §5.1／§5.6 |
+| `H_i` | required | 本列使用的 observation mode，須等於 Block D 的 `observation_mode` | — | §3（W3） |
+| `operator_offset` | required-if `operator_offset_declared=true` | \(\pm(\mathrm{bridge\_at}-1)v\)，**獨立欄位** | derived @ entry endpoint | §2 rows 8–9（W2） |
+| `label_true_match` | required-if 進行 CAL 或 RANK 評估 | 布林／候選標記；**evaluation-only** | post-hoc（**不得**進入任何 score 欄位） | §6.2／§7.5（W8 label isolation） |
+| `admissibility` | required | \(\in\{\texttt{admitted},\ \texttt{dropped}\}\)；`dropped` 須附**恰一個**列舉理由 | — | W9 |
+
+### §8.5 Block X — derived 量（由 D1 計算；**不得**由 input 冒充）
+
+下列量**不是** input：它們由 Block D/E/P 的欄位依 frozen §4–§6 唯一決定。schema 允許
+input 附帶它們**僅作為 cross-check**；若附帶，其值必須與依 frozen 公式重算者一致
+（W5），否則該 record inadmissible。**任何以外部值取代重算的做法，即脫離本 D1 的
+instantiation。**
+
+| Derived 量 | 由誰決定 | 來源 § |
+|:--|:--|:--|
+| \(a,b\)、\(A_\Delta\) | \((\gamma,\Delta)\) | §4.3 |
+| \(d_\Delta(c)\) | \((\gamma,\Delta,\bar v(c))\) | §4.3；**不含** operator offset（§4.4） |
+| \(Q_\Delta\) | \((\gamma,D,\Delta)\) | §4.5（\(\gamma=0\)：§4.6） |
+| \(m^-_\Delta=A_\Delta\hat z_0+d_\Delta(c)\)、\(e^-=z_\Delta-m^-_\Delta\) | Block E＋上列 | §5.2（符號約定 frozen） |
+| \(P^-_\Delta=A_\Delta P_0A_\Delta^\top+Q_\Delta\) | \(P_0,A_\Delta,Q_\Delta\) | §5.2 |
+| \(r=y_1-Hm^-_\Delta\) | Block P＋上列 | §5.3 |
+| \(S_\Delta=HP^-_\Delta H^\top+R_1\)（canonical \(C=0\)）／＋\(HC+C^\top H\)（dependent） | `error_dependence` | §5.4 |
+| \(q,\ \log\det S_\Delta,\ E,\ \Pi(\Omega)\) | \(r,S_\Delta,\Omega\) | §6.1（需 \(S_\Delta\succ0\) regime） |
+
+### §8.6 Well-formedness predicates（frozen；fail-closed、機械可判定）
+
+| # | Predicate | 違反後果 | 來源 |
+|:--|:--|:--|:--|
+| **W1** | **Anchor identity**：\(\Delta_{\mathrm{on}}=g_{\mathrm{phys}}+(\mathrm{bridge\_at}-1)\) 逐列成立；且 \(g_{\mathrm{phys}}=\mathrm{entry\_anchor\_frame}-\mathrm{exit\_anchor\_frame}\ge1\)、`bridge_at`\(\ge1\) | record inadmissible | §2 field 5／field 3 |
+| **W2** | **Anchor 宣告與 offset 分離**：每列 `anchor_pair` 明寫；production-corresponding instantiation 必須為 exit→entry 並**重現** \(\pm(\mathrm{bridge\_at}-1)v\)，且該 offset 只能出現在 `operator_offset` 欄位——**不得**折進 \(d_\Delta(c)\)、\(m^-_\Delta\) 或 \(e^-\) | record inadmissible；折入者為 layer 混淆 | §2 rows 8–9／§4.4 |
+| **W3** | **Observation mode 一致性**：全 study 恰一個 \(H\)，且每列 `H_i` 與之相同；\(H_{xv}\) 須有 `causal_availability`；若 entry velocity 由與 \((0,\Delta]\) **重疊**的 frames 導出 ⇒ `error_dependence` 必須為 `dependent` 且 `C_cross_cov_id` 已宣告 | declaration inadmissible | §3.3／§5.4／§7.2 |
+| **W4** | **PSD／可逆性**：\(P_0\succeq0\)、\(R_1\succeq0\)、\(D\succeq0\)；dependent path 另需 \(\big[\begin{smallmatrix}P^-_\Delta&C\\ C^\top&R_1\end{smallmatrix}\big]\succeq0\)。使用 \(q/E/\Pi\) 的列另需 \(S_\Delta\succ0\)（canonical \(C=0\)＋\(R_1\succ0\) 即足；dependent path 需額外 nondegeneracy） | 違反 PSD ⇒ inadmissible；\(S_\Delta\) 退化 ⇒ 該列不得產生 \(q/E/\Pi\) | §5.5／§5.6／§6.1 |
+| **W5** | **維度／單位／derived 一致性**：所有矩陣維度與 `coordinate_dim_d` 及 \(H\) 相容；單位依 §4.7／§5.6／§6.5；附帶的 Block X 值必須與依 frozen 公式重算者一致 | record inadmissible | §4.7／§5.6／§8.5 |
+| **W6** | **Identifiability regime**（承 §7，逐項機械判定）：(a) `gamma_status=known` 時，quotient claim 需 `parameter_sharing_scope` 內 **\(\ge4\) 相異 \(\Delta\)**；single-\(\Delta\) population 連 quotient 都不可識別。(b) `gamma_status=unknown` 時，任何依賴 \(\gamma\)（或 \(D\) 與 \(\gamma\) 分離）的 claim 需 **\(>4\) 相異 \(\Delta\)** **且** `joint_map_condition_status`\(\neq\)`not_established`；「\(\ge5\) gaps」只是**必要**非充分。(c) 需要 \(P_{xx}\) 與 \(R_1\) **分離**的 claim 需 `gauge_fixing`\(\neq\)`none`。(d) 需要 \(\operatorname{asym}(P_{xv})\) 的 claim 需 \(H_{xv}\) ＋ multi-gap ＋ 共享參數 ＋ \(\gamma\) regime 滿足。(e) 需要 \(\bar v(c)\) 的 claim 需 `context_varies=true` 且 context 為 exit-causal | 對應 claim **non-identifiable**（§8.7；落入 terminal-3 rejection region 的判定屬 WP-A8） | §7.3／§7.4／§7.6／§7.7 |
+| **W7** | **Claim／evaluation-unit 一致性**：`claim_target=CAL` 的評估只在 \(\{(e,i^\star)\}\)（true match）上做且需 `cal_working_null`；`claim_target=RANK` 只做 event-local ordering（event 內計算後再跨 event 平均）。**同一份宣告不得同時主張兩者**；CAL 結論不得轉述為 RANK，反之亦然 | claim inadmissible | §6.2／§6.0 |
+| **W8** | **Conservation 與 label isolation**（A 層最小集）：每個 admitted pair 屬**恰一個** event；每個 event 恰一個 exit anchor 與一組不重複 candidates；`label_true_match` 與任何 GT 導出量為 **evaluation-only**，**不得**作為 Block D/E/P 任一 score-relevant 欄位的輸入。（fold／partition／trial-unit／blind-reveal 的完整 conservation 由 B1 charter 所有，本節不複寫） | record 或 study inadmissible | §6.2；B1 charter conservation identities |
+| **W9** | **Fail-closed missing-value**：缺任一 `required`（或已觸發的 `required-if`）欄位 ⇒ 該 record／declaration **inadmissible**，**不得**以預設值、鄰值或全域常數補齊；`dropped` 列須附**恰一個**列舉理由；optional 欄位缺席須**明確記錄**，其後果見 §8.7 | inadmissible；靜默補值即脫離本 D1 | §2 row 9 精神（不得靜默繼承） |
+
+### §8.7 Claim-restriction map（缺宣告 ⇒ 哪些 claim 不可主張；承 §7 leakage matrix）
+
+本表把 §7.6 的**阻斷條件**翻譯成 schema-level 的機械判定：左欄的宣告缺席時，右欄的
+claim 因 leakage／未滿足 regime 而**不可主張**（其餘 claim 不受影響）。
+
+| 缺席的宣告／欄位 | 因此**不可主張**的 claim | 仍可主張者 | 依據 |
+|:--|:--|:--|:--|
+| `gauge_fixing=none` | 任何需要 \(P_{xx}\) 與 \(R_1\) **分離**的 claim（結構性 gauge，\(H_{xv}\) 亦不可破） | 只依 \(P_{xx}+R_1\) 之和的 quotient claim | §7.4 G1／§7.6 |
+| `gamma_status=unknown` 且（\(\le4\) 相異 \(\Delta\) 或 `joint_map_condition_status=not_established`） | 任何識別 \(\gamma\)、或需 \(\gamma\) 與 \(D\) 分離的 claim | 給定 \(\gamma\) 條件下的 quotient claim（須明寫其 conditional 前提） | §7.4 G3／§7.6／§7.7 |
+| `observation_mode=`\(H_x\) | 任何需要 \(\operatorname{asym}(P_{xv})\) 的 claim（\(H_x\) 下 structural invisible） | \(\operatorname{sym}(P_{xv})\)／\(P_{vv}\)／\(D\)（在 W6(a) regime 下） | §7.4 G2／§7.6 |
+| `context_varies=false` 或 `context_definition` 未宣告 | 任何 \(\bar v(c)\)（context drift）claim | 常數-mean 層級的敘述（須標明混淆） | §7.4／§7.6 mean-level |
+| `operator_offset_declared=false` | 任何 mean／residual-bias claim（operator offset 與 \(\bar v(c)\)／常數 bias 混淆） | 純 covariance-level claim | §7.6 mean-level／§2 row 9 |
+| `label_true_match` 不可得 | **CAL 與 RANK 皆不可主張**（兩者皆以 true-match label 為前提） | 僅 model-side 的定義性敘述（無 claim） | §7.5 |
+| `cal_working_null` 未宣告 | CAL 的**分佈層** claim（\(q\sim\chi^2_k\)、coverage／PIT） | \(q,\log\det S_\Delta,E,\Pi\) 作為 \(r,S_\Delta\) 的**函數**仍 well-defined | §6.1 |
+| `region_definition` 未宣告（卻使用 \(\Pi\)） | 任何 \(\Pi\)-based claim | \(q\)／NLL-based claim | §6.1／§6.3 |
+| single-event population（`parameter_sharing_scope` 只含一個 \(\Delta\)） | \(\{P_0,\gamma,D,R_1,\bar v\}\) 的**任何**識別 claim（連 quotient 都不可） | 無（此 regime 下 identifiability 最強收縮） | §7.3 |
+| `error_dependence=dependent` 但 \(S_\Delta\succ0\) 未另行確立 | 任何需 \(S_\Delta^{-1}\) 的 claim（\(q/E/\Pi\)） | \(S_\Delta\succeq0\) 層級的敘述 | §5.5／§6.1 |
+
+**跨欄位的合成規則（frozen）：** 多個缺席同時發生時，不可主張的 claim 集合為各列的
+**聯集**；一個 claim 只要落入任一列的禁區即不可主張。CAL 與 RANK 之間**互不救援**
+（一者可主張不使另一者可主張，§7.5）。
+
+### §8.8 本節顯式不解決（typed deferrals）
+
+| 項目 | 擁有 WP／文件 | 狀態 |
+|:--|:--|:--|
+| terminal review（checklist artifact + 機械 terminal selection） | 後續 packet（WP-A8 planned） | unresolved |
+| **B1-slot identity**、**score-layer contract**、B1 activation gate、frozen-inputs 清單 | [B1 charter](../threads/gctm_b1_runtime_grounded_offline_attribution_task.md)（owner 前置） | 不由本節決定 |
+| evaluation design：fold／trial unit／dependence treatment／minimum exposure／minimum effect／short-gap retention bar／metric／threshold／blind-reveal 協定 | B1 charter | 不在 A 層 schema |
+| reserved-symbol 規則（base score 寫 \(s_{\mathrm{base}}\)、`s0` 為保留名）與 hook scope | [synthesis core](../../modules/semantic/research/gctm_b1_o1_task_objectives_and_semantics_20260716.md) §0／§2.1 | 只指向，不複寫 |
+| storage format／serialization／schema versioning 機制 | — | 本節只定 field semantics，不選格式 |
+| runtime 可觀測性、H0 guarantee／fidelity edge、欄位是否**真的**可從 production 取得 | H0 路徑 | 不授權（本 schema 只列 requirement，非 availability claim） |
+| 實際 data／capture／fitting／identification／任何 gain 數值 | — | 不授權（charter Non-scope） |
+| reverse-time／candidate-backward atom | 後續 | typed boundary only（§4.0 boundary 3） |
+| B1/O1、H0、runtime、online、production | — | 不授權（charter Non-scope） |
+
+**Freeze 邊界：** 本節凍結的是 **schema 的 interface shape**——欄位集、型別／單位／
+causal-availability 綁定、input-vs-derived 分界、well-formedness predicates 與
+claim-restriction map。它不宣稱任何 runtime 擷取值、不建立 fidelity edge、不啟用 B1、
+不取 data、不選任何數值／metric／format、不選 terminal。修改須 append-only correction
+（原文保留、註記 superseded）。
 
 ## History
 
@@ -1437,3 +1643,44 @@ schema-only B1 input interface（WP-A7 planned）。
   only under \(H_x\), observable under \(H_{xv}\) (identification still needs multi-gap +
   shared params + \(\gamma\) regime); (iii) \(\gamma\) unknown = unmet regime. No other
   change.
+- 2026-07-23 — **§8 frozen by WP-A7** (last D1 deliverable: schema-only interface
+  for a separately declared future B1 input). Defines the consumption rule
+  (a future input instantiates this D1 **iff** it supplies every `required` /
+  triggered `required-if` field, passes all well-formedness predicates, and keeps
+  its claims inside the claim-restriction map — otherwise it is **not** an
+  instantiation and may not cite any §6/§7 conclusion); the authority split
+  (B1-slot identity, score-layer contract, activation gate, evaluation design and
+  reserved-symbol rules stay owned by the B1 charter / synthesis core — linked,
+  not restated); four field blocks — **D** declaration-level (spec identity,
+  \(d\), observation mode + causal availability, `error_dependence`,
+  `gamma_status`/`joint_map_condition_status`, `gauge_fixing`,
+  `parameter_sharing_scope`, context + `context_varies`, `claim_target`,
+  `cal_working_null`, `region_definition`, `operator_offset_declared`,
+  fail-closed `missing_value_rule`), **E** event-level (`event_key`, exit anchor,
+  \(\hat z_0\), `P0_exit_cov_id`, context, candidate count), **P** pair-level
+  (entry anchor, \(g_{\mathrm{phys}}\), `bridge_at`, \(\Delta_{\mathrm{on}}\),
+  `anchor_pair`, \(y_1\), `R1_obs_cov_id`, \(H_i\), `operator_offset`,
+  evaluation-only `label_true_match`, `admissibility`), and **X** derived
+  (\(a,b,A_\Delta,d_\Delta(c),Q_\Delta,m^-_\Delta,e^-,P^-_\Delta,r,S_\Delta,
+  q,\log\det S_\Delta,E,\Pi\)) which are **inputs to nothing** — supplying them
+  in place of recomputation leaves the instantiation. Nine fail-closed
+  predicates W1–W9 (anchor identity \(\Delta_{\mathrm{on}}=g_{\mathrm{phys}}+
+  (\mathrm{bridge\_at}-1)\); anchor declaration with the operator offset kept in
+  its own field, never folded into \(d_\Delta/m^-_\Delta/e^-\); observation-mode
+  consistency with the overlap ⇒ dependent-\(C\) rule; PSD/invertibility;
+  dimension/unit/derived consistency; the §7 identifiability regime; CAL/RANK
+  evaluation-unit separation; conservation + **label isolation**; fail-closed
+  missing values) and a claim-restriction map translating the §7.6 blocking
+  conditions into per-field mechanical verdicts (union rule across fields; CAL
+  and RANK never rescue each other). §8 is schema-only: no B1 activation, no
+  runtime-availability claim, no data/fitting, no format choice, no terminal.
+  §2–§7 byte-frozen; the §6.6/§7.9 "§8 reserved" rows are superseded by the §1
+  append-only correction. Predicate decidability checked on synthetic records in
+  session scratchpad: a conforming declaration passes all nine predicates, 17
+  injected violations (one or more per predicate, incl. \(\Delta_{\mathrm{on}}=
+  g_{\mathrm{phys}}\), offset folded into the mean, \(H_{xv}\) overlap without a
+  declared \(C\), non-PSD \(R_1\), supplied \(S_\Delta\ne\) recomputed, each W6
+  regime case, CAL claim on a RANK declaration, label used in a score, duplicate
+  pair key, unfilled `required-if`) are each caught by the intended predicate,
+  and the §8.7 union rule leaves the quotient claim admissible while forbidding
+  the three blocked ones. No code committed.

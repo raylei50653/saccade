@@ -382,6 +382,9 @@ D1 §6 measures no gain, selects no metric/threshold, and makes no ranking or
 calibration data claim. This resolves the **last** of the four numbered
 obligations; a sealable terminal still requires the D1 identifiability/leakage
 matrix (§7), the schema-only B1 input interface (§8), and terminal review.
+*(Status update: §7 was frozen by WP-A6 and §8 by WP-A7, so only terminal review
+— WP-A8 — remains; see the obligation-status updates below, which are the status
+source of record.)*
 
 ### 3. Independence or explicit cross-covariance
 
@@ -459,7 +462,7 @@ production-behavior change.
 
 WP-A0 (activation) created none of these. **D1 exists as a seed since WP-A1**
 ([gap_conditioned_stochastic_transition_spec_v1.md](../models/gap_conditioned_stochastic_transition_spec_v1.md):
-§2–§7 frozen through WP-A6, §8 reserved); D2 exists since WP-A3
+§2–§8 frozen through WP-A7 — all D1 deliverable items complete); D2 exists since WP-A3
 ([lemmas v1](../models/gap_conditioned_stochastic_transition_lemmas_v1.md)).
 
 ### D1 — canonical model specification
@@ -592,6 +595,27 @@ numbered obligation (all four remain resolved). One D1 deliverable remains — t
 schema-only B1 input interface (D1 §8, WP-A7) — plus terminal review (WP-A8), so
 terminal review still could not yet reach the sealable terminal.
 
+*Update (WP-A7, 2026-07-23):* the schema-only B1 input interface is **frozen** in
+[D1 §8](../models/gap_conditioned_stochastic_transition_spec_v1.md) — the **last**
+D1 deliverable item. It fixes only the *interface shape* a separately declared
+future B1 input must have: the fail-closed consumption rule (an input instantiates
+D1 **iff** it supplies every `required`/triggered `required-if` field, passes the
+nine well-formedness predicates W1–W9, and keeps its claims inside the
+claim-restriction map — otherwise it may cite no §6/§7 conclusion), the four field
+blocks (declaration / event / pair / derived, with every derived quantity
+**computed, never supplied**), and a claim-restriction map translating the §7.6
+leakage-blocking conditions into per-field mechanical verdicts. It is **not** a
+numbered obligation (all four remain resolved), and it **grants no B1 authority**:
+the **B1-slot identity**, the **score-layer contract**, B1's activation gate and
+frozen inputs, and all evaluation design remain owned by the
+[B1 charter](gctm_b1_runtime_grounded_offline_attribution_task.md) — D1 §8 links
+them and does not restate or pre-decide them. Fields are *requirements*, not
+availability claims: no runtime observability is asserted and no fidelity edge is
+created. **All D1 deliverable items are now complete**; the remaining step before
+`GCTM_MODEL_SPEC_SEALABLE` is **WP-A8 terminal review** (checklist artifact +
+mechanical terminal selection), which is where any terminal is selected — this
+update selects none.
+
 Even the sealable terminal would grant no automatic B1, O1, online, mainline,
 or production authority.
 
@@ -635,12 +659,13 @@ terminal. Terminal review is therefore split off to WP-A8, with WP-A6/WP-A7
 resolving the two remaining D1 deliverables first. (This lease is replaceable
 without a registry or WIP change.)
 
-**Current step:** WP-A6 landed (D1 §7 frozen: identifiability & leakage matrix;
-the terminal-3 predicate object). **All four numbered obligations (1/WP-A1,
-4/WP-A2, 3/WP-A4, 2/WP-A5) remain resolved**, and D2 (WP-A3) has landed. Next =
-WP-A7 (schema-only B1 input interface, D1 §8), then WP-A8 (terminal review). One
-D1 deliverable (§8) remains before terminal review; a sealable terminal is not
-reachable until WP-A7–A8 complete.
+**Current step:** WP-A7 landed (D1 §8 frozen: schema-only B1 input interface —
+the last D1 deliverable). **All four numbered obligations (1/WP-A1, 4/WP-A2,
+3/WP-A4, 2/WP-A5) remain resolved**, D2 (WP-A3) has landed, and **every D1
+deliverable item is complete** (§2–§8 frozen). Next = **WP-A8 (terminal review)**:
+the checklist artifact plus the charter's mechanical terminal selection. No
+terminal is selected until that review, and even the sealable terminal would grant
+no B1/O1/online/production authority.
 
 ## History
 
@@ -769,3 +794,46 @@ reachable until WP-A7–A8 complete.
   four numbered obligations remain resolved; remaining before terminal review = WP-A7
   (B1 schema, D1 §8). No new file ⇒ no master_map regeneration. No
   B1/O1/runtime/online/production authority granted. Next packet WP-A7.
+- 2026-07-23 — **WP-A7: schema-only B1 input interface frozen** (the **last** D1
+  deliverable; **not** a numbered obligation — all four remain resolved).
+  [D1 §8](../models/gap_conditioned_stochastic_transition_spec_v1.md) fixes the
+  *interface shape* a separately declared future B1 input must have for the A-layer
+  objects to be instantiated unambiguously: a fail-closed **consumption rule** (an
+  input instantiates this D1 **iff** it supplies every `required` / triggered
+  `required-if` field, passes all nine well-formedness predicates, and keeps its
+  claims inside the claim-restriction map — otherwise it is **not** an instantiation
+  and may cite **no** §6/§7 conclusion, since those conclusions are always bound to
+  their regime); an explicit **authority split** — the **B1-slot identity**, the
+  **score-layer contract**, B1's activation gate and frozen-inputs list, all
+  evaluation design (folds, trial unit, minimum exposure, metrics, thresholds,
+  blind/reveal) and the reserved-symbol rules stay owned by the
+  [B1 charter](gctm_b1_runtime_grounded_offline_attribution_task.md) /
+  [synthesis core](../../modules/semantic/research/gctm_b1_o1_task_objectives_and_semantics_20260716.md),
+  linked and **not** restated, with same-named fields (`observation_mode`,
+  `causal_availability`, `context_definition`, `P0_exit_cov_id`, `R1_obs_cov_id`, …)
+  reused as the same objects; four field blocks (**D** declaration-level, **E**
+  event-level, **P** pair-level, **X** derived) where every Block-X quantity
+  (\(A_\Delta,d_\Delta(c),Q_\Delta,m^-_\Delta,e^-,P^-_\Delta,r,S_\Delta,q,\log\det
+  S_\Delta,E,\Pi\)) is **computed, never supplied** — substituting an external value
+  for the frozen formula leaves the instantiation; predicates **W1–W9** (anchor
+  identity \(\Delta_{\mathrm{on}}=g_{\mathrm{phys}}+(\mathrm{bridge\_at}-1)\), so the
+  forbidden default \(\Delta_{\mathrm{on}}=g_{\mathrm{phys}}\) is mechanically
+  rejected; the operator offset \(\pm(\mathrm{bridge\_at}-1)v\) kept in its own field
+  and never folded into \(d_\Delta/m^-_\Delta/e^-\); observation-mode consistency with
+  the overlap ⇒ dependent-\(C\) rule; PSD + the \(S_\Delta\succ0\) regime for
+  \(q/E/\Pi\); dimension/unit/derived consistency; the **§7 identifiability regime**
+  made mechanically checkable; CAL/RANK evaluation-unit separation; conservation +
+  **label isolation**; fail-closed missing values with no imputation); and a
+  **claim-restriction map** turning each §7.6 blocking condition into a per-field
+  verdict (union across absences; CAL and RANK never rescue each other). §8 is
+  **schema-only**: it activates no B1, asserts no runtime availability (fields are
+  *requirements*, not availability claims), takes no data, fits nothing, chooses no
+  storage format, and selects no terminal. Frozen §2–§7 kept byte-frozen; the stale
+  "§8 reserved" rows in §6.6/§7.9 superseded via an append-only status note.
+  Predicate decidability was checked on synthetic records (conforming input passes
+  all nine; 17 injected violations each caught by the intended predicate; union rule
+  leaves the quotient claim admissible) — scratchpad only, no code committed. **All
+  D1 deliverable items are now complete**; the only remaining step before a sealable
+  terminal is **WP-A8 terminal review** (checklist artifact + mechanical terminal
+  selection). No new file ⇒ no master_map regeneration. No B1/O1/runtime/online/
+  production authority granted. Next packet WP-A8.
