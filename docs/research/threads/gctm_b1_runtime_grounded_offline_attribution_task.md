@@ -71,7 +71,7 @@ future merge, replacement, or relation rewrite requires a separate
 owner-accepted transition.
 
 The independent substrate-agnostic line is named `GCTM_D1` and is owned by its
-[proposed diagnostic charter](gctm_d1_substrate_agnostic_ranking_diagnostic_task.md).
+[closed diagnostic charter](closed/gctm_d1_substrate_agnostic_ranking_diagnostic_task.md).
 Its evidence cannot satisfy either runtime B1's substrate, provenance,
 identity, checksum, compatibility, or activation gates.
 
@@ -760,7 +760,7 @@ accepted B1 handoff and must not rewrite B1 semantics.
 - [GCTM task charter](closed/gap_conditioned_stochastic_transition_model_task.md)
 - [O0 routing charter](closed/bridge_frozen_evidence_o0_routing_20260716.md)
 - [B1-slot identity decision](../contracts/gctm_b1_slot_identity_decision_v1.json)
-- [GCTM D1 diagnostic charter](gctm_d1_substrate_agnostic_ranking_diagnostic_task.md)
+- [GCTM D1 diagnostic charter](closed/gctm_d1_substrate_agnostic_ranking_diagnostic_task.md)
 - [claim-state registry（§7 score layer / §8 候選集）](../contracts/claim_state_registry.md)
 - [bridge decision semantics](../tracker-decision/relink_bridge.md)
 - [O1 task charter](gctm_o1_online_intervention_efficacy_task.md)

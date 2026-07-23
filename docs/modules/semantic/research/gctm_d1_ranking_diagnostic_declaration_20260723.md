@@ -57,7 +57,7 @@ Machine sidecar (immutable sealed packet; PR #265):
 [`evidence/gctm_d1_substrate_agnostic_ranking_20260723/declaration_sidecar.json`](evidence/gctm_d1_substrate_agnostic_ranking_20260723/declaration_sidecar.json)
 
 Charter:
-[`docs/research/threads/gctm_d1_substrate_agnostic_ranking_diagnostic_task.md`](../../../research/threads/gctm_d1_substrate_agnostic_ranking_diagnostic_task.md)
+[`docs/research/threads/closed/gctm_d1_substrate_agnostic_ranking_diagnostic_task.md`](../../../research/threads/closed/gctm_d1_substrate_agnostic_ranking_diagnostic_task.md)
 
 Slot identity:
 [`gctm_b1_slot_identity_decision_v1`](../../../research/contracts/gctm_b1_slot_identity_decision_v1.json)

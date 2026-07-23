@@ -5,8 +5,7 @@
 
 ## Sole active
 
-- **GCTM_D1 — canonical synthetic diagnostic execution** →
-  [task charter](../../research/threads/gctm_d1_substrate_agnostic_ranking_diagnostic_task.md)
+- **無 active**
 - H0 closure（三個 owner-accepted ordered terminal `H0_PROVENANCE_INVALID`;
   faithful capture = none;actual H0 guarantee = none;Phase B forbidden;
   任何未來 re-entry 前置＝machine-checked launch-hygiene pre-authorization
