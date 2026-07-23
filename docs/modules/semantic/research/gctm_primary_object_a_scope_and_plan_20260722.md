@@ -6,9 +6,14 @@
 # GCTM 範圍與方案 — primary object = A
 
 > **HISTORICAL — pre-activation planning memo（2026-07-22 撰寫；2026-07-23 起
-> superseded）。** 本 memo 的 proposal 已全部被 owner 接受並落地：GCTM 於
-> 2026-07-22 activate（WP-A0），於 2026-07-23 關閉於 owner-accepted ordered
-> terminal **`GCTM_MODEL_SPEC_SEALABLE`**。因此文中一切「parked」「keep GCTM
+> superseded）。** 本 memo 的 **primary-object = A 決策**與 **existing-online
+> §§9.2–9.4 conditional scope amendment** 已被 owner 接受並落地（PR #248 acceptance
+> ／PR #249 landing），GCTM 隨後於 2026-07-22 activate（WP-A0）、2026-07-23 關閉於
+> owner-accepted ordered terminal **`GCTM_MODEL_SPEC_SEALABLE`**。**其餘平行建議
+> 不屬於 GCTM closure，也未因此執行或取得 authority**——特別是 §4 的 `WP-L2∥`
+> （registry L2 contract）與 `WP-B1`（B1 declaration）：**registry-owned L2
+> score-layer contract 仍不存在**（[registry §7 架構缺口](../../../research/contracts/claim_state_registry.md)），
+> B1 仍是 proposed。因此文中一切「parked」「keep GCTM
 > parked」「activation 前」的敘述都是**當時快照**，**不是現況**；現況與 terminal
 > 由下列 owner 擁有：
 > [closed charter *Final status*](../../../research/threads/closed/gap_conditioned_stochastic_transition_model_task.md) ·

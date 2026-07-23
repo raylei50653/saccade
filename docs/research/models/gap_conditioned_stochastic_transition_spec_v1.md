@@ -23,10 +23,13 @@ correction 修改**。
   owner-accepted ordered terminal `GCTM_MODEL_SPEC_SEALABLE`；見
   [closed charter *Final status*](../threads/closed/gap_conditioned_stochastic_transition_model_task.md)
   與 [terminal review](gap_conditioned_stochastic_transition_terminal_review_v1.md)）。
-  本檔的 `doc-status` 標籤**刻意不動**：C6 生命週期詞彙沒有適用於 canonical model
-  doc 的 `sealed` 值，而標成 `closed` 會被 L1 逼進 `closed/` 路徑並打斷 charter／
-  registry 的引用。**「D1 的檔案標籤 ≠ 任務未關」**——任務狀態的唯一 owner 是
-  closed charter 與 [claim-state registry](../contracts/claim_state_registry.md)。
+  本檔的 file-level marker 仍是既有的 `doc-status: draft`——**這不是 C6 授權的合法
+  終局**：C6 的狀態詞彙是 `proposed | active | parked | closed | archived`，`draft`
+  不在其中，而 C6 目前**沒有**對應「已被接受的 canonical artifact」的狀態（標成
+  `closed` 會被 L1 逼進 `closed/` 並打斷 charter／registry 引用）。此處只**顯式記錄
+  這個治理缺口**，不以此 marker 判定 task lifecycle，也不宣稱例外已被 C6 授權；
+  是否新增 `sealed`／`canonical` 狀態需另做一次 contract decision。**任務狀態的唯一
+  owner 仍是** closed charter 與 [claim-state registry](../contracts/claim_state_registry.md)。
 
 ## §1 Document state
 
