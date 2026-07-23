@@ -382,6 +382,9 @@ D1 §6 measures no gain, selects no metric/threshold, and makes no ranking or
 calibration data claim. This resolves the **last** of the four numbered
 obligations; a sealable terminal still requires the D1 identifiability/leakage
 matrix (§7), the schema-only B1 input interface (§8), and terminal review.
+*(Status update: §7 was frozen by WP-A6 and §8 by WP-A7, so only terminal review
+— WP-A8 — remains; see the obligation-status updates below, which are the status
+source of record.)*
 
 ### 3. Independence or explicit cross-covariance
 
@@ -459,7 +462,7 @@ production-behavior change.
 
 WP-A0 (activation) created none of these. **D1 exists as a seed since WP-A1**
 ([gap_conditioned_stochastic_transition_spec_v1.md](../models/gap_conditioned_stochastic_transition_spec_v1.md):
-§2–§7 frozen through WP-A6, §8 reserved); D2 exists since WP-A3
+§2–§8 frozen through WP-A7 — all D1 deliverable items complete); D2 exists since WP-A3
 ([lemmas v1](../models/gap_conditioned_stochastic_transition_lemmas_v1.md)).
 
 ### D1 — canonical model specification
@@ -592,6 +595,27 @@ numbered obligation (all four remain resolved). One D1 deliverable remains — t
 schema-only B1 input interface (D1 §8, WP-A7) — plus terminal review (WP-A8), so
 terminal review still could not yet reach the sealable terminal.
 
+*Update (WP-A7, 2026-07-23):* the schema-only B1 input interface is **frozen** in
+[D1 §8](../models/gap_conditioned_stochastic_transition_spec_v1.md) — the **last**
+D1 deliverable item. It fixes only the *interface shape* a separately declared
+future B1 input must have: the fail-closed consumption rule (an input instantiates
+D1 **iff** it supplies every `required`/triggered `required-if` field, passes the
+nine well-formedness predicates W1–W9, and keeps its claims inside the
+claim-restriction map — otherwise it may cite no §6/§7 conclusion), the four field
+blocks (declaration / event / pair / derived, with every derived quantity
+**computed, never supplied**), and a claim-restriction map translating the §7.6
+leakage-blocking conditions into per-field mechanical verdicts. It is **not** a
+numbered obligation (all four remain resolved), and it **grants no B1 authority**:
+the **B1-slot identity**, the **score-layer contract**, B1's activation gate and
+frozen inputs, and all evaluation design remain owned by the
+[B1 charter](gctm_b1_runtime_grounded_offline_attribution_task.md) — D1 §8 links
+them and does not restate or pre-decide them. Fields are *requirements*, not
+availability claims: no runtime observability is asserted and no fidelity edge is
+created. **All D1 deliverable items are now complete**; the remaining step before
+`GCTM_MODEL_SPEC_SEALABLE` is **WP-A8 terminal review** (checklist artifact +
+mechanical terminal selection), which is where any terminal is selected — this
+update selects none.
+
 Even the sealable terminal would grant no automatic B1, O1, online, mainline,
 or production authority.
 
@@ -635,12 +659,13 @@ terminal. Terminal review is therefore split off to WP-A8, with WP-A6/WP-A7
 resolving the two remaining D1 deliverables first. (This lease is replaceable
 without a registry or WIP change.)
 
-**Current step:** WP-A6 landed (D1 §7 frozen: identifiability & leakage matrix;
-the terminal-3 predicate object). **All four numbered obligations (1/WP-A1,
-4/WP-A2, 3/WP-A4, 2/WP-A5) remain resolved**, and D2 (WP-A3) has landed. Next =
-WP-A7 (schema-only B1 input interface, D1 §8), then WP-A8 (terminal review). One
-D1 deliverable (§8) remains before terminal review; a sealable terminal is not
-reachable until WP-A7–A8 complete.
+**Current step:** WP-A7 landed (D1 §8 frozen: schema-only B1 input interface —
+the last D1 deliverable). **All four numbered obligations (1/WP-A1, 4/WP-A2,
+3/WP-A4, 2/WP-A5) remain resolved**, D2 (WP-A3) has landed, and **every D1
+deliverable item is complete** (§2–§8 frozen). Next = **WP-A8 (terminal review)**:
+the checklist artifact plus the charter's mechanical terminal selection. No
+terminal is selected until that review, and even the sealable terminal would grant
+no B1/O1/online/production authority.
 
 ## History
 
@@ -769,3 +794,152 @@ reachable until WP-A7–A8 complete.
   four numbered obligations remain resolved; remaining before terminal review = WP-A7
   (B1 schema, D1 §8). No new file ⇒ no master_map regeneration. No
   B1/O1/runtime/online/production authority granted. Next packet WP-A7.
+- 2026-07-23 — **WP-A7: schema-only B1 input interface frozen** (the **last** D1
+  deliverable; **not** a numbered obligation — all four remain resolved).
+  [D1 §8](../models/gap_conditioned_stochastic_transition_spec_v1.md) fixes the
+  *interface shape* a separately declared future B1 input must have for the A-layer
+  objects to be instantiated unambiguously: a fail-closed **consumption rule** (an
+  input instantiates this D1 **iff** it supplies every `required` / triggered
+  `required-if` field, passes all nine well-formedness predicates, and keeps its
+  claims inside the claim-restriction map — otherwise it is **not** an instantiation
+  and may cite **no** §6/§7 conclusion, since those conclusions are always bound to
+  their regime); an explicit **authority split** — the **B1-slot identity**, the
+  **score-layer contract**, B1's activation gate and frozen-inputs list, all
+  evaluation design (folds, trial unit, minimum exposure, metrics, thresholds,
+  blind/reveal) and the reserved-symbol rules stay owned by the
+  [B1 charter](gctm_b1_runtime_grounded_offline_attribution_task.md) /
+  [synthesis core](../../modules/semantic/research/gctm_b1_o1_task_objectives_and_semantics_20260716.md),
+  linked and **not** restated, with same-named fields (`observation_mode`,
+  `causal_availability`, `context_definition`, `P0_exit_cov_id`, `R1_obs_cov_id`, …)
+  reused as the same objects; four field blocks (**D** declaration-level, **E**
+  event-level, **P** pair-level, **X** derived) where every Block-X quantity
+  (\(A_\Delta,d_\Delta(c),Q_\Delta,m^-_\Delta,e^-,P^-_\Delta,r,S_\Delta,q,\log\det
+  S_\Delta,E,\Pi\)) is **computed, never supplied** — substituting an external value
+  for the frozen formula leaves the instantiation; predicates **W1–W9** (anchor
+  identity \(\Delta_{\mathrm{on}}=g_{\mathrm{phys}}+(\mathrm{bridge\_at}-1)\), so the
+  forbidden default \(\Delta_{\mathrm{on}}=g_{\mathrm{phys}}\) is mechanically
+  rejected; the operator offset \(\pm(\mathrm{bridge\_at}-1)v\) kept in its own field
+  and never folded into \(d_\Delta/m^-_\Delta/e^-\); observation-mode consistency with
+  the overlap ⇒ dependent-\(C\) rule; PSD + the \(S_\Delta\succ0\) regime for
+  \(q/E/\Pi\); dimension/unit/derived consistency; the **§7 identifiability regime**
+  made mechanically checkable; CAL/RANK evaluation-unit separation; conservation +
+  **label isolation**; fail-closed missing values with no imputation); and a
+  **claim-restriction map** turning each §7.6 blocking condition into a per-field
+  verdict (union across absences; CAL and RANK never rescue each other). §8 is
+  **schema-only**: it activates no B1, asserts no runtime availability (fields are
+  *requirements*, not availability claims), takes no data, fits nothing, chooses no
+  storage format, and selects no terminal. Frozen §2–§7 kept byte-frozen; the stale
+  "§8 reserved" rows in §6.6/§7.9 superseded via an append-only status note.
+  Predicate decidability was checked on synthetic records (conforming input passes
+  all nine; 17 injected violations each caught by the intended predicate; union rule
+  leaves the quotient claim admissible) — scratchpad only, no code committed. **All
+  D1 deliverable items are now complete**; the only remaining step before a sealable
+  terminal is **WP-A8 terminal review** (checklist artifact + mechanical terminal
+  selection). No new file ⇒ no master_map regeneration. No B1/O1/runtime/online/
+  production authority granted. Next packet WP-A8.
+- 2026-07-23 — bounded corrections per #258 owner review (REQUEST CHANGES → fixed
+  pre-merge; **D1 §8 not yet frozen**; §2–§7 byte-frozen; the WP-A7 entry above is
+  superseded on the predicate count and sanity figures). Three blockers closed the
+  gap between §8's promise and its fields: (1) **Block X was not computable from
+  D/E/P** — no field supplied \(D\), \(\bar v(c)\), or the \(\gamma\) used for
+  scoring under `gamma_status=unknown`, so a record could pass every check and
+  still be unrecomputable; added `transition_diffusion_D_id`,
+  `context_drift_model_id`, `gamma_estimate_id`, event-level `vbar_value`, and a
+  new **closure predicate W5′** (binding completeness ⇒ otherwise **not an
+  instantiation at all**, since CAL and RANK both need a computable score; plus
+  same-artifact sharing of \(\gamma,D,\bar v\) inside `parameter_sharing_scope`,
+  with \(P_0/R_1\) sharing additionally required for identification claims,
+  W6(f)); (2) **\(e^-\) is latent** — Block X split into **X-a** (computable) and
+  **X-b** (\(z_\Delta,\delta z_0,\eta_\Delta,e^-\), symbolic only), since the
+  schema never supplies \(z_\Delta\); the observable counterpart is \(r\), and
+  adding `z_delta_true`-style inputs is forbidden as a W8 label-isolation
+  violation; (3) **missing transpose** — dependent-\(C\) row corrected to
+  \(S_\Delta=HP^-_\Delta H^\top+R_1+HC+C^\top H^\top\) per frozen §5.4. Plus a
+  scope strengthening: **`identification_scope`** \(\in\{\)`local`,`global`\(\}\)
+  — a `local_full_rank_established` condition supports only local claims and may
+  not be restated as global identification (§7.4/§7.7). Predicate count is now
+  **ten** (W1–W9 + W5′); re-checked on synthetic records (conforming declaration
+  passes all ten; **27** injected violations each caught by the intended
+  predicate; a `local` claim under a local-only condition correctly passes).
+  Scratchpad only, no code committed. Authority boundary unchanged: still
+  schema-only, no B1 activation, no runtime-availability claim, no terminal.
+- 2026-07-23 — second bounded correction per #258 owner re-review (still
+  pre-merge; D1 §8 not yet frozen; §2–§7 byte-frozen). Two blockers: (1) the
+  \(\bar v(c)\) binding was **self-contradictory** (Block D required the drift
+  model to be per-event evaluable while Block E's `vbar_value` was required-if it
+  is not, making that branch unreachable) and W5′(b)'s "same value" reading would
+  have outlawed the legal \(c_1\neq c_2\Rightarrow\bar v(c_1)\neq\bar v(c_2)\)
+  case — fixed by separating **mapping identity** (`context_drift_model_id`,
+  shared) from **evaluability** (new `context_drift_model_evaluable`) and
+  per-event values (`vbar_value`), with new **W5′(a′)** requiring each event to
+  resolve \(\bar v(c)\) by at least one of the two paths and the two to agree when
+  both exist; (2) the **claim set was not machine-readable** — `claim_target`
+  (CAL/RANK) cannot tell W6 which branch to fire, so the restriction map was
+  complete in prose but not mechanically decidable; fixed by a required
+  **`claim_dependency_set`** over a closed atom vocabulary (D1 §8.2.1) listing
+  only §7 identifiability dependencies (no metric/threshold/score-ladder
+  semantics, so no B1-charter authority is taken), with W6 restated per atom
+  (branches (a)–(g), including the new `mean_bias_attribution` ⇒
+  `operator_offset_declared` rule) and §8.7 judging atoms via a set-intersection
+  test. Re-checked on synthetic records: **38** injected violations each caught,
+  three legality cases correctly pass. Scratchpad only, no code committed.
+  Boundary unchanged: schema-only, no B1 activation, no terminal.
+- 2026-07-23 — third bounded correction per #258 owner re-review (still pre-merge;
+  D1 §8 not yet frozen; §2–§7 byte-frozen). Two blockers in the atom algebra:
+  (1) **`quotient_only` contradicted the combination rule** (its "only" vs free
+  co-listing made `{quotient_only, Pxx_R1_split}` legal-but-contradictory) and
+  hid a `required-if` (under unknown \(\gamma\) it needed `identification_scope`,
+  which only the two \(\gamma\) atoms triggered) — renamed **`covariance_quotient`**
+  without exclusivity, with `identification_scope` now required whenever
+  `gamma_status=unknown` and the set meets \(\mathcal A_{\mathrm{cov}}\), and W6(b)
+  plus the §8.7 \(\gamma\)-regime row now gating the whole covariance class;
+  (2) **covariance and mean levels were conflated** — W6(f) forced the shared
+  \(P_0/R_1\) artifact on `vbar_context_drift`/`mean_bias_attribution` too, though
+  §7.6 blocks mean-level leaks by varying exit-causal context, operator-offset
+  declaration and population/null instead. Atoms are now typed
+  (\(\mathcal A_{\mathrm{cov}}\) / \(\mathcal A_{\mathrm{mean}}\)), W6(f) applies to
+  the covariance class only, `mean_bias_attribution` is narrowed to operator-offset
+  separation and must co-list `vbar_context_drift` unless the drift is declared
+  `vbar_zero` (new W6(g); previously it could pass under `context_varies=false`),
+  and the third §7.6 mean row becomes its own atom `exit_state_bias_separation`
+  with W6(h) (\(\ge2\) distinct \(\Delta\) + offset declaration). Re-checked:
+  **43** injected violations each caught, **ten** legality cases correctly pass.
+  Scratchpad only, no code committed. Boundary unchanged: schema-only, no B1
+  activation, no terminal.
+- 2026-07-23 — fourth bounded correction per #258 owner re-review (still
+  pre-merge; D1 §8 not yet frozen; §2–§7 byte-frozen). Two blockers + one
+  map/predicate domain mismatch, all fallout from the atom typing: (1)
+  `parameter_sharing_scope` still promised unconditional \((P_0,\gamma,D,R_1)\)
+  sharing, contradicting typed W6(f) and stranding mean-only declarations (split
+  the scope and `exit_state_bias_separation` loses its \(\ge2\) gaps) — rewritten
+  as a **conditional scope** (population + shared \(\gamma,D,\bar v\)-mapping
+  always; shared \(P_0,R_1\) **only if** the atom set meets
+  \(\mathcal A_{\mathrm{cov}}\)), no new field; (2) the §8.7 single-event row
+  over-blocked `mean_bias_attribution`, whose §7.6 blocking condition after
+  narrowing is the explicit offset declaration, not multi-gap — the row now
+  forbids \(\mathcal A_{\mathrm{cov}}\cup\{\)`vbar_context_drift`,
+  `exit_state_bias_separation`\(\}\) and leaves that atom to W6(g) (a non-zero
+  drift still forces the `vbar_context_drift` co-listing, which the same row
+  blocks); (3) the §8.7 local-full-rank row named only the two \(\gamma\) atoms
+  while W6(b) checks scope for the whole \(\mathcal A_{\mathrm{cov}}\) — the row now
+  covers the class, so the declared decision procedure and the predicate share one
+  domain. Re-checked: **45** injected violations each caught, **fourteen**
+  legality cases correctly pass. Scratchpad only, no code committed. Boundary
+  unchanged: schema-only, no B1 activation, no terminal.
+- 2026-07-23 — fifth bounded correction per #258 owner re-review (still
+  pre-merge; D1 §8 not yet frozen; §2–§7 byte-frozen). One blocker: the §8.7
+  "single-event" row equated **one event** with **one distinct \(\Delta\)**, but a
+  population can be single-gap and multi-event, and frozen §7.4/§7.6 condition
+  \(\bar v(c)\) identification on declared, **varying**, exit-causal context —
+  not on distinct gaps (those are needed by the covariance shapes and by
+  exit-state bias separation). W6(e) was already correct, so a legal single-gap
+  multi-event context study passed the predicate and was rejected by the map.
+  Row renamed **single-gap population** and its forbidden set narrowed to
+  \(\mathcal A_{\mathrm{cov}}\cup\{\)`exit_state_bias_separation`\(\}\);
+  `vbar_context_drift` removed (a true single event has `context_varies=false`
+  and is fail-closed by W6(e), so no duplicate block is needed). Also fixed a
+  round-3 rename typo (the old atom name is `quotient_only`). Re-checked: **46**
+  injected violations each caught, **fifteen** legality cases pass, including a
+  single-gap multi-event varying-context population supporting
+  `vbar_context_drift`. Scratchpad only, no code committed. Boundary unchanged:
+  schema-only, no B1 activation, no terminal.

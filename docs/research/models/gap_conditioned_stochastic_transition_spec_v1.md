@@ -1,6 +1,6 @@
 <!-- doc-status: draft -->
-<!-- doc-promotion: none; D1 canonical model specification (seed); §2–§3 frozen at WP-A1, §4 frozen at WP-A2, §5 frozen at WP-A4, §6 frozen at WP-A5, §7 frozen at WP-A6 -->
-<!-- doc-date: 2026-07-22 -->
+<!-- doc-promotion: none; D1 canonical model specification (seed); §2–§3 frozen at WP-A1, §4 frozen at WP-A2, §5 frozen at WP-A4, §6 frozen at WP-A5, §7 frozen at WP-A6, §8 frozen at WP-A7 -->
+<!-- doc-date: 2026-07-23 -->
 <!-- doc-module: semantic -->
 
 # Gap-conditioned stochastic transition model — canonical specification (D1, v1)
@@ -30,7 +30,7 @@ correction 修改**。
 | §5 Innovation composition (\(P_0\)/\(P^-_\Delta\)/\(R_1\)/\(S_\Delta\); independence vs explicit \(C\)) | **frozen** | WP-A4 (owner merge) |
 | §6 Calibration vs candidate-local ranking claim space (obligation 2) | **frozen** | WP-A5 (owner merge) |
 | §7 Identifiability and leakage matrix (terminal-3 predicate object) | **frozen** | WP-A6 (owner merge) |
-| §8 Schema-only interface for a future B1 input | reserved — not yet specified | WP-A7 (planned) |
+| §8 Schema-only interface for a future B1 input | **frozen** | WP-A7 (owner merge) |
 
 Reserved sections carry no obligations-resolved claim. WP-A2 resolves charter
 obligation 4 (canonical-state affine M2 transition; §4); WP-A4 resolves charter
@@ -38,13 +38,16 @@ obligation 3 (independence vs explicit cross-covariance \(C\); §5); WP-A5
 resolves charter obligation 2 (calibration-only gain vs candidate-local ranking
 gain as distinct claims; §6). **All four numbered activation-contract
 obligations are now resolved.** WP-A6 additionally freezes the D1
-identifiability/leakage matrix (§7; the terminal-3 predicate object). A sealable
-terminal (`GCTM_MODEL_SPEC_SEALABLE`) additionally requires the remaining D1
-deliverable — the schema-only B1 input interface (§8) — plus terminal review;
-that section remains reserved. §4 makes no claim about obligations 2–3, §5 makes
-no claim about obligation 2, §6 makes no claim about identifiability/leakage, and
-§7 measures no data and selects no terminal — it specifies the identifiability
-boundary only, and makes no B1/O1/runtime/production quantity claim.
+identifiability/leakage matrix (§7; the terminal-3 predicate object), and WP-A7
+freezes the last D1 deliverable — the schema-only B1 input interface (§8). **All
+D1 deliverable items are therefore complete**; a sealable terminal
+(`GCTM_MODEL_SPEC_SEALABLE`) still requires terminal review (WP-A8), which is
+where any terminal is selected. §4 makes no claim about obligations 2–3, §5 makes
+no claim about obligation 2, §6 makes no claim about identifiability/leakage, §7
+measures no data and selects no terminal — it specifies the identifiability
+boundary only — and §8 is schema-only: it defines what a future B1 input would
+have to supply, activates no B1, asserts no runtime availability, and makes no
+B1/O1/runtime/production quantity claim.
 
 > **Append-only renumber correction (WP-A5).** WP-A5 inserts §6 (calibration vs
 > ranking) directly after frozen §5, so the former reserved §6/§7 shift to §7/§8.
@@ -61,6 +64,15 @@ boundary only, and makes no B1/O1/runtime/production quantity claim.
 > (the terminal-3 predicate object). Frozen §5 and §6 are kept **byte-frozen** and
 > are not edited in place; the current section status is the §1 document-state
 > table above. This note is the append-only correction of record.
+
+> **Append-only status correction (WP-A7).** WP-A7 freezes §8 (schema-only B1
+> input interface). The frozen §6.6, §7.9 typed-deferral tables and the §6.0/§7.0
+> boundary paragraphs describe §8 as `reserved`/`unresolved` — **freeze-time
+> snapshots** that are now **superseded**: §8 is **frozen by WP-A7**. Frozen
+> §5–§7 are kept **byte-frozen** and are not edited in place; the current section
+> status is the §1 document-state table above. This note is the append-only
+> correction of record. §8 resolves no numbered obligation (all four remain
+> resolved by WP-A1/A2/A4/A5) and selects no terminal.
 
 ## §2 Canonical observation/time interface（obligation 1 — nine fields, frozen）
 
@@ -1159,11 +1171,282 @@ boundary verdict** 之**定義**。它不宣稱任何 runtime 擷取值、不建
 執行 identification、不選參數／metric／threshold、不選 terminal。修改須 append-only
 correction（原文保留、註記 superseded）。
 
-## §8 Reserved
+## §8 Schema-only interface for a future B1 input（D1 deliverable — frozen）
 
-`GCTM_MODEL_SPEC_SEALABLE` 之前必須完成（見 charter frozen terminal partition
-與 obligation-status table）；在其 work packet 落地前，本檔不預先陳述。**§8**
-schema-only B1 input interface（WP-A7 planned）。
+本節落地 charter D1 的最後一項 deliverable「**schema-only interface for a
+separately declared future B1 input**」。它規定：一個**未來**的 B1 input 若宣稱
+instantiate 本 D1，必須提供哪些**欄位**、各欄位的**型別／domain／單位／causal
+availability**、哪些量是 **input** 而哪些是 **derived（不得由 input 冒充）**、以及
+哪些 **well-formedness predicate** 必須 fail-closed 通過。它建立在 frozen §2–§7 之上，
+不重定義任何既有物件。
+
+**Schema-only 的意思（凍結）：** 只定義 *interface shape*——欄位存在性、語意綁定與
+可機械判定的合法性條件。它**不**啟用 B1、不取 data、不 fit、不選任何數值／metric／
+threshold／fold／file format，也**不**建立 fidelity edge。
+
+### §8.0 本節做什麼／不做什麼（typed boundary）
+
+**做（frozen）：** (i) 定義 schema 的 consumption rule（何謂「本 D1 的合法
+instantiation」）與 authority 分工；(ii) 定義四個 block 的欄位集——declaration-level
+（Block D）、event-level（Block E）、pair-level（Block P）、derived（Block X：可計算的
+**X-a** 與 latent-only 的 **X-b**）——各附
+required/optional 標記、domain、單位、causal availability 與其 frozen 來源 §；(iii)
+凍結 **well-formedness predicates**（W1–W9＋W5′，共十條，fail-closed、機械可判定）；(iv) 凍結
+**claim-restriction map**：某欄位／宣告缺席時，哪些 claim 因 §7 leakage 而**不可主張**。
+
+**不做（明確不授權／留給後續）：** **不執行任何 data、capture、fitting、evaluation**；
+不宣稱任何 runtime 擷取值可得（本 schema 的欄位是 *requirement*，不是 *availability
+claim*）；不選 storage format／serialization／schema-version 機制；不定義 evaluation
+design（fold、trial unit、minimum exposure、metric、threshold、blind/reveal 協定——皆
+B1 charter 所有）；不決定 **B1-slot identity**、不寫 **score-layer contract**（兩者皆為
+B1 charter 的 owner 前置，本節只 link，不複寫）；**不選 terminal**（WP-A8）；不建立
+fidelity edge、不做 bridge-runtime claim。
+
+沿用 §4.0／§5.0／§6.0／§7.0 的 canonical boundary（永不逾越），本節額外固定兩條：
+
+- **Schema ≠ activation。** 一個滿足本 schema 的 input **不因此**成為 accepted B1
+  evidence：B1 的 activation gate、frozen inputs、slot identity 與 score-layer 前置
+  由 [B1 charter](../threads/gctm_b1_runtime_grounded_offline_attribution_task.md)
+  獨占；滿足本 schema 只表示「A 層物件可被無歧義 instantiate」。
+- **Schema ≠ fidelity。** 欄位指名 production 對象時，其地位仍是 §2 的
+  *declared-target*；runtime 忠實性須 H0／fidelity-edge 路徑另行建立。本 schema 的
+  任何欄位都不得被引用為 runtime-fidelity 證據。
+
+### §8.1 Consumption rule 與 authority 分工（frozen）
+
+**Consumption rule（frozen，fail-closed）：** 一個未來 B1 input 宣稱 instantiate 本
+D1，當且僅當
+
+1. 提供 Block D／E／P 的**全部 `required` 欄位**，並對每個 `required-if` 欄位滿足其
+   觸發條件；且
+2. 通過 §8.6 的**全部**十條 well-formedness predicates（W1–W9＋W5′）；且
+3. 其 `claim_dependency_set`（§8.2.1 的封閉 atom 詞彙）與 §8.7 claim-restriction map
+   依**實際宣告到的欄位**算出的禁止 atom 集合**交集為空**。
+
+三者任一不成立 ⇒ 該 input **不是**本 D1 的 instantiation，**不得**引用 D1 的任何
+identifiability／separation 結論（§6／§7 的結論永遠綁其 regime 前提，§7.0）。
+不合法 record 一律 **inadmissible**，**不得**以預設值補齊（W9）。
+
+**Authority 分工（link, don't restate）：**
+
+| 對象 | 擁有者 | 本節的關係 |
+|:--|:--|:--|
+| A 層 canonical 物件（obs/time interface、transition、innovation、claim space、identifiability） | 本檔 §2–§7（frozen） | 本節**綁定**，不重定義 |
+| B1 activation gate、frozen inputs 清單、**B1-slot identity**、**score-layer contract**、evaluation design（fold／trial unit／metric／threshold／blind-reveal） | [B1 charter](../threads/gctm_b1_runtime_grounded_offline_attribution_task.md) | 本節只**指向**，不複寫、不預決 |
+| 跨 task 共享語意（hook scope、reserved-symbol 規則，如 base score 寫 \(s_{\mathrm{base}}\) 而 `s0` 為保留名） | [B1/O1 synthesis core](../../modules/semantic/research/gctm_b1_o1_task_objectives_and_semantics_20260716.md) §0／§2.1 | 本節只**指向** |
+| runtime observability／evidence fidelity | H0 declaration | 本節只**指向** |
+
+**欄位命名（frozen）：** 與 B1 charter frozen-inputs 同名的欄位（如
+`coordinate_substrate_id`、`observation_mode`、`causal_availability`、
+`context_definition`、`P0_exit_cov_id`、`R1_obs_cov_id`）即**同一物件**，沿用其名，
+**不另造名**；本節新增的欄位只補 A 層 instantiation 所必需者。
+
+### §8.2 Block D — declaration-level 欄位（每個 study 宣告一次）
+
+| 欄位 | 必要性 | 值域／型別 | 綁定 |
+|:--|:--|:--|:--|
+| `gctm_spec_id` | required | 本檔的 exact identity（path + commit/hash） | 指名被 instantiate 的 frozen §2–§8 |
+| `coordinate_substrate_id` | required | substrate 識別；A 層 latent state 於 \(\mathbb R^{2d}\) | §2 field 1（declared-target 地位不變） |
+| `coordinate_dim_d` | required | \(d\in\mathbb N_{\ge1}\)（production-corresponding \(d=2\)） | §4.1／§4.7 |
+| `frame_time_unit` | required | canonical = 1 frame interval；秒級須另附映射 | §2 field 2／field 7 |
+| `observation_mode` | required | 恰一個 \(\in\{H_x,H_{xv}\}\) | §3；production-corresponding 綁 \(H_x\) |
+| `causal_availability` | required-if `observation_mode=`\(H_{xv}\) | entry velocity 的**可得時點與來源**宣告 | §3.3 |
+| `error_dependence` | required | \(\in\{\texttt{independent},\ \texttt{dependent}\}\)；canonical = `independent`（\(C=0\)） | §5.4 |
+| `C_cross_cov_id` | required-if `error_dependence=dependent` | \(C\) 的來源；須落在 joint-PSD domain | §5.4／§5.6 |
+| `gamma_status` | required | \(\in\{\texttt{known},\ \texttt{unknown}\}\) | §7.4 |
+| `gamma_value` | required-if `gamma_status=known` | \(\gamma\in[0,\infty)\)，單位 \(\mathrm{frame}^{-1}\)（\(\gamma=0\)=M1 boundary） | §4.6／§4.7 |
+| `gamma_estimate_id` | required-if `gamma_status=unknown` | **實際用於計分**的 \(\gamma\) estimate／artifact 之來源（Block X 需要一個具體 \(\gamma\) 才能重算）；其**識別地位**另受 W6(b) 限制——供應可計分的值**不等於**已識別 | §4.7；W6(b) |
+| `joint_map_condition_status` | required-if `gamma_status=unknown` | \(\in\{\texttt{global\_injectivity\_established},\ \texttt{local\_full\_rank\_established},\ \texttt{not\_established}\}\)＋證據來源；**本規格不證明任一者** | §7.4／§7.7 |
+| `identification_scope` | required-if `gamma_status=unknown` **且** `claim_dependency_set` 與 \(\mathcal A_{\mathrm{cov}}\) 有交集（§8.2.1；含 `covariance_quotient`——\(\gamma\) unknown 時 quotient 亦須經 W6(b) 的 \(\gamma\) regime，故不得漏觸發）；`gamma_status=known` 時不需要 | \(\in\{\texttt{local},\ \texttt{global}\}\)；**global claim 需 `global_injectivity_established`；`local_full_rank_established` 只支持 local claim，且 local 結論不得被轉述為 global identification** | §7.4／§7.7（二者不等價） |
+| `transition_diffusion_D_id` | required | \(D=LL^\top\succeq0\)（\(d\times d\)，\(\ell^2\mathrm{frame}^{-3}\)）之來源／識別；\(Q_\Delta\) 由 \((\gamma,D,\Delta)\) 唯一決定 | §4.5／§4.7 |
+| `context_drift_model_id` | required | \(\bar v:\mathcal C_{\mathrm{exit}}\to\mathbb R^d\) 這個 **mapping 的 identity**（**不**預設 consumer 能執行它）；宣告 \(\bar v\equiv0\)（無 context drift）須以**保留值** `vbar_zero` 明寫（機械可判定，供 W6(g) 引用）。**共享的是 mapping identity，不是值**——\(c_1\neq c_2\Rightarrow\bar v(c_1)\neq\bar v(c_2)\) 完全合法（正是 `context_varies=true` 的情形） | §4.3／§4.7 |
+| `context_drift_model_evaluable` | required | 布林：consumer 是否可**逐 event 執行**該 mapping。`false` ⇒ 每個 event 必須帶 `vbar_value`（§8.3；解析路徑見 W5′(a′)） | §4.3；W5′ |
+| `gauge_fixing` | required | \(\in\{\texttt{R1\_declared},\ \texttt{Pxx\_declared},\ \texttt{none}\}\)（固定 \(P_{xx}\!\leftrightarrow\!R_1\) gauge 的**額外獨立資訊**） | §7.4 G1／§7.6 |
+| `parameter_sharing_scope` | required | **Conditional scope（frozen）**：定義 claim population，以及該 population 共用的 \(\gamma,D\) 與 \(\bar v\)-mapping identity（W5′(b)，計分所需的最小集）。**若** `claim_dependency_set` 與 \(\mathcal A_{\mathrm{cov}}\) 有交集，同一 scope **另須**共享 \(P_0,R_1\)（W6(f)，§7.4 shared-parameter 前提）；純 \(\mathcal A_{\mathrm{mean}}\)／`no_parameter_identification` 的 declaration **不**要求 \(P_0/R_1\) 為同一 artifact，故其 population 可含 \(P_0/R_1\) 相異的 events（mean-level 的阻斷條件見 §7.6 mean 表） | §7.4／§7.6；W5′(b)／W6(f) |
+| `context_definition` | required | \(\mathcal C_{\mathrm{exit}}\) 的定義；須僅含 exit-causal 資訊 | §4.0 boundary 4／§4.7 |
+| `context_varies` | required | 布林：\(c\) 在 population 中是否**變化**（決定 \(\bar v(c)\) 可否與常數 mean 分離） | §7.4／§7.6 mean-level |
+| `claim_target` | required | 恰一個 \(\in\{\texttt{CAL},\ \texttt{RANK}\}\)；兩者須**各自**一份宣告 | §6.2（CAL/RANK 永不互相冒充） |
+| `claim_dependency_set` | required | 非空集合，元素取自下方**封閉** atom 詞彙（§8.2.1）；列出該 claim 依賴哪些 §7 regime atom。**W6 與 §8.7 全部對此集合判定** | §7.4／§7.6／§7.7 |
+| `cal_working_null` | required-if `claim_target=CAL` | §6.1 的 Gaussian working null（\(\delta z_0\sim\mathcal N(0,P_0)\)）之顯式宣告 | §6.1 |
+| `region_definition` | required-if 使用 \(\Pi(\Omega)\) | \(\Omega\) 的定義；candidates 間是否全等須寫明 | §6.1／§6.3 region caveat |
+| `operator_offset_declared` | required | 布林＋其構成（`bridge_at` 與所用 \(v\) 的來源） | §2 rows 8–9／§4.4 |
+| `missing_value_rule` | required | 必須為 fail-closed（缺 required 欄位 ⇒ record inadmissible），**不得**為 imputation | W9 |
+
+#### §8.2.1 `claim_dependency_set` — 封閉 atom 詞彙（frozen）
+
+Consumption rule 第 3 條要求 claim 落在 §8.7 允許範圍內；`claim_target`
+（CAL／RANK）**不足以**機械決定要觸發 W6 的哪幾條，因此 claim 必須顯式列出它依賴
+的 §7 regime atom。詞彙**封閉**（不得自造 atom），且**只指 §7 的 identifiability
+依賴**——它**不**定義 metric、threshold、score ladder 或任何 B1 評估語意（那些仍屬
+B1 charter／score-layer contract）。
+
+Atom 分**三類**（承 §7.6 的 covariance-level／mean-level 分層，**不得混為一談**）：
+
+| Atom | 類別 | 意義 | 觸發的 W6 分支 |
+|:--|:--|:--|:--|
+| `no_parameter_identification` | none | claim 不依賴任何參數識別（參數視為 given／declared，只做 §6 層的 CAL／RANK 敘述）；**必須單獨出現** | 無（W7／W9 仍適用） |
+| `covariance_quotient` | **covariance-id** | claim **使用** identifiable quotient \(\{D,P_{vv},\operatorname{sym}(P_{xv}),P_{xx}+R_1\}\) 的成分（**不**宣稱排他性——需要超越 quotient 的成分時另列對應 atom） | W6(a)；\(\gamma\) unknown 時另加 W6(b) |
+| `gamma_identification` | **covariance-id** | 主張識別 \(\gamma\) | W6(b) |
+| `gamma_D_separation` | **covariance-id** | 需 \(\gamma\) 與 \(D\) 分離 | W6(b) |
+| `Pxx_R1_split` | **covariance-id** | 需 \(P_{xx}\) 與 \(R_1\) **分離**（非只用其和） | W6(c)（\(\gamma\) unknown 時另加 W6(b)） |
+| `asym_Pxv` | **covariance-id** | 需 \(\operatorname{asym}(P_{xv})\) | W6(d)（\(\gamma\) unknown 時另加 W6(b)） |
+| `vbar_context_drift` | **mean-level** | 需 \(\bar v(c)\) 的 context drift 與常數 mean 分離 | W6(e) |
+| `mean_bias_attribution` | **mean-level** | **僅指 operator-offset separation**：把 \(\pm(\mathrm{bridge\_at}-1)v\) 與 mean 的其餘部分分開 | W6(g) |
+| `exit_state_bias_separation` | **mean-level** | 主張把 **exit-state 估計 bias** 與上二者分開 | W6(h) |
+
+**類別集合（frozen，供 predicate 引用）：**
+\[
+\mathcal A_{\mathrm{cov}}=\{\texttt{covariance\_quotient},\texttt{gamma\_identification},
+\texttt{gamma\_D\_separation},\texttt{Pxx\_R1\_split},\texttt{asym\_Pxv}\},
+\]
+\[
+\mathcal A_{\mathrm{mean}}=\{\texttt{vbar\_context\_drift},\texttt{mean\_bias\_attribution},
+\texttt{exit\_state\_bias\_separation}\}.
+\]
+
+**組合規則（frozen）：**
+
+1. **空集不合法**：`required` 且非空——「無依賴」必須以 `no_parameter_identification`
+   **明示**，使「明示無依賴」與「漏填」在 W9 下可區分（fail-closed）。
+2. `no_parameter_identification` **必須單獨出現**，不得與任何其他 atom 併列。
+3. 其餘 atom 可自由併列（`covariance_quotient` **無**排他性語意：它只表示 claim
+   *使用* quotient 成分，需要超越 quotient 者另列 `Pxx_R1_split`／`asym_Pxv`，各自
+   由其分支判定——舊名 `quotient_only` 的 "only" 與併列規則相矛盾，故改名）。
+4. **層別不互相蘊含**：\(\mathcal A_{\mathrm{cov}}\) 依賴共享 covariance 參數，
+   \(\mathcal A_{\mathrm{mean}}\) 依賴 varying exit-causal context／operator-offset
+   宣告／population-null——**W6(f) 只適用於 \(\mathcal A_{\mathrm{cov}}\)**（§7.6 的
+   covariance-level 與 mean-level 是不同表）。
+5. 判定取各觸發分支的**聯集**（§8.7 合成規則）。
+
+### §8.3 Block E — event-level 欄位（每個 candidate event 一列）
+
+Candidate event \(\mathcal E\) 的定義沿用 §6.2（一條 lost track 的固定 exit anchor
+＋一組有限 entry candidates），不重定義。
+
+| 欄位 | 必要性 | 值域／型別 | Causal availability | 綁定 |
+|:--|:--|:--|:--|:--|
+| `event_key` | required | 全域唯一 | — | §6.2；RANK 的 evaluation unit |
+| `exit_anchor_frame` | required | frame index（lost track 最後被觀測 frame） | exit-time | §2 field 3（exit endpoint） |
+| `z0_hat` | required | \(\hat z_0=[\hat x_0;\hat v_0]\in\mathbb R^{2d}\)；\(x\):\(\ell\)、\(v\):\(\ell/\mathrm{frame}\) | exit-time | §5.2 |
+| `P0_exit_cov_id` | required | \(P_0\succeq0\)（\(2d\times2d\)）之來源／識別 | exit-time | §5.1／§5.6 |
+| `context_c` | required | \(c\in\mathcal C_{\mathrm{exit}}\) | exit-time | §4.7 |
+| `vbar_value` | required-if `context_drift_model_evaluable=false`；否則 optional（若同時出現，值須與 model 求值一致，W5′(a′)） | \(\bar v(c)\in\mathbb R^d\)，單位 \(\ell/\mathrm{frame}\)；在 \([0,\Delta]\) 內固定；**可隨 `context_c` 逐 event 不同** | exit-time（boundary 4） | §4.3／§4.7 |
+| `candidate_count` | required | \(\lvert\mathcal E\rvert\in\mathbb N_{\ge1}\) | — | §6.2 |
+
+### §8.4 Block P — pair-level 欄位（每個 (event, candidate) 一列）
+
+| 欄位 | 必要性 | 值域／型別 | Causal availability | 綁定 |
+|:--|:--|:--|:--|:--|
+| `event_key` | required | 指向 Block E | — | conservation（W8） |
+| `candidate_key` | required | event 內唯一 | — | §6.2 |
+| `entry_anchor_frame` | required | frame index（candidate 第一次被觀測 frame＝entry endpoint） | entry-time | §2 field 5／field 6 |
+| `g_phys` | required | \(g_{\mathrm{phys}}=\Delta\in\mathbb N_{\ge1}\)，單位 frame | 兩 endpoint 皆定後 | §2 field 3；canonical transition index |
+| `bridge_at` | required | event 當下綁定的 runtime 值（**不**凍結常數） | 宣告時 | §2 field 6 |
+| `delta_on` | required | \(\Delta_{\mathrm{on}}=\mathrm{la}\in\mathbb N\)，單位 frame | entry-time | §2 field 4 |
+| `anchor_pair` | required | 明寫本列 transition 的兩個 anchor（canonical＝exit endpoint → entry endpoint） | — | §2 field 5（W2） |
+| `y1_obs` | required | entry observation；\(H_x\):\(\mathbb R^{d}\)（\(\ell\)）、\(H_{xv}\):\(\mathbb R^{2d}\) | entry-time | §5.3 |
+| `R1_obs_cov_id` | required | \(R_1\succeq0\)，維度隨 \(H\) | entry-time | §5.1／§5.6 |
+| `H_i` | required | 本列使用的 observation mode，須等於 Block D 的 `observation_mode` | — | §3（W3） |
+| `operator_offset` | required-if `operator_offset_declared=true` | \(\pm(\mathrm{bridge\_at}-1)v\)，**獨立欄位** | derived @ entry endpoint | §2 rows 8–9（W2） |
+| `label_true_match` | required-if 進行 CAL 或 RANK 評估 | 布林／候選標記；**evaluation-only** | post-hoc（**不得**進入任何 score 欄位） | §6.2／§7.5（W8 label isolation） |
+| `admissibility` | required | \(\in\{\texttt{admitted},\ \texttt{dropped}\}\)；`dropped` 須附**恰一個**列舉理由 | — | W9 |
+
+### §8.5 Block X — derived 量（**X-a** 由 D1 計算；**X-b** latent，不可 row-level 計算）
+
+本 block 分兩類，**不得混為一談**：
+
+**X-a — computable derived fields（由 Block D/E/P 唯一決定）。** 這些量**不是**
+input：它們由已宣告欄位依 frozen §4–§6 唯一決定。schema 允許 input 附帶它們**僅作為
+cross-check**；若附帶，其值必須與依 frozen 公式重算者一致（W5），否則該 record
+inadmissible。**任何以外部值取代重算的做法，即脫離本 D1 的 instantiation。**
+
+| X-a 量 | 由誰決定（皆為已宣告欄位） | 來源 § |
+|:--|:--|:--|
+| \(a,b\)、\(A_\Delta\) | \(\gamma\)（`gamma_value`／`gamma_estimate_id`）、\(\Delta\)=`g_phys` | §4.3 |
+| \(d_\Delta(c)\) | \(\gamma,\Delta\)、\(\bar v(c)\)（`context_drift_model_id`／`vbar_value`） | §4.3；**不含** operator offset（§4.4） |
+| \(Q_\Delta\) | \(\gamma\)、\(D\)（`transition_diffusion_D_id`）、\(\Delta\) | §4.5（\(\gamma=0\)：§4.6） |
+| \(m^-_\Delta=A_\Delta\hat z_0+d_\Delta(c)\) | `z0_hat`＋上列 | §5.2（符號約定 frozen） |
+| \(P^-_\Delta=A_\Delta P_0A_\Delta^\top+Q_\Delta\) | `P0_exit_cov_id`、\(A_\Delta,Q_\Delta\) | §5.2 |
+| \(r=y_1-Hm^-_\Delta\) | `y1_obs`、\(H\)、\(m^-_\Delta\) | §5.3（**可觀測** innovation） |
+| \(S_\Delta=HP^-_\Delta H^\top+R_1\)（canonical \(C=0\)）／\(+HC+C^\top H^\top\)（dependent） | `error_dependence`、`R1_obs_cov_id`、`C_cross_cov_id` | §5.4 |
+| \(q,\ \log\det S_\Delta,\ E,\ \Pi(\Omega)\) | \(r,S_\Delta,\Omega\) | §6.1（需 \(S_\Delta\succ0\) regime） |
+
+**X-b — latent symbolic quantities（**不可** row-level 計算，**不得**作為 input）。**
+下列量只存在於 model 定義與 moment derivation 中，**不是**任何 record 可計算或可
+cross-check 的輸出：
+
+| X-b 量 | 為何不可 row-level 計算 | 只用於 |
+|:--|:--|:--|
+| \(z_\Delta\)（entry-time latent state） | schema 只提供 \(y_1=Hz_\Delta+\epsilon_1\)（`y1_obs`），一般**不可反解** \(z_\Delta\) | model 定義（§4.3 kernel） |
+| \(\delta z_0=z_0-\hat z_0\)、\(\eta_\Delta\) | 皆含 latent \(z\)；schema 只提供估計量 \(\hat z_0\) 與其 covariance \(P_0\) | \(P^-_\Delta\) 的 moment derivation（§5.2） |
+| \(e^-=z_\Delta-m^-_\Delta\) | latent prediction error；**可觀測／可計算的對應量是 \(r=y_1-Hm^-_\Delta\)**（\(r=He^-+\epsilon_1\)，§5.3） | 符號約定與 \(P^-_\Delta,S_\Delta\) 的推導（§5.2／§5.4） |
+
+**禁止（frozen）：** 不得為了「讓 X-b 可 cross-check」而新增 `z_delta_true`／
+`e_minus_observed` 之類的欄位。任何 latent／GT 導出的 entry-time 真值一旦進入
+record，即違反 W8 的 **label isolation**（evaluation-only 資訊不得進入 score 層）。
+X-b 的存在只保證 §5 的 moment 結構有定義，**不**構成 record-level 可用性 claim。
+
+### §8.6 Well-formedness predicates（frozen；fail-closed、機械可判定）
+
+| # | Predicate | 違反後果 | 來源 |
+|:--|:--|:--|:--|
+| **W1** | **Anchor identity**：\(\Delta_{\mathrm{on}}=g_{\mathrm{phys}}+(\mathrm{bridge\_at}-1)\) 逐列成立；且 \(g_{\mathrm{phys}}=\mathrm{entry\_anchor\_frame}-\mathrm{exit\_anchor\_frame}\ge1\)、`bridge_at`\(\ge1\) | record inadmissible | §2 field 5／field 3 |
+| **W2** | **Anchor 宣告與 offset 分離**：每列 `anchor_pair` 明寫；production-corresponding instantiation 必須為 exit→entry 並**重現** \(\pm(\mathrm{bridge\_at}-1)v\)，且該 offset 只能出現在 `operator_offset` 欄位——**不得**折進 \(d_\Delta(c)\)、\(m^-_\Delta\) 或 \(e^-\) | record inadmissible；折入者為 layer 混淆 | §2 rows 8–9／§4.4 |
+| **W3** | **Observation mode 一致性**：全 study 恰一個 \(H\)，且每列 `H_i` 與之相同；\(H_{xv}\) 須有 `causal_availability`；若 entry velocity 由與 \((0,\Delta]\) **重疊**的 frames 導出 ⇒ `error_dependence` 必須為 `dependent` 且 `C_cross_cov_id` 已宣告 | declaration inadmissible | §3.3／§5.4／§7.2 |
+| **W4** | **PSD／可逆性**：\(P_0\succeq0\)、\(R_1\succeq0\)、\(D\succeq0\)；dependent path 另需 \(\big[\begin{smallmatrix}P^-_\Delta&C\\ C^\top&R_1\end{smallmatrix}\big]\succeq0\)。使用 \(q/E/\Pi\) 的列另需 \(S_\Delta\succ0\)（canonical \(C=0\)＋\(R_1\succ0\) 即足；dependent path 需額外 nondegeneracy） | 違反 PSD ⇒ inadmissible；\(S_\Delta\) 退化 ⇒ 該列不得產生 \(q/E/\Pi\) | §5.5／§5.6／§6.1 |
+| **W5** | **維度／單位／derived 一致性**：所有矩陣維度與 `coordinate_dim_d` 及 \(H\) 相容；單位依 §4.7／§5.6／§6.5；附帶的 **X-a** 值必須與依 frozen 公式重算者一致；**X-b（latent）不得作為 input 出現** | record inadmissible | §4.7／§5.6／§8.5 |
+| **W5′** | **Parameter-binding 完備性與 sharing 一致性**（closure predicate）：(a) **完備性**——每個 **X-a** 量的所有決定欄位必須實際可解析：\(\gamma\)（`gamma_value` 或 `gamma_estimate_id`）、\(D\)（`transition_diffusion_D_id`）、\(P_0\)（`P0_exit_cov_id`）、\(R_1\)（`R1_obs_cov_id`）、dependent path 的 \(C\)（`C_cross_cov_id`）。**任一不可解析 ⇒ Block X-a 無法重算 ⇒ 該 declaration 不是本 D1 的 instantiation**（不得以「參數待識別」含混帶過：CAL 與 RANK 皆需可計算的 score）。(a′) **\(\bar v(c)\) 的逐 event 解析（兩條路徑，恰一條即可）**——每個 event 的 \(\bar v(c)\) 必須至少由下列之一得到：**(i)** `context_drift_model_evaluable=true`，consumer 逐 event 執行共享 mapping；或 **(ii)** 該 event 的 `vbar_value`。兩者皆缺 ⇒ 該 event inadmissible；兩者皆有 ⇒ **值必須一致**（否則 inadmissible）。(b) **sharing 一致性**——`parameter_sharing_scope` 內 \(\gamma\)、\(D\) 綁定與 \(\bar v\) 的 **mapping identity**（`context_drift_model_id`）必須解析到**同一** artifact，不得只在宣告層寫「共享」。**注意：共享的是 mapping，不是值**——\(c\) 不同則 \(\bar v(c)\) 本應不同（`context_varies=true`），逐 event 的 `vbar_value` 相異**不**違反本條 | declaration／該 event inadmissible | §4.3／§4.5／§4.7／§5.6／§8.5 X-a |
+| **W6** | **Identifiability regime**（承 §7；**逐 atom 對 `claim_dependency_set` 機械判定**，§8.2.1）：(a) `covariance_quotient` ⇒ 需 `parameter_sharing_scope` 內 **\(\ge4\) 相異 \(\Delta\)**（single-\(\Delta\) population 連 quotient 都不可識別，§7.3），且 \(\gamma\) 須 `known` 或滿足 (b)。(b) **\(\gamma\) regime**——`gamma_status=unknown` 時，`claim_dependency_set` 中**任一** \(\mathcal A_{\mathrm{cov}}\) atom（含 `covariance_quotient`、`Pxx_R1_split`、`asym_Pxv`，非只 \(\gamma\) 兩者）皆須：需 **\(>4\) 相異 \(\Delta\)**、`joint_map_condition_status`\(\neq\)`not_established`，**且 `identification_scope` 不得強於已確立的條件**（`global` 需 `global_injectivity_established`；`local_full_rank_established` 只支持 `local`，**local 結論不得被轉述為 global identification**——二者不等價，§7.4／§7.7）；「\(\ge5\) gaps」只是**必要**非充分。(c) `Pxx_R1_split` ⇒ 需 `gauge_fixing`\(\neq\)`none`。(d) `asym_Pxv` ⇒ 需 \(H_{xv}\)＋multi-gap＋共享參數＋\(\gamma\) regime 滿足。(e) `vbar_context_drift` ⇒ 需 `context_varies=true` 且 context 為 exit-causal。(f) 集合與 \(\mathcal A_{\mathrm{cov}}\) 有交集 ⇒ 另需 `parameter_sharing_scope` 內 \(P_0\) 與 \(R_1\) 也解析到**同一** artifact（§7.4 shared-parameter 前提；W5′(b) 只要求 \(\gamma,D,\bar v\)-mapping 共享，那是**計分**所需的最小集）。**(f) 不適用於 \(\mathcal A_{\mathrm{mean}}\)**：mean-level 的阻斷條件是 varying exit-causal context／operator-offset 宣告／population-null，**不是** \(P_0/R_1\) 的 artifact identity（§7.6 兩張表分列）。(g) `mean_bias_attribution`（＝operator-offset separation）⇒ 需 `operator_offset_declared=true`；**且**若 `context_drift_model_id`\(\neq\)`vbar_zero`（即宣告了非零 context drift），則 `vbar_context_drift` **必須同時列入** `claim_dependency_set`（否則 W6(e) 不被觸發，\(\bar v(c)\) 與常數 bias 的混淆會漏判，§7.6 mean-level）。(h) `exit_state_bias_separation` ⇒ 需 `parameter_sharing_scope` 內 **\(\ge2\) 相異 \(\Delta\)**（single event 下 exit-state bias 與另二者不可分，§7.6 mean-level 第 3 列）**且** `operator_offset_declared=true` **且**（`context_drift_model_id=`\(\,\)`vbar_zero` 或 `vbar_context_drift` 已列入）；zero-mean null \(\mathbb E[\delta z_0]=0\) 由 frozen §5.3 提供，非可選。多 atom 取各分支**聯集** | 對應 claim **non-identifiable**（§8.7；落入 terminal-3 rejection region 的判定屬 WP-A8） | §7.3／§7.4／§7.6／§7.7 |
+| **W7** | **Claim／evaluation-unit 一致性**：`claim_target=CAL` 的評估只在 \(\{(e,i^\star)\}\)（true match）上做且需 `cal_working_null`；`claim_target=RANK` 只做 event-local ordering（event 內計算後再跨 event 平均）。**同一份宣告不得同時主張兩者**；CAL 結論不得轉述為 RANK，反之亦然 | claim inadmissible | §6.2／§6.0 |
+| **W8** | **Conservation 與 label isolation**（A 層最小集）：每個 admitted pair 屬**恰一個** event；每個 event 恰一個 exit anchor 與一組不重複 candidates；`label_true_match` 與任何 GT 導出量為 **evaluation-only**，**不得**作為 Block D/E/P 任一 score-relevant 欄位的輸入。（fold／partition／trial-unit／blind-reveal 的完整 conservation 由 B1 charter 所有，本節不複寫） | record 或 study inadmissible | §6.2；B1 charter conservation identities |
+| **W9** | **Fail-closed missing-value**：缺任一 `required`（或已觸發的 `required-if`）欄位 ⇒ 該 record／declaration **inadmissible**，**不得**以預設值、鄰值或全域常數補齊；`dropped` 列須附**恰一個**列舉理由；optional 欄位缺席須**明確記錄**，其後果見 §8.7 | inadmissible；靜默補值即脫離本 D1 | §2 row 9 精神（不得靜默繼承） |
+
+### §8.7 Claim-restriction map（缺宣告 ⇒ 哪些 claim 不可主張；承 §7 leakage matrix）
+
+本表把 §7.6 的**阻斷條件**翻譯成 schema-level 的機械判定：左欄的宣告缺席時，右欄
+所列的 **`claim_dependency_set` atom**（§8.2.1）即**不可主張**（其餘 atom 不受影響）。
+判定對象一律是 atom，不是自然語言的 claim 描述——這是「機械可判定」的落點。
+
+| 缺席的宣告／欄位 | 因此**不可主張**的 atom | 仍可主張者 | 依據 |
+|:--|:--|:--|:--|
+| `gauge_fixing=none` | `Pxx_R1_split`（結構性 gauge，\(H_{xv}\) 亦不可破） | `covariance_quotient`（只用 \(P_{xx}+R_1\) 之和） | §7.4 G1／§7.6 |
+| `gamma_status=unknown` 且（\(\le4\) 相異 \(\Delta\) 或 `joint_map_condition_status=not_established`） | **全部 \(\mathcal A_{\mathrm{cov}}\)**——`gamma_identification`、`gamma_D_separation`、`covariance_quotient`、`Pxx_R1_split`、`asym_Pxv`（quotient 在 \(\gamma\) unknown 時同樣要過 \(\gamma\) regime，§7.4） | 給定 \(\gamma\)（`gamma_estimate_id`）條件下的 score／quotient claim（須明寫其 conditional 前提：**供應可計分的 \(\gamma\) 值不等於已識別 \(\gamma\)**） | §7.4 G3／§7.6／§7.7 |
+| 只有 `local_full_rank_established`（無 global injectivity） | `identification_scope=global` 下的**全部 \(\mathcal A_{\mathrm{cov}}\)**（`gamma_identification`／`gamma_D_separation`／`covariance_quotient`／`Pxx_R1_split`／`asym_Pxv`——W6(b) 對整個 class 檢查 scope，判定域因此與 map 一致）；local 結論**不得**被轉述為 global identification | `identification_scope=local` 的 claim（須標明只 local） | §7.4／§7.7（二者不等價） |
+| 參數 binding 不可解析（\(\gamma\)／\(D\)／\(P_0\)／\(R_1\)／dependent 的 \(C\) 任一缺；或某 event 的 \(\bar v(c)\) 兩條路徑皆無、或兩者不一致） | **全部** atom（含 `no_parameter_identification`）——Block X-a 無法重算 ⇒ 該 declaration **根本不是**本 D1 的 instantiation（非「部分受限」） | 無 | W5′(a)/(a′)／§8.5 X-a |
+| `parameter_sharing_scope` 內 \(P_0\)／\(R_1\) 未解析到同一 artifact | **\(\mathcal A_{\mathrm{cov}}\) 全部**（§7.4 shared-parameter 前提不成立） | `no_parameter_identification` 與 **\(\mathcal A_{\mathrm{mean}}\)**（mean-level 不依賴 \(P_0/R_1\) artifact identity，§7.6 分表） | §7.4／W6(f) |
+| `observation_mode=`\(H_x\) | `asym_Pxv`（\(H_x\) 下 structural invisible） | `covariance_quotient`（\(\operatorname{sym}(P_{xv})\)／\(P_{vv}\)／\(D\)，在 W6(a) regime 下） | §7.4 G2／§7.6 |
+| `context_varies=false` 或 `context_definition` 未宣告 | `vbar_context_drift`（連帶：宣告非零 drift 時 `mean_bias_attribution` 亦被 W6(g) 擋下，因它必須併列 `vbar_context_drift`） | 常數-mean 層級的敘述（須標明混淆）；\(\bar v\equiv0\)（`vbar_zero`）下的 `mean_bias_attribution` | §7.4／§7.6 mean-level |
+| `operator_offset_declared=false` | `mean_bias_attribution`、`exit_state_bias_separation`（operator offset 與 \(\bar v(c)\)／常數 bias 混淆） | \(\mathcal A_{\mathrm{cov}}\)（covariance-level 不受 mean-level 阻斷影響） | §7.6 mean-level／§2 row 9 |
+| `label_true_match` 不可得 | **CAL 與 RANK 皆不可主張**（兩者皆以 true-match label 為前提） | 僅 model-side 的定義性敘述（無 claim） | §7.5 |
+| `cal_working_null` 未宣告 | CAL 的**分佈層** claim（\(q\sim\chi^2_k\)、coverage／PIT） | \(q,\log\det S_\Delta,E,\Pi\) 作為 \(r,S_\Delta\) 的**函數**仍 well-defined | §6.1 |
+| `region_definition` 未宣告（卻使用 \(\Pi\)） | 任何 \(\Pi\)-based claim | \(q\)／NLL-based claim | §6.1／§6.3 |
+| **single-gap population**（`parameter_sharing_scope` 只含一個 distinct \(\Delta\)） | \(\mathcal A_{\mathrm{cov}}\cup\{\)`exit_state_bias_separation`\(\}\)（§7.3：連 quotient 都不可；exit-state bias 需 multi-gap，§7.6 mean 表第 3 列） | `no_parameter_identification`；`mean_bias_attribution`（已縮窄為**已宣告** operator offset 的分離，阻斷條件是該宣告本身而非 multi-gap，交由 W6(g)）；**以及 `vbar_context_drift`**——§7.4／§7.6 對 \(\bar v(c)\) 的條件是「\(c\) 已宣告／觀測、在 population 中**變化**、exit-causally available」，**不含**多個相異 \(\Delta\)；single-gap 但 multi-event 且 context 變化的 population 合法。真正的 single **event** 無法讓 context 變化，由 W6(e)（`context_varies=false`）fail-closed，本列不重複攔截 | §7.3／§7.4／§7.6 |
+| `error_dependence=dependent` 但 \(S_\Delta\succ0\) 未另行確立 | 任何需 \(S_\Delta^{-1}\) 的 claim（\(q/E/\Pi\)） | \(S_\Delta\succeq0\) 層級的敘述 | §5.5／§6.1 |
+
+**跨欄位的合成規則（frozen）：** 多個缺席同時發生時，禁止的 atom 集合為各列的
+**聯集**；只要 `claim_dependency_set` 與該聯集有**非空交集**，該 claim 即不可主張
+（機械判定＝集合交集是否為空）。CAL 與 RANK 之間**互不救援**（一者可主張不使另一者
+可主張，§7.5）。
+
+### §8.8 本節顯式不解決（typed deferrals）
+
+| 項目 | 擁有 WP／文件 | 狀態 |
+|:--|:--|:--|
+| terminal review（checklist artifact + 機械 terminal selection） | 後續 packet（WP-A8 planned） | unresolved |
+| **B1-slot identity**、**score-layer contract**、B1 activation gate、frozen-inputs 清單 | [B1 charter](../threads/gctm_b1_runtime_grounded_offline_attribution_task.md)（owner 前置） | 不由本節決定 |
+| evaluation design：fold／trial unit／dependence treatment／minimum exposure／minimum effect／short-gap retention bar／metric／threshold／blind-reveal 協定 | B1 charter | 不在 A 層 schema |
+| reserved-symbol 規則（base score 寫 \(s_{\mathrm{base}}\)、`s0` 為保留名）與 hook scope | [synthesis core](../../modules/semantic/research/gctm_b1_o1_task_objectives_and_semantics_20260716.md) §0／§2.1 | 只指向，不複寫 |
+| storage format／serialization／schema versioning 機制 | — | 本節只定 field semantics，不選格式 |
+| runtime 可觀測性、H0 guarantee／fidelity edge、欄位是否**真的**可從 production 取得 | H0 路徑 | 不授權（本 schema 只列 requirement，非 availability claim） |
+| 實際 data／capture／fitting／identification／任何 gain 數值 | — | 不授權（charter Non-scope） |
+| reverse-time／candidate-backward atom | 後續 | typed boundary only（§4.0 boundary 3） |
+| B1/O1、H0、runtime、online、production | — | 不授權（charter Non-scope） |
+
+**Freeze 邊界：** 本節凍結的是 **schema 的 interface shape**——欄位集、型別／單位／
+causal-availability 綁定、input-vs-derived 分界、well-formedness predicates 與
+claim-restriction map。它不宣稱任何 runtime 擷取值、不建立 fidelity edge、不啟用 B1、
+不取 data、不選任何數值／metric／format、不選 terminal。修改須 append-only correction
+（原文保留、註記 superseded）。
 
 ## History
 
@@ -1437,3 +1720,252 @@ schema-only B1 input interface（WP-A7 planned）。
   only under \(H_x\), observable under \(H_{xv}\) (identification still needs multi-gap +
   shared params + \(\gamma\) regime); (iii) \(\gamma\) unknown = unmet regime. No other
   change.
+- 2026-07-23 — **§8 frozen by WP-A7** (last D1 deliverable: schema-only interface
+  for a separately declared future B1 input). Defines the consumption rule
+  (a future input instantiates this D1 **iff** it supplies every `required` /
+  triggered `required-if` field, passes all well-formedness predicates, and keeps
+  its claims inside the claim-restriction map — otherwise it is **not** an
+  instantiation and may not cite any §6/§7 conclusion); the authority split
+  (B1-slot identity, score-layer contract, activation gate, evaluation design and
+  reserved-symbol rules stay owned by the B1 charter / synthesis core — linked,
+  not restated); four field blocks — **D** declaration-level (spec identity,
+  \(d\), observation mode + causal availability, `error_dependence`,
+  `gamma_status`/`joint_map_condition_status`, `gauge_fixing`,
+  `parameter_sharing_scope`, context + `context_varies`, `claim_target`,
+  `cal_working_null`, `region_definition`, `operator_offset_declared`,
+  fail-closed `missing_value_rule`), **E** event-level (`event_key`, exit anchor,
+  \(\hat z_0\), `P0_exit_cov_id`, context, candidate count), **P** pair-level
+  (entry anchor, \(g_{\mathrm{phys}}\), `bridge_at`, \(\Delta_{\mathrm{on}}\),
+  `anchor_pair`, \(y_1\), `R1_obs_cov_id`, \(H_i\), `operator_offset`,
+  evaluation-only `label_true_match`, `admissibility`), and **X** derived
+  (\(a,b,A_\Delta,d_\Delta(c),Q_\Delta,m^-_\Delta,e^-,P^-_\Delta,r,S_\Delta,
+  q,\log\det S_\Delta,E,\Pi\)) which are **inputs to nothing** — supplying them
+  in place of recomputation leaves the instantiation. Nine fail-closed
+  predicates W1–W9 (anchor identity \(\Delta_{\mathrm{on}}=g_{\mathrm{phys}}+
+  (\mathrm{bridge\_at}-1)\); anchor declaration with the operator offset kept in
+  its own field, never folded into \(d_\Delta/m^-_\Delta/e^-\); observation-mode
+  consistency with the overlap ⇒ dependent-\(C\) rule; PSD/invertibility;
+  dimension/unit/derived consistency; the §7 identifiability regime; CAL/RANK
+  evaluation-unit separation; conservation + **label isolation**; fail-closed
+  missing values) and a claim-restriction map translating the §7.6 blocking
+  conditions into per-field mechanical verdicts (union rule across fields; CAL
+  and RANK never rescue each other). §8 is schema-only: no B1 activation, no
+  runtime-availability claim, no data/fitting, no format choice, no terminal.
+  §2–§7 byte-frozen; the §6.6/§7.9 "§8 reserved" rows are superseded by the §1
+  append-only correction. Predicate decidability checked on synthetic records in
+  session scratchpad: a conforming declaration passes all nine predicates, 17
+  injected violations (one or more per predicate, incl. \(\Delta_{\mathrm{on}}=
+  g_{\mathrm{phys}}\), offset folded into the mean, \(H_{xv}\) overlap without a
+  declared \(C\), non-PSD \(R_1\), supplied \(S_\Delta\ne\) recomputed, each W6
+  regime case, CAL claim on a RANK declaration, label used in a score, duplicate
+  pair key, unfilled `required-if`) are each caught by the intended predicate,
+  and the §8.7 union rule leaves the quotient claim admissible while forbidding
+  the three blocked ones. No code committed.
+- 2026-07-23 — bounded corrections per #258 owner review (REQUEST CHANGES → fixed
+  pre-merge; **§8 not yet frozen**; §2–§7 untouched, byte-frozen). Three blockers
+  plus one scope strengthening; the round-1 entry above is **superseded** on the
+  predicate count and sanity figures. (1) **Block X was not computable from
+  D/E/P** — §8.5 claimed every derived quantity is determined by declared fields,
+  but no field supplied \(D\), \(\bar v(c)\), or the \(\gamma\) actually used for
+  scoring when `gamma_status=unknown`; a record could satisfy every `required`
+  field and still be unrecomputable, breaking the consumption rule's core promise.
+  Added Block-D bindings `transition_diffusion_D_id`, `context_drift_model_id`
+  (must be per-event evaluable; \(\bar v\equiv0\) is a legal explicit value) and
+  `gamma_estimate_id` (supplying a scorable \(\gamma\) is explicitly **not**
+  identification), Block-E `vbar_value` (required-if the drift model is not
+  per-event evaluable), and a new **closure predicate W5′**: (a) every X-a
+  quantity's determining bindings must actually resolve — otherwise the
+  declaration is **not** an instantiation at all (a "parameters still to be
+  identified" declaration is inadmissible, since both CAL and RANK need a
+  computable score); (b) \(\gamma,D,\bar v\) must resolve to the **same**
+  artifact inside `parameter_sharing_scope`, not merely be declared shared.
+  W6(f) adds the stronger requirement for identification claims: \(P_0\) and
+  \(R_1\) must also resolve to one artifact across the scope (the §7.4
+  shared-parameter premise), which scoring alone does not need. (2) **\(e^-\) is
+  latent, not a row-level derived field** — the schema supplies \(\hat z_0\) and
+  \(y_1=Hz_\Delta+\epsilon_1\), never \(z_\Delta\), so \(e^-=z_\Delta-m^-_\Delta\)
+  cannot be computed or cross-checked per record. Block X split into **X-a**
+  (computable: \(a,b,A_\Delta,d_\Delta,Q_\Delta,m^-_\Delta,P^-_\Delta,r,S_\Delta,
+  q,\log\det S_\Delta,E,\Pi\)) and **X-b** (latent symbolic: \(z_\Delta,\delta z_0,
+  \eta_\Delta,e^-\)), which exist only for the §5 moment derivation; the
+  observable counterpart of \(e^-\) is \(r=He^-+\epsilon_1\). Adding
+  `z_delta_true`/`e_minus_observed` inputs is explicitly **forbidden** — latent/GT
+  entry-time truth in a record violates W8 label isolation. (3) **Missing
+  transpose** — the §8.5 dependent-\(C\) row read
+  \(S_\Delta=HP^-_\Delta H^\top+R_1+HC+C^\top H\); corrected to
+  \(+HC+C^\top H^\top\) per frozen §5.4 (as written the term is not even
+  dimensionally valid). (4) **local vs global identification scope** — W6(b)
+  previously let any `joint_map_condition_status`\(\neq\)`not_established` carry a
+  \(\gamma\) claim, so a `local_full_rank_established` declaration could state a
+  global result. Added Block-D `identification_scope` \(\in\{\)`local`,`global`\(\}\)
+  (required-if the claim depends on identifying \(\gamma\)): `global` needs
+  `global_injectivity_established`; `local_full_rank_established` supports only
+  `local`, and a local conclusion may not be restated as global identification
+  (§7.4/§7.7: the two are not equivalent). §8.7 gains four rows (unresolvable
+  bindings ⇒ **no** claim at all, not partial restriction; unshared \(P_0/R_1\) ⇒
+  no identification claim; local-only condition ⇒ no global claim; scorable
+  \(\gamma\) ≠ identified \(\gamma\)). Predicate count is now **ten** (W1–W9 plus
+  W5′). Re-checked on synthetic records: the conforming declaration passes all
+  ten, and **27** injected violations are each caught by the intended predicate
+  (the round-1 17 plus absent \(D\)/\(\bar v\)/\(\gamma\)-estimate/\(C\) bindings,
+  a mismatched \(D\) inside the sharing scope, latent \(e^-\) or \(z_\Delta\)
+  supplied as input, a global claim on a local-only condition, an unset scope, and
+  unshared \(P_0\) under an identification claim), while a `local` claim under
+  `local_full_rank_established` correctly passes. Scratchpad only; no code
+  committed.
+- 2026-07-23 — second bounded correction per #258 owner re-review (still
+  pre-merge; **§8 not yet frozen**; §2–§7 byte-frozen). Two blockers; sanity
+  figures below supersede the earlier entries. (1) **\(\bar v(c)\) binding was
+  self-contradictory** — Block D demanded `context_drift_model_id` be per-event
+  evaluable while Block E's `vbar_value` was `required-if` it is *not*, making the
+  fallback branch unreachable; and W5′(b)'s "same artifact／value" reading would
+  have banned the legal, indeed intended, case \(c_1\neq c_2\Rightarrow
+  \bar v(c_1)\neq\bar v(c_2)\) (exactly what `context_varies=true` asserts).
+  Split into two layers: `context_drift_model_id` is now the **mapping identity**
+  (evaluability no longer assumed), a new `context_drift_model_evaluable` boolean
+  says whether the consumer can run it, and `vbar_value` is `required-if` it
+  cannot (optional otherwise). New **W5′(a′)**: each event must resolve
+  \(\bar v(c)\) by **at least one** of the two paths — shared evaluable mapping,
+  or event-level `vbar_value` — with the value required to **agree** when both are
+  present; neither ⇒ that event inadmissible. W5′(b) now shares only \(\gamma\),
+  \(D\) and the \(\bar v\) **mapping identity**; per-event `vbar_value` may differ
+  freely across events. (2) **Claim set was not machine-readable** — the consumption rule
+  required a claim to sit inside the restriction map, but `claim_target`
+  (CAL/RANK) does not say whether the claim depends on \(\gamma\) identification,
+  the \(P_{xx}/R_1\) split, \(\operatorname{asym}(P_{xv})\), \(\bar v(c)\), or
+  mean-bias attribution, so nothing selected which W6 branch to fire; the map was
+  complete in prose but not mechanically decidable. Added required Block-D
+  **`claim_dependency_set`** over a **closed** atom vocabulary (§8.2.1:
+  `no_parameter_identification`, `covariance_quotient`, `gamma_identification`,
+  `gamma_D_separation`, `Pxx_R1_split`, `asym_Pxv`, `vbar_context_drift`,
+  `mean_bias_attribution`) — identifiability dependencies only, so it takes no
+  metric/threshold/score-ladder authority from the B1 charter. Empty sets are
+  illegal (absence of dependency must be stated as `no_parameter_identification`,
+  keeping "declared none" distinct from "forgot" under W9), and that atom may not
+  be combined with others. W6 is now stated per atom, branches (a)–(g) —
+  (g) `mean_bias_attribution` ⇒ `operator_offset_declared=true` is new — and §8.7
+  judges **atoms**, with the composition rule restated as a set-intersection test:
+  a claim is admissible iff `claim_dependency_set` ∩ (union of forbidden atoms) =
+  ∅. `identification_scope` is now triggered by the atom set rather than by prose.
+  Re-checked on synthetic records: conforming declaration passes all ten
+  predicates; **38** injected violations each caught by the intended predicate
+  (the previous 27 plus: \(\bar v\) with neither path, the two paths disagreeing,
+  two mapping identities inside one sharing scope, an empty dependency set, an
+  unknown atom, `no_parameter_identification` combined with another atom, and four
+  atom-level regime violations); and three legality cases correctly **pass** —
+  per-event \(\bar v\) values differing across contexts, the `vbar_value` path
+  when the mapping is not evaluable, and `no_parameter_identification` surviving
+  where identification atoms die. Scratchpad only; no code committed.
+- 2026-07-23 — third bounded correction per #258 owner re-review (still pre-merge;
+  **§8 not yet frozen**; §2–§7 byte-frozen). Two blockers in the atom algebra
+  introduced by the previous round; sanity figures below supersede all earlier
+  entries. (1) **`quotient_only` contradicted the combination rule** — its name
+  asserted "**only** the identifiable quotient" while the rule allowed free
+  co-listing, so `{quotient_only, Pxx_R1_split}` and `{quotient_only, asym_Pxv}`
+  were syntactically legal yet self-contradictory; and it carried a **hidden
+  `required-if`**: under \(\gamma\) unknown W6(a) routed it through the \(\gamma\)
+  regime W6(b), but `identification_scope` was triggered only by the two
+  \(\gamma\) atoms, so a predicate needed a field the field table said was not
+  required. Renamed to **`covariance_quotient`** with the exclusivity claim
+  dropped ("claim *uses* quotient components"; anything beyond it must list its
+  own atom, judged by its own branch), and `identification_scope` is now
+  `required-if` `gamma_status=unknown` **and** the set meets
+  \(\mathcal A_{\mathrm{cov}}\) — covering `covariance_quotient`, `Pxx_R1_split`
+  and `asym_Pxv`, not just the two \(\gamma\) atoms. W6(b) likewise now gates
+  **every** \(\mathcal A_{\mathrm{cov}}\) atom under unknown \(\gamma\), and the
+  §8.7 failed-\(\gamma\)-regime row forbids the whole class. (2) **covariance and
+  mean levels were conflated** — W6(f) applied the shared-\(P_0/R_1\)-artifact
+  requirement to *every* non-`no_parameter_identification` atom, including
+  `vbar_context_drift` and `mean_bias_attribution`, but §7.6 keeps two separate
+  tables: mean-level leaks are blocked by varying exit-causal context, the
+  operator-offset declaration and the population/null, **not** by \(P_0/R_1\)
+  artifact identity. Atoms are now typed into
+  \(\mathcal A_{\mathrm{cov}}=\{\)`covariance_quotient`, `gamma_identification`,
+  `gamma_D_separation`, `Pxx_R1_split`, `asym_Pxv`\(\}\) and
+  \(\mathcal A_{\mathrm{mean}}=\{\)`vbar_context_drift`, `mean_bias_attribution`,
+  `exit_state_bias_separation`\(\}\); **W6(f) applies to \(\mathcal A_{\mathrm{cov}}\)
+  only**, and the §8.7 sharing row lists the mean atoms as unaffected. Also
+  narrowed `mean_bias_attribution` to **operator-offset separation** alone, with
+  new W6(g) requiring that a non-zero declared drift force `vbar_context_drift`
+  to be co-listed (so W6(e) actually fires — previously `{mean_bias_attribution}`
+  could pass under `context_varies=false`, contradicting §7.6), for which
+  `context_drift_model_id` gains the machine-readable reserved value `vbar_zero`;
+  and split off the third §7.6 mean-level row as its own atom
+  **`exit_state_bias_separation`** with W6(h) (needs \(\ge2\) distinct \(\Delta\)
+  — single-event exit-state bias is inseparable — plus the operator-offset
+  declaration and a settled \(\bar v\) status; the zero-mean null
+  \(\mathbb E[\delta z_0]=0\) comes from frozen §5.3 and is not optional).
+  Re-checked on synthetic records: conforming declaration passes all ten
+  predicates; **43** injected violations each caught (previous 38 plus:
+  `mean_bias_attribution` without the required `vbar_context_drift` co-listing,
+  `exit_state_bias_separation` at a single \(\Delta\) and without the offset
+  declaration, `covariance_quotient` under unknown \(\gamma\) with no
+  `identification_scope`, `asym_Pxv` under an unmet \(\gamma\) regime); and **ten**
+  legality cases correctly pass — including `{covariance_quotient, Pxx_R1_split}`
+  now being coherent under a declared gauge, mean atoms surviving unshared
+  \(P_0/R_1\), a mixed covariance+mean set, `mean_bias_attribution` alone under
+  `vbar_zero`, and the scope `required-if` firing for an unknown-\(\gamma\)
+  quotient claim. Scratchpad only; no code committed.
+- 2026-07-23 — fourth bounded correction per #258 owner re-review (still
+  pre-merge; **§8 not yet frozen**; §2–§7 byte-frozen). Two blockers plus one
+  map/predicate domain mismatch, all consequences of the previous round's atom
+  typing; sanity figures supersede all earlier entries. (1) **`parameter_sharing_scope`
+  still promised unconditional \((P_0,\gamma,D,R_1)\) sharing**, contradicting the
+  typed W6(f) (only \(\mathcal A_{\mathrm{cov}}\) needs shared \(P_0/R_1\)) and the
+  §8.7 row that lets mean atoms survive unshared \(P_0/R_1\): a mean-only
+  declaration either violated the field definition or had to split its scope,
+  which would then starve `exit_state_bias_separation` of the \(\ge2\) gaps it
+  needs. Rewritten as a **conditional scope**: the field defines the claim
+  population plus the shared \(\gamma,D\) and \(\bar v\)-mapping identity
+  (W5′(b), the minimum needed to score), and **only if** the atom set meets
+  \(\mathcal A_{\mathrm{cov}}\) does the same scope additionally require shared
+  \(P_0,R_1\) (W6(f)) — no new field; the row now matches what W5′/W6 already
+  implemented. (2) **The single-event row over-blocked `mean_bias_attribution`** —
+  after narrowing that atom to *declared*-operator-offset separation, its §7.6
+  blocking condition is the explicit offset declaration, **not** multi-gap, so
+  `{mean_bias_attribution}` with `operator_offset_declared=true` and
+  `context_drift_model_id=vbar_zero` passed W6(g) but was rejected by §8.7. The
+  single-event row now forbids \(\mathcal A_{\mathrm{cov}}\cup\{\)`vbar_context_drift`,
+  `exit_state_bias_separation`\(\}\) and leaves `mean_bias_attribution` to W6(g);
+  a non-zero drift still forces `vbar_context_drift` to be co-listed, which the
+  same row then blocks, so the single-event escape hatch stays closed. (3)
+  **Map/predicate domain mismatch** — W6(b) checks local-vs-global scope for the
+  whole \(\mathcal A_{\mathrm{cov}}\), but the §8.7 local-full-rank row still named
+  only the two \(\gamma\) atoms. Since §8.7 is declared to be *the* atom-set
+  decision procedure, the row now forbids `identification_scope=global` for the
+  entire class (fail-closed behaviour was already correct; the stated domain was
+  not). Re-checked on synthetic records: conforming declaration passes all ten
+  predicates; **45** injected violations each caught (previous 43 plus
+  single-event `vbar_context_drift` and single-event `mean_bias_attribution`
+  under a non-zero drift); **fourteen** legality cases correctly pass, now
+  including single-event `mean_bias_attribution` under `vbar_zero`, a mean-only
+  declaration over events with different \(P_0/R_1\) artifacts, and local-only
+  evidence blocking a `global` claim for `covariance_quotient` and
+  `Pxx_R1_split` (not just the \(\gamma\) atoms). Scratchpad only; no code
+  committed.
+- 2026-07-23 — fifth bounded correction per #258 owner re-review (still
+  pre-merge; **§8 not yet frozen**; §2–§7 byte-frozen). One blocker plus one
+  non-blocking typo; sanity figures supersede all earlier entries. **The §8.7
+  "single-event" row conflated "one event" with "one distinct \(\Delta\)"** — a
+  population may be single-gap yet multi-event (e.g. three events all at
+  \(\Delta=4\) with contexts \(A,B,C\)), and frozen §7.4/§7.6 condition
+  \(\bar v(c)\) identification on **declared, varying, exit-causal context
+  only** — never on distinct \(\Delta\)s (distinct gaps are required by the
+  covariance shapes, §7.4, and by exit-state bias separation, §7.6 mean row 3,
+  not by context drift). W6(e) was already correct (it checks `context_varies`),
+  so the row contradicted the predicate: a legal single-gap multi-event context
+  study passed W6(e) and was then rejected by §8.7. Renamed the row to
+  **single-gap population (one distinct \(\Delta\) in scope)** and narrowed its
+  forbidden set to \(\mathcal A_{\mathrm{cov}}\cup\{\)`exit_state_bias_separation`\(\}\),
+  dropping `vbar_context_drift`: a genuine single **event** cannot vary its
+  context, so W6(e) fail-closes on `context_varies=false` without this row
+  duplicating the block. `mean_bias_attribution` remains outside the set (round 4).
+  Also fixed a typo introduced by the round-3 rename — the combination rule cited
+  the superseded name as `covariance_quotient`; the old name is `quotient_only`.
+  Re-checked on synthetic records: conforming declaration passes all ten
+  predicates; **46** injected violations each caught (a true single event with
+  `context_varies=false` claiming `vbar_context_drift`; the same with
+  `mean_bias_attribution` co-listed; single-gap `exit_state_bias_separation`;
+  plus the previous 43); **fifteen** legality cases correctly pass, now including
+  the case this round is about — a **single-gap, multi-event, varying-context**
+  population supporting `vbar_context_drift`. Scratchpad only; no code committed.
