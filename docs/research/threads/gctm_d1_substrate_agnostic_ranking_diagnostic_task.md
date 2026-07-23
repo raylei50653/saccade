@@ -176,6 +176,18 @@ Missing, partial, stale, mismatched, or rejected verdicts select
 `reject_runtime_consumption`. Until acceptance, D1 and both runtime B1 slots
 remain isolated.
 
+Because `H0_ROUTE5_B1` and `GCTM_B1` are distinct consumers that do not share
+activation authority, the machine record carries two independent gates:
+
+```text
+gctm_d1_to_h0_route5_b1_compatibility_v1
+gctm_d1_to_gctm_b1_compatibility_v1
+```
+
+A future verdict artifact may be referenced by both gates only when it
+explicitly binds both exact consumer identities. Acceptance on one gate never
+implies acceptance on the other.
+
 ## Ordered terminal family
 
 A future sealed D1 declaration must select exactly one bounded terminal:

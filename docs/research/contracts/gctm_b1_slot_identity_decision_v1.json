@@ -30,10 +30,16 @@
         "sealed_b1_declaration",
         "owner_scheduling"
       ],
+      "satisfied_activation_requirements": [],
+      "activation_evidence_bindings": [],
       "allowed_evidence_classes": [
         "h0_runtime_evidence",
         "accepted_score_contract",
-        "schema_validation"
+        "schema_validation",
+        "runtime_consumer_compatibility_verdict",
+        "owner_accepted_runtime_freeze",
+        "sealed_runtime_declaration",
+        "owner_scheduling_decision"
       ],
       "cannot_satisfy_gate_classes": []
     },
@@ -57,11 +63,17 @@
         "sealed_b1_declaration",
         "owner_scheduling"
       ],
+      "satisfied_activation_requirements": [],
+      "activation_evidence_bindings": [],
       "allowed_evidence_classes": [
         "h0_runtime_evidence",
         "gctm_theory_seal",
         "accepted_score_contract",
-        "schema_validation"
+        "schema_validation",
+        "runtime_consumer_compatibility_verdict",
+        "owner_accepted_runtime_freeze",
+        "sealed_runtime_declaration",
+        "owner_scheduling_decision"
       ],
       "cannot_satisfy_gate_classes": []
     },
@@ -79,6 +91,8 @@
         "charter_owner_acceptance",
         "owner_scheduling"
       ],
+      "satisfied_activation_requirements": [],
+      "activation_evidence_bindings": [],
       "allowed_evidence_classes": [
         "gctm_theory_seal",
         "accepted_score_contract",
@@ -86,7 +100,8 @@
         "sealed_non_runtime_dataset",
         "machine_checkable_invariant",
         "bounded_counterexample",
-        "schema_validation"
+        "schema_validation",
+        "owner_accepted_governance"
       ],
       "cannot_satisfy_gate_classes": [
         "runtime_substrate",
@@ -132,6 +147,25 @@
       "gate_id": "gctm_d1_to_h0_route5_b1_compatibility_v1",
       "producer_slot_id": "GCTM_D1",
       "consumer_slot_id": "H0_ROUTE5_B1",
+      "status": "missing",
+      "fail_closed": true,
+      "required_checks": [
+        "canonical_h0_evidence_manifest",
+        "stable_evidence_identity",
+        "checksum_verification",
+        "producer_consumer_schema_compatibility",
+        "observation_semantics_compatibility",
+        "parameterization_compatibility",
+        "score_transformation_normalization_compatibility",
+        "ordering_preservation_verdict"
+      ],
+      "verdict_owner_acceptance_id": null,
+      "incompatible_behavior": "reject_runtime_consumption"
+    },
+    {
+      "gate_id": "gctm_d1_to_gctm_b1_compatibility_v1",
+      "producer_slot_id": "GCTM_D1",
+      "consumer_slot_id": "GCTM_B1",
       "status": "missing",
       "fail_closed": true,
       "required_checks": [

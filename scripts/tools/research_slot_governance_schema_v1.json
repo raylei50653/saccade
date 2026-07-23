@@ -142,6 +142,8 @@
         "owner_acceptance_id",
         "blocked_by",
         "activation_requirements",
+        "satisfied_activation_requirements",
+        "activation_evidence_bindings",
         "allowed_evidence_classes",
         "cannot_satisfy_gate_classes"
       ],
@@ -173,6 +175,16 @@
         "activation_requirements": {
           "$ref": "#/$defs/id_list"
         },
+        "satisfied_activation_requirements": {
+          "$ref": "#/$defs/id_list"
+        },
+        "activation_evidence_bindings": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/activation_evidence_binding"
+          }
+        },
         "allowed_evidence_classes": {
           "type": "array",
           "minItems": 1,
@@ -186,7 +198,12 @@
               "sealed_non_runtime_dataset",
               "machine_checkable_invariant",
               "bounded_counterexample",
-              "schema_validation"
+              "schema_validation",
+              "runtime_consumer_compatibility_verdict",
+              "owner_accepted_runtime_freeze",
+              "sealed_runtime_declaration",
+              "owner_scheduling_decision",
+              "owner_accepted_governance"
             ]
           }
         },
@@ -203,6 +220,49 @@
               "runtime_activation_authority"
             ]
           }
+        }
+      }
+    },
+    "activation_evidence_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requirement_id",
+        "evidence_id",
+        "evidence_class",
+        "artifact_sha256",
+        "owner_acceptance_id"
+      ],
+      "properties": {
+        "requirement_id": {
+          "$ref": "#/$defs/id"
+        },
+        "evidence_id": {
+          "$ref": "#/$defs/id"
+        },
+        "evidence_class": {
+          "enum": [
+            "h0_runtime_evidence",
+            "gctm_theory_seal",
+            "accepted_score_contract",
+            "synthetic_fixture",
+            "sealed_non_runtime_dataset",
+            "machine_checkable_invariant",
+            "bounded_counterexample",
+            "schema_validation",
+            "runtime_consumer_compatibility_verdict",
+            "owner_accepted_runtime_freeze",
+            "sealed_runtime_declaration",
+            "owner_scheduling_decision",
+            "owner_accepted_governance"
+          ]
+        },
+        "artifact_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "owner_acceptance_id": {
+          "$ref": "#/$defs/id"
         }
       }
     },

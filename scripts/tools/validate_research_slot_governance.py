@@ -40,6 +40,30 @@ RUNTIME_COMPATIBILITY_CHECKS = frozenset(
         "ordering_preservation_verdict",
     }
 )
+RUNTIME_ACTIVATION_REQUIREMENTS = frozenset(
+    {
+        "valid_h0_runtime_substrate",
+        "stable_evidence_identity",
+        "canonical_checksum",
+        "h0_gctm_consumer_compatibility_verdict",
+        "observation_freeze",
+        "parameterization_freeze",
+        "sealed_b1_declaration",
+        "owner_scheduling",
+    }
+)
+RUNTIME_ACTIVATION_EVIDENCE_CLASS = {
+    "valid_h0_runtime_substrate": "h0_runtime_evidence",
+    "stable_evidence_identity": "h0_runtime_evidence",
+    "canonical_checksum": "h0_runtime_evidence",
+    "h0_gctm_consumer_compatibility_verdict": (
+        "runtime_consumer_compatibility_verdict"
+    ),
+    "observation_freeze": "owner_accepted_runtime_freeze",
+    "parameterization_freeze": "owner_accepted_runtime_freeze",
+    "sealed_b1_declaration": "sealed_runtime_declaration",
+    "owner_scheduling": "owner_scheduling_decision",
+}
 
 
 class SlotGovernanceValidationError(ValueError):
@@ -162,6 +186,32 @@ def _validate_slots(slots: Mapping[str, Mapping[str, Any]]) -> None:
         authority = slot["authority_class"]
         evidence = set(slot["allowed_evidence_classes"])
         exclusions = set(slot["cannot_satisfy_gate_classes"])
+        requirements = set(slot["activation_requirements"])
+        satisfied = set(slot["satisfied_activation_requirements"])
+        bindings = _unique_by(
+            _sequence(
+                slot["activation_evidence_bindings"],
+                f"slots[{slot_id}].activation_evidence_bindings",
+            ),
+            "requirement_id",
+            f"slots[{slot_id}].activation_evidence_bindings",
+        )
+        if set(bindings) != satisfied:
+            raise SlotGovernanceValidationError(
+                "activation_evidence",
+                f"slot {slot_id} must bind exactly its satisfied activation requirements",
+            )
+        if not satisfied <= requirements:
+            raise SlotGovernanceValidationError(
+                "activation_evidence",
+                f"slot {slot_id} satisfies undeclared activation requirements",
+            )
+        for requirement_id, binding in bindings.items():
+            if binding["evidence_class"] not in evidence:
+                raise SlotGovernanceValidationError(
+                    "activation_evidence",
+                    f"slot {slot_id} binding {requirement_id} uses a forbidden evidence class",
+                )
         if authority == "diagnostic_only":
             if "h0_runtime_evidence" in evidence:
                 raise SlotGovernanceValidationError(
@@ -173,6 +223,26 @@ def _validate_slots(slots: Mapping[str, Mapping[str, Any]]) -> None:
                     "diagnostic_evidence_boundary",
                     f"diagnostic slot {slot_id} must disclaim every runtime gate class",
                 )
+        if authority == "runtime_grounded":
+            if requirements != RUNTIME_ACTIVATION_REQUIREMENTS:
+                raise SlotGovernanceValidationError(
+                    "runtime_activation_requirements",
+                    f"runtime slot {slot_id} must declare the complete runtime activation gate",
+                )
+            required_classes = set(RUNTIME_ACTIVATION_EVIDENCE_CLASS.values())
+            if not required_classes <= evidence:
+                raise SlotGovernanceValidationError(
+                    "runtime_evidence_boundary",
+                    f"runtime slot {slot_id} does not admit every required activation evidence class",
+                )
+            for requirement_id, binding in bindings.items():
+                expected_class = RUNTIME_ACTIVATION_EVIDENCE_CLASS[requirement_id]
+                if binding["evidence_class"] != expected_class:
+                    raise SlotGovernanceValidationError(
+                        "runtime_evidence_boundary",
+                        f"runtime slot {slot_id} requirement {requirement_id} "
+                        f"requires {expected_class}",
+                    )
         if slot["state"] == "active" and slot["owner_acceptance_id"] is None:
             raise SlotGovernanceValidationError(
                 "activation_authority",
@@ -182,6 +252,15 @@ def _validate_slots(slots: Mapping[str, Mapping[str, Any]]) -> None:
             raise SlotGovernanceValidationError(
                 "activation_blocked",
                 f"active slot {slot_id} still has blockers {slot['blocked_by']}",
+            )
+        if slot["state"] == "active" and (
+            not requirements
+            or satisfied != requirements
+            or set(bindings) != requirements
+        ):
+            raise SlotGovernanceValidationError(
+                "activation_evidence",
+                f"active slot {slot_id} lacks a complete accepted evidence binding",
             )
 
 
@@ -193,6 +272,7 @@ def _validate_compatibility(
         "gate_id",
         "compatibility_gates",
     )
+    gate_coordinates: set[tuple[str, str]] = set()
     for gate_id, gate in gates.items():
         producer = gate["producer_slot_id"]
         consumer = gate["consumer_slot_id"]
@@ -201,6 +281,13 @@ def _validate_compatibility(
                 "compatibility_reference",
                 f"compatibility gate {gate_id} endpoints must be distinct declared slots",
             )
+        coordinate = (producer, consumer)
+        if coordinate in gate_coordinates:
+            raise SlotGovernanceValidationError(
+                "duplicate_compatibility_gate",
+                f"multiple compatibility gates bind {producer} to {consumer}",
+            )
+        gate_coordinates.add(coordinate)
         if set(gate["required_checks"]) != RUNTIME_COMPATIBILITY_CHECKS:
             raise SlotGovernanceValidationError(
                 "compatibility_completeness",
@@ -216,6 +303,30 @@ def _validate_compatibility(
                 "compatibility_authority",
                 f"compatible gate {gate_id} lacks owner acceptance",
             )
+
+    required_coordinates: set[tuple[str, str]] = set()
+    for value in _sequence(record["relations"], "relations"):
+        relation = _mapping(value, "relation")
+        if relation["relation"] != "isolated":
+            continue
+        source = relation["source_slot_id"]
+        target = relation["target_slot_id"]
+        source_authority = slots[source]["authority_class"]
+        target_authority = slots[target]["authority_class"]
+        if {source_authority, target_authority} != {
+            "diagnostic_only",
+            "runtime_grounded",
+        }:
+            continue
+        diagnostic = source if source_authority == "diagnostic_only" else target
+        runtime = target if target_authority == "runtime_grounded" else source
+        required_coordinates.add((diagnostic, runtime))
+    missing = required_coordinates - gate_coordinates
+    if missing:
+        raise SlotGovernanceValidationError(
+            "compatibility_coverage",
+            f"isolated diagnostic/runtime relations lack gates: {sorted(missing)}",
+        )
 
 
 def _validate_terminal_policies(
@@ -282,6 +393,11 @@ def _validate_registry_projection(
         )
     for slot_id, slot in slots.items():
         blocked = bool(slot["blocked_by"])
+        if slot["authority_class"] == "diagnostic_only" and slot_id in candidates:
+            raise SlotGovernanceValidationError(
+                "diagnostic_candidate_boundary",
+                f"diagnostic-only slot {slot_id} cannot be decision-relevant",
+            )
         if (blocked or slot["state"] != "active") and slot_id in active_wip:
             raise SlotGovernanceValidationError(
                 "false_active_wip", f"non-active or blocked slot {slot_id} holds WIP"
@@ -322,6 +438,13 @@ def validate_record(record: object) -> dict[str, object]:
             if slot["state"] == "active"
             and not slot["blocked_by"]
             and slot["owner_acceptance_id"] is not None
+            and set(slot["satisfied_activation_requirements"])
+            == set(slot["activation_requirements"])
+            and {
+                binding["requirement_id"]
+                for binding in slot["activation_evidence_bindings"]
+            }
+            == set(slot["activation_requirements"])
         ),
         "decision_relevant_candidates": list(
             _mapping(record_map["registry_projection"], "registry_projection")[

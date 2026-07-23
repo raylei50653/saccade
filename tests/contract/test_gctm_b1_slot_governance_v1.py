@@ -52,6 +52,62 @@ def _relation(record: dict[str, Any], source: str, target: str) -> dict[str, Any
     )
 
 
+def _projected_slot(record: dict[str, Any], slot_id: str) -> dict[str, Any]:
+    return next(
+        item
+        for item in record["registry_projection"]["slot_states"]
+        if item["slot_id"] == slot_id
+    )
+
+
+def _activation_binding(
+    requirement_id: str, evidence_class: str, index: int
+) -> dict[str, str]:
+    return {
+        "requirement_id": requirement_id,
+        "evidence_id": f"fixture_activation_evidence_{index}",
+        "evidence_class": evidence_class,
+        "artifact_sha256": f"{index + 1:064x}",
+        "owner_acceptance_id": f"fixture_activation_acceptance_{index}",
+    }
+
+
+def _activate_diagnostic(record: dict[str, Any]) -> None:
+    slot = _slot(record, "GCTM_D1")
+    requirements = list(slot["activation_requirements"])
+    slot["state"] = "active"
+    slot["owner_acceptance_id"] = "fixture_d1_activation_acceptance"
+    slot["blocked_by"] = []
+    slot["satisfied_activation_requirements"] = requirements
+    slot["activation_evidence_bindings"] = [
+        _activation_binding(requirement_id, "owner_accepted_governance", index)
+        for index, requirement_id in enumerate(requirements)
+    ]
+    projected = _projected_slot(record, "GCTM_D1")
+    projected["state"] = "active"
+    projected["blocked_by"] = []
+
+
+def _activate_runtime(record: dict[str, Any], slot_id: str) -> None:
+    slot = _slot(record, slot_id)
+    requirements = list(slot["activation_requirements"])
+    slot["state"] = "active"
+    slot["owner_acceptance_id"] = f"fixture_{slot_id.lower()}_activation_acceptance"
+    slot["blocked_by"] = []
+    slot["satisfied_activation_requirements"] = requirements
+    slot["activation_evidence_bindings"] = [
+        _activation_binding(
+            requirement_id,
+            governance.RUNTIME_ACTIVATION_EVIDENCE_CLASS[requirement_id],
+            index,
+        )
+        for index, requirement_id in enumerate(requirements)
+    ]
+    projected = _projected_slot(record, slot_id)
+    projected["state"] = "active"
+    projected["blocked_by"] = []
+
+
 def _assert_error(
     record: dict[str, Any], error_class: str
 ) -> governance.SlotGovernanceValidationError:
@@ -132,12 +188,70 @@ def test_runtime_b1_cannot_activate_while_h0_substrate_blocker_exists() -> None:
     activated = _slot(invalid, "H0_ROUTE5_B1")
     activated["state"] = "active"
     activated["owner_acceptance_id"] = "invalid_activation_while_blocked"
-    next(
-        item
-        for item in invalid["registry_projection"]["slot_states"]
-        if item["slot_id"] == "H0_ROUTE5_B1"
-    )["state"] = "active"
+    _projected_slot(invalid, "H0_ROUTE5_B1")["state"] = "active"
     _assert_error(invalid, "activation_blocked")
+
+
+def test_runtime_b1_cannot_delete_activation_gate_and_self_activate() -> None:
+    invalid = _record()
+    runtime = _slot(invalid, "H0_ROUTE5_B1")
+    runtime["state"] = "active"
+    runtime["blocked_by"] = []
+    runtime["owner_acceptance_id"] = "invalid_runtime_activation"
+    runtime["activation_requirements"] = []
+    runtime["satisfied_activation_requirements"] = []
+    runtime["activation_evidence_bindings"] = []
+    runtime["allowed_evidence_classes"] = ["accepted_score_contract"]
+    projected = _projected_slot(invalid, "H0_ROUTE5_B1")
+    projected["state"] = "active"
+    projected["blocked_by"] = []
+
+    _assert_error(invalid, "runtime_activation_requirements")
+
+
+def test_runtime_b1_requires_complete_accepted_evidence_bindings() -> None:
+    invalid = _record()
+    runtime = _slot(invalid, "GCTM_B1")
+    runtime["state"] = "active"
+    runtime["blocked_by"] = []
+    runtime["owner_acceptance_id"] = "invalid_incomplete_runtime_activation"
+    projected = _projected_slot(invalid, "GCTM_B1")
+    projected["state"] = "active"
+    projected["blocked_by"] = []
+
+    _assert_error(invalid, "activation_evidence")
+
+
+def test_complete_runtime_activation_bindings_are_machine_eligible() -> None:
+    record = _record()
+    _activate_runtime(record, "GCTM_B1")
+
+    report = governance.validate_record(record)
+
+    assert report["activation_eligible_slots"] == ["GCTM_B1"]
+
+
+def test_runtime_activation_binding_requires_hash_and_owner_acceptance() -> None:
+    invalid = _record()
+    _activate_runtime(invalid, "GCTM_B1")
+    del _slot(invalid, "GCTM_B1")["activation_evidence_bindings"][0][
+        "owner_acceptance_id"
+    ]
+
+    _assert_error(invalid, "schema_rejection")
+
+
+def test_runtime_requirement_rejects_wrong_evidence_class() -> None:
+    invalid = _record()
+    _activate_runtime(invalid, "GCTM_B1")
+    binding = next(
+        item
+        for item in _slot(invalid, "GCTM_B1")["activation_evidence_bindings"]
+        if item["requirement_id"] == "canonical_checksum"
+    )
+    binding["evidence_class"] = "accepted_score_contract"
+
+    _assert_error(invalid, "runtime_evidence_boundary")
 
 
 def test_accepted_score_contract_alone_produces_no_b1_candidate() -> None:
@@ -151,6 +265,15 @@ def test_accepted_score_contract_alone_produces_no_b1_candidate() -> None:
         in _slot(record, "GCTM_B1")["allowed_evidence_classes"]
     )
     assert record["registry_projection"]["decision_relevant_candidates"] == []
+
+
+def test_accepted_score_contract_cannot_replace_runtime_evidence_classes() -> None:
+    invalid = _record()
+    _slot(invalid, "H0_ROUTE5_B1")["allowed_evidence_classes"] = [
+        "accepted_score_contract"
+    ]
+
+    _assert_error(invalid, "runtime_evidence_boundary")
 
 
 def test_diagnostic_charter_and_terminal_do_not_unlock_o1() -> None:
@@ -192,16 +315,40 @@ def test_diagnostic_terminal_cannot_rewrite_runtime_b1_state() -> None:
 
 
 def test_missing_compatibility_verdict_fails_closed() -> None:
-    gate = _record()["compatibility_gates"][0]
-    assert gate["status"] == "missing"
-    assert gate["verdict_owner_acceptance_id"] is None
-    assert gate["fail_closed"] is True
-    assert gate["incompatible_behavior"] == "reject_runtime_consumption"
-    assert set(gate["required_checks"]) == governance.RUNTIME_COMPATIBILITY_CHECKS
+    gates = _record()["compatibility_gates"]
+    assert {(gate["producer_slot_id"], gate["consumer_slot_id"]) for gate in gates} == {
+        ("GCTM_D1", "H0_ROUTE5_B1"),
+        ("GCTM_D1", "GCTM_B1"),
+    }
+    for gate in gates:
+        assert gate["status"] == "missing"
+        assert gate["verdict_owner_acceptance_id"] is None
+        assert gate["fail_closed"] is True
+        assert gate["incompatible_behavior"] == "reject_runtime_consumption"
+        assert set(gate["required_checks"]) == governance.RUNTIME_COMPATIBILITY_CHECKS
 
     invalid = _record()
     invalid["compatibility_gates"][0]["fail_closed"] = False
     _assert_error(invalid, "schema_rejection")
+
+
+def test_each_isolated_runtime_consumer_requires_its_own_compatibility_gate() -> None:
+    invalid = _record()
+    invalid["compatibility_gates"] = [
+        gate
+        for gate in invalid["compatibility_gates"]
+        if gate["consumer_slot_id"] != "GCTM_B1"
+    ]
+
+    _assert_error(invalid, "compatibility_coverage")
+
+
+def test_active_diagnostic_slot_cannot_be_decision_relevant() -> None:
+    invalid = _record()
+    _activate_diagnostic(invalid)
+    invalid["registry_projection"]["decision_relevant_candidates"] = ["GCTM_D1"]
+
+    _assert_error(invalid, "diagnostic_candidate_boundary")
 
 
 def test_registry_repush_has_no_false_active_wip() -> None:
