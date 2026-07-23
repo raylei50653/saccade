@@ -81,18 +81,17 @@
       "slot_id": "GCTM_D1",
       "title": "Substrate-agnostic GCTM ranking diagnostic",
       "charter_ref": "docs/research/threads/gctm_d1_substrate_agnostic_ranking_diagnostic_task.md",
-      "state": "proposed",
+      "state": "active",
       "authority_class": "diagnostic_only",
-      "owner_acceptance_id": null,
-      "blocked_by": [
-        "owner_scheduling"
-      ],
+      "owner_acceptance_id": "gctm_d1_activation_owner_acceptance_20260723",
+      "blocked_by": [],
       "activation_requirements": [
         "declaration_owner_acceptance",
         "owner_scheduling"
       ],
       "satisfied_activation_requirements": [
-        "declaration_owner_acceptance"
+        "declaration_owner_acceptance",
+        "owner_scheduling"
       ],
       "activation_evidence_bindings": [
         {
@@ -101,6 +100,13 @@
           "evidence_class": "owner_accepted_governance",
           "artifact_sha256": "33dda22efffe3f1d8cfceec66400ef7549b1b9ba692bcffbb0eabe78dee355e0",
           "owner_acceptance_id": "gctm_d1_declaration_owner_acceptance_20260723"
+        },
+        {
+          "requirement_id": "owner_scheduling",
+          "evidence_id": "gctm_d1_owner_scheduling_20260723",
+          "evidence_class": "owner_scheduling_decision",
+          "artifact_sha256": "17c534c5dc25ad0318d26b0208a7f9dceedc603ec1f81dc29fe27b49bc2607c8",
+          "owner_acceptance_id": "gctm_d1_activation_owner_acceptance_20260723"
         }
       ],
       "allowed_evidence_classes": [
@@ -227,14 +233,14 @@
       },
       {
         "slot_id": "GCTM_D1",
-        "state": "proposed",
-        "blocked_by": [
-          "owner_scheduling"
-        ]
+        "state": "active",
+        "blocked_by": []
       }
     ],
     "decision_relevant_candidates": [],
-    "active_wip": [],
+    "active_wip": [
+      "GCTM_D1"
+    ],
     "o1_state": "proposed",
     "h0_reentry_authorized": false
   }

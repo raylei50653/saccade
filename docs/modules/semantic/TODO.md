@@ -5,13 +5,8 @@
 
 ## Sole active
 
-- ⏸️ **無 active**（2026-07-23 起）。GCTM charter 已於 owner 接受 ordered terminal
-  `GCTM_MODEL_SPEC_SEALABLE` 後關閉 → [closed charter](../../research/threads/closed/gap_conditioned_stochastic_transition_model_task.md)
-  · [Issue #175](https://github.com/raylei50653/saccade/issues/175);terminal 與
-  limits 以該卡 *Final status* 與 [claim-state registry](../../research/contracts/claim_state_registry.md) 為準
-  （本欄只作 WIP 投影,不複述 terminal 內容）。**該 seal 是 diagnostic-only**,
-  不授權 data／fitting／H0／B1／O1／runtime／online／production,亦不改 H0 狀態;
-  B1／O1 仍是 proposed,各自另有 gate。
+- **GCTM_D1 — canonical synthetic diagnostic execution** →
+  [task charter](../../research/threads/gctm_d1_substrate_agnostic_ranking_diagnostic_task.md)
 - H0 closure（三個 owner-accepted ordered terminal `H0_PROVENANCE_INVALID`;
   faithful capture = none;actual H0 guarantee = none;Phase B forbidden;
   任何未來 re-entry 前置＝machine-checked launch-hygiene pre-authorization
@@ -26,17 +21,6 @@
 - **GCTM B1 — runtime-grounded offline attribution and score-ranking evaluation** —
   `GCTM_B1`, `proposed`, `blocked_by: h0_runtime_substrate`; it does not alias
   or supersede `H0_ROUTE5_B1` → [task charter](../../research/threads/gctm_b1_runtime_grounded_offline_attribution_task.md)
-- **GCTM D1 — substrate-agnostic ranking diagnostic** — `GCTM_D1`,
-  `proposed` / non-WIP, diagnostic-only, declaration
-  **`GCTM_D1_DECLARATION_ACCEPTED`**
-  (`gctm_d1_declaration_owner_acceptance_20260723`),
-  `blocked_by: owner_scheduling`; execution unscheduled; sealed packet
-  identities frozen; provisional seal-candidate terminal string remains
-  **`GCTM_D1_INTERFACE_READY`** (canonical registry `state: none`; not promoted);
-  no unlock of B1/O1 or WIP →
-  [declaration](research/gctm_d1_ranking_diagnostic_declaration_20260723.md) ·
-  [terminal](research/gctm_d1_ranking_diagnostic_terminal_20260723.md) ·
-  [charter](../../research/threads/gctm_d1_substrate_agnostic_ranking_diagnostic_task.md)
 - **GCTM O1 — online score intervention and system-efficacy evaluation** → [task charter](../../research/threads/gctm_o1_online_intervention_efficacy_task.md)
 
 ## Parked
