@@ -884,3 +884,25 @@ no B1/O1/online/production authority.
   test. Re-checked on synthetic records: **38** injected violations each caught,
   three legality cases correctly pass. Scratchpad only, no code committed.
   Boundary unchanged: schema-only, no B1 activation, no terminal.
+- 2026-07-23 — third bounded correction per #258 owner re-review (still pre-merge;
+  D1 §8 not yet frozen; §2–§7 byte-frozen). Two blockers in the atom algebra:
+  (1) **`quotient_only` contradicted the combination rule** (its "only" vs free
+  co-listing made `{quotient_only, Pxx_R1_split}` legal-but-contradictory) and
+  hid a `required-if` (under unknown \(\gamma\) it needed `identification_scope`,
+  which only the two \(\gamma\) atoms triggered) — renamed **`covariance_quotient`**
+  without exclusivity, with `identification_scope` now required whenever
+  `gamma_status=unknown` and the set meets \(\mathcal A_{\mathrm{cov}}\), and W6(b)
+  plus the §8.7 \(\gamma\)-regime row now gating the whole covariance class;
+  (2) **covariance and mean levels were conflated** — W6(f) forced the shared
+  \(P_0/R_1\) artifact on `vbar_context_drift`/`mean_bias_attribution` too, though
+  §7.6 blocks mean-level leaks by varying exit-causal context, operator-offset
+  declaration and population/null instead. Atoms are now typed
+  (\(\mathcal A_{\mathrm{cov}}\) / \(\mathcal A_{\mathrm{mean}}\)), W6(f) applies to
+  the covariance class only, `mean_bias_attribution` is narrowed to operator-offset
+  separation and must co-list `vbar_context_drift` unless the drift is declared
+  `vbar_zero` (new W6(g); previously it could pass under `context_varies=false`),
+  and the third §7.6 mean row becomes its own atom `exit_state_bias_separation`
+  with W6(h) (\(\ge2\) distinct \(\Delta\) + offset declaration). Re-checked:
+  **43** injected violations each caught, **ten** legality cases correctly pass.
+  Scratchpad only, no code committed. Boundary unchanged: schema-only, no B1
+  activation, no terminal.

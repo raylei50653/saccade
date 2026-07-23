@@ -1257,9 +1257,9 @@ identifiability／separation 結論（§6／§7 的結論永遠綁其 regime 前
 | `gamma_value` | required-if `gamma_status=known` | \(\gamma\in[0,\infty)\)，單位 \(\mathrm{frame}^{-1}\)（\(\gamma=0\)=M1 boundary） | §4.6／§4.7 |
 | `gamma_estimate_id` | required-if `gamma_status=unknown` | **實際用於計分**的 \(\gamma\) estimate／artifact 之來源（Block X 需要一個具體 \(\gamma\) 才能重算）；其**識別地位**另受 W6(b) 限制——供應可計分的值**不等於**已識別 | §4.7；W6(b) |
 | `joint_map_condition_status` | required-if `gamma_status=unknown` | \(\in\{\texttt{global\_injectivity\_established},\ \texttt{local\_full\_rank\_established},\ \texttt{not\_established}\}\)＋證據來源；**本規格不證明任一者** | §7.4／§7.7 |
-| `identification_scope` | required-if `claim_dependency_set` 含 `gamma_identification` 或 `gamma_D_separation`（§8.2.1） | \(\in\{\texttt{local},\ \texttt{global}\}\)；**global claim 需 `global_injectivity_established`；`local_full_rank_established` 只支持 local claim，且 local 結論不得被轉述為 global identification** | §7.4／§7.7（二者不等價） |
+| `identification_scope` | required-if `gamma_status=unknown` **且** `claim_dependency_set` 與 \(\mathcal A_{\mathrm{cov}}\) 有交集（§8.2.1；含 `covariance_quotient`——\(\gamma\) unknown 時 quotient 亦須經 W6(b) 的 \(\gamma\) regime，故不得漏觸發）；`gamma_status=known` 時不需要 | \(\in\{\texttt{local},\ \texttt{global}\}\)；**global claim 需 `global_injectivity_established`；`local_full_rank_established` 只支持 local claim，且 local 結論不得被轉述為 global identification** | §7.4／§7.7（二者不等價） |
 | `transition_diffusion_D_id` | required | \(D=LL^\top\succeq0\)（\(d\times d\)，\(\ell^2\mathrm{frame}^{-3}\)）之來源／識別；\(Q_\Delta\) 由 \((\gamma,D,\Delta)\) 唯一決定 | §4.5／§4.7 |
-| `context_drift_model_id` | required | \(\bar v:\mathcal C_{\mathrm{exit}}\to\mathbb R^d\) 這個 **mapping 的 identity**（**不**預設 consumer 能執行它）；宣告 \(\bar v\equiv0\)（無 context drift）亦須明寫為此欄位的合法值。**共享的是 mapping identity，不是值**——\(c_1\neq c_2\Rightarrow\bar v(c_1)\neq\bar v(c_2)\) 完全合法（正是 `context_varies=true` 的情形） | §4.3／§4.7 |
+| `context_drift_model_id` | required | \(\bar v:\mathcal C_{\mathrm{exit}}\to\mathbb R^d\) 這個 **mapping 的 identity**（**不**預設 consumer 能執行它）；宣告 \(\bar v\equiv0\)（無 context drift）須以**保留值** `vbar_zero` 明寫（機械可判定，供 W6(g) 引用）。**共享的是 mapping identity，不是值**——\(c_1\neq c_2\Rightarrow\bar v(c_1)\neq\bar v(c_2)\) 完全合法（正是 `context_varies=true` 的情形） | §4.3／§4.7 |
 | `context_drift_model_evaluable` | required | 布林：consumer 是否可**逐 event 執行**該 mapping。`false` ⇒ 每個 event 必須帶 `vbar_value`（§8.3；解析路徑見 W5′(a′)） | §4.3；W5′ |
 | `gauge_fixing` | required | \(\in\{\texttt{R1\_declared},\ \texttt{Pxx\_declared},\ \texttt{none}\}\)（固定 \(P_{xx}\!\leftrightarrow\!R_1\) gauge 的**額外獨立資訊**） | §7.4 G1／§7.6 |
 | `parameter_sharing_scope` | required | 哪些 events 共享同一 \((P_0,\gamma,D,R_1)\)（identifiability 的 population 定義） | §7.4 |
@@ -1280,21 +1280,43 @@ Consumption rule 第 3 條要求 claim 落在 §8.7 允許範圍內；`claim_tar
 依賴**——它**不**定義 metric、threshold、score ladder 或任何 B1 評估語意（那些仍屬
 B1 charter／score-layer contract）。
 
-| Atom | 意義 | 觸發的 W6 分支 |
-|:--|:--|:--|
-| `no_parameter_identification` | claim 不依賴任何參數識別（參數視為 given／declared，只做 §6 層的 CAL／RANK 敘述）；**必須單獨出現**，不得與其他 atom 併列 | 無（但 W7／W9 仍適用） |
-| `quotient_only` | 只依賴 identifiable quotient \(\{D,P_{vv},\operatorname{sym}(P_{xv}),P_{xx}+R_1\}\) | W6(a)（＋\(\gamma\) unknown 時 W6(b)） |
-| `gamma_identification` | 主張識別 \(\gamma\) | W6(b)＋`identification_scope` |
-| `gamma_D_separation` | 需 \(\gamma\) 與 \(D\) 分離 | W6(b)＋`identification_scope` |
-| `Pxx_R1_split` | 需 \(P_{xx}\) 與 \(R_1\) **分離**（非只用其和） | W6(c) |
-| `asym_Pxv` | 需 \(\operatorname{asym}(P_{xv})\) | W6(d) |
-| `vbar_context_drift` | 需 \(\bar v(c)\) 的 context drift | W6(e) |
-| `mean_bias_attribution` | 對 mean／residual bias 作歸因（operator offset ↔ \(\bar v\) ↔ 常數 bias） | W6(g) |
+Atom 分**三類**（承 §7.6 的 covariance-level／mean-level 分層，**不得混為一談**）：
 
-**空集不合法**：`required` 且非空——「無依賴」必須以 `no_parameter_identification`
-**明示**，使「明示無依賴」與「漏填」在 W9 下可區分（fail-closed）。除
-`no_parameter_identification` 外，其餘 atom 可任意併列；判定取各分支的**聯集**
-（§8.7 合成規則）。
+| Atom | 類別 | 意義 | 觸發的 W6 分支 |
+|:--|:--|:--|:--|
+| `no_parameter_identification` | none | claim 不依賴任何參數識別（參數視為 given／declared，只做 §6 層的 CAL／RANK 敘述）；**必須單獨出現** | 無（W7／W9 仍適用） |
+| `covariance_quotient` | **covariance-id** | claim **使用** identifiable quotient \(\{D,P_{vv},\operatorname{sym}(P_{xv}),P_{xx}+R_1\}\) 的成分（**不**宣稱排他性——需要超越 quotient 的成分時另列對應 atom） | W6(a)；\(\gamma\) unknown 時另加 W6(b) |
+| `gamma_identification` | **covariance-id** | 主張識別 \(\gamma\) | W6(b) |
+| `gamma_D_separation` | **covariance-id** | 需 \(\gamma\) 與 \(D\) 分離 | W6(b) |
+| `Pxx_R1_split` | **covariance-id** | 需 \(P_{xx}\) 與 \(R_1\) **分離**（非只用其和） | W6(c)（\(\gamma\) unknown 時另加 W6(b)） |
+| `asym_Pxv` | **covariance-id** | 需 \(\operatorname{asym}(P_{xv})\) | W6(d)（\(\gamma\) unknown 時另加 W6(b)） |
+| `vbar_context_drift` | **mean-level** | 需 \(\bar v(c)\) 的 context drift 與常數 mean 分離 | W6(e) |
+| `mean_bias_attribution` | **mean-level** | **僅指 operator-offset separation**：把 \(\pm(\mathrm{bridge\_at}-1)v\) 與 mean 的其餘部分分開 | W6(g) |
+| `exit_state_bias_separation` | **mean-level** | 主張把 **exit-state 估計 bias** 與上二者分開 | W6(h) |
+
+**類別集合（frozen，供 predicate 引用）：**
+\[
+\mathcal A_{\mathrm{cov}}=\{\texttt{covariance\_quotient},\texttt{gamma\_identification},
+\texttt{gamma\_D\_separation},\texttt{Pxx\_R1\_split},\texttt{asym\_Pxv}\},
+\]
+\[
+\mathcal A_{\mathrm{mean}}=\{\texttt{vbar\_context\_drift},\texttt{mean\_bias\_attribution},
+\texttt{exit\_state\_bias\_separation}\}.
+\]
+
+**組合規則（frozen）：**
+
+1. **空集不合法**：`required` 且非空——「無依賴」必須以 `no_parameter_identification`
+   **明示**，使「明示無依賴」與「漏填」在 W9 下可區分（fail-closed）。
+2. `no_parameter_identification` **必須單獨出現**，不得與任何其他 atom 併列。
+3. 其餘 atom 可自由併列（`covariance_quotient` **無**排他性語意：它只表示 claim
+   *使用* quotient 成分，需要超越 quotient 者另列 `Pxx_R1_split`／`asym_Pxv`，各自
+   由其分支判定——舊名 `covariance_quotient` 的 "only" 與併列規則相矛盾，故改名）。
+4. **層別不互相蘊含**：\(\mathcal A_{\mathrm{cov}}\) 依賴共享 covariance 參數，
+   \(\mathcal A_{\mathrm{mean}}\) 依賴 varying exit-causal context／operator-offset
+   宣告／population-null——**W6(f) 只適用於 \(\mathcal A_{\mathrm{cov}}\)**（§7.6 的
+   covariance-level 與 mean-level 是不同表）。
+5. 判定取各觸發分支的**聯集**（§8.7 合成規則）。
 
 ### §8.3 Block E — event-level 欄位（每個 candidate event 一列）
 
@@ -1374,7 +1396,7 @@ X-b 的存在只保證 §5 的 moment 結構有定義，**不**構成 record-lev
 | **W4** | **PSD／可逆性**：\(P_0\succeq0\)、\(R_1\succeq0\)、\(D\succeq0\)；dependent path 另需 \(\big[\begin{smallmatrix}P^-_\Delta&C\\ C^\top&R_1\end{smallmatrix}\big]\succeq0\)。使用 \(q/E/\Pi\) 的列另需 \(S_\Delta\succ0\)（canonical \(C=0\)＋\(R_1\succ0\) 即足；dependent path 需額外 nondegeneracy） | 違反 PSD ⇒ inadmissible；\(S_\Delta\) 退化 ⇒ 該列不得產生 \(q/E/\Pi\) | §5.5／§5.6／§6.1 |
 | **W5** | **維度／單位／derived 一致性**：所有矩陣維度與 `coordinate_dim_d` 及 \(H\) 相容；單位依 §4.7／§5.6／§6.5；附帶的 **X-a** 值必須與依 frozen 公式重算者一致；**X-b（latent）不得作為 input 出現** | record inadmissible | §4.7／§5.6／§8.5 |
 | **W5′** | **Parameter-binding 完備性與 sharing 一致性**（closure predicate）：(a) **完備性**——每個 **X-a** 量的所有決定欄位必須實際可解析：\(\gamma\)（`gamma_value` 或 `gamma_estimate_id`）、\(D\)（`transition_diffusion_D_id`）、\(P_0\)（`P0_exit_cov_id`）、\(R_1\)（`R1_obs_cov_id`）、dependent path 的 \(C\)（`C_cross_cov_id`）。**任一不可解析 ⇒ Block X-a 無法重算 ⇒ 該 declaration 不是本 D1 的 instantiation**（不得以「參數待識別」含混帶過：CAL 與 RANK 皆需可計算的 score）。(a′) **\(\bar v(c)\) 的逐 event 解析（兩條路徑，恰一條即可）**——每個 event 的 \(\bar v(c)\) 必須至少由下列之一得到：**(i)** `context_drift_model_evaluable=true`，consumer 逐 event 執行共享 mapping；或 **(ii)** 該 event 的 `vbar_value`。兩者皆缺 ⇒ 該 event inadmissible；兩者皆有 ⇒ **值必須一致**（否則 inadmissible）。(b) **sharing 一致性**——`parameter_sharing_scope` 內 \(\gamma\)、\(D\) 綁定與 \(\bar v\) 的 **mapping identity**（`context_drift_model_id`）必須解析到**同一** artifact，不得只在宣告層寫「共享」。**注意：共享的是 mapping，不是值**——\(c\) 不同則 \(\bar v(c)\) 本應不同（`context_varies=true`），逐 event 的 `vbar_value` 相異**不**違反本條 | declaration／該 event inadmissible | §4.3／§4.5／§4.7／§5.6／§8.5 X-a |
-| **W6** | **Identifiability regime**（承 §7；**逐 atom 對 `claim_dependency_set` 機械判定**，§8.2.1）：(a) `quotient_only` ⇒ 需 `parameter_sharing_scope` 內 **\(\ge4\) 相異 \(\Delta\)**（single-\(\Delta\) population 連 quotient 都不可識別，§7.3），且 \(\gamma\) 須 `known` 或滿足 (b)。(b) `gamma_identification`／`gamma_D_separation` ⇒ 若 `gamma_status=unknown`：需 **\(>4\) 相異 \(\Delta\)**、`joint_map_condition_status`\(\neq\)`not_established`，**且 `identification_scope` 不得強於已確立的條件**（`global` 需 `global_injectivity_established`；`local_full_rank_established` 只支持 `local`，**local 結論不得被轉述為 global identification**——二者不等價，§7.4／§7.7）；「\(\ge5\) gaps」只是**必要**非充分。(c) `Pxx_R1_split` ⇒ 需 `gauge_fixing`\(\neq\)`none`。(d) `asym_Pxv` ⇒ 需 \(H_{xv}\)＋multi-gap＋共享參數＋\(\gamma\) regime 滿足。(e) `vbar_context_drift` ⇒ 需 `context_varies=true` 且 context 為 exit-causal。(f) 集合含**任一**非 `no_parameter_identification` 的 atom（即存在 parameter-identification 成分）⇒ 另需 `parameter_sharing_scope` 內 \(P_0\) 與 \(R_1\) 也解析到**同一** artifact（§7.4 shared-parameter 前提；W5′(b) 只要求 \(\gamma,D,\bar v\)-mapping 共享，那是**計分**所需的最小集）。(g) `mean_bias_attribution` ⇒ 需 `operator_offset_declared=true`（否則 operator offset 與 \(\bar v\)／常數 bias 混淆，§7.6 mean-level）。多 atom 取各分支**聯集** | 對應 claim **non-identifiable**（§8.7；落入 terminal-3 rejection region 的判定屬 WP-A8） | §7.3／§7.4／§7.6／§7.7 |
+| **W6** | **Identifiability regime**（承 §7；**逐 atom 對 `claim_dependency_set` 機械判定**，§8.2.1）：(a) `covariance_quotient` ⇒ 需 `parameter_sharing_scope` 內 **\(\ge4\) 相異 \(\Delta\)**（single-\(\Delta\) population 連 quotient 都不可識別，§7.3），且 \(\gamma\) 須 `known` 或滿足 (b)。(b) **\(\gamma\) regime**——`gamma_status=unknown` 時，`claim_dependency_set` 中**任一** \(\mathcal A_{\mathrm{cov}}\) atom（含 `covariance_quotient`、`Pxx_R1_split`、`asym_Pxv`，非只 \(\gamma\) 兩者）皆須：需 **\(>4\) 相異 \(\Delta\)**、`joint_map_condition_status`\(\neq\)`not_established`，**且 `identification_scope` 不得強於已確立的條件**（`global` 需 `global_injectivity_established`；`local_full_rank_established` 只支持 `local`，**local 結論不得被轉述為 global identification**——二者不等價，§7.4／§7.7）；「\(\ge5\) gaps」只是**必要**非充分。(c) `Pxx_R1_split` ⇒ 需 `gauge_fixing`\(\neq\)`none`。(d) `asym_Pxv` ⇒ 需 \(H_{xv}\)＋multi-gap＋共享參數＋\(\gamma\) regime 滿足。(e) `vbar_context_drift` ⇒ 需 `context_varies=true` 且 context 為 exit-causal。(f) 集合與 \(\mathcal A_{\mathrm{cov}}\) 有交集 ⇒ 另需 `parameter_sharing_scope` 內 \(P_0\) 與 \(R_1\) 也解析到**同一** artifact（§7.4 shared-parameter 前提；W5′(b) 只要求 \(\gamma,D,\bar v\)-mapping 共享，那是**計分**所需的最小集）。**(f) 不適用於 \(\mathcal A_{\mathrm{mean}}\)**：mean-level 的阻斷條件是 varying exit-causal context／operator-offset 宣告／population-null，**不是** \(P_0/R_1\) 的 artifact identity（§7.6 兩張表分列）。(g) `mean_bias_attribution`（＝operator-offset separation）⇒ 需 `operator_offset_declared=true`；**且**若 `context_drift_model_id`\(\neq\)`vbar_zero`（即宣告了非零 context drift），則 `vbar_context_drift` **必須同時列入** `claim_dependency_set`（否則 W6(e) 不被觸發，\(\bar v(c)\) 與常數 bias 的混淆會漏判，§7.6 mean-level）。(h) `exit_state_bias_separation` ⇒ 需 `parameter_sharing_scope` 內 **\(\ge2\) 相異 \(\Delta\)**（single event 下 exit-state bias 與另二者不可分，§7.6 mean-level 第 3 列）**且** `operator_offset_declared=true` **且**（`context_drift_model_id=`\(\,\)`vbar_zero` 或 `vbar_context_drift` 已列入）；zero-mean null \(\mathbb E[\delta z_0]=0\) 由 frozen §5.3 提供，非可選。多 atom 取各分支**聯集** | 對應 claim **non-identifiable**（§8.7；落入 terminal-3 rejection region 的判定屬 WP-A8） | §7.3／§7.4／§7.6／§7.7 |
 | **W7** | **Claim／evaluation-unit 一致性**：`claim_target=CAL` 的評估只在 \(\{(e,i^\star)\}\)（true match）上做且需 `cal_working_null`；`claim_target=RANK` 只做 event-local ordering（event 內計算後再跨 event 平均）。**同一份宣告不得同時主張兩者**；CAL 結論不得轉述為 RANK，反之亦然 | claim inadmissible | §6.2／§6.0 |
 | **W8** | **Conservation 與 label isolation**（A 層最小集）：每個 admitted pair 屬**恰一個** event；每個 event 恰一個 exit anchor 與一組不重複 candidates；`label_true_match` 與任何 GT 導出量為 **evaluation-only**，**不得**作為 Block D/E/P 任一 score-relevant 欄位的輸入。（fold／partition／trial-unit／blind-reveal 的完整 conservation 由 B1 charter 所有，本節不複寫） | record 或 study inadmissible | §6.2；B1 charter conservation identities |
 | **W9** | **Fail-closed missing-value**：缺任一 `required`（或已觸發的 `required-if`）欄位 ⇒ 該 record／declaration **inadmissible**，**不得**以預設值、鄰值或全域常數補齊；`dropped` 列須附**恰一個**列舉理由；optional 欄位缺席須**明確記錄**，其後果見 §8.7 | inadmissible；靜默補值即脫離本 D1 | §2 row 9 精神（不得靜默繼承） |
@@ -1387,18 +1409,18 @@ X-b 的存在只保證 §5 的 moment 結構有定義，**不**構成 record-lev
 
 | 缺席的宣告／欄位 | 因此**不可主張**的 atom | 仍可主張者 | 依據 |
 |:--|:--|:--|:--|
-| `gauge_fixing=none` | `Pxx_R1_split`（結構性 gauge，\(H_{xv}\) 亦不可破） | `quotient_only`（只依 \(P_{xx}+R_1\) 之和） | §7.4 G1／§7.6 |
-| `gamma_status=unknown` 且（\(\le4\) 相異 \(\Delta\) 或 `joint_map_condition_status=not_established`） | `gamma_identification`、`gamma_D_separation` | 給定 \(\gamma\)（`gamma_estimate_id`）條件下的 score／quotient claim（須明寫其 conditional 前提：**供應可計分的 \(\gamma\) 值不等於已識別 \(\gamma\)**） | §7.4 G3／§7.6／§7.7 |
+| `gauge_fixing=none` | `Pxx_R1_split`（結構性 gauge，\(H_{xv}\) 亦不可破） | `covariance_quotient`（只用 \(P_{xx}+R_1\) 之和） | §7.4 G1／§7.6 |
+| `gamma_status=unknown` 且（\(\le4\) 相異 \(\Delta\) 或 `joint_map_condition_status=not_established`） | **全部 \(\mathcal A_{\mathrm{cov}}\)**——`gamma_identification`、`gamma_D_separation`、`covariance_quotient`、`Pxx_R1_split`、`asym_Pxv`（quotient 在 \(\gamma\) unknown 時同樣要過 \(\gamma\) regime，§7.4） | 給定 \(\gamma\)（`gamma_estimate_id`）條件下的 score／quotient claim（須明寫其 conditional 前提：**供應可計分的 \(\gamma\) 值不等於已識別 \(\gamma\)**） | §7.4 G3／§7.6／§7.7 |
 | 只有 `local_full_rank_established`（無 global injectivity） | `identification_scope=global` 下的 `gamma_identification`／`gamma_D_separation`；local 結論**不得**被轉述為 global identification | `identification_scope=local` 的 claim（須標明只 local） | §7.4／§7.7（二者不等價） |
 | 參數 binding 不可解析（\(\gamma\)／\(D\)／\(P_0\)／\(R_1\)／dependent 的 \(C\) 任一缺；或某 event 的 \(\bar v(c)\) 兩條路徑皆無、或兩者不一致） | **全部** atom（含 `no_parameter_identification`）——Block X-a 無法重算 ⇒ 該 declaration **根本不是**本 D1 的 instantiation（非「部分受限」） | 無 | W5′(a)/(a′)／§8.5 X-a |
-| `parameter_sharing_scope` 內 \(P_0\)／\(R_1\) 未解析到同一 artifact | **除** `no_parameter_identification` **外的全部** atom（§7.4 shared-parameter 前提不成立） | `no_parameter_identification`（逐 event score 計算不需跨 event 共享 \(P_0/R_1\)） | §7.4／W6(f) |
-| `observation_mode=`\(H_x\) | `asym_Pxv`（\(H_x\) 下 structural invisible） | `quotient_only`（\(\operatorname{sym}(P_{xv})\)／\(P_{vv}\)／\(D\)，在 W6(a) regime 下） | §7.4 G2／§7.6 |
-| `context_varies=false` 或 `context_definition` 未宣告 | `vbar_context_drift` | 常數-mean 層級的敘述（須標明混淆） | §7.4／§7.6 mean-level |
-| `operator_offset_declared=false` | `mean_bias_attribution`（operator offset 與 \(\bar v(c)\)／常數 bias 混淆） | covariance-level 的 atom（`quotient_only` 等） | §7.6 mean-level／§2 row 9 |
+| `parameter_sharing_scope` 內 \(P_0\)／\(R_1\) 未解析到同一 artifact | **\(\mathcal A_{\mathrm{cov}}\) 全部**（§7.4 shared-parameter 前提不成立） | `no_parameter_identification` 與 **\(\mathcal A_{\mathrm{mean}}\)**（mean-level 不依賴 \(P_0/R_1\) artifact identity，§7.6 分表） | §7.4／W6(f) |
+| `observation_mode=`\(H_x\) | `asym_Pxv`（\(H_x\) 下 structural invisible） | `covariance_quotient`（\(\operatorname{sym}(P_{xv})\)／\(P_{vv}\)／\(D\)，在 W6(a) regime 下） | §7.4 G2／§7.6 |
+| `context_varies=false` 或 `context_definition` 未宣告 | `vbar_context_drift`（連帶：宣告非零 drift 時 `mean_bias_attribution` 亦被 W6(g) 擋下，因它必須併列 `vbar_context_drift`） | 常數-mean 層級的敘述（須標明混淆）；\(\bar v\equiv0\)（`vbar_zero`）下的 `mean_bias_attribution` | §7.4／§7.6 mean-level |
+| `operator_offset_declared=false` | `mean_bias_attribution`、`exit_state_bias_separation`（operator offset 與 \(\bar v(c)\)／常數 bias 混淆） | \(\mathcal A_{\mathrm{cov}}\)（covariance-level 不受 mean-level 阻斷影響） | §7.6 mean-level／§2 row 9 |
 | `label_true_match` 不可得 | **CAL 與 RANK 皆不可主張**（兩者皆以 true-match label 為前提） | 僅 model-side 的定義性敘述（無 claim） | §7.5 |
 | `cal_working_null` 未宣告 | CAL 的**分佈層** claim（\(q\sim\chi^2_k\)、coverage／PIT） | \(q,\log\det S_\Delta,E,\Pi\) 作為 \(r,S_\Delta\) 的**函數**仍 well-defined | §6.1 |
 | `region_definition` 未宣告（卻使用 \(\Pi\)） | 任何 \(\Pi\)-based claim | \(q\)／NLL-based claim | §6.1／§6.3 |
-| single-event population（`parameter_sharing_scope` 只含一個 \(\Delta\)） | **除** `no_parameter_identification` **外的全部** atom（連 `quotient_only` 都不可） | `no_parameter_identification` | §7.3 |
+| single-event population（`parameter_sharing_scope` 只含一個 \(\Delta\)） | **除** `no_parameter_identification` **外的全部** atom（連 `covariance_quotient` 與 `exit_state_bias_separation` 都不可，§7.3／§7.6） | `no_parameter_identification` | §7.3／§7.6 |
 | `error_dependence=dependent` 但 \(S_\Delta\succ0\) 未另行確立 | 任何需 \(S_\Delta^{-1}\) 的 claim（\(q/E/\Pi\)） | \(S_\Delta\succeq0\) 層級的敘述 | §5.5／§6.1 |
 
 **跨欄位的合成規則（frozen）：** 多個缺席同時發生時，禁止的 atom 集合為各列的
@@ -1814,7 +1836,7 @@ claim-restriction map。它不宣稱任何 runtime 擷取值、不建立 fidelit
   mean-bias attribution, so nothing selected which W6 branch to fire; the map was
   complete in prose but not mechanically decidable. Added required Block-D
   **`claim_dependency_set`** over a **closed** atom vocabulary (§8.2.1:
-  `no_parameter_identification`, `quotient_only`, `gamma_identification`,
+  `no_parameter_identification`, `covariance_quotient`, `gamma_identification`,
   `gamma_D_separation`, `Pxx_R1_split`, `asym_Pxv`, `vbar_context_drift`,
   `mean_bias_attribution`) — identifiability dependencies only, so it takes no
   metric/threshold/score-ladder authority from the B1 charter. Empty sets are
@@ -1834,3 +1856,53 @@ claim-restriction map。它不宣稱任何 runtime 擷取值、不建立 fidelit
   per-event \(\bar v\) values differing across contexts, the `vbar_value` path
   when the mapping is not evaluable, and `no_parameter_identification` surviving
   where identification atoms die. Scratchpad only; no code committed.
+- 2026-07-23 — third bounded correction per #258 owner re-review (still pre-merge;
+  **§8 not yet frozen**; §2–§7 byte-frozen). Two blockers in the atom algebra
+  introduced by the previous round; sanity figures below supersede all earlier
+  entries. (1) **`quotient_only` contradicted the combination rule** — its name
+  asserted "**only** the identifiable quotient" while the rule allowed free
+  co-listing, so `{quotient_only, Pxx_R1_split}` and `{quotient_only, asym_Pxv}`
+  were syntactically legal yet self-contradictory; and it carried a **hidden
+  `required-if`**: under \(\gamma\) unknown W6(a) routed it through the \(\gamma\)
+  regime W6(b), but `identification_scope` was triggered only by the two
+  \(\gamma\) atoms, so a predicate needed a field the field table said was not
+  required. Renamed to **`covariance_quotient`** with the exclusivity claim
+  dropped ("claim *uses* quotient components"; anything beyond it must list its
+  own atom, judged by its own branch), and `identification_scope` is now
+  `required-if` `gamma_status=unknown` **and** the set meets
+  \(\mathcal A_{\mathrm{cov}}\) — covering `covariance_quotient`, `Pxx_R1_split`
+  and `asym_Pxv`, not just the two \(\gamma\) atoms. W6(b) likewise now gates
+  **every** \(\mathcal A_{\mathrm{cov}}\) atom under unknown \(\gamma\), and the
+  §8.7 failed-\(\gamma\)-regime row forbids the whole class. (2) **covariance and
+  mean levels were conflated** — W6(f) applied the shared-\(P_0/R_1\)-artifact
+  requirement to *every* non-`no_parameter_identification` atom, including
+  `vbar_context_drift` and `mean_bias_attribution`, but §7.6 keeps two separate
+  tables: mean-level leaks are blocked by varying exit-causal context, the
+  operator-offset declaration and the population/null, **not** by \(P_0/R_1\)
+  artifact identity. Atoms are now typed into
+  \(\mathcal A_{\mathrm{cov}}=\{\)`covariance_quotient`, `gamma_identification`,
+  `gamma_D_separation`, `Pxx_R1_split`, `asym_Pxv`\(\}\) and
+  \(\mathcal A_{\mathrm{mean}}=\{\)`vbar_context_drift`, `mean_bias_attribution`,
+  `exit_state_bias_separation`\(\}\); **W6(f) applies to \(\mathcal A_{\mathrm{cov}}\)
+  only**, and the §8.7 sharing row lists the mean atoms as unaffected. Also
+  narrowed `mean_bias_attribution` to **operator-offset separation** alone, with
+  new W6(g) requiring that a non-zero declared drift force `vbar_context_drift`
+  to be co-listed (so W6(e) actually fires — previously `{mean_bias_attribution}`
+  could pass under `context_varies=false`, contradicting §7.6), for which
+  `context_drift_model_id` gains the machine-readable reserved value `vbar_zero`;
+  and split off the third §7.6 mean-level row as its own atom
+  **`exit_state_bias_separation`** with W6(h) (needs \(\ge2\) distinct \(\Delta\)
+  — single-event exit-state bias is inseparable — plus the operator-offset
+  declaration and a settled \(\bar v\) status; the zero-mean null
+  \(\mathbb E[\delta z_0]=0\) comes from frozen §5.3 and is not optional).
+  Re-checked on synthetic records: conforming declaration passes all ten
+  predicates; **43** injected violations each caught (previous 38 plus:
+  `mean_bias_attribution` without the required `vbar_context_drift` co-listing,
+  `exit_state_bias_separation` at a single \(\Delta\) and without the offset
+  declaration, `covariance_quotient` under unknown \(\gamma\) with no
+  `identification_scope`, `asym_Pxv` under an unmet \(\gamma\) regime); and **ten**
+  legality cases correctly pass — including `{covariance_quotient, Pxx_R1_split}`
+  now being coherent under a declared gauge, mean atoms surviving unshared
+  \(P_0/R_1\), a mixed covariance+mean set, `mean_bias_attribution` alone under
+  `vbar_zero`, and the scope `required-if` firing for an unknown-\(\gamma\)
+  quotient claim. Scratchpad only; no code committed.
