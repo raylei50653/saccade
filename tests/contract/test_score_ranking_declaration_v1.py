@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from decimal import Decimal
 import json
 from pathlib import Path
 import sys
@@ -182,6 +183,18 @@ def test_in_memory_non_finite_number_fails_closed() -> None:
     _assert_error(declaration, "non_finite_number")
 
 
+def test_in_memory_decimal_nan_fails_closed() -> None:
+    declaration = _valid()
+    declaration["claim"]["minimum_effect"]["value"] = Decimal("NaN")
+    _assert_error(declaration, "non_finite_number")
+
+
+def test_in_memory_decimal_infinity_fails_closed() -> None:
+    declaration = _valid()
+    declaration["claim"]["minimum_effect"]["value"] = Decimal("Infinity")
+    _assert_error(declaration, "non_finite_number")
+
+
 def test_identity_transform_cannot_hide_multiple_components() -> None:
     declaration = _valid()
     declaration["policy"]["score"]["transform_kind"] = "identity"
@@ -308,6 +321,14 @@ def test_high_rung_obligations_cannot_share_one_artifact_identity() -> None:
     declaration = _active_sr6()
     bindings = declaration["rung_obligations"][4]["artifact_bindings"]
     bindings["quantity_fidelity"] = bindings["substrate_identity"]
+    _assert_error(declaration, "duplicate_identity")
+
+
+def test_high_rung_artifact_identity_cannot_be_reused_across_rungs() -> None:
+    declaration = _active_sr6()
+    sr4_bindings = declaration["rung_obligations"][4]["artifact_bindings"]
+    sr5_bindings = declaration["rung_obligations"][5]["artifact_bindings"]
+    sr5_bindings["online_hook"] = sr4_bindings["substrate_identity"]
     _assert_error(declaration, "duplicate_identity")
 
 

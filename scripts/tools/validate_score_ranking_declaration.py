@@ -9,6 +9,7 @@ import argparse
 import json
 import math
 from collections.abc import Mapping, Sequence
+from numbers import Number
 from pathlib import Path
 from typing import Any
 
@@ -145,10 +146,18 @@ def load_json(path: Path) -> Any:
 
 
 def _validate_finite_numbers(value: object, path: str = "<root>") -> None:
-    if isinstance(value, float) and not math.isfinite(value):
-        raise ScoreRankingValidationError(
-            "non_finite_number", f"non-finite numeric value at {path}"
-        )
+    if isinstance(value, Number) and not isinstance(value, bool):
+        try:
+            finite = math.isfinite(value)
+        except TypeError as exc:
+            raise ScoreRankingValidationError(
+                "semantic_type",
+                f"non-JSON-native numeric value at {path}",
+            ) from exc
+        if not finite:
+            raise ScoreRankingValidationError(
+                "non_finite_number", f"non-finite numeric value at {path}"
+            )
     if isinstance(value, Mapping):
         for key, item in value.items():
             _validate_finite_numbers(item, f"{path}/{key}")
@@ -351,6 +360,7 @@ def _validate_rungs(record: Mapping[str, Any]) -> None:
     expected_rungs = RUNG_ORDER[: target_index + 1]
     obligations = _sequence(record["rung_obligations"], "rung_obligations")
     declared_rungs: list[str] = []
+    seen_binding_ids: set[str] = set()
     for index, obligation in enumerate(obligations):
         item = _mapping(obligation, f"rung_obligations[{index}]")
         rung = item["rung"]
@@ -386,11 +396,13 @@ def _validate_rungs(record: Mapping[str, Any]) -> None:
                 f"(missing={missing}, unexpected={unexpected})",
             )
         binding_ids = tuple(bindings.values())
-        if len(binding_ids) != len(set(binding_ids)):
+        duplicate_binding_ids = seen_binding_ids.intersection(binding_ids)
+        if len(binding_ids) != len(set(binding_ids)) or duplicate_binding_ids:
             raise ScoreRankingValidationError(
                 "duplicate_identity",
-                f"{rung} artifact bindings must use distinct identities",
+                "SR4-SR6 artifact bindings must use globally distinct identities",
             )
+        seen_binding_ids.update(binding_ids)
     if tuple(declared_rungs) != expected_rungs:
         raise ScoreRankingValidationError(
             "rung_prefix",
