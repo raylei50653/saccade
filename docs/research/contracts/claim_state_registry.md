@@ -546,9 +546,9 @@ last_reviewed_at: 2026-07-23
 slot_id: GCTM_D1
 layer: diagnostic-only（非 runtime decision layer）
 ladder: proposed charter terminal family
-transition_semantics: defined（只允許 local diagnostic terminal；canonical transition 需 owner scheduling 後 execution）
-lifecycle_state: proposed
-state: none
+transition_semantics: defined（只允許 local diagnostic terminal；canonical transition 需 owner-accepted execution closure）
+lifecycle_state: active
+state: none                              # active WIP ≠ accepted terminal
 declaration_acceptance:
   terminal: GCTM_D1_DECLARATION_ACCEPTED
   owner_acceptance_id: gctm_d1_declaration_owner_acceptance_20260723
@@ -559,8 +559,20 @@ declaration_acceptance:
   does_not_equal_execution: true
   does_not_create_decision_relevant_candidate: true
   does_not_promote_provisional_terminal: true
-  does_not_satisfy_owner_scheduling: true
-  note: slot.owner_acceptance_id remains null until activation; it is not this declaration acceptance id
+  note: declaration acceptance id is not slot.owner_acceptance_id
+owner_scheduling:
+  scheduling_id: gctm_d1_owner_scheduling_20260723
+  evidence_class: owner_scheduling_decision
+  owner_acceptance_id: gctm_d1_activation_owner_acceptance_20260723
+  acceptance_date: 2026-07-23
+  decision: schedule GCTM_D1 for one canonical execution
+  scope: one canonical execution of the exact declaration and packet identities accepted by gctm_d1_declaration_owner_acceptance_20260723
+  artifact: ../../modules/semantic/research/gctm_d1_owner_scheduling_20260723.json
+  artifact_sha256: 17c534c5dc25ad0318d26b0208a7f9dceedc603ec1f81dc29fe27b49bc2607c8
+  does_not_equal_execution_completed: true
+  does_not_select_terminal: true
+  does_not_close_charter: true
+  does_not_create_decision_relevant_candidate: true
 seal_candidate:
   status: SEAL_CANDIDATE_GENERATED
   generation_kind: pre_activation_synthetic_seal_candidate
@@ -572,24 +584,25 @@ seal_candidate:
 substrate: synthetic fixture pack gctm_d1_synthetic_fixture_pack_v1（non-runtime）
 target_substrate: none
 authority_class: diagnostic_only
-blocked_by: owner_scheduling
+blocked_by: []
 blockers:
   - type: inadmissibility
     what: runtime claim、runtime B1 transition、O1 unlock 或 decision-relevant candidate
     clause: diagnostic evidence 不可滿足 runtime substrate/provenance/identity/checksum/compatibility/activation authority
   - type: dependency
-    what: charter activation / WIP / canonical terminal acceptance
-    clause: declaration_owner_acceptance 已滿足（owner_accepted_governance）；owner_scheduling 仍缺且必須是 owner_scheduling_decision；canonical state 仍 none
+    what: canonical terminal acceptance / charter closure
+    clause: activation gates 已滿足；one canonical execution authorized；execution / mechanical terminal selection / owner-accepted closure 仍屬後續獨立 PR；canonical state 仍 none
 decision_relevance:
-  status: zero — declaration acceptance does not equal execution；does not create decision-relevant candidate；不取得 WIP
+  status: zero as decision-relevant candidate — active diagnostic WIP only；does not enter decision_relevant_candidates；does not unlock B1/O1/H0
 supporting_declaration: ../../modules/semantic/research/gctm_d1_ranking_diagnostic_declaration_20260723.md
 supporting_terminal: ../../modules/semantic/research/gctm_d1_ranking_diagnostic_terminal_20260723.md
 supporting_packet: ../../modules/semantic/research/evidence/gctm_d1_substrate_agnostic_ranking_20260723/
+supporting_scheduling: ../../modules/semantic/research/gctm_d1_owner_scheduling_20260723.json
 charter_ref: ../threads/gctm_d1_substrate_agnostic_ranking_diagnostic_task.md
-accepting_review: gctm_d1_declaration_owner_acceptance_20260723
-last_transition: 2026-07-23 — GCTM_D1_DECLARATION_ACCEPTED; requirement declaration_owner_acceptance bound; owner_scheduling still requires owner_scheduling_decision; canonical state remains none; no B1/O1/H0 change
+accepting_review: gctm_d1_activation_owner_acceptance_20260723
+last_transition: 2026-07-23 — owner scheduling accepted; GCTM_D1 activated; one canonical execution authorized; WIP acquired; canonical state remains none; no execution / terminal / B1/O1/H0 change
 admissible_units: []
-derived_from: gctm_b1_slot_identity_decision_v1.json terminal policy + owner-accepted declaration + seal-candidate packet + §5 relevance
+derived_from: gctm_b1_slot_identity_decision_v1.json terminal policy + owner-accepted declaration + owner scheduling decision + seal-candidate packet + §5 relevance
 last_reviewed_at: 2026-07-23
 ```
 ---
@@ -617,10 +630,11 @@ last_reviewed_at: 2026-07-23
 | *(仍全空，2026-07-23 D1 charter 建立後重推)* | `GCTM_D1` | 新 charter 仍 `proposed`、diagnostic-only。其 terminal policy 不解鎖 runtime B1/O1、不產生 decision-relevant candidate。 |
 | *(仍全空，2026-07-23 D1 seal-candidate 後重推)* | `GCTM_D1` | 僅有 pre-activation synthetic **seal-candidate**（provisional terminal string `GCTM_D1_INTERFACE_READY`）；canonical `state` 仍 `none`。**不**滿足 runtime gates；**不**進入決策候選集。 |
 | *(仍全空，2026-07-23 D1 declaration acceptance 後重推)* | `GCTM_D1` | Declaration 已 `GCTM_D1_DECLARATION_ACCEPTED`（`gctm_d1_declaration_owner_acceptance_20260723`）；execution contract 凍結；`blocked_by: owner_scheduling`；canonical `state` 仍 `none`。**declaration acceptance ≠ execution**；**不**產生 decision-relevant candidate；**不**取得 WIP；runtime gates 仍 `missing`。 |
+| *(仍非 decision-relevant，2026-07-23 D1 owner scheduling 後重推)* | `GCTM_D1` | Owner scheduling 已接受（`gctm_d1_owner_scheduling_20260723` / `gctm_d1_activation_owner_acceptance_20260723`）；slot **active**；`active_wip: [GCTM_D1]`；one canonical execution authorized。canonical `state` 仍 `none`；**不**進入 `decision_relevant_candidates`；runtime gates 仍 `missing`；execution / terminal / closure 屬後續獨立 PR。 |
 
 **Machine projection:** `gctm_b1_slot_identity_decision_v1.json` 的
 `registry_projection` 已重推為 `decision_relevant_candidates: []`、
-`active_wip: []`、`o1_state: proposed`、`h0_reentry_authorized: false`。
+`active_wip: [GCTM_D1]`、`o1_state: proposed`、`h0_reentry_authorized: false`。
 該 projection 由 `validate_research_slot_governance.py` fail closed 驗證。
 
 **O0 的選擇（歷史）：** O0 於 2026-07-16 取 H0 為唯一 active，2026-07-20 依

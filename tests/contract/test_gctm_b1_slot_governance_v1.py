@@ -136,9 +136,9 @@ def test_authoritative_record_and_schema_validate() -> None:
         "valid": True,
         "owner_decision_status": "accepted",
         "authority_verified": True,
-        "activation_eligible_slots": [],
+        "activation_eligible_slots": ["GCTM_D1"],
         "decision_relevant_candidates": [],
-        "active_wip": [],
+        "active_wip": ["GCTM_D1"],
     }
 
 
@@ -234,7 +234,8 @@ def test_complete_runtime_activation_bindings_are_machine_eligible() -> None:
 
     report = governance.validate_record(record)
 
-    assert report["activation_eligible_slots"] == ["GCTM_B1"]
+    # GCTM_D1 is already active/eligible; complete runtime bindings add GCTM_B1.
+    assert report["activation_eligible_slots"] == ["GCTM_B1", "GCTM_D1"]
 
 
 def test_runtime_activation_binding_requires_hash_and_owner_acceptance() -> None:
@@ -266,27 +267,54 @@ def test_diagnostic_activation_requirements_are_declaration_plus_scheduling() ->
     assert set(diagnostic["activation_requirements"]) == (
         governance.DIAGNOSTIC_ACTIVATION_REQUIREMENTS
     )
-    assert diagnostic["satisfied_activation_requirements"] == [
-        "declaration_owner_acceptance"
-    ]
-    assert diagnostic["blocked_by"] == ["owner_scheduling"]
+    assert set(diagnostic["satisfied_activation_requirements"]) == (
+        governance.DIAGNOSTIC_ACTIVATION_REQUIREMENTS
+    )
+    assert diagnostic["blocked_by"] == []
+    assert diagnostic["state"] == "active"
     assert "owner_scheduling_decision" in diagnostic["allowed_evidence_classes"]
-    assert diagnostic["owner_acceptance_id"] is None
+    assert (
+        diagnostic["owner_acceptance_id"]
+        == "gctm_d1_activation_owner_acceptance_20260723"
+    )
 
-    binding = diagnostic["activation_evidence_bindings"][0]
-    assert binding["requirement_id"] == "declaration_owner_acceptance"
-    assert binding["evidence_class"] == "owner_accepted_governance"
+    bindings = {
+        item["requirement_id"]: item
+        for item in diagnostic["activation_evidence_bindings"]
+    }
+    assert bindings["declaration_owner_acceptance"]["evidence_class"] == (
+        "owner_accepted_governance"
+    )
+    assert bindings["declaration_owner_acceptance"]["evidence_id"] == (
+        "gctm_d1_declaration_owner_acceptance_20260723"
+    )
+    assert bindings["owner_scheduling"]["evidence_class"] == (
+        "owner_scheduling_decision"
+    )
+    assert bindings["owner_scheduling"]["evidence_id"] == (
+        "gctm_d1_owner_scheduling_20260723"
+    )
+    assert bindings["owner_scheduling"]["artifact_sha256"] == (
+        "17c534c5dc25ad0318d26b0208a7f9dceedc603ec1f81dc29fe27b49bc2607c8"
+    )
+    assert bindings["owner_scheduling"]["owner_acceptance_id"] == (
+        "gctm_d1_activation_owner_acceptance_20260723"
+    )
 
 
 def test_complete_diagnostic_activation_bindings_are_machine_eligible() -> None:
-    record = _record()
-    _activate_diagnostic(record)
-
-    report = governance.validate_record(record)
-
+    # Authoritative record is already activation-eligible after owner scheduling.
+    report = governance.validate_record_file(RECORD)
     assert report["activation_eligible_slots"] == ["GCTM_D1"]
     assert report["decision_relevant_candidates"] == []
-    assert report["active_wip"] == []
+    assert report["active_wip"] == ["GCTM_D1"]
+
+    # Synthetic rebinding remains valid under the same activation contract.
+    record = _record()
+    _activate_diagnostic(record)
+    synthetic = governance.validate_record(record)
+    assert synthetic["activation_eligible_slots"] == ["GCTM_D1"]
+    assert synthetic["decision_relevant_candidates"] == []
 
 
 def test_diagnostic_owner_scheduling_rejects_owner_accepted_governance() -> None:
@@ -314,9 +342,21 @@ def test_diagnostic_declaration_acceptance_rejects_scheduling_evidence_class() -
 def test_diagnostic_cannot_drop_owner_scheduling_requirement() -> None:
     invalid = _record()
     diagnostic = _slot(invalid, "GCTM_D1")
+    # Demote to pre-activation so the requirement-set rule is the failure mode.
+    diagnostic["state"] = "proposed"
+    diagnostic["owner_acceptance_id"] = None
     diagnostic["activation_requirements"] = ["declaration_owner_acceptance"]
-    diagnostic["blocked_by"] = []
-    _projected_slot(invalid, "GCTM_D1")["blocked_by"] = []
+    diagnostic["satisfied_activation_requirements"] = ["declaration_owner_acceptance"]
+    diagnostic["activation_evidence_bindings"] = [
+        binding
+        for binding in diagnostic["activation_evidence_bindings"]
+        if binding["requirement_id"] == "declaration_owner_acceptance"
+    ]
+    diagnostic["blocked_by"] = ["owner_scheduling"]
+    projected = _projected_slot(invalid, "GCTM_D1")
+    projected["state"] = "proposed"
+    projected["blocked_by"] = ["owner_scheduling"]
+    invalid["registry_projection"]["active_wip"] = []
 
     _assert_error(invalid, "diagnostic_activation_requirements")
 
@@ -324,11 +364,24 @@ def test_diagnostic_cannot_drop_owner_scheduling_requirement() -> None:
 def test_diagnostic_must_admit_owner_scheduling_decision_evidence_class() -> None:
     invalid = _record()
     diagnostic = _slot(invalid, "GCTM_D1")
+    diagnostic["state"] = "proposed"
+    diagnostic["owner_acceptance_id"] = None
     diagnostic["allowed_evidence_classes"] = [
         cls
         for cls in diagnostic["allowed_evidence_classes"]
         if cls != "owner_scheduling_decision"
     ]
+    diagnostic["satisfied_activation_requirements"] = ["declaration_owner_acceptance"]
+    diagnostic["activation_evidence_bindings"] = [
+        binding
+        for binding in diagnostic["activation_evidence_bindings"]
+        if binding["requirement_id"] == "declaration_owner_acceptance"
+    ]
+    diagnostic["blocked_by"] = ["owner_scheduling"]
+    projected = _projected_slot(invalid, "GCTM_D1")
+    projected["state"] = "proposed"
+    projected["blocked_by"] = ["owner_scheduling"]
+    invalid["registry_projection"]["active_wip"] = []
 
     _assert_error(invalid, "diagnostic_evidence_boundary")
 
@@ -434,11 +487,12 @@ def test_registry_repush_has_no_false_active_wip() -> None:
     record = _record()
     projection = record["registry_projection"]
     assert projection["decision_relevant_candidates"] == []
-    assert projection["active_wip"] == []
+    assert projection["active_wip"] == ["GCTM_D1"]
     assert projection["h0_reentry_authorized"] is False
 
+    # Non-active runtime slots must not hold WIP.
     invalid = deepcopy(record)
-    invalid["registry_projection"]["active_wip"] = ["GCTM_D1"]
+    invalid["registry_projection"]["active_wip"] = ["GCTM_D1", "H0_ROUTE5_B1"]
     _assert_error(invalid, "false_active_wip")
 
 
@@ -452,13 +506,12 @@ def test_registry_todo_and_charter_project_the_machine_record() -> None:
         assert "GCTM_B1" in text
         assert "GCTM_D1" in text
         assert "blocked_by: h0_runtime_substrate" in text
-    assert "無 active" in todo
+    assert "GCTM_D1 — canonical synthetic diagnostic execution" in todo
     assert "decision_relevant_candidates: []" in registry
-    assert "active_wip: []" in registry
-    assert (
-        "PROPOSED / non-WIP / declaration owner-accepted / execution unscheduled"
-        in charter
-    )
+    assert "active_wip: [GCTM_D1]" in registry
+    assert "ACTIVE / sole-active / one canonical execution authorized" in charter
     assert "gctm_d1_declaration_owner_acceptance_20260723" in charter
+    assert "gctm_d1_owner_scheduling_20260723" in charter
+    assert "gctm_d1_activation_owner_acceptance_20260723" in charter
     assert "runtime faithful" in charter
     assert "reject_runtime_consumption" in charter

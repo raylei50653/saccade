@@ -1,12 +1,12 @@
 ---
-doc-status: proposed
+doc-status: active
 doc-promotion: navigation-only; not evidence
 doc-date: 2026-07-23
 doc-module: semantic
 owner-module: semantic
 work-class: mainline-study
-wip-role: non-wip
-activation-gate: "separate owner scheduling"
+wip-role: sole-active
+activation-gate: "declaration owner acceptance + owner scheduling — both satisfied 2026-07-23; see Activation record"
 target-decision-layer: diagnostic-only
 primary-intent: model-and-interface-diagnostic
 output-class: "diagnostic seal | bounded no-go | interface-ready"
@@ -14,26 +14,66 @@ mainline-transition: "GCTM_D1 only; never H0_ROUTE5_B1, GCTM_B1, or GCTM_O1"
 created: 2026-07-23
 ---
 
-# GCTM D1 — substrate-agnostic ranking diagnostic — proposed task charter
+# GCTM D1 — substrate-agnostic ranking diagnostic — task charter
 
 ## Status and authority
 
-**PROPOSED / non-WIP / declaration owner-accepted / execution unscheduled.**
-`GCTM_D1` is an independent, substrate-agnostic diagnostic slot. Its sealed
-declaration is owner-accepted as a frozen execution contract
-(`gctm_d1_declaration_owner_acceptance_20260723`). The charter itself is **not
-active**, **not closed**, and does **not** occupy the semantic WIP lock.
-Canonical registry `state` remains **`none`**. Creating or accepting the
-declaration does not authorize data access, fitting, runtime capture, H0
-re-entry, B1/O1 activation, or a production-facing claim.
+**ACTIVE / sole-active / one canonical execution authorized / execution not
+completed.** `GCTM_D1` is an independent, substrate-agnostic diagnostic slot.
+Its sealed declaration is owner-accepted as a frozen execution contract
+(`gctm_d1_declaration_owner_acceptance_20260723`). Owner scheduling
+(`gctm_d1_owner_scheduling_20260723` /
+`gctm_d1_activation_owner_acceptance_20260723`) activates the slot, acquires
+semantic WIP, and authorizes **exactly one** canonical synthetic diagnostic
+execution of those frozen identities. The charter is **not closed**. Canonical
+registry `state` remains **`none`** until a later owner-accepted execution
+closure. This activation does not authorize fixture/runner/invariant/interface
+replacement, H0 re-entry, B1/O1 activation, or a production-facing claim.
 
 ```text
 declaration accepted     = yes (execution contract frozen)
-execution unscheduled    = yes
-WIP not acquired         = yes
+owner scheduling         = yes (one canonical execution authorized)
+WIP acquired             = yes (diagnostic sole-active)
+execution completed      = no
 canonical state          = none
-blocked_by               = owner_scheduling
+blocked_by               = []
 ```
+
+### Activation record
+
+The activation gate required both:
+
+1. `declaration_owner_acceptance` — **satisfied**
+   (`gctm_d1_declaration_owner_acceptance_20260723` /
+   evidence_class `owner_accepted_governance`; PR #266); and
+2. `owner_scheduling` — **satisfied**
+   (`gctm_d1_owner_scheduling_20260723` /
+   evidence_class `owner_scheduling_decision`;
+   slot `owner_acceptance_id` =
+   `gctm_d1_activation_owner_acceptance_20260723`).
+
+Canonical scheduling record:
+
+[`gctm_d1_owner_scheduling_20260723.json`](../../modules/semantic/research/gctm_d1_owner_scheduling_20260723.json)
+(`artifact_sha256: 17c534c5dc25ad0318d26b0208a7f9dceedc603ec1f81dc29fe27b49bc2607c8`).
+
+Owner decision text:
+
+```text
+schedule GCTM_D1 for one canonical execution
+```
+
+Scope:
+
+```text
+one canonical execution of the exact declaration and packet identities
+accepted by gctm_d1_declaration_owner_acceptance_20260723
+```
+
+**Activation ≠ execution completed.** This transition authorizes WIP and one
+frozen-runner execution. It does not run the diagnostic, select a terminal,
+promote the provisional seal-candidate string, or close the charter. Those
+remain a later independent PR.
 
 The machine-readable identity and authority boundary is owned by
 [`gctm_b1_slot_identity_decision_v1`](../contracts/gctm_b1_slot_identity_decision_v1.json):
@@ -76,10 +116,10 @@ The charter may define and compare:
 The charter may not freeze a runtime observation mode or runtime
 parameterization. A diagnostic family definition is not a runtime freeze.
 
-### Pre-activation seal-candidate generation (explicitly allowed)
+### Frozen pre-activation seal-candidate package
 
-Before charter activation and before any WIP/scheduling decision, the
-repository may generate a **pre-activation synthetic seal-candidate package**:
+Before activation, the repository generated a **pre-activation synthetic
+seal-candidate package** whose identities are frozen by declaration acceptance:
 
 ```text
 generation_kind = pre_activation_synthetic_seal_candidate
@@ -88,26 +128,21 @@ status           = SEAL_CANDIDATE_GENERATED
 authority        = owner-reviewable proposal, not charter execution
 ```
 
-This generation:
+Owner-accepted charter **execution** is now scheduled. The frozen package may
+be used by the authorized one-shot canonical execution; it is still **not** a
+canonical registry terminal transition and still does not unlock B1/O1/H0.
 
-- **may** run machine-checkable invariants on synthetic fixtures;
-- **may** emit a provisional selected terminal string for owner review;
-- **must not** be recorded as an owner-accepted charter execution;
-- **must not** perform a canonical registry terminal state transition;
-- **must not** acquire WIP or unlock B1/O1/H0.
-
-Owner-accepted charter **execution** remains gated by machine activation
-requirements (exact evidence-class typing):
+Activation requirements (both satisfied):
 
 1. ~~`declaration_owner_acceptance`~~ **satisfied** —
    evidence_class `owner_accepted_governance` bound to
    `gctm_d1_declaration_owner_acceptance_20260723`;
-2. `owner_scheduling` (**remaining gate**) —
-   evidence_class must be `owner_scheduling_decision`
-   (generic `owner_accepted_governance` fails closed).
+2. ~~`owner_scheduling`~~ **satisfied** —
+   evidence_class `owner_scheduling_decision` bound to
+   `gctm_d1_owner_scheduling_20260723`.
 
-Seal-candidate generation, declaration acceptance, and owner-accepted execution
-are distinct authorities.
+Seal-candidate generation, declaration acceptance, owner scheduling, and
+owner-accepted execution closure remain distinct authorities.
 
 ## Allowed evidence
 
@@ -142,7 +177,7 @@ eligible to activate H0_ROUTE5_B1 or GCTM_B1
 decision-relevant transition for either runtime B1
 replacement for H0 provenance, evidence identity, or checksum
 automatic O1 eligibility or activation
-automatic WIP acquisition
+automatic WIP acquisition without owner scheduling
 parked-thread return to mainline
 ```
 
@@ -158,66 +193,16 @@ runtime_consumer_compatibility
 runtime_activation_authority
 ```
 
-Any ambiguous or missing classification fails closed as diagnostic-only.
-
-## Diagnostic protocol requirements
-
-The sealed D1 declaration freezes:
+## Relation to other slots
 
 ```text
-diagnostic_id
-accepted_gctm_theory_identity
-accepted_score_contract_identity
-input_substrate_class = synthetic | sealed_non_runtime
-input_identity
-input_checksum
-input_schema
-observation_family
-parameterization_family
-candidate_universe
-event_key
-score_orientation
-score_transform
-normalization
-tie_rule
-invariants
-counterexample_search_space
-identifiability_questions
-terminal_order
+GCTM_D1  --isolated-->  H0_ROUTE5_B1
+GCTM_D1  --isolated-->  GCTM_B1
+GCTM_B1  --coexist-->   H0_ROUTE5_B1
 ```
 
-At minimum, the diagnostic procedure must:
-
-1. preserve event and candidate-universe identity across compared scores;
-2. distinguish score calibration from within-event ordering;
-3. test monotonicity under each declared transformation;
-4. reject scale-dependent comparisons without a frozen normalization;
-5. reject a model whose aggregate gain hides a declared protected-stratum
-   ordering loss;
-6. report constructive counterexamples rather than averaging them away;
-7. state which parameters or latent quantities remain non-identifiable;
-8. emit the exact future consumer fields and semantics that a runtime producer
-   would need to supply.
-
-## Future H0 compatibility gate
-
-A future proposal to consume D1 output in either runtime-grounded B1 remains
-inadmissible until one compatibility verdict binds all of:
-
-1. canonical H0 evidence manifest;
-2. stable H0 evidence identity;
-3. canonical checksum verification;
-4. producer/consumer schema compatibility;
-5. observation-semantics compatibility;
-6. parameterization compatibility;
-7. score transformation and normalization compatibility;
-8. ordering-preservation verdict.
-
-The verdict must be separately owner-accepted and must bind exact producer,
-consumer, schema, observation, parameterization, and transform identities.
-Missing, partial, stale, mismatched, or rejected verdicts select
-`reject_runtime_consumption`. Until acceptance, D1 and both runtime B1 slots
-remain isolated.
+`GCTM_D1` does not alias, supersede, or share activation authority with either
+runtime-grounded slot. Runtime slots remain isolated.
 
 Because `H0_ROUTE5_B1` and `GCTM_B1` are distinct consumers that do not share
 activation authority, the machine record carries two independent gates:
@@ -229,7 +214,8 @@ gctm_d1_to_gctm_b1_compatibility_v1
 
 A future verdict artifact may be referenced by both gates only when it
 explicitly binds both exact consumer identities. Acceptance on one gate never
-implies acceptance on the other. Both gates remain `missing`.
+implies acceptance on the other. Both gates remain `missing` with fail-closed
+`incompatible_behavior: reject_runtime_consumption`.
 
 ## Ordered terminal family
 
@@ -255,7 +241,8 @@ Maximum claim: interface-ready, not runtime-compatible.
 
 These terminals may transition only `GCTM_D1`. They cannot alter
 `H0_ROUTE5_B1`, `GCTM_B1`, or `GCTM_O1`; cannot create a decision-relevant
-candidate; cannot acquire WIP; and cannot authorize H0 re-entry.
+candidate; and cannot authorize H0 re-entry. Terminal selection on an active
+charter **releases** WIP; it does not create WIP.
 
 Mechanical selection order (frozen by declaration acceptance):
 
@@ -265,19 +252,21 @@ Mechanical selection order (frozen by declaration acceptance):
 
 ## Activation and exit
 
-This charter may become active only after:
+This charter is active because both activation requirements are satisfied:
 
 1. `declaration_owner_acceptance` — **satisfied**
    (`gctm_d1_declaration_owner_acceptance_20260723` /
    evidence_class `owner_accepted_governance`); and
-2. `owner_scheduling` — **not satisfied**
-   (requires evidence_class `owner_scheduling_decision`).
+2. `owner_scheduling` — **satisfied**
+   (`gctm_d1_owner_scheduling_20260723` /
+   evidence_class `owner_scheduling_decision`).
 
-Slot-level `owner_acceptance_id` remains `null` until activation; it is not
-the declaration acceptance id. Declaration acceptance does not activate or
-close this charter. If a future active D1 selects one of the three terminals,
-it exits and releases WIP. No exit condition performs a cross-slot state
-transition.
+Slot-level `owner_acceptance_id` is
+`gctm_d1_activation_owner_acceptance_20260723` (activation acceptance only;
+not the declaration acceptance id). When the authorized one canonical
+execution selects one of the three terminals under a later owner acceptance,
+the charter exits and releases WIP. No exit condition performs a cross-slot
+state transition.
 
 ## Prohibited actions
 
@@ -291,14 +280,31 @@ This charter never authorizes:
 - registration of diagnostic evidence as runtime evidence;
 - changes to the accepted score-ranking contract;
 - supersession of H0 route-5 B1;
-- reactivation of a parked research thread.
+- reactivation of a parked research thread;
+- replacement of the frozen fixture, runner, invariants, consumer interface,
+  parameterization, or terminal procedure.
 
 ## Current verdict
 
-`GCTM_D1` is a proposed, isolated diagnostic charter whose declaration is
-owner-accepted as a frozen execution contract. Execution remains unscheduled;
-canonical state remains `none`; runtime-consumption gates remain fail-closed
-`missing`; candidate set and semantic WIP lock remain empty.
+`GCTM_D1` is an **active**, isolated diagnostic charter. Declaration is
+owner-accepted; owner scheduling is accepted; one canonical synthetic
+execution is authorized; semantic WIP is held. Canonical state remains
+`none`; runtime-consumption gates remain fail-closed `missing`; the slot is
+**not** a decision-relevant runtime candidate.
+
+### Owner scheduling status (2026-07-23)
+
+```text
+decision             = schedule GCTM_D1 for one canonical execution
+scheduling_id        = gctm_d1_owner_scheduling_20260723
+owner_acceptance_id  = gctm_d1_activation_owner_acceptance_20260723
+slot state           = active
+WIP acquired         = yes
+execution completed  = no
+canonical state      = none
+next step            = separate PR: frozen runner execution + mechanical
+                       terminal selection + owner-accepted closure
+```
 
 ### Declaration acceptance status (2026-07-23)
 
@@ -306,9 +312,6 @@ canonical state remains `none`; runtime-consumption gates remain fail-closed
 acceptance_terminal  = GCTM_D1_DECLARATION_ACCEPTED
 owner_acceptance_id  = gctm_d1_declaration_owner_acceptance_20260723
 declaration frozen   = yes
-execution unscheduled = yes
-state remains none   = yes
-next gate            = owner_scheduling
 ```
 
 ### Seal-candidate package status (2026-07-23)
@@ -316,8 +319,10 @@ next gate            = owner_scheduling
 A **pre-activation synthetic seal-candidate** package has been generated
 (`status: SEAL_CANDIDATE_GENERATED`). Provisional mechanical terminal string:
 **`GCTM_D1_INTERFACE_READY`** (not a canonical registry state transition;
-declaration acceptance does not promote it).
+activation does not promote it).
 
+- scheduling (owner-accepted):
+  [`gctm_d1_owner_scheduling_20260723.json`](../../modules/semantic/research/gctm_d1_owner_scheduling_20260723.json)
 - declaration (owner-accepted):
   [`gctm_d1_ranking_diagnostic_declaration_20260723.md`](../../modules/semantic/research/gctm_d1_ranking_diagnostic_declaration_20260723.md)
 - terminal (seal-candidate report):
@@ -325,7 +330,6 @@ declaration acceptance does not promote it).
 - packet (immutable PR #265 identities):
   [`evidence/gctm_d1_substrate_agnostic_ranking_20260723/`](../../modules/semantic/research/evidence/gctm_d1_substrate_agnostic_ranking_20260723/)
 
-This is **not** owner-accepted charter execution. It does **not** acquire WIP,
-unlock B1/O1, satisfy any runtime compatibility gate, or move the canonical
-registry `state` off `none`. Charter activation still requires separate owner
-scheduling.
+Owner scheduling accepts WIP and authorizes one canonical execution of those
+frozen identities. It does **not** unlock B1/O1, satisfy any runtime
+compatibility gate, or move the canonical registry `state` off `none`.
