@@ -5,14 +5,28 @@
 
 # GCTM 範圍與方案 — primary object = A
 
-> **Planning memo · not active · not sealed · no execution authority**
+> **HISTORICAL — pre-activation planning memo（2026-07-22 撰寫；2026-07-23 起
+> superseded）。** 本 memo 的 proposal 已全部被 owner 接受並落地：GCTM 於
+> 2026-07-22 activate（WP-A0），於 2026-07-23 關閉於 owner-accepted ordered
+> terminal **`GCTM_MODEL_SPEC_SEALABLE`**。因此文中一切「parked」「keep GCTM
+> parked」「activation 前」的敘述都是**當時快照**，**不是現況**；現況與 terminal
+> 由下列 owner 擁有：
+> [closed charter *Final status*](../../../research/threads/closed/gap_conditioned_stochastic_transition_model_task.md) ·
+> [D1 spec v1](../../../research/models/gap_conditioned_stochastic_transition_spec_v1.md) ·
+> [D2 lemmas v1](../../../research/models/gap_conditioned_stochastic_transition_lemmas_v1.md) ·
+> [terminal review](../../../research/models/gap_conditioned_stochastic_transition_terminal_review_v1.md) ·
+> [claim-state registry](../../../research/contracts/claim_state_registry.md)。
+> 本 memo 保留原文作為決策脈絡（primary object = A 的選擇理由與被否決的替代），
+> 不重寫、不追認。
+>
+> **Planning memo · not active · not sealed · no execution authority（原文保留）**
 >
 > 本文件是單一範圍／方案稿：收斂先前 GCTM 評語的修正，固定 **primary object = A
 > （latent state transition）**，並重排 activation 前工作順序。
 >
 > 它**不**取代：
 >
-> - [GCTM parked charter](../../../research/threads/closed/gap_conditioned_stochastic_transition_model_task.md)
+> - [GCTM task charter（撰寫時 parked；現為 **CLOSED**）](../../../research/threads/closed/gap_conditioned_stochastic_transition_model_task.md)
 > - [H0→GCTM consumer compatibility](h0_gctm_consumer_compatibility_requirements_20260718.md)
 > - [B1/O1 shared semantics](gctm_b1_o1_task_objectives_and_semantics_20260716.md)
 > - [existing online object analysis](existing_online_object_analysis_for_gctm_alignment_20260718.md)
@@ -406,7 +420,7 @@ existing_online_object_analysis
     not as unconditional A-seal obligations
   → until that amendment lands, existing unconditional wording still controls
 
-gap_conditioned_stochastic_transition_model_task (parked charter)
+gap_conditioned_stochastic_transition_model_task (當時 parked charter；現 CLOSED，見 threads/closed/)
   owns stable research question, M0/M1/M2 family boundary, activation gates
   → this memo proposes primary-object resolution + reordered blockers
   → does NOT activate the charter
@@ -490,7 +504,7 @@ This document is successful if and only if a reader can answer:
 2. If accepted: later docs PR must first land that qualification in the
    existing-online authority, then land A into future active GCTM declaration
    language (still requires GCTM activation gate).
-3. Keep GCTM charter **parked** until owner scheduling.
+3. Keep GCTM charter **parked** until owner scheduling. *(已發生：owner scheduling 2026-07-22 ⇒ activate；2026-07-23 closed。)*
 4. Continue H0 re-entry / qualification on its own authority chain; do not
    couple its WIP to GCTM math drafting unless a bridge-runtime claim is intended.
 5. Optionally open a **separate** registry L2 contract draft as non-WIP
