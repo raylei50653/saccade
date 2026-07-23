@@ -17,6 +17,11 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[2]
 SCHEMA_ID = "score_ranking_declaration_v1"
 SCHEMA_PATH = ROOT / "scripts/tools/score_ranking_declaration_schema_v1.json"
+ACCEPTED_CONTRACT_SHA256 = (
+    "7dbc2d965079fa3fc13f7802a4a083b1c4cbf49d658ffe3728b6c405364a13b4"
+)
+OWNER_ACCEPTANCE_ID = "score_ranking_contract_owner_acceptance_20260723"
+REGISTRY_BINDING_ID = "claim_state_registry_score_ranking_v1"
 
 RUNG_ORDER = ("SR0", "SR1", "SR2", "SR3", "SR4", "SR5", "SR6")
 RUNG_OBLIGATIONS: dict[str, frozenset[str]] = {

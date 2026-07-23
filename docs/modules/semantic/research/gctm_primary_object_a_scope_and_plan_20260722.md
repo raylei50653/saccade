@@ -12,8 +12,8 @@
 > owner-accepted ordered terminal **`GCTM_MODEL_SPEC_SEALABLE`**。**其餘平行建議
 > 不屬於 GCTM closure，也未因此執行或取得 authority**——特別是 §4 的 `WP-L2∥`
 > （cross-study L2 contract, registry-bound）與 `WP-B1`（B1 declaration）：**L2
-> [score-layer contract draft](../../../research/contracts/score_ranking_evidence_contract.md)
-> 已開始，但尚未 owner-accepted**（[registry §7 架構缺口](../../../research/contracts/claim_state_registry.md)），
+> [score-layer contract v1](../../../research/contracts/score_ranking_evidence_contract.md)
+> 已於 2026-07-23 owner-accepted 並綁入 registry**（[registry §7](../../../research/contracts/claim_state_registry.md)），
 > B1 仍是 proposed。因此文中一切「parked」「keep GCTM
 > parked」「activation 前」的敘述都是**當時快照**，**不是現況**；現況與 terminal
 > 由下列 owner 擁有：

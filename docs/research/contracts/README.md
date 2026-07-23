@@ -15,7 +15,7 @@
 | **[statistical_robust_feasible_set_estimation_under_asymmetric_loss.md](statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)** | **最上層數學契約。** 非對稱損失下的安全域：\(\max_\theta G_{\mathrm{FP}}(\theta)\) s.t. \(L_{\mathrm{GT}}(\theta)\le\varepsilon\) · feasible / productive-safe / robust-feasible set · region geometry（thickness、boundary distance、interior）· **有限樣本與 independence unit 強制宣告（§8.1）** · robustness 軸（sequence / fold / **substrate** / perturbation / execution，§9）· **claim ladder L0–L6（§10）** · **§13 forbidden shortcuts** · **role-aligned experiment contract（§20）＋ declaration seal bar（§20.8 — 宣告邊界規則的唯一 owner：typed κ、凍結自由度、機械可判定、exhaustive terminal、scoped exhaustion naming、blind→reveal hash binding）＋ dual-space accounting / reduction typing（§20.9 — 第四宣告座標 substrate、ρ_v/a_{v,t} 型別介面、conservation identities、跨空間推論義務、typed failure semantics）** |
 | **[runtime_quantity_fidelity_protocol.md](runtime_quantity_fidelity_protocol.md)** | **runtime 量的忠實性協議。** 任何聲稱代表 production runtime quantity 的 offline 量，不得因公式同形/同名而繼承語義。core lemma：**同一個 \(f\)、不同的時域化約算子 \(R\)** → shadow capture → 版本化 key/ID universe → partition 守恆 → 封門檻 → 五項驗證 → 四分 terminal → append-only amendment |
 | **[signal_table_schema.md](signal_table_schema.md)** | **分層契約。** A/B1/B2 訊號表；**§0.4 L0 safe-reject**；**§0.5 Gate vs Score**（membership vs ordering — 決定一個問題屬於哪一層） |
-| **[score_ranking_evidence_contract.md](score_ranking_evidence_contract.md)** | **L2 score-ranking 契約草案（尚未生效）。** 定義 event-local rank／margin／top-1、candidate-universe identity、calibration 分離與 `SR0`–`SR6` claim ladder；v1 schema／validator／正負 fixtures 只提供 proposed mechanical review surface。在 owner acceptance 與 registry 回寫前，所有受 §7 阻擋的 L2 object 仍是 `transition_semantics: unavailable`。 |
+| **[score_ranking_evidence_contract.md](score_ranking_evidence_contract.md)** | **Owner-accepted L2 score-ranking 契約 v1。** 定義 event-local rank／margin／top-1、candidate-universe identity、calibration 分離與 `SR0`–`SR6` claim ladder；v1 schema／validator／正負 fixtures 提供 fail-closed declaration surface。契約 acceptance 只補上 transition semantics，不自動啟動研究或推進任何 object。 |
 | **[boolean_composition_semantics_contract.md](boolean_composition_semantics_contract.md)** | **組合語義。** Ω/Θ 分型、三值 predicate、universe identity、threshold edge、role closure、canonical grammar、closed-loop firewall |
 | **[safe_region_asset_contract.md](safe_region_asset_contract.md)** | **打包契約（R0-B RegionAsset）。** 把已封存的 evidence 決定性地打包成 region asset；claim level 與成熟度；**transfer / intervention / production 皆尚未授權** |
 
@@ -34,9 +34,9 @@ statistical_robust_feasible_set  ──┬─►  一切 gate / safe-region / re
 
 runtime_quantity_fidelity_protocol ──►  任何「這個 offline 量代表 production 量」的宣稱
 
-signal_table_schema §0.5 ──► score_ranking_evidence_contract
+signal_table_schema §0.5 ──► score_ranking_evidence_contract v1
 （gate / score 分層）         （L2 rank / margin / top-1 / calibration / SR0–SR6；
-                               proposed，owner acceptance 前不具 transition authority）
+                               owner-accepted 2026-07-23）
 ```
 
 - **層級衝突**：分層歸屬（gate vs score）以 `signal_table_schema §0.5` 為準；統計與 claim level 以 feasible-set 框架為準；量的忠實性以 fidelity protocol 為準。
@@ -61,4 +61,4 @@ feasible-set 框架的 **§9.3 substrate robustness** 與 fidelity protocol 的 
 
 | 缺口 | 狀態 |
 |---|---|
-| **score-ranking 規範契約尚未被接受** | [L2 contract draft](score_ranking_evidence_contract.md) 已開始收斂 event-local rank / margin / top-1、calibration 與 claim ladder；但它仍是 `proposed`，尚未取得 transition authority。owner acceptance＋registry 回寫前，任何 ranking 研究只能把它當 review draft，不得自造 claim level 或宣稱 §7 gate 已滿足。 |
+| **score-ranking 規範契約** | **已解決（2026-07-23）。** [`score_ranking_evidence_contract_v1`](score_ranking_evidence_contract.md) 已 owner-accepted 並綁入 registry；L2 transition semantics 現為 defined。這不解除各 object 自己的 substrate、relevance、declaration、seal 或 scheduling blockers。 |

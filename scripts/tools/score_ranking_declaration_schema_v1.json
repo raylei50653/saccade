@@ -157,11 +157,14 @@
           },
           "then": {
             "properties": {
+              "contract_sha256": {
+                "const": "7dbc2d965079fa3fc13f7802a4a083b1c4cbf49d658ffe3728b6c405364a13b4"
+              },
               "owner_acceptance_id": {
-                "$ref": "#/$defs/id"
+                "const": "score_ranking_contract_owner_acceptance_20260723"
               },
               "registry_binding_id": {
-                "$ref": "#/$defs/id"
+                "const": "claim_state_registry_score_ranking_v1"
               }
             }
           }

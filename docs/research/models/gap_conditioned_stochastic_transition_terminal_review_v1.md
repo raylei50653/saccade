@@ -143,7 +143,7 @@ treated as satisfied by this review.
 
 | Item | Why it is not a scoring row | Standing after this review |
 |:--|:--|:--|
-| Pre-activation boundary-normalization obligation 2 — **L2 score-insertion contract** | Not an A-layer seal obligation: the charter states it blocks any B1/O1 **score-ranking path**, and the scope qualification / plan memo place a frozen L2 contract outside the A-layer seal conditions (a parallel B1 blocker) | **Still absent** ([registry §7](../contracts/claim_state_registry.md) architecture gap). The selected terminal does not relax it; any B1/O1 score-ranking path stays blocked |
+| Pre-activation boundary-normalization obligation 2 — **L2 score-insertion contract** | Not an A-layer seal obligation: the charter states it blocks any B1/O1 **score-ranking path**, and the scope qualification / plan memo place a frozen L2 contract outside the A-layer seal conditions (a parallel B1 blocker) | **Absent at terminal-selection time.** This historical standing was superseded later on 2026-07-23 when [`score_ranking_evidence_contract_v1`](../contracts/score_ranking_evidence_contract.md) was owner-accepted and registry-bound; the selected A-layer terminal itself still grants no B1/O1 authority |
 | Pre-activation boundary-normalization obligation 3 — **typed cross-layer mapping** | Its A-layer legs are discharged inside scored rows (D1 §2 binding classes `normative` / `documented-production` / `declared-target`; D1 §3 causal availability); its **score-policy** leg is owned by the B1 charter and the registry-owned L2 contract, i.e. outside A-layer scope under the in-force qualification | A-layer legs declared; score-policy leg **not** established and not claimed |
 | **Terminal review** itself (listed as an open deferral in D1 §7.9/§8.8) | It is the act this artifact performs, not an obligation it scores; scoring itself would be circular | Performed here; superseded in D1 by the WP-A8 append-only §1 note |
 | **Terminal closure** write-back (charter §"Terminal closure": write terminal + lifecycle back to the charter and Issue #175) | Sequenced **after** selection by the charter's own decision procedure (step 4, owner acceptance), so it cannot be a precondition of the selection | Landed as the acceptance-step obligations listed in §10 |
@@ -287,8 +287,9 @@ mainline, or production authority (charter, explicit). It authorises no data
 execution, parameter fitting, capture, GT/FP reveal, tracker or CUDA/runtime
 change, H0 change, threshold or policy selection, or claim-state promotion of
 any production object. B1 and O1 remain separately chartered and separately
-gated; the registry-owned L2 score-layer contract remains absent and continues
-to block any B1/O1 score-ranking path.
+gated. The registry-owned L2 score-layer contract was absent when this terminal
+was selected, then separately owner-accepted and registry-bound on 2026-07-23;
+that later event does not alter this terminal or satisfy B1/O1's other gates.
 
 ## §10 Post-selection obligations (charter step 4 — owner acceptance)
 
