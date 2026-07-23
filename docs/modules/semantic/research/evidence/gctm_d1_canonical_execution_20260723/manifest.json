@@ -1,0 +1,14 @@
+{
+  "does_not_replace_accepted_packet": "gctm_d1_substrate_agnostic_ranking_20260723",
+  "execution_id": "gctm_d1_canonical_execution_20260723",
+  "files": {
+    "execution_witness.json": "07922a67d9643f75e9fbbda544de1944d93d6a170fb34fcbad902a7e5b3d4230",
+    "terminal_acceptance.json": "1aa779f6d8e15f08ec9c3fa722a27b42efc1a8ec2129a431a76bc67cfe9e67e5"
+  },
+  "not_a_diagnostic_evidence_packet": true,
+  "packet_id": "gctm_d1_canonical_execution_20260723",
+  "record_scope": "canonical_execution_witness",
+  "scheduling_id": "gctm_d1_owner_scheduling_20260723",
+  "schema": "gctm_d1_canonical_execution_witness_manifest_v1",
+  "selected_terminal": "GCTM_D1_INTERFACE_READY"
+}

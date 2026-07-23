@@ -1,0 +1,56 @@
+{
+  "acceptance_date": "2026-07-23",
+  "acceptance_mechanism": "PR merge of this change constitutes owner acceptance of the mechanically selected terminal",
+  "accepted_packet_id": "gctm_d1_substrate_agnostic_ranking_20260723",
+  "accepted_packet_manifest_hash": "9efb9005711b1f9f08c6ae06ffc03cad49e7489fda56c7129d04c844fecd9bc2",
+  "bit_identical_against_accepted_packet": true,
+  "blocked_claims": [
+    "runtime compatibility",
+    "runtime fidelity",
+    "H0 substrate",
+    "H0 re-entry authority",
+    "H0_ROUTE5_B1 activation",
+    "GCTM_B1 activation",
+    "O1 eligibility",
+    "decision-relevant candidate",
+    "production claim"
+  ],
+  "distinct_from_activation_owner_acceptance_id": "gctm_d1_activation_owner_acceptance_20260723",
+  "distinct_from_declaration_owner_acceptance_id": "gctm_d1_declaration_owner_acceptance_20260723",
+  "execution_id": "gctm_d1_canonical_execution_20260723",
+  "execution_witness": "docs/modules/semantic/research/evidence/gctm_d1_canonical_execution_20260723/execution_witness.json",
+  "execution_witness_hash": "07922a67d9643f75e9fbbda544de1944d93d6a170fb34fcbad902a7e5b3d4230",
+  "invariants_passed": "12/12",
+  "maximum_supported_claim": "The frozen substrate-agnostic diagnostic family is internally machine-checkable and exposes a complete consumer interface suitable for a separate runtime compatibility review.",
+  "not_established": [
+    "runtime compatibility",
+    "runtime fidelity",
+    "H0 substrate",
+    "H0 re-entry authority",
+    "H0_ROUTE5_B1 activation",
+    "GCTM_B1 activation",
+    "O1 eligibility",
+    "decision-relevant candidate",
+    "production claim"
+  ],
+  "owner_acceptance_id": "gctm_d1_terminal_owner_acceptance_20260723",
+  "record_scope": "owner_terminal_acceptance_candidate",
+  "registry_effect_authorized_on_acceptance": {
+    "GCTM_D1_state": "GCTM_D1_INTERFACE_READY",
+    "active_wip": [],
+    "compatibility_gates_remain": "missing",
+    "decision_relevant_candidates": [],
+    "h0_reentry_authorized": false,
+    "lifecycle_state": "terminal"
+  },
+  "scheduling_id": "gctm_d1_owner_scheduling_20260723",
+  "schema": "gctm_d1_terminal_acceptance_v1",
+  "selected_terminal": "GCTM_D1_INTERFACE_READY",
+  "slot_id": "GCTM_D1",
+  "terminal_procedure_id": "gctm_d1_mechanical_three_way_terminal_v1",
+  "terminal_procedure_order": [
+    "GCTM_D1_BOUNDED_NO_GO",
+    "GCTM_D1_DIAGNOSTIC_SEAL",
+    "GCTM_D1_INTERFACE_READY"
+  ]
+}

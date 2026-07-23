@@ -1,0 +1,168 @@
+{
+  "accepted_declaration_hash": "33dda22efffe3f1d8cfceec66400ef7549b1b9ba692bcffbb0eabe78dee355e0",
+  "accepted_packet_id": "gctm_d1_substrate_agnostic_ranking_20260723",
+  "accepted_packet_manifest_hash": "9efb9005711b1f9f08c6ae06ffc03cad49e7489fda56c7129d04c844fecd9bc2",
+  "accepted_packet_rel": "docs/modules/semantic/research/evidence/gctm_d1_substrate_agnostic_ranking_20260723",
+  "activation_owner_acceptance_id": "gctm_d1_activation_owner_acceptance_20260723",
+  "authority_notes": {
+    "does_not_copy_frozen_packet": true,
+    "does_not_equal_owner_terminal_acceptance": true,
+    "does_not_rewrite_pr265_packet": true,
+    "owner_acceptance_via_pr_merge": true
+  },
+  "bit_identical_comparison": {
+    "all_canonical_artifacts_bit_identical": true,
+    "artifacts": {
+      "compatibility_requirements_matrix.json": {
+        "accepted_packet_sha256": "25a2ca49dbfd6d9d8985681967beb3f4df51e2fc51901444f246c94e49fa7ddd",
+        "bit_identical": true,
+        "scratch_sha256": "25a2ca49dbfd6d9d8985681967beb3f4df51e2fc51901444f246c94e49fa7ddd"
+      },
+      "consumer_interface.json": {
+        "accepted_packet_sha256": "45c16a6c8cf50d098b12cc8e4f1acbdcc846d0d431ad77f9fbe64bdb60bb57ce",
+        "bit_identical": true,
+        "scratch_sha256": "45c16a6c8cf50d098b12cc8e4f1acbdcc846d0d431ad77f9fbe64bdb60bb57ce"
+      },
+      "declaration_sidecar.json": {
+        "accepted_packet_sha256": "6799e09a5cc39e6bc05e2970d55fe15c59081b814937bafcb6ab4fefc1e99809",
+        "bit_identical": true,
+        "scratch_sha256": "6799e09a5cc39e6bc05e2970d55fe15c59081b814937bafcb6ab4fefc1e99809"
+      },
+      "event_level_diagnostic_packet.json": {
+        "accepted_packet_sha256": "f0b0bf9039a098b949968f00465f1ac419b5a8422ffea9226eb623db1a40366d",
+        "bit_identical": true,
+        "scratch_sha256": "f0b0bf9039a098b949968f00465f1ac419b5a8422ffea9226eb623db1a40366d"
+      },
+      "fixture_pack.json": {
+        "accepted_packet_sha256": "92dafcd0acc33642b2eaddb1c6178d2d2d519b1e40ea3160069155c9150151bd",
+        "bit_identical": true,
+        "scratch_sha256": "92dafcd0acc33642b2eaddb1c6178d2d2d519b1e40ea3160069155c9150151bd"
+      },
+      "identities.json": {
+        "accepted_packet_sha256": "c913f1d17f36acb54b08a209b4ecb62b540c0f55e54c994035bcdc1ebe39125e",
+        "bit_identical": true,
+        "scratch_sha256": "c913f1d17f36acb54b08a209b4ecb62b540c0f55e54c994035bcdc1ebe39125e"
+      },
+      "invariant_report.json": {
+        "accepted_packet_sha256": "f9ca3e64f7c4937686e3efa2d2661c068803f1aa48883013212a84b6ed3f940d",
+        "bit_identical": true,
+        "scratch_sha256": "f9ca3e64f7c4937686e3efa2d2661c068803f1aa48883013212a84b6ed3f940d"
+      },
+      "manifest.json": {
+        "accepted_packet_sha256": "9efb9005711b1f9f08c6ae06ffc03cad49e7489fda56c7129d04c844fecd9bc2",
+        "bit_identical": true,
+        "scratch_sha256": "9efb9005711b1f9f08c6ae06ffc03cad49e7489fda56c7129d04c844fecd9bc2"
+      },
+      "terminal_report.json": {
+        "accepted_packet_sha256": "c31e774d3497c8729cb9f1f01c135251a3a8b1a043ec02dfa7edef1ce2c27e0c",
+        "bit_identical": true,
+        "scratch_sha256": "c31e774d3497c8729cb9f1f01c135251a3a8b1a043ec02dfa7edef1ce2c27e0c"
+      }
+    },
+    "note": "scratch output compared to PR #265 frozen packet; scratch is not a new canonical evidence packet"
+  },
+  "command": [
+    "uv",
+    "run",
+    "python",
+    "scripts/tools/run_gctm_d1_diagnostic.py",
+    "--out-dir",
+    "out/gctm_d1_canonical_execution_20260723"
+  ],
+  "completed_at_utc": "2026-07-23T14:35:06Z",
+  "core_package_file_sha256": {
+    "scripts/tools/gctm_d1/__init__.py": "c4d08209bc1dcb4b8adcefe9333f635b4157403a6b929a1a71194c7812f132ac",
+    "scripts/tools/gctm_d1/consumer_interface.py": "3dac0704471801e767d4b92dceaa71afeb0b8639e21860d5d3fb27e7fa5beb32",
+    "scripts/tools/gctm_d1/fixtures.py": "19d6acd3d7e573b65abe3c11bcc0f50265e109db68437b8a6dd0082ff60165da",
+    "scripts/tools/gctm_d1/invariants.py": "5ea8406c741c95fd252f0d245f8b94ecd84ccf4f7eef7ad58139ff83afa0b398",
+    "scripts/tools/gctm_d1/models.py": "7442946f0a5e3b2b50606cf605cc9ed8793776fb5897d2fea8b8390c3cfaeb06",
+    "scripts/tools/gctm_d1/runner.py": "7e424352958fcef58e96af143a880215a149a9611c94e811015f7cca21d5df53"
+  },
+  "core_package_identity": "scripts/tools/gctm_d1/",
+  "declaration_owner_acceptance_id": "gctm_d1_declaration_owner_acceptance_20260723",
+  "execution_commit": "d80f53389a4b3f4a9f8ea83f80c5133ba9602451",
+  "execution_count": 1,
+  "execution_id": "gctm_d1_canonical_execution_20260723",
+  "execution_qualification": {
+    "checks": [
+      "scheduling_identity_and_checksum",
+      "declaration_acceptance_identity",
+      "runner_and_core_package_identity",
+      "fixture_pack_id_and_checksum",
+      "theory_lemmas_score_contract_hashes",
+      "canonical_packet_manifest_identity",
+      "scheduling_not_previously_consumed",
+      "working_tree_clean",
+      "execution_at_explicit_commit_identity",
+      "no_overwrite_of_sealed_packet"
+    ],
+    "result": "passed"
+  },
+  "fixture_pack_id": "gctm_d1_synthetic_fixture_pack_v1",
+  "fixture_sha256": "92dafcd0acc33642b2eaddb1c6178d2d2d519b1e40ea3160069155c9150151bd",
+  "invariant_result": {
+    "all_passed": true,
+    "ids": [
+      "I1",
+      "I2",
+      "I3",
+      "I4",
+      "I5",
+      "I6",
+      "I7",
+      "I8",
+      "I9",
+      "I10",
+      "I11",
+      "I12"
+    ],
+    "n_invariants": 12,
+    "n_passed": 12
+  },
+  "mechanical_selected_terminal": "GCTM_D1_INTERFACE_READY",
+  "not_established": [
+    "runtime_compatibility",
+    "runtime_fidelity",
+    "H0_substrate",
+    "H0_reentry_authority",
+    "H0_ROUTE5_B1_activation",
+    "GCTM_B1_activation",
+    "O1_eligibility",
+    "decision_relevant_candidate",
+    "production_claim"
+  ],
+  "record_scope": "canonical_execution_witness",
+  "runner_identity": "scripts/tools/run_gctm_d1_diagnostic.py",
+  "runner_sha256": "9686a8cb58b3d2d06fd38ed369c9440ac973c350f055742e3d0fb5d60d10e8bb",
+  "runtime_identity": {
+    "executable": "/usr/sbin/python3",
+    "platform": "Linux-6.18.33.1-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+    "python_implementation": "CPython",
+    "python_version": "3.14.6"
+  },
+  "scheduling_artifact": "docs/modules/semantic/research/gctm_d1_owner_scheduling_20260723.json",
+  "scheduling_artifact_sha256": "17c534c5dc25ad0318d26b0208a7f9dceedc603ec1f81dc29fe27b49bc2607c8",
+  "scheduling_id": "gctm_d1_owner_scheduling_20260723",
+  "schema": "gctm_d1_canonical_execution_witness_v1",
+  "scratch_artifact_sha256": {
+    "compatibility_requirements_matrix.json": "25a2ca49dbfd6d9d8985681967beb3f4df51e2fc51901444f246c94e49fa7ddd",
+    "consumer_interface.json": "45c16a6c8cf50d098b12cc8e4f1acbdcc846d0d431ad77f9fbe64bdb60bb57ce",
+    "declaration_sidecar.json": "6799e09a5cc39e6bc05e2970d55fe15c59081b814937bafcb6ab4fefc1e99809",
+    "event_level_diagnostic_packet.json": "f0b0bf9039a098b949968f00465f1ac419b5a8422ffea9226eb623db1a40366d",
+    "fixture_pack.json": "92dafcd0acc33642b2eaddb1c6178d2d2d519b1e40ea3160069155c9150151bd",
+    "identities.json": "c913f1d17f36acb54b08a209b4ecb62b540c0f55e54c994035bcdc1ebe39125e",
+    "invariant_report.json": "f9ca3e64f7c4937686e3efa2d2661c068803f1aa48883013212a84b6ed3f940d",
+    "manifest.json": "9efb9005711b1f9f08c6ae06ffc03cad49e7489fda56c7129d04c844fecd9bc2",
+    "terminal_report.json": "c31e774d3497c8729cb9f1f01c135251a3a8b1a043ec02dfa7edef1ce2c27e0c"
+  },
+  "scratch_out_dir": "out/gctm_d1_canonical_execution_20260723",
+  "sealed_packet_unmodified": true,
+  "started_at_utc": "2026-07-23T14:35:06Z",
+  "terminal_procedure_id": "gctm_d1_mechanical_three_way_terminal_v1",
+  "terminal_procedure_order": [
+    "GCTM_D1_BOUNDED_NO_GO",
+    "GCTM_D1_DIAGNOSTIC_SEAL",
+    "GCTM_D1_INTERFACE_READY"
+  ],
+  "working_tree_clean_at_execution": true
+}
