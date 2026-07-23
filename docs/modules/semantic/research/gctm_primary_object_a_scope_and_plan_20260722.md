@@ -12,7 +12,7 @@
 >
 > 它**不**取代：
 >
-> - [GCTM parked charter](../../../research/threads/gap_conditioned_stochastic_transition_model_task.md)
+> - [GCTM parked charter](../../../research/threads/closed/gap_conditioned_stochastic_transition_model_task.md)
 > - [H0→GCTM consumer compatibility](h0_gctm_consumer_compatibility_requirements_20260718.md)
 > - [B1/O1 shared semantics](gctm_b1_o1_task_objectives_and_semantics_20260716.md)
 > - [existing online object analysis](existing_online_object_analysis_for_gctm_alignment_20260718.md)
@@ -502,7 +502,7 @@ This document is successful if and only if a reader can answer:
 
 | Topic | Authority |
 |:--|:--|
-| Parked GCTM problem boundary | `docs/research/threads/gap_conditioned_stochastic_transition_model_task.md` |
+| Parked GCTM problem boundary | `docs/research/threads/closed/gap_conditioned_stochastic_transition_model_task.md` |
 | A/B/C/D menu + online operator | `docs/modules/semantic/research/existing_online_object_analysis_for_gctm_alignment_20260718.md` |
 | H0 consumer compatibility | `docs/modules/semantic/research/h0_gctm_consumer_compatibility_requirements_20260718.md` |
 | B1/O1 shared semantics | `docs/modules/semantic/research/gctm_b1_o1_task_objectives_and_semantics_20260716.md` |

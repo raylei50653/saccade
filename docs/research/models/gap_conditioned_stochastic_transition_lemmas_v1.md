@@ -24,7 +24,7 @@ claim 定義之上（obligation 2 的 proof 面）。L1–L4（§2–§5）除�
   [D1 §4](gap_conditioned_stochastic_transition_spec_v1.md)（canonical state、M2
   SDE、\(A_\Delta\)、\(d_\Delta(c)\)、\(Q_\Delta\)、domains、units）。本檔的所有符號
   **沿用** D1 §4，**不重新定義**。
-- Task/lifecycle owner：[GCTM task charter](../threads/gap_conditioned_stochastic_transition_model_task.md)
+- Task/lifecycle owner：[GCTM task charter](../threads/closed/gap_conditioned_stochastic_transition_model_task.md)
   （Issue [#175](https://github.com/raylei50653/saccade/issues/175)）；D2 是 charter
   「Future deliverables」列的 lemma/proof appendix，由 WP-A3 owning packet 建立。
 - 本檔**不**做 bridge-runtime claim、不建立 fidelity edge、不選 model 參數、不解除

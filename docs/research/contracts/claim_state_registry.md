@@ -440,6 +440,40 @@ derived_from: §4.1 錯層 + §4.4 契約缺席 + §5 relevance zero
 last_reviewed_at: 2026-07-12
 ```
 
+### `quantity.gap_conditioned_transition_model.a_layer_spec`
+
+```yaml
+layer: quantity（非決策層 — A 層 latent transition specification;不是 gate,也不是可插入的 score）
+ladder: study-sealed terminal（GCTM charter WP-A0 凍結的 5-terminal ordered partition）
+                                         transition_semantics: defined（該 charter 自帶機械判準）
+state: GCTM_MODEL_SPEC_SEALABLE (accepted)   # diagnostic-only spec seal;非 production claim
+substrate: substrate-agnostic A 層數學（canonical state \(\mathbb R^{2d}\);無任何 runtime 擷取值）
+target_substrate: runtime bridge `S_A`（active CUDA bridge geometry）
+open_limits:
+  - identifiability **specified ≠ established**（\(\gamma\) regime 未證;\(P_{xx}\leftrightarrow R_1\) gauge 與 \(H_x\) 下 \(\mathrm{asym}(P_{xv})\) 結構性不可識別）
+  - 無 runtime substrate／accepted fidelity edge（H0 envelope 空）;所有 production-facing 欄位仍是 declared-target
+  - CAL／RANK 只有定義、null 與 metric family,**無任何 measured gain**
+  - canonical \(C=0\) 是宣告決定;dependent-error path 的可逆性需額外假設
+  - D1 §8 只列 requirement,不宣稱 runtime availability
+  - dimensional consistency 由 cross-reference 而非獨立 lemma（terminal review J-1）
+blockers:
+  - type: inadmissibility
+    what: 以 bridge-runtime claim 消費本 spec
+    clause: §4.2 substrate 不繼承（substrate ≠ target_substrate,且無 accepted fidelity edge / L4）
+  - type: dependency
+    what: 作為 score-ranking 層模型進入 B1/O1
+    clause: §4.4 — score-layer 契約不存在（§7 架構缺口）;另需 B1-slot identity ＋ sealed B1 declaration ＋ owner scheduling
+decision_relevance:
+  status: **zero（目前）** — 無 runtime substrate 且 L2 契約缺席;terminal 5 與 terminal 3/4 在當前狀態下**都不**改變任何 production 決策 ⇒ §5 反事實測試不通過 ⇒ 不得取得 WIP 鎖
+  role: enabling precondition only — 它固定的是「未來若被授權,B1 可引用哪一份 frozen 模型介面與其 regime」,不是 production 行為
+supporting_declaration: ../models/gap_conditioned_stochastic_transition_spec_v1.md（D1,§2–§8 frozen）· ../models/gap_conditioned_stochastic_transition_lemmas_v1.md（D2,L1–L5）
+accepting_review: ../models/gap_conditioned_stochastic_transition_terminal_review_v1.md（WP-A8 checklist ＋ 機械 selection）· charter *Final status*: ../threads/closed/gap_conditioned_stochastic_transition_model_task.md
+last_transition: 2026-07-23 — 本 object 第一個被接受的 terminal（WP-A8;Issue #175）
+admissible_units: []                     # [cached derivation]
+derived_from: §4.2（substrate 不繼承,無 L4）＋ §4.4（score-layer 契約缺席）＋ §5（relevance zero）
+last_reviewed_at: 2026-07-23
+```
+
 ---
 
 ## 7. 架構缺口（顯式化，而不是假裝可編排）
@@ -452,11 +486,12 @@ last_reviewed_at: 2026-07-12
 
 ## 8. 候選集 → O0 選擇（registry 到此為止）
 
-**registry 產生的合法候選集（重推於 2026-07-20；前次 2026-07-14）：**
+**registry 產生的合法候選集（重推於 2026-07-23；前次 2026-07-20）：**
 
 | 候選 | Object | 為何合法 |
 |---|---|---|
 | *(全空)* | 所有 object | 已達 terminal／被 inadmissibility 排除／依賴未解／relevance zero。前次唯一成員（H0 pre-seal，`quantity.bridge_capture_provenance` 的 §4.3 dependency）已被 O0 取用並執行完畢：exactly-once sealed invocation 的 ordered terminal＝`H0_PROVENANCE_INVALID`，owner-accepted（#209，2026-07-19）⇒ unit 消費、候選集回空。 |
+| *(仍全空，2026-07-23 重推)* | `quantity.gap_conditioned_transition_model.a_layer_spec` | 新登記的 object 也**不**產生候選單元：它的 accepted state 是 diagnostic-only spec seal，consumers 受 §4.2（substrate 不繼承）與 §4.4（score-layer 契約缺席）阻擋，且 §5 relevance 為 zero。GCTM charter 已關閉，semantic WIP 鎖回到空。 |
 
 **O0 的選擇（歷史）：** O0 於 2026-07-16 取 H0 為唯一 active，2026-07-20 依
 route 1 關閉（[closed charter](../threads/closed/bridge_frozen_evidence_o0_routing_20260716.md)）。

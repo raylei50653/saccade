@@ -11,7 +11,7 @@ correction 修改**。
 
 **Authority 邊界：**
 
-- Task/lifecycle owner：[GCTM task charter](../threads/gap_conditioned_stochastic_transition_model_task.md)
+- Task/lifecycle owner：[GCTM task charter](../threads/closed/gap_conditioned_stochastic_transition_model_task.md)
   （Issue [#175](https://github.com/raylei50653/saccade/issues/175)）。
 - Production-object 描述來源：[existing-online object analysis](../../modules/semantic/research/existing_online_object_analysis_for_gctm_alignment_20260718.md)
   （supplemental；runtime authority 仍是 `src/tracking/tracker_gpu.cu`）。
@@ -42,8 +42,9 @@ identifiability/leakage matrix (§7; the terminal-3 predicate object), and WP-A7
 freezes the last D1 deliverable — the schema-only B1 input interface (§8). **All
 D1 deliverable items are therefore complete**; WP-A8 terminal review has since
 selected **`GCTM_MODEL_SPEC_SEALABLE`** against the charter's frozen decision
-procedure (owner acceptance pending; see the WP-A8 append-only note below — the
-terminal is selected by that review, not by this document). §4 makes no claim
+procedure (owner-accepted 2026-07-23; see the WP-A8 append-only note below — the
+terminal is selected by that review and accepted by the owner, not by this
+document). §4 makes no claim
 about obligations 2–3, §5 makes
 no claim about obligation 2, §6 makes no claim about identifiability/leakage, §7
 measures no data and selects no terminal — it specifies the identifiability
@@ -79,8 +80,9 @@ B1/O1/runtime/production quantity claim.
 > **Append-only status correction (WP-A8).** Terminal review has been performed
 > by WP-A8 (charter decision procedure; checklist artifact:
 > [terminal review v1](gap_conditioned_stochastic_transition_terminal_review_v1.md)),
-> and the selected terminal is **`GCTM_MODEL_SPEC_SEALABLE`** (owner acceptance
-> pending). The frozen §7.9 and §8.8 typed-deferral tables list *terminal review
+> and the selected terminal is **`GCTM_MODEL_SPEC_SEALABLE`** (owner-accepted
+> 2026-07-23; the task charter is closed and now lives at
+> [threads/closed/](../threads/closed/gap_conditioned_stochastic_transition_model_task.md)). The frozen §7.9 and §8.8 typed-deferral tables list *terminal review
 > (checklist artifact + mechanical terminal selection)* as `unresolved` — a
 > **freeze-time snapshot** that is now **superseded**. In particular, the §7.7
 > sentence assigning to WP-A8 the mechanical decision of whether the
@@ -1993,7 +1995,7 @@ claim-restriction map。它不宣稱任何 runtime 擷取值、不建立 fidelit
   document and D2; the checklist artifact is
   [terminal review v1](gap_conditioned_stochastic_transition_terminal_review_v1.md)
   and the selected terminal is **`GCTM_MODEL_SPEC_SEALABLE`** (ordered terminal
-  5; owner acceptance pending). All four D1 deliverable rows (§4 equations +
+  5; owner-accepted 2026-07-23, which closed the task charter). All four D1 deliverable rows (§4 equations +
   domains, §3 observation interfaces, §7 identifiability/leakage matrix, §8 B1
   schema) are recorded `complete`; the §7.7 question left to WP-A8 — whether the
   identifiability row is `complete` or `rejection-established` — is answered

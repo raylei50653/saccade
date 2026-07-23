@@ -15,6 +15,7 @@ docs/archive/    = archived（很少用；不再需要 threads 導航）
 
 | File |
 |:--|
+| [gap_conditioned_stochastic_transition_model_task.md](gap_conditioned_stochastic_transition_model_task.md) |
 | [bridge_frozen_evidence_o0_routing_20260716.md](bridge_frozen_evidence_o0_routing_20260716.md) |
 | [gap_conditioned_probabilistic_motion_probe_20260711.md](gap_conditioned_probabilistic_motion_probe_20260711.md) |
 | [safe_region_assetization_20260710.md](safe_region_assetization_20260710.md) |

@@ -6,7 +6,7 @@
 # GCTM terminal review — checklist artifact and mechanical terminal selection (WP-A8)
 
 **用途：** the checklist artifact required by the
-[GCTM task charter](../threads/gap_conditioned_stochastic_transition_model_task.md)
+[GCTM task charter](../threads/closed/gap_conditioned_stochastic_transition_model_task.md)
 §"Terminal partition — frozen at activation (WP-A0)" → *Decision procedure
 (frozen)*, step 2, plus the mechanical terminal selection that step 1/3 defines
 over it.
@@ -25,7 +25,14 @@ over it.
 - This artifact **measures no data**, fits nothing, establishes no
   runtime-fidelity edge, and grants no authority. Selecting a terminal is not
   accepting one: **owner acceptance** (decision procedure step 4) is what closes
-  the task.
+  the task. Acceptance was recorded 2026-07-23 in the now-closed charter
+  (*Final status*) and in the [claim-state registry](../contracts/claim_state_registry.md);
+  the body below is kept as the review record as written at selection time.
+- Lifecycle labels of D1, D2 and this artifact are deliberately **unchanged** by
+  the closure: C6 has no `sealed` state for a canonical model document, and
+  moving them into a `closed/` path would break the citations the closed charter
+  and the registry depend on. The task lifecycle is owned by the closed charter,
+  not by these files.
 
 ## §0 What this artifact is / is not (typed boundary)
 
@@ -205,13 +212,15 @@ selected_terminal: GCTM_MODEL_SPEC_SEALABLE      # ordered terminal 5
 selection_basis:   checklist §3 — 15/15 scoring rows `complete`;
                    0 `rejection-established`; 0 `incomplete`
 procedure:         charter "Decision procedure (frozen)" steps 1–3
-status:            selected by terminal review; **owner acceptance (step 4) pending**
+status:            selected by terminal review; **owner-accepted 2026-07-23**
+                   (step 4) — task closed by that acceptance
 ```
 
-Selection is mechanical given §3. It is **not** an acceptance: until the owner
-accepts, the task's recorded state is "terminal selected, acceptance pending",
-and the charter/Issue #175 write-back plus the closure obligations in §10 are
-what acceptance triggers.
+Selection is mechanical given §3. It is **not** an acceptance: the owner
+acceptance that followed (2026-07-23) is what closed the task and triggered the
+charter/Issue #175 write-back plus the closure obligations in §10. Had the owner
+declined, this artifact would still hold — it records the selection, not the
+acceptance.
 
 ## §7 Judgement points (where a reviewer may legitimately flip a row)
 
@@ -300,3 +309,7 @@ checklist rows:
   acceptance pending. Judgement points J-1/J-2/J-3 recorded with the terminal
   each flip would select. No frozen D1/D2 content edited; no data, fitting,
   runtime, online, B1/O1 or production authority granted; H0 state unchanged.
+- 2026-07-23 — terminal **owner-accepted**; the GCTM charter closed and moved to
+  `threads/closed/`, the semantic WIP lock was released, and the object's first
+  accepted-state record was added to the claim-state registry. This artifact's
+  rows and verdicts are unchanged by that acceptance.

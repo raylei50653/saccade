@@ -116,7 +116,7 @@ terminal 由 owning charter（[threads/](threads/README.md)）決定，本表只
 |------|------|
 | [gap_conditioned_stochastic_transition_spec_v1.md](models/gap_conditioned_stochastic_transition_spec_v1.md) | **GCTM D1** — canonical model specification（§2–§8 frozen；observation/time interface、affine M2 + \(Q_\Delta\)、innovation composition、CAL/RANK claim space、identifiability & leakage matrix、schema-only B1 input interface） |
 | [gap_conditioned_stochastic_transition_lemmas_v1.md](models/gap_conditioned_stochastic_transition_lemmas_v1.md) | **GCTM D2** — lemma / proof appendix（L1 PSD、L2 \(\gamma\to0\) nesting、L3 semigroup + CK、L4 asymptotics、L5 \(q\)/NLL ranking equivalence） |
-| [gap_conditioned_stochastic_transition_terminal_review_v1.md](models/gap_conditioned_stochastic_transition_terminal_review_v1.md) | **GCTM terminal review（WP-A8）** — checklist artifact + 機械 terminal selection（`GCTM_MODEL_SPEC_SEALABLE`，owner acceptance 未決）；不授權 B1/O1/runtime/production |
+| [gap_conditioned_stochastic_transition_terminal_review_v1.md](models/gap_conditioned_stochastic_transition_terminal_review_v1.md) | **GCTM terminal review（WP-A8）** — checklist artifact + 機械 terminal selection（`GCTM_MODEL_SPEC_SEALABLE`，owner-accepted 2026-07-23）；不授權 B1/O1/runtime/production |
 
 ### reid/（本樹）
 
