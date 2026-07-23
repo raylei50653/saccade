@@ -30,6 +30,13 @@ claim 定義之上（obligation 2 的 proof 面）。L1–L4（§2–§5）除�
 - 本檔**不**做 bridge-runtime claim、不建立 fidelity edge、不選 model 參數、不解除
   charter obligations 2/3、不觸及 WP-A4/A5 物件（\(P_0,R_1,S_\Delta,C\)），也**不**
   授權 data、fitting、runtime、online、production。
+- **Lifecycle（讀者導引）：** owning charter 已 **CLOSED**（2026-07-23，
+  owner-accepted `GCTM_MODEL_SPEC_SEALABLE`；[closed charter](../threads/closed/gap_conditioned_stochastic_transition_model_task.md) ·
+  [terminal review](gap_conditioned_stochastic_transition_terminal_review_v1.md)）。本檔的
+  file-level marker 仍是既有的 `doc-status: draft`，該值**不在** C6 詞彙內，而 C6 目前
+  也沒有對應「已被接受的 canonical artifact」的狀態——此處只**顯式記錄這個未解的治理
+  缺口**（非 C6 授權的例外），**不以此 marker 判定 task lifecycle**；任務狀態的 owner 是
+  closed charter 與 [claim-state registry](../contracts/claim_state_registry.md)。
 
 ## §1 Scope, boundary, and imported notation
 

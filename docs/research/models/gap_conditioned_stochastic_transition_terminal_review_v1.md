@@ -28,11 +28,17 @@ over it.
   the task. Acceptance was recorded 2026-07-23 in the now-closed charter
   (*Final status*) and in the [claim-state registry](../contracts/claim_state_registry.md);
   the body below is kept as the review record as written at selection time.
-- Lifecycle labels of D1, D2 and this artifact are deliberately **unchanged** by
-  the closure: C6 has no `sealed` state for a canonical model document, and
-  moving them into a `closed/` path would break the citations the closed charter
-  and the registry depend on. The task lifecycle is owned by the closed charter,
-  not by these files.
+- Lifecycle labels of D1, D2 and this artifact are **unchanged** by the closure,
+  and that is a **recorded governance gap, not a C6-sanctioned exception**: C6's
+  vocabulary is `proposed | active | parked | closed | archived`, it has no state
+  for an *accepted canonical artifact*, and marking these files `closed` would
+  force an L1 move into `closed/` that breaks the citations the closed charter
+  and the registry depend on. Whether to add a `sealed` / `canonical` state is a
+  separate contract decision, not something this review takes. **Do not read task
+  lifecycle off these file markers** — it is owned by the closed charter and the
+  [claim-state registry](../contracts/claim_state_registry.md).
+  *(Wording corrected post-merge per #260 review; the review's rows, predicate
+  evaluation and selected terminal are unaffected.)*
 
 ## §0 What this artifact is / is not (typed boundary)
 
