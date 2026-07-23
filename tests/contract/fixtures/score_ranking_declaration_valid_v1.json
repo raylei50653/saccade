@@ -1,0 +1,194 @@
+{
+  "schema": "score_ranking_declaration_v1",
+  "declaration_id": "fixture_score_ranking_sr3_v1",
+  "record_scope": "fixture_only",
+  "contract_binding": {
+    "contract_id": "score_ranking_evidence_contract_v1",
+    "contract_status": "proposed",
+    "contract_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "owner_acceptance_id": null,
+    "registry_binding_id": null
+  },
+  "policy": {
+    "policy_id": "fixture_gctm_score_policy_v1",
+    "source_pair_space_id": "fixture_pair_space_v1",
+    "event_space_id": "fixture_candidate_event_space_v1",
+    "pair_to_event_reduction_id": "fixture_pair_to_event_v1",
+    "candidate_universe": {
+      "universe_id": "fixture_retained_candidate_universe_v1",
+      "event_key_fields": [
+        "sequence_id",
+        "event_id"
+      ],
+      "candidate_key_fields": [
+        "sequence_id",
+        "event_id",
+        "candidate_id"
+      ],
+      "inclusion_source_id": "fixture_runtime_candidate_source_v1",
+      "retained_band_id": "fixture_retained_band_v1",
+      "gt_present_rule_id": "fixture_gt_present_partition_v1",
+      "gt_absent_rule_id": "fixture_gt_absent_partition_v1",
+      "ambiguous_label_rule_id": "fixture_ambiguous_label_partition_v1",
+      "duplicate_rule": "reject",
+      "empty_event_rule": "exclude_with_enumerated_reason",
+      "singleton_event_rule": "separate_no_competition",
+      "drop_reason_vocabulary": [
+        "ambiguous_label",
+        "empty_candidate_event",
+        "missing_score",
+        "non_finite_score"
+      ]
+    },
+    "score": {
+      "component_ids": [
+        "base_score",
+        "gctm_score"
+      ],
+      "transform_id": "fixture_additive_score_transform_v1",
+      "transform_kind": "pair_local",
+      "output_domain_id": "fixture_native_cost_domain_v1",
+      "orientation": "lower_better"
+    },
+    "tie_rule": {
+      "rule_id": "fixture_stable_candidate_tie_v1",
+      "kind": "stable_candidate_key",
+      "key_fields": [
+        "sequence_id",
+        "event_id",
+        "candidate_id"
+      ]
+    },
+    "cutoff": {
+      "cutoff_id": "fixture_imported_support_cutoff_v1",
+      "role": "support_gate_imported",
+      "value_rule_id": "fixture_frozen_support_value_v1",
+      "imported_gate_id": "fixture_retained_band_gate_v1"
+    },
+    "fallback_rule_id": "fixture_no_fallback_v1",
+    "abstention_rule_id": "fixture_no_abstention_v1",
+    "missing_value_rule_id": "fixture_fail_closed_missing_value_v1"
+  },
+  "spaces": {
+    "calibration_space_id": "fixture_gt_transition_calibration_space_v1",
+    "assignment_space_id": null,
+    "system_space_id": null,
+    "reductions": []
+  },
+  "calibration_claim": {
+    "kind": "none"
+  },
+  "claim": {
+    "target_rung": "SR3",
+    "claim_space": "ranking",
+    "kappa": {
+      "quantification_space": "candidate_event",
+      "comparison_relation_id": "fixture_paired_policy_comparison_v1",
+      "decision_rule_id": "fixture_sr3_minimum_effect_rule_v1"
+    },
+    "primary_ranking_metric": "gt_best_negative_margin",
+    "metric_parameters": {},
+    "target_metric_id": "fixture_gt_best_negative_margin_v1",
+    "minimum_exposure": 100,
+    "minimum_effect": {
+      "operator": "gt",
+      "value": 0.0,
+      "unit": "native_cost_margin"
+    },
+    "dependence_unit_id": "fixture_sequence_cluster_v1",
+    "uncertainty_method_id": "fixture_cluster_bootstrap_v1",
+    "folds_id": "fixture_leave_one_sequence_out_v1",
+    "blind_reveal_binding_id": "fixture_blind_reveal_hash_v1",
+    "no_refit": true,
+    "stability_strata": [
+      "context",
+      "gap",
+      "held_out_fold",
+      "sequence"
+    ],
+    "protected_strata": [
+      "short_gap"
+    ],
+    "short_gap_retention_rule_id": "fixture_short_gap_retention_v1"
+  },
+  "rung_obligations": [
+    {
+      "rung": "SR0",
+      "obligation_ids": [
+        "denominator_semantics",
+        "orientation_transform_tie",
+        "policy_identity",
+        "space_identity"
+      ],
+      "artifact_bindings": {}
+    },
+    {
+      "rung": "SR1",
+      "obligation_ids": [
+        "candidate_universe_conservation",
+        "exposure",
+        "fit_selection_data",
+        "policy_search_space",
+        "primary_metric_effect"
+      ],
+      "artifact_bindings": {}
+    },
+    {
+      "rung": "SR2",
+      "obligation_ids": [
+        "blind_reveal_binding",
+        "dependence_uncertainty",
+        "disjoint_partitions",
+        "no_refit",
+        "per_fold_result"
+      ],
+      "artifact_bindings": {}
+    },
+    {
+      "rung": "SR3",
+      "obligation_ids": [
+        "candidate_universe_invariance",
+        "cross_sequence_stability",
+        "fallback_audit",
+        "gap_context_stability",
+        "protected_stratum_retention",
+        "short_gap_retention"
+      ],
+      "artifact_bindings": {}
+    }
+  ],
+  "conservation": {
+    "pair_to_event_exactly_once": true,
+    "event_to_sequence_fold_exactly_once": true,
+    "pair_count_reconciliation": true,
+    "gt_partition_reconciliation": true,
+    "partition_disjointness": true,
+    "paired_policy_candidate_identity": true,
+    "exactly_one_drop_reason": true,
+    "non_finite_rule_bound": true
+  },
+  "terminals": [
+    {
+      "terminal_id": "fixture_sr3_invalid",
+      "outcome_class": "invalid",
+      "state_transition": {
+        "kind": "none"
+      }
+    },
+    {
+      "terminal_id": "fixture_sr3_valid_negative",
+      "outcome_class": "valid_negative",
+      "state_transition": {
+        "kind": "none"
+      }
+    },
+    {
+      "terminal_id": "fixture_sr3_valid_positive",
+      "outcome_class": "valid_positive",
+      "state_transition": {
+        "kind": "transition",
+        "target_state": "SR3"
+      }
+    }
+  ]
+}

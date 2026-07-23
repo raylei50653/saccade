@@ -15,6 +15,7 @@
 | `test_old_flagship_inventory.py` | system | contract | active | Contract for the old-flagship per-study inventory parser. |
 | `test_research_packet_manifest.py` | system | contract | active | Generic manifest/integrity contract for sealed research evidence packets. |
 | `test_research_packet_schema.py` | system | contract | active | Generic schema contract for sealed research evidence packets. |
+| `test_score_ranking_declaration_v1.py` | system | contract | active | Contract for the fail-closed L2 score-ranking declaration v1 validator. |
 | `test_scripts_structure.py` | system | contract | active | Contract tests for the scripts/ self-documentation + generated index. |
 | `test_terminal_slot_schema.py` | system | contract | active | Contract for the terminal-slot YAML schema validator. |
 

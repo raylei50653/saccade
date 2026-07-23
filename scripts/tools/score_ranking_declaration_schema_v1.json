@@ -1,0 +1,853 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "score_ranking_declaration_v1",
+  "title": "L2 score-ranking study declaration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "declaration_id",
+    "record_scope",
+    "contract_binding",
+    "policy",
+    "spaces",
+    "calibration_claim",
+    "claim",
+    "rung_obligations",
+    "conservation",
+    "terminals"
+  ],
+  "properties": {
+    "schema": {
+      "const": "score_ranking_declaration_v1"
+    },
+    "declaration_id": {
+      "$ref": "#/$defs/id"
+    },
+    "record_scope": {
+      "enum": [
+        "fixture_only",
+        "actual"
+      ]
+    },
+    "contract_binding": {
+      "$ref": "#/$defs/contract_binding"
+    },
+    "policy": {
+      "$ref": "#/$defs/policy"
+    },
+    "spaces": {
+      "$ref": "#/$defs/spaces"
+    },
+    "calibration_claim": {
+      "$ref": "#/$defs/calibration_claim"
+    },
+    "claim": {
+      "$ref": "#/$defs/claim"
+    },
+    "rung_obligations": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 7,
+      "items": {
+        "$ref": "#/$defs/rung_obligation"
+      }
+    },
+    "conservation": {
+      "$ref": "#/$defs/conservation"
+    },
+    "terminals": {
+      "type": "array",
+      "minItems": 3,
+      "items": {
+        "$ref": "#/$defs/terminal"
+      }
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{2,127}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "nullable_id": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/id"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "id_array": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/id"
+      }
+    },
+    "contract_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contract_id",
+        "contract_status",
+        "contract_sha256",
+        "owner_acceptance_id",
+        "registry_binding_id"
+      ],
+      "properties": {
+        "contract_id": {
+          "const": "score_ranking_evidence_contract_v1"
+        },
+        "contract_status": {
+          "enum": [
+            "proposed",
+            "active"
+          ]
+        },
+        "contract_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "owner_acceptance_id": {
+          "$ref": "#/$defs/nullable_id"
+        },
+        "registry_binding_id": {
+          "$ref": "#/$defs/nullable_id"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "contract_status": {
+                "const": "proposed"
+              }
+            },
+            "required": [
+              "contract_status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "owner_acceptance_id": {
+                "type": "null"
+              },
+              "registry_binding_id": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "contract_status": {
+                "const": "active"
+              }
+            },
+            "required": [
+              "contract_status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "owner_acceptance_id": {
+                "$ref": "#/$defs/id"
+              },
+              "registry_binding_id": {
+                "$ref": "#/$defs/id"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "policy_id",
+        "source_pair_space_id",
+        "event_space_id",
+        "pair_to_event_reduction_id",
+        "candidate_universe",
+        "score",
+        "tie_rule",
+        "cutoff",
+        "fallback_rule_id",
+        "abstention_rule_id",
+        "missing_value_rule_id"
+      ],
+      "properties": {
+        "policy_id": {
+          "$ref": "#/$defs/id"
+        },
+        "source_pair_space_id": {
+          "$ref": "#/$defs/id"
+        },
+        "event_space_id": {
+          "$ref": "#/$defs/id"
+        },
+        "pair_to_event_reduction_id": {
+          "$ref": "#/$defs/id"
+        },
+        "candidate_universe": {
+          "$ref": "#/$defs/candidate_universe"
+        },
+        "score": {
+          "$ref": "#/$defs/score"
+        },
+        "tie_rule": {
+          "$ref": "#/$defs/tie_rule"
+        },
+        "cutoff": {
+          "$ref": "#/$defs/cutoff"
+        },
+        "fallback_rule_id": {
+          "$ref": "#/$defs/id"
+        },
+        "abstention_rule_id": {
+          "$ref": "#/$defs/id"
+        },
+        "missing_value_rule_id": {
+          "$ref": "#/$defs/id"
+        }
+      }
+    },
+    "candidate_universe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "universe_id",
+        "event_key_fields",
+        "candidate_key_fields",
+        "inclusion_source_id",
+        "retained_band_id",
+        "gt_present_rule_id",
+        "gt_absent_rule_id",
+        "ambiguous_label_rule_id",
+        "duplicate_rule",
+        "empty_event_rule",
+        "singleton_event_rule",
+        "drop_reason_vocabulary"
+      ],
+      "properties": {
+        "universe_id": {
+          "$ref": "#/$defs/id"
+        },
+        "event_key_fields": {
+          "$ref": "#/$defs/id_array"
+        },
+        "candidate_key_fields": {
+          "$ref": "#/$defs/id_array"
+        },
+        "inclusion_source_id": {
+          "$ref": "#/$defs/id"
+        },
+        "retained_band_id": {
+          "$ref": "#/$defs/nullable_id"
+        },
+        "gt_present_rule_id": {
+          "$ref": "#/$defs/id"
+        },
+        "gt_absent_rule_id": {
+          "$ref": "#/$defs/id"
+        },
+        "ambiguous_label_rule_id": {
+          "$ref": "#/$defs/id"
+        },
+        "duplicate_rule": {
+          "enum": [
+            "reject",
+            "deduplicate_by_candidate_key"
+          ]
+        },
+        "empty_event_rule": {
+          "const": "exclude_with_enumerated_reason"
+        },
+        "singleton_event_rule": {
+          "const": "separate_no_competition"
+        },
+        "drop_reason_vocabulary": {
+          "$ref": "#/$defs/id_array"
+        }
+      }
+    },
+    "score": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "component_ids",
+        "transform_id",
+        "transform_kind",
+        "output_domain_id",
+        "orientation"
+      ],
+      "properties": {
+        "component_ids": {
+          "$ref": "#/$defs/id_array"
+        },
+        "transform_id": {
+          "$ref": "#/$defs/id"
+        },
+        "transform_kind": {
+          "enum": [
+            "identity",
+            "pair_local",
+            "event_coupled"
+          ]
+        },
+        "output_domain_id": {
+          "$ref": "#/$defs/id"
+        },
+        "orientation": {
+          "enum": [
+            "higher_better",
+            "lower_better"
+          ]
+        }
+      }
+    },
+    "tie_rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rule_id",
+        "kind",
+        "key_fields"
+      ],
+      "properties": {
+        "rule_id": {
+          "$ref": "#/$defs/id"
+        },
+        "kind": {
+          "enum": [
+            "stable_candidate_key",
+            "fractional_rank"
+          ]
+        },
+        "key_fields": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/id"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "stable_candidate_key"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "key_fields": {
+                "minItems": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "fractional_rank"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "key_fields": {
+                "maxItems": 0
+              }
+            }
+          }
+        }
+      ]
+    },
+    "cutoff": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cutoff_id",
+        "role",
+        "value_rule_id",
+        "imported_gate_id"
+      ],
+      "properties": {
+        "cutoff_id": {
+          "$ref": "#/$defs/id"
+        },
+        "role": {
+          "enum": [
+            "support_gate_imported",
+            "reporting_slice",
+            "assignment_rule"
+          ]
+        },
+        "value_rule_id": {
+          "$ref": "#/$defs/id"
+        },
+        "imported_gate_id": {
+          "$ref": "#/$defs/nullable_id"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "role": {
+                "const": "support_gate_imported"
+              }
+            },
+            "required": [
+              "role"
+            ]
+          },
+          "then": {
+            "properties": {
+              "imported_gate_id": {
+                "$ref": "#/$defs/id"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "imported_gate_id": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "spaces": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "calibration_space_id",
+        "assignment_space_id",
+        "system_space_id",
+        "reductions"
+      ],
+      "properties": {
+        "calibration_space_id": {
+          "$ref": "#/$defs/id"
+        },
+        "assignment_space_id": {
+          "$ref": "#/$defs/nullable_id"
+        },
+        "system_space_id": {
+          "$ref": "#/$defs/nullable_id"
+        },
+        "reductions": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/reduction"
+          }
+        }
+      }
+    },
+    "reduction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reduction_id",
+        "source_space_id",
+        "target_space_id"
+      ],
+      "properties": {
+        "reduction_id": {
+          "$ref": "#/$defs/id"
+        },
+        "source_space_id": {
+          "$ref": "#/$defs/id"
+        },
+        "target_space_id": {
+          "$ref": "#/$defs/id"
+        }
+      }
+    },
+    "calibration_claim": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind"
+          ],
+          "properties": {
+            "kind": {
+              "const": "none"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "reference_id",
+            "calibration_unit_id",
+            "estimator_id",
+            "proper_score_id",
+            "held_out_rule_id",
+            "minimum_exposure"
+          ],
+          "properties": {
+            "kind": {
+              "enum": [
+                "distributional",
+                "probabilistic",
+                "scale_comparability"
+              ]
+            },
+            "reference_id": {
+              "$ref": "#/$defs/id"
+            },
+            "calibration_unit_id": {
+              "$ref": "#/$defs/id"
+            },
+            "estimator_id": {
+              "$ref": "#/$defs/id"
+            },
+            "proper_score_id": {
+              "$ref": "#/$defs/nullable_id"
+            },
+            "held_out_rule_id": {
+              "$ref": "#/$defs/id"
+            },
+            "minimum_exposure": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        }
+      ]
+    },
+    "claim": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "target_rung",
+        "claim_space",
+        "kappa",
+        "primary_ranking_metric",
+        "metric_parameters",
+        "target_metric_id",
+        "minimum_exposure",
+        "minimum_effect",
+        "dependence_unit_id",
+        "uncertainty_method_id",
+        "folds_id",
+        "blind_reveal_binding_id",
+        "no_refit",
+        "stability_strata",
+        "protected_strata",
+        "short_gap_retention_rule_id"
+      ],
+      "properties": {
+        "target_rung": {
+          "$ref": "#/$defs/rung"
+        },
+        "claim_space": {
+          "enum": [
+            "score_observation",
+            "ranking",
+            "portable_ranking",
+            "assignment",
+            "system"
+          ]
+        },
+        "kappa": {
+          "$ref": "#/$defs/kappa"
+        },
+        "primary_ranking_metric": {
+          "enum": [
+            "event_pairwise_accuracy",
+            "gt_reciprocal_rank",
+            "top_k_gt_recall",
+            "gt_best_negative_margin",
+            "correct_assignment_rate"
+          ]
+        },
+        "metric_parameters": {
+          "type": "object"
+        },
+        "target_metric_id": {
+          "$ref": "#/$defs/id"
+        },
+        "minimum_exposure": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "minimum_effect": {
+          "$ref": "#/$defs/minimum_effect"
+        },
+        "dependence_unit_id": {
+          "$ref": "#/$defs/id"
+        },
+        "uncertainty_method_id": {
+          "$ref": "#/$defs/id"
+        },
+        "folds_id": {
+          "$ref": "#/$defs/id"
+        },
+        "blind_reveal_binding_id": {
+          "$ref": "#/$defs/id"
+        },
+        "no_refit": {
+          "const": true
+        },
+        "stability_strata": {
+          "$ref": "#/$defs/id_array"
+        },
+        "protected_strata": {
+          "$ref": "#/$defs/id_array"
+        },
+        "short_gap_retention_rule_id": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "primary_ranking_metric": {
+                "const": "top_k_gt_recall"
+              }
+            },
+            "required": [
+              "primary_ranking_metric"
+            ]
+          },
+          "then": {
+            "properties": {
+              "metric_parameters": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "top_k"
+                ],
+                "properties": {
+                  "top_k": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                }
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "metric_parameters": {
+                "type": "object",
+                "additionalProperties": false,
+                "maxProperties": 0
+              }
+            }
+          }
+        }
+      ]
+    },
+    "kappa": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "quantification_space",
+        "comparison_relation_id",
+        "decision_rule_id"
+      ],
+      "properties": {
+        "quantification_space": {
+          "enum": [
+            "candidate_event",
+            "assignment",
+            "system"
+          ]
+        },
+        "comparison_relation_id": {
+          "$ref": "#/$defs/id"
+        },
+        "decision_rule_id": {
+          "$ref": "#/$defs/id"
+        }
+      }
+    },
+    "minimum_effect": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "operator",
+        "value",
+        "unit"
+      ],
+      "properties": {
+        "operator": {
+          "enum": [
+            "gt",
+            "ge",
+            "lt",
+            "le"
+          ]
+        },
+        "value": {
+          "type": "number"
+        },
+        "unit": {
+          "$ref": "#/$defs/id"
+        }
+      }
+    },
+    "rung": {
+      "enum": [
+        "SR0",
+        "SR1",
+        "SR2",
+        "SR3",
+        "SR4",
+        "SR5",
+        "SR6"
+      ]
+    },
+    "rung_obligation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rung",
+        "obligation_ids",
+        "artifact_bindings"
+      ],
+      "properties": {
+        "rung": {
+          "$ref": "#/$defs/rung"
+        },
+        "obligation_ids": {
+          "$ref": "#/$defs/id_array"
+        },
+        "artifact_bindings": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/id"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/id"
+          }
+        }
+      }
+    },
+    "conservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pair_to_event_exactly_once",
+        "event_to_sequence_fold_exactly_once",
+        "pair_count_reconciliation",
+        "gt_partition_reconciliation",
+        "partition_disjointness",
+        "paired_policy_candidate_identity",
+        "exactly_one_drop_reason",
+        "non_finite_rule_bound"
+      ],
+      "properties": {
+        "pair_to_event_exactly_once": {
+          "const": true
+        },
+        "event_to_sequence_fold_exactly_once": {
+          "const": true
+        },
+        "pair_count_reconciliation": {
+          "const": true
+        },
+        "gt_partition_reconciliation": {
+          "const": true
+        },
+        "partition_disjointness": {
+          "const": true
+        },
+        "paired_policy_candidate_identity": {
+          "const": true
+        },
+        "exactly_one_drop_reason": {
+          "const": true
+        },
+        "non_finite_rule_bound": {
+          "const": true
+        }
+      }
+    },
+    "terminal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "terminal_id",
+        "outcome_class",
+        "state_transition"
+      ],
+      "properties": {
+        "terminal_id": {
+          "$ref": "#/$defs/id"
+        },
+        "outcome_class": {
+          "enum": [
+            "invalid",
+            "valid_negative",
+            "valid_positive"
+          ]
+        },
+        "state_transition": {
+          "$ref": "#/$defs/state_transition"
+        }
+      }
+    },
+    "state_transition": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind"
+          ],
+          "properties": {
+            "kind": {
+              "const": "none"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "target_state"
+          ],
+          "properties": {
+            "kind": {
+              "const": "transition"
+            },
+            "target_state": {
+              "$ref": "#/$defs/rung"
+            }
+          }
+        }
+      ]
+    }
+  }
+}
