@@ -130,8 +130,14 @@ def resolve_covariance(cand: CandidateObservation, mode: CovMode) -> np.ndarray:
         raise FailClosedError("invalid_scale", "scale_alpha must be positive finite")
 
     if mode == "candidate_specific":
-        base = cand.cov_candidate if cand.cov_candidate is not None else cand.cov_shared
-        s = _as_cov(base, d, "candidate_specific_S")
+        # Fail closed: undeclared candidate-specific S must not silently fall back
+        # to shared event covariance (matches consumer reject_runtime_consumption).
+        if cand.cov_candidate is None:
+            raise FailClosedError(
+                "missing_candidate_covariance",
+                "candidate_specific mode requires cov_candidate; no shared-S fallback",
+            )
+        s = _as_cov(cand.cov_candidate, d, "candidate_specific_S")
     else:
         s = _as_cov(cand.cov_shared, d, "shared_S")
         if mode == "isotropic_shared":

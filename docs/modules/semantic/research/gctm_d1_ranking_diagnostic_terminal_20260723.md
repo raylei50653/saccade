@@ -1,11 +1,21 @@
 <!-- doc-status: proposed -->
-<!-- doc-promotion: diagnostic terminal report for owner review; not runtime evidence -->
+<!-- doc-promotion: seal-candidate terminal report for owner review; not charter execution -->
 <!-- doc-date: 2026-07-23 -->
 <!-- doc-module: semantic -->
 
-# GCTM D1 terminal report — 2026-07-23
+# GCTM D1 seal-candidate terminal report — 2026-07-23
 
-## Selected terminal
+## Authority
+
+```text
+record_scope     = diagnostic_seal_candidate
+generation_kind  = pre_activation_synthetic_seal_candidate
+status           = SEAL_CANDIDATE_GENERATED
+not              = owner-accepted charter execution
+not              = canonical registry state transition
+```
+
+## Provisional selected terminal
 
 # `GCTM_D1_INTERFACE_READY`
 
@@ -15,67 +25,44 @@ Machine packet:
 Declaration:
 [`gctm_d1_ranking_diagnostic_declaration_20260723.md`](gctm_d1_ranking_diagnostic_declaration_20260723.md)
 
-## Execution summary
+## Execution summary (synthetic seal-candidate only)
 
 | Item | Result |
 |:--|:--|
 | Substrate | synthetic fixture pack `gctm_d1_synthetic_fixture_pack_v1` |
 | Invariants I1–I12 | **all passed** |
 | Ranking-active mechanism | `anisotropic_shared_innovation_covariance` **demonstrated** |
+| Candidate-specific mechanism | mechanical q vs NLL order difference **demonstrated** |
 | Calibration-only mechanism | `shared_isotropic_scalar_covariance` **distinguished** |
-| Consumer interface | complete machine-readable artifact emitted |
-| Compatibility gates | requirements matrix emitted; both runtime gates remain `missing` |
+| Consumer interface | complete machine-readable artifact |
+| Compatibility gates | requirements only; both runtime gates remain `missing` |
+| Canonical registry state | **`none`** (seal-candidate bookkeeping only) |
 | H0 / runtime claims | **none** |
 
-## Constructive counterexamples retained
+## Terminal selection rule (three-way)
 
-1. **Shared anisotropic \(S\)** reorders vs Euclidean M0
-   (`E_shared_aniso`: M0 prefers `c_false`, M1 prefers `c_true`).
-2. **Candidate-specific \(S\)** diverges \(q\) vs NLL order (`E_cand_spec`).
-3. **M2 context drift** reorders vs M1 under fixed interface (`E_m2_drift`).
-4. **L5.2 numeric** \((r,S)=(1,1)\) vs \((1.2,4)\): \(q\) prefers the second,
-   NLL prefers the first.
+1. Invariant or ranking-active falsification failure → `GCTM_D1_BOUNDED_NO_GO`
+2. Invariants + ranking-active pass, interface incomplete → `GCTM_D1_DIAGNOSTIC_SEAL`
+3. Invariants + ranking-active + complete interface → `GCTM_D1_INTERFACE_READY`
 
 ## Canonical conclusion
 
-### Maximum claims
+### Maximum claims (seal-candidate)
 
-- The declared substrate-agnostic observation/parameterization family is
-  machine-checkable on synthetic non-runtime inputs.
-- Calibration-only and ranking-active mechanisms are mechanically
-  distinguishable.
-- The ordering-active mechanism is precisely specified:
-  **anisotropic shared innovation covariance** (with candidate-specific
-  covariance admissible when causally declared).
-- Future runtime consumer fields and semantics are complete enough for a
-  **separate** H0 compatibility verdict process.
-- Non-identifiable quantities are explicitly listed; absence/singularity fails
-  closed toward `reject_runtime_consumption`.
-- Results do not depend on pooled-row independence.
+- Pre-activation synthetic seal-candidate is machine-checkable.
+- Calibration-only and ranking-active mechanisms are mechanically distinguishable.
+- Ordering-active mechanism is precisely specified.
+- Future runtime consumer fields are complete enough for a **separate** H0
+  compatibility verdict process (not completed here).
 
 ### Blocked claims
 
+- Owner-accepted charter execution
+- Canonical registry terminal transition
 - Runtime fidelity or H0 capture equivalence
-- H0→GCTM consumer compatibility completed
 - Activation of `H0_ROUTE5_B1`, `GCTM_B1`, or `GCTM_O1`
-- Decision-relevant registry candidate
-- WIP acquisition
-- Production observation-mode freeze
-- Pooled-row independence as ranking evidence
-- Repair or re-entry of historical H0 packets
+- Decision-relevant candidate / WIP acquisition
 
-## Registry effect
+## Exit line (provisional)
 
-On owner acceptance of this terminal:
-
-- update **only** the `GCTM_D1` diagnostic state;
-- close this diagnostic task;
-- do **not** alter `quantity.bridge_capture_provenance`, `H0_ROUTE5_B1`,
-  `GCTM_B1`, `GCTM_O1`, or the decision-relevant candidate set.
-
-Charter activation and WIP still require separate owner acceptance of the
-declaration **and** a separate scheduling decision.
-
-## Exit line
-
-`GCTM_D1_INTERFACE_READY`
+`GCTM_D1_INTERFACE_READY` — seal-candidate only

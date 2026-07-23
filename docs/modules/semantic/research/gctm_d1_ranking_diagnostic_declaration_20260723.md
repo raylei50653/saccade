@@ -7,8 +7,14 @@
 
 ## Status
 
-**Owner-reviewable sealed diagnostic declaration.** Not charter activation.
-Not WIP. Not runtime evidence. Not an H0 compatibility verdict.
+**Pre-activation synthetic seal-candidate declaration** (owner-reviewable).
+Not charter execution. Not canonical registry terminal transition. Not WIP.
+Not runtime evidence. Not an H0 compatibility verdict.
+
+```text
+generation_kind = pre_activation_synthetic_seal_candidate
+status          = SEAL_CANDIDATE_GENERATED
+```
 
 Machine sidecar:
 [`evidence/gctm_d1_substrate_agnostic_ranking_20260723/declaration_sidecar.json`](evidence/gctm_d1_substrate_agnostic_ranking_20260723/declaration_sidecar.json)
@@ -146,19 +152,21 @@ gctm_d1_to_gctm_b1_compatibility_v1
 
 Missing / partial / rejected verdicts select `reject_runtime_consumption`.
 
-## Terminal procedure
+## Terminal procedure (three-way, mechanical)
 
 Exactly one of:
 
-1. `GCTM_D1_DIAGNOSTIC_SEAL`
-2. `GCTM_D1_BOUNDED_NO_GO`
-3. `GCTM_D1_INTERFACE_READY`
+1. `GCTM_D1_BOUNDED_NO_GO` — invariants fail **or** ranking-active/calibration
+   distinction falsified
+2. `GCTM_D1_DIAGNOSTIC_SEAL` — invariants + ranking-active pass, but consumer
+   interface incomplete
+3. `GCTM_D1_INTERFACE_READY` — invariants + ranking-active + complete validated
+   interface
 
-Selection is mechanical via the runner (`select_terminal`): all invariants pass
-**and** ranking-active anisotropic mechanism is demonstrated **and**
-calibration-only isotropic mechanism is distinguished →
-`GCTM_D1_INTERFACE_READY`; otherwise bounded no-go or diagnostic seal as
-applicable.
+Selection is mechanical via `select_terminal(..., interface_complete=...)`.
+A provisional terminal string from seal-candidate generation is **not** an
+owner-accepted charter execution and does **not** move canonical registry
+`state` off `none`.
 
 ## Prohibited actions (reaffirmed)
 

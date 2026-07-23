@@ -52,6 +52,75 @@ def _field(
     }
 
 
+REQUIRED_INTERFACE_TOP_LEVEL_KEYS = frozenset(
+    {
+        "consumer_slot_id",
+        "gctm_theory_identity",
+        "observation_family",
+        "parameterization_family",
+        "coordinate_semantics",
+        "required_runtime_fields",
+        "field_shapes",
+        "field_units",
+        "time_conversion",
+        "causal_availability_by_field",
+        "candidate_specific_fields",
+        "event_shared_fields",
+        "missing_value_rule",
+        "context_definition",
+        "context_fallback",
+        "covariance_semantics",
+        "score_transform",
+        "score_orientation",
+        "normalization",
+        "tie_rule",
+        "candidate_universe",
+        "event_key",
+        "ordering_active_mechanism",
+        "identifiability_limits",
+        "compatibility_checks",
+        "reject_runtime_consumption_conditions",
+    }
+)
+
+REQUIRED_FIELD_KEYS = frozenset(
+    {
+        "name",
+        "semantic_meaning",
+        "units",
+        "shape",
+        "event_shared_or_candidate_specific",
+        "available_when",
+        "future_info_leak",
+        "consumed_by_invariant",
+        "absence_selects_reject_runtime_consumption",
+    }
+)
+
+
+def interface_is_complete(consumer: dict[str, Any]) -> bool:
+    """True iff the consumer interface carries all INTERFACE_READY requirements."""
+    if not REQUIRED_INTERFACE_TOP_LEVEL_KEYS.issubset(consumer.keys()):
+        return False
+    fields = consumer.get("required_runtime_fields")
+    if not isinstance(fields, list) or len(fields) < 8:
+        return False
+    for field in fields:
+        if not isinstance(field, dict):
+            return False
+        if not REQUIRED_FIELD_KEYS.issubset(field.keys()):
+            return False
+    if not consumer.get("ordering_active_mechanism"):
+        return False
+    if not consumer.get("reject_runtime_consumption_conditions"):
+        return False
+    if not consumer.get("identifiability_limits"):
+        return False
+    if consumer.get("not_an_h0_compatibility_verdict") is not True:
+        return False
+    return True
+
+
 def build_consumer_interface() -> dict[str, Any]:
     required_runtime_fields = [
         _field(

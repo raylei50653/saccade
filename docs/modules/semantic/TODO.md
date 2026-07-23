@@ -28,9 +28,9 @@
   or supersede `H0_ROUTE5_B1` → [task charter](../../research/threads/gctm_b1_runtime_grounded_offline_attribution_task.md)
 - **GCTM D1 — substrate-agnostic ranking diagnostic** — `GCTM_D1`,
   `proposed` / non-WIP, diagnostic-only, `blocked_by: charter_owner_acceptance`;
-  sealed package selected terminal **`GCTM_D1_INTERFACE_READY`** (synthetic;
-  ranking-active mechanism = anisotropic shared innovation covariance);
-  no terminal unlocks B1/O1 or WIP →
+  pre-activation synthetic **seal-candidate** with provisional terminal
+  **`GCTM_D1_INTERFACE_READY`** (canonical registry `state: none`); no unlock of
+  B1/O1 or WIP →
   [declaration](research/gctm_d1_ranking_diagnostic_declaration_20260723.md) ·
   [terminal](research/gctm_d1_ranking_diagnostic_terminal_20260723.md) ·
   [charter](../../research/threads/gctm_d1_substrate_agnostic_ranking_diagnostic_task.md)

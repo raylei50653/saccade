@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -26,7 +25,11 @@ from . import (
     SCORE_TRANSFORM,
     TIE_RULE,
 )
-from .consumer_interface import build_compatibility_matrix, build_consumer_interface
+from .consumer_interface import (
+    build_compatibility_matrix,
+    build_consumer_interface,
+    interface_is_complete,
+)
 from .fixtures import (
     FIXTURE_PACK_ID,
     canonical_json_bytes,
@@ -38,6 +41,24 @@ from .models import ordering_tuple, score_candidate
 
 
 REPO = Path(__file__).resolve().parents[3]
+
+# Fixed metadata for bit-identical seal-candidate regeneration.
+SEALED_CREATED_AT_UTC = "2026-07-23T00:00:00Z"
+CANONICAL_PACKET_REL = (
+    "docs/modules/semantic/research/evidence/"
+    "gctm_d1_substrate_agnostic_ranking_20260723"
+)
+CANONICAL_ARTIFACTS = (
+    "fixture_pack.json",
+    "declaration_sidecar.json",
+    "invariant_report.json",
+    "event_level_diagnostic_packet.json",
+    "consumer_interface.json",
+    "compatibility_requirements_matrix.json",
+    "terminal_report.json",
+    "identities.json",
+    "manifest.json",
+)
 
 
 def _file_sha256(path: Path) -> str:
@@ -140,17 +161,37 @@ def run_models(pack: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def select_terminal(invariant_report: dict[str, Any], mechanism: dict[str, Any]) -> str:
-    if not invariant_report["all_passed"]:
-        return "GCTM_D1_BOUNDED_NO_GO"
+def ranking_active_requirements_met(mechanism: dict[str, Any]) -> bool:
     active = mechanism["admissible_ranking_active"]
     if not active.get("anisotropic_shared_innovation_covariance"):
-        return "GCTM_D1_BOUNDED_NO_GO"
+        return False
+    if not active.get("candidate_specific_observation_covariance"):
+        return False
     if not mechanism["calibration_only"].get(
         "shared_isotropic_scalar_covariance", False
     ):
+        return False
+    return True
+
+
+def select_terminal(
+    invariant_report: dict[str, Any],
+    mechanism: dict[str, Any],
+    *,
+    interface_complete: bool,
+) -> str:
+    """Three-way mechanical terminal selection.
+
+    - invariants or ranking-active falsification fail → BOUNDED_NO_GO
+    - invariants + ranking-active pass, interface incomplete → DIAGNOSTIC_SEAL
+    - invariants + ranking-active + complete interface → INTERFACE_READY
+    """
+    if not invariant_report["all_passed"]:
         return "GCTM_D1_BOUNDED_NO_GO"
-    # Positive terminal: interface-ready with ranking-active mechanism specified.
+    if not ranking_active_requirements_met(mechanism):
+        return "GCTM_D1_BOUNDED_NO_GO"
+    if not interface_complete:
+        return "GCTM_D1_DIAGNOSTIC_SEAL"
     return "GCTM_D1_INTERFACE_READY"
 
 
@@ -167,9 +208,12 @@ def build_declaration_sidecar(
         "slot_id": DIAGNOSTIC_SLOT_ID,
         "authority_class": "diagnostic_only",
         "record_scope": "diagnostic_seal_candidate",
+        "generation_kind": "pre_activation_synthetic_seal_candidate",
         "owner_acceptance_status": "pending_owner_review",
         "activation_status": "not_activated",
         "wip_status": "non_wip",
+        "not_charter_execution": True,
+        "not_canonical_registry_terminal_transition": True,
         "accepted_gctm_theory_identity": {
             "path": GCTM_THEORY_IDENTITY,
             "sha256": theory_sha,
@@ -241,7 +285,7 @@ def build_terminal_report(
     ]
     if terminal == "GCTM_D1_INTERFACE_READY":
         max_claims = [
-            "declared substrate-agnostic observation/parameterization family is machine-checkable",
+            "seal-candidate only: declared substrate-agnostic family is machine-checkable on synthetic fixtures",
             "calibration-only vs ranking-active mechanisms are mechanically distinguishable",
             "ordering-active mechanism precisely specified: anisotropic shared innovation covariance",
             "future runtime consumer interface fields/semantics complete for separate H0 verdict",
@@ -250,7 +294,8 @@ def build_terminal_report(
         ]
     elif terminal == "GCTM_D1_DIAGNOSTIC_SEAL":
         max_claims = [
-            "declared diagnostic object is internally sealed on synthetic substrate"
+            "seal-candidate only: declared diagnostic object is internally sealed on synthetic substrate",
+            "consumer interface incomplete or not yet validated for INTERFACE_READY",
         ]
     else:
         max_claims = [
@@ -261,8 +306,10 @@ def build_terminal_report(
         "schema": "gctm_d1_terminal_report_v1",
         "diagnostic_id": DIAGNOSTIC_ID,
         "slot_id": DIAGNOSTIC_SLOT_ID,
+        "record_scope": "diagnostic_seal_candidate",
         "selected_terminal": terminal,
         "terminal_family": list(ALLOWED_TERMINALS),
+        "terminal_status": "seal_candidate_pending_owner_acceptance",
         "invariants_all_passed": invariant_report["all_passed"],
         "n_invariants_passed": invariant_report["n_passed"],
         "n_invariants": invariant_report["n_invariants"],
@@ -273,6 +320,8 @@ def build_terminal_report(
         "identities": identities,
         "registry_effect": {
             "may_transition_slot_ids": [DIAGNOSTIC_SLOT_ID],
+            "canonical_registry_state_transition": False,
+            "records_seal_candidate_only": True,
             "must_not_alter": [
                 "quantity.bridge_capture_provenance",
                 "H0_ROUTE5_B1",
@@ -287,11 +336,13 @@ def build_terminal_report(
             "maximum_claims": max_claims,
             "blocked_claims": blocked_claims,
             "selected_terminal": terminal,
+            "authority": "seal_candidate_not_owner_accepted_execution",
         },
     }
 
 
 def emit_packet(out_dir: Path) -> dict[str, Any]:
+    """Generate a deterministic seal-candidate packet (not charter execution)."""
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -311,6 +362,7 @@ def emit_packet(out_dir: Path) -> dict[str, Any]:
     mechanism = invariant_report["ranking_active_mechanism_test"]
     event_packet = run_models(pack)
     consumer = build_consumer_interface()
+    interface_complete = interface_is_complete(consumer)
     compat = build_compatibility_matrix()
     declaration = build_declaration_sidecar(
         fixture_sha=fixture_sha,
@@ -318,10 +370,16 @@ def emit_packet(out_dir: Path) -> dict[str, Any]:
         lemmas_sha=lemmas_sha,
         contract_sha=contract_sha,
     )
-    terminal = select_terminal(invariant_report, mechanism)
+    terminal = select_terminal(
+        invariant_report,
+        mechanism,
+        interface_complete=interface_complete,
+    )
 
     identities = {
         "diagnostic_id": DIAGNOSTIC_ID,
+        "packet_id": "gctm_d1_substrate_agnostic_ranking_20260723",
+        "canonical_packet_rel": CANONICAL_PACKET_REL,
         "fixture_pack_id": FIXTURE_PACK_ID,
         "fixture_sha256": fixture_sha,
         "gctm_theory_path": GCTM_THEORY_IDENTITY,
@@ -334,9 +392,7 @@ def emit_packet(out_dir: Path) -> dict[str, Any]:
         "parameterization_family": PARAMETERIZATION_FAMILY,
         "runner": "scripts/tools/run_gctm_d1_diagnostic.py",
         "core_package": "scripts/tools/gctm_d1/",
-        "output_dir": str(out_dir.relative_to(REPO))
-        if out_dir.is_relative_to(REPO)
-        else str(out_dir),
+        "record_scope": "diagnostic_seal_candidate",
     }
 
     terminal_report = build_terminal_report(
@@ -346,47 +402,46 @@ def emit_packet(out_dir: Path) -> dict[str, Any]:
         mechanism=mechanism,
     )
 
-    artifact_digests = {
-        "fixture_pack.json": fixture_sha,
-        "declaration_sidecar.json": _write_json(
-            out_dir / "declaration_sidecar.json", declaration
-        ),
-        "invariant_report.json": _write_json(
-            out_dir / "invariant_report.json", invariant_report
-        ),
-        "event_level_diagnostic_packet.json": _write_json(
-            out_dir / "event_level_diagnostic_packet.json", event_packet
-        ),
-        "consumer_interface.json": _write_json(
-            out_dir / "consumer_interface.json", consumer
-        ),
-        "compatibility_requirements_matrix.json": _write_json(
-            out_dir / "compatibility_requirements_matrix.json", compat
-        ),
-        "terminal_report.json": _write_json(
-            out_dir / "terminal_report.json", terminal_report
-        ),
-        "identities.json": _write_json(out_dir / "identities.json", identities),
+    # Write non-manifest artifacts first. Manifest digests cover those files only
+    # (no circular self-hash) so content is bit-identical across regenerations.
+    artifact_bodies: dict[str, Any] = {
+        "declaration_sidecar.json": declaration,
+        "invariant_report.json": invariant_report,
+        "event_level_diagnostic_packet.json": event_packet,
+        "consumer_interface.json": consumer,
+        "compatibility_requirements_matrix.json": compat,
+        "terminal_report.json": terminal_report,
+        "identities.json": identities,
     }
+    artifact_digests: dict[str, str] = {"fixture_pack.json": fixture_sha}
+    for name, body in artifact_bodies.items():
+        artifact_digests[name] = _write_json(out_dir / name, body)
 
     manifest = {
         "schema": "gctm_d1_evidence_packet_manifest_v1",
         "diagnostic_id": DIAGNOSTIC_ID,
         "slot_id": DIAGNOSTIC_SLOT_ID,
-        "created_at_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "created_at_utc": SEALED_CREATED_AT_UTC,
         "substrate_class": "synthetic",
         "non_runtime": True,
         "h0_forbidden": True,
+        "record_scope": "diagnostic_seal_candidate",
         "selected_terminal": terminal,
+        "interface_complete": interface_complete,
         "artifacts": artifact_digests,
         "identities": identities,
-        "status": "DIAGNOSTIC_EXECUTED",
+        "status": "SEAL_CANDIDATE_GENERATED",
+        "not_charter_execution": True,
+        "not_owner_accepted_terminal_transition": True,
     }
-    artifact_digests["manifest.json"] = _write_json(out_dir / "manifest.json", manifest)
+    manifest_sha = _write_json(out_dir / "manifest.json", manifest)
 
     return {
         "out_dir": str(out_dir),
         "selected_terminal": terminal,
         "all_invariants_passed": invariant_report["all_passed"],
+        "interface_complete": interface_complete,
         "manifest": manifest,
+        "manifest_sha256": manifest_sha,
+        "artifact_digests": artifact_digests,
     }

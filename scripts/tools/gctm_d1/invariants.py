@@ -282,16 +282,62 @@ def inv8_scale_dependent_without_normalization_rejected(
     )
 
 
+def protected_stratum_guard(
+    *,
+    strata_true_ranks: dict[str, dict[str, int]],
+    protected_strata: list[str],
+    aggregate_top1_baseline: int,
+    aggregate_top1_challenger: int,
+) -> dict[str, Any]:
+    """Reject when aggregate gain hides a protected-stratum ordering loss.
+
+    Returns a result dict with `passed` False when any protected stratum has
+    true-rank regression (higher rank number = worse under lower_better ranks)
+    under a challenger that also does not strictly lose aggregate top-1 count.
+    Any protected-stratum regression fails regardless of aggregate (cannot hide).
+    """
+    regressions: dict[str, dict[str, int]] = {}
+    for stratum in protected_strata:
+        ranks = strata_true_ranks.get(stratum)
+        if ranks is None:
+            return {
+                "passed": False,
+                "reason": f"missing_protected_stratum:{stratum}",
+                "regressions": regressions,
+            }
+        if ranks["challenger_true_rank"] > ranks["baseline_true_rank"]:
+            regressions[stratum] = ranks
+
+    aggregate_improved_or_flat = aggregate_top1_challenger >= aggregate_top1_baseline
+    # Charter: reject a model whose aggregate gain hides a protected loss.
+    # Also reject protected loss even without aggregate gain (loss is not admissible).
+    hidden = bool(regressions) and aggregate_improved_or_flat
+    pure_regression = bool(regressions)
+    passed = not pure_regression
+    return {
+        "passed": passed,
+        "protected_regressions": regressions,
+        "aggregate_top1_baseline": aggregate_top1_baseline,
+        "aggregate_top1_challenger": aggregate_top1_challenger,
+        "aggregate_improved_or_flat": aggregate_improved_or_flat,
+        "would_hide_under_aggregate": hidden,
+        "reason": (
+            "protected_stratum_regression"
+            if pure_regression
+            else "no_protected_stratum_regression"
+        ),
+    }
+
+
 def inv9_protected_stratum_not_hidden(
     cands: list[CandidateObservation],
 ) -> InvariantResult:
     """Aggregate improvement cannot hide a loss in a declared protected stratum."""
-    # Constructive counterexample retained: compare M0 vs a "fake aggregate-only"
-    # story on long_gap vs short_gap under anisotropic S.
     short = [c for c in cands if c.event_id == "E_short_gap"]
     long = [c for c in cands if c.event_id == "E_long_gap"]
+    events = {"short_gap": short, "long_gap": long}
 
-    def true_rank(event, model):
+    def true_rank(event, model: ModelId) -> int:
         scored = _score_event(
             event, model, cov_mode="anisotropic_shared", rank_score="q"
         )
@@ -299,32 +345,58 @@ def inv9_protected_stratum_not_hidden(
         true_id = next(c.cand_id for c in event if c.is_true_match)
         return order.index(true_id) + 1
 
-    # M1 improves long-gap true rank relative to a degraded baseline ordering
-    # while we separately verify short-gap is reported, not averaged away.
-    short_m0 = true_rank(short, "M0")
-    short_m1 = true_rank(short, "M1")
-    long_m0 = true_rank(long, "M0")
-    long_m1 = true_rank(long, "M1")
+    strata_true_ranks: dict[str, dict[str, int]] = {}
+    top1_m0 = 0
+    top1_m1 = 0
+    for name, event in events.items():
+        r0 = true_rank(event, "M0")
+        r1 = true_rank(event, "M1")
+        strata_true_ranks[name] = {
+            "baseline_true_rank": r0,
+            "challenger_true_rank": r1,
+            # retained aliases for packet readability
+            "m0_true_rank": r0,
+            "m1_true_rank": r1,
+        }
+        top1_m0 += int(r0 == 1)
+        top1_m1 += int(r1 == 1)
 
-    strata = {
-        "short_gap": {"m0_true_rank": short_m0, "m1_true_rank": short_m1},
-        "long_gap": {"m0_true_rank": long_m0, "m1_true_rank": long_m1},
-    }
-    # Guard: any short_gap rank regression is surfaced as protected-stratum loss.
-    short_regression = short_m1 > short_m0
-    # Aggregate top-1 count must not silence the stratum flag.
-    aggregate_flag_ok = True
-    if short_regression:
-        aggregate_flag_ok = True  # flag retained, not averaged away
-    ok = "short_gap" in strata and aggregate_flag_ok
+    guard = protected_stratum_guard(
+        strata_true_ranks=strata_true_ranks,
+        protected_strata=["short_gap"],
+        aggregate_top1_baseline=top1_m0,
+        aggregate_top1_challenger=top1_m1,
+    )
+
+    # Negative constructive case retained in detail (not averaged away): if short
+    # were to regress while aggregate top-1 did not fall, the guard must fail.
+    negative = protected_stratum_guard(
+        strata_true_ranks={
+            "short_gap": {
+                "baseline_true_rank": 1,
+                "challenger_true_rank": 2,
+            },
+            "long_gap": {
+                "baseline_true_rank": 2,
+                "challenger_true_rank": 1,
+            },
+        },
+        protected_strata=["short_gap"],
+        aggregate_top1_baseline=1,
+        aggregate_top1_challenger=2,
+    )
+    negative_ok = negative["passed"] is False and negative["would_hide_under_aggregate"]
+
+    ok = bool(guard["passed"]) and negative_ok
     return InvariantResult(
         "I9_protected_stratum_not_hidden",
         "Aggregate improvement cannot hide a loss in a declared protected stratum",
         ok,
         {
             "protected_strata": ["short_gap"],
-            "strata_true_ranks": strata,
-            "short_gap_regression": short_regression,
+            "strata_true_ranks": strata_true_ranks,
+            "guard": guard,
+            "constructive_hiding_counterexample": negative,
             "constructive_retention": "per-stratum ranks retained; not pooled AUC",
         },
     )
@@ -386,6 +458,22 @@ def inv10_fail_closed_undefined() -> InvariantResult:
                 cov_shared=np.eye(d),
             ),
             "M2",
+        ),
+    )
+    expect(
+        "missing_candidate_covariance",
+        lambda: resolve_covariance(
+            CandidateObservation(
+                event_id="e",
+                cand_id="c",
+                residual=r,
+                delta=1.0,
+                is_true_match=True,
+                stratum="short_gap",
+                cov_shared=np.eye(d),
+                cov_candidate=None,
+            ),
+            "candidate_specific",
         ),
     )
     # Tie rule is frozen; unsupported rules fail closed.
@@ -550,15 +638,21 @@ def ranking_active_mechanism_test(cands: list[CandidateObservation]) -> dict[str
         _score_event(cspec, "M1", cov_mode="candidate_specific", rank_score="nll")
     )
 
+    cand_specific_ranking_active = q_cs != nll_cs
     return {
         "ordering_active_mechanism": ORDERING_ACTIVE_MECHANISM,
         "admissible_ranking_active": {
             "anisotropic_shared_innovation_covariance": m0_aniso != m1_aniso,
-            "candidate_specific_observation_covariance": q_cs != nll_cs or True,
+            "candidate_specific_observation_covariance": cand_specific_ranking_active,
             "notes": (
-                "Candidate-specific S is ranking-active when causally declared; "
+                "Candidate-specific S is ranking-active when causally declared and "
+                "mechanically produces an ordering difference (here q vs NLL); "
                 "shared anisotropic S is ranking-active vs Euclidean M0."
             ),
+            "evidence": {
+                "anisotropic": {"m0_order": m0_aniso, "m1_order": m1_aniso},
+                "candidate_specific_q_vs_nll": {"q_order": q_cs, "nll_order": nll_cs},
+            },
         },
         "calibration_only": {
             CALIBRATION_ONLY_MECHANISM: m0_iso == m1_iso,
