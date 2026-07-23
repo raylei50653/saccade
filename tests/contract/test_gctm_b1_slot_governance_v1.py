@@ -28,6 +28,7 @@ D1_CHARTER = (
     / "docs"
     / "research"
     / "threads"
+    / "closed"
     / "gctm_d1_substrate_agnostic_ranking_diagnostic_task.md"
 )
 sys.path.insert(0, TOOLS.as_posix())
@@ -136,10 +137,11 @@ def test_authoritative_record_and_schema_validate() -> None:
         "valid": True,
         "owner_decision_status": "accepted",
         "authority_verified": True,
-        "activation_eligible_slots": ["GCTM_D1"],
+        "activation_eligible_slots": [],
         "decision_relevant_candidates": [],
-        "active_wip": ["GCTM_D1"],
+        "active_wip": [],
     }
+    assert _slot(_record(), "GCTM_D1")["state"] == "terminal"
 
 
 def test_gctm_b1_is_not_an_h0_route5_alias() -> None:
@@ -234,8 +236,10 @@ def test_complete_runtime_activation_bindings_are_machine_eligible() -> None:
 
     report = governance.validate_record(record)
 
-    # GCTM_D1 is already active/eligible; complete runtime bindings add GCTM_B1.
-    assert report["activation_eligible_slots"] == ["GCTM_B1", "GCTM_D1"]
+    # GCTM_D1 is terminal (not activation-eligible); complete runtime bindings
+    # add only GCTM_B1.
+    assert report["activation_eligible_slots"] == ["GCTM_B1"]
+    assert _slot(record, "GCTM_D1")["state"] == "terminal"
 
 
 def test_runtime_activation_binding_requires_hash_and_owner_acceptance() -> None:
@@ -271,7 +275,7 @@ def test_diagnostic_activation_requirements_are_declaration_plus_scheduling() ->
         governance.DIAGNOSTIC_ACTIVATION_REQUIREMENTS
     )
     assert diagnostic["blocked_by"] == []
-    assert diagnostic["state"] == "active"
+    assert diagnostic["state"] == "terminal"
     assert "owner_scheduling_decision" in diagnostic["allowed_evidence_classes"]
     assert (
         diagnostic["owner_acceptance_id"]
@@ -303,13 +307,14 @@ def test_diagnostic_activation_requirements_are_declaration_plus_scheduling() ->
 
 
 def test_complete_diagnostic_activation_bindings_are_machine_eligible() -> None:
-    # Authoritative record is already activation-eligible after owner scheduling.
+    # Authoritative record is terminal after owner-accepted canonical execution.
     report = governance.validate_record_file(RECORD)
-    assert report["activation_eligible_slots"] == ["GCTM_D1"]
+    assert report["activation_eligible_slots"] == []
     assert report["decision_relevant_candidates"] == []
-    assert report["active_wip"] == ["GCTM_D1"]
+    assert report["active_wip"] == []
+    assert _slot(_record(), "GCTM_D1")["state"] == "terminal"
 
-    # Synthetic rebinding remains valid under the same activation contract.
+    # Synthetic rebinding to active remains valid under the activation contract.
     record = _record()
     _activate_diagnostic(record)
     synthetic = governance.validate_record(record)
@@ -487,11 +492,17 @@ def test_registry_repush_has_no_false_active_wip() -> None:
     record = _record()
     projection = record["registry_projection"]
     assert projection["decision_relevant_candidates"] == []
-    assert projection["active_wip"] == ["GCTM_D1"]
+    assert projection["active_wip"] == []
     assert projection["h0_reentry_authorized"] is False
+    assert _slot(record, "GCTM_D1")["state"] == "terminal"
 
-    # Non-active runtime slots must not hold WIP.
+    # Terminal diagnostic must not hold WIP; runtime non-active must not either.
     invalid = deepcopy(record)
+    invalid["registry_projection"]["active_wip"] = ["GCTM_D1"]
+    _assert_error(invalid, "false_active_wip")
+
+    invalid = deepcopy(record)
+    _activate_diagnostic(invalid)
     invalid["registry_projection"]["active_wip"] = ["GCTM_D1", "H0_ROUTE5_B1"]
     _assert_error(invalid, "false_active_wip")
 
@@ -501,17 +512,24 @@ def test_registry_todo_and_charter_project_the_machine_record() -> None:
     todo = TODO.read_text(encoding="utf-8")
     charter = D1_CHARTER.read_text(encoding="utf-8")
 
-    for text in (registry, todo):
-        assert "H0_ROUTE5_B1" in text
-        assert "GCTM_B1" in text
-        assert "GCTM_D1" in text
-        assert "blocked_by: h0_runtime_substrate" in text
-    assert "GCTM_D1 — canonical synthetic diagnostic execution" in todo
+    # TODO is WIP-only: no terminal body; proposed runtime slots remain named.
+    assert "H0_ROUTE5_B1" in todo
+    assert "GCTM_B1" in todo
+    assert "blocked_by: h0_runtime_substrate" in todo
+    assert "無 active" in todo
+    assert "GCTM_D1" in registry
+    assert "H0_ROUTE5_B1" in registry
+    assert "GCTM_B1" in registry
+    assert "blocked_by: h0_runtime_substrate" in registry
     assert "decision_relevant_candidates: []" in registry
-    assert "active_wip: [GCTM_D1]" in registry
-    assert "ACTIVE / sole-active / one canonical execution authorized" in charter
+    assert "active_wip: []" in registry
+    assert "state: GCTM_D1_INTERFACE_READY" in registry
+    assert "lifecycle_state: terminal" in registry
+    assert "GCTM_D1_INTERFACE_READY" in charter
+    assert "Current step" in charter and "none — closed" in charter
     assert "gctm_d1_declaration_owner_acceptance_20260723" in charter
     assert "gctm_d1_owner_scheduling_20260723" in charter
     assert "gctm_d1_activation_owner_acceptance_20260723" in charter
+    assert "gctm_d1_terminal_owner_acceptance_20260723" in charter
     assert "runtime faithful" in charter
     assert "reject_runtime_consumption" in charter

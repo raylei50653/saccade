@@ -54,8 +54,8 @@ decision, blocker change, or consumer-compatibility verdict.
 
 | Field | Current projection | Owner / read first |
 |:--|:--|:--|
-| **ACTIVE** | **GCTM_D1 — canonical synthetic diagnostic execution** — owner scheduling accepted 2026-07-23 (`gctm_d1_owner_scheduling_20260723` / `gctm_d1_activation_owner_acceptance_20260723`); slot **active**; semantic WIP held; one canonical execution of the PR #266 frozen declaration/packet identities authorized. Canonical registry `state` remains **`none`** (execution not completed; no terminal selected; charter not closed). Diagnostic-only; not a decision-relevant runtime candidate; no B1/O1/H0 authority. | [semantic TODO](../../modules/semantic/TODO.md) · [D1 charter](gctm_d1_substrate_agnostic_ranking_diagnostic_task.md) · [scheduling record](../../modules/semantic/research/gctm_d1_owner_scheduling_20260723.json) · [machine identity decision](../contracts/gctm_b1_slot_identity_decision_v1.json) |
-| **NEXT** | Separate PR: run the frozen D1 runner on the sealed synthetic packet, mechanically select one terminal, and complete owner-accepted closure. Both runtime slots remain **proposed / non-WIP** behind runtime substrate, identity, checksum, compatibility, freeze, declaration, and scheduling gates. The closed GCTM A-layer seal (`GCTM_MODEL_SPEC_SEALABLE`) grants no B1/O1 authority. | [claim-state registry](../contracts/claim_state_registry.md) · [D1 charter](gctm_d1_substrate_agnostic_ranking_diagnostic_task.md) · [B1 charter](gctm_b1_runtime_grounded_offline_attribution_task.md) · [O1 charter](gctm_o1_online_intervention_efficacy_task.md) · [GCTM charter (closed)](closed/gap_conditioned_stochastic_transition_model_task.md) |
+| **ACTIVE** | **none** — semantic sole-active WIP is empty (`active_wip: []`). | [semantic TODO](../../modules/semantic/TODO.md) · [claim-state registry](../contracts/claim_state_registry.md) · [machine identity decision](../contracts/gctm_b1_slot_identity_decision_v1.json) |
+| **NEXT** | No automatic next. Both runtime slots remain **proposed / non-WIP** behind runtime substrate, identity, checksum, compatibility, freeze, declaration, and scheduling gates. Closed D1 (`GCTM_D1_INTERFACE_READY`) and closed GCTM A-layer seal (`GCTM_MODEL_SPEC_SEALABLE`) grant no B1/O1/H0 authority. | [claim-state registry](../contracts/claim_state_registry.md) · [D1 charter (closed)](closed/gctm_d1_substrate_agnostic_ranking_diagnostic_task.md) · [B1 charter](gctm_b1_runtime_grounded_offline_attribution_task.md) · [O1 charter](gctm_o1_online_intervention_efficacy_task.md) · [GCTM charter (closed)](closed/gap_conditioned_stochastic_transition_model_task.md) |
 | **READINESS** | H0 remains closed at owner-accepted `H0_PROVENANCE_INVALID` (three same-type ordered terminals): no faithful capture, no accepted runtime-fidelity edge, no actual H0 guarantee envelope; Phase B forbidden; any future re-entry requires a machine-checked launch-hygiene pre-authorization gate plus a fresh I→F→S owner reseal plus separate exactly-once authorization. Positive H0 blocks only bridge-runtime B1, not A-layer GCTM or diagnostic D1 work. | [H0 declaration](../../modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md) · [claim-state registry](../contracts/claim_state_registry.md) |
 
 ### Blockers and transition gates
@@ -77,15 +77,14 @@ GCTM → bridge-runtime B1
   → B1 may become active
 
 GCTM_D1 diagnostic line
-  active charter; owner scheduling accepted (one canonical execution authorized)
-  ∧ declaration_owner_acceptance + owner_scheduling both satisfied
-  ∧ active_wip: [GCTM_D1]; decision_relevant_candidates: []
-  ∧ pre-activation synthetic seal-candidate packet identities frozen
-  ∧ provisional INTERFACE_READY string not promoted to canonical state
-  ∧ canonical registry state remains none (execution not yet completed)
+  closed at owner-accepted mechanical terminal GCTM_D1_INTERFACE_READY
+  ∧ declaration_owner_acceptance + owner_scheduling both historical/satisfied
+  ∧ one canonical execution consumed (gctm_d1_canonical_execution_20260723)
+  ∧ active_wip: []; decision_relevant_candidates: []
+  ∧ accepted packet identities remain PR #265 sealed (not rewritten)
   ∧ diagnostic evidence cannot satisfy H0 substrate/provenance/identity/checksum
   ∧ missing H0 compatibility verdict fails closed
-  → no B1/O1 candidate, no H0 re-entry; next PR = frozen execution + terminal + closure
+  → no B1/O1 candidate, no H0 re-entry, no production claim
 ```
 
 For any bridge-runtime consumer, the required compatibility check is limited to
@@ -255,7 +254,6 @@ frontmatter、搬移與索引要求。
 
 | Thread | Work class / WIP role | Current concrete work | Owner |
 |:--|:--|:--|:--|
-| [gctm_d1_substrate_agnostic_ranking_diagnostic_task.md](gctm_d1_substrate_agnostic_ranking_diagnostic_task.md) | mainline-study · **sole-active** | Owner scheduling accepted; one canonical synthetic diagnostic execution authorized; next = frozen runner execution + mechanical terminal + owner-accepted closure | semantic |
 | [association_recovery_registry_20260709.md](association_recovery_registry_20260709.md) | maintenance · **non-WIP** | Keep R/H ownership and path-health registry current | semantic |
 | [doc_structure_o15_followup_20260709.md](doc_structure_o15_followup_20260709.md) | governance · **non-WIP** | Pay down research-index debt; optional structure checks remain non-blocking | ownership |
 
@@ -271,6 +269,7 @@ frontmatter、搬移與索引要求。
 
 | Thread | Closed | Terminal (one-line) | Direct handoff disposition | Cross-thread consequence (not handoff) | Owner |
 |:--|:--|:--|:--|:--|:--|
+| [gctm_d1_substrate_agnostic_ranking_diagnostic_task.md](closed/gctm_d1_substrate_agnostic_ranking_diagnostic_task.md) | 2026-07-23 | **`GCTM_D1_INTERFACE_READY` owner-accepted** (mechanical three-way terminal; canonical execution `gctm_d1_canonical_execution_20260723`; [execution witness](../../modules/semantic/research/evidence/gctm_d1_canonical_execution_20260723/execution_witness.json) · [terminal acceptance](../../modules/semantic/research/evidence/gctm_d1_canonical_execution_20260723/terminal_acceptance.json)) · diagnostic-only; I1–I12 pass; consumer interface complete | **no receiver / no continuation** — interface-ready ≠ runtime-compatible; unlocks no B1/O1/H0 | runtime compatibility gates remain `missing`; `active_wip: []`; `decision_relevant_candidates: []`; H0 re-entry still unauthorized; B1/O1 remain proposed behind runtime substrate | semantic |
 | [gap_conditioned_stochastic_transition_model_task.md](closed/gap_conditioned_stochastic_transition_model_task.md) | 2026-07-23 | **`GCTM_MODEL_SPEC_SEALABLE` owner-accepted** (ordered terminal 5; selected by WP-A8 terminal review, [checklist artifact](../models/gap_conditioned_stochastic_transition_terminal_review_v1.md)) · diagnostic-only A-layer model-spec seal · D1 §2–§8 + D2 L1–L5 frozen | **no receiver / no continuation** — the seal grants no B1/O1/online/production authority; B1 and O1 need separate activation | H0 state unchanged (no faithful capture, no fidelity edge, empty guarantee set); the at-close L2 contract absence is **superseded** by the 2026-07-23 owner-accepted [v1 binding](../contracts/score_ranking_evidence_contract.md), but substrate still does not inherit and all other B1/O1 gates remain | semantic |
 | [bridge_frozen_evidence_o0_routing_20260716.md](closed/bridge_frozen_evidence_o0_routing_20260716.md) | 2026-07-20 | **route 1 `H0_PROVENANCE_INVALID` owner-accepted**（[#209](https://github.com/raylei50653/saccade/issues/209)，2026-07-19）· H0 = CLOSED（diagnostic-only）· controller retry / Phase B forbidden | **no receiver / no continuation** — NEXT = none automatically | GCTM [#175](https://github.com/raylei50653/saccade/issues/175) was parked **at close time**（activation required a separate owner scheduling decision）——**superseded**: that decision was taken 2026-07-22 and GCTM then closed 2026-07-23 at `GCTM_MODEL_SPEC_SEALABLE`（see its Closed row above）; the O0 card's *Final status* keeps the at-close snapshot. Provenance gap becomes permanent registry `open_limits`（unchanged） | semantic |
 | [gap_conditioned_probabilistic_motion_probe_20260711.md](closed/gap_conditioned_probabilistic_motion_probe_20260711.md) | 2026-07-13 | **`V5 ACCEPTED_WITH_LIMITS`** · D0 follow-up closed at `T2_PROXY_UNFAITHFUL` | **no receiver / no continuation** | H0 observability is an independent proposed task, not a handoff | semantic |

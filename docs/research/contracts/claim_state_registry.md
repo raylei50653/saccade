@@ -545,10 +545,10 @@ last_reviewed_at: 2026-07-23
 ```yaml
 slot_id: GCTM_D1
 layer: diagnostic-only（非 runtime decision layer）
-ladder: proposed charter terminal family
-transition_semantics: defined（只允許 local diagnostic terminal；canonical transition 需 owner-accepted execution closure）
-lifecycle_state: active
-state: none                              # active WIP ≠ accepted terminal
+ladder: ordered GCTM_D1 terminal family
+transition_semantics: defined（local diagnostic terminal only；no cross-slot unlock）
+lifecycle_state: terminal
+state: GCTM_D1_INTERFACE_READY
 declaration_acceptance:
   terminal: GCTM_D1_DECLARATION_ACCEPTED
   owner_acceptance_id: gctm_d1_declaration_owner_acceptance_20260723
@@ -569,15 +569,42 @@ owner_scheduling:
   scope: one canonical execution of the exact declaration and packet identities accepted by gctm_d1_declaration_owner_acceptance_20260723
   artifact: ../../modules/semantic/research/gctm_d1_owner_scheduling_20260723.json
   artifact_sha256: 17c534c5dc25ad0318d26b0208a7f9dceedc603ec1f81dc29fe27b49bc2607c8
-  does_not_equal_execution_completed: true
-  does_not_select_terminal: true
-  does_not_close_charter: true
+  consumed_by_execution: gctm_d1_canonical_execution_20260723
   does_not_create_decision_relevant_candidate: true
+supporting_execution:
+  execution_id: gctm_d1_canonical_execution_20260723
+  execution_commit: d80f53389a4b3f4a9f8ea83f80c5133ba9602451
+  artifact: ../../modules/semantic/research/evidence/gctm_d1_canonical_execution_20260723/execution_witness.json
+  bit_identical_to_accepted_packet: true
+  invariants: 12/12
+  mechanical_selected_terminal: GCTM_D1_INTERFACE_READY
+terminal_acceptance:
+  selected_terminal: GCTM_D1_INTERFACE_READY
+  owner_acceptance_id: gctm_d1_terminal_owner_acceptance_20260723
+  acceptance_date: 2026-07-23
+  acceptance_mechanism: PR merge
+  artifact: ../../modules/semantic/research/evidence/gctm_d1_canonical_execution_20260723/terminal_acceptance.json
+  terminal_procedure_id: gctm_d1_mechanical_three_way_terminal_v1
+  maximum_supported_claim: >-
+    The frozen substrate-agnostic diagnostic family is internally
+    machine-checkable and exposes a complete consumer interface suitable
+    for a separate runtime compatibility review.
+  blocked_claims:
+    - runtime compatibility
+    - runtime fidelity
+    - H0 substrate
+    - H0 re-entry authority
+    - H0_ROUTE5_B1 activation
+    - GCTM_B1 activation
+    - O1 eligibility
+    - decision-relevant candidate
+    - production claim
+  note: terminal acceptance id is independent of slot.owner_acceptance_id (activation)
 seal_candidate:
   status: SEAL_CANDIDATE_GENERATED
   generation_kind: pre_activation_synthetic_seal_candidate
   provisional_terminal: GCTM_D1_INTERFACE_READY
-  authority: sealed packet identities frozen by declaration acceptance; not charter execution; not canonical state transition
+  authority: sealed packet identities frozen by declaration acceptance; promoted to canonical terminal only via supporting_execution + terminal_acceptance
   packet: ../../modules/semantic/research/evidence/gctm_d1_substrate_agnostic_ranking_20260723/
   declaration: ../../modules/semantic/research/gctm_d1_ranking_diagnostic_declaration_20260723.md
   terminal_report: ../../modules/semantic/research/gctm_d1_ranking_diagnostic_terminal_20260723.md
@@ -589,20 +616,19 @@ blockers:
   - type: inadmissibility
     what: runtime claim、runtime B1 transition、O1 unlock 或 decision-relevant candidate
     clause: diagnostic evidence 不可滿足 runtime substrate/provenance/identity/checksum/compatibility/activation authority
-  - type: dependency
-    what: canonical terminal acceptance / charter closure
-    clause: activation gates 已滿足；one canonical execution authorized；execution / mechanical terminal selection / owner-accepted closure 仍屬後續獨立 PR；canonical state 仍 none
 decision_relevance:
-  status: zero as decision-relevant candidate — active diagnostic WIP only；does not enter decision_relevant_candidates；does not unlock B1/O1/H0
+  status: zero as decision-relevant candidate — diagnostic terminal only；does not enter decision_relevant_candidates；does not unlock B1/O1/H0
 supporting_declaration: ../../modules/semantic/research/gctm_d1_ranking_diagnostic_declaration_20260723.md
 supporting_terminal: ../../modules/semantic/research/gctm_d1_ranking_diagnostic_terminal_20260723.md
 supporting_packet: ../../modules/semantic/research/evidence/gctm_d1_substrate_agnostic_ranking_20260723/
 supporting_scheduling: ../../modules/semantic/research/gctm_d1_owner_scheduling_20260723.json
-charter_ref: ../threads/gctm_d1_substrate_agnostic_ranking_diagnostic_task.md
-accepting_review: gctm_d1_activation_owner_acceptance_20260723
-last_transition: 2026-07-23 — owner scheduling accepted; GCTM_D1 activated; one canonical execution authorized; WIP acquired; canonical state remains none; no execution / terminal / B1/O1/H0 change
+supporting_execution: ../../modules/semantic/research/evidence/gctm_d1_canonical_execution_20260723/execution_witness.json
+supporting_terminal_acceptance: ../../modules/semantic/research/evidence/gctm_d1_canonical_execution_20260723/terminal_acceptance.json
+charter_ref: ../threads/closed/gctm_d1_substrate_agnostic_ranking_diagnostic_task.md
+accepting_review: gctm_d1_terminal_owner_acceptance_20260723
+last_transition: 2026-07-23 — canonical execution completed; mechanical terminal GCTM_D1_INTERFACE_READY owner-accepted; lifecycle terminal; WIP released; no B1/O1/H0/runtime-compatibility change
 admissible_units: []
-derived_from: gctm_b1_slot_identity_decision_v1.json terminal policy + owner-accepted declaration + owner scheduling decision + seal-candidate packet + §5 relevance
+derived_from: gctm_b1_slot_identity_decision_v1.json terminal policy + owner-accepted declaration + owner scheduling + canonical execution witness + terminal acceptance + §5 relevance
 last_reviewed_at: 2026-07-23
 ```
 ---
@@ -631,11 +657,13 @@ last_reviewed_at: 2026-07-23
 | *(仍全空，2026-07-23 D1 seal-candidate 後重推)* | `GCTM_D1` | 僅有 pre-activation synthetic **seal-candidate**（provisional terminal string `GCTM_D1_INTERFACE_READY`）；canonical `state` 仍 `none`。**不**滿足 runtime gates；**不**進入決策候選集。 |
 | *(仍全空，2026-07-23 D1 declaration acceptance 後重推)* | `GCTM_D1` | Declaration 已 `GCTM_D1_DECLARATION_ACCEPTED`（`gctm_d1_declaration_owner_acceptance_20260723`）；execution contract 凍結；`blocked_by: owner_scheduling`；canonical `state` 仍 `none`。**declaration acceptance ≠ execution**；**不**產生 decision-relevant candidate；**不**取得 WIP；runtime gates 仍 `missing`。 |
 | *(仍非 decision-relevant，2026-07-23 D1 owner scheduling 後重推)* | `GCTM_D1` | Owner scheduling 已接受（`gctm_d1_owner_scheduling_20260723` / `gctm_d1_activation_owner_acceptance_20260723`）；slot **active**；`active_wip: [GCTM_D1]`；one canonical execution authorized。canonical `state` 仍 `none`；**不**進入 `decision_relevant_candidates`；runtime gates 仍 `missing`；execution / terminal / closure 屬後續獨立 PR。 |
+| *(仍全空，2026-07-23 D1 canonical execution closure 後重推)* | `GCTM_D1` | Canonical execution 完成；mechanical terminal **`GCTM_D1_INTERFACE_READY`** owner-accepted（`gctm_d1_terminal_owner_acceptance_20260723`）；`lifecycle_state: terminal`；`active_wip: []`。**不**進入 `decision_relevant_candidates`；runtime gates 仍 `missing`；**不**授權 H0 re-entry 或 B1/O1 activation。 |
 
 **Machine projection:** `gctm_b1_slot_identity_decision_v1.json` 的
 `registry_projection` 已重推為 `decision_relevant_candidates: []`、
-`active_wip: [GCTM_D1]`、`o1_state: proposed`、`h0_reentry_authorized: false`。
-該 projection 由 `validate_research_slot_governance.py` fail closed 驗證。
+`active_wip: []`、`o1_state: proposed`、`h0_reentry_authorized: false`；
+`GCTM_D1` slot `state: terminal`。該 projection 由
+`validate_research_slot_governance.py` fail closed 驗證。
 
 **O0 的選擇（歷史）：** O0 於 2026-07-16 取 H0 為唯一 active，2026-07-20 依
 route 1 關閉（[closed charter](../threads/closed/bridge_frozen_evidence_o0_routing_20260716.md)）。

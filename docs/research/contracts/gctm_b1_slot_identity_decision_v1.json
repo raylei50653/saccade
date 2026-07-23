@@ -80,8 +80,8 @@
     {
       "slot_id": "GCTM_D1",
       "title": "Substrate-agnostic GCTM ranking diagnostic",
-      "charter_ref": "docs/research/threads/gctm_d1_substrate_agnostic_ranking_diagnostic_task.md",
-      "state": "active",
+      "charter_ref": "docs/research/threads/closed/gctm_d1_substrate_agnostic_ranking_diagnostic_task.md",
+      "state": "terminal",
       "authority_class": "diagnostic_only",
       "owner_acceptance_id": "gctm_d1_activation_owner_acceptance_20260723",
       "blocked_by": [],
@@ -233,14 +233,12 @@
       },
       {
         "slot_id": "GCTM_D1",
-        "state": "active",
+        "state": "terminal",
         "blocked_by": []
       }
     ],
     "decision_relevant_candidates": [],
-    "active_wip": [
-      "GCTM_D1"
-    ],
+    "active_wip": [],
     "o1_state": "proposed",
     "h0_reentry_authorized": false
   }
