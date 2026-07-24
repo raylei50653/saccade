@@ -1,0 +1,708 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "h0_gctm_guarantee_registration_v3",
+  "title": "H0 to GCTM guarantee registration for native-universe completeness (v3)",
+  "description": "Additive registration contract for universe_completeness guarantees targeting gctm_runtime_native_candidate_universe_v1. Does not modify v1/v2 semantics. Does not authorize H0 capture, re-entry, substrate, or compatibility.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "record_id",
+    "record_scope",
+    "record_state",
+    "consumer",
+    "identity_bindings"
+  ],
+  "properties": {
+    "schema": {
+      "const": "h0_gctm_guarantee_registration_v3"
+    },
+    "record_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{2,127}$"
+    },
+    "record_scope": {
+      "enum": [
+        "fixture_only",
+        "actual"
+      ]
+    },
+    "record_state": {
+      "enum": [
+        "candidate-source",
+        "registered-guarantee"
+      ]
+    },
+    "consumer": {
+      "$ref": "#/$defs/consumer"
+    },
+    "identity_bindings": {
+      "$ref": "#/$defs/identity_bindings"
+    },
+    "candidate_sources": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 6,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/candidate_source"
+      }
+    },
+    "baseline": {
+      "$ref": "#/$defs/baseline"
+    },
+    "guarantees": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 2,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/guarantee"
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "record_state": {
+            "const": "candidate-source"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "candidate_sources"
+        ],
+        "properties": {
+          "record_scope": {
+            "const": "fixture_only"
+          },
+          "baseline": false,
+          "guarantees": false
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "record_state": {
+            "const": "registered-guarantee"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "baseline",
+          "guarantees"
+        ],
+        "properties": {
+          "record_scope": {
+            "const": "actual"
+          },
+          "candidate_sources": false
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "field_list": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_]{0,127}$"
+      }
+    },
+    "consumer_object": {
+      "enum": [
+        "runtime_candidate_universe",
+        "runtime_event_membership"
+      ]
+    },
+    "stream": {
+      "enum": [
+        "pair_record",
+        "candidate_record",
+        "event_universe_sidecar"
+      ]
+    },
+    "identity_bindings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "consumer_universe_id",
+        "event_key_version",
+        "candidate_key_version",
+        "inclusion_stage_identity",
+        "mask_identity",
+        "gate_retained_band_identity",
+        "completeness_predicate_id",
+        "native_universe_semantics_version"
+      ],
+      "properties": {
+        "consumer_universe_id": {
+          "const": "gctm_runtime_native_candidate_universe_v1"
+        },
+        "event_key_version": {
+          "const": "gctm_runtime_event_key_v1"
+        },
+        "candidate_key_version": {
+          "const": "gctm_runtime_candidate_key_v1"
+        },
+        "inclusion_stage_identity": {
+          "const": "pre_score_eligible_v1"
+        },
+        "mask_identity": {
+          "const": "h0_pair_pre_score_mask_v1"
+        },
+        "gate_retained_band_identity": {
+          "const": "native_non_score_gates_height_speed_spatial_v1"
+        },
+        "completeness_predicate_id": {
+          "const": "h0_native_universe_completeness_predicate_v1"
+        },
+        "native_universe_semantics_version": {
+          "const": "native_universe_v2"
+        }
+      }
+    },
+    "consumer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "consumer_id",
+        "consumer_universe_id",
+        "maximum_claim_layer",
+        "required_guarantee_ids"
+      ],
+      "properties": {
+        "consumer_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{2,127}$"
+        },
+        "consumer_universe_id": {
+          "const": "gctm_runtime_native_candidate_universe_v1"
+        },
+        "maximum_claim_layer": {
+          "enum": [
+            "gctm_model_specification",
+            "bridge_runtime_b1"
+          ]
+        },
+        "required_guarantee_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{2,127}$"
+          }
+        }
+      }
+    },
+    "candidate_source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_id",
+        "consumer_object",
+        "stream",
+        "source_fields",
+        "causal_availability"
+      ],
+      "properties": {
+        "source_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{2,127}$"
+        },
+        "consumer_object": {
+          "$ref": "#/$defs/consumer_object"
+        },
+        "stream": {
+          "$ref": "#/$defs/stream"
+        },
+        "source_fields": {
+          "$ref": "#/$defs/field_list"
+        },
+        "causal_availability": {
+          "enum": [
+            "online",
+            "lagged",
+            "offline_only"
+          ]
+        }
+      }
+    },
+    "baseline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "baseline_id",
+        "h0_terminal",
+        "h0_evidence_id",
+        "h0_packet_hash",
+        "h0_schema_version",
+        "runtime_instrumentation_identity",
+        "policy_base_id",
+        "resolved_preset_id",
+        "capture_mode",
+        "capture_run_uuid",
+        "event_key_version",
+        "dataset_sequence_domain",
+        "accepted_by",
+        "accepted_at"
+      ],
+      "properties": {
+        "baseline_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{2,127}$"
+        },
+        "h0_terminal": {
+          "const": "H0_FULL_COMMIT_CAPTURE_FAITHFUL"
+        },
+        "h0_evidence_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "h0_packet_hash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "h0_schema_version": {
+          "const": "h0_bridge_decision_trace_v2"
+        },
+        "runtime_instrumentation_identity": {
+          "type": "string",
+          "minLength": 1
+        },
+        "policy_base_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "resolved_preset_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "capture_mode": {
+          "type": "string",
+          "minLength": 1
+        },
+        "capture_run_uuid": {
+          "type": "string",
+          "minLength": 1
+        },
+        "event_key_version": {
+          "const": "gctm_runtime_event_key_v1"
+        },
+        "dataset_sequence_domain": {
+          "type": "string",
+          "minLength": 1
+        },
+        "accepted_by": {
+          "const": "h0_owner"
+        },
+        "accepted_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "source_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "stream",
+        "source_fields"
+      ],
+      "properties": {
+        "stream": {
+          "$ref": "#/$defs/stream"
+        },
+        "source_fields": {
+          "$ref": "#/$defs/field_list"
+        }
+      }
+    },
+    "pair_key": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "seq",
+        "frame",
+        "cand_slot",
+        "cand_instance_uid",
+        "lost_slot",
+        "lost_instance_uid"
+      ],
+      "properties": {
+        "seq": { "type": "integer", "minimum": 0 },
+        "frame": { "type": "integer", "minimum": 0 },
+        "cand_slot": { "type": "integer", "minimum": 0 },
+        "cand_instance_uid": { "type": "integer", "minimum": 0 },
+        "lost_slot": { "type": "integer", "minimum": 0 },
+        "lost_instance_uid": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "native_candidate_exposure_key": {
+      "$comment": "Trace-v2 native_candidate_keys / candidate_records identity: frame-local exposure, not event-local C_e membership.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "seq",
+        "frame",
+        "cand_slot",
+        "cand_instance_uid"
+      ],
+      "properties": {
+        "seq": { "type": "integer", "minimum": 0 },
+        "frame": { "type": "integer", "minimum": 0 },
+        "cand_slot": { "type": "integer", "minimum": 0 },
+        "cand_instance_uid": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "event_key": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "seq",
+        "frame",
+        "lost_slot",
+        "lost_instance_uid",
+        "event_key_version"
+      ],
+      "properties": {
+        "seq": { "type": "integer", "minimum": 0 },
+        "frame": { "type": "integer", "minimum": 0 },
+        "lost_slot": { "type": "integer", "minimum": 0 },
+        "lost_instance_uid": { "type": "integer", "minimum": 0 },
+        "event_key_version": {
+          "const": "gctm_runtime_event_key_v1"
+        }
+      }
+    },
+    "event_local_candidate_key": {
+      "$comment": "Consumer candidate_key = (event_key, cand_slot, cand_instance_uid). One native exposure candidate may legally join many events.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "event_key",
+        "cand_slot",
+        "cand_instance_uid"
+      ],
+      "properties": {
+        "event_key": { "$ref": "#/$defs/event_key" },
+        "cand_slot": { "type": "integer", "minimum": 0 },
+        "cand_instance_uid": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "completeness_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capture_run_uuid",
+        "capture_schema_version",
+        "native_pair_keys",
+        "pair_record_keys",
+        "pre_score_eligible_pair_keys",
+        "native_candidate_keys",
+        "candidate_record_keys",
+        "candidate_pre_score_passes",
+        "retained_candidate_membership",
+        "totals",
+        "partial_events",
+        "silent_truncation_possible",
+        "claim_commit_label_participation",
+        "exposure_predicates",
+        "m0_m1_m2_identical_universe",
+        "inclusion_stage_score_independent"
+      ],
+      "properties": {
+        "capture_run_uuid": {
+          "type": "string",
+          "minLength": 1
+        },
+        "capture_schema_version": {
+          "const": "h0_bridge_decision_trace_v2"
+        },
+        "native_pair_keys": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/pair_key" }
+        },
+        "pair_record_keys": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/pair_key" }
+        },
+        "pre_score_eligible_pair_keys": {
+          "$comment": "Pre-score eligible subset of pair keys; membership is the projection of this set under rho, not the full native candidate exposure set.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/pair_key" }
+        },
+        "native_candidate_keys": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/native_candidate_exposure_key" }
+        },
+        "candidate_record_keys": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/native_candidate_exposure_key" }
+        },
+        "candidate_pre_score_passes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "candidate_key",
+              "pre_score_passes"
+            ],
+            "properties": {
+              "candidate_key": {
+                "$ref": "#/$defs/native_candidate_exposure_key"
+              },
+              "pre_score_passes": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          }
+        },
+        "retained_candidate_membership": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/event_local_candidate_key"
+          }
+        },
+        "totals": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "total_native_pair_keys",
+            "total_pair_records",
+            "total_native_candidate_keys",
+            "total_candidate_records",
+            "overflow_native_pair_keys",
+            "overflow_pair_records",
+            "overflow_native_candidate_keys",
+            "overflow_candidate_records",
+            "bridge_attempt_count",
+            "identity_uid_wrap_events"
+          ],
+          "properties": {
+            "total_native_pair_keys": { "type": "integer", "minimum": 0 },
+            "total_pair_records": { "type": "integer", "minimum": 0 },
+            "total_native_candidate_keys": { "type": "integer", "minimum": 0 },
+            "total_candidate_records": { "type": "integer", "minimum": 0 },
+            "overflow_native_pair_keys": { "type": "integer", "minimum": 0 },
+            "overflow_pair_records": { "type": "integer", "minimum": 0 },
+            "overflow_native_candidate_keys": { "type": "integer", "minimum": 0 },
+            "overflow_candidate_records": { "type": "integer", "minimum": 0 },
+            "bridge_attempt_count": { "type": "integer", "minimum": 0 },
+            "identity_uid_wrap_events": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "partial_events": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/event_key" }
+        },
+        "silent_truncation_possible": {
+          "type": "boolean"
+        },
+        "claim_commit_label_participation": {
+          "type": "boolean"
+        },
+        "exposure_predicates": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "require_candidate_exposure",
+            "bridge_attempt_equals_native_candidate_keys"
+          ],
+          "properties": {
+            "require_candidate_exposure": { "type": "boolean" },
+            "bridge_attempt_equals_native_candidate_keys": { "type": "boolean" }
+          }
+        },
+        "m0_m1_m2_identical_universe": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "same_event_set",
+            "same_C_e",
+            "event_set_fingerprint",
+            "c_e_fingerprint"
+          ],
+          "properties": {
+            "same_event_set": { "type": "boolean" },
+            "same_C_e": { "type": "boolean" },
+            "event_set_fingerprint": {
+              "type": "string",
+              "minLength": 1
+            },
+            "c_e_fingerprint": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "inclusion_stage_score_independent": {
+          "type": "boolean"
+        }
+      }
+    },
+    "guarantee": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "guarantee_id",
+        "guarantee_class",
+        "consumer_object",
+        "consumer_universe_id",
+        "baseline_id",
+        "runtime_instrumentation_identity",
+        "resolved_preset_id",
+        "h0_schema_version",
+        "capture_run_uuid",
+        "dataset_sequence_domain",
+        "event_key_version",
+        "candidate_key_version",
+        "inclusion_stage_identity",
+        "mask_identity",
+        "gate_retained_band_identity",
+        "source_bindings",
+        "completeness_predicate_id",
+        "replay_non_perturbation_basis",
+        "causal_availability",
+        "declared_domain",
+        "invalidation_inputs",
+        "completeness_evidence"
+      ],
+      "properties": {
+        "guarantee_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{2,127}$"
+        },
+        "guarantee_class": {
+          "const": "universe_completeness"
+        },
+        "consumer_object": {
+          "$ref": "#/$defs/consumer_object"
+        },
+        "consumer_universe_id": {
+          "const": "gctm_runtime_native_candidate_universe_v1"
+        },
+        "baseline_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{2,127}$"
+        },
+        "runtime_instrumentation_identity": {
+          "type": "string",
+          "minLength": 1
+        },
+        "resolved_preset_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "h0_schema_version": {
+          "const": "h0_bridge_decision_trace_v2"
+        },
+        "capture_run_uuid": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dataset_sequence_domain": {
+          "type": "string",
+          "minLength": 1
+        },
+        "event_key_version": {
+          "const": "gctm_runtime_event_key_v1"
+        },
+        "candidate_key_version": {
+          "const": "gctm_runtime_candidate_key_v1"
+        },
+        "inclusion_stage_identity": {
+          "const": "pre_score_eligible_v1"
+        },
+        "mask_identity": {
+          "const": "h0_pair_pre_score_mask_v1"
+        },
+        "gate_retained_band_identity": {
+          "const": "native_non_score_gates_height_speed_spatial_v1"
+        },
+        "source_bindings": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/source_binding"
+          }
+        },
+        "completeness_predicate_id": {
+          "const": "h0_native_universe_completeness_predicate_v1"
+        },
+        "replay_non_perturbation_basis": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "replay",
+              "shadow_nonperturbation"
+            ]
+          }
+        },
+        "causal_availability": {
+          "enum": [
+            "online",
+            "lagged",
+            "offline_only"
+          ]
+        },
+        "declared_domain": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "preset_id",
+            "runtime_identity",
+            "schema_id",
+            "dataset_sequence_domain",
+            "consumer_universe_id"
+          ],
+          "properties": {
+            "preset_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "runtime_identity": {
+              "type": "string",
+              "minLength": 1
+            },
+            "schema_id": {
+              "const": "h0_bridge_decision_trace_v2"
+            },
+            "dataset_sequence_domain": {
+              "type": "string",
+              "minLength": 1
+            },
+            "consumer_universe_id": {
+              "const": "gctm_runtime_native_candidate_universe_v1"
+            }
+          }
+        },
+        "invalidation_inputs": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "completeness_evidence": {
+          "$ref": "#/$defs/completeness_evidence"
+        }
+      }
+    }
+  }
+}

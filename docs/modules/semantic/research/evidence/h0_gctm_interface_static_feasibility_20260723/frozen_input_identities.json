@@ -41,9 +41,9 @@
     },
     {
       "role": "h0_guarantee_registration_validator",
-      "identity_id": "verify_h0_gctm_guarantee_registration_9039587c",
+      "identity_id": "verify_h0_gctm_guarantee_registration_64a64b61",
       "path": "scripts/tools/verify_h0_gctm_guarantee_registration.py",
-      "sha256": "9039587ce06698295f964740d97b0304afbd72bab671fa492339bd7e906f652a"
+      "sha256": "64a64b61d9eaeeb5293a0e748d5a008f74a6e52d0fa9b38ad01808bcbc4fc2e4"
     },
     {
       "role": "h0_guarantee_candidate_fixture",

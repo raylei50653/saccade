@@ -9,9 +9,11 @@
 | `test_declaration_seal_order.py` | system | contract | active | A sealed declaration must exist before the results it claims to have predicted. |
 | `test_gctm_b1_slot_governance_v1.py` | system | contract | active | Contract tests for B1 slot identity and substrate-agnostic GCTM isolation. |
 | `test_gctm_d1_ranking_diagnostic_v1.py` | system | contract | active | Contract tests for the GCTM D1 ranking diagnostic interface package. |
+| `test_gctm_runtime_universe_v1.py` | system | contract | active | Contract tests for the GCTM runtime-native candidate-universe freeze. |
 | `test_h0_controller_input_member_parity.py` | system | regression | active | Contract regression for the H0 controller-input member declaration. |
 | `test_h0_gctm_guarantee_registration.py` | system | contract | active | Contract for the H0 GCTM guarantee-registration verifier (candidate-identity v1). |
 | `test_h0_gctm_guarantee_registration_v2.py` | system | contract | active | Contract for the H0 GCTM guarantee-registration verifier (candidate-sources v2). |
+| `test_h0_gctm_guarantee_registration_v3.py` | system | contract | active | Contract for the H0 GCTM guarantee-registration verifier (universe-completeness v3). |
 | `test_h0_gctm_static_feasibility_v1.py` | system | contract | active | Contract tests for the bounded H0 to GCTM static feasibility audit. |
 | `test_h0_launch_hygiene_gate.py` | system | regression | active | Contract regression for the H0 launch-hygiene pre-authorization gate. |
 | `test_migration_manifest_v0.py` | system | contract | active | Contract for the doc migration manifest parser and master-map generator. |

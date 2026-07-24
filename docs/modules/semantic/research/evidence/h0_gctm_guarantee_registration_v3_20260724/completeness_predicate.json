@@ -1,0 +1,95 @@
+{
+  "schema": "h0_native_universe_completeness_predicate_v1",
+  "predicate_id": "h0_native_universe_completeness_predicate_v1",
+  "consumer_universe_id": "gctm_runtime_native_candidate_universe_v1",
+  "scope": "capture_domain_global",
+  "not_pair_row_local": true,
+  "mechanical_checks": [
+    {
+      "id": 1,
+      "name": "consumer_identity_exact_match",
+      "rule": "consumer_universe_id and identity_bindings exact-match sealed constants"
+    },
+    {
+      "id": 2,
+      "name": "event_candidate_key_versions_exact_match",
+      "rule": "event_key_version=gctm_runtime_event_key_v1 and candidate_key_version=gctm_runtime_candidate_key_v1"
+    },
+    {
+      "id": 3,
+      "name": "inclusion_stage_pre_score_score_independent",
+      "rule": "inclusion_stage_identity=pre_score_eligible_v1 and inclusion_stage_score_independent=true"
+    },
+    {
+      "id": 4,
+      "name": "native_pair_key_to_pair_record_bijection",
+      "rule": "every native_pair_key maps to exactly one pair_record key"
+    },
+    {
+      "id": 5,
+      "name": "event_local_membership_from_pre_score_pairs",
+      "rule": "retained event-local candidate keys equal the projection of pre_score_eligible_pair_keys under rho; consumer candidate_key=(event_key,cand_slot,cand_instance_uid); native exposure may join 0..N events; pre_score_passes==0 has no membership"
+    },
+    {
+      "id": 6,
+      "name": "emitted_row_count_reconciliation",
+      "rule": "totals for native keys and emitted rows reconcile with evidence arrays"
+    },
+    {
+      "id": 7,
+      "name": "duplicate_candidate_rows_rejected",
+      "rule": "duplicate native exposure candidate keys and duplicate event-local membership keys fail closed"
+    },
+    {
+      "id": 8,
+      "name": "event_local_uniqueness_and_pre_score_passes_match",
+      "rule": "within one event (cand_slot,cand_instance_uid) is unique; membership count per exposure equals candidate_pre_score_passes; same exposure across distinct events is legal"
+    },
+    {
+      "id": 9,
+      "name": "overflow_counters_zero",
+      "rule": "all relevant overflow_* counters equal zero"
+    },
+    {
+      "id": 10,
+      "name": "silent_truncation_impossible",
+      "rule": "silent_truncation_possible must be false under the declared basis"
+    },
+    {
+      "id": 11,
+      "name": "partial_events_fail_closed",
+      "rule": "partial_events must be empty"
+    },
+    {
+      "id": 12,
+      "name": "identity_uid_wrap_events_zero",
+      "rule": "identity_uid_wrap_events equals zero"
+    },
+    {
+      "id": 13,
+      "name": "capture_exposure_predicates",
+      "rule": "require_candidate_exposure and bridge_attempt_count equals native candidate key count"
+    },
+    {
+      "id": 14,
+      "name": "claim_commit_label_excluded",
+      "rule": "claim/commit/label fields do not participate in universe or membership"
+    },
+    {
+      "id": 15,
+      "name": "m0_m1_m2_identical_universe",
+      "rule": "M0/M1/M2 consume identical event sets and C_e"
+    }
+  ],
+  "forbidden_formation_sources": [
+    "claim_record",
+    "commit_record",
+    "winner",
+    "best_or_second",
+    "margin",
+    "proposal",
+    "GT_or_FP_label",
+    "reveal_information"
+  ],
+  "h0_completeness_guarantee_established": false
+}

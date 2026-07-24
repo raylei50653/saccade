@@ -88,8 +88,8 @@
   "artifact_bindings": {
     "schema_sha256": "f4688d36a5e9db633f0db254d9d2c0e5201c9f6d1db9ca191a9c3c691cffa02f",
     "validator_sha256": "fa78c5598f9cabc10a8450bc1066a4a147126e2193967e923cd60f1e878bdc37",
-    "responsibility_matrix_sha256": "31d55305e6e33441955931558c602ba49d5ba4924495a32c593dabbfea394513",
-    "frozen_input_record_sha256": "fdaee307cc0af99cb18c0f393771b4aafd96ff9ac655ba69ee771355b244dd58",
+    "responsibility_matrix_sha256": "4e445a9d89aeac00c6d7b2bed44700efaea7b8244cf76781188c8279d4021a37",
+    "frozen_input_record_sha256": "50f51ca6ff055f7b427ef22ccc3ba5016b4d4d55a17db1a35c2f1a4877e24bad",
     "coverage_report_sha256": "d51dae3d8b3eeb03501ffe563c293bea9f493820c62c45d0fb578ce007f9e536",
     "boundary_verdicts_sha256": "687b4dfe5da3c6ac1a1ccbbf0797980fe14b22fb6e4465d81d52fe9c37cd067a",
     "fixture_catalog_sha256": "8b7a1edfcd89cb14d7a84fee90ae3809b9558dcba7fab91fb02a7147b1cd2413"
