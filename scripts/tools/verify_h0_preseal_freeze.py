@@ -1620,11 +1620,24 @@ def verify_artifact(
 
 
 def _single_parent(root: Path, commit: str) -> str:
+    """Return the sole parent of an ordinary one-parent commit.
+
+    Multi-parent or parentless commits cannot occupy the F or S slots of an
+    I → F → S landing.  For discovery classification that is a *non-current*
+    checkout (``LandingMismatchError``), not a malformed historical artifact:
+    declaration A7.RC2 allows instrumentation head ``I`` to be any reviewable
+    commit, including a merge, while only F and S must be ordinary one-parent
+    commits.  Raising a hard structural ``VerificationError`` here previously
+    aborted mixed-corpus landing discovery on merge-commit HEADs (GitHub main
+    merges, PR merge refs) before any candidate could be classified.
+    """
     parents = _git(root, "show", "-s", "--format=%P", commit, text=True)
     assert isinstance(parents, str)
     values = parents.split()
     if len(values) != 1 or not HEAD_RE.fullmatch(values[0]):
-        raise VerificationError(f"{commit} is not an ordinary one-parent commit")
+        raise LandingMismatchError(
+            f"{commit} is not an ordinary one-parent landing commit"
+        )
     return values[0]
 
 
@@ -1645,6 +1658,8 @@ def verify_authority_landing(
     assert isinstance(execution, str)
     if not HEAD_RE.fullmatch(execution):
         raise VerificationError("execution checkout is not a commit")
+    # Parent-count failures are LandingMismatchError: this checkout is not a
+    # sealed S, so no historical v3 candidate matches as current.
     freeze_commit = _single_parent(root, execution)
     instrumentation = _single_parent(root, freeze_commit)
     if instrumentation != head:

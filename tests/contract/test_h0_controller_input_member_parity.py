@@ -241,11 +241,12 @@ def test_build_tool_binding_omission_is_full_strict_but_discovery_tolerant(
 
 
 # The two regressed escapes this repair removes. Every other fail-closed
-# discovery boundary is legitimate and context-dependent — zero current landings
-# on an unsealed 1-parent checkout, or a non-ordinary-parent topology error when
-# HEAD is a merge / non-seal commit (e.g. the pull_request merge-ref that CI
-# checks out). The end-to-end tests must forbid only these two escapes, not the
-# broad wrapper, so they stay correct across local, CI-PR, and worktree contexts.
+# discovery boundary is legitimate and context-dependent — most commonly zero
+# current landings on an unsealed checkout (including merge-commit HEAD, where
+# multi-parent topology is classified as non-current LandingMismatch rather than
+# a hard structural abort). The end-to-end tests must forbid only these two
+# escapes, not the broad wrapper, so they stay correct across local, CI-PR, and
+# worktree contexts.
 _REGRESSED_ESCAPES = ("missing or unknown members", "derivation is malformed")
 
 

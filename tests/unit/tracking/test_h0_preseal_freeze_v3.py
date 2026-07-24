@@ -334,6 +334,40 @@ def test_execution_checkout_must_be_exact_seal_commit(tmp_path: Path) -> None:
         )
 
 
+def test_multiparent_execution_checkout_is_landing_mismatch_not_structural(
+    tmp_path: Path,
+) -> None:
+    """Merge / multi-parent HEAD cannot be S; classify as non-current, not abort.
+
+    Regression for Seal requalification on GitHub merge-commit main: discovery
+    previously raised a hard VerificationError from _single_parent(HEAD), which
+    aborted mixed-corpus classification and failed controlled-host qualification
+    at landing_discovery_dry_run. Declaration A7.RC2 allows I to be any
+    reviewable commit (including merges); only F and S must be ordinary
+    one-parent commits. ``LandingMismatchError`` is the non-current signal
+    caught by ``verify_current_landing_candidate``.
+    """
+    root, instrumentation, _freeze, seal, artifact = _chain(tmp_path)
+    # Build a second parent and a merge commit (multi-parent execution checkout).
+    _git(root, "checkout", "-b", "side", instrumentation)
+    (root / "side.txt").write_text("side\n", encoding="utf-8")
+    side = _commit(root, "side parent")
+    _git(root, "checkout", seal)
+    _git(root, "merge", "--no-ff", "-m", "merge side", side)
+    merge = _git(root, "rev-parse", "HEAD")
+    parents = _git(root, "show", "-s", "--format=%P", merge).split()
+    assert len(parents) == 2
+
+    with pytest.raises(
+        verifier.LandingMismatchError, match="ordinary one-parent"
+    ) as excinfo:
+        verifier.verify_authority_landing(root, artifact, checkout=merge)
+    # Discovery catches LandingMismatchError only; hard structural VerificationError
+    # (non-subclass path) would abort the whole corpus.
+    assert type(excinfo.value) is verifier.LandingMismatchError
+    assert issubclass(verifier.LandingMismatchError, verifier.VerificationError)
+
+
 @pytest.mark.parametrize(
     "payload",
     [
