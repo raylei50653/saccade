@@ -60,10 +60,22 @@ and controlled-host qualification must exercise the same predicate before
 a head may become Seal-eligible.
 ```
 
+## Qualified execution-bound head
+
+```text
+candidate_head_sha = 205a811780ae43a172657f5f0bf886084d95a229
+repair_terminal    = H0_R5_ATTESTATION_QUALIFIED_SEALABLE
+```
+
+Supersedes prior provisional bindings `99f7bb54…` and `077d1b9d…`. Later
+docs-only / merge commits do **not** inherit qualification. Any subsequent
+**execution-bound** change invalidates this report.
+
 ## Files
 
 | File | Role |
 |:--|:--|
+| `manifest.json` | Packet checksum inventory |
 | `isolation_probe.json` | Non-authoritative controlled-host isolation probe |
 | `root_cause_witness.json` | Actual root-cause witness |
 | `repair_terminal.json` | Mechanical ordered Repair terminal |

@@ -1,8 +1,8 @@
 {
   "actual_guarantee_established": false,
   "authority": "non_authoritative",
-  "candidate_head_sha": "077d1b9d38d02d10d09771a0fee340831276b8c2",
-  "candidate_tree_sha": "cba7d84271ebc26dceecb94ad35301862b1943d4",
+  "candidate_head_sha": "205a811780ae43a172657f5f0bf886084d95a229",
+  "candidate_tree_sha": "6d41fa03c760af62a6ee6f112d246f66d0ce0f08",
   "controlled_host_qualification_passed": true,
   "does_not_establish": [
     "I_selected",
@@ -31,7 +31,7 @@
   "owner_decision_identity": "h0_r5_extension_plugin_attestation_closure_authorization_20260724",
   "owner_decision_surface": "https://github.com/raylei50653/saccade/issues/280",
   "policy_capture_semantics_changed": false,
-  "qualification_artifact_digest": "207c208c32a2ec44928eca5a32b8759c2da2b96ddb433fb286a6ca0dbe8213b7",
+  "qualification_artifact_digest": "fe080f806ba544bafbb9f526cd5549e68f11fbbae2f580452e1acac2539699b6",
   "qualification_controller_predicate_parity": true,
   "r4_failure_coordinate_isolated": true,
   "recorder_omission_repaired": true,
@@ -39,5 +39,9 @@
   "repair_unit": "h0_extension_plugin_runtime_attestation_closure_v1",
   "schema": "h0_r5_repair_terminal_v1",
   "spent_s4": "a76efffa01a6fb731218150c355f5859bb8e6dd4",
+  "supersedes_qualified_heads": [
+    "99f7bb542a04334f55ddf622b093649a6d48f33f",
+    "077d1b9d38d02d10d09771a0fee340831276b8c2"
+  ],
   "trace_v2_abi_changed": false
 }
