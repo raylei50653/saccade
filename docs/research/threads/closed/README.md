@@ -15,6 +15,8 @@ docs/archive/    = archived（很少用；不再需要 threads 導航）
 
 | File |
 |:--|
+| [gctm_runtime_native_candidate_universe_task.md](gctm_runtime_native_candidate_universe_task.md) |
+| [h0_gctm_interface_static_feasibility_audit_20260723.md](h0_gctm_interface_static_feasibility_audit_20260723.md) |
 | [gctm_d1_substrate_agnostic_ranking_diagnostic_task.md](gctm_d1_substrate_agnostic_ranking_diagnostic_task.md) |
 | [gap_conditioned_stochastic_transition_model_task.md](gap_conditioned_stochastic_transition_model_task.md) |
 | [bridge_frozen_evidence_o0_routing_20260716.md](bridge_frozen_evidence_o0_routing_20260716.md) |

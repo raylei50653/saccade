@@ -1,0 +1,334 @@
+{
+  "schema": "gctm_runtime_native_candidate_universe_declaration_v1",
+  "declaration_id": "gctm_runtime_native_candidate_universe_v1",
+  "record_scope": "consumer_contract_only",
+  "created_at": "2026-07-24",
+  "authority_class": "runtime_consumer_contract",
+  "ownership": {
+    "runtime_consumer_identity": "gctm_runtime_native_candidate_universe_v1",
+    "is_gctm_d1_candidate_universe": false,
+    "is_h0_guarantee": false,
+    "is_runtime_evidence_substrate": false,
+    "is_b1_activation_declaration": false,
+    "future_b1_reference_role": "GCTM_B1 may bind this identity as its runtime candidate-universe contract after separate activation gates clear",
+    "d1_status": "GCTM_D1_INTERFACE_READY remains closed and read-only"
+  },
+  "prerequisite_binding": {
+    "terminal": "H0_GCTM_INTERFACE_STRUCTURALLY_INSUFFICIENT",
+    "owner_acceptance_id": "h0_gctm_static_audit_terminal_owner_acceptance_20260723",
+    "retained_conclusions": [
+      "current ABI / registration-v2 is structurally insufficient",
+      "repeat capture under unchanged interface is forbidden"
+    ],
+    "consumer_owned_gap_closed_by_this_packet": [
+      "candidate_universe",
+      "event membership / event composition semantics"
+    ],
+    "producer_owned_gap_not_closed": [
+      "H0 completeness guarantee",
+      "registration-v2 envelope binding",
+      "runtime compatibility verdict"
+    ]
+  },
+  "research_question": {
+    "question": "Does trace-v2 admit a score-independent, complete, replayable native candidate-event boundary on which M0, M1, and M2 can be compared over the identical event set and candidate set without depending on winner, claim, commit, or reveal information?",
+    "answer": "yes_as_consumer_contract",
+    "answer_detail": "A unique pre-score lost-centric native universe is definable from frozen pair-record fields, reject-reason vocabulary, and native-universe sidecars. Completeness remains a future producer registration obligation, not an established H0 guarantee."
+  },
+  "score_policy_spaces": {
+    "U_src": {
+      "space_id": "h0_bridge_pair_record_space_v2",
+      "identity": "immutable source pair-record space = every emitted pair_records row under h0_bridge_decision_trace_v2",
+      "source_stream": "pair_records",
+      "stable_key_fields": [
+        "seq",
+        "frame",
+        "cand_slot",
+        "cand_instance_uid",
+        "lost_slot",
+        "lost_instance_uid"
+      ],
+      "native_key_sidecar": "native_pair_keys",
+      "changing_this_space_creates_new_score_policy": true
+    },
+    "U_evt": {
+      "space_id": "h0_bridge_lost_event_space_v1",
+      "identity": "runtime candidate-event space = one lost-instance bridge competition per (seq,frame,lost_slot,lost_instance_uid) under event_key_version",
+      "event_key_version": "gctm_runtime_event_key_v1",
+      "changing_this_space_creates_new_score_policy": true
+    },
+    "rho": {
+      "mapping_id": "pair_to_lost_event_v1",
+      "identity": "rho maps each pair row to exactly one event by projecting the lost-side event key fields",
+      "domain": "U_src",
+      "codomain": "U_evt",
+      "rule": "rho(pair) = event_key(seq, frame, lost_slot, lost_instance_uid, event_key_version)",
+      "total": true,
+      "functional": true,
+      "changing_this_mapping_creates_new_score_policy": true
+    },
+    "C_e": {
+      "universe_member_id": "pre_score_eligible_candidates_for_event_v1",
+      "identity": "complete candidate universe for event e = set of candidate keys whose pair with the event lost identity is pre-score eligible",
+      "inclusion_stage_id": "pre_score_eligible_v1",
+      "changing_this_member_creates_new_score_policy": true
+    },
+    "tuple_immutability_rule": "Any change to U_src, U_evt, rho, or C_e inclusion identity creates a different score policy and may not inherit prior score-ranking rungs."
+  },
+  "event_identity": {
+    "event_key_version": "gctm_runtime_event_key_v1",
+    "event_key_fields": [
+      "seq",
+      "frame",
+      "lost_slot",
+      "lost_instance_uid",
+      "event_key_version"
+    ],
+    "bridge_event_identity": "h0_bridge_decision_trace_v2",
+    "formation_runtime_point": "At bridge-fire for a candidate with hit_streak==bridge_at, after the lost track is admitted as a structural competitor in the native pair scan and before claim/commit. Event membership is completed by grouping all structural/pre-score pairs that share the same lost identity on that capture sequence/frame.",
+    "consistent_across_candidate_pair_rows": true,
+    "consistency_rule": "Every pair row belonging to the same event must carry identical (seq, frame, lost_slot, lost_instance_uid). Divergence is invalid and fail-closed.",
+    "represents_trajectory_identity": false,
+    "represents_single_bridge_competition": true,
+    "must_not_be_inferred_from": [
+      "claim winner",
+      "commit result",
+      "best_lost_slot",
+      "second_lost_slot",
+      "proposal_emitted",
+      "true_match_label"
+    ],
+    "lifecycle": {
+      "birth": "first structural pair observation for the lost key at (seq, frame)",
+      "death": "capture-frame boundary; no multi-frame trajectory reuse",
+      "invalidation_inputs": [
+        "h0_capture_abi_sha256",
+        "event_key_version",
+        "lost_instance_uid_semantics",
+        "seq packaging semantics",
+        "native_universe_v2_semantics"
+      ]
+    }
+  },
+  "candidate_identity": {
+    "candidate_key_version": "gctm_runtime_candidate_key_v1",
+    "candidate_key_fields": [
+      "event_key",
+      "cand_slot",
+      "cand_instance_uid"
+    ],
+    "forbidden_identity_sources": [
+      "cand_precommit_track_id",
+      "lost_precommit_track_id",
+      "track_id local/global fallback",
+      "claim packed_atomic_key",
+      "postcommit track id"
+    ],
+    "prevents": {
+      "visible_track_id_as_stable_identity": true,
+      "candidate_slot_reuse_without_instance_uid": true,
+      "duplicate_candidate_rows_in_same_event": true,
+      "same_candidate_assigned_to_multiple_events": true,
+      "local_or_global_id_fallback": true
+    },
+    "uniqueness_rule": "Within one event, (cand_slot, cand_instance_uid) is unique. Across events, the same physical slot may reappear only with a distinct event_key and/or instance uid generation.",
+    "exactly_one_event_membership": "each included candidate belongs to exactly one event under rho"
+  },
+  "inclusion_stage": {
+    "stage_id": "pre_score_eligible_v1",
+    "selected_stage": "pre_score_eligible_set",
+    "allowed_native_stages": [
+      "structural_candidate_set",
+      "pre_score_eligible_set",
+      "final_eligible_set",
+      "other_exact_declared_native_stage"
+    ],
+    "exactly_one_stage_selected": true,
+    "semantic_intent": "after all declared non-score gates; before GCTM/baseline score ordering; before winner, claim, and commit",
+    "score_independent": true,
+    "circular_if_score_dependent": true,
+    "writer_proof": {
+      "structural_entry": "tracker_gpu.cu relink_bidir_propose_kernel structural lost scan admits competitors before height/speed/spatial gates; native_pair_keys and structural_competitors count them",
+      "pre_score_gates": [
+        "height (H0_PAIR_REJECT_HEIGHT)",
+        "speed (H0_PAIR_REJECT_SPEED)",
+        "spatial (H0_PAIR_REJECT_SPATIAL)"
+      ],
+      "pre_score_pass_counter": "pre_score_passes increments only after height/speed/spatial pass (or are disabled)",
+      "score_and_later_gates": [
+        "bdist computation",
+        "cutoff (H0_PAIR_REJECT_CUTOFF)",
+        "occupancy (H0_PAIR_REJECT_OCCUPANCY)",
+        "appearance (H0_PAIR_REJECT_APPEARANCE)",
+        "portable_tail (H0_PAIR_REJECT_PORTABLE_TAIL)",
+        "best/second ranking",
+        "margin",
+        "proposal",
+        "claim",
+        "commit"
+      ],
+      "reconstruct_from_pair_records": "pair is pre_score_eligible iff reject_reason not in {HEIGHT, SPEED, SPATIAL}; disabled pre-score gates are non-rejecting"
+    },
+    "rejected_stages": {
+      "structural_candidate_set": "legal but not preferred: includes pairs that fail declared non-score gates and would mix gate interventions into pure score comparisons",
+      "final_eligible_set": "unsealable for pure score ranking: depends on baseline bdist cutoff and post-score vetoes; circular for GCTM score replacement",
+      "claim_or_commit_derived": "forbidden: depends on winner/claim/commit"
+    },
+    "forbidden_inclusion_fields": [
+      "best_lost_slot",
+      "second_lost_slot",
+      "best_bdist",
+      "second_best_bdist",
+      "margin",
+      "proposal_emitted",
+      "claim_won",
+      "commit_executed",
+      "winning_cand_slot",
+      "true_match_label"
+    ]
+  },
+  "composition": {
+    "candidate_inclusion_source": "pair_records reconstructed at pre_score_eligible_v1, reconciled to native_pair_keys",
+    "candidate_mask_identity": "h0_pair_pre_score_mask_v1",
+    "gate_retained_band_identity": "native_non_score_gates_height_speed_spatial_v1",
+    "candidate_count_source": "count of unique candidate keys in C_e for event e",
+    "pair_row_reconciliation_rule": "for every native_pair_key, exactly one pair_records row with identical stable key must exist when overflow counters are zero; otherwise the capture is partial and fail-closed",
+    "duplicate_rule": "reject",
+    "drop_reason_vocabulary": [
+      "not_structural",
+      "rejected_height",
+      "rejected_speed",
+      "rejected_spatial",
+      "overflow_truncated",
+      "partial_event",
+      "duplicate_candidate_row",
+      "cross_event_candidate_split",
+      "missing_pair_row",
+      "identity_uid_wrap"
+    ],
+    "empty_event_rule": "retain_with_enumerated_reason_empty_pre_score_universe",
+    "singleton_event_rule": "retain_as_no_competition_event_ranking_metrics_separately_declared",
+    "overflow_rule": "any overflow_* counter > 0 invalidates completeness for the affected stream and fail-closes universe sealing for that capture",
+    "truncation_rule": "silent truncation is forbidden; truncated rows must surface as overflow counters",
+    "partial_event_rule": "fail_closed_reject_event_and_capture_for_runtime_ranking_consumption"
+  },
+  "completeness_requirements": {
+    "scope": "semantics_only_not_an_h0_guarantee",
+    "future_producer_must_prove": [
+      "all native candidates satisfying inclusion semantics are represented",
+      "no candidate row is silently dropped",
+      "reported total reconciles with emitted rows",
+      "overflow/truncation is explicit",
+      "partial events fail closed",
+      "each candidate belongs to exactly one event"
+    ],
+    "h0_completeness_guarantee_established": false,
+    "required_counters": [
+      "total_pair_records",
+      "total_native_pair_keys",
+      "overflow_pair_records",
+      "overflow_native_pair_keys",
+      "total_candidate_records",
+      "total_native_candidate_keys",
+      "overflow_candidate_records",
+      "overflow_native_candidate_keys",
+      "bridge_attempt_count",
+      "identity_uid_wrap_events"
+    ],
+    "reconciliation_predicates": [
+      "len(pair_records) + overflow_pair_records accounting equals total_pair_records under declared capacity semantics",
+      "len(native_pair_keys) + overflow_native_pair_keys accounting equals total_native_pair_keys",
+      "zero-overflow captures require exact key equality between native_pair_keys and pair_records stable keys",
+      "pre_score C_e candidate counts reconcile with pair rows selected by inclusion predicate"
+    ]
+  },
+  "label_boundary": {
+    "b1_offline_only": [
+      "true_match_label",
+      "GT",
+      "FP",
+      "GT_present",
+      "GT_absent",
+      "ambiguous",
+      "fold",
+      "blind",
+      "reveal"
+    ],
+    "runtime_event_formation_depends_on_labels": false,
+    "runtime_candidate_inclusion_depends_on_labels": false,
+    "attachment_rule_for_future_b1_evaluation": "Labels attach offline to the frozen runtime (event_key, candidate_key) identities after universe sealing. Attachment may not rewrite U_evt, C_e, rho, inclusion stage, or drop-reason assignment. Labels never enter an H0 guarantee contract.",
+    "inside_h0_guarantee_envelope": false
+  },
+  "m0_m1_m2_conservation": {
+    "required_invariants": [
+      "same event set",
+      "same event key",
+      "same candidate identity",
+      "same C_e",
+      "same duplicate handling",
+      "same missing/overflow handling",
+      "same label partition"
+    ],
+    "m0_to_m1_may_change_candidate_universe": false,
+    "m1_to_m2_may_change_candidate_universe": false,
+    "inclusion_change_classification": "If a future model changes candidate inclusion, the study is no longer a pure score-ranking comparison and must be declared as a gate/support intervention under the gate contract, not under score_ranking_evidence_contract_v1 pure score comparison."
+  },
+  "claim_commit_boundary": {
+    "claim_participates_in_universe_formation": false,
+    "commit_participates_in_universe_formation": false,
+    "winner_fields_participate_in_universe_formation": false,
+    "note": "Claim and commit streams remain available for later operator-layer audits but are outside runtime universe formation."
+  },
+  "registration_requirements_binding": {
+    "artifact_id": "h0_native_universe_completeness_registration_requirements_v1",
+    "path": "docs/modules/semantic/research/evidence/gctm_runtime_native_candidate_universe_20260724/h0_native_universe_completeness_registration_requirements_v1.json",
+    "modifies_registration_v2": false,
+    "claims_registration_v3_exists": false
+  },
+  "sealability": {
+    "structurally_defined": true,
+    "score_independent": true,
+    "non_circular": true,
+    "event_local": true,
+    "candidate_conserving": true,
+    "complete_as_consumer_semantics": true,
+    "complete_as_h0_guarantee": false,
+    "current_trace_v2_sufficient_to_define_consumer_universe": true,
+    "current_registration_v2_sufficient_to_bind_completeness": false
+  },
+  "fixed_validator_output": {
+    "authority_verified": false,
+    "runtime_guarantee_established": false,
+    "runtime_compatibility_established": false,
+    "h0_reentry_authorized": false,
+    "b1_activation_eligible": false
+  },
+  "ordered_terminals": [
+    "GCTM_RUNTIME_UNIVERSE_AUDIT_INVALID",
+    "GCTM_RUNTIME_UNIVERSE_UNSEALABLE",
+    "GCTM_RUNTIME_UNIVERSE_CONTRACT_SEALABLE"
+  ],
+  "selected_terminal": "GCTM_RUNTIME_UNIVERSE_CONTRACT_SEALABLE",
+  "maximum_supported_conclusion": "A runtime-native GCTM candidate-universe contract is structurally defined and is suitable as the consumer target for a separate minimal H0 registration/fidelity-edge delta.",
+  "not_established": [
+    "H0 completeness guarantee",
+    "runtime compatibility",
+    "runtime substrate",
+    "B1 activation",
+    "H0 re-entry authority",
+    "registration-v3 existence",
+    "production/runtime behavior change"
+  ],
+  "next_owner_decision": {
+    "selected_path": "minimal H0 registration-v3 delta",
+    "alternative_path_if_producer_cannot_meet_requirements": "reconsider GCTM_B1 runtime hook",
+    "forbidden": [
+      "treat this packet as H0 implementation authority",
+      "repeat H0 capture under unchanged registration-v2",
+      "activate GCTM_B1",
+      "activate H0_ROUTE5_B1",
+      "activate O1",
+      "issue runtime compatibility verdict"
+    ]
+  }
+}

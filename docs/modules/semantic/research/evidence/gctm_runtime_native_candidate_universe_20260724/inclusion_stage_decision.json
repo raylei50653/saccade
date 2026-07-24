@@ -1,0 +1,87 @@
+{
+  "schema": "gctm_runtime_inclusion_stage_decision_v1",
+  "record_id": "gctm_runtime_inclusion_stage_decision_20260724",
+  "universe_identity": "gctm_runtime_native_candidate_universe_v1",
+  "selected_stage_id": "pre_score_eligible_v1",
+  "selected_stage": "pre_score_eligible_set",
+  "exactly_one_stage": true,
+  "score_independent": true,
+  "decision": {
+    "preferred_semantics": "after all declared non-score gates; before GCTM/baseline score ordering; before winner, claim, and commit",
+    "exists_in_trace_v2": true,
+    "proved_from": [
+      "scripts/tools/h0_bridge_decision_trace_schema_v2.json",
+      "include/tracking/tracker_gpu.hpp H0PairRejectReason",
+      "src/tracking/tracker_gpu.cu relink_bidir_propose_kernel writer order"
+    ]
+  },
+  "stage_inventory": [
+    {
+      "stage": "structural_candidate_set",
+      "score_independent": true,
+      "selected": false,
+      "definition": "lost competitors admitted by the structural scan before height/speed/spatial",
+      "native_signals": [
+        "native_pair_keys",
+        "structural_competitors",
+        "pair_records existence"
+      ],
+      "rejection_reason_if_not_selected": "includes pairs that fail declared non-score gates; mixes gate mass into pure score comparison"
+    },
+    {
+      "stage": "pre_score_eligible_set",
+      "score_independent": true,
+      "selected": true,
+      "definition": "structural pairs that pass height/speed/spatial (or those gates disabled), before bdist cutoff, ranking, claim, and commit",
+      "native_signals": [
+        "pair_records.reject_reason not in {HEIGHT,SPEED,SPATIAL}",
+        "candidate_records.pre_score_passes count"
+      ],
+      "inclusion_predicate": "reject_reason ∉ {H0_PAIR_REJECT_HEIGHT, H0_PAIR_REJECT_SPEED, H0_PAIR_REJECT_SPATIAL}"
+    },
+    {
+      "stage": "final_eligible_set",
+      "score_independent": false,
+      "selected": false,
+      "definition": "pairs with final_pair_eligible pass after cutoff and post-score vetoes",
+      "native_signals": [
+        "final_pair_eligible",
+        "final_pair_eligible_count"
+      ],
+      "rejection_reason_if_not_selected": "score-dependent and circular for GCTM score replacement comparisons"
+    },
+    {
+      "stage": "other_exact_declared_native_stage",
+      "score_independent": null,
+      "selected": false,
+      "definition": "none declared for this consumer contract",
+      "native_signals": [],
+      "rejection_reason_if_not_selected": "no alternate stage is declared"
+    }
+  ],
+  "circularity_checks": {
+    "uses_score_cutoff": false,
+    "uses_best_or_second": false,
+    "uses_claim": false,
+    "uses_commit": false,
+    "uses_labels": false,
+    "verdict": "non_circular"
+  },
+  "writer_order_proof": [
+    "structural admission and native_pair_key append",
+    "height gate",
+    "speed gate",
+    "spatial gate",
+    "pre_score_passes++",
+    "bdist / directional score",
+    "cutoff",
+    "occupancy",
+    "appearance",
+    "portable_tail",
+    "final_pair_eligible",
+    "best/second update",
+    "margin / proposal",
+    "claim",
+    "commit"
+  ]
+}

@@ -1,0 +1,54 @@
+{
+  "schema": "gctm_runtime_composition_completeness_contract_v1",
+  "record_id": "gctm_runtime_composition_completeness_20260724",
+  "universe_identity": "gctm_runtime_native_candidate_universe_v1",
+  "composition": {
+    "candidate_inclusion_source": "pair_records reconstructed at pre_score_eligible_v1, reconciled to native_pair_keys",
+    "candidate_mask_identity": "h0_pair_pre_score_mask_v1",
+    "gate_retained_band_identity": "native_non_score_gates_height_speed_spatial_v1",
+    "candidate_count_source": "count of unique candidate keys in C_e for event e",
+    "pair_row_reconciliation_rule": "for every native_pair_key, exactly one pair_records row with identical stable key must exist when overflow counters are zero; otherwise the capture is partial and fail-closed",
+    "duplicate_rule": "reject",
+    "drop_reason_vocabulary": [
+      "not_structural",
+      "rejected_height",
+      "rejected_speed",
+      "rejected_spatial",
+      "overflow_truncated",
+      "partial_event",
+      "duplicate_candidate_row",
+      "cross_event_candidate_split",
+      "missing_pair_row",
+      "identity_uid_wrap"
+    ],
+    "empty_event_rule": "retain_with_enumerated_reason_empty_pre_score_universe",
+    "singleton_event_rule": "retain_as_no_competition_event_ranking_metrics_separately_declared",
+    "overflow_rule": "any overflow_* counter > 0 invalidates completeness for the affected stream and fail-closes universe sealing for that capture",
+    "truncation_rule": "silent truncation is forbidden; truncated rows must surface as overflow counters",
+    "partial_event_rule": "fail_closed_reject_event_and_capture_for_runtime_ranking_consumption"
+  },
+  "completeness_requirements": {
+    "scope": "semantics_only_not_an_h0_guarantee",
+    "future_producer_must_prove": [
+      "all native candidates satisfying inclusion semantics are represented",
+      "no candidate row is silently dropped",
+      "reported total reconciles with emitted rows",
+      "overflow/truncation is explicit",
+      "partial events fail closed",
+      "each candidate belongs to exactly one event"
+    ],
+    "h0_completeness_guarantee_established": false
+  },
+  "m0_m1_m2_conservation": {
+    "required_invariants": [
+      "same event set",
+      "same event key",
+      "same candidate identity",
+      "same C_e",
+      "same duplicate handling",
+      "same missing/overflow handling",
+      "same label partition"
+    ],
+    "pure_score_ranking_requires_universe_invariance": true
+  }
+}

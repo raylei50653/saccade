@@ -498,6 +498,62 @@ derived_from: frozen responsibility matrix + immutable derivations + coverage co
 last_reviewed_at: 2026-07-23
 ```
 
+### `quantity.gctm_runtime_native_candidate_universe`
+
+```yaml
+layer: quantity（runtime-consumer candidate-universe / event-composition contract；非 H0 guarantee、非 runtime substrate、非 B1 activation）
+ladder: ordered GCTM_RUNTIME_UNIVERSE terminal family
+transition_semantics: defined
+lifecycle_state: terminal
+state: GCTM_RUNTIME_UNIVERSE_CONTRACT_SEALABLE
+terminal_acceptance:
+  owner_acceptance_id: gctm_runtime_universe_terminal_owner_acceptance_20260724
+  acceptance_date: 2026-07-24
+  acceptance_mechanism: PR merge of the exact mechanically validated packet
+substrate: none（consumer contract over frozen trace-v2 identities only；no H0 capture）
+target_substrate: future GCTM_B1 runtime candidate-universe binding after separate gates
+authority_class: runtime_consumer_contract_only
+runtime_consumer_identity: gctm_runtime_native_candidate_universe_v1
+frozen_inputs:
+  - H0_GCTM_INTERFACE_STRUCTURALLY_INSUFFICIENT / h0_gctm_static_audit_terminal_owner_acceptance_20260723
+  - score_ranking_evidence_contract_v1 @ 7dbc2d965079fa3fc13f7802a4a083b1c4cbf49d658ffe3728b6c405364a13b4
+  - h0_bridge_decision_trace_v2 @ 5ea8bea16ab6f6916baebd486c3256100427ae823e2f7bac021ff1284254f9a2
+  - GCTM_D1_INTERFACE_READY (closed read-only; synthetic universe not replaced)
+result:
+  event_key: gctm_runtime_event_key_v1 = (seq, frame, lost_slot, lost_instance_uid, event_key_version)
+  candidate_key: gctm_runtime_candidate_key_v1 = (event_key, cand_slot, cand_instance_uid)
+  inclusion_stage: pre_score_eligible_v1 (score-independent)
+  composition_and_completeness: defined as consumer semantics only
+  registration_requirements: h0_native_universe_completeness_registration_requirements_v1 (requirements-only)
+  maximum_conclusion: suitable consumer target for a separate minimal H0 registration/fidelity-edge delta
+blockers:
+  - type: inadmissibility
+    what: treat this packet as H0 completeness guarantee / runtime substrate / B1 activation
+    clause: consumer contract only; fixed non-authority outputs remain false
+  - type: dependency
+    what: producer-side completeness registration
+    clause: registration-v2 cannot bind envelope/native-universe completeness; needs separate registration-v3 delta
+decision_relevance:
+  status: terminal decision-changing mainline for consumer universe definition — positive path enables a precisely scoped H0 registration-v3 delta; negative would have ruled out the current bridge hook as a score-ranking universe
+  selected_consequence: freeze consumer target; do not auto-authorize H0 implementation
+runtime_consumer_gates:
+  H0_ROUTE5_B1: missing（unchanged）
+  GCTM_B1: missing（unchanged；與前者獨立）
+not_established:
+  - H0 completeness guarantee
+  - runtime fidelity / compatibility / substrate
+  - registration-v3 existence
+  - H0_ROUTE5_B1 / GCTM_B1 / O1 activation
+wip_history: 2026-07-24 sole-active acquired for consumer re-charter → terminal selected → WIP released
+supporting_charter: ../threads/closed/gctm_runtime_native_candidate_universe_task.md
+supporting_packet: ../../modules/semantic/research/evidence/gctm_runtime_native_candidate_universe_20260724/
+accepting_review: gctm_runtime_universe_terminal_owner_acceptance_20260724
+last_transition: 2026-07-24 — mechanical runtime-universe terminal sealable as consumer contract；no capture/re-entry/registration/compatibility/gate/activation effect
+admissible_units: []
+derived_from: frozen score-policy spaces + pre-score inclusion proof + composition/completeness contract + registration requirements surface + ordered terminal
+last_reviewed_at: 2026-07-24
+```
+
 ### `quantity.gap_conditioned_transition_model.a_layer_spec`
 
 ```yaml
@@ -694,7 +750,7 @@ last_reviewed_at: 2026-07-23
 |---|---|
 | **score-layer transition semantics** | **RESOLVED 2026-07-23.** [`score_ranking_evidence_contract_v1`](score_ranking_evidence_contract.md) 已由 owner 接受並凍結；`owner_acceptance_id: score_ranking_contract_owner_acceptance_20260723`；`registry_binding_id: claim_state_registry_score_ranking_v1`；`contract_sha256: 7dbc2d965079fa3fc13f7802a4a083b1c4cbf49d658ffe3728b6c405364a13b4`。本 binding 只使 L2 admissibility 可判定；不自動推進 object、產生候選、啟動 B1/O1 或授權 runtime 行為。 |
 | **B1-slot identity** | **RESOLVED 2026-07-23.** [`gctm_b1_slot_identity_decision_v1`](gctm_b1_slot_identity_decision_v1.json) 固定 `GCTM_B1 != H0_ROUTE5_B1`、`relation: coexist`、非 alias、非 supersede、不可共享 activation authority；未來改寫關係須另開 owner-accepted transition。Identity resolution 不解除任何 runtime gate。 |
-| **H0 runtime substrate / compatibility** | **OPEN / fail closed；unchanged-interface re-entry blocked.** 三次 `H0_PROVENANCE_INVALID` 後仍無 valid runtime substrate、stable evidence identity、canonical checksum 或 owner-accepted H0→GCTM compatibility verdict。2026-07-23 bounded static audit 又選出 `H0_GCTM_INTERFACE_STRUCTURALLY_INSUFFICIENT`：D1 candidate universe 仍是 synthetic，registration-v2 也不能 bind trace-v2 native-universe completeness。`H0_ROUTE5_B1` 與 `GCTM_B1` 均保持 proposed；兩個 compatibility gate 各自 `missing`。下一個 owner charter 只能先選 minimal registration/fidelity-edge delta 或 runtime consumer re-charter，不得在 unchanged interface 下重複 capture。 |
+| **H0 runtime substrate / compatibility** | **OPEN / fail closed；unchanged-interface re-entry blocked.** 三次 `H0_PROVENANCE_INVALID` 後仍無 valid runtime substrate、stable evidence identity、canonical checksum 或 owner-accepted H0→GCTM compatibility verdict。2026-07-23 bounded static audit 選出 `H0_GCTM_INTERFACE_STRUCTURALLY_INSUFFICIENT`。2026-07-24 consumer re-charter 另凍結 `gctm_runtime_native_candidate_universe_v1`（terminal `GCTM_RUNTIME_UNIVERSE_CONTRACT_SEALABLE`），只關閉 consumer-owned candidate-universe / event-membership 語義缺口；**不**建立 H0 completeness guarantee、runtime substrate 或 compatibility verdict。registration-v2 仍不能 bind native-universe completeness；requirements-only 表面見 `h0_native_universe_completeness_registration_requirements_v1`。`H0_ROUTE5_B1` 與 `GCTM_B1` 均保持 proposed；兩個 compatibility gate 各自 `missing`。下一個 owner 決策優先為 **minimal H0 registration-v3 delta**（或以 producer 無法滿足 requirements 為由 re-scope B1 hook）；不得在 unchanged registration-v2 下重複 capture，也不得把 universe contract 直接交接成 H0 implementation authority。 |
 
 ---
 
@@ -714,6 +770,7 @@ last_reviewed_at: 2026-07-23
 | *(仍非 decision-relevant，2026-07-23 D1 owner scheduling 後重推)* | `GCTM_D1` | Owner scheduling 已接受（`gctm_d1_owner_scheduling_20260723` / `gctm_d1_activation_owner_acceptance_20260723`）；slot **active**；`active_wip: [GCTM_D1]`；one canonical execution authorized。canonical `state` 仍 `none`；**不**進入 `decision_relevant_candidates`；runtime gates 仍 `missing`；execution / terminal / closure 屬後續獨立 PR。 |
 | *(仍全空，2026-07-23 D1 canonical execution closure 後重推)* | `GCTM_D1` | Canonical execution 完成；mechanical terminal **`GCTM_D1_INTERFACE_READY`** owner-accepted（`gctm_d1_terminal_owner_acceptance_20260723`）；`lifecycle_state: terminal`；`active_wip: []`。**不**進入 `decision_relevant_candidates`；runtime gates 仍 `missing`；**不**授權 H0 re-entry 或 B1/O1 activation。 |
 | *(仍全空，2026-07-23 H0→GCTM static audit closure 後重推)* | `quantity.h0_gctm_interface_static_feasibility` | Decision-changing mainline 已完成並選出 **`H0_GCTM_INTERFACE_STRUCTURALLY_INSUFFICIENT`**；WIP 已釋放，object 本身不是 runtime compatibility object 或 B1 candidate。結論阻止 unchanged-interface H0 capture/re-entry 自動排程，但不產生新的 decision-relevant implementation candidate；owner 必須另選 registration/fidelity-edge delta 或 consumer re-charter。 |
+| *(仍全空，2026-07-24 runtime universe contract closure 後重推)* | `quantity.gctm_runtime_native_candidate_universe` | Consumer re-charter 完成並選出 **`GCTM_RUNTIME_UNIVERSE_CONTRACT_SEALABLE`**；凍結 `gctm_runtime_native_candidate_universe_v1`（pre-score lost-centric event/candidate keys + composition/completeness semantics + registration-v3 requirements-only surface）。WIP 已釋放。此 object **不是** H0 guarantee、runtime substrate、compatibility verdict 或 B1 candidate；**不**進入 `decision_relevant_candidates`；**不**授權 capture/re-entry/registration 實作。下一個 owner charter 若要以 producer 路徑推進，須另開 minimal registration-v3 delta。 |
 
 **Machine projection:** `gctm_b1_slot_identity_decision_v1.json` 的
 `registry_projection` 已重推為 `decision_relevant_candidates: []`、
