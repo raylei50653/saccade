@@ -1,0 +1,235 @@
+{
+  "authorization": {
+    "authorization_consumed": true,
+    "authorization_granted": true,
+    "authorized_invocation_count": 1,
+    "consumed_at": "controller_process_launch",
+    "controller": "h0_phase_a_controller_v1",
+    "deadline_seconds": 3600,
+    "execution_schema": "h0_phase_a_execution_v1",
+    "identity": "h0_r4_phase_a_exactly_once_authorization_20260724",
+    "operator_command": "uv run --frozen python scripts/tools/run_h0_phase_a.py",
+    "phase": "Phase A only",
+    "phase_b": "forbidden",
+    "resume": "forbidden",
+    "retry": 0,
+    "second_invocation_under_S": "permanently_forbidden_after_first_process_launch",
+    "surface": "https://github.com/raylei50653/saccade/issues/278"
+  },
+  "controller_invocation": {
+    "authoritative_invocation_count": 1,
+    "checkout_sha": "a76efffa01a6fb731218150c355f5859bb8e6dd4",
+    "command": [
+      "uv",
+      "run",
+      "--frozen",
+      "python",
+      "scripts/tools/run_h0_phase_a.py"
+    ],
+    "controller_result": "provenance_invalid",
+    "end_monotonic": 9255.826670832,
+    "end_utc": "2026-07-24T12:52:13Z",
+    "launched": true,
+    "operator_identity": "ray",
+    "result_json": {
+      "result": "provenance_invalid",
+      "schema": "h0_phase_a_execution_v1"
+    },
+    "return_code": 1,
+    "start_monotonic": 8958.034206985,
+    "start_utc": "2026-07-24T12:47:15Z",
+    "stderr": "",
+    "stdout": "",
+    "stdout_stderr_note": "Controller process I/O captured by host runner was empty beyond launch meta; authoritative structured result is result.json inside the evidence root."
+  },
+  "document_type": "execution_witness",
+  "evidence_root": {
+    "checksums_sha256_digest": "3ff0ac6087a989265d6d8f73b0a2af903b446d03c24a41891576b9a4241a4a04",
+    "inventory_digest": "a0527d314051b9aa96660ce57c7a1c5478aa17950db5533549deca48b4f52b4e",
+    "manifest_json_sha256": "c3cf4bd8bdfbf0fc2dc500b982ceca8136913d7381b185a4b9506e724e903cf0",
+    "member_count": 25,
+    "members": [
+      {
+        "path": "build_identity.json",
+        "sha256": "25cab1fda82866a1c390bdf0a1bcd45a0cc189bce8f8bbd5215b3bb79589765a"
+      },
+      {
+        "path": "checksums.sha256",
+        "sha256": "3ff0ac6087a989265d6d8f73b0a2af903b446d03c24a41891576b9a4241a4a04"
+      },
+      {
+        "path": "comparison.json",
+        "sha256": "9a26afdb737ed37a18cc9b82863d6de1a2c67c17fe26f336df73d00d119119a3"
+      },
+      {
+        "path": "gpu_identity.json",
+        "sha256": "2f821ea4c377dc2a00a38616adc35b2f984111baf3b41495a6f42693c3d90ade"
+      },
+      {
+        "path": "input_binding.json",
+        "sha256": "d7510219c0341fd9a770e6b1d35cca4a64e26f50b626401cf142366a0c360043"
+      },
+      {
+        "path": "logs/00_cmake_configure.stderr.log",
+        "sha256": "9c08d0f250de92c94b8758974415ba9c1422ca20358b8ea977de275117502450"
+      },
+      {
+        "path": "logs/00_cmake_configure.stdout.log",
+        "sha256": "22a096b17ba770390ba641425b45da727fceab7d1bba24f8dcbe1cf873150b77"
+      },
+      {
+        "path": "logs/01_cmake_build.stderr.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "logs/01_cmake_build.stdout.log",
+        "sha256": "216f918ee9bb200edbdae16e13f51b6273d837c50cbbc76e3c4383c0eaa7bf47"
+      },
+      {
+        "path": "manifest.json",
+        "sha256": "c3cf4bd8bdfbf0fc2dc500b982ceca8136913d7381b185a4b9506e724e903cf0"
+      },
+      {
+        "path": "result.json",
+        "sha256": "2c1cfa17c977ad02c6c1dee335810b9ee7ff37f1cbba1382d41a00f06b96529a"
+      },
+      {
+        "path": "runs/00_capture_off/invocation.json",
+        "sha256": "e4eb5080c86162317a1f25275fa45721b8fe13d7ba7250725fe0e46d2f803878"
+      },
+      {
+        "path": "runs/00_capture_off/stderr.log",
+        "sha256": "b0b978b79d5085555087a7a95fa550f0019515d6b376f745cc2411d56976a88d"
+      },
+      {
+        "path": "runs/00_capture_off/stdout.log",
+        "sha256": "b0b978b79d5085555087a7a95fa550f0019515d6b376f745cc2411d56976a88d"
+      },
+      {
+        "path": "runs/01_capture_on_1/invocation.json",
+        "sha256": "4ab9b9ed7ff0b26b7087182330057e3b62fab23ca92704f89f9c708f9b079e45"
+      },
+      {
+        "path": "runs/01_capture_on_1/stderr.log",
+        "sha256": "b0b978b79d5085555087a7a95fa550f0019515d6b376f745cc2411d56976a88d"
+      },
+      {
+        "path": "runs/01_capture_on_1/stdout.log",
+        "sha256": "b0b978b79d5085555087a7a95fa550f0019515d6b376f745cc2411d56976a88d"
+      },
+      {
+        "path": "runs/02_capture_on_2/invocation.json",
+        "sha256": "b906912aa8563c28590825c7bdda3c0f90ed7f9868d04fcc8a5c65b6c082c74f"
+      },
+      {
+        "path": "runs/02_capture_on_2/stderr.log",
+        "sha256": "b0b978b79d5085555087a7a95fa550f0019515d6b376f745cc2411d56976a88d"
+      },
+      {
+        "path": "runs/02_capture_on_2/stdout.log",
+        "sha256": "b0b978b79d5085555087a7a95fa550f0019515d6b376f745cc2411d56976a88d"
+      },
+      {
+        "path": "runs/03_capture_on_3/invocation.json",
+        "sha256": "5369ae7c334f3f1bf801f78a339c3077f7ece44955e0029dd1b8272d6cc54ed7"
+      },
+      {
+        "path": "runs/03_capture_on_3/stderr.log",
+        "sha256": "b0b978b79d5085555087a7a95fa550f0019515d6b376f745cc2411d56976a88d"
+      },
+      {
+        "path": "runs/03_capture_on_3/stdout.log",
+        "sha256": "b0b978b79d5085555087a7a95fa550f0019515d6b376f745cc2411d56976a88d"
+      },
+      {
+        "path": "runtime_identity.json",
+        "sha256": "ead4b4fa61058e6d7f6054b9eb87151ebb46ea0650954d3facde5c1b6630595b"
+      },
+      {
+        "path": "verification/aggregate.json",
+        "sha256": "0be12cc292773239d75604e9f2496787387ee8874395f4a3a9d723c615fe3f2e"
+      }
+    ],
+    "path": "docs/modules/semantic/research/evidence/h0_phase_a_2a233387a6a321dd43570e2e30dc718571b3b4f4/",
+    "result_json_sha256": "2c1cfa17c977ad02c6c1dee335810b9ee7ff37f1cbba1382d41a00f06b96529a",
+    "state": "final",
+    "verifier_report_aggregate_json_sha256": "0be12cc292773239d75604e9f2496787387ee8874395f4a3a9d723c615fe3f2e"
+  },
+  "explicitly_not_established": [
+    "H0_FULL_COMMIT_CAPTURE_FAITHFUL",
+    "Phase B",
+    "actual registration-v3 guarantee",
+    "runtime compatibility",
+    "H0_ROUTE5_B1 activation",
+    "GCTM_B1 activation",
+    "O1 activation",
+    "owner acceptance of terminal (requires PR merge / owner decision)"
+  ],
+  "factual_boundary": {
+    "build_ok": true,
+    "capture_child_runs": "NOT_RUN",
+    "capture_packets": "not_produced",
+    "checkpoints": {
+      "T0": "completed",
+      "T1": "completed",
+      "T2a_0_to_T4": "not_reached"
+    },
+    "decision_predicates": {
+      "artifacts_ok": true,
+      "build_ok": true,
+      "classified_execution": true,
+      "extension_ok": true,
+      "packets_valid": true,
+      "policy_equal": true,
+      "provenance_ok": false,
+      "runners_ok": true,
+      "serialization_ok": true,
+      "timed_out": false
+    },
+    "extension_ok_predicate": true,
+    "failure_reason": "extension/plugin load is absent from runtime attestation",
+    "failure_stage": "extension_load",
+    "note": "Controller classified DriftError during extension_load runtime attestation as ordered terminal provenance_invalid (A2.4 first row); extension_ok predicate remains true because DriftError maps to provenance_ok=false before extension_load_failed.",
+    "policy_comparison": "not_produced",
+    "provenance_ok": false
+  },
+  "independent_preseal_verifier": {
+    "complete": true,
+    "instrumentation_head": "2a233387a6a321dd43570e2e30dc718571b3b4f4",
+    "landing": {
+      "execution_checkout": "a76efffa01a6fb731218150c355f5859bb8e6dd4",
+      "freeze_commit": "ced4a4cc6a71473dcb1225203e6d59df0437d976",
+      "instrumentation_head": "2a233387a6a321dd43570e2e30dc718571b3b4f4",
+      "seal_commit": "a76efffa01a6fb731218150c355f5859bb8e6dd4"
+    },
+    "schema": "h0_preseal_freeze_v3_verifier_v1",
+    "valid": true
+  },
+  "launch_hygiene": {
+    "first": {
+      "authority": "non_authoritative",
+      "authorization_consumed": false,
+      "capture": "forbidden",
+      "predicate_source": "run_h0_phase_a.assert_no_preexisting_build_tree",
+      "result": "clear",
+      "schema": "h0_launch_hygiene_gate_v1",
+      "terminal_claim": "forbidden"
+    },
+    "second": {
+      "authority": "non_authoritative",
+      "authorization_consumed": false,
+      "capture": "forbidden",
+      "predicate_source": "run_h0_phase_a.assert_no_preexisting_build_tree",
+      "result": "clear",
+      "schema": "h0_launch_hygiene_gate_v1",
+      "terminal_claim": "forbidden"
+    }
+  },
+  "owner_acceptance_claimed": false,
+  "schema": "h0_r4_phase_a_execution_witness_v1",
+  "seal": {
+    "F": "ced4a4cc6a71473dcb1225203e6d59df0437d976",
+    "I": "2a233387a6a321dd43570e2e30dc718571b3b4f4",
+    "S": "a76efffa01a6fb731218150c355f5859bb8e6dd4"
+  }
+}

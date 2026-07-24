@@ -1,0 +1,20 @@
+{
+  "actual_guarantee": "not_established",
+  "controller_result": "provenance_invalid",
+  "document_type": "mechanical_result_mapping",
+  "mapping_rule": "controller result top-to-bottom ordered terminal mapping; no reinterpretation",
+  "mapping_table_row": "provenance_invalid \u2192 H0_PROVENANCE_INVALID",
+  "mechanical_disposition": "H0_PROVENANCE_INVALID",
+  "not_substituted": [
+    "did_not_turn_execution_failure_into_packet_invalid",
+    "did_not_call_failed_run_partial_capture",
+    "did_not_substitute_later_terminal",
+    "did_not_treat_as_H0_FULL_COMMIT_CAPTURE_FAITHFUL",
+    "did_not_start_Phase_B"
+  ],
+  "owner_acceptance_claimed": false,
+  "phase_b": "not_authorized",
+  "retry_under_S": "permanently_forbidden_after_launch",
+  "runtime_compatibility": "not_established",
+  "schema": "h0_r4_phase_a_mechanical_disposition_v1"
+}

@@ -1,0 +1,35 @@
+{
+  "capture_on_packet_trace_v2_verifiers": {
+    "executed": false,
+    "packet_verification_states": [
+      "not_produced",
+      "not_produced",
+      "not_produced"
+    ],
+    "reason": "capture-on packets not_produced under provenance_invalid; no packet.json to verify",
+    "runs": [
+      "01_capture_on_1",
+      "02_capture_on_2",
+      "03_capture_on_3"
+    ]
+  },
+  "command": [
+    "uv",
+    "run",
+    "python",
+    "scripts/tools/verify_h0_phase_a.py",
+    "docs/modules/semantic/research/evidence/h0_phase_a_2a233387a6a321dd43570e2e30dc718571b3b4f4"
+  ],
+  "controller_result": "provenance_invalid",
+  "document_type": "independent_verifier_report",
+  "evidence_unmodified_by_verifier": true,
+  "report": {
+    "document_type": "aggregate_verification",
+    "result": "provenance_invalid",
+    "schema": "h0_phase_a_verifier_v1",
+    "valid": true
+  },
+  "return_code": 0,
+  "schema": "h0_phase_a_independent_verifier_report_v1",
+  "valid": true
+}
