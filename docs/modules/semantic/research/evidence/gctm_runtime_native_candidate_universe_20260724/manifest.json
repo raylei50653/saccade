@@ -1,0 +1,46 @@
+{
+  "schema": "gctm_runtime_universe_manifest_v1",
+  "packet_id": "gctm_runtime_native_candidate_universe_20260724",
+  "created_at": "2026-07-24",
+  "scope": "runtime_consumer_candidate_universe_contract",
+  "selected_terminal": "GCTM_RUNTIME_UNIVERSE_CONTRACT_SEALABLE",
+  "runtime_consumer_identity": "gctm_runtime_native_candidate_universe_v1",
+  "artifacts": {
+    "universe_declaration.json": "e2fd266547bf26e57a2cda4bc64e930008c51c145e1eb0f23deceb5a7bdb455d",
+    "frozen_input_identities.json": "057544f8480b58631b557f4a0d46c9268ee6d1102748b2d40953974c9ee9fbfb",
+    "event_candidate_identity.json": "ddf4d3c8cec680929be65fa11ab104a6f66a012abb98c45bb784428314138306",
+    "inclusion_stage_decision.json": "c9b544698a309dab067f35a85ece65303b2e15929d19a2b07004e2022f1218a7",
+    "composition_completeness_contract.json": "ff220f6ed932b36c03448977748e8f980d8714a7698e98d79ca2f7af89d34484",
+    "h0_native_universe_completeness_registration_requirements_v1.json": "2b4086e4aff4f185a995220201c36e4c19b94dc752d8382107ade15ac69e967f",
+    "terminal_report.json": "224ac7b4a28596e0bce0344dfe4588a4d150f811283d892dbd007417cfde5475"
+  },
+  "tooling": {
+    "schema": {
+      "path": "scripts/tools/gctm_runtime_universe_schema_v1.json",
+      "sha256": "a1885f55a5179c456680e0753f5a2b77c042a69f8e4ab196bf7254e4184fe57e"
+    },
+    "validator": {
+      "path": "scripts/tools/validate_gctm_runtime_universe.py",
+      "sha256": "0a244f5fa62552aa21118b23445c03ca0167eb6fd8a456f33747eda4bfea3081"
+    },
+    "fixture_catalog": {
+      "path": "tests/contract/fixtures/gctm_runtime_universe_fixture_catalog_v1.json",
+      "sha256": "f12d1dcf86fe67a309b250f8a8542ee670f20af49493939e98392991b293f8a3"
+    },
+    "targeted_tests": {
+      "path": "tests/contract/test_gctm_runtime_universe_v1.py",
+      "sha256": "8edc1ba65c348e125988459deaad11331e278af211fe0558732e7612b723b234"
+    }
+  },
+  "authority_verified": false,
+  "runtime_guarantee_established": false,
+  "runtime_compatibility_established": false,
+  "h0_reentry_authorized": false,
+  "b1_activation_eligible": false,
+  "h0_capture_performed": false,
+  "actual_guarantee_registration_performed": false,
+  "registration_v2_modified": false,
+  "registration_v3_created": false,
+  "runtime_gate_status_changed": false,
+  "gctm_d1_reopened": false
+}

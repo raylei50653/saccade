@@ -1,0 +1,200 @@
+{
+  "schema": "gctm_runtime_universe_fixture_catalog_v1",
+  "catalog_id": "gctm_runtime_universe_fixture_catalog_v1",
+  "canonical_declaration": "docs/modules/semantic/research/evidence/gctm_runtime_native_candidate_universe_20260724/universe_declaration.json",
+  "fixtures": [
+    {
+      "fixture_id": "canonical_sealable",
+      "kind": "positive",
+      "expected_terminal": "GCTM_RUNTIME_UNIVERSE_CONTRACT_SEALABLE",
+      "expected_ok": true,
+      "mutations": []
+    },
+    {
+      "fixture_id": "score_dependent_inclusion",
+      "kind": "negative_unsealable",
+      "expected_terminal": "GCTM_RUNTIME_UNIVERSE_UNSEALABLE",
+      "expected_ok": true,
+      "mutations": [
+        {
+          "op": "replace",
+          "path": ["inclusion_stage", "selected_stage"],
+          "value": "final_eligible_set"
+        },
+        {
+          "op": "replace",
+          "path": ["inclusion_stage", "score_independent"],
+          "value": false
+        },
+        {
+          "op": "replace",
+          "path": ["score_policy_spaces", "C_e", "inclusion_stage_id"],
+          "value": "final_eligible_set"
+        },
+        {
+          "op": "replace",
+          "path": ["sealability", "score_independent"],
+          "value": false
+        },
+        {
+          "op": "replace",
+          "path": ["sealability", "non_circular"],
+          "value": false
+        },
+        {
+          "op": "replace",
+          "path": ["selected_terminal"],
+          "value": "GCTM_RUNTIME_UNIVERSE_UNSEALABLE"
+        },
+        {
+          "op": "replace",
+          "path": ["research_question", "answer"],
+          "value": "no_unsealable"
+        }
+      ]
+    },
+    {
+      "fixture_id": "claim_in_universe_formation",
+      "kind": "negative_invalid",
+      "expected_terminal": "GCTM_RUNTIME_UNIVERSE_AUDIT_INVALID",
+      "expected_ok": false,
+      "mutations": [
+        {
+          "op": "replace",
+          "path": ["claim_commit_boundary", "claim_participates_in_universe_formation"],
+          "value": true
+        }
+      ]
+    },
+    {
+      "fixture_id": "labels_in_runtime_inclusion",
+      "kind": "negative_invalid",
+      "expected_terminal": "GCTM_RUNTIME_UNIVERSE_AUDIT_INVALID",
+      "expected_ok": false,
+      "mutations": [
+        {
+          "op": "replace",
+          "path": ["label_boundary", "runtime_candidate_inclusion_depends_on_labels"],
+          "value": true
+        }
+      ]
+    },
+    {
+      "fixture_id": "m_universe_not_conserved",
+      "kind": "negative_invalid",
+      "expected_terminal": "GCTM_RUNTIME_UNIVERSE_AUDIT_INVALID",
+      "expected_ok": false,
+      "mutations": [
+        {
+          "op": "replace",
+          "path": ["m0_m1_m2_conservation", "m0_to_m1_may_change_candidate_universe"],
+          "value": true
+        }
+      ]
+    },
+    {
+      "fixture_id": "missing_drop_reason",
+      "kind": "negative_invalid",
+      "expected_terminal": "GCTM_RUNTIME_UNIVERSE_AUDIT_INVALID",
+      "expected_ok": false,
+      "mutations": [
+        {
+          "op": "replace",
+          "path": ["composition", "drop_reason_vocabulary"],
+          "value": ["rejected_height"]
+        }
+      ]
+    },
+    {
+      "fixture_id": "duplicate_event_key_fields",
+      "kind": "negative_invalid",
+      "expected_terminal": "GCTM_RUNTIME_UNIVERSE_AUDIT_INVALID",
+      "expected_ok": false,
+      "mutations": [
+        {
+          "op": "replace",
+          "path": ["event_identity", "event_key_fields"],
+          "value": ["seq", "frame"]
+        }
+      ]
+    },
+    {
+      "fixture_id": "authority_flag_true",
+      "kind": "negative_invalid",
+      "expected_terminal": "GCTM_RUNTIME_UNIVERSE_AUDIT_INVALID",
+      "expected_ok": false,
+      "mutations": [
+        {
+          "op": "replace",
+          "path": ["fixed_validator_output", "b1_activation_eligible"],
+          "value": true
+        }
+      ]
+    },
+    {
+      "fixture_id": "registration_v3_claimed",
+      "kind": "negative_invalid",
+      "expected_terminal": "GCTM_RUNTIME_UNIVERSE_AUDIT_INVALID",
+      "expected_ok": false,
+      "mutations": [
+        {
+          "op": "replace",
+          "path": ["registration_requirements_binding", "claims_registration_v3_exists"],
+          "value": true
+        }
+      ]
+    },
+    {
+      "fixture_id": "h0_completeness_claimed",
+      "kind": "negative_invalid",
+      "expected_terminal": "GCTM_RUNTIME_UNIVERSE_AUDIT_INVALID",
+      "expected_ok": false,
+      "mutations": [
+        {
+          "op": "replace",
+          "path": ["completeness_requirements", "h0_completeness_guarantee_established"],
+          "value": true
+        }
+      ]
+    },
+    {
+      "fixture_id": "wrong_prerequisite_terminal",
+      "kind": "negative_invalid",
+      "expected_terminal": "GCTM_RUNTIME_UNIVERSE_AUDIT_INVALID",
+      "expected_ok": false,
+      "mutations": [
+        {
+          "op": "replace",
+          "path": ["prerequisite_binding", "terminal"],
+          "value": "H0_GCTM_INTERFACE_STRUCTURALLY_FEASIBLE"
+        }
+      ]
+    },
+    {
+      "fixture_id": "track_id_identity_allowed",
+      "kind": "negative_invalid",
+      "expected_terminal": "GCTM_RUNTIME_UNIVERSE_AUDIT_INVALID",
+      "expected_ok": false,
+      "mutations": [
+        {
+          "op": "replace",
+          "path": ["candidate_identity", "prevents", "visible_track_id_as_stable_identity"],
+          "value": false
+        }
+      ]
+    },
+    {
+      "fixture_id": "terminal_mismatch_sealable_flag",
+      "kind": "negative_invalid",
+      "expected_terminal": "GCTM_RUNTIME_UNIVERSE_AUDIT_INVALID",
+      "expected_ok": false,
+      "mutations": [
+        {
+          "op": "replace",
+          "path": ["selected_terminal"],
+          "value": "GCTM_RUNTIME_UNIVERSE_UNSEALABLE"
+        }
+      ]
+    }
+  ]
+}

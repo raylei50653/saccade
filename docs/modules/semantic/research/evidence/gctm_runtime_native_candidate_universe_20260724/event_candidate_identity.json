@@ -1,0 +1,64 @@
+{
+  "schema": "gctm_runtime_event_candidate_identity_v1",
+  "record_id": "gctm_runtime_event_candidate_identity_20260724",
+  "universe_identity": "gctm_runtime_native_candidate_universe_v1",
+  "event_key": {
+    "version": "gctm_runtime_event_key_v1",
+    "fields": [
+      "seq",
+      "frame",
+      "lost_slot",
+      "lost_instance_uid",
+      "event_key_version"
+    ],
+    "native_field_sources": {
+      "seq": "capture envelope / Python wrapper sequencing of h0_bridge_decision_trace_v2 rows",
+      "frame": "pair_records.frame / native_pair_keys.frame at bridge fire",
+      "lost_slot": "pair_records.lost_slot",
+      "lost_instance_uid": "pair_records.lost_instance_uid (track_instance_uid_v1 generation)",
+      "event_key_version": "declaration constant gctm_runtime_event_key_v1"
+    },
+    "formation_point": "single bridge-fire competition for one lost instance on one capture sequence/frame",
+    "consistent_on_all_candidate_pair_rows": true,
+    "trajectory_identity": false,
+    "inference_from_claim_or_commit_forbidden": true,
+    "lifecycle": {
+      "birth": "first structural pair for the lost key at (seq, frame)",
+      "scope": "event-local, single frame competition",
+      "invalidation_inputs": [
+        "h0_capture_abi_sha256",
+        "event_key_version",
+        "lost_instance_uid_semantics",
+        "seq packaging semantics",
+        "native_universe_v2_semantics"
+      ]
+    }
+  },
+  "candidate_key": {
+    "version": "gctm_runtime_candidate_key_v1",
+    "fields": [
+      "event_key",
+      "cand_slot",
+      "cand_instance_uid"
+    ],
+    "native_field_sources": {
+      "cand_slot": "pair_records.cand_slot / candidate_records.cand_slot",
+      "cand_instance_uid": "pair_records.cand_instance_uid (track_instance_uid_v1 generation)"
+    },
+    "forbidden_substitutes": [
+      "cand_precommit_track_id",
+      "visible track_id",
+      "local id",
+      "global id",
+      "packed_atomic_key"
+    ],
+    "uniqueness": "unique within event; slot reuse across frames requires distinct event_key and/or instance uid",
+    "exactly_one_event": true
+  },
+  "rho": {
+    "mapping_id": "pair_to_lost_event_v1",
+    "rule": "project pair row lost-side fields into event_key",
+    "total": true,
+    "functional": true
+  }
+}

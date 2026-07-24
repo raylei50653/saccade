@@ -199,6 +199,7 @@ Manifest: `docs/ownership/doc_migration_manifest.yaml`
 - `docs/research/threads/closed/gap_conditioned_probabilistic_motion_probe_20260711.md`
 - `docs/research/threads/closed/gap_conditioned_stochastic_transition_model_task.md`
 - `docs/research/threads/closed/gctm_d1_substrate_agnostic_ranking_diagnostic_task.md`
+- `docs/research/threads/closed/gctm_runtime_native_candidate_universe_task.md`
 - `docs/research/threads/closed/h0_gctm_interface_static_feasibility_audit_20260723.md`
 - `docs/research/threads/closed/m_b1_online_hook_20260709.md`
 - `docs/research/threads/closed/runtime_faithful_safe_domain_20260712.md`
@@ -330,6 +331,6 @@ Excluded from the active index and default search view.
 
 ## Inventory summary
 
-- documents: 280
-- active: 225
+- documents: 281
+- active: 226
 - grayed out: 55

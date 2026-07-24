@@ -1,0 +1,108 @@
+{
+  "schema": "gctm_runtime_universe_frozen_inputs_v1",
+  "record_id": "gctm_runtime_universe_frozen_inputs_20260724",
+  "identity_policy": "path_plus_sha256_only_no_mutable_branch_tip",
+  "prerequisite_terminals": [
+    {
+      "terminal": "H0_GCTM_INTERFACE_STRUCTURALLY_INSUFFICIENT",
+      "owner_acceptance_id": "h0_gctm_static_audit_terminal_owner_acceptance_20260723",
+      "retained_conclusions": [
+        "current ABI / registration-v2 is structurally insufficient",
+        "repeat capture under unchanged interface is forbidden"
+      ]
+    }
+  ],
+  "inputs": [
+    {
+      "role": "h0_gctm_static_audit_terminal",
+      "identity_id": "h0_gctm_static_audit_terminal_report_20260723",
+      "path": "docs/modules/semantic/research/evidence/h0_gctm_interface_static_feasibility_20260723/terminal_report.json",
+      "sha256": "e43e6e1ddb58e58e94222b1ae3b79ebe720d3b5a0bc65218cae0d4f9cfbd2914"
+    },
+    {
+      "role": "h0_gctm_static_audit_frozen_inputs",
+      "identity_id": "h0_gctm_static_audit_frozen_inputs_20260723",
+      "path": "docs/modules/semantic/research/evidence/h0_gctm_interface_static_feasibility_20260723/frozen_input_identities.json",
+      "sha256": "fdaee307cc0af99cb18c0f393771b4aafd96ff9ac655ba69ee771355b244dd58"
+    },
+    {
+      "role": "h0_gctm_static_audit_charter",
+      "identity_id": "h0_gctm_interface_static_feasibility_audit_20260723",
+      "path": "docs/research/threads/closed/h0_gctm_interface_static_feasibility_audit_20260723.md",
+      "sha256": "c90838d51e4453e3044753d98484b0182e9d7a5791643fa06384787f5ea2adce"
+    },
+    {
+      "role": "score_ranking_evidence_contract",
+      "identity_id": "score_ranking_evidence_contract_v1",
+      "path": "docs/research/contracts/score_ranking_evidence_contract.md",
+      "sha256": "7dbc2d965079fa3fc13f7802a4a083b1c4cbf49d658ffe3728b6c405364a13b4"
+    },
+    {
+      "role": "gctm_b1_proposed_charter",
+      "identity_id": "gctm_b1_runtime_grounded_offline_attribution_task",
+      "path": "docs/research/threads/gctm_b1_runtime_grounded_offline_attribution_task.md",
+      "sha256": "305b6aa1a5daf611af37fe658b74175467879a1feb60c683a9b8e38c0f0efb2d"
+    },
+    {
+      "role": "gctm_d1_consumer_interface",
+      "identity_id": "gctm_d1_substrate_agnostic_ranking_v1_consumer_interface",
+      "path": "docs/modules/semantic/research/evidence/gctm_d1_substrate_agnostic_ranking_20260723/consumer_interface.json",
+      "sha256": "45c16a6c8cf50d098b12cc8e4f1acbdcc846d0d431ad77f9fbe64bdb60bb57ce"
+    },
+    {
+      "role": "gctm_d1_compatibility_requirements",
+      "identity_id": "gctm_d1_substrate_agnostic_ranking_v1_compatibility_requirements_v1",
+      "path": "docs/modules/semantic/research/evidence/gctm_d1_substrate_agnostic_ranking_20260723/compatibility_requirements_matrix.json",
+      "sha256": "25a2ca49dbfd6d9d8985681967beb3f4df51e2fc51901444f246c94e49fa7ddd"
+    },
+    {
+      "role": "gctm_d1_terminal_acceptance",
+      "identity_id": "gctm_d1_terminal_owner_acceptance_20260723",
+      "path": "docs/modules/semantic/research/evidence/gctm_d1_canonical_execution_20260723/terminal_acceptance.json",
+      "sha256": "1aa779f6d8e15f08ec9c3fa722a27b42efc1a8ec2129a431a76bc67cfe9e67e5"
+    },
+    {
+      "role": "h0_bridge_decision_trace_v2",
+      "identity_id": "h0_bridge_decision_trace_v2",
+      "path": "scripts/tools/h0_bridge_decision_trace_schema_v2.json",
+      "sha256": "5ea8bea16ab6f6916baebd486c3256100427ae823e2f7bac021ff1284254f9a2"
+    },
+    {
+      "role": "h0_capture_record_types",
+      "identity_id": "tracker_gpu_h0_record_types_898fa631",
+      "path": "include/tracking/tracker_gpu.hpp",
+      "sha256": "898fa631c40352c9bd1a9280ee0443113096bf2317c9be524af278ea71338de2"
+    },
+    {
+      "role": "h0_capture_writer",
+      "identity_id": "tracker_gpu_h0_capture_writer_e89934f6",
+      "path": "src/tracking/tracker_gpu.cu",
+      "sha256": "e89934f6a0dabcd1fa8359d4dc033330cdacfb75899f45e5b721bd2d55d92e45"
+    },
+    {
+      "role": "h0_gctm_compatibility_requirements",
+      "identity_id": "h0_gctm_consumer_compatibility_requirements_20260718",
+      "path": "docs/modules/semantic/research/h0_gctm_consumer_compatibility_requirements_20260718.md",
+      "sha256": "6cb37366a14129461e68c24e17cbeaada80d0cd7dccf1d0ea75ac102e997151a"
+    },
+    {
+      "role": "h0_capture_declaration",
+      "identity_id": "headline_bridge_full_decision_capture_declaration_20260713",
+      "path": "docs/modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md",
+      "sha256": "602994a3a49f2fbb0e27bfe3f43a023064dff9df8bd9457f733628176c3ac816"
+    }
+  ],
+  "read_only_closed_objects": [
+    {
+      "object": "GCTM_D1_INTERFACE_READY",
+      "status": "closed_read_only",
+      "note": "synthetic_event_candidate_set_v1 remains the D1 universe; this packet does not replace it"
+    },
+    {
+      "object": "synthetic_event_candidate_set_v1",
+      "status": "closed_read_only",
+      "note": "D1 sealed synthetic universe is not reopened or rewritten"
+    }
+  ],
+  "mutable_branch_tip_used": false
+}

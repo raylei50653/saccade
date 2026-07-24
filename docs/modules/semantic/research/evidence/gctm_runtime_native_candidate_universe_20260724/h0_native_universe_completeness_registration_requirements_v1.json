@@ -1,0 +1,90 @@
+{
+  "schema": "h0_native_universe_completeness_registration_requirements_v1",
+  "artifact_id": "h0_native_universe_completeness_registration_requirements_v1",
+  "created_at": "2026-07-24",
+  "artifact_class": "requirements_only",
+  "modifies_registration_v2": false,
+  "claims_registration_v3_exists": false,
+  "consumer_target": "gctm_runtime_native_candidate_universe_v1",
+  "purpose": "Enumerate the minimal future H0 registration delta surface required before a producer can claim native-universe completeness for the frozen runtime consumer universe.",
+  "guarantee_class": "universe_completeness",
+  "consumer_objects": [
+    "runtime_candidate_universe",
+    "runtime_event_membership"
+  ],
+  "required_streams": [
+    "pair_record",
+    "candidate_record",
+    "event_universe_sidecar"
+  ],
+  "required_bindings": [
+    {
+      "binding": "universe_identity",
+      "required_value_or_shape": "exact consumer identity gctm_runtime_native_candidate_universe_v1 or a later superseding owner-accepted identity",
+      "registration_v2_status": "not_registrable"
+    },
+    {
+      "binding": "event_key_version",
+      "required_value_or_shape": "exact frozen event-key version (gctm_runtime_event_key_v1 or successor)",
+      "registration_v2_status": "not_registrable"
+    },
+    {
+      "binding": "inclusion_stage_identity",
+      "required_value_or_shape": "exact stage id pre_score_eligible_v1 or an owner-accepted alternative that remains score-independent",
+      "registration_v2_status": "not_registrable"
+    },
+    {
+      "binding": "mask_identity",
+      "required_value_or_shape": "h0_pair_pre_score_mask_v1 or successor with immutable reject-reason partition",
+      "registration_v2_status": "not_registrable"
+    },
+    {
+      "binding": "emitted_row_count",
+      "required_value_or_shape": "per-stream emitted counts for pair/candidate/event sidecars",
+      "registration_v2_status": "partial_counters_only"
+    },
+    {
+      "binding": "native_candidate_count",
+      "required_value_or_shape": "native candidate and pair key totals",
+      "registration_v2_status": "partial_counters_only"
+    },
+    {
+      "binding": "overflow_truncation_status",
+      "required_value_or_shape": "explicit overflow/truncation booleans and counters; silent drop forbidden",
+      "registration_v2_status": "partial_counters_only"
+    },
+    {
+      "binding": "exposure_completeness_counters",
+      "required_value_or_shape": "bridge_attempt_count, identity_uid_wrap_events, and any exposure predicates required by the consumer",
+      "registration_v2_status": "partial_counters_only"
+    },
+    {
+      "binding": "replay_non_perturbation_basis",
+      "required_value_or_shape": "capture must remain decision-neutral and replayable under the declared observer basis",
+      "registration_v2_status": "not_registrable_as_universe_completeness"
+    },
+    {
+      "binding": "causal_availability",
+      "required_value_or_shape": "membership fields available after native event formation and before runtime ranking claim; no claim/commit/label dependence",
+      "registration_v2_status": "not_registrable"
+    },
+    {
+      "binding": "invalidation_set",
+      "required_value_or_shape": "ABI, event-key version, inclusion-stage, mask, uid, and completeness-predicate invalidation inputs",
+      "registration_v2_status": "not_registrable"
+    }
+  ],
+  "required_guarantee_capabilities": [
+    "register guarantee_class=universe_completeness",
+    "bind consumer_object in {runtime_candidate_universe, runtime_event_membership}",
+    "bind envelope/native-universe sidecars, not only pair/candidate/claim/commit field coordinates",
+    "fail closed on overflow, partial events, silent truncation, and cross-event candidate splits",
+    "remain score-independent and claim/commit-independent"
+  ],
+  "explicit_non_claims": [
+    "This artifact does not modify registration-v2.",
+    "This artifact does not create registration-v3.",
+    "This artifact does not authorize H0 capture or re-entry.",
+    "This artifact does not establish an H0 completeness guarantee."
+  ]
+}

@@ -45,7 +45,7 @@ WIP=1 **只綁 mainline charter**。工程 follow-up、資料補件、文件收�
 
 ## Current transition panel — H0 → GCTM
 
-**Manual navigation projection · reconciled 2026-07-23.** This panel owns no
+**Manual navigation projection · reconciled 2026-07-24.** This panel owns no
 terminal, evidence, or WIP state: `ACTIVE` is projected from the module TODO;
 task lifecycle and gates remain owned by the linked charters/contracts. If a
 row conflicts with its owner, the owner wins. Update this panel in the same
@@ -55,8 +55,8 @@ decision, blocker change, or consumer-compatibility verdict.
 | Field | Current projection | Owner / read first |
 |:--|:--|:--|
 | **ACTIVE** | **none** — semantic sole-active WIP is empty (`active_wip: []`). | [semantic TODO](../../modules/semantic/TODO.md) · [claim-state registry](../contracts/claim_state_registry.md) · [machine identity decision](../contracts/gctm_b1_slot_identity_decision_v1.json) |
-| **NEXT** | No automatic next. The static producer→consumer audit closed at `H0_GCTM_INTERFACE_STRUCTURALLY_INSUFFICIENT`; an owner must separately choose either a minimal H0 registration/fidelity-edge delta or a GCTM runtime-consumer re-charter. Both runtime slots remain **proposed / non-WIP** and both compatibility gates remain independently `missing`. | [static audit charter (closed)](closed/h0_gctm_interface_static_feasibility_audit_20260723.md) · [claim-state registry](../contracts/claim_state_registry.md) · [B1 charter](gctm_b1_runtime_grounded_offline_attribution_task.md) · [O1 charter](gctm_o1_online_intervention_efficacy_task.md) |
-| **READINESS** | H0 remains closed at owner-accepted `H0_PROVENANCE_INVALID` (three same-type ordered terminals): no faithful capture, accepted runtime-fidelity edge, or actual guarantee envelope. The static audit additionally proves that unchanged trace-v2 + registration-v2 cannot complete the accepted D1 candidate-universe/event-membership path, so repeating capture under that interface is not eligible. No H0 re-entry, exactly-once authority, runtime verdict, or B1/O1 activation follows. | [static audit packet](../../modules/semantic/research/evidence/h0_gctm_interface_static_feasibility_20260723/) · [H0 declaration](../../modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md) · [claim-state registry](../contracts/claim_state_registry.md) |
+| **NEXT** | No automatic next. Consumer re-charter closed at `GCTM_RUNTIME_UNIVERSE_CONTRACT_SEALABLE` and froze `gctm_runtime_native_candidate_universe_v1` as the runtime candidate-universe consumer target. An owner may separately charter a **minimal H0 registration-v3 delta** against that target, or re-scope the B1 runtime hook if producer requirements cannot be met. Both runtime slots remain **proposed / non-WIP** and both compatibility gates remain independently `missing`. | [runtime universe charter (closed)](closed/gctm_runtime_native_candidate_universe_task.md) · [static audit charter (closed)](closed/h0_gctm_interface_static_feasibility_audit_20260723.md) · [claim-state registry](../contracts/claim_state_registry.md) · [B1 charter](gctm_b1_runtime_grounded_offline_attribution_task.md) · [O1 charter](gctm_o1_online_intervention_efficacy_task.md) |
+| **READINESS** | H0 remains closed at owner-accepted `H0_PROVENANCE_INVALID` (three same-type ordered terminals): no faithful capture, accepted runtime-fidelity edge, or actual guarantee envelope. Static audit `H0_GCTM_INTERFACE_STRUCTURALLY_INSUFFICIENT` still forbids unchanged-interface capture. The 2026-07-24 consumer universe contract is sealable but does **not** establish completeness, substrate, compatibility, or B1 activation. No H0 re-entry, exactly-once authority, runtime verdict, or B1/O1 activation follows. | [runtime universe packet](../../modules/semantic/research/evidence/gctm_runtime_native_candidate_universe_20260724/) · [static audit packet](../../modules/semantic/research/evidence/h0_gctm_interface_static_feasibility_20260723/) · [H0 declaration](../../modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md) · [claim-state registry](../contracts/claim_state_registry.md) |
 
 ### Blockers and transition gates
 
@@ -90,11 +90,21 @@ H0 → GCTM static feasibility line
   path/hash-frozen D1 interface + trace-v2 + registration-v2 audit
   → H0_GCTM_INTERFACE_STRUCTURALLY_INSUFFICIENT
   ∧ g_phys/residual/operator-offset/GCTM covariance structurally derivable
-  ∧ candidate_universe unresolved (D1 synthetic identity)
+  ∧ candidate_universe unresolved under D1 synthetic identity
   ∧ event_membership completeness not registrable in registration-v2
   ∧ both runtime compatibility gates remain independently missing
-  → no unchanged-interface capture/re-entry; owner must separately charter
-    a minimal H0 registration/fidelity-edge delta or runtime consumer re-charter
+  → no unchanged-interface capture/re-entry
+
+GCTM runtime-native candidate-universe consumer line
+  consumer re-charter over frozen trace-v2 + score contract + static-audit terminal
+  → GCTM_RUNTIME_UNIVERSE_CONTRACT_SEALABLE
+  ∧ identity gctm_runtime_native_candidate_universe_v1
+  ∧ event_key / candidate_key / pre_score inclusion / composition frozen
+  ∧ completeness semantics defined (not an H0 guarantee)
+  ∧ registration-v3 requirements-only surface published
+  ∧ both runtime compatibility gates remain independently missing
+  → suitable consumer target for a separate minimal H0 registration-v3 delta;
+    not H0 implementation authority; no B1/O1 activation
 ```
 
 For any bridge-runtime consumer, the required compatibility check is limited to
@@ -279,7 +289,8 @@ frontmatter、搬移與索引要求。
 
 | Thread | Closed | Terminal (one-line) | Direct handoff disposition | Cross-thread consequence (not handoff) | Owner |
 |:--|:--|:--|:--|:--|:--|
-| [h0_gctm_interface_static_feasibility_audit_20260723.md](closed/h0_gctm_interface_static_feasibility_audit_20260723.md) | 2026-07-23 | **`H0_GCTM_INTERFACE_STRUCTURALLY_INSUFFICIENT`** — path/hash-frozen static audit; physical gap/residual/covariance path is structurally expressible, but D1's synthetic candidate universe and registration-v2's missing native-universe completeness binding stop the end-to-end evidence path | **no receiver** — owner must separately choose a new delta or re-charter; no implementation is auto-authorized | unchanged-interface H0 capture/re-entry is ineligible; both runtime gates remain independently `missing`; no B1/O1/GCTM_D1 state change | semantic |
+| [gctm_runtime_native_candidate_universe_task.md](closed/gctm_runtime_native_candidate_universe_task.md) | 2026-07-24 | **`GCTM_RUNTIME_UNIVERSE_CONTRACT_SEALABLE`** — freezes runtime consumer identity `gctm_runtime_native_candidate_universe_v1` with pre-score lost-centric event/candidate keys, composition/completeness semantics, and registration-v3 requirements-only surface | **no H0 implementation handoff** — may only inform a separately chartered minimal registration-v3 delta | closes consumer-owned universe/membership gap from the static audit; does **not** establish H0 completeness, substrate, compatibility, or B1 activation; both runtime gates remain `missing` | semantic |
+| [h0_gctm_interface_static_feasibility_audit_20260723.md](closed/h0_gctm_interface_static_feasibility_audit_20260723.md) | 2026-07-23 | **`H0_GCTM_INTERFACE_STRUCTURALLY_INSUFFICIENT`** — path/hash-frozen static audit; physical gap/residual/covariance path is structurally expressible, but D1's synthetic candidate universe and registration-v2's missing native-universe completeness binding stop the end-to-end evidence path | **no receiver** — owner must separately choose a new delta or re-charter; no implementation is auto-authorized | unchanged-interface H0 capture/re-entry is ineligible; both runtime gates remain independently `missing`; no B1/O1/GCTM_D1 state change; consumer re-charter later closed 2026-07-24 without reopening this terminal | semantic |
 | [gctm_d1_substrate_agnostic_ranking_diagnostic_task.md](closed/gctm_d1_substrate_agnostic_ranking_diagnostic_task.md) | 2026-07-23 | **`GCTM_D1_INTERFACE_READY` owner-accepted** (mechanical three-way terminal; canonical execution `gctm_d1_canonical_execution_20260723`; [execution witness](../../modules/semantic/research/evidence/gctm_d1_canonical_execution_20260723/execution_witness.json) · [terminal acceptance](../../modules/semantic/research/evidence/gctm_d1_canonical_execution_20260723/terminal_acceptance.json)) · diagnostic-only; I1–I12 pass; consumer interface complete | **no receiver / no continuation** — interface-ready ≠ runtime-compatible; unlocks no B1/O1/H0 | runtime compatibility gates remain `missing`; `active_wip: []`; `decision_relevant_candidates: []`; H0 re-entry still unauthorized; B1/O1 remain proposed behind runtime substrate | semantic |
 | [gap_conditioned_stochastic_transition_model_task.md](closed/gap_conditioned_stochastic_transition_model_task.md) | 2026-07-23 | **`GCTM_MODEL_SPEC_SEALABLE` owner-accepted** (ordered terminal 5; selected by WP-A8 terminal review, [checklist artifact](../models/gap_conditioned_stochastic_transition_terminal_review_v1.md)) · diagnostic-only A-layer model-spec seal · D1 §2–§8 + D2 L1–L5 frozen | **no receiver / no continuation** — the seal grants no B1/O1/online/production authority; B1 and O1 need separate activation | H0 state unchanged (no faithful capture, no fidelity edge, empty guarantee set); the at-close L2 contract absence is **superseded** by the 2026-07-23 owner-accepted [v1 binding](../contracts/score_ranking_evidence_contract.md), but substrate still does not inherit and all other B1/O1 gates remain | semantic |
 | [bridge_frozen_evidence_o0_routing_20260716.md](closed/bridge_frozen_evidence_o0_routing_20260716.md) | 2026-07-20 | **route 1 `H0_PROVENANCE_INVALID` owner-accepted**（[#209](https://github.com/raylei50653/saccade/issues/209)，2026-07-19）· H0 = CLOSED（diagnostic-only）· controller retry / Phase B forbidden | **no receiver / no continuation** — NEXT = none automatically | GCTM [#175](https://github.com/raylei50653/saccade/issues/175) was parked **at close time**（activation required a separate owner scheduling decision）——**superseded**: that decision was taken 2026-07-22 and GCTM then closed 2026-07-23 at `GCTM_MODEL_SPEC_SEALABLE`（see its Closed row above）; the O0 card's *Final status* keeps the at-close snapshot. Provenance gap becomes permanent registry `open_limits`（unchanged） | semantic |

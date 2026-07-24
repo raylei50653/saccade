@@ -11,6 +11,10 @@
   任何未來 re-entry 前置＝machine-checked launch-hygiene pre-authorization
   gate＋fresh I→F→S＋另行 exactly-once 授權）：state fact-owner 見
   [claim-state registry](../../research/contracts/claim_state_registry.md)。
+- 2026-07-24 consumer re-charter closed at
+  `GCTM_RUNTIME_UNIVERSE_CONTRACT_SEALABLE`（`gctm_runtime_native_candidate_universe_v1`）；
+  WIP released at terminal；**not** H0 implementation authority. See
+  [closed charter](../../research/threads/closed/gctm_runtime_native_candidate_universe_task.md).
 
 ## Proposed（non-WIP）
 
@@ -21,6 +25,9 @@
   `GCTM_B1`, `proposed`, `blocked_by: h0_runtime_substrate`; it does not alias
   or supersede `H0_ROUTE5_B1` → [task charter](../../research/threads/gctm_b1_runtime_grounded_offline_attribution_task.md)
 - **GCTM O1 — online score intervention and system-efficacy evaluation** → [task charter](../../research/threads/gctm_o1_online_intervention_efficacy_task.md)
+- **(next owner choice, non-WIP until scheduled)** minimal H0 registration-v3
+  delta targeting `gctm_runtime_native_candidate_universe_v1` completeness
+  binding, or B1 runtime-hook re-scope if producer requirements cannot be met
 
 ## Parked
 
