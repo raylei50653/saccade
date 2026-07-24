@@ -605,14 +605,18 @@ def _build_identity(root: Path, build: Path, python: Path) -> dict[str, Any]:
         record = _regular_file_record(artifact)
         # Use the controller producer (recursive ldd + known dlopen siblings)
         # so qualification admits the same runtime-closure class as Phase A.
-        deps = controller._dynamic_dependencies(
-            artifact,
-            ldd,
-            root=root,
-            started=time.monotonic(),
-            monitor=None,
-            clock=time.monotonic,
-        )
+        # Unit fixtures may be non-ELF placeholder bytes — skip ldd then.
+        if artifact.read_bytes()[:4] == b"\x7fELF":
+            deps = controller._dynamic_dependencies(
+                artifact,
+                ldd,
+                root=root,
+                started=time.monotonic(),
+                monitor=None,
+                clock=time.monotonic,
+            )
+        else:
+            deps = []
         record["dynamic_dependencies"] = deps
         artifacts.append(record)
     return {

@@ -1,0 +1,27 @@
+{
+  "actual_guarantee_established": false,
+  "artifacts": {
+    "README.md": "5208d67e51f9d77806d7492a62a1d00cfea8b2ffa24400c36494acb7474db222",
+    "isolation_probe.json": "6eac6671a0757775b3c31253a85185307e6cfe365a52c4923e8160b2525031ca",
+    "qualification_report.json": "625b44a112e54a1a7a86490249fd650c6a65c8f394c75200e4487737e04ec643",
+    "qualification_summary.json": "207c208c32a2ec44928eca5a32b8759c2da2b96ddb433fb286a6ca0dbe8213b7",
+    "repair_terminal.json": "37f38a575eda6eaee116d2872e55b0ad7836fe1b0b4cb3416ed3b34400b3dd10",
+    "root_cause_witness.json": "e83930e957322e154dd7893969556fe79bd3871d1250b0647c57bbc6715541ae"
+  },
+  "authority_verified": false,
+  "candidate_head_sha": "077d1b9d38d02d10d09771a0fee340831276b8c2",
+  "candidate_tree_sha": "cba7d84271ebc26dceecb94ad35301862b1943d4",
+  "created_at": "2026-07-24",
+  "decision_relevant_candidates_modified": false,
+  "execution_authorized": false,
+  "h0_capture_performed": false,
+  "h0_reentry_authorized": false,
+  "packet_id": "h0_r5_extension_plugin_attestation_closure_20260724",
+  "qualification_artifact_digest": "207c208c32a2ec44928eca5a32b8759c2da2b96ddb433fb286a6ca0dbe8213b7",
+  "repair_unit": "h0_extension_plugin_runtime_attestation_closure_v1",
+  "runtime_compatibility_established": false,
+  "runtime_substrate_established": false,
+  "schema": "h0_r5_repair_manifest_v1",
+  "scope": "h0_r5_extension_plugin_runtime_attestation_closure_repair",
+  "selected_terminal": "H0_R5_ATTESTATION_QUALIFIED_SEALABLE"
+}

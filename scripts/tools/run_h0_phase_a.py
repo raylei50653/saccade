@@ -2382,8 +2382,14 @@ def discover_python_interpreter_runtime_paths(python: Path) -> list[str]:
     CPython opens during ``-I -B -c`` startup.  Paths are reported in the form
     the interpreter itself uses (including symlink path forms under uv-managed
     base prefixes).
+
+    The ``python`` argument may be a venv symlink (common under uv/CI); the
+    process is launched through that path.  Freeze-time physical-file admission
+    remains a separate require_canonical_absolute / non-symlink check.
     """
-    python = require_canonical_absolute(python.as_posix(), directory=False)
+    python = Path(python)
+    if not python.is_file():
+        raise ContractError(f"python interpreter is absent: {python}")
     script = (
         "import pathlib, site, sys\n"
         "paths = set()\n"
