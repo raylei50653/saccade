@@ -8,7 +8,9 @@
   "plugin_observed": true,
   "plugin_realpath": "/home/ray/developer/ai/saccade/build/h0_phase_a/libsaccade_scan_plugin.so",
   "probe_terminal": "H0_R5_ATTESTATION_GAP_ISOLATED",
+  "qualified_execution_bound_head": "077d1b9d38d02d10d09771a0fee340831276b8c2",
   "returncode": 0,
+  "revalidated_after_loader_scope_fix": true,
   "schema": "h0_r5_isolation_probe_v1",
   "tool_runtime_count": 4661,
   "violations": []

@@ -1,8 +1,8 @@
 {
   "actual_guarantee_established": false,
   "authority": "non_authoritative",
-  "candidate_head_sha": "99f7bb542a04334f55ddf622b093649a6d48f33f",
-  "candidate_tree_sha": "33969fc1b8795c9d14a3f1282b0adb5767cc6ebd",
+  "candidate_head_sha": "077d1b9d38d02d10d09771a0fee340831276b8c2",
+  "candidate_tree_sha": "cba7d84271ebc26dceecb94ad35301862b1943d4",
   "controlled_host_qualification_passed": true,
   "does_not_establish": [
     "I_selected",
@@ -20,12 +20,18 @@
   "execution_authorized": false,
   "extension_plugin_independently_observed": true,
   "isolation_probe_terminal": "H0_R5_ATTESTATION_GAP_ISOLATED",
+  "loader_path_exception_scope": [
+    "tool_runtime",
+    "build_artifact",
+    "build_runtime_closure"
+  ],
   "maximum_conclusion": "The exact qualified H0-R5 repair head is eligible for a separate owner Seal decision that may construct one fresh I \u2192 F \u2192 S chain.",
-  "next_owner_decision": "separate Seal PR",
+  "next_owner_decision": "separate Seal PR selecting candidate_head_sha exactly",
+  "non_loader_path_policy": "fail_closed_non_canonical_and_undeclared_alias",
   "owner_decision_identity": "h0_r5_extension_plugin_attestation_closure_authorization_20260724",
   "owner_decision_surface": "https://github.com/raylei50653/saccade/issues/280",
   "policy_capture_semantics_changed": false,
-  "qualification_artifact_digest": "d1a5828980c927039d0c18c27e6a5bb4b584fbc4e8e013092c06734d789f1552",
+  "qualification_artifact_digest": "207c208c32a2ec44928eca5a32b8759c2da2b96ddb433fb286a6ca0dbe8213b7",
   "qualification_controller_predicate_parity": true,
   "r4_failure_coordinate_isolated": true,
   "recorder_omission_repaired": true,
