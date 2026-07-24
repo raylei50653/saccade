@@ -1,0 +1,24 @@
+{
+  "schema": "h0_r4_repair_manifest_v1",
+  "packet_id": "h0_r4_authority_overlay_runtime_binding_split_20260724",
+  "created_at": "2026-07-24",
+  "scope": "h0_r4_authority_overlay_runtime_binding_split_repair",
+  "selected_terminal": "H0_R4_REPAIR_QUALIFIED_SEALABLE",
+  "repair_unit": "h0_authority_overlay_runtime_binding_split_v1",
+  "candidate_head_sha": "ba8ee8fa74a8c636c929de408660ce72d15e309d",
+  "candidate_tree_sha": "62d33172a9806a0dcc8270f67e35903e31ddda7d",
+  "artifacts": {
+    "README.md": "c134807a3abd360455208a9ab13f725921a0cef09f59be8035edc6a789f41e3e",
+    "qualification_report.json": "21e58db7d0829dc9948be2d8fbd256b938e131c8afc35fecf549ff7195ab3524",
+    "qualification_summary.json": "5cbd9b012c269d5eee61e626402735fee58ace038cd153dd8ae5c450d964b04d",
+    "repair_terminal.json": "b6af609945d3dc2cfc07624b4895de9ee6aa1f035385c9d81a79f3c3065ae39b"
+  },
+  "authority_verified": false,
+  "execution_authorized": false,
+  "actual_guarantee_established": false,
+  "h0_reentry_authorized": false,
+  "h0_capture_performed": false,
+  "runtime_substrate_established": false,
+  "runtime_compatibility_established": false,
+  "decision_relevant_candidates_modified": false
+}

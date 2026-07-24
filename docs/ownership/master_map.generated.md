@@ -105,6 +105,7 @@ Manifest: `docs/ownership/doc_migration_manifest.yaml`
 - `docs/modules/semantic/research/association_tools.yaml`
 - `docs/modules/semantic/research/bridge_fidelity_reconciled_map_20260715.md`
 - `docs/modules/semantic/research/escape_tail_forensic_20260711.md`
+- `docs/modules/semantic/research/evidence/h0_r4_authority_overlay_runtime_binding_split_20260724/README.md`
 - `docs/modules/semantic/research/existing_online_object_analysis_for_gctm_alignment_20260718.md`
 - `docs/modules/semantic/research/gctm_b1_o1_task_objectives_and_semantics_20260716.md`
 - `docs/modules/semantic/research/gctm_d1_ranking_diagnostic_declaration_20260723.md`
@@ -332,6 +333,6 @@ Excluded from the active index and default search view.
 
 ## Inventory summary
 
-- documents: 282
-- active: 227
+- documents: 283
+- active: 228
 - grayed out: 55
