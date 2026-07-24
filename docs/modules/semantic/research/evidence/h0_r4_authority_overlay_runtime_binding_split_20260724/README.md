@@ -35,7 +35,7 @@ Repair removes declaration from runtime inventory and binds it only through
 ## Qualified head
 
 ```text
-candidate_head_sha = d8241f9e3a0bd2169673fff1242c35a42980ff6c
+candidate_head_sha = ba8ee8fa74a8c636c929de408660ce72d15e309d
 repair_terminal    = H0_R4_REPAIR_QUALIFIED_SEALABLE
 ```
 

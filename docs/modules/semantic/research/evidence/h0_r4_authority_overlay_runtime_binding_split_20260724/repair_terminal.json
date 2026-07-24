@@ -1,7 +1,7 @@
 {
   "actual_guarantee_established": false,
   "authority": "non_authoritative",
-  "candidate_head_sha": "d8241f9e3a0bd2169673fff1242c35a42980ff6c",
+  "candidate_head_sha": "ba8ee8fa74a8c636c929de408660ce72d15e309d",
   "declaration_amendment": "Amendment 10 \u2014 authority-overlay/runtime-binding separation",
   "declaration_authority_overlay_bound": true,
   "declaration_runtime_bound": false,

@@ -1,8 +1,8 @@
 {
   "actual_guarantee_established": false,
   "authority": "non_authoritative",
-  "candidate_head_sha": "d8241f9e3a0bd2169673fff1242c35a42980ff6c",
-  "candidate_tree_sha": "793a1e5ec339d9a8fd918c88afbae9348510d65e",
+  "candidate_head_sha": "ba8ee8fa74a8c636c929de408660ce72d15e309d",
+  "candidate_tree_sha": "62d33172a9806a0dcc8270f67e35903e31ddda7d",
   "declaration_authority_overlay_bound": true,
   "declaration_runtime_bound": false,
   "execution_authorized": false,
