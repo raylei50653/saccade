@@ -185,21 +185,19 @@ SEAL_RELEVANT_PATHS = tuple(
 )
 
 
-# Root-level documentation / VCS / agent-config surfaces that are never a build
-# or runtime-import input.  Kept explicit (not a prefix catch-all) so a future
-# root binary or CMake fragment cannot silently reclassify as non-runtime.
+# Amendment 6 Correction 1: DEVELOPMENT.md is documentation-only.
+# Amendment 10 precise extensions: only the exact post-I3 projection blockers
+# that are not H0 execution-consumed surfaces.  Dockerfile / README / LICENSE
+# remain fail-closed runtime_build_consumable — they are not blanket non-build.
 ROOT_NON_RUNTIME_FILES = frozenset(
     {
         "DEVELOPMENT.md",
         "REPO_LAYOUT.md",
-        "README.md",
-        "LICENSE",
         ".gitignore",
-        "Dockerfile",
-        "docker-compose.yml",
     }
 )
-# Agent-tool config trees are never runtime-imported by H0.
+# Deleted agent-tool config trees appear in policy-base diffs but are never
+# imported by H0 execution.  Prefix-scoped to avoid root catch-all.
 NON_RUNTIME_AGENT_PREFIXES = (".gemini/", ".claude/", ".codex/", ".grok/", ".agents/")
 
 
@@ -207,9 +205,7 @@ def classify_path(path: str) -> str:
     """Amendment 6 ``h0_projection_path_class_v1`` — fail-closed.
 
     Anything not explicitly non-runtime is runtime/build-consumable.  Root
-    documentation / VCS / agent-config files are non-runtime (Amendment 6
-    Correction 1 pattern, extended so post-I3 mainline doc/VCS edits do not
-    block a fresh freeze under the Amendment-10 repair).
+    exceptions are exact members of ``ROOT_NON_RUNTIME_FILES`` only.
     """
     if path in ROOT_NON_RUNTIME_FILES:
         return "non_runtime_recorded"

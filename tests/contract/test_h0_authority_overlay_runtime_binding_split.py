@@ -238,3 +238,102 @@ def test_registration_v3_downstream_structurally_reachable() -> None:
         downstream["consumer_universe"] == "gctm_runtime_native_candidate_universe_v1"
     )
     assert downstream["actual_guarantee_in_this_pr"] is False
+
+
+# ── Qualification report verifier mechanical binding ─────────────────────────
+
+import verify_h0_r4_qualification_report as r4_report  # noqa: E402
+
+REPORT_PATH = (
+    ROOT
+    / "docs/modules/semantic/research/evidence"
+    / "h0_r4_authority_overlay_runtime_binding_split_20260724"
+    / "qualification_report.json"
+)
+
+
+def _canonical_report() -> dict[str, object]:
+    return json.loads(REPORT_PATH.read_text(encoding="utf-8"))
+
+
+def test_qualification_report_verifier_accepts_bound_packet() -> None:
+    r4_report.validate_report(_canonical_report(), root=ROOT)
+
+
+def test_qualification_report_rejects_fake_head_sha() -> None:
+    report = _canonical_report()
+    report["candidate_head_sha"] = "0" * 40
+    with pytest.raises(r4_report.ReportError, match="not a commit"):
+        r4_report.validate_report(report, root=ROOT)
+
+
+def test_qualification_report_rejects_tree_mismatch() -> None:
+    report = _canonical_report()
+    report["candidate_tree_sha"] = "f" * 40
+    with pytest.raises(r4_report.ReportError, match="candidate_tree_sha"):
+        r4_report.validate_report(report, root=ROOT)
+
+
+def test_qualification_report_rejects_missing_required_key_with_extras() -> None:
+    report = _canonical_report()
+    del report["known_s3_defect_removed"]
+    report["extra_field"] = "noise"
+    with pytest.raises(r4_report.ReportError, match="missing"):
+        r4_report.validate_report(report, root=ROOT)
+
+
+def test_qualification_report_rejects_contradictory_qualified_sealable() -> None:
+    report = _canonical_report()
+    report["qualification_result"] = "failed"
+    report["repair_terminal"] = "H0_R4_REPAIR_QUALIFIED_SEALABLE"
+    report["known_s3_defect_removed"] = False
+    report["declaration_authority_overlay_bound"] = False
+    with pytest.raises(r4_report.ReportError):
+        r4_report.validate_report(report, root=ROOT)
+
+
+def test_qualification_report_rejects_summary_result_disagreement(
+    tmp_path: Path,
+) -> None:
+    report = _canonical_report()
+    summary_src = ROOT / str(report["qualification_summary_path"])
+    summary = json.loads(summary_src.read_text(encoding="utf-8"))
+    summary["result"] = "failed"
+    for step in summary["steps"]:
+        step["state"] = "failed"
+    local_summary = tmp_path / "qualification_summary.json"
+    local_summary.write_text(json.dumps(summary), encoding="utf-8")
+    # Point report at a path under ROOT via a symlink inside evidence? Instead
+    # write under tmp and invoke with root=tmp after materialising head objects.
+    # Simpler: mutate in-memory path by monkeypatching load is hard; use a
+    # workspace that still has the real git object database via --git-dir.
+    report["qualification_summary_path"] = "summary.json"
+    (tmp_path / "summary.json").write_text(json.dumps(summary), encoding="utf-8")
+    # Need git objects for head; use the real repo as root but override path
+    # by placing a conflicting summary beside a rewritten relative path inside
+    # a temp clone is heavy.  Call _verify_summary_binding directly.
+    with pytest.raises(r4_report.ReportError, match="disagrees with summary"):
+        r4_report._verify_summary_binding(
+            report,
+            summary,
+            head=str(report["candidate_head_sha"]),
+            tree=str(report["candidate_tree_sha"]),
+        )
+
+
+def test_terminal_matrix_invalid_rejects_green_flags() -> None:
+    report = _canonical_report()
+    report["repair_terminal"] = "H0_R4_REPAIR_INVALID"
+    report["next_owner_decision"] = "repair contract"
+    # Keep green flags + passed qualification — must fail.
+    with pytest.raises(r4_report.ReportError, match="INVALID cannot be selected"):
+        r4_report._verify_terminal_consistency(report)
+
+
+def test_terminal_matrix_abi_delta_requires_abi_flag() -> None:
+    report = _canonical_report()
+    report["repair_terminal"] = "H0_R4_REPAIR_REQUIRES_ABI_DELTA"
+    report["trace_v2_abi_changed"] = False
+    report["next_owner_decision"] = "exact ABI-delta charter"
+    with pytest.raises(r4_report.ReportError, match="REQUIRES_ABI_DELTA"):
+        r4_report._verify_terminal_consistency(report)

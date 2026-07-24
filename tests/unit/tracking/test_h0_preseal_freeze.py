@@ -98,10 +98,21 @@ def test_admitted_set_is_exactly_the_declared_five() -> None:
     }
 
 
-def test_development_md_is_the_sole_non_runtime_root_exception() -> None:
-    # Amendment 6 Correction 1(b): documentation-only root file; every other
-    # root file stays fail-closed (see test_unmatched_paths_fail_closed_to_runtime).
+def test_development_md_is_the_amendment6_root_exception() -> None:
+    # Amendment 6 Correction 1(b): documentation-only root file.
     assert classify_path("DEVELOPMENT.md") == "non_runtime_recorded"
+
+
+def test_amendment10_precise_non_runtime_root_exceptions() -> None:
+    # Amendment 10: only the exact post-I3 projection blockers that are not
+    # H0 execution-consumed.  Dockerfile/README remain fail-closed as runtime.
+    assert classify_path("REPO_LAYOUT.md") == "non_runtime_recorded"
+    assert classify_path(".gitignore") == "non_runtime_recorded"
+    assert classify_path(".gemini/settings.json") == "non_runtime_recorded"
+    assert classify_path("README.md") == "runtime_build_consumable"
+    assert classify_path("Dockerfile") == "runtime_build_consumable"
+    assert classify_path("docker-compose.yml") == "runtime_build_consumable"
+    assert classify_path("LICENSE") == "runtime_build_consumable"
 
 
 def test_content_pinned_admission_is_exactly_the_declared_four() -> None:

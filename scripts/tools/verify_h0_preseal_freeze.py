@@ -450,15 +450,7 @@ def _blob_slot(root: Path, rev: str, path: str) -> dict[str, Any]:
 def _classify(path: str) -> str:
     # Keep byte-parity with build_h0_preseal_freeze.classify_path (independent
     # transcription; do not import the assembler).
-    if path in {
-        "DEVELOPMENT.md",
-        "REPO_LAYOUT.md",
-        "README.md",
-        "LICENSE",
-        ".gitignore",
-        "Dockerfile",
-        "docker-compose.yml",
-    }:
+    if path in {"DEVELOPMENT.md", "REPO_LAYOUT.md", ".gitignore"}:
         return "non_runtime_recorded"
     if path.startswith((".gemini/", ".claude/", ".codex/", ".grok/", ".agents/")):
         return "non_runtime_recorded"
