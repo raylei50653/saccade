@@ -323,7 +323,15 @@ PAIR_KEY_FIELDS = (
     "lost_slot",
     "lost_instance_uid",
 )
-CANDIDATE_KEY_FIELDS = ("seq", "frame", "cand_slot", "cand_instance_uid")
+# Trace-v2 exposure identity (native_candidate_keys / candidate_records).
+NATIVE_CANDIDATE_EXPOSURE_KEY_FIELDS = (
+    "seq",
+    "frame",
+    "cand_slot",
+    "cand_instance_uid",
+)
+# Frozen for API compatibility with older tests; equals exposure key fields.
+CANDIDATE_KEY_FIELDS = NATIVE_CANDIDATE_EXPOSURE_KEY_FIELDS
 EVENT_KEY_FIELDS = (
     "seq",
     "frame",
@@ -331,6 +339,8 @@ EVENT_KEY_FIELDS = (
     "lost_instance_uid",
     "event_key_version",
 )
+# Consumer event-local candidate identity:
+# (event_key, cand_slot, cand_instance_uid).
 
 # Ordered terminals for the registration-v3 contract seal itself.
 TERMINAL_V3_AUDIT_INVALID = "H0_REGISTRATION_V3_AUDIT_INVALID"
@@ -861,6 +871,34 @@ def _validate_candidate_sources_v3(record: Mapping[str, Any]) -> None:
         )
 
 
+def _pair_to_event_local_membership(pair: tuple) -> tuple:
+    """Project a pair key to consumer event-local candidate identity.
+
+    pair = (seq, frame, cand_slot, cand_instance_uid, lost_slot, lost_instance_uid)
+    membership = (seq, frame, lost_slot, lost_instance_uid, event_key_version,
+                  cand_slot, cand_instance_uid)
+    """
+    seq, frame, cand_slot, cand_uid, lost_slot, lost_uid = pair
+    return (
+        seq,
+        frame,
+        lost_slot,
+        lost_uid,
+        V3_EVENT_KEY_VERSION,
+        cand_slot,
+        cand_uid,
+    )
+
+
+def _pair_to_exposure(pair: tuple) -> tuple:
+    return pair[0], pair[1], pair[2], pair[3]
+
+
+def _membership_to_exposure(membership: tuple) -> tuple:
+    seq, frame, _lost_slot, _lost_uid, _ekv, cand_slot, cand_uid = membership
+    return seq, frame, cand_slot, cand_uid
+
+
 def _validate_completeness_evidence(
     evidence: Mapping[str, Any],
     *,
@@ -913,20 +951,41 @@ def _validate_completeness_evidence(
         raise RegistrationValidationError(
             f"{context}: duplicate native_pair_key entries are rejected"
         )
+    pair_row_set = set(pair_rows)
+
+    pre_score_pairs = [
+        _tuple_from_key(
+            _as_mapping(item, "pre_score_eligible_pair_key"),
+            PAIR_KEY_FIELDS,
+            "pair",
+        )
+        for item in evidence["pre_score_eligible_pair_keys"]
+    ]
+    pre_score_counter = Counter(pre_score_pairs)
+    if any(count != 1 for count in pre_score_counter.values()):
+        raise RegistrationValidationError(
+            f"{context}: duplicate pre_score_eligible_pair_key entries are rejected"
+        )
+    unknown_pre_score = sorted(set(pre_score_pairs) - pair_row_set)
+    if unknown_pre_score:
+        raise RegistrationValidationError(
+            f"{context}: pre_score_eligible_pair_keys must be a subset of "
+            f"pair_record_keys (unknown={unknown_pre_score})"
+        )
 
     native_candidates = [
         _tuple_from_key(
             _as_mapping(item, "native_candidate_key"),
-            CANDIDATE_KEY_FIELDS,
-            "candidate",
+            NATIVE_CANDIDATE_EXPOSURE_KEY_FIELDS,
+            "candidate exposure",
         )
         for item in evidence["native_candidate_keys"]
     ]
     candidate_rows = [
         _tuple_from_key(
             _as_mapping(item, "candidate_record_key"),
-            CANDIDATE_KEY_FIELDS,
-            "candidate",
+            NATIVE_CANDIDATE_EXPOSURE_KEY_FIELDS,
+            "candidate exposure",
         )
         for item in evidence["candidate_record_keys"]
     ]
@@ -944,20 +1003,49 @@ def _validate_completeness_evidence(
         raise RegistrationValidationError(
             f"{context}: duplicate candidate rows are rejected"
         )
+    exposure_set = set(native_cand_counter)
+
+    passes_entries = evidence["candidate_pre_score_passes"]
+    if not isinstance(passes_entries, Sequence) or isinstance(
+        passes_entries, (str, bytes)
+    ):
+        raise RegistrationValidationError(
+            f"{context}: candidate_pre_score_passes must be an array"
+        )
+    pre_score_passes: dict[tuple, int] = {}
+    for index, entry in enumerate(passes_entries):
+        entry_map = _as_mapping(entry, f"candidate_pre_score_passes[{index}]")
+        cand = _tuple_from_key(
+            _as_mapping(entry_map["candidate_key"], "candidate_key"),
+            NATIVE_CANDIDATE_EXPOSURE_KEY_FIELDS,
+            "candidate exposure",
+        )
+        if cand in pre_score_passes:
+            raise RegistrationValidationError(
+                f"{context}: duplicate candidate_pre_score_passes for {cand!r}"
+            )
+        value = entry_map["pre_score_passes"]
+        if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+            raise RegistrationValidationError(
+                f"{context}: pre_score_passes must be a non-negative integer"
+            )
+        pre_score_passes[cand] = value
+    if set(pre_score_passes) != exposure_set:
+        missing = sorted(exposure_set - set(pre_score_passes))
+        extra = sorted(set(pre_score_passes) - exposure_set)
+        raise RegistrationValidationError(
+            f"{context}: candidate_pre_score_passes must cover exactly the native "
+            f"candidate exposure set (missing={missing}, extra={extra})"
+        )
 
     membership = evidence["retained_candidate_membership"]
     if not isinstance(membership, Sequence) or isinstance(membership, (str, bytes)):
         raise RegistrationValidationError(
             f"{context}: retained_candidate_membership must be an array"
         )
-    membership_by_candidate: dict[tuple, tuple] = {}
+    membership_keys: list[tuple] = []
     for index, entry in enumerate(membership):
         entry_map = _as_mapping(entry, f"retained_candidate_membership[{index}]")
-        cand = _tuple_from_key(
-            _as_mapping(entry_map["candidate_key"], "candidate_key"),
-            CANDIDATE_KEY_FIELDS,
-            "candidate_key",
-        )
         event = _tuple_from_key(
             _as_mapping(entry_map["event_key"], "event_key"),
             EVENT_KEY_FIELDS,
@@ -967,29 +1055,63 @@ def _validate_completeness_evidence(
             raise RegistrationValidationError(
                 f"{context}: event_key_version must be {V3_EVENT_KEY_VERSION!r}"
             )
-        # Candidate key (seq,frame) must match event (seq,frame).
-        if cand[0] != event[0] or cand[1] != event[1]:
+        cand_slot = entry_map["cand_slot"]
+        cand_uid = entry_map["cand_instance_uid"]
+        if not isinstance(cand_slot, int) or isinstance(cand_slot, bool):
             raise RegistrationValidationError(
-                f"{context}: retained candidate must share seq/frame with its event"
+                f"{context}: cand_slot must be an integer"
             )
-        if cand in membership_by_candidate:
-            if membership_by_candidate[cand] != event:
-                raise RegistrationValidationError(
-                    f"{context}: cross-event candidate split rejected for {cand!r}"
-                )
+        if not isinstance(cand_uid, int) or isinstance(cand_uid, bool):
             raise RegistrationValidationError(
-                f"{context}: duplicate candidate membership for {cand!r}"
+                f"{context}: cand_instance_uid must be an integer"
             )
-        membership_by_candidate[cand] = event
+        # event_local = (seq, frame, lost_slot, lost_uid, ekv, cand_slot, cand_uid)
+        membership_key = (*event, cand_slot, cand_uid)
+        exposure = _membership_to_exposure(membership_key)
+        if exposure[0] != event[0] or exposure[1] != event[1]:
+            raise RegistrationValidationError(
+                f"{context}: event-local membership must share seq/frame with event"
+            )
+        if exposure not in exposure_set:
+            raise RegistrationValidationError(
+                f"{context}: membership exposure {exposure!r} is not in "
+                "native_candidate_keys"
+            )
+        membership_keys.append(membership_key)
 
-    retained = set(membership_by_candidate)
-    if retained != set(native_cand_counter):
-        missing = sorted(set(native_cand_counter) - retained)
-        extra = sorted(retained - set(native_cand_counter))
+    membership_counter = Counter(membership_keys)
+    if any(count != 1 for count in membership_counter.values()):
+        dups = sorted(key for key, count in membership_counter.items() if count != 1)
         raise RegistrationValidationError(
-            f"{context}: every retained candidate key must belong to exactly one "
-            f"event and reconcile with native keys (missing={missing}, extra={extra})"
+            f"{context}: duplicate event-local candidate membership rejected: {dups}"
         )
+
+    # Within one event, (cand_slot, cand_instance_uid) is unique — already
+    # implied by unique event-local keys. Same exposure may join many events.
+    projected = Counter(
+        _pair_to_event_local_membership(pair) for pair in pre_score_pairs
+    )
+    if membership_counter != projected:
+        only_membership = sorted(membership_counter - projected)
+        only_projected = sorted(projected - membership_counter)
+        raise RegistrationValidationError(
+            f"{context}: retained_candidate_membership must equal the projection "
+            "of pre_score_eligible_pair_keys under rho "
+            f"(membership_without_pair={only_membership}, "
+            f"pair_without_membership={only_projected})"
+        )
+
+    membership_by_exposure = Counter(
+        _membership_to_exposure(key) for key in membership_keys
+    )
+    for exposure, declared_passes in pre_score_passes.items():
+        actual = membership_by_exposure.get(exposure, 0)
+        if actual != declared_passes:
+            raise RegistrationValidationError(
+                f"{context}: pre_score_passes for exposure {exposure!r} is "
+                f"{declared_passes}, but event-local membership count is {actual}"
+            )
+    # pre_score_passes == 0 is legal: exposure present, no membership, no C_e seat.
 
     totals = _as_mapping(evidence["totals"], "totals")
     expected_totals = {
@@ -1279,59 +1401,401 @@ def mandatory_completeness_fields_available_in_trace_v2() -> dict[str, object]:
     }
 
 
+def _audit_source_bindings() -> list[dict[str, object]]:
+    return [
+        {
+            "stream": "pair_record",
+            "source_fields": sorted(V3_PAIR_COMPLETENESS_FIELDS),
+        },
+        {
+            "stream": "candidate_record",
+            "source_fields": sorted(V3_CANDIDATE_COMPLETENESS_FIELDS),
+        },
+        {
+            "stream": "event_universe_sidecar",
+            "source_fields": sorted(EVENT_UNIVERSE_SIDECAR_FIELDS),
+        },
+    ]
+
+
+def build_audit_candidate_source_probe() -> dict[str, object]:
+    """Canonical candidate-source probe for mechanical contract audit."""
+    return {
+        "schema": SCHEMA_V3,
+        "record_id": "audit_probe_candidate_source_v3",
+        "record_scope": "fixture_only",
+        "record_state": "candidate-source",
+        "consumer": {
+            "consumer_id": "audit_probe_consumer_v3",
+            "consumer_universe_id": V3_CONSUMER_UNIVERSE_ID,
+            "maximum_claim_layer": "gctm_model_specification",
+            "required_guarantee_ids": [],
+        },
+        "identity_bindings": dict(V3_IDENTITY_BINDINGS),
+        "candidate_sources": [
+            {
+                "source_id": "audit_pair",
+                "consumer_object": "runtime_candidate_universe",
+                "stream": "pair_record",
+                "source_fields": sorted(V3_PAIR_COMPLETENESS_FIELDS),
+                "causal_availability": "online",
+            },
+            {
+                "source_id": "audit_candidate",
+                "consumer_object": "runtime_candidate_universe",
+                "stream": "candidate_record",
+                "source_fields": sorted(V3_CANDIDATE_COMPLETENESS_FIELDS),
+                "causal_availability": "online",
+            },
+            {
+                "source_id": "audit_sidecar",
+                "consumer_object": "runtime_candidate_universe",
+                "stream": "event_universe_sidecar",
+                "source_fields": sorted(EVENT_UNIVERSE_SIDECAR_FIELDS),
+                "causal_availability": "online",
+            },
+        ],
+    }
+
+
+def build_audit_registered_guarantee_probe() -> dict[str, object]:
+    """Synthetic registered-guarantee probe covering multi-event + zero-pass.
+
+    Event-local membership uses consumer candidate_key =
+    (event_key, cand_slot, cand_instance_uid). The same native exposure
+    candidate may legally join multiple lost events; pre_score_passes == 0
+    means no membership.
+    """
+    capture_run_uuid = "audit-capture-run-uuid-v3-0001"
+    baseline = {
+        "baseline_id": "audit_h0_baseline_universe_v3",
+        "h0_terminal": "H0_FULL_COMMIT_CAPTURE_FAITHFUL",
+        "h0_evidence_id": "audit_h0_evidence_universe_v3",
+        "h0_packet_hash": "a" * 64,
+        "h0_schema_version": CAPTURE_ABI_SCHEMA_ID,
+        "runtime_instrumentation_identity": "audit_runtime_identity_v1",
+        "policy_base_id": "audit_policy_base_v1",
+        "resolved_preset_id": "audit_preset_m_v1",
+        "capture_mode": "audit_capture_mode_v1",
+        "capture_run_uuid": capture_run_uuid,
+        "event_key_version": V3_EVENT_KEY_VERSION,
+        "dataset_sequence_domain": "audit_sequence_domain_v1",
+        "accepted_by": "h0_owner",
+        "accepted_at": "2026-07-24T00:00:00Z",
+    }
+    event_e1 = {
+        "seq": 0,
+        "frame": 10,
+        "lost_slot": 2,
+        "lost_instance_uid": 200,
+        "event_key_version": V3_EVENT_KEY_VERSION,
+    }
+    event_e2 = {
+        "seq": 0,
+        "frame": 10,
+        "lost_slot": 4,
+        "lost_instance_uid": 400,
+        "event_key_version": V3_EVENT_KEY_VERSION,
+    }
+    pair_a_e1 = {
+        "seq": 0,
+        "frame": 10,
+        "cand_slot": 1,
+        "cand_instance_uid": 100,
+        "lost_slot": 2,
+        "lost_instance_uid": 200,
+    }
+    pair_a_e2 = {
+        "seq": 0,
+        "frame": 10,
+        "cand_slot": 1,
+        "cand_instance_uid": 100,
+        "lost_slot": 4,
+        "lost_instance_uid": 400,
+    }
+    pair_b_e1 = {
+        "seq": 0,
+        "frame": 10,
+        "cand_slot": 3,
+        "cand_instance_uid": 101,
+        "lost_slot": 2,
+        "lost_instance_uid": 200,
+    }
+    cand_a = {"seq": 0, "frame": 10, "cand_slot": 1, "cand_instance_uid": 100}
+    cand_b = {"seq": 0, "frame": 10, "cand_slot": 3, "cand_instance_uid": 101}
+    cand_c = {"seq": 0, "frame": 10, "cand_slot": 5, "cand_instance_uid": 102}
+    evidence = {
+        "capture_run_uuid": capture_run_uuid,
+        "capture_schema_version": CAPTURE_ABI_SCHEMA_ID,
+        "native_pair_keys": [dict(pair_a_e1), dict(pair_a_e2), dict(pair_b_e1)],
+        "pair_record_keys": [dict(pair_a_e1), dict(pair_a_e2), dict(pair_b_e1)],
+        "pre_score_eligible_pair_keys": [
+            dict(pair_a_e1),
+            dict(pair_a_e2),
+            dict(pair_b_e1),
+        ],
+        "native_candidate_keys": [dict(cand_a), dict(cand_b), dict(cand_c)],
+        "candidate_record_keys": [dict(cand_a), dict(cand_b), dict(cand_c)],
+        "candidate_pre_score_passes": [
+            {"candidate_key": dict(cand_a), "pre_score_passes": 2},
+            {"candidate_key": dict(cand_b), "pre_score_passes": 1},
+            {"candidate_key": dict(cand_c), "pre_score_passes": 0},
+        ],
+        "retained_candidate_membership": [
+            {
+                "event_key": dict(event_e1),
+                "cand_slot": 1,
+                "cand_instance_uid": 100,
+            },
+            {
+                "event_key": dict(event_e2),
+                "cand_slot": 1,
+                "cand_instance_uid": 100,
+            },
+            {
+                "event_key": dict(event_e1),
+                "cand_slot": 3,
+                "cand_instance_uid": 101,
+            },
+        ],
+        "totals": {
+            "total_native_pair_keys": 3,
+            "total_pair_records": 3,
+            "total_native_candidate_keys": 3,
+            "total_candidate_records": 3,
+            "overflow_native_pair_keys": 0,
+            "overflow_pair_records": 0,
+            "overflow_native_candidate_keys": 0,
+            "overflow_candidate_records": 0,
+            "bridge_attempt_count": 3,
+            "identity_uid_wrap_events": 0,
+        },
+        "partial_events": [],
+        "silent_truncation_possible": False,
+        "claim_commit_label_participation": False,
+        "exposure_predicates": {
+            "require_candidate_exposure": True,
+            "bridge_attempt_equals_native_candidate_keys": True,
+        },
+        "m0_m1_m2_identical_universe": {
+            "same_event_set": True,
+            "same_C_e": True,
+            "event_set_fingerprint": "audit_event_set_fp_v1",
+            "c_e_fingerprint": "audit_c_e_fp_v1",
+        },
+        "inclusion_stage_score_independent": True,
+    }
+
+    def _guarantee(guarantee_id: str, consumer_object: str) -> dict[str, object]:
+        return {
+            "guarantee_id": guarantee_id,
+            "guarantee_class": "universe_completeness",
+            "consumer_object": consumer_object,
+            "consumer_universe_id": V3_CONSUMER_UNIVERSE_ID,
+            "baseline_id": baseline["baseline_id"],
+            "runtime_instrumentation_identity": baseline[
+                "runtime_instrumentation_identity"
+            ],
+            "resolved_preset_id": baseline["resolved_preset_id"],
+            "h0_schema_version": baseline["h0_schema_version"],
+            "capture_run_uuid": capture_run_uuid,
+            "dataset_sequence_domain": baseline["dataset_sequence_domain"],
+            "event_key_version": V3_EVENT_KEY_VERSION,
+            "candidate_key_version": V3_CANDIDATE_KEY_VERSION,
+            "inclusion_stage_identity": V3_INCLUSION_STAGE_IDENTITY,
+            "mask_identity": V3_MASK_IDENTITY,
+            "gate_retained_band_identity": V3_GATE_RETAINED_BAND_IDENTITY,
+            "source_bindings": _audit_source_bindings(),
+            "completeness_predicate_id": V3_COMPLETENESS_PREDICATE_ID,
+            "replay_non_perturbation_basis": ["replay", "shadow_nonperturbation"],
+            "causal_availability": "online",
+            "declared_domain": {
+                "preset_id": baseline["resolved_preset_id"],
+                "runtime_identity": baseline["runtime_instrumentation_identity"],
+                "schema_id": CAPTURE_ABI_SCHEMA_ID,
+                "dataset_sequence_domain": baseline["dataset_sequence_domain"],
+                "consumer_universe_id": V3_CONSUMER_UNIVERSE_ID,
+            },
+            "invalidation_inputs": sorted(V3_REQUIRED_INVALIDATION_INPUTS),
+            "completeness_evidence": evidence,
+        }
+
+    guarantees = [
+        _guarantee(
+            "h0_runtime_candidate_universe_completeness_audit_v1",
+            "runtime_candidate_universe",
+        ),
+        _guarantee(
+            "h0_runtime_event_membership_completeness_audit_v1",
+            "runtime_event_membership",
+        ),
+    ]
+    return {
+        "schema": SCHEMA_V3,
+        "record_id": "audit_probe_registered_universe_completeness_v3",
+        "record_scope": "actual",
+        "record_state": "registered-guarantee",
+        "consumer": {
+            "consumer_id": "audit_gctm_consumer_v3",
+            "consumer_universe_id": V3_CONSUMER_UNIVERSE_ID,
+            "maximum_claim_layer": "bridge_runtime_b1",
+            "required_guarantee_ids": [g["guarantee_id"] for g in guarantees],
+        },
+        "identity_bindings": dict(V3_IDENTITY_BINDINGS),
+        "baseline": baseline,
+        "guarantees": guarantees,
+    }
+
+
 def audit_registration_v3_contract() -> dict[str, object]:
     """Mechanically select the registration-v3 ordered terminal.
 
-    This audits the *contract* (schema + validator + ABI coverage), not an
-    actual H0 guarantee or owner-accepted baseline.
+    Exercises schema + full semantic validation (candidate-source,
+    registered-guarantee positive multi-event/zero-pass branch, and key
+    fail-closed negatives). Does not establish an actual H0 guarantee.
     """
+    from copy import deepcopy
+
     issues: list[str] = []
+    selection_basis = {
+        "schema_valid": False,
+        "v3_dispatch_present": SCHEMA_V3 in SCHEMA_PATHS,
+        "identity_bindings_exact": False,
+        "completeness_predicate_complete": False,
+        "sidecar_fields_available_in_trace_v2": False,
+        "pair_candidate_fields_available_in_trace_v2": False,
+        "candidate_source_fixture_valid": False,
+        "registered_positive_branch_structurally_usable": False,
+        "multi_event_same_exposure_accepted": False,
+        "zero_pre_score_passes_accepted": False,
+        "negative_catalog_fail_closed": False,
+        "actual_guarantee_claimed": False,
+    }
+
     try:
         _schema_document(SCHEMA_V3)
-        _schema_validate(
-            {
-                "schema": SCHEMA_V3,
-                "record_id": "audit_probe_candidate_source_v3",
-                "record_scope": "fixture_only",
-                "record_state": "candidate-source",
-                "consumer": {
-                    "consumer_id": "audit_probe_consumer_v3",
-                    "consumer_universe_id": V3_CONSUMER_UNIVERSE_ID,
-                    "maximum_claim_layer": "gctm_model_specification",
-                    "required_guarantee_ids": [],
-                },
-                "identity_bindings": dict(V3_IDENTITY_BINDINGS),
-                "candidate_sources": [
-                    {
-                        "source_id": "audit_pair",
-                        "consumer_object": "runtime_candidate_universe",
-                        "stream": "pair_record",
-                        "source_fields": sorted(V3_PAIR_COMPLETENESS_FIELDS),
-                        "causal_availability": "online",
-                    },
-                    {
-                        "source_id": "audit_candidate",
-                        "consumer_object": "runtime_candidate_universe",
-                        "stream": "candidate_record",
-                        "source_fields": sorted(V3_CANDIDATE_COMPLETENESS_FIELDS),
-                        "causal_availability": "online",
-                    },
-                    {
-                        "source_id": "audit_sidecar",
-                        "consumer_object": "runtime_candidate_universe",
-                        "stream": "event_universe_sidecar",
-                        "source_fields": sorted(EVENT_UNIVERSE_SIDECAR_FIELDS),
-                        "causal_availability": "online",
-                    },
-                ],
-            },
-            SCHEMA_V3,
-        )
+        selection_basis["schema_valid"] = True
     except RegistrationValidationError as exc:
-        issues.append(f"schema_or_probe_invalid: {exc}")
+        issues.append(f"schema_document_invalid: {exc}")
 
     coverage = mandatory_completeness_fields_available_in_trace_v2()
-    if issues:
+    selection_basis["sidecar_fields_available_in_trace_v2"] = not coverage[
+        "missing_sidecar_fields"
+    ]
+    selection_basis["pair_candidate_fields_available_in_trace_v2"] = not (
+        coverage["missing_pair_fields"] or coverage["missing_candidate_fields"]
+    )
+
+    try:
+        candidate_report = validate_record(build_audit_candidate_source_probe())
+        if candidate_report.get("structurally_usable") is not False:
+            issues.append("candidate_source_probe_structurally_usable_must_be_false")
+        else:
+            selection_basis["candidate_source_fixture_valid"] = True
+            selection_basis["identity_bindings_exact"] = True
+    except RegistrationValidationError as exc:
+        issues.append(f"candidate_source_probe_invalid: {exc}")
+
+    try:
+        registered = build_audit_registered_guarantee_probe()
+        registered_report = validate_record(registered)
+        if registered_report.get("structurally_usable") is not True:
+            issues.append("registered_probe_must_be_structurally_usable")
+        else:
+            selection_basis["registered_positive_branch_structurally_usable"] = True
+            selection_basis["completeness_predicate_complete"] = True
+            selection_basis["multi_event_same_exposure_accepted"] = True
+            selection_basis["zero_pre_score_passes_accepted"] = True
+    except RegistrationValidationError as exc:
+        issues.append(f"registered_positive_probe_invalid: {exc}")
+        registered = None
+
+    negative_ok = 0
+    negative_required = 0
+    if registered is not None:
+        # 1) membership/pre_score_passes mismatch
+        negative_required += 1
+        bad = deepcopy(registered)
+        bad["guarantees"][0]["completeness_evidence"]["candidate_pre_score_passes"][0][
+            "pre_score_passes"
+        ] = 1
+        try:
+            validate_record(bad)
+            issues.append("negative_pre_score_passes_mismatch_did_not_fail")
+        except RegistrationValidationError:
+            negative_ok += 1
+
+        # 2) membership not equal to pre-score pair projection
+        negative_required += 1
+        bad = deepcopy(registered)
+        bad["guarantees"][0]["completeness_evidence"][
+            "retained_candidate_membership"
+        ] = bad["guarantees"][0]["completeness_evidence"][
+            "retained_candidate_membership"
+        ][:1]
+        try:
+            validate_record(bad)
+            issues.append("negative_membership_projection_mismatch_did_not_fail")
+        except RegistrationValidationError:
+            negative_ok += 1
+
+        # 3) wrong consumer universe
+        negative_required += 1
+        bad = deepcopy(registered)
+        bad["identity_bindings"]["consumer_universe_id"] = "wrong_universe"
+        try:
+            validate_record(bad)
+            issues.append("negative_wrong_universe_did_not_fail")
+        except RegistrationValidationError:
+            negative_ok += 1
+
+        # 4) incomplete invalidation set
+        negative_required += 1
+        bad = deepcopy(registered)
+        bad["guarantees"][0]["invalidation_inputs"] = sorted(
+            V3_REQUIRED_INVALIDATION_INPUTS - {"capture_run_uuid"}
+        )
+        try:
+            validate_record(bad)
+            issues.append("negative_invalidation_set_did_not_fail")
+        except RegistrationValidationError:
+            negative_ok += 1
+
+        # 5) overflow
+        negative_required += 1
+        bad = deepcopy(registered)
+        bad["guarantees"][0]["completeness_evidence"]["totals"][
+            "overflow_native_pair_keys"
+        ] = 1
+        try:
+            validate_record(bad)
+            issues.append("negative_overflow_did_not_fail")
+        except RegistrationValidationError:
+            negative_ok += 1
+
+    if negative_required > 0 and negative_ok == negative_required:
+        selection_basis["negative_catalog_fail_closed"] = True
+    elif negative_required > 0:
+        issues.append(
+            f"negative_catalog_incomplete: {negative_ok}/{negative_required} failed closed"
+        )
+
+    required_basis = {
+        "schema_valid",
+        "v3_dispatch_present",
+        "identity_bindings_exact",
+        "completeness_predicate_complete",
+        "sidecar_fields_available_in_trace_v2",
+        "pair_candidate_fields_available_in_trace_v2",
+        "candidate_source_fixture_valid",
+        "registered_positive_branch_structurally_usable",
+        "multi_event_same_exposure_accepted",
+        "zero_pre_score_passes_accepted",
+        "negative_catalog_fail_closed",
+    }
+    basis_ok = all(selection_basis[key] for key in required_basis)
+
+    if issues or not basis_ok:
         terminal = TERMINAL_V3_AUDIT_INVALID
     elif not coverage["all_available"]:
         terminal = TERMINAL_V3_REQUIRES_ABI_DELTA
@@ -1347,6 +1811,7 @@ def audit_registration_v3_contract() -> dict[str, object]:
         "terminal_order": list(TERMINAL_V3_ORDER),
         "trace_v2_abi_change_required": terminal == TERMINAL_V3_REQUIRES_ABI_DELTA,
         "abi_coverage": coverage,
+        "selection_basis": selection_basis,
         "audit_issues": issues,
         "actual_guarantee_established": False,
         "runtime_compatibility_established": False,

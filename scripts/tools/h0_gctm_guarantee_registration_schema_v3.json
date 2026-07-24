@@ -344,7 +344,8 @@
         "lost_instance_uid": { "type": "integer", "minimum": 0 }
       }
     },
-    "candidate_key": {
+    "native_candidate_exposure_key": {
+      "$comment": "Trace-v2 native_candidate_keys / candidate_records identity: frame-local exposure, not event-local C_e membership.",
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -380,6 +381,21 @@
         }
       }
     },
+    "event_local_candidate_key": {
+      "$comment": "Consumer candidate_key = (event_key, cand_slot, cand_instance_uid). One native exposure candidate may legally join many events.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "event_key",
+        "cand_slot",
+        "cand_instance_uid"
+      ],
+      "properties": {
+        "event_key": { "$ref": "#/$defs/event_key" },
+        "cand_slot": { "type": "integer", "minimum": 0 },
+        "cand_instance_uid": { "type": "integer", "minimum": 0 }
+      }
+    },
     "completeness_evidence": {
       "type": "object",
       "additionalProperties": false,
@@ -388,8 +404,10 @@
         "capture_schema_version",
         "native_pair_keys",
         "pair_record_keys",
+        "pre_score_eligible_pair_keys",
         "native_candidate_keys",
         "candidate_record_keys",
+        "candidate_pre_score_passes",
         "retained_candidate_membership",
         "totals",
         "partial_events",
@@ -415,27 +433,43 @@
           "type": "array",
           "items": { "$ref": "#/$defs/pair_key" }
         },
+        "pre_score_eligible_pair_keys": {
+          "$comment": "Pre-score eligible subset of pair keys; membership is the projection of this set under rho, not the full native candidate exposure set.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/pair_key" }
+        },
         "native_candidate_keys": {
           "type": "array",
-          "items": { "$ref": "#/$defs/candidate_key" }
+          "items": { "$ref": "#/$defs/native_candidate_exposure_key" }
         },
         "candidate_record_keys": {
           "type": "array",
-          "items": { "$ref": "#/$defs/candidate_key" }
+          "items": { "$ref": "#/$defs/native_candidate_exposure_key" }
         },
-        "retained_candidate_membership": {
+        "candidate_pre_score_passes": {
           "type": "array",
           "items": {
             "type": "object",
             "additionalProperties": false,
             "required": [
               "candidate_key",
-              "event_key"
+              "pre_score_passes"
             ],
             "properties": {
-              "candidate_key": { "$ref": "#/$defs/candidate_key" },
-              "event_key": { "$ref": "#/$defs/event_key" }
+              "candidate_key": {
+                "$ref": "#/$defs/native_candidate_exposure_key"
+              },
+              "pre_score_passes": {
+                "type": "integer",
+                "minimum": 0
+              }
             }
+          }
+        },
+        "retained_candidate_membership": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/event_local_candidate_key"
           }
         },
         "totals": {

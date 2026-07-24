@@ -65,40 +65,52 @@ DECLARED_DOMAIN = {
     "dataset_sequence_domain": "contract_sequence_domain_v1",
     "consumer_universe_id": "gctm_runtime_native_candidate_universe_v1",
 }
-PAIR_A = {
-    "seq": 0,
-    "frame": 10,
-    "cand_slot": 1,
-    "cand_instance_uid": 100,
-    "lost_slot": 2,
-    "lost_instance_uid": 200,
-}
-PAIR_B = {
-    "seq": 0,
-    "frame": 10,
-    "cand_slot": 3,
-    "cand_instance_uid": 101,
-    "lost_slot": 2,
-    "lost_instance_uid": 200,
-}
-CAND_A = {
-    "seq": 0,
-    "frame": 10,
-    "cand_slot": 1,
-    "cand_instance_uid": 100,
-}
-CAND_B = {
-    "seq": 0,
-    "frame": 10,
-    "cand_slot": 3,
-    "cand_instance_uid": 101,
-}
-EVENT_E = {
+
+# Two lost events on the same frame.
+EVENT_E1 = {
     "seq": 0,
     "frame": 10,
     "lost_slot": 2,
     "lost_instance_uid": 200,
     "event_key_version": "gctm_runtime_event_key_v1",
+}
+EVENT_E2 = {
+    "seq": 0,
+    "frame": 10,
+    "lost_slot": 4,
+    "lost_instance_uid": 400,
+    "event_key_version": "gctm_runtime_event_key_v1",
+}
+
+# Native exposure candidates (frame-local; may join 0..N events).
+CAND_A = {"seq": 0, "frame": 10, "cand_slot": 1, "cand_instance_uid": 100}
+CAND_B = {"seq": 0, "frame": 10, "cand_slot": 3, "cand_instance_uid": 101}
+CAND_C = {"seq": 0, "frame": 10, "cand_slot": 5, "cand_instance_uid": 102}
+
+# Pairs: A joins both events; B joins only E1; C has no pre-score pairs.
+PAIR_A_E1 = {
+    "seq": 0,
+    "frame": 10,
+    "cand_slot": 1,
+    "cand_instance_uid": 100,
+    "lost_slot": 2,
+    "lost_instance_uid": 200,
+}
+PAIR_A_E2 = {
+    "seq": 0,
+    "frame": 10,
+    "cand_slot": 1,
+    "cand_instance_uid": 100,
+    "lost_slot": 4,
+    "lost_instance_uid": 400,
+}
+PAIR_B_E1 = {
+    "seq": 0,
+    "frame": 10,
+    "cand_slot": 3,
+    "cand_instance_uid": 101,
+    "lost_slot": 2,
+    "lost_instance_uid": 200,
 }
 
 
@@ -120,27 +132,51 @@ def _source_bindings() -> list[dict[str, object]]:
 
 
 def _completeness_evidence() -> dict[str, object]:
+    """Multi-event same exposure + zero pre_score_passes exposure."""
     return {
         "capture_run_uuid": CAPTURE_RUN_UUID,
         "capture_schema_version": "h0_bridge_decision_trace_v2",
-        "native_pair_keys": [dict(PAIR_A), dict(PAIR_B)],
-        "pair_record_keys": [dict(PAIR_A), dict(PAIR_B)],
-        "native_candidate_keys": [dict(CAND_A), dict(CAND_B)],
-        "candidate_record_keys": [dict(CAND_A), dict(CAND_B)],
+        "native_pair_keys": [dict(PAIR_A_E1), dict(PAIR_A_E2), dict(PAIR_B_E1)],
+        "pair_record_keys": [dict(PAIR_A_E1), dict(PAIR_A_E2), dict(PAIR_B_E1)],
+        "pre_score_eligible_pair_keys": [
+            dict(PAIR_A_E1),
+            dict(PAIR_A_E2),
+            dict(PAIR_B_E1),
+        ],
+        "native_candidate_keys": [dict(CAND_A), dict(CAND_B), dict(CAND_C)],
+        "candidate_record_keys": [dict(CAND_A), dict(CAND_B), dict(CAND_C)],
+        "candidate_pre_score_passes": [
+            {"candidate_key": dict(CAND_A), "pre_score_passes": 2},
+            {"candidate_key": dict(CAND_B), "pre_score_passes": 1},
+            {"candidate_key": dict(CAND_C), "pre_score_passes": 0},
+        ],
         "retained_candidate_membership": [
-            {"candidate_key": dict(CAND_A), "event_key": dict(EVENT_E)},
-            {"candidate_key": dict(CAND_B), "event_key": dict(EVENT_E)},
+            {
+                "event_key": dict(EVENT_E1),
+                "cand_slot": 1,
+                "cand_instance_uid": 100,
+            },
+            {
+                "event_key": dict(EVENT_E2),
+                "cand_slot": 1,
+                "cand_instance_uid": 100,
+            },
+            {
+                "event_key": dict(EVENT_E1),
+                "cand_slot": 3,
+                "cand_instance_uid": 101,
+            },
         ],
         "totals": {
-            "total_native_pair_keys": 2,
-            "total_pair_records": 2,
-            "total_native_candidate_keys": 2,
-            "total_candidate_records": 2,
+            "total_native_pair_keys": 3,
+            "total_pair_records": 3,
+            "total_native_candidate_keys": 3,
+            "total_candidate_records": 3,
             "overflow_native_pair_keys": 0,
             "overflow_pair_records": 0,
             "overflow_native_candidate_keys": 0,
             "overflow_candidate_records": 0,
-            "bridge_attempt_count": 2,
+            "bridge_attempt_count": 3,
             "identity_uid_wrap_events": 0,
         },
         "partial_events": [],
@@ -274,6 +310,45 @@ def test_structurally_complete_registered_guarantee_is_usable_not_authoritative(
     }
 
 
+def test_same_exposure_candidate_may_join_multiple_events() -> None:
+    """Consumer candidate_key is event-local; same exposure across events is legal."""
+    report = registration.validate_record(_registered_record_v3())
+    assert report["structurally_usable"] is True
+    evidence = _completeness_evidence()
+    membership = evidence["retained_candidate_membership"]
+    a_events = [
+        m["event_key"]["lost_slot"]
+        for m in membership
+        if m["cand_slot"] == 1 and m["cand_instance_uid"] == 100
+    ]
+    assert sorted(a_events) == [2, 4]
+
+
+def test_zero_pre_score_passes_has_no_membership() -> None:
+    report = registration.validate_record(_registered_record_v3())
+    assert report["structurally_usable"] is True
+    evidence = _completeness_evidence()
+    membership_exposures = {
+        (
+            m["event_key"]["seq"],
+            m["event_key"]["frame"],
+            m["cand_slot"],
+            m["cand_instance_uid"],
+        )
+        for m in evidence["retained_candidate_membership"]
+    }
+    assert (0, 10, 5, 102) not in membership_exposures
+    passes = {
+        (
+            row["candidate_key"]["cand_slot"],
+            row["candidate_key"]["cand_instance_uid"],
+            row["pre_score_passes"],
+        )
+        for row in evidence["candidate_pre_score_passes"]
+    }
+    assert (5, 102, 0) in passes
+
+
 def test_contract_audit_selects_sealable_without_abi_delta() -> None:
     audit = registration.audit_registration_v3_contract()
     assert audit["selected_terminal"] == registration.TERMINAL_V3_CONTRACT_SEALABLE
@@ -281,6 +356,14 @@ def test_contract_audit_selects_sealable_without_abi_delta() -> None:
     assert audit["actual_guarantee_established"] is False
     assert audit["runtime_compatibility_established"] is False
     assert audit["abi_coverage"]["all_available"] is True
+    basis = audit["selection_basis"]
+    assert basis["candidate_source_fixture_valid"] is True
+    assert basis["registered_positive_branch_structurally_usable"] is True
+    assert basis["multi_event_same_exposure_accepted"] is True
+    assert basis["zero_pre_score_passes_accepted"] is True
+    assert basis["negative_catalog_fail_closed"] is True
+    assert basis["completeness_predicate_complete"] is True
+    assert audit["audit_issues"] == []
 
 
 # ---------------------------------------------------------------------------
@@ -291,7 +374,6 @@ def test_contract_audit_selects_sealable_without_abi_delta() -> None:
 def test_wrong_consumer_universe_identity() -> None:
     record = _registered_record_v3()
     record["identity_bindings"]["consumer_universe_id"] = "wrong_universe"
-    # Schema const fails first for identity_bindings.
     with pytest.raises(
         registration.RegistrationValidationError,
         match="schema rejection|consumer_universe",
@@ -361,8 +443,8 @@ def test_native_key_without_emitted_row() -> None:
     guarantees = record["guarantees"]
     assert isinstance(guarantees, list)
     evidence = guarantees[0]["completeness_evidence"]
-    evidence["pair_record_keys"] = [dict(PAIR_A)]
-    evidence["totals"]["total_pair_records"] = 1
+    evidence["pair_record_keys"] = [dict(PAIR_A_E1), dict(PAIR_B_E1)]
+    evidence["totals"]["total_pair_records"] = 2
     with pytest.raises(
         registration.RegistrationValidationError, match="native_pair_key"
     ):
@@ -374,8 +456,8 @@ def test_emitted_row_without_native_key() -> None:
     guarantees = record["guarantees"]
     assert isinstance(guarantees, list)
     evidence = guarantees[0]["completeness_evidence"]
-    evidence["native_pair_keys"] = [dict(PAIR_A)]
-    evidence["totals"]["total_native_pair_keys"] = 1
+    evidence["native_pair_keys"] = [dict(PAIR_A_E1), dict(PAIR_B_E1)]
+    evidence["totals"]["total_native_pair_keys"] = 2
     with pytest.raises(
         registration.RegistrationValidationError, match="native_pair_key"
     ):
@@ -387,29 +469,60 @@ def test_duplicate_candidate_rejected() -> None:
     guarantees = record["guarantees"]
     assert isinstance(guarantees, list)
     evidence = guarantees[0]["completeness_evidence"]
-    evidence["candidate_record_keys"] = [dict(CAND_A), dict(CAND_A)]
-    evidence["native_candidate_keys"] = [dict(CAND_A), dict(CAND_A)]
+    evidence["candidate_record_keys"] = [dict(CAND_A), dict(CAND_A), dict(CAND_B)]
+    evidence["native_candidate_keys"] = [dict(CAND_A), dict(CAND_A), dict(CAND_B)]
+    evidence["totals"]["total_native_candidate_keys"] = 3
+    evidence["totals"]["total_candidate_records"] = 3
+    evidence["totals"]["bridge_attempt_count"] = 3
     with pytest.raises(
         registration.RegistrationValidationError, match="duplicate candidate"
     ):
         registration.validate_record(record)
 
 
-def test_cross_event_candidate_split_rejected() -> None:
+def test_duplicate_event_local_membership_rejected() -> None:
     record = _registered_record_v3()
     guarantees = record["guarantees"]
     assert isinstance(guarantees, list)
     evidence = guarantees[0]["completeness_evidence"]
-    other_event = dict(EVENT_E)
-    other_event["lost_slot"] = 9
-    other_event["lost_instance_uid"] = 999
-    evidence["retained_candidate_membership"] = [
-        {"candidate_key": dict(CAND_A), "event_key": dict(EVENT_E)},
-        {"candidate_key": dict(CAND_A), "event_key": other_event},
-        {"candidate_key": dict(CAND_B), "event_key": dict(EVENT_E)},
-    ]
+    evidence["retained_candidate_membership"].append(
+        {
+            "event_key": dict(EVENT_E1),
+            "cand_slot": 1,
+            "cand_instance_uid": 100,
+        }
+    )
     with pytest.raises(
-        registration.RegistrationValidationError, match="cross-event candidate split"
+        registration.RegistrationValidationError,
+        match="duplicate event-local candidate membership",
+    ):
+        registration.validate_record(record)
+
+
+def test_membership_must_equal_pre_score_pair_projection() -> None:
+    record = _registered_record_v3()
+    guarantees = record["guarantees"]
+    assert isinstance(guarantees, list)
+    evidence = guarantees[0]["completeness_evidence"]
+    # Drop one membership while leaving the pre-score pair.
+    evidence["retained_candidate_membership"] = evidence[
+        "retained_candidate_membership"
+    ][:2]
+    with pytest.raises(
+        registration.RegistrationValidationError,
+        match="projection of pre_score_eligible_pair_keys|pre_score_passes",
+    ):
+        registration.validate_record(record)
+
+
+def test_pre_score_passes_mismatch_rejected() -> None:
+    record = _registered_record_v3()
+    guarantees = record["guarantees"]
+    assert isinstance(guarantees, list)
+    evidence = guarantees[0]["completeness_evidence"]
+    evidence["candidate_pre_score_passes"][0]["pre_score_passes"] = 1
+    with pytest.raises(
+        registration.RegistrationValidationError, match="pre_score_passes"
     ):
         registration.validate_record(record)
 
@@ -438,7 +551,7 @@ def test_partial_event_fail_closed() -> None:
     record = _registered_record_v3()
     guarantees = record["guarantees"]
     assert isinstance(guarantees, list)
-    guarantees[0]["completeness_evidence"]["partial_events"] = [dict(EVENT_E)]
+    guarantees[0]["completeness_evidence"]["partial_events"] = [dict(EVENT_E1)]
     with pytest.raises(
         registration.RegistrationValidationError, match="partial events"
     ):
@@ -564,8 +677,6 @@ def test_v3_class_with_v2_consumer_object_rejected() -> None:
 
 
 def test_v2_record_attempting_universe_completeness_rejected() -> None:
-    record = json.loads(V2_FIXTURE.read_text(encoding="utf-8"))
-    # Promote to registered-like shape under v2 with a forbidden class.
     record = {
         "schema": "h0_gctm_guarantee_registration_v2",
         "record_id": "contract_v2_universe_attempt",
@@ -690,7 +801,6 @@ def test_guarantees_do_not_mutually_imply() -> None:
     record = _registered_record_v3()
     consumer = record["consumer"]
     assert isinstance(consumer, dict)
-    # Drop one guarantee from required ids while keeping both guarantees.
     consumer["required_guarantee_ids"] = consumer["required_guarantee_ids"][:1]
     with pytest.raises(
         registration.RegistrationValidationError, match="required_guarantee_ids"

@@ -26,7 +26,7 @@
       "role": "gctm_runtime_universe_terminal",
       "identity_id": "gctm_runtime_universe_terminal_report_20260724",
       "path": "docs/modules/semantic/research/evidence/gctm_runtime_native_candidate_universe_20260724/terminal_report.json",
-      "sha256": "2b8874a4453fb8687687f7d46a3435e724824e250b7ade97bc11017a7391b076"
+      "sha256": "d8dabee30e4519167f0a4ba3fe9ac9558b5682f5ea3eda548a1d97e1fec3952a"
     },
     {
       "role": "gctm_runtime_universe_declaration",
@@ -38,7 +38,7 @@
       "role": "gctm_runtime_universe_frozen_inputs",
       "identity_id": "gctm_runtime_universe_frozen_inputs_20260724",
       "path": "docs/modules/semantic/research/evidence/gctm_runtime_native_candidate_universe_20260724/frozen_input_identities.json",
-      "sha256": "68b00f0ead30ef01cf225f44b26505b396e6c4a8dfb95d8fe16f1284337df4bf"
+      "sha256": "cc9ba15e9cf747a9b3ddaf5ac7f4482642869dd719eef7f87e3f5410ced9ed30"
     },
     {
       "role": "registration_requirements",
@@ -62,7 +62,7 @@
       "role": "h0_gctm_static_audit_terminal",
       "identity_id": "h0_gctm_static_audit_terminal_report_20260723",
       "path": "docs/modules/semantic/research/evidence/h0_gctm_interface_static_feasibility_20260723/terminal_report.json",
-      "sha256": "dd9de05c55467bcbf6881c99efb7c2216110b668bed4e242d729192673807624"
+      "sha256": "6a9ab4ac63f06b88a9916e745aeb0ab9fd1e4c220c482db82e4dd60f7e8ceeb9"
     },
     {
       "role": "h0_bridge_decision_trace_v2",

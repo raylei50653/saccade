@@ -27,8 +27,8 @@
     },
     {
       "id": 5,
-      "name": "retained_candidate_exactly_one_event",
-      "rule": "every retained candidate key belongs to exactly one event under rho"
+      "name": "event_local_membership_from_pre_score_pairs",
+      "rule": "retained event-local candidate keys equal the projection of pre_score_eligible_pair_keys under rho; consumer candidate_key=(event_key,cand_slot,cand_instance_uid); native exposure may join 0..N events; pre_score_passes==0 has no membership"
     },
     {
       "id": 6,
@@ -38,12 +38,12 @@
     {
       "id": 7,
       "name": "duplicate_candidate_rows_rejected",
-      "rule": "duplicate candidate keys fail closed"
+      "rule": "duplicate native exposure candidate keys and duplicate event-local membership keys fail closed"
     },
     {
       "id": 8,
-      "name": "cross_event_candidate_splits_rejected",
-      "rule": "same candidate key assigned to multiple events fails closed"
+      "name": "event_local_uniqueness_and_pre_score_passes_match",
+      "rule": "within one event (cand_slot,cand_instance_uid) is unique; membership count per exposure equals candidate_pre_score_passes; same exposure across distinct events is legal"
     },
     {
       "id": 9,
