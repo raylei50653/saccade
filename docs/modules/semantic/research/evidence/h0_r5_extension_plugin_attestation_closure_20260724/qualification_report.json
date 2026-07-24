@@ -1,0 +1,94 @@
+{
+  "authority": "non_authoritative",
+  "capture": "forbidden",
+  "does_not_establish": [
+    "I_selected",
+    "F_created",
+    "S_created",
+    "SEALED_accepted",
+    "execution_authorized",
+    "H0_baseline_accepted",
+    "runtime_substrate_established",
+    "actual_guarantee_registered",
+    "runtime_compatibility_established",
+    "B1_O1_activation"
+  ],
+  "extension_load": {
+    "attestation_state": "complete",
+    "confinement_plan_digest": "0336dee56b3ad097aea9f66aa786fdfde7f52bfe688f1c2d061b1a9f434e0d0a",
+    "extension_artifact_observed": true,
+    "extension_identity_equal": true,
+    "plugin_artifact_observed": true,
+    "plugin_identity_equal": true,
+    "runtime_inputs_digest": "8e6fb78f320e6ec7c22350ae0b76c63ade7712f3c01bee090438e9d2a41efc64",
+    "state": "passed",
+    "violations": []
+  },
+  "invalidated_by": "any post-qualification execution-bound commit",
+  "owner_decision_identity": "h0_r5_extension_plugin_attestation_closure_authorization_20260724",
+  "owner_decision_surface": "https://github.com/raylei50653/saccade/issues/280",
+  "phase_b": "forbidden",
+  "qualification_artifact_digest": "d1a5828980c927039d0c18c27e6a5bb4b584fbc4e8e013092c06734d789f1552",
+  "qualification_result": "passed",
+  "repair_unit": "h0_extension_plugin_runtime_attestation_closure_v1",
+  "repository_head_sha": "99f7bb542a04334f55ddf622b093649a6d48f33f",
+  "repository_tree_sha": "33969fc1b8795c9d14a3f1282b0adb5767cc6ebd",
+  "requested_ref": "99f7bb542a04334f55ddf622b093649a6d48f33f",
+  "research_inputs": "forbidden",
+  "schema": "h0_r5_qualification_report_v1",
+  "steps": [
+    {
+      "name": "configure",
+      "state": "passed"
+    },
+    {
+      "name": "build",
+      "state": "passed"
+    },
+    {
+      "name": "build_identity",
+      "state": "passed"
+    },
+    {
+      "name": "runtime_closure",
+      "state": "passed"
+    },
+    {
+      "name": "cuda_runtime_confinement",
+      "state": "passed"
+    },
+    {
+      "attestation_state": "complete",
+      "confinement_plan_digest": "0336dee56b3ad097aea9f66aa786fdfde7f52bfe688f1c2d061b1a9f434e0d0a",
+      "extension_artifact_observed": true,
+      "extension_identity_equal": true,
+      "name": "extension_load",
+      "plugin_artifact_observed": true,
+      "plugin_identity_equal": true,
+      "runtime_inputs_digest": "8e6fb78f320e6ec7c22350ae0b76c63ade7712f3c01bee090438e9d2a41efc64",
+      "state": "passed",
+      "violations": []
+    },
+    {
+      "name": "t1_verdict_semantics",
+      "state": "passed"
+    },
+    {
+      "name": "runner_launch_preflight",
+      "state": "passed"
+    },
+    {
+      "name": "failure_envelope_serialization",
+      "state": "passed"
+    },
+    {
+      "name": "preseal_freeze_assembly",
+      "state": "passed"
+    },
+    {
+      "name": "landing_discovery_dry_run",
+      "state": "passed"
+    }
+  ],
+  "terminal_claim": "forbidden"
+}

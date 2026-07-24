@@ -25,11 +25,11 @@
   S4 permanently spent; no faithful capture; no actual H0 guarantee; Phase B forbidden）:
   state fact-owner 見
   [claim-state registry](../../research/contracts/claim_state_registry.md)。
-- **H0-R5 Repair open（2026-07-24）** — sole repair unit
-  `h0_extension_plugin_runtime_attestation_closure_v1` under owner decision
-  `h0_r5_extension_plugin_attestation_closure_authorization_20260724`（Issue #280）.
-  Authorizes repair + controlled-host qualification + future Seal eligibility only.
+- **H0-R5 Repair closed at `H0_R5_ATTESTATION_QUALIFIED_SEALABLE`**
+  （`h0_extension_plugin_runtime_attestation_closure_v1` / Issue #280）。
+  Controlled-host qualification passed; exact head eligible for separate Seal PR only.
   **Not** F/S, Phase-A execution, exactly-once auth, Phase B, actual guarantee, or B1/O1.
+  See [repair evidence](research/evidence/h0_r5_extension_plugin_attestation_closure_20260724/).
 - 2026-07-24 consumer re-charter closed at
   `GCTM_RUNTIME_UNIVERSE_CONTRACT_SEALABLE`（`gctm_runtime_native_candidate_universe_v1`）；
   WIP released at terminal；**not** H0 implementation authority. See

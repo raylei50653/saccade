@@ -453,7 +453,8 @@ pending_reentry:                          # append-only; pre-seal, no terminal c
     spent_chain_boundary: "S4=a76efffa permanently spent; no retry/resume/re-interpretation of S4; no reuse of F4/S4; no Phase B from R4 packet"
     authorized: "one repair unit; controlled-host non-authoritative qualification; fresh future Seal eligibility if qualification passes"
     not_authorized: "F/S creation; Phase-A execution; exactly-once authorization; Phase B; actual registration-v3 guarantee; runtime compatibility; H0_ROUTE5_B1 / GCTM_B1 / O1 activation"
-    status: "OPEN 2026-07-24 — repair in progress under #280; does not claim Seal or execution authority"
+    status: "RESOLVED 2026-07-24 — mechanical terminal H0_R5_ATTESTATION_QUALIFIED_SEALABLE; controlled-host qualification passed; exact qualified head eligible for separate Seal PR only; no I/F/S, no execution, no actual guarantee"
+    qualified_head_binding: "see docs/modules/semantic/research/evidence/h0_r5_extension_plugin_attestation_closure_20260724/qualification_report.json"
 last_reviewed_at: 2026-07-24
 ```
 
