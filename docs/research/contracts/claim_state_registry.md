@@ -385,7 +385,8 @@ pending_reentry:                          # append-only; pre-seal, no terminal c
     spent_chain_boundary: "S3=3a6a9ec6 permanently spent; no retry/resume/re-interpretation"
     registration_v3_downstream: "h0_gctm_guarantee_registration_v3 / gctm_runtime_native_candidate_universe_v1 structurally reachable after successful Phase-A; no actual guarantee in this Repair"
     launch_hygiene_gate: "scripts/tools/h0_launch_hygiene_gate.py retained; single-source predicate run_h0_phase_a.assert_no_preexisting_build_tree"
-    status: "ACTIVE 2026-07-24 — Repair / qualification candidate under construction; decision-relevant WIP held; terminal family H0_R4_REPAIR_{INVALID,REQUIRES_ABI_DELTA,QUALIFIED_SEALABLE}"
+    status: "RESOLVED 2026-07-24 — mechanical terminal H0_R4_REPAIR_QUALIFIED_SEALABLE; controlled-host qualification passed; WIP released; exact qualified head eligible for separate Seal PR only; no I/F/S, no execution, no actual guarantee"
+    qualified_head_binding: "see docs/modules/semantic/research/evidence/h0_r4_authority_overlay_runtime_binding_split_20260724/qualification_report.json"
 last_reviewed_at: 2026-07-24
 ```
 

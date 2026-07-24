@@ -32,12 +32,24 @@ Declaration was simultaneously:
 Repair removes declaration from runtime inventory and binds it only through
 `h0_owner_authority_overlay_v1` with S-byte continuous monitoring.
 
+## Qualified head
+
+```text
+candidate_head_sha = d8241f9e3a0bd2169673fff1242c35a42980ff6c
+repair_terminal    = H0_R4_REPAIR_QUALIFIED_SEALABLE
+```
+
+Any later **execution-bound** change invalidates this qualification and requires
+a fresh report bound to a new exact head. This evidence packet itself is
+non-authoritative bookkeeping and is not a Seal/I/F/S identity.
+
 ## Files
 
 | File | Role |
 |:--|:--|
 | `repair_terminal.json` | Mechanical ordered Repair terminal |
 | `qualification_report.json` | Non-authoritative qualification binding exact head SHA |
+| `qualification_summary.json` | Controlled-host harness witness (`h0_phase_a_qualification_v1`) |
 | `README.md` | This navigation note |
 
 ## Non-claims
