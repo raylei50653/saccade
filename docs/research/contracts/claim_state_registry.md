@@ -303,6 +303,12 @@ last_transition: 2026-07-14 — cause 由 foreign-capture 改為 provenance inco
                  2026-07-21 — #235 re-entry #3 第三個 owner-accepted `H0_PROVENANCE_INVALID`
                  （object state 不變;死因不同＝extension_load confinement-plan construction;
                  詳見 reentry_terminal_history re-entry #3）
+                 2026-07-24 — H0-R4 Phase-A sole authoritative invocation under sealed S=a76efffa
+                 mechanical disposition `H0_PROVENANCE_INVALID`（controller literal
+                 `provenance_invalid`; independent verifier valid=true）; authorization
+                 consumed; exact S permanently spent; owner acceptance of the truthful
+                 negative terminal is the surface of this evidence PR merge only
+                 （object state 不變;詳見 reentry_terminal_history re-entry #4 / H0-R4）
 admissible_units: []                   # H0 unit 已消費並於 route 1 關閉;現無宣告的補救動作。
                                        # 重進=append-only declaration amendment＋新 I→F→S
                                        # owner reseal＋owner scheduling（§9 重新 review 時再推導）
@@ -371,6 +377,49 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
     ledger_effect: 上方 route-1 永久留帳結論不變（仍無 faithful capture / 無 accepted runtime-fidelity edge / 無 actual H0 guarantee envelope）;候選集仍空;guarantee set 空;Phase B / GCTM / B1 / O1 未啟動
     future_reentry_precondition: NONE — 本 acceptance 不授權任何 repair / reseal / 新 re-entry;exact S=3a6a9ec6 permanently spent
     issues: '#235 (owner acceptance surface; remains UNMERGED; exact S=3a6a9ec6 immutable spent history; closeout landed via separate PR; no closing keyword)'
+  - date: 2026-07-24
+    scheduling: owner-scheduled H0-R4 Phase-A execution under sealed S（post #277 Seal; post Amendment 10 repair qualification; non-automatic; O0 charter 仍 closed,候選集仍空）
+    declaration_amendment: "Amendment 10 authority overlay + owner SEALED row at S=a76efffa（PR #277）"
+    scope: "sole authoritative Phase-A controller invocation under exact sealed S; Phase B forbidden; no retry/resume; no automatic guarantee registration"
+    chain:
+      I4: 2a233387a6a321dd43570e2e30dc718571b3b4f4
+      F4: ced4a4cc6a71473dcb1225203e6d59df0437d976
+      S4: a76efffa01a6fb731218150c355f5859bb8e6dd4
+    authorization:
+      identity: h0_r4_phase_a_exactly_once_authorization_20260724
+      surface: "https://github.com/raylei50653/saccade/issues/278"
+      authorized_invocation_count: 1
+      authorization_consumed: true
+      consumed_at: controller_process_launch
+    invocation: authoritative_count=1; exactly_once_authorization=consumed; exact_S_permanently_spent; retry/resume/second_invocation_under_S4=permanently_forbidden
+    controller_result: provenance_invalid   # controller literal; A2.4 first ordered terminal
+    mechanical_disposition: H0_PROVENANCE_INVALID
+    independent_verifier: '{"document_type":"aggregate_verification","result":"provenance_invalid","schema":"h0_phase_a_verifier_v1","valid":true}' ; rc=0
+    factual_boundary:
+      failure_stage: extension_load
+      failure_reason: "extension/plugin load is absent from runtime attestation"
+      failing_predicate: provenance_ok=false（唯一 false;build_ok/extension_ok/artifacts_ok/classified_execution/packets_valid/policy_equal/runners_ok/serialization_ok 皆 true;timed_out=false）
+      checkpoints: T0/T1 completed（inventory_equal;t0 bound_inputs_digest 2e5e11a4）; T2a_0→T4 not_reached
+      capture_child_runs: NOT_RUN（00_capture_off / 01_capture_on_1 / 02_capture_on_2 / 03_capture_on_3;confinement_plan_digest=null）
+      build_runtime_gpu_identity: complete（build/runtime/GPU identity 已產生;四個 child runtime_inputs 因 blocking_result=provenance_invalid 均為 not_produced）
+      comparison: not_produced
+      capture_evidence: none
+      note: "DriftError during extension_load runtime attestation maps to ordered terminal provenance_invalid before extension_load_failed; extension_ok predicate remains true"
+    evidence_packet: docs/modules/semantic/research/evidence/h0_phase_a_2a233387a6a321dd43570e2e30dc718571b3b4f4/
+    witness_bundle: docs/modules/semantic/research/evidence/h0_r4_phase_a_execution_witness_20260724/
+    digests:
+      inventory_digest: a0527d314051b9aa96660ce57c7a1c5478aa17950db5533549deca48b4f52b4e   # 25 members
+      manifest_json_sha256: c3cf4bd8bdfbf0fc2dc500b982ceca8136913d7381b185a4b9506e724e903cf0
+      result_json_sha256: 2c1cfa17c977ad02c6c1dee335810b9ee7ff37f1cbba1382d41a00f06b96529a
+      checksums_sha256_digest: 3ff0ac6087a989265d6d8f73b0a2af903b446d03c24a41891576b9a4241a4a04
+      verifier_report_aggregate_json_sha256: 0be12cc292773239d75604e9f2496787387ee8874395f4a3a9d723c615fe3f2e
+    owner_acceptance: pending this evidence PR merge as truthful-negative ordered terminal surface only;
+                      **not** claimed in the evidence-witness commit;
+                      **not** `H0_FULL_COMMIT_CAPTURE_FAITHFUL`;不成立 actual H0 guarantee;不構成 guarantee registration 基礎;
+                      does not authorize repair / reseal / new re-entry / Phase B
+    ledger_effect: 上方 route-1 永久留帳結論不變（仍無 faithful capture / 無 accepted runtime-fidelity edge / 無 actual H0 guarantee envelope）;候選集仍空;guarantee set 空;Phase B / GCTM / B1 / O1 未啟動; registration-v3 仍為 contract-sealable only
+    future_reentry_precondition: NONE from this mechanical terminal alone — exact S=a76efffa permanently spent; any future work requires a separate owner decision
+    issues: '#277 (Seal landed) / #278 (exactly-once authorization surface; consumed at launch)'
 pending_reentry:                          # append-only; pre-seal, no terminal claimed; route-1 永久留帳結論不變
   - date: 2026-07-21
     scheduling: owner-scheduled re-entry #3（滿足 line-337 future_reentry_precondition:launch-hygiene gate 先行）
@@ -387,6 +436,17 @@ pending_reentry:                          # append-only; pre-seal, no terminal c
     launch_hygiene_gate: "scripts/tools/h0_launch_hygiene_gate.py retained; single-source predicate run_h0_phase_a.assert_no_preexisting_build_tree"
     status: "RESOLVED 2026-07-24 — mechanical terminal H0_R4_REPAIR_QUALIFIED_SEALABLE; controlled-host qualification passed; WIP released; exact qualified head eligible for separate Seal PR only; no I/F/S, no execution, no actual guarantee"
     qualified_head_binding: "see docs/modules/semantic/research/evidence/h0_r4_authority_overlay_runtime_binding_split_20260724/qualification_report.json"
+  - date: 2026-07-24
+    scheduling: owner-scheduled H0-R4 Phase-A exactly-once execution under sealed S（post #277 Seal; authorization #278）
+    chain:
+      I4: 2a233387a6a321dd43570e2e30dc718571b3b4f4
+      F4: ced4a4cc6a71473dcb1225203e6d59df0437d976
+      S4: a76efffa01a6fb731218150c355f5859bb8e6dd4
+    authorization_identity: h0_r4_phase_a_exactly_once_authorization_20260724
+    launch_hygiene_gate: "scripts/tools/h0_launch_hygiene_gate.py; first+second gate clear before launch"
+    status: "EXECUTED 2026-07-24 — controller launched once under exact S; authorization consumed; controller_result=provenance_invalid; mechanical_disposition=H0_PROVENANCE_INVALID; independent verifier valid=true; exact S permanently spent; retry/resume/second invocation forbidden; Phase B not authorized; actual guarantee not established; owner acceptance of truthful-negative terminal = this evidence PR merge surface only; no repair/reseal/new re-entry authorized by this record"
+    evidence_packet: docs/modules/semantic/research/evidence/h0_phase_a_2a233387a6a321dd43570e2e30dc718571b3b4f4/
+    witness_bundle: docs/modules/semantic/research/evidence/h0_r4_phase_a_execution_witness_20260724/
 last_reviewed_at: 2026-07-24
 ```
 

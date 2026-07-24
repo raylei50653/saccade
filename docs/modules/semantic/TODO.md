@@ -8,12 +8,28 @@
 - **無 active**
 - H0 R4 repair closed at `H0_R4_REPAIR_QUALIFIED_SEALABLE`
   （`h0_authority_overlay_runtime_binding_split_v1` / Amendment 10）；WIP released.
-  Exact qualified head is eligible for a **separate Seal PR** only. Capture,
-  execution authorization, actual guarantee, and B1/O1 remain forbidden. See
+  Seal PR #277 landed exact S=`a76efffa…`. See
   [repair evidence](research/evidence/h0_r4_authority_overlay_runtime_binding_split_20260724/).
-- H0 closure baseline（三個 owner-accepted ordered terminal `H0_PROVENANCE_INVALID`;
-  faithful capture = none; actual H0 guarantee = none; Phase B forbidden;
-  S3=`3a6a9ec6…` permanently spent）：state fact-owner 見
+- **H0-R4 Phase-A executed once under sealed S（2026-07-24）** — facts only, not
+  owner terminal acceptance:
+  - `I=2a233387…` / `F=ced4a4cc…` / `S=a76efffa…`
+  - authorization `h0_r4_phase_a_exactly_once_authorization_20260724`（Issue #278）
+  - first+second launch-hygiene = `clear`; invocation count = 1; authorization consumed
+  - controller `result=provenance_invalid`; mechanical disposition
+    `H0_PROVENANCE_INVALID`; independent verifier `valid=true`, rc=0
+  - evidence:
+    [h0_phase_a_2a233387…](research/evidence/h0_phase_a_2a233387a6a321dd43570e2e30dc718571b3b4f4/)
+    + [execution witness](research/evidence/h0_r4_phase_a_execution_witness_20260724/)
+  - exact S permanently spent; retry/resume/second invocation forbidden; Phase B
+    not authorized; actual guarantee = none; runtime compatibility = none;
+    B1/O1 not activated. Owner acceptance of the truthful-negative terminal is
+    this evidence PR merge surface only. No repair/reseal/new re-entry authorized.
+  Detail: [claim-state registry `reentry_terminal_history` re-entry #4 / H0-R4](../../research/contracts/claim_state_registry.md).
+- H0 closure baseline（三個 prior owner-accepted ordered terminal
+  `H0_PROVENANCE_INVALID` + H0-R4 mechanical `H0_PROVENANCE_INVALID` pending this
+  PR’s owner acceptance surface; faithful capture = none; actual H0 guarantee =
+  none; Phase B forbidden; S3=`3a6a9ec6…` and S4=`a76efffa…` permanently spent）：
+  state fact-owner 見
   [claim-state registry](../../research/contracts/claim_state_registry.md)。
 - 2026-07-24 consumer re-charter closed at
   `GCTM_RUNTIME_UNIVERSE_CONTRACT_SEALABLE`（`gctm_runtime_native_candidate_universe_v1`）；
@@ -23,7 +39,7 @@
   `H0_REGISTRATION_V3_CONTRACT_SEALABLE`（`h0_gctm_guarantee_registration_v3` /
   `quantity.h0_native_universe_completeness_registration`）；
   WIP released at terminal；**not** actual guarantee / capture / re-entry.
-  Downstream target of a successful future Phase-A packet after a separate Seal.
+  H0-R4 Phase-A did **not** establish an actual registration-v3 guarantee.
   See [closed charter](../../research/threads/closed/h0_gctm_guarantee_registration_v3_universe_completeness_20260724.md).
 
 ## Proposed（non-WIP）
@@ -35,9 +51,11 @@
   `GCTM_B1`, `proposed`, `blocked_by: h0_runtime_substrate`; it does not alias
   or supersede `H0_ROUTE5_B1` → [task charter](../../research/threads/gctm_b1_runtime_grounded_offline_attribution_task.md)
 - **GCTM O1 — online score intervention and system-efficacy evaluation** → [task charter](../../research/threads/gctm_o1_online_intervention_efficacy_task.md)
-- **(next owner choice)** separate Seal PR on the exact R4 qualified repair head
-  (then fresh I→F→S + launch-hygiene clear + exactly-once authorization), or
-  exact ABI-delta charter if a later producer gap is discovered
+- **(next owner choice after H0-R4 evidence PR)** terminal closeout acceptance of
+  the truthful-negative `H0_PROVENANCE_INVALID` packet only; **or** a separate
+  owner decision for any later repair / reseal / re-entry. This record does **not**
+  authorize Phase B, actual registration-v3 guarantee audit as accepted, runtime
+  compatibility, or B1/O1 activation.
 
 ## Parked
 
