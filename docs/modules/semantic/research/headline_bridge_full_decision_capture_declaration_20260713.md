@@ -2274,3 +2274,4 @@ Route-1 permanent ledger conclusions are unchanged. GCTM #175 remains PARKED;
 Phase B remains FORBIDDEN. A post-qualification commit invalidates
 qualification. The owner records the sole `SEALED` event for any later fresh
 chain as the final appended row below.
+| 2026-07-24 | `e32331c8fd3cec5f866f57fdcf8c89207f5961c0` | `1d96c3b70abacd264d4716890750fe6fc854ff2f` | `SEALED` |
