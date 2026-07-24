@@ -1,0 +1,30 @@
+{
+  "actual_guarantee_established": false,
+  "authority": "non_authoritative",
+  "candidate_head_sha": "ba8ee8fa74a8c636c929de408660ce72d15e309d",
+  "candidate_tree_sha": "62d33172a9806a0dcc8270f67e35903e31ddda7d",
+  "declaration_authority_overlay_bound": true,
+  "declaration_runtime_bound": false,
+  "execution_authorized": false,
+  "forbidden_claims": [
+    "I_selected",
+    "F_created",
+    "S_created",
+    "SEALED_accepted",
+    "execution_authorized",
+    "H0_baseline_accepted",
+    "runtime_substrate_established",
+    "actual_guarantee_registered",
+    "runtime_compatibility_established"
+  ],
+  "known_s3_defect_removed": true,
+  "launch_hygiene": "predicate_single_source_verified",
+  "next_owner_decision": "separate Seal PR",
+  "qualification_result": "passed",
+  "qualification_summary_path": "docs/modules/semantic/research/evidence/h0_r4_authority_overlay_runtime_binding_split_20260724/qualification_summary.json",
+  "registration_v3_downstream_target": "structurally_reachable",
+  "repair_terminal": "H0_R4_REPAIR_QUALIFIED_SEALABLE",
+  "repair_unit": "h0_authority_overlay_runtime_binding_split_v1",
+  "schema": "h0_r4_qualification_report_v1",
+  "trace_v2_abi_changed": false
+}

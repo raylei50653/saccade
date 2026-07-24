@@ -34,6 +34,18 @@ CHILD_SCHEMA = "h0_phase_a_child_v1"
 BOUND_INPUTS_SCHEMA = "h0_bound_inputs_v1"
 BUILD_TOOL_BINDING_SCHEMA = "h0_build_tool_binding_v1"
 BUILD_TOOL_BINDING_RESOLVER = "h0_build_tool_binding_resolver_v1"
+# Amendment 10: owner-authority overlay is typed separately from runtime
+# repository binding.  The controller-input member key remains
+# ``authority_landing`` for member-parity continuity with historical freezes.
+OWNER_AUTHORITY_OVERLAY_SCHEMA = "h0_owner_authority_overlay_v1"
+# Historical RC2 landing schema retained for archive/cross-version admission.
+HISTORICAL_AUTHORITY_LANDING_SCHEMA = "h0_authority_landing_v1"
+DECLARATION_PATH = (
+    "docs/modules/semantic/research/"
+    "headline_bridge_full_decision_capture_declaration_20260713.md"
+)
+# Declaration is owner-overlay authority only; never a runtime repository input.
+RUNTIME_EXCLUDED_REPOSITORY_PATHS = frozenset({DECLARATION_PATH})
 # Canonical controller-input member declaration for the authoritative current
 # v3 pre-seal artifact.  The freeze assembler builds exactly this set, the
 # execution schema enumerates it as its property universe, and the independent
@@ -153,9 +165,26 @@ MODEL_LOGICAL_PATHS = (
     "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
     "runs/mamba_gt_yolo26m_v14replica_t3_t1/best.ckpt",
 )
+# Amendment 10: declaration.md is owner-overlay authority, not a runtime input.
 REQUIRED_REPOSITORY_INPUTS = (
     "configs/presets/mamba_whole_graph_m.yaml",
-    "docs/modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md",
+    "docs/modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.policy.yaml",
+    "scripts/tools/export_headline_bridge_decision_trace.py",
+    "scripts/tools/h0_bridge_decision_trace_schema_v2.json",
+    "scripts/tools/h0_phase_a_execution_schema_v1.json",
+    "scripts/tools/h0_runtime_confinement.py",
+    "scripts/tools/resolved_bridge_policy_config.py",
+    "scripts/tools/run_h0_phase_a.py",
+    "scripts/tools/run_h0_phase_a_child.py",
+    "scripts/tools/verify_h0_phase_a.py",
+    "scripts/tools/verify_headline_bridge_decision_trace.py",
+    "uv.lock",
+)
+# Pre-Amendment-10 packets still carry the declaration as a required repository
+# input; archive verification admits that exact historical tuple only.
+HISTORICAL_REQUIRED_REPOSITORY_INPUTS = (
+    "configs/presets/mamba_whole_graph_m.yaml",
+    DECLARATION_PATH,
     "docs/modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.policy.yaml",
     "scripts/tools/export_headline_bridge_decision_trace.py",
     "scripts/tools/h0_bridge_decision_trace_schema_v2.json",
@@ -673,6 +702,13 @@ def validate_bound_inventory(inventory: Mapping[str, Any]) -> None:
         raise ContractError(
             "repository inventory omits an A7/RC1 controller/runtime authority"
         )
+    # Amendment 10 fail-closed: declaration must never re-enter runtime inventory.
+    leaked = repository_paths & RUNTIME_EXCLUDED_REPOSITORY_PATHS
+    if leaked:
+        raise ContractError(
+            "authority-overlay path leaked into runtime repository inventory: "
+            + ", ".join(sorted(leaked))
+        )
     if (
         tuple(record["logical_path"] for record in inventory["models_engines"])
         != MODEL_LOGICAL_PATHS
@@ -765,6 +801,11 @@ def repository_inventory(
         except (ValueError, UnicodeDecodeError) as exc:
             raise ContractError("git ls-tree emitted a non-canonical record") from exc
         require_canonical_relative(path_value)
+        # Amendment 10: declaration is owner-overlay authority only.  Exclude it
+        # from the runtime-bound repository inventory so S's one-line SEALED
+        # append cannot collide with F-frozen runtime byte equality.
+        if path_value in RUNTIME_EXCLUDED_REPOSITORY_PATHS:
+            continue
         if git_type != "blob" or mode not in {"100644", "100755", "120000"}:
             raise ContractError(
                 f"unsupported repository input {mode} {git_type} {path_value}"
@@ -782,10 +823,10 @@ def repository_inventory(
             executable = bool(info.st_mode & stat.S_IXUSR)
             if executable != (mode == "100755"):
                 raise DriftError(f"repository executable-mode mismatch: {path_value}")
-            # RC2 admits the declaration's one append-only SEALED overlay only
-            # after preflight has independently proven I -> F -> S.  The bound
-            # repository inventory remains an I inventory, while the physical
-            # overlay is separately watched for drift through T4.
+            # RC2 admits freeze-artifact post-head overlay paths only after
+            # preflight has independently proven I -> F -> S.  Runtime-bound
+            # repository inventory remains an I inventory; owner-overlay paths
+            # (declaration) are excluded above and monitored against S bytes.
             data = (
                 _run_auxiliary_subprocess(
                     ["git", "show", f"{head}:{path_value}"],
@@ -873,6 +914,101 @@ def recompute_bound_inventory(
     return inventory
 
 
+def owner_authority_overlay(
+    *,
+    artifact_path: str,
+    declaration_at_f: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Assemble the Amendment-10 owner authority overlay (freeze-time)."""
+    require_canonical_relative(artifact_path)
+    length = declaration_at_f.get("length")
+    sha256 = declaration_at_f.get("sha256")
+    if (
+        not isinstance(length, int)
+        or length < 0
+        or not isinstance(sha256, str)
+        or len(sha256) != 64
+        or any(char not in "0123456789abcdef" for char in sha256)
+    ):
+        raise ContractError("declaration_at_f identity is malformed")
+    return {
+        "schema": OWNER_AUTHORITY_OVERLAY_SCHEMA,
+        "artifact_path": artifact_path,
+        "declaration_path": DECLARATION_PATH,
+        "declaration_at_f": {"length": length, "sha256": sha256},
+        "post_head_allowed_paths": [artifact_path, DECLARATION_PATH],
+    }
+
+
+def declaration_byte_identity(root: Path) -> dict[str, Any]:
+    path = root / DECLARATION_PATH
+    if path.is_symlink() or not path.is_file():
+        raise ContractError("declaration is not a physical regular file")
+    data = path.read_bytes()
+    return {"length": len(data), "sha256": sha256_bytes(data)}
+
+
+def verify_owner_authority_overlay_s_bytes(
+    contract: Mapping[str, Any],
+    *,
+    started: float,
+    clock: Callable[[], float] = time.monotonic,
+) -> None:
+    """Continuous T0–T4: declaration worktree must equal sealed S bytes.
+
+    Inotify already watches the declaration path via the authority overlay.  This
+    check deliberately does not share the bound-input monitor with the git
+    helper so a concurrent inventory mutation is attributed to the checkpoint's
+    inventory comparison, not to a nested helper stage.
+    """
+    landing = contract.get("authority_landing")
+    if not isinstance(landing, Mapping):
+        raise ContractError("controller input has no authority-landing descriptor")
+    schema = landing.get("schema")
+    if schema == HISTORICAL_AUTHORITY_LANDING_SCHEMA:
+        # Historical dual-bound packets are never re-executed under this path.
+        return
+    if schema != OWNER_AUTHORITY_OVERLAY_SCHEMA:
+        raise ContractError("authority overlay schema is not the Amendment-10 type")
+    if landing.get("declaration_path") != DECLARATION_PATH:
+        raise ContractError("authority overlay declaration path drift")
+    declaration_at_f = landing.get("declaration_at_f")
+    if not isinstance(declaration_at_f, Mapping):
+        raise ContractError("authority overlay lacks declaration_at_f")
+    root = require_canonical_absolute(contract["repository_root"], directory=True)
+    git_path = require_canonical_absolute(
+        contract["tool_paths"]["git"], directory=False
+    )
+    # Execution checkout is S.  Continuous drift uses S bytes as the baseline,
+    # not the F-time declaration_at_f record (which deliberately lacks the
+    # SEALED line).
+    sealed = _run_auxiliary_subprocess(
+        ["git", "show", f"HEAD:{DECLARATION_PATH}"],
+        executable=git_path,
+        cwd=root,
+        env={"PATH": "/usr/bin:/bin", "LC_ALL": "C.UTF-8"},
+        started=started,
+        stage="owner-overlay S-byte declaration",
+        clock=clock,
+    ).stdout
+    working = (root / DECLARATION_PATH).read_bytes()
+    if working != sealed:
+        raise DriftError("declaration drifted from sealed S bytes")
+    # F-time identity must remain a strict prefix of S (append-only owner event).
+    f_length = int(declaration_at_f["length"])
+    f_sha = str(declaration_at_f["sha256"])
+    if len(sealed) < f_length or sha256_bytes(sealed[:f_length]) != f_sha:
+        raise DriftError("sealed declaration is not an append-only extension of F")
+    # Also prove runtime inventory remains free of the declaration.
+    repository_paths = {
+        record["path"] for record in contract["bound_inputs"]["repository"]
+    }
+    if DECLARATION_PATH in repository_paths:
+        raise DriftError(
+            "declaration re-entered runtime repository inventory during execution"
+        )
+
+
 def bound_file_paths(contract: Mapping[str, Any]) -> tuple[Path, ...]:
     root = Path(contract["repository_root"])
     inventory = contract["bound_inputs"]
@@ -914,6 +1050,7 @@ def verify_bound_checkpoint(
         current = recompute_bound_inventory(
             contract, started=started, monitor=monitor, clock=clock
         )
+        verify_owner_authority_overlay_s_bytes(contract, started=started, clock=clock)
     except DriftError as exc:
         # A recomputation failure did not yield an inventory that can be
         # compared.  Preserve only events observed during that operation.
@@ -1622,6 +1759,8 @@ def preflight_controller_input(
         raise ContractError(
             "authority landing and controller instrumentation heads differ"
         )
+    # Amendment 10: after topology is proven, pin continuous monitoring to S.
+    verify_owner_authority_overlay_s_bytes(contract, started=started, clock=clock)
     if select_gpu_record(nvml_gpu_inventory()) != contract["gpu"]:
         raise ContractError(
             "lexicographically selected NVML GPU identity differs from v3"

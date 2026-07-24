@@ -447,6 +447,7 @@ deleting.
 | `verify_h0_phase_a.py` | stable | cli | Independent A7/RC1 aggregate verifier for Phase-A execution evidence. |
 | `verify_h0_phase_a_archive.py` | stable | cli | Versioned archive verifier for immutable H0 Phase-A evidence. |
 | `verify_h0_preseal_freeze.py` | stable | cli | Independently verify a canonical ``h0_preseal_freeze_v3`` artifact. |
+| `verify_h0_r4_qualification_report.py` | stable | cli | Verify a non-authoritative H0 R4 repair qualification report. |
 | `verify_headline_bridge_decision_trace.py` | stable | cli | Replay and validate the sealed H0 bridge-decision trace from capture alone. |
 | `verify_r1_temporal_reduction_replay.py` | stable | cli | Verify R1's estimator replay without reading labels or fitting a score. |
 | `weight_method_safe_region.py` | diagnostic | cli | Compare weighting methods by GT-safe *productive region* (not best FP). |

@@ -6,10 +6,14 @@
 ## Sole active
 
 - **無 active**
-- H0 closure（三個 owner-accepted ordered terminal `H0_PROVENANCE_INVALID`;
-  faithful capture = none;actual H0 guarantee = none;Phase B forbidden;
-  任何未來 re-entry 前置＝machine-checked launch-hygiene pre-authorization
-  gate＋fresh I→F→S＋另行 exactly-once 授權）：state fact-owner 見
+- H0 R4 repair closed at `H0_R4_REPAIR_QUALIFIED_SEALABLE`
+  （`h0_authority_overlay_runtime_binding_split_v1` / Amendment 10）；WIP released.
+  Exact qualified head is eligible for a **separate Seal PR** only. Capture,
+  execution authorization, actual guarantee, and B1/O1 remain forbidden. See
+  [repair evidence](research/evidence/h0_r4_authority_overlay_runtime_binding_split_20260724/).
+- H0 closure baseline（三個 owner-accepted ordered terminal `H0_PROVENANCE_INVALID`;
+  faithful capture = none; actual H0 guarantee = none; Phase B forbidden;
+  S3=`3a6a9ec6…` permanently spent）：state fact-owner 見
   [claim-state registry](../../research/contracts/claim_state_registry.md)。
 - 2026-07-24 consumer re-charter closed at
   `GCTM_RUNTIME_UNIVERSE_CONTRACT_SEALABLE`（`gctm_runtime_native_candidate_universe_v1`）；
@@ -19,6 +23,7 @@
   `H0_REGISTRATION_V3_CONTRACT_SEALABLE`（`h0_gctm_guarantee_registration_v3` /
   `quantity.h0_native_universe_completeness_registration`）；
   WIP released at terminal；**not** actual guarantee / capture / re-entry.
+  Downstream target of a successful future Phase-A packet after a separate Seal.
   See [closed charter](../../research/threads/closed/h0_gctm_guarantee_registration_v3_universe_completeness_20260724.md).
 
 ## Proposed（non-WIP）
@@ -30,9 +35,9 @@
   `GCTM_B1`, `proposed`, `blocked_by: h0_runtime_substrate`; it does not alias
   or supersede `H0_ROUTE5_B1` → [task charter](../../research/threads/gctm_b1_runtime_grounded_offline_attribution_task.md)
 - **GCTM O1 — online score intervention and system-efficacy evaluation** → [task charter](../../research/threads/gctm_o1_online_intervention_efficacy_task.md)
-- **(next owner choice, non-WIP until scheduled)** design H0 re-entry and actual
-  baseline capture under sealed registration-v3, or define an exact minimal ABI
-  delta if a later producer gap is discovered, or re-scope the B1 runtime hook
+- **(next owner choice)** separate Seal PR on the exact R4 qualified repair head
+  (then fresh I→F→S + launch-hygiene clear + exactly-once authorization), or
+  exact ABI-delta charter if a later producer gap is discovered
 
 ## Parked
 

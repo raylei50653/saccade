@@ -37,7 +37,9 @@ POLICY_RESOLVED_SHA256 = (
     "c7a6dbb35168cba75249b7f2c67d8455b6f634732493e455a4bb920aab6d7782"
 )
 FREEZE_SCHEMA = "h0_preseal_freeze_v3"
-LANDING_SCHEMA = "h0_authority_landing_v1"
+# Amendment 10 current overlay; historical freezes retain the RC2 landing schema.
+LANDING_SCHEMA = "h0_owner_authority_overlay_v1"
+HISTORICAL_LANDING_SCHEMA = "h0_authority_landing_v1"
 HEAD_RE = re.compile(r"^[0-9a-f]{40}$")
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
@@ -197,7 +199,22 @@ MODEL_INPUTS = (
     "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
     "runs/mamba_gt_yolo26m_v14replica_t3_t1/best.ckpt",
 )
+# Amendment 10: declaration is owner-overlay only, not a runtime repository input.
 REPOSITORY_INPUTS = (
+    "configs/presets/mamba_whole_graph_m.yaml",
+    "docs/modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.policy.yaml",
+    "scripts/tools/export_headline_bridge_decision_trace.py",
+    "scripts/tools/h0_bridge_decision_trace_schema_v2.json",
+    "scripts/tools/h0_phase_a_execution_schema_v1.json",
+    "scripts/tools/h0_runtime_confinement.py",
+    "scripts/tools/resolved_bridge_policy_config.py",
+    "scripts/tools/run_h0_phase_a.py",
+    "scripts/tools/run_h0_phase_a_child.py",
+    "scripts/tools/verify_h0_phase_a.py",
+    "scripts/tools/verify_headline_bridge_decision_trace.py",
+    "uv.lock",
+)
+HISTORICAL_REPOSITORY_INPUTS = (
     "configs/presets/mamba_whole_graph_m.yaml",
     DECLARATION_PATH,
     "docs/modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.policy.yaml",
@@ -212,6 +229,7 @@ REPOSITORY_INPUTS = (
     "scripts/tools/verify_headline_bridge_decision_trace.py",
     "uv.lock",
 )
+RUNTIME_EXCLUDED_REPOSITORY_PATHS = frozenset({DECLARATION_PATH})
 RESULTS = (
     "provenance_invalid",
     "build_failed",
@@ -430,8 +448,11 @@ def _blob_slot(root: Path, rev: str, path: str) -> dict[str, Any]:
 
 
 def _classify(path: str) -> str:
-    if path == "DEVELOPMENT.md":
-        # Amendment 6 Correction 1 — documentation-only root-file exception.
+    # Keep byte-parity with build_h0_preseal_freeze.classify_path (independent
+    # transcription; do not import the assembler).
+    if path in {"DEVELOPMENT.md", "REPO_LAYOUT.md", ".gitignore"}:
+        return "non_runtime_recorded"
+    if path.startswith((".gemini/", ".claude/", ".codex/", ".grok/", ".agents/")):
         return "non_runtime_recorded"
     if path.startswith(("src/", "include/", "configs/", "cmake/")) or path in {
         "pyproject.toml",
@@ -897,18 +918,46 @@ def _require_exact_members(
 
 def _verify_landing_shape(value: Mapping[str, Any], head: str) -> None:
     expected_path = freeze_path(head)
+    schema = value.get("schema")
+    if schema == HISTORICAL_LANDING_SCHEMA:
+        _require_exact_members(
+            value,
+            {"schema", "artifact_path", "declaration_path", "post_head_allowed_paths"},
+            "authority_landing",
+        )
+        if (
+            value.get("artifact_path") != expected_path
+            or value.get("declaration_path") != DECLARATION_PATH
+            or value.get("post_head_allowed_paths") != [expected_path, DECLARATION_PATH]
+        ):
+            raise VerificationError("authority_landing_v1 literals differ from RC2")
+        return
+    if schema != LANDING_SCHEMA:
+        raise VerificationError("authority overlay schema is not admitted")
     _require_exact_members(
         value,
-        {"schema", "artifact_path", "declaration_path", "post_head_allowed_paths"},
-        "authority_landing",
+        {
+            "schema",
+            "artifact_path",
+            "declaration_path",
+            "declaration_at_f",
+            "post_head_allowed_paths",
+        },
+        "owner_authority_overlay",
     )
+    declaration_at_f = value.get("declaration_at_f")
     if (
-        value.get("schema") != LANDING_SCHEMA
-        or value.get("artifact_path") != expected_path
+        value.get("artifact_path") != expected_path
         or value.get("declaration_path") != DECLARATION_PATH
         or value.get("post_head_allowed_paths") != [expected_path, DECLARATION_PATH]
+        or not isinstance(declaration_at_f, Mapping)
+        or set(declaration_at_f) != {"length", "sha256"}
+        or not isinstance(declaration_at_f.get("length"), int)
+        or declaration_at_f["length"] < 0
+        or not isinstance(declaration_at_f.get("sha256"), str)
+        or not SHA256_RE.fullmatch(str(declaration_at_f["sha256"]))
     ):
-        raise VerificationError("authority_landing_v1 literals differ from RC2")
+        raise VerificationError("owner_authority_overlay_v1 literals differ from A10")
 
 
 def _verify_implementation_bindings(
@@ -1018,8 +1067,23 @@ def _verify_controller_input(value: object, root: Path, head: str) -> None:
         or value["instrumentation_head"] != head
     ):
         raise VerificationError("controller-input identity differs from A7")
-    if value["execution_constants"] != expected_execution_constants(root):
-        raise VerificationError("A7/RC1 execution constants drift")
+    expected_constants = expected_execution_constants(root)
+    observed_constants = value["execution_constants"]
+    if observed_constants != expected_constants:
+        # Pre-Amendment-10 freezes retain the declaration in
+        # required_repository_inputs; admit that exact historical tuple only.
+        landing = value.get("authority_landing")
+        historical_ok = False
+        if (
+            isinstance(landing, Mapping)
+            and landing.get("schema") == HISTORICAL_LANDING_SCHEMA
+            and isinstance(observed_constants, dict)
+        ):
+            adjusted = dict(expected_constants)
+            adjusted["required_repository_inputs"] = list(HISTORICAL_REPOSITORY_INPUTS)
+            historical_ok = observed_constants == adjusted
+        if not historical_ok:
+            raise VerificationError("A7/RC1 execution constants drift")
     _verify_landing_shape(value["authority_landing"], head)
     expected_root = f"docs/modules/semantic/research/evidence/h0_phase_a_{head}"
     if (
@@ -1102,14 +1166,28 @@ def _verify_controller_input(value: object, root: Path, head: str) -> None:
         key=lambda item: str(item).encode("utf-8"),
     ):
         raise VerificationError("bound repository inventory ordering drift")
-    if not set(REPOSITORY_INPUTS).issubset(
-        {record.get("path") for record in repository if isinstance(record, dict)}
-    ):
+    repository_paths = {
+        record.get("path") for record in repository if isinstance(record, dict)
+    }
+    landing = value["authority_landing"]
+    landing_schema = landing.get("schema")
+    required_inputs = (
+        REPOSITORY_INPUTS
+        if landing_schema == LANDING_SCHEMA
+        else HISTORICAL_REPOSITORY_INPUTS
+    )
+    if not set(required_inputs).issubset(repository_paths):
         raise VerificationError("bound repository inventory omits A7 inputs")
+    if landing_schema == LANDING_SCHEMA and (
+        repository_paths & RUNTIME_EXCLUDED_REPOSITORY_PATHS
+    ):
+        raise VerificationError(
+            "authority-overlay path leaked into runtime repository inventory"
+        )
     raw_tree = _git(root, "ls-tree", "-r", "--full-tree", "-z", head)
     assert isinstance(raw_tree, bytes)
     expected_repository: list[dict[str, Any]] = []
-    overlays = set(value["authority_landing"]["post_head_allowed_paths"])
+    overlays = set(landing["post_head_allowed_paths"])
     for row in (part for part in raw_tree.split(b"\0") if part):
         try:
             meta, raw_path = row.split(b"\t", 1)
@@ -1119,6 +1197,12 @@ def _verify_controller_input(value: object, root: Path, head: str) -> None:
             raise VerificationError("non-canonical repository tree record") from exc
         if kind != "blob" or mode not in {"100644", "100755", "120000"}:
             raise VerificationError(f"unsupported bound repository entry {path}")
+        # Amendment 10 current freezes exclude declaration from runtime inventory.
+        if (
+            landing_schema == LANDING_SCHEMA
+            and path in RUNTIME_EXCLUDED_REPOSITORY_PATHS
+        ):
+            continue
         blob = _blob(root, head, path)
         expected_repository.append(
             {
@@ -1153,6 +1237,15 @@ def _verify_controller_input(value: object, root: Path, head: str) -> None:
             ) from exc
     if repository != expected_repository:
         raise VerificationError("bound repository Git-object/byte inventory drift")
+    if landing_schema == LANDING_SCHEMA:
+        declaration_blob = _blob(root, head, DECLARATION_PATH)
+        declaration_at_f = landing["declaration_at_f"]
+        if declaration_at_f.get("length") != len(
+            declaration_blob
+        ) or declaration_at_f.get("sha256") != _sha(declaration_blob):
+            raise VerificationError(
+                "owner overlay declaration_at_f differs from instrumentation head"
+            )
     for category in ("models_engines", "tool_runtime"):
         records = inventory[category]
         if not isinstance(records, list):
@@ -1595,6 +1688,30 @@ def verify_authority_landing(
         ) from exc
     if len([entry for entry in lines if event.fullmatch(entry)]) != 1:
         raise VerificationError("seal row is missing or duplicated")
+    # Amendment 10: when the freeze carries the owner overlay, F declaration
+    # bytes must match declaration_at_f and equal the pre-append baseline.
+    landing = artifact.get("authority_landing")
+    controller = artifact.get("phase_a_controller_input")
+    if isinstance(controller, Mapping):
+        controller_landing = controller.get("authority_landing")
+        if isinstance(controller_landing, Mapping):
+            landing = controller_landing
+    if isinstance(landing, Mapping) and landing.get("schema") == LANDING_SCHEMA:
+        declaration_at_f = landing.get("declaration_at_f")
+        if not isinstance(declaration_at_f, Mapping) or (
+            declaration_at_f.get("length") != len(before)
+            or declaration_at_f.get("sha256") != _sha(before)
+        ):
+            raise VerificationError(
+                "owner overlay declaration_at_f does not match F declaration bytes"
+            )
+        worktree = root / DECLARATION_PATH
+        try:
+            current = worktree.read_bytes()
+        except OSError as exc:
+            raise VerificationError("declaration worktree is unreadable") from exc
+        if current != after:
+            raise VerificationError("declaration worktree differs from sealed S bytes")
     return {
         "instrumentation_head": head,
         "freeze_commit": freeze_commit,

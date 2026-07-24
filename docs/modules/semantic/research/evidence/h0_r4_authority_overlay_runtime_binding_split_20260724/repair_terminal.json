@@ -1,0 +1,40 @@
+{
+  "actual_guarantee_established": false,
+  "authority": "non_authoritative",
+  "candidate_head_sha": "ba8ee8fa74a8c636c929de408660ce72d15e309d",
+  "declaration_amendment": "Amendment 10 \u2014 authority-overlay/runtime-binding separation",
+  "declaration_authority_overlay_bound": true,
+  "declaration_runtime_bound": false,
+  "does_not_establish": [
+    "I_selected",
+    "F_created",
+    "S_created",
+    "SEALED_accepted",
+    "execution_authorized",
+    "H0_baseline_accepted",
+    "runtime_substrate_established",
+    "actual_guarantee_registered",
+    "runtime_compatibility_established",
+    "B1_O1_activation"
+  ],
+  "execution_authorized": false,
+  "known_s3_defect_removed": true,
+  "launch_hygiene": "predicate_single_source_verified",
+  "maximum_conclusion": "The exact qualified repair head is eligible for a separate owner Seal decision that may construct one fresh I \u2192 F \u2192 S chain.",
+  "next_owner_decision": "separate Seal PR",
+  "registration_v3_binding": {
+    "consumer_objects": [
+      "runtime_candidate_universe",
+      "runtime_event_membership"
+    ],
+    "consumer_universe": "gctm_runtime_native_candidate_universe_v1",
+    "guarantee_class": "universe_completeness",
+    "registration_schema": "h0_gctm_guarantee_registration_v3"
+  },
+  "registration_v3_downstream_target": "structurally_reachable",
+  "repair_terminal": "H0_R4_REPAIR_QUALIFIED_SEALABLE",
+  "repair_unit": "h0_authority_overlay_runtime_binding_split_v1",
+  "schema": "h0_r4_repair_terminal_v1",
+  "spent_s3": "3a6a9ec6348f1dccca6acabef8025159c3bec1d3",
+  "trace_v2_abi_changed": false
+}
