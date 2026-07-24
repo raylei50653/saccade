@@ -2373,6 +2373,92 @@ def _elf_build_id(
     return matches[0].lower()
 
 
+def discover_python_interpreter_runtime_paths(python: Path) -> list[str]:
+    """Discover logical paths the frozen interpreter needs under confinement.
+
+    The Phase-A extension-load vector runs a real CPython process.  The frozen
+    ``tool_runtime`` inventory must therefore include the interpreter's
+    base_prefix stdlib, venv bootstrap files, and the small set of host files
+    CPython opens during ``-I -B -c`` startup.  Paths are reported in the form
+    the interpreter itself uses (including symlink path forms under uv-managed
+    base prefixes).
+
+    The ``python`` argument may be a venv symlink (common under uv/CI); the
+    process is launched through that path.  Freeze-time physical-file admission
+    remains a separate require_canonical_absolute / non-symlink check.
+    """
+    python = Path(python)
+    if not python.is_file():
+        raise ContractError(f"python interpreter is absent: {python}")
+    script = (
+        "import pathlib, site, sys\n"
+        "paths = set()\n"
+        # Only walk the interpreter base_prefix stdlib tree.  Never rglob the
+        # venv prefix (sys.prefix): that would expand the entire site-packages
+        # universe into tool_runtime.
+        "base = pathlib.Path(sys.base_prefix)\n"
+        "if base.is_dir():\n"
+        "    for path in base.rglob('*'):\n"
+        "        if path.is_file() and not path.is_symlink():\n"
+        "            paths.add(path.as_posix())\n"
+        "cfg = pathlib.Path(sys.executable).resolve().parent.parent / 'pyvenv.cfg'\n"
+        "if cfg.is_file() and not cfg.is_symlink():\n"
+        "    paths.add(cfg.as_posix())\n"
+        "for entry in site.getsitepackages():\n"
+        "    base = pathlib.Path(entry)\n"
+        "    if not base.is_dir():\n"
+        "        continue\n"
+        "    for path in base.glob('*.pth'):\n"
+        "        if path.is_file() and not path.is_symlink():\n"
+        "            paths.add(path.as_posix())\n"
+        "    for name in ('_virtualenv.py',):\n"
+        "        candidate = base / name\n"
+        "        if candidate.is_file() and not candidate.is_symlink():\n"
+        "            paths.add(candidate.as_posix())\n"
+        "        pyc = base / '__pycache__' / (name.replace('.py', '.cpython-312.pyc'))\n"
+        "        if pyc.is_file() and not pyc.is_symlink():\n"
+        "            paths.add(pyc.as_posix())\n"
+        "    hack = base / '_distutils_hack'\n"
+        "    if hack.is_dir():\n"
+        "        for path in hack.rglob('*'):\n"
+        "            if path.is_file() and not path.is_symlink():\n"
+        "                paths.add(path.as_posix())\n"
+        "for extra in (\n"
+        "    '/etc/ld.so.cache',\n"
+        "    '/usr/share/locale/locale.alias',\n"
+        "    '/usr/lib/locale/locale-archive',\n"
+        "    '/usr/share/zoneinfo/UTC',\n"
+        "    '/etc/passwd', '/etc/group', '/etc/nsswitch.conf',\n"
+        "    '/etc/host.conf', '/etc/hosts', '/etc/resolv.conf',\n"
+        "    '/etc/gnutls/config',\n"
+        "):\n"
+        "    path = pathlib.Path(extra)\n"
+        "    if path.is_file() and not path.is_symlink():\n"
+        "        paths.add(path.as_posix())\n"
+        "gconv = pathlib.Path('/usr/lib/gconv')\n"
+        "if gconv.is_dir():\n"
+        "    for path in gconv.iterdir():\n"
+        "        if path.is_file() and not path.is_symlink():\n"
+        "            paths.add(path.as_posix())\n"
+        "c_utf8 = pathlib.Path('/usr/lib/locale/C.utf8')\n"
+        "if c_utf8.is_dir():\n"
+        "    for path in c_utf8.rglob('*'):\n"
+        "        if path.is_file() and not path.is_symlink():\n"
+        "            paths.add(path.as_posix())\n"
+        "print('\\n'.join(sorted(paths)))\n"
+    )
+    result = subprocess.run(
+        [python.as_posix(), "-I", "-B", "-c", script],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    paths = [line for line in result.stdout.splitlines() if line.startswith("/")]
+    if not paths:
+        raise ContractError("python interpreter runtime discovery returned no paths")
+    return paths
+
+
 def _dynamic_dependencies(
     path: Path,
     ldd: Path,
@@ -2417,9 +2503,178 @@ def _dynamic_dependencies(
                 "sha256": sha256_bytes(data),
             }
         )
+    # Recursively close the ldd graph so transitive NEEDED members are admitted.
+    pending = [Path(record["realpath"]) for record in records]
+    seen = {record["realpath"] for record in records}
+    while pending:
+        source = pending.pop(0)
+        nested = _run_auxiliary_subprocess(
+            ["ldd", source.as_posix()],
+            executable=ldd,
+            cwd=root,
+            env={"PATH": "/usr/bin:/bin", "LC_ALL": "C.UTF-8"},
+            started=started,
+            monitor=monitor,
+            stage=f"dynamic dependency identity {source}",
+            clock=clock,
+            text=True,
+        )
+        for line in nested.stdout.splitlines():
+            stripped = line.strip()
+            if not stripped or "linux-vdso" in stripped or "not found" in stripped:
+                continue
+            candidate = (
+                stripped.split("=>", 1)[1].strip().split(" ", 1)[0]
+                if "=>" in stripped
+                else stripped.split(" ", 1)[0]
+            )
+            if not candidate.startswith("/"):
+                continue
+            dependency = Path(candidate).resolve(strict=True)
+            realpath = dependency.as_posix()
+            if realpath in seen:
+                continue
+            data = dependency.read_bytes()
+            records.append(
+                {
+                    "length": len(data),
+                    "path": candidate,
+                    "realpath": realpath,
+                    "sha256": sha256_bytes(data),
+                }
+            )
+            seen.add(realpath)
+            pending.append(dependency)
+    # One-hop sibling libraries that are commonly dlopened by members of the
+    # static ldd graph (e.g. libtbb → libtbbmalloc) but never appear in NEEDED.
+    sibling_names = {
+        "libtbb.so.12": ("libtbbmalloc.so.2", "libtbbmalloc_proxy.so.2"),
+        "libtbb.so.12.19": ("libtbbmalloc.so.2", "libtbbmalloc_proxy.so.2"),
+    }
+    seen_paths = {record["realpath"] for record in records}
+    for record in list(records):
+        name = Path(record["path"]).name
+        for sibling in sibling_names.get(name, ()):
+            candidate = Path(record["path"]).with_name(sibling)
+            if (
+                not candidate.exists()
+                and Path(record["realpath"]).parent.joinpath(sibling).exists()
+            ):
+                candidate = Path(record["realpath"]).parent / sibling
+            if not candidate.exists():
+                continue
+            try:
+                real = candidate.resolve(strict=True)
+                data = real.read_bytes()
+            except OSError:
+                continue
+            if real.as_posix() in seen_paths:
+                continue
+            records.append(
+                {
+                    "length": len(data),
+                    "path": candidate.as_posix(),
+                    "realpath": real.as_posix(),
+                    "sha256": sha256_bytes(data),
+                }
+            )
+            seen_paths.add(real.as_posix())
     records.sort(key=lambda record: record["path"].encode("utf-8"))
     if len({record["path"] for record in records}) != len(records):
         raise ContractError(f"duplicate dynamic dependency identity: {path}")
+    return records
+
+
+def _runtime_maps_dependencies(
+    *,
+    python: Path,
+    extension: Path,
+    plugin: Path,
+    root: Path,
+    library_path: str,
+    started: float,
+    monitor: BoundInputMonitor | None,
+    clock: Callable[[], float],
+) -> list[dict[str, Any]]:
+    """Capture shared objects actually mapped while loading extension+plugin.
+
+    Complements ``ldd``: some libraries (e.g. tbbmalloc) are dlopened at load
+    time and never appear in the static NEEDED graph.
+    """
+    script = (
+        "import ctypes, pathlib, sys\n"
+        # Match the controller extension-load vector: import the extension as a
+        # Python module (runs module-init dlopen paths) then CDLL the plugin.
+        f"sys.path.insert(0, {extension.parent.as_posix()!r})\n"
+        "import saccade_tracking_ext\n"
+        "assert pathlib.Path(saccade_tracking_ext.__file__).resolve() == "
+        f"pathlib.Path({extension.as_posix()!r}).resolve()\n"
+        f"ctypes.CDLL({plugin.as_posix()!r}, mode=ctypes.RTLD_LOCAL)\n"
+        "print(pathlib.Path('/proc/self/maps').read_text())\n"
+    )
+    result = _run_auxiliary_subprocess(
+        [python.as_posix(), "-I", "-B", "-c", script],
+        executable=python,
+        cwd=root,
+        env={
+            "PATH": f"{root}/.venv/bin:/usr/bin:/bin",
+            "LC_ALL": "C.UTF-8",
+            "LANG": "C.UTF-8",
+            "LD_LIBRARY_PATH": library_path,
+            "SACCADE_BUILD_PATH": (root / "build/h0_phase_a").as_posix(),
+            "PYTHONNOUSERSITE": "1",
+        },
+        started=started,
+        monitor=monitor,
+        stage="runtime maps dependency identity",
+        clock=clock,
+        text=True,
+    )
+    records: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for line in result.stdout.splitlines():
+        fields = line.split(maxsplit=5)
+        if len(fields) != 6 or not fields[5].startswith("/"):
+            continue
+        candidate = fields[5].split(" (deleted)", 1)[0]
+        path = Path(candidate)
+        # Maps closure is for shared libraries only; interpreter/stdlib belong
+        # in tool_runtime, not build-artifact dynamic_dependencies.
+        name = path.name
+        if not (
+            name.endswith(".so")
+            or ".so." in name
+            or name.endswith(".so.1")
+            or ".so." in path.as_posix()
+        ):
+            continue
+        if not path.is_file() and not path.is_symlink():
+            continue
+        try:
+            real = path.resolve(strict=True)
+            if not real.is_file():
+                continue
+            data = real.read_bytes()
+        except OSError:
+            continue
+        realpath = real.as_posix()
+        if realpath in seen:
+            continue
+        if realpath in {
+            extension.resolve(strict=True).as_posix(),
+            plugin.resolve(strict=True).as_posix(),
+        }:
+            continue
+        seen.add(realpath)
+        records.append(
+            {
+                "length": len(data),
+                "path": candidate,
+                "realpath": realpath,
+                "sha256": sha256_bytes(data),
+            }
+        )
+    records.sort(key=lambda record: record["path"].encode("utf-8"))
     return records
 
 
@@ -2747,16 +3002,46 @@ def _build_identity(
         contract["tool_paths"]["readelf"], directory=False
     )
     ldd = require_canonical_absolute(contract["tool_paths"]["ldd"], directory=False)
+    libraries = contract["library_dirs"]
+    library_path = ":".join(
+        (
+            (root / "build/h0_phase_a").as_posix(),
+            libraries["tensorrt_library_dir"],
+            libraries["pytorch_library_dir"],
+            libraries["cuda_library_dir"],
+        )
+    )
+    python_path = root / ".venv/bin/python"
+    maps_records = _runtime_maps_dependencies(
+        python=python_path,
+        extension=artifact_paths[0],
+        plugin=artifact_paths[1],
+        root=root,
+        library_path=library_path,
+        started=started,
+        monitor=monitor,
+        clock=clock,
+    )
     artifacts = []
     for artifact in artifact_paths:
         record = _regular_file_record(artifact, artifact.relative_to(root).as_posix())
-        record["dynamic_dependencies"] = _dynamic_dependencies(
+        ldd_records = _dynamic_dependencies(
             artifact,
             ldd,
             root=root,
             started=started,
             monitor=monitor,
             clock=clock,
+        )
+        # Merge ldd closure with maps-observed runtime loads (dlopen members).
+        by_realpath = {item["realpath"]: item for item in ldd_records}
+        for item in maps_records:
+            by_realpath.setdefault(item["realpath"], item)
+        # Never list the two top-level artifacts as their own dependencies.
+        by_realpath.pop(artifact.resolve(strict=True).as_posix(), None)
+        record["dynamic_dependencies"] = sorted(
+            by_realpath.values(),
+            key=lambda item: item["path"].encode("utf-8"),
         )
         record["elf_gnu_build_id"] = _elf_build_id(
             artifact,
@@ -2981,17 +3266,45 @@ def _verify_extension_load(
     elif returncode != 0:
         state = "failed"
         result = "extension_load_failed"
-    observed = {record["realpath"] for record in attestation["regular_files"]}
-    if (
-        extension.resolve(strict=True).as_posix() not in observed
-        or plugin.resolve(strict=True).as_posix() not in observed
-    ):
-        raise DriftError("extension/plugin load is absent from runtime attestation")
+
+    def _artifact_identity(index: int, path: Path) -> dict[str, Any]:
+        record = identity["artifacts"][index]
+        if "length" in record and "sha256" in record:
+            return {
+                "path": path,
+                "length": int(record["length"]),
+                "sha256": str(record["sha256"]),
+            }
+        data = path.read_bytes()
+        return {
+            "path": path,
+            "length": len(data),
+            "sha256": sha256_bytes(data),
+        }
+
+    try:
+        membership = h0_runtime_confinement.assert_extension_plugin_membership(
+            attestation,
+            extension=extension,
+            plugin=plugin,
+            extension_identity=_artifact_identity(0, extension),
+            plugin_identity=_artifact_identity(1, plugin),
+        )
+    except h0_runtime_confinement.ConfinementError as exc:
+        raise DriftError(
+            "extension/plugin load is absent from runtime attestation"
+            if "absent from runtime attestation" in str(exc)
+            else f"extension/plugin runtime attestation membership failed: {exc}"
+        ) from exc
     return {
         "confinement_plan_digest": runtime_plan["digest"],
         "confinement_probe_passed": attestation.get("denial_probe_observed") is True,
         "environment": environment,
         "environment_digest": sha256_bytes(canonical_json_bytes(environment)),
+        "extension_artifact_observed": membership["extension_artifact_observed"],
+        "extension_identity_equal": membership["extension_identity_equal"],
+        "plugin_artifact_observed": membership["plugin_artifact_observed"],
+        "plugin_identity_equal": membership["plugin_identity_equal"],
         "result": result,
         "returncode": returncode,
         "runtime_inputs": attestation,

@@ -1,0 +1,64 @@
+{
+  "schema": "h0_r5_root_cause_witness_v1",
+  "authority": "non_authoritative",
+  "repair_unit": "h0_extension_plugin_runtime_attestation_closure_v1",
+  "owner_decision_identity": "h0_r5_extension_plugin_attestation_closure_authorization_20260724",
+  "owner_decision_surface": "https://github.com/raylei50653/saccade/issues/280",
+  "r4_boundary": {
+    "I4": "2a233387a6a321dd43570e2e30dc718571b3b4f4",
+    "F4": "ced4a4cc6a71473dcb1225203e6d59df0437d976",
+    "S4": "a76efffa01a6fb731218150c355f5859bb8e6dd4",
+    "authorization": "h0_r4_phase_a_exactly_once_authorization_20260724",
+    "controller_result": "provenance_invalid",
+    "mechanical_disposition": "H0_PROVENANCE_INVALID",
+    "failure_stage": "extension_load",
+    "failure_reason": "extension/plugin load is absent from runtime attestation",
+    "acceptance_commit": "55d2da47c5538004e254830a273a2ac4362d8eae"
+  },
+  "failure_coordinate": {
+    "stage": "extension_load",
+    "predicate": "exact physical realpath of extension and plugin must each appear in h0_runtime_inputs_v1.regular_files with build_artifact binding, matching length/sha256, and kernel-observed consuming operations",
+    "isolated_probe_terminal": "H0_R5_ATTESTATION_GAP_ISOLATED"
+  },
+  "root_causes": [
+    {
+      "id": "recorder_physical_identity",
+      "summary": "Recorder required declared logical-path aliases and rejected non-canonical loader paths even when the resolved physical realpath was an admitted plan member (symlink forms under uv base_prefix; .. components in dynamic-linker paths). Fix is loader-scoped only: tool_runtime / build_artifact / build_runtime_closure may use those path forms; models_engines / sequence / repository remain fail-closed on non_canonical traversal and undeclared aliases.",
+      "surface": "scripts/tools/h0_runtime_confinement.py (_Recorder.observe_path)"
+    },
+    {
+      "id": "tool_runtime_missing_python_base_prefix",
+      "summary": "Frozen tool_runtime did not admit the CPython base_prefix stdlib / host startup files required for confined -I -B -c extension load.",
+      "surface": "scripts/tools/build_h0_preseal_freeze.py + run_h0_phase_a.discover_python_interpreter_runtime_paths"
+    },
+    {
+      "id": "dynamic_dependency_dlopen_siblings",
+      "summary": "Static ldd closure omitted runtime-dlopened siblings (e.g. libtbbmalloc for libtbb), so Landlock/recorder rejected legitimate loads.",
+      "surface": "scripts/tools/run_h0_phase_a.py (_dynamic_dependencies sibling expansion + maps discovery)"
+    },
+    {
+      "id": "qualification_subprocess_only",
+      "summary": "Qualification extension_load only checked subprocess return code and did not share the controller attestation membership predicate.",
+      "surface": "scripts/tools/qualify_h0_phase_a.py (_qualify_confined_extension_load)"
+    }
+  ],
+  "repairs": [
+    "observe_path loader-scoped realpath exception for tool_runtime/build_artifact/build_runtime_closure only (model/sequence/repository non_canonical fail-closed retained)",
+    "shared assert_extension_plugin_membership / CONSUMING_OPERATIONS predicate",
+    "discover_python_interpreter_runtime_paths admitted into freeze tool_runtime",
+    "recursive ldd + known dlopen siblings + maps-observed shared objects in build identity",
+    "qualification confined extension/plugin load with same membership predicate"
+  ],
+  "forbidden_repairs_not_used": [
+    "remove or weaken controller membership check",
+    "copy expected artifacts into regular_files without observing them",
+    "treat build_identity membership as runtime observation",
+    "hard-code the two paths into a successful attestation",
+    "turn attestation failure into a warning",
+    "change trace-v2 data-plane records",
+    "change provenance_invalid into extension_load_failed"
+  ],
+  "trace_v2_abi_changed": false,
+  "execution_abi_changed": false,
+  "policy_capture_semantics_changed": false
+}

@@ -678,6 +678,7 @@ def test_bound_and_unbound_sequence_file_use_the_same_boundary(
 def test_native_path_traversal_fails_before_open(
     native_fixture: dict[str, Path],
 ) -> None:
+    """Non-loader inputs stay fail-closed even when traversal hits a bound model."""
     traversal = native_fixture["run_dir"] / "../../../model.bin"
     returncode, attestation = _run(native_fixture, _plan(native_fixture), traversal)
     assert returncode == -9
@@ -685,6 +686,88 @@ def test_native_path_traversal_fails_before_open(
         violation["reason"] == "non_canonical_path"
         for violation in attestation["violations"]
     )
+
+
+def _run_with_plugin_path(
+    fixture: dict[str, Path], plan: dict[str, Any], plugin_argument: Path
+) -> tuple[int, dict[str, Any]]:
+    """Like ``_run`` but varies the plugin path (loader/build_artifact channel)."""
+    root = fixture["root"]
+    vector = [
+        fixture["runner"].as_posix(),
+        fixture["probe"].as_posix(),
+        plugin_argument.as_posix(),
+        fixture["model"].as_posix(),
+    ]
+    stdout_path = fixture["run_dir"] / f"stdout-{os.urandom(8).hex()}"
+    stderr_path = fixture["run_dir"] / f"stderr-{os.urandom(8).hex()}"
+    with (
+        open(os.devnull, "rb", buffering=0) as stdin,
+        open(stdout_path, "xb", buffering=0) as stdout,
+        open(stderr_path, "xb", buffering=0) as stderr,
+    ):
+        process = confinement.spawn_confined(
+            vector,
+            cwd=root,
+            env={"LANG": "C.UTF-8", "LC_ALL": "C.UTF-8"},
+            stdin=stdin,
+            stdout=stdout,
+            stderr=stderr,
+            plan=plan,
+        )
+        returncode = process.wait(timeout=10)
+        return returncode, process.runtime_attestation()
+
+
+def test_build_artifact_accepts_non_canonical_loader_path(
+    native_fixture: dict[str, Path],
+) -> None:
+    """``..`` path forms of an admitted build_artifact must succeed and record realpath."""
+    root = native_fixture["root"]
+    plugin = native_fixture["plugin"]
+    plan = _plan(native_fixture)
+    noncanonical = root / "evidence.incomplete" / ".." / plugin.name
+    assert ".." in noncanonical.as_posix()
+    assert noncanonical.resolve(strict=True) == plugin.resolve(strict=True)
+    returncode, attestation = _run_with_plugin_path(native_fixture, plan, noncanonical)
+    assert returncode == 0, attestation.get("violations")
+    assert attestation["state"] == "complete"
+    record = next(
+        item
+        for item in attestation["regular_files"]
+        if item["realpath"] == plugin.resolve(strict=True).as_posix()
+    )
+    assert "build_artifact" in record["bindings"]
+    assert set(record["operations"]) & {
+        "open",
+        "openat",
+        "mmap",
+        "mmap_read",
+        "mmap_exec",
+    }
+
+
+def test_build_artifact_accepts_symlink_loader_path(
+    native_fixture: dict[str, Path],
+) -> None:
+    """Symlink path forms of an admitted build_artifact must succeed and record realpath."""
+    root = native_fixture["root"]
+    plugin = native_fixture["plugin"]
+    plan = _plan(native_fixture)
+    alias = root / "plugin-loader-alias.so"
+    alias.symlink_to(plugin)
+    try:
+        returncode, attestation = _run_with_plugin_path(native_fixture, plan, alias)
+    finally:
+        alias.unlink(missing_ok=True)
+    assert returncode == 0, attestation.get("violations")
+    assert attestation["state"] == "complete"
+    record = next(
+        item
+        for item in attestation["regular_files"]
+        if item["realpath"] == plugin.resolve(strict=True).as_posix()
+    )
+    assert "build_artifact" in record["bindings"]
 
 
 def test_output_symlink_cannot_hide_a_bound_input(

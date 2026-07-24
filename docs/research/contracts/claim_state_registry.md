@@ -413,13 +413,11 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
       result_json_sha256: 2c1cfa17c977ad02c6c1dee335810b9ee7ff37f1cbba1382d41a00f06b96529a
       checksums_sha256_digest: 3ff0ac6087a989265d6d8f73b0a2af903b446d03c24a41891576b9a4241a4a04
       verifier_report_aggregate_json_sha256: 0be12cc292773239d75604e9f2496787387ee8874395f4a3a9d723c615fe3f2e
-    owner_acceptance: pending this evidence PR merge as truthful-negative ordered terminal surface only;
-                      **not** claimed in the evidence-witness commit;
-                      **not** `H0_FULL_COMMIT_CAPTURE_FAITHFUL`;不成立 actual H0 guarantee;不構成 guarantee registration 基礎;
-                      does not authorize repair / reseal / new re-entry / Phase B
-    ledger_effect: 上方 route-1 永久留帳結論不變（仍無 faithful capture / 無 accepted runtime-fidelity edge / 無 actual H0 guarantee envelope）;候選集仍空;guarantee set 空;Phase B / GCTM / B1 / O1 未啟動; registration-v3 仍為 contract-sealable only
+    owner_acceptance: "accepted: 2026-07-24; acceptance_surface: PR #279 merge; acceptance_commit: 55d2da47c5538004e254830a273a2ac4362d8eae; scope: truthful-negative H0_PROVENANCE_INVALID only"
+    owner_acceptance_not: "**not** `H0_FULL_COMMIT_CAPTURE_FAITHFUL`; actual guarantee = none; runtime compatibility = none; Phase B = forbidden; future reentry authorization = none; does not authorize repair / reseal / new re-entry by itself"
+    ledger_effect: 上方 route-1 永久留帳結論不變（仍無 faithful capture / 無 accepted runtime-fidelity edge / 無 actual H0 guarantee envelope）;候選集仍空;guarantee set 空;Phase B / GCTM / B1 / O1 未啟動; registration-v3 仍為 contract-sealable only; R4 chain permanently spent; R5 repair authority is a separate owner decision (#280) only
     future_reentry_precondition: NONE from this mechanical terminal alone — exact S=a76efffa permanently spent; any future work requires a separate owner decision
-    issues: '#277 (Seal landed) / #278 (exactly-once authorization surface; consumed at launch)'
+    issues: '#277 (Seal landed) / #278 (exactly-once authorization surface; consumed at launch; closed after PR #279 acceptance) / #280 (H0-R5 repair owner decision; not execution authority)'
 pending_reentry:                          # append-only; pre-seal, no terminal claimed; route-1 永久留帳結論不變
   - date: 2026-07-21
     scheduling: owner-scheduled re-entry #3（滿足 line-337 future_reentry_precondition:launch-hygiene gate 先行）
@@ -444,9 +442,19 @@ pending_reentry:                          # append-only; pre-seal, no terminal c
       S4: a76efffa01a6fb731218150c355f5859bb8e6dd4
     authorization_identity: h0_r4_phase_a_exactly_once_authorization_20260724
     launch_hygiene_gate: "scripts/tools/h0_launch_hygiene_gate.py; first+second gate clear before launch"
-    status: "EXECUTED 2026-07-24 — controller launched once under exact S; authorization consumed; controller_result=provenance_invalid; mechanical_disposition=H0_PROVENANCE_INVALID; independent verifier valid=true; exact S permanently spent; retry/resume/second invocation forbidden; Phase B not authorized; actual guarantee not established; owner acceptance of truthful-negative terminal = this evidence PR merge surface only; no repair/reseal/new re-entry authorized by this record"
+    status: "EXECUTED + OWNER-ACCEPTED 2026-07-24 — controller launched once under exact S; authorization consumed; controller_result=provenance_invalid; mechanical_disposition=H0_PROVENANCE_INVALID; independent verifier valid=true; exact S permanently spent; retry/resume/second invocation forbidden; Phase B not authorized; actual guarantee not established; owner acceptance of truthful-negative terminal only via PR #279 merge (55d2da47…); no repair/reseal/new re-entry authorized by this record"
     evidence_packet: docs/modules/semantic/research/evidence/h0_phase_a_2a233387a6a321dd43570e2e30dc718571b3b4f4/
     witness_bundle: docs/modules/semantic/research/evidence/h0_r4_phase_a_execution_witness_20260724/
+  - date: 2026-07-24
+    scheduling: owner-scheduled H0-R5 Repair（extension/plugin runtime-attestation closure; not an execution authorization）
+    owner_decision_identity: h0_r5_extension_plugin_attestation_closure_authorization_20260724
+    owner_decision_surface: "https://github.com/raylei50653/saccade/issues/280"
+    repair_unit: h0_extension_plugin_runtime_attestation_closure_v1
+    spent_chain_boundary: "S4=a76efffa permanently spent; no retry/resume/re-interpretation of S4; no reuse of F4/S4; no Phase B from R4 packet"
+    authorized: "one repair unit; controlled-host non-authoritative qualification; fresh future Seal eligibility if qualification passes"
+    not_authorized: "F/S creation; Phase-A execution; exactly-once authorization; Phase B; actual registration-v3 guarantee; runtime compatibility; H0_ROUTE5_B1 / GCTM_B1 / O1 activation"
+    status: "RESOLVED 2026-07-24 — mechanical terminal H0_R5_ATTESTATION_QUALIFIED_SEALABLE; controlled-host qualification passed; exact qualified head eligible for separate Seal PR only; no I/F/S, no execution, no actual guarantee"
+    qualified_head_binding: "see docs/modules/semantic/research/evidence/h0_r5_extension_plugin_attestation_closure_20260724/qualification_report.json"
 last_reviewed_at: 2026-07-24
 ```
 
@@ -881,7 +889,7 @@ last_reviewed_at: 2026-07-23
 |---|---|
 | **score-layer transition semantics** | **RESOLVED 2026-07-23.** [`score_ranking_evidence_contract_v1`](score_ranking_evidence_contract.md) 已由 owner 接受並凍結；`owner_acceptance_id: score_ranking_contract_owner_acceptance_20260723`；`registry_binding_id: claim_state_registry_score_ranking_v1`；`contract_sha256: 7dbc2d965079fa3fc13f7802a4a083b1c4cbf49d658ffe3728b6c405364a13b4`。本 binding 只使 L2 admissibility 可判定；不自動推進 object、產生候選、啟動 B1/O1 或授權 runtime 行為。 |
 | **B1-slot identity** | **RESOLVED 2026-07-23.** [`gctm_b1_slot_identity_decision_v1`](gctm_b1_slot_identity_decision_v1.json) 固定 `GCTM_B1 != H0_ROUTE5_B1`、`relation: coexist`、非 alias、非 supersede、不可共享 activation authority；未來改寫關係須另開 owner-accepted transition。Identity resolution 不解除任何 runtime gate。 |
-| **H0 runtime substrate / compatibility** | **OPEN / fail closed；unchanged-interface re-entry blocked.** 三次 `H0_PROVENANCE_INVALID` 後仍無 valid runtime substrate、stable evidence identity、canonical checksum 或 owner-accepted H0→GCTM compatibility verdict。2026-07-23 bounded static audit 選出 `H0_GCTM_INTERFACE_STRUCTURALLY_INSUFFICIENT`。2026-07-24 consumer re-charter 凍結 `gctm_runtime_native_candidate_universe_v1`（`GCTM_RUNTIME_UNIVERSE_CONTRACT_SEALABLE`）。同日 additive registration-v3 選出 **`H0_REGISTRATION_V3_CONTRACT_SEALABLE`**（`quantity.h0_native_universe_completeness_registration` / `h0_gctm_guarantee_registration_v3`）：可 fail-closed 描述 future `universe_completeness` for `runtime_candidate_universe` + `runtime_event_membership`，且 **不需** trace-v2 ABI delta。registration-v1/v2 保持 frozen；**仍無** actual H0 guarantee、runtime substrate 或 compatibility verdict。`H0_ROUTE5_B1` 與 `GCTM_B1` 均保持 proposed；兩個 compatibility gate 各自 `missing`。下一個 owner 決策優先為 **design H0 re-entry and actual baseline capture**（或若日後發現 producer gap 再開 exact minimal ABI delta）；不得把 registration-v3 seal 直接交接成 accepted guarantee / capture authority。 |
+| **H0 runtime substrate / compatibility** | **OPEN / fail closed；unchanged-interface re-entry blocked.** 四個 owner-accepted `H0_PROVENANCE_INVALID` terminals（含 R4 via PR #279）後仍無 valid runtime substrate、stable evidence identity、canonical checksum 或 owner-accepted H0→GCTM compatibility verdict。2026-07-23 bounded static audit 選出 `H0_GCTM_INTERFACE_STRUCTURALLY_INSUFFICIENT`。2026-07-24 consumer re-charter 凍結 `gctm_runtime_native_candidate_universe_v1`（`GCTM_RUNTIME_UNIVERSE_CONTRACT_SEALABLE`）。同日 additive registration-v3 選出 **`H0_REGISTRATION_V3_CONTRACT_SEALABLE`**（`quantity.h0_native_universe_completeness_registration` / `h0_gctm_guarantee_registration_v3`）：可 fail-closed 描述 future `universe_completeness` for `runtime_candidate_universe` + `runtime_event_membership`，且 **不需** trace-v2 ABI delta。registration-v1/v2 保持 frozen；**仍無** actual H0 guarantee、runtime substrate 或 compatibility verdict。`H0_ROUTE5_B1` 與 `GCTM_B1` 均保持 proposed；兩個 compatibility gate 各自 `missing`。下一個 owner 決策優先為 **design H0 re-entry and actual baseline capture**（或若日後發現 producer gap 再開 exact minimal ABI delta）；不得把 registration-v3 seal 直接交接成 accepted guarantee / capture authority。 |
 
 ---
 

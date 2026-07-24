@@ -1,0 +1,21 @@
+{
+  "attestation_state": "complete",
+  "authority": "non_authoritative",
+  "extension_observed": true,
+  "extension_realpath": "/home/ray/developer/ai/saccade/build/h0_phase_a/saccade_tracking_ext.cpython-312-x86_64-linux-gnu.so",
+  "maps_count": 248,
+  "plan_files": 4664,
+  "plugin_observed": true,
+  "plugin_realpath": "/home/ray/developer/ai/saccade/build/h0_phase_a/libsaccade_scan_plugin.so",
+  "probe_terminal": "H0_R5_ATTESTATION_GAP_ISOLATED",
+  "qualified_execution_bound_head": "205a811780ae43a172657f5f0bf886084d95a229",
+  "returncode": 0,
+  "revalidated_after_loader_scope_fix": true,
+  "schema": "h0_r5_isolation_probe_v1",
+  "supersedes_qualified_heads": [
+    "99f7bb542a04334f55ddf622b093649a6d48f33f",
+    "077d1b9d38d02d10d09771a0fee340831276b8c2"
+  ],
+  "tool_runtime_count": 4661,
+  "violations": []
+}

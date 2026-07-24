@@ -31,6 +31,21 @@ ATTESTATION_SCHEMA = "h0_runtime_inputs_v1"
 BACKEND = "landlock_seccomp_ptrace_v1"
 INGRESS_POLICY = "deny_external_bytes_v1"
 TRACE_SCOPE = ("execve", "execveat", "mmap", "open", "openat", "openat2")
+# Kernel-observed operations that prove actual runtime file consumption.
+# Artificial markers (e.g. declared_loaded=true) are never sufficient.
+CONSUMING_OPERATIONS = frozenset(
+    {
+        "open",
+        "openat",
+        "openat2",
+        "mmap",
+        "mmap_read",
+        "mmap_exec",
+        "startup_mapping",
+        "execve",
+        "execveat",
+    }
+)
 
 _SYS_LANDLOCK_CREATE_RULESET = 444
 _SYS_LANDLOCK_ADD_RULE = 445
@@ -811,15 +826,29 @@ class _Recorder:
             return False
         record = self.files.get(real.as_posix())
         alias_record = self.aliases.get(lexical)
-        loader_traversal = (
-            non_canonical
-            and record is not None
-            and "tool_runtime" in record["bindings"]
+        # Loader/runtime path forms only.  The dynamic linker and Python import
+        # machinery open admitted build/tool artifacts via non-canonical paths
+        # (``..`` components) and symlink path forms that resolve to the
+        # admitted realpath.  Those forms must be observed for
+        # build_artifact / build_runtime_closure / tool_runtime members.
+        #
+        # Non-loader bindings (models_engines, sequence, repository) remain
+        # fail-closed: non-canonical traversal and undeclared aliases are
+        # rejected even when they resolve to an admitted physical file.
+        loader_bindings = frozenset(
+            {
+                "tool_runtime",
+                "build_artifact",
+                "build_runtime_closure",
+            }
         )
-        if non_canonical and not loader_traversal:
+        loader_member = record is not None and bool(
+            loader_bindings.intersection(record["bindings"])
+        )
+        if non_canonical and not loader_member:
             self._violate(operation, lexical, "non_canonical_path")
             return False
-        if record is None or (alias_record is not record and not loader_traversal):
+        if record is None or (alias_record is not record and not loader_member):
             self._violate(operation, lexical, "unbound_regular_file")
             return False
         if write:
@@ -1266,3 +1295,117 @@ def spawn_confined(
         return ConfinedProcess(pid, plan, abi)
     finally:
         os.close(ready_read)
+
+
+def regular_file_index(
+    attestation: Mapping[str, Any],
+) -> dict[str, Mapping[str, Any]]:
+    """Index attestation regular_files by resolved realpath."""
+    records = attestation.get("regular_files")
+    if not isinstance(records, list):
+        raise ConfinementError("attestation regular_files is not a list")
+    index: dict[str, Mapping[str, Any]] = {}
+    for record in records:
+        if not isinstance(record, Mapping) or "realpath" not in record:
+            raise ConfinementError("attestation regular_files member is malformed")
+        key = str(record["realpath"])
+        if key in index:
+            raise ConfinementError(f"duplicate attestation realpath: {key}")
+        index[key] = record
+    return index
+
+
+def assert_build_artifact_observed(
+    attestation: Mapping[str, Any],
+    *,
+    realpath: str | Path,
+    expected_length: int,
+    expected_sha256: str,
+    require_build_artifact_binding: bool = True,
+) -> dict[str, Any]:
+    """Require one top-level build artifact as an independently observed input.
+
+    Positive predicate (shared by controller and qualification):
+      - exact physical realpath is present in attestation.regular_files
+      - binding contains build_artifact (when required)
+      - length/sha256 equal build identity
+      - observed operations prove kernel-level runtime consumption
+      - no runtime identity drift against the attested length/hash pair
+    """
+    path = Path(realpath).resolve(strict=True).as_posix()
+    index = regular_file_index(attestation)
+    record = index.get(path)
+    if record is None:
+        raise ConfinementError(
+            f"build artifact absent from runtime attestation: {path}"
+        )
+    bindings = record.get("bindings")
+    if not isinstance(bindings, list):
+        raise ConfinementError(f"attestation bindings malformed for {path}")
+    if require_build_artifact_binding and "build_artifact" not in bindings:
+        raise ConfinementError(f"build artifact missing build_artifact binding: {path}")
+    if int(record.get("length", -1)) != int(expected_length):
+        raise ConfinementError(f"build artifact length drift in attestation: {path}")
+    if str(record.get("sha256", "")) != str(expected_sha256):
+        raise ConfinementError(f"build artifact hash drift in attestation: {path}")
+    operations = record.get("operations")
+    if not isinstance(operations, list) or not operations:
+        raise ConfinementError(
+            f"build artifact lacks observed consuming operations: {path}"
+        )
+    if not CONSUMING_OPERATIONS.intersection(str(item) for item in operations):
+        raise ConfinementError(
+            f"build artifact operations do not prove runtime consumption: {path}"
+        )
+    return dict(record)
+
+
+def assert_extension_plugin_membership(
+    attestation: Mapping[str, Any],
+    *,
+    extension: Mapping[str, Any] | Path,
+    plugin: Mapping[str, Any] | Path,
+    extension_identity: Mapping[str, Any] | None = None,
+    plugin_identity: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Shared controller/qualification predicate for both top-level artifacts."""
+    if extension_identity is None:
+        if not isinstance(extension, Path):
+            raise ConfinementError("extension identity requires path or identity map")
+        data = extension.read_bytes()
+        extension_identity = {
+            "path": extension,
+            "length": len(data),
+            "sha256": hashlib.sha256(data).hexdigest(),
+        }
+    if plugin_identity is None:
+        if not isinstance(plugin, Path):
+            raise ConfinementError("plugin identity requires path or identity map")
+        data = plugin.read_bytes()
+        plugin_identity = {
+            "path": plugin,
+            "length": len(data),
+            "sha256": hashlib.sha256(data).hexdigest(),
+        }
+    extension_path = extension_identity.get("path", extension)
+    plugin_path = plugin_identity.get("path", plugin)
+    extension_record = assert_build_artifact_observed(
+        attestation,
+        realpath=extension_path,
+        expected_length=int(extension_identity["length"]),
+        expected_sha256=str(extension_identity["sha256"]),
+    )
+    plugin_record = assert_build_artifact_observed(
+        attestation,
+        realpath=plugin_path,
+        expected_length=int(plugin_identity["length"]),
+        expected_sha256=str(plugin_identity["sha256"]),
+    )
+    return {
+        "extension_artifact_observed": True,
+        "plugin_artifact_observed": True,
+        "extension_identity_equal": True,
+        "plugin_identity_equal": True,
+        "extension_record": extension_record,
+        "plugin_record": plugin_record,
+    }

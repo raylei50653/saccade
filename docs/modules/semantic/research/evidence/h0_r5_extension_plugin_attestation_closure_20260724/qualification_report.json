@@ -1,0 +1,99 @@
+{
+  "authority": "non_authoritative",
+  "capture": "forbidden",
+  "does_not_establish": [
+    "I_selected",
+    "F_created",
+    "S_created",
+    "SEALED_accepted",
+    "execution_authorized",
+    "H0_baseline_accepted",
+    "runtime_substrate_established",
+    "actual_guarantee_registered",
+    "runtime_compatibility_established",
+    "B1_O1_activation"
+  ],
+  "extension_load": {
+    "attestation_state": "complete",
+    "confinement_plan_digest": "c769a2266c8e2e94d95ac92f5fef877b96a1e8fd4fc68b5804f7c9ca611a08a7",
+    "extension_artifact_observed": true,
+    "extension_identity_equal": true,
+    "plugin_artifact_observed": true,
+    "plugin_identity_equal": true,
+    "runtime_inputs_digest": "e874fe4e63fcbf7aad6f24bbf35e86cda69821d8ae99d2ad2fad91af575a6e0b",
+    "state": "passed",
+    "violations": []
+  },
+  "invalidated_by": "any post-qualification execution-bound commit",
+  "note": "Seal decision must select this exact execution-bound head; later docs-only or merge commits do not inherit qualification. Supersedes prior bindings 99f7bb54 and 077d1b9d.",
+  "owner_decision_identity": "h0_r5_extension_plugin_attestation_closure_authorization_20260724",
+  "owner_decision_surface": "https://github.com/raylei50653/saccade/issues/280",
+  "phase_b": "forbidden",
+  "qualification_artifact_digest": "fe080f806ba544bafbb9f526cd5549e68f11fbbae2f580452e1acac2539699b6",
+  "qualification_result": "passed",
+  "repair_unit": "h0_extension_plugin_runtime_attestation_closure_v1",
+  "repository_head_sha": "205a811780ae43a172657f5f0bf886084d95a229",
+  "repository_tree_sha": "6d41fa03c760af62a6ee6f112d246f66d0ce0f08",
+  "requested_ref": "205a811780ae43a172657f5f0bf886084d95a229",
+  "research_inputs": "forbidden",
+  "schema": "h0_r5_qualification_report_v1",
+  "steps": [
+    {
+      "name": "configure",
+      "state": "passed"
+    },
+    {
+      "name": "build",
+      "state": "passed"
+    },
+    {
+      "name": "build_identity",
+      "state": "passed"
+    },
+    {
+      "name": "runtime_closure",
+      "state": "passed"
+    },
+    {
+      "name": "cuda_runtime_confinement",
+      "state": "passed"
+    },
+    {
+      "attestation_state": "complete",
+      "confinement_plan_digest": "c769a2266c8e2e94d95ac92f5fef877b96a1e8fd4fc68b5804f7c9ca611a08a7",
+      "extension_artifact_observed": true,
+      "extension_identity_equal": true,
+      "name": "extension_load",
+      "plugin_artifact_observed": true,
+      "plugin_identity_equal": true,
+      "runtime_inputs_digest": "e874fe4e63fcbf7aad6f24bbf35e86cda69821d8ae99d2ad2fad91af575a6e0b",
+      "state": "passed",
+      "violations": []
+    },
+    {
+      "name": "t1_verdict_semantics",
+      "state": "passed"
+    },
+    {
+      "name": "runner_launch_preflight",
+      "state": "passed"
+    },
+    {
+      "name": "failure_envelope_serialization",
+      "state": "passed"
+    },
+    {
+      "name": "preseal_freeze_assembly",
+      "state": "passed"
+    },
+    {
+      "name": "landing_discovery_dry_run",
+      "state": "passed"
+    }
+  ],
+  "supersedes_qualified_heads": [
+    "99f7bb542a04334f55ddf622b093649a6d48f33f",
+    "077d1b9d38d02d10d09771a0fee340831276b8c2"
+  ],
+  "terminal_claim": "forbidden"
+}
