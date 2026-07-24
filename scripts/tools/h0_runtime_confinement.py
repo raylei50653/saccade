@@ -825,22 +825,31 @@ class _Recorder:
             self._violate(operation, lexical, "unbound_non_file_resource")
             return False
         record = self.files.get(real.as_posix())
-        # Membership key is the resolved physical realpath.  The dynamic linker
-        # and Python import machinery frequently open admitted files via:
-        #   - non-canonical paths containing ``..`` components; and/or
-        #   - symlink path forms that resolve to the admitted realpath.
-        # Landlock remains the path-enforcing boundary (inode admission).  Once
-        # the resolved realpath is an admitted plan member, those path forms are
-        # the same runtime-consumed artifact and must be independently observed
-        # in regular_files — not rejected as unbound.  Hardlinks to a different
-        # unreolved path string still fail because resolve() does not collapse
-        # them onto the admitted realpath key.
-        if record is None:
-            self._violate(
-                operation,
-                lexical,
-                "non_canonical_path" if non_canonical else "unbound_regular_file",
-            )
+        alias_record = self.aliases.get(lexical)
+        # Loader/runtime path forms only.  The dynamic linker and Python import
+        # machinery open admitted build/tool artifacts via non-canonical paths
+        # (``..`` components) and symlink path forms that resolve to the
+        # admitted realpath.  Those forms must be observed for
+        # build_artifact / build_runtime_closure / tool_runtime members.
+        #
+        # Non-loader bindings (models_engines, sequence, repository) remain
+        # fail-closed: non-canonical traversal and undeclared aliases are
+        # rejected even when they resolve to an admitted physical file.
+        loader_bindings = frozenset(
+            {
+                "tool_runtime",
+                "build_artifact",
+                "build_runtime_closure",
+            }
+        )
+        loader_member = record is not None and bool(
+            loader_bindings.intersection(record["bindings"])
+        )
+        if non_canonical and not loader_member:
+            self._violate(operation, lexical, "non_canonical_path")
+            return False
+        if record is None or (alias_record is not record and not loader_member):
+            self._violate(operation, lexical, "unbound_regular_file")
             return False
         if write:
             self._violate(operation, lexical, "write_to_bound_input")

@@ -23,7 +23,7 @@
   "root_causes": [
     {
       "id": "recorder_physical_identity",
-      "summary": "Recorder required declared logical-path aliases and rejected non-canonical loader paths even when the resolved physical realpath was an admitted plan member (symlink forms under uv base_prefix; .. components in dynamic-linker paths).",
+      "summary": "Recorder required declared logical-path aliases and rejected non-canonical loader paths even when the resolved physical realpath was an admitted plan member (symlink forms under uv base_prefix; .. components in dynamic-linker paths). Fix is loader-scoped only: tool_runtime / build_artifact / build_runtime_closure may use those path forms; models_engines / sequence / repository remain fail-closed on non_canonical traversal and undeclared aliases.",
       "surface": "scripts/tools/h0_runtime_confinement.py (_Recorder.observe_path)"
     },
     {
@@ -43,7 +43,7 @@
     }
   ],
   "repairs": [
-    "observe_path membership key = resolved physical realpath (admitted plan member)",
+    "observe_path loader-scoped realpath exception for tool_runtime/build_artifact/build_runtime_closure only (model/sequence/repository non_canonical fail-closed retained)",
     "shared assert_extension_plugin_membership / CONSUMING_OPERATIONS predicate",
     "discover_python_interpreter_runtime_paths admitted into freeze tool_runtime",
     "recursive ldd + known dlopen siblings + maps-observed shared objects in build identity",
