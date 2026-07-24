@@ -137,12 +137,21 @@ def test_fixture_catalog(fixture: dict[str, Any]) -> None:
 
 
 def test_frozen_input_hashes_match_disk() -> None:
+    import h0_declaration_frozen_identity as decl_id
+
     frozen = _load(FROZEN)
     assert frozen["mutable_branch_tip_used"] is False
     for item in frozen["inputs"]:
         path = ROOT / item["path"]
         assert path.is_file(), item["path"]
-        assert _sha256(path) == item["sha256"], item["path"]
+        disk = path.read_bytes()
+        # H0 capture declaration may carry pure trailing SEALED appends after the
+        # package freeze; other frozen inputs stay strict path+sha256.
+        assert decl_id.frozen_path_hash_ok(
+            path=item["path"],
+            disk_bytes=disk,
+            expected_sha256=item["sha256"],
+        ), item["path"]
 
 
 def test_registration_requirements_are_requirements_only() -> None:

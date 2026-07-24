@@ -15,6 +15,7 @@
 | `test_frozen_packet_exact_key_recoverability.py` | system | contract | active | Contracts for the single-phase EK0 frozen-packet consistency audit. |
 | `test_gmc.py` | eval | behavior | active | Tests for saccade.perception.eval.gmc (Global Motion Compensation). |
 | `test_gpu_bidir_bridge.py` | tracking | behavior | active | Unit tests for the GPU tracker bidirectional bridge (perception.tracking.tracker_gpu). |
+| `test_h0_declaration_frozen_identity.py` | system | contract | active | Unit tests for H0 declaration frozen-hash SEALED-append tolerance. |
 | `test_h0_phase_a_controller.py` | system | contract | active | Hermetic A7/RC1 controller, child-contract, and verifier admissions. |
 | `test_h0_preseal_freeze.py` | system | contract | active | Amendment 6 classifier/admission semantics for the H0 pre-seal freeze. |
 | `test_h0_preseal_freeze_v3.py` | system | contract | active | RC2 authority-chain and independent v3 JSON admissions; no Phase A runs. |

@@ -9,9 +9,9 @@
   "quantity_object": "quantity.h0_native_universe_completeness_registration",
   "artifacts": {
     "contract_identity.json": "994006676f1e8b5ef02a7a18e7e8df3178ef1065faf662a52fcc8bcea2992704",
-    "frozen_input_identities.json": "14b81f14d9bf3386a8c795597d14069046f3509622d0b5ffef4cd0d12abe223b",
+    "frozen_input_identities.json": "e2747946e239c27d75d9974d68902e0c637fb8bceb2827269a347c5369388b7d",
     "completeness_predicate.json": "b64294165313ee0860b3c7be45ded40738713b4a0e14246453bb351bed68ec5b",
-    "terminal_report.json": "298c5991aaacfc3cc853b3b68c388f36c67576174eb2e52c3c5844006fef4294"
+    "terminal_report.json": "f9453b6628b81fdfeefb4a03a9d12a6d397e72f7c3a233b37a193b7cbf654633"
   },
   "tooling": {
     "schema": {

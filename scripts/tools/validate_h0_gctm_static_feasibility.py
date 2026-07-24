@@ -28,6 +28,7 @@ REGISTRATION_TOOLS = ROOT / "scripts/tools"
 if REGISTRATION_TOOLS.as_posix() not in sys.path:
     sys.path.insert(0, REGISTRATION_TOOLS.as_posix())
 
+import h0_declaration_frozen_identity as decl_id  # noqa: E402
 import verify_h0_gctm_guarantee_registration as registration  # noqa: E402
 
 
@@ -266,11 +267,25 @@ def _validate_frozen_inputs(record: Mapping[str, Any]) -> dict[str, Mapping[str,
         roles.append(role)
         identities.append(str(item_map["identity_id"]))
         path = ROOT / str(item_map["path"])
-        actual = _sha256_path(path)
-        if actual != item_map["sha256"]:
+        try:
+            disk_bytes = path.read_bytes()
+        except OSError as exc:
+            raise AuditValidationError(
+                "frozen_identity", f"cannot read frozen input {path}: {exc}"
+            ) from exc
+        actual = hashlib.sha256(disk_bytes).hexdigest()
+        expected = str(item_map["sha256"])
+        # H0 capture declaration may gain pure trailing SEALED owner-event rows
+        # after package freeze (Amendment 10 Seal append).  Other frozen inputs
+        # remain strict path+sha256.
+        if not decl_id.frozen_path_hash_ok(
+            path=str(item_map["path"]),
+            disk_bytes=disk_bytes,
+            expected_sha256=expected,
+        ):
             raise AuditValidationError(
                 "frozen_identity",
-                f"{role} hash mismatch: declared={item_map['sha256']} actual={actual}",
+                f"{role} hash mismatch: declared={expected} actual={actual}",
             )
         if path.suffix == ".json":
             document = load_json(path)

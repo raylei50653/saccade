@@ -87,7 +87,7 @@
   },
   "artifact_bindings": {
     "schema_sha256": "f4688d36a5e9db633f0db254d9d2c0e5201c9f6d1db9ca191a9c3c691cffa02f",
-    "validator_sha256": "fa78c5598f9cabc10a8450bc1066a4a147126e2193967e923cd60f1e878bdc37",
+    "validator_sha256": "dee9f0994c11c088f0c8a789a114e27b57fad49bf995f6805953ad833b6b4258",
     "responsibility_matrix_sha256": "1e0cd600d13bb53ac1b182df7a28647a62fb12a74bb16481fda12ae1b7f8b45c",
     "frozen_input_record_sha256": "379a3ce189470d63febb1fc5ea2284f827e6a54d4037314551c387d714e4e473",
     "coverage_report_sha256": "d51dae3d8b3eeb03501ffe563c293bea9f493820c62c45d0fb578ce007f9e536",

@@ -19,6 +19,12 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[2]
+TOOLS = ROOT / "scripts/tools"
+if TOOLS.as_posix() not in sys.path:
+    sys.path.insert(0, TOOLS.as_posix())
+
+import h0_declaration_frozen_identity as decl_id  # noqa: E402
+
 SCHEMA_PATH = ROOT / "scripts/tools/gctm_runtime_universe_schema_v1.json"
 PACKET_DIR = (
     ROOT
@@ -291,13 +297,27 @@ def validate_frozen_inputs(record: Mapping[str, Any], frozen_path: Path) -> None
         row = require_mapping(item, "frozen input row")
         path = ROOT / str(row["path"])
         require_true(path.is_file(), "frozen_path", f"missing frozen input {path}")
-        actual = sha256_file(path)
         expected = str(row["sha256"])
-        require_true(
-            actual == expected,
-            "frozen_hash_mismatch",
-            f"hash mismatch for {row['path']}: expected {expected}, got {actual}",
-        )
+        try:
+            disk_bytes = path.read_bytes()
+        except OSError as exc:
+            raise RuntimeUniverseValidationError(
+                "frozen_path", f"cannot read frozen input {path}: {exc}"
+            ) from exc
+        actual = hashlib.sha256(disk_bytes).hexdigest()
+        # H0 capture declaration may gain pure trailing SEALED owner-event rows
+        # after package freeze (Amendment 10 Seal append).  All other inputs stay
+        # strict path+sha256.
+        if not decl_id.frozen_path_hash_ok(
+            path=str(row["path"]),
+            disk_bytes=disk_bytes,
+            expected_sha256=expected,
+        ):
+            require_true(
+                False,
+                "frozen_hash_mismatch",
+                f"hash mismatch for {row['path']}: expected {expected}, got {actual}",
+            )
 
 
 def validate_score_policy_spaces(record: Mapping[str, Any]) -> None:

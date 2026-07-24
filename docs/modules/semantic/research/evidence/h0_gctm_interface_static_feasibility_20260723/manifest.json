@@ -9,7 +9,7 @@
     "coverage_conservation_report.json": "d51dae3d8b3eeb03501ffe563c293bea9f493820c62c45d0fb578ce007f9e536",
     "frozen_input_identities.json": "379a3ce189470d63febb1fc5ea2284f827e6a54d4037314551c387d714e4e473",
     "responsibility_coverage_matrix.json": "1e0cd600d13bb53ac1b182df7a28647a62fb12a74bb16481fda12ae1b7f8b45c",
-    "terminal_report.json": "04b7f3dd9029876119cde89ad39d4529bd114972c8f4acca360bf600422664bf"
+    "terminal_report.json": "27e669bb8de5b46d73a2c49bcbfb243d06d471db0ef3d6e8de44d027f068a90b"
   },
   "tooling": {
     "schema": {
@@ -18,7 +18,7 @@
     },
     "validator": {
       "path": "scripts/tools/validate_h0_gctm_static_feasibility.py",
-      "sha256": "fa78c5598f9cabc10a8450bc1066a4a147126e2193967e923cd60f1e878bdc37"
+      "sha256": "dee9f0994c11c088f0c8a789a114e27b57fad49bf995f6805953ad833b6b4258"
     },
     "fixture_catalog": {
       "path": "tests/contract/fixtures/h0_gctm_static_feasibility_fixture_catalog_v1.json",

@@ -95,13 +95,13 @@
   },
   "artifact_bindings": {
     "universe_declaration_sha256": "e2fd266547bf26e57a2cda4bc64e930008c51c145e1eb0f23deceb5a7bdb455d",
-    "frozen_input_record_sha256": "f9fd1a47f82ea3f8d8ea5f950959a4c9b60c325077e9050d83bf756903f19792",
+    "frozen_input_record_sha256": "f355f34ff11625314549b05be35fdb8147f4434ba2337ea291c050c92ced3afa",
     "event_candidate_identity_sha256": "ddf4d3c8cec680929be65fa11ab104a6f66a012abb98c45bb784428314138306",
     "inclusion_stage_decision_sha256": "c9b544698a309dab067f35a85ece65303b2e15929d19a2b07004e2022f1218a7",
     "composition_completeness_sha256": "ff220f6ed932b36c03448977748e8f980d8714a7698e98d79ca2f7af89d34484",
     "registration_requirements_sha256": "2b4086e4aff4f185a995220201c36e4c19b94dc752d8382107ade15ac69e967f",
     "schema_sha256": "a1885f55a5179c456680e0753f5a2b77c042a69f8e4ab196bf7254e4184fe57e",
-    "validator_sha256": "0a244f5fa62552aa21118b23445c03ca0167eb6fd8a456f33747eda4bfea3081",
+    "validator_sha256": "30f1a06fc367bb386b3dc260e3ac131592f3e156958d9ba25fabffa635b4503f",
     "fixture_catalog_sha256": "f12d1dcf86fe67a309b250f8a8542ee670f20af49493939e98392991b293f8a3"
   },
   "acceptance": {

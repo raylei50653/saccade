@@ -386,6 +386,7 @@ deleting.
 | `gpu_check.py` | diagnostic | - | Sanity-check PyTorch/CUDA/GPU environment. |
 | `graphify_cuda_patch.sh` | diagnostic | cli | Re-apply graphify CUDA (.cu/.cuh) AST support after a graphify upgrade. |
 | `gt_safe_region_area.py` | diagnostic | cli | GT-safe region area in GT-CDF / tail-mass coordinates (not raw thr). |
+| `h0_declaration_frozen_identity.py` | stable | - | H0 declaration frozen-identity checks with SEALED-append tolerance. |
 | `h0_launch_hygiene_gate.py` | stable | cli | Non-authoritative launch-hygiene pre-authorization gate for H0 Phase A. |
 | `h0_runtime_confinement.py` | stable | - | Linux fail-closed runtime confinement and file-input attestation. |
 | `horizon_convergence_probe.py` | experiment | cli | Horizon-convergence probe — does the pedestrian bbox scale field actually converge to a stable horizon line? … |
