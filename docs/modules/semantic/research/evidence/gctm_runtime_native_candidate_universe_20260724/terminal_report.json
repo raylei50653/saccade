@@ -101,7 +101,7 @@
     "composition_completeness_sha256": "ff220f6ed932b36c03448977748e8f980d8714a7698e98d79ca2f7af89d34484",
     "registration_requirements_sha256": "2b4086e4aff4f185a995220201c36e4c19b94dc752d8382107ade15ac69e967f",
     "schema_sha256": "a1885f55a5179c456680e0753f5a2b77c042a69f8e4ab196bf7254e4184fe57e",
-    "validator_sha256": "490ff83eca34873cbcf0851ceda09e1adc6db6bae4fba08ac682c55933ef254e",
+    "validator_sha256": "0a244f5fa62552aa21118b23445c03ca0167eb6fd8a456f33747eda4bfea3081",
     "fixture_catalog_sha256": "f12d1dcf86fe67a309b250f8a8542ee670f20af49493939e98392991b293f8a3"
   },
   "acceptance": {

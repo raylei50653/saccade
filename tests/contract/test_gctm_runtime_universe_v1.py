@@ -73,13 +73,17 @@ def test_schema_and_canonical_declaration_validate() -> None:
     assert schema["additionalProperties"] is False
     record = _load(DECLARATION)
     jsonschema.Draft202012Validator(schema).validate(record)
-    result = universe.validate_declaration(record, frozen_path=FROZEN, reg_path=REG_REQ)
+    result = universe.validate_declaration(
+        record, frozen_path=FROZEN, reg_path=REG_REQ, packet_dir=PACKET
+    )
     assert result["valid"] is True
     assert result["selected_terminal"] == universe.TERMINAL_SEALABLE
     assert result["fixed_validator_output"] == universe.FIXED_NON_AUTHORITY
+    assert result["packet_bindings"]["valid"] is True
+    assert result["packet_bindings"]["packet_id"] == universe.PACKET_ID
 
 
-def test_cli_validates_canonical_declaration(tmp_path: Path) -> None:
+def test_cli_validates_canonical_declaration() -> None:
     import subprocess
 
     proc = subprocess.run(
@@ -101,6 +105,7 @@ def test_cli_validates_canonical_declaration(tmp_path: Path) -> None:
     report = json.loads(proc.stdout)
     assert report["ok"] is True
     assert report["selected_terminal"] == universe.TERMINAL_SEALABLE
+    assert report["result"]["packet_bindings"]["valid"] is True
     assert report["authority_verified"] is False
     assert report["runtime_guarantee_established"] is False
     assert report["runtime_compatibility_established"] is False
@@ -114,16 +119,21 @@ def test_cli_validates_canonical_declaration(tmp_path: Path) -> None:
     ids=lambda item: item["fixture_id"],
 )
 def test_fixture_catalog(fixture: dict[str, Any]) -> None:
+    # Fixture mutations exercise declaration structure only; packet integrity
+    # is validated separately against the committed on-disk packet.
     record = _fixture_record(fixture)
     if fixture["expected_ok"]:
         result = universe.validate_declaration(
-            record, frozen_path=FROZEN, reg_path=REG_REQ
+            record, frozen_path=FROZEN, reg_path=REG_REQ, packet_dir=None
         )
         assert result["selected_terminal"] == fixture["expected_terminal"]
         assert result["fixed_validator_output"] == universe.FIXED_NON_AUTHORITY
+        assert "packet_bindings" not in result
     else:
         with pytest.raises(universe.RuntimeUniverseValidationError):
-            universe.validate_declaration(record, frozen_path=FROZEN, reg_path=REG_REQ)
+            universe.validate_declaration(
+                record, frozen_path=FROZEN, reg_path=REG_REQ, packet_dir=None
+            )
 
 
 def test_frozen_input_hashes_match_disk() -> None:
@@ -158,6 +168,106 @@ def test_packet_sidecars_exist() -> None:
         "manifest.json",
     ):
         assert (PACKET / name).is_file(), name
+
+
+def test_packet_bindings_verify_exact_committed_packet() -> None:
+    packet = universe.validate_packet_bindings(PACKET)
+    assert packet["valid"] is True
+    assert packet["declaration_id"] == universe.DECLARATION_ID
+    assert packet["selected_terminal"] == universe.TERMINAL_SEALABLE
+    assert packet["fixed_validator_output"] == universe.FIXED_NON_AUTHORITY
+    for name in universe.REQUIRED_PACKET_ARTIFACTS:
+        assert name in packet["artifacts_checked"]
+    for key in universe.REQUIRED_TOOLING_KEYS:
+        assert key in packet["tooling_checked"]
+    for binding in universe.TERMINAL_BINDING_MAP:
+        assert binding in packet["terminal_bindings_checked"]
+
+
+def test_packet_bindings_fail_on_stale_manifest_artifact_hash(
+    tmp_path: Path,
+) -> None:
+    import shutil
+
+    clone = tmp_path / "packet"
+    shutil.copytree(PACKET, clone)
+    manifest_path = clone / "manifest.json"
+    manifest = _load(manifest_path)
+    # Tamper: keep disk content, break declared hash.
+    name = "universe_declaration.json"
+    manifest["artifacts"][name] = "0" * 64
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    with pytest.raises(universe.RuntimeUniverseValidationError) as exc:
+        universe.validate_packet_bindings(clone)
+    assert exc.value.error_class == "packet_artifact_hash_mismatch"
+
+
+def test_packet_bindings_fail_on_sidecar_content_tamper(tmp_path: Path) -> None:
+    import shutil
+
+    clone = tmp_path / "packet"
+    shutil.copytree(PACKET, clone)
+    target = clone / "event_candidate_identity.json"
+    data = _load(target)
+    data["tampered"] = True
+    target.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    with pytest.raises(universe.RuntimeUniverseValidationError) as exc:
+        universe.validate_packet_bindings(clone)
+    assert exc.value.error_class == "packet_artifact_hash_mismatch"
+
+
+def test_packet_bindings_fail_on_terminal_manifest_binding_drift(
+    tmp_path: Path,
+) -> None:
+    import shutil
+
+    clone = tmp_path / "packet"
+    shutil.copytree(PACKET, clone)
+    terminal_path = clone / "terminal_report.json"
+    terminal = _load(terminal_path)
+    # Keep manifest correct vs disk; break terminal_report binding only.
+    terminal["artifact_bindings"]["universe_declaration_sha256"] = "1" * 64
+    terminal_path.write_text(json.dumps(terminal, indent=2) + "\n", encoding="utf-8")
+    # terminal_report itself is hashed in manifest, so this may fail either as
+    # terminal hash mismatch or binding mismatch depending on check order.
+    with pytest.raises(universe.RuntimeUniverseValidationError) as exc:
+        universe.validate_packet_bindings(clone)
+    assert exc.value.error_class in {
+        "packet_artifact_hash_mismatch",
+        "terminal_manifest_binding_mismatch",
+        "terminal_binding_disk_mismatch",
+    }
+
+
+def test_packet_bindings_fail_on_identity_cross_check(tmp_path: Path) -> None:
+    import shutil
+
+    clone = tmp_path / "packet"
+    shutil.copytree(PACKET, clone)
+    manifest_path = clone / "manifest.json"
+    manifest = _load(manifest_path)
+    manifest["runtime_consumer_identity"] = "not_the_runtime_universe"
+    # Recompute only is not done: this is intentional drift. But changing
+    # manifest content also invalidates nothing about itself (manifest is not
+    # self-hashed). Artifact hashes remain correct.
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    with pytest.raises(universe.RuntimeUniverseValidationError) as exc:
+        universe.validate_packet_bindings(clone)
+    assert exc.value.error_class == "identity_cross_check"
+
+
+def test_packet_bindings_fail_on_stale_tooling_hash(tmp_path: Path) -> None:
+    import shutil
+
+    clone = tmp_path / "packet"
+    shutil.copytree(PACKET, clone)
+    manifest_path = clone / "manifest.json"
+    manifest = _load(manifest_path)
+    manifest["tooling"]["schema"]["sha256"] = "2" * 64
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    with pytest.raises(universe.RuntimeUniverseValidationError) as exc:
+        universe.validate_packet_bindings(clone)
+    assert exc.value.error_class == "packet_tooling_hash_mismatch"
 
 
 def test_d1_synthetic_universe_not_replaced() -> None:

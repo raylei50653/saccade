@@ -20,21 +20,58 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 SCHEMA_PATH = ROOT / "scripts/tools/gctm_runtime_universe_schema_v1.json"
-FROZEN_INPUTS_PATH = (
+PACKET_DIR = (
     ROOT
     / "docs/modules/semantic/research/evidence"
     / "gctm_runtime_native_candidate_universe_20260724"
-    / "frozen_input_identities.json"
 )
+FROZEN_INPUTS_PATH = PACKET_DIR / "frozen_input_identities.json"
 REG_REQ_PATH = (
-    ROOT
-    / "docs/modules/semantic/research/evidence"
-    / "gctm_runtime_native_candidate_universe_20260724"
-    / "h0_native_universe_completeness_registration_requirements_v1.json"
+    PACKET_DIR / "h0_native_universe_completeness_registration_requirements_v1.json"
 )
+MANIFEST_PATH = PACKET_DIR / "manifest.json"
+TERMINAL_REPORT_PATH = PACKET_DIR / "terminal_report.json"
+DECLARATION_PATH = PACKET_DIR / "universe_declaration.json"
 
 SCHEMA_ID = "gctm_runtime_native_candidate_universe_declaration_v1"
 DECLARATION_ID = "gctm_runtime_native_candidate_universe_v1"
+PACKET_ID = "gctm_runtime_native_candidate_universe_20260724"
+MANIFEST_SCHEMA = "gctm_runtime_universe_manifest_v1"
+TERMINAL_REPORT_SCHEMA = "gctm_runtime_universe_terminal_report_v1"
+
+REQUIRED_PACKET_ARTIFACTS = (
+    "universe_declaration.json",
+    "frozen_input_identities.json",
+    "event_candidate_identity.json",
+    "inclusion_stage_decision.json",
+    "composition_completeness_contract.json",
+    "h0_native_universe_completeness_registration_requirements_v1.json",
+    "terminal_report.json",
+)
+REQUIRED_TOOLING_KEYS = (
+    "schema",
+    "validator",
+    "fixture_catalog",
+    "targeted_tests",
+)
+# Maps terminal_report.artifact_bindings keys → (manifest_section, key).
+TERMINAL_BINDING_MAP: dict[str, tuple[str, str]] = {
+    "universe_declaration_sha256": ("artifacts", "universe_declaration.json"),
+    "frozen_input_record_sha256": ("artifacts", "frozen_input_identities.json"),
+    "event_candidate_identity_sha256": ("artifacts", "event_candidate_identity.json"),
+    "inclusion_stage_decision_sha256": ("artifacts", "inclusion_stage_decision.json"),
+    "composition_completeness_sha256": (
+        "artifacts",
+        "composition_completeness_contract.json",
+    ),
+    "registration_requirements_sha256": (
+        "artifacts",
+        "h0_native_universe_completeness_registration_requirements_v1.json",
+    ),
+    "schema_sha256": ("tooling", "schema"),
+    "validator_sha256": ("tooling", "validator"),
+    "fixture_catalog_sha256": ("tooling", "fixture_catalog"),
+}
 
 TERMINAL_INVALID = "GCTM_RUNTIME_UNIVERSE_AUDIT_INVALID"
 TERMINAL_UNSEALABLE = "GCTM_RUNTIME_UNIVERSE_UNSEALABLE"
@@ -681,11 +718,193 @@ def validate_fixed_outputs_and_terminal(
     return computed
 
 
+def _require_fixed_non_authority(container: Mapping[str, Any], name: str) -> None:
+    for key, expected in FIXED_NON_AUTHORITY.items():
+        # Manifest stores the five fixed flags at top level; terminal_report
+        # nests them under fixed_validator_output.
+        if key in container:
+            actual = container.get(key)
+        else:
+            nested = require_mapping(
+                container.get("fixed_validator_output"),
+                f"{name}.fixed_validator_output",
+            )
+            actual = nested.get(key)
+        require_true(
+            actual is expected,
+            "fixed_non_authority",
+            f"{name}.{key} must be {expected}",
+        )
+
+
+def validate_packet_bindings(packet_dir: Path = PACKET_DIR) -> dict[str, Any]:
+    """Fail-closed integrity check for the exact on-disk consumer packet.
+
+    Verifies manifest and terminal_report artifact/tooling SHA-256 bindings
+    against disk, and cross-checks identity/terminal fields across declaration,
+    manifest, and terminal report. Does not authorize H0/runtime/B1 authority.
+    """
+    packet_dir = packet_dir.resolve()
+    manifest_path = packet_dir / "manifest.json"
+    terminal_path = packet_dir / "terminal_report.json"
+    declaration_path = packet_dir / "universe_declaration.json"
+    for path in (manifest_path, terminal_path, declaration_path):
+        require_true(path.is_file(), "packet_missing", f"missing packet file {path}")
+
+    manifest = require_mapping(load_json(manifest_path), "manifest")
+    terminal = require_mapping(load_json(terminal_path), "terminal_report")
+    declaration = require_mapping(load_json(declaration_path), "universe_declaration")
+
+    require_true(
+        manifest.get("schema") == MANIFEST_SCHEMA,
+        "manifest_schema",
+        f"manifest schema must be {MANIFEST_SCHEMA}",
+    )
+    require_true(
+        terminal.get("schema") == TERMINAL_REPORT_SCHEMA,
+        "terminal_schema",
+        f"terminal_report schema must be {TERMINAL_REPORT_SCHEMA}",
+    )
+    require_true(
+        manifest.get("packet_id") == PACKET_ID,
+        "packet_id",
+        f"manifest.packet_id must be {PACKET_ID}",
+    )
+    require_true(
+        terminal.get("packet_id") == PACKET_ID,
+        "packet_id",
+        f"terminal_report.packet_id must be {PACKET_ID}",
+    )
+
+    artifacts = require_mapping(manifest.get("artifacts"), "manifest.artifacts")
+    for name in REQUIRED_PACKET_ARTIFACTS:
+        require_true(
+            name in artifacts,
+            "manifest_artifacts",
+            f"manifest.artifacts missing {name}",
+        )
+        path = packet_dir / name
+        require_true(
+            path.is_file(), "packet_missing", f"missing packet artifact {path}"
+        )
+        actual = sha256_file(path)
+        expected = str(artifacts[name])
+        require_true(
+            actual == expected,
+            "packet_artifact_hash_mismatch",
+            f"manifest.artifacts[{name!r}] hash mismatch: expected {expected}, got {actual}",
+        )
+
+    tooling = require_mapping(manifest.get("tooling"), "manifest.tooling")
+    for key in REQUIRED_TOOLING_KEYS:
+        require_true(
+            key in tooling, "manifest_tooling", f"manifest.tooling missing {key}"
+        )
+        entry = require_mapping(tooling.get(key), f"manifest.tooling.{key}")
+        rel = str(entry.get("path", ""))
+        path = ROOT / rel
+        require_true(path.is_file(), "tooling_missing", f"missing tooling file {path}")
+        actual = sha256_file(path)
+        expected = str(entry.get("sha256", ""))
+        require_true(
+            actual == expected,
+            "packet_tooling_hash_mismatch",
+            f"manifest.tooling[{key!r}] hash mismatch for {rel}: expected {expected}, got {actual}",
+        )
+
+    bindings = require_mapping(
+        terminal.get("artifact_bindings"), "terminal_report.artifact_bindings"
+    )
+    for binding_key, (section, section_key) in TERMINAL_BINDING_MAP.items():
+        require_true(
+            binding_key in bindings,
+            "terminal_bindings",
+            f"terminal_report.artifact_bindings missing {binding_key}",
+        )
+        if section == "artifacts":
+            expected = str(artifacts[section_key])
+        else:
+            expected = str(
+                require_mapping(tooling.get(section_key), f"tooling.{section_key}")[
+                    "sha256"
+                ]
+            )
+        actual = str(bindings[binding_key])
+        require_true(
+            actual == expected,
+            "terminal_manifest_binding_mismatch",
+            f"terminal_report.artifact_bindings[{binding_key!r}]={actual} "
+            f"does not match manifest {section}[{section_key!r}]={expected}",
+        )
+        # Also re-check disk for terminal bindings (defends against manifest/tooling
+        # agreement that both point at a stale value relative to disk).
+        if section == "artifacts":
+            disk = sha256_file(packet_dir / section_key)
+        else:
+            disk = sha256_file(ROOT / str(tooling[section_key]["path"]))
+        require_true(
+            actual == disk,
+            "terminal_binding_disk_mismatch",
+            f"terminal_report.artifact_bindings[{binding_key!r}]={actual} "
+            f"does not match on-disk digest {disk}",
+        )
+
+    # Cross-identity: declaration ↔ manifest ↔ terminal_report.
+    decl_id = declaration.get("declaration_id")
+    decl_terminal = declaration.get("selected_terminal")
+    require_true(
+        decl_id == DECLARATION_ID,
+        "declaration_id",
+        f"declaration_id must be {DECLARATION_ID}",
+    )
+    require_true(
+        manifest.get("runtime_consumer_identity") == decl_id,
+        "identity_cross_check",
+        "manifest.runtime_consumer_identity must equal declaration.declaration_id",
+    )
+    require_true(
+        terminal.get("frozen_runtime_universe") == decl_id,
+        "identity_cross_check",
+        "terminal_report.frozen_runtime_universe must equal declaration.declaration_id",
+    )
+    require_true(
+        manifest.get("selected_terminal") == decl_terminal,
+        "terminal_cross_check",
+        "manifest.selected_terminal must equal declaration.selected_terminal",
+    )
+    require_true(
+        terminal.get("selected_terminal") == decl_terminal,
+        "terminal_cross_check",
+        "terminal_report.selected_terminal must equal declaration.selected_terminal",
+    )
+    ownership = require_mapping(declaration.get("ownership"), "ownership")
+    require_true(
+        ownership.get("runtime_consumer_identity") == decl_id,
+        "identity_cross_check",
+        "ownership.runtime_consumer_identity must equal declaration_id",
+    )
+
+    _require_fixed_non_authority(manifest, "manifest")
+    _require_fixed_non_authority(terminal, "terminal_report")
+
+    return {
+        "valid": True,
+        "packet_id": PACKET_ID,
+        "declaration_id": decl_id,
+        "selected_terminal": decl_terminal,
+        "artifacts_checked": sorted(artifacts),
+        "tooling_checked": sorted(tooling),
+        "terminal_bindings_checked": sorted(TERMINAL_BINDING_MAP),
+        "fixed_validator_output": dict(FIXED_NON_AUTHORITY),
+    }
+
+
 def validate_declaration(
     record: Mapping[str, Any],
     *,
     frozen_path: Path = FROZEN_INPUTS_PATH,
     reg_path: Path = REG_REQ_PATH,
+    packet_dir: Path | None = None,
 ) -> dict[str, Any]:
     require_mapping(record, "declaration")
     validate_schema_shape(record)
@@ -727,13 +946,25 @@ def validate_declaration(
     validate_registration_requirements(record, reg_path)
     terminal = validate_fixed_outputs_and_terminal(record, unsealable)
 
-    return {
+    result: dict[str, Any] = {
         "valid": True,
         "selected_terminal": terminal,
         "unsealable_reasons": list(unsealable),
         "fixed_validator_output": dict(FIXED_NON_AUTHORITY),
         "declaration_id": DECLARATION_ID,
     }
+    if packet_dir is not None:
+        packet = validate_packet_bindings(packet_dir)
+        # When validating an in-memory declaration against a packet, the on-disk
+        # declaration digest is already checked by packet bindings; additionally
+        # require the in-memory selected_terminal to match the packet terminal.
+        require_true(
+            record.get("selected_terminal") == packet["selected_terminal"],
+            "packet_declaration_terminal_mismatch",
+            "in-memory declaration selected_terminal must match packet terminal",
+        )
+        result["packet_bindings"] = packet
+    return result
 
 
 def build_report(
@@ -761,10 +992,24 @@ def build_report(
     return report
 
 
+def _resolve_packet_dir(
+    declaration_path: Path, packet_dir_arg: Path | None
+) -> Path | None:
+    if packet_dir_arg is not None:
+        return packet_dir_arg
+    candidate = declaration_path.resolve().parent
+    if (candidate / "manifest.json").is_file() and (
+        candidate / "terminal_report.json"
+    ).is_file():
+        return candidate
+    return None
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=(
-            "Validate a GCTM runtime-native candidate-universe declaration. "
+            "Validate a GCTM runtime-native candidate-universe declaration and, "
+            "when present, the exact on-disk packet bindings. "
             "Never authorizes H0/runtime/B1 authority."
         )
     )
@@ -786,6 +1031,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="Path to registration-v3 requirements-only artifact",
     )
     parser.add_argument(
+        "--packet-dir",
+        type=Path,
+        default=None,
+        help=(
+            "Packet directory containing manifest.json and terminal_report.json. "
+            "Defaults to the declaration's parent when those files are present."
+        ),
+    )
+    parser.add_argument(
+        "--skip-packet-bindings",
+        action="store_true",
+        help="Validate declaration structure only (does not accept the exact packet).",
+    )
+    parser.add_argument(
         "--json",
         action="store_true",
         help="Emit machine-readable JSON report on stdout",
@@ -794,10 +1053,21 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     try:
         record = load_json(args.declaration)
+        packet_dir = None
+        if not args.skip_packet_bindings:
+            packet_dir = _resolve_packet_dir(args.declaration, args.packet_dir)
+            require_true(
+                packet_dir is not None,
+                "packet_dir_required",
+                "canonical validation requires a packet directory with "
+                "manifest.json and terminal_report.json; pass --packet-dir "
+                "or --skip-packet-bindings",
+            )
         result = validate_declaration(
             record,
             frozen_path=args.frozen_inputs,
             reg_path=args.registration_requirements,
+            packet_dir=packet_dir,
         )
     except RuntimeUniverseValidationError as exc:
         report = build_report(
@@ -821,6 +1091,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(json.dumps(report, indent=2, sort_keys=True))
     else:
         print(f"OK terminal={result['selected_terminal']}")
+        if result.get("packet_bindings"):
+            print("packet_bindings: verified")
         print(json.dumps(FIXED_NON_AUTHORITY, indent=2, sort_keys=True))
     return 0
 

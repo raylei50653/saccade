@@ -12,7 +12,7 @@
     "inclusion_stage_decision.json": "c9b544698a309dab067f35a85ece65303b2e15929d19a2b07004e2022f1218a7",
     "composition_completeness_contract.json": "ff220f6ed932b36c03448977748e8f980d8714a7698e98d79ca2f7af89d34484",
     "h0_native_universe_completeness_registration_requirements_v1.json": "2b4086e4aff4f185a995220201c36e4c19b94dc752d8382107ade15ac69e967f",
-    "terminal_report.json": "b56320b200aa37c2f7a47082e6eda751a963324fc7f17c681c2a16a0a7a9f521"
+    "terminal_report.json": "224ac7b4a28596e0bce0344dfe4588a4d150f811283d892dbd007417cfde5475"
   },
   "tooling": {
     "schema": {
@@ -21,7 +21,7 @@
     },
     "validator": {
       "path": "scripts/tools/validate_gctm_runtime_universe.py",
-      "sha256": "490ff83eca34873cbcf0851ceda09e1adc6db6bae4fba08ac682c55933ef254e"
+      "sha256": "0a244f5fa62552aa21118b23445c03ca0167eb6fd8a456f33747eda4bfea3081"
     },
     "fixture_catalog": {
       "path": "tests/contract/fixtures/gctm_runtime_universe_fixture_catalog_v1.json",
@@ -29,7 +29,7 @@
     },
     "targeted_tests": {
       "path": "tests/contract/test_gctm_runtime_universe_v1.py",
-      "sha256": "72f1ee6d6f4474acdaba1c2c429c69b9d3e7f6ab9a50b4bb0f2bd48f7b74ad67"
+      "sha256": "8edc1ba65c348e125988459deaad11331e278af211fe0558732e7612b723b234"
     }
   },
   "authority_verified": false,
