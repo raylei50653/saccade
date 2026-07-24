@@ -1,0 +1,45 @@
+{
+  "schema": "h0_registration_v3_manifest_v1",
+  "packet_id": "h0_gctm_guarantee_registration_v3_20260724",
+  "created_at": "2026-07-24",
+  "scope": "registration_v3_universe_completeness_contract",
+  "selected_terminal": "H0_REGISTRATION_V3_CONTRACT_SEALABLE",
+  "registration_identity": "h0_gctm_guarantee_registration_v3",
+  "consumer_universe_id": "gctm_runtime_native_candidate_universe_v1",
+  "quantity_object": "quantity.h0_native_universe_completeness_registration",
+  "artifacts": {
+    "contract_identity.json": "994006676f1e8b5ef02a7a18e7e8df3178ef1065faf662a52fcc8bcea2992704",
+    "frozen_input_identities.json": "0bdc639b99e8d5aa576914ebd9b8438b481f7aa9edbb044b297d9cb8c6d90ffd",
+    "completeness_predicate.json": "0c17ef3c1e16e9bb27740ad21f73e261b7e09479582dcb3b40df6b57dc8bc5ad",
+    "terminal_report.json": "d046145106ea1daa6d3b15b90e3d184927de3388ce91727a64a7e462eea96777"
+  },
+  "tooling": {
+    "schema": {
+      "path": "scripts/tools/h0_gctm_guarantee_registration_schema_v3.json",
+      "sha256": "e8ffdfc0ee0d30dfa543b0b46dffdc286806e03f840692ec62601acf4673dbcb"
+    },
+    "validator": {
+      "path": "scripts/tools/verify_h0_gctm_guarantee_registration.py",
+      "sha256": "66dc80e349756b2d72178517dd6c12add454e24fd8271cb707f6b5a2629641cf"
+    },
+    "candidate_fixture": {
+      "path": "tests/contract/fixtures/h0_gctm_guarantee_registration_candidate_universe_v3.json",
+      "sha256": "28ecabd37005c9196ce6e7eb1f8b188949f933cb1ff621050671830a09d93e0f"
+    },
+    "targeted_tests": {
+      "path": "tests/contract/test_h0_gctm_guarantee_registration_v3.py",
+      "sha256": "9d890909f0799f52e9eed3cf3706252f4af4faa3b34adb0098f1b826614033f2"
+    }
+  },
+  "authority_verified": false,
+  "runtime_substrate_established": false,
+  "runtime_compatibility_established": false,
+  "h0_reentry_authorized": false,
+  "h0_capture_performed": false,
+  "actual_guarantee_registration_performed": false,
+  "registration_v1_modified": false,
+  "registration_v2_modified": false,
+  "registration_v3_created": true,
+  "runtime_gate_status_changed": false,
+  "decision_relevant_candidates_modified": false
+}

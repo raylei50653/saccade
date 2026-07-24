@@ -1,0 +1,124 @@
+{
+  "schema": "h0_registration_v3_terminal_report_v1",
+  "report_id": "h0_registration_v3_terminal_report_20260724",
+  "packet_id": "h0_gctm_guarantee_registration_v3_20260724",
+  "record_scope": "mechanical_terminal_candidate",
+  "terminal_procedure_id": "h0_registration_v3_ordered_terminal_v1",
+  "terminal_order": [
+    "H0_REGISTRATION_V3_AUDIT_INVALID",
+    "H0_REGISTRATION_V3_REQUIRES_ABI_DELTA",
+    "H0_REGISTRATION_V3_CONTRACT_SEALABLE"
+  ],
+  "selected_terminal": "H0_REGISTRATION_V3_CONTRACT_SEALABLE",
+  "selection_basis": {
+    "schema_valid": true,
+    "v3_dispatch_present": true,
+    "identity_bindings_exact": true,
+    "completeness_predicate_complete": true,
+    "sidecar_fields_available_in_trace_v2": true,
+    "pair_candidate_fields_available_in_trace_v2": true,
+    "candidate_source_fixture_valid": true,
+    "registered_positive_branch_structurally_usable": true,
+    "v1_v2_non_regression": true,
+    "negative_catalog_fail_closed": true,
+    "actual_guarantee_claimed": false
+  },
+  "registration_identity": "h0_gctm_guarantee_registration_v3",
+  "consumer_universe": "gctm_runtime_native_candidate_universe_v1",
+  "new_guarantee_class": "universe_completeness",
+  "consumer_objects": [
+    "runtime_candidate_universe",
+    "runtime_event_membership"
+  ],
+  "trace_v2_abi_change_required": false,
+  "actual_guarantee_established": false,
+  "runtime_compatibility_established": false,
+  "runtime_substrate_established": false,
+  "authority_verified": false,
+  "h0_reentry_authorized": false,
+  "maximum_supported_conclusion": "The registration-v3 contract is structurally capable of registering future H0 native-universe and event-membership completeness guarantees for gctm_runtime_native_candidate_universe_v1.",
+  "not_established": [
+    "actual H0 guarantee",
+    "accepted runtime baseline",
+    "runtime substrate",
+    "runtime compatibility",
+    "H0 re-entry authority",
+    "H0_ROUTE5_B1 activation",
+    "GCTM_B1 activation",
+    "O1 activation",
+    "production claim"
+  ],
+  "fixed_validator_output": {
+    "authority_verified": false,
+    "runtime_substrate_established": false,
+    "runtime_compatibility_established": false,
+    "h0_reentry_authorized": false
+  },
+  "prerequisite_retained": {
+    "terminal": "GCTM_RUNTIME_UNIVERSE_CONTRACT_SEALABLE",
+    "owner_acceptance_id": "gctm_runtime_universe_terminal_owner_acceptance_20260724",
+    "requirements_identity": "h0_native_universe_completeness_registration_requirements_v1",
+    "retained_conclusions": [
+      "trace-v2 is sufficient to define the consumer universe",
+      "registration-v2 is insufficient to register completeness",
+      "capture under unchanged registration-v2 remains forbidden"
+    ]
+  },
+  "forbidden_effects_confirmed_absent": [
+    "H0 capture",
+    "actual guarantee registration",
+    "H0 baseline acceptance",
+    "registration-v1 mutation",
+    "registration-v2 mutation",
+    "runtime compatibility verdict",
+    "runtime substrate establishment",
+    "H0_ROUTE5_B1 activation",
+    "GCTM_B1 activation",
+    "O1 activation",
+    "decision_relevant_candidates insertion",
+    "production/runtime behavior change"
+  ],
+  "next_owner_decision": {
+    "selected_path": "design H0 re-entry and actual baseline capture",
+    "alternative_if_abi_gap_discovered": "define exact minimal ABI delta",
+    "alternative_if_contract_invalid": "repair registration-v3 contract",
+    "direct_handoff_as_actual_guarantee": false
+  },
+  "decision_relevance": {
+    "sealable": "permits owner consideration of a future H0 runtime-substrate re-entry design",
+    "requires_abi_delta": "forbids capture until the exact producer delta is separately accepted",
+    "invalid": "repair the registration contract",
+    "not_in_decision_relevant_candidates": true,
+    "not_h0_route5_b1": true,
+    "not_gctm_b1": true,
+    "not_compatibility_gate_status": true
+  },
+  "artifact_bindings": {
+    "contract_identity_sha256": "994006676f1e8b5ef02a7a18e7e8df3178ef1065faf662a52fcc8bcea2992704",
+    "frozen_input_record_sha256": "0bdc639b99e8d5aa576914ebd9b8438b481f7aa9edbb044b297d9cb8c6d90ffd",
+    "completeness_predicate_sha256": "0c17ef3c1e16e9bb27740ad21f73e261b7e09479582dcb3b40df6b57dc8bc5ad",
+    "schema_sha256": "e8ffdfc0ee0d30dfa543b0b46dffdc286806e03f840692ec62601acf4673dbcb",
+    "validator_sha256": "66dc80e349756b2d72178517dd6c12add454e24fd8271cb707f6b5a2629641cf",
+    "candidate_fixture_sha256": "28ecabd37005c9196ce6e7eb1f8b188949f933cb1ff621050671830a09d93e0f",
+    "targeted_tests_sha256": "9d890909f0799f52e9eed3cf3706252f4af4faa3b34adb0098f1b826614033f2"
+  },
+  "acceptance": {
+    "owner_acceptance_id": "h0_registration_v3_terminal_owner_acceptance_20260724",
+    "acceptance_mechanism": "PR merge constitutes owner acceptance of this exact mechanically validated registration-v3 contract",
+    "pending_until_merge": true,
+    "merge_accepts": [
+      "registration-v3 contract identity",
+      "schema and validator semantics",
+      "completeness predicate",
+      "mechanical terminal"
+    ],
+    "merge_does_not_accept": [
+      "actual guarantee registration",
+      "H0 baseline acceptance",
+      "capture authorization",
+      "H0 re-entry",
+      "runtime compatibility",
+      "B1/O1 activation"
+    ]
+  }
+}

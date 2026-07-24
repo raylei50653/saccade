@@ -1,0 +1,72 @@
+{
+  "schema": "h0_registration_v3_contract_identity_v1",
+  "contract_id": "h0_gctm_guarantee_registration_v3",
+  "quantity_object": "quantity.h0_native_universe_completeness_registration",
+  "created_at": "2026-07-24",
+  "record_scope": "registration_contract_only",
+  "authority_class": "registration_contract_seal",
+  "consumer_universe_id": "gctm_runtime_native_candidate_universe_v1",
+  "requirements_identity": "h0_native_universe_completeness_registration_requirements_v1",
+  "owner_acceptance_prerequisite": "gctm_runtime_universe_terminal_owner_acceptance_20260724",
+  "guarantee_class": "universe_completeness",
+  "consumer_objects": [
+    "runtime_candidate_universe",
+    "runtime_event_membership"
+  ],
+  "required_streams": [
+    "pair_record",
+    "candidate_record",
+    "event_universe_sidecar"
+  ],
+  "identity_bindings": {
+    "consumer_universe_id": "gctm_runtime_native_candidate_universe_v1",
+    "event_key_version": "gctm_runtime_event_key_v1",
+    "candidate_key_version": "gctm_runtime_candidate_key_v1",
+    "inclusion_stage_identity": "pre_score_eligible_v1",
+    "mask_identity": "h0_pair_pre_score_mask_v1",
+    "gate_retained_band_identity": "native_non_score_gates_height_speed_spatial_v1",
+    "completeness_predicate_id": "h0_native_universe_completeness_predicate_v1",
+    "native_universe_semantics_version": "native_universe_v2"
+  },
+  "event_universe_sidecar": {
+    "kind": "registration_level_source_type",
+    "modifies_trace_v2_abi": false,
+    "bound_envelope_fields": [
+      "native_candidate_keys",
+      "native_pair_keys",
+      "total_native_candidate_keys",
+      "total_native_pair_keys",
+      "total_candidate_records",
+      "total_pair_records",
+      "overflow_native_candidate_keys",
+      "overflow_native_pair_keys",
+      "overflow_candidate_records",
+      "overflow_pair_records",
+      "bridge_attempt_count",
+      "identity_uid_wrap_events",
+      "capture_schema_version",
+      "capture_run_uuid"
+    ]
+  },
+  "retained_conclusions": [
+    "trace-v2 is sufficient to define the consumer universe",
+    "registration-v2 is insufficient to register completeness",
+    "capture under unchanged registration-v2 remains forbidden"
+  ],
+  "additive_versioning": {
+    "v1_frozen": true,
+    "v2_frozen": true,
+    "v3_backfill_forbidden": true
+  },
+  "explicit_non_claims": [
+    "actual H0 guarantee",
+    "accepted runtime baseline",
+    "runtime substrate",
+    "runtime compatibility",
+    "H0 re-entry authority",
+    "H0_ROUTE5_B1 activation",
+    "GCTM_B1 activation",
+    "O1 activation",
+    "production claim"
+  ]
+}

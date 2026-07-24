@@ -433,9 +433,23 @@ def test_unknown_fields_fail_closed() -> None:
 
 def test_unsupported_schema_version_is_rejected() -> None:
     record = _registered_record_v2()
-    record["schema"] = "h0_gctm_guarantee_registration_v3"
+    record["schema"] = "h0_gctm_guarantee_registration_v99"
 
     with pytest.raises(
         registration.RegistrationValidationError, match="unsupported registration"
+    ):
+        registration.validate_record(record)
+
+
+def test_v2_cannot_register_universe_completeness_class() -> None:
+    """v2 class allowlist stays frozen; universe_completeness is v3-only."""
+    record = _registered_record_v2()
+    guarantees = record["guarantees"]
+    assert isinstance(guarantees, list)
+    guarantees[0]["guarantee_class"] = "universe_completeness"
+    guarantees[0]["consumer_object"] = "runtime_candidate_universe"
+
+    with pytest.raises(
+        registration.RegistrationValidationError, match="schema rejection"
     ):
         registration.validate_record(record)

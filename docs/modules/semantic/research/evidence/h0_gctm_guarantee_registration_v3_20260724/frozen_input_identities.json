@@ -1,0 +1,107 @@
+{
+  "schema": "h0_registration_v3_frozen_inputs_v1",
+  "record_id": "h0_registration_v3_frozen_inputs_20260724",
+  "identity_policy": "path_plus_sha256_only_no_mutable_branch_tip",
+  "prerequisite_terminals": [
+    {
+      "terminal": "GCTM_RUNTIME_UNIVERSE_CONTRACT_SEALABLE",
+      "owner_acceptance_id": "gctm_runtime_universe_terminal_owner_acceptance_20260724",
+      "retained_conclusions": [
+        "trace-v2 is sufficient to define the consumer universe",
+        "registration-v2 is insufficient to register completeness",
+        "capture under unchanged registration-v2 remains forbidden"
+      ]
+    },
+    {
+      "terminal": "H0_GCTM_INTERFACE_STRUCTURALLY_INSUFFICIENT",
+      "owner_acceptance_id": "h0_gctm_static_audit_terminal_owner_acceptance_20260723",
+      "retained_conclusions": [
+        "current ABI / registration-v2 is structurally insufficient",
+        "repeat capture under unchanged interface is forbidden"
+      ]
+    }
+  ],
+  "inputs": [
+    {
+      "role": "gctm_runtime_universe_terminal",
+      "identity_id": "gctm_runtime_universe_terminal_report_20260724",
+      "path": "docs/modules/semantic/research/evidence/gctm_runtime_native_candidate_universe_20260724/terminal_report.json",
+      "sha256": "2b8874a4453fb8687687f7d46a3435e724824e250b7ade97bc11017a7391b076"
+    },
+    {
+      "role": "gctm_runtime_universe_declaration",
+      "identity_id": "gctm_runtime_native_candidate_universe_v1",
+      "path": "docs/modules/semantic/research/evidence/gctm_runtime_native_candidate_universe_20260724/universe_declaration.json",
+      "sha256": "e2fd266547bf26e57a2cda4bc64e930008c51c145e1eb0f23deceb5a7bdb455d"
+    },
+    {
+      "role": "gctm_runtime_universe_frozen_inputs",
+      "identity_id": "gctm_runtime_universe_frozen_inputs_20260724",
+      "path": "docs/modules/semantic/research/evidence/gctm_runtime_native_candidate_universe_20260724/frozen_input_identities.json",
+      "sha256": "68b00f0ead30ef01cf225f44b26505b396e6c4a8dfb95d8fe16f1284337df4bf"
+    },
+    {
+      "role": "registration_requirements",
+      "identity_id": "h0_native_universe_completeness_registration_requirements_v1",
+      "path": "docs/modules/semantic/research/evidence/gctm_runtime_native_candidate_universe_20260724/h0_native_universe_completeness_registration_requirements_v1.json",
+      "sha256": "2b4086e4aff4f185a995220201c36e4c19b94dc752d8382107ade15ac69e967f"
+    },
+    {
+      "role": "composition_completeness_contract",
+      "identity_id": "gctm_runtime_composition_completeness_20260724",
+      "path": "docs/modules/semantic/research/evidence/gctm_runtime_native_candidate_universe_20260724/composition_completeness_contract.json",
+      "sha256": "ff220f6ed932b36c03448977748e8f980d8714a7698e98d79ca2f7af89d34484"
+    },
+    {
+      "role": "gctm_runtime_universe_charter",
+      "identity_id": "gctm_runtime_native_candidate_universe_task",
+      "path": "docs/research/threads/closed/gctm_runtime_native_candidate_universe_task.md",
+      "sha256": "dddd88e3baea073e35a9e504b87ba7e8e81ed7b1a21d69f3f7bbf8a3f8ec9c73"
+    },
+    {
+      "role": "h0_gctm_static_audit_terminal",
+      "identity_id": "h0_gctm_static_audit_terminal_report_20260723",
+      "path": "docs/modules/semantic/research/evidence/h0_gctm_interface_static_feasibility_20260723/terminal_report.json",
+      "sha256": "dd9de05c55467bcbf6881c99efb7c2216110b668bed4e242d729192673807624"
+    },
+    {
+      "role": "h0_bridge_decision_trace_v2",
+      "identity_id": "h0_bridge_decision_trace_v2",
+      "path": "scripts/tools/h0_bridge_decision_trace_schema_v2.json",
+      "sha256": "5ea8bea16ab6f6916baebd486c3256100427ae823e2f7bac021ff1284254f9a2"
+    },
+    {
+      "role": "h0_gctm_guarantee_registration_v1_schema",
+      "identity_id": "h0_gctm_guarantee_registration_v1",
+      "path": "scripts/tools/h0_gctm_guarantee_registration_schema_v1.json",
+      "sha256": "65dd17c83d0550731beb0e0a362964917a7b6ab98bb1738dab034f47b3728be6"
+    },
+    {
+      "role": "h0_gctm_guarantee_registration_v2_schema",
+      "identity_id": "h0_gctm_guarantee_registration_v2",
+      "path": "scripts/tools/h0_gctm_guarantee_registration_schema_v2.json",
+      "sha256": "63af2eba012a248d769cde225ce28db404cefe592edc995a12d86af307419ff2"
+    },
+    {
+      "role": "h0_gctm_guarantee_registration_v1_fixture",
+      "identity_id": "h0_gctm_guarantee_registration_candidate_identity_v1_fixture",
+      "path": "tests/contract/fixtures/h0_gctm_guarantee_registration_candidate_identity_v1.json",
+      "sha256": "73d68a0b8eb2456413adc35b4b6ecb9de3e98db111cf888682aa1eef2f1eb874"
+    },
+    {
+      "role": "h0_gctm_guarantee_registration_v2_fixture",
+      "identity_id": "h0_gctm_guarantee_registration_candidate_sources_v2_fixture",
+      "path": "tests/contract/fixtures/h0_gctm_guarantee_registration_candidate_sources_v2.json",
+      "sha256": "dc8db5007832c68fd91ff980fac667c990cad0abd0e31cfb2373d387e277401b"
+    }
+  ],
+  "frozen_v1_v2_surfaces": {
+    "h0_gctm_guarantee_registration_v1": "frozen",
+    "h0_gctm_guarantee_registration_v2": "frozen",
+    "identity_v1_semantics": "frozen",
+    "v2_class_object_stream_allowlists": "frozen",
+    "existing_v1_v2_fixtures_and_outputs": "frozen",
+    "v3_semantics_must_not_backfill_v2": true
+  },
+  "mutable_branch_tip_used": false
+}

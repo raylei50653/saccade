@@ -1,0 +1,124 @@
+{
+  "schema": "h0_gctm_guarantee_registration_v3",
+  "record_id": "fixture_h0_gctm_candidate_universe_completeness_v3",
+  "record_scope": "fixture_only",
+  "record_state": "candidate-source",
+  "consumer": {
+    "consumer_id": "fixture_gctm_registration_v3",
+    "consumer_universe_id": "gctm_runtime_native_candidate_universe_v1",
+    "maximum_claim_layer": "gctm_model_specification",
+    "required_guarantee_ids": []
+  },
+  "identity_bindings": {
+    "consumer_universe_id": "gctm_runtime_native_candidate_universe_v1",
+    "event_key_version": "gctm_runtime_event_key_v1",
+    "candidate_key_version": "gctm_runtime_candidate_key_v1",
+    "inclusion_stage_identity": "pre_score_eligible_v1",
+    "mask_identity": "h0_pair_pre_score_mask_v1",
+    "gate_retained_band_identity": "native_non_score_gates_height_speed_spatial_v1",
+    "completeness_predicate_id": "h0_native_universe_completeness_predicate_v1",
+    "native_universe_semantics_version": "native_universe_v2"
+  },
+  "candidate_sources": [
+    {
+      "source_id": "fixture_h0_runtime_candidate_universe_pair_keys",
+      "consumer_object": "runtime_candidate_universe",
+      "stream": "pair_record",
+      "source_fields": [
+        "seq",
+        "frame",
+        "cand_slot",
+        "cand_instance_uid",
+        "lost_slot",
+        "lost_instance_uid",
+        "reject_reason"
+      ],
+      "causal_availability": "online"
+    },
+    {
+      "source_id": "fixture_h0_runtime_candidate_universe_candidate_keys",
+      "consumer_object": "runtime_candidate_universe",
+      "stream": "candidate_record",
+      "source_fields": [
+        "seq",
+        "frame",
+        "cand_slot",
+        "cand_instance_uid",
+        "pre_score_passes"
+      ],
+      "causal_availability": "online"
+    },
+    {
+      "source_id": "fixture_h0_runtime_candidate_universe_event_sidecar",
+      "consumer_object": "runtime_candidate_universe",
+      "stream": "event_universe_sidecar",
+      "source_fields": [
+        "bridge_attempt_count",
+        "capture_run_uuid",
+        "capture_schema_version",
+        "identity_uid_wrap_events",
+        "native_candidate_keys",
+        "native_pair_keys",
+        "overflow_candidate_records",
+        "overflow_native_candidate_keys",
+        "overflow_native_pair_keys",
+        "overflow_pair_records",
+        "total_candidate_records",
+        "total_native_candidate_keys",
+        "total_native_pair_keys",
+        "total_pair_records"
+      ],
+      "causal_availability": "online"
+    },
+    {
+      "source_id": "fixture_h0_runtime_event_membership_pair_keys",
+      "consumer_object": "runtime_event_membership",
+      "stream": "pair_record",
+      "source_fields": [
+        "seq",
+        "frame",
+        "cand_slot",
+        "cand_instance_uid",
+        "lost_slot",
+        "lost_instance_uid",
+        "reject_reason"
+      ],
+      "causal_availability": "online"
+    },
+    {
+      "source_id": "fixture_h0_runtime_event_membership_candidate_keys",
+      "consumer_object": "runtime_event_membership",
+      "stream": "candidate_record",
+      "source_fields": [
+        "seq",
+        "frame",
+        "cand_slot",
+        "cand_instance_uid",
+        "pre_score_passes"
+      ],
+      "causal_availability": "online"
+    },
+    {
+      "source_id": "fixture_h0_runtime_event_membership_event_sidecar",
+      "consumer_object": "runtime_event_membership",
+      "stream": "event_universe_sidecar",
+      "source_fields": [
+        "bridge_attempt_count",
+        "capture_run_uuid",
+        "capture_schema_version",
+        "identity_uid_wrap_events",
+        "native_candidate_keys",
+        "native_pair_keys",
+        "overflow_candidate_records",
+        "overflow_native_candidate_keys",
+        "overflow_native_pair_keys",
+        "overflow_pair_records",
+        "total_candidate_records",
+        "total_native_candidate_keys",
+        "total_native_pair_keys",
+        "total_pair_records"
+      ],
+      "causal_availability": "online"
+    }
+  ]
+}

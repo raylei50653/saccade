@@ -15,6 +15,7 @@ docs/archive/    = archived（很少用；不再需要 threads 導航）
 
 | File |
 |:--|
+| [h0_gctm_guarantee_registration_v3_universe_completeness_20260724.md](h0_gctm_guarantee_registration_v3_universe_completeness_20260724.md) |
 | [gctm_runtime_native_candidate_universe_task.md](gctm_runtime_native_candidate_universe_task.md) |
 | [h0_gctm_interface_static_feasibility_audit_20260723.md](h0_gctm_interface_static_feasibility_audit_20260723.md) |
 | [gctm_d1_substrate_agnostic_ranking_diagnostic_task.md](gctm_d1_substrate_agnostic_ranking_diagnostic_task.md) |

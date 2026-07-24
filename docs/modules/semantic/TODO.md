@@ -15,6 +15,11 @@
   `GCTM_RUNTIME_UNIVERSE_CONTRACT_SEALABLE`（`gctm_runtime_native_candidate_universe_v1`）；
   WIP released at terminal；**not** H0 implementation authority. See
   [closed charter](../../research/threads/closed/gctm_runtime_native_candidate_universe_task.md).
+- 2026-07-24 registration-v3 closed at
+  `H0_REGISTRATION_V3_CONTRACT_SEALABLE`（`h0_gctm_guarantee_registration_v3` /
+  `quantity.h0_native_universe_completeness_registration`）；
+  WIP released at terminal；**not** actual guarantee / capture / re-entry.
+  See [closed charter](../../research/threads/closed/h0_gctm_guarantee_registration_v3_universe_completeness_20260724.md).
 
 ## Proposed（non-WIP）
 
@@ -25,9 +30,9 @@
   `GCTM_B1`, `proposed`, `blocked_by: h0_runtime_substrate`; it does not alias
   or supersede `H0_ROUTE5_B1` → [task charter](../../research/threads/gctm_b1_runtime_grounded_offline_attribution_task.md)
 - **GCTM O1 — online score intervention and system-efficacy evaluation** → [task charter](../../research/threads/gctm_o1_online_intervention_efficacy_task.md)
-- **(next owner choice, non-WIP until scheduled)** minimal H0 registration-v3
-  delta targeting `gctm_runtime_native_candidate_universe_v1` completeness
-  binding, or B1 runtime-hook re-scope if producer requirements cannot be met
+- **(next owner choice, non-WIP until scheduled)** design H0 re-entry and actual
+  baseline capture under sealed registration-v3, or define an exact minimal ABI
+  delta if a later producer gap is discovered, or re-scope the B1 runtime hook
 
 ## Parked
 

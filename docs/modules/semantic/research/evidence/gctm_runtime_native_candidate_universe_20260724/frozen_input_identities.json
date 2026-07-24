@@ -17,13 +17,13 @@
       "role": "h0_gctm_static_audit_terminal",
       "identity_id": "h0_gctm_static_audit_terminal_report_20260723",
       "path": "docs/modules/semantic/research/evidence/h0_gctm_interface_static_feasibility_20260723/terminal_report.json",
-      "sha256": "e43e6e1ddb58e58e94222b1ae3b79ebe720d3b5a0bc65218cae0d4f9cfbd2914"
+      "sha256": "dd9de05c55467bcbf6881c99efb7c2216110b668bed4e242d729192673807624"
     },
     {
       "role": "h0_gctm_static_audit_frozen_inputs",
       "identity_id": "h0_gctm_static_audit_frozen_inputs_20260723",
       "path": "docs/modules/semantic/research/evidence/h0_gctm_interface_static_feasibility_20260723/frozen_input_identities.json",
-      "sha256": "fdaee307cc0af99cb18c0f393771b4aafd96ff9ac655ba69ee771355b244dd58"
+      "sha256": "f1f73f52631a8fb6d6ad39d18b17e377451f684a2bc3f77d40d76f2cc39b6488"
     },
     {
       "role": "h0_gctm_static_audit_charter",
