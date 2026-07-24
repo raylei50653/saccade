@@ -391,6 +391,7 @@ def test_archive_corpus_discovers_every_committed_phase_a_root() -> None:
     roots = archive_corpus.archive_roots()
     assert [root.name for root in roots] == [
         "h0_phase_a_1a8c13a890b3490bb7aa50dc2ab491db89b8b474",
+        "h0_phase_a_2a233387a6a321dd43570e2e30dc718571b3b4f4",
         "h0_phase_a_31c9eee83fc46f34ab0fd9218c4e1ba2ed545636",
         "h0_phase_a_42121c064cd1a3c4202e114cc6f4d8866a9e6af0",
         "h0_phase_a_5a2d1de509fa64f2e5ce9a4db8182337da215968",
