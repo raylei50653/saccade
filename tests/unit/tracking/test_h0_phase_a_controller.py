@@ -124,27 +124,30 @@ def _controller() -> dict[str, object]:
         ],
     }
     build_tool_binding["digest"] = parent._binding_digest(build_tool_binding)
+    # Unit fixtures are not a sealed I→F→S chain.  Record the current worktree
+    # declaration as declaration_at_f so S-byte continuous monitoring (which
+    # requires F to be a prefix of HEAD) can treat this checkout as a degenerate
+    # F==S baseline without inventing a SEALED append.
+    declaration_bytes = (ROOT / parent.DECLARATION_PATH).read_bytes()
     return {
         "authority_landing": {
             "artifact_path": (
                 "docs/modules/semantic/research/evidence/"
                 f"h0_preseal_freeze_{head}/h0_preseal_freeze_v3.json"
             ),
-            "declaration_path": (
-                "docs/modules/semantic/research/"
-                "headline_bridge_full_decision_capture_declaration_20260713.md"
-            ),
+            "declaration_path": parent.DECLARATION_PATH,
+            "declaration_at_f": {
+                "length": len(declaration_bytes),
+                "sha256": hashlib.sha256(declaration_bytes).hexdigest(),
+            },
             "post_head_allowed_paths": [
                 (
                     "docs/modules/semantic/research/evidence/"
                     f"h0_preseal_freeze_{head}/h0_preseal_freeze_v3.json"
                 ),
-                (
-                    "docs/modules/semantic/research/"
-                    "headline_bridge_full_decision_capture_declaration_20260713.md"
-                ),
+                parent.DECLARATION_PATH,
             ],
-            "schema": "h0_authority_landing_v1",
+            "schema": parent.OWNER_AUTHORITY_OVERLAY_SCHEMA,
         },
         "bound_inputs": bound,
         "build_tool_binding": build_tool_binding,
@@ -2901,6 +2904,10 @@ def test_checkpoint_drift_record_preserves_before_and_after_timing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     contract = _controller()
+    # Fixture is not a sealed S checkout; isolate inventory-timing behaviour.
+    monkeypatch.setattr(
+        parent, "verify_owner_authority_overlay_s_bytes", lambda *a, **k: None
+    )
     before = parent.InotifyEvent("/before", 1, "bound_mutation")
     monitor = _CheckpointMonitor([before])
     with pytest.raises(parent.CheckpointDriftError) as caught:
@@ -2956,6 +2963,9 @@ def test_checkpoint_inventory_inequality_without_inotify_has_failed_row(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     contract = _controller()
+    monkeypatch.setattr(
+        parent, "verify_owner_authority_overlay_s_bytes", lambda *a, **k: None
+    )
     monitor = _CheckpointMonitor([], [])
     observed_digest = "f" * 64
     monkeypatch.setattr(

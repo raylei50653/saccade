@@ -34,8 +34,31 @@
     }
   ],
   "repair_units": [
-    "h0_build_tool_provenance_closure"
+    "h0_authority_overlay_runtime_binding_split_v1"
   ],
+  "acceptance_invariants": [
+    "controller_schema_verifier_member_parity",
+    "runtime_input_authority_overlay_disjointness",
+    "exact_ifs_topology",
+    "exact_two_diff_landing",
+    "s_byte_continuous_monitoring",
+    "historical_packet_verification_unchanged",
+    "historical_terminal_digests_unchanged",
+    "launch_hygiene_predicate_reuse",
+    "trace_v2_abi_unchanged",
+    "registration_v1_v2_v3_tests_unchanged",
+    "no_production_runtime_policy_change"
+  ],
+  "registration_v3_downstream": {
+    "registration_schema": "h0_gctm_guarantee_registration_v3",
+    "guarantee_class": "universe_completeness",
+    "consumer_objects": [
+      "runtime_candidate_universe",
+      "runtime_event_membership"
+    ],
+    "consumer_universe": "gctm_runtime_native_candidate_universe_v1",
+    "actual_guarantee_in_this_pr": false
+  },
   "qualification": {
     "authority": "non_authoritative",
     "forbidden": [

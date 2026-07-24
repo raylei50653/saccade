@@ -162,9 +162,13 @@ MODEL_INPUTS = (
     "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
     "runs/mamba_gt_yolo26m_v14replica_t3_t1/best.ckpt",
 )
+# Amendment 10: declaration.md is owner-overlay authority, not a runtime input.
+DECLARATION_PATH = (
+    "docs/modules/semantic/research/"
+    "headline_bridge_full_decision_capture_declaration_20260713.md"
+)
 REQUIRED_REPOSITORY_INPUTS = (
     "configs/presets/mamba_whole_graph_m.yaml",
-    "docs/modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md",
     "docs/modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.policy.yaml",
     "scripts/tools/export_headline_bridge_decision_trace.py",
     "scripts/tools/h0_bridge_decision_trace_schema_v2.json",
@@ -177,6 +181,23 @@ REQUIRED_REPOSITORY_INPUTS = (
     "scripts/tools/verify_headline_bridge_decision_trace.py",
     "uv.lock",
 )
+HISTORICAL_REQUIRED_REPOSITORY_INPUTS = (
+    "configs/presets/mamba_whole_graph_m.yaml",
+    DECLARATION_PATH,
+    "docs/modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.policy.yaml",
+    "scripts/tools/export_headline_bridge_decision_trace.py",
+    "scripts/tools/h0_bridge_decision_trace_schema_v2.json",
+    "scripts/tools/h0_phase_a_execution_schema_v1.json",
+    "scripts/tools/h0_runtime_confinement.py",
+    "scripts/tools/resolved_bridge_policy_config.py",
+    "scripts/tools/run_h0_phase_a.py",
+    "scripts/tools/run_h0_phase_a_child.py",
+    "scripts/tools/verify_h0_phase_a.py",
+    "scripts/tools/verify_headline_bridge_decision_trace.py",
+    "uv.lock",
+)
+OWNER_AUTHORITY_OVERLAY_SCHEMA = "h0_owner_authority_overlay_v1"
+HISTORICAL_AUTHORITY_LANDING_SCHEMA = "h0_authority_landing_v1"
 C_PATHS = (
     "manifest.json",
     "build_identity.json",
@@ -613,7 +634,11 @@ def _verify_constants(controller: Mapping[str, Any]) -> None:
         raise VerificationError("inotify mask mismatch")
     if constants["model_inputs"] != list(MODEL_INPUTS):
         raise VerificationError("resolved model/engine input set mismatch")
-    if constants["required_repository_inputs"] != list(REQUIRED_REPOSITORY_INPUTS):
+    observed_required = tuple(constants["required_repository_inputs"])
+    if observed_required not in (
+        tuple(REQUIRED_REPOSITORY_INPUTS),
+        tuple(HISTORICAL_REQUIRED_REPOSITORY_INPUTS),
+    ):
         raise VerificationError("required controller/runtime authority set mismatch")
     if constants["checkpoints"] != list(CHECKPOINTS):
         raise VerificationError("bound-input checkpoint order mismatch")
@@ -769,8 +794,26 @@ def _verify_bound_inputs(controller: Mapping[str, Any]) -> None:
                     f"{category} inventory duplicates a physical path"
                 )
     repository_paths = {record["path"] for record in inventory["repository"]}
-    if not set(REQUIRED_REPOSITORY_INPUTS).issubset(repository_paths):
+    landing = controller.get("authority_landing")
+    landing_schema = landing.get("schema") if isinstance(landing, Mapping) else None
+    required = (
+        REQUIRED_REPOSITORY_INPUTS
+        if landing_schema == OWNER_AUTHORITY_OVERLAY_SCHEMA
+        else (
+            HISTORICAL_REQUIRED_REPOSITORY_INPUTS
+            if landing_schema == HISTORICAL_AUTHORITY_LANDING_SCHEMA
+            else REQUIRED_REPOSITORY_INPUTS
+        )
+    )
+    if not set(required).issubset(repository_paths):
         raise VerificationError("repository inventory omits an A7/RC1 authority")
+    if (
+        landing_schema == OWNER_AUTHORITY_OVERLAY_SCHEMA
+        and DECLARATION_PATH in repository_paths
+    ):
+        raise VerificationError(
+            "authority-overlay path leaked into runtime repository inventory"
+        )
     payload = {
         "models_engines": inventory["models_engines"],
         "repository": inventory["repository"],

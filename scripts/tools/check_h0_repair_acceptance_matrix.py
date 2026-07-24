@@ -54,7 +54,30 @@ QUALIFICATION_STEPS = (
     "preseal_freeze_assembly",
     "landing_discovery_dry_run",
 )
-REPAIR_UNITS = ("h0_build_tool_provenance_closure",)
+REPAIR_UNITS = ("h0_authority_overlay_runtime_binding_split_v1",)
+ACCEPTANCE_INVARIANTS = (
+    "controller_schema_verifier_member_parity",
+    "runtime_input_authority_overlay_disjointness",
+    "exact_ifs_topology",
+    "exact_two_diff_landing",
+    "s_byte_continuous_monitoring",
+    "historical_packet_verification_unchanged",
+    "historical_terminal_digests_unchanged",
+    "launch_hygiene_predicate_reuse",
+    "trace_v2_abi_unchanged",
+    "registration_v1_v2_v3_tests_unchanged",
+    "no_production_runtime_policy_change",
+)
+REGISTRATION_V3_DOWNSTREAM = {
+    "registration_schema": "h0_gctm_guarantee_registration_v3",
+    "guarantee_class": "universe_completeness",
+    "consumer_objects": (
+        "runtime_candidate_universe",
+        "runtime_event_membership",
+    ),
+    "consumer_universe": "gctm_runtime_native_candidate_universe_v1",
+    "actual_guarantee_in_this_pr": False,
+}
 
 
 class MatrixError(ValueError):
@@ -79,10 +102,12 @@ def _require_strings(value: object, label: str) -> list[str]:
 
 def validate_matrix(value: Mapping[str, Any]) -> None:
     expected = {
+        "acceptance_invariants",
         "algorithm",
         "correction_budget",
         "gates",
         "qualification",
+        "registration_v3_downstream",
         "repair_units",
         "schema",
     }
@@ -99,6 +124,34 @@ def validate_matrix(value: Mapping[str, Any]) -> None:
         != REPAIR_UNITS
     ):
         raise MatrixError("admissible repair unit differs from the H0 repair contract")
+    if (
+        tuple(
+            _require_strings(
+                value.get("acceptance_invariants"), "acceptance invariants"
+            )
+        )
+        != ACCEPTANCE_INVARIANTS
+    ):
+        raise MatrixError("acceptance invariants differ from the H0 repair contract")
+    downstream = value.get("registration_v3_downstream")
+    if not isinstance(downstream, Mapping):
+        raise MatrixError("registration-v3 downstream binding is malformed")
+    if set(downstream) != set(REGISTRATION_V3_DOWNSTREAM):
+        raise MatrixError("registration-v3 downstream members differ from contract")
+    if (
+        downstream.get("registration_schema")
+        != REGISTRATION_V3_DOWNSTREAM["registration_schema"]
+        or downstream.get("guarantee_class")
+        != REGISTRATION_V3_DOWNSTREAM["guarantee_class"]
+        or tuple(
+            _require_strings(downstream.get("consumer_objects"), "consumer objects")
+        )
+        != REGISTRATION_V3_DOWNSTREAM["consumer_objects"]
+        or downstream.get("consumer_universe")
+        != REGISTRATION_V3_DOWNSTREAM["consumer_universe"]
+        or downstream.get("actual_guarantee_in_this_pr") is not False
+    ):
+        raise MatrixError("registration-v3 downstream binding differs from contract")
     gates = value.get("gates")
     if not isinstance(gates, list) or len(gates) != len(GATES):
         raise MatrixError("acceptance matrix gate cardinality is malformed")

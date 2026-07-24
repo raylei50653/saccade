@@ -378,7 +378,15 @@ pending_reentry:                          # append-only; pre-seal, no terminal c
     scope: "re-admit 既有 sealed unit h0_build_tool_provenance_closure 供單一 fresh I→F→S attempt（前次於 #224/#227 I=31c9eee8 被 PROVENANCE_INVALID 消費,capture 前失敗）;非第二 unit;acceptance matrix/checker/workflow tuple/qualification 語義/歷史 declaration/歷史 sealed evidence 全 byte 不變"
     launch_hygiene_gate: "scripts/tools/h0_launch_hygiene_gate.py（非授權;複用單源 predicate run_h0_phase_a.assert_no_preexisting_build_tree）;mandatory:授權前與 sealed checkout controller launch 前皆須報 clear"
     status: "RESOLVED 2026-07-21 — owner sealed（S=3a6a9ec6）＋ exactly-once authorized ＋ scheduled ＋ executed ⇒ 到達 owner-accepted ordered terminal H0_PROVENANCE_INVALID（見 reentry_terminal_history re-entry #3;PR #235 comment 5032610430）;exactly-once authorization consumed;exact S permanently spent;retry/resume/second invocation forbidden;無 repair / 新 re-entry 授權"
-last_reviewed_at: 2026-07-21
+  - date: 2026-07-24
+    scheduling: owner-scheduled H0 R4 Repair（re-entry #4 pre-seal engineering; not an execution authorization）
+    declaration_amendment: "Amendment 10（headline_bridge_full_decision_capture_declaration_20260713.md;append-only; authority-overlay/runtime-binding separation）"
+    scope: "sole repair unit h0_authority_overlay_runtime_binding_split_v1 — remove declaration from runtime-bound repository inventory; bind it only via h0_owner_authority_overlay_v1 with S-byte continuous monitoring; re-admit exactly one future fresh I→F→S after qualification; does not select I / create F or S / authorize execution / establish guarantee"
+    spent_chain_boundary: "S3=3a6a9ec6 permanently spent; no retry/resume/re-interpretation"
+    registration_v3_downstream: "h0_gctm_guarantee_registration_v3 / gctm_runtime_native_candidate_universe_v1 structurally reachable after successful Phase-A; no actual guarantee in this Repair"
+    launch_hygiene_gate: "scripts/tools/h0_launch_hygiene_gate.py retained; single-source predicate run_h0_phase_a.assert_no_preexisting_build_tree"
+    status: "ACTIVE 2026-07-24 — Repair / qualification candidate under construction; decision-relevant WIP held; terminal family H0_R4_REPAIR_{INVALID,REQUIRES_ABI_DELTA,QUALIFIED_SEALABLE}"
+last_reviewed_at: 2026-07-24
 ```
 
 #### ADR 020 terminal slot (per-study owner)

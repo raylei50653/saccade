@@ -48,7 +48,10 @@ from check_h0_bridge_decision_trace_contract import (  # noqa: E402
 FREEZE_SCHEMA_VERSION = "h0_preseal_freeze_v3"
 CAPTURE_SCHEMA_VERSION = "h0_bridge_decision_trace_v2"
 CLASSIFIER_VERSION = "h0_projection_path_class_v1"
-LANDING_SCHEMA_VERSION = "h0_authority_landing_v1"
+# Amendment 10: current freezes emit the typed owner authority overlay.
+# Historical freezes retain h0_authority_landing_v1.
+LANDING_SCHEMA_VERSION = "h0_owner_authority_overlay_v1"
+HISTORICAL_LANDING_SCHEMA_VERSION = "h0_authority_landing_v1"
 BUILD_TOOL_BOUND_INPUTS_SCHEMA = "h0_build_tool_bound_inputs_v1"
 DECLARATION_PATH = (
     "docs/modules/semantic/research/"
@@ -501,13 +504,17 @@ def _derive_controller_input(head: str) -> dict[str, Any]:
     }
     bound_inputs["digest"] = controller.bound_inventory_digest(bound_inputs)
     controller.validate_bound_inventory(bound_inputs)
+    # Amendment 10: declaration is excluded from runtime inventory by the
+    # controller's repository_inventory; pin F-time declaration bytes into the
+    # owner authority overlay instead.
+    declaration_at_f = controller.declaration_byte_identity(root)
     evidence_root = f"docs/modules/semantic/research/evidence/h0_phase_a_{head}"
-    landing = {
-        "schema": LANDING_SCHEMA_VERSION,
-        "artifact_path": freeze_artifact_path(head),
-        "declaration_path": DECLARATION_PATH,
-        "post_head_allowed_paths": [freeze_artifact_path(head), DECLARATION_PATH],
-    }
+    landing = controller.owner_authority_overlay(
+        artifact_path=freeze_artifact_path(head),
+        declaration_at_f=declaration_at_f,
+    )
+    if landing["schema"] != LANDING_SCHEMA_VERSION:
+        raise RuntimeError("freeze assembler authority overlay schema drift")
     controller_input = {
         "authority_landing": landing,
         "bound_inputs": bound_inputs,
@@ -836,26 +843,34 @@ def build_artifact(
     preset_sha = evidence["preset_sha"]
     resolved_sha = evidence["resolved_sha"]
 
+    import run_h0_phase_a as controller  # local implementation, bound above
+
     if controller_input is None:
         try:
             controller_input = _derive_controller_input(head)
         except (OSError, RuntimeError, subprocess.SubprocessError) as exc:
             problems.append(f"A7/RC1 controller-input inventory is unavailable: {exc}")
+            try:
+                declaration_at_f = controller.declaration_byte_identity(ROOT)
+            except (OSError, controller.ContractError):
+                declaration_at_f = {"length": 0, "sha256": "0" * 64}
             controller_input = {
-                "authority_landing": {
-                    "schema": LANDING_SCHEMA_VERSION,
-                    "artifact_path": freeze_artifact_path(head),
-                    "declaration_path": DECLARATION_PATH,
-                    "post_head_allowed_paths": [
-                        freeze_artifact_path(head),
-                        DECLARATION_PATH,
-                    ],
-                },
+                "authority_landing": controller.owner_authority_overlay(
+                    artifact_path=freeze_artifact_path(head),
+                    declaration_at_f=declaration_at_f,
+                ),
                 "unavailable": True,
             }
     if controller_input.get("instrumentation_head") != head:
         problems.append(
             "controller input does not bind the resolved instrumentation head"
+        )
+
+    authority_landing = controller_input.get("authority_landing")
+    if not isinstance(authority_landing, dict):
+        authority_landing = controller.owner_authority_overlay(
+            artifact_path=freeze_artifact_path(head),
+            declaration_at_f=controller.declaration_byte_identity(ROOT),
         )
 
     artifact = {
@@ -897,12 +912,7 @@ def build_artifact(
             "platform": platform.platform(),
             "git": _git("--version"),
         },
-        "authority_landing": {
-            "schema": LANDING_SCHEMA_VERSION,
-            "artifact_path": freeze_artifact_path(head),
-            "declaration_path": DECLARATION_PATH,
-            "post_head_allowed_paths": [freeze_artifact_path(head), DECLARATION_PATH],
-        },
+        "authority_landing": authority_landing,
         "implementation_bindings": bindings,
         "phase_a_controller_input": controller_input,
         "complete": not problems,

@@ -181,7 +181,10 @@
         "operator_vector": {"const": ["uv", "run", "--frozen", "python", "scripts/tools/run_h0_phase_a.py"]},
         "ordered_run_plan": {"const": ["00_capture_off", "01_capture_on_1", "02_capture_on_2", "03_capture_on_3"]},
         "publication_rollback": {"const": {"publication": "atomic_rename_incomplete_to_final_then_fsync_parent_v1", "rollback": "remove_partial_D_V_before_checksums_or_leave_incomplete_unpublished_v1"}},
-        "required_repository_inputs": {"const": ["configs/presets/mamba_whole_graph_m.yaml", "docs/modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md", "docs/modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.policy.yaml", "scripts/tools/export_headline_bridge_decision_trace.py", "scripts/tools/h0_bridge_decision_trace_schema_v2.json", "scripts/tools/h0_phase_a_execution_schema_v1.json", "scripts/tools/h0_runtime_confinement.py", "scripts/tools/resolved_bridge_policy_config.py", "scripts/tools/run_h0_phase_a.py", "scripts/tools/run_h0_phase_a_child.py", "scripts/tools/verify_h0_phase_a.py", "scripts/tools/verify_headline_bridge_decision_trace.py", "uv.lock"]},
+        "required_repository_inputs": {"oneOf": [
+          {"const": ["configs/presets/mamba_whole_graph_m.yaml", "docs/modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.policy.yaml", "scripts/tools/export_headline_bridge_decision_trace.py", "scripts/tools/h0_bridge_decision_trace_schema_v2.json", "scripts/tools/h0_phase_a_execution_schema_v1.json", "scripts/tools/h0_runtime_confinement.py", "scripts/tools/resolved_bridge_policy_config.py", "scripts/tools/run_h0_phase_a.py", "scripts/tools/run_h0_phase_a_child.py", "scripts/tools/verify_h0_phase_a.py", "scripts/tools/verify_headline_bridge_decision_trace.py", "uv.lock"]},
+          {"const": ["configs/presets/mamba_whole_graph_m.yaml", "docs/modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md", "docs/modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.policy.yaml", "scripts/tools/export_headline_bridge_decision_trace.py", "scripts/tools/h0_bridge_decision_trace_schema_v2.json", "scripts/tools/h0_phase_a_execution_schema_v1.json", "scripts/tools/h0_runtime_confinement.py", "scripts/tools/resolved_bridge_policy_config.py", "scripts/tools/run_h0_phase_a.py", "scripts/tools/run_h0_phase_a_child.py", "scripts/tools/verify_h0_phase_a.py", "scripts/tools/verify_headline_bridge_decision_trace.py", "uv.lock"]}
+        ]},
         "result_enum": {"const": ["provenance_invalid", "build_failed", "extension_load_failed", "runner_nonzero", "runner_timeout", "serialization_failed", "artifact_missing_or_unreadable", "unclassified_execution_failure", "capture_perturbs_policy", "packet_invalid", "phase_a_pass"]},
         "result_matrix": {"$ref": "#/$defs/result_matrix"},
         "trace_capacities": {"const": [65536, 16384, 16384, 16384]},
@@ -203,14 +206,36 @@
       ],
       "properties": {
         "authority_landing": {
-          "type": "object", "additionalProperties": false,
-          "required": ["schema", "artifact_path", "declaration_path", "post_head_allowed_paths"],
-          "properties": {
-            "schema": {"const": "h0_authority_landing_v1"},
-            "artifact_path": {"$ref": "#/$defs/relative_path"},
-            "declaration_path": {"const": "docs/modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md"},
-            "post_head_allowed_paths": {"type": "array", "items": {"$ref": "#/$defs/relative_path"}, "minItems": 2, "maxItems": 2, "uniqueItems": true}
-          }
+          "oneOf": [
+            {
+              "type": "object", "additionalProperties": false,
+              "required": ["schema", "artifact_path", "declaration_path", "declaration_at_f", "post_head_allowed_paths"],
+              "properties": {
+                "schema": {"const": "h0_owner_authority_overlay_v1"},
+                "artifact_path": {"$ref": "#/$defs/relative_path"},
+                "declaration_path": {"const": "docs/modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md"},
+                "declaration_at_f": {
+                  "type": "object", "additionalProperties": false,
+                  "required": ["length", "sha256"],
+                  "properties": {
+                    "length": {"type": "integer", "minimum": 0},
+                    "sha256": {"$ref": "#/$defs/sha256"}
+                  }
+                },
+                "post_head_allowed_paths": {"type": "array", "items": {"$ref": "#/$defs/relative_path"}, "minItems": 2, "maxItems": 2, "uniqueItems": true}
+              }
+            },
+            {
+              "type": "object", "additionalProperties": false,
+              "required": ["schema", "artifact_path", "declaration_path", "post_head_allowed_paths"],
+              "properties": {
+                "schema": {"const": "h0_authority_landing_v1"},
+                "artifact_path": {"$ref": "#/$defs/relative_path"},
+                "declaration_path": {"const": "docs/modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md"},
+                "post_head_allowed_paths": {"type": "array", "items": {"$ref": "#/$defs/relative_path"}, "minItems": 2, "maxItems": 2, "uniqueItems": true}
+              }
+            }
+          ]
         },
         "bound_inputs": {"$ref": "#/$defs/bound_inputs"},
         "build_tool_binding": {"$ref": "#/$defs/build_tool_binding"},

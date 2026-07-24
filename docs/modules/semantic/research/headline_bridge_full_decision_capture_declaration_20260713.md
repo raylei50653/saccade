@@ -2085,3 +2085,192 @@ change the route-1 permanent-ledger conclusion recorded in
 accepted runtime-fidelity edge, and no actual H0 guarantee envelope. The owner
 records the sole `SEALED` event for this re-entry as the final appended row
 below.
+
+## Amendment 10 — authority-overlay/runtime-binding separation (2026-07-24; pre-seal)
+
+### A10.1 Scope and historical boundary
+
+Re-entry #3 spent exact chain
+`I3=5a2d1de509fa64f2e5ce9a4db8182337da215968` /
+`F3=7895704c298504b279ae8e1febf19ca2a715637f` /
+`S3=3a6a9ec6348f1dccca6acabef8025159c3bec1d3` at owner-accepted
+`H0_PROVENANCE_INVALID` because the declaration file was simultaneously:
+
+1. an F-frozen runtime-bound repository input in `h0_bound_inputs_v1.repository`
+   / `REQUIRED_REPOSITORY_INPUTS` / confinement-plan runtime byte equality; and
+2. the S owner-event append target.
+
+That dual role is a structural provenance defect. S3 remains immutable and
+permanently spent: no retry, resume, or re-interpretation of that chain is
+admitted. Historical I/F/S packets, terminals, and digests remain byte-frozen.
+
+The sole admissible repair unit is
+`h0_authority_overlay_runtime_binding_split_v1`. It is recorded as the
+one-member `repair_units` registry in `h0_repair_acceptance_matrix_v1` and
+replaces the spent build-tool unit for this re-entry only. Any second unit,
+unlisted scope expansion, capture change, Phase-B work, or trace-v2 data-plane
+change is rejected. If repairing the split still requires a trace-v2 ABI delta
+to reach registration-v3 evidence, the ordered terminal is
+`H0_R4_REPAIR_REQUIRES_ABI_DELTA` and a separate ABI-delta charter is required.
+
+This amendment re-admits **exactly one future fresh `I → F → S` chain** after a
+qualified Repair head. It authorizes only Repair / qualification-candidate
+construction. It does **not** select I, create F or S, authorize execution,
+authorize Phase B, establish an H0 guarantee, or start `H0_ROUTE5_B1`,
+`GCTM_B1`, or O1. Any later execution-bound change invalidates qualification
+and requires a completely fresh I.
+
+### A10.2 Runtime implementation authority
+
+Runtime-bound repository inventory is restricted to executable / build /
+policy / schema / controller inputs of I. The declaration path
+
+```text
+docs/modules/semantic/research/
+  headline_bridge_full_decision_capture_declaration_20260713.md
+```
+
+is **removed** from:
+
+- `REQUIRED_REPOSITORY_INPUTS`
+- `h0_bound_inputs_v1.repository`
+- the runtime implementation binding set
+- F-time runtime byte-equality checks (including confinement-plan admission)
+
+The declaration is **not** deleted and is **not** excluded from provenance
+monitoring. It simply ceases to be a runtime repository input.
+
+### A10.3 Owner authority overlay
+
+A typed authority overlay `h0_owner_authority_overlay_v1` (controller member
+key remains `authority_landing` for member-parity continuity) binds only:
+
+- freeze artifact at F
+- literal owner `SEALED` event at S
+- derived `I → F → S` topology
+- declaration path
+- declaration bytes at F
+- declaration bytes at S
+- the exact appended owner-event line
+
+Controller, preflight, independent preseal verifier, and Phase-A verifier must
+prove:
+
+```text
+I = F^
+F = S^
+E = S
+F differs from I only by the freeze artifact
+S differs from F only by one literal declaration-line append
+```
+
+During execution the declaration remains an immutable input, but its continuous
+authority baseline is **S bytes**, not I or F bytes:
+
+```text
+runtime repository binding:   compare executable/runtime objects to I
+freeze authority:             verify freeze artifact at F
+owner-event authority:        verify declaration overlay at S
+continuous execution drift:   compare declaration to accepted S bytes through T4
+```
+
+Owner overlay must not alter runtime policy, configuration, or capture
+semantics. Runtime build/import graphs must not consume the declaration.
+
+### A10.4 Fail-closed invariants
+
+At least these are mechanical:
+
+1. declaration is not in runtime repository-input inventory;
+2. declaration exists only in the authority-overlay inventory;
+3. F declaration bytes contain no new owner event;
+4. S declaration bytes differ from F by exactly one legal owner-event line;
+5. S declaration has no other byte change;
+6. freeze artifact exists only at F/S;
+7. F has no other path change relative to I;
+8. S has no other path change relative to F;
+9. controller, execution schema, freeze assembler, preseal verifier, and
+   Phase-A verifier agree on the authority split;
+10. declaration does not drift relative to S bytes across T0–T4;
+11. runtime build/import graph does not consume declaration;
+12. owner overlay changes no runtime policy, configuration, or capture
+    semantics.
+
+Any inconsistency selects `provenance_invalid` before build. No fallback,
+ignore, or auto-correction is admitted.
+
+### A10.5 Launch-hygiene boundary
+
+The single-source predicate `run_h0_phase_a.assert_no_preexisting_build_tree`
+and tool `scripts/tools/h0_launch_hygiene_gate.py` remain. This Repair only
+verifies their existence and single-source relation. Future mandatory sequence
+after qualification:
+
+1. qualification completes;
+2. owner prepares exactly-once authorization only after launch-hygiene = clear;
+3. separate Seal creates S;
+4. sealed checkout launch only after launch-hygiene = clear;
+5. then exactly-once authorization may be consumed.
+
+Gate authority remains non-authoritative; `authorization_consumed = false`;
+capture forbidden; terminal claim forbidden.
+
+### A10.6 Registration-v3 downstream binding
+
+A successful future Phase-A packet is structurally available for a **separate**
+registration acceptance against:
+
+```text
+registration_schema:  h0_gctm_guarantee_registration_v3
+guarantee_class:      universe_completeness
+consumer_objects:     runtime_candidate_universe, runtime_event_membership
+consumer_universe:    gctm_runtime_native_candidate_universe_v1
+```
+
+This Repair does **not** produce a checked-in `record_state: registered-guarantee`
+record, claim owner baseline acceptance, promote qualification fixtures to
+guarantees, change compatibility gates, or establish a runtime substrate.
+Successful capture would first emit a non-authoritative evidence witness;
+actual baseline / guarantee acceptance is a separate PR.
+
+### A10.7 Trace and policy boundary
+
+Byte/semantic frozen and out of scope for this Repair:
+
+```text
+h0_bridge_decision_trace_v2, pair_record, candidate_record, claim_record,
+commit_record, native_universe_v2, capture_envelope_v2, headline runtime
+policy, resolved preset, score/gate logic, CUDA launch geometry
+```
+
+No trace ABI delta is required by this Repair. Discovery that one is required
+selects `H0_R4_REPAIR_REQUIRES_ABI_DELTA` and closes this scope.
+
+### A10.8 Ordered Repair terminals
+
+| Terminal | Meaning |
+|:--|:--|
+| `H0_R4_REPAIR_INVALID` | Contract, identity, topology, matrix, or qualification incomplete → repair candidate rejected; no I; no seal; no execution |
+| `H0_R4_REPAIR_REQUIRES_ABI_DELTA` | Authority split still needs a trace-v2 data-plane change → close Repair; define separate ABI-delta charter; no capture |
+| `H0_R4_REPAIR_QUALIFIED_SEALABLE` | Static admission and controlled-host qualification pass; known S3 defect removed; trace-v2 ABI unchanged; registration-v3 structurally reachable |
+
+Maximum positive conclusion:
+
+```text
+The exact qualified repair head is eligible for a separate owner Seal
+decision that may construct one fresh I → F → S chain.
+```
+
+It does **not** establish: I selected, F/S created, SEALED accepted, execution
+authorized, H0 baseline accepted, runtime substrate established, actual
+guarantee registered, or runtime compatibility established.
+
+### A10.9 State effect
+
+This is an append-only pre-seal engineering amendment, not an owner acceptance
+of I, F, S, or a terminal. The sole repair unit is
+`h0_authority_overlay_runtime_binding_split_v1`. S3 stays permanently spent.
+Route-1 permanent ledger conclusions are unchanged. GCTM #175 remains PARKED;
+Phase B remains FORBIDDEN. A post-qualification commit invalidates
+qualification. The owner records the sole `SEALED` event for any later fresh
+chain as the final appended row below.
