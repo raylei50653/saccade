@@ -1499,10 +1499,20 @@ def test_extension_load_runs_inside_runtime_confinement_and_records_attestation(
     plugin = tmp_path / "build/h0_phase_a/libsaccade_scan_plugin.so"
     extension.write_bytes(b"extension")
     plugin.write_bytes(b"plugin")
+    extension_bytes = extension.read_bytes()
+    plugin_bytes = plugin.read_bytes()
     identity = {
         "artifacts": [
-            {"path": extension.relative_to(tmp_path).as_posix()},
-            {"path": plugin.relative_to(tmp_path).as_posix()},
+            {
+                "path": extension.relative_to(tmp_path).as_posix(),
+                "length": len(extension_bytes),
+                "sha256": parent.sha256_bytes(extension_bytes),
+            },
+            {
+                "path": plugin.relative_to(tmp_path).as_posix(),
+                "length": len(plugin_bytes),
+                "sha256": parent.sha256_bytes(plugin_bytes),
+            },
         ]
     }
     digest = "4" * 64
@@ -1514,8 +1524,20 @@ def test_extension_load_runs_inside_runtime_confinement_and_records_attestation(
         "installed_before_exec": True,
         "process_tree_terminal": True,
         "regular_files": [
-            {"realpath": extension.as_posix()},
-            {"realpath": plugin.as_posix()},
+            {
+                "bindings": ["build_artifact"],
+                "length": len(extension_bytes),
+                "operations": ["openat", "mmap_exec"],
+                "realpath": extension.as_posix(),
+                "sha256": parent.sha256_bytes(extension_bytes),
+            },
+            {
+                "bindings": ["build_artifact"],
+                "length": len(plugin_bytes),
+                "operations": ["openat", "mmap_exec"],
+                "realpath": plugin.as_posix(),
+                "sha256": parent.sha256_bytes(plugin_bytes),
+            },
         ],
         "state": attestation_state,
         "trace_scope": list(parent.RUNTIME_TRACE_SCOPE),

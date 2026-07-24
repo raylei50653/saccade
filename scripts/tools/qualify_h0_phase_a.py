@@ -254,6 +254,241 @@ def _repository_identity(root: Path, requested_ref: str) -> dict[str, str]:
     }
 
 
+def _qualify_confined_extension_load(
+    *,
+    root: Path,
+    workspace: Path,
+    python: Path,
+    extension: Path,
+    plugin: Path,
+    identity: Mapping[str, Any],
+    environment: Mapping[str, str],
+    timeout: float,
+) -> dict[str, Any]:
+    """Non-authoritative confined extension/plugin load with shared membership.
+
+    Shares attestation schema, artifact membership predicate, identity
+    comparison, and failure semantics with the controller's extension-load
+    stage.  Does not consume execution authorization, write an H0 evidence
+    root, or claim a terminal.
+    """
+    import os
+
+    import h0_runtime_confinement as confinement
+    import run_h0_phase_a as controller
+
+    load_root = workspace / "_extension_load"
+    load_root.mkdir(exist_ok=False)
+    denial_probe = workspace / "_runtime_confinement_denial_probe"
+    denial_probe.write_bytes(b"MUST_BE_DENIED\n")
+    stdout_path = load_root / "stdout.log"
+    stderr_path = load_root / "stderr.log"
+
+    # Build a non-authoritative inventory sufficient for confined import/CDLL.
+    # Full repository/sequence inventories are not required for this substrate
+    # gate; tool_runtime is discovered from the frozen interpreter itself.
+    runtime_paths = controller.discover_python_interpreter_runtime_paths(python)
+    tool_runtime = []
+    seen: set[str] = set()
+    for logical in runtime_paths:
+        try:
+            record = controller.external_input_record(root, logical)
+        except Exception as exc:  # noqa: BLE001 - surface as qualification failure
+            raise QualificationError(
+                f"qualification tool_runtime discovery failed for {logical}: {exc}"
+            ) from exc
+        if record["realpath"] in seen:
+            continue
+        seen.add(record["realpath"])
+        tool_runtime.append(record)
+    # Include ldd closure members and maps-observed runtime loads.
+    library_path = environment.get("LD_LIBRARY_PATH", "")
+    try:
+        maps_records = controller._runtime_maps_dependencies(
+            python=python,
+            extension=extension,
+            plugin=plugin,
+            root=root,
+            library_path=library_path,
+            started=time.monotonic(),
+            monitor=None,
+            clock=time.monotonic,
+        )
+    except Exception as exc:  # noqa: BLE001
+        raise QualificationError(
+            f"qualification maps dependency discovery failed: {exc}"
+        ) from exc
+    dependency_records: list[Mapping[str, Any]] = []
+    for artifact in identity["artifacts"]:
+        dependency_records.extend(artifact.get("dynamic_dependencies", []))
+    dependency_records.extend(maps_records)
+    for dependency in dependency_records:
+        path = Path(str(dependency.get("realpath") or dependency.get("path", "")))
+        if not path.exists():
+            continue
+        try:
+            record = controller.external_input_record(root, path.as_posix())
+        except Exception:
+            continue
+        if record["realpath"] in seen:
+            continue
+        seen.add(record["realpath"])
+        tool_runtime.append(record)
+    # Fold maps-observed members into each artifact's dynamic_dependencies so
+    # build_plan admits them as build_runtime_closure.
+    maps_by_real = {item["realpath"]: item for item in maps_records}
+    for artifact in identity["artifacts"]:
+        deps = list(artifact.get("dynamic_dependencies", []))
+        known = {str(item.get("realpath")) for item in deps}
+        for realpath, item in maps_by_real.items():
+            if realpath in known:
+                continue
+            deps.append(item)
+            known.add(realpath)
+        artifact["dynamic_dependencies"] = deps
+
+    inventory = {
+        "models_engines": [],
+        "repository": [],
+        "sequence": {"files": [], "root": "datasets"},
+        "tool_runtime": tool_runtime,
+    }
+    build_identity = {
+        "artifacts": [
+            {
+                "path": Path(artifact["path"]).resolve(strict=True).as_posix()
+                if Path(artifact["path"]).is_absolute()
+                else artifact["path"],
+                "length": artifact["length"],
+                "sha256": artifact["sha256"],
+                "dynamic_dependencies": artifact.get("dynamic_dependencies", []),
+            }
+            for artifact in identity["artifacts"]
+        ],
+        "python": {
+            "path": python.resolve(strict=True).as_posix(),
+            "length": python.stat().st_size,
+            "sha256": sha256_file(python),
+        },
+    }
+    # Normalize artifact paths relative to root when under root.
+    for artifact in build_identity["artifacts"]:
+        path = Path(artifact["path"])
+        if path.is_absolute():
+            try:
+                artifact["path"] = (
+                    path.resolve(strict=True)
+                    .relative_to(root.resolve(strict=True))
+                    .as_posix()
+                )
+            except ValueError:
+                artifact["path"] = path.resolve(strict=True).as_posix()
+
+    try:
+        plan = confinement.build_plan(
+            root=root,
+            incomplete=workspace,
+            inventory=inventory,
+            build_identity=build_identity,
+            denial_probe=denial_probe,
+            output_directories=(load_root,),
+        )
+    except confinement.ConfinementError as exc:
+        raise QualificationError(
+            f"qualification extension-load confinement plan failed: {exc}"
+        ) from exc
+
+    load_script = (
+        "import ctypes,pathlib,sys;"
+        f"sys.path.insert(0,{extension.parent.as_posix()!r});"
+        f"p=pathlib.Path({denial_probe.as_posix()!r});"
+        "denied=False;"
+        "\ntry:p.read_bytes()"
+        "\nexcept PermissionError:denied=True"
+        "\nassert denied;"
+        "\nimport saccade_tracking_ext;"
+        f"e=pathlib.Path({extension.as_posix()!r}).resolve(strict=True);"
+        "a=pathlib.Path(saccade_tracking_ext.__file__).resolve(strict=True);"
+        "assert a==e;"
+        f"ctypes.CDLL({plugin.as_posix()!r},mode=ctypes.RTLD_LOCAL)"
+    )
+    vector = [python.as_posix(), "-I", "-B", "-c", load_script]
+    with (
+        open(os.devnull, "rb", buffering=0) as stdin,
+        open(stdout_path, "xb", buffering=0) as stdout,
+        open(stderr_path, "xb", buffering=0) as stderr,
+    ):
+        try:
+            process = confinement.spawn_confined(
+                vector,
+                cwd=root,
+                env=dict(environment),
+                stdin=stdin,
+                stdout=stdout,
+                stderr=stderr,
+                plan=plan,
+            )
+        except confinement.ConfinementError as exc:
+            raise QualificationError(
+                f"qualification extension-load confinement setup failed: {exc}"
+            ) from exc
+        try:
+            returncode = process.wait(timeout=timeout)
+        except Exception as exc:  # noqa: BLE001
+            process.terminate_tree()
+            raise QualificationError(
+                f"qualification confined extension load failed: {exc}"
+            ) from exc
+    try:
+        attestation = process.runtime_attestation()
+    except confinement.ConfinementError as exc:
+        raise QualificationError(
+            f"qualification runtime attestation failed: {exc}"
+        ) from exc
+    runtime_digest = sha256_bytes(canonical_json_bytes(attestation))
+    if (
+        attestation.get("state") != "complete"
+        or attestation.get("violations")
+        or returncode != 0
+    ):
+        raise QualificationError(
+            "qualification confined extension/plugin load did not complete cleanly: "
+            f"returncode={returncode} state={attestation.get('state')} "
+            f"violations={attestation.get('violations') or []}"
+        )
+    try:
+        membership = confinement.assert_extension_plugin_membership(
+            attestation,
+            extension=extension,
+            plugin=plugin,
+            extension_identity={
+                "path": extension,
+                "length": int(identity["artifacts"][0]["length"]),
+                "sha256": str(identity["artifacts"][0]["sha256"]),
+            },
+            plugin_identity={
+                "path": plugin,
+                "length": int(identity["artifacts"][1]["length"]),
+                "sha256": str(identity["artifacts"][1]["sha256"]),
+            },
+        )
+    except confinement.ConfinementError as exc:
+        raise QualificationError(
+            f"qualification extension/plugin attestation membership failed: {exc}"
+        ) from exc
+    return {
+        "attestation_state": attestation["state"],
+        "confinement_plan_digest": plan["digest"],
+        "extension_artifact_observed": membership["extension_artifact_observed"],
+        "extension_identity_equal": membership["extension_identity_equal"],
+        "plugin_artifact_observed": membership["plugin_artifact_observed"],
+        "plugin_identity_equal": membership["plugin_identity_equal"],
+        "returncode": returncode,
+        "runtime_inputs_digest": runtime_digest,
+        "violations": list(attestation.get("violations") or []),
+    }
+
+
 def _run(
     vector: Sequence[str],
     *,
@@ -304,26 +539,38 @@ def _cmake_cache(cache: Path) -> dict[str, str]:
 
 
 def _dynamic_closure(path: Path) -> list[dict[str, Any]]:
-    result = subprocess.run(
-        ["ldd", path.as_posix()],
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        check=False,
-    )
-    if result.returncode:
-        raise QualificationError(f"ldd rejected qualification artifact: {path}")
+    """Recursive ldd closure of one qualification artifact."""
+    pending = [path.resolve(strict=True)]
+    seen: set[str] = {pending[0].as_posix()}
     records: list[dict[str, Any]] = []
-    for line in result.stdout.decode("utf-8", errors="replace").splitlines():
-        if "not found" in line:
-            raise QualificationError(
-                f"qualification closure has missing dependency: {line}"
-            )
-        if "=>" not in line:
-            continue
-        target = line.split("=>", 1)[1].strip().split(" ", 1)[0]
-        if target.startswith("/"):
-            records.append(_regular_file_record(Path(target).resolve(strict=True)))
+    while pending:
+        source = pending.pop(0)
+        result = subprocess.run(
+            ["ldd", source.as_posix()],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+        if result.returncode:
+            raise QualificationError(f"ldd rejected qualification artifact: {source}")
+        for line in result.stdout.decode("utf-8", errors="replace").splitlines():
+            if "not found" in line:
+                raise QualificationError(
+                    f"qualification closure has missing dependency: {line}"
+                )
+            if "=>" not in line:
+                continue
+            target = line.split("=>", 1)[1].strip().split(" ", 1)[0]
+            if not target.startswith("/"):
+                continue
+            real = Path(target).resolve(strict=True)
+            realpath = real.as_posix()
+            if realpath in seen:
+                continue
+            seen.add(realpath)
+            records.append(_regular_file_record(real))
+            pending.append(real)
     return sorted(records, key=lambda record: record["path"].encode("utf-8"))
 
 
@@ -350,7 +597,24 @@ def _build_identity(root: Path, build: Path, python: Path) -> dict[str, Any]:
     cmake_path = Path(cache_values.get("CMAKE_COMMAND", "")).resolve(strict=False)
     if not cache_values.get("CMAKE_COMMAND") or not cmake_path.is_file():
         raise QualificationError("qualification CMake cache lacks CMake executable")
-    artifacts = [_regular_file_record(extension), _regular_file_record(plugin)]
+    import run_h0_phase_a as controller
+
+    ldd = _tool("ldd")
+    artifacts = []
+    for artifact in (extension, plugin):
+        record = _regular_file_record(artifact)
+        # Use the controller producer (recursive ldd + known dlopen siblings)
+        # so qualification admits the same runtime-closure class as Phase A.
+        deps = controller._dynamic_dependencies(
+            artifact,
+            ldd,
+            root=root,
+            started=time.monotonic(),
+            monitor=None,
+            clock=time.monotonic,
+        )
+        record["dynamic_dependencies"] = deps
+        artifacts.append(record)
     return {
         "artifacts": artifacts,
         "cmake": _regular_file_record(cmake_path.resolve(strict=True)),
@@ -497,7 +761,7 @@ def qualification_runner_argv(build: Path, extension: Path, plugin: Path) -> lis
     ]
 
 
-def _step(name: str, action: Callable[[], None], steps: list[dict[str, str]]) -> None:
+def _step(name: str, action: Callable[[], None], steps: list[dict[str, Any]]) -> None:
     action()
     steps.append({"name": name, "state": "passed"})
 
@@ -726,32 +990,45 @@ def run_qualification(
             ),
             steps,
         )
-        load_script = (
-            "import ctypes,pathlib,sys;"
-            f"sys.path.insert(0,{build.as_posix()!r});"
-            "import saccade_tracking_ext;"
-            f"assert pathlib.Path(saccade_tracking_ext.__file__).resolve()==pathlib.Path({extension.as_posix()!r}).resolve();"
-            f"ctypes.CDLL({plugin.as_posix()!r},mode=ctypes.RTLD_LOCAL)"
-        )
         runtime_environment = {
             **environment,
             "LD_LIBRARY_PATH": library_path,
             "SACCADE_BUILD_PATH": build.as_posix(),
             "H0_QUALIFICATION_MODE": "1",
         }
-        runner = [python.as_posix(), "-I", "-B", "-c", load_script]
-        _step(
-            "extension_load",
-            lambda: _run(
-                runner,
+        extension_load_report: dict[str, Any] = {}
+
+        def _confined_extension_load() -> None:
+            nonlocal extension_load_report
+            extension_load_report = _qualify_confined_extension_load(
                 root=root,
+                workspace=workspace,
+                python=python,
+                extension=extension,
+                plugin=plugin,
+                identity=identity,
                 environment=runtime_environment,
-                stdout_path=logs / "extension_load.stdout.log",
-                stderr_path=logs / "extension_load.stderr.log",
                 timeout=timeout,
-            ),
-            steps,
-        )
+            )
+
+        _step("extension_load", _confined_extension_load, steps)
+        steps[-1] = {
+            **steps[-1],
+            **{
+                key: extension_load_report[key]
+                for key in (
+                    "confinement_plan_digest",
+                    "runtime_inputs_digest",
+                    "extension_artifact_observed",
+                    "plugin_artifact_observed",
+                    "extension_identity_equal",
+                    "plugin_identity_equal",
+                    "attestation_state",
+                    "violations",
+                )
+                if key in extension_load_report
+            },
+        }
         qualification_inputs = _qualification_inventory(root, identity)
         before = qualification_inputs
         after = _qualification_inventory(root, identity)

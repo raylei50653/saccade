@@ -10,27 +10,26 @@
   （`h0_authority_overlay_runtime_binding_split_v1` / Amendment 10）；WIP released.
   Seal PR #277 landed exact S=`a76efffa…`. See
   [repair evidence](research/evidence/h0_r4_authority_overlay_runtime_binding_split_20260724/).
-- **H0-R4 Phase-A executed once under sealed S（2026-07-24）** — facts only, not
-  owner terminal acceptance:
+- **H0-R4 Phase-A executed once under sealed S（2026-07-24）** — owner-accepted
+  truthful-negative terminal only（PR #279 merge `55d2da47…`）:
   - `I=2a233387…` / `F=ced4a4cc…` / `S=a76efffa…`
-  - authorization `h0_r4_phase_a_exactly_once_authorization_20260724`（Issue #278）
-  - first+second launch-hygiene = `clear`; invocation count = 1; authorization consumed
-  - controller `result=provenance_invalid`; mechanical disposition
-    `H0_PROVENANCE_INVALID`; independent verifier `valid=true`, rc=0
+  - authorization `h0_r4_phase_a_exactly_once_authorization_20260724`（Issue #278；consumed）
+  - controller `result=provenance_invalid` → `H0_PROVENANCE_INVALID`; verifier `valid=true`
   - evidence:
     [h0_phase_a_2a233387…](research/evidence/h0_phase_a_2a233387a6a321dd43570e2e30dc718571b3b4f4/)
     + [execution witness](research/evidence/h0_r4_phase_a_execution_witness_20260724/)
-  - exact S permanently spent; retry/resume/second invocation forbidden; Phase B
-    not authorized; actual guarantee = none; runtime compatibility = none;
-    B1/O1 not activated. Owner acceptance of the truthful-negative terminal is
-    this evidence PR merge surface only. No repair/reseal/new re-entry authorized.
-  Detail: [claim-state registry `reentry_terminal_history` re-entry #4 / H0-R4](../../research/contracts/claim_state_registry.md).
-- H0 closure baseline（三個 prior owner-accepted ordered terminal
-  `H0_PROVENANCE_INVALID` + H0-R4 mechanical `H0_PROVENANCE_INVALID` pending this
-  PR’s owner acceptance surface; faithful capture = none; actual H0 guarantee =
-  none; Phase B forbidden; S3=`3a6a9ec6…` and S4=`a76efffa…` permanently spent）：
+  - S4 permanently spent; no faithful capture; no actual H0 guarantee; Phase B forbidden;
+    no future reentry authorization from R4 alone.
+  Detail: [claim-state registry](../../research/contracts/claim_state_registry.md).
+- H0 closure baseline（**four** owner-accepted `H0_PROVENANCE_INVALID` terminals;
+  S4 permanently spent; no faithful capture; no actual H0 guarantee; Phase B forbidden）:
   state fact-owner 見
   [claim-state registry](../../research/contracts/claim_state_registry.md)。
+- **H0-R5 Repair open（2026-07-24）** — sole repair unit
+  `h0_extension_plugin_runtime_attestation_closure_v1` under owner decision
+  `h0_r5_extension_plugin_attestation_closure_authorization_20260724`（Issue #280）.
+  Authorizes repair + controlled-host qualification + future Seal eligibility only.
+  **Not** F/S, Phase-A execution, exactly-once auth, Phase B, actual guarantee, or B1/O1.
 - 2026-07-24 consumer re-charter closed at
   `GCTM_RUNTIME_UNIVERSE_CONTRACT_SEALABLE`（`gctm_runtime_native_candidate_universe_v1`）；
   WIP released at terminal；**not** H0 implementation authority. See
@@ -51,11 +50,9 @@
   `GCTM_B1`, `proposed`, `blocked_by: h0_runtime_substrate`; it does not alias
   or supersede `H0_ROUTE5_B1` → [task charter](../../research/threads/gctm_b1_runtime_grounded_offline_attribution_task.md)
 - **GCTM O1 — online score intervention and system-efficacy evaluation** → [task charter](../../research/threads/gctm_o1_online_intervention_efficacy_task.md)
-- **(next owner choice after H0-R4 evidence PR)** terminal closeout acceptance of
-  the truthful-negative `H0_PROVENANCE_INVALID` packet only; **or** a separate
-  owner decision for any later repair / reseal / re-entry. This record does **not**
-  authorize Phase B, actual registration-v3 guarantee audit as accepted, runtime
-  compatibility, or B1/O1 activation.
+- **(next after H0-R5 Repair if `H0_R5_ATTESTATION_QUALIFIED_SEALABLE`)** separate
+  Seal PR → fresh I→F→S → launch hygiene → separate exactly-once authorization →
+  one Phase-A invocation. Repair merge is **not** Seal or execution authority.
 
 ## Parked
 

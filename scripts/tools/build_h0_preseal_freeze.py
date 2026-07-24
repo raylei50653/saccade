@@ -489,6 +489,11 @@ def _derive_controller_input(head: str) -> dict[str, Any]:
     # controlled-host qualification.  The controller's actual-loaded
     # attestation remains the final admission for dependencies discovered while
     # the frozen process runs.
+    #
+    # H0-R5: the confined extension/plugin load vector runs a real CPython
+    # process.  Its base_prefix stdlib, venv bootstrap files, and host startup
+    # files must be pre-admitted as tool_runtime members so the recorder can
+    # independently observe the two top-level build artifacts in regular_files.
     non_build_tool_candidates = [
         Path(path) for name, path in tool_paths.items() if name not in {"cmake", "cxx"}
     ] + [python, pyvenv_config]
@@ -501,9 +506,23 @@ def _derive_controller_input(head: str) -> dict[str, Any]:
                 if path.is_file() and not path.is_symlink()
             )
         )
+    for logical in controller.discover_python_interpreter_runtime_paths(python):
+        tool_candidates.append(Path(logical))
+    # Deduplicate while preserving first-seen logical path form.
+    deduped_candidates: list[Path] = []
+    seen_realpaths: set[str] = set()
+    for path in tool_candidates:
+        try:
+            real = path.resolve(strict=True).as_posix()
+        except OSError:
+            continue
+        if real in seen_realpaths:
+            continue
+        seen_realpaths.add(real)
+        deduped_candidates.append(path)
     other_tools = [
         controller.external_input_record(root, path.as_posix())
-        for path in tool_candidates
+        for path in deduped_candidates
     ]
     tools = sorted(
         [*other_tools, *build_tool_bound_inputs["tool_runtime"]],
