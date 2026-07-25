@@ -101,13 +101,24 @@ jobs:
 
       - name: Bind controlled host-local runtime inputs into the checkout
         run: |
-          for name in datasets models runs; do
-            source="${SACCADE_CONTROLLED_RESOURCE_ROOT}/${name}"
-            test -d "${source}"
-            test ! -e "${name}"
-            test ! -L "${name}"
-            ln -s "${source}" "${name}"
-          done
+          bind_runtime_input() {
+            relative_path="$1"
+            source="${SACCADE_CONTROLLED_RESOURCE_ROOT}/${relative_path}"
+            target="${GITHUB_WORKSPACE}/${relative_path}"
+            test -e "${source}"
+            test ! -e "${target}"
+            test ! -L "${target}"
+            mkdir -p "$(dirname "${target}")"
+            ln -s "${source}" "${target}"
+          }
+
+          bind_runtime_input "datasets/MOT17/train/MOT17-09-SDP"
+          bind_runtime_input "datasets/MOT17/train/MOT17-04-SDP"
+          bind_runtime_input "runs/mamba_gt_yolo26m_v14replica_t3_t1/best.ckpt"
+          bind_runtime_input "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt"
+          bind_runtime_input "models/yolo/yolo26m.pt"
+          bind_runtime_input "models/yolo/yolo26m_backbone_640_best.engine"
+          bind_runtime_input "models/yolo/mamba_head_26m.engine"
 
       - uses: astral-sh/setup-uv@v5
         with:

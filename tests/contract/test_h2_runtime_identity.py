@@ -385,8 +385,17 @@ def test_gpu_reattestation_binds_controlled_host_runtime_inputs_lexically() -> N
     )
     assert "SACCADE_CONTROLLED_RESOURCE_ROOT:" in workflow
     assert "Bind controlled host-local runtime inputs into the checkout" in workflow
-    assert "for name in datasets models runs; do" in workflow
-    assert 'ln -s "${source}" "${name}"' in workflow
+    assert 'ln -s "${source}" "${target}"' in workflow
+    for path in (
+        "datasets/MOT17/train/MOT17-09-SDP",
+        "datasets/MOT17/train/MOT17-04-SDP",
+        "runs/mamba_gt_yolo26m_v14replica_t3_t1/best.ckpt",
+        "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
+        "models/yolo/yolo26m.pt",
+        "models/yolo/yolo26m_backbone_640_best.engine",
+        "models/yolo/mamba_head_26m.engine",
+    ):
+        assert f'bind_runtime_input "{path}"' in workflow
 
 
 def test_witness_fields_are_marked_as_carrying_no_authority() -> None:
