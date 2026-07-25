@@ -121,8 +121,16 @@ jobs:
             ln -s --relative "${source}" "${target}"
           }
 
-          bind_runtime_input "datasets/MOT17/train/MOT17-09-SDP"
+          # All seven § C3.2 item 10 sequences: the runtime-input manifest binds
+          # the whole measurement member set in both phases, so a two-sequence
+          # bind would fail the manifest step rather than produce a partial one.
+          bind_runtime_input "datasets/MOT17/train/MOT17-02-SDP"
           bind_runtime_input "datasets/MOT17/train/MOT17-04-SDP"
+          bind_runtime_input "datasets/MOT17/train/MOT17-05-SDP"
+          bind_runtime_input "datasets/MOT17/train/MOT17-09-SDP"
+          bind_runtime_input "datasets/MOT17/train/MOT17-10-SDP"
+          bind_runtime_input "datasets/MOT17/train/MOT17-11-SDP"
+          bind_runtime_input "datasets/MOT17/train/MOT17-13-SDP"
           bind_runtime_input "runs/mamba_gt_yolo26m_v14replica_t3_t1/best.ckpt"
           bind_runtime_input "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt"
           bind_runtime_input "models/yolo/yolo26m.pt"

@@ -23,9 +23,20 @@ Two changes from H0's A2.4 partition, and it matters which is which:
 Witness fields (physical hashes, loaded closures, GPU identity) may never select
 a terminal; `select_terminal` refuses to look at them, and a test pins that.
 
+**The partition is phase-aware, and the phase is never inferred** (§ C3.7). The
+two chains check different things at different times: Phase B decides everything
+decidable *before* launch in the § C3.6 admission gate, where refusal costs no
+authorization, so its terminal 1 carries exactly one meaning — a bound input was
+written while the measurement ran. Phase A's § 7 terminal 1 is untouched and
+still admits a launch-time probe or certificate mismatch. Defaulting the phase
+would silently pick one chain's ruler for the other's evidence, so `phase` is
+required and inconsistent combinations raise.
+
 Usage:
   uv run python scripts/tools/h2_terminal_partition.py --explain
-  uv run python scripts/tools/h2_terminal_partition.py --select result.json
+  uv run python scripts/tools/h2_terminal_partition.py --explain --phase b
+  uv run python scripts/tools/h2_terminal_partition.py --phase a --select result.json
+  uv run python scripts/tools/h2_terminal_partition.py --phase b --admit gate.json
 """
 # status: stable
 
@@ -39,13 +50,62 @@ from typing import Any, Mapping, NamedTuple
 
 PARTITION_SCHEMA = "h2_terminal_partition_v1"
 
+PHASES: tuple[str, ...] = ("a", "b")
+
+# What "complete" means per phase, in the § 3.3 four-run block: one capture-off
+# run and three capture-on packets per sequence. Phase A runs the measurement
+# fixture alone; Phase B runs the § C3.2 item 10 seven-sequence plan.
+PHASE_COMPLETION: dict[str, dict[str, int]] = {
+    "a": {
+        "required_sequences": 1,
+        "required_capture_on_packets": 3,
+        "required_capture_off_runs": 1,
+    },
+    "b": {
+        "required_sequences": 7,
+        "required_capture_on_packets": 21,
+        "required_capture_off_runs": 7,
+    },
+}
+
 
 class Terminal(NamedTuple):
     order: int
     name: str
-    condition: str
+    # phase -> that phase's exact condition. Not a single string: the two chains
+    # genuinely differ, and a merged sentence would be true of neither.
+    condition: dict[str, str]
     transition: str
     phase_a_reachable: bool
+
+    def condition_for(self, phase: str) -> str:
+        return self.condition[_checked_phase(phase)]
+
+
+def _checked_phase(phase: str) -> str:
+    if phase not in PHASES:
+        raise PartitionError(
+            f"unknown phase: {phase!r}; expected one of {list(PHASES)}"
+        )
+    return phase
+
+
+def _completion_condition(phase: str) -> str:
+    counts = PHASE_COMPLETION[phase]
+    body = (
+        "every preceding condition false, all "
+        f"{counts['required_sequences']} sequence(s) complete, all "
+        f"{counts['required_capture_on_packets']} capture-on packets and all "
+        f"{counts['required_capture_off_runs']} capture-off run(s) recorded, and "
+        "all verifications pass"
+    )
+    if phase == "a":
+        return (
+            f"{body} — but Phase A cannot select this terminal: a Phase-A pass is "
+            "the non-terminal progression, and terminal 5 requires the frozen "
+            "unlabelled seven-sequence Phase-B artifact"
+        )
+    return f"{body}, over the frozen unlabelled seven-sequence Phase B"
 
 
 # Ordered; first applicable is authoritative (declaration § 7).
@@ -53,9 +113,15 @@ TERMINALS: tuple[Terminal, ...] = (
     Terminal(
         1,
         "H2_INPUT_MUTATED_DURING_MEASUREMENT",
-        "a bound input was written during the invocation, or the behavior probe at "
-        "launch differs from the reference bound in F, or the Layer-P certificate "
-        "does not match F",
+        {
+            "a": "a bound input was written during the invocation, or the behavior "
+            "probe at launch differs from the reference bound in F, or the Layer-P "
+            "certificate does not match F",
+            "b": "a bound input — the Phase-A evidence root included — was written "
+            "during the invocation. The launch-time probe and certificate checks are "
+            "not here: § C3.6 decides them in the admission gate, before S_B is "
+            "consumed, where a mismatch spends no authorization",
+        },
         "closes the H2 measurement unit; object state unchanged; candidate set stays "
         "empty; a fresh I→F→S and a separate authorization would be required",
         True,
@@ -63,7 +129,12 @@ TERMINALS: tuple[Terminal, ...] = (
     Terminal(
         2,
         "H2_CAPTURE_PERTURBS_POLICY",
-        "execution completed and any A7.6 capture-off/on equality differs",
+        {
+            "a": "execution completed and any A7.6 capture-off/on equality differs",
+            "b": "execution completed and any of the seven sequences' A7.6 "
+            "capture-off/on equality differs (§ C3.4: disjunction of failure over "
+            "the seven, so the terminal never depends on execution order)",
+        },
         "closes the observational-capture route itself: decision-neutral shadow "
         "capture is not achievable at this ABI, so grounding must proceed by "
         "native-side reproduction or not at all",
@@ -72,17 +143,27 @@ TERMINALS: tuple[Terminal, ...] = (
     Terminal(
         3,
         "H2_PACKET_INVALID",
-        "non-perturbation held but any packet, exposure, overflow, native-universe, "
-        "conservation, cross-repeat canonical digest, or replay predicate fails",
+        {
+            "a": "non-perturbation held but any packet, exposure, overflow, "
+            "native-universe, conservation, cross-repeat canonical digest, or replay "
+            "predicate fails",
+            "b": "non-perturbation held but any of the seven sequences' packet, "
+            "exposure, overflow, native-universe, conservation, cross-repeat "
+            "canonical digest, or replay predicate fails",
+        },
         "closes this measurement; routes to a separate capture-ABI-delta charter",
         True,
     ),
     Terminal(
         4,
         "H2_MEASUREMENT_EXECUTION_INVALID",
-        "after the sealed launch: nonzero build, extension/plugin load failure, "
-        "runner nonzero, deadline exhausted, serialization failure, missing or "
-        "unreadable required artifact, or any unclassified execution failure",
+        {
+            phase: "after the sealed launch: nonzero build, extension/plugin load "
+            "failure, runner nonzero, deadline exhausted, serialization failure, "
+            "missing or unreadable required artifact, or any unclassified execution "
+            "failure"
+            for phase in PHASES
+        },
         "closes this measurement with no partial-capture reinterpretation; a fresh "
         "chain would be required",
         True,
@@ -90,9 +171,7 @@ TERMINALS: tuple[Terminal, ...] = (
     Terminal(
         5,
         "H2_FULL_COMMIT_CAPTURE_FAITHFUL",
-        "every preceding condition false, all three capture-on packets and all "
-        "verifications pass, and the frozen unlabelled seven-sequence Phase B is "
-        "complete",
+        {phase: _completion_condition(phase) for phase in PHASES},
         "adds a decision capability: a runtime-fidelity edge becomes available for "
         "owner acceptance, which is the precondition — not the activation — of "
         "H0_ROUTE5_B1 / GCTM_B1 / O1",
@@ -139,9 +218,78 @@ ORDERED_PREDICATES: tuple[tuple[str, str], ...] = (
 # Predicates whose *false* value selects the failure, vs whose *true* value does.
 _TRUE_IS_FAILURE = frozenset({"bound_input_mutated"})
 
+# The § C3.6 admission gate, in the clause's own order (a–e). These are NOT
+# predicates of the partition: they are evaluated *before* the § C3.5.1 step-5
+# write that consumes S_B, and their failure selects no terminal at all. Adding
+# them to ORDERED_PREDICATES would be the exact error the clause exists to
+# prevent — an inadmissible launch recorded as an epistemic result.
+ADMISSION_CONDITIONS: tuple[tuple[str, str], ...] = (
+    ("phase_a_evidence_root_verifies", "phase_a_evidence_root_unverified"),
+    ("phase_a_observation_selects_no_terminal", "phase_a_did_not_pass"),
+    ("axes_and_probe_equal_freeze", "freeze_mismatch"),
+    ("layer_p_certificate_matches_freeze", "certificate_mismatch"),
+    ("prior_attempts_complete_and_verified", "prior_attempts_unverified"),
+)
+
+# An admission failure is Layer-P class (§ 5.1): a coordinate to retry against,
+# not a result about the world.
+ADMISSION_FAILURE_CLASS = "layer_p"
+
+# Predicates § C3.6 moves out of Phase B's terminal 1 and into admission. Phase B
+# still emits all six (§ C3.4), and these two are then already decided: admission
+# passed only if both held. A post-launch move of either is a write to a bound
+# input, which `bound_input_mutated` reports. So a Phase-B observation that
+# reports one false while claiming admission passed is incoherent, and it fails
+# closed here rather than selecting terminal 1 under a condition Phase B's
+# terminal 1 no longer names.
+PHASE_B_ADMISSION_DECIDED: frozenset[str] = frozenset(
+    {"behavior_probe_equals_freeze", "layer_p_certificate_matches_freeze"}
+)
+
 
 class PartitionError(RuntimeError):
     pass
+
+
+class Admission(NamedTuple):
+    admitted: bool
+    reasons: tuple[str, ...]
+
+    # Structural, not a computed field: no admission outcome selects a terminal.
+    terminal: None = None
+
+    def describe(self) -> str:
+        if self.admitted:
+            return "admission passed → S_B may be consumed and the measurement launched"
+        return (
+            f"admission refused ({', '.join(self.reasons)}) → no terminal, "
+            f"no authorization spent, {ADMISSION_FAILURE_CLASS} class"
+        )
+
+
+def evaluate_admission(record: Mapping[str, Any], *, phase: str) -> Admission:
+    """Evaluate the § C3.6 gate. Total, fail-closed, and pre-terminal.
+
+    Phase-B only: § C3.6 narrows the Phase-B chain and explicitly does not align
+    Phase A, whose § 7 launch-time checks remain terminal 1 conditions. Asking
+    for a Phase-A admission verdict is a caller defect, not a pass.
+    """
+    if _checked_phase(phase) != "b":
+        raise PartitionError(
+            "the admission gate is defined for phase 'b' only; Phase A's "
+            "launch-time checks are terminal-1 conditions (§ 7)"
+        )
+    missing = [key for key, _ in ADMISSION_CONDITIONS if key not in record]
+    if missing:
+        raise PartitionError(f"admission record is missing conditions: {missing}")
+    reasons: list[str] = []
+    for key, reason in ADMISSION_CONDITIONS:
+        value = record[key]
+        if not isinstance(value, bool):
+            raise PartitionError(f"admission condition {key} is not a bool: {value!r}")
+        if not value:
+            reasons.append(reason)
+    return Admission(not reasons, tuple(reasons))
 
 
 class Selection(NamedTuple):
@@ -150,14 +298,18 @@ class Selection(NamedTuple):
     order: int | None
     transition: str | None
     phase_a_emittable: bool
+    phase: str = "a"
 
     def describe(self) -> str:
         if self.terminal is None:
             return (
-                f"result={self.result} → no H2 terminal (non-terminal progression); "
-                "terminal 5 requires the Phase-B artifact"
+                f"phase={self.phase} result={self.result} → no H2 terminal "
+                "(non-terminal progression); terminal 5 requires the Phase-B artifact"
             )
-        return f"result={self.result} → {self.terminal} (ordered #{self.order})"
+        return (
+            f"phase={self.phase} result={self.result} → {self.terminal} "
+            f"(ordered #{self.order})"
+        )
 
 
 def terminal_by_name(name: str) -> Terminal:
@@ -168,7 +320,11 @@ def terminal_by_name(name: str) -> Terminal:
 
 
 def select_terminal(
-    observation: Mapping[str, Any], *, phase_b_complete: bool = False
+    observation: Mapping[str, Any],
+    *,
+    phase: str,
+    phase_b_complete: bool = False,
+    admission: Admission | None = None,
 ) -> Selection:
     """Map one observation to exactly one terminal. Total and order-sensitive.
 
@@ -176,10 +332,50 @@ def select_terminal(
     is a defect in the caller, and guessing a default is how a fail-closed check
     becomes fail-open. An explicit `execution_result` may name a specific
     execution failure so terminal 4's cause is recorded rather than flattened.
+
+    `phase` is required and `phase_b_complete=True` is admissible only under
+    `phase="b"`; the inconsistent combination raises rather than defaulting.
+    Under `phase="b"` a passed `Admission` is required — this is where "an
+    admission failure yields no terminal" (§ C3.6) is executable rather than
+    prose, since a refused gate must never reach a selection at all.
     """
+    _checked_phase(phase)
+    if phase_b_complete and phase != "b":
+        raise PartitionError(
+            "phase_b_complete is admissible only under phase='b': a Phase-A chain "
+            "cannot hold the seven-sequence Phase-B artifact (§ 7, § C3.7)"
+        )
+    if phase == "b":
+        if admission is None:
+            raise PartitionError(
+                "phase='b' requires the § C3.6 admission verdict: no terminal may be "
+                "selected before the gate that precedes S_B consumption"
+            )
+        if not admission.admitted:
+            raise PartitionError(
+                "admission was refused "
+                f"({', '.join(admission.reasons)}): no terminal is selected, no "
+                f"authorization is spent, {ADMISSION_FAILURE_CLASS} class (§ C3.6)"
+            )
+    elif admission is not None:
+        raise PartitionError(
+            "phase='a' takes no admission verdict: the gate is Phase-B only (§ C3.6)"
+        )
+
     missing = [key for key, _ in ORDERED_PREDICATES if key not in observation]
     if missing:
         raise PartitionError(f"observation is missing predicates: {missing}")
+
+    if phase == "b":
+        decided = sorted(
+            key for key in PHASE_B_ADMISSION_DECIDED if observation[key] is False
+        )
+        if decided:
+            raise PartitionError(
+                f"phase='b' observation contradicts a passed admission gate: {decided} "
+                "were decided before S_B was consumed, and a later move of either is a "
+                "bound-input mutation (§ C3.6)"
+            )
 
     for key, result in ORDERED_PREDICATES:
         value = observation[key]
@@ -197,19 +393,23 @@ def select_terminal(
                     f"execution_result {named!r} does not map to terminal 4"
                 )
             result = named
-        return _selection(result)
+        return _selection(result, phase=phase)
 
     if not phase_b_complete:
-        return _selection("measurement_pass")
-    return _selection("measurement_pass", terminal_override=TERMINALS[4].name)
+        return _selection("measurement_pass", phase=phase)
+    return _selection(
+        "measurement_pass", phase=phase, terminal_override=TERMINALS[4].name
+    )
 
 
-def _selection(result: str, *, terminal_override: str | None = None) -> Selection:
+def _selection(
+    result: str, *, phase: str, terminal_override: str | None = None
+) -> Selection:
     if result not in RESULT_TO_TERMINAL:
         raise PartitionError(f"unmapped controller result: {result}")
     name = terminal_override or RESULT_TO_TERMINAL[result]
     if name is None:
-        return Selection(result, None, None, None, True)
+        return Selection(result, None, None, None, True, phase)
     terminal = terminal_by_name(name)
     return Selection(
         result,
@@ -217,6 +417,7 @@ def _selection(result: str, *, terminal_override: str | None = None) -> Selectio
         terminal.order,
         terminal.transition,
         terminal.phase_a_reachable,
+        phase,
     )
 
 
@@ -228,15 +429,40 @@ def as_payload() -> dict[str, Any]:
             "membership is not computed, so no observation can select it. Witness "
             "fields carry no decision authority."
         ),
+        "admission_conditions": [list(item) for item in ADMISSION_CONDITIONS],
+        "admission_failure_class": ADMISSION_FAILURE_CLASS,
         "ordered_predicates": [list(item) for item in ORDERED_PREDICATES],
+        "phase_completion": PHASE_COMPLETION,
+        "phases": list(PHASES),
         "result_to_terminal": RESULT_TO_TERMINAL,
         "terminals": [terminal._asdict() for terminal in TERMINALS],
     }
 
 
+def _explain(phases: tuple[str, ...]) -> None:
+    for phase in phases:
+        counts = PHASE_COMPLETION[phase]
+        print(f"phase {phase}: {counts}")
+        for terminal in TERMINALS:
+            reach = "both phases" if terminal.phase_a_reachable else "phase B only"
+            print(f"  {terminal.order}. {terminal.name}  [{reach}]")
+            print(f"       when: {terminal.condition_for(phase)}")
+            print(f"       then: {terminal.transition}")
+        if phase == "b":
+            print("  admission (pre-terminal, before S_B is consumed):")
+            for key, reason in ADMISSION_CONDITIONS:
+                print(f"       {key} — false selects no terminal, reason {reason}")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--explain", action="store_true", help="print the partition")
+    parser.add_argument(
+        "--phase",
+        choices=PHASES,
+        default=None,
+        help="the chain being decided; required for --select and --admit",
+    )
     parser.add_argument(
         "--select",
         type=Path,
@@ -244,27 +470,46 @@ def main(argv: list[str] | None = None) -> int:
         help="select a terminal from a JSON observation",
     )
     parser.add_argument(
+        "--admit",
+        type=Path,
+        default=None,
+        help="evaluate the § C3.6 admission gate from a JSON record (phase b)",
+    )
+    parser.add_argument(
         "--phase-b-complete",
         action="store_true",
-        help="the frozen seven-sequence Phase-B artifact exists",
+        help="the frozen seven-sequence Phase-B artifact exists (phase b only)",
     )
     args = parser.parse_args(argv)
 
-    if args.explain:
-        for terminal in TERMINALS:
-            reach = "A" if terminal.phase_a_reachable else "B only"
-            print(f"{terminal.order}. {terminal.name}  [{reach}]")
-            print(f"     when: {terminal.condition}")
-            print(f"     then: {terminal.transition}")
+    if args.explain and args.select is None and args.admit is None:
+        _explain((args.phase,) if args.phase else PHASES)
         return 0
 
-    if args.select is None:
-        parser.error("one of --explain or --select is required")
+    if args.select is None and args.admit is None:
+        parser.error("one of --explain, --select or --admit is required")
+    if args.phase is None:
+        parser.error("--phase is required with --select or --admit")
 
+    admission: Admission | None = None
     try:
+        if args.admit is not None:
+            record = json.loads(args.admit.read_text(encoding="utf-8"))
+            admission = evaluate_admission(record, phase=args.phase)
+            print(admission.describe())
+            if not admission.admitted:
+                # Refused: Layer-P class, no terminal, no authorization spent.
+                return 1
+        if args.select is None:
+            return 0
         observation = json.loads(args.select.read_text(encoding="utf-8"))
-        selection = select_terminal(observation, phase_b_complete=args.phase_b_complete)
-    except (PartitionError, json.JSONDecodeError) as exc:
+        selection = select_terminal(
+            observation,
+            phase=args.phase,
+            phase_b_complete=args.phase_b_complete,
+            admission=admission,
+        )
+    except (PartitionError, json.JSONDecodeError, OSError) as exc:
         print(f"terminal selection failed: {exc}", file=sys.stderr)
         return 1
     print(selection.describe())
