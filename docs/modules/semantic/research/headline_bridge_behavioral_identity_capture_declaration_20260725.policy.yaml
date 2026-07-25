@@ -17,8 +17,8 @@ document:
   path: headline_bridge_behavioral_identity_capture_declaration_20260725.md
 
 sealed_prefix:
-  bytes: 44249
-  sha256: "14a8ef7b694fc07328ab6e6d49b032ac0e6bd3570623b688dbfc0bc8026c3199"
+  bytes: 70274
+  sha256: "c26ef917d9e811646a27dfcffa37231fab92725a3b4e32944b23b601b28b775f"
   # Re-pin log (each entry was a deliberate pre-seal edit, not a slip):
   #   Review reset — coordinate / bounded probe / equivalence split; content-bound
   #                  fixtures/assets/build products; v2 Layer-P certificate.
@@ -39,6 +39,37 @@ sealed_prefix:
   #             precondition 6 (the Phase-B chain), §8.4's single write condition.
   #             Re-pinned to the entire post-correction body, which also brings
   #             Review Correction 1 back inside the pin.
+  #   Review Correction 3 — the Phase-B chain form that precondition 6 requires
+  #             (issue #290 accepted 2026-07-25 with three narrowings, issue kept
+  #             open as the standing surface): I_B = (I40_B, F_B) with a full-F64
+  #             evidence-root key, the F_B freeze list, S_B, the result mapping,
+  #             the measurement-surface re-attempt rule, the pre-terminal
+  #             admission gate, and the pre-seal edit list. Re-pinned to the
+  #             entire post-correction body. Note C3.9: from the Phase-A seal to
+  #             the Phase-B seal this file may not be edited at all — a re-pin is
+  #             an identity_semantics move, which is fatal to a sealed Phase A.
+  #   Review Correction 3, revised under review (PR #291, before merge). Two
+  #             defects, both in the identity boundary rather than in any test:
+  #             (P0) C3.5's measurement surface omitted the executed extension /
+  #             TensorRT-plugin bytes — the published axis is the manifest's
+  #             coordinate_digest, which excludes build_artifacts, and the only
+  #             other binding was the Layer-P certificate, which C3.5 excludes as
+  #             attempt-local — so it now names full_digest, and C3.8's axis
+  #             membership is corrected to match §4 and h2_runtime_inputs.py;
+  #             (P1) C3.5.1 added — prior_attempts binds consumed-attempt records
+  #             with three verify classes, so a terminal-4 failure before the
+  #             archive exists cannot strand a spent authorization. Revised in
+  #             place because Correction 3 has not merged; re-pinned to the
+  #             entire revised body.
+  #   Review Correction 3, second review round (PR #291, before merge). The P1
+  #             repair had left S_B with two consumption points — C3.3 said
+  #             process launch, C3.5.1 said the record written before it — so a
+  #             crash between them made the authority state a matter of which
+  #             clause an implementer read. Collapsed to one: the durable
+  #             write-and-flush of `authorization_consumed` IS the consumption,
+  #             the launch follows it, and the one-authorization cost of a crash
+  #             in that window is stated as a deliberate loss rather than a
+  #             bookkeeping artifact. Re-pinned to the entire revised body.
 
 policy_target:
   kind: headline

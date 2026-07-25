@@ -6,7 +6,7 @@ doc-module: semantic
 owner-module: semantic
 work-class: mainline-study
 wip-role: non-wip
-activation-gate: "四項 owner decision 已於 2026-07-25 accepted（#286）；剩餘 gate = Phase-B chain form 先成文 + S4 Layer-M plumbing 實作 + 一份 Layer-P pass certificate，然後才談 seal"
+activation-gate: "四項 owner decision 已於 2026-07-25 accepted（#286）；Phase-B chain form 已於 2026-07-25 accepted（#290）並成文為 declaration Review Correction 3；剩餘 gate = C3.9 pre-seal ruler 編輯（七序列 manifest + phase_a_evidence schema + phase-aware partition）+ S4 Layer-M plumbing 實作 + 一份 Layer-P pass certificate，然後才談 seal"
 target-decision-layer: none
 primary-intent: boundary-diagnostic
 output-class: "diagnostic result | substrate-fidelity edge proposal"
@@ -126,8 +126,8 @@ staging order are projected below.
 
 ### Decision 1's precondition — the Phase-A success path
 
-*Projection of Correction 2's §5.2 precondition 6. Reasoning and normative text
-live there.*
+*Projection of Correction 2's §5.2 precondition 6 and of **Correction 3**, which
+satisfies it. Reasoning and normative text live there.*
 
 A fully successful Phase A selects no terminal — `h2_terminal_partition.py` maps
 `measurement_pass` to no terminal, and terminal 5 additionally requires the
@@ -136,12 +136,30 @@ from starting. Without a Phase-B chain, the best available outcome of the one
 authorized invocation is a spent authorization, an unclosed unit, and no mainline
 transition (§20.7).
 
-So the staging order gains a gate: **the Phase-B chain — its own `I → F → S`, its
+So the staging order gained a gate: **the Phase-B chain — its own `I → F → S`, its
 authorization form, and its precondition on a passing Phase A — must be published
 before the Phase-A seal.** Seal scope is unchanged; the success path simply has
-to exist before an authorization can be spent reaching it. Correction 2 states
-the requirement; the chain itself is still unwritten, and that is remaining work,
-not something already delivered.
+to exist before an authorization can be spent reaching it.
+
+**Status: published.** The chain form was accepted on
+[#290](https://github.com/raylei50653/saccade/issues/290) (2026-07-25, with three
+narrowings; the issue stays open as the standing surface) and is written as
+declaration **Review Correction 3** — `I_B = (I40_B, F_B)`, the `F_B` freeze list,
+`S_B`, the result mapping, the measurement-surface re-attempt rule, the
+pre-terminal admission gate, and the C3.9 pre-seal edit list. What precondition 6
+asks for now exists; what remains is the ruler work C3.9 schedules, below.
+
+Two consequences a reader of this charter must not get wrong:
+
+- **terminal 2 is reachable in Phase B.** All seven sequences run
+  `00_capture_off` and the A7.6 comparison is live on each, because H0's
+  terminal-5 semantics require the non-perturbation bars to pass for every
+  sequence (C3.4);
+- **`identity_semantics` is frozen from the Phase-A seal to the Phase-B seal**
+  (C3.1(b) requires coordinate equality across both phases), so every ruler edit —
+  including any further re-pin of the declaration's `.policy.yaml` — must land
+  before Phase A seals. Editing the ruler after that seal invalidates the Phase-A
+  result the chain is built to consume (C3.9).
 
 ## Registry field `captured_under`
 
@@ -203,9 +221,11 @@ certificate, **or** the scope is disconfirmed and the charter is re-planned.
 
 ## Discard when
 
-- the Phase-B chain form cannot be declared on terms the owner accepts (decision
-  1's precondition fails) — then the Phase-A seal has no reachable success path
-  and the unit is re-planned or parked before any authorization is spent; or
+- ~~the Phase-B chain form cannot be declared on terms the owner accepts~~ —
+  **resolved 2026-07-25**: accepted on #290 and published as Correction 3. The
+  live successor condition is that the C3.9 pre-seal ruler edits cannot be
+  completed before the Phase-A seal — the chain then has no admissible Phase-B
+  step, and the unit is re-planned or parked before any authorization is spent; or
 - a G1 probe inequality appears across builds of identical decision-relevant
   source — the design premise is falsified and the coordinate/probe split needs
   rework before anything downstream; or
@@ -216,9 +236,12 @@ certificate, **or** the scope is disconfirmed and the charter is re-planned.
 
 1. [H2 declaration](../../modules/semantic/research/headline_bridge_behavioral_identity_capture_declaration_20260725.md)
    — §0.1 supersession boundary, §4 coordinate/probe/equivalence, §5 two-layer
-   budget, §7 partition, Review Correction 1, and **Review Correction 2**, which
-   closes §9. Read Correction 2 before §9: §9 is retained as the historical
-   statement of the question and is no longer an open-decision authority.
+   budget, §7 partition, Review Correction 1, **Review Correction 2**, which
+   closes §9, and **Review Correction 3**, the Phase-B chain. Read Correction 2
+   before §9: §9 is retained as the historical statement of the question and is no
+   longer an open-decision authority. Read Correction 3 before §7: §7 alone does
+   not describe how Phase B is entered, what a Phase-B terminal closes, or which
+   pre-launch failures cost no authorization.
 2. [H0 declaration](../../modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md)
    — A7.6 non-perturbation inventory and the packet verifier, consumed verbatim.
 3. [R5 parity audit](../../modules/semantic/research/evidence/h0_r5_qualification_authoritative_parity_audit_20260725/)
@@ -242,7 +265,23 @@ certificate, **or** the scope is disconfirmed and the charter is re-planned.
 
 ## Current step
 
-**Scope the Layer-M controller. Do not implement it yet, and do not seal.**
+**Land the C3.9 pre-seal ruler edits, then scope the Layer-M controller. Do not
+seal.**
+
+Correction 3 puts an ordering constraint on everything below: `identity_semantics`
+must be frozen from the Phase-A seal to the Phase-B seal, so the ruler work comes
+first and the controller work may follow (it is `plumbing_only` and moves no
+axis). The ruler work is `h2_runtime_inputs.py` — seven sequences, plus the
+`phase_a_evidence` schema/producer that C3.8 requires to move no published axis —
+and `h2_terminal_partition.py` — phase-scoped terminal-1 metadata, phase-aware
+terminal-5 metadata (Phase A: 1 sequence / 3 capture-on packets; Phase B: 7 / 21
+plus 7 capture-off runs), the `phase` argument, and updated tests. Both edits
+republish the coordinate and need a green controlled-host re-attestation.
+
+C3.9's trap applies to that work directly: a *new* `scripts/tools/h2_*.py` file
+classifies as `plumbing_only`, so admission or phase logic placed outside
+`h2_terminal_partition.py` must be added to `IDENTITY_SEMANTICS_PATHS` in the same
+change, or the ruler moves inside the frozen window with nothing to catch it.
 
 The reuse pattern is already established and should not be re-litigated:
 `run_h2_layer_p.py:351` imports `run_h0_phase_a` as a library and uses exactly
@@ -318,16 +357,27 @@ declaration consequence, not a shortcut):
 
 A Layer-M seal may be proposed only when **all** of these hold:
 
-1. the Phase-B chain form is **published** — declaration §5.2 precondition 6,
-   added by Review Correction 2. The correction states the requirement; the
-   chain itself (its `I → F → S` and authorization form) is still unwritten;
-2. the S4 items above are implemented, tested, and reviewed;
-3. a Layer-P pass certificate (`h2_layer_p_certificate_v2`) exists for the exact
+1. ✅ the Phase-B chain form is **published** — declaration §5.2 precondition 6
+   (Correction 2) is satisfied by **Review Correction 3**, accepted on
+   [#290](https://github.com/raylei50653/saccade/issues/290) on 2026-07-25;
+2. the **C3.9 pre-seal ruler edits** are landed, republished, and re-attested
+   green on the controlled host — `h2_runtime_inputs.py` (seven sequences plus the
+   `phase_a_evidence` schema/producer, which by C3.8 must move no published axis)
+   and `h2_terminal_partition.py` (phase-scoped terminal-1 metadata, phase-aware
+   terminal-5 metadata, the `phase` argument, updated tests). These are ruler
+   files: after the Phase-A seal they cannot be touched at all;
+3. the S4 items above are implemented, tested, and reviewed;
+4. a Layer-P pass certificate (`h2_layer_p_certificate_v2`) exists for the exact
    head under seal, with `--base` given and the full changed-path verdict clean;
-4. the published coordinate is current and the controlled-host workflow is green
+5. the published coordinate is current and the controlled-host workflow is green
    at that head;
-5. the owner issues a separate exactly-once authorization — this charter is not
+6. the owner issues a separate exactly-once authorization — this charter is not
    one and cannot become one.
+
+A Phase-B seal has its own gates, and they are Correction 3's, not this list's:
+`I_B`, `F_B` and `S_B` per C3.1–C3.3, the C3.6 admission gate passing before
+`S_B` is consumed, and the C3.5 re-attempt rule if a prior Phase-B terminal
+exists.
 
 Terminal acceptance, when a terminal is eventually selected, is recorded by the
 [claim-state registry](../contracts/claim_state_registry.md), not here.
@@ -387,6 +437,52 @@ Additionally, and specific to the accepted decisions:
   `captured_under` carried three conflicting write rules; and the decision
   status had two live answers because the declaration still presented §9 as
   open.
+- **2026-07-25** — the Phase-B chain form was proposed on
+  [#290](https://github.com/raylei50653/saccade/issues/290), returned
+  *changes required*, revised, and **accepted** with three narrowings: the
+  evidence-root key uses the complete `F64` digest rather than a truncation;
+  admission is an independent pre-terminal gate, so a failure spends no `S_B` and
+  selects no terminal, and Phase-B terminal 1 means bound-input mutation only;
+  and `phase_a_evidence` binds in `F_B` and the monitor watch set but never in the
+  published `runtime_inputs` axis, since only its schema and producer can be
+  frozen before Phase A has run. The review also corrected two errors of mine:
+  keying the terminal-2/3 retry ban to the *coordinate* would have forbidden the
+  capture-ABI-delta route terminal 3 exists to select (the key is the sealed `F_B`
+  measurement surface, which `plumbing_only` code can move without moving an
+  axis), and "the partition file needs no change" was false — terminal 5's
+  mechanical condition still said *three* capture-on packets against Phase B's 21.
+  Landed as declaration **Review Correction 3**, `sealed_prefix` re-pinned to
+  61 605 bytes, runtime identity republished. The issue stays open as the standing
+  surface for this chain.
+- **2026-07-25** — PR #291 review returned *changes required* on the identity
+  boundary, and Correction 3 was revised in place before merge. **P0:** C3.5's
+  measurement surface named neither the executed extension nor the TensorRT
+  plugin. The published `runtime_inputs` axis is the manifest's
+  `coordinate_digest`, which excludes `build_artifacts` by design so one
+  coordinate can span builds, and the only other binding — the Layer-P
+  certificate's `runtime_input_full_digest` — was excluded from the surface as
+  attempt-local. Terminals 2 and 3 were therefore declared permanent properties of
+  a digest that could not see the binary that produced them, while §4.2 already
+  says different native bytes can hold the bounded probe equal. The surface now
+  names `full_digest`, and C3.8's axis membership — which had listed build
+  artifacts as published — is corrected to match §4 and the implementation.
+  **P1:** terminal 4 covers failures that can occur before an archive exists, so
+  `prior_attempts` could be unformable after `S_B` was spent. New **C3.5.1** binds
+  consumed-attempt records with a normative write-before-consume ordering and
+  three verify classes (`complete` / `envelope` / `unterminated`), and closes the
+  kill-switch: an unterminated attempt whose surviving artifacts already show
+  perturbation or an invalid packet inherits the terminal-2/3 ban. Neither fix
+  adds a pre-seal ruler edit. Re-pinned to 69 228 bytes, republished.
+- **2026-07-25** — the same review's second round accepted both repairs and found
+  one defect they had introduced: `S_B` had **two consumption points**. C3.3 said
+  process launch; C3.5.1's ordering wrote the `authorization_consumed` record
+  before it. The fail-closed direction was right but the authority state was not
+  single-valued — a crash in that window was spent, unspent, or governed-as-spent
+  depending on which clause an implementer read. Collapsed to one durable
+  linearization point: the write-and-flush **is** the consumption, the launch
+  follows it, and the one-authorization cost of a crash in that window is recorded
+  as a deliberate loss rather than described away as a record of nothing. Re-pinned
+  to 70 274 bytes, republished.
 - **2026-07-25** — a second review round closed two governance defects. The
   decision resolution had **two fact-owners** — this charter claimed to own the
   decision list while Correction 2 claimed to be §9's single resolution pointer,

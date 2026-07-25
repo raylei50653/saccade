@@ -811,3 +811,477 @@ pinned prefix; does not change the capture ABI, A7.6, the packet verifier, or an
 preset; and does not unblock `H0_ROUTE5_B1`, `GCTM_B1`, or O1. H0's closed
 history, its five spent `S` chains, and the permanent ledger entry on
 `quantity.bridge_capture_provenance` remain unchanged.
+
+---
+
+## Review Correction 3 — the Phase-B chain form (2026-07-25, pre-seal)
+
+This correction records an owner decision and publishes the chain that §5.2
+precondition 6 requires. It changes no authority state, grants no execution,
+selects no `I`, creates no `F`/`S`, issues no exactly-once authorization, runs no
+sequence, and writes no registry or sidecar state. Precondition 6 asks that the
+success path **exist on paper before an authorization can be spent reaching it**;
+this correction is that paper and nothing more.
+
+Decision surface: [#290](https://github.com/raylei50653/saccade/issues/290),
+accepted 2026-07-25 with three normative narrowings, which are incorporated
+below rather than recorded as deltas. The issue remains open as the standing
+surface for this chain. Its Revision 1 supersedes the original §1, §3, §4 and
+Consequence D of that issue; where the issue and this correction differ, this
+correction governs — an owner decision surface is not a declaration.
+
+### C3.1 `I_B` — the Phase-B instance
+
+```text
+I_B := (I40_B, F_B)
+```
+
+`I_B` is a new instance, never a continuation or resumption of `I_A`. `I40_B` is
+the exact 40-lowercase-hex head under Phase-B seal; `I40_B ≠ I40_A` is permitted
+and `I40_B = I40_A` is permitted, because the head alone does not identify the
+instance.
+
+A Phase-A result is admissible into `I_B` only if:
+
+```text
+(a) a Phase-A evidence root exists whose recorded observation selects no
+    terminal (result = measurement_pass under h2_terminal_partition.py), and
+    whose manifest and checksum inventory verify; and
+(b) all five coordinate axes and the bounded probe recorded in F_A are
+    byte-equal to the publication resolved at F_B construction:
+      decision_surface · implementation · environment
+      identity_semantics · runtime_inputs · probe
+```
+
+Head inequality is permitted precisely because a head may differ only through
+paths that move no axis — which is what allows the Phase-B controller, child,
+verifier, archive checker and observation emitter to be written *after* the
+Phase-A seal (`h2_path_partition.py` classifies `scripts/tools/run_h2_*`,
+`verify_h2_*` and `check_h2_*` as `plumbing_only`).
+
+If (b) fails, §8.3.1's consumption rule applies unchanged and without exception:
+`decision_surface` / `identity_semantics` / probe drift is `stale`;
+`implementation` / `environment` / `runtime_inputs` drift is
+`re_attestation_required`. Both make the Phase-A evidence inadmissible. There is
+no tolerance, no carve-out, and no inert-member exemption; inventing one would be
+the equivalence upgrade §8.4 forbids in v1.
+
+**Evidence root.**
+
+```text
+h2_measure_b_<I40_B>_<F64>
+    F64 = the complete 64-lowercase-hex canonical digest of the F_B freeze record
+```
+
+The full digest is used, never a truncation: an evidence root is an identity, and
+a shortened digest trades a collision probability for a cosmetic path length.
+Uniqueness is mechanical rather than conventional — every successor `F_B` must
+bind `prior_attempts`, the complete ordered list of preceding **consumed-attempt
+records** for this Phase-A result (C3.5.1), each of which must exist and verify
+in its own class — so two attempts cannot share an `F_B` digest even at a
+byte-identical head. `check_h2_measure_archives.py` recomputes the digest from
+the recorded freeze record, rejects any root whose name does not match it, and
+rejects an incomplete `prior_attempts` list or one naming a root that does not
+exist or does not verify. The accepted `h2_measure_` family (§9 item 3) is preserved,
+`capture_phase` is a required manifest field, and
+`check_h0_phase_a_archives.py` remains untouched.
+
+### C3.2 `F_B` — the freeze
+
+`F_B` binds, and a Phase-B launch is admissible only against it:
+
+1. **the Phase-A result** — evidence root path, manifest digest, checksum
+   inventory digest, the recorded six-predicate observation, and its
+   `measurement_pass` selection;
+2. **the coordinate** — the five axes and the bounded probe, each recorded *and*
+   asserted equal to `F_A`'s value; this equality is a bound predicate, never a
+   witness field (§4.1);
+3. **a Layer-P v2 pass certificate** (`h2_layer_p_certificate_v2`) for the exact
+   Phase-B head, `--base` given, full changed-path verdict clean;
+4. **runtime inputs** — the complete runtime-input manifest of all seven
+   sequences, both fixture roles, every configured weight/checkpoint/engine,
+   extension, TensorRT plugin, sequence metadata, and executed third-party
+   evaluator code. `F_B` binds the manifest's **`full_digest`**, never its
+   `coordinate_digest`: the coordinate deliberately excludes `build_artifacts`
+   (`h2_runtime_inputs.py`) so that one coordinate can span builds, and it is
+   `F`/certificate scope — §4.1 — that pins which physical bytes a measurement
+   was authorized to consume;
+5. **the consumed-unchanged surface** — the capture ABI digest
+   (`h0_bridge_decision_trace_schema_v2.json`), the packet verifier, and the A7.6
+   seven-member inventory (§6: H2 introduces no comparison vocabulary of its own);
+6. **the executed code** — Phase-B controller, child/recorder, verifier, archive
+   checker, and observation emitter digests;
+7. **`phase_a_evidence`** — the complete manifest of the bound Phase-A evidence
+   root, and its membership in the `BoundInputMonitor` watch set (C3.6);
+8. **`prior_attempts`** — complete and ordered, per C3.1 and C3.5.1;
+9. **the exposure declaration**, in H0's own frozen vocabulary:
+
+   ```text
+   capture_phase              = phase_b
+   require_candidate_exposure = true
+   require_commit_exposure    = true
+   ```
+
+   Per sequence: nonzero candidate exposure required. Over the seven-sequence
+   union: nonzero commit exposure required. Per-sequence commit exposure is
+   recorded and may be zero — A3.1's bar is that a Phase-B artifact with no actual
+   commit path cannot support terminal 5, not that every sequence must commit;
+10. **the run plan** — the seven sequences in lexicographic order
+
+    ```text
+    MOT17-02-SDP  MOT17-04-SDP  MOT17-05-SDP  MOT17-09-SDP
+    MOT17-10-SDP  MOT17-11-SDP  MOT17-13-SDP
+    ```
+
+    each executed as the §3.3 four-run block `00_capture_off`,
+    `01/02/03_capture_on`, in that order, under the unmodified A5 policy target
+    with `SACCADE_GPU_DECODE=1`, unlabelled, with no threshold sweep and no GT/FP
+    read. 28 runs, one invocation, retry count zero for every step.
+
+    Phase A's own runs are **not** reused for MOT17-04-SDP: reuse across chains is
+    a resume, which §5.2 forbids.
+
+**MOT17-09-SDP has two distinct roles and they may not be conflated.** The
+bounded probe runs it in identity mode (`gpu_decode = 0`, single-threaded relink,
+§3.2). Phase B also runs it as one of the seven measurement sequences under §3.3.
+Neither run may be substituted for the other.
+
+### C3.3 `S_B` — the authorization
+
+A new owner exactly-once authorization, in the identical form as `S_A`,
+introducing no new authorization vocabulary. `S_A` is spent at Phase-A launch and
+its scope was Phase-A-only; it cannot be extended, re-read, or re-used. Retry,
+resume, and repaired re-run under `S_B` are permanently forbidden, exactly as
+§5.2 forbids them under `S_A`.
+
+**`S_B` has exactly one consumption event, and it is not process launch.** `S_B`
+is consumed by the durable write-and-flush of the `authorization_consumed` record
+(C3.5.1 step 5), which happens after the C3.6 admission gate has passed and
+before the measurement launches. That write *is* the consumption — not a note
+about a consumption that occurs elsewhere — so the authority state has a single
+definition and a single durable linearization point, and no observer can find the
+authorization spent-but-unrecorded or recorded-but-unspent.
+
+The Phase-B controller contains no downstream dispatch, import, subprocess, queue
+submission, or continuation flag. It exits after Phase B. Owner acceptance is a
+separate act with its own record.
+
+### C3.4 Result mapping
+
+Phase B emits the same six `ORDERED_PREDICATES` the partition already defines.
+Each predicate's Phase-B value is the **disjunction of failure over the seven
+sequences**, so the selected terminal never depends on execution order;
+`select_terminal` is then applied unchanged, first-applicable, under
+`phase="b"` with `phase_b_complete=True`.
+
+| Phase-B observation | Terminal |
+| --- | --- |
+| a bound input — the Phase-A evidence root included — was written during the invocation | 1 `H2_INPUT_MUTATED_DURING_MEASUREMENT` |
+| any sequence's A7.6 capture-off/on equality differs | 2 `H2_CAPTURE_PERTURBS_POLICY` |
+| any sequence's packet, exposure, overflow, native-universe, conservation, cross-repeat canonical digest, or replay predicate fails | 3 `H2_PACKET_INVALID` |
+| post-launch build / load / runner-nonzero / deadline / serialization / missing-artifact / unclassified failure | 4 `H2_MEASUREMENT_EXECUTION_INVALID` |
+| every preceding false, all seven sequences complete, all 21 capture-on packets and all verifications pass | 5 `H2_FULL_COMMIT_CAPTURE_FAITHFUL` |
+
+**Terminal 2 is reachable in Phase B, and this is load-bearing.** Every Phase-B
+sequence runs `00_capture_off` and the A7.6 comparison is live on all seven: H0's
+terminal-5 semantics, consumed unchanged, require the non-perturbation bars to
+pass *for every sequence*. A perturbation first observable on MOT17-02 must be
+able to select terminal 2; the alternative is a terminal 5 asserting
+seven-sequence faithfulness on one sequence's non-perturbation evidence.
+
+### C3.5 Re-attempt after a Phase-B terminal
+
+```text
+terminal 1 or 4
+  → attempt-local. A fresh chain at the same published coordinate is
+    admissible, with the prior evidence root bound into the successor F_B.
+
+terminal 2 or 3
+  → a property of the sealed F_B measurement surface — not of the attempt, and
+    not of the coordinate alone. Retry against the same measurement surface is
+    forbidden. A separately accepted successor (the capture-ABI-delta charter
+    that terminal 3's §7 transition selects, or an owner decision on terminal
+    2's route closure) becomes admissible only once it changes the bound
+    measurement surface.
+```
+
+The **measurement surface** is a bound field of `F_B`:
+
+```text
+measurement_surface_digest = canonical digest of
+  the five coordinate axes and the bounded probe
+  the runtime-input manifest's full_digest — which is coordinate_digest
+    together with build_artifacts.digest, hence the exact extension and
+    TensorRT-plugin bytes (C3.2 item 4)
+  capture ABI · packet verifier · A7.6 inventory
+  controller · child/recorder · verifier · archive checker · observation emitter
+  the run plan (C3.2 item 10) and the exposure declaration (item 9)
+```
+
+Deliberately excluded as attempt-local, which is what makes a terminal-1/4
+re-attempt expressible at all: the Layer-P certificate, the bound Phase-A
+evidence root, `phase_a_evidence`, `prior_attempts`, and `I40_B`.
+
+The key is the surface rather than the coordinate because the controller, child,
+verifier and archive checker are `plumbing_only` — correctly, since they move no
+coordinate axis — yet they determine terminal 3. Keying the ban to the coordinate
+would forbid the very ABI-delta route terminal 3 is defined to select.
+
+**Why `full_digest` is named explicitly, and why the certificate's copy of it is
+not enough.** The published `runtime_inputs` axis is the manifest's
+`coordinate_digest`, and that digest excludes `build_artifacts` by construction —
+`tests/contract/test_h2_runtime_inputs.py` pins exactly this: changing a build
+artifact moves `full_digest` and leaves the coordinate still. The physical bytes
+are otherwise bound only inside the Layer-P v2 certificate
+(`run_h2_layer_p.py`'s `runtime_input_full_digest`), and the certificate is
+excluded here as attempt-local. Without this line the surface would therefore
+admit *different extension and plugin bytes under one identical
+`measurement_surface_digest`* — while §4.2's own threat model says different
+native bytes can hold the bounded probe equal. Terminals 2 and 3 are functions of
+what actually executed; a permanence claim keyed on a digest that does not see
+the executed binary would be a claim about the wrong object. So the surface
+re-admits the one certificate field that names the executed bytes, and nothing
+else from the certificate: not the head, not the changed-path verdict, not the
+attempt's own pass record.
+
+This does **not** move build artifacts into the published axis. The layering of
+§4.1 is preserved exactly: the coordinate spans builds; `F`/certificate scope
+pins the bytes; the measurement surface, being an `F_B` field, sits on the
+`F` side of that line.
+
+Two guards, so this is not a licence to iterate:
+
+- a change to the measurement surface must be a **named, demonstrated defect
+  repair** in H0 §6's own repair vocabulary — compilation, capacity sizing,
+  serialization, or implementation bugs — with the prior terminal's evidence root
+  and the named defect bound into the successor `F_B`;
+- §8.1's no-refit rule applies verbatim: no bar, tolerance, proxy, threshold,
+  estimator, or classifier may be adjusted to close a gap. A surface change that
+  relaxes a comparison is not a repair, and a terminal 2 or 3 "fixed" by
+  weakening what it checks is exactly the laundering this clause exists to
+  prevent.
+
+**A changed surface is necessary, never sufficient.** Because `full_digest` now
+enters the surface, a bit-different rebuild of unchanged sources moves
+`measurement_surface_digest` on its own. That does not make a successor
+admissible: the two guards above are the operative bar, and a rebuild carrying no
+named, demonstrated defect repair is not a repair. Re-running a terminal 2 or 3
+against recompiled bytes in the hope of a different answer is a retry wearing a
+new digest, and it is forbidden by the first guard, not permitted by the digest.
+
+### C3.5.1 The consumed-attempt record — what `prior_attempts` binds
+
+C3.1 requires every root named in `prior_attempts` to exist and verify, and C3.5
+allows a terminal-4 re-attempt. Terminal 4 covers serialization failure, missing
+or unreadable artifacts, and unclassified execution failure — so without this
+clause an attempt could spend `S_B` and then fail *before* an archive existed,
+leaving a re-attempt permanently unformable: authorization spent, no verifiable
+predecessor to bind, no successor `F_B` possible. `prior_attempts` therefore binds
+**consumed-attempt records**, not completed measurement archives.
+
+```text
+ordering, normative
+
+  1. F_B is constructed and its F64 digest computed          (S_B unspent)
+  2. the evidence root h2_measure_b_<I40_B>_<F64> is created and the freeze
+     record written to it                                    (S_B unspent)
+  3. the C3.6 admission gate is evaluated and its verdict written
+  4. admission failed → the root is marked `inadmissible`, is NOT a
+     consumed attempt, and is not bound by any successor's prior_attempts
+     (Layer-P class, §5.1: a coordinate to retry against)
+  5. admission passed → the controller writes and flushes the
+     `authorization_consumed` record. THAT WRITE CONSUMES S_B (C3.3).
+  6. the measurement launches
+  7. every exit path — terminal, caught failure, or crash — leaves the root in
+     exactly one of the three verify classes below
+```
+
+Step 5 is the consumption event itself, deliberately placed before the launch it
+authorizes. A process that dies between step 5 and step 6 has therefore spent
+`S_B` and produced an `unterminated` attempt; there is nothing to reconcile,
+because no other event ever claimed to be the consumption. The alternative
+ordering — consume at launch, record afterwards — makes the durable record lag
+the act it records, which is exactly how a spent authorization goes missing.
+
+This costs an attempt in one case, and the cost is accepted deliberately: a
+crash after the flush and before the launch spends `S_B` on a measurement that
+never ran. That is a real loss of one authorization, not a bookkeeping artifact,
+and it is preferred to the alternative in which the same crash leaves the
+authority state undecidable.
+
+**The three verify classes.** `check_h2_measure_archives.py` classifies every
+root in `prior_attempts` as exactly one, and "verifies" means the class's own
+integrity condition — a terminal-4 attempt is never required to produce artifacts
+its failure is defined by the absence of:
+
+```text
+complete    a full measurement archive: manifest, checksum inventory, packets,
+            recorded observation and selected terminal. Verified in full.
+
+envelope    a caught failure: freeze record, authorization_consumed record,
+            the failure classification, and whatever artifacts survived, with a
+            checksum inventory over exactly those. Verified as an envelope —
+            completeness of the envelope, not of the measurement.
+
+unterminated
+            authorization_consumed present, no terminal recorded: the process
+            did not reach an exit path it could write. It selects no terminal —
+            no observation exists — the authorization is permanently spent, and
+            for re-attempt admissibility it is treated as terminal 4.
+```
+
+**The kill-switch is closed.** An `unterminated` attempt is re-attemptable only
+if the verifier, run over every artifact that did survive, finds no completed
+sequence exhibiting a capture-off/on inequality or an invalid packet. If the
+surviving evidence already shows one, the C3.5 ban on terminals 2 and 3 applies
+to that surface, whether or not the attempt lived long enough to record it.
+Otherwise, terminating a run at the first sign of perturbation would be a way to
+convert a forbidden terminal into a re-attemptable one, which is the same
+laundering §8.1 forbids in the refit direction.
+
+The controller, the failure envelope writer and the archive checker are all
+`plumbing_only` (C3.9), so this clause adds no pre-seal ruler edit; it is a
+contract those Layer-M components must satisfy, and `check_h2_measure_archives.py`
+is where it is mechanically enforced.
+
+### C3.6 The admission gate is pre-terminal
+
+Admission is an **independent gate evaluated before `S_B` is consumed**. Its
+failure is an inadmissible launch: no terminal is selected, no authorization is
+spent, and the outcome is Layer-P class (§5.1) — a coordinate to retry against,
+not an epistemic result.
+
+```text
+admission (evaluated before the C3.5.1 step-5 write that consumes S_B)
+  a. the bound Phase-A evidence root exists, verifies, and its manifest and
+     checksum-inventory digests equal F_B
+  b. its recorded observation selects no terminal (result = measurement_pass)
+  c. the five axes and the bounded probe equal F_B, and F_B's copies equal F_A's
+  d. the Layer-P v2 certificate for the Phase-B head equals F_B
+  e. prior_attempts is complete and every named root exists and verifies in
+     its C3.5.1 class
+
+after that write (S_B consumed; the measurement then launches)
+  terminal 1 is selected by bound-input mutation only: any write to a bound
+  input, the Phase-A evidence root included, sets `bound_input_mutated`.
+```
+
+So in the Phase-B chain, terminal 1 carries exactly one meaning — a bound input
+was written while the measurement ran — and every condition that is decidable
+before launch is decided before launch, where it costs nothing. This is the
+two-layer budget of §5 applied to its own success path.
+
+**The asymmetry with Phase A is deliberate and is recorded, not smuggled.** §7's
+terminal-1 condition also admits a launch-time probe or certificate mismatch, and
+that text is untouched for Phase A: this correction is append-only and narrows
+nothing above the pinned prefix. The Phase-B chain moves those two checks into
+admission because Phase B has strictly more to check before launch (the Phase-A
+result itself) and because the narrowing is monotone-safe — it can only *avoid*
+spending an authorization, never admit a launch §7 would have refused. Aligning
+Phase A would be a separate decision on a separate surface; this correction does
+not make it.
+
+### C3.7 What the partition file must change
+
+"No new `ORDERED_PREDICATE`" holds: the Phase-A-evidence case is carried by the
+admission gate of C3.6 and by the existing `bound_input_mutated` predicate. "No
+partition-file change" does not hold, and is not claimed.
+`scripts/tools/h2_terminal_partition.py` requires:
+
+1. **terminal 1's condition metadata** — phase-scoped, per C3.6;
+2. **terminal 5's condition metadata** — phase-aware. It currently reads "all
+   three capture-on packets". Required form: `required_sequences` and
+   `required_capture_on_packets` per phase — Phase A: 1 sequence, 3 capture-on
+   packets; Phase B: 7 sequences, 21 capture-on packets and 7 capture-off runs —
+   with `--explain --phase {a,b}` printing that phase's exact condition;
+3. **an explicit `phase` argument** to `select_terminal`, with
+   `phase_b_complete=True` admissible only under `phase="b"`; the inconsistent
+   combination raises rather than defaulting, per the module's existing
+   fail-closed intake;
+4. **tests** — the existing contract tests updated, and extended to cover
+   phase-awareness, the admission gate, and the rule that an admission failure
+   yields no terminal.
+
+### C3.8 `phase_a_evidence` binds in `F_B`, never in the published axis
+
+`phase_a_evidence` enters `F_B`'s complete manifest and the `BoundInputMonitor`
+watch set. It does **not** enter the published `runtime_inputs` axis.
+
+What is frozen before the seal is the **schema and its producer**; the concrete
+evidence values can only bind after Phase A passes, which is after the Phase-A
+seal by construction. Admitting them to the published axis would make the axis
+undefined until Phase A had already run, and would move the axis at exactly the
+moment C3.9 requires it to be still.
+
+Mechanically, and stated as the exact split the next implementer must not get
+backwards — the published axis and the freeze are two different digests over two
+different member sets:
+
+```text
+published runtime_inputs axis  = manifest coordinate_digest
+    seven sequences + configured runtime assets + third-party runtime
+    build artifacts are NOT members (h2_runtime_inputs.py builds
+    coordinate_digest over exactly four sections, excluding build_artifacts)
+
+F_B / full manifest            = manifest full_digest, plus F_B-only sections
+    the published members + the exact build artifacts (extension, TensorRT
+    plugin)                                            → full_digest
+    + phase_a_evidence                                 → F_B field, in neither
+                                                         digest
+```
+
+This is §4's own row for `runtime_inputs` and §4.1's bound-input/witness split,
+unchanged; the earlier draft of this clause listed build artifacts as published
+axis members, which was wrong in the direction that matters — it would have led
+an implementer to publish the coordinate that binds them, or to key C3.5's
+surface on the one that does not.
+
+The `phase_a_evidence` section is an `F_B`-only manifest section, absent when no
+Phase-A evidence is supplied, and a contract test pins that adding it moves
+**neither** the published axis **nor** `full_digest` — the latter because the
+Layer-P v2 certificate records `runtime_input_full_digest`, so a section that
+moved it would invalidate certificates for reasons that have nothing to do with
+what was built or run.
+
+### C3.9 The pre-seal edit list
+
+§C3.1(b) requires the five axes to be equal across both phases, so
+`identity_semantics` must be **frozen from the Phase-A seal to the Phase-B
+seal**. Every file the clauses above touch is a member of that ruler, so all of
+this must land, be republished, and be re-attested on the controlled host
+**before Phase A seals**:
+
+1. this declaration's `.policy.yaml` — the `sealed_prefix` re-pin carrying this
+   correction;
+2. `scripts/tools/h2_runtime_inputs.py` — the seven sequences, and the
+   `phase_a_evidence` schema/producer of C3.8, which must leave both
+   `coordinate_digest` and `full_digest` computed over their current member sets;
+3. `scripts/tools/h2_terminal_partition.py` — the four changes of C3.7;
+4. `docs/reference/runtime_identity.generated.json` republished, with
+   `.github/workflows/runtime_identity.yml` green at that head.
+
+The only Phase-B work that may land *after* the Phase-A seal is the Phase-B
+controller, child/recorder, verifier, archive checker and observation emitter:
+they are `plumbing_only` and move no axis, while still being bound into `F_B` and
+therefore into the C3.5 measurement surface.
+
+**One trap is pinned here because nothing else would catch it.** A *new* file
+named `scripts/tools/h2_*.py` classifies as `plumbing_only`: only the exact paths
+in `IDENTITY_SEMANTICS_PATHS` are the ruler. If any admission or phase logic is
+placed in a new `h2_` module rather than inside `h2_terminal_partition.py`, that
+module must be added to `IDENTITY_SEMANTICS_PATHS` in the same change — itself a
+ruler edit, hence pre-seal. Splitting ruler logic into a file that silently reads
+as plumbing would let the ruler move inside the frozen window with no check
+firing, which is the §5.3 circular-oracle hazard wearing a different hat.
+
+### What this correction does not do
+
+It does not seal, authorize, or schedule anything; issues no `S_B` and no `S_A`;
+selects no `I`; creates no `F`; runs no sequence; writes no registry state and no
+`captured_under` value; changes no preset, kernel constant, or capture ABI; does
+not alter A7.6 or the packet verifier; does not alter §§0–8 or Corrections 1–2
+above the pinned prefix; and does not unblock `H0_ROUTE5_B1`, `GCTM_B1`, or O1.
+H0's closed history, its five spent `S` chains, and the permanent ledger entry on
+`quantity.bridge_capture_provenance` remain unchanged. §5.2 precondition 6 is now
+satisfiable in principle; the remaining gates of the charter's `Acceptance`
+section are untouched.
