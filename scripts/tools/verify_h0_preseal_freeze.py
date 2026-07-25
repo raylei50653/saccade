@@ -528,9 +528,46 @@ def _physical_executable(command: str, *, search_path: str | None = None) -> Pat
     return candidate
 
 
+def _symlink_chain(path: Path) -> list[str]:
+    """Independently reconstruct the RC1 absolute-path symlink parent chain.
+
+    Transcribed from the controller's external-input algorithm without importing
+    it, so the verifier remains a separate authority path while still matching
+    R5 base_prefix path forms that traverse uv-managed symlink prefixes.
+    """
+    chain: list[str] = []
+    absolute = Path(os.path.abspath(path))
+    if not absolute.is_absolute():
+        raise VerificationError(f"host runtime path is not absolute: {path}")
+    current = Path("/")
+    pending = list(absolute.parts[1:])
+    seen: set[Path] = set()
+    while pending:
+        current /= pending.pop(0)
+        if current.is_symlink():
+            if current in seen:
+                raise VerificationError(f"symlink loop in host runtime input: {path}")
+            seen.add(current)
+            chain.append(current.as_posix())
+            target = Path(os.readlink(current))
+            replacement = target if target.is_absolute() else current.parent / target
+            replacement = Path(os.path.abspath(replacement))
+            current = Path("/")
+            pending = list(replacement.parts[1:]) + pending
+    return chain
+
+
 def _host_file_record(path: Path) -> dict[str, Any]:
-    """Rebuild an RC1 external-input record for an already physical path."""
-    resolved = path.resolve(strict=True)
+    """Rebuild an RC1 external-input record for a host path (symlink-aware).
+
+    Logical path form is preserved as supplied.  ``symlink_chain`` records any
+    intermediate symlink path components so R5 interpreter base_prefix path
+    forms (uv-managed symlink prefixes) match assembler external-input records.
+    """
+    path = Path(path)
+    absolute = Path(os.path.abspath(path))
+    chain = _symlink_chain(absolute)
+    resolved = absolute.resolve(strict=True)
     details = resolved.lstat()
     if not stat.S_ISREG(details.st_mode) or resolved.is_symlink():
         raise VerificationError(f"host runtime input is not a regular file: {path}")
@@ -540,7 +577,7 @@ def _host_file_record(path: Path) -> dict[str, Any]:
         "logical_path": path.as_posix(),
         "realpath": resolved.as_posix(),
         "sha256": _sha(data),
-        "symlink_chain": [],
+        "symlink_chain": chain,
     }
 
 
@@ -704,11 +741,110 @@ def _independently_selected_gpu() -> dict[str, Any]:
     return records[0]
 
 
+def _discover_python_interpreter_runtime_paths(python: Path) -> list[str]:
+    """Independently rediscover frozen-interpreter runtime paths (R5 semantics).
+
+    The confined Phase-A extension-load vector runs a real CPython process.  The
+    freeze ``tool_runtime`` inventory must therefore pre-admit the interpreter's
+    base_prefix stdlib, venv bootstrap files, and the small set of host files
+    CPython opens during ``-I -B -c`` startup.
+
+    This reconstruction is deliberately local to the verifier: it does **not**
+    import or call the controller/assembler discovery implementation.  The
+    discovery script is a byte-stable, fail-closed transcription of the same
+    R5 execution-input semantics so independent host expansion rejects any
+    assembler inventory that omits or mutates these paths.
+    """
+    python = Path(python)
+    if not python.is_file():
+        raise VerificationError(f"python interpreter is absent: {python}")
+    # Independently transcribed R5 discovery script.  Keep semantics aligned
+    # with the assembler without sharing a code path.
+    script = (
+        "import pathlib, site, sys\n"
+        "paths = set()\n"
+        # Only walk the interpreter base_prefix stdlib tree.  Never rglob the
+        # venv prefix (sys.prefix): that would expand the entire site-packages
+        # universe into tool_runtime.
+        "base = pathlib.Path(sys.base_prefix)\n"
+        "if base.is_dir():\n"
+        "    for path in base.rglob('*'):\n"
+        "        if path.is_file() and not path.is_symlink():\n"
+        "            paths.add(path.as_posix())\n"
+        "cfg = pathlib.Path(sys.executable).resolve().parent.parent / 'pyvenv.cfg'\n"
+        "if cfg.is_file() and not cfg.is_symlink():\n"
+        "    paths.add(cfg.as_posix())\n"
+        "for entry in site.getsitepackages():\n"
+        "    base = pathlib.Path(entry)\n"
+        "    if not base.is_dir():\n"
+        "        continue\n"
+        "    for path in base.glob('*.pth'):\n"
+        "        if path.is_file() and not path.is_symlink():\n"
+        "            paths.add(path.as_posix())\n"
+        "    for name in ('_virtualenv.py',):\n"
+        "        candidate = base / name\n"
+        "        if candidate.is_file() and not candidate.is_symlink():\n"
+        "            paths.add(candidate.as_posix())\n"
+        "        pyc = base / '__pycache__' / (name.replace('.py', '.cpython-312.pyc'))\n"
+        "        if pyc.is_file() and not pyc.is_symlink():\n"
+        "            paths.add(pyc.as_posix())\n"
+        "    hack = base / '_distutils_hack'\n"
+        "    if hack.is_dir():\n"
+        "        for path in hack.rglob('*'):\n"
+        "            if path.is_file() and not path.is_symlink():\n"
+        "                paths.add(path.as_posix())\n"
+        "for extra in (\n"
+        "    '/etc/ld.so.cache',\n"
+        "    '/usr/share/locale/locale.alias',\n"
+        "    '/usr/lib/locale/locale-archive',\n"
+        "    '/usr/share/zoneinfo/UTC',\n"
+        "    '/etc/passwd', '/etc/group', '/etc/nsswitch.conf',\n"
+        "    '/etc/host.conf', '/etc/hosts', '/etc/resolv.conf',\n"
+        "    '/etc/gnutls/config',\n"
+        "):\n"
+        "    path = pathlib.Path(extra)\n"
+        "    if path.is_file() and not path.is_symlink():\n"
+        "        paths.add(path.as_posix())\n"
+        "gconv = pathlib.Path('/usr/lib/gconv')\n"
+        "if gconv.is_dir():\n"
+        "    for path in gconv.iterdir():\n"
+        "        if path.is_file() and not path.is_symlink():\n"
+        "            paths.add(path.as_posix())\n"
+        "c_utf8 = pathlib.Path('/usr/lib/locale/C.utf8')\n"
+        "if c_utf8.is_dir():\n"
+        "    for path in c_utf8.rglob('*'):\n"
+        "        if path.is_file() and not path.is_symlink():\n"
+        "            paths.add(path.as_posix())\n"
+        "print('\\n'.join(sorted(paths)))\n"
+    )
+    try:
+        result = subprocess.run(
+            [python.as_posix(), "-I", "-B", "-c", script],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise VerificationError(
+            "independent python interpreter runtime discovery failed"
+        ) from exc
+    paths = [line for line in result.stdout.splitlines() if line.startswith("/")]
+    if not paths:
+        raise VerificationError(
+            "independent python interpreter runtime discovery returned no paths"
+        )
+    return paths
+
+
 def _independent_host_execution_inputs(root: Path) -> dict[str, Any]:
     """Reconstruct every host-selected execution input from A7's algorithms.
 
     The artifact is deliberately not consulted for path selection.  This closes
     the self-consistent-but-substituted ``tool_runtime`` model rejected in P1.
+
+    R5: after the pre-R5 tool/library candidates are collected, independently
+    rediscover the frozen interpreter runtime path set and admit any physical
+    files not already present (first-seen logical path wins on realpath).
     """
     tool_paths = {
         name: _physical_executable(name).as_posix()
@@ -782,8 +918,32 @@ def _independent_host_execution_inputs(root: Path) -> dict[str, Any]:
                 if path.is_file() and not path.is_symlink()
             )
         )
+    # Deduplicate by physical realpath while preserving first-seen logical form,
+    # then fold in R5 interpreter-runtime paths the same way the freeze
+    # assembler admits them (without importing that producer).
+    ordered: list[Path] = []
+    seen_realpaths: set[str] = set()
+    for path in candidates:
+        try:
+            real = path.resolve(strict=True).as_posix()
+        except OSError:
+            continue
+        if real in seen_realpaths:
+            continue
+        seen_realpaths.add(real)
+        ordered.append(path)
+    for logical in _discover_python_interpreter_runtime_paths(python):
+        path = Path(logical)
+        try:
+            real = path.resolve(strict=True).as_posix()
+        except OSError:
+            continue
+        if real in seen_realpaths:
+            continue
+        seen_realpaths.add(real)
+        ordered.append(path)
     tool_runtime = sorted(
-        (_host_file_record(path) for path in candidates),
+        (_host_file_record(path) for path in ordered),
         key=lambda record: record["logical_path"].encode("utf-8"),
     )
     if len({record["realpath"] for record in tool_runtime}) != len(tool_runtime):

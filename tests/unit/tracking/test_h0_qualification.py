@@ -459,6 +459,106 @@ def test_preseal_sealability_gate_rejects_head_mismatch(
         qualification._check_preseal_sealability(None)
 
 
+def test_preseal_full_assembly_rejects_tool_runtime_divergence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Qualification must fail when assembler/verifier tool_runtime diverge."""
+    head = "a" * 40
+    root = tmp_path / "repo"
+    root.mkdir()
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+
+    def sealable(command_line: list[str]) -> dict[str, object]:
+        return {
+            "schema": "h0_preseal_static_sealability_v1",
+            "instrumentation_head": head,
+            "instrumentation_tree": "b" * 40,
+            "projection_admitted": True,
+            "sealable": True,
+            "problems": [],
+        }
+
+    freeze_record = {
+        "length": 1,
+        "logical_path": "/selected/git",
+        "realpath": "/selected/git",
+        "sha256": "a" * 64,
+        "symlink_chain": [],
+    }
+    independent_record = {
+        "length": 1,
+        "logical_path": "/selected/git",
+        "realpath": "/selected/git",
+        "sha256": "b" * 64,  # mutated identity
+        "symlink_chain": [],
+    }
+    artifact = {
+        "complete": True,
+        "instrumentation_head": head,
+        "phase_a_controller_input": {
+            "bound_inputs": {"tool_runtime": [freeze_record]},
+        },
+    }
+
+    monkeypatch.setattr(freezer, "check_preseal_sealability", sealable)
+    monkeypatch.setattr(freezer, "build_artifact", lambda *_a, **_k: (artifact, []))
+
+    import verify_h0_preseal_freeze as freeze_verifier
+
+    monkeypatch.setattr(
+        freeze_verifier,
+        "_independent_host_execution_inputs",
+        lambda _root: {
+            "tool_paths": {},
+            "build_tool_binding": {},
+            "library_dirs": {},
+            "gpu": {},
+            "tool_runtime": [independent_record],
+        },
+    )
+    with pytest.raises(
+        qualification.QualificationError, match="tool_runtime inventory mismatch"
+    ):
+        qualification._check_preseal_freeze_assembly(head, root, workspace)
+
+
+def test_preseal_full_assembly_rejects_when_static_only_would_pass(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Static sealability alone must not satisfy the strengthened assembly gate."""
+    head = "a" * 40
+    root = tmp_path / "repo"
+    root.mkdir()
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+
+    def sealable(command_line: list[str]) -> dict[str, object]:
+        return {
+            "schema": "h0_preseal_static_sealability_v1",
+            "instrumentation_head": head,
+            "instrumentation_tree": "b" * 40,
+            "projection_admitted": True,
+            "sealable": True,
+            "problems": [],
+        }
+
+    # Static sealability would pass, but full assembly is incomplete.
+    monkeypatch.setattr(freezer, "check_preseal_sealability", sealable)
+    monkeypatch.setattr(
+        freezer,
+        "build_artifact",
+        lambda *_a, **_k: (
+            {"complete": False, "instrumentation_head": head, "problems": ["gap"]},
+            ["gap"],
+        ),
+    )
+    with pytest.raises(
+        qualification.QualificationError, match="full preseal freeze is incomplete"
+    ):
+        qualification._check_preseal_freeze_assembly(head, root, workspace)
+
+
 def test_passing_report_requires_canonical_step_sequence() -> None:
     canonical = [{"name": name, "state": "passed"} for name in qualification.STEP_NAMES]
     qualification._require_canonical_steps(canonical)

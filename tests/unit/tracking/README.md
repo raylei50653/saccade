@@ -20,6 +20,7 @@
 | `test_h0_preseal_freeze.py` | system | contract | active | Amendment 6 classifier/admission semantics for the H0 pre-seal freeze. |
 | `test_h0_preseal_freeze_v3.py` | system | contract | active | RC2 authority-chain and independent v3 JSON admissions; no Phase A runs. |
 | `test_h0_qualification.py` | system | contract | active | Prospective H0 repair/qualification gate contracts. |
+| `test_h0_r5_attestation_membership.py` | system | contract | active | H0-R5 extension/plugin runtime-attestation membership predicates. |
 | `test_h0_runtime_confinement.py` | system | contract | active | Kernel-level runtime input confinement and native loader admissions. |
 | `test_headline_bridge_decision_trace.py` | system | contract | active | Outcome-blind contracts for H0's full bridge-decision trace packet. |
 | `test_reorder.py` | tracking | behavior | active | Unit tests for the tracker reordering buffer (perception.tracking.reorder). |

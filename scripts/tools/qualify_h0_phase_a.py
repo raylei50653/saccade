@@ -2,9 +2,14 @@
 """Run the repeatable, non-authoritative H0 substrate qualification gate.
 
 This tool intentionally is *not* a controller mode.  It never discovers a
-freeze, reads a research sequence, writes an H0 evidence root, or produces an
-H0 terminal.  It exercises the same host build and extension substrate with a
-synthetic runner so ordinary engineering failures are found before a seal.
+landing freeze under the repository evidence tree, writes an H0 Phase-A
+evidence root, produces an H0 terminal, or consumes execution authority.  The
+``preseal_freeze_assembly`` step may assemble a representative complete freeze
+in memory (including host-bound sequence/model inventory hashes) and write that
+JSON only under the external qualification workspace so the independent
+verifier can fail closed on assembler/verifier execution-input divergence.  It
+exercises the same host build and extension substrate with a synthetic runner
+so ordinary engineering failures are found before a seal.
 """
 # status: stable
 
@@ -791,6 +796,112 @@ def _check_preseal_sealability(head: str | None) -> None:
         raise QualificationError("pre-seal static sealability binds a different head")
 
 
+def _check_preseal_freeze_assembly(
+    head: str | None, root: Path, workspace: Path
+) -> dict[str, Any]:
+    """Full preseal freeze assembly + independent verifier (R5 parity gate).
+
+    Static sealability alone is insufficient: R5 expanded ``tool_runtime`` via
+    interpreter-runtime discovery, and a divergence between the assembler and
+    the independent verifier only appears when a complete freeze is materialised
+    and independently re-checked.  This step:
+
+    1. reuses the static sealability gate;
+    2. assembles a representative complete freeze in memory (no repo write);
+    3. runs the independent verifier's host execution-input reconstruction and
+       full artifact verification (no I→F→S landing check — qualification
+       checkouts are unsealed);
+    4. asserts byte-exact ``tool_runtime`` inventory equality;
+    5. writes the freeze JSON under the external qualification workspace only.
+
+    Does not discover a landing freeze, write an H0 evidence root under the
+    repository, produce an H0 terminal, or consume execution authority.
+    """
+    import build_h0_preseal_freeze as freezer
+    import verify_h0_preseal_freeze as freeze_verifier
+
+    _check_preseal_sealability(head)
+    if head is None:
+        raise QualificationError(
+            "full preseal freeze assembly requires a resolved head"
+        )
+
+    try:
+        artifact, problems = freezer.build_artifact(
+            ["qualify_h0_phase_a", "--preseal-full-assembly"]
+        )
+    except (OSError, RuntimeError, subprocess.SubprocessError) as exc:
+        raise QualificationError(f"full preseal freeze assembly failed: {exc}") from exc
+
+    if problems or artifact.get("complete") is not True:
+        raise QualificationError(
+            "full preseal freeze is incomplete: "
+            + ("; ".join(problems) if problems else "complete is not true")
+        )
+    if artifact.get("instrumentation_head") != head:
+        raise QualificationError(
+            "full preseal freeze binds a different instrumentation head"
+        )
+
+    controller_input = artifact.get("phase_a_controller_input")
+    if not isinstance(controller_input, Mapping):
+        raise QualificationError("full preseal freeze lacks phase_a_controller_input")
+    bound_inputs = controller_input.get("bound_inputs")
+    if not isinstance(bound_inputs, Mapping):
+        raise QualificationError("full preseal freeze lacks bound_inputs")
+    freeze_tool_runtime = bound_inputs.get("tool_runtime")
+    if not isinstance(freeze_tool_runtime, list):
+        raise QualificationError("full preseal freeze tool_runtime is not a list")
+
+    try:
+        independent = freeze_verifier._independent_host_execution_inputs(root)
+    except freeze_verifier.VerificationError as exc:
+        raise QualificationError(
+            f"independent host execution-input expansion failed: {exc}"
+        ) from exc
+
+    independent_tool_runtime = independent.get("tool_runtime")
+    if freeze_tool_runtime != independent_tool_runtime:
+        freeze_count = len(freeze_tool_runtime)
+        independent_count = (
+            len(independent_tool_runtime)
+            if isinstance(independent_tool_runtime, list)
+            else -1
+        )
+        raise QualificationError(
+            "assembler/verifier tool_runtime inventory mismatch: "
+            f"freeze={freeze_count} independent={independent_count}"
+        )
+
+    try:
+        # Landing topology is intentionally not checked: qualification runs on
+        # an unsealed head.  Host execution inputs and artifact structure are.
+        freeze_verifier.verify_artifact(
+            artifact,
+            root,
+            check_worktree=True,
+            require_complete=True,
+        )
+    except freeze_verifier.VerificationError as exc:
+        raise QualificationError(
+            f"independent full freeze verification failed: {exc}"
+        ) from exc
+
+    out_dir = workspace / "preseal_freeze_assembly"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / "h0_preseal_freeze_v3.json"
+    payload = canonical_json_bytes(artifact) + b"\n"
+    out_path.write_bytes(payload)
+    return {
+        "complete": True,
+        "instrumentation_head": head,
+        "tool_runtime_count": len(freeze_tool_runtime),
+        "tool_runtime_equal": True,
+        "workspace_artifact": out_path.as_posix(),
+        "workspace_artifact_sha256": sha256_bytes(payload),
+    }
+
+
 def _landing_discovery_dry_run(root: Path) -> None:
     """Exercise the controller's real landing-discovery entry, non-authoritatively.
 
@@ -1057,8 +1168,22 @@ def run_qualification(
         if failure_probe["failure"]["stage"] != "checkpoint_T1":
             raise QualificationError("synthetic failure envelope stage drift")
         steps.append({"name": "failure_envelope_serialization", "state": "passed"})
-        _check_preseal_sealability(repository_identity["repository_head_sha"])
-        steps.append({"name": "preseal_freeze_assembly", "state": "passed"})
+        preseal_report = _check_preseal_freeze_assembly(
+            repository_identity["repository_head_sha"],
+            root,
+            workspace,
+        )
+        steps.append(
+            {
+                "name": "preseal_freeze_assembly",
+                "state": "passed",
+                "tool_runtime_count": preseal_report["tool_runtime_count"],
+                "tool_runtime_equal": preseal_report["tool_runtime_equal"],
+                "workspace_artifact_sha256": preseal_report[
+                    "workspace_artifact_sha256"
+                ],
+            }
+        )
         _landing_discovery_dry_run(root)
         steps.append({"name": "landing_discovery_dry_run", "state": "passed"})
         _require_canonical_steps(steps)

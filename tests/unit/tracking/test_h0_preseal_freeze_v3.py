@@ -266,6 +266,11 @@ def _independent_host_fixture(
     monkeypatch.setattr(
         verifier, "_independently_selected_gpu", lambda: {"uuid": "GPU"}
     )
+    # Fixtures fully mock subprocess.run for the torch/library query; R5
+    # interpreter-runtime discovery is exercised by dedicated tests instead.
+    monkeypatch.setattr(
+        verifier, "_discover_python_interpreter_runtime_paths", lambda _python: []
+    )
     monkeypatch.setattr(verifier.subprocess, "run", run)
     return root, pyvenv_config
 
@@ -324,6 +329,181 @@ def test_independent_host_expansion_rejects_pyvenv_config_identity_mismatch(
     }
     with pytest.raises(verifier.VerificationError, match="host expansion"):
         verifier._verify_host_execution_inputs(controller, inventory, root)
+
+
+def test_independent_discovery_admits_fixture_interpreter_runtime_paths(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """R5: independent expansion must admit discovered interpreter-runtime paths."""
+    root, _pyvenv_config = _independent_host_fixture(tmp_path, monkeypatch)
+    runtime = tmp_path / "interp-runtime"
+    runtime.mkdir()
+    extra = runtime / "encodings_stub.py"
+    extra.write_bytes(b"encodings\n")
+    host_paths = [extra.as_posix(), "/etc/ld.so.cache"]
+    # Keep only paths that exist on this host for the fixture record builder.
+    present = [path for path in host_paths if Path(path).is_file()]
+    assert present, "fixture requires at least one discoverable host path"
+    monkeypatch.setattr(
+        verifier,
+        "_discover_python_interpreter_runtime_paths",
+        lambda _python: present,
+    )
+    host = verifier._independent_host_execution_inputs(root)
+    logicals = {item["logical_path"] for item in host["tool_runtime"]}
+    for path in present:
+        assert path in logicals
+        record = next(
+            item for item in host["tool_runtime"] if item["logical_path"] == path
+        )
+        assert record == verifier._host_file_record(Path(path))
+
+
+def test_omitted_or_mutated_interpreter_runtime_path_fails_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Omission or mutation of a discovered interpreter-runtime path is fail-closed."""
+    root, _pyvenv_config = _independent_host_fixture(tmp_path, monkeypatch)
+    runtime = tmp_path / "interp-runtime"
+    runtime.mkdir()
+    extra = runtime / "locale_alias_stub"
+    extra.write_bytes(b"locale\n")
+    discovered = [extra.as_posix()]
+    monkeypatch.setattr(
+        verifier,
+        "_discover_python_interpreter_runtime_paths",
+        lambda _python: discovered,
+    )
+    expected = verifier._independent_host_execution_inputs(root)
+    controller = {
+        "tool_paths": dict(expected["tool_paths"]),
+        "build_tool_binding": dict(expected["build_tool_binding"]),
+        "library_dirs": dict(expected["library_dirs"]),
+        "gpu": dict(expected["gpu"]),
+    }
+
+    omitted = {
+        "tool_runtime": [
+            dict(record)
+            for record in expected["tool_runtime"]
+            if record["logical_path"] != extra.as_posix()
+        ]
+    }
+    with pytest.raises(verifier.VerificationError, match="host expansion"):
+        verifier._verify_host_execution_inputs(controller, omitted, root)
+
+    mutated = {"tool_runtime": [dict(record) for record in expected["tool_runtime"]]}
+    target = next(
+        item
+        for item in mutated["tool_runtime"]
+        if item["logical_path"] == extra.as_posix()
+    )
+    target["sha256"] = "0" * 64
+    with pytest.raises(verifier.VerificationError, match="host expansion"):
+        verifier._verify_host_execution_inputs(controller, mutated, root)
+
+
+def test_assembler_tool_runtime_matches_independent_expansion_on_host() -> None:
+    """Positive host regression: freeze assembler tool_runtime == independent verifier.
+
+    Builds the same candidate set the freeze assembler admits (including R5
+    interpreter-runtime discovery) and asserts byte-exact inventory equality
+    against the verifier's independent reconstruction — not mere counts.
+    """
+    import run_h0_phase_a as controller
+
+    root = Path(__file__).resolve().parents[3]
+    python = root / ".venv/bin/python"
+    if not python.is_file() or python.is_symlink():
+        pytest.skip("physical frozen .venv/bin/python unavailable")
+    pyvenv_config = root / ".venv/pyvenv.cfg"
+    if not pyvenv_config.is_file() or pyvenv_config.is_symlink():
+        pytest.skip("physical frozen .venv/pyvenv.cfg unavailable")
+
+    tool_paths = {
+        name: assembler._physical_executable(name).as_posix()
+        for name in ("git", "ldd", "readelf", "uv")
+    }
+    build_tool_bound_inputs = assembler.derive_build_tool_bound_inputs(
+        root, ldd_path=Path(tool_paths["ldd"])
+    )
+    build_tool_binding = build_tool_bound_inputs["build_tool_binding"]
+    tool_paths.update(
+        {
+            item["role"]: item["record"]["realpath"]
+            for item in build_tool_binding["tools"]
+        }
+    )
+    query = subprocess.run(
+        [
+            python.as_posix(),
+            "-I",
+            "-c",
+            "import pathlib,sysconfig,torch; "
+            "print((pathlib.Path(torch.__file__).resolve().parent/'lib').as_posix()); "
+            "import tensorrt_libs; "
+            "print(pathlib.Path(tensorrt_libs.__file__).resolve().parent.as_posix()); "
+            "print(pathlib.Path(sysconfig.get_path('purelib')).resolve().as_posix())",
+        ],
+        cwd=root,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.splitlines()
+    if len(query) != 3:
+        pytest.skip("could not derive runtime library directories")
+    cuda_root = Path(query[2]).resolve(strict=True) / "nvidia/cu13"
+    nvcc = cuda_root / "bin/nvcc"
+    if nvcc.is_symlink() or not nvcc.is_file():
+        pytest.skip("frozen venv CUDA compiler unavailable")
+    tool_paths["nvcc"] = nvcc.as_posix()
+    libraries = {
+        "tensorrt_library_dir": Path(query[1]).resolve(strict=True).as_posix(),
+        "pytorch_library_dir": Path(query[0]).resolve(strict=True).as_posix(),
+        "cuda_library_dir": (cuda_root / "lib").resolve(strict=True).as_posix(),
+    }
+    non_build = [
+        Path(path) for name, path in tool_paths.items() if name not in {"cmake", "cxx"}
+    ] + [python, pyvenv_config]
+    tool_candidates = list(non_build)
+    for directory in libraries.values():
+        tool_candidates.extend(
+            sorted(
+                path
+                for path in Path(directory).rglob("*")
+                if path.is_file() and not path.is_symlink()
+            )
+        )
+    for logical in controller.discover_python_interpreter_runtime_paths(python):
+        tool_candidates.append(Path(logical))
+    deduped: list[Path] = []
+    seen: set[str] = set()
+    for path in tool_candidates:
+        try:
+            real = path.resolve(strict=True).as_posix()
+        except OSError:
+            continue
+        if real in seen:
+            continue
+        seen.add(real)
+        deduped.append(path)
+    other = [
+        controller.external_input_record(root, path.as_posix()) for path in deduped
+    ]
+    assembler_tool_runtime = sorted(
+        [*other, *build_tool_bound_inputs["tool_runtime"]],
+        key=lambda record: record["logical_path"].encode("utf-8"),
+    )
+    independent = verifier._independent_host_execution_inputs(root)
+    independent_tool_runtime = independent["tool_runtime"]
+    assert len(assembler_tool_runtime) == len(independent_tool_runtime)
+    assert assembler_tool_runtime == independent_tool_runtime
+    assert any(
+        item["logical_path"].endswith("ld.so.cache")
+        or "encodings" in item["logical_path"]
+        or "python3.12" in item["logical_path"]
+        for item in independent_tool_runtime
+    )
 
 
 def test_execution_checkout_must_be_exact_seal_commit(tmp_path: Path) -> None:
