@@ -6,7 +6,7 @@ doc-module: semantic
 owner-module: semantic
 work-class: mainline-study
 wip-role: non-wip
-activation-gate: "四項 owner decision 已於 2026-07-25 accepted（#286）；Phase-B chain form 已於 2026-07-25 accepted（#290）並成文為 declaration Review Correction 3；剩餘 gate = C3.9 pre-seal ruler 編輯（七序列 manifest + phase_a_evidence schema + phase-aware partition）+ S4 Layer-M plumbing 實作 + 一份 Layer-P pass certificate，然後才談 seal"
+activation-gate: "四項 owner decision 已於 2026-07-25 accepted（#286）；Phase-B chain form 已於 2026-07-25 accepted（#290）並成文為 declaration Review Correction 3；C3.9 pre-seal ruler 編輯（七序列 manifest + phase_a_evidence schema + phase-aware partition）已 landed 並 republish；剩餘 gate = 該 head 的 controlled-host re-attestation 綠 + S4 Layer-M plumbing 實作 + 一份 Layer-P pass certificate，然後才談 seal"
 target-decision-layer: none
 primary-intent: boundary-diagnostic
 output-class: "diagnostic result | substrate-fidelity edge proposal"
@@ -147,7 +147,8 @@ narrowings; the issue stays open as the standing surface) and is written as
 declaration **Review Correction 3** — `I_B = (I40_B, F_B)`, the `F_B` freeze list,
 `S_B`, the result mapping, the measurement-surface re-attempt rule, the
 pre-terminal admission gate, and the C3.9 pre-seal edit list. What precondition 6
-asks for now exists; what remains is the ruler work C3.9 schedules, below.
+asks for now exists, and the ruler work C3.9 schedules has since landed; what
+remains is the Layer-M plumbing, below.
 
 Two consequences a reader of this charter must not get wrong:
 
@@ -222,10 +223,10 @@ certificate, **or** the scope is disconfirmed and the charter is re-planned.
 ## Discard when
 
 - ~~the Phase-B chain form cannot be declared on terms the owner accepts~~ —
-  **resolved 2026-07-25**: accepted on #290 and published as Correction 3. The
-  live successor condition is that the C3.9 pre-seal ruler edits cannot be
-  completed before the Phase-A seal — the chain then has no admissible Phase-B
-  step, and the unit is re-planned or parked before any authorization is spent; or
+  **resolved 2026-07-25**: accepted on #290 and published as Correction 3. Its
+  successor condition — that the C3.9 pre-seal ruler edits cannot be completed
+  before the Phase-A seal — is **also spent**: those edits landed on 2026-07-25.
+  Neither can discard this unit again; or
 - a G1 probe inequality appears across builds of identical decision-relevant
   source — the design premise is falsified and the coordinate/probe split needs
   rework before anything downstream; or
@@ -265,23 +266,32 @@ certificate, **or** the scope is disconfirmed and the charter is re-planned.
 
 ## Current step
 
-**Land the C3.9 pre-seal ruler edits, then scope the Layer-M controller. Do not
-seal.**
+**Scope the Layer-M controller. Do not seal.**
 
 Correction 3 puts an ordering constraint on everything below: `identity_semantics`
 must be frozen from the Phase-A seal to the Phase-B seal, so the ruler work comes
 first and the controller work may follow (it is `plumbing_only` and moves no
-axis). The ruler work is `h2_runtime_inputs.py` — seven sequences, plus the
-`phase_a_evidence` schema/producer that C3.8 requires to move no published axis —
-and `h2_terminal_partition.py` — phase-scoped terminal-1 metadata, phase-aware
-terminal-5 metadata (Phase A: 1 sequence / 3 capture-on packets; Phase B: 7 / 21
-plus 7 capture-off runs), the `phase` argument, and updated tests. Both edits
-republish the coordinate and need a green controlled-host re-attestation.
+axis).
 
-C3.9's trap applies to that work directly: a *new* `scripts/tools/h2_*.py` file
-classifies as `plumbing_only`, so admission or phase logic placed outside
-`h2_terminal_partition.py` must be added to `IDENTITY_SEMANTICS_PATHS` in the same
-change, or the ruler moves inside the frozen window with nothing to catch it.
+**The ruler work has landed.** `h2_runtime_inputs.py` now binds all seven
+`MEASUREMENT_SEQUENCES` in both phases and carries the `phase_a_evidence`
+section, which is bound and watched while belonging to neither digest — the two
+member sets are named once, in `COORDINATE_SECTIONS` / `FULL_DIGEST_SECTIONS`, so
+a later section cannot land in the wrong digest by omission.
+`h2_terminal_partition.py` now requires an explicit `phase`, carries per-phase
+terminal conditions and `PHASE_COMPLETION` counts (Phase A: 1 sequence / 3
+capture-on packets / 1 capture-off run; Phase B: 7 / 21 / 7), and implements the
+C3.6 gate as `evaluate_admission` — a pre-terminal object whose refusal selects
+no terminal and which `select_terminal` requires before any Phase-B selection.
+`.github/workflows/runtime_identity.yml` binds all seven sequences on the
+controlled host. The coordinate is republished; the remaining ruler gate is the
+green re-attestation at that head.
+
+C3.9's trap applied to that work directly and was honoured: a *new*
+`scripts/tools/h2_*.py` file classifies as `plumbing_only`, so the admission and
+phase logic went inside `h2_terminal_partition.py` rather than into a new module
+that would have moved the ruler inside the frozen window with nothing to catch
+it. The same rule binds the Layer-M work below.
 
 The reuse pattern is already established and should not be re-litigated:
 `run_h2_layer_p.py:351` imports `run_h0_phase_a` as a library and uses exactly
@@ -365,7 +375,9 @@ A Layer-M seal may be proposed only when **all** of these hold:
    `phase_a_evidence` schema/producer, which by C3.8 must move no published axis)
    and `h2_terminal_partition.py` (phase-scoped terminal-1 metadata, phase-aware
    terminal-5 metadata, the `phase` argument, updated tests). These are ruler
-   files: after the Phase-A seal they cannot be touched at all;
+   files: after the Phase-A seal they cannot be touched at all. **Edits landed and
+   coordinate republished 2026-07-25; the controlled-host re-attestation at that
+   head is the open half of this gate;**
 3. the S4 items above are implemented, tested, and reviewed;
 4. a Layer-P pass certificate (`h2_layer_p_certificate_v2`) exists for the exact
    head under seal, with `--base` given and the full changed-path verdict clean;

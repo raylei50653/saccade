@@ -11,6 +11,31 @@ This module hashes their content into two coordinates:
 The build-artifact portion is deliberately not an equivalence claim. Different
 builds may have different bytes; the certificate records which bytes Layer M is
 allowed to consume.
+
+**All seven measurement sequences are bound in both phases** (declaration
+§ C3.2 item 4 / § C3.9 item 2). Phase A executes only ``MOT17-04-SDP``, but
+§ C3.1(b) requires the five published axes to be *equal* across Phase A and
+Phase B, and the `runtime_inputs` axis is one of them. A Phase-A manifest that
+bound one measurement sequence would have to move at the Phase-B freeze —
+inside the window in which `identity_semantics` is frozen — so the seven-sequence
+member set is established before the Phase-A seal, not at the point of use.
+``MOT17-09-SDP`` therefore appears twice, in the two roles § C3.2 forbids
+conflating: once as the Layer-P identity fixture, once as a measurement
+sequence.
+
+The two digests are computed over fixed section member sets, named once in
+``COORDINATE_SECTIONS`` / ``FULL_DIGEST_SECTIONS``:
+
+* ``coordinate_digest`` — the four sections above; ``build_artifacts`` is
+  excluded by construction so one published coordinate can span builds;
+* ``full_digest`` — the coordinate together with ``build_artifacts``, which is
+  what pins the exact executed extension and TensorRT-plugin bytes.
+
+``phase_a_evidence`` (§ C3.8) is an ``F_B``-only section and a member of
+*neither* digest: it is absent until Phase A has passed, so admitting it to
+either would make an axis undefined until after the seal that freezes it. It is
+bound by ``F_B`` and watched by ``BoundInputMonitor``, and a contract test pins
+that adding it moves neither digest.
 """
 # status: stable
 
@@ -30,8 +55,34 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 SCHEMA = "h2_runtime_input_manifest_v1"
 POLICY_PRESET_REL = "configs/presets/mamba_whole_graph_m.yaml"
 IDENTITY_SEQUENCE = "MOT17-09-SDP"
-MEASUREMENT_SEQUENCE = "MOT17-04-SDP"
+
+# The § C3.2 item 10 run plan, in the lexicographic order it declares. This is a
+# member set, not a schedule: the manifest binds all seven in both phases.
+MEASUREMENT_SEQUENCES: tuple[str, ...] = (
+    "MOT17-02-SDP",
+    "MOT17-04-SDP",
+    "MOT17-05-SDP",
+    "MOT17-09-SDP",
+    "MOT17-10-SDP",
+    "MOT17-11-SDP",
+    "MOT17-13-SDP",
+)
 DEFAULT_DATA_ROOT = "datasets/MOT17"
+
+IDENTITY_FIXTURE_ROLE = "identity_fixture_input"
+MEASUREMENT_FIXTURE_ROLE = "measurement_fixture_input"
+PHASE_A_EVIDENCE_ROLE = "phase_a_evidence_input"
+PHASE_A_EVIDENCE_SECTION = "phase_a_evidence"
+
+# The exact member set of each digest. Stated once so the two can never drift
+# apart by an edit that adds a section and forgets which digest it belongs to.
+COORDINATE_SECTIONS: tuple[str, ...] = (
+    "identity_fixture",
+    "measurement_fixture",
+    "runtime_assets",
+    "third_party_runtime",
+)
+FULL_DIGEST_SECTIONS: tuple[str, ...] = (*COORDINATE_SECTIONS, "build_artifacts")
 
 # These are passed directly to build_mamba_gated_detector by the probe runner.
 RUNTIME_ASSET_FIELDS = (
@@ -199,9 +250,11 @@ def _fixture_paths(*, data_root: Path, sequence: str) -> tuple[Path, ...]:
     return _files_below(sequence_root)
 
 
-def _fixture_section(*, data_root: Path, sequence: str, role: str) -> dict[str, Any]:
+def _fixture_records(
+    *, data_root: Path, sequence: str, role: str
+) -> list[dict[str, Any]]:
     sequence_root = _absolute_lexical(data_root / "train" / sequence)
-    records = [
+    return [
         _record(
             path=path,
             role=role,
@@ -209,10 +262,60 @@ def _fixture_section(*, data_root: Path, sequence: str, role: str) -> dict[str, 
         )
         for path in _fixture_paths(data_root=data_root, sequence=sequence)
     ]
-    section = _section(records)
+
+
+def _identity_fixture_section(*, data_root: Path, sequence: str) -> dict[str, Any]:
+    sequence_root = _absolute_lexical(data_root / "train" / sequence)
+    section = _section(
+        _fixture_records(
+            data_root=data_root, sequence=sequence, role=IDENTITY_FIXTURE_ROLE
+        )
+    )
     section["configured_root"] = sequence_root.as_posix()
     section["sequence"] = sequence
     section["root"] = _shown(sequence_root)
+    return section
+
+
+def _measurement_fixture_section(
+    *, data_root: Path, sequences: Iterable[str]
+) -> dict[str, Any]:
+    """One section over all seven sequences: one digest, one axis member."""
+    records: list[dict[str, Any]] = []
+    declared: list[dict[str, Any]] = []
+    for sequence in sequences:
+        sequence_root = _absolute_lexical(data_root / "train" / sequence)
+        per_sequence = _fixture_records(
+            data_root=data_root, sequence=sequence, role=MEASUREMENT_FIXTURE_ROLE
+        )
+        records.extend(per_sequence)
+        declared.append(
+            {
+                "configured_root": sequence_root.as_posix(),
+                "file_count": len(per_sequence),
+                "root": _shown(sequence_root),
+                "sequence": sequence,
+            }
+        )
+    section = _section(records)
+    section["sequences"] = declared
+    return section
+
+
+def _phase_a_evidence_section(evidence_root: Path) -> dict[str, Any]:
+    """The § C3.8 `F_B`-only section. In neither digest; bound and watched."""
+    configured = _absolute_lexical(evidence_root)
+    records = [
+        _record(
+            path=path,
+            role=PHASE_A_EVIDENCE_ROLE,
+            coordinate=path.relative_to(configured).as_posix(),
+        )
+        for path in _files_below(configured)
+    ]
+    section = _section(records)
+    section["configured_root"] = configured.as_posix()
+    section["root"] = _shown(configured)
     return section
 
 
@@ -300,27 +403,40 @@ def _build_artifacts_section(build_dir: Path) -> dict[str, Any]:
     return section
 
 
+def _checked_sequences(
+    identity_sequence: str, measurement_sequences: Iterable[str]
+) -> tuple[str, ...]:
+    if identity_sequence != IDENTITY_SEQUENCE:
+        raise RuntimeInputError(
+            f"identity fixture must be {IDENTITY_SEQUENCE}, got {identity_sequence}"
+        )
+    declared = tuple(measurement_sequences)
+    if declared != MEASUREMENT_SEQUENCES:
+        raise RuntimeInputError(
+            f"measurement fixtures must be {list(MEASUREMENT_SEQUENCES)}, "
+            f"got {list(declared)}"
+        )
+    return declared
+
+
 def discover_bound_paths(
     *,
     build_dir: Path,
     data_root: Path | None = None,
     identity_sequence: str = IDENTITY_SEQUENCE,
-    measurement_sequence: str = MEASUREMENT_SEQUENCE,
+    measurement_sequences: Iterable[str] = MEASUREMENT_SEQUENCES,
+    phase_a_evidence_root: Path | None = None,
 ) -> tuple[Path, ...]:
     """Discover lexical consumer paths before any content digest is computed."""
-    if identity_sequence != IDENTITY_SEQUENCE:
-        raise RuntimeInputError(
-            f"identity fixture must be {IDENTITY_SEQUENCE}, got {identity_sequence}"
-        )
-    if measurement_sequence != MEASUREMENT_SEQUENCE:
-        raise RuntimeInputError(
-            f"measurement fixture must be {MEASUREMENT_SEQUENCE}, "
-            f"got {measurement_sequence}"
-        )
+    sequences = _checked_sequences(identity_sequence, measurement_sequences)
     root = _absolute_lexical(data_root or (REPO_ROOT / DEFAULT_DATA_ROOT))
     paths = {
         *_fixture_paths(data_root=root, sequence=identity_sequence),
-        *_fixture_paths(data_root=root, sequence=measurement_sequence),
+        *(
+            path
+            for sequence in sequences
+            for path in _fixture_paths(data_root=root, sequence=sequence)
+        ),
         *(
             path
             for _field, _configured, path in _runtime_asset_paths(
@@ -330,6 +446,8 @@ def discover_bound_paths(
         *_third_party_paths(),
         *_build_artifact_paths(build_dir),
     }
+    if phase_a_evidence_root is not None:
+        paths.update(_files_below(_absolute_lexical(phase_a_evidence_root)))
     return tuple(sorted(paths, key=lambda item: item.as_posix()))
 
 
@@ -338,41 +456,33 @@ def build_manifest(
     build_dir: Path,
     data_root: Path | None = None,
     identity_sequence: str = IDENTITY_SEQUENCE,
-    measurement_sequence: str = MEASUREMENT_SEQUENCE,
+    measurement_sequences: Iterable[str] = MEASUREMENT_SEQUENCES,
+    phase_a_evidence_root: Path | None = None,
 ) -> dict[str, Any]:
-    """Hash every declared fixture, asset, third-party component and build output."""
-    if identity_sequence != IDENTITY_SEQUENCE:
-        raise RuntimeInputError(
-            f"identity fixture must be {IDENTITY_SEQUENCE}, got {identity_sequence}"
-        )
-    if measurement_sequence != MEASUREMENT_SEQUENCE:
-        raise RuntimeInputError(
-            f"measurement fixture must be {MEASUREMENT_SEQUENCE}, got {measurement_sequence}"
-        )
+    """Hash every declared fixture, asset, third-party component and build output.
+
+    `phase_a_evidence_root` is supplied only when an `F_B` is being constructed;
+    it adds the § C3.8 section and moves neither digest.
+    """
+    sequences = _checked_sequences(identity_sequence, measurement_sequences)
     root = _absolute_lexical(data_root or (REPO_ROOT / DEFAULT_DATA_ROOT))
     sections = {
-        "identity_fixture": _fixture_section(
-            data_root=root, sequence=identity_sequence, role="identity_fixture_input"
+        "identity_fixture": _identity_fixture_section(
+            data_root=root, sequence=identity_sequence
         ),
-        "measurement_fixture": _fixture_section(
-            data_root=root,
-            sequence=measurement_sequence,
-            role="measurement_fixture_input",
+        "measurement_fixture": _measurement_fixture_section(
+            data_root=root, sequences=sequences
         ),
         "runtime_assets": _runtime_assets_section(REPO_ROOT / POLICY_PRESET_REL),
         "third_party_runtime": _third_party_section(),
         "build_artifacts": _build_artifacts_section(build_dir),
     }
+    if phase_a_evidence_root is not None:
+        sections[PHASE_A_EVIDENCE_SECTION] = _phase_a_evidence_section(
+            phase_a_evidence_root
+        )
     coordinate_digest = digest(
-        {
-            name: sections[name]["digest"]
-            for name in (
-                "identity_fixture",
-                "measurement_fixture",
-                "runtime_assets",
-                "third_party_runtime",
-            )
-        }
+        {name: sections[name]["digest"] for name in COORDINATE_SECTIONS}
     )
     full_digest = digest(
         {
@@ -398,6 +508,44 @@ def _valid_sha256(value: Any) -> bool:
     )
 
 
+def _validate_measurement_sequences(section: Mapping[str, Any]) -> None:
+    """The declared seven, in order, each actually carrying files."""
+    declared = section.get("sequences")
+    if not isinstance(declared, list):
+        raise RuntimeInputError("measurement fixture sequences are absent")
+    names = tuple(
+        item.get("sequence") if isinstance(item, Mapping) else None for item in declared
+    )
+    if names != MEASUREMENT_SEQUENCES:
+        raise RuntimeInputError(
+            f"measurement fixture sequences must be {list(MEASUREMENT_SEQUENCES)}, "
+            f"got {list(names)}"
+        )
+    observed: dict[str, int] = {name: 0 for name in MEASUREMENT_SEQUENCES}
+    for record in section["files"]:
+        sequence = str(record.get("coordinate", "")).split("/", 1)[0]
+        if sequence not in observed:
+            raise RuntimeInputError(
+                f"measurement fixture file outside the declared sequences: "
+                f"{record.get('coordinate')}"
+            )
+        observed[sequence] += 1
+    for item in declared:
+        sequence = item["sequence"]
+        if item.get("file_count") != observed[sequence]:
+            raise RuntimeInputError(
+                f"measurement fixture file_count mismatch for {sequence}: "
+                f"declared {item.get('file_count')}, observed {observed[sequence]}"
+            )
+        if not observed[sequence]:
+            raise RuntimeInputError(f"measurement fixture {sequence} is empty")
+        root = Path(str(item.get("configured_root", "")))
+        if not root.is_absolute():
+            raise RuntimeInputError(
+                f"measurement fixture {sequence} configured_root is not absolute"
+            )
+
+
 def validate_manifest(
     payload: Mapping[str, Any], *, verify_files: bool = False
 ) -> dict[str, Any]:
@@ -408,15 +556,11 @@ def validate_manifest(
     data_root = Path(str(payload.get("data_root", "")))
     if not data_root.is_absolute():
         raise RuntimeInputError("runtime-input manifest data_root is not absolute")
-    section_names = (
-        "identity_fixture",
-        "measurement_fixture",
-        "runtime_assets",
-        "third_party_runtime",
-        "build_artifacts",
-    )
+    present = list(FULL_DIGEST_SECTIONS)
+    if PHASE_A_EVIDENCE_SECTION in payload:
+        present.append(PHASE_A_EVIDENCE_SECTION)
     sections: dict[str, Mapping[str, Any]] = {}
-    for name in section_names:
+    for name in present:
         section = payload.get(name)
         if not isinstance(section, Mapping):
             raise RuntimeInputError(f"runtime-input manifest missing {name}")
@@ -483,18 +627,9 @@ def validate_manifest(
         sections[name] = section
     if sections["identity_fixture"].get("sequence") != IDENTITY_SEQUENCE:
         raise RuntimeInputError("identity fixture sequence mismatch")
-    if sections["measurement_fixture"].get("sequence") != MEASUREMENT_SEQUENCE:
-        raise RuntimeInputError("measurement fixture sequence mismatch")
+    _validate_measurement_sequences(sections["measurement_fixture"])
     coordinate = digest(
-        {
-            name: sections[name]["digest"]
-            for name in (
-                "identity_fixture",
-                "measurement_fixture",
-                "runtime_assets",
-                "third_party_runtime",
-            )
-        }
+        {name: sections[name]["digest"] for name in COORDINATE_SECTIONS}
     )
     if payload.get("coordinate_digest") != coordinate:
         raise RuntimeInputError("runtime-input coordinate digest mismatch")
@@ -512,9 +647,18 @@ def validate_manifest(
             raise RuntimeInputError(
                 "runtime-input manifest build_artifacts.build_dir is not absolute"
             )
+        evidence = sections.get(PHASE_A_EVIDENCE_SECTION)
+        evidence_root = (
+            Path(str(evidence.get("configured_root", ""))) if evidence else None
+        )
+        if evidence is not None and not (evidence_root and evidence_root.is_absolute()):
+            raise RuntimeInputError(
+                "runtime-input manifest phase_a_evidence.configured_root is not absolute"
+            )
         current_paths = discover_bound_paths(
             build_dir=build_dir,
             data_root=data_root,
+            phase_a_evidence_root=evidence_root,
         )
         recorded_paths = _consumer_paths_from_sections(sections)
         if current_paths != recorded_paths:
@@ -540,17 +684,23 @@ def load_manifest(path: Path, *, verify_files: bool = False) -> dict[str, Any]:
     return validate_manifest(payload, verify_files=verify_files)
 
 
+def _bound_section_names(payload: Mapping[str, Any]) -> tuple[str, ...]:
+    """Every section a consumer opens — digest membership is a separate question.
+
+    `phase_a_evidence` is in neither digest (§ C3.8) and is nonetheless bound and
+    watched (§ C3.2 item 7), which is exactly why membership is enumerated here
+    rather than reused from `FULL_DIGEST_SECTIONS`.
+    """
+    if PHASE_A_EVIDENCE_SECTION in payload:
+        return (*FULL_DIGEST_SECTIONS, PHASE_A_EVIDENCE_SECTION)
+    return FULL_DIGEST_SECTIONS
+
+
 def _consumer_paths_from_sections(
     sections: Mapping[str, Mapping[str, Any]],
 ) -> tuple[Path, ...]:
     paths: set[Path] = set()
-    for name in (
-        "identity_fixture",
-        "measurement_fixture",
-        "runtime_assets",
-        "third_party_runtime",
-        "build_artifacts",
-    ):
+    for name in _bound_section_names(sections):
         for record in sections[name]["files"]:
             paths.add(Path(record["configured_path"]))
     return tuple(sorted(paths, key=lambda item: item.as_posix()))
@@ -558,29 +708,14 @@ def _consumer_paths_from_sections(
 
 def consumer_paths(payload: Mapping[str, Any]) -> tuple[Path, ...]:
     validated = validate_manifest(payload)
-    sections = {
-        name: validated[name]
-        for name in (
-            "identity_fixture",
-            "measurement_fixture",
-            "runtime_assets",
-            "third_party_runtime",
-            "build_artifacts",
-        )
-    }
+    sections = {name: validated[name] for name in _bound_section_names(validated)}
     return _consumer_paths_from_sections(sections)
 
 
 def bound_paths(payload: Mapping[str, Any]) -> tuple[Path, ...]:
     validated = validate_manifest(payload)
     paths: set[Path] = set()
-    for name in (
-        "identity_fixture",
-        "measurement_fixture",
-        "runtime_assets",
-        "third_party_runtime",
-        "build_artifacts",
-    ):
+    for name in _bound_section_names(validated):
         for record in validated[name]["files"]:
             paths.add(Path(record["configured_path"]))
             paths.add(Path(record["resolved_path"]))
@@ -589,6 +724,12 @@ def bound_paths(payload: Mapping[str, Any]) -> tuple[Path, ...]:
 
 
 def publication_axis(payload: Mapping[str, Any]) -> dict[str, Any]:
+    """The published `runtime_inputs` axis: the four coordinate sections only.
+
+    `build_artifacts` is excluded because the coordinate spans builds, and
+    `phase_a_evidence` because it does not exist until after the seal that
+    freezes this axis (§ C3.8).
+    """
     validated = validate_manifest(payload)
     return {
         "digest": validated["coordinate_digest"],
@@ -600,7 +741,13 @@ def publication_axis(payload: Mapping[str, Any]) -> dict[str, Any]:
         "measurement_fixture": {
             "digest": validated["measurement_fixture"]["digest"],
             "file_count": validated["measurement_fixture"]["file_count"],
-            "sequence": MEASUREMENT_SEQUENCE,
+            "sequences": [
+                {
+                    "file_count": item["file_count"],
+                    "sequence": item["sequence"],
+                }
+                for item in validated["measurement_fixture"]["sequences"]
+            ],
         },
         "runtime_assets": {
             "digest": validated["runtime_assets"]["digest"],
@@ -618,9 +765,22 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--build-dir", type=Path, required=True)
     parser.add_argument("--data-root", type=Path, default=None)
     parser.add_argument("--emit", type=Path, required=True)
+    parser.add_argument(
+        "--phase-a-evidence-root",
+        type=Path,
+        default=None,
+        help=(
+            "bind the Phase-A evidence root as an F_B-only section (§ C3.8); "
+            "it moves neither digest"
+        ),
+    )
     args = parser.parse_args(argv)
     try:
-        payload = build_manifest(build_dir=args.build_dir, data_root=args.data_root)
+        payload = build_manifest(
+            build_dir=args.build_dir,
+            data_root=args.data_root,
+            phase_a_evidence_root=args.phase_a_evidence_root,
+        )
     except (RuntimeInputError, OSError) as exc:
         print(f"runtime-input manifest failed: {exc}", file=sys.stderr)
         return 1
@@ -629,6 +789,12 @@ def main(argv: list[str] | None = None) -> int:
     print(f"wrote {args.emit}")
     print(f"  coordinate_digest {payload['coordinate_digest']}")
     print(f"  full_digest       {payload['full_digest']}")
+    if PHASE_A_EVIDENCE_SECTION in payload:
+        section = payload[PHASE_A_EVIDENCE_SECTION]
+        print(
+            f"  phase_a_evidence  {section['digest']} "
+            f"({section['file_count']} files, in neither digest)"
+        )
     return 0
 
 
