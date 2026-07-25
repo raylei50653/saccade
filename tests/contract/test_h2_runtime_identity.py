@@ -368,6 +368,17 @@ def test_gpu_reattestation_triggers_when_the_ruler_changes() -> None:
         )
 
 
+def test_gpu_reattestation_runs_for_same_repository_pull_requests_only() -> None:
+    workflow = (_REPO / ".github/workflows/runtime_identity.yml").read_text(
+        encoding="utf-8"
+    )
+    assert "pull_request:" in workflow
+    assert (
+        "github.event.pull_request.head.repo.full_name == github.repository" in workflow
+    )
+    assert "github.event.pull_request.head.sha || github.sha" in workflow
+
+
 def test_witness_fields_are_marked_as_carrying_no_authority() -> None:
     built = identity.build_publication(probe=None, runtime_input_manifest=None)
     note = built["witness"]["note"]

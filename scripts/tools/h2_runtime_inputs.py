@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any, Iterable, Mapping
@@ -68,6 +69,34 @@ def sha256_file(path: Path) -> str:
     return hasher.hexdigest()
 
 
+def _absolute_lexical(path: Path) -> Path:
+    """Return the consumer-visible absolute path without resolving symlinks."""
+    return Path(os.path.abspath(path))
+
+
+def _symlink_chain(path: Path) -> list[dict[str, str]]:
+    """Record every symlink component exactly as the consumer traverses it."""
+    lexical = _absolute_lexical(path)
+    current = Path(lexical.anchor)
+    chain: list[dict[str, str]] = []
+    for part in lexical.parts[1:]:
+        current /= part
+        if current.is_symlink():
+            chain.append(
+                {
+                    "path": current.as_posix(),
+                    "target": os.readlink(current),
+                }
+            )
+    return chain
+
+
+def _path_binding(path: Path) -> tuple[Path, Path, list[dict[str, str]]]:
+    configured = _absolute_lexical(path)
+    resolved = configured.resolve(strict=True)
+    return configured, resolved, _symlink_chain(configured)
+
+
 def _shown(path: Path) -> str:
     resolved = path.resolve()
     if resolved.is_relative_to(REPO_ROOT):
@@ -76,15 +105,17 @@ def _shown(path: Path) -> str:
 
 
 def _record(*, path: Path, role: str, coordinate: str) -> dict[str, Any]:
-    resolved = path.resolve(strict=True)
+    configured, resolved, symlink_chain = _path_binding(path)
     if not resolved.is_file():
         raise RuntimeInputError(f"runtime input is not a regular file: {resolved}")
     return {
+        "configured_path": configured.as_posix(),
         "coordinate": coordinate,
         "length": resolved.stat().st_size,
         "resolved_path": resolved.as_posix(),
         "role": role,
         "sha256": sha256_file(resolved),
+        "symlink_chain": symlink_chain,
     }
 
 
@@ -105,32 +136,58 @@ def _section(records: Iterable[dict[str, Any]]) -> dict[str, Any]:
     return {"digest": digest(projection), "file_count": len(members), "files": members}
 
 
-def _fixture_section(*, data_root: Path, sequence: str, role: str) -> dict[str, Any]:
-    sequence_root = (data_root / "train" / sequence).resolve(strict=True)
+def _files_below(root: Path, pattern: str = "*") -> tuple[Path, ...]:
+    lexical_root = _absolute_lexical(root)
+    lexical_root.resolve(strict=True)
+    entries = tuple(lexical_root.rglob(pattern))
+    directory_symlinks = sorted(
+        (path for path in entries if path.is_symlink() and path.is_dir()),
+        key=lambda item: item.as_posix(),
+    )
+    if directory_symlinks:
+        raise RuntimeInputError(
+            "runtime-input directory symlinks are unsupported: "
+            + ", ".join(path.as_posix() for path in directory_symlinks)
+        )
+    return tuple(
+        sorted(
+            (path for path in entries if path.is_file()),
+            key=lambda item: item.as_posix(),
+        )
+    )
+
+
+def _fixture_paths(*, data_root: Path, sequence: str) -> tuple[Path, ...]:
+    sequence_root = _absolute_lexical(data_root / "train" / sequence)
     if not (sequence_root / "seqinfo.ini").is_file():
         raise RuntimeInputError(f"{sequence}: seqinfo.ini is absent")
     if not (sequence_root / "img1").is_dir():
         raise RuntimeInputError(f"{sequence}: img1 is absent")
+    return _files_below(sequence_root)
+
+
+def _fixture_section(*, data_root: Path, sequence: str, role: str) -> dict[str, Any]:
+    sequence_root = _absolute_lexical(data_root / "train" / sequence)
     records = [
         _record(
             path=path,
             role=role,
             coordinate=f"{sequence}/{path.relative_to(sequence_root).as_posix()}",
         )
-        for path in sequence_root.rglob("*")
-        if path.is_file()
+        for path in _fixture_paths(data_root=data_root, sequence=sequence)
     ]
     section = _section(records)
+    section["configured_root"] = sequence_root.as_posix()
     section["sequence"] = sequence
     section["root"] = _shown(sequence_root)
     return section
 
 
-def _runtime_assets_section(preset_path: Path) -> dict[str, Any]:
+def _runtime_asset_paths(preset_path: Path) -> tuple[tuple[str, str, Path], ...]:
     payload = yaml.safe_load(preset_path.read_text(encoding="utf-8")) or {}
     if not isinstance(payload, dict):
         raise RuntimeInputError(f"{preset_path}: preset is not a mapping")
-    records: list[dict[str, Any]] = []
+    paths: list[tuple[str, str, Path]] = []
     for field in RUNTIME_ASSET_FIELDS:
         configured = payload.get(field)
         if not isinstance(configured, str) or not configured:
@@ -140,51 +197,107 @@ def _runtime_assets_section(preset_path: Path) -> dict[str, Any]:
         path = Path(configured)
         if not path.is_absolute():
             path = REPO_ROOT / path
-        records.append(_record(path=path, role=field, coordinate=configured))
+        paths.append((field, configured, _absolute_lexical(path)))
+    return tuple(paths)
+
+
+def _runtime_assets_section(preset_path: Path) -> dict[str, Any]:
+    records = [
+        _record(path=path, role=field, coordinate=configured)
+        for field, configured, path in _runtime_asset_paths(preset_path)
+    ]
     return _section(records)
 
 
+def _third_party_paths() -> tuple[Path, ...]:
+    root = _absolute_lexical(REPO_ROOT / "third_party" / "TrackEval" / "trackeval")
+    return _files_below(root, "*.py")
+
+
 def _third_party_section() -> dict[str, Any]:
-    root = REPO_ROOT / "third_party" / "TrackEval" / "trackeval"
+    root = _absolute_lexical(REPO_ROOT / "third_party" / "TrackEval" / "trackeval")
     records = [
         _record(
             path=path,
             role="third_party_runtime_component",
             coordinate=path.relative_to(REPO_ROOT).as_posix(),
         )
-        for path in root.rglob("*.py")
-        if path.is_file()
+        for path in _third_party_paths()
     ]
-    return _section(records)
+    section = _section(records)
+    section["configured_root"] = root.as_posix()
+    return section
 
 
-def _build_artifacts_section(build_dir: Path) -> dict[str, Any]:
-    resolved = build_dir.resolve(strict=True)
-    extension = sorted(resolved.glob("saccade_tracking_ext*.so"))
-    plugins = sorted(resolved.glob("libsaccade_scan_plugin.so"))
+def _build_artifact_paths(build_dir: Path) -> tuple[Path, Path]:
+    configured = _absolute_lexical(build_dir)
+    configured.resolve(strict=True)
+    extension = sorted(configured.glob("saccade_tracking_ext*.so"))
+    plugins = sorted(configured.glob("libsaccade_scan_plugin.so"))
     if len(extension) != 1:
         raise RuntimeInputError(
-            f"{resolved}: expected one saccade_tracking_ext*.so, found {len(extension)}"
+            f"{configured}: expected one saccade_tracking_ext*.so, "
+            f"found {len(extension)}"
         )
     if len(plugins) != 1:
         raise RuntimeInputError(
-            f"{resolved}: expected one libsaccade_scan_plugin.so, found {len(plugins)}"
+            f"{configured}: expected one libsaccade_scan_plugin.so, "
+            f"found {len(plugins)}"
         )
+    return extension[0], plugins[0]
+
+
+def _build_artifacts_section(build_dir: Path) -> dict[str, Any]:
+    configured = _absolute_lexical(build_dir)
+    extension, plugin = _build_artifact_paths(configured)
     records = [
         _record(
-            path=extension[0],
+            path=extension,
             role="tracking_extension",
-            coordinate=extension[0].name,
+            coordinate=extension.name,
         ),
         _record(
-            path=plugins[0],
+            path=plugin,
             role="tensorrt_scan_plugin",
-            coordinate=plugins[0].name,
+            coordinate=plugin.name,
         ),
     ]
     section = _section(records)
-    section["build_dir"] = resolved.as_posix()
+    section["build_dir"] = configured.as_posix()
     return section
+
+
+def discover_bound_paths(
+    *,
+    build_dir: Path,
+    data_root: Path | None = None,
+    identity_sequence: str = IDENTITY_SEQUENCE,
+    measurement_sequence: str = MEASUREMENT_SEQUENCE,
+) -> tuple[Path, ...]:
+    """Discover lexical consumer paths before any content digest is computed."""
+    if identity_sequence != IDENTITY_SEQUENCE:
+        raise RuntimeInputError(
+            f"identity fixture must be {IDENTITY_SEQUENCE}, got {identity_sequence}"
+        )
+    if measurement_sequence != MEASUREMENT_SEQUENCE:
+        raise RuntimeInputError(
+            f"measurement fixture must be {MEASUREMENT_SEQUENCE}, "
+            f"got {measurement_sequence}"
+        )
+    root = _absolute_lexical(data_root or (REPO_ROOT / DEFAULT_DATA_ROOT))
+    paths = {
+        *_fixture_paths(data_root=root, sequence=identity_sequence),
+        *_fixture_paths(data_root=root, sequence=measurement_sequence),
+        *(
+            path
+            for _field, _configured, path in _runtime_asset_paths(
+                REPO_ROOT / POLICY_PRESET_REL
+            )
+        ),
+        *_third_party_paths(),
+        *_build_artifact_paths(build_dir),
+    }
+    return tuple(sorted(paths, key=lambda item: item.as_posix()))
 
 
 def build_manifest(
@@ -203,7 +316,7 @@ def build_manifest(
         raise RuntimeInputError(
             f"measurement fixture must be {MEASUREMENT_SEQUENCE}, got {measurement_sequence}"
         )
-    root = data_root or (REPO_ROOT / DEFAULT_DATA_ROOT)
+    root = _absolute_lexical(data_root or (REPO_ROOT / DEFAULT_DATA_ROOT))
     sections = {
         "identity_fixture": _fixture_section(
             data_root=root, sequence=identity_sequence, role="identity_fixture_input"
@@ -237,6 +350,7 @@ def build_manifest(
     return {
         **sections,
         "coordinate_digest": coordinate_digest,
+        "data_root": root.as_posix(),
         "full_digest": full_digest,
         "policy_preset": POLICY_PRESET_REL,
         "schema": SCHEMA,
@@ -258,6 +372,9 @@ def validate_manifest(
         raise RuntimeInputError(f"not a {SCHEMA} payload")
     if payload.get("policy_preset") != POLICY_PRESET_REL:
         raise RuntimeInputError("runtime-input manifest preset mismatch")
+    data_root = Path(str(payload.get("data_root", "")))
+    if not data_root.is_absolute():
+        raise RuntimeInputError("runtime-input manifest data_root is not absolute")
     section_names = (
         "identity_fixture",
         "measurement_fixture",
@@ -285,14 +402,46 @@ def validate_manifest(
                 raise RuntimeInputError(f"{name}: invalid sha256 for {key}")
             if not isinstance(record.get("length"), int) or record["length"] < 0:
                 raise RuntimeInputError(f"{name}: invalid length for {key}")
+            configured = Path(str(record.get("configured_path", "")))
+            resolved = Path(str(record.get("resolved_path", "")))
+            symlink_chain = record.get("symlink_chain")
+            if not configured.is_absolute() or not resolved.is_absolute():
+                raise RuntimeInputError(f"{name}: non-absolute path binding for {key}")
+            if not isinstance(symlink_chain, list) or any(
+                not isinstance(item, Mapping)
+                or not Path(str(item.get("path", ""))).is_absolute()
+                or not isinstance(item.get("target"), str)
+                for item in symlink_chain
+            ):
+                raise RuntimeInputError(f"{name}: malformed symlink chain for {key}")
             if verify_files:
-                resolved = Path(str(record.get("resolved_path", "")))
-                if not resolved.is_file():
-                    raise RuntimeInputError(f"{name}: bound file absent: {resolved}")
-                if resolved.stat().st_size != record["length"]:
-                    raise RuntimeInputError(f"{name}: length moved: {resolved}")
-                if sha256_file(resolved) != record["sha256"]:
-                    raise RuntimeInputError(f"{name}: content moved: {resolved}")
+                try:
+                    current_configured, current_resolved, current_chain = _path_binding(
+                        configured
+                    )
+                except (OSError, RuntimeError) as exc:
+                    raise RuntimeInputError(
+                        f"{name}: bound path unusable for {key}: {exc}"
+                    ) from exc
+                if (
+                    current_configured != configured
+                    or current_resolved != resolved
+                    or current_chain != symlink_chain
+                ):
+                    raise RuntimeInputError(
+                        f"{name}: path binding moved for {key}: "
+                        f"{configured} -> {current_resolved}"
+                    )
+                if not current_resolved.is_file():
+                    raise RuntimeInputError(
+                        f"{name}: bound file absent: {current_resolved}"
+                    )
+                if current_resolved.stat().st_size != record["length"]:
+                    raise RuntimeInputError(f"{name}: length moved: {current_resolved}")
+                if sha256_file(current_resolved) != record["sha256"]:
+                    raise RuntimeInputError(
+                        f"{name}: content moved: {current_resolved}"
+                    )
         expected = digest([_digest_projection(item) for item in files])
         if section.get("digest") != expected:
             raise RuntimeInputError(f"{name}: section digest mismatch")
@@ -324,6 +473,25 @@ def validate_manifest(
     )
     if payload.get("full_digest") != full:
         raise RuntimeInputError("runtime-input full digest mismatch")
+    if verify_files:
+        build_dir = Path(str(sections["build_artifacts"].get("build_dir", "")))
+        if not build_dir.is_absolute():
+            raise RuntimeInputError(
+                "runtime-input manifest build_artifacts.build_dir is not absolute"
+            )
+        current_paths = discover_bound_paths(
+            build_dir=build_dir,
+            data_root=data_root,
+        )
+        recorded_paths = _consumer_paths_from_sections(sections)
+        if current_paths != recorded_paths:
+            added = sorted(set(current_paths) - set(recorded_paths))
+            removed = sorted(set(recorded_paths) - set(current_paths))
+            raise RuntimeInputError(
+                "runtime-input membership moved: "
+                f"added={[path.as_posix() for path in added]}, "
+                f"removed={[path.as_posix() for path in removed]}"
+            )
     return dict(payload)
 
 
@@ -339,6 +507,37 @@ def load_manifest(path: Path, *, verify_files: bool = False) -> dict[str, Any]:
     return validate_manifest(payload, verify_files=verify_files)
 
 
+def _consumer_paths_from_sections(
+    sections: Mapping[str, Mapping[str, Any]],
+) -> tuple[Path, ...]:
+    paths: set[Path] = set()
+    for name in (
+        "identity_fixture",
+        "measurement_fixture",
+        "runtime_assets",
+        "third_party_runtime",
+        "build_artifacts",
+    ):
+        for record in sections[name]["files"]:
+            paths.add(Path(record["configured_path"]))
+    return tuple(sorted(paths, key=lambda item: item.as_posix()))
+
+
+def consumer_paths(payload: Mapping[str, Any]) -> tuple[Path, ...]:
+    validated = validate_manifest(payload)
+    sections = {
+        name: validated[name]
+        for name in (
+            "identity_fixture",
+            "measurement_fixture",
+            "runtime_assets",
+            "third_party_runtime",
+            "build_artifacts",
+        )
+    }
+    return _consumer_paths_from_sections(sections)
+
+
 def bound_paths(payload: Mapping[str, Any]) -> tuple[Path, ...]:
     validated = validate_manifest(payload)
     paths: set[Path] = set()
@@ -350,7 +549,9 @@ def bound_paths(payload: Mapping[str, Any]) -> tuple[Path, ...]:
         "build_artifacts",
     ):
         for record in validated[name]["files"]:
+            paths.add(Path(record["configured_path"]))
             paths.add(Path(record["resolved_path"]))
+            paths.update(Path(item["path"]) for item in record["symlink_chain"])
     return tuple(sorted(paths, key=lambda item: item.as_posix()))
 
 

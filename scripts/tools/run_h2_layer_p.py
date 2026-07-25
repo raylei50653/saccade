@@ -334,28 +334,16 @@ class LayerP:
         result_path = self.work_dir / "behavior_probe.json"
         manifest_path = self.work_dir / "runtime_inputs.json"
         try:
-            manifest = runtime_inputs.build_manifest(build_dir=self.build_dir)
+            discovered = runtime_inputs.discover_bound_paths(build_dir=self.build_dir)
         except (runtime_inputs.RuntimeInputError, OSError) as exc:
-            raise self._block("identity_run", f"runtime-input binding failed: {exc}")
-        manifest_path.write_bytes(canonical_json_bytes(manifest) + b"\n")
-        if manifest["coordinate_digest"] != published["coordinate"].get(
-            "runtime_inputs"
-        ):
-            raise self._block(
-                "identity_run",
-                "published runtime-input coordinate does not match the selected "
-                "fixtures/assets",
-                published_runtime_inputs=published["coordinate"].get("runtime_inputs"),
-                measured_runtime_inputs=manifest["coordinate_digest"],
-            )
-
+            raise self._block("identity_run", f"runtime-input discovery failed: {exc}")
         bound = {
             REPO_ROOT / path
             for path_class in ("decision_relevant", "identity_semantics")
             for path in identity.tracked_files_for_class(path_class)
             if (REPO_ROOT / path).is_file()
         }
-        bound.update(runtime_inputs.bound_paths(manifest))
+        bound.update(discovered)
         try:
             monitor = h0_controller.BoundInputMonitor(bound)
         except (h0_controller.DriftError, OSError) as exc:
@@ -366,6 +354,30 @@ class LayerP:
             "SACCADE_BUILD_PATH": self.build_dir.as_posix(),
         }
         try:
+            try:
+                manifest = runtime_inputs.build_manifest(build_dir=self.build_dir)
+            except (runtime_inputs.RuntimeInputError, OSError) as exc:
+                raise self._block(
+                    "identity_run", f"runtime-input binding failed: {exc}"
+                ) from exc
+            if runtime_inputs.consumer_paths(manifest) != discovered:
+                raise self._block(
+                    "identity_run",
+                    "runtime-input membership changed between discovery and binding",
+                )
+            manifest_path.write_bytes(canonical_json_bytes(manifest) + b"\n")
+            if manifest["coordinate_digest"] != published["coordinate"].get(
+                "runtime_inputs"
+            ):
+                raise self._block(
+                    "identity_run",
+                    "published runtime-input coordinate does not match the selected "
+                    "fixtures/assets",
+                    published_runtime_inputs=published["coordinate"].get(
+                        "runtime_inputs"
+                    ),
+                    measured_runtime_inputs=manifest["coordinate_digest"],
+                )
             try:
                 completed = subprocess.run(
                     [
@@ -385,6 +397,13 @@ class LayerP:
             except OSError as exc:
                 raise self._block(
                     "identity_run", f"identity probe could not launch: {exc}"
+                ) from exc
+            try:
+                runtime_inputs.validate_manifest(manifest, verify_files=True)
+            except (runtime_inputs.RuntimeInputError, OSError) as exc:
+                raise self._block(
+                    "identity_run",
+                    f"post-run validation failed: {exc}",
                 ) from exc
             events = monitor.drain()
         finally:

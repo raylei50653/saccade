@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -92,3 +93,52 @@ def test_build_artifact_changes_full_digest_but_not_stable_coordinate(
     after = inputs.build_manifest(build_dir=build_dir, data_root=data_root)
     assert before["coordinate_digest"] == after["coordinate_digest"]
     assert before["full_digest"] != after["full_digest"]
+
+
+def test_discovery_returns_the_lexical_paths_that_consumers_open(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    data_root, build_dir = _fixture_tree(tmp_path, monkeypatch)
+    target = _write(tmp_path / "assets" / "alternate.bin", b"asset-0")
+    configured = tmp_path / "assets" / f"{inputs.RUNTIME_ASSET_FIELDS[0]}.bin"
+    configured.unlink()
+    configured.symlink_to(target)
+
+    discovered = set(
+        inputs.discover_bound_paths(build_dir=build_dir, data_root=data_root)
+    )
+
+    assert Path(os.path.abspath(configured)) in discovered
+    assert target.resolve() not in discovered
+
+
+def test_manifest_rejects_an_equal_content_asset_symlink_retarget(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    data_root, build_dir = _fixture_tree(tmp_path, monkeypatch)
+    first = _write(tmp_path / "assets" / "first.bin", b"same-bytes")
+    second = _write(tmp_path / "assets" / "second.bin", b"same-bytes")
+    configured = tmp_path / "assets" / f"{inputs.RUNTIME_ASSET_FIELDS[0]}.bin"
+    configured.unlink()
+    configured.symlink_to(first)
+    manifest = inputs.build_manifest(build_dir=build_dir, data_root=data_root)
+
+    configured.unlink()
+    configured.symlink_to(second)
+
+    with pytest.raises(inputs.RuntimeInputError, match="path binding moved"):
+        inputs.validate_manifest(manifest, verify_files=True)
+
+
+def test_manifest_revalidation_rejects_fixture_membership_drift(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    data_root, build_dir = _fixture_tree(tmp_path, monkeypatch)
+    manifest = inputs.build_manifest(build_dir=build_dir, data_root=data_root)
+    _write(
+        data_root / "train" / inputs.MEASUREMENT_SEQUENCE / "img1" / "000002.jpg",
+        b"late-frame",
+    )
+
+    with pytest.raises(inputs.RuntimeInputError, match="membership moved"):
+        inputs.validate_manifest(manifest, verify_files=True)

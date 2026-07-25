@@ -679,3 +679,35 @@ production change follows from this document. H0's closed history, its five spen
 `S` chains, and the permanent ledger entry on
 `quantity.bridge_capture_provenance` are unchanged: there is still no faithful
 capture, no accepted runtime-fidelity edge, and no actual H0 guarantee envelope.
+
+---
+
+## Review Correction 1 — continuous runtime-input binding (2026-07-25, pre-seal)
+
+This correction closes the manifest/monitor TOCTOU found in PR #287 review. It
+changes no authority state and grants no execution.
+
+For §4.2 predicate 2 and §5.3, "watched during execution" now has this mechanical
+order:
+
+```text
+discover lexical consumer paths and symlink chains
+→ start BoundInputMonitor
+→ build and persist the content manifest
+→ execute the bounded identity probe
+→ validate every recorded file, path target, symlink chain and full membership
+→ final monitor drain
+→ close the monitor
+→ only then admit certificate construction
+```
+
+The manifest records both the configured lexical path actually opened by the
+consumer and its resolved target, plus every symlink component and link text.
+Layer P monitors the lexical paths before hashing begins. An equal-content
+symlink retarget, a fixture member added after hashing, or a content mutation in
+the former pre-monitor window therefore blocks Layer P and cannot enter a pass
+certificate.
+
+The controlled-host re-attestation workflow also runs against the exact head SHA
+of same-repository pull requests. Fork pull requests are rejected at job scope
+before any untrusted code can reach the self-hosted runner.

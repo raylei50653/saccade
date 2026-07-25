@@ -57,8 +57,8 @@ Full argument: declaration §0. Design record:
 |:--|:--|:--|
 | **S0** | ✅ landed — this charter + the H2 declaration + navigation + registry field proposal | no — docs only |
 | **S1** | ✅ landed — bounded behavior probe, coordinate/probe publisher, runtime-input manifest and path-partition firewall; G1/G2 remain probes, not equivalence evidence | no — default-off research tooling |
-| **S2** | ✅ landed — published coordinate/probe/equivalence split, `captured_under` sidecar, fail-closed static guard, self-hosted input/probe re-attestation | no |
-| **S3** | ✅ landed — `run_h2_layer_p.py`: required base, retry verdict, build/load proof, complete runtime-input monitor, bounded probe, v2 certificate, append-only retry log | no |
+| **S2** | ✅ landed — published coordinate/probe/equivalence split, `captured_under` sidecar, fail-closed static guard, same-repository PR-head + main self-hosted input/probe re-attestation | no |
+| **S3** | ✅ landed — `run_h2_layer_p.py`: required base, retry verdict, build/load proof, monitor-before-hash runtime-input binding, post-run content/membership/symlink revalidation, bounded probe, v2 certificate, append-only retry log | no |
 | **S4** | ⚠️ **partial** — terminal partition landed as an executable module (`h2_terminal_partition.py`, 28 tests); the measurement run/packet plumbing is **not implemented** (below) | no |
 
 ### S4 — what is and is not implemented

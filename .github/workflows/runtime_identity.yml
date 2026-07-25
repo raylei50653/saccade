@@ -17,6 +17,32 @@ on:
         required: true
         default: main
         type: string
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "include/**"
+      - "configs/presets/mamba_whole_graph_m.yaml"
+      - "scripts/eval/**"
+      - "scripts/tools/resolved_bridge_policy_config.py"
+      - "CMakeLists.txt"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "datasets/**"
+      - "models/**"
+      - "runs/**"
+      - "third_party/**"
+      - ".github/workflows/runtime_identity.yml"
+      - "scripts/pre_push.sh"
+      - "scripts/tools/h2_behavioral_identity.py"
+      - "scripts/tools/h2_path_partition.py"
+      - "scripts/tools/h2_runtime_inputs.py"
+      - "scripts/tools/h2_terminal_partition.py"
+      - "scripts/tools/build_runtime_identity.py"
+      - "scripts/tools/check_runtime_identity_staleness.py"
+      - "scripts/tools/run_h2_layer_p.py"
+      - "docs/modules/semantic/research/headline_bridge_behavioral_identity_capture_declaration_20260725.policy.yaml"
+      - "docs/reference/runtime_identity.generated.json"
   push:
     branches: [main]
     paths:
@@ -58,6 +84,10 @@ env:
 
 jobs:
   behavior-axis:
+    # Never execute untrusted fork code on the controlled self-hosted runner.
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
     # Same controlled host as H0 qualification: it supplies the real CUDA /
     # TensorRT runtime closure. This job enters no research authority and reads
     # no research inputs; it only recomputes a digest and compares it.
@@ -65,7 +95,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.ref || github.ref }}
+          ref: ${{ inputs.ref || github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
 
       - uses: astral-sh/setup-uv@v5
