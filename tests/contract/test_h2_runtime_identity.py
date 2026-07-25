@@ -379,6 +379,16 @@ def test_gpu_reattestation_runs_for_same_repository_pull_requests_only() -> None
     assert "github.event.pull_request.head.sha || github.sha" in workflow
 
 
+def test_gpu_reattestation_binds_controlled_host_runtime_inputs_lexically() -> None:
+    workflow = (_REPO / ".github/workflows/runtime_identity.yml").read_text(
+        encoding="utf-8"
+    )
+    assert "SACCADE_CONTROLLED_RESOURCE_ROOT:" in workflow
+    assert "Bind controlled host-local runtime inputs into the checkout" in workflow
+    assert "for name in datasets models runs; do" in workflow
+    assert 'ln -s "${source}" "${name}"' in workflow
+
+
 def test_witness_fields_are_marked_as_carrying_no_authority() -> None:
     built = identity.build_publication(probe=None, runtime_input_manifest=None)
     note = built["witness"]["note"]
