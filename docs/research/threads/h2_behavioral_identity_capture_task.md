@@ -56,9 +56,9 @@ Full argument: declaration §0. Design record:
 | Stage | Content | Touches production behavior |
 |:--|:--|:--|
 | **S0** | ✅ landed — this charter + the H2 declaration + navigation + registry field proposal | no — docs only |
-| **S1** | ✅ landed — behavioral-identity module, four-axis builder, path-partition firewall; **G1 and G2 both pass** (declaration § 5.1.2–5.1.3) | no — default-off research tooling |
-| **S2** | ✅ landed — published `runtime_identity`, `captured_under` sidecar, staleness guard in `pre_push`, self-hosted CI re-attestation (declaration § 8.3.1) | no |
-| **S3** | ✅ landed — `run_h2_layer_p.py`: retry admissibility, launch hygiene, build, build-tool witness, load-consumption proof, mutation monitor, behavior comparison, append-only retry log | no |
+| **S1** | ✅ landed — bounded behavior probe, coordinate/probe publisher, runtime-input manifest and path-partition firewall; G1/G2 remain probes, not equivalence evidence | no — default-off research tooling |
+| **S2** | ✅ landed — published coordinate/probe/equivalence split, `captured_under` sidecar, fail-closed static guard, self-hosted input/probe re-attestation | no |
+| **S3** | ✅ landed — `run_h2_layer_p.py`: required base, retry verdict, build/load proof, complete runtime-input monitor, bounded probe, v2 certificate, append-only retry log | no |
 | **S4** | ⚠️ **partial** — terminal partition landed as an executable module (`h2_terminal_partition.py`, 28 tests); the measurement run/packet plumbing is **not implemented** (below) | no |
 
 ### S4 — what is and is not implemented
@@ -84,9 +84,10 @@ below, and none of them has been made. Layer P is independently useful without i
 
 ### Falsification gates (S1, before anything downstream)
 
-- **G1** — the same source built in two different directories must produce an
-  **equal `behavior` axis** (physical digests will differ and are witness only).
-  G1 failing kills the design; stop and report.
+- **G1** — the same source built in two different directories should produce an
+  equal bounded behavior probe. Inequality falsifies the intended stability;
+  equality says only that MOT17-09 observed no difference and is not an
+  equivalence proof. Exact extension/plugin bytes remain certificate/F inputs.
 - **G2** — three repeats under the A5 policy target must be byte-identical on the
   A7.6 inventory. G2 is a **cheap pre-seal probe of a risk independent of
   provenance**: if production is nondeterministic (GPU-decode race, relink
@@ -118,21 +119,23 @@ Against `quantity.bridge_capture_provenance`
 dependency, nothing else:
 
 ```yaml
-captured_under:                  # NEW — which published runtime_identity the
-  decision_surface: <sha256>     #       evidence was captured under; absent for
-  implementation:   <sha256>     #       all existing rows (no retroactive claim)
-  environment:      <sha256>
-  behavior:         <sha256>
+captured_under:                  # NEW — exact coordinate/probe used by evidence
+  coordinate:
+    decision_surface:   <sha256>
+    implementation:     <sha256>
+    environment:        <sha256>
+    identity_semantics: <sha256>
+    runtime_inputs:     <sha256>
+  probe: <sha256>               # bounded MOT17-09 observation, not equivalence
 dependencies:                    # ADD one entry
   - H2 Layer-M measurement (proposed; declaration 2026-07-25) — a passing
     terminal 5 is the precondition, not the activation, of a runtime-fidelity edge
 ```
 
-Consumption rule proposed with it: a row whose `captured_under.decision_surface`
-or `captured_under.behavior` differs from the published `runtime_identity` is
-**stale** and its consumers are inadmissible until re-attested; a difference
-confined to `implementation` / `environment` with `behavior` equal is
-behavior-preserving and changes nothing. Version-lag accounting in the sense of
+Consumption rule: decision-surface, identity-semantics or probe drift is stale.
+Implementation, environment or runtime-input drift with an equal probe is
+`re_attestation_required`, never behavior-preserving. V1 defines no equivalence
+upgrade. Version-lag accounting follows
 [ADR 020 §S2](../../decisions/020-doc-lifecycle-new-nogo.md).
 
 ## Boundary

@@ -1,14 +1,14 @@
-"""The behavior axis must digest the declared members, and only those.
+"""The behavior probe is bounded and its publication intake fails closed.
 
-Three properties carry the axis, and each has a way of being quietly wrong:
+Three properties carry the probe, and each has a way of being quietly wrong:
 
   * **member set** — the digest covers exactly the four § 4.0 members. Digesting
     the whole inventory dict would fold in mode, fixture, and any future key, so
     an identity-mode digest and a production digest of the same behavior would
-    differ and the axis would stop being about behavior.
+    differ and the probe would stop being about observed behavior.
   * **sensitivity** — every member must actually move the digest. A member that
     is collected but not digested is worse than absent: it looks like coverage.
-  * **fail-closed intake** — an axis may not be built from a run whose repeats
+  * **fail-closed intake** — a probe may not be built from a run whose repeats
     disagreed. A digest that averages over a non-reproducible run is a fiction.
 
 No GPU here: these exercise the pure digest/intake logic. The runs themselves are
@@ -64,7 +64,7 @@ def test_the_declared_member_set_is_exactly_four() -> None:
     )
 
 
-def test_trace_only_members_are_not_in_the_axis() -> None:
+def test_trace_only_members_are_not_in_the_probe() -> None:
     """§ 4.0: they cannot exist capture-off, so including them would make the
     axis uncomputable in identity mode."""
     for excluded in (
@@ -150,63 +150,186 @@ def test_canonical_json_is_h0s_convention() -> None:
 # --------------------------------------------------------------------------- #
 # Identity intake                                                              #
 # --------------------------------------------------------------------------- #
-def _behavior_payload(**overrides) -> dict:
+def _behavior_payload(tmp_path: Path, **overrides) -> dict:
+    build_dir = tmp_path / "build"
+    build_dir.mkdir(exist_ok=True)
+    extension = build_dir / "saccade_tracking_ext.test.so"
+    plugin = build_dir / "libsaccade_scan_plugin.so"
+    extension.write_bytes(b"extension")
+    plugin.write_bytes(b"plugin")
+    artifacts = []
+    for role, path in sorted(
+        (
+            ("tracking_extension", extension),
+            ("tensorrt_scan_plugin", plugin),
+        )
+    ):
+        artifacts.append(
+            {
+                "coordinate": path.name,
+                "length": path.stat().st_size,
+                "path": path.as_posix(),
+                "role": role,
+                "sha256": identity.sha256_file(path),
+            }
+        )
+    projection = [
+        {
+            "coordinate": item["coordinate"],
+            "length": item["length"],
+            "role": item["role"],
+            "sha256": item["sha256"],
+        }
+        for item in artifacts
+    ]
     payload = {
+        "build_witness": {
+            "artifacts": artifacts,
+            "build_dir": build_dir.as_posix(),
+            "digest": behavior.digest(projection),
+            "schema": behavior.BUILD_WITNESS_SCHEMA,
+        },
+        "determinism_pinned": True,
         "digest": "ab" * 32,
         "digests": ["ab" * 32],
         "identical": True,
         "mode": "identity",
         "preset": behavior.POLICY_PRESET_REL,
         "repeats": 1,
-        "resolved_fingerprint": "cd" * 32,
-        "schema": "h2_behavior_result_v1",
+        "recorder_sha256": identity.sha256_file(Path(behavior.__file__)),
+        "resolved_fingerprint": identity.decision_surface_axis()[
+            "resolved_bridge_policy_config_v1"
+        ],
+        "schema": behavior.RESULT_SCHEMA,
         "sequence": behavior.IDENTITY_SEQUENCE,
     }
     payload.update(overrides)
     return payload
 
 
-def test_a_non_reproducible_run_cannot_define_an_axis(tmp_path: Path) -> None:
+def test_a_non_reproducible_run_cannot_define_a_probe(tmp_path: Path) -> None:
     path = tmp_path / "result.json"
     path.write_text(
-        json.dumps(_behavior_payload(identical=False, repeats=3, digest=None)),
+        json.dumps(
+            _behavior_payload(
+                tmp_path,
+                identical=False,
+                repeats=3,
+                digest=None,
+                digests=["ab" * 32, "cd" * 32, "ef" * 32],
+            )
+        ),
         encoding="utf-8",
     )
     with pytest.raises(identity.IdentityError, match="repeats disagreed"):
-        identity.load_behavior(path)
+        identity.load_identity_behavior_probe(path)
 
 
 def test_a_foreign_schema_is_rejected(tmp_path: Path) -> None:
     path = tmp_path / "result.json"
-    path.write_text(json.dumps(_behavior_payload(schema="other_v1")), encoding="utf-8")
+    path.write_text(
+        json.dumps(_behavior_payload(tmp_path, schema="other_v1")), encoding="utf-8"
+    )
     with pytest.raises(identity.IdentityError):
-        identity.load_behavior(path)
+        identity.load_identity_behavior_probe(path)
 
 
 def test_a_valid_payload_loads(tmp_path: Path) -> None:
     path = tmp_path / "result.json"
-    path.write_text(json.dumps(_behavior_payload()), encoding="utf-8")
-    loaded = identity.load_behavior(path)
+    path.write_text(json.dumps(_behavior_payload(tmp_path)), encoding="utf-8")
+    loaded = identity.load_identity_behavior_probe(path)
     assert loaded["digest"] == "ab" * 32
     assert loaded["state"] == "computed"
+
+
+@pytest.mark.parametrize(
+    "field,value,match",
+    [
+        ("mode", "production", "expected mode"),
+        ("sequence", behavior.MEASUREMENT_SEQUENCE, "expected sequence"),
+        ("preset", "other.yaml", "preset mismatch"),
+        ("determinism_pinned", False, "pinning mismatch"),
+        ("resolved_fingerprint", "00" * 32, "does not match"),
+        ("recorder_sha256", "00" * 32, "recorder does not match"),
+        ("digest", "not-a-sha256", "valid SHA-256"),
+        ("build_witness", None, "build_witness"),
+    ],
+)
+def test_identity_probe_intake_rejects_wrong_provenance(
+    tmp_path: Path, field: str, value: object, match: str
+) -> None:
+    path = tmp_path / f"{field}.json"
+    path.write_text(
+        json.dumps(_behavior_payload(tmp_path, **{field: value})), encoding="utf-8"
+    )
+    with pytest.raises(identity.IdentityError, match=match):
+        identity.load_identity_behavior_probe(path)
+
+
+def test_production_repeat_probe_is_separate_from_identity_intake(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "production.json"
+    path.write_text(
+        json.dumps(
+            _behavior_payload(
+                tmp_path,
+                determinism_pinned=False,
+                digests=["ab" * 32, "ab" * 32],
+                mode="production",
+                repeats=2,
+                sequence=behavior.MEASUREMENT_SEQUENCE,
+            )
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(identity.IdentityError, match="expected mode"):
+        identity.load_identity_behavior_probe(path)
+    loaded = identity.load_production_repeat_probe(path)
+    assert loaded["mode"] == "production"
+
+
+def test_cli_defaults_production_probe_to_measurement_fixture(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    observed: list[tuple[str, bool]] = []
+
+    def fake_run(*, sequence: str, identity_mode: bool, output_dir: Path) -> dict:
+        observed.append((sequence, identity_mode))
+        return {
+            "build_witness": {},
+            "digest": "ab" * 32,
+            "mode": "identity" if identity_mode else "production",
+            "preset": behavior.POLICY_PRESET_REL,
+            "resolved_fingerprint": "cd" * 32,
+            "sequence": sequence,
+        }
+
+    monkeypatch.setattr(behavior, "run_behavior_inventory", fake_run)
+    output = tmp_path / "probe.json"
+    assert behavior.main(["--emit", output.as_posix()]) == 0
+    assert observed == [(behavior.MEASUREMENT_SEQUENCE, False)]
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    assert payload["determinism_pinned"] is False
 
 
 # --------------------------------------------------------------------------- #
 # Axis assembly                                                                #
 # --------------------------------------------------------------------------- #
-def test_an_identity_without_a_behavior_axis_is_incomplete() -> None:
-    built = identity.build_identity(behavior=None, build_dir=None)
-    assert built["complete"] is False
-    assert built["identity"]["behavior"] is None
-    assert built["axes"]["behavior"]["state"] == "not_computed"
+def test_a_publication_without_probe_or_runtime_inputs_is_incomplete() -> None:
+    built = identity.build_publication(probe=None, runtime_input_manifest=None)
+    assert built["publication_complete"] is False
+    assert built["probe"]["digest"] is None
+    assert built["coordinate"]["runtime_inputs"] is None
+    assert built["equivalence"]["state"] == "unproven"
 
 
 def test_the_three_static_axes_are_reproducible() -> None:
-    first = identity.build_identity(behavior=None, build_dir=None)
-    second = identity.build_identity(behavior=None, build_dir=None)
-    for axis in ("decision_surface", "environment", "implementation"):
-        assert first["identity"][axis] == second["identity"][axis]
-        assert first["identity"][axis] is not None
+    first = identity.build_publication(probe=None, runtime_input_manifest=None)
+    second = identity.build_publication(probe=None, runtime_input_manifest=None)
+    for axis in identity.STATIC_COORDINATE_AXES:
+        assert first["coordinate"][axis] == second["coordinate"][axis]
+        assert first["coordinate"][axis] is not None
 
 
 def test_the_implementation_axis_covers_the_kernel_and_the_preset() -> None:
@@ -214,13 +337,38 @@ def test_the_implementation_axis_covers_the_kernel_and_the_preset() -> None:
     assert "src/tracking/tracker_gpu.cu" in files
     assert "include/tracking/tracker_gpu.hpp" in files
     assert "configs/presets/mamba_whole_graph_m.yaml" in files
+    assert "src/saccade/perception/eval/relink.py" in files
+    assert "src/saccade/perception/temporal_yolo/mamba_gated_detector.py" in files
     # Prose is classified decision-relevant but kept out of the axis, so a README
     # edit cannot bump `implementation`.
     assert not any(path.endswith(".md") for path in files)
 
 
+def test_identity_semantics_axis_binds_the_ruler_itself() -> None:
+    files = set(identity.tracked_files_for_class("identity_semantics"))
+    assert {
+        ".github/workflows/runtime_identity.yml",
+        "scripts/tools/h2_behavioral_identity.py",
+        "scripts/tools/h2_path_partition.py",
+        "scripts/tools/h2_runtime_inputs.py",
+        "scripts/tools/h2_terminal_partition.py",
+        "scripts/tools/build_runtime_identity.py",
+        "scripts/tools/check_runtime_identity_staleness.py",
+        "scripts/tools/run_h2_layer_p.py",
+    } <= files
+
+
+def test_gpu_reattestation_triggers_when_the_ruler_changes() -> None:
+    workflow = (_REPO / ".github/workflows/runtime_identity.yml").read_text(
+        encoding="utf-8"
+    )
+    for path in sorted(identity.partition.IDENTITY_SEMANTICS_PATHS):
+        assert f'- "{path}"' in workflow, (
+            f"runtime re-attestation does not trigger when {path} changes"
+        )
+
+
 def test_witness_fields_are_marked_as_carrying_no_authority() -> None:
-    built = identity.build_identity(behavior=None, build_dir=None)
+    built = identity.build_publication(probe=None, runtime_input_manifest=None)
     note = built["witness"]["note"]
-    assert "no decision authority" in note
-    assert "not a function of source" in note
+    assert "navigation witness" in note

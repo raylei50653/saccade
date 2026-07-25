@@ -122,14 +122,14 @@ fi
 # the rule that substrate does not inherit — but nothing checked whether the
 # substrate still existed. A preset default or kernel constant could move and
 # every state proven on it would quietly stop meaning what it says.
-# Fail-closed on the decision-affecting axis only: `implementation` /
-# `environment` drift is behavior-preserving *if* the behavior digest holds, and
-# only a GPU identity run can decide that (warning + re-attestation note).
-echo "── runtime identity staleness (decision_surface fail-closed; rest warn)"
+# Every static coordinate is fail-closed. A later equal probe never turns
+# implementation/environment drift into equivalence; consumers require explicit
+# re-attestation.
+echo "── runtime coordinate staleness (all static axes fail-closed)"
 if uv run python3 scripts/tools/check_runtime_identity_staleness.py 2>&1; then
   ok "runtime identity"
 else
-  fail "runtime identity — decision surface moved without republishing, or a stale binding; see scripts/tools/check_runtime_identity_staleness.py"
+  fail "runtime coordinate — static axis moved, or a binding needs re-attestation; see scripts/tools/check_runtime_identity_staleness.py"
   ERRORS=$((ERRORS + 1))
 fi
 

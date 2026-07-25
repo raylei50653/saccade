@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Compute the H2 `behavior` axis: a policy-visible digest of one eval run.
+"""Compute the H2 behavior probe: a policy-visible digest of one eval run.
 
-The axis digests exactly the four capture-off-computable A7.6 members
+The probe digests exactly the four capture-off-computable A7.6 members
 (declaration § 4.0), in canonical key order:
 
     active_tid_slot_pairs   per frame, sorted by slot
@@ -23,11 +23,10 @@ parameterized, and edits no frozen plumbing.
 
 What this tool is for, and what it is not:
 
-  * **Change detector.** In identity mode (`--identity-mode`) the known
-    nondeterminism sources are pinned off, so a change to decision-relevant code
-    provably moves the digest. This is *not* a claim that identity mode
-    reproduces production behavior — treating it as one would repeat the
-    `R`-operator error the fidelity protocol forbids.
+  * **Change detector.** In identity mode (`--identity-mode`) known
+    nondeterminism sources are pinned off. Digest inequality proves a behavior
+    difference on this fixture. Equality proves only that this probe observed no
+    difference; it does not establish measurement-domain equivalence.
   * **Repeat-equality probe.** With `--repeats N --require-identical` on the
     production policy target it answers, cheaply and before any seal, whether
     production is byte-reproducible at all (gate G2).
@@ -54,15 +53,18 @@ from typing import Any, Callable, Mapping, Sequence
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
-BEHAVIOR_SCHEMA = "h2_behavior_inventory_v1"
+BEHAVIOR_SCHEMA = "h2_behavior_probe_inventory_v1"
+RESULT_SCHEMA = "h2_behavior_probe_result_v1"
+BUILD_WITNESS_SCHEMA = "h2_build_witness_v1"
 
-# Declaration § 3.1 / H0 Amendment 5. The identity axis and the measurement share
+# Declaration § 3.1 / H0 Amendment 5. The probe and the measurement share
 # one policy target; only the fixture and the determinism pinning differ.
 POLICY_PRESET_REL = "configs/presets/mamba_whole_graph_m.yaml"
 POLICY_PRESET_STEM = "mamba_whole_graph_m"
 
-# Declaration § 3.2. Shortest 7-seq member; owner-overridable.
+# Declaration § 3.2. Shortest 7-seq member; fixed for this probe schema.
 IDENTITY_SEQUENCE = "MOT17-09-SDP"
+MEASUREMENT_SEQUENCE = "MOT17-04-SDP"
 
 # Declaration § 4.0 — the exact member set, frozen.
 BEHAVIOR_MEMBERS = (
@@ -138,6 +140,60 @@ def _assert_extension_consumed(build_dir: Path) -> dict[str, Any]:
     }
 
 
+def _assert_build_components_consumed(
+    build_dir: Path, extension: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Bind the extension and TensorRT plugin actually mapped by this process."""
+    maps_path = Path("/proc/self/maps")
+    if not maps_path.is_file():
+        raise BehavioralIdentityError("/proc/self/maps is unavailable")
+    mapped: set[Path] = set()
+    for line in maps_path.read_text(encoding="utf-8").splitlines():
+        fields = line.split(maxsplit=5)
+        if len(fields) != 6 or not fields[5].startswith("/"):
+            continue
+        candidate = Path(fields[5].replace("\\040", " ")).resolve()
+        if candidate.is_file() and candidate.parent == build_dir:
+            mapped.add(candidate)
+
+    expected = {
+        "tracking_extension": Path(str(extension["extension_path"])).resolve(),
+        "tensorrt_scan_plugin": (build_dir / "libsaccade_scan_plugin.so").resolve(),
+    }
+    artifacts = []
+    for role, path in expected.items():
+        if path not in mapped:
+            raise BehavioralIdentityError(
+                f"{role} was not consumed from the selected build directory: {path}"
+            )
+        data = path.read_bytes()
+        artifacts.append(
+            {
+                "coordinate": path.name,
+                "length": len(data),
+                "path": path.as_posix(),
+                "role": role,
+                "sha256": hashlib.sha256(data).hexdigest(),
+            }
+        )
+    artifacts.sort(key=lambda item: (item["role"], item["coordinate"]))
+    projection = [
+        {
+            "coordinate": item["coordinate"],
+            "length": item["length"],
+            "role": item["role"],
+            "sha256": item["sha256"],
+        }
+        for item in artifacts
+    ]
+    return {
+        "artifacts": artifacts,
+        "build_dir": build_dir.as_posix(),
+        "digest": digest(projection),
+        "schema": BUILD_WITNESS_SCHEMA,
+    }
+
+
 def _import_eval_stack() -> tuple[Any, ...]:
     # The build directory must win over the `.pth`-injected default.
     build_dir = resolve_build_dir()
@@ -204,7 +260,8 @@ def run_behavior_inventory(
         set_postprocess_compile,
     ) = _import_eval_stack()
 
-    build_witness = _assert_extension_consumed(resolve_build_dir())
+    build_dir = resolve_build_dir()
+    extension_witness = _assert_extension_consumed(build_dir)
 
     preset_path = REPO_ROOT / POLICY_PRESET_REL
     defaults = yaml.safe_load(preset_path.read_text(encoding="utf-8")) or {}
@@ -400,6 +457,7 @@ def run_behavior_inventory(
         "schema": BEHAVIOR_SCHEMA,
     }
     _validate_inventory(inventory)
+    build_witness = _assert_build_components_consumed(build_dir, extension_witness)
     return {
         "inventory": inventory,
         "digest": behavior_digest(inventory),
@@ -408,8 +466,8 @@ def run_behavior_inventory(
         "preset": POLICY_PRESET_REL,
         "resolved_fingerprint": resolved,
         "determinism_pinned": bool(identity_mode),
-        # Witness only (declaration § 4.1): records which physical binary produced
-        # the digest. Never a predicate on the axis.
+        # Certificate input, not an equivalence predicate: records the exact
+        # extension and plugin consumed by this probe.
         "build_witness": build_witness,
     }
 
@@ -430,8 +488,8 @@ def behavior_digest(inventory: Mapping[str, Any]) -> str:
     """Digest exactly the § 4.0 members — never the whole dict.
 
     Digesting the dict would fold in mode, fixture, and future keys, so an
-    identity-mode digest and a production digest of the same behavior would
-    differ. The axis is about behavior; provenance of the run is recorded
+    identity-mode digest and a production digest of the same observation would
+    differ. The probe is about observed behavior; provenance of the run is recorded
     alongside it, not inside it.
     """
     _validate_inventory(inventory)
@@ -476,7 +534,7 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--require-identical needs --repeats >= 2")
 
     sequence = args.sequences or (
-        IDENTITY_SEQUENCE if args.identity_mode else IDENTITY_SEQUENCE
+        IDENTITY_SEQUENCE if args.identity_mode else MEASUREMENT_SEQUENCE
     )
     out_root = args.out_dir or (REPO_ROOT / "out" / "h2_behavior")
 
@@ -491,7 +549,7 @@ def main(argv: list[str] | None = None) -> int:
                 output_dir=run_dir,
             )
         except BehavioralIdentityError as exc:
-            print(f"behavioral identity failed: {exc}", file=sys.stderr)
+            print(f"behavior probe failed: {exc}", file=sys.stderr)
             return 1
         results.append(result)
         print(f"run {index}: behavior={result['digest']} mode={result['mode']}")
@@ -502,11 +560,13 @@ def main(argv: list[str] | None = None) -> int:
         "digest": digests[0] if identical else None,
         "digests": digests,
         "identical": identical,
+        "determinism_pinned": bool(args.identity_mode),
         "mode": results[0]["mode"],
         "preset": results[0]["preset"],
         "repeats": args.repeats,
+        "recorder_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         "resolved_fingerprint": results[0]["resolved_fingerprint"],
-        "schema": "h2_behavior_result_v1",
+        "schema": RESULT_SCHEMA,
         "sequence": sequence,
     }
     if args.emit:

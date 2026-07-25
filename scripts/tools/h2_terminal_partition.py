@@ -53,7 +53,7 @@ TERMINALS: tuple[Terminal, ...] = (
     Terminal(
         1,
         "H2_INPUT_MUTATED_DURING_MEASUREMENT",
-        "a bound input was written during the invocation, or the behavior axis at "
+        "a bound input was written during the invocation, or the behavior probe at "
         "launch differs from the reference bound in F, or the Layer-P certificate "
         "does not match F",
         "closes the H2 measurement unit; object state unchanged; candidate set stays "
@@ -106,7 +106,7 @@ TERMINALS: tuple[Terminal, ...] = (
 RESULT_TO_TERMINAL: dict[str, str | None] = {
     # -> terminal 1
     "input_mutated": "H2_INPUT_MUTATED_DURING_MEASUREMENT",
-    "behavior_axis_moved": "H2_INPUT_MUTATED_DURING_MEASUREMENT",
+    "behavior_probe_moved": "H2_INPUT_MUTATED_DURING_MEASUREMENT",
     "certificate_mismatch": "H2_INPUT_MUTATED_DURING_MEASUREMENT",
     # -> terminal 2
     "capture_perturbs_policy": "H2_CAPTURE_PERTURBS_POLICY",
@@ -129,7 +129,7 @@ RESULT_TO_TERMINAL: dict[str, str | None] = {
 # carry no decision authority" is enforced rather than merely asserted.
 ORDERED_PREDICATES: tuple[tuple[str, str], ...] = (
     ("bound_input_mutated", "input_mutated"),
-    ("behavior_axis_equals_freeze", "behavior_axis_moved"),
+    ("behavior_probe_equals_freeze", "behavior_probe_moved"),
     ("layer_p_certificate_matches_freeze", "certificate_mismatch"),
     ("capture_off_on_equal", "capture_perturbs_policy"),
     ("packets_valid", "packet_invalid"),

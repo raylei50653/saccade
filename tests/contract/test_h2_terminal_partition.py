@@ -41,7 +41,7 @@ def _clean() -> dict[str, object]:
     """An observation with every predicate satisfied."""
     return {
         "bound_input_mutated": False,
-        "behavior_axis_equals_freeze": True,
+        "behavior_probe_equals_freeze": True,
         "layer_p_certificate_matches_freeze": True,
         "capture_off_on_equal": True,
         "packets_valid": True,
@@ -110,7 +110,11 @@ def test_phase_b_completion_reaches_terminal_five() -> None:
     "key,value,expected",
     [
         ("bound_input_mutated", True, "H2_INPUT_MUTATED_DURING_MEASUREMENT"),
-        ("behavior_axis_equals_freeze", False, "H2_INPUT_MUTATED_DURING_MEASUREMENT"),
+        (
+            "behavior_probe_equals_freeze",
+            False,
+            "H2_INPUT_MUTATED_DURING_MEASUREMENT",
+        ),
         (
             "layer_p_certificate_matches_freeze",
             False,

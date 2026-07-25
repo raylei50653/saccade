@@ -1,12 +1,13 @@
 {
-  "schema": "runtime_identity_bindings_v1",
+  "schema": "runtime_coordinate_bindings_v1",
   "purpose": "Machine-readable home for `captured_under`: which published runtime_identity a piece of accepted evidence was captured under. THIS FILE IS THE MECHANICAL AUTHORITY for staleness; the claim-state registry remains the sole writer of object STATE (doc structure contract C5.1).",
   "why_a_sidecar": "The same reason `declaration_policy_binding_v1` is a sidecar: nothing in this repository should parse Markdown tables to reach a fail-closed verdict. A partial Markdown parser trusted with authority found a new way to be wrong every hardening round. The registry keeps the prose and the state; this file keeps the digests.",
   "published_identity": "docs/reference/runtime_identity.generated.json",
   "consumption_rule": {
-    "current": "every bound axis equals the published identity",
-    "behavior_preserving": "`implementation` and/or `environment` differ while `behavior` and `decision_surface` are equal — the online track moved without changing policy-visible behavior; the binding stays valid",
-    "stale": "`decision_surface` or `behavior` differs — consumers are inadmissible until re-attested. This is a version-lag flag, not a retraction: a closure established on the old identity remains true of that identity (fidelity protocol § 2.8).",
+    "current": "every bound coordinate and the bounded behavior probe equal the publication",
+    "re_attestation_required": "`implementation`, `environment`, or `runtime_inputs` differs while the bounded probe is equal. Probe equality is not equivalence; consumers remain inadmissible until scope-sufficient re-attestation.",
+    "stale": "`decision_surface`, `identity_semantics`, or the bounded probe differs. Consumers are inadmissible until re-attested. This is version lag, not a retraction: a closure established on the old coordinate remains true of that coordinate.",
+    "equivalence": "No v1 binding may claim behavior-preserving equivalence. That upgrade requires a separately versioned verifier and accepted full measurement-domain or sufficiency evidence.",
     "unattested": "captured_under is null — the evidence predates published identities and makes no substrate-version claim. Absence is never read as agreement."
   },
   "bindings": [

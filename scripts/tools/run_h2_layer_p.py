@@ -9,14 +9,14 @@ authorization belongs to the Layer-M measurement (declaration § 5.1 / § 5.2).
 Three rules shape this controller, each answering a recorded H0 failure:
 
   * **Retries may only touch plumbing.** Admissibility is decided by
-    `h2_path_partition`, which rejects `decision_relevant`, `invariant_authority`
+    `h2_path_partition`, which rejects `decision_relevant`, `identity_semantics`,
+    consumed inputs/assets,
     and unclassified paths. Retryability without that firewall would be the E1b
     circular oracle with extra steps.
-  * **The invariant is behavioral, not physical.** Every run recomputes the
-    `behavior` axis and compares it to the published identity. Physical artifact
-    hashes are recorded as witness: the same source built in a different
-    directory has a different `sha256` (R5 parity audit), so physical identity
-    cannot be an invariant.
+  * **The probe is bounded.** Every run recomputes the MOT17-09 probe. Inequality
+    proves a difference; equality is recorded only as a probe pass and never as
+    measurement-domain equivalence. Exact physical inputs are content-bound into
+    this pass certificate instead.
   * **A rejection persists its coordinate before it aborts.** R5's authoritative
     run died with `extension_load_record: not_recorded`, buying zero information
     for a whole authorization. Here every stage writes its record first.
@@ -27,9 +27,8 @@ extension under test was the one actually imported. Neither needs the loaded fil
 closure enumerated in advance, which is the assumption that failed five times.
 
 Usage:
-  uv run python scripts/tools/run_h2_layer_p.py
   uv run python scripts/tools/run_h2_layer_p.py --base main --emit out/h2_layer_p/cert.json
-  uv run python scripts/tools/run_h2_layer_p.py --skip-build   # reuse the build dir
+  uv run python scripts/tools/run_h2_layer_p.py --base HEAD --skip-build
 """
 # status: stable
 
@@ -54,10 +53,12 @@ if _TOOLS.as_posix() not in sys.path:
 import build_runtime_identity as identity  # noqa: E402
 import check_runtime_identity_staleness as staleness  # noqa: E402
 import h2_path_partition as partition  # noqa: E402
+import h2_runtime_inputs as runtime_inputs  # noqa: E402
 import run_h0_phase_a as h0_controller  # noqa: E402  (imported, never modified)
 from h2_behavioral_identity import IDENTITY_SEQUENCE, canonical_json_bytes  # noqa: E402
 
-LAYER_P_SCHEMA = "h2_layer_p_v1"
+LAYER_P_SCHEMA = "h2_layer_p_v2"
+CERTIFICATE_SCHEMA = "h2_layer_p_certificate_v2"
 BUILD_DIR_REL = "build/h2_layer_p"
 WORK_ROOT_REL = "out/h2_layer_p"
 
@@ -88,11 +89,22 @@ def _utc() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _git(*args: str) -> str:
+    completed = subprocess.run(
+        ["git", *args],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return completed.stdout.strip()
+
+
 class LayerP:
     def __init__(
         self,
         *,
-        base: str | None,
+        base: str,
         skip_build: bool,
         fixture: str,
         build_dir: Path | None = None,
@@ -109,6 +121,7 @@ class LayerP:
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         self.work_dir = REPO_ROOT / WORK_ROOT_REL / stamp
         self.work_dir.mkdir(parents=True, exist_ok=True)
+        self.retry_verdict: dict[str, Any] | None = None
         self.record: dict[str, Any] = {
             "schema": LAYER_P_SCHEMA,
             "authority": "non_authoritative_pre_seal_engineering",
@@ -138,13 +151,6 @@ class LayerP:
 
     # -- stages ------------------------------------------------------------ #
     def retry_admissibility(self) -> None:
-        if self.base is None:
-            self._stage(
-                "retry_admissibility",
-                "skipped",
-                note="no --base given; admissibility is only defined against a base",
-            )
-            return
         try:
             changed = partition.changed_paths_since(self.base)
         except subprocess.CalledProcessError as exc:
@@ -156,14 +162,27 @@ class LayerP:
             "base": self.base,
             "changed_count": len(changed),
             "decision_relevant": list(verdict.decision_relevant),
-            "invariant_authority": list(verdict.invariant_authority),
+            "identity_semantics": list(verdict.identity_semantics),
+            "identity_fixture_input": list(verdict.identity_fixture_input),
+            "measurement_input": list(verdict.measurement_input),
+            "runtime_asset": list(verdict.runtime_asset),
             "unclassified": list(verdict.unclassified),
+            "plumbing_only": list(verdict.plumbing_only),
+            "non_execution": list(verdict.non_execution),
+            "admissible": verdict.admissible,
         }
+        self.retry_verdict = fields
         if not verdict.admissible:
             raise self._block("retry_admissibility", verdict.reason(), **fields)
         self._stage("retry_admissibility", "pass", **fields)
 
     def preflight(self) -> dict[str, Any]:
+        dirty = _git("status", "--porcelain", "--untracked-files=no")
+        if dirty:
+            raise self._block(
+                "preflight",
+                "tracked worktree is dirty; Layer P requires a committed source coordinate",
+            )
         # Launch hygiene: a pre-existing build tree ended one H0 re-entry
         # (`build/h0_phase_a exists at controller launch`). Here it is a cheap
         # precondition rather than a spent authorization.
@@ -178,21 +197,24 @@ class LayerP:
             )
         try:
             published = staleness.load_published(REPO_ROOT / staleness.PUBLISHED_REL)
-            failures, warnings = staleness.compare_publication(published, behavior=None)
+            failures, warnings = staleness.compare_publication(
+                published, probe=None, runtime_input_manifest=None
+            )
         except (staleness.StalenessError, identity.IdentityError) as exc:
             raise self._block("preflight", f"published identity unusable: {exc}")
         if failures:
             raise self._block("preflight", "; ".join(failures))
-        reference = published["identity"].get("behavior")
+        reference = published["probe"].get("digest")
         if reference is None:
             raise self._block(
                 "preflight",
-                "published identity has no behavior axis; there is no invariant to hold",
+                "published coordinate has no identity probe",
             )
         self._stage(
             "preflight",
             "pass",
-            published_identity=published["identity"],
+            published_coordinate=published["coordinate"],
+            published_probe=published["probe"],
             static_axis_warnings=warnings,
         )
         return published
@@ -254,7 +276,7 @@ class LayerP:
             tools=tools,
             note=(
                 "Witness only. Build-tool provenance ended re-entry #2 as a predicate; "
-                "under H2 the behavior digest carries the invariant instead."
+                "under H2 the pass certificate content-binds the consumed artifacts."
             ),
         )
 
@@ -302,14 +324,35 @@ class LayerP:
         self._stage("extension_load", "pass", witness=witness)
         return witness
 
-    def identity_run(self, published: dict[str, Any]) -> str:
-        reference = published["identity"]["behavior"]
-        result_path = self.work_dir / "behavior.json"
-        bound = [
+    def identity_run(
+        self, published: dict[str, Any]
+    ) -> tuple[dict[str, Any], dict[str, Any], Path, Path]:
+        reference = published["probe"]["digest"]
+        result_path = self.work_dir / "behavior_probe.json"
+        manifest_path = self.work_dir / "runtime_inputs.json"
+        try:
+            manifest = runtime_inputs.build_manifest(build_dir=self.build_dir)
+        except (runtime_inputs.RuntimeInputError, OSError) as exc:
+            raise self._block("identity_run", f"runtime-input binding failed: {exc}")
+        manifest_path.write_bytes(canonical_json_bytes(manifest) + b"\n")
+        if manifest["coordinate_digest"] != published["coordinate"].get(
+            "runtime_inputs"
+        ):
+            raise self._block(
+                "identity_run",
+                "published runtime-input coordinate does not match the selected "
+                "fixtures/assets",
+                published_runtime_inputs=published["coordinate"].get("runtime_inputs"),
+                measured_runtime_inputs=manifest["coordinate_digest"],
+            )
+
+        bound = {
             REPO_ROOT / path
-            for path in identity.decision_relevant_files()
+            for path_class in ("decision_relevant", "identity_semantics")
+            for path in identity.tracked_files_for_class(path_class)
             if (REPO_ROOT / path).is_file()
-        ]
+        }
+        bound.update(runtime_inputs.bound_paths(manifest))
         try:
             monitor = h0_controller.BoundInputMonitor(bound)
         except (h0_controller.DriftError, OSError) as exc:
@@ -319,26 +362,33 @@ class LayerP:
             **os.environ,
             "SACCADE_BUILD_PATH": self.build_dir.as_posix(),
         }
-        completed = subprocess.run(
-            [
-                sys.executable,
-                (_TOOLS / "h2_behavioral_identity.py").as_posix(),
-                "--identity-mode",
-                "--sequences",
-                self.fixture,
-                "--emit",
-                result_path.as_posix(),
-            ],
-            cwd=REPO_ROOT,
-            capture_output=True,
-            text=True,
-            env=environment,
-        )
+        try:
+            try:
+                completed = subprocess.run(
+                    [
+                        sys.executable,
+                        (_TOOLS / "h2_behavioral_identity.py").as_posix(),
+                        "--identity-mode",
+                        "--sequences",
+                        self.fixture,
+                        "--emit",
+                        result_path.as_posix(),
+                    ],
+                    cwd=REPO_ROOT,
+                    capture_output=True,
+                    text=True,
+                    env=environment,
+                )
+            except OSError as exc:
+                raise self._block(
+                    "identity_run", f"identity probe could not launch: {exc}"
+                ) from exc
+            events = monitor.drain()
+        finally:
+            monitor.close()
         (self.work_dir / "identity_run.log").write_text(
             completed.stdout + completed.stderr, encoding="utf-8"
         )
-        # Mutation check first: a mutated input invalidates whatever the run said.
-        events = monitor.drain()
         if events:
             raise self._block(
                 "identity_run",
@@ -348,27 +398,83 @@ class LayerP:
         if completed.returncode != 0:
             raise self._block(
                 "identity_run",
-                f"identity run exited {completed.returncode}; see identity_run.log",
+                f"identity probe exited {completed.returncode}; see identity_run.log",
                 returncode=completed.returncode,
             )
         try:
-            measured = identity.load_behavior(result_path)["digest"]
+            probe = identity.load_identity_behavior_probe(result_path)
         except identity.IdentityError as exc:
-            raise self._block("identity_run", f"identity result unusable: {exc}")
+            raise self._block("identity_run", f"identity probe unusable: {exc}")
 
-        if measured != reference:
-            # This is the firewall firing: a plumbing-only change moved the
-            # invariant, which means it was not plumbing-only.
+        if probe["build_witness"]["digest"] != manifest["build_artifacts"]["digest"]:
             raise self._block(
                 "identity_run",
-                "H2_PLUMBING_CHANGED_BEHAVIOR — the behavior axis moved under a "
-                f"plumbing-only change: published {reference}, measured {measured}. "
-                "This chain is dead; only the owner may re-open it.",
-                published_behavior=reference,
-                measured_behavior=measured,
+                "probe consumed build artifacts other than the certificate manifest",
             )
-        self._stage("identity_run", "pass", behavior=measured, sequence=self.fixture)
-        return measured
+        if probe["digest"] != reference:
+            raise self._block(
+                "identity_run",
+                "H2_PLUMBING_CHANGED_PROBE — the bounded fixture probe moved: "
+                f"published {reference}, measured {probe['digest']}. This proves a "
+                "difference, but equality would still not prove equivalence.",
+                published_probe=reference,
+                measured_probe=probe["digest"],
+            )
+        self._stage(
+            "identity_run",
+            "pass",
+            probe=probe["digest"],
+            sequence=self.fixture,
+            runtime_input_coordinate=manifest["coordinate_digest"],
+            equivalence="unproven",
+        )
+        return probe, manifest, result_path, manifest_path
+
+    def build_certificate(
+        self,
+        *,
+        published: dict[str, Any],
+        probe: dict[str, Any],
+        manifest: dict[str, Any],
+        probe_path: Path,
+        manifest_path: Path,
+        extension_witness: dict[str, Any],
+    ) -> dict[str, Any]:
+        if self.retry_verdict is None:
+            raise RuntimeError("retry admissibility verdict is absent")
+        return {
+            "schema": CERTIFICATE_SCHEMA,
+            "source_head": _git("rev-parse", "HEAD"),
+            "source_tree": _git("rev-parse", "HEAD^{tree}"),
+            "selected_base": self.base,
+            "changed_path_verdict": self.retry_verdict,
+            "decision_relevant_digest": identity.implementation_axis()["digest"],
+            "identity_semantics_digest": identity.identity_semantics_axis()["digest"],
+            "plumbing_set_digest": identity.plumbing_axis()["digest"],
+            "published_identity_file_digest": identity.sha256_file(
+                REPO_ROOT / staleness.PUBLISHED_REL
+            ),
+            "probe_result_file_digest": identity.sha256_file(probe_path),
+            "runtime_input_manifest_file_digest": identity.sha256_file(manifest_path),
+            "runtime_input_coordinate_digest": manifest["coordinate_digest"],
+            "runtime_input_full_digest": manifest["full_digest"],
+            "build_artifact_digest": manifest["build_artifacts"]["digest"],
+            "behavior_probe": probe["digest"],
+            "probe_schema": probe["schema"],
+            "mode": probe["mode"],
+            "fixture": probe["sequence"],
+            "equivalence": "unproven",
+            "build_dir": self.build_dir_rel,
+            "extension_witness": extension_witness,
+            "build_witness": probe["build_witness"],
+            "published_coordinate": published["coordinate"],
+            "published_probe": published["probe"]["digest"],
+            "note": (
+                "A Layer-P pass certificate is a precondition for a Layer-M seal, "
+                "never an authorization or equivalence proof. It grants no execution "
+                "and no terminal."
+            ),
+        }
 
     # -- driver ------------------------------------------------------------ #
     def run(self) -> int:
@@ -378,7 +484,7 @@ class LayerP:
             self.build()
             self.build_binding()
             witness = self.extension_load()
-            behavior = self.identity_run(published)
+            probe, manifest, probe_path, manifest_path = self.identity_run(published)
         except Blocked as exc:
             print(f"plumbing_blocked({exc.coordinate}): {exc.detail}", file=sys.stderr)
             print(f"record: {self.work_dir / 'layer_p.json'}", file=sys.stderr)
@@ -386,20 +492,18 @@ class LayerP:
             return 1
 
         self.record["result"] = "plumbing_pass"
-        self.record["certificate"] = {
-            "behavior": behavior,
-            "build_dir": self.build_dir_rel,
-            "extension_witness": witness,
-            "identity": published["identity"],
-            "note": (
-                "A Layer-P pass certificate is a precondition for a Layer-M seal, "
-                "never an authorization. It grants no execution and no terminal."
-            ),
-        }
+        self.record["certificate"] = self.build_certificate(
+            published=published,
+            probe=probe,
+            manifest=manifest,
+            probe_path=probe_path,
+            manifest_path=manifest_path,
+            extension_witness=witness,
+        )
         self.record["finished_utc"] = _utc()
         self._persist()
         self._append_retry_log()
-        print(f"plumbing_pass  behavior={behavior}")
+        print(f"plumbing_pass  probe={probe['digest']} equivalence=unproven")
         print(f"record: {self.work_dir / 'layer_p.json'}")
         return 0
 
@@ -424,13 +528,18 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--base",
-        default=None,
-        help="git base to check retry admissibility against (e.g. main)",
+        required=True,
+        help="selected I/F git coordinate used for retry admissibility",
     )
     parser.add_argument(
         "--skip-build", action="store_true", help="reuse an existing build dir"
     )
-    parser.add_argument("--fixture", default=IDENTITY_SEQUENCE, help="identity fixture")
+    parser.add_argument(
+        "--fixture",
+        default=IDENTITY_SEQUENCE,
+        choices=(IDENTITY_SEQUENCE,),
+        help="fixed identity-probe fixture",
+    )
     parser.add_argument(
         "--build-dir",
         type=Path,

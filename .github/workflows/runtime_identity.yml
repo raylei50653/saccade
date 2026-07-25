@@ -1,16 +1,13 @@
-name: Runtime Identity (behavior axis re-attestation)
+name: Runtime Coordinate + Probe Re-attestation
 
-# The three static axes are checked on every push by `scripts/pre_push.sh`
-# (`check_runtime_identity_staleness.py`), which needs no GPU. The `behavior`
-# axis does: it is one capture-off identity-mode eval run. This workflow is that
-# re-attestation, on the controlled host that already carries the CUDA/TensorRT
-# closure for H0 qualification.
+# Static coordinate axes are checked on every push. This controlled-host job also
+# content-binds fixtures/assets and reruns the bounded MOT17-09 behavior probe.
+# Probe equality does not establish equivalence.
 #
 # It publishes nothing and seals nothing. It answers exactly one question: does
-# the committed `docs/reference/runtime_identity.generated.json` still describe
-# the behavior this tree produces? A mismatch means the published identity is
-# stale and every research state bound to it needs re-attestation — the
-# `online → research` drift that previously had no detector at all.
+# the committed `docs/reference/runtime_identity.generated.json` still describes
+# this coordinate and bounded probe? A mismatch requires republication or
+# re-attestation; equality is not an equivalence proof.
 
 on:
   workflow_dispatch:
@@ -23,18 +20,33 @@ on:
   push:
     branches: [main]
     paths:
-      # The decision-relevant surface, per scripts/tools/h2_path_partition.py.
-      # Keep this list in step with DECISION_RELEVANT_PATHS / _PREFIXES.
-      - "src/tracking/tracker_gpu.cu"
-      - "include/tracking/tracker_gpu.hpp"
-      - "src/tracking/tracker_gpu_python.cpp"
-      - "src/saccade/perception/tracking/tracker_gpu.py"
-      - "src/saccade/perception/eval/stages.py"
-      - "src/saccade/perception/eval/pipeline.py"
-      - "src/saccade/perception/eval/evaluator.py"
+      # Implementation coordinate.
+      - "src/**"
+      - "include/**"
       - "configs/presets/mamba_whole_graph_m.yaml"
-      - "scripts/eval/mot17_args.py"
-      - "scripts/eval/config/**"
+      - "scripts/eval/**"
+      - "scripts/tools/resolved_bridge_policy_config.py"
+      # Environment/plumbing coordinate.
+      - "CMakeLists.txt"
+      - "pyproject.toml"
+      - "uv.lock"
+      # Versioned runtime inputs (ignored host-local assets are still rebound
+      # when another trigger runs this job).
+      - "datasets/**"
+      - "models/**"
+      - "runs/**"
+      - "third_party/**"
+      # The ruler itself.
+      - ".github/workflows/runtime_identity.yml"
+      - "scripts/pre_push.sh"
+      - "scripts/tools/h2_behavioral_identity.py"
+      - "scripts/tools/h2_path_partition.py"
+      - "scripts/tools/h2_runtime_inputs.py"
+      - "scripts/tools/h2_terminal_partition.py"
+      - "scripts/tools/build_runtime_identity.py"
+      - "scripts/tools/check_runtime_identity_staleness.py"
+      - "scripts/tools/run_h2_layer_p.py"
+      - "docs/modules/semantic/research/headline_bridge_behavioral_identity_capture_declaration_20260725.policy.yaml"
       - "docs/reference/runtime_identity.generated.json"
 
 permissions:
@@ -68,12 +80,18 @@ jobs:
           cmake -S . -B build/runtime_identity -DCMAKE_BUILD_TYPE=Release
           cmake --build build/runtime_identity --parallel
 
-      - name: Static axes must already be current
-        # If this fails, the push that moved the policy surface did not republish
-        # the identity; the behavior run below would be attesting the wrong thing.
-        run: uv run --frozen python scripts/tools/check_runtime_identity_staleness.py
+      - name: Bind fixtures, weights, engines, plugin and third-party runtime
+        run: |
+          uv run --frozen python scripts/tools/h2_runtime_inputs.py \
+            --build-dir build/runtime_identity \
+            --emit "${RUNNER_TEMP}/runtime-inputs.json"
 
-      - name: Re-attest the behavior axis
+      - name: Coordinate must already be current
+        run: |
+          uv run --frozen python scripts/tools/check_runtime_identity_staleness.py \
+            --runtime-inputs-from "${RUNNER_TEMP}/runtime-inputs.json"
+
+      - name: Re-attest the bounded behavior probe
         env:
           SACCADE_BUILD_PATH: ${{ github.workspace }}/build/runtime_identity
         run: |
@@ -83,12 +101,16 @@ jobs:
       - name: Compare against the published identity
         run: |
           uv run --frozen python scripts/tools/check_runtime_identity_staleness.py \
-            --behavior-from "${RUNNER_TEMP}/behavior.json"
+            --probe-from "${RUNNER_TEMP}/behavior.json" \
+            --runtime-inputs-from "${RUNNER_TEMP}/runtime-inputs.json" \
+            --strict
 
       - name: Upload the attestation
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: behavior-axis-${{ github.sha }}
-          path: ${{ runner.temp }}/behavior.json
+          name: runtime-coordinate-probe-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/behavior.json
+            ${{ runner.temp }}/runtime-inputs.json
           if-no-files-found: warn

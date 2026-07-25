@@ -1,4 +1,4 @@
-# H2 — headline-m bridge-decision capture under behavioral runtime identity
+# H2 — headline-m bridge capture under a bound coordinate and bounded probe
 
 <!-- doc-status: proposed -->
 <!-- doc-promotion: none -->
@@ -130,12 +130,13 @@ Design objective        n/a — no design-evaluation intent is claimed; §20.3 r
                         objectives are not invoked and no design candidate may be emitted
 Selection rule          n/a for candidate selection; the terminal is selected
                         mechanically by the ordered partition of §7 (first applicable)
-Validity gate           (a) Layer-P pass certificate present and matching (§5.2);
-                        (b) behavior axis equal to the published reference at
-                            measurement launch;
-                        (c) A7.6 capture-off/on comparison computable on all four runs;
-                        (d) three capture-on packets present and schema-valid.
-                        Failure of (a)–(d) routes to §7, never to a re-run.
+Validity gate           (a) Layer-P v2 pass certificate present and matching (§5.2);
+                        (b) content-bound fixtures/assets/build artifacts equal F;
+                        (c) bounded behavior probe equal to the published reference
+                            at measurement launch (change detection only);
+                        (d) A7.6 capture-off/on comparison computable on all four runs;
+                        (e) three capture-on packets present and schema-valid.
+                        Failure of (a)–(e) routes to §7, never to a re-run.
 Stop condition          sufficiency: one terminal in §7 is selected.
                         futility: no futility stop exists inside a sealed
                         measurement — the partition is total and the invocation
@@ -155,17 +156,18 @@ Spaces use the owner symbols of contract §20.9.2.
 
 | Unit | Quantification space | Comparison relation | Decision rule |
 | --- | --- | --- | --- |
-| `identity.behavior` | the identity fixture's frame set (§3.2), all A7.6 members | **exact byte equality** of the canonical inventory digest | equal ⇒ identity axis holds; unequal ⇒ Layer-P hard stop (§5.3) or T1 if at measurement launch |
+| `identity.probe` | the identity fixture's finite frame set (§3.2), all A7.6 probe members | **exact byte equality** of the canonical inventory digest | unequal ⇒ observed difference and Layer-P hard stop (§5.3) or T1 at launch; equal ⇒ only "probe observed no difference", never equivalence |
 | `policy.nonperturbation` | `U^evt` restricted to the measurement fixture; A7.6 members `mot_output`, `final_track_rows`, `active_tid_slot_pairs`, `relink_debug_raw`, `overflow_vector` | **exact** equality, capture-off vs each capture-on | any difference ⇒ T2 |
 | `pair` | joined candidate–lost pairs, exact-key join `J_v` | exact equality of packed claim inputs and canonical digest across capture-on runs 1–3 | any difference ⇒ T3 |
 | `candidate` | capture-on canonical candidate keys with `proposal_emitted=pass` | exact key-set, count, and SHA-256 equality; exact join to native proposal keys | any difference ⇒ T3 |
 | `claim` | claim records and claim-winner transitions | exact replay agreement (gate / ranking / margin / claim) | any disagreement ⇒ T3 |
 | `commit` | commit records, pre/post `track_id` and `active` | exact replay agreement; agreement with final state and bridge-accept count | any disagreement ⇒ T3 |
 
-`identity.behavior` is a **fidelity-type** κ over frame units and carries no
-claim-level ε statement. No unit in this declaration quantifies over trial units
-`T_v`; H2 therefore makes no ε-bounded claim and §20.9.6's bound interface is
-not invoked.
+`identity.probe` is a finite-fixture diagnostic κ over frame units. It carries no
+claim-level ε statement and no implication outside that frame set. In particular,
+its equality is not an implementation→measurement-domain injection and cannot
+preserve an old claim. No unit here quantifies over trial units `T_v`; H2 makes no
+ε-bounded claim and §20.9.6's bound interface is not invoked.
 
 ### 1.2 §20.9.1 four declaration coordinates
 
@@ -173,7 +175,7 @@ not invoked.
 2. **study intent** — `boundary diagnostic`;
 3. **κ quantification space** — event/pair/frame units (§1.1); no `T_v`;
 4. **substrate** — the production CUDA foot-bridge decision path at the
-   published `runtime_identity` (§4), measured on the fixture of §3.3.
+   published runtime coordinate (§4), measured on the fixture of §3.3.
 
 Registered-object agreement: H2 consumes `quantity.bridge_capture_provenance`
 whose accepted record is `substrate = D0/R1/S0 shadow capture provenance
@@ -216,10 +218,11 @@ purpose      deterministic change detector for decision-relevant code
 ```
 
 **Identity-mode configuration is not a production-equivalence claim.** It is a
-change detector: its only job is that a modification of decision-relevant code
-provably changes the digest. Treating it as production's behavior would repeat
-exactly the `R`-operator error the fidelity protocol forbids. Any statement about
-production behavior comes from §3.3, never from §3.2.
+bounded change detector: digest inequality proves a difference on this fixture;
+digest equality says only that this fixture observed no difference. A branch that
+fires only for MOT17-04 state, size, gap, or candidate combinations can change
+Layer-M behavior while this digest stays equal. Any production statement comes
+from §3.3 or a separately accepted sufficiency proof, never from §3.2 alone.
 
 ### 3.3 Measurement fixture (Layer M)
 
@@ -235,22 +238,24 @@ and pinning determinism there would substitute a different `R`.
 
 ---
 
-## 4. Runtime identity — derivational and behavioral, with physical as witness
+## 4. Coordinate, probe, and equivalence are distinct
 
-`runtime_identity` (schema `h2_runtime_identity_v1`) is a four-axis tuple. Each
-axis is computable from committed artifacts plus one identity-fixture run; none
-requires knowing the loader's closure in advance.
+The published schema `h2_runtime_coordinate_probe_v1` has three explicit layers:
+`coordinate` versions what ran, `probe` records one bounded observation, and
+`equivalence.state` remains `unproven`. No consumer may collapse the latter two.
 
-| Axis | Definition | Derived from |
+| Coordinate / probe | Definition | Derived from |
 | --- | --- | --- |
 | `decision_surface` | canonical digest of the fully resolved parameter snapshot of the A5 preset, plus the declared kernel decision constants | `scripts/eval/config/gen_golden_snapshot.py`; guarded by `check_headline_decision_contract.py` |
-| `implementation` | git tree digest restricted to the execution-bound path set (A10.2's set, declaration excluded) | `REQUIRED_REPOSITORY_INPUTS` |
+| `implementation` | content digest of the complete `src/` + `include/` production implementation and resolved eval surface, not only paths exercised by MOT17-09 | `h2_path_partition.py` |
 | `environment` | build recipe digest + `uv.lock` digest + CUDA / TensorRT / driver versions (optionally the GHCR image digest) | `CMakeLists.txt`, `uv.lock`, `docker_build.yml` |
-| `behavior` | canonical digest of the four capture-off-computable A7.6 members on the identity fixture (§4.0) | technique of `scripts/tools/run_h0_phase_a_child.py`, reimplemented parameterized in `scripts/tools/h2_behavioral_identity.py` |
+| `identity_semantics` | content digest of the digest producer, classifier, publisher, staleness checker, terminal partition, Layer-P certificate producer, workflow and schema policy | exact authority set in `h2_path_partition.py` |
+| `runtime_inputs` | content digest of both sequence fixtures, every configured weight/checkpoint/engine, and executed third-party evaluator code | `h2_runtime_inputs.py` |
+| `probe` | canonical digest of the four capture-off-computable A7.6 members on MOT17-09 | `h2_behavioral_identity.py`; sufficiency is `fixture_change_detector_only` |
 
-### 4.0 The `behavior` axis member set (exact)
+### 4.0 The behavior-probe member set (exact)
 
-The axis digests exactly these A7.6 members, in canonical key order:
+The probe digests exactly these A7.6 members, in canonical key order:
 
 ```text
 active_tid_slot_pairs      per frame, sorted by slot
@@ -272,17 +277,21 @@ definition:
   policy-visible state, and its semantic counters are meaningless when the trace
   buffers are not allocated.
 
-The identity run is therefore **capture-off**, which is also what makes the axis
+The identity run is therefore **capture-off**, which is also what makes the probe
 publishable by the online track without enabling any research instrumentation.
 `run_h0_phase_a_child.py` is not modified: it is hash-pinned inside historical
 freeze artifacts, so H2 reimplements the technique parameterized rather than
 editing frozen plumbing.
 
-### 4.1 Witness fields carry no decision authority
+### 4.1 Bound runtime inputs versus witness
 
-The following are **recorded and never predicate**: physical `sha256` and ELF
-build-id of extension and plugin; the `tool_runtime` list and its count; the
-observed `regular_files` closure; `dynamic_dependencies`; NVML GPU identity.
+Content hashes of both fixtures, configured weights/checkpoints/engines,
+extension, TensorRT plugin, sequence metadata, and executed TrackEval code are
+**certificate/F inputs**. They define which measurement was authorized; they do
+not prove equivalence to any other coordinate.
+
+ELF build-id, broad host `tool_runtime`, observed regular-file closure, unrelated
+dynamic dependencies, and NVML serial identity remain witness-only.
 
 > **No terminal in §7 may be selected on a witness field.** A witness mismatch is
 > recorded and reported; it never selects a terminal and never blocks a Layer-P
@@ -293,15 +302,11 @@ observed `regular_files` closure; `dynamic_dependencies`; NVML GPU identity.
 The threat model is (i) different decision-relevant code, (ii) mutated inputs,
 (iii) capture perturbing decisions.
 
-- (i) is covered jointly by `decision_surface` + `implementation` **and** the
-  `behavior` axis: an unaccounted shared library that changed bridge arithmetic
-  would alter the A7.6 inventory — every output row's raw binary32 bits, the
-  per-frame `active_tid_slot_pairs`, the 13-integer `relink_debug_raw`, and the
-  9-integer overflow vector. Enumerative membership never covered this: it
-  admitted or rejected 4661 host files that cannot reach the kernel, and would
-  have passed a closure whose arithmetic differed.
-- (ii) is covered by the mutation detector (`BoundInputMonitor` inotify) — a
-  detector, not an enumeration.
+- (i) is versioned by `decision_surface`, broad `implementation`, and
+  `identity_semantics`; the finite probe is an additional detector, not coverage
+  proof.
+- (ii) is content-bound by `h2_runtime_inputs.py` and watched during execution by
+  `BoundInputMonitor`, including ignored datasets and model/build assets.
 - (iii) is A7.6's capture-off/on equality, unchanged.
 
 Retained physical predicates, both decidable without prior closure knowledge:
@@ -324,10 +329,11 @@ Layer P is **pre-seal engineering**. It produces no H2 terminal and consumes no
 authorization; its results are `plumbing_pass` or
 `plumbing_blocked(<coordinate>)`. This is not a new permission: Amendments 1–10
 were all pre-seal repairs and none was a terminal. What changes is that H2's
-pre-seal validation is *self-contained and repeatable*, because its predicate is
-behavioral rather than physical — H0's pre-seal validation could only be tested
-by spending an authorization, since qualification provably did not transfer
-(§0).
+pre-seal validation is *self-contained and repeatable*: each attempt records an
+exact final source/input/build coordinate plus a bounded smoke probe before any
+seal. No attempt claims equivalence to another coordinate. H0's pre-seal
+validation could only be tested by spending an authorization because
+qualification provably did not transfer (§0).
 
 **Every rejection must persist its coordinate before aborting.** R5's
 `extension_load_record: not_recorded` is inadmissible here: a retryable budget is
@@ -370,16 +376,17 @@ Consequences, stated exactly:
 The design's central premise is falsifiable in minutes and was tested before
 anything downstream was built:
 
-| Build directory | extension length | extension `sha256` | `behavior` digest |
+| Build directory | extension length | extension `sha256` | behavior-probe digest |
 | --- | ---: | --- | --- |
 | `build/` | 4 115 232 | `79ea49453402de47…` | `2dabed0bc05e3bc7…` |
 | `build/ci_arch214/` | 4 065 896 | `8d3cdb61b7b9d1cd…` | `2dabed0bc05e3bc7…` |
 | `build/h2_layer_p/` (built fresh by Layer P) | 4 065 896 | `1ad797d26bd4c8ab…` | `2dabed0bc05e3bc7…` |
 
 Three physically distinct binaries — different hashes, two of them at different
-lengths — produce the **identical** behavioral identity, on identical
-decision-relevant source (`tracker_gpu.cu|.hpp|_python.cpp` verified equal between
-`HEAD` and R5's `I=524f7e3b`). A fourth artifact already on disk,
+lengths — produce the **identical bounded MOT17-09 probe**. G1 establishes only
+the forward observation "these builds produced the same probe"; it does not
+establish the reverse implication from equal probe to equal measurement-domain
+behavior. A fourth artifact already on disk,
 `build/h0_phase_a/` at `b064a700…`, is byte-different from `build/ci_arch214/` at
 the *same* 4 065 896 length — independently reproducing the R5 parity audit's
 finding without a rebuild.
@@ -391,9 +398,10 @@ between a new build and the published reference.
 
 The tool verifies which binary it loaded rather than assuming: a
 site-packages `.pth` pins `<repo>/build` into `sys.path`, so an unverified
-`SACCADE_BUILD_PATH` override is silently ignored and a two-build comparison can
-appear to pass while testing one binary twice. `_assert_extension_consumed`
-fails closed on that, and records the loaded path and hash as witness.
+`SACCADE_BUILD_PATH` override was silently ignored and a two-build comparison can
+appear to pass while testing one binary twice. The runner now fails closed unless
+both the selected extension and selected TensorRT plugin are actually mapped,
+and their content hashes enter the Layer-P certificate.
 
 #### 5.1.3 Gate G2 result (2026-07-25, non-authoritative)
 
@@ -427,11 +435,15 @@ packets, and every replay predicate.
 
 Preconditions bound into the seal:
 
-1. a Layer-P pass certificate (`h2_layer_p_v1`) whose plumbing digest and
-   behavior digest are recorded in `F`;
-2. the published `runtime_identity` four-axis tuple;
-3. the `decision_relevant` tree digest;
-4. the capture ABI digest.
+1. a Layer-P pass certificate (`h2_layer_p_certificate_v2`) binding source
+   HEAD/tree, selected base, complete changed-path verdict, decision-relevant,
+   identity-semantics and plumbing-set digests;
+2. exact SHA-256 of the published coordinate/probe file, probe-result file, and
+   runtime-input manifest;
+3. content digests of both fixtures, all configured weights/checkpoints/engines,
+   extension, TensorRT plugin, sequence metadata and third-party runtime code;
+4. the fixed probe fixture/mode/schema and `equivalence = unproven`;
+5. the capture ABI digest.
 
 One `I → F → S` chain, one exactly-once authorization, consumed at controller
 process launch. **Retry, resume, and repaired re-run under the same `S` remain
@@ -449,40 +461,37 @@ mechanically pinned":
    Classification is total and mutually exclusive; an unclassified path is
    **fail-closed** — silence is not permission, which is the assertion H0's
    enumerative admission kept getting wrong.
-   - `decision_relevant` — H0's five A6.2 `ADMITTED_RUNTIME_PATHS` (transcribed
-     from `verify_h0_preseal_freeze.py`, and tested against it so the protected
-     set cannot silently shrink), plus the emission/inject sites the A7.6
-     inventory observes through (`pipeline.py`, `evaluator.py`), plus the policy
-     surface (`configs/presets/mamba_whole_graph_m.yaml`,
-     `resolved_bridge_policy_config.py`, `scripts/eval/mot17_args.py`,
-     `scripts/eval/config/`).
-   - `invariant_authority` — the guard itself: the behavior-digest producer, this
-     classifier, the identity publisher, and the staleness checker. Rejected in a
-     retry for a different reason than `decision_relevant`: not "you changed what
-     we measure" but "you changed what decides whether it changed". Without this
-     class the firewall would hold only until someone edited it — a circular
-     oracle with extra steps.
+   - `decision_relevant` — the full production `src/` and `include/` surfaces,
+     resolved eval configuration, selected preset and entrypoint. MOT17-09
+     execution coverage is not used to shrink this coordinate.
+   - `identity_semantics` — the ruler itself: probe producer/member definition,
+     classifier, runtime-input manifest, publisher, staleness checker, terminal
+     partition, Layer-P certificate producer, workflow and schema policy.
+     Rejected because a retry cannot edit what decides whether it changed.
+   - `identity_fixture_input` / `measurement_input` — MOT17-09 and MOT17-04
+     content/metadata respectively.
+   - `runtime_asset` — weights, checkpoints, engines, extension/plugin build
+     products and executed third-party components.
    - `plumbing_only` — build recipe, loader environment, confinement plan,
      attestation recorder, evidence serialization, controller and verifier
      scaffolding, CI, infra.
-   - `non_execution` — docs, tests, datasets, results; never executed by a run,
-     so never blocking.
+   - `non_execution` — prose, tests and outputs not consumed by the run.
 
    A Layer-P retry may change `plumbing_only` and `non_execution` paths and
    nothing else. Note the asymmetry with H0's `h0_projection_path_class_v1`: a
    misclassification here does **not** gate a seal (which is what made A6
-   Correction 1 necessary) — it is caught by the behavior digest, because a
-   `plumbing_only` edit that moves the digest is by definition misclassified.
-2. **Behavioral pinning.** Every Layer-P retry recomputes the `behavior` axis and
-   must equal the published reference. Inequality is a hard stop
-   `H2_PLUMBING_CHANGED_BEHAVIOR`; that chain is dead and only the owner may
-   re-open it. A `plumbing_only` edit that moves the behavior digest is by
-   definition misclassified.
+   Correction 1 necessary). Final plumbing and runtime artifacts are content-bound
+   into the certificate/F rather than declared equivalent to an earlier build.
+2. **Bounded probe.** Every Layer-P pass recomputes the fixed MOT17-09 probe.
+   Inequality is `H2_PLUMBING_CHANGED_PROBE`. Equality means only that this probe
+   observed no difference; `equivalence` stays `unproven`.
 3. **Append-only retry log.** Each retry records the coordinate it resolved. No
    silent iteration.
-4. **Seal binds everything.** At `F` the behavior digest, the
-   `decision_relevant` tree digest, and the plumbing-set digest are frozen
-   together, so the measurement is as tightly bound as H0's ever was.
+4. **Seal binds everything.** At `F` the coordinate, bounded probe, selected base,
+   authority/plumbing digests, both fixture digests, all runtime-asset digests,
+   extension/plugin bytes, and exact certificate/result/manifest files are frozen
+   together. This identifies one measurement without claiming cross-coordinate
+   equivalence.
 
 ### 5.4 What A10's principle is retained for
 
@@ -511,7 +520,7 @@ pre-seal and are not in this space (§5.1).
 
 | # | Terminal | Exact condition | Mainline transition (§20.7) |
 | --- | --- | --- | --- |
-| 1 | `H2_INPUT_MUTATED_DURING_MEASUREMENT` | `BoundInputMonitor` observes a write to any bound input during the invocation, **or** the `behavior` axis at launch differs from the reference bound in `F`, **or** the Layer-P certificate does not match `F` | closes the H2 measurement unit; `quantity.bridge_capture_provenance` unchanged; candidate set stays empty; a fresh `I → F → S` and a separate authorization would be required |
+| 1 | `H2_INPUT_MUTATED_DURING_MEASUREMENT` | `BoundInputMonitor` observes a write to any bound input during the invocation, **or** the behavior probe at launch differs from the reference bound in `F`, **or** the Layer-P certificate/content manifest does not match `F` | closes the H2 measurement unit; `quantity.bridge_capture_provenance` unchanged; candidate set stays empty; a fresh `I → F → S` and a separate authorization would be required |
 | 2 | `H2_CAPTURE_PERTURBS_POLICY` | Execution completed and any A7.6 capture-off/on equality differs | **closes the observational-capture route itself**: decision-neutral shadow capture is not achievable at this ABI, so grounding must proceed by native-side reproduction or not at all |
 | 3 | `H2_PACKET_INVALID` | Non-perturbation held but any packet, exposure, overflow, native-universe, conservation, cross-repeat canonical digest, or replay predicate fails | closes this measurement; routes to a separate capture-ABI-delta charter (no ABI change is authorized here) |
 | 4 | `H2_MEASUREMENT_EXECUTION_INVALID` | After the sealed launch: nonzero build, extension/plugin load failure, runner nonzero, deadline exhausted, serialization failure, missing or unreadable required artifact, or any unclassified execution failure (mandatory catch-all) | closes this measurement with no partial-capture reinterpretation; a fresh chain would be required |
@@ -556,9 +565,9 @@ was post-seal.
 - **Fixtures** — §3.2 and §3.3 are frozen by name and frame count.
 - **Determinism pinning** — applies to the identity fixture only, with the exact
   settings named in §3.2; the measurement fixture pins nothing.
-- **Axis bump semantics** — `behavior` unchanged with `implementation` or
-  `environment` changed is *behavior-preserving*; `decision_surface` or
-  `behavior` changed is *decision-affecting* (§8.4).
+- **No equivalence from probe equality** — `implementation`, `environment`, or
+  runtime-input drift with an equal probe is `re_attestation_required`;
+  `decision_surface`, `identity_semantics`, or probe drift is `stale` (§8.4).
 - **No refit** — no proxy, threshold, estimator, or classifier may be adjusted to
   close a gap; a Layer-P retry may only change `plumbing_only` paths (§5.3).
 
@@ -576,27 +585,31 @@ process exit condition.
 H2 has no blind phase: the capture is unlabelled and no GT/FP read is authorized.
 §20.8 item 6 is therefore not applicable. The hash bindings that would carry it
 are still recorded (`F` binds the runner, controller, verifier, capture ABI,
-Layer-P certificate, and behavior reference).
+Layer-P certificate, runtime-input manifest, and probe reference).
 
-### 8.3.1 Published identity and the `online → research` guard (landed 2026-07-25)
+### 8.3.1 Published coordinate/probe and the `online → research` guard
 
-The four-axis identity is published at
-`docs/reference/runtime_identity.generated.json` and the drift guard runs in
-`scripts/pre_push.sh`:
+The coordinate/probe publication is
+`docs/reference/runtime_identity.generated.json`; that generated file is the
+authority for current digests. Its structure is:
 
 ```text
-decision_surface  9b7faeb0f76a43483a924ac4028361bb155373027e9fe44e4cffbd5f1a2b0369
-implementation    32ae4857cb7d0b1898aa96bc347ff276c582fd722b25bea4301c098c95176d8d
-environment       3cf9ae3e7d0dfa3ff3b020ef7aba86dbb15571c6271f3999f1afa310a82f566a
-behavior          2dabed0bc05e3bc75ec2115b3213f5c0b1aed3e837c22dd2325109339e4719b5
+coordinate:
+  decision_surface / implementation / environment
+  identity_semantics / runtime_inputs
+probe:
+  kind: identity_probe
+  sufficiency: fixture_change_detector_only
+equivalence:
+  state: unproven
 ```
-
-Verified live, both directions of the asymmetry that makes a dual track real:
 
 | Perturbation | Result |
 | --- | --- |
-| `decision_surface` differs from recomputed | hard failure, with the regeneration command |
-| `implementation` differs, `behavior` equal | warning + re-attestation note; exit 0 (exit 1 under `--strict`) |
+| any static coordinate differs from recomputed publication | hard failure, with regeneration command |
+| fixture/model/engine content differs from supplied manifest | hard failure |
+| `implementation` / `environment` / `runtime_inputs` differs in a binding while probe stays equal | `re_attestation_required`; consumer inadmissible |
+| `decision_surface` / `identity_semantics` / probe differs | `stale`; consumer inadmissible |
 
 `captured_under` lives in the sidecar
 `docs/research/contracts/runtime_identity_bindings_v1.json`, **not** parsed out of
@@ -607,26 +620,30 @@ partial Markdown parser. The registry stays the sole writer of object state
 chains produced no faithful capture, so there is nothing to bind, and a contract
 test pins that absence so it cannot be filled in retroactively.
 
-The `behavior` axis needs a GPU, so it is re-attested by
+The bounded probe needs a GPU, so it is re-attested by
 `.github/workflows/runtime_identity.yml` on the same controlled host as H0
-qualification, triggered by any push touching the decision-relevant surface.
+qualification. The workflow is triggered by implementation, environment,
+identity-semantics and publication changes and also binds runtime-input content.
 
 ### 8.4 Proposed registry field (owner decision, not written here)
 
 ```yaml
 captured_under:                    # proposed addition to a state record
-  decision_surface: <sha256>
-  implementation:   <sha256>
-  environment:      <sha256>
-  behavior:         <sha256>
+  coordinate:
+    decision_surface:   <sha256>
+    implementation:     <sha256>
+    environment:        <sha256>
+    identity_semantics: <sha256>
+    runtime_inputs:     <sha256>
+  probe: <sha256>
 ```
 
-Consumption rule, proposed: a state whose `captured_under.decision_surface` or
-`captured_under.behavior` differs from the published `runtime_identity` is
-**stale** and its consumers are inadmissible until re-attested; a difference
-confined to `implementation` or `environment` with `behavior` equal is
-behavior-preserving and does not affect the state. Staleness is a mechanical
-flag, in the sense of ADR 020 §S2's version-lag accounting — not a retraction.
+Consumption rule: decision-surface, identity-semantics or probe drift is
+**stale**. Implementation, environment or runtime-input drift with equal probe is
+**re-attestation-required**, not behavior-preserving. V1 has no equivalence
+upgrade: adding one requires a versioned verifier and accepted full
+measurement-domain or explicit sufficiency evidence. Both verdicts are
+version-lag accounting, not retraction of a claim about its original coordinate.
 
 ### 8.5 Scoped exhaustion
 

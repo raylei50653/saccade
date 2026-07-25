@@ -37,7 +37,10 @@ import verify_h0_preseal_freeze as h0_freeze  # noqa: E402
 
 _CLASSES = {
     "decision_relevant",
-    "invariant_authority",
+    "identity_semantics",
+    "identity_fixture_input",
+    "measurement_input",
+    "runtime_asset",
     "plumbing_only",
     "non_execution",
     "unclassified",
@@ -80,15 +83,25 @@ def test_prose_is_non_execution_wherever_it_lives() -> None:
         ("CMakeLists.txt", "plumbing_only"),
         ("uv.lock", "plumbing_only"),
         ("scripts/tools/h0_runtime_confinement.py", "plumbing_only"),
-        ("scripts/tools/run_h2_layer_p.py", "plumbing_only"),
+        ("scripts/tools/run_h2_layer_p.py", "identity_semantics"),
         (".github/workflows/ci.yml", "plumbing_only"),
-        ("scripts/tools/h2_path_partition.py", "invariant_authority"),
-        ("scripts/tools/h2_behavioral_identity.py", "invariant_authority"),
-        ("scripts/tools/build_runtime_identity.py", "invariant_authority"),
+        (".github/workflows/runtime_identity.yml", "identity_semantics"),
+        ("scripts/tools/h2_path_partition.py", "identity_semantics"),
+        ("scripts/tools/h2_behavioral_identity.py", "identity_semantics"),
+        ("scripts/tools/h2_runtime_inputs.py", "identity_semantics"),
+        ("scripts/tools/h2_terminal_partition.py", "identity_semantics"),
+        ("scripts/tools/build_runtime_identity.py", "identity_semantics"),
         ("docs/modules/semantic/TODO.md", "non_execution"),
         ("tests/contract/test_h2_path_partition.py", "non_execution"),
-        ("datasets/MOT17/train/MOT17-09-SDP/seqinfo.ini", "non_execution"),
-        ("src/saccade/perception/reid/embedder.py", "unclassified"),
+        (
+            "datasets/MOT17/train/MOT17-09-SDP/seqinfo.ini",
+            "identity_fixture_input",
+        ),
+        ("datasets/MOT17/train/MOT17-04-SDP/seqinfo.ini", "measurement_input"),
+        ("models/yolo/yolo26m.pt", "runtime_asset"),
+        ("third_party/plugin.so", "runtime_asset"),
+        ("src/saccade/perception/reid/embedder.py", "decision_relevant"),
+        ("vendor/unknown.bin", "unclassified"),
     ],
 )
 def test_representative_classifications(path: str, expected: str) -> None:
@@ -99,7 +112,7 @@ def test_classes_are_mutually_exclusive() -> None:
     """No literal path may appear in two class tables."""
     tables = {
         "decision_relevant": set(partition.DECISION_RELEVANT_PATHS),
-        "invariant_authority": set(partition.INVARIANT_AUTHORITY_PATHS),
+        "identity_semantics": set(partition.IDENTITY_SEMANTICS_PATHS),
         "plumbing_only": set(partition.PLUMBING_ONLY_PATHS),
         "non_execution": set(partition.NON_EXECUTION_PATHS),
     }
@@ -118,16 +131,15 @@ def test_the_guard_cannot_be_edited_by_the_retry_it_guards() -> None:
     """The digest producer and this classifier live under `scripts/tools/h2_`,
     which is otherwise a plumbing prefix. The exact-path rule must win, or a
     retry could weaken the very check that makes retries sound."""
-    for path in partition.INVARIANT_AUTHORITY_PATHS:
-        assert path.startswith("scripts/tools/"), path
-        assert partition.classify(path) == "invariant_authority", path
+    for path in partition.IDENTITY_SEMANTICS_PATHS:
+        assert partition.classify(path) == "identity_semantics", path
 
     verdict = partition.check_retry(
         ["CMakeLists.txt", "scripts/tools/h2_behavioral_identity.py"]
     )
     assert not verdict.admissible
-    assert verdict.invariant_authority == ("scripts/tools/h2_behavioral_identity.py",)
-    assert "guard cannot be edited" in verdict.reason()
+    assert verdict.identity_semantics == ("scripts/tools/h2_behavioral_identity.py",)
+    assert "cannot edit itself" in verdict.reason()
 
 
 def test_prefix_rules_do_not_overlap_across_classes() -> None:
@@ -135,6 +147,7 @@ def test_prefix_rules_do_not_overlap_across_classes() -> None:
         "decision_relevant": partition.DECISION_RELEVANT_PREFIXES,
         "plumbing_only": partition.PLUMBING_ONLY_PREFIXES,
         "non_execution": partition.NON_EXECUTION_PREFIXES,
+        "runtime_asset": partition.RUNTIME_ASSET_PREFIXES,
     }
     for left_name, left in groups.items():
         for right_name, right in groups.items():
@@ -172,9 +185,9 @@ def test_a_decision_relevant_change_blocks_the_retry() -> None:
 
 def test_an_unclassified_change_fails_closed() -> None:
     """The whole point: silence is not permission."""
-    verdict = partition.check_retry(["src/saccade/perception/reid/embedder.py"])
+    verdict = partition.check_retry(["vendor/unknown.bin"])
     assert not verdict.admissible
-    assert verdict.unclassified == ("src/saccade/perception/reid/embedder.py",)
+    assert verdict.unclassified == ("vendor/unknown.bin",)
     assert "fail-closed" in verdict.reason()
 
 
@@ -184,12 +197,12 @@ def test_a_blocked_path_is_reported_even_when_mixed_with_admissible_ones() -> No
             "uv.lock",
             "docs/TODO.md",
             "src/saccade/perception/eval/stages.py",
-            "src/saccade/perception/reid/embedder.py",
+            "vendor/unknown.bin",
         ]
     )
     assert not verdict.admissible
     assert verdict.decision_relevant == ("src/saccade/perception/eval/stages.py",)
-    assert verdict.unclassified == ("src/saccade/perception/reid/embedder.py",)
+    assert verdict.unclassified == ("vendor/unknown.bin",)
     assert verdict.plumbing_only == ("uv.lock",)
     assert verdict.non_execution == ("docs/TODO.md",)
 
@@ -202,3 +215,23 @@ def test_absolute_paths_inside_the_repo_normalize() -> None:
 def test_cli_exit_codes_match_the_verdict() -> None:
     assert partition.main(["--check-retry", "CMakeLists.txt"]) == 0
     assert partition.main(["--check-retry", "src/tracking/tracker_gpu.cu"]) == 1
+
+
+@pytest.mark.parametrize(
+    "path,field",
+    [
+        (
+            "datasets/MOT17/train/MOT17-09-SDP/seqinfo.ini",
+            "identity_fixture_input",
+        ),
+        (
+            "datasets/MOT17/train/MOT17-04-SDP/seqinfo.ini",
+            "measurement_input",
+        ),
+        ("models/yolo/yolo26m.pt", "runtime_asset"),
+    ],
+)
+def test_consumed_inputs_and_assets_block_retry(path: str, field: str) -> None:
+    verdict = partition.check_retry([path])
+    assert not verdict.admissible
+    assert getattr(verdict, field) == (path,)

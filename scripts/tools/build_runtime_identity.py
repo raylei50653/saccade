@@ -1,64 +1,47 @@
 #!/usr/bin/env python3
-"""Build the published four-axis `runtime_identity` of the online track.
+"""Publish an H2 runtime coordinate plus a bounded behavior probe.
 
-    decision_surface  resolved parameter snapshot of the sealed preset + the
-                      resolved bridge-policy fingerprint
-    implementation    git blob digest over the decision-relevant path set
-    environment       build recipe + dependency lock + CUDA/TRT/driver versions
-    behavior          the § 4.0 policy-visible digest (h2_behavioral_identity)
+The publication deliberately keeps three concepts separate:
 
-Everything physical — artifact SHA-256, ELF build-id, loaded library closure,
-GPU serial identity — is recorded as **witness** and carries no decision
-authority (declaration § 4.1). That inversion is the whole point: H0 spent five
-exactly-once authorizations proving physical membership, and the owner's R5
-parity audit showed physical identity is not even a function of source (same
-source, different build directory, different `sha256` and build-id). An identity
-you cannot recompute cannot be published, and an identity nobody can publish has
-to be re-derived by every study under a one-shot budget.
+* ``coordinate`` versions source, configuration, environment, identity semantics,
+  and content-bound stable runtime inputs;
+* ``probe`` records what MOT17-09 observed under the deterministic probe mode;
+* ``equivalence`` is unproven. Probe equality never upgrades it.
 
-Axis bump semantics (declaration § 8.1 / § 8.4):
-
-  * `behavior` unchanged while `implementation` / `environment` changed
-    ⇒ behavior-preserving; sealed claims survive. This is what lets the online
-      track move without invalidating research.
-  * `decision_surface` or `behavior` changed ⇒ decision-affecting; every state
-    captured under the old identity is stale until re-attested.
-
-Usage:
-  uv run python scripts/tools/build_runtime_identity.py --emit out/identity.json
-  uv run python scripts/tools/build_runtime_identity.py \
-      --behavior-from out/h2_behavior/result.json --emit docs/reference/runtime_identity.generated.json
-  uv run python scripts/tools/build_runtime_identity.py --run-behavior --build-dir build/h2_a
+Physical extension/plugin bytes belong to a Layer-P certificate and eventual
+freeze, not to cross-build equivalence.
 """
 # status: stable
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 _TOOLS = REPO_ROOT / "scripts" / "tools"
 if _TOOLS.as_posix() not in sys.path:
     sys.path.insert(0, _TOOLS.as_posix())
 
+import h2_behavioral_identity as behavior  # noqa: E402
 import h2_path_partition as partition  # noqa: E402
-from h2_behavioral_identity import (  # noqa: E402
-    POLICY_PRESET_REL,
-    POLICY_PRESET_STEM,
-    canonical_json_bytes,
-    digest,
-)
+import h2_runtime_inputs as runtime_inputs  # noqa: E402
 
-IDENTITY_SCHEMA = "h2_runtime_identity_v1"
-
-# `environment` axis inputs: the recipe that produces the binaries and the lock
-# that pins every wheel they load. Deliberately *not* the loaded closure.
+IDENTITY_SCHEMA = "h2_runtime_coordinate_probe_v1"
 ENVIRONMENT_FILES = ("CMakeLists.txt", "pyproject.toml", "uv.lock")
+STATIC_COORDINATE_AXES = (
+    "decision_surface",
+    "environment",
+    "implementation",
+    "identity_semantics",
+)
+ALL_COORDINATE_AXES = (*STATIC_COORDINATE_AXES, "runtime_inputs")
 
 
 class IdentityError(RuntimeError):
@@ -72,17 +55,23 @@ def _git(*args: str) -> str:
     return completed.stdout.strip()
 
 
-# --------------------------------------------------------------------------- #
-# decision_surface                                                             #
-# --------------------------------------------------------------------------- #
-def decision_surface_axis() -> dict[str, Any]:
-    """Resolved parameter snapshot of the sealed preset, plus its policy fingerprint.
+def sha256_file(path: Path) -> str:
+    hasher = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            hasher.update(chunk)
+    return hasher.hexdigest()
 
-    Reuses the existing golden-snapshot resolver (`scripts/eval/config/gen_golden_snapshot.py`)
-    so this axis and `tests/fixtures/golden_config_*.json` cannot drift apart, and
-    the bridge-policy resolver that `check_headline_decision_contract.py` and the
-    declaration bindings already use.
-    """
+
+def _valid_sha256(value: Any) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and all(character in "0123456789abcdef" for character in value)
+    )
+
+
+def decision_surface_axis() -> dict[str, Any]:
     for extra in (
         REPO_ROOT / "scripts" / "eval",
         REPO_ROOT / "scripts" / "eval" / "config",
@@ -93,51 +82,44 @@ def decision_surface_axis() -> dict[str, Any]:
     from gen_golden_snapshot import _resolve_config
     from resolved_bridge_policy_config import fingerprint
 
-    resolved = _resolve_config(POLICY_PRESET_STEM)
+    resolved = _resolve_config(behavior.POLICY_PRESET_STEM)
+    resolved_fingerprint = fingerprint(behavior.POLICY_PRESET_STEM)
     return {
-        "digest": digest(
+        "digest": behavior.digest(
             {
-                "preset": POLICY_PRESET_REL,
-                "resolved_bridge_policy_config_v1": fingerprint(POLICY_PRESET_STEM),
+                "preset": behavior.POLICY_PRESET_REL,
+                "resolved_bridge_policy_config_v1": resolved_fingerprint,
                 "resolved_parameters": resolved,
             }
         ),
         "parameter_count": len(resolved),
-        "preset": POLICY_PRESET_REL,
-        "resolved_bridge_policy_config_v1": fingerprint(POLICY_PRESET_STEM),
+        "preset": behavior.POLICY_PRESET_REL,
+        "resolved_bridge_policy_config_v1": resolved_fingerprint,
     }
 
 
-# --------------------------------------------------------------------------- #
-# implementation                                                               #
-# --------------------------------------------------------------------------- #
-def decision_relevant_files() -> tuple[str, ...]:
-    """Every tracked file the partition calls `decision_relevant`.
-
-    Expanded from git rather than from a literal list: a new file under
-    `scripts/eval/config/` is decision-relevant the moment it lands, and an
-    identity that missed it would be silently narrower than its own definition.
-    """
-    tracked = [line for line in _git("ls-files").splitlines() if line]
+def tracked_files_for_class(path_class: partition.PathClass) -> tuple[str, ...]:
+    tracked = [
+        line
+        for line in _git(
+            "ls-files", "--cached", "--others", "--exclude-standard"
+        ).splitlines()
+        if line
+    ]
     return tuple(
         sorted(
             path
             for path in tracked
-            if partition.classify(path) == "decision_relevant"
-            # Prose under a decision-relevant prefix (e.g. `scripts/eval/config/README.md`)
-            # stays *classified* decision-relevant — a retry may not edit it — but it is
-            # kept out of the axis so a doc edit cannot bump `implementation`. The axis
-            # errs toward over-sensitivity elsewhere; there is no reason to add noise
-            # that is knowably behavior-irrelevant.
+            if partition.classify(path) == path_class
             and not path.endswith((".md", ".rst", ".txt"))
         )
     )
 
 
-def implementation_axis() -> dict[str, Any]:
-    files = decision_relevant_files()
+def _content_axis(path_class: partition.PathClass) -> dict[str, Any]:
+    files = tracked_files_for_class(path_class)
     if not files:
-        raise IdentityError("decision-relevant file set is empty")
+        raise IdentityError(f"{path_class} file set is empty")
     members = []
     for path in files:
         blob = _git("hash-object", "--", path)
@@ -145,17 +127,29 @@ def implementation_axis() -> dict[str, Any]:
             raise IdentityError(f"unexpected blob id for {path}: {blob!r}")
         members.append({"blob": blob, "path": path})
     return {
-        "digest": digest(members),
+        "digest": behavior.digest(members),
         "file_count": len(members),
         "files": members,
     }
 
 
-# --------------------------------------------------------------------------- #
-# environment                                                                  #
-# --------------------------------------------------------------------------- #
+def decision_relevant_files() -> tuple[str, ...]:
+    return tracked_files_for_class("decision_relevant")
+
+
+def implementation_axis() -> dict[str, Any]:
+    return _content_axis("decision_relevant")
+
+
+def identity_semantics_axis() -> dict[str, Any]:
+    return _content_axis("identity_semantics")
+
+
+def plumbing_axis() -> dict[str, Any]:
+    return _content_axis("plumbing_only")
+
+
 def _torch_environment() -> dict[str, Any]:
-    """Versions, not file identities. Fails soft: absence is recorded, not fatal."""
     try:
         import torch
     except Exception as exc:  # pragma: no cover - environment probe
@@ -194,169 +188,293 @@ def environment_axis() -> dict[str, Any]:
         recipe.append({"blob": _git("hash-object", "--", name), "path": name})
     toolchain = _torch_environment()
     return {
-        "digest": digest({"recipe": recipe, "toolchain": toolchain}),
+        "digest": behavior.digest({"recipe": recipe, "toolchain": toolchain}),
         "recipe": recipe,
         "toolchain": toolchain,
     }
 
 
-# --------------------------------------------------------------------------- #
-# witness — recorded, never predicate                                          #
-# --------------------------------------------------------------------------- #
-def witness(build_dir: Path | None) -> dict[str, Any]:
-    record: dict[str, Any] = {
-        "note": (
-            "Witness fields carry no decision authority (declaration § 4.1). No "
-            "terminal may be selected on them. Physical artifact identity is not a "
-            "function of source: the same source built in a different directory "
-            "yields a different sha256 and ELF build-id."
-        ),
-        "head": _git("rev-parse", "HEAD"),
-        "tree": _git("rev-parse", "HEAD^{tree}"),
-        "worktree_dirty": bool(_git("status", "--porcelain")),
-    }
-    if build_dir is None:
-        record["build_artifacts"] = None
-        return record
-    artifacts = []
-    for pattern in ("saccade_tracking_ext*.so", "libsaccade_scan_plugin.so"):
-        for path in sorted(build_dir.glob(pattern)):
-            data = path.read_bytes()
-            import hashlib
+def _validate_build_witness(witness: Any, *, verify_files: bool) -> dict[str, Any]:
+    if not isinstance(witness, Mapping):
+        raise IdentityError("probe build_witness is missing")
+    if witness.get("schema") != behavior.BUILD_WITNESS_SCHEMA:
+        raise IdentityError("probe build_witness schema mismatch")
+    artifacts = witness.get("artifacts")
+    if not isinstance(artifacts, list) or len(artifacts) != 2:
+        raise IdentityError("probe build_witness must bind extension and plugin")
+    roles = {item.get("role") for item in artifacts if isinstance(item, Mapping)}
+    if roles != {"tracking_extension", "tensorrt_scan_plugin"}:
+        raise IdentityError(f"probe build_witness roles are invalid: {roles}")
+    projection = []
+    for item in artifacts:
+        if not isinstance(item, Mapping):
+            raise IdentityError("probe build_witness artifact is malformed")
+        if not _valid_sha256(item.get("sha256")):
+            raise IdentityError("probe build_witness artifact sha256 is invalid")
+        if not isinstance(item.get("length"), int) or item["length"] <= 0:
+            raise IdentityError("probe build_witness artifact length is invalid")
+        projection.append(
+            {
+                "coordinate": item.get("coordinate"),
+                "length": item["length"],
+                "role": item["role"],
+                "sha256": item["sha256"],
+            }
+        )
+        if verify_files:
+            path = Path(str(item.get("path", "")))
+            if not path.is_file():
+                raise IdentityError(f"probe build_witness artifact is absent: {path}")
+            if (
+                path.stat().st_size != item["length"]
+                or sha256_file(path) != item["sha256"]
+            ):
+                raise IdentityError(f"probe build_witness artifact moved: {path}")
+    if witness.get("digest") != behavior.digest(projection):
+        raise IdentityError("probe build_witness digest mismatch")
+    return dict(witness)
 
-            artifacts.append(
-                {
-                    "length": len(data),
-                    "path": path.relative_to(REPO_ROOT).as_posix()
-                    if path.is_relative_to(REPO_ROOT)
-                    else path.as_posix(),
-                    "sha256": hashlib.sha256(data).hexdigest(),
-                }
-            )
-    record["build_artifacts"] = artifacts
-    record["build_dir"] = build_dir.as_posix()
-    return record
 
-
-# --------------------------------------------------------------------------- #
-# assembly                                                                     #
-# --------------------------------------------------------------------------- #
-def build_identity(
+def _validate_probe_payload(
+    payload: Any,
     *,
-    behavior: dict[str, Any] | None,
-    build_dir: Path | None,
+    source: Path,
+    expected_mode: str,
+    expected_sequence: str,
+    expected_pinning: bool,
+    minimum_repeats: int,
+    verify_witness_files: bool,
 ) -> dict[str, Any]:
-    axes = {
+    if not isinstance(payload, Mapping):
+        raise IdentityError(f"{source}: behavior probe payload is not a mapping")
+    if payload.get("schema") != behavior.RESULT_SCHEMA:
+        raise IdentityError(f"{source}: not a {behavior.RESULT_SCHEMA} payload")
+    if payload.get("mode") != expected_mode:
+        raise IdentityError(f"{source}: expected mode {expected_mode!r}")
+    if payload.get("sequence") != expected_sequence:
+        raise IdentityError(f"{source}: expected sequence {expected_sequence!r}")
+    if payload.get("preset") != behavior.POLICY_PRESET_REL:
+        raise IdentityError(f"{source}: probe preset mismatch")
+    if payload.get("determinism_pinned") is not expected_pinning:
+        raise IdentityError(f"{source}: determinism pinning mismatch")
+    repeats = payload.get("repeats")
+    if not isinstance(repeats, int) or repeats < minimum_repeats:
+        raise IdentityError(f"{source}: repeats must be >= {minimum_repeats}")
+    digests = payload.get("digests")
+    if not isinstance(digests, list) or len(digests) != repeats:
+        raise IdentityError(f"{source}: digests/repeats cardinality mismatch")
+    if payload.get("identical") is not True or len(set(digests)) != 1:
+        raise IdentityError(f"{source}: repeats disagreed")
+    probe_digest = payload.get("digest")
+    if not _valid_sha256(probe_digest) or any(
+        not _valid_sha256(item) for item in digests
+    ):
+        raise IdentityError(f"{source}: probe digest is not a valid SHA-256")
+    if probe_digest != digests[0]:
+        raise IdentityError(f"{source}: digest does not match repeat digests")
+    recorder_digest = payload.get("recorder_sha256")
+    current_recorder = sha256_file(Path(behavior.__file__))
+    if recorder_digest != current_recorder:
+        raise IdentityError(
+            f"{source}: behavior-probe recorder does not match this tree"
+        )
+    expected_fingerprint = decision_surface_axis()["resolved_bridge_policy_config_v1"]
+    if payload.get("resolved_fingerprint") != expected_fingerprint:
+        raise IdentityError(f"{source}: resolved_fingerprint does not match this tree")
+    witness = _validate_build_witness(
+        payload.get("build_witness"), verify_files=verify_witness_files
+    )
+    return {
+        "build_witness": witness,
+        "determinism_pinned": expected_pinning,
+        "digest": probe_digest,
+        "mode": expected_mode,
+        "preset": behavior.POLICY_PRESET_REL,
+        "repeats": repeats,
+        "recorder_sha256": current_recorder,
+        "resolved_fingerprint": expected_fingerprint,
+        "schema": behavior.RESULT_SCHEMA,
+        "sequence": expected_sequence,
+        "state": "computed",
+    }
+
+
+def _read_json(path: Path) -> Any:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise IdentityError(f"{path}: unreadable JSON: {exc}") from exc
+
+
+def load_identity_behavior_probe(
+    path: Path, *, verify_witness_files: bool = True
+) -> dict[str, Any]:
+    return _validate_probe_payload(
+        _read_json(path),
+        source=path,
+        expected_mode="identity",
+        expected_sequence=behavior.IDENTITY_SEQUENCE,
+        expected_pinning=True,
+        minimum_repeats=1,
+        verify_witness_files=verify_witness_files,
+    )
+
+
+def load_production_repeat_probe(
+    path: Path, *, verify_witness_files: bool = True
+) -> dict[str, Any]:
+    """Load G2 evidence only; this result can never populate the identity probe."""
+    return _validate_probe_payload(
+        _read_json(path),
+        source=path,
+        expected_mode="production",
+        expected_sequence=behavior.MEASUREMENT_SEQUENCE,
+        expected_pinning=False,
+        minimum_repeats=2,
+        verify_witness_files=verify_witness_files,
+    )
+
+
+def witness() -> dict[str, Any]:
+    return {
+        "head": _git("rev-parse", "HEAD"),
+        "note": (
+            "HEAD/tree are navigation witness. The coordinate digests working-tree "
+            "content; the Layer-P certificate additionally requires a selected base."
+        ),
+        "tree": _git("rev-parse", "HEAD^{tree}"),
+        "worktree_dirty": bool(_git("status", "--porcelain", "--untracked-files=no")),
+    }
+
+
+def build_publication(
+    *,
+    probe: dict[str, Any] | None,
+    runtime_input_manifest: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    axes: dict[str, dict[str, Any]] = {
         "decision_surface": decision_surface_axis(),
         "environment": environment_axis(),
         "implementation": implementation_axis(),
+        "identity_semantics": identity_semantics_axis(),
     }
-    if behavior is None:
-        axes["behavior"] = {
+    if runtime_input_manifest is None:
+        axes["runtime_inputs"] = {"digest": None, "state": "not_computed"}
+    else:
+        axes["runtime_inputs"] = runtime_inputs.publication_axis(runtime_input_manifest)
+    coordinate = {name: axes[name].get("digest") for name in ALL_COORDINATE_AXES}
+    if probe is None:
+        probe_axis = {
             "digest": None,
+            "kind": "identity_probe",
             "state": "not_computed",
-            "note": (
-                "The behavior axis requires one capture-off identity run on a GPU. "
-                "Until it is present this identity is incomplete and must not be "
-                "published or cited as a substrate coordinate."
-            ),
+            "sufficiency": "none",
         }
     else:
-        axes["behavior"] = behavior
-    complete = axes["behavior"].get("digest") is not None
+        probe_axis = {
+            **probe,
+            "kind": "identity_probe",
+            "sufficiency": "fixture_change_detector_only",
+        }
+    complete = all(coordinate.values()) and probe_axis["digest"] is not None
     return {
         "axes": axes,
-        "complete": complete,
-        "identity": {name: axes[name].get("digest") for name in sorted(axes)},
+        "coordinate": coordinate,
+        "equivalence": {
+            "proof": None,
+            "state": "unproven",
+            "note": (
+                "Probe equality is not measurement-domain equivalence. A future "
+                "accepted proof requires a versioned verifier and full declared scope."
+            ),
+        },
+        "probe": probe_axis,
+        "publication_complete": bool(complete),
         "schema": IDENTITY_SCHEMA,
-        "witness": witness(build_dir),
-    }
-
-
-def load_behavior(path: Path) -> dict[str, Any]:
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    if payload.get("schema") != "h2_behavior_result_v1":
-        raise IdentityError(f"{path}: not an h2_behavior_result_v1 payload")
-    if not payload.get("identical", False) and int(payload.get("repeats", 1)) > 1:
-        raise IdentityError(
-            f"{path}: repeats disagreed — a non-reproducible run cannot define an axis"
-        )
-    if payload.get("digest") is None:
-        raise IdentityError(f"{path}: no digest")
-    return {
-        "digest": payload["digest"],
-        "mode": payload.get("mode"),
-        "repeats": payload.get("repeats"),
-        "sequence": payload.get("sequence"),
-        "state": "computed",
+        "witness": witness(),
     }
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--emit", type=Path, default=None, help="write JSON identity")
-    parser.add_argument(
-        "--behavior-from",
-        type=Path,
-        default=None,
-        help="read the behavior axis from an h2_behavioral_identity result",
-    )
-    parser.add_argument(
-        "--run-behavior",
-        action="store_true",
-        help="run one identity-mode behavior pass now (needs a GPU)",
-    )
-    parser.add_argument(
-        "--build-dir",
-        type=Path,
-        default=None,
-        help="record physical build artifacts from this directory as witness",
-    )
-    parser.add_argument(
-        "--require-complete",
-        action="store_true",
-        help="exit nonzero unless the behavior axis is present",
-    )
+    parser.add_argument("--emit", type=Path, default=None)
+    parser.add_argument("--probe-from", type=Path, default=None)
+    parser.add_argument("--runtime-inputs-from", type=Path, default=None)
+    parser.add_argument("--run-probe", action="store_true")
+    parser.add_argument("--build-dir", type=Path, default=None)
+    parser.add_argument("--require-complete", action="store_true")
     args = parser.parse_args(argv)
 
-    behavior: dict[str, Any] | None = None
     try:
-        if args.behavior_from and args.run_behavior:
-            parser.error("--behavior-from and --run-behavior are mutually exclusive")
-        if args.behavior_from:
-            behavior = load_behavior(args.behavior_from)
-        elif args.run_behavior:
-            from h2_behavioral_identity import IDENTITY_SEQUENCE, run_behavior_inventory
-
-            result = run_behavior_inventory(
-                sequence=IDENTITY_SEQUENCE,
-                identity_mode=True,
-                output_dir=REPO_ROOT / "out" / "h2_behavior" / "identity",
-            )
-            behavior = {
+        if args.probe_from and args.run_probe:
+            parser.error("--probe-from and --run-probe are mutually exclusive")
+        probe: dict[str, Any] | None = None
+        manifest: dict[str, Any] | None = None
+        if args.probe_from:
+            probe = load_identity_behavior_probe(args.probe_from)
+        elif args.run_probe:
+            if args.build_dir is None:
+                parser.error("--run-probe requires --build-dir")
+            previous_build_path = os.environ.get("SACCADE_BUILD_PATH")
+            os.environ["SACCADE_BUILD_PATH"] = args.build_dir.resolve().as_posix()
+            try:
+                result = behavior.run_behavior_inventory(
+                    sequence=behavior.IDENTITY_SEQUENCE,
+                    identity_mode=True,
+                    output_dir=REPO_ROOT / "out" / "h2_behavior" / "identity",
+                )
+            finally:
+                if previous_build_path is None:
+                    os.environ.pop("SACCADE_BUILD_PATH", None)
+                else:
+                    os.environ["SACCADE_BUILD_PATH"] = previous_build_path
+            payload = {
+                "build_witness": result["build_witness"],
+                "determinism_pinned": True,
                 "digest": result["digest"],
+                "digests": [result["digest"]],
+                "identical": True,
                 "mode": result["mode"],
+                "preset": result["preset"],
                 "repeats": 1,
+                "recorder_sha256": sha256_file(Path(behavior.__file__)),
+                "resolved_fingerprint": result["resolved_fingerprint"],
+                "schema": behavior.RESULT_SCHEMA,
                 "sequence": result["sequence"],
-                "state": "computed",
             }
-        identity = build_identity(behavior=behavior, build_dir=args.build_dir)
-    except IdentityError as exc:
-        print(f"runtime identity failed: {exc}", file=sys.stderr)
+            probe = _validate_probe_payload(
+                payload,
+                source=Path("<in-process>"),
+                expected_mode="identity",
+                expected_sequence=behavior.IDENTITY_SEQUENCE,
+                expected_pinning=True,
+                minimum_repeats=1,
+                verify_witness_files=True,
+            )
+        if args.runtime_inputs_from:
+            manifest = runtime_inputs.load_manifest(
+                args.runtime_inputs_from, verify_files=True
+            )
+        elif args.build_dir is not None:
+            manifest = runtime_inputs.build_manifest(build_dir=args.build_dir)
+        publication = build_publication(probe=probe, runtime_input_manifest=manifest)
+    except (IdentityError, runtime_inputs.RuntimeInputError, OSError) as exc:
+        print(f"runtime coordinate publication failed: {exc}", file=sys.stderr)
         return 1
 
-    payload = canonical_json_bytes(identity) + b"\n"
+    output = behavior.canonical_json_bytes(publication) + b"\n"
     if args.emit:
         args.emit.parent.mkdir(parents=True, exist_ok=True)
-        args.emit.write_bytes(payload)
+        args.emit.write_bytes(output)
         print(f"wrote {args.emit}")
     else:
-        sys.stdout.write(payload.decode("utf-8"))
-
-    for name, value in identity["identity"].items():
-        print(f"  {name:18} {value}")
-    if args.require_complete and not identity["complete"]:
-        print("behavior axis absent — identity incomplete", file=sys.stderr)
+        sys.stdout.write(output.decode("utf-8"))
+    for name, value in publication["coordinate"].items():
+        print(f"  coordinate.{name:18} {value}")
+    print(f"  probe.behavior       {publication['probe']['digest']}")
+    print("  equivalence          unproven")
+    if args.require_complete and not publication["publication_complete"]:
+        print("coordinate/probe publication is incomplete", file=sys.stderr)
         return 1
     return 0
 
