@@ -454,6 +454,25 @@ Additionally, and specific to the accepted decisions:
   Landed as declaration **Review Correction 3**, `sealed_prefix` re-pinned to
   61 605 bytes, runtime identity republished. The issue stays open as the standing
   surface for this chain.
+- **2026-07-25** — PR #291 review returned *changes required* on the identity
+  boundary, and Correction 3 was revised in place before merge. **P0:** C3.5's
+  measurement surface named neither the executed extension nor the TensorRT
+  plugin. The published `runtime_inputs` axis is the manifest's
+  `coordinate_digest`, which excludes `build_artifacts` by design so one
+  coordinate can span builds, and the only other binding — the Layer-P
+  certificate's `runtime_input_full_digest` — was excluded from the surface as
+  attempt-local. Terminals 2 and 3 were therefore declared permanent properties of
+  a digest that could not see the binary that produced them, while §4.2 already
+  says different native bytes can hold the bounded probe equal. The surface now
+  names `full_digest`, and C3.8's axis membership — which had listed build
+  artifacts as published — is corrected to match §4 and the implementation.
+  **P1:** terminal 4 covers failures that can occur before an archive exists, so
+  `prior_attempts` could be unformable after `S_B` was spent. New **C3.5.1** binds
+  consumed-attempt records with a normative write-before-consume ordering and
+  three verify classes (`complete` / `envelope` / `unterminated`), and closes the
+  kill-switch: an unterminated attempt whose surviving artifacts already show
+  perturbation or an invalid packet inherits the terminal-2/3 ban. Neither fix
+  adds a pre-seal ruler edit. Re-pinned to 69 228 bytes, republished.
 - **2026-07-25** — a second review round closed two governance defects. The
   decision resolution had **two fact-owners** — this charter claimed to own the
   decision list while Correction 2 claimed to be §9's single resolution pointer,

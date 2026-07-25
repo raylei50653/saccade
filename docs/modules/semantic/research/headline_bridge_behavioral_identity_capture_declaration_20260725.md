@@ -876,13 +876,13 @@ h2_measure_b_<I40_B>_<F64>
 The full digest is used, never a truncation: an evidence root is an identity, and
 a shortened digest trades a collision probability for a cosmetic path length.
 Uniqueness is mechanical rather than conventional — every successor `F_B` must
-bind `prior_attempts`, the complete ordered list of preceding Phase-B evidence
-roots for this Phase-A result, each of which must exist and verify — so two
-attempts cannot share an `F_B` digest even at a byte-identical head.
-`check_h2_measure_archives.py` recomputes the digest from the recorded freeze
-record, rejects any root whose name does not match it, and rejects an incomplete
-`prior_attempts` list or one naming a root that does not exist or does not
-verify. The accepted `h2_measure_` family (§9 item 3) is preserved,
+bind `prior_attempts`, the complete ordered list of preceding **consumed-attempt
+records** for this Phase-A result (C3.5.1), each of which must exist and verify
+in its own class — so two attempts cannot share an `F_B` digest even at a
+byte-identical head. `check_h2_measure_archives.py` recomputes the digest from
+the recorded freeze record, rejects any root whose name does not match it, and
+rejects an incomplete `prior_attempts` list or one naming a root that does not
+exist or does not verify. The accepted `h2_measure_` family (§9 item 3) is preserved,
 `capture_phase` is a required manifest field, and
 `check_h0_phase_a_archives.py` remains untouched.
 
@@ -898,9 +898,14 @@ verify. The accepted `h2_measure_` family (§9 item 3) is preserved,
    witness field (§4.1);
 3. **a Layer-P v2 pass certificate** (`h2_layer_p_certificate_v2`) for the exact
    Phase-B head, `--base` given, full changed-path verdict clean;
-4. **runtime inputs** — content digests of all seven sequences, both fixture
-   roles, every configured weight/checkpoint/engine, extension, TensorRT plugin,
-   sequence metadata, and executed third-party evaluator code;
+4. **runtime inputs** — the complete runtime-input manifest of all seven
+   sequences, both fixture roles, every configured weight/checkpoint/engine,
+   extension, TensorRT plugin, sequence metadata, and executed third-party
+   evaluator code. `F_B` binds the manifest's **`full_digest`**, never its
+   `coordinate_digest`: the coordinate deliberately excludes `build_artifacts`
+   (`h2_runtime_inputs.py`) so that one coordinate can span builds, and it is
+   `F`/certificate scope — §4.1 — that pins which physical bytes a measurement
+   was authorized to consume;
 5. **the consumed-unchanged surface** — the capture ABI digest
    (`h0_bridge_decision_trace_schema_v2.json`), the packet verifier, and the A7.6
    seven-member inventory (§6: H2 introduces no comparison vocabulary of its own);
@@ -908,7 +913,7 @@ verify. The accepted `h2_measure_` family (§9 item 3) is preserved,
    checker, and observation emitter digests;
 7. **`phase_a_evidence`** — the complete manifest of the bound Phase-A evidence
    root, and its membership in the `BoundInputMonitor` watch set (C3.6);
-8. **`prior_attempts`** — complete and ordered, per C3.1;
+8. **`prior_attempts`** — complete and ordered, per C3.1 and C3.5.1;
 9. **the exposure declaration**, in H0's own frozen vocabulary:
 
    ```text
@@ -998,6 +1003,9 @@ The **measurement surface** is a bound field of `F_B`:
 ```text
 measurement_surface_digest = canonical digest of
   the five coordinate axes and the bounded probe
+  the runtime-input manifest's full_digest — which is coordinate_digest
+    together with build_artifacts.digest, hence the exact extension and
+    TensorRT-plugin bytes (C3.2 item 4)
   capture ABI · packet verifier · A7.6 inventory
   controller · child/recorder · verifier · archive checker · observation emitter
   the run plan (C3.2 item 10) and the exposure declaration (item 9)
@@ -1005,12 +1013,34 @@ measurement_surface_digest = canonical digest of
 
 Deliberately excluded as attempt-local, which is what makes a terminal-1/4
 re-attempt expressible at all: the Layer-P certificate, the bound Phase-A
-evidence root, `prior_attempts`, and `I40_B`.
+evidence root, `phase_a_evidence`, `prior_attempts`, and `I40_B`.
 
 The key is the surface rather than the coordinate because the controller, child,
 verifier and archive checker are `plumbing_only` — correctly, since they move no
 coordinate axis — yet they determine terminal 3. Keying the ban to the coordinate
 would forbid the very ABI-delta route terminal 3 is defined to select.
+
+**Why `full_digest` is named explicitly, and why the certificate's copy of it is
+not enough.** The published `runtime_inputs` axis is the manifest's
+`coordinate_digest`, and that digest excludes `build_artifacts` by construction —
+`tests/contract/test_h2_runtime_inputs.py` pins exactly this: changing a build
+artifact moves `full_digest` and leaves the coordinate still. The physical bytes
+are otherwise bound only inside the Layer-P v2 certificate
+(`run_h2_layer_p.py`'s `runtime_input_full_digest`), and the certificate is
+excluded here as attempt-local. Without this line the surface would therefore
+admit *different extension and plugin bytes under one identical
+`measurement_surface_digest`* — while §4.2's own threat model says different
+native bytes can hold the bounded probe equal. Terminals 2 and 3 are functions of
+what actually executed; a permanence claim keyed on a digest that does not see
+the executed binary would be a claim about the wrong object. So the surface
+re-admits the one certificate field that names the executed bytes, and nothing
+else from the certificate: not the head, not the changed-path verdict, not the
+attempt's own pass record.
+
+This does **not** move build artifacts into the published axis. The layering of
+§4.1 is preserved exactly: the coordinate spans builds; `F`/certificate scope
+pins the bytes; the measurement surface, being an `F_B` field, sits on the
+`F` side of that line.
 
 Two guards, so this is not a licence to iterate:
 
@@ -1023,6 +1053,80 @@ Two guards, so this is not a licence to iterate:
   relaxes a comparison is not a repair, and a terminal 2 or 3 "fixed" by
   weakening what it checks is exactly the laundering this clause exists to
   prevent.
+
+**A changed surface is necessary, never sufficient.** Because `full_digest` now
+enters the surface, a bit-different rebuild of unchanged sources moves
+`measurement_surface_digest` on its own. That does not make a successor
+admissible: the two guards above are the operative bar, and a rebuild carrying no
+named, demonstrated defect repair is not a repair. Re-running a terminal 2 or 3
+against recompiled bytes in the hope of a different answer is a retry wearing a
+new digest, and it is forbidden by the first guard, not permitted by the digest.
+
+### C3.5.1 The consumed-attempt record — what `prior_attempts` binds
+
+C3.1 requires every root named in `prior_attempts` to exist and verify, and C3.5
+allows a terminal-4 re-attempt. Terminal 4 covers serialization failure, missing
+or unreadable artifacts, and unclassified execution failure — so without this
+clause an attempt could spend `S_B` and then fail *before* an archive existed,
+leaving a re-attempt permanently unformable: authorization spent, no verifiable
+predecessor to bind, no successor `F_B` possible. `prior_attempts` therefore binds
+**consumed-attempt records**, not completed measurement archives.
+
+```text
+ordering, normative
+
+  1. F_B is constructed and its F64 digest computed          (no S_B spent)
+  2. the evidence root h2_measure_b_<I40_B>_<F64> is created and the freeze
+     record written to it                                    (no S_B spent)
+  3. the C3.6 admission gate is evaluated and its verdict written
+  4. admission failed → the root is marked `inadmissible`, is NOT a
+     consumed attempt, and is not bound by any successor's prior_attempts
+     (Layer-P class, §5.1: a coordinate to retry against)
+  5. admission passed → the controller writes and flushes the
+     `authorization_consumed` record, and only then consumes S_B and launches
+  6. every exit path — terminal, caught failure, or crash — leaves the root in
+     exactly one of the three verify classes below
+```
+
+Step 5 is deliberately ordered write-before-consume. If the process dies between
+the record and the launch, an attempt is recorded that spent nothing. That
+asymmetry is chosen: over-recording an attempt can only forbid a reuse, while
+under-recording one would let a spent authorization vanish.
+
+**The three verify classes.** `check_h2_measure_archives.py` classifies every
+root in `prior_attempts` as exactly one, and "verifies" means the class's own
+integrity condition — a terminal-4 attempt is never required to produce artifacts
+its failure is defined by the absence of:
+
+```text
+complete    a full measurement archive: manifest, checksum inventory, packets,
+            recorded observation and selected terminal. Verified in full.
+
+envelope    a caught failure: freeze record, authorization_consumed record,
+            the failure classification, and whatever artifacts survived, with a
+            checksum inventory over exactly those. Verified as an envelope —
+            completeness of the envelope, not of the measurement.
+
+unterminated
+            authorization_consumed present, no terminal recorded: the process
+            did not reach an exit path it could write. It selects no terminal —
+            no observation exists — the authorization is permanently spent, and
+            for re-attempt admissibility it is treated as terminal 4.
+```
+
+**The kill-switch is closed.** An `unterminated` attempt is re-attemptable only
+if the verifier, run over every artifact that did survive, finds no completed
+sequence exhibiting a capture-off/on inequality or an invalid packet. If the
+surviving evidence already shows one, the C3.5 ban on terminals 2 and 3 applies
+to that surface, whether or not the attempt lived long enough to record it.
+Otherwise, terminating a run at the first sign of perturbation would be a way to
+convert a forbidden terminal into a re-attemptable one, which is the same
+laundering §8.1 forbids in the refit direction.
+
+The controller, the failure envelope writer and the archive checker are all
+`plumbing_only` (C3.9), so this clause adds no pre-seal ruler edit; it is a
+contract those Layer-M components must satisfy, and `check_h2_measure_archives.py`
+is where it is mechanically enforced.
 
 ### C3.6 The admission gate is pre-terminal
 
@@ -1038,7 +1142,8 @@ admission (before S_B is consumed)
   b. its recorded observation selects no terminal (result = measurement_pass)
   c. the five axes and the bounded probe equal F_B, and F_B's copies equal F_A's
   d. the Layer-P v2 certificate for the Phase-B head equals F_B
-  e. prior_attempts is complete and every named root exists and verifies
+  e. prior_attempts is complete and every named root exists and verifies in
+     its C3.5.1 class
 
 post-launch (S_B consumed)
   terminal 1 is selected by bound-input mutation only: any write to a bound
@@ -1092,11 +1197,35 @@ seal by construction. Admitting them to the published axis would make the axis
 undefined until Phase A had already run, and would move the axis at exactly the
 moment C3.9 requires it to be still.
 
-Mechanically: the `runtime_inputs` axis membership stays *seven sequences +
-runtime assets + third-party + build artifacts*. The `phase_a_evidence` section
-is an `F_B`-only manifest section, excluded from the published axis digest by
-construction, absent when no Phase-A evidence is supplied, and a contract test
-pins that adding the section moves no published axis.
+Mechanically, and stated as the exact split the next implementer must not get
+backwards — the published axis and the freeze are two different digests over two
+different member sets:
+
+```text
+published runtime_inputs axis  = manifest coordinate_digest
+    seven sequences + configured runtime assets + third-party runtime
+    build artifacts are NOT members (h2_runtime_inputs.py builds
+    coordinate_digest over exactly four sections, excluding build_artifacts)
+
+F_B / full manifest            = manifest full_digest, plus F_B-only sections
+    the published members + the exact build artifacts (extension, TensorRT
+    plugin)                                            → full_digest
+    + phase_a_evidence                                 → F_B field, in neither
+                                                         digest
+```
+
+This is §4's own row for `runtime_inputs` and §4.1's bound-input/witness split,
+unchanged; the earlier draft of this clause listed build artifacts as published
+axis members, which was wrong in the direction that matters — it would have led
+an implementer to publish the coordinate that binds them, or to key C3.5's
+surface on the one that does not.
+
+The `phase_a_evidence` section is an `F_B`-only manifest section, absent when no
+Phase-A evidence is supplied, and a contract test pins that adding it moves
+**neither** the published axis **nor** `full_digest` — the latter because the
+Layer-P v2 certificate records `runtime_input_full_digest`, so a section that
+moved it would invalidate certificates for reasons that have nothing to do with
+what was built or run.
 
 ### C3.9 The pre-seal edit list
 
@@ -1109,7 +1238,8 @@ this must land, be republished, and be re-attested on the controlled host
 1. this declaration's `.policy.yaml` — the `sealed_prefix` re-pin carrying this
    correction;
 2. `scripts/tools/h2_runtime_inputs.py` — the seven sequences, and the
-   `phase_a_evidence` schema/producer of C3.8;
+   `phase_a_evidence` schema/producer of C3.8, which must leave both
+   `coordinate_digest` and `full_digest` computed over their current member sets;
 3. `scripts/tools/h2_terminal_partition.py` — the four changes of C3.7;
 4. `docs/reference/runtime_identity.generated.json` republished, with
    `.github/workflows/runtime_identity.yml` green at that head.

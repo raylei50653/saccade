@@ -17,8 +17,8 @@ document:
   path: headline_bridge_behavioral_identity_capture_declaration_20260725.md
 
 sealed_prefix:
-  bytes: 61605
-  sha256: "670518168f1a6672c93b3381e79c23caa6081e3de13a9eec0b7a34b73c847380"
+  bytes: 69228
+  sha256: "6d1697695ba8048b2b3b1847fbdc2e8f19c1902a02e04960a9dd6fb4e322200a"
   # Re-pin log (each entry was a deliberate pre-seal edit, not a slip):
   #   Review reset — coordinate / bounded probe / equivalence split; content-bound
   #                  fixtures/assets/build products; v2 Layer-P certificate.
@@ -48,6 +48,19 @@ sealed_prefix:
   #             entire post-correction body. Note C3.9: from the Phase-A seal to
   #             the Phase-B seal this file may not be edited at all — a re-pin is
   #             an identity_semantics move, which is fatal to a sealed Phase A.
+  #   Review Correction 3, revised under review (PR #291, before merge). Two
+  #             defects, both in the identity boundary rather than in any test:
+  #             (P0) C3.5's measurement surface omitted the executed extension /
+  #             TensorRT-plugin bytes — the published axis is the manifest's
+  #             coordinate_digest, which excludes build_artifacts, and the only
+  #             other binding was the Layer-P certificate, which C3.5 excludes as
+  #             attempt-local — so it now names full_digest, and C3.8's axis
+  #             membership is corrected to match §4 and h2_runtime_inputs.py;
+  #             (P1) C3.5.1 added — prior_attempts binds consumed-attempt records
+  #             with three verify classes, so a terminal-4 failure before the
+  #             archive exists cannot strand a spent authorization. Revised in
+  #             place because Correction 3 has not merged; re-pinned to the
+  #             entire revised body.
 
 policy_target:
   kind: headline
