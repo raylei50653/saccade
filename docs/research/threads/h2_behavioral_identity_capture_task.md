@@ -38,8 +38,11 @@ Authority split:
   successor consumes unchanged (capture ABI, A3, A5, **A7.6**, packet verifier);
 - the **[claim-state registry](../contracts/claim_state_registry.md)** remains the
   sole writer of `quantity.bridge_capture_provenance` state (C5.1);
-- this charter owns only navigation, the staging order, and **the decision list**
-  — including the record of its resolution.
+- **declaration Review Correction 2** owns the record of the §9 decisions'
+  resolution — it is the only document that can supersede §9 inside its own
+  authority — so everything this charter says about that resolution is a
+  navigation projection of it;
+- this charter owns only navigation and the staging order.
 
 ## Why this unit exists
 
@@ -103,62 +106,52 @@ is what resolves plumbing coordinates without spending authorizations.
   allowed this to be tested cheaply — its five invocations never reached the runs
   stage. **Result:** `bd88260a76ceb395…` ×3 (declaration § 5.1.3).
 
-## Owner decisions — accepted 2026-07-25
+## Owner decisions — resolved 2026-07-25
 
-Decision surface [#286](https://github.com/raylei50653/saccade/issues/286).
-Acceptance authorizes nothing: no `I`, no `F`/`S`, no capture, no exactly-once
-grant, no registry state write.
+**Navigation projection.** The fact-owner is declaration
+[Review Correction 2](../../modules/semantic/research/headline_bridge_behavioral_identity_capture_declaration_20260725.md),
+which closes §9 inside the declaration's own authority; the decision surface was
+[#286](https://github.com/raylei50653/saccade/issues/286), now resolved and
+closed. **If anything below conflicts with Correction 2, Correction 2 wins** —
+this section carries no verdict of its own and must be updated in the same change
+as any correction that supersedes it.
 
-| # | Decision | Verdict |
-|--:|:--|:--|
-| 1 | **The §7 terminal partition** — `provenance_invalid` removed as a predicate; pre-seal plumbing failures are not terminals, while a post-launch execution failure keeps a fail-closed terminal (§20.8 item 3) | **ACCEPTED, with one precondition** (below) |
-| 2 | **Registry field `captured_under`** — coordinate/probe sidecar on `quantity.bridge_capture_provenance` | **ACCEPTED as schema only**; the single write condition is owner-accepted terminal 5 (below) |
-| 3 | Slot name `H2`, terminal prefix `H2_*`, evidence prefix `h2_measure_<I40>` | **ACCEPTED** |
-| 4 | Identity fixture MOT17-09-SDP (525 frames), identity-mode with `--no-gpu-decode` + single-thread relink | **ACCEPTED** |
+All four §9 decisions were accepted on 2026-07-25. Acceptance authorizes nothing:
+no `I`, no `F`/`S`, no capture, no exactly-once grant, no registry state write.
+Correction 2 carries the verdict table, the §5.2 precondition it adds, and the
+§8.4 write condition it fixes.
+
+The two consequences a reader of this charter needs in order to navigate the
+staging order are projected below.
 
 ### Decision 1's precondition — the Phase-A success path
 
-The partition is accepted as written, **and** the following gap must be closed in
-the declaration before any Phase-A seal is issued.
+*Projection of Correction 2's §5.2 precondition 6. Reasoning and normative text
+live there.*
 
-A fully successful Phase A selects no terminal. `h2_terminal_partition.py` maps
-`measurement_pass` to `None` and says so explicitly: terminal 5 additionally
-requires the frozen seven-sequence Phase B. But declaration §2 states the seal
-authorizes "no Phase B", §7 states "Phase A never starts Phase B", and §5.2
-forbids retry, resume, and repaired re-run under the same `S`. There is no
-Phase-B chain defined anywhere in the declaration — Phase B appears only as *not
-authorized*, *required for terminal 5*, and *never started by Phase A*.
+A fully successful Phase A selects no terminal — `h2_terminal_partition.py` maps
+`measurement_pass` to no terminal, and terminal 5 additionally requires the
+frozen seven-sequence Phase B, which §2 does not authorize and §7 forbids Phase A
+from starting. Without a Phase-B chain, the best available outcome of the one
+authorized invocation is a spent authorization, an unclosed unit, and no mainline
+transition (§20.7).
 
-The consequence, stated exactly: **the best possible outcome of the one
-authorized Layer-M invocation is a spent authorization, an unclosed unit, and
-zero mainline transition** (§20.7).
-
-This is **not** inherited from H0. H0's seal covered "sealed Phase A, then (only
-if admitted) Phase B" in one chain
-([H0 declaration](../../modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md),
-pre-seal engineering block). H2 narrowed the seal to Phase A only without
-supplying the Phase-B chain that terminal 5 depends on.
-
-Accepted resolution: **the Phase-B chain form — its own `I → F → S`, its
-authorization form, and its precondition on a passing Phase A — must be declared
-before the Phase-A seal.** The seal scope stays Phase-A-only, so H2's
-minimal-epistemic-budget thesis is preserved; what changes is that the success
-path exists on paper before an authorization can be spent reaching it.
-
-**Recorded in its fact-owner.** This is not a charter-only claim: declaration
-**Review Correction 2** closes §9, marks it a historical statement of the
-question rather than an open-decision authority, and adds the Phase-B chain as
-§5.2's sixth bound precondition. The correction lands in the declaration's
-append-only region below the pinned `sealed_prefix` (which ends above
-`Review Correction 1`), so it needs no re-pin, changes no `identity_semantics`
-member, and triggers no `runtime_identity.generated.json` republish.
+So the staging order gains a gate: **the Phase-B chain — its own `I → F → S`, its
+authorization form, and its precondition on a passing Phase A — must be published
+before the Phase-A seal.** Seal scope is unchanged; the success path simply has
+to exist before an authorization can be spent reaching it. Correction 2 states
+the requirement; the chain itself is still unwritten, and that is remaining work,
+not something already delivered.
 
 ## Registry field `captured_under`
 
-Accepted as schema against `quantity.bridge_capture_provenance`
+*Projection of Correction 2's §8.4 write condition. The mechanical authority for
+the rule is the sidecar `../contracts/runtime_identity_bindings_v1.json`, not
+this charter and not registry Markdown.*
+
+Accepted as **schema only** against `quantity.bridge_capture_provenance`
 ([registry](../contracts/claim_state_registry.md)); **state, terminal, cause, and
-`open_limits` unchanged** — this adds a substrate-version coordinate and one
-dependency, nothing else:
+`open_limits` unchanged**:
 
 ```yaml
 captured_under:                  # exact coordinate/probe used by evidence
@@ -174,28 +167,17 @@ dependencies:                    # ADD one entry
     terminal 5 is the precondition, not the activation, of a runtime-fidelity edge
 ```
 
-**Write condition — one rule, and the sidecar owns it.** The mechanical authority
-is `../contracts/runtime_identity_bindings_v1.json`, not this charter and not
-registry Markdown:
+One write condition, and nothing may be inferred beside it:
 
 ```text
 a binding appears only if an H2 Layer-M measurement reaches terminal 5
 and an owner accepts it
 ```
 
-So, stated so no second rule can be inferred:
-
-- the sidecar row for `quantity.bridge_capture_provenance` **already exists**
-  with `captured_under: null`. `null` means *no substrate-version claim* and is
-  never read as agreement; it flips to a coordinate only under the rule above,
-  written by the owner (C5.1);
-- evidence packets from terminals 1–4 record their own capture coordinate inside
-  the packet — a measurement must describe the coordinate it ran on — but that
-  packet-local record is **not** an object-level binding and never becomes one;
-- no retroactive binding is written for evidence predating published identities.
-
-This supersedes the looser "written when the first H2 evidence exists" phrasing:
-a negative terminal is H2 evidence and still writes no binding.
+The sidecar row already exists with `captured_under: null`, which means *no
+substrate-version claim* and is never read as agreement. Terminals 1–4 record a
+capture coordinate inside their own packet; that is never promoted to an
+object-level binding, and no retroactive binding is written.
 
 Consumption rule: decision-surface, identity-semantics or probe drift is stale.
 Implementation, environment or runtime-input drift with an equal probe is
@@ -395,16 +377,27 @@ Additionally, and specific to the accepted decisions:
 - **2026-07-25** — owner accepted all four decisions on
   [#286](https://github.com/raylei50653/saccade/issues/286); decision 1 accepted
   with the Phase-B-chain precondition. Recorded in the fact-owner as declaration
-  **Review Correction 2** (append-only, below the pinned prefix): §9 closed,
-  §5.2 precondition 6 added, §8.4's write condition fixed to owner-accepted
-  terminal 5. Next concrete work: scope the Layer-M controller
-  (`Current step`), not implement or seal it.
+  **Review Correction 2**: §9 closed, §5.2 precondition 6 added, §8.4's write
+  condition fixed to owner-accepted terminal 5. Next concrete work: scope the
+  Layer-M controller (`Current step`), not implement or seal it.
 - **2026-07-25** — PR boundary review found three P1 defects in the first draft
   of this charter, all fixed before merge: the Layer-M reuse list was
   unimplementable (`child_argv` hardcodes the frozen child, whose recorder
   raises on unsorted pairs before any outer normalization could run);
   `captured_under` carried three conflicting write rules; and the decision
   status had two live answers because the declaration still presented §9 as
-  open. A fourth correction was to this charter's own cost claim — the
-  declaration's `sealed_prefix` ends above `Review Correction 1`, so an
-  append-only correction needs no re-pin and no republish.
+  open.
+- **2026-07-25** — a second review round closed two governance defects. The
+  decision resolution had **two fact-owners** — this charter claimed to own the
+  decision list while Correction 2 claimed to be §9's single resolution pointer,
+  and both carried a full verdict table; the charter is now a projection only.
+  And the `sealed_prefix` lifecycle had two rules: the binding declares that,
+  pre-seal, the pin is the entire document and every correction forces a
+  conscious re-pin, while an intermediate draft of this charter claimed
+  Correction 2 was free because it landed below the byte boundary. The declared
+  rule wins. Correction 2 was re-pinned to the full body and
+  `runtime_identity.generated.json` republished; the re-pin also brought
+  `Review Correction 1` — appended in PR #287 without a re-pin — back inside the
+  pin. A green suite never established the append was permitted: the byte test
+  tolerates trailing content by construction, so only the binding's re-pin log
+  can record that the pre-seal rule was honoured.

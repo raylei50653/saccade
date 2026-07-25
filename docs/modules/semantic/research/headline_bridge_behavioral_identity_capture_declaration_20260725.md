@@ -784,6 +784,26 @@ Consequences, stated so no second rule can be inferred:
   packet-local record is **not** an object-level binding and never becomes one;
 - no retroactive binding is written for evidence predating published identities.
 
+### Pre-seal re-pin (and a drift this repairs)
+
+H2 is **pre-seal**, so the binding's own rule applies: the pinned prefix is the
+entire current document, and each review correction must force a conscious re-pin
+rather than slipping through. The narrow prefix that ends above an appendable
+region is reserved for *after* an owner seals a body.
+
+This correction is therefore accompanied by a deliberate re-pin of
+`sealed_prefix` to the full post-correction body, and by the resulting republish
+of `docs/reference/runtime_identity.generated.json`, since the binding file is an
+`identity_semantics` member.
+
+That re-pin also repairs an existing drift. `Review Correction 1` was appended
+without a re-pin, which is why the pinned boundary sat below it and why an append
+could momentarily look free. It was not free — it was an unrecorded exception to
+the pre-seal rule. The byte-level test cannot catch this on its own: it verifies
+that the pinned prefix still hashes correctly and deliberately tolerates trailing
+content, so a green suite is not evidence that the pre-seal re-pin rule was
+honoured. Only the binding's re-pin log is.
+
 ### What this correction does not do
 
 It does not seal, authorize, or schedule anything; does not alter §§0–8 above the
