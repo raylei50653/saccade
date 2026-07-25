@@ -1,0 +1,39 @@
+H0_R5_PARITY_DIVERGENCE_IDENTIFIED
+
+root cause:
+  Qualification extension-load child vector inserts extension.parent into sys.path
+  before `import saccade_tracking_ext`. Authoritative controller extension-load
+  child vector does not. Under python -I -B, site still loads and
+  saccade_build.pth injects <repo>/build into sys.path, so authoritative import
+  binds build/saccade_tracking_ext*.so instead of build/h0_phase_a/*.so.
+  Shared membership predicate then fails: expected h0_phase_a realpath is absent
+  from runtime attestation.regular_files → DriftError
+  "extension/plugin load is absent from runtime attestation" → provenance_invalid.
+
+affected surface:
+  scripts/tools/run_h0_phase_a.py::_verify_extension_load child load script
+  scripts/tools/verify_h0_phase_a.py::_expected_extension_load_vector (mirrors defect)
+  scripts/tools/qualify_h0_phase_a.py::_qualify_confined_extension_load (has insert; parity gap)
+  .venv site saccade_build.pth → build/ (ambient import path under -I)
+
+why qualification passed:
+  load script forces extension.parent ahead of site/build pth; import realpath
+  equals expected artifact; membership observes build_artifact with consuming ops.
+
+why authoritative failed:
+  load script lacks that insert; import realpath ≠ expected build/h0_phase_a
+  artifact; membership reports absent; controller maps to provenance_invalid
+  before extension_load_failed; extension_load record not written.
+
+minimal repair boundary:
+  Runtime: make controller (and verifier expected vector) use the same
+  sys.path.insert(0, extension.parent) bootstrap as qualification / maps helper
+  OR disable site for the load child (-S) and require explicit path bootstrap only.
+  Single shared load-vector builder for qualify, controller, maps, verifier.
+  Governance: exact-head qualification binding into F + fail-closed seal gates
+  (separate PR from runtime).
+
+required new gate:
+  1) qualify.repository_head_sha/tree == I before seal
+  2) shared extension-load vector identity check (byte-equal across surfaces)
+  3) negative tests: without insert, import binds build/ not h0_phase_a under site pth

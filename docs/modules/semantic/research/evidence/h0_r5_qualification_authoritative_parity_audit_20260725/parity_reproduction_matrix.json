@@ -1,0 +1,165 @@
+{
+  "schema": "h0_r5_parity_reproduction_matrix_v1",
+  "authority": "diagnostic_only_non_authoritative",
+  "prohibitions_honored": [
+    "no authoritative controller re-run",
+    "no capture",
+    "no terminal claim as H0 result",
+    "no write to authoritative evidence root",
+    "no authorization reuse",
+    "no reuse of S as execution authority"
+  ],
+  "cases": [
+    {
+      "case": "A",
+      "description": "qualification harness at 205a8117\u2026",
+      "executed": false,
+      "execution_mode": "evidence_reuse",
+      "reason_not_reexecuted": "historical controlled-host qualification report already records pass at exact head; re-run would not add identity evidence and is outside minimal reproduction for load-vector defect",
+      "extension_observed": true,
+      "plugin_observed": true,
+      "expected_realpaths": {
+        "extension": "/home/ray/developer/ai/saccade/build/h0_qualification/r5/build/saccade_tracking_ext.cpython-312-x86_64-linux-gnu.so",
+        "plugin": "/home/ray/developer/ai/saccade/build/h0_qualification/r5/build/libsaccade_scan_plugin.so"
+      },
+      "observed_realpaths": "not_individually_recorded_in_report_but_identity_equal_true",
+      "regular_files_membership": "passed",
+      "consuming_operations": "satisfied (membership passed)",
+      "confinement_violations": [],
+      "runtime_inputs_digest": "e874fe4e63fcbf7aad6f24bbf35e86cda69821d8ae99d2ad2fad91af575a6e0b",
+      "confinement_plan_digest": "c769a2266c8e2e94d95ac92f5fef877b96a1e8fd4fc68b5804f7c9ca611a08a7",
+      "build_artifact_digest": {
+        "extension": "f374a223d18b708f126e87e292b2b3bef1fe30dae4ffa96e763283b6710944a7",
+        "plugin": "bd8ef779a926215865a58a4ac90a91b487370c0884522f8ea81cf6427dae6699"
+      },
+      "tool_runtime_digest": "not_recorded",
+      "terminal": "qualification_passed_non_authoritative"
+    },
+    {
+      "case": "B",
+      "description": "qualification harness at 524f7e3b\u2026",
+      "executed": false,
+      "execution_mode": "not_required_for_first_divergence",
+      "reason_not_reexecuted": "extension-load function byte-identical to 205a8117; would not change load-vector analysis",
+      "extension_observed": "not_run",
+      "plugin_observed": "not_run",
+      "expected_realpaths": "not_run",
+      "observed_realpaths": "not_run",
+      "regular_files_membership": "not_run",
+      "consuming_operations": "not_run",
+      "confinement_violations": "not_run",
+      "runtime_inputs_digest": "not_run",
+      "confinement_plan_digest": "not_run",
+      "build_artifact_digest": "not_run",
+      "tool_runtime_digest": "not_run",
+      "terminal": "not_run"
+    },
+    {
+      "case": "C",
+      "description": "authoritative extension-load subpath at 524f7e3b extracted as non-authoritative diagnostic (import resolution only; no full confinement spawn)",
+      "executed": true,
+      "execution_mode": "host_python_import_resolution_probe",
+      "command_summary": ".venv/bin/python -I -B -c import saccade_tracking_ext without sys.path insert; assert path == build/h0_phase_a artifact",
+      "extension_observed": true,
+      "plugin_observed": "not_probed_in_this_case",
+      "expected_realpaths": {
+        "extension": "/home/ray/developer/ai/saccade/build/h0_phase_a/saccade_tracking_ext.cpython-312-x86_64-linux-gnu.so"
+      },
+      "observed_realpaths": {
+        "extension": "/home/ray/developer/ai/saccade/build/saccade_tracking_ext.cpython-312-x86_64-linux-gnu.so"
+      },
+      "path_equal": false,
+      "observed_sha256": "79ea49453402de4752b624b84bfa08136cc07cfde2cd1455e888834c1a0aa0cc",
+      "expected_sha256": "b064a7009a657ecb911a91052e4ac99ed8179e6080b98ea0ba86469707d8030d",
+      "regular_files_membership": "would_fail_for_expected_h0_phase_a_realpath",
+      "consuming_operations": "not_applicable_unconfined_probe",
+      "confinement_violations": "not_applicable_unconfined_probe",
+      "runtime_inputs_digest": "not_applicable",
+      "confinement_plan_digest": "not_applicable",
+      "build_artifact_digest": {
+        "expected_extension": "b064a7009a657ecb911a91052e4ac99ed8179e6080b98ea0ba86469707d8030d",
+        "observed_extension": "79ea49453402de4752b624b84bfa08136cc07cfde2cd1455e888834c1a0aa0cc"
+      },
+      "tool_runtime_digest": "not_applicable",
+      "terminal": "diagnostic_import_path_mismatch_stable",
+      "sys_path_observed": [
+        "\u2026/lib/python3.12",
+        "\u2026/lib-dynload",
+        "\u2026/site-packages",
+        "/home/ray/developer/ai/saccade/src",
+        "/home/ray/developer/ai/saccade/build"
+      ],
+      "pth_source": ".venv/lib/python3.12/site-packages/saccade_build.pth \u2192 /home/ray/developer/ai/saccade/build"
+    },
+    {
+      "case": "C2",
+      "description": "qualification-equivalent import bootstrap for h0_phase_a path (sys.path.insert extension.parent)",
+      "executed": true,
+      "execution_mode": "host_python_import_resolution_probe",
+      "extension_observed": true,
+      "plugin_observed": "not_probed",
+      "expected_realpaths": {
+        "extension": "/home/ray/developer/ai/saccade/build/h0_phase_a/saccade_tracking_ext.cpython-312-x86_64-linux-gnu.so"
+      },
+      "observed_realpaths": {
+        "extension": "/home/ray/developer/ai/saccade/build/h0_phase_a/saccade_tracking_ext.cpython-312-x86_64-linux-gnu.so"
+      },
+      "path_equal": true,
+      "sha256_equal": true,
+      "regular_files_membership": "would_pass_for_expected_realpath",
+      "consuming_operations": "not_applicable_unconfined_probe",
+      "confinement_violations": "not_applicable_unconfined_probe",
+      "runtime_inputs_digest": "not_applicable",
+      "confinement_plan_digest": "not_applicable",
+      "build_artifact_digest": {
+        "extension": "b064a7009a657ecb911a91052e4ac99ed8179e6080b98ea0ba86469707d8030d"
+      },
+      "tool_runtime_digest": "not_applicable",
+      "terminal": "diagnostic_import_path_match_stable"
+    },
+    {
+      "case": "D",
+      "description": "qualification harness using exact F controller input",
+      "executed": false,
+      "execution_mode": "skipped_safe_isolation",
+      "reason": "Would require assembling confined plan from multi-GB bound_inputs and risk side effects; first divergence already stably reproduced by Case C/C2 without F inventory.",
+      "extension_observed": "not_run",
+      "plugin_observed": "not_run",
+      "expected_realpaths": "not_run",
+      "observed_realpaths": "not_run",
+      "regular_files_membership": "not_run",
+      "consuming_operations": "not_run",
+      "confinement_violations": "not_run",
+      "runtime_inputs_digest": "not_run",
+      "confinement_plan_digest": "not_run",
+      "build_artifact_digest": "not_run",
+      "tool_runtime_digest": "not_run",
+      "terminal": "not_run"
+    },
+    {
+      "case": "E",
+      "description": "authoritative subpath using qualification-generated confinement plan",
+      "executed": false,
+      "execution_mode": "skipped_safe_isolation",
+      "reason": "Historical qualification confinement plan not re-materialized as standalone artifact beyond digest; load-vector defect is upstream of plan membership for expected path.",
+      "extension_observed": "not_run",
+      "plugin_observed": "not_run",
+      "expected_realpaths": "not_run",
+      "observed_realpaths": "not_run",
+      "regular_files_membership": "not_run",
+      "consuming_operations": "not_run",
+      "confinement_violations": "not_run",
+      "runtime_inputs_digest": "not_run",
+      "confinement_plan_digest": "not_run",
+      "build_artifact_digest": "not_run",
+      "tool_runtime_digest": "not_run",
+      "terminal": "not_run"
+    }
+  ],
+  "authoritative_evidence_alignment": {
+    "failure_stage": "extension_load",
+    "failure_reason": "extension/plugin load is absent from runtime attestation",
+    "mapping": "controller collapses ConfinementError containing 'absent from runtime attestation' into DriftError with that fixed reason; membership checks expected build/h0_phase_a realpaths",
+    "why_case_C_explains_auth_failure": "Without sys.path.insert, import binds build/ artifact, so expected h0_phase_a realpath never appears in attestation.regular_files \u2192 assert_build_artifact_observed raises absent \u2192 DriftError \u2192 provenance_invalid"
+  }
+}

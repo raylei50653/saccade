@@ -1,0 +1,34 @@
+{
+  "schema": "h0_r5_parity_audit_manifest_v1",
+  "packet_id": "h0_r5_qualification_authoritative_parity_audit_20260725",
+  "created_at": "2026-07-25",
+  "document_type": "qualification_authoritative_parity_audit",
+  "authority": "diagnostic_only_non_authoritative",
+  "terminal": "H0_R5_PARITY_DIVERGENCE_IDENTIFIED",
+  "not_a_controller_evidence_root": true,
+  "not_actual_guarantee": true,
+  "not_phase_b": true,
+  "owner_acceptance_claimed": false,
+  "execution_authorized": false,
+  "h0_capture_performed": false,
+  "new_seal_permitted": false,
+  "new_authorization_permitted": false,
+  "new_authoritative_launch_permitted": false,
+  "scope": "H0-R5 qualification vs authoritative extension-load parity audit",
+  "chain": {
+    "qualification_head": "205a811780ae43a172657f5f0bf886084d95a229",
+    "I": "524f7e3b88f73bc366d467d53a2c393a7d3ba937",
+    "F": "6e425dc6f89a15d4eb43d3889a517d632f0ee39e",
+    "S": "6fdb060c50c9ed784a3fa2229b1ea2514dd1af5e"
+  },
+  "files": {
+    "AUDIT_REPORT.md": "440622b19b8d00041dd79cdd9f018f1f13aa3a40c1469b4eb0c071c6d73c4b2e",
+    "VERDICT.txt": "df7c0c4ad610de0e128402335ec263c63209d3c337b73f81bd093d592d4d63a1",
+    "parity_reproduction_matrix.json": "c4fb28ba3a0613671a5f4fc47862cc0f6cf9bdba2668a33b3e7088399893db77",
+    "qualification_authoritative_divergence_trace.json": "d6ffe046dfb782b97a07374f4be30031aec2538a1fc83df9b0844eb941c3b0fc",
+    "qualification_authoritative_identity_matrix.json": "de31123b0a9f05ef293f06bcdd4e6a8b6d29c2caa5807fb7741beea5e10f7b10",
+    "qualification_authoritative_path_comparison.json": "e3a56eba7f4c94e0bf1513db90cf70e50f0293c5bff85e2f9fe1ee8d64b1cba0",
+    "qualification_head_inheritance_audit.json": "f6a2e2b598a54fb74bd22227bfd0fd812152904c09041f73d0689dab6d1bfb72",
+    "seal_gate_adequacy_audit.json": "4f4d5851557e1f4f30c0e9a57275515ee380fc21b4b4d234937b0683e38b2ec6"
+  }
+}

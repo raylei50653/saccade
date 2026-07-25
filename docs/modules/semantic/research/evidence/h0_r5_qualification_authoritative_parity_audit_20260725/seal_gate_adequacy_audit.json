@@ -1,0 +1,50 @@
+{
+  "schema": "h0_r5_seal_gate_adequacy_audit_v1",
+  "questions": {
+    "qualification_head_equals_I": {
+      "seal_verifies": false,
+      "evidence": "verify_h0_preseal_freeze checks instrumentation_head cleanliness and tree bindings; no field requires qualification repository_head_sha == I",
+      "classification": "contract_omission + implementation_omission"
+    },
+    "qualification_tree_equals_I_tree": {
+      "seal_verifies": false,
+      "evidence": "no qualification tree field in freeze or verifier",
+      "classification": "contract_omission + implementation_omission"
+    },
+    "qualification_report_digest_bound_into_F": {
+      "seal_verifies": false,
+      "evidence": "F implementation_bindings omit qualify_h0_phase_a.py; freeze JSON has no qualification_report_digest field; string search finds no 205a8117 / e874fe4e / c769a226 binding",
+      "classification": "contract_omission + implementation_omission (assembler comment: qualification harnesses intentionally absent from implementation bindings)"
+    },
+    "qualification_confinement_plan_digest_equals_F_controller_input": {
+      "seal_verifies": false,
+      "evidence": "F does not record qualification confinement_plan_digest; controller input is not a confinement plan",
+      "classification": "contract_omission"
+    },
+    "qualification_runtime_input_digest_recomputable_from_F": {
+      "seal_verifies": false,
+      "evidence": "qualification runtime_inputs_digest is from reduced inventory path; F bound_inputs are full inventory \u2014 different objects",
+      "classification": "contract_omission"
+    },
+    "qualification_build_artifact_identities_equal_F_expected": {
+      "seal_verifies": false,
+      "evidence": "F does not embed build artifact sha256; artifacts are produced post-seal at execution; qualification artifacts under different build dir",
+      "classification": "intentionally_not_required_for_prebuild_freeze (build is post-seal) \u2014 but then qualification extension-load pass cannot substitute for post-build attestation"
+    }
+  },
+  "why_invalid_exact_head_qualification_still_sealed": {
+    "mechanism": "Owner SEALED event and freeze assembly target I=524f7e3b after post-qual tool_runtime parity commit; seal gates verify freeze internal consistency at I, not continuity of qualification exact-head binding.",
+    "owner_review_gap": "qualification_report explicitly forbids inheritance after execution-bound commits; selecting I\u2260qual head violated that declaration",
+    "classification": [
+      "contract_omission",
+      "implementation_omission",
+      "owner_review_omission"
+    ]
+  },
+  "adequacy_verdict": "INADEQUATE_TO_BLOCK_R5_LAUNCH_PRECONDITIONS",
+  "required_new_gates": [
+    "assembler+independent verifier reject unless qualification.repository_head_sha == instrumentation_head and trees equal",
+    "F binds qualification_report digest and requires mechanical recompute of qualification confinement/runtime digests where applicable",
+    "extension-load child vector byte-equality gate between qualify harness and controller (or shared single function)"
+  ]
+}
