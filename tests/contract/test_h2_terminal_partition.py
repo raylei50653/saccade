@@ -391,6 +391,90 @@ def test_a_non_boolean_admission_condition_fails_closed() -> None:
         tp.evaluate_admission(record, phase="b")
 
 
+# --------------------------------------------------------------------------- #
+# Phase B is total: no clean run may end without a terminal                    #
+# --------------------------------------------------------------------------- #
+def test_a_clean_phase_b_observation_cannot_end_without_a_terminal() -> None:
+    """By selection time admission has passed and § C3.5.1 step 5 has consumed
+    `S_B`. A no-terminal return would spend an authorization and record nothing —
+    the state § C3.5.1 exists to make unformable."""
+    with pytest.raises(tp.PartitionError, match="no non-terminal progression"):
+        tp.select_terminal(_clean(), phase="b", admission=_admitted())
+
+
+@pytest.mark.parametrize(
+    "key,value,expected",
+    [
+        ("bound_input_mutated", True, "H2_INPUT_MUTATED_DURING_MEASUREMENT"),
+        ("capture_off_on_equal", False, "H2_CAPTURE_PERTURBS_POLICY"),
+        ("packets_valid", False, "H2_PACKET_INVALID"),
+        ("execution_complete", False, "H2_MEASUREMENT_EXECUTION_INVALID"),
+    ],
+)
+def test_phase_b_failure_terminals_do_not_need_a_complete_artifact(
+    key: str, value: bool, expected: str
+) -> None:
+    """Terminals 1-4 are exactly the cases where the seven sequences did *not*
+    complete. Requiring completeness to reach them would make the failures of an
+    incomplete Phase B unselectable."""
+    observation = {**_clean(), key: value}
+    selection = tp.select_terminal(
+        observation, phase="b", phase_b_complete=False, admission=_admitted()
+    )
+    assert selection.terminal == expected
+    assert selection.phase == "b"
+
+
+def test_a_clean_phase_a_run_is_still_a_non_terminal_progression() -> None:
+    """The narrowing above is Phase-B only: Phase A's pass is the entry to Phase B
+    and must stay non-terminal."""
+    selection = tp.select_terminal(_clean(), phase="a")
+    assert selection.terminal is None
+    assert selection.result == "measurement_pass"
+
+
+def test_the_payload_publishes_the_phase_b_narrowing() -> None:
+    """§ 20.8's test is two *independent* implementers. One may consume only this
+    payload, so a narrowing that lives solely in `select_terminal` would let the
+    two record different terminals for the same observation."""
+    narrowing = tp.as_payload()["phase_narrowing"]
+
+    assert set(narrowing) == set(tp.PHASES)
+    assert narrowing["b"]["forbidden_results"] == list(tp.PHASE_B_FORBIDDEN_RESULTS)
+    assert narrowing["b"]["has_non_terminal_progression"] is False
+    assert narrowing["b"]["clean_observation_requires_phase_b_complete"] is True
+    assert narrowing["a"]["forbidden_results"] == []
+    assert narrowing["a"]["has_non_terminal_progression"] is True
+
+
+def test_the_forbidden_results_are_exactly_the_admission_decided_ones() -> None:
+    """Derived, not transcribed: the payload cannot drift from the check."""
+    assert set(tp.PHASE_B_FORBIDDEN_RESULTS) == {
+        result
+        for key, result in tp.ORDERED_PREDICATES
+        if key in tp.PHASE_B_ADMISSION_DECIDED
+    }
+    # And each one still maps to terminal 1 in the phase-independent union.
+    for result in tp.PHASE_B_FORBIDDEN_RESULTS:
+        assert tp.RESULT_TO_TERMINAL[result] == "H2_INPUT_MUTATED_DURING_MEASUREMENT"
+
+
+def test_the_payload_and_the_function_agree_on_every_phase_b_result() -> None:
+    """Cross-check the two consumption routes rather than asserting each alone."""
+    payload = tp.as_payload()
+    forbidden = set(payload["phase_narrowing"]["b"]["forbidden_results"])
+    for key, result in tp.ORDERED_PREDICATES:
+        observation = {**_clean(), key: key in tp._TRUE_IS_FAILURE}
+        if result in forbidden:
+            with pytest.raises(tp.PartitionError):
+                tp.select_terminal(observation, phase="b", admission=_admitted())
+        else:
+            selection = tp.select_terminal(
+                observation, phase="b", admission=_admitted()
+            )
+            assert selection.terminal == payload["result_to_terminal"][selection.result]
+
+
 def test_the_payload_carries_the_phase_and_admission_vocabulary() -> None:
     payload = tp.as_payload()
     assert payload["phases"] == ["a", "b"]

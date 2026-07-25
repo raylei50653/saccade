@@ -247,6 +247,16 @@ PHASE_B_ADMISSION_DECIDED: frozenset[str] = frozenset(
 )
 
 
+# Results `RESULT_TO_TERMINAL` maps to terminal 1 but Phase B cannot select,
+# because their predicates were decided in admission. `RESULT_TO_TERMINAL` is the
+# phase-independent union; this is the Phase-B restriction of it, and both are
+# published so an implementer consuming only `as_payload()` reaches the same
+# verdict as one calling `select_terminal` (§ 20.8's two-implementer test).
+PHASE_B_FORBIDDEN_RESULTS: tuple[str, ...] = tuple(
+    result for key, result in ORDERED_PREDICATES if key in PHASE_B_ADMISSION_DECIDED
+)
+
+
 class PartitionError(RuntimeError):
     pass
 
@@ -338,6 +348,16 @@ def select_terminal(
     Under `phase="b"` a passed `Admission` is required — this is where "an
     admission failure yields no terminal" (§ C3.6) is executable rather than
     prose, since a refused gate must never reach a selection at all.
+
+    **Phase B is total: it has no non-terminal progression.** The
+    `measurement_pass`/no-terminal outcome exists for Phase A alone, whose pass
+    is the progression into Phase B. By the time a Phase-B observation is
+    selected on, admission has passed and the § C3.5.1 step-5 write has consumed
+    `S_B`, so returning "no terminal" would leave an authorization permanently
+    spent with nothing recorded — the exact state § C3.5.1 exists to make
+    unformable. A clean Phase-B observation must therefore carry
+    `phase_b_complete=True`, and a caller that omits it gets an error rather
+    than a hole.
     """
     _checked_phase(phase)
     if phase_b_complete and phase != "b":
@@ -395,11 +415,18 @@ def select_terminal(
             result = named
         return _selection(result, phase=phase)
 
-    if not phase_b_complete:
-        return _selection("measurement_pass", phase=phase)
-    return _selection(
-        "measurement_pass", phase=phase, terminal_override=TERMINALS[4].name
-    )
+    if phase == "b":
+        if not phase_b_complete:
+            raise PartitionError(
+                "a clean Phase-B observation requires phase_b_complete=True: Phase B "
+                "has no non-terminal progression, and S_B is already consumed by the "
+                "time an observation is selected on (§ C3.5.1). Returning no terminal "
+                "here would spend an authorization and record nothing"
+            )
+        return _selection(
+            "measurement_pass", phase=phase, terminal_override=TERMINALS[4].name
+        )
+    return _selection("measurement_pass", phase=phase)
 
 
 def _selection(
@@ -433,6 +460,25 @@ def as_payload() -> dict[str, Any]:
         "admission_failure_class": ADMISSION_FAILURE_CLASS,
         "ordered_predicates": [list(item) for item in ORDERED_PREDICATES],
         "phase_completion": PHASE_COMPLETION,
+        # `result_to_terminal` above is the phase-independent union. Phase B
+        # narrows it in two ways, both published here: an implementer that
+        # consumes only this payload must reach the same verdict as one calling
+        # `select_terminal`, or § 20.8's two-implementer test is satisfied by
+        # neither of them.
+        "phase_narrowing": {
+            "b": {
+                "admission_decided_predicates": sorted(PHASE_B_ADMISSION_DECIDED),
+                "forbidden_results": list(PHASE_B_FORBIDDEN_RESULTS),
+                "clean_observation_requires_phase_b_complete": True,
+                "has_non_terminal_progression": False,
+            },
+            "a": {
+                "admission_decided_predicates": [],
+                "forbidden_results": [],
+                "clean_observation_requires_phase_b_complete": False,
+                "has_non_terminal_progression": True,
+            },
+        },
         "phases": list(PHASES),
         "result_to_terminal": RESULT_TO_TERMINAL,
         "terminals": [terminal._asdict() for terminal in TERMINALS],
@@ -452,6 +498,17 @@ def _explain(phases: tuple[str, ...]) -> None:
             print("  admission (pre-terminal, before S_B is consumed):")
             for key, reason in ADMISSION_CONDITIONS:
                 print(f"       {key} — false selects no terminal, reason {reason}")
+            print(
+                "  narrowing: results "
+                f"{list(PHASE_B_FORBIDDEN_RESULTS)} are unselectable (decided in "
+                "admission); Phase B is total — a clean observation requires "
+                "phase_b_complete=True and there is no non-terminal progression"
+            )
+        else:
+            print(
+                "  progression: a clean Phase-A observation selects no terminal "
+                "(measurement_pass) — that pass is the entry to Phase B"
+            )
 
 
 def main(argv: list[str] | None = None) -> int:
