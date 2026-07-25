@@ -385,6 +385,7 @@ def test_gpu_reattestation_binds_controlled_host_runtime_inputs_lexically() -> N
     )
     assert "SACCADE_CONTROLLED_RESOURCE_ROOT:" in workflow
     assert "Bind controlled host-local runtime inputs into the checkout" in workflow
+    assert "uv sync --frozen --extra dali" in workflow
     assert 'ln -s "${source}" "${target}"' in workflow
     for path in (
         "datasets/MOT17/train/MOT17-09-SDP",

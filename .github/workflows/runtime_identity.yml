@@ -129,7 +129,7 @@ jobs:
           prune-cache: false
 
       - name: Sync dependencies
-        run: uv sync --frozen
+        run: uv sync --frozen --extra dali
 
       - name: Build the native extension
         run: |
