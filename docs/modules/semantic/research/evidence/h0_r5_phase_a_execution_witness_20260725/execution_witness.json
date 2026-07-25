@@ -1,0 +1,255 @@
+{
+  "authorization": {
+    "authorization_consumed": true,
+    "authorization_granted": true,
+    "authorized_invocation_count": 1,
+    "consumed_at": "controller_process_launch",
+    "controller": "h0_phase_a_controller_v1",
+    "deadline_seconds": 3600,
+    "execution_schema": "h0_phase_a_execution_v1",
+    "identity": "h0_r5_phase_a_exactly_once_authorization_20260725",
+    "operator_command": "uv run --frozen python scripts/tools/run_h0_phase_a.py",
+    "phase": "Phase A only",
+    "phase_b": "forbidden",
+    "resume": "forbidden",
+    "retry": 0,
+    "second_invocation_under_S": "permanently_forbidden_after_first_process_launch",
+    "surface": "https://github.com/raylei50653/saccade/issues/283"
+  },
+  "controller_invocation": {
+    "authoritative_invocation_count": 1,
+    "checkout_sha": "6fdb060c50c9ed784a3fa2229b1ea2514dd1af5e",
+    "command": [
+      "uv",
+      "run",
+      "--frozen",
+      "python",
+      "scripts/tools/run_h0_phase_a.py"
+    ],
+    "controller_result": "provenance_invalid",
+    "duration_seconds": 330,
+    "end_utc": "2026-07-25T03:25:44Z",
+    "launched": true,
+    "operator_identity": "ray",
+    "pid": 132557,
+    "result_json": {
+      "result": "provenance_invalid",
+      "schema": "h0_phase_a_execution_v1"
+    },
+    "return_code": 1,
+    "start_utc": "2026-07-25T03:20:14Z",
+    "stderr": "",
+    "stdout": "",
+    "stdout_stderr_note": "Controller process I/O captured by host runner was empty beyond launch meta; authoritative structured result is result.json inside the evidence root."
+  },
+  "document_type": "execution_witness",
+  "evidence_root": {
+    "checksums_sha256_digest": "9e69184f064ae66c115d4e4f58fea88b822847034456a3256066fce03c9dacfe",
+    "inventory_digest": "800eb83952ee416c40d3ababc1acee6e9a770db267173b1d60adf4a2d1937f44",
+    "manifest_json_sha256": "8b96269bdfb25f6f7bcfd8368db0a46c724cdd2f1225c19b1210d43f2eff5ace",
+    "member_count": 25,
+    "members": [
+      {
+        "path": "build_identity.json",
+        "sha256": "d929a9430c467933a1fbbe62dc5003b8e7e9c18820472df6060ad1d52e6f1cb8"
+      },
+      {
+        "path": "checksums.sha256",
+        "sha256": "9e69184f064ae66c115d4e4f58fea88b822847034456a3256066fce03c9dacfe"
+      },
+      {
+        "path": "comparison.json",
+        "sha256": "9a26afdb737ed37a18cc9b82863d6de1a2c67c17fe26f336df73d00d119119a3"
+      },
+      {
+        "path": "gpu_identity.json",
+        "sha256": "2f821ea4c377dc2a00a38616adc35b2f984111baf3b41495a6f42693c3d90ade"
+      },
+      {
+        "path": "input_binding.json",
+        "sha256": "d864c779b87110ef36382f5a446f7d6d2f5182c0131cc5d0f6490ad084aa7620"
+      },
+      {
+        "path": "logs/00_cmake_configure.stderr.log",
+        "sha256": "9c08d0f250de92c94b8758974415ba9c1422ca20358b8ea977de275117502450"
+      },
+      {
+        "path": "logs/00_cmake_configure.stdout.log",
+        "sha256": "853743c5e7cbed971367969978f384b1504e14940f8e6107539ed28bc0387c18"
+      },
+      {
+        "path": "logs/01_cmake_build.stderr.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "logs/01_cmake_build.stdout.log",
+        "sha256": "216f918ee9bb200edbdae16e13f51b6273d837c50cbbc76e3c4383c0eaa7bf47"
+      },
+      {
+        "path": "manifest.json",
+        "sha256": "8b96269bdfb25f6f7bcfd8368db0a46c724cdd2f1225c19b1210d43f2eff5ace"
+      },
+      {
+        "path": "result.json",
+        "sha256": "2c1cfa17c977ad02c6c1dee335810b9ee7ff37f1cbba1382d41a00f06b96529a"
+      },
+      {
+        "path": "runs/00_capture_off/invocation.json",
+        "sha256": "1a7f7aed009b5969dd088c49691543f684618553bb7d04702a3ed45475c595da"
+      },
+      {
+        "path": "runs/00_capture_off/stderr.log",
+        "sha256": "b0b978b79d5085555087a7a95fa550f0019515d6b376f745cc2411d56976a88d"
+      },
+      {
+        "path": "runs/00_capture_off/stdout.log",
+        "sha256": "b0b978b79d5085555087a7a95fa550f0019515d6b376f745cc2411d56976a88d"
+      },
+      {
+        "path": "runs/01_capture_on_1/invocation.json",
+        "sha256": "ede7ea65c390794b777189ea0fd0e4f277e555f59eed140a62647a8afdc7a1a1"
+      },
+      {
+        "path": "runs/01_capture_on_1/stderr.log",
+        "sha256": "b0b978b79d5085555087a7a95fa550f0019515d6b376f745cc2411d56976a88d"
+      },
+      {
+        "path": "runs/01_capture_on_1/stdout.log",
+        "sha256": "b0b978b79d5085555087a7a95fa550f0019515d6b376f745cc2411d56976a88d"
+      },
+      {
+        "path": "runs/02_capture_on_2/invocation.json",
+        "sha256": "1f67ca386f0766fb51756ffd57ccc1557b365190d76e10c3820f1287282d6f4c"
+      },
+      {
+        "path": "runs/02_capture_on_2/stderr.log",
+        "sha256": "b0b978b79d5085555087a7a95fa550f0019515d6b376f745cc2411d56976a88d"
+      },
+      {
+        "path": "runs/02_capture_on_2/stdout.log",
+        "sha256": "b0b978b79d5085555087a7a95fa550f0019515d6b376f745cc2411d56976a88d"
+      },
+      {
+        "path": "runs/03_capture_on_3/invocation.json",
+        "sha256": "9e0bf65b7fa368f1aa75d53070414a30c411bff2091af7bc58ac6065b5c02975"
+      },
+      {
+        "path": "runs/03_capture_on_3/stderr.log",
+        "sha256": "b0b978b79d5085555087a7a95fa550f0019515d6b376f745cc2411d56976a88d"
+      },
+      {
+        "path": "runs/03_capture_on_3/stdout.log",
+        "sha256": "b0b978b79d5085555087a7a95fa550f0019515d6b376f745cc2411d56976a88d"
+      },
+      {
+        "path": "runtime_identity.json",
+        "sha256": "878007e0a15153be39c95ccb11e5bd4160475f1a0acbec9222bc9f9764972e72"
+      },
+      {
+        "path": "verification/aggregate.json",
+        "sha256": "0be12cc292773239d75604e9f2496787387ee8874395f4a3a9d723c615fe3f2e"
+      }
+    ],
+    "path": "docs/modules/semantic/research/evidence/h0_phase_a_524f7e3b88f73bc366d467d53a2c393a7d3ba937/",
+    "result_json_sha256": "2c1cfa17c977ad02c6c1dee335810b9ee7ff37f1cbba1382d41a00f06b96529a",
+    "verifier_report_aggregate_json_sha256": "0be12cc292773239d75604e9f2496787387ee8874395f4a3a9d723c615fe3f2e"
+  },
+  "explicitly_not_established": [
+    "H0_FULL_COMMIT_CAPTURE_FAITHFUL",
+    "actual H0 guarantee envelope",
+    "runtime compatibility",
+    "Phase B authorization",
+    "GCTM / B1 / O1 activation",
+    "future reentry authorization from this terminal alone"
+  ],
+  "factual_boundary": {
+    "build_runtime_gpu_identity": "complete",
+    "capture_child_runs": "NOT_RUN (00_capture_off / 01_capture_on_1 / 02_capture_on_2 / 03_capture_on_3; confinement_plan_digest=null)",
+    "capture_evidence": "none",
+    "checkpoints": "T0/T1 completed (inventory_equal; t0 bound_inputs_digest a8e4bece); T2a_0→T4 not_reached",
+    "comparison": "not_produced",
+    "decision_predicates": {
+      "artifacts_ok": true,
+      "build_ok": true,
+      "classified_execution": true,
+      "extension_ok": true,
+      "packets_valid": true,
+      "policy_equal": true,
+      "provenance_ok": false,
+      "runners_ok": true,
+      "serialization_ok": true,
+      "timed_out": false
+    },
+    "failing_predicate": "provenance_ok=false (sole false; build_ok/extension_ok/artifacts_ok/classified_execution/packets_valid/policy_equal/runners_ok/serialization_ok all true; timed_out=false)",
+    "failure_reason": "extension/plugin load is absent from runtime attestation",
+    "failure_stage": "extension_load",
+    "note": "DriftError-class extension_load runtime attestation absence maps to ordered terminal provenance_invalid before extension_load_failed; extension_ok remains true"
+  },
+  "independent_preseal_verifier": {
+    "complete": true,
+    "instrumentation_head": "524f7e3b88f73bc366d467d53a2c393a7d3ba937",
+    "landing": {
+      "execution_checkout": "6fdb060c50c9ed784a3fa2229b1ea2514dd1af5e",
+      "freeze_commit": "6e425dc6f89a15d4eb43d3889a517d632f0ee39e",
+      "instrumentation_head": "524f7e3b88f73bc366d467d53a2c393a7d3ba937",
+      "seal_commit": "6fdb060c50c9ed784a3fa2229b1ea2514dd1af5e"
+    },
+    "schema": "h0_preseal_freeze_v3_verifier_v1",
+    "valid": true
+  },
+  "independent_verifier": {
+    "command": [
+      "uv",
+      "run",
+      "--frozen",
+      "python",
+      "scripts/tools/verify_h0_phase_a.py",
+      "docs/modules/semantic/research/evidence/h0_phase_a_524f7e3b88f73bc366d467d53a2c393a7d3ba937"
+    ],
+    "document_type": "aggregate_verification",
+    "result": "provenance_invalid",
+    "return_code": 0,
+    "schema": "h0_phase_a_verifier_v1",
+    "valid": true
+  },
+  "launch_hygiene": {
+    "first_gate": {
+      "authority": "non_authoritative",
+      "authorization_consumed": false,
+      "capture": "forbidden",
+      "checked_subtree": "build/h0_phase_a",
+      "predicate_source": "run_h0_phase_a.assert_no_preexisting_build_tree",
+      "reason": null,
+      "repository_root": "/home/ray/developer/ai/saccade",
+      "result": "clear",
+      "schema": "h0_launch_hygiene_gate_v1",
+      "terminal_claim": "forbidden"
+    },
+    "predicate_source": "run_h0_phase_a.assert_no_preexisting_build_tree",
+    "second_gate": {
+      "authority": "non_authoritative",
+      "authorization_consumed": false,
+      "capture": "forbidden",
+      "checked_subtree": "build/h0_phase_a",
+      "predicate_source": "run_h0_phase_a.assert_no_preexisting_build_tree",
+      "reason": null,
+      "repository_root": "/home/ray/developer/ai/saccade",
+      "result": "clear",
+      "schema": "h0_launch_hygiene_gate_v1",
+      "terminal_claim": "forbidden"
+    }
+  },
+  "owner_acceptance_claimed": false,
+  "schema": "h0_r5_phase_a_execution_witness_v1",
+  "seal": {
+    "F": "6e425dc6f89a15d4eb43d3889a517d632f0ee39e",
+    "F_tree": "1dff09254d388ddfb6f6608f21e8f35c5ef0e0e9",
+    "I": "524f7e3b88f73bc366d467d53a2c393a7d3ba937",
+    "I_tree": "c2ce782fa2c78c8fefc81796a484731560dda10d",
+    "S": "6fdb060c50c9ed784a3fa2229b1ea2514dd1af5e",
+    "S_tree": "29db5dfc853911b355c9d295372dbd8c75973f91",
+    "freeze_inventory_digest": "a8e4bece4b29e293ce56c1c59c9e882f53d4e3f2a47a459e9ea25542070199b9",
+    "repair_unit": "h0_r5_preseal_verifier_tool_runtime_independent_expansion_parity_v1",
+    "seal_inventory_digest": "7fc2ccf332798b3fb8d0de125e4f3e739babf3f36447b34e2fe5cd4eb6ba7cc7"
+  }
+}
