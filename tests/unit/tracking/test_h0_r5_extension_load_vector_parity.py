@@ -6,7 +6,12 @@ does not. Under ``python -I -B`` site still loads ``saccade_build.pth`` →
 ``<repo>/build``, so the controller can import a non-h0_phase_a artifact and fail
 membership for the expected realpath.
 
-These tests are diagnostic only. They do not authorize repair, seal, or launch.
+These tests are diagnostic only. They document whether each surface's *source*
+explicitly bootstraps ``extension.parent``. They do **not** assert full
+byte-policy equality of child scripts, argv, flags, environment, or path order.
+A later seal-grade gate should compare a shared canonical vector/spec instead.
+
+These tests do not authorize repair, seal, or launch.
 """
 
 # scope: system
@@ -35,6 +40,16 @@ def _source(fn) -> str:
     return inspect.getsource(fn)
 
 
+def _explicitly_bootstraps_extension_parent(text: str) -> bool:
+    """True when source text literally names both insert and extension.parent.
+
+    This is a *source-shape* diagnostic, not a full vector policy comparison.
+    A shared builder that hides the insert behind a helper will correctly fail
+    this check until this diagnostic is replaced by canonical-vector equality.
+    """
+    return "sys.path.insert" in text and "extension.parent" in text
+
+
 def test_membership_predicate_is_shared_module() -> None:
     import h0_runtime_confinement as confinement
 
@@ -49,18 +64,16 @@ def test_membership_predicate_is_shared_module() -> None:
 
 def test_qualification_load_vector_inserts_extension_parent() -> None:
     source = _source(qualify._qualify_confined_extension_load)
-    assert "sys.path.insert" in source
-    assert "extension.parent" in source
+    assert _explicitly_bootstraps_extension_parent(source)
 
 
 def test_maps_helper_inserts_extension_parent() -> None:
     source = _source(controller._runtime_maps_dependencies)
-    assert "sys.path.insert" in source
-    assert "extension.parent" in source
+    assert _explicitly_bootstraps_extension_parent(source)
 
 
 def test_controller_extension_load_child_script_lacks_extension_parent_insert() -> None:
-    """Documents the R5 parity defect: controller vector omits the insert."""
+    """Documents the R5 parity defect: controller child script omits the insert."""
     source = _source(controller._verify_extension_load)
     # Parent may still sys.path.insert tools/ for imports; child -c script must not
     # be confused with that. Look for the f-string that builds the child script.
@@ -72,35 +85,36 @@ def test_controller_extension_load_child_script_lacks_extension_parent_insert() 
     assert match is not None, "could not locate controller extension-load script"
     body = match.group("body")
     assert "import saccade_tracking_ext" in body
-    assert "sys.path.insert" not in body
-    assert "extension.parent" not in body
+    assert not _explicitly_bootstraps_extension_parent(body)
 
 
 def test_verifier_expected_vector_mirrors_controller_without_insert() -> None:
     source = _source(verifier._expected_extension_load_vector)
     assert "import saccade_tracking_ext" in source
-    assert "sys.path.insert" not in source
+    assert not _explicitly_bootstraps_extension_parent(source)
 
 
 @pytest.mark.xfail(
     strict=True,
     reason=(
-        "H0-R5 parity audit: controller/verifier extension-load child vectors "
-        "lack sys.path.insert(0, extension.parent) present in qualification and "
-        "maps helper. Remove xfail only when vectors are byte-policy equal."
+        "H0-R5 parity audit: controller/verifier child-script sources do not "
+        "explicitly bootstrap extension.parent (qualification and maps helper do). "
+        "Remove xfail only when all four surfaces' checked regions explicitly "
+        "bootstrap extension.parent in source — not when a shared builder merely "
+        "establishes runtime parity without those literals. Full vector/spec "
+        "equality belongs to a later seal-grade gate, not this diagnostic."
     ),
 )
-def test_extension_load_vector_parity_desired_state() -> None:
-    """Desired end-state after runtime repair: all three surfaces insert."""
+def test_all_surfaces_explicitly_bootstrap_extension_parent() -> None:
+    """Desired interim state: each surface's source explicitly bootstraps parent.
+
+    Not a claim of full child-script / argv / env / policy byte equality.
+    """
     q = _source(qualify._qualify_confined_extension_load)
     c = _source(controller._verify_extension_load)
     v = _source(verifier._expected_extension_load_vector)
     m = _source(controller._runtime_maps_dependencies)
 
-    def has_insert(text: str) -> bool:
-        return "sys.path.insert" in text and "extension.parent" in text
-
-    # Restrict controller check to child script region
     match = re.search(
         r"script\s*=\s*\((?P<body>.*?)\)\s*\n\s*vector\s*=\s*\[python",
         c,
@@ -108,7 +122,7 @@ def test_extension_load_vector_parity_desired_state() -> None:
     )
     assert match is not None
     child = match.group("body")
-    assert has_insert(q)
-    assert has_insert(m)
-    assert has_insert(child)
-    assert has_insert(v)
+    assert _explicitly_bootstraps_extension_parent(q)
+    assert _explicitly_bootstraps_extension_parent(m)
+    assert _explicitly_bootstraps_extension_parent(child)
+    assert _explicitly_bootstraps_extension_parent(v)

@@ -34,6 +34,8 @@ minimal repair boundary:
   (separate PR from runtime).
 
 required new gate:
-  1) qualify.repository_head_sha/tree == I before seal
-  2) shared extension-load vector identity check (byte-equal across surfaces)
+  1) mechanically bind existing qualification exact-head contract:
+     qualify.repository_head_sha/tree == I before seal
+  2) seal-grade extension-load canonical vector/spec equality across surfaces
+     (stronger than source-literal extension.parent bootstrap diagnostics)
   3) negative tests: without insert, import binds build/ not h0_phase_a under site pth

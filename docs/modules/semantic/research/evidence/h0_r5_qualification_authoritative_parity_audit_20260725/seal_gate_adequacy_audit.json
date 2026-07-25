@@ -1,50 +1,65 @@
 {
   "schema": "h0_r5_seal_gate_adequacy_audit_v1",
+  "classification_vocabulary": {
+    "contract_omission": "no governing rule exists that requires the property",
+    "existing_qualification_contract_not_mechanically_bound": "qualification report/contract already states the rule (e.g. exact-head / invalidated_by), but freeze assembler and independent seal verifier do not ingest or recompute that binding",
+    "freeze_seal_integration_omission": "F/S tooling does not wire the existing qualification identity into mechanical gates",
+    "implementation_omission": "code path that should enforce a required property is absent",
+    "owner_review_omission": "owner SEALED / I selection proceeded despite a published qualification clause that forbade the selection"
+  },
+  "qualification_contract_already_states": {
+    "invalidated_by": "any post-qualification execution-bound commit",
+    "seal_head_requirement": "Seal decision must select this exact execution-bound head; later docs-only or merge commits do not inherit qualification",
+    "source": "docs/modules/semantic/research/evidence/h0_r5_extension_plugin_attestation_closure_20260724/qualification_report.json"
+  },
   "questions": {
     "qualification_head_equals_I": {
       "seal_verifies": false,
-      "evidence": "verify_h0_preseal_freeze checks instrumentation_head cleanliness and tree bindings; no field requires qualification repository_head_sha == I",
-      "classification": "contract_omission + implementation_omission"
+      "evidence": "qualification_report already requires exact execution-bound head; verify_h0_preseal_freeze checks instrumentation_head cleanliness and tree bindings but never requires qualification.repository_head_sha == I",
+      "classification": "existing_qualification_contract_not_mechanically_bound + freeze_seal_integration_omission"
     },
     "qualification_tree_equals_I_tree": {
       "seal_verifies": false,
-      "evidence": "no qualification tree field in freeze or verifier",
-      "classification": "contract_omission + implementation_omission"
+      "evidence": "exact-head binding implies tree identity; freeze/seal path has no qualification.repository_tree_sha field and does not compare it to instrumentation_tree",
+      "classification": "existing_qualification_contract_not_mechanically_bound + freeze_seal_integration_omission"
     },
     "qualification_report_digest_bound_into_F": {
       "seal_verifies": false,
-      "evidence": "F implementation_bindings omit qualify_h0_phase_a.py; freeze JSON has no qualification_report_digest field; string search finds no 205a8117 / e874fe4e / c769a226 binding",
-      "classification": "contract_omission + implementation_omission (assembler comment: qualification harnesses intentionally absent from implementation bindings)"
+      "evidence": "F implementation_bindings omit qualify_h0_phase_a.py; freeze JSON has no qualification_report_digest field; string search finds no 205a8117 / e874fe4e / c769a226 binding. Assembler comment: qualification harnesses intentionally absent from implementation bindings.",
+      "classification": "freeze_seal_integration_omission + implementation_omission"
     },
     "qualification_confinement_plan_digest_equals_F_controller_input": {
       "seal_verifies": false,
-      "evidence": "F does not record qualification confinement_plan_digest; controller input is not a confinement plan",
-      "classification": "contract_omission"
+      "evidence": "F does not record qualification confinement_plan_digest; controller input is not a confinement plan; no cross-check exists",
+      "classification": "freeze_seal_integration_omission"
     },
     "qualification_runtime_input_digest_recomputable_from_F": {
       "seal_verifies": false,
-      "evidence": "qualification runtime_inputs_digest is from reduced inventory path; F bound_inputs are full inventory \u2014 different objects",
-      "classification": "contract_omission"
+      "evidence": "qualification runtime_inputs_digest is from reduced inventory path; F bound_inputs are full inventory — different objects with no mechanical bridge",
+      "classification": "freeze_seal_integration_omission"
     },
     "qualification_build_artifact_identities_equal_F_expected": {
       "seal_verifies": false,
       "evidence": "F does not embed build artifact sha256; artifacts are produced post-seal at execution; qualification artifacts under different build dir",
-      "classification": "intentionally_not_required_for_prebuild_freeze (build is post-seal) \u2014 but then qualification extension-load pass cannot substitute for post-build attestation"
+      "classification": "intentionally_not_required_for_prebuild_freeze (build is post-seal) — but then qualification extension-load pass cannot substitute for post-build attestation"
     }
   },
   "why_invalid_exact_head_qualification_still_sealed": {
-    "mechanism": "Owner SEALED event and freeze assembly target I=524f7e3b after post-qual tool_runtime parity commit; seal gates verify freeze internal consistency at I, not continuity of qualification exact-head binding.",
-    "owner_review_gap": "qualification_report explicitly forbids inheritance after execution-bound commits; selecting I\u2260qual head violated that declaration",
+    "mechanism": "Owner SEALED event and freeze assembly target I=524f7e3b after post-qual tool_runtime parity commit; seal gates verify freeze internal consistency at I, not continuity of the already-published qualification exact-head binding.",
+    "owner_review_gap": "qualification_report explicitly forbids inheritance after execution-bound commits; selecting I≠qual head violated that declaration",
     "classification": [
-      "contract_omission",
-      "implementation_omission",
+      "existing_qualification_contract_not_mechanically_bound",
+      "freeze_seal_integration_omission",
       "owner_review_omission"
+    ],
+    "not_classified_as": [
+      "contract_omission — the qualification report already states exact-head binding and invalidated_by; the gap is enforcement and integration, not absence of a rule"
     ]
   },
   "adequacy_verdict": "INADEQUATE_TO_BLOCK_R5_LAUNCH_PRECONDITIONS",
   "required_new_gates": [
-    "assembler+independent verifier reject unless qualification.repository_head_sha == instrumentation_head and trees equal",
+    "assembler+independent verifier reject unless qualification.repository_head_sha == instrumentation_head and trees equal (mechanical binding of the existing qualification contract)",
     "F binds qualification_report digest and requires mechanical recompute of qualification confinement/runtime digests where applicable",
-    "extension-load child vector byte-equality gate between qualify harness and controller (or shared single function)"
+    "extension-load canonical vector/spec equality across qualify, controller, maps helper, and verifier (seal-grade; stronger than source-literal bootstrap diagnostics)"
   ]
 }

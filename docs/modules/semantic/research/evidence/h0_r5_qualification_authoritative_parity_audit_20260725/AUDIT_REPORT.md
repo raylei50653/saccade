@@ -122,14 +122,24 @@ Head mismatch is earlier **contractually** but is **not** the causal first diffe
 
 See `seal_gate_adequacy_audit.json`.
 
-Seal / freeze / independent preseal verifier **do not** require:
+The qualification report **already** states exact-head binding
+(`invalidated_by = any post-qualification execution-bound commit`; seal must
+select that exact head). The gap is **not** `contract_omission`. It is:
+
+- **existing qualification contract not mechanically bound** into F/S tooling  
+- **freeze/seal integration omission** (no head/tree/report-digest gates)  
+- **owner-review omission** (I selected despite the published clause)
+
+Seal / freeze / independent preseal verifier **do not** mechanically enforce:
 
 - qualification head == I  
 - qualification tree == I tree  
 - qualification report digest bound into F  
 - qualification confinement/runtime digests recomputable from F  
 
-Assembler comment documents intentional exclusion of qualification harnesses from implementation bindings. Selecting I after post-qual commits is an **owner-review omission** relative to the qualification contract clause `invalidated_by = any post-qualification execution-bound commit`.
+Assembler comment documents intentional exclusion of qualification harnesses
+from implementation bindings, which is an integration choice that left the
+existing contract unenforced.
 
 ### Phase 7 — Terminal
 
