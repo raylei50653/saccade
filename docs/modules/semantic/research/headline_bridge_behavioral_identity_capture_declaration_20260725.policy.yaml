@@ -17,8 +17,8 @@ document:
   path: headline_bridge_behavioral_identity_capture_declaration_20260725.md
 
 sealed_prefix:
-  bytes: 44249
-  sha256: "14a8ef7b694fc07328ab6e6d49b032ac0e6bd3570623b688dbfc0bc8026c3199"
+  bytes: 61605
+  sha256: "670518168f1a6672c93b3381e79c23caa6081e3de13a9eec0b7a34b73c847380"
   # Re-pin log (each entry was a deliberate pre-seal edit, not a slip):
   #   Review reset — coordinate / bounded probe / equivalence split; content-bound
   #                  fixtures/assets/build products; v2 Layer-P certificate.
@@ -39,6 +39,15 @@ sealed_prefix:
   #             precondition 6 (the Phase-B chain), §8.4's single write condition.
   #             Re-pinned to the entire post-correction body, which also brings
   #             Review Correction 1 back inside the pin.
+  #   Review Correction 3 — the Phase-B chain form that precondition 6 requires
+  #             (issue #290 accepted 2026-07-25 with three narrowings, issue kept
+  #             open as the standing surface): I_B = (I40_B, F_B) with a full-F64
+  #             evidence-root key, the F_B freeze list, S_B, the result mapping,
+  #             the measurement-surface re-attempt rule, the pre-terminal
+  #             admission gate, and the pre-seal edit list. Re-pinned to the
+  #             entire post-correction body. Note C3.9: from the Phase-A seal to
+  #             the Phase-B seal this file may not be edited at all — a re-pin is
+  #             an identity_semantics move, which is fatal to a sealed Phase A.
 
 policy_target:
   kind: headline
