@@ -100,7 +100,9 @@ jobs:
 
       - uses: astral-sh/setup-uv@v5
         with:
-          enable-cache: true
+          # The controlled host retains its local uv cache. Restoring the GitHub
+          # action cache downloaded >2.4 GiB before any build/probe work began.
+          enable-cache: false
 
       - name: Sync dependencies
         run: uv sync --frozen
