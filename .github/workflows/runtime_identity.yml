@@ -80,7 +80,6 @@ permissions:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  SACCADE_CONTROLLED_RESOURCE_ROOT: /home/ray/developer/ai/saccade
   UV_EXTRA_INDEX_URL: https://pypi.nvidia.com/
 
 jobs:
@@ -101,15 +100,25 @@ jobs:
 
       - name: Bind controlled host-local runtime inputs into the checkout
         run: |
+          # Durable host tree, relative to GITHUB_WORKSPACE (no absolute path in git).
+          # Self-hosted layout: $RUNNER/_work/<repo>/<repo> → host permanent tree.
+          # Override with SACCADE_CONTROLLED_RESOURCE_ROOT only if the host differs.
+          resource_root="${SACCADE_CONTROLLED_RESOURCE_ROOT:-../../../../developer/ai/saccade}"
+          if [ "${resource_root#/}" = "${resource_root}" ]; then
+            resource_root="${GITHUB_WORKSPACE}/${resource_root}"
+          fi
+          resource_root="$(cd "${resource_root}" && pwd)"
+          echo "controlled resource root: ${resource_root}"
+
           bind_runtime_input() {
             relative_path="$1"
-            source="${SACCADE_CONTROLLED_RESOURCE_ROOT}/${relative_path}"
+            source="${resource_root}/${relative_path}"
             target="${GITHUB_WORKSPACE}/${relative_path}"
             test -e "${source}"
             test ! -e "${target}"
             test ! -L "${target}"
             mkdir -p "$(dirname "${target}")"
-            ln -s "${source}" "${target}"
+            ln -s --relative "${source}" "${target}"
           }
 
           bind_runtime_input "datasets/MOT17/train/MOT17-09-SDP"
