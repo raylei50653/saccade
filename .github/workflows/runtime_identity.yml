@@ -1,0 +1,94 @@
+name: Runtime Identity (behavior axis re-attestation)
+
+# The three static axes are checked on every push by `scripts/pre_push.sh`
+# (`check_runtime_identity_staleness.py`), which needs no GPU. The `behavior`
+# axis does: it is one capture-off identity-mode eval run. This workflow is that
+# re-attestation, on the controlled host that already carries the CUDA/TensorRT
+# closure for H0 qualification.
+#
+# It publishes nothing and seals nothing. It answers exactly one question: does
+# the committed `docs/reference/runtime_identity.generated.json` still describe
+# the behavior this tree produces? A mismatch means the published identity is
+# stale and every research state bound to it needs re-attestation — the
+# `online → research` drift that previously had no detector at all.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Ref to attest
+        required: true
+        default: main
+        type: string
+  push:
+    branches: [main]
+    paths:
+      # The decision-relevant surface, per scripts/tools/h2_path_partition.py.
+      # Keep this list in step with DECISION_RELEVANT_PATHS / _PREFIXES.
+      - "src/tracking/tracker_gpu.cu"
+      - "include/tracking/tracker_gpu.hpp"
+      - "src/tracking/tracker_gpu_python.cpp"
+      - "src/saccade/perception/tracking/tracker_gpu.py"
+      - "src/saccade/perception/eval/stages.py"
+      - "src/saccade/perception/eval/pipeline.py"
+      - "src/saccade/perception/eval/evaluator.py"
+      - "configs/presets/mamba_whole_graph_m.yaml"
+      - "scripts/eval/mot17_args.py"
+      - "scripts/eval/config/**"
+      - "docs/reference/runtime_identity.generated.json"
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  UV_EXTRA_INDEX_URL: https://pypi.nvidia.com/
+
+jobs:
+  behavior-axis:
+    # Same controlled host as H0 qualification: it supplies the real CUDA /
+    # TensorRT runtime closure. This job enters no research authority and reads
+    # no research inputs; it only recomputes a digest and compares it.
+    runs-on: [self-hosted, linux, x64, h0-qualification]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+          fetch-depth: 1
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Sync dependencies
+        run: uv sync --frozen
+
+      - name: Build the native extension
+        run: |
+          cmake -S . -B build/runtime_identity -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/runtime_identity --parallel
+
+      - name: Static axes must already be current
+        # If this fails, the push that moved the policy surface did not republish
+        # the identity; the behavior run below would be attesting the wrong thing.
+        run: uv run --frozen python scripts/tools/check_runtime_identity_staleness.py
+
+      - name: Re-attest the behavior axis
+        env:
+          SACCADE_BUILD_PATH: ${{ github.workspace }}/build/runtime_identity
+        run: |
+          uv run --frozen python scripts/tools/h2_behavioral_identity.py \
+            --identity-mode --emit "${RUNNER_TEMP}/behavior.json"
+
+      - name: Compare against the published identity
+        run: |
+          uv run --frozen python scripts/tools/check_runtime_identity_staleness.py \
+            --behavior-from "${RUNNER_TEMP}/behavior.json"
+
+      - name: Upload the attestation
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: behavior-axis-${{ github.sha }}
+          path: ${{ runner.temp }}/behavior.json
+          if-no-files-found: warn

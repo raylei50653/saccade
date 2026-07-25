@@ -62,6 +62,12 @@
   `GCTM_B1`, `proposed`, `blocked_by: h0_runtime_substrate`; it does not alias
   or supersede `H0_ROUTE5_B1` → [task charter](../../research/threads/gctm_b1_runtime_grounded_offline_attribution_task.md)
 - **GCTM O1 — online score intervention and system-efficacy evaluation** → [task charter](../../research/threads/gctm_o1_online_intervention_efficacy_task.md)
+- **H2 — bridge-decision capture under behavioral runtime identity** — `proposed`,
+  non-WIP; successor to H0's **identity layer only**（declaration §0.1 boundary;
+  H0 sealed history / 五個 spent `S` / permanent ledger 全部不變）；authorizes no
+  capture, no `I`/`F`/`S`, no re-entry → [task charter](../../research/threads/h2_behavioral_identity_capture_task.md)
+  · [declaration](research/headline_bridge_behavioral_identity_capture_declaration_20260725.md)
+  · owner decision surface [#286](https://github.com/raylei50653/saccade/issues/286)（四項決策；不授權任何執行）
 - **(next only via separate owner decision)** any future H0 re-entry requires a new
   repair/seal/authorization chain; exact S=`6fdb060c…` is permanently spent.
 

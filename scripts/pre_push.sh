@@ -117,6 +117,22 @@ else
   ERRORS=$((ERRORS + 1))
 fi
 
+# ── 4.11 runtime-identity staleness: the online → research direction ─────────
+# The claim-state registry has always carried `substrate` / `target_substrate` and
+# the rule that substrate does not inherit — but nothing checked whether the
+# substrate still existed. A preset default or kernel constant could move and
+# every state proven on it would quietly stop meaning what it says.
+# Fail-closed on the decision-affecting axis only: `implementation` /
+# `environment` drift is behavior-preserving *if* the behavior digest holds, and
+# only a GPU identity run can decide that (warning + re-attestation note).
+echo "── runtime identity staleness (decision_surface fail-closed; rest warn)"
+if uv run python3 scripts/tools/check_runtime_identity_staleness.py 2>&1; then
+  ok "runtime identity"
+else
+  fail "runtime identity — decision surface moved without republishing, or a stale binding; see scripts/tools/check_runtime_identity_staleness.py"
+  ERRORS=$((ERRORS + 1))
+fi
+
 echo "── tests structure check (three-axis header + fresh index; fail-closed)"
 if uv run python3 scripts/tools/check_tests_structure.py --strict 2>&1; then
   ok "tests structure"

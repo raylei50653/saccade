@@ -1,0 +1,43 @@
+# Declaration -> preset binding. THIS FILE IS THE MECHANICAL AUTHORITY.
+#
+# Same rule as the H0 binding beside it: nothing parses the Markdown to decide
+# what policy this declaration froze. H2 consumes H0's Amendment 5 policy-target
+# identity unchanged (declaration § 0.1 / § 3.1), so it binds the same headline
+# preset — and it binds it here, mechanically, rather than inheriting H0's
+# binding. Two declarations are two bindings; a shared target is not a shared pin.
+#
+# Pre-seal. The prefix pinned below is the **entire current document**: H2 is
+# expected to take review corrections, and each one must force a conscious re-pin
+# rather than slipping through. Once an owner seals a body, narrow the prefix to
+# end above the appendable region (as H0's binding does) so amendments can land
+# below it without re-pinning the frozen part.
+schema: declaration_policy_binding_v1
+
+document:
+  path: headline_bridge_behavioral_identity_capture_declaration_20260725.md
+
+sealed_prefix:
+  bytes: 36530
+  sha256: "a580af55b547cd9704cd8b7d992462f8603e5d77e3c41dde430bd6885f1a355a"
+  # Re-pin log (each entry was a deliberate pre-seal edit, not a slip):
+  #   § 4.0  — the exact four capture-off-computable A7.6 members of the
+  #            `behavior` axis, and why the other three are excluded.
+  #   § 5.3  — the `invariant_authority` path class: the guard may not be edited
+  #            by the retry it guards.
+  #   § 5.1.1 — the frozen child's false slot-order assertion, found by Layer P.
+  #   § 5.1.2 / § 5.1.3 — gate G1 and G2 results.
+  #   § 8.3.1 — the published identity, the sidecar home of `captured_under`, and
+  #             the live verification of both drift directions.
+  #   § 7     — pointer to the executable form of the partition
+  #             (scripts/tools/h2_terminal_partition.py).
+  #   § 9     — owner decision surface identity (issue #286).
+
+policy_target:
+  kind: headline
+  preset: configs/presets/mamba_whole_graph_m.yaml
+
+# Recomputed by scripts/tools/resolved_bridge_policy_config.py, never transcribed.
+preset_identity:
+  sha256: "496c4ec22b497c70bc8409227513939b4cd86834bf2210475d0ad655be6937af"
+  resolved_schema: resolved_bridge_policy_config_v1
+  resolved_fingerprint: "c7a6dbb35168cba75249b7f2c67d8455b6f634732493e455a4bb920aab6d7782"
