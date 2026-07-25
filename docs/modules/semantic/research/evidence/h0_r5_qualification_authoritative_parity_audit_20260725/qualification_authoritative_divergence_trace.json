@@ -1,0 +1,150 @@
+{
+  "schema": "h0_r5_qualification_authoritative_divergence_trace_v1",
+  "first_divergence_status": "IDENTIFIED",
+  "stages": [
+    {
+      "stage": "1_qualification_head_vs_I",
+      "qualification_value": {
+        "commit": "205a811780ae43a172657f5f0bf886084d95a229",
+        "tree": "6d41fa03c760af62a6ee6f112d246f66d0ce0f08"
+      },
+      "authoritative_value": {
+        "commit": "524f7e3b88f73bc366d467d53a2c393a7d3ba937",
+        "tree": "c2ce782fa2c78c8fefc81796a484731560dda10d"
+      },
+      "equal": false,
+      "evidence_source": [
+        "qualification_report.json repository_head_sha/tree",
+        "freeze instrumentation_head/tree",
+        "git rev-parse"
+      ],
+      "causal_relevance": "contractual_invalidation_of_qualification_for_I; NOT sufficient alone to explain runtime pass/fail because extension-load vectors already diverge at exact qualified head",
+      "first_divergence": false
+    },
+    {
+      "stage": "2_qualification_freeze_vs_F",
+      "qualification_value": "qualification does not emit the sealed F artifact; preseal step at I was strengthened post-qual",
+      "authoritative_value": {
+        "F": "6e425dc6f89a15d4eb43d3889a517d632f0ee39e",
+        "instrumentation_head": "524f7e3b88f73bc366d467d53a2c393a7d3ba937"
+      },
+      "equal": false,
+      "evidence_source": [
+        "h0_preseal_freeze_v3.json",
+        "qualification_report does not name F"
+      ],
+      "causal_relevance": "F was assembled at I not at qualification head; seal-path governance gap",
+      "first_divergence": false
+    },
+    {
+      "stage": "3_controller_input",
+      "qualification_value": "reduced extension-load inventory (not full controller input)",
+      "authoritative_value": "full phase_a_controller_input.bound_inputs digest a8e4bece\u2026",
+      "equal": false,
+      "evidence_source": [
+        "qualify_h0_phase_a._qualify_confined_extension_load inventory",
+        "freeze phase_a_controller_input"
+      ],
+      "causal_relevance": "inventory scale differs; secondary to load-vector realpath binding",
+      "first_divergence": false
+    },
+    {
+      "stage": "4_confinement_plan_digest",
+      "qualification_value": "c769a2266c8e2e94d95ac92f5fef877b96a1e8fd4fc68b5804f7c9ca611a08a7",
+      "authoritative_value": "not_recorded",
+      "equal": false,
+      "evidence_source": [
+        "qualification_report extension_load",
+        "authoritative build_identity lacks extension_load"
+      ],
+      "causal_relevance": "cannot pairwise-compare plan digests due to auth evidence omission after DriftError",
+      "first_divergence": false
+    },
+    {
+      "stage": "5_membership_predicate_implementation",
+      "qualification_value": {
+        "file": "h0_runtime_confinement.py",
+        "sha256": "8e9ee43440aa0093dc5b36974405d950a1091163e30f2a4984d55653d309a1be"
+      },
+      "authoritative_value": {
+        "file": "h0_runtime_confinement.py",
+        "sha256": "8e9ee43440aa0093dc5b36974405d950a1091163e30f2a4984d55653d309a1be"
+      },
+      "equal": true,
+      "evidence_source": [
+        "git show at QUAL_HEAD and I"
+      ],
+      "causal_relevance": "not divergent",
+      "first_divergence": false
+    },
+    {
+      "stage": "6_extension_load_child_vector_sys_path_bootstrap",
+      "qualification_value": {
+        "script_includes": "sys.path.insert(0, extension.parent)",
+        "function": "_qualify_confined_extension_load",
+        "file": "scripts/tools/qualify_h0_phase_a.py"
+      },
+      "authoritative_value": {
+        "script_includes": "NO sys.path.insert of extension.parent",
+        "function": "_verify_extension_load",
+        "file": "scripts/tools/run_h0_phase_a.py",
+        "verifier_expected_vector": "verify_h0_phase_a._expected_extension_load_vector matches controller (also no insert)"
+      },
+      "equal": false,
+      "evidence_source": [
+        "scripts/tools/qualify_h0_phase_a.py:406-420",
+        "scripts/tools/run_h0_phase_a.py:3197-3210",
+        "scripts/tools/verify_h0_phase_a.py:_expected_extension_load_vector",
+        "diagnostic Case C/C2 import resolution"
+      ],
+      "causal_relevance": "PRIMARY: determines which physical .so Python imports under -I with site/.pth active; drives whether expected build artifact realpath appears in runtime attestation",
+      "first_divergence": true
+    },
+    {
+      "stage": "7_import_realpath_binding",
+      "qualification_value": "expected extension realpath loaded (identity_equal true in report)",
+      "authoritative_value": "diagnostic: loads build/saccade_tracking_ext*.so via saccade_build.pth; not build/h0_phase_a",
+      "equal": false,
+      "evidence_source": [
+        "qualification_report extension_identity_equal=true",
+        "Case C probe",
+        "saccade_build.pth content"
+      ],
+      "causal_relevance": "direct consequence of stage 6",
+      "first_divergence": false
+    },
+    {
+      "stage": "8_membership_result",
+      "qualification_value": {
+        "extension_artifact_observed": true,
+        "plugin_artifact_observed": true,
+        "violations": []
+      },
+      "authoritative_value": {
+        "failure": "extension/plugin load is absent from runtime attestation",
+        "extension_load_record": "not_recorded"
+      },
+      "equal": false,
+      "evidence_source": [
+        "qualification_report",
+        "input_binding.json failure",
+        "result.json provenance_invalid"
+      ],
+      "causal_relevance": "terminal mapping of stage 6/7 under shared membership predicate",
+      "first_divergence": false
+    },
+    {
+      "stage": "9_internal_maps_helper_inconsistency",
+      "qualification_value": "n/a",
+      "authoritative_value": "_runtime_maps_dependencies uses sys.path.insert and claims to match controller vector, but controller vector lacks insert",
+      "equal": false,
+      "evidence_source": [
+        "run_h0_phase_a.py:2604-2614 vs 3197-3210"
+      ],
+      "causal_relevance": "explains why maps closure discovery can succeed while confined extension-load fails",
+      "first_divergence": false
+    }
+  ],
+  "first_divergence_stage": "6_extension_load_child_vector_sys_path_bootstrap",
+  "reproduction_stability": "stable_on_host_import_probe_repeated_equal_false_without_insert_equal_true_with_insert"
+}

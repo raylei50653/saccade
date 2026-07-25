@@ -1,0 +1,168 @@
+{
+  "schema": "h0_r5_qualification_authoritative_path_comparison_v1",
+  "authority": "diagnostic_only_non_authoritative",
+  "A_entrypoint": {
+    "qualification": {
+      "invoked_python": ".venv/bin/python (via uv run --frozen path in harness; child uses resolved python identity)",
+      "child_argv_pattern": [
+        "<python>",
+        "-I",
+        "-B",
+        "-c",
+        "<load_script_with_sys_path_insert>"
+      ],
+      "cwd": "<repository_root>",
+      "isolation_flags": [
+        "-I",
+        "-B"
+      ],
+      "user_site": "disabled_by_-I_implies_-s",
+      "PYTHONPATH": "ignored_by_-I",
+      "LD_LIBRARY_PATH": "<qual_build>:tensorrt:pytorch:cuda",
+      "SACCADE_BUILD_PATH": "build/h0_qualification/r5/build (or workspace build dir)",
+      "H0_QUALIFICATION_MODE": "1",
+      "CUDA_VISIBLE_DEVICES": "from qualification environment / host",
+      "temporary_directories": "external qualification workspace + workspace/_extension_load",
+      "child_sys_path_bootstrap": "sys.path.insert(0, extension.parent) BEFORE import"
+    },
+    "authoritative": {
+      "invoked_python": "uv run --frozen python scripts/tools/run_h0_phase_a.py \u2192 child .venv/bin/python",
+      "child_argv_pattern": [
+        "<python>",
+        "-I",
+        "-B",
+        "-c",
+        "<load_script_WITHOUT_sys_path_insert>"
+      ],
+      "cwd": "<repository_root>",
+      "isolation_flags": [
+        "-I",
+        "-B"
+      ],
+      "user_site": "disabled_by_-I_implies_-s",
+      "PYTHONPATH": "ignored_by_-I",
+      "LD_LIBRARY_PATH": "build/h0_phase_a:tensorrt:pytorch:cuda",
+      "SACCADE_BUILD_PATH": "build/h0_phase_a",
+      "H0_QUALIFICATION_MODE": "absent",
+      "CUDA_VISIBLE_DEVICES": "contract gpu uuid",
+      "temporary_directories": "incomplete_root/_extension_load",
+      "child_sys_path_bootstrap": "NONE \u2014 relies on site/.pth (saccade_build.pth \u2192 repo build/) under -I which still loads site"
+    },
+    "equal": false,
+    "first_material_difference": "child load script: qualification inserts extension.parent into sys.path; authoritative does not"
+  },
+  "B_build_artifacts": {
+    "qualification": {
+      "extension_logical_path": "build/h0_qualification/r5/build/saccade_tracking_ext.cpython-312-x86_64-linux-gnu.so",
+      "extension_sha256": "f374a223d18b708f126e87e292b2b3bef1fe30dae4ffa96e763283b6710944a7",
+      "extension_length": 4065896,
+      "plugin_logical_path": "build/h0_qualification/r5/build/libsaccade_scan_plugin.so",
+      "plugin_sha256": "bd8ef779a926215865a58a4ac90a91b487370c0884522f8ea81cf6427dae6699",
+      "plugin_length": 122864,
+      "load_order": [
+        "import saccade_tracking_ext",
+        "ctypes.CDLL(plugin, RTLD_LOCAL)"
+      ],
+      "import_mechanism": "Python import after sys.path.insert(extension.parent)",
+      "plugin_load_mechanism": "ctypes.CDLL RTLD_LOCAL"
+    },
+    "authoritative": {
+      "extension_logical_path": "build/h0_phase_a/saccade_tracking_ext.cpython-312-x86_64-linux-gnu.so",
+      "extension_sha256": "b064a7009a657ecb911a91052e4ac99ed8179e6080b98ea0ba86469707d8030d",
+      "extension_length": 4065896,
+      "plugin_logical_path": "build/h0_phase_a/libsaccade_scan_plugin.so",
+      "plugin_sha256": "5499811b8185ef28b828aff51eb4ee9fefcdf833111e2505d259b06f5652094c",
+      "plugin_length": 122864,
+      "load_order": [
+        "import saccade_tracking_ext",
+        "ctypes.CDLL(plugin, RTLD_LOCAL)"
+      ],
+      "import_mechanism": "Python import WITHOUT sys.path insert; site saccade_build.pth adds repo build/",
+      "plugin_load_mechanism": "ctypes.CDLL RTLD_LOCAL"
+    },
+    "equal": false,
+    "notes": [
+      "Separate build directories and rebuilds produce different artifact sha256 (expected).",
+      "Critical path difference is import resolution, not merely build dir naming.",
+      "Diagnostic reproduction (non-confined): without sys.path.insert, import resolves to build/saccade_tracking_ext*.so (sha256 79ea4945\u2026), not build/h0_phase_a (sha256 b064a700\u2026)."
+    ]
+  },
+  "C_confinement_plan": {
+    "qualification": {
+      "inventory": "reduced: empty repository/sequence/models_engines; tool_runtime = interpreter runtime + maps deps + artifact dynamic deps",
+      "build_artifact_members": "qualified build artifacts under h0_qualification tree",
+      "confinement_plan_digest": "c769a2266c8e2e94d95ac92f5fef877b96a1e8fd4fc68b5804f7c9ca611a08a7",
+      "backend": "landlock_seccomp_ptrace_v1",
+      "build_plan_implementation": "h0_runtime_confinement.build_plan"
+    },
+    "authoritative": {
+      "inventory": "full freeze bound_inputs (repository + sequence + models_engines + tool_runtime)",
+      "build_artifact_members": "build/h0_phase_a artifacts from build_identity",
+      "confinement_plan_digest": "not_recorded (extension_load record not written after DriftError)",
+      "backend": "landlock_seccomp_ptrace_v1",
+      "build_plan_implementation": "h0_runtime_confinement.build_plan"
+    },
+    "equal": false,
+    "shared_builder_byte_identical": true,
+    "builder_sha256": "8e9ee43440aa0093dc5b36974405d950a1091163e30f2a4984d55653d309a1be"
+  },
+  "D_recorder_lifecycle": {
+    "shared_implementation": "h0_runtime_confinement.spawn_confined / ConfinedProcess / _Recorder",
+    "byte_identical": true,
+    "qualification": {
+      "sequence": [
+        "build_plan",
+        "spawn_confined",
+        "wait",
+        "runtime_attestation",
+        "assert_extension_plugin_membership"
+      ],
+      "membership_on_failure": "QualificationError"
+    },
+    "authoritative": {
+      "sequence": [
+        "build_plan",
+        "spawn_confined",
+        "wait_with_monitor",
+        "runtime_attestation_details",
+        "assert_extension_plugin_membership"
+      ],
+      "membership_on_failure": "DriftError \u2192 provenance_invalid (message collapses 'absent from runtime attestation')",
+      "monitor": "BoundInputMonitor active during wait"
+    },
+    "equal": "lifecycle_core_equal_with_auth_specific_monitor_and_error_mapping",
+    "events_before_attach_risk": "shared ptrace supervisor; no evidence of attach-window-only failure unique to auth without load-path difference"
+  },
+  "E_membership_predicate": {
+    "function": "h0_runtime_confinement.assert_extension_plugin_membership",
+    "helper": "assert_build_artifact_observed",
+    "CONSUMING_OPERATIONS": [
+      "execve",
+      "execveat",
+      "mmap",
+      "mmap_exec",
+      "mmap_read",
+      "open",
+      "openat",
+      "openat2",
+      "startup_mapping"
+    ],
+    "regular_files_membership": "exact physical realpath key into attestation.regular_files",
+    "identity_comparison": "length + sha256 against expected build identity",
+    "require_build_artifact_binding": true,
+    "byte_identical_between_qualification_and_authoritative": true,
+    "implementation_sha256": "8e9ee43440aa0093dc5b36974405d950a1091163e30f2a4984d55653d309a1be",
+    "identical_at_qual_head_and_I": true
+  },
+  "internal_inconsistency": {
+    "description": "run_h0_phase_a._runtime_maps_dependencies load script includes sys.path.insert(0, extension.parent) and comments 'Match the controller extension-load vector', but _verify_extension_load child script omits that insert.",
+    "maps_helper_has_sys_path_insert": true,
+    "extension_load_vector_has_sys_path_insert": false,
+    "qualification_has_sys_path_insert": true
+  },
+  "saccade_build_pth": {
+    "path": ".venv/lib/python3.12/site-packages/saccade_build.pth",
+    "content": "/home/ray/developer/ai/saccade/build",
+    "effect_under_minus_I": "site still loads ( -I does not imply -S ); pth adds repo build/ to sys.path; without extension.parent insert, import binds build/ not build/h0_phase_a/"
+  }
+}

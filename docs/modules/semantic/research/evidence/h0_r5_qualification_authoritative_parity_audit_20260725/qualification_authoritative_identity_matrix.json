@@ -1,0 +1,140 @@
+{
+  "schema": "h0_r5_qualification_authoritative_identity_matrix_v1",
+  "audit": "H0-R5 Qualification-to-Authoritative Extension-Load Parity Audit",
+  "authority": "diagnostic_only_non_authoritative",
+  "notes": [
+    "All identities are from recorded evidence or git objects; equality is never assumed without digest comparison.",
+    "Fields unavailable in evidence are explicitly not_recorded.",
+    "Authoritative extension_load record was not persisted because DriftError aborted before build_identity.extension_load write."
+  ],
+  "qualification": {
+    "head_commit": "205a811780ae43a172657f5f0bf886084d95a229",
+    "tree": "6d41fa03c760af62a6ee6f112d246f66d0ce0f08",
+    "report_path": "docs/modules/semantic/research/evidence/h0_r5_extension_plugin_attestation_closure_20260724/qualification_report.json",
+    "report_sha256": "3a8f4cd3596e097dcf422ab060b67112958152508636126efd1824d253a2f42a",
+    "summary_path": "docs/modules/semantic/research/evidence/h0_r5_extension_plugin_attestation_closure_20260724/qualification_summary.json",
+    "summary_sha256": "fe080f806ba544bafbb9f526cd5549e68f11fbbae2f580452e1acac2539699b6",
+    "qualification_artifact_digest": "fe080f806ba544bafbb9f526cd5549e68f11fbbae2f580452e1acac2539699b6",
+    "qualification_result": "passed",
+    "invalidated_by": "any post-qualification execution-bound commit",
+    "confinement_plan_digest": "c769a2266c8e2e94d95ac92f5fef877b96a1e8fd4fc68b5804f7c9ca611a08a7",
+    "runtime_inputs_digest": "e874fe4e63fcbf7aad6f24bbf35e86cda69821d8ae99d2ad2fad91af575a6e0b",
+    "tool_runtime_digest": "not_recorded",
+    "tool_runtime_note": "qualification extension-load builds a reduced inventory; full F-scale tool_runtime digest is not a qualification report field",
+    "build_artifact_identities": [
+      {
+        "role": "extension",
+        "path": "/home/ray/developer/ai/saccade/build/h0_qualification/r5/build/saccade_tracking_ext.cpython-312-x86_64-linux-gnu.so",
+        "length": 4065896,
+        "sha256": "f374a223d18b708f126e87e292b2b3bef1fe30dae4ffa96e763283b6710944a7"
+      },
+      {
+        "role": "plugin",
+        "path": "/home/ray/developer/ai/saccade/build/h0_qualification/r5/build/libsaccade_scan_plugin.so",
+        "length": 122864,
+        "sha256": "bd8ef779a926215865a58a4ac90a91b487370c0884522f8ea81cf6427dae6699"
+      }
+    ],
+    "python_sha256": "d3a545002164f920c88f3ec49d47c3bfd21237d1d3eed7f95f6ce7d81ea2254b",
+    "build_tool_binding_digest": "d831e00e8ec22ed109f502cac78538845ce8eb164cee7a7f061269eaf7212cfd",
+    "build_tool_bound_inputs_digest": "934eafe0659acd3f857a84d8b580523da9d8f2e6e912114c6cb858b27adea79e",
+    "qualification_input_inventory_digest": "47ef83b38679c67623d580a859aedf50aed224eff5036b7d252e2f954f17927d",
+    "membership_implementation_sha256": "8e9ee43440aa0093dc5b36974405d950a1091163e30f2a4984d55653d309a1be",
+    "qualify_harness_sha256_at_head": "d7510359dad40b882b81faebe4341565623f021593ccbdedb88b9f64fecfded3",
+    "controller_sha256_at_head": "205855b87bbc7907289ed6763ce2896fb665970f02eaeee23da93f9e04531e19",
+    "confinement_sha256_at_head": "8e9ee43440aa0093dc5b36974405d950a1091163e30f2a4984d55653d309a1be"
+  },
+  "instrumentation_I": {
+    "commit": "524f7e3b88f73bc366d467d53a2c393a7d3ba937",
+    "tree": "c2ce782fa2c78c8fefc81796a484731560dda10d"
+  },
+  "freeze_F": {
+    "commit": "6e425dc6f89a15d4eb43d3889a517d632f0ee39e",
+    "tree": "1dff09254d388ddfb6f6608f21e8f35c5ef0e0e9",
+    "artifact_path": "docs/modules/semantic/research/evidence/h0_preseal_freeze_524f7e3b88f73bc366d467d53a2c393a7d3ba937/h0_preseal_freeze_v3.json",
+    "instrumentation_head": "524f7e3b88f73bc366d467d53a2c393a7d3ba937",
+    "instrumentation_tree": "c2ce782fa2c78c8fefc81796a484731560dda10d",
+    "bound_inputs_digest": "a8e4bece4b29e293ce56c1c59c9e882f53d4e3f2a47a459e9ea25542070199b9",
+    "controller_input_schema": "h0_phase_a_controller_v1",
+    "build_tool_binding_digest": "d831e00e8ec22ed109f502cac78538845ce8eb164cee7a7f061269eaf7212cfd",
+    "tool_runtime_count": 4518,
+    "tool_runtime_list_sha256": "7ce6d2df11498aba2f82df89c2a51baa19bac5711eb83d4baf5a8aec7c227b29",
+    "confinement_plan_digest": "not_recorded",
+    "confinement_plan_note": "freeze binds controller inputs and implementation bindings; confinement plan is assembled at runtime from bound_inputs+build_identity",
+    "controller_implementation_sha256": "205855b87bbc7907289ed6763ce2896fb665970f02eaeee23da93f9e04531e19",
+    "confinement_implementation_sha256": "8e9ee43440aa0093dc5b36974405d950a1091163e30f2a4984d55653d309a1be",
+    "qualify_harness_bound_in_F": false,
+    "qualification_report_digest_bound_in_F": false,
+    "qualification_head_bound_in_F": false
+  },
+  "seal_S": {
+    "commit": "6fdb060c50c9ed784a3fa2229b1ea2514dd1af5e",
+    "tree": "29db5dfc853911b355c9d295372dbd8c75973f91"
+  },
+  "authoritative": {
+    "checkout_commit": "6fdb060c50c9ed784a3fa2229b1ea2514dd1af5e",
+    "checkout_tree": "29db5dfc853911b355c9d295372dbd8c75973f91",
+    "evidence_root": "docs/modules/semantic/research/evidence/h0_phase_a_524f7e3b88f73bc366d467d53a2c393a7d3ba937",
+    "build_identity_state": "complete",
+    "build_identity_sha256": "d929a9430c467933a1fbbe62dc5003b8e7e9c18820472df6060ad1d52e6f1cb8",
+    "build_artifact_identities": [
+      {
+        "role": "extension",
+        "path": "build/h0_phase_a/saccade_tracking_ext.cpython-312-x86_64-linux-gnu.so",
+        "length": 4065896,
+        "sha256": "b064a7009a657ecb911a91052e4ac99ed8179e6080b98ea0ba86469707d8030d",
+        "elf_gnu_build_id": "0803b38a478d824a85f6c2c87a2902007451a851"
+      },
+      {
+        "role": "plugin",
+        "path": "build/h0_phase_a/libsaccade_scan_plugin.so",
+        "length": 122864,
+        "sha256": "5499811b8185ef28b828aff51eb4ee9fefcdf833111e2505d259b06f5652094c",
+        "elf_gnu_build_id": "4b69ba7b04fa96b11e79f55a450b87bc0723d117"
+      }
+    ],
+    "runtime_identity_state": "complete",
+    "runtime_identity_sha256": "878007e0a15153be39c95ccb11e5bd4160475f1a0acbec9222bc9f9764972e72",
+    "bound_inputs_digest": "a8e4bece4b29e293ce56c1c59c9e882f53d4e3f2a47a459e9ea25542070199b9",
+    "tool_runtime_count": 4518,
+    "tool_runtime_list_sha256": "7ce6d2df11498aba2f82df89c2a51baa19bac5711eb83d4baf5a8aec7c227b29",
+    "input_binding_t0_digest": "a8e4bece4b29e293ce56c1c59c9e882f53d4e3f2a47a459e9ea25542070199b9",
+    "input_binding_failure": {
+      "reason": "extension/plugin load is absent from runtime attestation",
+      "stage": "extension_load"
+    },
+    "confinement_plan_digest": "not_recorded",
+    "observed_regular_files_digest": "not_recorded",
+    "extension_load_record": "not_recorded",
+    "extension_plugin_expected_identities": [
+      {
+        "role": "extension",
+        "path": "build/h0_phase_a/saccade_tracking_ext.cpython-312-x86_64-linux-gnu.so",
+        "length": 4065896,
+        "sha256": "b064a7009a657ecb911a91052e4ac99ed8179e6080b98ea0ba86469707d8030d"
+      },
+      {
+        "role": "plugin",
+        "path": "build/h0_phase_a/libsaccade_scan_plugin.so",
+        "length": 122864,
+        "sha256": "5499811b8185ef28b828aff51eb4ee9fefcdf833111e2505d259b06f5652094c"
+      }
+    ],
+    "extension_plugin_observed_identities": "not_recorded",
+    "controller_result": "provenance_invalid",
+    "mechanical_disposition": "H0_PROVENANCE_INVALID",
+    "authorization": "h0_r5_phase_a_exactly_once_authorization_20260725"
+  },
+  "pairwise_equality": {
+    "qualification_head_equals_I": false,
+    "qualification_tree_equals_I_tree": false,
+    "qualification_build_artifact_sha256_equals_authoritative": false,
+    "qualification_build_artifact_paths_equal_authoritative": false,
+    "F_bound_inputs_digest_equals_authoritative": true,
+    "F_tool_runtime_equals_authoritative_tool_runtime": true,
+    "membership_predicate_byte_identical_qual_vs_auth": true,
+    "controller_byte_identical_qual_head_vs_I": true,
+    "confinement_byte_identical_qual_head_vs_I": true,
+    "qualify_harness_byte_identical_qual_head_vs_I": false
+  }
+}

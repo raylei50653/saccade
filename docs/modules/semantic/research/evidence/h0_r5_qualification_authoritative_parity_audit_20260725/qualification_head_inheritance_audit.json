@@ -1,0 +1,119 @@
+{
+  "schema": "h0_r5_qualification_head_inheritance_audit_v1",
+  "qualification_head": "205a811780ae43a172657f5f0bf886084d95a229",
+  "qualification_tree": "6d41fa03c760af62a6ee6f112d246f66d0ce0f08",
+  "selected_I": "524f7e3b88f73bc366d467d53a2c393a7d3ba937",
+  "selected_I_tree": "c2ce782fa2c78c8fefc81796a484731560dda10d",
+  "contract_clause": "invalidated_by = any post-qualification execution-bound commit; later docs-only / merge commits do not inherit qualification",
+  "commits": [
+    {
+      "commit": "40fa500628043cc4a85cebf61eac067be32dd186",
+      "subject": "docs(h0): rebind R5 QUALIFIED_SEALABLE to 205a8117 and refresh packet",
+      "changed_files": [
+        {
+          "status": "M",
+          "path": "docs/modules/semantic/research/evidence/h0_r5_extension_plugin_attestation_closure_20260724/README.md"
+        },
+        {
+          "status": "M",
+          "path": "docs/modules/semantic/research/evidence/h0_r5_extension_plugin_attestation_closure_20260724/isolation_probe.json"
+        },
+        {
+          "status": "M",
+          "path": "docs/modules/semantic/research/evidence/h0_r5_extension_plugin_attestation_closure_20260724/manifest.json"
+        },
+        {
+          "status": "M",
+          "path": "docs/modules/semantic/research/evidence/h0_r5_extension_plugin_attestation_closure_20260724/qualification_report.json"
+        },
+        {
+          "status": "M",
+          "path": "docs/modules/semantic/research/evidence/h0_r5_extension_plugin_attestation_closure_20260724/qualification_summary.json"
+        },
+        {
+          "status": "M",
+          "path": "docs/modules/semantic/research/evidence/h0_r5_extension_plugin_attestation_closure_20260724/repair_terminal.json"
+        }
+      ],
+      "execution_bound": false,
+      "qualification_bound": true,
+      "seal_verifier_only": false,
+      "changes_freeze_assembly": false,
+      "changes_controller_input": false,
+      "changes_tool_runtime_expansion": false,
+      "changes_extension_load_predicate": false,
+      "changes_authoritative_launch_behavior": false,
+      "qualification_contractually_invalidated": false,
+      "notes": "docs-only packet rebind (does not inherit as code change on first-parent tools)"
+    },
+    {
+      "commit": "bddc970ab17a6f13b4fc5f400b446bef0b121590",
+      "subject": "Merge pull request #281 from raylei50653/agent/h0-r5-extension-plugin-attestation-closure",
+      "changed_files": [],
+      "execution_bound": false,
+      "qualification_bound": false,
+      "seal_verifier_only": false,
+      "changes_freeze_assembly": false,
+      "changes_controller_input": false,
+      "changes_tool_runtime_expansion": false,
+      "changes_extension_load_predicate": false,
+      "changes_authoritative_launch_behavior": false,
+      "qualification_contractually_invalidated": false,
+      "notes": "merge of docs packet refresh onto mainline"
+    },
+    {
+      "commit": "524f7e3b88f73bc366d467d53a2c393a7d3ba937",
+      "subject": "fix(h0): R5 verifier tool_runtime independent-expansion parity",
+      "changed_files": [
+        {
+          "status": "M",
+          "path": "docs/ownership/tests_inventory.generated.md"
+        },
+        {
+          "status": "M",
+          "path": "scripts/tools/qualify_h0_phase_a.py"
+        },
+        {
+          "status": "M",
+          "path": "scripts/tools/verify_h0_preseal_freeze.py"
+        },
+        {
+          "status": "M",
+          "path": "tests/unit/tracking/README.md"
+        },
+        {
+          "status": "M",
+          "path": "tests/unit/tracking/test_h0_preseal_freeze_v3.py"
+        },
+        {
+          "status": "M",
+          "path": "tests/unit/tracking/test_h0_qualification.py"
+        }
+      ],
+      "execution_bound": true,
+      "qualification_bound": true,
+      "seal_verifier_only": true,
+      "changes_freeze_assembly": true,
+      "changes_controller_input": false,
+      "changes_tool_runtime_expansion": true,
+      "changes_extension_load_predicate": false,
+      "changes_authoritative_launch_behavior": false,
+      "qualification_contractually_invalidated": true,
+      "notes": "execution-bound qualify/preseal verifier parity repair"
+    }
+  ],
+  "extension_load_function_equal_across_range": {
+    "qualify__qualify_confined_extension_load": true,
+    "controller__verify_extension_load": true,
+    "membership_assert_extension_plugin_membership": true
+  },
+  "overall_inheritance_verdict": "INVALIDATED_AND_BEHAVIORALLY_DIFFERENT",
+  "verdict_rationale": [
+    "I != qualification head/tree \u2192 exact-head binding fails by contract; must not be rewritten as valid inheritance.",
+    "524f7e3b changes scripts/tools/qualify_h0_phase_a.py and verify_h0_preseal_freeze.py (execution/seal-bound surfaces) \u2192 contractually invalidates qualification for I.",
+    "Behavioral difference is real for preseal assembly/verifier tool_runtime expansion path.",
+    "Extension-load load_script bodies and membership predicate are byte-equal across the range; the pass/fail parity defect is NOT introduced by 205a8117\u2192524f7e3b \u2014 it already exists at the qualified head between qualify vs controller vectors."
+  ],
+  "extension_load_specific_inheritance": "INVALIDATED_BUT_BEHAVIORALLY_EQUAL",
+  "extension_load_specific_note": "Even if inheritance were ignored, sealing at exact 205a8117 would still face the same controller load-vector defect versus qualification."
+}
