@@ -112,7 +112,7 @@ grant, no registry state write.
 | # | Decision | Verdict |
 |--:|:--|:--|
 | 1 | **The §7 terminal partition** — `provenance_invalid` removed as a predicate; pre-seal plumbing failures are not terminals, while a post-launch execution failure keeps a fail-closed terminal (§20.8 item 3) | **ACCEPTED, with one precondition** (below) |
-| 2 | **Registry field `captured_under`** — coordinate/probe sidecar on `quantity.bridge_capture_provenance` | **ACCEPTED as schema**; written when the first H2 evidence exists, never retroactively |
+| 2 | **Registry field `captured_under`** — coordinate/probe sidecar on `quantity.bridge_capture_provenance` | **ACCEPTED as schema only**; the single write condition is owner-accepted terminal 5 (below) |
 | 3 | Slot name `H2`, terminal prefix `H2_*`, evidence prefix `h2_measure_<I40>` | **ACCEPTED** |
 | 4 | Identity fixture MOT17-09-SDP (525 frames), identity-mode with `--no-gpu-decode` + single-thread relink | **ACCEPTED** |
 
@@ -145,12 +145,13 @@ before the Phase-A seal.** The seal scope stays Phase-A-only, so H2's
 minimal-epistemic-budget thesis is preserved; what changes is that the success
 path exists on paper before an authorization can be spent reaching it.
 
-This adds a precondition to declaration §5.2 and resolves §9. Recording it there
-requires an append-only correction plus a `sealed_prefix` re-pin in
-`…_declaration_20260725.policy.yaml` (which pins the *entire* body) and a
-republish of `docs/reference/runtime_identity.generated.json`, because the policy
-file is an `identity_semantics` member. That is a separate change and is **not**
-done by this charter; it is listed in `Acceptance` as a seal gate.
+**Recorded in its fact-owner.** This is not a charter-only claim: declaration
+**Review Correction 2** closes §9, marks it a historical statement of the
+question rather than an open-decision authority, and adds the Phase-B chain as
+§5.2's sixth bound precondition. The correction lands in the declaration's
+append-only region below the pinned `sealed_prefix` (which ends above
+`Review Correction 1`), so it needs no re-pin, changes no `identity_semantics`
+member, and triggers no `runtime_identity.generated.json` republish.
 
 ## Registry field `captured_under`
 
@@ -173,12 +174,28 @@ dependencies:                    # ADD one entry
     terminal 5 is the precondition, not the activation, of a runtime-fidelity edge
 ```
 
-**Not written yet, deliberately.** The field records the coordinate *under which
-evidence was captured*, and no H2 evidence exists. It is absent for all existing
-rows and no retroactive claim is made anywhere; the owner writes it (C5.1) in the
-same change as the first H2 evidence root. The digests live in the sidecar
-`../contracts/runtime_identity_bindings_v1.json`, not parsed out of registry
-Markdown.
+**Write condition — one rule, and the sidecar owns it.** The mechanical authority
+is `../contracts/runtime_identity_bindings_v1.json`, not this charter and not
+registry Markdown:
+
+```text
+a binding appears only if an H2 Layer-M measurement reaches terminal 5
+and an owner accepts it
+```
+
+So, stated so no second rule can be inferred:
+
+- the sidecar row for `quantity.bridge_capture_provenance` **already exists**
+  with `captured_under: null`. `null` means *no substrate-version claim* and is
+  never read as agreement; it flips to a coordinate only under the rule above,
+  written by the owner (C5.1);
+- evidence packets from terminals 1–4 record their own capture coordinate inside
+  the packet — a measurement must describe the coordinate it ran on — but that
+  packet-local record is **not** an object-level binding and never becomes one;
+- no retroactive binding is written for evidence predating published identities.
+
+This supersedes the looser "written when the first H2 evidence exists" phrasing:
+a negative terminal is H2 evidence and still writes no binding.
 
 Consumption rule: decision-surface, identity-semantics or probe drift is stale.
 Implementation, environment or runtime-input drift with an equal probe is
@@ -217,7 +234,9 @@ certificate, **or** the scope is disconfirmed and the charter is re-planned.
 
 1. [H2 declaration](../../modules/semantic/research/headline_bridge_behavioral_identity_capture_declaration_20260725.md)
    — §0.1 supersession boundary, §4 coordinate/probe/equivalence, §5 two-layer
-   budget, §7 partition, §9 decisions, Review Correction 1.
+   budget, §7 partition, Review Correction 1, and **Review Correction 2**, which
+   closes §9. Read Correction 2 before §9: §9 is retained as the historical
+   statement of the question and is no longer an open-decision authority.
 2. [H0 declaration](../../modules/semantic/research/headline_bridge_full_decision_capture_declaration_20260713.md)
    — A7.6 non-perturbation inventory and the packet verifier, consumed verbatim.
 3. [R5 parity audit](../../modules/semantic/research/evidence/h0_r5_qualification_authoritative_parity_audit_20260725/)
@@ -254,8 +273,9 @@ provenance apparatus H2 **deleted**, so the size is not the thing being inherite
 - `run_h0_phase_a.BoundInputMonitor` / `DriftError` — mutation detection, the
   `bound_input_mutated` predicate;
 - `run_h0_phase_a` canonical-JSON / digest helpers — the §8.1 frozen convention;
-- `run_h0_phase_a` child/evaluator argv, launch and deadline helpers — the four
-  ordered runs;
+- `run_h0_phase_a`'s **fixture-agnostic** process primitives —
+  `_bounded_remaining`, `_deadline_checked_call`, `_wait_with_monitor`,
+  `_terminate_process_group`;
 - `h2_runtime_inputs` — manifest build, validate, post-run revalidate;
 - `h2_behavioral_identity` — the launch-time probe, the
   `behavior_probe_equals_freeze` predicate;
@@ -278,10 +298,24 @@ declaration consequence, not a shortcut):
   `_collect_runtime_attestation` — witness-only under §4.1: recorded, never
   predicates, never terminal-selecting;
 - `_checkpoint_inventory_verdict` and H0's A2 three-attempt coverage budget — H2
-  has no coverage attempts.
+  has no coverage attempts;
+- **`child_argv` and `evaluator_argv`** — these are not generic launchers.
+  `child_argv` hardcodes `scripts/tools/run_h0_phase_a_child.py`
+  (`run_h0_phase_a.py:1207`) and `evaluator_argv` is bound to
+  `EVALUATOR_ARGV_PREFIX` and H0's run-directory layout. H2 writes its own child
+  argv and its own child/recorder.
+
+  This is forced, not preferred. The frozen child takes the native pairs and
+  raises inside its **own** recorder if they are not already slot-sorted
+  (`run_h0_phase_a_child.py:444`), so no outer layer can supply §5.1.1's
+  normalization — reusing that argv and normalizing the order are mutually
+  exclusive. Writing an H2 child is what makes the normalization reachable while
+  leaving the frozen child untouched.
 
 **Must be newly written:**
 
+0. an H2 child entrypoint and its argv builder, replacing the two H0 argv
+   helpers above;
 1. the four ordered runs `00_capture_off`, `01/02/03_capture_on` on MOT17-04-SDP
    under the unmodified A5 target with `SACCADE_GPU_DECODE=1` (§3.3);
 2. the A7.6 seven-member capture-off/on comparison → `capture_off_on_equal`;
@@ -302,9 +336,9 @@ declaration consequence, not a shortcut):
 
 A Layer-M seal may be proposed only when **all** of these hold:
 
-1. the Phase-B chain form is declared (decision 1's precondition) — an
-   append-only declaration correction, a `sealed_prefix` re-pin, and a
-   `runtime_identity.generated.json` republish;
+1. the Phase-B chain form is **published** — declaration §5.2 precondition 6,
+   added by Review Correction 2. The correction states the requirement; the
+   chain itself (its `I → F → S` and authorization form) is still unwritten;
 2. the S4 items above are implemented, tested, and reviewed;
 3. a Layer-P pass certificate (`h2_layer_p_certificate_v2`) exists for the exact
    head under seal, with `--base` given and the full changed-path verdict clean;
@@ -329,8 +363,10 @@ Additionally, and specific to the accepted decisions:
 - a probe equality may never be reported as behavior preservation, measurement-
   domain equivalence, or an equivalence upgrade — `equivalence.state` is
   `unproven` in v1 and there is no upgrade path without a versioned verifier;
-- `captured_under` may not be written to any existing registry row, and may not
-  be written at all until H2 evidence exists;
+- `captured_under` may not be written for any terminal other than an
+  owner-accepted terminal 5, and no retroactive binding may be written for
+  evidence predating published identities; a terminal-1–4 packet's own capture
+  coordinate may not be promoted into the object-level sidecar;
 - no witness field (ELF build-id, host `tool_runtime`, observed file closure,
   NVML identity) may select a terminal or block a Layer-P retry;
 - a successful Phase A may not be reported as terminal 5, as partial capture, or
@@ -358,5 +394,17 @@ Additionally, and specific to the accepted decisions:
   #288's open test-plan item.
 - **2026-07-25** — owner accepted all four decisions on
   [#286](https://github.com/raylei50653/saccade/issues/286); decision 1 accepted
-  with the Phase-B-chain precondition recorded above. Next concrete work: scope
-  the Layer-M controller (`Current step`), not implement or seal it.
+  with the Phase-B-chain precondition. Recorded in the fact-owner as declaration
+  **Review Correction 2** (append-only, below the pinned prefix): §9 closed,
+  §5.2 precondition 6 added, §8.4's write condition fixed to owner-accepted
+  terminal 5. Next concrete work: scope the Layer-M controller
+  (`Current step`), not implement or seal it.
+- **2026-07-25** — PR boundary review found three P1 defects in the first draft
+  of this charter, all fixed before merge: the Layer-M reuse list was
+  unimplementable (`child_argv` hardcodes the frozen child, whose recorder
+  raises on unsorted pairs before any outer normalization could run);
+  `captured_under` carried three conflicting write rules; and the decision
+  status had two live answers because the declaration still presented §9 as
+  open. A fourth correction was to this charter's own cost claim — the
+  declaration's `sealed_prefix` ends above `Review Correction 1`, so an
+  append-only correction needs no re-pin and no republish.
