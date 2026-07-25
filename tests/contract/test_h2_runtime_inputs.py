@@ -130,6 +130,70 @@ def test_manifest_rejects_an_equal_content_asset_symlink_retarget(
         inputs.validate_manifest(manifest, verify_files=True)
 
 
+def test_symlink_chain_records_multi_hop_intermediate_links(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """configured -> intermediate -> final must record the intermediate hop."""
+    data_root, build_dir = _fixture_tree(tmp_path, monkeypatch)
+    final = _write(tmp_path / "controlled" / "version-a.bin", b"same-bytes")
+    intermediate = tmp_path / "controlled" / "current"
+    intermediate.parent.mkdir(parents=True, exist_ok=True)
+    intermediate.symlink_to(final)
+    configured = tmp_path / "assets" / f"{inputs.RUNTIME_ASSET_FIELDS[0]}.bin"
+    configured.unlink()
+    configured.symlink_to(intermediate)
+
+    manifest = inputs.build_manifest(build_dir=build_dir, data_root=data_root)
+    record = next(
+        item
+        for item in manifest["runtime_assets"]["files"]
+        if item["role"] == inputs.RUNTIME_ASSET_FIELDS[0]
+    )
+    chain_paths = {item["path"] for item in record["symlink_chain"]}
+    configured_abs = Path(os.path.abspath(configured)).as_posix()
+    intermediate_abs = Path(os.path.abspath(intermediate)).as_posix()
+    final_abs = Path(os.path.abspath(final)).as_posix()
+
+    assert configured_abs in chain_paths
+    assert intermediate_abs in chain_paths
+    assert record["resolved_path"] == final_abs
+
+    watched = set(inputs.watch_paths((configured,)))
+    assert Path(configured_abs) in watched
+    assert Path(intermediate_abs) in watched
+    assert Path(final_abs) in watched
+
+    bound = set(inputs.bound_paths(manifest))
+    assert Path(intermediate_abs) in bound
+
+
+def test_manifest_rejects_multi_hop_intermediate_equal_content_retarget(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Transient-capable intermediate retarget must fail post-run revalidation.
+
+    Chain: configured link → intermediate link → final file.
+    Retargeting only the intermediate (equal content) must move the binding
+    even when the configured path and final content digest look unchanged.
+    """
+    data_root, build_dir = _fixture_tree(tmp_path, monkeypatch)
+    first = _write(tmp_path / "controlled" / "version-a.bin", b"same-bytes")
+    second = _write(tmp_path / "controlled" / "version-b.bin", b"same-bytes")
+    intermediate = tmp_path / "controlled" / "current"
+    intermediate.parent.mkdir(parents=True, exist_ok=True)
+    intermediate.symlink_to(first)
+    configured = tmp_path / "assets" / f"{inputs.RUNTIME_ASSET_FIELDS[0]}.bin"
+    configured.unlink()
+    configured.symlink_to(intermediate)
+    manifest = inputs.build_manifest(build_dir=build_dir, data_root=data_root)
+
+    intermediate.unlink()
+    intermediate.symlink_to(second)
+
+    with pytest.raises(inputs.RuntimeInputError, match="path binding moved"):
+        inputs.validate_manifest(manifest, verify_files=True)
+
+
 def test_manifest_revalidation_rejects_fixture_membership_drift(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

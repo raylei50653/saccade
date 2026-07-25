@@ -75,19 +75,36 @@ def _absolute_lexical(path: Path) -> Path:
 
 
 def _symlink_chain(path: Path) -> list[dict[str, str]]:
-    """Record every symlink component exactly as the consumer traverses it."""
+    """Record every symlink component exactly as the consumer traverses it.
+
+    Walks the full resolution chain, including intermediate links introduced by
+    earlier targets (multi-hop). Matches the H0 verifier traversal: when a
+    component is a symlink, its target is expanded and traversal continues from
+    that target with loop detection. Recording only configured-path components
+    would miss retargets of intermediate links such as::
+
+        configured -> intermediate -> final
+    """
     lexical = _absolute_lexical(path)
-    current = Path(lexical.anchor)
     chain: list[dict[str, str]] = []
-    for part in lexical.parts[1:]:
-        current /= part
-        if current.is_symlink():
-            chain.append(
-                {
-                    "path": current.as_posix(),
-                    "target": os.readlink(current),
-                }
-            )
+    current = Path(lexical.anchor)
+    pending = list(lexical.parts[1:])
+    seen: set[Path] = set()
+    while pending:
+        current /= pending.pop(0)
+        if not current.is_symlink():
+            continue
+        if current in seen:
+            raise RuntimeInputError(f"symlink loop in runtime input: {path}")
+        seen.add(current)
+        target = os.readlink(current)
+        chain.append({"path": current.as_posix(), "target": target})
+        replacement = (
+            Path(target) if Path(target).is_absolute() else current.parent / target
+        )
+        replacement = _absolute_lexical(replacement)
+        current = Path(replacement.anchor)
+        pending = list(replacement.parts[1:]) + pending
     return chain
 
 
@@ -95,6 +112,22 @@ def _path_binding(path: Path) -> tuple[Path, Path, list[dict[str, str]]]:
     configured = _absolute_lexical(path)
     resolved = configured.resolve(strict=True)
     return configured, resolved, _symlink_chain(configured)
+
+
+def watch_paths(paths: Iterable[Path]) -> tuple[Path, ...]:
+    """Expand consumer paths to the full set BoundInputMonitor must watch.
+
+    Includes the configured lexical path, the final resolved target, and every
+    multi-hop symlink component on the resolution chain. Membership discovery
+    stays consumer-path-only; this expansion is only for continuous watching.
+    """
+    watched: set[Path] = set()
+    for path in paths:
+        configured, resolved, chain = _path_binding(path)
+        watched.add(configured)
+        watched.add(resolved)
+        watched.update(Path(item["path"]) for item in chain)
+    return tuple(sorted(watched, key=lambda item: item.as_posix()))
 
 
 def _shown(path: Path) -> str:

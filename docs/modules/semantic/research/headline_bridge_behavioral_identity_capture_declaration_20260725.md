@@ -702,11 +702,13 @@ discover lexical consumer paths and symlink chains
 ```
 
 The manifest records both the configured lexical path actually opened by the
-consumer and its resolved target, plus every symlink component and link text.
-Layer P monitors the lexical paths before hashing begins. An equal-content
-symlink retarget, a fixture member added after hashing, or a content mutation in
-the former pre-monitor window therefore blocks Layer P and cannot enter a pass
-certificate.
+consumer and its resolved target, plus every multi-hop symlink component and
+link text (intermediate targets introduced by earlier links included; loop
+detection fails closed). Layer P monitors the configured paths, resolved
+targets, and multi-hop chain members before hashing begins. An equal-content
+symlink retarget of a configured or intermediate link, a fixture member added
+after hashing, or a content mutation in the former pre-monitor window therefore
+blocks Layer P and cannot enter a pass certificate.
 
 The controlled-host re-attestation workflow also runs against the exact head SHA
 of same-repository pull requests. Fork pull requests are rejected at job scope

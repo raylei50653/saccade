@@ -335,6 +335,7 @@ class LayerP:
         manifest_path = self.work_dir / "runtime_inputs.json"
         try:
             discovered = runtime_inputs.discover_bound_paths(build_dir=self.build_dir)
+            watched_inputs = runtime_inputs.watch_paths(discovered)
         except (runtime_inputs.RuntimeInputError, OSError) as exc:
             raise self._block("identity_run", f"runtime-input discovery failed: {exc}")
         bound = {
@@ -343,7 +344,9 @@ class LayerP:
             for path in identity.tracked_files_for_class(path_class)
             if (REPO_ROOT / path).is_file()
         }
-        bound.update(discovered)
+        # Watch configured, resolved, and multi-hop symlink intermediates so a
+        # transient retarget of an intermediate link cannot hide from inotify.
+        bound.update(watched_inputs)
         try:
             monitor = h0_controller.BoundInputMonitor(bound)
         except (h0_controller.DriftError, OSError) as exc:

@@ -136,6 +136,11 @@ def test_identity_run_monitors_hashing_and_revalidates_before_final_drain(
         events.append("discover")
         return (bound_input,)
 
+    def watch_paths(paths: object) -> tuple[Path, ...]:
+        events.append("watch_expand")
+        assert paths == (bound_input,)
+        return (bound_input,)
+
     class Monitor:
         def __init__(self, paths: object) -> None:
             assert bound_input in paths  # type: ignore[operator]
@@ -172,6 +177,7 @@ def test_identity_run_monitors_hashing_and_revalidates_before_final_drain(
     monkeypatch.setattr(
         layer_p.runtime_inputs, "discover_bound_paths", discover_bound_paths
     )
+    monkeypatch.setattr(layer_p.runtime_inputs, "watch_paths", watch_paths)
     monkeypatch.setattr(layer_p.h0_controller, "BoundInputMonitor", Monitor)
     monkeypatch.setattr(layer_p.runtime_inputs, "build_manifest", build_manifest)
     monkeypatch.setattr(
@@ -197,6 +203,7 @@ def test_identity_run_monitors_hashing_and_revalidates_before_final_drain(
 
     assert events == [
         "discover",
+        "watch_expand",
         "monitor_start",
         "build_manifest",
         "probe",
