@@ -45,7 +45,7 @@ WIP=1 **只綁 mainline charter**。工程 follow-up、資料補件、文件收�
 
 ## Current transition panel — H0 → GCTM
 
-**Manual navigation projection · reconciled 2026-07-24.** This panel owns no
+**Manual navigation projection · reconciled 2026-07-25.** This panel owns no
 terminal, evidence, or WIP state: `ACTIVE` is projected from the module TODO;
 task lifecycle and gates remain owned by the linked charters/contracts. If a
 row conflicts with its owner, the owner wins. Update this panel in the same
@@ -56,7 +56,8 @@ decision, blocker change, or consumer-compatibility verdict.
 |:--|:--|:--|
 | **ACTIVE** | **none** — semantic sole-active WIP is empty (`active_wip: []`). | [semantic TODO](../../modules/semantic/TODO.md) · [claim-state registry](../contracts/claim_state_registry.md) · [machine identity decision](../contracts/gctm_b1_slot_identity_decision_v1.json) |
 | **NEXT** | No automatic next. Registration-v3 closed at `H0_REGISTRATION_V3_CONTRACT_SEALABLE` for consumer `gctm_runtime_native_candidate_universe_v1`. An owner may design **H0 re-entry and actual baseline capture** under the sealed contract, define an exact minimal ABI delta if a later producer gap appears, or re-scope the B1 runtime hook. Both runtime slots remain **proposed / non-WIP** and both compatibility gates remain independently `missing`. | [registration-v3 charter (closed)](closed/h0_gctm_guarantee_registration_v3_universe_completeness_20260724.md) · [runtime universe charter (closed)](closed/gctm_runtime_native_candidate_universe_task.md) · [claim-state registry](../contracts/claim_state_registry.md) · [B1 charter](gctm_b1_runtime_grounded_offline_attribution_task.md) · [O1 charter](gctm_o1_online_intervention_efficacy_task.md) |
-| **READINESS** | H0 remains closed at owner-accepted `H0_PROVENANCE_INVALID` (three same-type ordered terminals): no faithful capture, accepted runtime-fidelity edge, or actual guarantee envelope. Static audit `H0_GCTM_INTERFACE_STRUCTURALLY_INSUFFICIENT` still forbids unchanged-interface capture. Consumer universe and registration-v3 contracts are sealable but do **not** establish actual completeness guarantees, substrate, compatibility, or B1 activation. No H0 re-entry, exactly-once authority, runtime verdict, or B1/O1 activation follows. | [registration-v3 packet](../../modules/semantic/research/evidence/h0_gctm_guarantee_registration_v3_20260724/) · [runtime universe packet](../../modules/semantic/research/evidence/gctm_runtime_native_candidate_universe_20260724/) · [static audit packet](../../modules/semantic/research/evidence/h0_gctm_interface_static_feasibility_20260723/) · [claim-state registry](../contracts/claim_state_registry.md) |
+| **SUCCESSOR DESIGN** | **H2 — proposed / non-WIP.** Replaces H0's **identity mechanism only** (declaration §0.1); H0's sealed history, five spent `S`, and permanent ledger entry are unchanged. Four owner decisions **accepted 2026-07-25** ([#286](https://github.com/raylei50653/saccade/issues/286)) — partition, `captured_under` schema, `H2` slot/prefix, MOT17-09 fixture — and acceptance **authorizes nothing**: no `I`/`F`/`S`, no capture, no exactly-once grant, no registry state write, no re-entry. Layer P (S1–S3) landed and green; Layer M (S4) is scoped but unimplemented; the seal additionally waits on a declared **Phase-B chain form**, without which a successful Phase A closes nothing. | [H2 charter](h2_behavioral_identity_capture_task.md) · [H2 declaration](../../modules/semantic/research/headline_bridge_behavioral_identity_capture_declaration_20260725.md) · [R5 parity audit](../../modules/semantic/research/evidence/h0_r5_qualification_authoritative_parity_audit_20260725/) |
+| **READINESS** | H0 remains closed at owner-accepted `H0_PROVENANCE_INVALID` (five spent `S`; no faithful capture, accepted runtime-fidelity edge, or actual guarantee envelope). Static audit `H0_GCTM_INTERFACE_STRUCTURALLY_INSUFFICIENT` still forbids unchanged-interface capture. Consumer universe and registration-v3 contracts are sealable but do **not** establish actual completeness guarantees, substrate, compatibility, or B1 activation. H2's accepted decisions and green Layer P change none of this. No H0 re-entry, exactly-once authority, runtime verdict, or B1/O1 activation follows. | [registration-v3 packet](../../modules/semantic/research/evidence/h0_gctm_guarantee_registration_v3_20260724/) · [runtime universe packet](../../modules/semantic/research/evidence/gctm_runtime_native_candidate_universe_20260724/) · [static audit packet](../../modules/semantic/research/evidence/h0_gctm_interface_static_feasibility_20260723/) · [claim-state registry](../contracts/claim_state_registry.md) |
 
 ### Blockers and transition gates
 
@@ -105,6 +106,20 @@ GCTM runtime-native candidate-universe consumer line
   ∧ both runtime compatibility gates remain independently missing
   → suitable consumer target for a separate minimal H0 registration-v3 delta;
     not H0 implementation authority; no B1/O1 activation
+
+H2 successor identity line (proposed; authorizes nothing)
+  H0's identity mechanism could not transfer across invocations (R5 parity audit)
+  → H2 replaces identity only: coordinate / bounded probe / equivalence=unproven
+  ∧ Layer P is pre-seal and retryable; Layer M keeps the exactly-once budget
+  ∧ four owner decisions accepted 2026-07-25 (#286) — partition, captured_under
+    schema, H2 slot/prefix, MOT17-09 fixture
+  ∧ acceptance grants no I/F/S, no capture, no authorization, no registry write
+  seal additionally requires
+    a declared Phase-B chain form                        ← still absent
+    ∧ S4 Layer-M plumbing implemented                    ← still absent
+    ∧ a Layer-P pass certificate at the exact sealed head
+    ∧ a separate owner exactly-once authorization
+  → no H0 re-entry, no substrate, no B1/O1 activation follows
 
 H0 registration-v3 universe-completeness contract line
   additive schema/validator over frozen consumer universe + trace-v2 envelope
@@ -281,7 +296,7 @@ frontmatter、搬移與索引要求。
 |:--|:--|:--|:--|
 | [gctm_b1_runtime_grounded_offline_attribution_task.md](gctm_b1_runtime_grounded_offline_attribution_task.md) | mainline-study · **non-WIP** | Proposed task charter — GCTM B1 runtime-grounded offline attribution and score-ranking evaluation (split from B1/O1 synthesis §37) | semantic |
 | [gctm_o1_online_intervention_efficacy_task.md](gctm_o1_online_intervention_efficacy_task.md) | mainline-study · **non-WIP** | Proposed task charter — GCTM O1 online score intervention and system-efficacy evaluation (split from B1/O1 synthesis §37) | semantic |
-| [h2_behavioral_identity_capture_task.md](h2_behavioral_identity_capture_task.md) | mainline-study · **non-WIP** | Proposed task charter — H2 bridge-decision capture under behavioral runtime identity (successor to H0's identity layer; five spent `S` unchanged) | semantic |
+| [h2_behavioral_identity_capture_task.md](h2_behavioral_identity_capture_task.md) | mainline-study · **non-WIP** | H2 bridge-decision capture under behavioral runtime identity (successor to H0's identity layer; five spent `S` unchanged). Four owner decisions **accepted 2026-07-25** ([#286](https://github.com/raylei50653/saccade/issues/286)); S1–S3 landed, S4 partial. Current work = **scope** the Layer-M controller; seal still gated on the Phase-B chain form | semantic |
 
 ## Active threads
 
