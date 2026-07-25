@@ -21,15 +21,27 @@
   - S4 permanently spent; no faithful capture; no actual H0 guarantee; Phase B forbidden;
     no future reentry authorization from R4 alone.
   Detail: [claim-state registry](../../research/contracts/claim_state_registry.md).
-- H0 closure baseline（**four** owner-accepted `H0_PROVENANCE_INVALID` terminals;
-  S4 permanently spent; no faithful capture; no actual H0 guarantee; Phase B forbidden）:
+- H0 closure baseline（**five** mechanical `H0_PROVENANCE_INVALID` terminals including
+  R5 S5; no faithful capture; no actual H0 guarantee; Phase B forbidden）:
   state fact-owner 見
   [claim-state registry](../../research/contracts/claim_state_registry.md)。
 - **H0-R5 Repair closed at `H0_R5_ATTESTATION_QUALIFIED_SEALABLE`**
   （`h0_extension_plugin_runtime_attestation_closure_v1` / Issue #280）。
-  Controlled-host qualification passed; exact head eligible for separate Seal PR only.
-  **Not** F/S, Phase-A execution, exactly-once auth, Phase B, actual guarantee, or B1/O1.
-  See [repair evidence](research/evidence/h0_r5_extension_plugin_attestation_closure_20260724/).
+  Controlled-host qualification passed; later tool_runtime independent-expansion parity
+  repair landed at `I=524f7e3b…`. See
+  [repair evidence](research/evidence/h0_r5_extension_plugin_attestation_closure_20260724/).
+- **H0-R5 Phase-A executed once under sealed S（2026-07-25）** — mechanical
+  truthful-negative terminal:
+  - `I=524f7e3b…` / `F=6e425dc6…` / `S=6fdb060c…`
+  - authorization `h0_r5_phase_a_exactly_once_authorization_20260725`（Issue #283；consumed）
+  - controller `result=provenance_invalid` → `H0_PROVENANCE_INVALID`; verifier `valid=true`
+  - failure: `extension/plugin load is absent from runtime attestation` at `extension_load`
+  - evidence:
+    [h0_phase_a_524f7e3b…](research/evidence/h0_phase_a_524f7e3b88f73bc366d467d53a2c393a7d3ba937/)
+    + [execution witness](research/evidence/h0_r5_phase_a_execution_witness_20260725/)
+  - S5 permanently spent; no faithful capture; no actual H0 guarantee; Phase B forbidden;
+    no future reentry authorization from R5 alone.
+  Detail: [claim-state registry](../../research/contracts/claim_state_registry.md).
 - 2026-07-24 consumer re-charter closed at
   `GCTM_RUNTIME_UNIVERSE_CONTRACT_SEALABLE`（`gctm_runtime_native_candidate_universe_v1`）；
   WIP released at terminal；**not** H0 implementation authority. See
@@ -50,9 +62,8 @@
   `GCTM_B1`, `proposed`, `blocked_by: h0_runtime_substrate`; it does not alias
   or supersede `H0_ROUTE5_B1` → [task charter](../../research/threads/gctm_b1_runtime_grounded_offline_attribution_task.md)
 - **GCTM O1 — online score intervention and system-efficacy evaluation** → [task charter](../../research/threads/gctm_o1_online_intervention_efficacy_task.md)
-- **(next after H0-R5 Repair if `H0_R5_ATTESTATION_QUALIFIED_SEALABLE`)** separate
-  Seal PR → fresh I→F→S → launch hygiene → separate exactly-once authorization →
-  one Phase-A invocation. Repair merge is **not** Seal or execution authority.
+- **(next only via separate owner decision)** any future H0 re-entry requires a new
+  repair/seal/authorization chain; exact S=`6fdb060c…` is permanently spent.
 
 ## Parked
 
