@@ -117,6 +117,23 @@ else
   ERRORS=$((ERRORS + 1))
 fi
 
+# ── 4.11 runtime-identity staleness: the online → research direction ─────────
+# The claim-state registry has always carried `substrate` / `target_substrate` and
+# the rule that substrate does not inherit — but nothing checked whether the
+# substrate still existed. A preset default or kernel constant could move and
+# every state proven on it would quietly stop meaning what it says.
+# Source-derived coordinates are fail-closed on every host. The observed
+# GPU/TensorRT environment is deliberately left unresolved here and is checked
+# fail-closed by controlled re-attestation / Layer P. A later equal probe never
+# turns implementation/environment drift into equivalence.
+echo "── runtime coordinate staleness (portable axes fail-closed)"
+if uv run python3 scripts/tools/check_runtime_identity_staleness.py 2>&1; then
+  ok "runtime identity"
+else
+  fail "runtime coordinate — static axis moved, or a binding needs re-attestation; see scripts/tools/check_runtime_identity_staleness.py"
+  ERRORS=$((ERRORS + 1))
+fi
+
 echo "── tests structure check (three-axis header + fresh index; fail-closed)"
 if uv run python3 scripts/tools/check_tests_structure.py --strict 2>&1; then
   ok "tests structure"

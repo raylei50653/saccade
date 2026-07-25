@@ -17,10 +17,16 @@
 | `test_h0_gctm_guarantee_registration_v3.py` | system | contract | active | Contract for the H0 GCTM guarantee-registration verifier (universe-completeness v3). |
 | `test_h0_gctm_static_feasibility_v1.py` | system | contract | active | Contract tests for the bounded H0 to GCTM static feasibility audit. |
 | `test_h0_launch_hygiene_gate.py` | system | regression | active | Contract regression for the H0 launch-hygiene pre-authorization gate. |
+| `test_h2_layer_p_certificate.py` | tracking,system | contract | active | Layer-P cannot skip admissibility and its certificate binds the full coordinate. |
+| `test_h2_path_partition.py` | tracking,system | contract | active | The H2 firewall must be a partition, and it must fail closed. |
+| `test_h2_runtime_identity.py` | tracking,system | contract | active | The behavior probe is bounded and its publication intake fails closed. |
+| `test_h2_runtime_inputs.py` | tracking,system | contract | active | Runtime fixtures and assets are content-bound, never called non-execution. |
+| `test_h2_terminal_partition.py` | tracking,system | contract | active | The terminal partition must be ordered, exhaustive, and blind to witness data. |
 | `test_migration_manifest_v0.py` | system | contract | active | Contract for the doc migration manifest parser and master-map generator. |
 | `test_old_flagship_inventory.py` | system | contract | active | Contract for the old-flagship per-study inventory parser. |
 | `test_research_packet_manifest.py` | system | contract | active | Generic manifest/integrity contract for sealed research evidence packets. |
 | `test_research_packet_schema.py` | system | contract | active | Generic schema contract for sealed research evidence packets. |
+| `test_runtime_identity_staleness.py` | tracking,system | contract | active | Coordinate drift never becomes equivalence merely because one probe is equal. |
 | `test_score_ranking_declaration_v1.py` | system | contract | active | Contract for the fail-closed L2 score-ranking declaration v1 validator. |
 | `test_scripts_structure.py` | system | contract | active | Contract tests for the scripts/ self-documentation + generated index. |
 | `test_terminal_slot_schema.py` | system | contract | active | Contract for the terminal-slot YAML schema validator. |

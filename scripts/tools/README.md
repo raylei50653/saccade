@@ -338,6 +338,7 @@ deleting.
 | `build_h0_preseal_freeze.py` | stable | cli | Assemble the sole H0 pre-seal artifact (``h0_preseal_freeze_v3``). |
 | `build_r1_bridge_replay.sh` | stable | - | Build the research-only device replay helper used by R1 host R0. |
 | `build_relink_candidates.py` | diagnostic | cli | Build a relink-candidate dataset from a no-relink / no-interp MOT dump. |
+| `build_runtime_identity.py` | stable | cli | Publish an H2 runtime coordinate plus a bounded behavior probe. |
 | `build_scripts_index.py` | stable | cli | Generate the scripts/ discovery index from each script's own header. |
 | `build_tests_index.py` | stable | cli | Generate the tests/ discovery index from each test file's own header tags. |
 | `cache_gt_tracks.py` | diagnostic | cli | cache_gt_tracks.py — Phase 1 GT Oracle Cache Generator |
@@ -357,6 +358,7 @@ deleting.
 | `check_h0_phase_a_archives.py` | stable | - | Verify every committed H0 Phase-A evidence root through archive codecs. |
 | `check_h0_repair_acceptance_matrix.py` | stable | - | Validate the prospective H0 repair/qualification acceptance matrix. |
 | `check_headline_decision_contract.py` | stable | cli | Static guard for the headline tracker-decision contract (no GPU). |
+| `check_runtime_identity_staleness.py` | stable | cli | Check runtime-coordinate lag without treating probe equality as equivalence. |
 | `check_scan_bwd.py` | diagnostic | - | Validate the CUDA selective-scan backward against the JIT autograd reference. |
 | `check_scripts_structure.py` | stable | cli | Scripts structure contract: every script self-documents, and the index is fresh. |
 | `check_tests_structure.py` | stable | cli | Tests structure contract: every test self-documents, and the index is fresh. |
@@ -389,6 +391,10 @@ deleting.
 | `h0_declaration_frozen_identity.py` | stable | - | H0 declaration frozen-identity checks with SEALED-append tolerance. |
 | `h0_launch_hygiene_gate.py` | stable | cli | Non-authoritative launch-hygiene pre-authorization gate for H0 Phase A. |
 | `h0_runtime_confinement.py` | stable | - | Linux fail-closed runtime confinement and file-input attestation. |
+| `h2_behavioral_identity.py` | stable | cli | Compute the H2 behavior probe: a policy-visible digest of one eval run. |
+| `h2_path_partition.py` | stable | cli | H2 firewall: classify paths and decide Layer-P retry admissibility. |
+| `h2_runtime_inputs.py` | stable | cli | Bind the fixtures and runtime assets consumed by H2. |
+| `h2_terminal_partition.py` | stable | cli | The H2 Layer-M terminal partition: ordered, exhaustive, mechanically decidable. |
 | `horizon_convergence_probe.py` | experiment | cli | Horizon-convergence probe — does the pedestrian bbox scale field actually converge to a stable horizon line? … |
 | `horizon_detector_test.py` | experiment | cli | Horizon homothety on REAL detections vs GT — does the vertex-homothety horizon survive detector truncation / … |
 | `horizon_homothety_probe.py` | experiment | cli | Horizon-convergence probe via VERTEX HOMOTHETY (design §3) — does the construction "connect the 4 correspondi… |
@@ -418,6 +424,7 @@ deleting.
 | `run_gctm_d1_diagnostic.py` | experiment | cli | GCTM D1 substrate-agnostic ranking diagnostic runner. |
 | `run_h0_phase_a.py` | stable | cli | A7/RC1 fail-closed Phase-A parent controller. |
 | `run_h0_phase_a_child.py` | stable | - | RC1 fixed Phase-A runtime child (parent-only entry point). |
+| `run_h2_layer_p.py` | stable | cli | H2 Layer P: retryable pre-seal plumbing, with no epistemic budget attached. |
 | `run_m_b1_5_stage2_q1q3.py` | experiment | cli | M-B1.5 Stage 2 Q1–Q3 runner: D_online label join + safe-negative mass audit. |
 | `run_m_b1_5_stage2_q4.py` | experiment | cli | M-B1.5 Stage 2 Q4 runner: signal separability on D_online. |
 | `run_m_b1_5_stage2_q45_atlas.py` | experiment | cli | M-B1.5 Stage 2 Q4.5: structured threshold-combination atlas. |

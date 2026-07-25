@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from collections import deque
 import hashlib
+import os
 
 import torch
 import torch.nn as nn
@@ -429,7 +430,8 @@ class TRTMambaHead(nn.Module):
             from pathlib import Path as _Path
 
             _root = _Path(__file__).resolve().parent.parent.parent.parent.parent
-            _so = _root / "build" / "libsaccade_scan_plugin.so"
+            _build = _Path(os.environ.get("SACCADE_BUILD_PATH", _root / "build"))
+            _so = _build / "libsaccade_scan_plugin.so"
             if _so.exists():
                 trt.get_plugin_registry().load_library(str(_so))
                 print(f"[TRTHead] Loaded SelectiveScan plugin: {_so}")

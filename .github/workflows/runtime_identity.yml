@@ -1,0 +1,172 @@
+name: Runtime Coordinate + Probe Re-attestation
+
+# Static coordinate axes are checked on every push. This controlled-host job also
+# content-binds fixtures/assets and reruns the bounded MOT17-09 behavior probe.
+# Probe equality does not establish equivalence.
+#
+# It publishes nothing and seals nothing. It answers exactly one question: does
+# the committed `docs/reference/runtime_identity.generated.json` still describes
+# this coordinate and bounded probe? A mismatch requires republication or
+# re-attestation; equality is not an equivalence proof.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Ref to attest
+        required: true
+        default: main
+        type: string
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "include/**"
+      - "configs/presets/mamba_whole_graph_m.yaml"
+      - "scripts/eval/**"
+      - "scripts/tools/resolved_bridge_policy_config.py"
+      - "CMakeLists.txt"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "datasets/**"
+      - "models/**"
+      - "runs/**"
+      - "third_party/**"
+      - ".github/workflows/runtime_identity.yml"
+      - "scripts/pre_push.sh"
+      - "scripts/tools/h2_behavioral_identity.py"
+      - "scripts/tools/h2_path_partition.py"
+      - "scripts/tools/h2_runtime_inputs.py"
+      - "scripts/tools/h2_terminal_partition.py"
+      - "scripts/tools/build_runtime_identity.py"
+      - "scripts/tools/check_runtime_identity_staleness.py"
+      - "scripts/tools/run_h2_layer_p.py"
+      - "docs/modules/semantic/research/headline_bridge_behavioral_identity_capture_declaration_20260725.policy.yaml"
+      - "docs/reference/runtime_identity.generated.json"
+  push:
+    branches: [main]
+    paths:
+      # Implementation coordinate.
+      - "src/**"
+      - "include/**"
+      - "configs/presets/mamba_whole_graph_m.yaml"
+      - "scripts/eval/**"
+      - "scripts/tools/resolved_bridge_policy_config.py"
+      # Environment/plumbing coordinate.
+      - "CMakeLists.txt"
+      - "pyproject.toml"
+      - "uv.lock"
+      # Versioned runtime inputs (ignored host-local assets are still rebound
+      # when another trigger runs this job).
+      - "datasets/**"
+      - "models/**"
+      - "runs/**"
+      - "third_party/**"
+      # The ruler itself.
+      - ".github/workflows/runtime_identity.yml"
+      - "scripts/pre_push.sh"
+      - "scripts/tools/h2_behavioral_identity.py"
+      - "scripts/tools/h2_path_partition.py"
+      - "scripts/tools/h2_runtime_inputs.py"
+      - "scripts/tools/h2_terminal_partition.py"
+      - "scripts/tools/build_runtime_identity.py"
+      - "scripts/tools/check_runtime_identity_staleness.py"
+      - "scripts/tools/run_h2_layer_p.py"
+      - "docs/modules/semantic/research/headline_bridge_behavioral_identity_capture_declaration_20260725.policy.yaml"
+      - "docs/reference/runtime_identity.generated.json"
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  SACCADE_CONTROLLED_RESOURCE_ROOT: /home/ray/developer/ai/saccade
+  UV_EXTRA_INDEX_URL: https://pypi.nvidia.com/
+
+jobs:
+  behavior-axis:
+    # Never execute untrusted fork code on the controlled self-hosted runner.
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    # Same controlled host as H0 qualification: it supplies the real CUDA /
+    # TensorRT runtime closure. This job enters no research authority and reads
+    # no research inputs; it only recomputes a digest and compares it.
+    runs-on: [self-hosted, linux, x64, h0-qualification]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+
+      - name: Bind controlled host-local runtime inputs into the checkout
+        run: |
+          bind_runtime_input() {
+            relative_path="$1"
+            source="${SACCADE_CONTROLLED_RESOURCE_ROOT}/${relative_path}"
+            target="${GITHUB_WORKSPACE}/${relative_path}"
+            test -e "${source}"
+            test ! -e "${target}"
+            test ! -L "${target}"
+            mkdir -p "$(dirname "${target}")"
+            ln -s "${source}" "${target}"
+          }
+
+          bind_runtime_input "datasets/MOT17/train/MOT17-09-SDP"
+          bind_runtime_input "datasets/MOT17/train/MOT17-04-SDP"
+          bind_runtime_input "runs/mamba_gt_yolo26m_v14replica_t3_t1/best.ckpt"
+          bind_runtime_input "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt"
+          bind_runtime_input "models/yolo/yolo26m.pt"
+          bind_runtime_input "models/yolo/yolo26m_backbone_640_best.engine"
+          bind_runtime_input "models/yolo/mamba_head_26m.engine"
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          # Reuse the controlled host's persistent uv cache without downloading
+          # or uploading a multi-GiB GitHub Actions cache.
+          enable-cache: false
+          cache-local-path: ~/.cache/uv
+          prune-cache: false
+
+      - name: Sync dependencies
+        run: uv sync --frozen --extra dali
+
+      - name: Build the native extension
+        run: |
+          cmake -S . -B build/runtime_identity -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/runtime_identity --parallel
+
+      - name: Bind fixtures, weights, engines, plugin and third-party runtime
+        run: |
+          uv run --frozen python scripts/tools/h2_runtime_inputs.py \
+            --build-dir build/runtime_identity \
+            --emit "${RUNNER_TEMP}/runtime-inputs.json"
+
+      - name: Coordinate must already be current
+        run: |
+          uv run --frozen python scripts/tools/check_runtime_identity_staleness.py \
+            --runtime-inputs-from "${RUNNER_TEMP}/runtime-inputs.json"
+
+      - name: Re-attest the bounded behavior probe
+        env:
+          SACCADE_BUILD_PATH: ${{ github.workspace }}/build/runtime_identity
+        run: |
+          uv run --frozen python scripts/tools/h2_behavioral_identity.py \
+            --identity-mode --emit "${RUNNER_TEMP}/behavior.json"
+
+      - name: Compare against the published identity
+        run: |
+          uv run --frozen python scripts/tools/check_runtime_identity_staleness.py \
+            --probe-from "${RUNNER_TEMP}/behavior.json" \
+            --runtime-inputs-from "${RUNNER_TEMP}/runtime-inputs.json" \
+            --strict
+
+      - name: Upload the attestation
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-coordinate-probe-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/behavior.json
+            ${{ runner.temp }}/runtime-inputs.json
+          if-no-files-found: warn
