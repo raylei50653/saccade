@@ -122,6 +122,29 @@ def test_the_published_coordinate_is_complete_and_static_axes_are_current() -> N
     assert warnings
 
 
+def test_host_environment_is_checked_only_on_a_controlled_host(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    published = staleness.load_published(_REPO / staleness.PUBLISHED_REL)
+    monkeypatch.setattr(identity, "environment_axis", lambda: {"digest": "9" * 64})
+
+    failures, warnings = staleness.compare_publication(
+        published, probe=None, runtime_input_manifest=None
+    )
+    assert not failures
+    assert any(
+        "host-specific environment was not recomputed" in item for item in warnings
+    )
+
+    failures, _warnings = staleness.compare_publication(
+        published,
+        probe=None,
+        runtime_input_manifest=None,
+        verify_environment=True,
+    )
+    assert any("environment moved" in item for item in failures)
+
+
 def test_every_checked_in_binding_classifies() -> None:
     published = staleness.load_published(_REPO / staleness.PUBLISHED_REL)
     bindings = staleness.load_bindings(_REPO / staleness.BINDINGS_REL)

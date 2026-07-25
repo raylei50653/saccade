@@ -198,7 +198,10 @@ class LayerP:
         try:
             published = staleness.load_published(REPO_ROOT / staleness.PUBLISHED_REL)
             failures, warnings = staleness.compare_publication(
-                published, probe=None, runtime_input_manifest=None
+                published,
+                probe=None,
+                runtime_input_manifest=None,
+                verify_environment=True,
             )
         except (staleness.StalenessError, identity.IdentityError) as exc:
             raise self._block("preflight", f"published identity unusable: {exc}")

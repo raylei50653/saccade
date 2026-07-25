@@ -130,11 +130,18 @@ def compare_publication(
     *,
     probe: str | None,
     runtime_input_manifest: Mapping[str, Any] | None = None,
+    verify_environment: bool = False,
 ) -> tuple[list[str], list[str]]:
-    """Return hard failures and explicitly unresolved checks."""
+    """Return hard failures and explicitly unresolved checks.
+
+    Source-derived axes are portable and can be checked on every host. The
+    environment coordinate contains observed Torch/CUDA/TensorRT/device state,
+    so it is checked only on the controlled attestation host. A generic CPU CI
+    runner must report that check as unresolved instead of comparing itself to
+    a GPU publication and manufacturing drift.
+    """
     recomputed = {
         "decision_surface": identity.decision_surface_axis()["digest"],
-        "environment": identity.environment_axis()["digest"],
         "implementation": identity.implementation_axis()["digest"],
         "identity_semantics": identity.identity_semantics_axis()["digest"],
     }
@@ -147,6 +154,20 @@ def compare_publication(
                 f"{axis} moved and was not republished: published "
                 f"{coordinate.get(axis)}, recomputed {measured}. {REGENERATE_HINT}"
             )
+
+    if verify_environment:
+        measured_environment = identity.environment_axis()["digest"]
+        if coordinate.get("environment") != measured_environment:
+            failures.append(
+                "environment moved and was not republished: published "
+                f"{coordinate.get('environment')}, recomputed "
+                f"{measured_environment}. {REGENERATE_HINT}"
+            )
+    else:
+        warnings.append(
+            "host-specific environment was not recomputed; controlled "
+            "re-attestation or Layer P must verify it"
+        )
 
     if runtime_input_manifest is None:
         warnings.append(
@@ -196,7 +217,10 @@ def main(argv: list[str] | None = None) -> int:
                 args.runtime_inputs_from, verify_files=True
             )
         failures, warnings = compare_publication(
-            published, probe=probe_digest, runtime_input_manifest=manifest
+            published,
+            probe=probe_digest,
+            runtime_input_manifest=manifest,
+            verify_environment=args.strict,
         )
 
         lag: dict[str, list[str]] = {}

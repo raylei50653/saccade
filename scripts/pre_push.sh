@@ -122,10 +122,11 @@ fi
 # the rule that substrate does not inherit — but nothing checked whether the
 # substrate still existed. A preset default or kernel constant could move and
 # every state proven on it would quietly stop meaning what it says.
-# Every static coordinate is fail-closed. A later equal probe never turns
-# implementation/environment drift into equivalence; consumers require explicit
-# re-attestation.
-echo "── runtime coordinate staleness (all static axes fail-closed)"
+# Source-derived coordinates are fail-closed on every host. The observed
+# GPU/TensorRT environment is deliberately left unresolved here and is checked
+# fail-closed by controlled re-attestation / Layer P. A later equal probe never
+# turns implementation/environment drift into equivalence.
+echo "── runtime coordinate staleness (portable axes fail-closed)"
 if uv run python3 scripts/tools/check_runtime_identity_staleness.py 2>&1; then
   ok "runtime identity"
 else
