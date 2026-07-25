@@ -383,10 +383,13 @@ def test_gpu_reattestation_binds_controlled_host_runtime_inputs_lexically() -> N
     workflow = (_REPO / ".github/workflows/runtime_identity.yml").read_text(
         encoding="utf-8"
     )
-    assert "SACCADE_CONTROLLED_RESOURCE_ROOT:" in workflow
+    assert "SACCADE_CONTROLLED_RESOURCE_ROOT" in workflow
+    # Relative to GITHUB_WORKSPACE — no absolute /home/... path in the workflow.
+    assert "/home/ray/" not in workflow
+    assert "../../../../developer/ai/saccade" in workflow
     assert "Bind controlled host-local runtime inputs into the checkout" in workflow
     assert "uv sync --frozen --extra dali" in workflow
-    assert 'ln -s "${source}" "${target}"' in workflow
+    assert 'ln -s --relative "${source}" "${target}"' in workflow
     for path in (
         "datasets/MOT17/train/MOT17-09-SDP",
         "datasets/MOT17/train/MOT17-04-SDP",
