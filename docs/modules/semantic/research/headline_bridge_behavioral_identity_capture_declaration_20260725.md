@@ -713,3 +713,101 @@ blocks Layer P and cannot enter a pass certificate.
 The controlled-host re-attestation workflow also runs against the exact head SHA
 of same-repository pull requests. Fork pull requests are rejected at job scope
 before any untrusted code can reach the self-hosted runner.
+
+---
+
+## Review Correction 2 — the four §9 decisions are resolved (2026-07-25, pre-seal)
+
+This correction records an owner decision. It changes no authority state, grants
+no execution, selects no `I`, creates no `F`/`S`, and writes no registry state.
+
+**§9 is closed.** Its four decisions were accepted on 2026-07-25 on the decision
+surface it names ([#286](https://github.com/raylei50653/saccade/issues/286),
+resolved and closed). §9 above is retained as the historical statement of the
+question; it is **no longer an open-decision authority**, and this correction is
+its single resolution pointer.
+
+| §9 item | Verdict |
+| --- | --- |
+| 1 — the §7 partition | accepted, with the §5.2 precondition below |
+| 2 — §8.4's registry field | accepted as **schema only**; write condition below |
+| 3 — slot `H2`, prefix `H2_*`, evidence prefix `h2_measure_<I40>` | accepted |
+| 4 — §3.2's identity fixture MOT17-09-SDP | accepted |
+
+### §5.2 gains a sixth precondition — the Phase-B chain
+
+A fully successful Phase A selects **no terminal**: the executable partition maps
+`measurement_pass` to no terminal, and §7's terminal 5 additionally requires the
+frozen seven-sequence Phase B. But §2 states the seal authorizes no Phase B, §7
+states Phase A never starts Phase B, and §5.2 forbids retry, resume, and repaired
+re-run under the same `S`. No Phase-B chain is defined in this declaration: Phase
+B appears only as *not authorized*, *required for terminal 5*, and *never started
+by Phase A*.
+
+Stated exactly: without a Phase-B chain, the best available outcome of the one
+authorized Layer-M invocation is a spent authorization, an unclosed unit, and no
+mainline transition under §20.7.
+
+This is not inherited from the H0 declaration, whose seal covered sealed Phase A
+and then, only if admitted, Phase B within one chain. H2 narrowed the seal to
+Phase A alone without supplying the chain terminal 5 depends on.
+
+Therefore §5.2's bound preconditions gain:
+
+```text
+6. a declared Phase-B chain form — its own I → F → S, its authorization form,
+   and its precondition on a passing Phase A — published before the Phase-A seal
+```
+
+The seal's scope is unchanged: it remains one Layer-M Phase-A invocation, and §2
+still authorizes no Phase B. What this precondition requires is that the success
+path exist on paper before an authorization can be spent reaching it.
+
+### §8.4's write condition (single semantics)
+
+`captured_under` is accepted as a **schema**, not as a value to be written now.
+The single mechanical rule is the one already carried by the sidecar
+`docs/research/contracts/runtime_identity_bindings_v1.json`:
+
+```text
+a binding appears only if an H2 Layer-M measurement reaches terminal 5
+and an owner accepts it
+```
+
+Consequences, stated so no second rule can be inferred:
+
+- the sidecar row for `quantity.bridge_capture_provenance` already exists with
+  `captured_under: null`; `null` means *no substrate-version claim*, never
+  agreement, and it flips to a coordinate only under the rule above;
+- evidence packets from terminals 1–4 record their own capture coordinate inside
+  the packet, because a measurement must describe the coordinate it ran on; that
+  packet-local record is **not** an object-level binding and never becomes one;
+- no retroactive binding is written for evidence predating published identities.
+
+### Pre-seal re-pin (and a drift this repairs)
+
+H2 is **pre-seal**, so the binding's own rule applies: the pinned prefix is the
+entire current document, and each review correction must force a conscious re-pin
+rather than slipping through. The narrow prefix that ends above an appendable
+region is reserved for *after* an owner seals a body.
+
+This correction is therefore accompanied by a deliberate re-pin of
+`sealed_prefix` to the full post-correction body, and by the resulting republish
+of `docs/reference/runtime_identity.generated.json`, since the binding file is an
+`identity_semantics` member.
+
+That re-pin also repairs an existing drift. `Review Correction 1` was appended
+without a re-pin, which is why the pinned boundary sat below it and why an append
+could momentarily look free. It was not free — it was an unrecorded exception to
+the pre-seal rule. The byte-level test cannot catch this on its own: it verifies
+that the pinned prefix still hashes correctly and deliberately tolerates trailing
+content, so a green suite is not evidence that the pre-seal re-pin rule was
+honoured. Only the binding's re-pin log is.
+
+### What this correction does not do
+
+It does not seal, authorize, or schedule anything; does not alter §§0–8 above the
+pinned prefix; does not change the capture ABI, A7.6, the packet verifier, or any
+preset; and does not unblock `H0_ROUTE5_B1`, `GCTM_B1`, or O1. H0's closed
+history, its five spent `S` chains, and the permanent ledger entry on
+`quantity.bridge_capture_provenance` remain unchanged.

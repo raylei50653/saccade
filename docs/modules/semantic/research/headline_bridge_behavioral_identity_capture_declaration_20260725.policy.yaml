@@ -17,8 +17,8 @@ document:
   path: headline_bridge_behavioral_identity_capture_declaration_20260725.md
 
 sealed_prefix:
-  bytes: 37878
-  sha256: "3ccfb9640656f38dea629b5b957eeb29414106a32422ed2efa96f39a86b04421"
+  bytes: 44249
+  sha256: "14a8ef7b694fc07328ab6e6d49b032ac0e6bd3570623b688dbfc0bc8026c3199"
   # Re-pin log (each entry was a deliberate pre-seal edit, not a slip):
   #   Review reset — coordinate / bounded probe / equivalence split; content-bound
   #                  fixtures/assets/build products; v2 Layer-P certificate.
@@ -29,6 +29,16 @@ sealed_prefix:
   #   § 7     — pointer to the executable form of the partition
   #             (scripts/tools/h2_terminal_partition.py).
   #   § 9     — owner decision surface identity (issue #286).
+  #   Review Correction 1 — MISSING RE-PIN, repaired below. The correction was
+  #             appended while the pin still ended at byte 37878, so the boundary
+  #             came to sit below it and a further append could look free. It was
+  #             not: it was an unrecorded exception to the pre-seal rule stated
+  #             above. The byte test tolerates trailing content by construction,
+  #             so it could not catch this — only this log can.
+  #   Review Correction 2 — §9 resolved (issue #286 accepted and closed), §5.2
+  #             precondition 6 (the Phase-B chain), §8.4's single write condition.
+  #             Re-pinned to the entire post-correction body, which also brings
+  #             Review Correction 1 back inside the pin.
 
 policy_target:
   kind: headline
