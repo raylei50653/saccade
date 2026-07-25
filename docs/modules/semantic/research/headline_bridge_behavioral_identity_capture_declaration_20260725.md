@@ -952,8 +952,15 @@ A new owner exactly-once authorization, in the identical form as `S_A`,
 introducing no new authorization vocabulary. `S_A` is spent at Phase-A launch and
 its scope was Phase-A-only; it cannot be extended, re-read, or re-used. Retry,
 resume, and repaired re-run under `S_B` are permanently forbidden, exactly as
-§5.2 forbids them under `S_A`. `S_B` is consumed at Phase-B controller process
-launch, and only after the C3.6 admission gate has passed.
+§5.2 forbids them under `S_A`.
+
+**`S_B` has exactly one consumption event, and it is not process launch.** `S_B`
+is consumed by the durable write-and-flush of the `authorization_consumed` record
+(C3.5.1 step 5), which happens after the C3.6 admission gate has passed and
+before the measurement launches. That write *is* the consumption — not a note
+about a consumption that occurs elsewhere — so the authority state has a single
+definition and a single durable linearization point, and no observer can find the
+authorization spent-but-unrecorded or recorded-but-unspent.
 
 The Phase-B controller contains no downstream dispatch, import, subprocess, queue
 submission, or continuation flag. It exits after Phase B. Owner acceptance is a
@@ -1075,23 +1082,32 @@ predecessor to bind, no successor `F_B` possible. `prior_attempts` therefore bin
 ```text
 ordering, normative
 
-  1. F_B is constructed and its F64 digest computed          (no S_B spent)
+  1. F_B is constructed and its F64 digest computed          (S_B unspent)
   2. the evidence root h2_measure_b_<I40_B>_<F64> is created and the freeze
-     record written to it                                    (no S_B spent)
+     record written to it                                    (S_B unspent)
   3. the C3.6 admission gate is evaluated and its verdict written
   4. admission failed → the root is marked `inadmissible`, is NOT a
      consumed attempt, and is not bound by any successor's prior_attempts
      (Layer-P class, §5.1: a coordinate to retry against)
   5. admission passed → the controller writes and flushes the
-     `authorization_consumed` record, and only then consumes S_B and launches
-  6. every exit path — terminal, caught failure, or crash — leaves the root in
+     `authorization_consumed` record. THAT WRITE CONSUMES S_B (C3.3).
+  6. the measurement launches
+  7. every exit path — terminal, caught failure, or crash — leaves the root in
      exactly one of the three verify classes below
 ```
 
-Step 5 is deliberately ordered write-before-consume. If the process dies between
-the record and the launch, an attempt is recorded that spent nothing. That
-asymmetry is chosen: over-recording an attempt can only forbid a reuse, while
-under-recording one would let a spent authorization vanish.
+Step 5 is the consumption event itself, deliberately placed before the launch it
+authorizes. A process that dies between step 5 and step 6 has therefore spent
+`S_B` and produced an `unterminated` attempt; there is nothing to reconcile,
+because no other event ever claimed to be the consumption. The alternative
+ordering — consume at launch, record afterwards — makes the durable record lag
+the act it records, which is exactly how a spent authorization goes missing.
+
+This costs an attempt in one case, and the cost is accepted deliberately: a
+crash after the flush and before the launch spends `S_B` on a measurement that
+never ran. That is a real loss of one authorization, not a bookkeeping artifact,
+and it is preferred to the alternative in which the same crash leaves the
+authority state undecidable.
 
 **The three verify classes.** `check_h2_measure_archives.py` classifies every
 root in `prior_attempts` as exactly one, and "verifies" means the class's own
@@ -1136,7 +1152,7 @@ spent, and the outcome is Layer-P class (§5.1) — a coordinate to retry agains
 not an epistemic result.
 
 ```text
-admission (before S_B is consumed)
+admission (evaluated before the C3.5.1 step-5 write that consumes S_B)
   a. the bound Phase-A evidence root exists, verifies, and its manifest and
      checksum-inventory digests equal F_B
   b. its recorded observation selects no terminal (result = measurement_pass)
@@ -1145,7 +1161,7 @@ admission (before S_B is consumed)
   e. prior_attempts is complete and every named root exists and verifies in
      its C3.5.1 class
 
-post-launch (S_B consumed)
+after that write (S_B consumed; the measurement then launches)
   terminal 1 is selected by bound-input mutation only: any write to a bound
   input, the Phase-A evidence root included, sets `bound_input_mutated`.
 ```

@@ -17,8 +17,8 @@ document:
   path: headline_bridge_behavioral_identity_capture_declaration_20260725.md
 
 sealed_prefix:
-  bytes: 69228
-  sha256: "6d1697695ba8048b2b3b1847fbdc2e8f19c1902a02e04960a9dd6fb4e322200a"
+  bytes: 70274
+  sha256: "c26ef917d9e811646a27dfcffa37231fab92725a3b4e32944b23b601b28b775f"
   # Re-pin log (each entry was a deliberate pre-seal edit, not a slip):
   #   Review reset — coordinate / bounded probe / equivalence split; content-bound
   #                  fixtures/assets/build products; v2 Layer-P certificate.
@@ -61,6 +61,15 @@ sealed_prefix:
   #             archive exists cannot strand a spent authorization. Revised in
   #             place because Correction 3 has not merged; re-pinned to the
   #             entire revised body.
+  #   Review Correction 3, second review round (PR #291, before merge). The P1
+  #             repair had left S_B with two consumption points — C3.3 said
+  #             process launch, C3.5.1 said the record written before it — so a
+  #             crash between them made the authority state a matter of which
+  #             clause an implementer read. Collapsed to one: the durable
+  #             write-and-flush of `authorization_consumed` IS the consumption,
+  #             the launch follows it, and the one-authorization cost of a crash
+  #             in that window is stated as a deliberate loss rather than a
+  #             bookkeeping artifact. Re-pinned to the entire revised body.
 
 policy_target:
   kind: headline

@@ -473,6 +473,16 @@ Additionally, and specific to the accepted decisions:
   kill-switch: an unterminated attempt whose surviving artifacts already show
   perturbation or an invalid packet inherits the terminal-2/3 ban. Neither fix
   adds a pre-seal ruler edit. Re-pinned to 69 228 bytes, republished.
+- **2026-07-25** — the same review's second round accepted both repairs and found
+  one defect they had introduced: `S_B` had **two consumption points**. C3.3 said
+  process launch; C3.5.1's ordering wrote the `authorization_consumed` record
+  before it. The fail-closed direction was right but the authority state was not
+  single-valued — a crash in that window was spent, unspent, or governed-as-spent
+  depending on which clause an implementer read. Collapsed to one durable
+  linearization point: the write-and-flush **is** the consumption, the launch
+  follows it, and the one-authorization cost of a crash in that window is recorded
+  as a deliberate loss rather than described away as a record of nothing. Re-pinned
+  to 70 274 bytes, republished.
 - **2026-07-25** — a second review round closed two governance defects. The
   decision resolution had **two fact-owners** — this charter claimed to own the
   decision list while Correction 2 claimed to be §9's single resolution pointer,
