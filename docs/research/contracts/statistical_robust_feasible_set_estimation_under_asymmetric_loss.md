@@ -1332,7 +1332,7 @@ is the historical exception to the §20.0 hosting rule.
 
 ### 20.0 Status and scope
 
-Contract version **v1.2 (2026-07-16; append-only — v1.1 2026-07-13 text unchanged, §20.9 added: substrate as a fourth declaration coordinate, dual-space accounting in owner symbols, ρ/aggregation reduction typing, conservation identities, dependence declaration, cross-space inference obligations, and typed failure semantics; no ε-bound formula is made normative)**. Prior version note: v1.1 (2026-07-13; append-only — v1 2026-07-12 text unchanged, §20.8 and the §20.2 κ line added to consolidate the declaration seal bar accrued in owner reviews). This section is the normative home of the experiment contract. Issue threads, study notes, and PR descriptions must **reference** this section; they must not restate or fork it. Every new decision-layer study that uses this framework's language or infrastructure runs under this contract. Studies opened before v1 keep their sealed procedures but must be re-classified under §20.4 before any result is cited as a design recommendation.
+Contract version **v1.3 (2026-07-26; append-only — v1.2 text unchanged, §20.10 added: online / research mutual exclusion, the state machine that owns the research → online direction, the default frozen axis set and its per-instance escalation, the two close dispositions, the rule that the lock stays outside every axis it freezes, and the explicit non-goals)**. Prior version note: v1.2 (2026-07-16; append-only — v1.1 2026-07-13 text unchanged, §20.9 added: substrate as a fourth declaration coordinate, dual-space accounting in owner symbols, ρ/aggregation reduction typing, conservation identities, dependence declaration, cross-space inference obligations, and typed failure semantics; no ε-bound formula is made normative)**. Prior version note: v1.1 (2026-07-13; append-only — v1 2026-07-12 text unchanged, §20.8 and the §20.2 κ line added to consolidate the declaration seal bar accrued in owner reviews). This section is the normative home of the experiment contract. Issue threads, study notes, and PR descriptions must **reference** this section; they must not restate or fork it. Every new decision-layer study that uses this framework's language or infrastructure runs under this contract. Studies opened before v1 keep their sealed procedures but must be re-classified under §20.4 before any result is cited as a design recommendation.
 
 **Hosting rule.** This framework hosts cross-line semantics only. Line-specific predeclared procedures are hosted as standalone files under [`procedures/`](../eval/procedures/), referencing this framework for shared terms; they are not added as new framework sections. §19 (GT-support morphology) was drafted in-framework and is the historical exception — its sealed v1 body has been moved to [procedures/gt_support_morphology_procedure_v1.md](../eval/procedures/gt_support_morphology_procedure_v1.md) with §19.x numbering preserved, and the §19 slot is a tombstone.
 
@@ -1670,6 +1670,111 @@ study validly falsifying a proxy is a completed falsification, not an
 invalid study), while the same semantics arising incidentally elsewhere is a
 validity failure. §20.7 must preserve the distinction between a valid
 negative answer and an experiment that could not answer.
+
+### 20.10 Online / research mutual exclusion (v1.3)
+
+Online modification and research measurement are **mutually exclusive states of
+the repository**. §20.2 already requires a declaration to freeze its inputs
+before running; this section owns the complementary direction — what the online
+surface may do while that declaration is being measured against.
+
+The direction matters because only one of the two was ever guarded. Coordinate
+staleness (`check_runtime_identity_staleness.py`, run fail-closed by
+`pre_push.sh`) catches an online move that was not republished, so a bound study
+dies correctly. Nothing prevented the move. Evidence can therefore be collected
+against a substrate that is being edited underneath it, with the loss surfacing
+only after the measurement has been spent — and measurements here are spent
+under exactly-once authorizations, so the cost of learning late is the study.
+
+#### 20.10.1 The state machine
+
+```text
+ONLINE_OPEN
+    ↓ open      freeze the current runtime coordinate
+RESEARCH_OPEN
+    ↓ close     seal the conclusion and the version binding
+RESEARCH_CLOSED
+    ↓ release   explicit
+ONLINE_OPEN
+```
+
+The state is owned by `research_lock_v1.json` in this directory and is moved only
+by `scripts/tools/research_lock.py`. The graph is **total**: the three named
+transitions are the only legal moves and every other pair is refused. Enforcement
+is a contract test (`tests/contract/test_research_lock.py`), so it runs under the
+existing fail-closed pytest step; a **missing lock file is a deleted guard, not
+`ONLINE_OPEN`**.
+
+At most one instance is open at a time. This is the same WIP=1 shape the doc
+structure contract already applies to mainline charters (C8), not a new lock.
+
+#### 20.10.2 What is frozen, and what is deliberately not
+
+`open` freezes, by default, the two coordinate axes that the accepted
+`runtime_coordinate_bindings_v1` consumption rule already classifies as `stale`
+— **conclusion-invalidating** — rather than `re_attestation_required`:
+`decision_surface` and `identity_semantics`, plus the published bounded probe.
+This is not a new taxonomy; forking one would create a second truth about what
+invalidates evidence.
+
+`implementation`, `environment` and `runtime_inputs` are **not** frozen by
+default. Freezing `implementation` would hold every decision-relevant source file
+shut for the duration of a study and buy no fail-closed guarantee that the
+existing re-attestation path does not already provide. A study that genuinely
+needs more freezes more, per instance, via `frozen_axes`. Only source-derived
+axes are lockable at all: `environment` and `runtime_inputs` cannot be recomputed
+on every host, so they cannot be enforced on every push.
+
+While an instance is open, each frozen axis must equal the frozen digest **both**
+recomputed from source and as published. A republish is an online move; it is
+refused the same way, so re-publishing is not a route around the freeze.
+
+`RESEARCH_CLOSED` retains the frozen coordinate as the study's sealed version
+binding but enforces no freeze. `release` is what returns the repository to
+`ONLINE_OPEN`, and it drops the instance: a released lock keeps no ghost freeze.
+
+#### 20.10.3 Two dispositions, and the C5.1 boundary
+
+`close` records `disposition ∈ {sealed, voided}`. Both are legal exits — an
+instance that must be abandoned so the online surface can move is *voided*, and
+voiding is a first-class outcome rather than a deletion. Neither disposition is
+an accepted terminal: the lock records that measurement stopped, never what was
+concluded. Object state remains the claim-state registry's to write (doc
+structure contract C5.1), and a close that produced no accepted transition must
+not manufacture a registry `last_transition` (C6).
+
+#### 20.10.4 The lock is outside every axis it freezes
+
+H0 re-entry #3 terminated `H0_PROVENANCE_INVALID` because its declaration was
+simultaneously a frozen runtime-bound input and the target of the seal that
+mutated it: the transition judged itself a provenance mismatch. Any lock whose
+own transitions moved a frozen digest would reproduce that defect. Three
+consequences are normative, not incidental:
+
+1. the lock file classifies as `non_execution` and appears in no coordinate axis;
+2. the lock tool is not an `identity_semantics` path, so a defect in the guard
+   remains repairable while an instance is open;
+3. enforcement does not edit `pre_push.sh`, which is itself an
+   `identity_semantics` file.
+
+#### 20.10.5 Explicit non-goals
+
+The following are **not** obligations of this section and must not be added to it
+by projection or by review. Each is permanent friction bought against a need that
+has not been demonstrated:
+
+| Not required | Why |
+|:--|:--|
+| Applicability graph across versions | A closed study states its own scope; nothing consumes a cross-version graph |
+| Cross-version compatibility maintenance | `runtime_coordinate_bindings_v1` already refuses equivalence claims; `stale` is version lag, not retraction |
+| Automatic migration of closed research | A closed conclusion is true of the coordinate it was captured under and makes no claim beyond it |
+| Permanent preservation of historical runtimes | The `environment` axis records a recipe pointer, deliberately not a restorable environment |
+
+A closed study is not maintained, re-validated, or re-run. Multi-version
+reproducibility is established only by a separate accepted decision naming a
+concrete regulatory, regression-diagnostic, benchmark, or high-value
+re-verification need — never as a default, and never as a side effect of opening
+a new instance.
 
 ---
 

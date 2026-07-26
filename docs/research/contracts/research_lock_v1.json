@@ -1,0 +1,15 @@
+{
+  "schema": "research_lock_v1",
+  "purpose": "Machine-readable home for the one state that decides whether the online surface or a research measurement is open. The two are mutually exclusive; the transition graph is total and fail-closed. Rules live in the experiment contract §20.10; enforcement lives in tests/contract/test_research_lock.py; this file carries only the state.",
+  "why_a_sidecar": "The same reason `runtime_coordinate_bindings_v1` is a sidecar: nothing in this repository should parse Markdown to reach a fail-closed verdict. It is also why this file is JSON under `contracts/` rather than prose — the decision layer carries rules and state, never narrative (doc structure contract C0.1 / L3).",
+  "why_it_is_outside_every_axis_it_freezes": "H0 re-entry #3 died because its declaration was simultaneously a frozen runtime-bound input and the target of the seal that mutated it, so the transition judged itself a provenance mismatch. This file classifies as `non_execution` and appears in no coordinate axis; opening and closing an instance therefore cannot move anything the instance freezes.",
+  "enforcement": {
+    "ONLINE_OPEN": "no freeze; the online surface is editable",
+    "RESEARCH_OPEN": "every axis in `instance.frozen_axes` must equal `instance.frozen.coordinate`, both recomputed from source and as published in docs/reference/runtime_identity.generated.json. A republish is an online move and is refused the same way.",
+    "RESEARCH_CLOSED": "no freeze is enforced; `instance.frozen` is retained as the sealed version binding of a finished study, and `release` is what returns the repository to ONLINE_OPEN"
+  },
+  "absence": "A missing lock file is a deleted guard, not ONLINE_OPEN. The contract test fails closed on it.",
+  "state": "ONLINE_OPEN",
+  "instance": null,
+  "history": []
+}
