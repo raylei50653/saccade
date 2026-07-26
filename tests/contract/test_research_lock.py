@@ -3,7 +3,11 @@
 * the committed lock is well-formed and its history is append-only;
 * `RESEARCH_OPEN` fails closed when a frozen axis moves — recomputed from
   source, or re-published under a new coordinate;
-* `RESEARCH_CLOSED` keeps the version binding but enforces no freeze;
+* `sealed` is refused under drift and `voided` is not — enforcement stops at
+  `RESEARCH_CLOSED`, so sealing is the last moment the freeze can be checked;
+* opening does not inherit consumer-binding admissibility, so a closed study
+  going stale never gates the next one;
+* `release` governs instance lifetime, not editability;
 * the guard cannot be edited by the freeze it guards — the lock file and its
   tool are outside every axis an instance can freeze.
 """
@@ -297,6 +301,162 @@ def test_a_non_recomputable_axis_cannot_be_frozen() -> None:
 def test_a_closed_instance_names_a_disposition() -> None:
     with pytest.raises(lock.ResearchLockError, match="disposition"):
         lock.validate_lock(_lock(lock.RESEARCH_CLOSED, _instance()))
+
+
+# ── sealing is the last moment the freeze can be checked ─────────────────────
+
+
+@pytest.fixture
+def cli(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Drive the CLI against a throwaway lock file and a fixed publication."""
+    path = tmp_path / "research_lock_v1.json"
+    monkeypatch.setattr(lock, "lock_path", lambda: path)
+
+    def run(argv: list[str], *, published: dict[str, Any] | None = None) -> int:
+        monkeypatch.setattr(lock, "_published", lambda: published or _PUBLISHED)
+        return lock.main(argv)
+
+    def seed(state: str, instance: dict[str, Any] | None) -> None:
+        lock.write_lock(_lock(state, instance), path)
+
+    def read() -> dict[str, Any]:
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    run.seed = seed  # type: ignore[attr-defined]
+    run.read = read  # type: ignore[attr-defined]
+    return run
+
+
+def _source_backed_instance(**overrides: Any) -> dict[str, Any]:
+    """An instance whose frozen coordinate matches what source actually hashes to."""
+    measured = lock.recompute(lock.DEFAULT_FROZEN_AXES)
+    return _instance(
+        frozen={"coordinate": measured, "probe": _FROZEN_PROBE}, **overrides
+    )
+
+
+def test_source_drift_cannot_be_sealed(cli) -> None:
+    """The frozen digests are fixtures, so live source cannot match them."""
+    cli.seed(lock.RESEARCH_OPEN, _instance())
+    assert cli(["close", "--disposition", "sealed", "--note", "n"]) == 1
+    assert cli.read()["state"] == lock.RESEARCH_OPEN
+
+
+def test_published_drift_cannot_be_sealed(cli) -> None:
+    """Source is clean; the publication moved under the open instance."""
+    instance = _source_backed_instance()
+    cli.seed(lock.RESEARCH_OPEN, instance)
+    moved = {
+        "coordinate": {**_PUBLISHED["coordinate"], **instance["frozen"]["coordinate"]},
+        "probe": {"digest": "0" * 64},
+    }
+    assert (
+        cli(["close", "--disposition", "sealed", "--note", "n"], published=moved) == 1
+    )
+    assert cli.read()["state"] == lock.RESEARCH_OPEN
+
+
+def test_drift_may_always_be_voided(cli) -> None:
+    """The exit that claims nothing is the one a drifted instance keeps."""
+    cli.seed(lock.RESEARCH_OPEN, _instance())
+    assert cli(["close", "--disposition", "voided", "--note", "abandoned"]) == 0
+    closed = cli.read()
+    assert closed["state"] == lock.RESEARCH_CLOSED
+    assert closed["instance"]["disposition"] == "voided"
+
+
+def test_an_undrifted_instance_seals(cli) -> None:
+    instance = _source_backed_instance()
+    published = {
+        "coordinate": {**_PUBLISHED["coordinate"], **instance["frozen"]["coordinate"]},
+        "probe": {"digest": _FROZEN_PROBE},
+    }
+    cli.seed(lock.RESEARCH_OPEN, instance)
+    assert (
+        cli(["close", "--disposition", "sealed", "--note", "n"], published=published)
+        == 0
+    )
+    assert cli.read()["instance"]["disposition"] == "sealed"
+
+
+# ── opening does not inherit historical binding admissibility ────────────────
+
+
+def test_open_does_not_consult_consumer_bindings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A stale closed study is the expected end of its life, not the next one's gate.
+
+    The precondition is proven not to read the bindings file at all: if it did,
+    this would raise instead of returning no failures.
+    """
+
+    def explode(*_: Any, **__: Any) -> None:
+        raise AssertionError("publication_precondition read the consumer bindings")
+
+    monkeypatch.setattr(lock.staleness, "load_bindings", explode)
+    published = lock.staleness.load_published(_REPO / lock.staleness.PUBLISHED_REL)
+    assert lock.publication_precondition(published) == []
+
+
+def test_open_refuses_a_publication_that_drifted_from_source() -> None:
+    published = {
+        "coordinate": {**_PUBLISHED["coordinate"]},
+        "probe": {"digest": _FROZEN_PROBE},
+    }
+    failures = lock.publication_precondition(published)
+    assert failures
+    assert any("not republished" in message for message in failures)
+
+
+def test_a_stale_binding_does_not_block_a_new_instance(cli) -> None:
+    """End to end: the CLI opens while a historical binding would fail the consumer CLI."""
+
+    def explode(*_: Any, **__: Any) -> None:
+        raise AssertionError("open consulted the consumer bindings")
+
+    published = lock.staleness.load_published(_REPO / lock.staleness.PUBLISHED_REL)
+    cli.seed(lock.ONLINE_OPEN, None)
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(lock.staleness, "load_bindings", explode)
+        code = cli(
+            [
+                "open",
+                "--instance-id",
+                "next-study",
+                "--declaration",
+                "docs/example.md",
+                "--evidence-root",
+                "docs/evidence/example",
+            ],
+            published=published,
+        )
+    assert code == 0
+    assert cli.read()["state"] == lock.RESEARCH_OPEN
+
+
+# ── release governs instance lifetime, not editability ───────────────────────
+
+
+def test_release_is_required_before_the_next_instance(cli) -> None:
+    """`close` lifts the freeze; `release` is what lets a new study start."""
+    cli.seed(lock.RESEARCH_CLOSED, _instance(disposition="sealed"))
+    assert (
+        cli(
+            [
+                "open",
+                "--instance-id",
+                "second",
+                "--declaration",
+                "docs/example.md",
+                "--evidence-root",
+                "docs/evidence/example",
+            ]
+        )
+        == 1
+    )
+    assert cli(["release", "--note", "acknowledged"]) == 0
+    assert cli.read()["state"] == lock.ONLINE_OPEN
 
 
 # ── the guard cannot be edited by the freeze it guards ───────────────────────

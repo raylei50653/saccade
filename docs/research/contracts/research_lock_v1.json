@@ -6,8 +6,10 @@
   "enforcement": {
     "ONLINE_OPEN": "no freeze; the online surface is editable",
     "RESEARCH_OPEN": "every axis in `instance.frozen_axes` must equal `instance.frozen.coordinate`, both recomputed from source and as published in docs/reference/runtime_identity.generated.json. A republish is an online move and is refused the same way.",
-    "RESEARCH_CLOSED": "no freeze is enforced; `instance.frozen` is retained as the sealed version binding of a finished study, and `release` is what returns the repository to ONLINE_OPEN"
+    "RESEARCH_CLOSED": "no freeze is enforced. `close` is the step that lifts it: `sealed` is refused unless the freeze still holds at close time, and `voided` has abandoned the instance so the surface can move. `instance.frozen` is retained as the sealed version binding of a finished study."
   },
+  "what_release_does": "It governs instance lifetime, not editability. It drops the instance and is the acknowledgement required before the next one can be opened, because `open` runs only from ONLINE_OPEN. Only RESEARCH_OPEN holds the online surface shut.",
+  "what_open_requires": "Only that the publication is itself current against source. Whether previously accepted bindings are still admissible is a consumer question and is deliberately not a gate here — see §20.10.2.",
   "absence": "A missing lock file is a deleted guard, not ONLINE_OPEN. The contract test fails closed on it.",
   "state": "ONLINE_OPEN",
   "instance": null,

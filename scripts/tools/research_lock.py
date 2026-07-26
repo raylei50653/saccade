@@ -308,6 +308,22 @@ def _published() -> dict[str, Any]:
     return staleness.load_published(REPO_ROOT / staleness.PUBLISHED_REL)
 
 
+def publication_precondition(published: Mapping[str, Any]) -> list[str]:
+    """Is the publication itself current? Nothing about who already consumed it.
+
+    Opening an instance must not depend on global consumer state. The staleness
+    CLI additionally walks every `runtime_identity_bindings_v1` row and fails on
+    any `stale` or `re_attestation_required` binding, which is the right verdict
+    for a consumer and the wrong precondition for establishing a new lock: a
+    closed study going stale as online advances is the expected end of its life
+    (§20.10.5), not a reason to refuse the next study. Requiring it to be
+    current again would smuggle in exactly the cross-version maintenance the
+    contract excludes.
+    """
+    failures, _ = staleness.compare_publication(published, probe=None)
+    return failures
+
+
 def _do_open(args: argparse.Namespace) -> int:
     lock = load_lock()
     axes = [axis.strip() for axis in args.freeze_axes.split(",") if axis.strip()]
@@ -318,16 +334,16 @@ def _do_open(args: argparse.Namespace) -> int:
             f"of {list(LOCKABLE_AXES)}"
         )
 
-    # Freezing a coordinate that is already stale would bind the instance to a
-    # publication that no longer describes anything.
-    print("── staleness precondition")
-    if staleness.main([]) != 0:
+    # Freezing a coordinate that has already drifted from source would bind the
+    # instance to a publication that no longer describes anything.
+    published = _published()
+    stale = publication_precondition(published)
+    if stale:
         raise ResearchLockError(
-            "the published runtime coordinate is stale or unpublished; republish "
-            "before opening a research instance"
+            "the published runtime coordinate has drifted from source; republish "
+            "before opening a research instance: " + "; ".join(stale)
         )
 
-    published = _published()
     binding = staleness._published_binding(published)
     instance = {
         "instance_id": args.instance_id,
@@ -353,6 +369,19 @@ def _do_close(args: argparse.Namespace) -> int:
         raise ResearchLockError(
             f"nothing to close: the lock is {lock['state']}, not {RESEARCH_OPEN}"
         )
+    if args.disposition == "sealed":
+        # Enforcement stops at RESEARCH_CLOSED, so sealing is the last moment at
+        # which the freeze can be checked at all. Without this, drifting the
+        # coordinate and then sealing would launder a broken instance into a
+        # finished one and every check downstream would agree.
+        failures = verify(lock, _published())
+        if failures:
+            raise ResearchLockError(
+                "cannot seal an instance whose frozen binding moved — a sealed "
+                "instance asserts that its coordinate held for the whole "
+                "measurement; revert the drift, or close it as `voided`: "
+                + "; ".join(failures)
+            )
     instance = dict(lock["instance"])
     instance["disposition"] = args.disposition
     instance["registry_pointer"] = args.registry_pointer

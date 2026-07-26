@@ -1710,6 +1710,19 @@ structure contract already applies to mainline charters (C8), not a new lock.
 
 #### 20.10.2 What is frozen, and what is deliberately not
 
+`open` has exactly one precondition: **the publication must itself be current**
+— present, well-formed, and equal to the recomputable axes as derived from
+source. Freezing a coordinate that has already drifted would bind the instance
+to a publication that no longer describes anything.
+
+The precondition stops there, and the boundary is normative. It must **not**
+extend to whether previously accepted bindings are still admissible against the
+current publication. A closed study going `stale` as online advances is the
+expected end of its life, not a defect to repair; making the next study wait for
+it would reintroduce, through the back door, precisely the cross-version
+maintenance §20.10.5 excludes. Consumer admissibility and lock establishment are
+separate questions and must not share a gate.
+
 `open` freezes, by default, the two coordinate axes that the accepted
 `runtime_coordinate_bindings_v1` consumption rule already classifies as `stale`
 — **conclusion-invalidating** — rather than `re_attestation_required`:
@@ -1729,15 +1742,38 @@ While an instance is open, each frozen axis must equal the frozen digest **both*
 recomputed from source and as published. A republish is an online move; it is
 refused the same way, so re-publishing is not a route around the freeze.
 
-`RESEARCH_CLOSED` retains the frozen coordinate as the study's sealed version
-binding but enforces no freeze. `release` is what returns the repository to
-`ONLINE_OPEN`, and it drops the instance: a released lock keeps no ghost freeze.
+**`close` is the step that lifts the freeze**, not `release`. This follows from
+what the two dispositions mean rather than from convenience: `sealed` is refused
+unless the freeze still holds at that moment (§20.10.3), so a sealed instance has
+already proven its coordinate held for the whole measurement, and `voided` has
+abandoned the instance precisely so that the surface can move. In both cases
+measurement has stopped and there is nothing left for a freeze to protect.
+
+`release` therefore governs *instance* lifetime, not editability. It drops the
+instance — a released lock keeps no ghost freeze — and it is the explicit
+acknowledgement that must happen before the next instance can be opened, because
+`open` runs only from `ONLINE_OPEN`. `RESEARCH_CLOSED` keeps the frozen
+coordinate meanwhile as the study's sealed version binding. Nothing in this
+section may be read as claiming that `RESEARCH_CLOSED` holds the online surface
+shut; only `RESEARCH_OPEN` does.
 
 #### 20.10.3 Two dispositions, and the C5.1 boundary
 
 `close` records `disposition ∈ {sealed, voided}`. Both are legal exits — an
 instance that must be abandoned so the online surface can move is *voided*, and
-voiding is a first-class outcome rather than a deletion. Neither disposition is
+voiding is a first-class outcome rather than a deletion.
+
+The two are **not** interchangeable, because enforcement stops at
+`RESEARCH_CLOSED` and sealing is therefore the last moment at which the freeze
+can be checked at all. **`sealed` is refused unless the full freeze check passes
+at close time**; drifting a frozen axis and then sealing would otherwise launder
+a broken instance into a finished one, and every check downstream would agree
+with it. `voided` is always permitted, drift included: that is the exit whose
+whole purpose is to abandon an instance so the surface can move. A drifted
+instance therefore has exactly one legal exit, and it is the one that claims
+nothing.
+
+Neither disposition is
 an accepted terminal: the lock records that measurement stopped, never what was
 concluded. Object state remains the claim-state registry's to write (doc
 structure contract C5.1), and a close that produced no accepted transition must
