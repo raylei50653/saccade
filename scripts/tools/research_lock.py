@@ -91,11 +91,14 @@ INSTANCE_REQUIRED = (
 )
 HISTORY_REQUIRED = ("from", "to", "at", "instance_id", "note")
 
-RELEASE_HINT = (
-    "the frozen coordinate is being edited while a research instance is open — "
-    "either revert the edit, or close the instance "
-    "(`research_lock.py close --disposition sealed|voided --note ...`) and "
-    "release it (`research_lock.py release --note ...`) before editing online"
+# Every use of this sits inside a message about drift that has already happened,
+# so it must not offer `sealed` (which that drift has already made illegal) or
+# imply that `release` gates editing (it gates the next instance).
+DRIFT_EXIT_HINT = (
+    "the frozen coordinate moved while a research instance is open — either "
+    "revert the edit, or close the instance as voided "
+    "(`research_lock.py close --disposition voided --note ...`); `release` is "
+    "required only before another research instance can open"
 )
 
 
@@ -235,7 +238,7 @@ def verify(
             failures.append(
                 f"{axis} moved while research instance {instance_id!r} is open: "
                 f"frozen {frozen[axis]}, recomputed {measured.get(axis)}. "
-                f"{RELEASE_HINT}"
+                f"{DRIFT_EXIT_HINT}"
             )
 
     # A republish is an online move too: it is how a coordinate edit is made
@@ -247,14 +250,14 @@ def verify(
                 f"the published runtime identity was re-published on {axis} while "
                 f"research instance {instance_id!r} is open: frozen "
                 f"{frozen[axis]}, published {published_coordinate.get(axis)}. "
-                f"{RELEASE_HINT}"
+                f"{DRIFT_EXIT_HINT}"
             )
     published_probe = published["probe"]["digest"]
     if published_probe != instance["frozen"]["probe"]:
         failures.append(
             f"the published identity probe moved while research instance "
             f"{instance_id!r} is open: frozen {instance['frozen']['probe']}, "
-            f"published {published_probe}. {RELEASE_HINT}"
+            f"published {published_probe}. {DRIFT_EXIT_HINT}"
         )
     return failures
 
@@ -397,7 +400,10 @@ def _do_close(args: argparse.Namespace) -> int:
 def _do_release(args: argparse.Namespace) -> int:
     lock = load_lock()
     write_lock(transition(lock, "release", instance=None, note=args.note))
-    print(f"{RESEARCH_CLOSED} -> {ONLINE_OPEN}: online surface is editable again")
+    print(
+        f"{RESEARCH_CLOSED} -> {ONLINE_OPEN}: instance released; "
+        "a new research instance may now open"
+    )
     return 0
 
 

@@ -135,7 +135,14 @@ def test_a_moved_frozen_axis_fails_closed(axis: str) -> None:
     )
     assert len(failures) == 1
     assert axis in failures[0]
-    assert "close the instance" in failures[0]
+    assert "close the instance as voided" in failures[0]
+
+
+def test_the_drift_hint_offers_only_the_exit_that_is_still_legal() -> None:
+    """Drift has already made `sealed` illegal, and `release` never gated editing."""
+    assert "voided" in lock.DRIFT_EXIT_HINT
+    assert "sealed" not in lock.DRIFT_EXIT_HINT
+    assert "before editing online" not in lock.DRIFT_EXIT_HINT
 
 
 def test_a_republish_is_an_online_move_too() -> None:
@@ -438,8 +445,14 @@ def test_a_stale_binding_does_not_block_a_new_instance(cli) -> None:
 # ── release governs instance lifetime, not editability ───────────────────────
 
 
-def test_release_is_required_before_the_next_instance(cli) -> None:
-    """`close` lifts the freeze; `release` is what lets a new study start."""
+def test_release_is_required_before_the_next_instance(
+    cli, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`close` lifts the freeze; `release` is what lets a new study start.
+
+    The output is asserted too: executable prose is the part a user actually
+    follows, so it is where "release controls editability" would drift back in.
+    """
     cli.seed(lock.RESEARCH_CLOSED, _instance(disposition="sealed"))
     assert (
         cli(
@@ -457,6 +470,10 @@ def test_release_is_required_before_the_next_instance(cli) -> None:
     )
     assert cli(["release", "--note", "acknowledged"]) == 0
     assert cli.read()["state"] == lock.ONLINE_OPEN
+
+    output = capsys.readouterr().out
+    assert "a new research instance may now open" in output
+    assert "editable" not in output
 
 
 # ── the guard cannot be edited by the freeze it guards ───────────────────────
