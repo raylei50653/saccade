@@ -1,10 +1,9 @@
 """The H2 Layer-M evidence contract: what an archive must support to be believed.
 
-The controller is not written yet, and that is exactly why these tests exist
-first: the evidence root is the whole interface between an execution that spends
-an exactly-once authorization and the ruler that reads it. Five properties are
-pinned here, each answering a specific way an archive could look fine while
-supporting nothing:
+This contract was written before the controller and remains the interface
+between an execution that spends an exactly-once authorization and the ruler
+that reads it. Six properties are pinned here, each answering a specific way an
+archive could look fine while supporting nothing:
 
   * **the observation cannot express what the partition cannot decide** — the
     emitter carries exactly `ORDERED_PREDICATES`, so a controller cannot record a
@@ -12,6 +11,9 @@ supporting nothing:
   * **the recorded terminal is recomputed, never trusted** — the verifier
     re-selects from the archived observation, rebuilds the A7.6 comparison and
     re-verifies every capture-on packet;
+  * **Phase-A terminal-1 inputs are cross-checked** — archived certificate,
+    content bindings, launch probe and mutation observations must agree with the
+    controller predicates instead of passing merely because they have checksums;
   * **the right to have spent `S_B` is recomputed too** — § C3.6's five
     conditions are rebuilt from the bound Phase-A root, both freeze records, the
     archived Layer-P certificate and the prior-attempt chain, and must match the
@@ -21,7 +23,7 @@ supporting nothing:
     only works if a later missing artifact cannot erase an earlier discovered
     inequality or invalid packet. Otherwise killing the process at the first sign
     of perturbation launders a forbidden terminal 2/3 into a re-attemptable 4;
-  * **§ C3.9's trap stays shut** — the three new files must classify as
+  * **§ C3.9's trap stays shut** — the Layer-M files must classify as
     `plumbing_only` *and* hold no ruler of their own, so no semantic rule can
     move inside the frozen window without `identity_semantics` moving.
 
@@ -279,6 +281,64 @@ def _clean_predicates(**overrides: bool) -> dict[str, bool]:
     return values
 
 
+def _write_phase_a_launch_records(root: Path, *, head: str) -> dict[str, Any]:
+    build_digest = "b" * 64
+    runtime_manifest = {
+        "schema": "h2_runtime_input_manifest_v1",
+        "build_artifacts": {"digest": build_digest},
+        "coordinate_digest": COORDINATE["runtime_inputs"],
+        "full_digest": "f" * 64,
+    }
+    reference = {
+        "schema": behavior.RESULT_SCHEMA,
+        "build_witness": {"digest": build_digest},
+        "digest": PROBE,
+        "digests": [PROBE],
+        "identical": True,
+        "mode": "identity",
+        "sequence": behavior.IDENTITY_SEQUENCE,
+    }
+    published = {
+        "schema": verifier.IDENTITY_SCHEMA,
+        "coordinate": COORDINATE,
+        "equivalence": {"state": "unproven"},
+        "probe": {"digest": PROBE},
+        "publication_complete": True,
+    }
+    evidence.write_document(root, evidence.RUNTIME_INPUTS_NAME, runtime_manifest)
+    evidence.write_document(root, evidence.REFERENCE_PROBE_NAME, reference)
+    evidence.write_document(root, evidence.PUBLISHED_IDENTITY_NAME, published)
+    certificate = {
+        "schema": CERTIFICATE_SCHEMA,
+        "behavior_probe": PROBE,
+        "build_artifact_digest": build_digest,
+        "build_witness": reference["build_witness"],
+        "equivalence": "unproven",
+        "probe_result_file_digest": evidence.sha256_file(
+            root / evidence.REFERENCE_PROBE_NAME
+        ),
+        "published_coordinate": COORDINATE,
+        "published_identity_file_digest": evidence.sha256_file(
+            root / evidence.PUBLISHED_IDENTITY_NAME
+        ),
+        "published_probe": PROBE,
+        "runtime_input_coordinate_digest": runtime_manifest["coordinate_digest"],
+        "runtime_input_full_digest": runtime_manifest["full_digest"],
+        "runtime_input_manifest_file_digest": evidence.sha256_file(
+            root / evidence.RUNTIME_INPUTS_NAME
+        ),
+        "source_head": head,
+    }
+    evidence.write_document(root, evidence.CERTIFICATE_NAME, certificate)
+    evidence.write_document(root, evidence.LAUNCH_PROBE_NAME, reference)
+    evidence.write_document(
+        root,
+        evidence.MUTATION_NAME,
+        {"schema": evidence.MUTATION_SCHEMA, "events": [], "mutated": False},
+    )
+    return certificate
+
+
 def phase_a_root(
     parent: Path,
     *,
@@ -290,7 +350,18 @@ def phase_a_root(
     parent.mkdir(parents=True, exist_ok=True)
     root = parent / evidence.phase_a_root_name(head)
     root.mkdir()
-    evidence.write_document(root, evidence.FREEZE_NAME, _freeze_record())
+    certificate = _write_phase_a_launch_records(root, head=head)
+    evidence.write_document(
+        root,
+        evidence.FREEZE_NAME,
+        _freeze_record(
+            instrumentation_head=head,
+            layer_p_certificate={
+                "schema": CERTIFICATE_SCHEMA,
+                "digest": evidence.digest(certificate),
+            },
+        ),
+    )
     if runs:
         _write_sequence(root, SEQUENCE_A, perturbed=perturbed)
     values = predicates or _clean_predicates(capture_off_on_equal=not perturbed)
@@ -300,6 +371,21 @@ def phase_a_root(
         evidence.observation_predicates(observation), phase="a"
     )
     evidence.write_document(root, evidence.TERMINAL_NAME, _terminal_record(selection))
+    evidence.write_document(
+        root,
+        evidence.CONTROLLER_NAME,
+        {
+            "schema": evidence.CONTROLLER_SCHEMA,
+            "capture_phase": evidence.CAPTURE_PHASE["a"],
+            "certificate_mismatch_reasons": [],
+            "instrumentation_head": head,
+            "ordered_runs": list(evidence.RUN_IDS),
+            "result": selection.result,
+            "sequence": SEQUENCE_A,
+            "state": "terminal",
+            "terminal": selection.terminal,
+        },
+    )
     return _finalize(root, phase="a", head=head, result=selection.result)
 
 
@@ -456,6 +542,48 @@ def test_recorded_predicate_must_match_the_replay(tmp_path: Path) -> None:
         tmp_path, predicates=_clean_predicates(capture_off_on_equal=False)
     )
     with pytest.raises(verifier.VerificationError, match="independent replay"):
+        verifier.verify_evidence_root(root)
+
+
+def test_launch_probe_predicate_is_recomputed_from_the_archive(
+    tmp_path: Path,
+) -> None:
+    root = phase_a_root(tmp_path)
+    launch = json.loads((root / evidence.LAUNCH_PROBE_NAME).read_text(encoding="utf-8"))
+    launch["digest"] = "9" * 64
+    evidence.write_document(root, evidence.LAUNCH_PROBE_NAME, launch)
+    _refinalize(root)
+    with pytest.raises(verifier.VerificationError, match="launch-probe predicate"):
+        verifier.verify_evidence_root(root)
+
+
+def test_certificate_predicate_is_recomputed_from_archived_bindings(
+    tmp_path: Path,
+) -> None:
+    root = phase_a_root(tmp_path)
+    certificate = json.loads(
+        (root / evidence.CERTIFICATE_NAME).read_text(encoding="utf-8")
+    )
+    certificate["published_probe"] = "9" * 64
+    evidence.write_document(root, evidence.CERTIFICATE_NAME, certificate)
+    _refinalize(root)
+    with pytest.raises(verifier.VerificationError, match="certificate match"):
+        verifier.verify_evidence_root(root)
+
+
+def test_mutation_predicate_must_match_the_monitor_record(tmp_path: Path) -> None:
+    root = phase_a_root(tmp_path)
+    evidence.write_document(
+        root,
+        evidence.MUTATION_NAME,
+        {
+            "schema": evidence.MUTATION_SCHEMA,
+            "events": [{"classification": "bound_mutation", "mask": 2, "path": "x"}],
+            "mutated": True,
+        },
+    )
+    _refinalize(root)
+    with pytest.raises(verifier.VerificationError, match="mutation record"):
         verifier.verify_evidence_root(root)
 
 
@@ -930,6 +1058,8 @@ def test_terminal_4_re_attempts_stay_expressible(tmp_path: Path) -> None:
 
 LAYER_M_FILES = (
     "scripts/tools/h2_measurement_evidence.py",
+    "scripts/tools/run_h2_measurement.py",
+    "scripts/tools/run_h2_measurement_child.py",
     "scripts/tools/verify_h2_measurement.py",
     "scripts/tools/check_h2_measure_archives.py",
 )

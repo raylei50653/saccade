@@ -1,0 +1,627 @@
+"""The H2 S4 controller must produce exactly what the independent verifier reads."""
+
+# scope: tracking, system
+# function: contract
+# lifecycle: active
+
+from __future__ import annotations
+
+import hashlib
+import importlib.util
+import subprocess
+import sys
+from pathlib import Path
+from typing import Any, Mapping
+
+import pytest
+
+_REPO = Path(__file__).resolve().parents[2]
+_TOOLS = _REPO / "scripts" / "tools"
+if _TOOLS.as_posix() not in sys.path:
+    sys.path.insert(0, _TOOLS.as_posix())
+
+import build_runtime_identity as identity  # noqa: E402
+import h2_behavioral_identity as behavior  # noqa: E402
+import h2_measurement_evidence as evidence  # noqa: E402
+import run_h2_measurement as controller  # noqa: E402
+import run_h2_measurement_child as child  # noqa: E402
+import verify_h2_measurement as verifier  # noqa: E402
+from export_headline_bridge_decision_trace import (  # noqa: E402
+    canonical_semantic_packet,
+)
+from run_h2_layer_p import CERTIFICATE_SCHEMA  # noqa: E402
+from verify_headline_bridge_decision_trace import verify_capture  # noqa: E402
+
+
+def _packet_builder():
+    path = _REPO / "tests/unit/tracking/test_headline_bridge_decision_trace.py"
+    spec = importlib.util.spec_from_file_location("_h2_controller_packet", path)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module._packet
+
+
+_packet = _packet_builder()
+
+
+class NullMonitor:
+    def __init__(self, *_: object, **__: object) -> None:
+        self.history: list[Any] = []
+        self.closed = False
+
+    def drain(self) -> list[Any]:
+        return []
+
+    def close(self) -> None:
+        self.closed = True
+
+
+def _projection(capture: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    packet = canonical_semantic_packet(capture)
+    streams = packet["streams"]
+    candidates = [
+        row for row in streams["candidate_records"] if int(row["proposal_emitted"]) == 1
+    ]
+    claims = streams["claim_records"]
+    commits = streams["commit_records"]
+    proposal = {"candidates": candidates, "claims": claims}
+    winner = {
+        "commits": commits,
+        "winning_claims": [row for row in claims if int(row["claim_won"]) == 1],
+    }
+    return (
+        {
+            "count": len(candidates),
+            "digest": evidence.digest(proposal),
+            "records": proposal,
+        },
+        {
+            "count": len(commits),
+            "digest": evidence.digest(winner),
+            "records": winner,
+        },
+    )
+
+
+def _products(
+    invocation: Mapping[str, Any],
+    *,
+    perturbed_run: str | None = None,
+    invalid_run: str | None = None,
+) -> child.RunProducts:
+    run_id = str(invocation["run_id"])
+    mot_bytes = (
+        b"1,9,0,0,1,1,0.9,-1,-1,-1\n"
+        if run_id != perturbed_run
+        else b"1,9,0,0,2,1,0.9,-1,-1,-1\n"
+    )
+    packet = None
+    packet_verification = None
+    proposal = None
+    winner = None
+    if run_id != evidence.CAPTURE_OFF_RUN:
+        capture = _packet(run_uuid=f"{run_id}-uuid")
+        proposal, winner = _projection(capture)
+        if run_id == invalid_run:
+            packet = {"capture_schema_version": "invalid"}
+            packet_verification = {"failure": "packet_invalid", "state": "fail"}
+        else:
+            packet = capture
+            packet_verification = {"report": verify_capture(capture), "state": "pass"}
+    inventory = {
+        behavior.BEHAVIOR_MEMBERS[0]: [{"frame": 1, "pairs": [[9, 3], [7, 4]]}],
+        behavior.BEHAVIOR_MEMBERS[1]: [
+            {
+                "binary32_bits": [1, 2, 3, 4, 5],
+                "class": 1,
+                "frame": 1,
+                "row_index": 0,
+                "track_id": 9,
+            }
+        ],
+        behavior.BEHAVIOR_MEMBERS[2]: {
+            "length": len(mot_bytes),
+            "sha256": hashlib.sha256(mot_bytes).hexdigest(),
+        },
+        behavior.A76_OVERFLOW_MEMBER: list(behavior.A76_OVERFLOW_ZERO_VECTOR),
+        behavior.A76_PROJECTION_MEMBERS[0]: proposal,
+        behavior.BEHAVIOR_MEMBERS[3]: list(range(13)),
+        "schema": evidence.POLICY_INVENTORY_SCHEMA,
+        behavior.A76_PROJECTION_MEMBERS[1]: winner,
+    }
+    return child.RunProducts(
+        mot_bytes=mot_bytes,
+        policy_inventory=inventory,
+        packet=packet,
+        packet_verification=packet_verification,
+    )
+
+
+def _write(path: Path, payload: Mapping[str, Any]) -> None:
+    evidence.write_document(path.parent, path.name, payload)
+
+
+def _bundle(tmp_path: Path) -> controller.LaunchBundle:
+    head = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=_REPO, text=True
+    ).strip()
+    tree = subprocess.check_output(
+        ["git", "rev-parse", "HEAD^{tree}"], cwd=_REPO, text=True
+    ).strip()
+    coordinate = dict(
+        zip(
+            identity.ALL_COORDINATE_AXES,
+            (character * 64 for character in "12345"),
+            strict=True,
+        )
+    )
+    probe_digest = "a" * 64
+    build_dir = tmp_path / "build"
+    build_dir.mkdir()
+    manifest = {
+        "coordinate_digest": coordinate["runtime_inputs"],
+        "full_digest": "b" * 64,
+        "build_artifacts": {
+            "build_dir": build_dir.as_posix(),
+            "digest": "c" * 64,
+        },
+    }
+    reference = {
+        "schema": behavior.RESULT_SCHEMA,
+        "build_witness": {"digest": manifest["build_artifacts"]["digest"]},
+        "digest": probe_digest,
+        "digests": [probe_digest],
+        "identical": True,
+        "mode": "identity",
+        "sequence": behavior.IDENTITY_SEQUENCE,
+    }
+    published = {
+        "schema": identity.IDENTITY_SCHEMA,
+        "coordinate": coordinate,
+        "equivalence": {"state": "unproven"},
+        "probe": {"digest": probe_digest},
+        "publication_complete": True,
+    }
+    reference_path = tmp_path / "reference.json"
+    runtime_path = tmp_path / "runtime.json"
+    published_path = tmp_path / "published.json"
+    _write(reference_path, reference)
+    _write(runtime_path, manifest)
+    _write(published_path, published)
+    certificate = {
+        "schema": CERTIFICATE_SCHEMA,
+        "source_head": head,
+        "source_tree": tree,
+        "selected_base": "main",
+        "changed_path_verdict": {"admissible": True},
+        "decision_relevant_digest": coordinate["implementation"],
+        "equivalence": "unproven",
+        "identity_semantics_digest": coordinate["identity_semantics"],
+        "plumbing_set_digest": identity.plumbing_axis()["digest"],
+        "published_coordinate": coordinate,
+        "behavior_probe": probe_digest,
+        "build_witness": reference["build_witness"],
+        "fixture": behavior.IDENTITY_SEQUENCE,
+        "mode": "identity",
+        "probe_schema": behavior.RESULT_SCHEMA,
+        "published_probe": probe_digest,
+        "runtime_input_coordinate_digest": manifest["coordinate_digest"],
+        "runtime_input_full_digest": manifest["full_digest"],
+        "build_artifact_digest": manifest["build_artifacts"]["digest"],
+        "runtime_input_manifest_file_digest": evidence.sha256_file(runtime_path),
+        "probe_result_file_digest": evidence.sha256_file(reference_path),
+        "published_identity_file_digest": evidence.sha256_file(published_path),
+        "build_dir": build_dir.as_posix(),
+    }
+    certificate_path = tmp_path / "certificate.json"
+    _write(certificate_path, certificate)
+    freeze = {
+        "schema": evidence.FREEZE_SCHEMA,
+        "instrumentation_head": head,
+        "coordinate": coordinate,
+        "probe": probe_digest,
+        "layer_p_certificate": {
+            "schema": CERTIFICATE_SCHEMA,
+            "digest": evidence.digest(certificate),
+        },
+        "measurement_surface_digest": "d" * 64,
+        "prior_attempts": [],
+    }
+    freeze_path = tmp_path / "freeze.json"
+    _write(freeze_path, freeze)
+    return controller.LaunchBundle(
+        freeze=freeze,
+        certificate=certificate,
+        reference_probe=reference,
+        runtime_manifest=manifest,
+        published_identity=published,
+        freeze_path=freeze_path,
+        certificate_path=certificate_path,
+        reference_probe_path=reference_path,
+        runtime_manifest_path=runtime_path,
+        published_identity_path=published_path,
+    )
+
+
+def _probe(root: Path, **_: object) -> dict[str, Any]:
+    freeze = evidence.load_document(root, evidence.FREEZE_NAME)
+    manifest = evidence.load_document(root, evidence.RUNTIME_INPUTS_NAME)
+    payload = {
+        "schema": behavior.RESULT_SCHEMA,
+        "build_witness": {"digest": manifest["build_artifacts"]["digest"]},
+        "digest": freeze["probe"],
+        "digests": [freeze["probe"]],
+        "identical": True,
+        "mode": "identity",
+        "sequence": behavior.IDENTITY_SEQUENCE,
+    }
+    evidence.write_document(root, evidence.LAUNCH_PROBE_NAME, payload)
+    return payload
+
+
+def _no_revalidation(_bundle: controller.LaunchBundle) -> tuple[str, ...]:
+    """Synthetic fixtures exercise controller flow, not host runtime inputs."""
+    return ()
+
+
+def _launcher(
+    *,
+    perturbed_run: str | None = None,
+    invalid_run: str | None = None,
+):
+    def launch(
+        invocation_path: Path,
+        environment: Mapping[str, str],
+        **_: object,
+    ) -> int:
+        return child.execute_child(
+            invocation_path,
+            environment=environment,
+            runner=lambda invocation: _products(
+                invocation,
+                perturbed_run=perturbed_run,
+                invalid_run=invalid_run,
+            ),
+        )
+
+    return launch
+
+
+def _execute(
+    tmp_path: Path,
+    *,
+    perturbed_run: str | None = None,
+    invalid_run: str | None = None,
+):
+    bound = tmp_path / "bound"
+    bound.write_text("frozen\n", encoding="utf-8")
+    return controller.execute_controller(
+        _bundle(tmp_path),
+        evidence_parent=tmp_path / "evidence",
+        bound_paths=(bound,),
+        require_clean_checkout=False,
+        launch_probe=_probe,
+        launch_child=_launcher(perturbed_run=perturbed_run, invalid_run=invalid_run),
+        monitor_factory=NullMonitor,
+        bundle_revalidator=_no_revalidation,
+        inherited_environment={},
+    )
+
+
+def test_slot_normalization_sorts_by_slot_and_rejects_duplicates() -> None:
+    assert child.normalize_active_pairs([[5, 8], [9, 2]], frame_id=7) == [
+        [9, 2],
+        [5, 8],
+    ]
+    with pytest.raises(child.ChildError, match="duplicate slot"):
+        child.normalize_active_pairs([[5, 2], [9, 2]], frame_id=7)
+
+
+def test_child_vector_is_h2_specific_and_binds_one_invocation(tmp_path: Path) -> None:
+    invocation = (tmp_path / "invocation.json").resolve()
+    vector = controller.child_argv(invocation)
+    assert vector[-2:] == ("--invocation", invocation.as_posix())
+    assert vector[3].endswith("run_h2_measurement_child.py")
+    assert "run_h0_phase_a_child.py" not in vector
+
+
+def test_clean_controller_archive_verifies_as_phase_a_progression(
+    tmp_path: Path,
+) -> None:
+    bundle = _bundle(tmp_path)
+    bound = tmp_path / "bound"
+    bound.write_text("frozen\n", encoding="utf-8")
+    launched: list[str] = []
+
+    def launch(
+        invocation_path: Path,
+        environment: Mapping[str, str],
+        **_: object,
+    ) -> int:
+        invocation = evidence.load_document(
+            invocation_path.parent, invocation_path.name
+        )
+        launched.append(str(invocation["run_id"]))
+        return child.execute_child(
+            invocation_path,
+            environment=environment,
+            runner=_products,
+        )
+
+    root, selection = controller.execute_controller(
+        bundle,
+        evidence_parent=tmp_path / "evidence",
+        bound_paths=(bound,),
+        require_clean_checkout=False,
+        launch_probe=_probe,
+        launch_child=launch,
+        monitor_factory=NullMonitor,
+        bundle_revalidator=_no_revalidation,
+        inherited_environment={},
+    )
+    assert selection.terminal is None
+    assert verifier.verify_evidence_root(root)["result"] == selection.result
+    assert launched == list(evidence.RUN_IDS)
+    assert sorted(
+        path.name
+        for path in (root / evidence.RUNS_DIR / controller.SEQUENCE).iterdir()
+        if path.is_dir()
+    ) == list(evidence.RUN_IDS)
+
+
+def test_capture_inequality_selects_terminal_2(tmp_path: Path) -> None:
+    root, selection = _execute(tmp_path, perturbed_run=evidence.CAPTURE_ON_RUNS[0])
+    assert selection.terminal == verifier.partition.TERMINALS[1].name
+    assert verifier.verify_evidence_root(root)["terminal"] == selection.terminal
+
+
+def test_invalid_packet_selects_terminal_3(tmp_path: Path) -> None:
+    root, selection = _execute(tmp_path, invalid_run=evidence.CAPTURE_ON_RUNS[0])
+    assert selection.terminal == verifier.partition.TERMINALS[2].name
+    assert verifier.verify_evidence_root(root)["terminal"] == selection.terminal
+
+
+def test_certificate_mismatch_stops_before_any_measurement_run(
+    tmp_path: Path,
+) -> None:
+    bundle = _bundle(tmp_path)
+    bundle.freeze["layer_p_certificate"]["digest"] = "f" * 64
+    bound = tmp_path / "bound"
+    bound.write_text("frozen\n", encoding="utf-8")
+    root, selection = controller.execute_controller(
+        bundle,
+        evidence_parent=tmp_path / "evidence",
+        bound_paths=(bound,),
+        require_clean_checkout=False,
+        launch_probe=lambda *_args, **_kwargs: pytest.fail("probe must not run"),
+        launch_child=lambda *_args, **_kwargs: pytest.fail("child must not run"),
+        monitor_factory=NullMonitor,
+        bundle_revalidator=_no_revalidation,
+    )
+    assert selection.terminal == verifier.partition.TERMINALS[0].name
+    assert not (root / evidence.RUNS_DIR).exists()
+    assert verifier.verify_evidence_root(root)["terminal"] == selection.terminal
+
+
+def test_launch_probe_mismatch_stops_before_measurement_runs(tmp_path: Path) -> None:
+    bundle = _bundle(tmp_path)
+    bound = tmp_path / "bound"
+    bound.write_text("frozen\n", encoding="utf-8")
+
+    def moved_probe(root: Path, **_: object) -> dict[str, Any]:
+        payload = {
+            "schema": behavior.RESULT_SCHEMA,
+            "digest": "e" * 64,
+            "digests": ["e" * 64],
+            "identical": True,
+            "mode": "identity",
+            "sequence": behavior.IDENTITY_SEQUENCE,
+        }
+        evidence.write_document(root, evidence.LAUNCH_PROBE_NAME, payload)
+        return payload
+
+    root, selection = controller.execute_controller(
+        bundle,
+        evidence_parent=tmp_path / "evidence",
+        bound_paths=(bound,),
+        require_clean_checkout=False,
+        launch_probe=moved_probe,
+        launch_child=lambda *_args, **_kwargs: pytest.fail("child must not run"),
+        monitor_factory=NullMonitor,
+        bundle_revalidator=_no_revalidation,
+    )
+    assert selection.terminal == verifier.partition.TERMINALS[0].name
+    assert verifier.verify_evidence_root(root)["terminal"] == selection.terminal
+
+
+def test_child_failure_is_a_verifiable_terminal_4_envelope(tmp_path: Path) -> None:
+    bundle = _bundle(tmp_path)
+    bound = tmp_path / "bound"
+    bound.write_text("frozen\n", encoding="utf-8")
+
+    def failed_child(*_args: object, **_kwargs: object) -> int:
+        return 2
+
+    root, selection = controller.execute_controller(
+        bundle,
+        evidence_parent=tmp_path / "evidence",
+        bound_paths=(bound,),
+        require_clean_checkout=False,
+        launch_probe=_probe,
+        launch_child=failed_child,
+        monitor_factory=NullMonitor,
+        bundle_revalidator=_no_revalidation,
+    )
+    assert selection.terminal == verifier.partition.EXECUTION_INVALID_TERMINAL
+    assert verifier.verify_evidence_root(root)["terminal"] == selection.terminal
+
+
+def test_bound_input_drift_has_priority_over_execution_failure(
+    tmp_path: Path,
+) -> None:
+    bundle = _bundle(tmp_path)
+    bound = tmp_path / "bound"
+    bound.write_text("frozen\n", encoding="utf-8")
+
+    class DriftMonitor(NullMonitor):
+        def __init__(self, *_: object, **__: object) -> None:
+            super().__init__()
+            self.history = [
+                type(
+                    "Event",
+                    (),
+                    {
+                        "classification": "bound_mutation",
+                        "mask": 2,
+                        "path": bound.as_posix(),
+                    },
+                )()
+            ]
+
+    def drift(*_args: object, **_kwargs: object) -> int:
+        raise controller.h0_controller.DriftError("mutated")
+
+    root, selection = controller.execute_controller(
+        bundle,
+        evidence_parent=tmp_path / "evidence",
+        bound_paths=(bound,),
+        require_clean_checkout=False,
+        launch_probe=_probe,
+        launch_child=drift,
+        monitor_factory=DriftMonitor,
+        bundle_revalidator=_no_revalidation,
+    )
+    assert selection.terminal == verifier.partition.TERMINALS[0].name
+    assert verifier.verify_evidence_root(root)["terminal"] == selection.terminal
+
+
+def test_monitor_precedes_revalidation_and_inputs_are_revalidated_post_run(
+    tmp_path: Path,
+) -> None:
+    bundle = _bundle(tmp_path)
+    bound = tmp_path / "bound"
+    bound.write_text("frozen\n", encoding="utf-8")
+    events: list[str] = []
+
+    class OrderedMonitor(NullMonitor):
+        def __init__(self, *_: object, **__: object) -> None:
+            super().__init__()
+            events.append("monitor")
+
+    def revalidate(_bundle: controller.LaunchBundle) -> tuple[str, ...]:
+        events.append("revalidate")
+        return ()
+
+    def probe(root: Path, **kwargs: object) -> dict[str, Any]:
+        events.append("probe")
+        return _probe(root, **kwargs)
+
+    def launch(
+        invocation_path: Path,
+        environment: Mapping[str, str],
+        **_: object,
+    ) -> int:
+        events.append(f"run:{invocation_path.parent.name}")
+        return child.execute_child(
+            invocation_path,
+            environment=environment,
+            runner=_products,
+        )
+
+    _root, selection = controller.execute_controller(
+        bundle,
+        evidence_parent=tmp_path / "evidence",
+        bound_paths=(bound,),
+        require_clean_checkout=False,
+        launch_probe=probe,
+        launch_child=launch,
+        monitor_factory=OrderedMonitor,
+        bundle_revalidator=revalidate,
+        inherited_environment={},
+    )
+    assert selection.terminal is None
+    assert events == [
+        "monitor",
+        "revalidate",
+        "probe",
+        *(f"run:{run_id}" for run_id in evidence.RUN_IDS),
+        "revalidate",
+    ]
+
+
+def test_post_run_revalidation_failure_has_terminal_1_priority(
+    tmp_path: Path,
+) -> None:
+    calls = 0
+
+    def moved_after_runs(_bundle: controller.LaunchBundle) -> tuple[str, ...]:
+        nonlocal calls
+        calls += 1
+        return () if calls == 1 else ("runtime input moved",)
+
+    bundle = _bundle(tmp_path)
+    bound = tmp_path / "bound"
+    bound.write_text("frozen\n", encoding="utf-8")
+    root, selection = controller.execute_controller(
+        bundle,
+        evidence_parent=tmp_path / "evidence",
+        bound_paths=(bound,),
+        require_clean_checkout=False,
+        launch_probe=_probe,
+        launch_child=_launcher(),
+        monitor_factory=NullMonitor,
+        bundle_revalidator=moved_after_runs,
+        inherited_environment={},
+    )
+    assert calls == 2
+    assert selection.terminal == verifier.partition.TERMINALS[0].name
+    assert verifier.verify_evidence_root(root)["terminal"] == selection.terminal
+
+
+def test_final_drain_mutation_beats_a_nonzero_child(tmp_path: Path) -> None:
+    bundle = _bundle(tmp_path)
+    bound = tmp_path / "bound"
+    bound.write_text("frozen\n", encoding="utf-8")
+
+    class LateMutationMonitor(NullMonitor):
+        def drain(self) -> list[Any]:
+            if self.history:
+                return []
+            event = type(
+                "Event",
+                (),
+                {
+                    "classification": "bound_mutation",
+                    "mask": 2,
+                    "path": bound.as_posix(),
+                },
+            )()
+            self.history.append(event)
+            return [event]
+
+    root, selection = controller.execute_controller(
+        bundle,
+        evidence_parent=tmp_path / "evidence",
+        bound_paths=(bound,),
+        require_clean_checkout=False,
+        launch_probe=_probe,
+        launch_child=lambda *_args, **_kwargs: 2,
+        monitor_factory=LateMutationMonitor,
+        bundle_revalidator=_no_revalidation,
+    )
+    assert selection.terminal == verifier.partition.TERMINALS[0].name
+    assert verifier.verify_evidence_root(root)["terminal"] == selection.terminal
+
+
+def test_controller_files_remain_plumbing_only() -> None:
+    import h2_path_partition as path_partition
+
+    assert (
+        path_partition.classify("scripts/tools/run_h2_measurement.py")
+        == "plumbing_only"
+    )
+    assert (
+        path_partition.classify("scripts/tools/run_h2_measurement_child.py")
+        == "plumbing_only"
+    )

@@ -50,10 +50,11 @@ _TOOLS = REPO_ROOT / "scripts" / "tools"
 if _TOOLS.as_posix() not in sys.path:
     sys.path.insert(0, _TOOLS.as_posix())
 
+import h2_behavioral_identity as behavior  # noqa: E402
 import h2_measurement_evidence as evidence  # noqa: E402
 import h2_terminal_partition as partition  # noqa: E402
 import verify_h0_phase_a as h0_verifier  # noqa: E402  (imported, never modified)
-from build_runtime_identity import ALL_COORDINATE_AXES  # noqa: E402
+from build_runtime_identity import ALL_COORDINATE_AXES, IDENTITY_SCHEMA  # noqa: E402
 from export_headline_bridge_decision_trace import (  # noqa: E402
     OVERFLOW_KEYS,
     STREAMS,
@@ -209,6 +210,124 @@ def _authorization(root: Path, phase: str) -> dict[str, Any] | None:
     return _load(
         root, evidence.AUTHORIZATION_NAME, schema=evidence.AUTHORIZATION_SCHEMA
     )
+
+
+def _phase_a_launch_records(
+    root: Path,
+    name: evidence.RootName,
+    freeze: Mapping[str, Any],
+    observation: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Independently cross-check the controller's archived terminal-1 inputs."""
+    certificate = _load(root, evidence.CERTIFICATE_NAME, schema=CERTIFICATE_SCHEMA)
+    reference = _load(
+        root, evidence.REFERENCE_PROBE_NAME, schema=behavior.RESULT_SCHEMA
+    )
+    runtime_manifest = _load(root, evidence.RUNTIME_INPUTS_NAME)
+    published = _load(root, evidence.PUBLISHED_IDENTITY_NAME, schema=IDENTITY_SCHEMA)
+    mutation = _load(root, evidence.MUTATION_NAME, schema=evidence.MUTATION_SCHEMA)
+    controller = _load(
+        root, evidence.CONTROLLER_NAME, schema=evidence.CONTROLLER_SCHEMA
+    )
+
+    binding = freeze.get("layer_p_certificate")
+    coordinate = freeze.get("coordinate")
+    probe_digest = freeze.get("probe")
+    build_artifacts = runtime_manifest.get("build_artifacts")
+    reference_witness = reference.get("build_witness")
+    certificate_match = (
+        isinstance(binding, Mapping)
+        and binding.get("schema") == CERTIFICATE_SCHEMA
+        and binding.get("digest") == evidence.digest(certificate)
+        and freeze.get("instrumentation_head") == name.i40
+        and certificate.get("source_head") == name.i40
+        and certificate.get("published_coordinate") == coordinate
+        and certificate.get("behavior_probe") == probe_digest
+        and certificate.get("published_probe") == probe_digest
+        and isinstance(build_artifacts, Mapping)
+        and certificate.get("runtime_input_coordinate_digest")
+        == runtime_manifest.get("coordinate_digest")
+        and certificate.get("runtime_input_full_digest")
+        == runtime_manifest.get("full_digest")
+        and certificate.get("build_artifact_digest") == build_artifacts.get("digest")
+        and certificate.get("runtime_input_manifest_file_digest")
+        == evidence.sha256_file(root / evidence.RUNTIME_INPUTS_NAME)
+        and certificate.get("probe_result_file_digest")
+        == evidence.sha256_file(root / evidence.REFERENCE_PROBE_NAME)
+        and certificate.get("published_identity_file_digest")
+        == evidence.sha256_file(root / evidence.PUBLISHED_IDENTITY_NAME)
+        and reference.get("digest") == probe_digest
+        and reference.get("identical") is True
+        and reference.get("mode") == "identity"
+        and reference.get("sequence") == behavior.IDENTITY_SEQUENCE
+        and isinstance(reference_witness, Mapping)
+        and reference_witness.get("digest") == build_artifacts.get("digest")
+        and certificate.get("build_witness") == reference_witness
+        and published.get("coordinate") == coordinate
+        and isinstance(published.get("probe"), Mapping)
+        and published["probe"].get("digest") == probe_digest
+        and isinstance(published.get("equivalence"), Mapping)
+        and published["equivalence"].get("state") == "unproven"
+        and published.get("publication_complete") is True
+    )
+    recorded_certificate_match = observation.get("layer_p_certificate_matches_freeze")
+    mismatch_reasons = controller.get("certificate_mismatch_reasons")
+    if recorded_certificate_match is True and not certificate_match:
+        raise VerificationError(
+            "recorded Layer-P certificate match disagrees with the archived "
+            "freeze/certificate/content bindings"
+        )
+    if recorded_certificate_match is False and (
+        not isinstance(mismatch_reasons, list) or not mismatch_reasons
+    ):
+        raise VerificationError(
+            "recorded Layer-P certificate mismatch has no controller reason"
+        )
+
+    launch_path = root / evidence.LAUNCH_PROBE_NAME
+    launch_matches: bool | None = None
+    if launch_path.is_file():
+        launch = _load(root, evidence.LAUNCH_PROBE_NAME, schema=behavior.RESULT_SCHEMA)
+        launch_witness = launch.get("build_witness")
+        launch_matches = (
+            launch.get("digest") == probe_digest
+            and isinstance(launch_witness, Mapping)
+            and isinstance(build_artifacts, Mapping)
+            and launch_witness.get("digest") == build_artifacts.get("digest")
+        )
+        if observation.get("behavior_probe_equals_freeze") is not launch_matches:
+            raise VerificationError(
+                "recorded launch-probe predicate differs from the archived probe"
+            )
+    elif recorded_certificate_match is True and observation.get(
+        "execution_result"
+    ) not in {
+        result
+        for result, terminal in partition.RESULT_TO_TERMINAL.items()
+        if terminal == EXECUTION_INVALID_TERMINAL
+    }:
+        raise VerificationError(
+            "a certificate-admitted Phase-A archive has no launch-time probe"
+        )
+
+    events = mutation.get("events")
+    if (
+        not isinstance(events, list)
+        or not isinstance(mutation.get("mutated"), bool)
+        or mutation["mutated"] is not bool(events)
+        or observation.get("bound_input_mutated") is not mutation["mutated"]
+    ):
+        raise VerificationError(
+            "recorded bound-input predicate differs from the mutation record"
+        )
+    if (
+        controller.get("instrumentation_head") != name.i40
+        or controller.get("capture_phase") != evidence.CAPTURE_PHASE[name.phase]
+        or controller.get("ordered_runs") != list(evidence.RUN_IDS)
+        or controller.get("sequence") not in evidence.expected_sequences(name.phase)
+    ):
+        raise VerificationError("controller record disagrees with the Phase-A plan")
+    return controller
 
 
 def classify(root: Path) -> str:
@@ -459,7 +578,12 @@ def _sequence_replay(root: Path, sequence: str) -> SequenceReplay:
         )
         for run_id in evidence.RUN_IDS
     )
-    complete = complete_inventories and all(state == PASS for state, _ in states)
+    # Completeness and validity are different claims.  A present packet that
+    # independently verifies `fail` is still a complete artifact and is exactly
+    # how terminal 3 is evidenced.  Only `unavailable` means the completed
+    # execution omitted a required packet; `Replay.all_packets_pass` owns the
+    # separate validity verdict.
+    complete = complete_inventories and all(state != UNAVAILABLE for state, _ in states)
     return SequenceReplay(sequence, runs, complete, reconstructed["state"] == "unequal")
 
 
@@ -851,6 +975,11 @@ def _verify_complete(root: Path, *, visiting: frozenset[str]) -> dict[str, Any]:
     )
     if not isinstance(observation.get("execution_complete"), bool):
         raise VerificationError("observation has no boolean execution_complete")
+    controller_record = (
+        _phase_a_launch_records(root, name, freeze, observation)
+        if name.phase == "a"
+        else None
+    )
     strict = observation["execution_complete"]
     replay = _replay(root, name.phase, strict=strict)
     _kill_switch(replay, observation)
@@ -874,6 +1003,14 @@ def _verify_complete(root: Path, *, visiting: frozenset[str]) -> dict[str, Any]:
     )
     if manifest.get("result") != selection.result:
         raise VerificationError("manifest result differs from the recomputed selection")
+    if controller_record is not None and (
+        controller_record.get("result") != selection.result
+        or controller_record.get("terminal") != selection.terminal
+        or controller_record.get("state") != "terminal"
+    ):
+        raise VerificationError(
+            "controller record result/terminal differs from independent selection"
+        )
 
     # A pass is the only outcome that claims completeness, so it is the only one
     # required to show it (§ 7 terminal 5 / the Phase-A progression).

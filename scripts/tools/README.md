@@ -428,6 +428,8 @@ deleting.
 | `run_h0_phase_a.py` | stable | cli | A7/RC1 fail-closed Phase-A parent controller. |
 | `run_h0_phase_a_child.py` | stable | - | RC1 fixed Phase-A runtime child (parent-only entry point). |
 | `run_h2_layer_p.py` | stable | cli | H2 Layer P: retryable pre-seal plumbing, with no epistemic budget attached. |
+| `run_h2_measurement.py` | stable | cli | H2 S4 Phase-A Layer-M controller. |
+| `run_h2_measurement_child.py` | stable | cli | H2 Phase-A measurement child and recorder. |
 | `run_m_b1_5_stage2_q1q3.py` | experiment | cli | M-B1.5 Stage 2 Q1–Q3 runner: D_online label join + safe-negative mass audit. |
 | `run_m_b1_5_stage2_q4.py` | experiment | cli | M-B1.5 Stage 2 Q4 runner: signal separability on D_online. |
 | `run_m_b1_5_stage2_q45_atlas.py` | experiment | cli | M-B1.5 Stage 2 Q4.5: structured threshold-combination atlas. |

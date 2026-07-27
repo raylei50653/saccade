@@ -24,6 +24,11 @@ h2_measure_b_<I40_B>_<F64>           phase B   (§ C3.1; complete digest, never
                                      recomputed by the verifier, never trusted
     layer_p_certificate.json         the certificate F binds, archived so the
                                      § C3.6(d) condition can be recomputed
+    reference_probe.json             the Layer-P probe-result file F binds
+    launch_probe.json                the launch-time probe used by terminal 1
+    runtime_inputs.json              the complete bound-input manifest
+    published_identity.json          the coordinate/probe publication F binds
+    mutation_observation.json        the BoundInputMonitor record
     authorization_consumed.json      phase B: the § C3.5.1 step-5 write that
                                      *is* the consumption of S_B
     observation.json                 exactly ORDERED_PREDICATES (+ optional
@@ -80,6 +85,8 @@ TERMINAL_SCHEMA = "h2_terminal_selection_v1"
 FREEZE_SCHEMA = "h2_measurement_freeze_v1"
 ADMISSION_SCHEMA = "h2_admission_verdict_v1"
 AUTHORIZATION_SCHEMA = "h2_authorization_consumed_v1"
+CONTROLLER_SCHEMA = "h2_measurement_controller_v1"
+MUTATION_SCHEMA = "h2_bound_input_mutation_v1"
 
 # Re-exported, never redeclared: the schema identifier is a ruler fact and lives
 # in `h2_behavioral_identity.py`, which owns the A7.6 member definitions (§ 4).
@@ -126,6 +133,12 @@ POLICY_INVENTORY_NAME = "policy_inventory.json"
 PACKET_NAME = "packet.json"
 PACKET_VERIFICATION_NAME = "packet_verification.json"
 CERTIFICATE_NAME = "layer_p_certificate.json"
+REFERENCE_PROBE_NAME = "reference_probe.json"
+LAUNCH_PROBE_NAME = "launch_probe.json"
+RUNTIME_INPUTS_NAME = "runtime_inputs.json"
+PUBLISHED_IDENTITY_NAME = "published_identity.json"
+MUTATION_NAME = "mutation_observation.json"
+CONTROLLER_NAME = "controller.json"
 
 RUNS_DIR = "runs"
 
@@ -397,7 +410,13 @@ def describe() -> dict[str, Any]:
             "freeze": FREEZE_NAME,
             "admission": ADMISSION_NAME,
             "authorization_consumed": AUTHORIZATION_NAME,
+            "controller": CONTROLLER_NAME,
+            "launch_probe": LAUNCH_PROBE_NAME,
+            "mutation_observation": MUTATION_NAME,
             "observation": OBSERVATION_NAME,
+            "published_identity": PUBLISHED_IDENTITY_NAME,
+            "reference_probe": REFERENCE_PROBE_NAME,
+            "runtime_inputs": RUNTIME_INPUTS_NAME,
             "terminal": TERMINAL_NAME,
         },
         "run_ids": list(RUN_IDS),
