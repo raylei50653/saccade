@@ -6,7 +6,7 @@ doc-module: semantic
 owner-module: semantic
 work-class: mainline-study
 wip-role: non-wip
-activation-gate: "四項 owner decision 已於 2026-07-25 accepted（#286）；Phase-B chain form 已於 2026-07-25 accepted（#290）並成文為 declaration Review Correction 3；C3.9 pre-seal ruler 編輯（七序列 manifest + phase_a_evidence schema + phase-aware partition）已 landed、republish，並於 `7c348f4e` 通過 controlled-host re-attestation（run 30164262580）；Layer-M review 又把語義常數搬回 ruler ⇒ identity_semantics 再動一次（`3edf6953`）已 republish，並於 `f2c2510a`（run 30243657973）重新通過 controlled-host re-attestation；PR #295 第二輪修補再次修改 packet-invalid exception boundary 與 terminal-2 surviving-evidence ruler，identity_semantics `93f87a83` 已 republish、gate 2 等待該 PR head 的 controlled-host re-attestation；S4 Phase-A controller（items 0–4）已 implemented/tested、待 review；剩餘 gate = controlled-host re-attestation + S4 review + seal head 的 Layer-P pass certificate + 該 head 的 coordinate/工作流綠，然後才談 seal"
+activation-gate: "四項 owner decision 已於 2026-07-25 accepted（#286）；Phase-B chain form 已於 2026-07-25 accepted（#290）並成文為 declaration Review Correction 3；C3.9 pre-seal ruler 編輯（七序列 manifest + phase_a_evidence schema + phase-aware partition）已 landed、republish，並於 `7c348f4e` 通過 controlled-host re-attestation（run 30164262580）；Layer-M review 又把語義常數搬回 ruler ⇒ identity_semantics 再動一次（`3edf6953`）已 republish，並於 `f2c2510a`（run 30243657973）重新通過 controlled-host re-attestation；PR #295 第二輪修補再次修改 packet-invalid exception boundary 與 terminal-2 surviving-evidence ruler，identity_semantics `93f87a83` 已 republish，並於 `32935d5d`（run 30254189532）重新通過 controlled-host re-attestation ⇒ gate 2 再度關閉；S4 Phase-A controller（items 0–4）已 implemented/tested、待 review；剩餘 gate = S4 review + seal head 的 Layer-P pass certificate + 該 head 的 coordinate/工作流綠，然後才談 seal"
 target-decision-layer: none
 primary-intent: boundary-diagnostic
 output-class: "diagnostic result | substrate-fidelity edge proposal"
@@ -722,6 +722,12 @@ Additionally, and specific to the accepted decisions:
   The exception/terminal-priority distinction moved `identity_semantics` to
   `93f87a83`; the publication was regenerated with the runtime-input coordinate
   and bounded probe digest unchanged, while equivalence remains `unproven`.
-  Acceptance gate 2 remains open until this repaired PR head is reviewed and
-  passes controlled-host re-attestation. No Layer-P certificate or seal may be
-  issued before then.
+  At this point acceptance gate 2 was reopened. No Layer-P certificate or seal
+  could be issued until the repaired head was republished and re-attested.
+
+- **2026-07-27** — controlled-host re-attestation passed on the repaired code
+  head `32935d5d` (run 30254189532), with the bounded probe and runtime-input
+  coordinate equal to the republished identity. This closes acceptance gate 2
+  for the repaired surface; S4 review, an exact seal-head Layer-P certificate
+  and separate owner authorization remain outstanding. No certificate or seal
+  was created by this run.
