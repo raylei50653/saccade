@@ -67,10 +67,16 @@
   H0 sealed history / 五個 spent `S` / permanent ledger 全部不變）；authorizes no
   capture, no `I`/`F`/`S`, no re-entry；Phase-A Layer-M controller implemented,
   contract-tested, reviewed and merged（[PR #295](https://github.com/raylei50653/saccade/pull/295)，
-  merge `b2f3c23f…`）⇒ S4 code-review gate closed；剩餘 gate 依序（Acceptance
-  items 4→5→6）= seal-candidate head 的 coordinate/probe current + controlled-host
-  綠 → 同一 head 的 Layer-P certificate + independent verification → separate
-  owner exactly-once authorization；do not seal or execute →
+  merge `b2f3c23f…`）⇒ S4 code-review gate closed；**Acceptance items 4→5→6 已於
+  2026-07-27 在 head `0a5dffe9…` 全部達成並執行一次 ⇒ authorization spent、
+  terminal `H2_INPUT_MUTATED_DURING_MEASUREMENT`、0/4 ordered runs started、
+  no capture、no seal、equivalence 仍 unproven；根因＝controller self-mutation
+  （自建 evidence root 後又要求 checkout 乾淨），非 head/binding/ruler 問題**；
+  items 4–5 satisfied-then-void（須在 successor head 重建）；item 6 已 consumed、
+  永久 spent（不是重建，而是 owner 另行簽發新授權）；下一步＝successor head 上的 controller repair，
+  之後 acceptance 週期在該 head 全部重建、authorization 由 owner 另行簽發；do not re-run →
+  [failure evidence](research/evidence/h2_phase_a_failed_attempt_0a5dffe9_20260727/)
+  ·
   [task charter](../../research/threads/h2_behavioral_identity_capture_task.md)
   · [declaration](research/headline_bridge_behavioral_identity_capture_declaration_20260725.md)
   · owner decision surface [#286](https://github.com/raylei50653/saccade/issues/286)（四項決策；不授權任何執行）

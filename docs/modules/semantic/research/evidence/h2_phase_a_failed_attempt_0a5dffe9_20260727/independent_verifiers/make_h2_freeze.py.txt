@@ -1,0 +1,174 @@
+"""One-shot canonical serialization of an `h2_measurement_freeze_v1` record.
+
+Reads only already-verified assets, writes exactly one gitignored file, and
+modifies nothing tracked. Every field is derived mechanically from a primary
+source; nothing is typed in by hand. The record carries exactly the fields the
+controller and the archive verifier consume — no provenance extras, because F's
+own canonical digest (F64) is its identity and unknown keys would move it.
+
+Refuses to write unless every precondition below holds.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+REPO = Path("/home/ray/developer/ai/saccade")
+CERT = REPO / "out/h2_layer_p/cert_full_base.json"
+RECORD_DIR = REPO / "out/h2_layer_p/20260727T151357Z"
+PUBLISHED = REPO / "docs/reference/runtime_identity.generated.json"
+OUT = REPO / "out/h2_seal/freeze.json"
+
+EXPECTED_HEAD = "0a5dffe921d78fce8e525baf8b4b624fc9ab957c"
+FREEZE_SCHEMA = "h2_measurement_freeze_v1"
+CERTIFICATE_SCHEMA = "h2_layer_p_certificate_v2"
+AXES = ("decision_surface", "environment", "identity_semantics", "implementation", "runtime_inputs")
+
+
+def die(msg: str) -> None:
+    print(f"REFUSED: {msg}", file=sys.stderr)
+    raise SystemExit(2)
+
+
+def require(ok: bool, msg: str) -> None:
+    if not ok:
+        die(msg)
+    print(f"  ok  {msg}")
+
+
+def git(*args: str) -> str:
+    return subprocess.run(
+        ["git", *args], cwd=REPO, capture_output=True, text=True, check=True
+    ).stdout.strip()
+
+
+def canonical(value: object) -> bytes:
+    return json.dumps(
+        value, allow_nan=False, ensure_ascii=True, separators=(",", ":"), sort_keys=True
+    ).encode("utf-8")
+
+
+def digest(value: object) -> str:
+    return hashlib.sha256(canonical(value)).hexdigest()
+
+
+def is_hex(value: object, length: int) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == length
+        and all(c in "0123456789abcdef" for c in value)
+    )
+
+
+cert_bytes = CERT.read_bytes()
+cert = json.loads(cert_bytes)
+probe = json.loads((RECORD_DIR / "behavior_probe.json").read_text())
+manifest = json.loads((RECORD_DIR / "runtime_inputs.json").read_text())
+published = json.loads(PUBLISHED.read_text())
+
+print("preconditions:")
+
+# 1. the certificate is itself canonical on disk, so its digest is unambiguous
+require(
+    cert_bytes == canonical(cert) + b"\n",
+    "certificate file bytes are canonical JSON + newline",
+)
+require(cert["schema"] == CERTIFICATE_SCHEMA, f"certificate schema is {CERTIFICATE_SCHEMA}")
+
+# 2. exact head / tree
+head, tree = git("rev-parse", "HEAD"), git("rev-parse", "HEAD^{tree}")
+require(head == EXPECTED_HEAD, f"git HEAD is the seal candidate {EXPECTED_HEAD}")
+require(cert["source_head"] == head, "certificate source_head == git HEAD")
+require(cert["source_tree"] == tree, "certificate source_tree == git HEAD^{tree}")
+require(not git("status", "--porcelain"), "working tree is clean (tracked and untracked)")
+
+# 3. the base is a full git object id
+require(
+    is_hex(cert.get("selected_base"), 40)
+    and git("rev-parse", cert["selected_base"]) == cert["selected_base"],
+    "selected_base is a full 40-hex commit that resolves to itself",
+)
+require(
+    cert["changed_path_verdict"].get("admissible") is True
+    and not cert["changed_path_verdict"].get("unclassified"),
+    "changed-path verdict is admissible with nothing unclassified",
+)
+
+# 4. the five coordinate axes, by schema, digest and published content
+coordinate = cert["published_coordinate"]
+require(tuple(sorted(coordinate)) == AXES, "certificate coordinate carries exactly the five axes")
+require(
+    all(is_hex(coordinate[a], 64) for a in AXES),
+    "every coordinate axis is a complete 64-hex digest",
+)
+require(
+    all(coordinate[a] == published["axes"][a]["digest"] for a in AXES),
+    "every axis equals the published identity file",
+)
+require(
+    coordinate["implementation"] == cert["decision_relevant_digest"]
+    and coordinate["identity_semantics"] == cert["identity_semantics_digest"]
+    and coordinate["runtime_inputs"] == cert["runtime_input_coordinate_digest"]
+    == manifest["coordinate_digest"],
+    "axis digests agree with the certificate's own fields and the manifest",
+)
+
+# 5. probe schema and digest
+require(
+    probe["schema"] == "h2_behavior_probe_result_v1"
+    and probe["mode"] == "identity"
+    and probe["sequence"] == "MOT17-09-SDP"
+    and probe.get("identical") is True,
+    "reference probe is the fixed identity probe and reproduced identically",
+)
+require(
+    is_hex(probe["digest"], 64)
+    and probe["digest"] == cert["behavior_probe"] == cert["published_probe"]
+    == published["probe"]["digest"],
+    "probe digest agrees: probe file == certificate == published identity",
+)
+
+# 6. equivalence must not be upgraded anywhere
+require(
+    cert["equivalence"] == "unproven"
+    and published["equivalence"]["state"] == "unproven"
+    and published["publication_complete"] is True,
+    "equivalence stays unproven and the publication is complete",
+)
+
+# 7. the certificate binding is a real hash of the certificate's canonical bytes
+cert_digest = digest(cert)
+require(
+    cert_digest == hashlib.sha256(cert_bytes[:-1]).hexdigest(),
+    "certificate digest recomputed two independent ways (object and file bytes)",
+)
+
+freeze = {
+    "schema": FREEZE_SCHEMA,
+    "instrumentation_head": cert["source_head"],
+    "coordinate": dict(coordinate),
+    "probe": cert["behavior_probe"],
+    "layer_p_certificate": {"schema": CERTIFICATE_SCHEMA, "digest": cert_digest},
+}
+
+# 8. F is canonically serializable and its own digest is stable under a round trip
+payload = canonical(freeze) + b"\n"
+require(
+    canonical(json.loads(payload)) + b"\n" == payload,
+    "freeze survives a canonical JSON round trip byte-identically",
+)
+f64 = digest(freeze)
+require(is_hex(f64, 64), "freeze canonical digest (F64) is a complete 64-hex value")
+
+if OUT.exists():
+    die(f"{OUT} already exists; refusing to overwrite an existing freeze record")
+OUT.parent.mkdir(parents=True, exist_ok=True)
+OUT.write_bytes(payload)
+
+print(f"\nwrote {OUT}")
+print(f"F64  {f64}")
+print(f"cert {cert_digest}")

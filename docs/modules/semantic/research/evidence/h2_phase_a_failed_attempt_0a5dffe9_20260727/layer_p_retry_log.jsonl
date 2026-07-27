@@ -1,0 +1,15 @@
+{"coordinate":"retry_admissibility","detail":"invariant-authority paths may not change in a Layer-P retry \u2014 the guard cannot be edited by the retry it guards: scripts/tools/build_runtime_identity.py, scripts/tools/check_runtime_identity_staleness.py, scripts/tools/h2_behavioral_identity.py, scripts/tools/h2_path_partition.py; unclassified paths (fail-closed; classify them in h2_path_partition.py first): scripts/pre_push.sh, scripts/tools/README.md","record":"out/h2_layer_p/20260725T063250Z/layer_p.json","result":"plumbing_blocked","utc":"2026-07-25T06:32:50Z"}
+{"coordinate":"retry_admissibility","detail":"invariant-authority paths may not change in a Layer-P retry \u2014 the guard cannot be edited by the retry it guards: scripts/tools/build_runtime_identity.py, scripts/tools/check_runtime_identity_staleness.py, scripts/tools/h2_behavioral_identity.py, scripts/tools/h2_path_partition.py","record":"out/h2_layer_p/20260725T063342Z/layer_p.json","result":"plumbing_blocked","utc":"2026-07-25T06:33:42Z"}
+{"coordinate":null,"detail":null,"record":"out/h2_layer_p/20260725T063355Z/layer_p.json","result":"plumbing_pass","utc":"2026-07-25T06:34:07Z"}
+{"coordinate":null,"detail":null,"record":"out/h2_layer_p/20260725T063445Z/layer_p.json","result":"plumbing_pass","utc":"2026-07-25T06:36:53Z"}
+{"coordinate":null,"detail":null,"record":"out/h2_layer_p/20260725T074928Z/layer_p.json","result":"plumbing_pass","utc":"2026-07-25T07:49:42Z"}
+{"coordinate":null,"detail":null,"record":"out/h2_layer_p/20260725T080244Z/layer_p.json","result":"plumbing_pass","utc":"2026-07-25T08:02:59Z"}
+{"coordinate":null,"detail":null,"record":"out/h2_layer_p/20260725T084329Z/layer_p.json","result":"plumbing_pass","utc":"2026-07-25T08:43:44Z"}
+{"coordinate":null,"detail":null,"record":"out/h2_layer_p/20260725T090034Z/layer_p.json","result":"plumbing_pass","utc":"2026-07-25T09:00:54Z"}
+{"coordinate":null,"detail":null,"record":"out/h2_layer_p/20260725T090624Z/layer_p.json","result":"plumbing_pass","utc":"2026-07-25T09:06:48Z"}
+{"coordinate":null,"detail":null,"record":"out/h2_layer_p/20260725T091248Z/layer_p.json","result":"plumbing_pass","utc":"2026-07-25T09:13:04Z"}
+{"coordinate":null,"detail":null,"record":"out/h2_layer_p/20260725T091831Z/layer_p.json","result":"plumbing_pass","utc":"2026-07-25T09:18:48Z"}
+{"coordinate":null,"detail":null,"record":"out/h2_layer_p/20260725T092214Z/layer_p.json","result":"plumbing_pass","utc":"2026-07-25T09:22:38Z"}
+{"coordinate":"preflight","detail":"build/h2_layer_p exists at launch; remove it or pass --skip-build","record":"out/h2_layer_p/20260727T145959Z/layer_p.json","result":"plumbing_blocked","utc":"2026-07-27T14:59:59Z"}
+{"coordinate":null,"detail":null,"record":"out/h2_layer_p/20260727T150041Z/layer_p.json","result":"plumbing_pass","utc":"2026-07-27T15:03:25Z"}
+{"coordinate":null,"detail":null,"record":"out/h2_layer_p/20260727T151357Z/layer_p.json","result":"plumbing_pass","utc":"2026-07-27T15:16:24Z"}

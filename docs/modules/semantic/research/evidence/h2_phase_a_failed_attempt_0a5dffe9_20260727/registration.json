@@ -1,0 +1,54 @@
+{
+ "attempt": {
+  "authorization": "spent",
+  "certificate_digest": "d95859cb3cc27eeadb72b0f94fdcf45107c590058dd2c288e14bcd47c3e24802",
+  "controller_exit_code": 2,
+  "f64": "a03fc4590ca931435fde4a93f28bec8ed156fe852718cd214e780e002d97fd8b",
+  "faithful_capture": false,
+  "runs_executed": 0,
+  "source_head": "0a5dffe921d78fce8e525baf8b4b624fc9ab957c",
+  "source_tree": "5530be2d67b8e7c83a7a858a44a2b11a1c347927",
+  "terminal": "H2_INPUT_MUTATED_DURING_MEASUREMENT"
+ },
+ "custody_incident": {
+  "archive_checksums_before_and_after": "12/12 OK",
+  "controller_records_affected": false,
+  "post_repair_archive_file_count": 13,
+  "repair": "moved out of the archive into out/h2_seal/failure_scene_20260727/, nothing deleted",
+  "what": "five scene files were created inside the evidence root by a relative-path command after a persisted `cd`"
+ },
+ "inventory": "SHA256SUMS.json is the authoritative packet inventory (paths packet-relative); it covers every file here except itself",
+ "inventory_note": "paths are packet-relative; SHA256SUMS.json is the authoritative inventory",
+ "original_untracked_locations": {
+  "controller_archive": "docs/modules/semantic/research/evidence/h2_measure_0a5dffe921d78fce8e525baf8b4b624fc9ab957c/",
+  "freeze": "out/h2_seal/freeze.json",
+  "layer_p_certificate": "out/h2_layer_p/cert_full_base.json",
+  "layer_p_record": "out/h2_layer_p/20260727T151357Z/",
+  "layer_p_retry_log": "out/h2_layer_p/retry_log.jsonl",
+  "repository_external_backup": "/home/ray/h2_seal_failure_evidence_0a5dffe9_20260727 (read-only)"
+ },
+ "registered_utc": "2026-07-27T15:43:03Z",
+ "root_cause_sites": [
+  {
+   "defect": "clean-checkout gate immediately followed by creating a non-ignored evidence root in the same checkout",
+   "file": "scripts/tools/run_h2_measurement.py",
+   "lines": "1050-1057"
+  },
+  {
+   "defect": "checkout-hygiene reason folded into layer_p_certificate_matches_freeze",
+   "file": "scripts/tools/run_h2_measurement.py",
+   "lines": "1140-1145"
+  },
+  {
+   "defect": "stop boundary repeats the unsatisfiable clean-checkout requirement",
+   "file": "scripts/tools/run_h2_measurement.py",
+   "lines": "1291-1293"
+  },
+  {
+   "defect": "EVIDENCE_REL points inside the tracked docs tree",
+   "file": "scripts/tools/h2_measurement_evidence.py",
+   "lines": "103"
+  }
+ ],
+ "schema": "h2_failure_scene_registration_v1"
+}

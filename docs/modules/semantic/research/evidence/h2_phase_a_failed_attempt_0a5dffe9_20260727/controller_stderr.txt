@@ -1,0 +1,1 @@
+H2 Phase-A controller rejected: recorded Layer-P certificate match disagrees with the archived freeze/certificate/content bindings and independent Git-tree recomputation
