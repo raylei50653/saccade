@@ -6,7 +6,7 @@ doc-module: semantic
 owner-module: semantic
 work-class: mainline-study
 wip-role: non-wip
-activation-gate: "四項 owner decision 已於 2026-07-25 accepted（#286）；Phase-B chain form 已於 2026-07-25 accepted（#290）並成文為 declaration Review Correction 3；C3.9 pre-seal ruler 編輯（七序列 manifest + phase_a_evidence schema + phase-aware partition）已 landed、republish，並於 `7c348f4e` 通過 controlled-host re-attestation（run 30164262580）；Layer-M review 又把語義常數搬回 ruler ⇒ identity_semantics 再動一次（`3edf6953`）已 republish，並於 `f2c2510a`（run 30243657973）重新通過 controlled-host re-attestation；PR #295 第二輪修補再次修改 packet-invalid exception boundary 與 terminal-2 surviving-evidence ruler，identity_semantics `93f87a83` 已 republish，並於 `32935d5d`（run 30254189532）重新通過 controlled-host re-attestation ⇒ gate 2 再度關閉；S4 Phase-A controller（items 0–4）已 implemented/tested、待 review；剩餘 gate = S4 review + seal head 的 Layer-P pass certificate + 該 head 的 coordinate/工作流綠，然後才談 seal"
+activation-gate: "四項 owner decision 已於 2026-07-25 accepted（#286）；Phase-B chain form 已於 2026-07-25 accepted（#290）並成文為 declaration Review Correction 3；C3.9 pre-seal ruler 編輯（七序列 manifest + phase_a_evidence schema + phase-aware partition）已 landed、republish，並於 `7c348f4e` 通過 controlled-host re-attestation（run 30164262580）；Layer-M review 又把語義常數搬回 ruler ⇒ identity_semantics 再動一次（`3edf6953`）已 republish，並於 `f2c2510a`（run 30243657973）重新通過 controlled-host re-attestation；PR #295 第二輪修補再次修改 packet-invalid exception boundary 與 terminal-2 surviving-evidence ruler，identity_semantics `93f87a83` 已 republish，並於 `32935d5d`（run 30254189532）重新通過 controlled-host re-attestation ⇒ gate 2 再度關閉；S4 Phase-A controller（items 0–4）已 implemented/tested，**review 已完成、PR #295 已 merge ⇒ S4 code-review gate closed**（reviewed implementation head `4c78b962…`，landed merge commit `b2f3c23f…`）；剩餘 gate = 最終 seal-candidate head 的 Layer-P pass certificate + 同一 head 的 coordinate/probe/controlled-host workflow 全綠 + separate owner exactly-once authorization，才可建立 F/S 並執行 Phase A"
 target-decision-layer: none
 primary-intent: boundary-diagnostic
 output-class: "diagnostic result | substrate-fidelity edge proposal"
@@ -68,7 +68,7 @@ Full argument: declaration §0. Design record:
 | **S1** | ✅ landed — bounded behavior probe, coordinate/probe publisher, runtime-input manifest and path-partition firewall; G1/G2 remain probes, not equivalence evidence | no — default-off research tooling |
 | **S2** | ✅ landed — published coordinate/probe/equivalence split, `captured_under` sidecar, fail-closed static guard, same-repository PR-head + main self-hosted input/probe re-attestation | no |
 | **S3** | ✅ landed — `run_h2_layer_p.py`: required base, retry verdict, build/load proof, monitor-before-hash runtime-input binding, post-run content/membership/symlink revalidation, bounded probe, v2 certificate, append-only retry log | no |
-| **S4** | ⚠️ **implemented / unreviewed / unsealed** — terminal partition, evidence-root contract, independent verifier, corpus checker, observation emitter, and the Phase-A controller with its four ordered runs. This implementation creates no `I`/`F`/`S` and performs no authorized measurement | no |
+| **S4** | ⚠️ **implemented / reviewed / merged — unsealed** — terminal partition, evidence-root contract, independent verifier, corpus checker, observation emitter, and the Phase-A controller with its four ordered runs. This implementation creates no `I`/`F`/`S` and performs no authorized measurement | no |
 
 ### S4 — what is and is not implemented
 
@@ -138,7 +138,7 @@ Three properties the verifier owes its name:
   already found — which is the only way § C3.5.1's kill-switch actually bans
   anything.
 
-**Implemented in the current change; review pending.** `run_h2_measurement.py`
+**Implemented, reviewed, and merged in [PR #295](https://github.com/raylei50653/saccade/pull/295).** `run_h2_measurement.py`
 is a Phase-A-only controller and `run_h2_measurement_child.py` is its dedicated
 child/recorder. Together they implement the four ordered runs, § 5.1.1 recorder
 normalization, live A7.6 comparison and packet-verifier wiring, and emission of
@@ -297,18 +297,25 @@ upgrade. Version-lag accounting follows
 *Planning target only; not accepted state; replaceable inside this charter
 without a registry write.*
 
-By the next commit point, the implemented Phase-A Layer-M build is expected to
-be **reviewable but not sealed**: it either survives review or is replaced. No
-`I`/`F`/`S`, no authorization, no capture, and no registry state change is
-expected to occur.
+The previous lease — the implemented Phase-A Layer-M build is **reviewable but
+not sealed**, surviving review or being replaced — was **met on 2026-07-27**: it
+survived review and landed (`Acceptance` item 3), with no `I`/`F`/`S`, no
+authorization, no capture, and no registry state change.
+
+By the next commit point, the build is expected to be **certified at one exact
+head but still unsealed**: a Layer-P pass certificate and a green controlled-host
+attestation at that same head, independently verified. That state is still not an
+authorization and still writes no registry state.
 
 ## Commit point
 
-Owner reviews whether state changed when **either** the Phase-A controller and
-its independent verifier are accepted, **or** the implementation is
-disconfirmed and the charter is re-planned. A real exact-head Layer-P
-certificate remains a seal gate, not something this implementation change
-creates.
+Owner reviews whether state changed when **either** an exact-head Layer-P
+certificate and its independent verification pass at the final seal-candidate
+head, **or** that certification fails and the charter is re-planned. Review
+acceptance of the controller (2026-07-27) was the previous commit point and
+changed no state. The certificate is a seal gate; producing it is still not a
+seal, and the separate owner exactly-once authorization remains a distinct step
+that no artifact in this repository can supply.
 
 ## Discard when
 
@@ -361,7 +368,9 @@ creates.
 
 ## Current step
 
-**Review the Phase-A Layer-M controller. Do not seal or execute a measurement.**
+**Certify one exact seal-candidate head. Do not seal or execute a measurement.**
+The S4 review is finished — see `Acceptance` item 3 — so what is left is entirely
+head-bound, not code-bound.
 
 Correction 3 puts an ordering constraint on everything below: `identity_semantics`
 must be frozen from the Phase-A seal to the Phase-B seal, so the ruler work comes
@@ -440,7 +449,7 @@ declaration consequence, not a shortcut):
   exclusive. Writing an H2 child is what makes the normalization reachable while
   leaving the frozen child untouched.
 
-**Newly written in the current change; review pending:**
+**Newly written, reviewed, and merged in [PR #295](https://github.com/raylei50653/saccade/pull/295):**
 
 0. ✅ an H2 child entrypoint and its argv builder, replacing the two H0 argv
    helpers above;
@@ -468,6 +477,31 @@ before the controller, so the controller is reviewed against that target rather
 than the target being adjusted to whatever the controller happened to emit —
 the § 5.3 circular-oracle hazard in its most ordinary form.
 
+### The remaining work is head-bound, and the head is not the reviewed head
+
+Every gate below binds **one exact commit**, so the order is fixed and no step may
+be carried over from an earlier head:
+
+1. stop modifying `main`;
+2. controlled-host re-attestation at that final head (`Acceptance` item 5);
+3. a Layer-P pass certificate produced **at that same head**, `--base` given, full
+   changed-path verdict clean (`Acceptance` item 4);
+4. independent verification of every certificate binding;
+5. only then a separate owner exactly-once authorization (`Acceptance` item 6);
+6. only after that authorization, `F`/`S` and the Phase-A execution.
+
+The reviewed implementation head `4c78b962…` is **not** a seal candidate, and
+neither is the merge commit that landed it. Content equality is not head equality:
+PR #295 landed as `b2f3c23f…` with a tree byte-identical to `4c78b962…`, and this
+governance closeout produces yet another commit over that same code. The
+certificate records `source_head` *and* `source_tree` (`run_h2_layer_p.py:472`),
+the controller requires `certificate["source_head"] == bundle.head == current_head`
+(`run_h2_measurement.py:249`), and the evidence root is keyed by that head's `I40`
+(`verify_h2_measurement.py:342`) — so a certificate issued at any predecessor is
+mechanically unusable at the head that is actually sealed, identical trees or not.
+The seal candidate is therefore whatever `main` head is final after documentation
+stops moving, which is the head step 2 must attest.
+
 ## Acceptance
 
 A Layer-M seal may be proposed only when **all** of these hold:
@@ -493,11 +527,19 @@ A Layer-M seal may be proposed only when **all** of these hold:
    attesting the merge tree `f04d4799`): runtime inputs re-bound, probe
    recomputed to `2dabed0bc05e3bc7…` — the seventh physically distinct build to
    reproduce it — and `--strict` staleness pass;**
-3. ⚠️ the S4 items above are implemented and contract-tested; review is pending;
+3. ✅ the S4 items above are implemented and contract-tested, and the **S4
+   code-review gate is closed**: reviewed implementation head `4c78b962…`, landed
+   as merge commit `b2f3c23f…` on `main` via
+   [PR #295](https://github.com/raylei50653/saccade/pull/295) on 2026-07-27. This
+   closes review of the *code*; it certifies no head and authorizes nothing;
 4. a Layer-P pass certificate (`h2_layer_p_certificate_v2`) exists for the exact
-   head under seal, with `--base` given and the full changed-path verdict clean;
-5. the published coordinate is current and the controlled-host workflow is green
-   at that head;
+   head under seal, with `--base` given and the full changed-path verdict clean —
+   and its bindings independently verified. Neither `4c78b962…` nor `b2f3c23f…`
+   can supply this for a later head: `source_head` is part of the certificate and
+   is required to equal the executing head, so identical content does not
+   transfer (see `Current step`);
+5. the published coordinate and bounded probe are current and the controlled-host
+   workflow is green **at that same head**;
 6. the owner issues a separate exactly-once authorization — this charter is not
    one and cannot become one.
 
@@ -737,3 +779,15 @@ Additionally, and specific to the accepted decisions:
   for the repaired surface; S4 review, an exact seal-head Layer-P certificate
   and separate owner authorization remain outstanding. No certificate or seal
   was created by this run.
+
+- **2026-07-27** — **the S4 code-review gate is closed.**
+  [PR #295](https://github.com/raylei50653/saccade/pull/295) was reviewed at
+  implementation head `4c78b962…` and merged to `main` as `b2f3c23f…`. This
+  governance closeout records that state and nothing else: it edits no ruler, no
+  controller and no verifier, moves no published axis, issues no certificate,
+  creates no `I`/`F`/`S`, and grants no authorization. The remaining gates are
+  `Acceptance` items 4–6, in that order, all bound to **one** final
+  seal-candidate head — which is not `4c78b962…` and not `b2f3c23f…`, because a
+  certificate binds `source_head`, not content (see `Current step`). Until that
+  head exists and is certified, verified, and separately authorized, no `F`/`S`
+  may be created and Phase A may not run.
