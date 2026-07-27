@@ -41,6 +41,8 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import os
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any, Iterable, Mapping, NamedTuple
@@ -50,10 +52,12 @@ _TOOLS = REPO_ROOT / "scripts" / "tools"
 if _TOOLS.as_posix() not in sys.path:
     sys.path.insert(0, _TOOLS.as_posix())
 
+import h2_behavioral_identity as behavior  # noqa: E402
 import h2_measurement_evidence as evidence  # noqa: E402
+import h2_path_partition as path_partition  # noqa: E402
 import h2_terminal_partition as partition  # noqa: E402
 import verify_h0_phase_a as h0_verifier  # noqa: E402  (imported, never modified)
-from build_runtime_identity import ALL_COORDINATE_AXES  # noqa: E402
+from build_runtime_identity import ALL_COORDINATE_AXES, IDENTITY_SCHEMA  # noqa: E402
 from export_headline_bridge_decision_trace import (  # noqa: E402
     OVERFLOW_KEYS,
     STREAMS,
@@ -120,6 +124,7 @@ class SequenceReplay(NamedTuple):
     runs: tuple[RunReplay, ...]
     complete: bool
     inequality_found: bool
+    packet_relation_failure: bool
 
     @property
     def packet_states(self) -> tuple[str, ...]:
@@ -140,7 +145,10 @@ class Replay(NamedTuple):
 
     @property
     def invalid_packet_observed(self) -> bool:
-        return any(FAIL in item.packet_states for item in self.sequences)
+        return any(
+            FAIL in item.packet_states or item.packet_relation_failure
+            for item in self.sequences
+        )
 
     @property
     def all_equal(self) -> bool:
@@ -149,7 +157,8 @@ class Replay(NamedTuple):
     @property
     def all_packets_pass(self) -> bool:
         return self.complete and all(
-            item.packet_states == (PASS,) * len(evidence.CAPTURE_ON_RUNS)
+            not item.packet_relation_failure
+            and item.packet_states == (PASS,) * len(evidence.CAPTURE_ON_RUNS)
             for item in self.sequences
         )
 
@@ -209,6 +218,374 @@ def _authorization(root: Path, phase: str) -> dict[str, Any] | None:
     return _load(
         root, evidence.AUTHORIZATION_NAME, schema=evidence.AUTHORIZATION_SCHEMA
     )
+
+
+def _git(*args: str) -> str:
+    try:
+        completed = subprocess.run(
+            ["git", *args],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except subprocess.SubprocessError as exc:
+        raise VerificationError(
+            f"archived source commit is unavailable: {exc}"
+        ) from exc
+    return completed.stdout.strip()
+
+
+def _commit_content_axes(head: str) -> dict[str, dict[str, Any]]:
+    """Rebuild all content axes from the archived commit, not controller code."""
+    raw = _git("ls-tree", "-r", "-z", "--full-tree", head)
+    classified: dict[str, list[dict[str, str]]] = {
+        "decision_relevant": [],
+        "identity_semantics": [],
+        "plumbing_only": [],
+    }
+    for entry in raw.split("\0"):
+        if not entry:
+            continue
+        try:
+            metadata, path = entry.split("\t", 1)
+            _mode, object_type, blob = metadata.split(" ", 2)
+        except ValueError as exc:
+            raise VerificationError("git tree listing is malformed") from exc
+        if object_type != "blob" or path.endswith((".md", ".rst", ".txt")):
+            continue
+        path_class = path_partition.classify(path)
+        if path_class in classified:
+            classified[path_class].append({"blob": blob, "path": path})
+    return {
+        path_class: {
+            "digest": evidence.digest(members),
+            "file_count": len(members),
+            "files": members,
+        }
+        for path_class, members in classified.items()
+    }
+
+
+def _checkout_witness(root: Path, head: str) -> dict[str, Any]:
+    witness = _load(
+        root,
+        evidence.CHECKOUT_WITNESS_NAME,
+        schema=evidence.CHECKOUT_WITNESS_SCHEMA,
+    )
+    expected_tree = _git("rev-parse", f"{head}^{{tree}}")
+    expected_axes = _commit_content_axes(head)
+    if (
+        set(witness)
+        != {
+            "axes",
+            "build_dir",
+            "repository_root",
+            "schema",
+            "source_head",
+            "source_tree",
+        }
+        or witness.get("source_head") != head
+        or witness.get("source_tree") != expected_tree
+        or witness.get("axes") != expected_axes
+        or not isinstance(witness.get("repository_root"), str)
+        or not Path(witness["repository_root"]).is_absolute()
+        or not isinstance(witness.get("build_dir"), str)
+        or not Path(witness["build_dir"]).is_absolute()
+    ):
+        raise VerificationError(
+            "checkout identity witness differs from the independently rebuilt "
+            "source tree/content axes"
+        )
+    return witness
+
+
+def _bound_path(value: Any, repository_root: str) -> str:
+    path = Path(str(value))
+    if not path.is_absolute():
+        path = Path(repository_root) / path
+    return os.path.normpath(path.as_posix())
+
+
+def _phase_a_launch_records(
+    root: Path,
+    name: evidence.RootName,
+    freeze: Mapping[str, Any],
+    observation: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Independently cross-check the controller's archived terminal-1 inputs."""
+    certificate = _load(root, evidence.CERTIFICATE_NAME, schema=CERTIFICATE_SCHEMA)
+    reference = _load(
+        root, evidence.REFERENCE_PROBE_NAME, schema=behavior.RESULT_SCHEMA
+    )
+    runtime_manifest = _load(root, evidence.RUNTIME_INPUTS_NAME)
+    published = _load(root, evidence.PUBLISHED_IDENTITY_NAME, schema=IDENTITY_SCHEMA)
+    mutation = _load(root, evidence.MUTATION_NAME, schema=evidence.MUTATION_SCHEMA)
+    stop = _load(
+        root, evidence.STOP_BOUNDARY_NAME, schema=evidence.STOP_BOUNDARY_SCHEMA
+    )
+    controller = _load(
+        root, evidence.CONTROLLER_NAME, schema=evidence.CONTROLLER_SCHEMA
+    )
+    checkout = _checkout_witness(root, name.i40)
+
+    binding = freeze.get("layer_p_certificate")
+    coordinate = freeze.get("coordinate")
+    probe_digest = freeze.get("probe")
+    build_artifacts = runtime_manifest.get("build_artifacts")
+    reference_witness = reference.get("build_witness")
+    certificate_match = (
+        isinstance(binding, Mapping)
+        and binding.get("schema") == CERTIFICATE_SCHEMA
+        and binding.get("digest") == evidence.digest(certificate)
+        and freeze.get("instrumentation_head") == name.i40
+        and certificate.get("source_head") == name.i40
+        and certificate.get("source_tree") == checkout["source_tree"]
+        and isinstance(certificate.get("selected_base"), str)
+        and bool(certificate["selected_base"])
+        and isinstance(certificate.get("changed_path_verdict"), Mapping)
+        and certificate["changed_path_verdict"].get("admissible") is True
+        and certificate.get("equivalence") == "unproven"
+        and isinstance(coordinate, Mapping)
+        and certificate.get("decision_relevant_digest")
+        == coordinate.get("implementation")
+        == checkout["axes"]["decision_relevant"]["digest"]
+        and certificate.get("identity_semantics_digest")
+        == coordinate.get("identity_semantics")
+        == checkout["axes"]["identity_semantics"]["digest"]
+        and certificate.get("plumbing_set_digest")
+        == checkout["axes"]["plumbing_only"]["digest"]
+        and certificate.get("published_coordinate") == coordinate
+        and certificate.get("behavior_probe") == probe_digest
+        and certificate.get("published_probe") == probe_digest
+        and isinstance(build_artifacts, Mapping)
+        and certificate.get("runtime_input_coordinate_digest")
+        == runtime_manifest.get("coordinate_digest")
+        and certificate.get("runtime_input_full_digest")
+        == runtime_manifest.get("full_digest")
+        and certificate.get("build_artifact_digest") == build_artifacts.get("digest")
+        and certificate.get("runtime_input_manifest_file_digest")
+        == evidence.sha256_file(root / evidence.RUNTIME_INPUTS_NAME)
+        and certificate.get("probe_result_file_digest")
+        == evidence.sha256_file(root / evidence.REFERENCE_PROBE_NAME)
+        and certificate.get("published_identity_file_digest")
+        == evidence.sha256_file(root / evidence.PUBLISHED_IDENTITY_NAME)
+        and reference.get("digest") == probe_digest
+        and reference.get("identical") is True
+        and reference.get("mode") == "identity"
+        and reference.get("sequence") == behavior.IDENTITY_SEQUENCE
+        and certificate.get("probe_schema") == behavior.RESULT_SCHEMA
+        and certificate.get("mode") == "identity"
+        and certificate.get("fixture") == behavior.IDENTITY_SEQUENCE
+        and isinstance(reference_witness, Mapping)
+        and reference_witness.get("digest") == build_artifacts.get("digest")
+        and certificate.get("build_witness") == reference_witness
+        and published.get("coordinate") == coordinate
+        and isinstance(published.get("probe"), Mapping)
+        and published["probe"].get("digest") == probe_digest
+        and isinstance(published.get("equivalence"), Mapping)
+        and published["equivalence"].get("state") == "unproven"
+        and published.get("publication_complete") is True
+        and _bound_path(certificate.get("build_dir"), checkout["repository_root"])
+        == _bound_path(build_artifacts.get("build_dir"), checkout["repository_root"])
+        == _bound_path(checkout["build_dir"], checkout["repository_root"])
+    )
+    recorded_certificate_match = observation.get("layer_p_certificate_matches_freeze")
+    mismatch_reasons = controller.get("certificate_mismatch_reasons")
+    if recorded_certificate_match is not certificate_match:
+        raise VerificationError(
+            "recorded Layer-P certificate match disagrees with the archived "
+            "freeze/certificate/content bindings and independent Git-tree "
+            "recomputation"
+        )
+    if (
+        not isinstance(mismatch_reasons, list)
+        or bool(mismatch_reasons) is certificate_match
+    ):
+        raise VerificationError(
+            "controller certificate reasons disagree with the independently "
+            "recomputed predicate"
+        )
+
+    launch_path = root / evidence.LAUNCH_PROBE_NAME
+    launch_matches: bool | None = None
+    if launch_path.is_file():
+        launch = _load(root, evidence.LAUNCH_PROBE_NAME, schema=behavior.RESULT_SCHEMA)
+        launch_witness = launch.get("build_witness")
+        launch_matches = (
+            launch.get("digest") == probe_digest
+            and isinstance(launch_witness, Mapping)
+            and isinstance(build_artifacts, Mapping)
+            and launch_witness.get("digest") == build_artifacts.get("digest")
+        )
+        if observation.get("behavior_probe_equals_freeze") is not launch_matches:
+            raise VerificationError(
+                "recorded launch-probe predicate differs from the archived probe"
+            )
+    elif recorded_certificate_match is True and observation.get(
+        "execution_result"
+    ) not in {
+        result
+        for result, terminal in partition.RESULT_TO_TERMINAL.items()
+        if terminal == EXECUTION_INVALID_TERMINAL
+    }:
+        raise VerificationError(
+            "a certificate-admitted Phase-A archive has no launch-time probe"
+        )
+
+    events = mutation.get("events")
+    if (
+        not isinstance(events, list)
+        or not isinstance(mutation.get("mutated"), bool)
+        or mutation["mutated"] is not bool(events)
+        or observation.get("bound_input_mutated") is not mutation["mutated"]
+    ):
+        raise VerificationError(
+            "recorded bound-input predicate differs from the mutation record"
+        )
+    stop_reasons = stop.get("revalidation_reasons")
+    stop_event_reasons = [
+        event.get("path")
+        for event in events
+        if isinstance(event, Mapping)
+        and event.get("classification") == "monitored_revalidation"
+    ]
+    expected_stop_members = {
+        "checkout_clean",
+        "completed_utc",
+        "final_drain_completed",
+        "linearization",
+        "monitor_closed",
+        "monitor_started",
+        "revalidation_completed_while_monitored",
+        "revalidation_reasons",
+        "schema",
+        "source_head",
+        "source_tree",
+    }
+    clean_linearization = (
+        stop.get("monitor_started") is True
+        and stop.get("revalidation_completed_while_monitored") is True
+        and stop.get("final_drain_completed") is True
+        and stop.get("checkout_clean") is True
+        and not stop_reasons
+        and not events
+    )
+    if (
+        set(stop) != expected_stop_members
+        or not isinstance(stop.get("monitor_started"), bool)
+        or not isinstance(stop.get("monitor_closed"), bool)
+        or not isinstance(stop.get("revalidation_completed_while_monitored"), bool)
+        or not isinstance(stop.get("final_drain_completed"), bool)
+        or not isinstance(stop_reasons, list)
+        or any(not isinstance(reason, str) or not reason for reason in stop_reasons)
+        or stop.get("linearization")
+        != ("clean_final_drain" if clean_linearization else None)
+        or (bool(stop_reasons) and mutation.get("mutated") is not True)
+        or (bool(stop_reasons) and stop_event_reasons != stop_reasons)
+        or (
+            stop["monitor_started"]
+            and (
+                not isinstance(stop.get("completed_utc"), str)
+                or not stop["completed_utc"]
+                or not isinstance(stop.get("checkout_clean"), bool)
+                or not isinstance(stop.get("source_head"), str)
+                or len(stop["source_head"]) != 40
+                or any(char not in "0123456789abcdef" for char in stop["source_head"])
+                or not isinstance(stop.get("source_tree"), str)
+                or len(stop["source_tree"]) != 40
+                or any(char not in "0123456789abcdef" for char in stop["source_tree"])
+            )
+        )
+        or (
+            not stop["monitor_started"]
+            and (
+                stop["monitor_closed"] is not False
+                or stop["revalidation_completed_while_monitored"] is not False
+                or stop["final_drain_completed"] is not False
+                or bool(stop_reasons)
+                or any(
+                    stop.get(field) is not None
+                    for field in (
+                        "checkout_clean",
+                        "completed_utc",
+                        "linearization",
+                        "source_head",
+                        "source_tree",
+                    )
+                )
+            )
+        )
+    ):
+        raise VerificationError("measurement stop boundary is malformed")
+    if (
+        stop["monitor_started"]
+        and stop["revalidation_completed_while_monitored"] is not True
+        and not stop_reasons
+    ):
+        raise VerificationError(
+            "started monitor has no completed revalidation or failure reason"
+        )
+    if (
+        stop.get("checkout_clean") is True
+        and stop["revalidation_completed_while_monitored"] is not True
+    ):
+        raise VerificationError(
+            "clean checkout state was recorded without monitored revalidation"
+        )
+    if (
+        stop["revalidation_completed_while_monitored"] is True
+        and stop.get("checkout_clean") is False
+        and (
+            not stop_reasons
+            or stop_event_reasons != stop_reasons
+            or mutation.get("mutated") is not True
+            or observation.get("bound_input_mutated") is not True
+        )
+    ):
+        raise VerificationError(
+            "dirty checkout after monitored revalidation has no matching "
+            "mutation evidence"
+        )
+    if stop.get("linearization") == "clean_final_drain" and (
+        stop.get("source_head") != checkout["source_head"]
+        or stop.get("source_tree") != checkout["source_tree"]
+    ):
+        raise VerificationError(
+            "clean final-drain source identity differs from the checkout witness"
+        )
+    terminal_four_results = {
+        result
+        for result, terminal in partition.RESULT_TO_TERMINAL.items()
+        if terminal == EXECUTION_INVALID_TERMINAL
+    }
+    if (
+        observation.get("execution_result") not in terminal_four_results
+        and not stop_reasons
+        and not events
+        and (
+            stop["monitor_started"] is not True
+            or stop["monitor_closed"] is not True
+            or stop["revalidation_completed_while_monitored"] is not True
+            or stop["final_drain_completed"] is not True
+            or stop["checkout_clean"] is not True
+            or stop["linearization"] != "clean_final_drain"
+            or stop.get("source_head") != checkout["source_head"]
+            or stop.get("source_tree") != checkout["source_tree"]
+        )
+    ):
+        raise VerificationError(
+            "clean non-execution-invalid archive has no active-monitor "
+            "revalidation/final-drain boundary"
+        )
+    if (
+        controller.get("instrumentation_head") != name.i40
+        or controller.get("capture_phase") != evidence.CAPTURE_PHASE[name.phase]
+        or controller.get("ordered_runs") != list(evidence.RUN_IDS)
+        or controller.get("sequence") not in evidence.expected_sequences(name.phase)
+    ):
+        raise VerificationError("controller record disagrees with the Phase-A plan")
+    return controller
 
 
 def classify(root: Path) -> str:
@@ -283,7 +660,73 @@ def _inventories(root: Path, sequence: str) -> dict[str, dict[str, Any]]:
     return present
 
 
-def _relations(inventories: Mapping[str, Mapping[str, Any]]) -> dict[str, Any]:
+def _base_inventories(
+    root: Path, sequence: str
+) -> tuple[dict[str, dict[str, Any]], set[str]]:
+    """Load every committed base member, including MOT-only survivors."""
+    present: dict[str, dict[str, Any]] = {}
+    base_records: set[str] = set()
+    expected = {*A76_EQUALITY_MEMBERS, "schema"}
+    for run_id in evidence.RUN_IDS:
+        directory = evidence.run_dir(root, sequence, run_id)
+        mot_path = directory / f"{sequence}.txt"
+        if mot_path.is_file():
+            try:
+                mot = mot_path.read_bytes()
+            except OSError as exc:
+                raise VerificationError(
+                    f"{sequence}/{run_id}: durable MOT output is unreadable"
+                ) from exc
+            present[run_id] = {
+                A76_EQUALITY_MEMBERS[0]: {
+                    "length": len(mot),
+                    "sha256": evidence.sha256_file(mot_path),
+                }
+            }
+        if not (directory / evidence.BASE_POLICY_INVENTORY_NAME).is_file():
+            continue
+        inventory = _load(
+            directory,
+            evidence.BASE_POLICY_INVENTORY_NAME,
+            schema=evidence.BASE_POLICY_INVENTORY_SCHEMA,
+        )
+        if set(inventory) != expected:
+            raise VerificationError(
+                f"base policy inventory schema mismatch: {sequence}/{run_id}"
+            )
+        synthetic = {
+            **inventory,
+            A76_OVERFLOW_MEMBER: list(A76_OVERFLOW_ZERO_VECTOR),
+            A76_PROJECTION_MEMBERS[0]: None,
+            "schema": evidence.POLICY_INVENTORY_SCHEMA,
+            A76_PROJECTION_MEMBERS[1]: None,
+        }
+        try:
+            h0_verifier._verify_policy_inventory(evidence.CAPTURE_OFF_RUN, synthetic)
+        except h0_verifier.VerificationError as exc:
+            raise VerificationError(f"{sequence}/{run_id}: {exc}") from exc
+        base_records.add(run_id)
+        durable_mot = present.get(run_id, {}).get(A76_EQUALITY_MEMBERS[0])
+        if durable_mot is None:
+            raise VerificationError(
+                f"{sequence}/{run_id}: base inventory has no durable MOT output"
+            )
+        if inventory[A76_EQUALITY_MEMBERS[0]] != durable_mot:
+            raise VerificationError(f"{sequence}/{run_id}: base MOT identity mismatch")
+        present.setdefault(run_id, {}).update(
+            {
+                member: inventory[member]
+                for member in A76_EQUALITY_MEMBERS
+                if member != A76_EQUALITY_MEMBERS[0]
+            }
+        )
+    return present, base_records
+
+
+def _relations(
+    bases: Mapping[str, Mapping[str, Any]],
+    inventories: Mapping[str, Mapping[str, Any]],
+) -> dict[str, Any]:
     """Every comparison the surviving inventories allow (H0's own grouping)."""
     off = evidence.CAPTURE_OFF_RUN
     relations: list[dict[str, Any]] = []
@@ -297,16 +740,18 @@ def _relations(inventories: Mapping[str, Mapping[str, Any]]) -> dict[str, Any]:
         if not equal and first_unequal is None:
             first_unequal = f"{left}:{right}:{member}"
 
-    if off in inventories:
+    if off in bases:
         for run_id in evidence.CAPTURE_ON_RUNS:
-            if run_id not in inventories:
+            if run_id not in bases:
                 continue
             for member in A76_EQUALITY_MEMBERS:
+                if member not in bases[off] or member not in bases[run_id]:
+                    continue
                 record(
                     off,
                     member,
                     run_id,
-                    inventories[off][member] == inventories[run_id][member],
+                    bases[off][member] == bases[run_id][member],
                 )
     on_present = [run for run in evidence.CAPTURE_ON_RUNS if run in inventories]
     if on_present:
@@ -350,7 +795,7 @@ def _verify_packet(
     try:
         packet_report = verify_capture(capture)
         packet = canonical_semantic_packet(capture)
-    except (KeyError, TypeError, ValueError):
+    except behavior.PACKET_INVALID_EXCEPTIONS:
         if stored is not None and stored != {
             "failure": "packet_invalid",
             "state": FAIL,
@@ -360,7 +805,10 @@ def _verify_packet(
             )
         return FAIL, None
     if inventory is not None:
-        _cross_check_projections(packet, capture, inventory, sequence, run_id)
+        try:
+            _cross_check_projections(packet, capture, inventory, sequence, run_id)
+        except VerificationError:
+            return FAIL, packet_report["semantic_digest_sha256"]
     if stored is not None and stored != {"report": packet_report, "state": PASS}:
         raise VerificationError(
             f"packet verifier pass record mismatch: {sequence}/{run_id}"
@@ -409,14 +857,36 @@ def _cross_check_projections(
 
 
 def _sequence_replay(root: Path, sequence: str) -> SequenceReplay:
+    bases, base_records = _base_inventories(root, sequence)
     inventories = _inventories(root, sequence)
-    reconstructed = _relations(inventories)
-    complete_inventories = len(inventories) == len(evidence.RUN_IDS)
-
+    for run_id, inventory in inventories.items():
+        if run_id not in base_records:
+            raise VerificationError(
+                f"{sequence}/{run_id}: full inventory has no durable base"
+            )
+        if any(
+            member not in bases[run_id] or inventory[member] != bases[run_id][member]
+            for member in A76_EQUALITY_MEMBERS
+        ):
+            raise VerificationError(
+                f"{sequence}/{run_id}: full/base inventory mismatch"
+            )
+    reconstructed = _relations(bases, inventories)
+    unequal_members = {
+        relation["member"]
+        for relation in reconstructed["relations"]
+        if relation["equal"] is False
+    }
+    base_inequality = bool(unequal_members.intersection(A76_EQUALITY_MEMBERS))
+    packet_relation_failure = bool(
+        unequal_members.intersection((*A76_PROJECTION_MEMBERS, A76_OVERFLOW_MEMBER))
+    )
     recorded_path = root / evidence.RUNS_DIR / sequence / evidence.COMPARISON_NAME
     if recorded_path.is_file():
         recorded = _load(root / evidence.RUNS_DIR / sequence, evidence.COMPARISON_NAME)
-        if complete_inventories:
+        if len(bases) == len(evidence.RUN_IDS) and len(inventories) == len(
+            evidence.RUN_IDS
+        ):
             if recorded != reconstructed:
                 raise VerificationError(
                     f"{sequence}: comparison.json differs from the independent A7.6 "
@@ -448,19 +918,47 @@ def _sequence_replay(root: Path, sequence: str) -> SequenceReplay:
                 continue
             if value != first:
                 states[index] = (FAIL, value)
+    if packet_relation_failure:
+        states = [
+            (FAIL, value) if state == PASS else (state, value)
+            for state, value in states
+        ]
 
     runs = tuple(
         RunReplay(
             run_id,
-            run_id in inventories,
+            run_id in base_records,
             UNAVAILABLE
             if run_id == evidence.CAPTURE_OFF_RUN
             else states[evidence.CAPTURE_ON_RUNS.index(run_id)][0],
         )
         for run_id in evidence.RUN_IDS
     )
-    complete = complete_inventories and all(state == PASS for state, _ in states)
-    return SequenceReplay(sequence, runs, complete, reconstructed["state"] == "unequal")
+    # Completeness and validity are different claims.  A present packet that
+    # independently verifies `fail` is still a complete artifact and is exactly
+    # how terminal 3 is evidenced.  Only `unavailable` means the completed
+    # execution omitted a required packet; `Replay.all_packets_pass` owns the
+    # separate validity verdict.
+    required_full_inventories = {
+        evidence.CAPTURE_OFF_RUN,
+        *(
+            run_id
+            for run_id, (state, _) in zip(evidence.CAPTURE_ON_RUNS, states, strict=True)
+            if state == PASS
+        ),
+    }
+    complete = (
+        len(base_records) == len(evidence.RUN_IDS)
+        and required_full_inventories.issubset(inventories)
+        and all(state != UNAVAILABLE for state, _ in states)
+    )
+    return SequenceReplay(
+        sequence,
+        runs,
+        complete,
+        base_inequality,
+        packet_relation_failure,
+    )
 
 
 def _replay(root: Path, phase: str, *, strict: bool) -> Replay:
@@ -851,6 +1349,11 @@ def _verify_complete(root: Path, *, visiting: frozenset[str]) -> dict[str, Any]:
     )
     if not isinstance(observation.get("execution_complete"), bool):
         raise VerificationError("observation has no boolean execution_complete")
+    controller_record = (
+        _phase_a_launch_records(root, name, freeze, observation)
+        if name.phase == "a"
+        else None
+    )
     strict = observation["execution_complete"]
     replay = _replay(root, name.phase, strict=strict)
     _kill_switch(replay, observation)
@@ -874,6 +1377,14 @@ def _verify_complete(root: Path, *, visiting: frozenset[str]) -> dict[str, Any]:
     )
     if manifest.get("result") != selection.result:
         raise VerificationError("manifest result differs from the recomputed selection")
+    if controller_record is not None and (
+        controller_record.get("result") != selection.result
+        or controller_record.get("terminal") != selection.terminal
+        or controller_record.get("state") != "terminal"
+    ):
+        raise VerificationError(
+            "controller record result/terminal differs from independent selection"
+        )
 
     # A pass is the only outcome that claims completeness, so it is the only one
     # required to show it (§ 7 terminal 5 / the Phase-A progression).

@@ -6,7 +6,7 @@ doc-module: semantic
 owner-module: semantic
 work-class: mainline-study
 wip-role: non-wip
-activation-gate: "四項 owner decision 已於 2026-07-25 accepted（#286）；Phase-B chain form 已於 2026-07-25 accepted（#290）並成文為 declaration Review Correction 3；C3.9 pre-seal ruler 編輯（七序列 manifest + phase_a_evidence schema + phase-aware partition）已 landed、republish，並於 `7c348f4e` 通過 controlled-host re-attestation（run 30164262580）；Layer-M review 又把語義常數搬回 ruler ⇒ identity_semantics 再動一次（`3edf6953`）已 republish，並於 `f2c2510a`（run 30243657973）重新通過 controlled-host re-attestation ⇒ gate 2 再度關閉；剩餘 gate = S4 controller（items 0–4）+ seal head 的 Layer-P pass certificate + 該 head 的 coordinate/工作流綠，然後才談 seal"
+activation-gate: "四項 owner decision 已於 2026-07-25 accepted（#286）；Phase-B chain form 已於 2026-07-25 accepted（#290）並成文為 declaration Review Correction 3；C3.9 pre-seal ruler 編輯（七序列 manifest + phase_a_evidence schema + phase-aware partition）已 landed、republish，並於 `7c348f4e` 通過 controlled-host re-attestation（run 30164262580）；Layer-M review 又把語義常數搬回 ruler ⇒ identity_semantics 再動一次（`3edf6953`）已 republish，並於 `f2c2510a`（run 30243657973）重新通過 controlled-host re-attestation；PR #295 第二輪修補再次修改 packet-invalid exception boundary 與 terminal-2 surviving-evidence ruler，identity_semantics `93f87a83` 已 republish，並於 `32935d5d`（run 30254189532）重新通過 controlled-host re-attestation ⇒ gate 2 再度關閉；S4 Phase-A controller（items 0–4）已 implemented/tested、待 review；剩餘 gate = S4 review + seal head 的 Layer-P pass certificate + 該 head 的 coordinate/工作流綠，然後才談 seal"
 target-decision-layer: none
 primary-intent: boundary-diagnostic
 output-class: "diagnostic result | substrate-fidelity edge proposal"
@@ -68,7 +68,7 @@ Full argument: declaration §0. Design record:
 | **S1** | ✅ landed — bounded behavior probe, coordinate/probe publisher, runtime-input manifest and path-partition firewall; G1/G2 remain probes, not equivalence evidence | no — default-off research tooling |
 | **S2** | ✅ landed — published coordinate/probe/equivalence split, `captured_under` sidecar, fail-closed static guard, same-repository PR-head + main self-hosted input/probe re-attestation | no |
 | **S3** | ✅ landed — `run_h2_layer_p.py`: required base, retry verdict, build/load proof, monitor-before-hash runtime-input binding, post-run content/membership/symlink revalidation, bounded probe, v2 certificate, append-only retry log | no |
-| **S4** | ⚠️ **partial** — terminal partition (`h2_terminal_partition.py`, owner-accepted) plus the evidence-root contract, the independent verifier, the corpus checker and the observation emitter; the **controller and its four ordered runs are not implemented** (scope below) | no |
+| **S4** | ⚠️ **implemented / unreviewed / unsealed** — terminal partition, evidence-root contract, independent verifier, corpus checker, observation emitter, and the Phase-A controller with its four ordered runs. This implementation creates no `I`/`F`/`S` and performs no authorized measurement | no |
 
 ### S4 — what is and is not implemented
 
@@ -112,8 +112,16 @@ where an edit would have changed what re-attempt is admissible while
 vocabulary and completion keys) and are published in `as_payload()` so both
 consumption paths agree.
 
-Two properties the verifier owes its name, both added after review:
+Three properties the verifier owes its name:
 
+- **the Phase-A terminal-1 inputs are cross-checked, not merely inventoried.**
+  The archived freeze/certificate/content bindings, checkout-identity witness,
+  launch probe, mutation record and controller result must agree with the
+  observation and the independently selected terminal. The verifier rebuilds
+  `source_tree` and the decision-relevant, identity-semantics and plumbing file
+  sets from the bound Git commit; it does not import the controller's certificate
+  evaluator. The recorded predicate must equal that recomputation in both
+  directions. Table-driven tamper tests pin every certificate condition;
 - **the admission gate is recomputed, not read.** § C3.6's five conditions are
   rebuilt from the bound Phase-A root, both freeze records, the archived Layer-P
   certificate and the prior-attempt chain, and must equal the record condition
@@ -130,10 +138,39 @@ Two properties the verifier owes its name, both added after review:
   already found — which is the only way § C3.5.1's kill-switch actually bans
   anything.
 
-**Not implemented.** `run_h2_measurement.py`, its child/recorder and its argv
-builder: the four ordered runs, the § 5.1.1 recorder normalization, the live A7.6
-and packet-verifier wiring, and the emission of the artifacts the three tools
-above already verify. Items 0–4 of `Current step` below.
+**Implemented in the current change; review pending.** `run_h2_measurement.py`
+is a Phase-A-only controller and `run_h2_measurement_child.py` is its dedicated
+child/recorder. Together they implement the four ordered runs, § 5.1.1 recorder
+normalization, live A7.6 comparison and packet-verifier wiring, and emission of
+the artifacts the three tools above verify. The controller consumes an external
+freeze, exact-head Layer-P certificate, reference probe, runtime-input manifest
+and published identity; it does not create or seal `I`, `F`, or `S`, and it has
+no Phase-B launch path.
+
+The raw MOT output is atomically committed and directory-fsynced first; that
+final path is the independent commit point for the `mot_output` A7.6 member.
+`policy_base_inventory.json` is then committed by same-directory temporary
+write, file fsync, atomic replace and directory fsync; that replace is the
+commit point for all four base members. Every other surviving JSON record uses
+the same atomic protocol. If execution stops between the two base commit
+points, controller and verifier replay the MOT-only survivor rather than erase
+its equality relation. The raw capture is written before canonicalization,
+projection or replay. Packet-data shape, numeric and binary-layout exceptions
+declared by `h2_behavioral_identity.py` record `packet_invalid`; unclassified
+implementation exceptions remain terminal-4 execution failures. A packet
+failure never fabricates projection or overflow fields and never deletes the
+already-known base equality evidence. After any child outcome, including
+nonzero, the controller replays every surviving base/full inventory and packet
+before applying terminal priority.
+
+The H2 measurement invocation ends at a clean final monitor drain. With the
+monitor still active, the controller revalidates every bound launch record and
+the checkout head/tree/cleanliness; it then performs the final nonblocking drain.
+A drain with no mutation event is the common linearization point. The monitor is
+closed only afterward, and all later writes are evidence-only. Thus a mutation
+during the sequential scan is caught by the monitor, while a mutation after the
+clean drain is explicitly outside the invocation. Failure, mismatch or an event
+during this stop protocol has terminal-1 priority.
 
 Nothing is blocked by this today. Layer P is independently useful without it — it
 is what resolves plumbing coordinates without spending authorizations.
@@ -198,7 +235,8 @@ declaration **Review Correction 3** — `I_B = (I40_B, F_B)`, the `F_B` freeze l
 `S_B`, the result mapping, the measurement-surface re-attempt rule, the
 pre-terminal admission gate, and the C3.9 pre-seal edit list. What precondition 6
 asks for now exists, and the ruler work C3.9 schedules has since landed; what
-remains is the Layer-M plumbing, below.
+remains is review of the implemented Phase-A Layer-M plumbing plus the
+exact-head seal gates below.
 
 Two consequences a reader of this charter must not get wrong:
 
@@ -259,16 +297,18 @@ upgrade. Version-lag accounting follows
 *Planning target only; not accepted state; replaceable inside this charter
 without a registry write.*
 
-By the next commit point, the Layer-M build is expected to be **scoped and
-reviewable but not sealed**: the controller scope below either survives a review
-pass or is replaced. No `I`/`F`/`S`, no authorization, no capture, and no
-registry state change is expected to occur.
+By the next commit point, the implemented Phase-A Layer-M build is expected to
+be **reviewable but not sealed**: it either survives review or is replaced. No
+`I`/`F`/`S`, no authorization, no capture, and no registry state change is
+expected to occur.
 
 ## Commit point
 
-Owner reviews whether state changed when **either** the Layer-M controller scope
-below is implemented and its verifier runs end-to-end on a Layer-P pass
-certificate, **or** the scope is disconfirmed and the charter is re-planned.
+Owner reviews whether state changed when **either** the Phase-A controller and
+its independent verifier are accepted, **or** the implementation is
+disconfirmed and the charter is re-planned. A real exact-head Layer-P
+certificate remains a seal gate, not something this implementation change
+creates.
 
 ## Discard when
 
@@ -306,6 +346,8 @@ certificate, **or** the scope is disconfirmed and the charter is re-planned.
 |:--|:--|
 | `scripts/tools/h2_terminal_partition.py` | the §7 partition, executable; the only terminal authority |
 | `scripts/tools/h2_measurement_evidence.py` | evidence-root contract + the observation emitter |
+| `scripts/tools/run_h2_measurement.py` | Phase-A Layer-M controller; validates externally supplied inputs and emits one evidence root |
+| `scripts/tools/run_h2_measurement_child.py` | H2-specific child/recorder; normalized active-pair inventory and frozen A5 execution |
 | `scripts/tools/verify_h2_measurement.py` | independent verifier; the three § C3.5.1 verify classes |
 | `scripts/tools/check_h2_measure_archives.py` | corpus checker; `prior_attempts` and the § C3.5 ban |
 | `scripts/tools/run_h2_layer_p.py` | Layer-P controller; emits `h2_layer_p_certificate_v2` |
@@ -319,7 +361,7 @@ certificate, **or** the scope is disconfirmed and the charter is re-planned.
 
 ## Current step
 
-**Scope the Layer-M controller. Do not seal.**
+**Review the Phase-A Layer-M controller. Do not seal or execute a measurement.**
 
 Correction 3 puts an ordering constraint on everything below: `identity_semantics`
 must be frozen from the Phase-A seal to the Phase-B seal, so the ruler work comes
@@ -398,15 +440,15 @@ declaration consequence, not a shortcut):
   exclusive. Writing an H2 child is what makes the normalization reachable while
   leaving the frozen child untouched.
 
-**Must be newly written:**
+**Newly written in the current change; review pending:**
 
-0. an H2 child entrypoint and its argv builder, replacing the two H0 argv
+0. ✅ an H2 child entrypoint and its argv builder, replacing the two H0 argv
    helpers above;
-1. the four ordered runs `00_capture_off`, `01/02/03_capture_on` on MOT17-04-SDP
+1. ✅ the four ordered runs `00_capture_off`, `01/02/03_capture_on` on MOT17-04-SDP
    under the unmodified A5 target with `SACCADE_GPU_DECODE=1` (§3.3);
-2. the A7.6 seven-member capture-off/on comparison → `capture_off_on_equal`;
-3. three capture-on packets + packet-verifier invocation → `packets_valid`;
-4. the recorder normalization of §5.1.1 — write `sorted(raw, key=slot)` and
+2. ✅ the A7.6 seven-member capture-off/on comparison → `capture_off_on_equal`;
+3. ✅ three capture-on packets + packet-verifier invocation → `packets_valid`;
+4. ✅ the recorder normalization of §5.1.1 — write `sorted(raw, key=slot)` and
    assert *no duplicate slot*, never the native `unordered_map` iteration order;
    the frozen `run_h0_phase_a_child.py` is **not** edited;
 5. ✅ evidence root `h2_measure_<I40>/` with manifest and checksum inventory —
@@ -421,11 +463,10 @@ declaration consequence, not a shortcut):
    optional `execution_result`, so the controller cannot express a terminal the
    partition does not define.
 
-Items 5–8 verify artifacts nothing yet produces; that is the intended order. The
-artifact contract is what the controller must satisfy, and writing it first means
-the controller is reviewed against a fixed target rather than the target being
-adjusted to whatever the controller happened to emit — the § 5.3 circular-oracle
-hazard in its most ordinary form.
+Items 5–8 landed before items 0–4 by design. The artifact contract was fixed
+before the controller, so the controller is reviewed against that target rather
+than the target being adjusted to whatever the controller happened to emit —
+the § 5.3 circular-oracle hazard in its most ordinary form.
 
 ## Acceptance
 
@@ -452,7 +493,7 @@ A Layer-M seal may be proposed only when **all** of these hold:
    attesting the merge tree `f04d4799`): runtime inputs re-bound, probe
    recomputed to `2dabed0bc05e3bc7…` — the seventh physically distinct build to
    reproduce it — and `--strict` staleness pass;**
-3. the S4 items above are implemented, tested, and reviewed;
+3. ⚠️ the S4 items above are implemented and contract-tested; review is pending;
 4. a Layer-P pass certificate (`h2_layer_p_certificate_v2`) exists for the exact
    head under seal, with `--base` given and the full changed-path verdict clean;
 5. the published coordinate is current and the controlled-host workflow is green
@@ -649,3 +690,50 @@ Additionally, and specific to the accepted decisions:
   one worth carrying into the controller: **a completeness check may not take its
   input from the object being checked.** Both defects in this round were the same
   shape — trusting a list to describe its own gaps.
+
+- **2026-07-27** — implemented the Phase-A Layer-M controller without sealing or
+  executing a measurement. `run_h2_measurement.py` consumes externally supplied
+  freeze/certificate/identity inputs, launches exactly the four ordered runs,
+  rechecks the A7.6 comparison and packet verdicts controller-side, and emits the
+  fixed evidence contract. Its dedicated child performs § 5.1.1 slot
+  normalization and duplicate rejection without editing H0's frozen child.
+  CPU-injected contract tests cover the clean path and terminals 1–4, including
+  mutation priority; the complete contract suite passed (822 passed, 4 skipped,
+  3 xfailed). The tests also exposed and fixed a verifier replay defect:
+  a present-but-invalid packet is complete evidence for terminal 3, not a
+  missing packet. Self-review then closed the initial-intake/monitor TOCTOU
+  window, added post-run runtime-input revalidation, and made the independent
+  verifier cross-check the archived terminal-1 inputs rather than treating them
+  as checksum-only files. Review, exact-head Layer-P certification,
+  controlled-host re-attestation and separate owner authorization remain
+  outstanding.
+
+- **2026-07-27** — PR review remediation closed three producer/verifier gaps.
+  The verifier now independently rebuilds the complete terminal-1 certificate
+  predicate from an archived checkout witness plus the bound Git tree and
+  requires exact bidirectional predicate equality. The child now persists raw
+  capture before one total packet-processing operation, so structural
+  canonicalization/projection/replay failures select terminal 3. The controller
+  initially attempted a post-close scan as an invocation-end boundary. Second
+  review showed that a sequential scan without the monitor cannot establish one
+  common state, and that dropping the full inventory also dropped higher-priority
+  base inequality evidence.
+
+- **2026-07-27** — second-round remediation separates the four durable base
+  A7.6 members from packet-derived projection/overflow, replays all surviving
+  evidence after every child outcome, and preserves terminal 2 over terminal 3
+  and 4. The stop protocol now revalidates while the monitor remains active and
+  uses the clean final drain as its linearization point; the verifier enforces
+  the exact v2 stop schema and `checkout_clean=true` on a clean progression.
+  The exception/terminal-priority distinction moved `identity_semantics` to
+  `93f87a83`; the publication was regenerated with the runtime-input coordinate
+  and bounded probe digest unchanged, while equivalence remains `unproven`.
+  At this point acceptance gate 2 was reopened. No Layer-P certificate or seal
+  could be issued until the repaired head was republished and re-attested.
+
+- **2026-07-27** — controlled-host re-attestation passed on the repaired code
+  head `32935d5d` (run 30254189532), with the bounded probe and runtime-input
+  coordinate equal to the republished identity. This closes acceptance gate 2
+  for the repaired surface; S4 review, an exact seal-head Layer-P certificate
+  and separate owner authorization remain outstanding. No certificate or seal
+  was created by this run.

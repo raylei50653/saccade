@@ -1,0 +1,751 @@
+#!/usr/bin/env python3
+"""H2 Phase-A measurement child and recorder.
+
+The parent is the only supported caller.  It writes one canonical invocation,
+launches this file with exactly ``--invocation <absolute path>``, and owns the
+four-run ordering and the single deadline.  The child owns one fresh evaluator
+process and the run-local artifacts:
+
+* the A7.6 policy inventory;
+* the complete capture packet and frozen packet-verifier report on capture-on;
+* the MOT bytes used by the inventory identity; and
+* the invocation state transition.
+
+This file is ``plumbing_only``.  It imports the A7.6 member sets, run ids,
+capture schema, trace capacities, and packet verifier from their existing
+authorities.  It does not define a terminal, phase completion rule, or new
+comparison vocabulary.
+"""
+# status: stable
+
+from __future__ import annotations
+
+import argparse
+import configparser
+import hashlib
+import os
+import struct
+import sys
+import tempfile
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Callable, Mapping, Sequence
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+_TOOLS = REPO_ROOT / "scripts" / "tools"
+if _TOOLS.as_posix() not in sys.path:
+    sys.path.insert(0, _TOOLS.as_posix())
+
+import h2_behavioral_identity as behavior  # noqa: E402
+import h2_measurement_evidence as evidence  # noqa: E402
+import run_h0_phase_a as h0_controller  # noqa: E402
+import run_h0_phase_a_child as h0_child  # noqa: E402
+from export_headline_bridge_decision_trace import (  # noqa: E402
+    OVERFLOW_KEYS,
+    STREAMS,
+    UNIVERSE_OVERFLOW_KEYS,
+    UNIVERSE_STREAMS,
+    canonical_semantic_packet,
+)
+from verify_headline_bridge_decision_trace import verify_capture  # noqa: E402
+
+CHILD_SCHEMA = "h2_measurement_child_v1"
+INVOCATION_SCHEMA = "h2_measurement_child_invocation_v1"
+
+(
+    ACTIVE_PAIRS_MEMBER,
+    FINAL_ROWS_MEMBER,
+    MOT_MEMBER,
+    RELINK_MEMBER,
+) = behavior.BEHAVIOR_MEMBERS
+PROPOSAL_MEMBER, WINNER_MEMBER = behavior.A76_PROJECTION_MEMBERS
+OVERFLOW_MEMBER = behavior.A76_OVERFLOW_MEMBER
+POLICY_MEMBERS = frozenset(
+    {
+        *behavior.A76_EQUALITY_MEMBERS,
+        *behavior.A76_PROJECTION_MEMBERS,
+        behavior.A76_OVERFLOW_MEMBER,
+        "schema",
+    }
+)
+BASE_POLICY_MEMBERS = frozenset({*behavior.A76_EQUALITY_MEMBERS, "schema"})
+OVERFLOW_FIELDS = tuple(OVERFLOW_KEYS[name] for name in STREAMS) + tuple(
+    UNIVERSE_OVERFLOW_KEYS[name] for name in UNIVERSE_STREAMS
+)
+
+
+class ChildError(RuntimeError):
+    """The child invocation or one produced artifact is invalid."""
+
+
+@dataclass(frozen=True)
+class RunProducts:
+    mot_bytes: bytes
+    policy_base_inventory: Mapping[str, Any]
+    policy_inventory: Mapping[str, Any] | None
+    packet: Mapping[str, Any] | None
+    packet_verification: Mapping[str, Any] | None
+
+
+@dataclass(frozen=True)
+class CaptureProcessing:
+    proposal: Mapping[str, Any] | None
+    winner: Mapping[str, Any] | None
+    overflow: list[int] | None
+    verification: Mapping[str, Any]
+
+    @property
+    def valid(self) -> bool:
+        return self.verification.get("state") == "pass"
+
+
+def normalize_active_pairs(
+    raw: Sequence[Sequence[int]], *, frame_id: int
+) -> list[list[int]]:
+    """Apply §5.1.1's recorder normalization and reject duplicate slots."""
+    pairs = [[int(pair[0]), int(pair[1])] for pair in raw]
+    pairs.sort(key=lambda pair: pair[1])
+    slots = [pair[1] for pair in pairs]
+    if len(set(slots)) != len(slots):
+        raise ChildError(
+            f"duplicate slot in active tid/slot pairs at frame {frame_id}: {pairs}"
+        )
+    return pairs
+
+
+def _canonical_document(path: Path, *, schema: str) -> dict[str, Any]:
+    try:
+        payload = evidence.load_document(path.parent, path.name, schema=schema)
+    except evidence.EvidenceError as exc:
+        raise ChildError(str(exc)) from exc
+    return payload
+
+
+def load_invocation(path: Path) -> dict[str, Any]:
+    if not path.is_absolute():
+        raise ChildError("invocation path is not absolute")
+    if path.is_symlink() or not path.is_file():
+        raise ChildError("invocation is not a physical regular file")
+    invocation = _canonical_document(path, schema=INVOCATION_SCHEMA)
+    required = {
+        "build_dir",
+        "capture_phase",
+        "capture_run_uuid",
+        "environment_digest",
+        "instrumentation_head",
+        "policy_fingerprint",
+        "run_dir",
+        "run_id",
+        "schema",
+        "sequence",
+        "state",
+    }
+    if set(invocation) != required:
+        raise ChildError(
+            "invocation has missing or unknown members: "
+            f"{sorted(set(invocation) ^ required)}"
+        )
+    if invocation["run_id"] not in evidence.RUN_IDS:
+        raise ChildError(f"unknown run id: {invocation['run_id']!r}")
+    phase = evidence.PHASE_BY_CAPTURE_PHASE.get(invocation["capture_phase"])
+    if phase != "a":
+        raise ChildError("this child implements the scoped Phase-A controller only")
+    if invocation["sequence"] not in evidence.expected_sequences(phase):
+        raise ChildError("invocation sequence is outside the Phase-A fixture")
+    run_dir = Path(str(invocation["run_dir"]))
+    build_dir = Path(str(invocation["build_dir"]))
+    if (
+        not run_dir.is_absolute()
+        or run_dir.resolve(strict=True) != path.parent.resolve(strict=True)
+        or not build_dir.is_absolute()
+        or not build_dir.is_dir()
+    ):
+        raise ChildError("invocation path binding is absent or inconsistent")
+    if invocation["state"] != "running":
+        raise ChildError("invocation is not in the running state")
+    run_uuid = invocation["capture_run_uuid"]
+    if not isinstance(run_uuid, str) or not run_uuid:
+        raise ChildError("invocation has no capture_run_uuid")
+    return invocation
+
+
+def _environment_digest(environment: Mapping[str, str]) -> str:
+    return hashlib.sha256(evidence.canonical_json_bytes(dict(environment))).hexdigest()
+
+
+def validate_environment(
+    environment: Mapping[str, str], invocation: Mapping[str, Any]
+) -> None:
+    if set(environment) != h0_child.EXPECTED_ENV_KEYS:
+        raise ChildError(
+            "child environment keys differ from the frozen A5 execution environment"
+        )
+    for key, value in h0_child.STATIC_ENV.items():
+        if environment.get(key) != value:
+            raise ChildError(f"child environment value mismatch for {key}")
+    if environment.get("SACCADE_BUILD_PATH") != invocation["build_dir"]:
+        raise ChildError("selected build directory differs from the invocation")
+    if environment.get("SACCADE_GPU_DECODE") != "1":
+        raise ChildError("the measurement child must keep GPU decode enabled")
+    if _environment_digest(environment) != invocation["environment_digest"]:
+        raise ChildError("child environment digest differs from the invocation")
+    run_dir = Path(str(invocation["run_dir"]))
+    for key, leaf in (
+        ("HOME", "home"),
+        ("TMPDIR", "tmp"),
+        ("XDG_CACHE_HOME", "xdg-cache"),
+    ):
+        expected = run_dir / "_env" / leaf
+        if environment.get(key) != expected.as_posix() or not expected.is_dir():
+            raise ChildError(f"derived environment directory mismatch for {key}")
+
+
+def _projection_records(
+    capture: Mapping[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    packet = canonical_semantic_packet(capture)
+    streams = packet["streams"]
+    candidates = [
+        row for row in streams["candidate_records"] if int(row["proposal_emitted"]) == 1
+    ]
+    claims = streams["claim_records"]
+    commits = streams["commit_records"]
+    proposal_payload = {"candidates": candidates, "claims": claims}
+    winner_payload = {
+        "commits": commits,
+        "winning_claims": [row for row in claims if int(row["claim_won"]) == 1],
+    }
+    return (
+        {
+            "count": len(candidates),
+            "digest": evidence.digest(proposal_payload),
+            "records": proposal_payload,
+        },
+        {
+            "count": len(commits),
+            "digest": evidence.digest(winner_payload),
+            "records": winner_payload,
+        },
+    )
+
+
+def persist_and_process_capture(
+    run_dir: Path, capture: Mapping[str, Any]
+) -> CaptureProcessing:
+    """Persist the raw capture before one total packet-verification operation."""
+    evidence.write_document(run_dir, evidence.PACKET_NAME, capture)
+    try:
+        proposal, winner = _projection_records(capture)
+        overflow = [int(capture[field]) for field in OVERFLOW_FIELDS]
+        report = verify_capture(capture)
+    except behavior.PACKET_INVALID_EXCEPTIONS:
+        verification: Mapping[str, Any] = {
+            "failure": "packet_invalid",
+            "state": "fail",
+        }
+        evidence.write_document(
+            run_dir, evidence.PACKET_VERIFICATION_NAME, verification
+        )
+        return CaptureProcessing(None, None, None, verification)
+    verification = {"report": report, "state": "pass"}
+    evidence.write_document(run_dir, evidence.PACKET_VERIFICATION_NAME, verification)
+    return CaptureProcessing(proposal, winner, overflow, verification)
+
+
+def _binary32_bits(value: float) -> int:
+    return struct.unpack("!I", struct.pack("!f", value))[0]
+
+
+def repository_runner(invocation: Mapping[str, Any]) -> RunProducts:
+    """Run the fixed A5 policy once and return the complete run-local products."""
+    (
+        yaml,
+        build_parser,
+        configure_runtime_env,
+        fingerprint,
+        evaluator_module,
+        stages_module,
+        EvalPipeline,
+        build_mamba_gated_detector,
+        set_postprocess_compile,
+    ) = behavior._import_eval_stack()
+
+    run_id = str(invocation["run_id"])
+    sequence = str(invocation["sequence"])
+    run_dir = Path(str(invocation["run_dir"]))
+    build_dir = Path(str(invocation["build_dir"]))
+    if behavior.resolve_build_dir() != build_dir:
+        raise ChildError("runtime build selection differs from the invocation")
+    extension = behavior._assert_extension_consumed(build_dir)
+
+    defaults = (
+        yaml.safe_load(
+            (REPO_ROOT / behavior.POLICY_PRESET_REL).read_text(encoding="utf-8")
+        )
+        or {}
+    )
+    if not isinstance(defaults, dict):
+        raise ChildError("policy preset is not a mapping")
+    parser = build_parser()
+    parser.set_defaults(**defaults)
+    args = parser.parse_args(
+        ["--sequences", sequence, "--output", (run_dir / "_runtime").as_posix()]
+    )
+    resolved = fingerprint(behavior.POLICY_PRESET_STEM)
+    if resolved != invocation["policy_fingerprint"]:
+        raise ChildError("resolved policy fingerprint differs from the invocation")
+    configure_runtime_env(args, os.environ)
+    validate_environment(os.environ, invocation)
+
+    tiling = getattr(args, "tiling", "native_640")
+    detector = build_mamba_gated_detector(
+        yolo_pt_path=args.mamba_yolo_weights,
+        teacher_ckpt=args.mamba_teacher_ckpt,
+        mamba_ckpt=args.mamba_ckpt,
+        img_size=behavior._image_size(tiling),
+        device="cuda",
+        conf_thr=0.001,
+        max_det=getattr(args, "max_det", 300),
+        trt_backbone_engine=getattr(args, "fpn_backbone_engine", ""),
+        trt_head_engine=getattr(args, "mamba_head_engine", ""),
+        temporal_T_override=0 if getattr(args, "no_temporal", False) else None,
+        use_cuda_graph=bool(getattr(args, "use_cuda_graph", False)),
+        use_whole_graph=bool(getattr(args, "use_whole_graph", False)),
+        small_p3_max_threshold=getattr(args, "mamba_small_p3_max_threshold", 0.0),
+    )
+    set_postprocess_compile(True)
+    detector.mamba_head.set_head_compile(True)
+    detector.mamba_head.set_block_compile(True)
+
+    active_pairs: list[dict[str, Any]] = []
+    final_rows: list[dict[str, Any]] = []
+    pipelines: list[Any] = []
+    emitted: list[tuple[str, tuple[str, ...]]] = []
+    original_init = EvalPipeline.__init__
+    original_frame = evaluator_module._run_frame
+    original_evaluator_emit = evaluator_module._fast_emit_mot_lines
+    original_stages_emit = stages_module._fast_emit_mot_lines
+
+    def controlled_init(self: Any, *positional: Any, **keywords: Any) -> None:
+        original_init(self, *positional, **keywords)
+        if self.seq != sequence or pipelines:
+            raise ChildError("evaluator constructed an unexpected or second sequence")
+        pipelines.append(self)
+        tracker = self.detector.tracker
+        enabled = run_id != evidence.CAPTURE_OFF_RUN
+        pair, candidate, claim, commit = h0_controller.TRACE_CAPACITIES
+        tracker.set_research_h0_bridge_trace(
+            enabled,
+            pair_capacity=pair,
+            candidate_capacity=candidate,
+            claim_capacity=claim,
+            commit_capacity=commit,
+        )
+        if enabled:
+            tracker.clear_research_h0_bridge_trace()
+
+    def controlled_frame(
+        state: Any, *, frame_id: int, prepared_detection: Any = None
+    ) -> bool:
+        outcome = original_frame(
+            state, frame_id=frame_id, prepared_detection=prepared_detection
+        )
+        raw = state.detector.tracker.tracker.get_active_tid_slot_pairs()
+        active_pairs.append(
+            {
+                "frame": int(frame_id),
+                "pairs": normalize_active_pairs(raw, frame_id=frame_id),
+            }
+        )
+        return outcome
+
+    def capturing_emit(
+        original: Callable[..., list[str]], **keywords: Any
+    ) -> list[str]:
+        lines = original(**keywords)
+        tracks = keywords["track_results"]
+        count = int(tracks["count"])
+        if len(lines) != count or keywords["seq"] != sequence:
+            raise ChildError("raw emission cardinality or sequence mismatch")
+        boxes = tracks["boxes"][:count].numpy()
+        scores = tracks["scores"][:count].numpy()
+        classes_value = tracks.get("classes")
+        classes = (
+            [int(getattr(args, "person_class", 0))] * count
+            if classes_value is None
+            else [int(value) for value in classes_value[:count].numpy()]
+        )
+        frame = int(keywords["frame_id"])
+        row_base = sum(1 for row in final_rows if row["frame"] == frame)
+        for offset, (line, box, score, class_id) in enumerate(
+            zip(lines, boxes, scores, classes, strict=True)
+        ):
+            fields = line.split(",")
+            if len(fields) != 10 or int(fields[0]) != frame:
+                raise ChildError("raw emission and MOT row disagree")
+            x1, y1, x2, y2 = (float(value) for value in box)
+            final_rows.append(
+                {
+                    "binary32_bits": [
+                        _binary32_bits(value)
+                        for value in (x1, y1, x2 - x1, y2 - y1, float(score))
+                    ],
+                    "class": class_id,
+                    "frame": frame,
+                    "row_index": row_base + offset,
+                    "track_id": int(fields[1]),
+                }
+            )
+        return lines
+
+    def callback(name: str, lines: tuple[str, ...]) -> None:
+        if emitted or name != sequence or not isinstance(lines, tuple):
+            raise ChildError("sequence callback cardinality or type mismatch")
+        emitted.append((name, lines))
+
+    EvalPipeline.__init__ = controlled_init
+    evaluator_module.EvalPipeline = EvalPipeline
+    evaluator_module._run_frame = controlled_frame
+    evaluator_module._fast_emit_mot_lines = lambda **kw: capturing_emit(
+        original_evaluator_emit, **kw
+    )
+    stages_module._fast_emit_mot_lines = lambda **kw: capturing_emit(
+        original_stages_emit, **kw
+    )
+
+    excluded = {
+        "module_detection",
+        "module_geometry",
+        "module_motion",
+        "module_reid",
+        "module_semantic",
+        "module_trigger",
+        "module_lifecycle",
+        "mamba_ckpt",
+        "mamba_teacher_ckpt",
+        "mamba_yolo_weights",
+        "teacher_head_ckpt",
+        "visualize",
+        "visualize_scale",
+        "visualize_fps",
+        "no_visualize_score",
+        "visualize_trail_len",
+    }
+    eval_kwargs = {
+        key: value for key, value in vars(args).items() if key not in excluded
+    }
+    eval_kwargs.update(
+        {
+            "detector": detector,
+            "engine": "mamba",
+            "sequence_result_callback": callback,
+            "tiling": tiling,
+        }
+    )
+    try:
+        result = evaluator_module.run_eval(**eval_kwargs)
+    finally:
+        EvalPipeline.__init__ = original_init
+        evaluator_module.EvalPipeline = EvalPipeline
+        evaluator_module._run_frame = original_frame
+        evaluator_module._fast_emit_mot_lines = original_evaluator_emit
+        stages_module._fast_emit_mot_lines = original_stages_emit
+    if result != {} or len(emitted) != 1 or len(pipelines) != 1:
+        raise ChildError("evaluator did not return at the sole no-metrics boundary")
+
+    sequence_info = configparser.ConfigParser(interpolation=None)
+    sequence_info.optionxform = str
+    try:
+        with (
+            REPO_ROOT / "datasets" / "MOT17" / "train" / sequence / "seqinfo.ini"
+        ).open("r", encoding="utf-8") as handle:
+            sequence_info.read_file(handle)
+        frame_count = int(sequence_info["Sequence"]["seqLength"])
+    except (OSError, KeyError, ValueError, configparser.Error) as exc:
+        raise ChildError("canonical sequence frame count is unavailable") from exc
+    if [row["frame"] for row in active_pairs] != list(range(1, frame_count + 1)):
+        raise ChildError("child did not process the complete sequence exactly once")
+
+    lines = emitted[0][1]
+    mot_bytes = ("\n".join(lines) + "\n").encode("utf-8")
+    callback_rows: list[tuple[int, int, int]] = []
+    row_positions: dict[int, int] = {}
+    for line in lines:
+        fields = line.split(",")
+        if len(fields) != 10:
+            raise ChildError("non-canonical MOT result row")
+        frame = int(fields[0])
+        position = row_positions.get(frame, 0)
+        row_positions[frame] = position + 1
+        callback_rows.append((frame, position, int(fields[1])))
+    raw_keys = [
+        (int(row["frame"]), int(row["row_index"]), int(row["track_id"]))
+        for row in final_rows
+    ]
+    if raw_keys != callback_rows:
+        raise ChildError("raw binary32 emission rows differ from callback order")
+
+    tracker = pipelines[0].detector.tracker
+    relink = [int(value) for value in tracker.get_relink_debug()]
+    if len(relink) != 13:
+        raise ChildError("native relink debug vector length drift")
+
+    base_inventory = {
+        ACTIVE_PAIRS_MEMBER: active_pairs,
+        FINAL_ROWS_MEMBER: final_rows,
+        MOT_MEMBER: {
+            "length": len(mot_bytes),
+            "sha256": hashlib.sha256(mot_bytes).hexdigest(),
+        },
+        RELINK_MEMBER: relink,
+        "schema": evidence.BASE_POLICY_INVENTORY_SCHEMA,
+    }
+    _persist_base_products(run_dir, sequence, mot_bytes, base_inventory)
+
+    packet: Mapping[str, Any] | None = None
+    packet_verification: Mapping[str, Any] | None = None
+    proposal: Mapping[str, Any] | None = None
+    winner: Mapping[str, Any] | None = None
+    overflow = list(behavior.A76_OVERFLOW_ZERO_VECTOR)
+    if run_id != evidence.CAPTURE_OFF_RUN:
+        capture = tracker.drain_research_h0_bridge_trace(
+            seq=sequence,
+            capture_phase=invocation["capture_phase"],
+            require_candidate_exposure=True,
+            require_commit_exposure=False,
+            capture_run_uuid=invocation["capture_run_uuid"],
+        )
+        packet = capture
+        processed = persist_and_process_capture(run_dir, capture)
+        packet_verification = processed.verification
+        if processed.valid:
+            proposal = processed.proposal
+            winner = processed.winner
+            assert processed.overflow is not None
+            overflow = processed.overflow
+        else:
+            # A structurally invalid raw packet is decisive terminal-3
+            # evidence. Do not fabricate packet-derived policy projections.
+            behavior._assert_build_components_consumed(build_dir, extension)
+            return RunProducts(
+                mot_bytes,
+                base_inventory,
+                None,
+                packet,
+                packet_verification,
+            )
+
+    inventory = {
+        ACTIVE_PAIRS_MEMBER: active_pairs,
+        FINAL_ROWS_MEMBER: final_rows,
+        MOT_MEMBER: {
+            "length": len(mot_bytes),
+            "sha256": hashlib.sha256(mot_bytes).hexdigest(),
+        },
+        OVERFLOW_MEMBER: overflow,
+        PROPOSAL_MEMBER: proposal,
+        RELINK_MEMBER: relink,
+        "schema": evidence.POLICY_INVENTORY_SCHEMA,
+        WINNER_MEMBER: winner,
+    }
+    behavior._assert_build_components_consumed(build_dir, extension)
+    return RunProducts(
+        mot_bytes,
+        base_inventory,
+        inventory,
+        packet,
+        packet_verification,
+    )
+
+
+def validate_products(run_id: str, products: RunProducts) -> None:
+    base = products.policy_base_inventory
+    if (
+        set(base) != BASE_POLICY_MEMBERS
+        or base.get("schema") != evidence.BASE_POLICY_INVENTORY_SCHEMA
+    ):
+        raise ChildError("base policy inventory schema mismatch")
+    if base[MOT_MEMBER] != {
+        "length": len(products.mot_bytes),
+        "sha256": hashlib.sha256(products.mot_bytes).hexdigest(),
+    }:
+        raise ChildError("MOT bytes differ from the base policy inventory")
+    inventory = products.policy_inventory
+    if inventory is None:
+        if (
+            run_id == evidence.CAPTURE_OFF_RUN
+            or products.packet is None
+            or products.packet_verification
+            != {"failure": "packet_invalid", "state": "fail"}
+        ):
+            raise ChildError("only a persisted invalid capture may omit its inventory")
+        return
+    if set(inventory) != POLICY_MEMBERS:
+        raise ChildError("policy inventory has missing or unknown members")
+    if inventory.get("schema") != evidence.POLICY_INVENTORY_SCHEMA:
+        raise ChildError("policy inventory schema mismatch")
+    if any(
+        inventory[member] != base[member] for member in behavior.A76_EQUALITY_MEMBERS
+    ):
+        raise ChildError("full policy inventory differs from its base members")
+    if inventory[MOT_MEMBER] != {
+        "length": len(products.mot_bytes),
+        "sha256": hashlib.sha256(products.mot_bytes).hexdigest(),
+    }:
+        raise ChildError("MOT bytes differ from the policy inventory")
+    if run_id == evidence.CAPTURE_OFF_RUN:
+        if products.packet is not None or products.packet_verification is not None:
+            raise ChildError("capture-off produced packet artifacts")
+        if (
+            inventory[PROPOSAL_MEMBER] is not None
+            or inventory[WINNER_MEMBER] is not None
+        ):
+            raise ChildError("capture-off fabricated trace-only projections")
+    elif products.packet is None or products.packet_verification is None:
+        raise ChildError("capture-on omitted packet artifacts")
+
+
+def _replace_invocation(path: Path, payload: Mapping[str, Any]) -> None:
+    evidence.write_document(path.parent, path.name, payload)
+
+
+def _write_mot(path: Path, payload: bytes) -> None:
+    descriptor, temporary_name = tempfile.mkstemp(
+        dir=path.parent,
+        prefix=f".{path.name}.",
+        suffix=".tmp",
+    )
+    temporary = Path(temporary_name)
+    try:
+        view = memoryview(payload)
+        while view:
+            written = os.write(descriptor, view)
+            if written <= 0:
+                raise OSError("short MOT artifact write")
+            view = view[written:]
+        os.fsync(descriptor)
+        os.close(descriptor)
+        descriptor = -1
+        os.replace(temporary, path)
+        evidence._fsync_directory(path.parent)
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+        try:
+            temporary.unlink()
+        except FileNotFoundError:
+            pass
+
+
+def _persist_base_products(
+    run_dir: Path,
+    sequence: str,
+    mot_bytes: bytes,
+    inventory: Mapping[str, Any],
+) -> None:
+    """Commit raw MOT first, then atomically commit all four base members.
+
+    A durable MOT final path is the independent commit point for `mot_output`.
+    The base-inventory replace plus directory fsync is the commit point for the
+    complete four-member base record. Replay deliberately accepts the window
+    between those two points.
+    """
+    mot_path = run_dir / f"{sequence}.txt"
+    if mot_path.is_file():
+        if mot_path.read_bytes() != mot_bytes:
+            raise ChildError("persisted MOT output differs from run products")
+    else:
+        _write_mot(mot_path, mot_bytes)
+    inventory_path = run_dir / evidence.BASE_POLICY_INVENTORY_NAME
+    if inventory_path.is_file():
+        if (
+            evidence.load_document(run_dir, evidence.BASE_POLICY_INVENTORY_NAME)
+            != inventory
+        ):
+            raise ChildError(
+                "persisted base policy inventory differs from run products"
+            )
+    else:
+        evidence.write_document(
+            run_dir,
+            evidence.BASE_POLICY_INVENTORY_NAME,
+            inventory,
+        )
+
+
+def execute_child(
+    invocation_path: Path,
+    *,
+    environment: Mapping[str, str] | None = None,
+    runner: Callable[[Mapping[str, Any]], RunProducts] = repository_runner,
+) -> int:
+    invocation = load_invocation(invocation_path)
+    validate_environment(
+        dict(os.environ if environment is None else environment), invocation
+    )
+    run_dir = invocation_path.parent
+    try:
+        products = runner(invocation)
+        validate_products(str(invocation["run_id"]), products)
+        _persist_base_products(
+            run_dir,
+            str(invocation["sequence"]),
+            products.mot_bytes,
+            products.policy_base_inventory,
+        )
+        if products.policy_inventory is not None:
+            evidence.write_document(
+                run_dir,
+                evidence.POLICY_INVENTORY_NAME,
+                products.policy_inventory,
+            )
+        if products.packet is not None:
+            packet_path = run_dir / evidence.PACKET_NAME
+            if packet_path.is_file():
+                if (
+                    evidence.load_document(run_dir, evidence.PACKET_NAME)
+                    != products.packet
+                ):
+                    raise ChildError("persisted raw capture differs from run products")
+            else:
+                evidence.write_document(run_dir, evidence.PACKET_NAME, products.packet)
+        if products.packet_verification is not None:
+            verification_path = run_dir / evidence.PACKET_VERIFICATION_NAME
+            if verification_path.is_file():
+                if (
+                    evidence.load_document(run_dir, evidence.PACKET_VERIFICATION_NAME)
+                    != products.packet_verification
+                ):
+                    raise ChildError(
+                        "persisted packet verification differs from run products"
+                    )
+            else:
+                evidence.write_document(
+                    run_dir,
+                    evidence.PACKET_VERIFICATION_NAME,
+                    products.packet_verification,
+                )
+        completed = {**invocation, "state": "completed"}
+        _replace_invocation(invocation_path, completed)
+        return 0
+    except BaseException:
+        try:
+            _replace_invocation(invocation_path, {**invocation, "state": "failed"})
+        except BaseException:
+            pass
+        raise
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
+    parser.add_argument("--invocation", type=Path, required=True)
+    args = parser.parse_args(list(argv) if argv is not None else None)
+    try:
+        return execute_child(args.invocation)
+    except BaseException as exc:
+        print(f"H2 measurement child rejected: {exc}", file=sys.stderr)
+        return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

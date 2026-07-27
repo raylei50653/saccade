@@ -65,7 +65,9 @@
 - **H2 — bridge-decision capture under behavioral runtime identity** — `proposed`,
   non-WIP; successor to H0's **identity layer only**（declaration §0.1 boundary;
   H0 sealed history / 五個 spent `S` / permanent ledger 全部不變）；authorizes no
-  capture, no `I`/`F`/`S`, no re-entry → [task charter](../../research/threads/h2_behavioral_identity_capture_task.md)
+  capture, no `I`/`F`/`S`, no re-entry；Phase-A Layer-M controller implemented
+  and contract-tested, review pending；do not seal or execute →
+  [task charter](../../research/threads/h2_behavioral_identity_capture_task.md)
   · [declaration](research/headline_bridge_behavioral_identity_capture_declaration_20260725.md)
   · owner decision surface [#286](https://github.com/raylei50653/saccade/issues/286)（四項決策；不授權任何執行）
 - **(next only via separate owner decision)** any future H0 re-entry requires a new

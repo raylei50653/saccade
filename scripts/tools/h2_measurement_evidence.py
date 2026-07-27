@@ -24,12 +24,20 @@ h2_measure_b_<I40_B>_<F64>           phase B   (§ C3.1; complete digest, never
                                      recomputed by the verifier, never trusted
     layer_p_certificate.json         the certificate F binds, archived so the
                                      § C3.6(d) condition can be recomputed
+    reference_probe.json             the Layer-P probe-result file F binds
+    launch_probe.json                the launch-time probe used by terminal 1
+    runtime_inputs.json              the complete bound-input manifest
+    published_identity.json          the coordinate/probe publication F binds
+    checkout_identity_witness.json   source tree and all three content axes
+    mutation_observation.json        the BoundInputMonitor record
+    measurement_stop_boundary.json   monitored revalidation + final-drain boundary
     authorization_consumed.json      phase B: the § C3.5.1 step-5 write that
                                      *is* the consumption of S_B
     observation.json                 exactly ORDERED_PREDICATES (+ optional
                                      execution_result)
     terminal.json                    the recorded selection
-    runs/<sequence>/<run id>/        policy_inventory.json, packet.json,
+    runs/<sequence>/<run id>/        policy_base_inventory.json, optional full
+                                     policy_inventory.json, packet.json and
                                      packet_verification.json
     runs/<sequence>/comparison.json  the A7.6 reconstruction for that sequence
 ```
@@ -50,6 +58,7 @@ import argparse
 import json
 import os
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any, Iterable, Mapping, NamedTuple
 
@@ -60,6 +69,7 @@ if _TOOLS.as_posix() not in sys.path:
 
 import h2_terminal_partition as partition  # noqa: E402
 from h2_behavioral_identity import (  # noqa: E402
+    A76_BASE_POLICY_INVENTORY_SCHEMA,
     A76_POLICY_INVENTORY_SCHEMA,
     MEASUREMENT_SEQUENCE,
 )
@@ -80,10 +90,15 @@ TERMINAL_SCHEMA = "h2_terminal_selection_v1"
 FREEZE_SCHEMA = "h2_measurement_freeze_v1"
 ADMISSION_SCHEMA = "h2_admission_verdict_v1"
 AUTHORIZATION_SCHEMA = "h2_authorization_consumed_v1"
+CONTROLLER_SCHEMA = "h2_measurement_controller_v1"
+MUTATION_SCHEMA = "h2_bound_input_mutation_v1"
+CHECKOUT_WITNESS_SCHEMA = "h2_checkout_identity_witness_v1"
+STOP_BOUNDARY_SCHEMA = "h2_measurement_stop_boundary_v2"
 
 # Re-exported, never redeclared: the schema identifier is a ruler fact and lives
 # in `h2_behavioral_identity.py`, which owns the A7.6 member definitions (§ 4).
 POLICY_INVENTORY_SCHEMA = A76_POLICY_INVENTORY_SCHEMA
+BASE_POLICY_INVENTORY_SCHEMA = A76_BASE_POLICY_INVENTORY_SCHEMA
 
 EVIDENCE_REL = "docs/modules/semantic/research/evidence"
 
@@ -123,9 +138,18 @@ OBSERVATION_NAME = "observation.json"
 TERMINAL_NAME = "terminal.json"
 COMPARISON_NAME = "comparison.json"
 POLICY_INVENTORY_NAME = "policy_inventory.json"
+BASE_POLICY_INVENTORY_NAME = "policy_base_inventory.json"
 PACKET_NAME = "packet.json"
 PACKET_VERIFICATION_NAME = "packet_verification.json"
 CERTIFICATE_NAME = "layer_p_certificate.json"
+REFERENCE_PROBE_NAME = "reference_probe.json"
+LAUNCH_PROBE_NAME = "launch_probe.json"
+RUNTIME_INPUTS_NAME = "runtime_inputs.json"
+PUBLISHED_IDENTITY_NAME = "published_identity.json"
+MUTATION_NAME = "mutation_observation.json"
+CHECKOUT_WITNESS_NAME = "checkout_identity_witness.json"
+STOP_BOUNDARY_NAME = "measurement_stop_boundary.json"
+CONTROLLER_NAME = "controller.json"
 
 RUNS_DIR = "runs"
 
@@ -235,19 +259,54 @@ def observation_predicates(document: Mapping[str, Any]) -> dict[str, Any]:
 # -- records and the checksum inventory ------------------------------------ #
 
 
-def write_document(root: Path, name: str, payload: Mapping[str, Any]) -> Path:
-    """Write one canonical record, flushed, and return its path.
+def _fsync_directory(directory: Path) -> None:
+    descriptor = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
 
-    Flushing matters for exactly one record — § C3.5.1 step 5, where the durable
-    write *is* the consumption of `S_B` — so every record takes the same path
-    rather than leaving the load-bearing one as a special case.
+
+def _atomic_write(path: Path, payload: bytes) -> None:
+    """Commit bytes without ever exposing a partial final-path artifact."""
+    descriptor, temporary_name = tempfile.mkstemp(
+        dir=path.parent,
+        prefix=f".{path.name}.",
+        suffix=".tmp",
+    )
+    temporary = Path(temporary_name)
+    try:
+        view = memoryview(payload)
+        while view:
+            written = os.write(descriptor, view)
+            if written <= 0:
+                raise OSError("short evidence-record write")
+            view = view[written:]
+        os.fsync(descriptor)
+        os.close(descriptor)
+        descriptor = -1
+        os.replace(temporary, path)
+        _fsync_directory(path.parent)
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+        try:
+            temporary.unlink()
+        except FileNotFoundError:
+            pass
+
+
+def write_document(root: Path, name: str, payload: Mapping[str, Any]) -> Path:
+    """Atomically write one canonical, durable record and return its path.
+
+    Every JSON record uses a same-directory temporary file, file fsync, atomic
+    replace, and directory fsync. A failed producer can therefore leave either
+    the prior complete record or the new complete record, never a partial JSON
+    document that the checksum inventory could accidentally archive.
     """
     path = root / name
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("wb") as handle:
-        handle.write(canonical_json_bytes(payload) + b"\n")
-        handle.flush()
-        os.fsync(handle.fileno())
+    _atomic_write(path, canonical_json_bytes(payload) + b"\n")
     return path
 
 
@@ -397,7 +456,13 @@ def describe() -> dict[str, Any]:
             "freeze": FREEZE_NAME,
             "admission": ADMISSION_NAME,
             "authorization_consumed": AUTHORIZATION_NAME,
+            "controller": CONTROLLER_NAME,
+            "launch_probe": LAUNCH_PROBE_NAME,
+            "mutation_observation": MUTATION_NAME,
             "observation": OBSERVATION_NAME,
+            "published_identity": PUBLISHED_IDENTITY_NAME,
+            "reference_probe": REFERENCE_PROBE_NAME,
+            "runtime_inputs": RUNTIME_INPUTS_NAME,
             "terminal": TERMINAL_NAME,
         },
         "run_ids": list(RUN_IDS),

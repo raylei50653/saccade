@@ -109,6 +109,21 @@ A76_OVERFLOW_ZERO_VECTOR: tuple[int, ...] = (0,) * 9
 # Requiring the identifier is what binds an H2 archive to A7.6's shapes rather
 # than to a re-typed copy of them.
 A76_POLICY_INVENTORY_SCHEMA = "h0_phase_a_policy_inventory_v1"
+A76_BASE_POLICY_INVENTORY_SCHEMA = "h2_a76_base_policy_inventory_v1"
+
+# Packet data can be malformed in ways that Python reports below rather than as
+# the verifier's intended ValueError. These remain packet-invalid data outcomes;
+# all other exceptions are implementation/execution failures. This distinction
+# affects terminal selection and therefore belongs to identity semantics, not a
+# Layer-M plumbing file.
+PACKET_INVALID_EXCEPTIONS = (
+    IndexError,
+    KeyError,
+    OverflowError,
+    TypeError,
+    ValueError,
+    struct.error,
+)
 
 
 class BehavioralIdentityError(RuntimeError):
