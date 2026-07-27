@@ -74,6 +74,42 @@ BEHAVIOR_MEMBERS = (
     "relink_debug_raw",
 )
 
+# A7.6's policy-visible comparison, declared here because it is a **member
+# definition** and § 4's `identity_semantics` axis is defined over exactly that:
+# the probe producer and its member definition, the classifier, the manifest,
+# the publisher, the staleness checker, the terminal partition, the certificate
+# producer, and schema policy. The Layer-M verifier consumes these by import.
+#
+# Stating them in the verifier instead would put the A7.6 relation inside a
+# `plumbing_only` file, where it could be edited without moving any axis — the
+# § C3.9 hazard exactly. § 6 forbids H2 from introducing comparison vocabulary
+# of its own, so these are H0's own grouping and H0's own order
+# (`verify_h0_phase_a.py:2294`), transcribed once and versioned here:
+#
+#   * four members compared capture-off against every capture-on run — the same
+#     four `BEHAVIOR_MEMBERS` the probe digests, in A7.6's comparison order
+#     rather than the probe's canonical key order;
+#   * two trace-only projections, which do not exist capture-off (§ 4.0) and are
+#     therefore compared across the capture-on runs only;
+#   * the overflow vector, a capture-on predicate: every value exactly zero.
+A76_EQUALITY_MEMBERS: tuple[str, ...] = (
+    "mot_output",
+    "final_track_rows",
+    "active_tid_slot_pairs",
+    "relink_debug_raw",
+)
+A76_PROJECTION_MEMBERS: tuple[str, ...] = (
+    "proposal_projection",
+    "winner_commit_projection",
+)
+A76_OVERFLOW_MEMBER = "overflow_vector"
+A76_OVERFLOW_ZERO_VECTOR: tuple[int, ...] = (0,) * 9
+
+# H0's own policy-inventory schema, required verbatim on every archived run.
+# Requiring the identifier is what binds an H2 archive to A7.6's shapes rather
+# than to a re-typed copy of them.
+A76_POLICY_INVENTORY_SCHEMA = "h0_phase_a_policy_inventory_v1"
+
 
 class BehavioralIdentityError(RuntimeError):
     """Fail closed: never emit a digest we cannot stand behind."""

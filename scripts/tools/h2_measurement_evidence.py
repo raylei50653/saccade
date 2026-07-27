@@ -20,7 +20,10 @@ h2_measure_b_<I40_B>_<F64>           phase B   (§ C3.1; complete digest, never
     manifest.json                    capture_phase, artifact inventory, digests
     checksums.sha256                 <sha256>  <relative path>, H0's format
     freeze.json                      the F record this root was launched against
-    admission.json                   phase B: the § C3.6 verdict (pre-terminal)
+    admission.json                   phase B: the § C3.6 verdict (pre-terminal),
+                                     recomputed by the verifier, never trusted
+    layer_p_certificate.json         the certificate F binds, archived so the
+                                     § C3.6(d) condition can be recomputed
     authorization_consumed.json      phase B: the § C3.5.1 step-5 write that
                                      *is* the consumption of S_B
     observation.json                 exactly ORDERED_PREDICATES (+ optional
@@ -56,7 +59,10 @@ if _TOOLS.as_posix() not in sys.path:
     sys.path.insert(0, _TOOLS.as_posix())
 
 import h2_terminal_partition as partition  # noqa: E402
-from h2_behavioral_identity import MEASUREMENT_SEQUENCE  # noqa: E402
+from h2_behavioral_identity import (  # noqa: E402
+    A76_POLICY_INVENTORY_SCHEMA,
+    MEASUREMENT_SEQUENCE,
+)
 
 # One digest convention for the whole unit (§ 8.1, H0's
 # `h0_phase_a_execution_v1` convention consumed unchanged). Imported rather than
@@ -75,10 +81,9 @@ FREEZE_SCHEMA = "h2_measurement_freeze_v1"
 ADMISSION_SCHEMA = "h2_admission_verdict_v1"
 AUTHORIZATION_SCHEMA = "h2_authorization_consumed_v1"
 
-# H0's own policy-inventory schema, required verbatim on every archived run:
-# requiring the identifier is what binds H2 to A7.6's shapes instead of to a
-# re-typed copy of them (§ 6 — H2 introduces no comparison vocabulary).
-POLICY_INVENTORY_SCHEMA = "h0_phase_a_policy_inventory_v1"
+# Re-exported, never redeclared: the schema identifier is a ruler fact and lives
+# in `h2_behavioral_identity.py`, which owns the A7.6 member definitions (§ 4).
+POLICY_INVENTORY_SCHEMA = A76_POLICY_INVENTORY_SCHEMA
 
 EVIDENCE_REL = "docs/modules/semantic/research/evidence"
 
@@ -120,6 +125,7 @@ COMPARISON_NAME = "comparison.json"
 POLICY_INVENTORY_NAME = "policy_inventory.json"
 PACKET_NAME = "packet.json"
 PACKET_VERIFICATION_NAME = "packet_verification.json"
+CERTIFICATE_NAME = "layer_p_certificate.json"
 
 RUNS_DIR = "runs"
 
@@ -211,7 +217,7 @@ def build_observation(
         # without letting the name change the terminal.
         if (
             partition.RESULT_TO_TERMINAL.get(execution_result)
-            != "H2_MEASUREMENT_EXECUTION_INVALID"
+            != partition.EXECUTION_INVALID_TERMINAL
         ):
             raise EvidenceError(
                 f"execution_result {execution_result!r} does not map to terminal 4"

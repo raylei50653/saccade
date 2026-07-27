@@ -1,35 +1,36 @@
 #!/usr/bin/env python3
 """Independent verifier for an H2 Layer-M evidence root.
 
-Independent means it recomputes rather than reads: the terminal is re-selected
-from the archived observation through `h2_terminal_partition`, the A7.6
-capture-off/on comparison is rebuilt from the archived policy inventories, and
-every capture-on packet is re-verified through the packet verifier itself. A
-controller that recorded a terminal its own artifacts do not support is rejected
-here, which is the only reason this file exists separately from the controller.
+Independent means it recomputes rather than reads, and it recomputes **two**
+things, not one:
+
+  * **the terminal** — re-selected from the archived observation through
+    `h2_terminal_partition`, with the A7.6 comparison rebuilt from the archived
+    policy inventories and every surviving capture-on packet re-verified through
+    the packet verifier;
+  * **the right to have spent `S_B`** — the § C3.6 admission gate is recomputed
+    from the bound Phase-A evidence root, the two freeze records, the archived
+    Layer-P certificate and the prior-attempt chain, and must be bit-identical to
+    what the controller recorded. A verifier that recomputed the terminal while
+    trusting `admission.json` would let a Phase-B archive assert its own
+    eligibility, which is the one claim the gate exists to deny.
 
 **Nothing in this file is a comparison or terminal authority.** § 6 forbids H2
-from introducing comparison vocabulary of its own, so the A7.6 members, the
-policy-inventory shape and the packet predicates are consumed from H0's frozen
-implementation by import — `verify_h0_phase_a._verify_policy_inventory`,
-`verify_headline_bridge_decision_trace.verify_capture` and
-`export_headline_bridge_decision_trace.canonical_semantic_packet` — and the
-terminal comes from `h2_terminal_partition.select_terminal`. This module is
-`plumbing_only` (§ C3.9) and holds no ruler.
+from introducing comparison vocabulary of its own and § C3.9 pins why a
+`plumbing_only` file must hold none: it can be edited without moving an axis, so
+a rule stated here could change while `identity_semantics` stood still. The A7.6
+member sets come from `h2_behavioral_identity`, the verify classes, surface-ban
+terminals and repair vocabulary from `h2_terminal_partition`, the axis names from
+`build_runtime_identity`, and the packet predicates from H0's own
+`verify_capture` / `canonical_semantic_packet` / `_verify_policy_inventory`.
 
-Three verify classes exist because a terminal-4 attempt is defined by the
-absence of artifacts (§ C3.5.1); `check_h2_measure_archives.py` is what
-classifies a root, and this module provides the three verifications:
-
-```text
-verify_evidence_root   complete       the full measurement, verified in full
-verify_envelope        envelope       a caught failure, verified as an envelope
-verify_unterminated    unterminated   S_B spent, no terminal recorded
-```
-
-All three run the § C3.5.1 kill-switch check: surviving evidence that already
-shows a capture-off/on inequality or an invalid packet may never sit under a
-recorded predicate claiming otherwise.
+**Surviving evidence accumulates monotonically.** A missing artifact may reduce
+what can be checked; it may never erase what was already found. Replay is
+therefore per run — `pass` / `fail` / `unavailable` — and every comparison that
+*can* be made from the inventories present is made, whether or not the sequence
+is complete and whether or not the controller's own `comparison.json` survived.
+Otherwise killing a process after the first invalid packet would launder a
+terminal-3 ban into a re-attemptable terminal 4 (§ C3.5.1).
 
 Usage:
   uv run python scripts/tools/verify_h2_measurement.py <evidence root>
@@ -52,62 +53,93 @@ if _TOOLS.as_posix() not in sys.path:
 import h2_measurement_evidence as evidence  # noqa: E402
 import h2_terminal_partition as partition  # noqa: E402
 import verify_h0_phase_a as h0_verifier  # noqa: E402  (imported, never modified)
+from build_runtime_identity import ALL_COORDINATE_AXES  # noqa: E402
 from export_headline_bridge_decision_trace import (  # noqa: E402
+    OVERFLOW_KEYS,
+    STREAMS,
+    UNIVERSE_OVERFLOW_KEYS,
+    UNIVERSE_STREAMS,
     canonical_semantic_packet,
 )
+from h2_behavioral_identity import (  # noqa: E402
+    A76_EQUALITY_MEMBERS,
+    A76_OVERFLOW_MEMBER,
+    A76_OVERFLOW_ZERO_VECTOR,
+    A76_PROJECTION_MEMBERS,
+)
 from h2_runtime_inputs import digest  # noqa: E402
+from run_h2_layer_p import CERTIFICATE_SCHEMA  # noqa: E402
 from verify_headline_bridge_decision_trace import verify_capture  # noqa: E402
 
 VERIFIER_SCHEMA = "h2_measurement_verifier_v1"
 
-VERIFY_CLASSES = ("complete", "envelope", "unterminated")
-
-# A7.6's equality members, in H0's own grouping (`verify_h0_phase_a.py:2294`):
-# four members compared capture-off against every capture-on run, two trace-only
-# projections compared across capture-on runs, and the overflow vector required
-# to be the zero vector. The membership is A7.6's; H2 adds nothing to it.
-EQUALITY_MEMBERS = (
-    "mot_output",
-    "final_track_rows",
-    "active_tid_slot_pairs",
-    "relink_debug_raw",
+# Derived, never restated. The non-terminal progression is *defined* as the one
+# result the partition maps to no terminal; spelling it out here would put a
+# ruler fact in a `plumbing_only` file (§ C3.9).
+NON_TERMINAL_RESULT = next(
+    result
+    for result, terminal in partition.RESULT_TO_TERMINAL.items()
+    if terminal is None
 )
-PROJECTION_MEMBERS = ("proposal_projection", "winner_commit_projection")
-OVERFLOW_ZERO_VECTOR = [0] * 9
+EXECUTION_INVALID_TERMINAL = partition.EXECUTION_INVALID_TERMINAL
+FULL_COMMIT_TERMINAL = partition.TERMINALS[4].name
+
+# The capture ABI's own overflow fields, in the capture ABI's own order, taken
+# from the exporter rather than transcribed (§ 6).
+OVERFLOW_FIELDS: tuple[str, ...] = tuple(
+    OVERFLOW_KEYS[stream] for stream in STREAMS
+) + tuple(UNIVERSE_OVERFLOW_KEYS[stream] for stream in UNIVERSE_STREAMS)
+
+# Per-run packet outcomes. `unavailable` is not a third kind of failure: it is
+# the absence of an artifact, and it never cancels a `fail` found elsewhere.
+PASS, FAIL, UNAVAILABLE = "pass", "fail", "unavailable"
 
 
 class VerificationError(RuntimeError):
     """The archive does not support what it records. Always fail-closed."""
 
 
+class RunReplay(NamedTuple):
+    run_id: str
+    inventory_present: bool
+    packet_state: str
+
+
 class SequenceReplay(NamedTuple):
     sequence: str
-    comparison_equal: bool | None  # None: inventories absent, nothing replayed
-    packet_states: tuple[str, ...]  # per capture-on run; () when absent
+    runs: tuple[RunReplay, ...]
+    complete: bool
+    inequality_found: bool
+
+    @property
+    def packet_states(self) -> tuple[str, ...]:
+        return tuple(
+            run.packet_state
+            for run in self.runs
+            if run.run_id in evidence.CAPTURE_ON_RUNS
+        )
 
 
 class Replay(NamedTuple):
     sequences: tuple[SequenceReplay, ...]
-    complete: bool  # every expected sequence fully present and replayed
+    complete: bool
 
     @property
     def perturbation_observed(self) -> bool:
-        return any(item.comparison_equal is False for item in self.sequences)
+        return any(item.inequality_found for item in self.sequences)
 
     @property
     def invalid_packet_observed(self) -> bool:
-        return any("fail" in item.packet_states for item in self.sequences)
+        return any(FAIL in item.packet_states for item in self.sequences)
 
     @property
     def all_equal(self) -> bool:
-        return self.complete and all(
-            item.comparison_equal is True for item in self.sequences
-        )
+        return self.complete and not self.perturbation_observed
 
     @property
     def all_packets_pass(self) -> bool:
         return self.complete and all(
-            item.packet_states == ("pass",) * len(evidence.CAPTURE_ON_RUNS)
+            item.packet_states == (PASS,) * len(evidence.CAPTURE_ON_RUNS)
             for item in self.sequences
         )
 
@@ -151,30 +183,6 @@ def _freeze(root: Path, name: evidence.RootName) -> dict[str, Any]:
     return freeze
 
 
-def _admission(root: Path, phase: str) -> partition.Admission | None:
-    if phase != "b":
-        # § C3.6 is Phase-B only; Phase A's launch-time checks stay terminal-1
-        # conditions and asking for a Phase-A admission verdict is a defect.
-        if (root / evidence.ADMISSION_NAME).exists():
-            raise VerificationError(
-                "a phase-A root carries an admission verdict; the § C3.6 gate is "
-                "phase-B only"
-            )
-        return None
-    record = _load(root, evidence.ADMISSION_NAME, schema=evidence.ADMISSION_SCHEMA)
-    try:
-        verdict = partition.evaluate_admission(record, phase="b")
-    except partition.PartitionError as exc:
-        raise VerificationError(f"admission record rejected: {exc}") from exc
-    if not verdict.admitted:
-        raise VerificationError(
-            "admission was refused "
-            f"({', '.join(verdict.reasons)}): this root is inadmissible, not a "
-            "consumed attempt (§ C3.5.1 step 4)"
-        )
-    return verdict
-
-
 def _authorization(root: Path, phase: str) -> dict[str, Any] | None:
     path = root / evidence.AUTHORIZATION_NAME
     if phase == "b":
@@ -193,72 +201,121 @@ def _authorization(root: Path, phase: str) -> dict[str, Any] | None:
     )
 
 
-# -- A7.6 comparison and packet replay ------------------------------------- #
+def classify(root: Path) -> str:
+    """Exactly one § C3.5.1 class per root; an unclassifiable root is a defect.
+
+    Lives here rather than in the corpus checker because the verifier needs it
+    too: a prior attempt must be verified *in its class* before the admission
+    gate that binds it can be recomputed.
+    """
+    name = _root_name(root)
+    admission = root / evidence.ADMISSION_NAME
+    authorization = root / evidence.AUTHORIZATION_NAME
+    terminal = root / evidence.TERMINAL_NAME
+    if admission.is_file():
+        if name.phase != "b":
+            raise VerificationError(
+                f"{root.name}: a phase-A root carries an admission verdict; the "
+                "§ C3.6 gate is phase-B only"
+            )
+        record = _load(root, evidence.ADMISSION_NAME, schema=evidence.ADMISSION_SCHEMA)
+        try:
+            verdict = partition.evaluate_admission(record, phase="b")
+        except partition.PartitionError as exc:
+            raise VerificationError(f"{root.name}: admission record rejected: {exc}")
+        if not verdict.admitted:
+            if authorization.is_file():
+                raise VerificationError(
+                    f"{root.name}: S_B was consumed after a refused admission gate "
+                    "(§ C3.5.1 steps 4-5)"
+                )
+            return partition.INADMISSIBLE_CLASS
+    elif name.phase == "b":
+        raise VerificationError(
+            f"{root.name}: a phase-B root records no § C3.6 admission verdict"
+        )
+    if name.phase == "b" and not authorization.is_file():
+        raise VerificationError(
+            f"{root.name}: a phase-B root passed admission but records no "
+            "authorization_consumed write (§ C3.5.1 step 5)"
+        )
+    if not terminal.is_file():
+        return "unterminated"
+    if (root / evidence.MANIFEST_NAME).is_file() and (
+        root / evidence.OBSERVATION_NAME
+    ).is_file():
+        return "complete"
+    return "envelope"
 
 
-def _policy_inventories(root: Path, sequence: str) -> dict[str, dict[str, Any]] | None:
-    inventories: dict[str, dict[str, Any]] = {}
+# -- A7.6 comparison and packet replay, monotone under missing artifacts ---- #
+
+
+def _inventories(root: Path, sequence: str) -> dict[str, dict[str, Any]]:
+    """Load every policy inventory that survived — never all-or-nothing."""
+    present: dict[str, dict[str, Any]] = {}
     for run_id in evidence.RUN_IDS:
-        path = evidence.run_dir(root, sequence, run_id) / evidence.POLICY_INVENTORY_NAME
-        if not path.is_file():
-            return None
+        directory = evidence.run_dir(root, sequence, run_id)
+        if not (directory / evidence.POLICY_INVENTORY_NAME).is_file():
+            continue
         inventory = _load(
-            evidence.run_dir(root, sequence, run_id),
+            directory,
             evidence.POLICY_INVENTORY_NAME,
             schema=evidence.POLICY_INVENTORY_SCHEMA,
         )
         try:
-            # Consumed verbatim: A7.6's member set and shapes are H0's, and a
-            # re-typed copy here would be exactly the vocabulary § 6 forbids.
+            # Consumed verbatim: A7.6's shapes are H0's, and a re-typed copy here
+            # would be exactly the vocabulary § 6 forbids.
             h0_verifier._verify_policy_inventory(run_id, inventory)
         except h0_verifier.VerificationError as exc:
             raise VerificationError(f"{sequence}/{run_id}: {exc}") from exc
-        inventories[run_id] = inventory
-    return inventories
+        present[run_id] = inventory
+    return present
 
 
-def _reconstruct_comparison(
-    inventories: Mapping[str, Mapping[str, Any]],
-) -> dict[str, Any]:
-    """H0's A7.6 reconstruction (`verify_h0_phase_a.py:2294-2345`), per sequence."""
+def _relations(inventories: Mapping[str, Mapping[str, Any]]) -> dict[str, Any]:
+    """Every comparison the surviving inventories allow (H0's own grouping)."""
     off = evidence.CAPTURE_OFF_RUN
     relations: list[dict[str, Any]] = []
     first_unequal: str | None = None
-    for run_id in evidence.CAPTURE_ON_RUNS:
-        for member in EQUALITY_MEMBERS:
-            equal = inventories[off][member] == inventories[run_id][member]
-            relations.append(
-                {"equal": equal, "left": off, "member": member, "right": run_id}
-            )
-            if not equal and first_unequal is None:
-                first_unequal = f"{off}:{run_id}:{member}"
-    reference_run = evidence.CAPTURE_ON_RUNS[0]
-    for member in PROJECTION_MEMBERS:
-        reference = inventories[reference_run][member]
-        for run_id in evidence.CAPTURE_ON_RUNS[1:]:
-            equal = reference == inventories[run_id][member]
-            relations.append(
-                {
-                    "equal": equal,
-                    "left": reference_run,
-                    "member": member,
-                    "right": run_id,
-                }
-            )
-            if not equal and first_unequal is None:
-                first_unequal = f"{reference_run}:{run_id}:{member}"
-    for run_id in evidence.CAPTURE_ON_RUNS:
-        zero = inventories[run_id]["overflow_vector"] == OVERFLOW_ZERO_VECTOR
+
+    def record(left: str, member: str, right: str, equal: bool) -> None:
+        nonlocal first_unequal
         relations.append(
-            {
-                "equal": zero,
-                "left": run_id,
-                "member": "overflow_vector",
-                "right": "zero_vector",
-            }
+            {"equal": equal, "left": left, "member": member, "right": right}
         )
-        if not zero and first_unequal is None:
-            first_unequal = f"{run_id}:overflow_vector"
+        if not equal and first_unequal is None:
+            first_unequal = f"{left}:{right}:{member}"
+
+    if off in inventories:
+        for run_id in evidence.CAPTURE_ON_RUNS:
+            if run_id not in inventories:
+                continue
+            for member in A76_EQUALITY_MEMBERS:
+                record(
+                    off,
+                    member,
+                    run_id,
+                    inventories[off][member] == inventories[run_id][member],
+                )
+    on_present = [run for run in evidence.CAPTURE_ON_RUNS if run in inventories]
+    if on_present:
+        reference = on_present[0]
+        for member in A76_PROJECTION_MEMBERS:
+            for run_id in on_present[1:]:
+                record(
+                    reference,
+                    member,
+                    run_id,
+                    inventories[reference][member] == inventories[run_id][member],
+                )
+    for run_id in on_present:
+        record(
+            run_id,
+            A76_OVERFLOW_MEMBER,
+            "zero_vector",
+            inventories[run_id][A76_OVERFLOW_MEMBER] == list(A76_OVERFLOW_ZERO_VECTOR),
+        )
     return {
         "first_unequal": first_unequal,
         "relations": relations,
@@ -266,95 +323,137 @@ def _reconstruct_comparison(
     }
 
 
-def _replay_packets(
-    root: Path, sequence: str, inventories: Mapping[str, Mapping[str, Any]]
-) -> tuple[str, ...]:
-    """Re-verify the three capture-on packets through the packet verifier."""
-    states: list[str] = []
-    semantic_digests: list[str] = []
-    for run_id in evidence.CAPTURE_ON_RUNS:
-        directory = evidence.run_dir(root, sequence, run_id)
-        if not (directory / evidence.PACKET_NAME).is_file():
-            return ()
-        capture = _load(directory, evidence.PACKET_NAME)
+def _verify_packet(
+    root: Path,
+    sequence: str,
+    run_id: str,
+    inventory: Mapping[str, Any] | None,
+) -> tuple[str, str | None]:
+    """Re-verify one capture-on packet, independent of what else survived."""
+    directory = evidence.run_dir(root, sequence, run_id)
+    if not (directory / evidence.PACKET_NAME).is_file():
+        return UNAVAILABLE, None
+    capture = _load(directory, evidence.PACKET_NAME)
+    stored: dict[str, Any] | None = None
+    if (directory / evidence.PACKET_VERIFICATION_NAME).is_file():
         stored = _load(directory, evidence.PACKET_VERIFICATION_NAME)
-        try:
-            packet_report = verify_capture(capture)
-            packet = canonical_semantic_packet(capture)
-        except (KeyError, TypeError, ValueError):
-            states.append("fail")
-            if stored != {"failure": "packet_invalid", "state": "fail"}:
-                raise VerificationError(
-                    f"packet verifier failure record mismatch: {sequence}/{run_id}"
-                )
-            continue
-        streams = packet["streams"]
-        candidates = [
-            row
-            for row in streams["candidate_records"]
-            if int(row["proposal_emitted"]) == 1
-        ]
-        claims = streams["claim_records"]
-        commits = streams["commit_records"]
-        proposal_payload = {"candidates": candidates, "claims": claims}
-        winner_payload = {
-            "commits": commits,
-            "winning_claims": [row for row in claims if int(row["claim_won"]) == 1],
-        }
-        expected_proposal = {
-            "count": len(candidates),
-            "digest": digest(proposal_payload),
-            "records": proposal_payload,
-        }
-        expected_winner = {
-            "count": len(commits),
-            "digest": digest(winner_payload),
-            "records": winner_payload,
-        }
-        inventory = inventories[run_id]
-        if (
-            inventory["proposal_projection"] != expected_proposal
-            or inventory["winner_commit_projection"] != expected_winner
-        ):
+    try:
+        packet_report = verify_capture(capture)
+        packet = canonical_semantic_packet(capture)
+    except (KeyError, TypeError, ValueError):
+        if stored is not None and stored != {
+            "failure": "packet_invalid",
+            "state": FAIL,
+        }:
             raise VerificationError(
-                f"packet/policy projection mismatch: {sequence}/{run_id}"
+                f"packet verifier failure record mismatch: {sequence}/{run_id}"
             )
-        expected_overflow = [
-            int(capture[key])
-            for key in (
-                "overflow_pair_records",
-                "overflow_candidate_records",
-                "overflow_claim_records",
-                "overflow_commit_records",
-                "overflow_native_candidate_keys",
-                "overflow_native_pair_keys",
-                "overflow_native_proposal_keys",
-                "overflow_native_claim_winner_keys",
-                "overflow_native_commit_keys",
-            )
-        ]
-        if inventory["overflow_vector"] != expected_overflow:
-            raise VerificationError(
-                f"packet/policy overflow mismatch: {sequence}/{run_id}"
-            )
-        states.append("pass")
-        semantic_digests.append(packet_report["semantic_digest_sha256"])
-        if stored != {"report": packet_report, "state": "pass"}:
-            raise VerificationError(
-                f"packet verifier pass record mismatch: {sequence}/{run_id}"
-            )
-    if len(semantic_digests) == len(evidence.CAPTURE_ON_RUNS) and (
-        len(set(semantic_digests)) != 1
+        return FAIL, None
+    if inventory is not None:
+        _cross_check_projections(packet, capture, inventory, sequence, run_id)
+    if stored is not None and stored != {"report": packet_report, "state": PASS}:
+        raise VerificationError(
+            f"packet verifier pass record mismatch: {sequence}/{run_id}"
+        )
+    return PASS, packet_report["semantic_digest_sha256"]
+
+
+def _cross_check_projections(
+    packet: Mapping[str, Any],
+    capture: Mapping[str, Any],
+    inventory: Mapping[str, Any],
+    sequence: str,
+    run_id: str,
+) -> None:
+    streams = packet["streams"]
+    candidates = [
+        row for row in streams["candidate_records"] if int(row["proposal_emitted"]) == 1
+    ]
+    claims = streams["claim_records"]
+    commits = streams["commit_records"]
+    proposal_payload = {"candidates": candidates, "claims": claims}
+    winner_payload = {
+        "commits": commits,
+        "winning_claims": [row for row in claims if int(row["claim_won"]) == 1],
+    }
+    expected_proposal = {
+        "count": len(candidates),
+        "digest": digest(proposal_payload),
+        "records": proposal_payload,
+    }
+    expected_winner = {
+        "count": len(commits),
+        "digest": digest(winner_payload),
+        "records": winner_payload,
+    }
+    if (
+        inventory[A76_PROJECTION_MEMBERS[0]] != expected_proposal
+        or inventory[A76_PROJECTION_MEMBERS[1]] != expected_winner
     ):
-        # Cross-repeat canonical digest equality, H0's own rule: three repeats
-        # that verify individually but disagree canonically are not three
-        # observations of one decision process.
-        states[1] = "fail"
-    return tuple(states)
+        raise VerificationError(
+            f"packet/policy projection mismatch: {sequence}/{run_id}"
+        )
+    expected_overflow = [int(capture[key]) for key in OVERFLOW_FIELDS]
+    if inventory[A76_OVERFLOW_MEMBER] != expected_overflow:
+        raise VerificationError(f"packet/policy overflow mismatch: {sequence}/{run_id}")
+
+
+def _sequence_replay(root: Path, sequence: str) -> SequenceReplay:
+    inventories = _inventories(root, sequence)
+    reconstructed = _relations(inventories)
+    complete_inventories = len(inventories) == len(evidence.RUN_IDS)
+
+    recorded_path = root / evidence.RUNS_DIR / sequence / evidence.COMPARISON_NAME
+    if recorded_path.is_file():
+        recorded = _load(root / evidence.RUNS_DIR / sequence, evidence.COMPARISON_NAME)
+        if complete_inventories:
+            if recorded != reconstructed:
+                raise VerificationError(
+                    f"{sequence}: comparison.json differs from the independent A7.6 "
+                    "reconstruction"
+                )
+        elif reconstructed["state"] == "unequal" and recorded.get("state") == "equal":
+            # Partial evidence cannot confirm a recorded equality, but it can
+            # contradict one, and a contradiction is decisive.
+            raise VerificationError(
+                f"{sequence}: comparison.json records equality while the surviving "
+                "inventories show an inequality"
+            )
+
+    states: list[tuple[str, str | None]] = []
+    for run_id in evidence.CAPTURE_ON_RUNS:
+        states.append(_verify_packet(root, sequence, run_id, inventories.get(run_id)))
+    digests = [value for _, value in states if value is not None]
+    if len(digests) > 1 and len(set(digests)) != 1:
+        # Cross-repeat canonical digest equality, H0's own rule. Repeats that
+        # verify individually but disagree canonically are not repeats of one
+        # decision process — and two disagreeing survivors already establish
+        # that, so the check does not wait for the third.
+        first = None
+        for index, (state, value) in enumerate(states):
+            if value is None:
+                continue
+            if first is None:
+                first = value
+                continue
+            if value != first:
+                states[index] = (FAIL, value)
+
+    runs = tuple(
+        RunReplay(
+            run_id,
+            run_id in inventories,
+            UNAVAILABLE
+            if run_id == evidence.CAPTURE_OFF_RUN
+            else states[evidence.CAPTURE_ON_RUNS.index(run_id)][0],
+        )
+        for run_id in evidence.RUN_IDS
+    )
+    complete = complete_inventories and all(state == PASS for state, _ in states)
+    return SequenceReplay(sequence, runs, complete, reconstructed["state"] == "unequal")
 
 
 def _replay(root: Path, phase: str, *, strict: bool) -> Replay:
-    """Replay whatever is present; `strict` demands every expected sequence."""
     expected = evidence.expected_sequences(phase)
     present = {path.name for path in evidence.sequence_dirs(root)}
     unexpected = sorted(present - set(expected))
@@ -362,36 +461,15 @@ def _replay(root: Path, phase: str, *, strict: bool) -> Replay:
         raise VerificationError(
             f"evidence root carries sequences the phase does not run: {unexpected}"
         )
-    results: list[SequenceReplay] = []
-    complete = True
-    for sequence in expected:
-        inventories = _policy_inventories(root, sequence)
-        if inventories is None:
-            complete = False
-            if strict:
-                raise VerificationError(
-                    f"{sequence}: a completed execution is missing policy inventories"
-                )
-            results.append(SequenceReplay(sequence, None, ()))
-            continue
-        reconstructed = _reconstruct_comparison(inventories)
-        recorded = _load(root / evidence.RUNS_DIR / sequence, evidence.COMPARISON_NAME)
-        if recorded != reconstructed:
-            raise VerificationError(
-                f"{sequence}: comparison.json differs from the independent A7.6 "
-                "reconstruction"
-            )
-        states = _replay_packets(root, sequence, inventories)
-        if strict and len(states) != len(evidence.CAPTURE_ON_RUNS):
-            raise VerificationError(
-                f"{sequence}: a completed execution is missing capture-on packets"
-            )
-        if len(states) != len(evidence.CAPTURE_ON_RUNS):
-            complete = False
-        results.append(
-            SequenceReplay(sequence, reconstructed["state"] == "equal", states)
+    sequences = tuple(_sequence_replay(root, sequence) for sequence in expected)
+    complete = all(item.complete for item in sequences)
+    if strict and not complete:
+        incomplete = [item.sequence for item in sequences if not item.complete]
+        raise VerificationError(
+            "a completed execution is missing policy inventories or capture-on "
+            f"packets: {incomplete}"
         )
-    return Replay(tuple(results), complete)
+    return Replay(sequences, complete)
 
 
 def _kill_switch(replay: Replay, observation: Mapping[str, Any]) -> None:
@@ -413,7 +491,142 @@ def _kill_switch(replay: Replay, observation: Mapping[str, Any]) -> None:
         )
 
 
-# -- the three verify classes ---------------------------------------------- #
+# -- the § C3.6 admission gate, recomputed --------------------------------- #
+
+
+def _required_mapping(freeze: Mapping[str, Any], field: str) -> Mapping[str, Any]:
+    value = freeze.get(field)
+    if not isinstance(value, Mapping):
+        raise VerificationError(f"F binds no {field} (§ C3.2)")
+    return value
+
+
+def _coordinate_and_probe(freeze: Mapping[str, Any], *, where: str) -> tuple[Any, Any]:
+    coordinate = _required_mapping(freeze, "coordinate")
+    missing = [axis for axis in ALL_COORDINATE_AXES if axis not in coordinate]
+    if missing:
+        raise VerificationError(f"{where} coordinate is missing axes: {missing}")
+    probe = freeze.get("probe")
+    if not isinstance(probe, str):
+        raise VerificationError(f"{where} binds no bounded probe")
+    return {axis: coordinate[axis] for axis in ALL_COORDINATE_AXES}, probe
+
+
+def recompute_admission(
+    root: Path, freeze: Mapping[str, Any], *, visiting: frozenset[str]
+) -> dict[str, bool]:
+    """Rebuild the § C3.6 verdict from artifacts, not from `admission.json`.
+
+    Every condition is decided here from something outside the controller's own
+    say-so: the bound Phase-A root and its verification, the two freeze records,
+    the archived Layer-P certificate, and the prior-attempt chain.
+    """
+    conditions = {key: False for key, _ in partition.ADMISSION_CONDITIONS}
+
+    # (a) and (b) — the bound Phase-A result exists, verifies, and passed.
+    section = _required_mapping(freeze, "phase_a_evidence")
+    bound_root_name = section.get("evidence_root")
+    if not isinstance(bound_root_name, str):
+        raise VerificationError("F_B binds no phase_a_evidence.evidence_root")
+    phase_a_root = root.parent / bound_root_name
+    phase_a_freeze: Mapping[str, Any] | None = None
+    try:
+        bound_name = _root_name(phase_a_root)
+        if bound_name.phase != "a":
+            raise VerificationError(
+                f"phase_a_evidence names a phase-{bound_name.phase} root"
+            )
+        report = _verify_in_class(phase_a_root, "complete", visiting=visiting)
+        if evidence.sha256_file(phase_a_root / evidence.MANIFEST_NAME) != section.get(
+            "manifest_digest"
+        ) or evidence.sha256_file(
+            phase_a_root / evidence.CHECKSUMS_NAME
+        ) != section.get("checksum_inventory_digest"):
+            raise VerificationError(
+                "the bound Phase-A manifest or checksum inventory differs from F_B"
+            )
+        phase_a_freeze = _load(
+            phase_a_root, evidence.FREEZE_NAME, schema=evidence.FREEZE_SCHEMA
+        )
+    except (VerificationError, OSError):
+        # A refused gate is a Layer-P coordinate, not an error: recompute it as
+        # false and let the comparison against the record decide the outcome.
+        return conditions
+    conditions["phase_a_evidence_root_verifies"] = True
+    conditions["phase_a_observation_selects_no_terminal"] = (
+        report.get("result") == NON_TERMINAL_RESULT and report.get("terminal") is None
+    )
+
+    # (c) — § C3.1(b): the five axes and the probe, equal across both phases.
+    try:
+        mine = _coordinate_and_probe(freeze, where="F_B")
+        theirs = _coordinate_and_probe(phase_a_freeze, where="F_A")
+    except VerificationError:
+        return conditions
+    conditions["axes_and_probe_equal_freeze"] = mine == theirs
+
+    # (d) — the certificate F_B binds is the one archived with the attempt.
+    certificate = freeze.get("layer_p_certificate")
+    if (
+        isinstance(certificate, Mapping)
+        and (root / evidence.CERTIFICATE_NAME).is_file()
+    ):
+        archived = _load(root, evidence.CERTIFICATE_NAME, schema=CERTIFICATE_SCHEMA)
+        conditions["layer_p_certificate_matches_freeze"] = (
+            certificate.get("digest") == digest(archived)
+            and certificate.get("schema") == CERTIFICATE_SCHEMA
+        )
+
+    # (e) — every named prior attempt exists and verifies in its own class.
+    priors = freeze.get("prior_attempts")
+    if isinstance(priors, list) and all(isinstance(item, str) for item in priors):
+        try:
+            for name in priors:
+                prior_root = root.parent / name
+                _verify_in_class(
+                    prior_root, classify(prior_root), visiting=visiting | {root.name}
+                )
+        except (VerificationError, OSError):
+            return conditions
+        conditions["prior_attempts_complete_and_verified"] = True
+    return conditions
+
+
+def _admission(
+    root: Path, freeze: Mapping[str, Any], phase: str, *, visiting: frozenset[str]
+) -> partition.Admission | None:
+    if phase != "b":
+        if (root / evidence.ADMISSION_NAME).exists():
+            raise VerificationError(
+                "a phase-A root carries an admission verdict; the § C3.6 gate is "
+                "phase-B only"
+            )
+        return None
+    recorded = _load(root, evidence.ADMISSION_NAME, schema=evidence.ADMISSION_SCHEMA)
+    recomputed = recompute_admission(root, freeze, visiting=visiting)
+    disagreed = sorted(
+        key for key, value in recomputed.items() if recorded.get(key) != value
+    )
+    if disagreed:
+        raise VerificationError(
+            "recorded admission differs from the independent recomputation on "
+            f"{disagreed}: the gate that decides whether S_B could be spent is "
+            "not the controller's to assert (§ C3.6)"
+        )
+    try:
+        verdict = partition.evaluate_admission(recomputed, phase="b")
+    except partition.PartitionError as exc:
+        raise VerificationError(f"admission record rejected: {exc}") from exc
+    if not verdict.admitted:
+        raise VerificationError(
+            "admission was refused "
+            f"({', '.join(verdict.reasons)}): this root is inadmissible, not a "
+            "consumed attempt (§ C3.5.1 step 4)"
+        )
+    return verdict
+
+
+# -- the verify classes ---------------------------------------------------- #
 
 
 def _manifest(
@@ -486,32 +699,43 @@ def _recompute_terminal(
 
 def _completion_met(root: Path, phase: str, replay: Replay) -> bool:
     counts = evidence.completion(phase)
-    capture_on = sum(len(item.packet_states) for item in replay.sequences)
+    required_sequences, required_packets, required_off_runs = (
+        counts[key] for key in partition.COMPLETION_KEYS
+    )
+    capture_on = sum(
+        1
+        for item in replay.sequences
+        for state in item.packet_states
+        if state != UNAVAILABLE
+    )
     capture_off = sum(
         1
         for item in replay.sequences
-        if (
-            root / evidence.RUNS_DIR / item.sequence / evidence.CAPTURE_OFF_RUN
-        ).is_dir()
+        for run in item.runs
+        if run.run_id == evidence.CAPTURE_OFF_RUN and run.inventory_present
     )
-    sequences = sum(1 for item in replay.sequences if item.comparison_equal is not None)
+    sequences = sum(1 for item in replay.sequences if item.complete)
     return (
         replay.complete
-        and sequences == counts["required_sequences"]
-        and capture_on == counts["required_capture_on_packets"]
-        and capture_off == counts["required_capture_off_runs"]
+        and sequences == required_sequences
+        and capture_on == required_packets
+        and capture_off == required_off_runs
     )
 
 
 def verify_evidence_root(root: Path) -> dict[str, Any]:
-    """Verify a `complete` archive in full: structure, replay, and terminal."""
+    """Verify a `complete` archive in full: structure, replay, gate, terminal."""
+    return _verify_in_class(root, "complete", visiting=frozenset())
+
+
+def _verify_complete(root: Path, *, visiting: frozenset[str]) -> dict[str, Any]:
     name = _root_name(root)
     present = _inventory(root)
     manifest = _manifest(root, name, present)
     freeze = _freeze(root, name)
     if manifest.get("freeze_digest") != evidence.freeze_digest(freeze):
         raise VerificationError("manifest freeze digest differs from the freeze record")
-    admission = _admission(root, name.phase)
+    admission = _admission(root, freeze, name.phase, visiting=visiting)
     _authorization(root, name.phase)
 
     # The observation is read once before the replay, because whether the replay
@@ -548,8 +772,8 @@ def verify_evidence_root(root: Path) -> dict[str, Any]:
 
     # A pass is the only outcome that claims completeness, so it is the only one
     # required to show it (§ 7 terminal 5 / the Phase-A progression).
-    passing = selection.terminal == partition.TERMINALS[4].name or (
-        name.phase == "a" and selection.result == "measurement_pass"
+    passing = selection.terminal == FULL_COMMIT_TERMINAL or (
+        name.phase == "a" and selection.result == NON_TERMINAL_RESULT
     )
     if passing and not _completion_met(root, name.phase, replay):
         raise VerificationError(
@@ -570,11 +794,14 @@ def verify_evidence_root(root: Path) -> dict[str, Any]:
     }
 
 
-def _envelope_common(root: Path, *, require_terminal: bool) -> dict[str, Any]:
+def _verify_spent(
+    root: Path, *, require_terminal: bool, visiting: frozenset[str]
+) -> dict[str, Any]:
+    """`envelope` and `unterminated`: both spent `S_B`, both verify what survived."""
     name = _root_name(root)
     present = _inventory(root)
     freeze = _freeze(root, name)
-    _admission(root, name.phase)
+    _admission(root, freeze, name.phase, visiting=visiting)
     _authorization(root, name.phase)
     observation: dict[str, Any] = {}
     if (root / evidence.OBSERVATION_NAME).is_file():
@@ -593,7 +820,7 @@ def _envelope_common(root: Path, *, require_terminal: bool) -> dict[str, Any]:
     recorded: dict[str, Any] = {}
     if terminal_present:
         recorded = _load(root, evidence.TERMINAL_NAME, schema=evidence.TERMINAL_SCHEMA)
-        if recorded.get("terminal") != "H2_MEASUREMENT_EXECUTION_INVALID":
+        if recorded.get("terminal") != EXECUTION_INVALID_TERMINAL:
             raise VerificationError(
                 "an envelope is a caught execution failure; a root recording "
                 f"{recorded.get('terminal')!r} must verify as complete"
@@ -617,14 +844,79 @@ def _envelope_common(root: Path, *, require_terminal: bool) -> dict[str, Any]:
     }
 
 
+def _verify_inadmissible(root: Path, *, visiting: frozenset[str]) -> dict[str, Any]:
+    """§ C3.5.1 step 4: refused before `S_B`, so it asserts nothing — and is still
+    an artifact, so its identity and integrity are verified like any other."""
+    del visiting
+    name = _root_name(root)
+    if name.phase != "b":
+        raise VerificationError(
+            "only a phase-B root can be inadmissible; the § C3.6 gate is phase-B only"
+        )
+    present = _inventory(root)
+    freeze = _freeze(root, name)
+    record = _load(root, evidence.ADMISSION_NAME, schema=evidence.ADMISSION_SCHEMA)
+    try:
+        verdict = partition.evaluate_admission(record, phase="b")
+    except partition.PartitionError as exc:
+        raise VerificationError(f"admission record rejected: {exc}") from exc
+    if verdict.admitted:
+        raise VerificationError(
+            "this root records a passed admission gate and is not inadmissible"
+        )
+    for name_ in (evidence.AUTHORIZATION_NAME, evidence.TERMINAL_NAME):
+        if (root / name_).exists():
+            raise VerificationError(
+                f"an inadmissible root spent no authorization and selected no "
+                f"terminal, but carries {name_}"
+            )
+    return {
+        "schema": VERIFIER_SCHEMA,
+        "verify_class": partition.INADMISSIBLE_CLASS,
+        "capture_phase": evidence.CAPTURE_PHASE[name.phase],
+        "evidence_root": root.name,
+        "file_count": len(present),
+        "freeze_digest": evidence.freeze_digest(freeze),
+        "admission_refused": list(verdict.reasons),
+        "result": None,
+        "terminal": None,
+        "valid": True,
+    }
+
+
 def verify_envelope(root: Path) -> dict[str, Any]:
     """Verify the completeness of the envelope, not of the measurement."""
-    return _envelope_common(root, require_terminal=True)
+    return _verify_in_class(root, "envelope", visiting=frozenset())
 
 
 def verify_unterminated(root: Path) -> dict[str, Any]:
     """Verify a root whose authorization was spent and whose process never exited."""
-    return _envelope_common(root, require_terminal=False)
+    return _verify_in_class(root, "unterminated", visiting=frozenset())
+
+
+def verify_inadmissible(root: Path) -> dict[str, Any]:
+    """Verify a root the § C3.6 gate refused before `S_B` was consumed."""
+    return _verify_in_class(root, partition.INADMISSIBLE_CLASS, visiting=frozenset())
+
+
+def _verify_in_class(
+    root: Path, verify_class: str, *, visiting: frozenset[str]
+) -> dict[str, Any]:
+    if root.name in visiting:
+        raise VerificationError(
+            f"prior_attempts is cyclic through {root.name}: a chain cannot bind "
+            "itself as its own predecessor"
+        )
+    visiting = visiting | {root.name}
+    if verify_class == "complete":
+        return _verify_complete(root, visiting=visiting)
+    if verify_class == "envelope":
+        return _verify_spent(root, require_terminal=True, visiting=visiting)
+    if verify_class == "unterminated":
+        return _verify_spent(root, require_terminal=False, visiting=visiting)
+    if verify_class == partition.INADMISSIBLE_CLASS:
+        return _verify_inadmissible(root, visiting=visiting)
+    raise VerificationError(f"unknown verify class: {verify_class!r}")
 
 
 def surviving_findings(root: Path) -> dict[str, bool]:
@@ -641,6 +933,7 @@ VERIFIERS = {
     "complete": verify_evidence_root,
     "envelope": verify_envelope,
     "unterminated": verify_unterminated,
+    partition.INADMISSIBLE_CLASS: verify_inadmissible,
 }
 
 
@@ -650,13 +943,14 @@ def main(argv: Iterable[str] | None = None) -> int:
     parser.add_argument(
         "--class",
         dest="verify_class",
-        choices=VERIFY_CLASSES,
-        default="complete",
-        help="the § C3.5.1 class to verify this root in (default: complete)",
+        choices=sorted(VERIFIERS),
+        default=None,
+        help="the class to verify this root in (default: classify it)",
     )
     args = parser.parse_args(list(argv) if argv is not None else None)
     try:
-        report = VERIFIERS[args.verify_class](args.evidence)
+        verify_class = args.verify_class or classify(args.evidence)
+        report = VERIFIERS[verify_class](args.evidence)
     except (VerificationError, h0_verifier.VerificationError, OSError) as exc:
         print(f"H2 measurement evidence rejected: {exc}", file=sys.stderr)
         return 1

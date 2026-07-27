@@ -50,20 +50,19 @@ import verify_h2_measurement as verifier  # noqa: E402
 
 EVIDENCE_ROOT = REPO_ROOT / evidence.EVIDENCE_REL
 
-CONSUMED_CLASSES = ("complete", "envelope", "unterminated")
-INADMISSIBLE = "inadmissible"
+# Every semantic name below is imported, never restated. Which terminals are
+# properties of the measurement surface, and which repairs may reopen one, decide
+# what a successor attempt is allowed to be — ruler facts, and this file is
+# `plumbing_only`, so a copy here could be edited without moving an axis (§ C3.9).
+CONSUMED_CLASSES = partition.VERIFY_CLASSES
+INADMISSIBLE = partition.INADMISSIBLE_CLASS
+SURFACE_TERMINALS = partition.SURFACE_BAN_TERMINALS
+REPAIR_VOCABULARY = partition.REPAIR_VOCABULARY
 
-# The terminals § C3.5 makes properties of the measurement surface rather than
-# of the attempt. A re-attempt against the same surface is forbidden.
-SURFACE_TERMINALS = frozenset({"H2_CAPTURE_PERTURBS_POLICY", "H2_PACKET_INVALID"})
-
-# H0 § 6, verbatim: "Only repairs that leave all those semantics unchanged —
-# compilation, capacity sizing, serialization, or implementation bugs — may
-# proceed under the same seal." § C3.5's first guard consumes that vocabulary
-# unchanged; anything outside it is not a repair.
-REPAIR_VOCABULARY = frozenset(
-    {"compilation", "capacity_sizing", "serialization", "implementation_bug"}
-)
+# The § C3.5.1 classification itself lives with the verifier, which needs it to
+# verify a prior attempt in its own class before the admission gate that binds it
+# can be recomputed. This is where it is applied to the corpus.
+classify = verifier.classify
 
 
 class CorpusError(RuntimeError):
@@ -130,50 +129,16 @@ def archive_roots(root: Path = EVIDENCE_ROOT) -> list[Path]:
     ]
 
 
-def classify(root: Path) -> str:
-    """Exactly one class per root; an unclassifiable root is a defect."""
-    admission = root / evidence.ADMISSION_NAME
-    authorization = root / evidence.AUTHORIZATION_NAME
-    terminal = root / evidence.TERMINAL_NAME
-    if admission.is_file():
-        record = evidence.load_document(
-            root, evidence.ADMISSION_NAME, schema=evidence.ADMISSION_SCHEMA
-        )
-        verdict = partition.evaluate_admission(record, phase="b")
-        if not verdict.admitted:
-            if authorization.is_file():
-                raise CorpusError(
-                    f"{root.name}: S_B was consumed after a refused admission gate "
-                    "(§ C3.5.1 steps 4-5)"
-                )
-            return INADMISSIBLE
-    name = evidence.parse_root_name(root.name)
-    if name.phase == "b" and not authorization.is_file():
-        raise CorpusError(
-            f"{root.name}: a phase-B root records neither an admission refusal nor "
-            "the authorization_consumed write that spends S_B"
-        )
-    if not terminal.is_file():
-        return "unterminated"
-    if (root / evidence.MANIFEST_NAME).is_file() and (
-        root / evidence.OBSERVATION_NAME
-    ).is_file():
-        return "complete"
-    return "envelope"
-
-
 def _load_attempt(root: Path) -> Attempt:
     name = evidence.parse_root_name(root.name)
     verify_class = classify(root)
     freeze = evidence.load_document(
         root, evidence.FREEZE_NAME, schema=evidence.FREEZE_SCHEMA
     )
-    if verify_class == INADMISSIBLE:
-        # Verified only as far as its own class goes: an inadmissible root spent
-        # nothing and asserts nothing about the world.
-        report: dict[str, Any] = {"verify_class": INADMISSIBLE, "valid": True}
-    else:
-        report = verifier.VERIFIERS[verify_class](root)
+    # Every class verifies, `inadmissible` included: it spent no authorization
+    # and asserts nothing about the world, but it is still an artifact with a
+    # root identity, a freeze record and a checksum inventory to stand behind.
+    report = verifier.VERIFIERS[verify_class](root)
     return Attempt(root, name, verify_class, report, freeze)
 
 
