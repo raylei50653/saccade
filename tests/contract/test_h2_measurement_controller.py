@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
+import os
 import struct
 import subprocess
 import sys
@@ -584,6 +585,90 @@ def test_child_nonzero_replays_surviving_base_and_invalid_packet(
         inherited_environment={},
     )
     assert selection.terminal == verifier.partition.TERMINALS[terminal_index].name
+    assert verifier.verify_evidence_root(root)["terminal"] == selection.terminal
+
+
+def test_mot_only_survivor_selects_terminal_2_when_base_json_write_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bundle = _bundle(tmp_path)
+    failed_run = evidence.CAPTURE_ON_RUNS[0]
+    real_write_document = evidence.write_document
+
+    def launch(
+        invocation_path: Path,
+        environment: Mapping[str, str],
+        **_: object,
+    ) -> int:
+        invocation = evidence.load_document(
+            invocation_path.parent, invocation_path.name
+        )
+        if invocation["run_id"] != failed_run:
+            return child.execute_child(
+                invocation_path,
+                environment=environment,
+                runner=_products,
+            )
+
+        def fail_mid_base_write(
+            root: Path, name: str, payload: Mapping[str, Any]
+        ) -> Path:
+            if name != evidence.BASE_POLICY_INVENTORY_NAME:
+                return real_write_document(root, name, payload)
+            real_os_write = os.write
+            calls = 0
+
+            def partial_then_fail(descriptor: int, data: Any) -> int:
+                nonlocal calls
+                calls += 1
+                if calls == 1:
+                    return real_os_write(descriptor, data[: max(1, len(data) // 2)])
+                raise OSError("injected base inventory write failure")
+
+            monkeypatch.setattr(os, "write", partial_then_fail)
+            try:
+                return real_write_document(root, name, payload)
+            finally:
+                monkeypatch.setattr(os, "write", real_os_write)
+
+        monkeypatch.setattr(evidence, "write_document", fail_mid_base_write)
+        try:
+            return child.execute_child(
+                invocation_path,
+                environment=environment,
+                runner=lambda current: _products(
+                    current,
+                    perturbed_run=failed_run,
+                ),
+            )
+        except OSError:
+            return 2
+        finally:
+            monkeypatch.setattr(evidence, "write_document", real_write_document)
+
+    root, selection = controller.execute_controller(
+        bundle,
+        evidence_parent=tmp_path / "evidence",
+        bound_paths=(bundle.runtime_manifest_path,),
+        require_clean_checkout=False,
+        launch_probe=_probe,
+        launch_child=launch,
+        monitor_factory=NullMonitor,
+        bundle_revalidator=_no_revalidation,
+        checkout_witness_builder=_checkout_witness,
+        checkout_state_reader=_checkout_state,
+        inherited_environment={},
+    )
+    run_dir = evidence.run_dir(root, controller.SEQUENCE, failed_run)
+    observation = evidence.load_document(
+        root, evidence.OBSERVATION_NAME, schema=evidence.OBSERVATION_SCHEMA
+    )
+    assert (run_dir / f"{controller.SEQUENCE}.txt").is_file()
+    assert not (run_dir / evidence.BASE_POLICY_INVENTORY_NAME).exists()
+    assert not tuple(run_dir.glob(f".{evidence.BASE_POLICY_INVENTORY_NAME}.*.tmp"))
+    assert observation["capture_off_on_equal"] is False
+    assert observation["execution_complete"] is False
+    assert selection.terminal == verifier.partition.TERMINALS[1].name
     assert verifier.verify_evidence_root(root)["terminal"] == selection.terminal
 
 

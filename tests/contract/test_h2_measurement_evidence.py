@@ -815,6 +815,56 @@ def test_stop_boundary_is_strict_and_requires_a_clean_checkout(
         verifier.verify_evidence_root(root)
 
 
+@pytest.mark.parametrize(
+    "tamper",
+    (
+        "checkout_dirty",
+        "source_head",
+        "source_tree",
+        "linearization",
+        "revalidation_incomplete",
+    ),
+)
+def test_terminal_4_stop_boundary_tamper_is_rejected(
+    tmp_path: Path, tamper: str
+) -> None:
+    root = phase_a_root(tmp_path)
+    observation = evidence.build_observation(
+        _clean_predicates(execution_complete=False),
+        execution_result="runner_nonzero",
+    )
+    evidence.write_document(root, evidence.OBSERVATION_NAME, observation)
+    selection = partition.select_terminal(
+        evidence.observation_predicates(observation), phase="a"
+    )
+    assert selection.terminal == partition.EXECUTION_INVALID_TERMINAL
+    evidence.write_document(root, evidence.TERMINAL_NAME, _terminal_record(selection))
+    controller_record = evidence.load_document(root, evidence.CONTROLLER_NAME)
+    controller_record["result"] = selection.result
+    controller_record["terminal"] = selection.terminal
+    evidence.write_document(root, evidence.CONTROLLER_NAME, controller_record)
+    _finalize(root, phase="a", head=HEAD_A, result=selection.result)
+    assert verifier.verify_evidence_root(root)["terminal"] == selection.terminal
+
+    stop = evidence.load_document(root, evidence.STOP_BOUNDARY_NAME)
+    if tamper == "checkout_dirty":
+        stop["checkout_clean"] = False
+        stop["linearization"] = None
+    elif tamper == "source_head":
+        stop["source_head"] = "9" * 40
+    elif tamper == "source_tree":
+        stop["source_tree"] = "9" * 40
+    elif tamper == "linearization":
+        stop["linearization"] = None
+    else:
+        stop["revalidation_completed_while_monitored"] = False
+        stop["linearization"] = None
+    evidence.write_document(root, evidence.STOP_BOUNDARY_NAME, stop)
+    _refinalize(root)
+    with pytest.raises(verifier.VerificationError, match="stop|revalidation|source"):
+        verifier.verify_evidence_root(root)
+
+
 def test_mutation_predicate_must_match_the_monitor_record(tmp_path: Path) -> None:
     root = phase_a_root(tmp_path)
     evidence.write_document(

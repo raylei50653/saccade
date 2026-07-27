@@ -58,6 +58,7 @@ import argparse
 import json
 import os
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any, Iterable, Mapping, NamedTuple
 
@@ -258,19 +259,54 @@ def observation_predicates(document: Mapping[str, Any]) -> dict[str, Any]:
 # -- records and the checksum inventory ------------------------------------ #
 
 
-def write_document(root: Path, name: str, payload: Mapping[str, Any]) -> Path:
-    """Write one canonical record, flushed, and return its path.
+def _fsync_directory(directory: Path) -> None:
+    descriptor = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
 
-    Flushing matters for exactly one record — § C3.5.1 step 5, where the durable
-    write *is* the consumption of `S_B` — so every record takes the same path
-    rather than leaving the load-bearing one as a special case.
+
+def _atomic_write(path: Path, payload: bytes) -> None:
+    """Commit bytes without ever exposing a partial final-path artifact."""
+    descriptor, temporary_name = tempfile.mkstemp(
+        dir=path.parent,
+        prefix=f".{path.name}.",
+        suffix=".tmp",
+    )
+    temporary = Path(temporary_name)
+    try:
+        view = memoryview(payload)
+        while view:
+            written = os.write(descriptor, view)
+            if written <= 0:
+                raise OSError("short evidence-record write")
+            view = view[written:]
+        os.fsync(descriptor)
+        os.close(descriptor)
+        descriptor = -1
+        os.replace(temporary, path)
+        _fsync_directory(path.parent)
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+        try:
+            temporary.unlink()
+        except FileNotFoundError:
+            pass
+
+
+def write_document(root: Path, name: str, payload: Mapping[str, Any]) -> Path:
+    """Atomically write one canonical, durable record and return its path.
+
+    Every JSON record uses a same-directory temporary file, file fsync, atomic
+    replace, and directory fsync. A failed producer can therefore leave either
+    the prior complete record or the new complete record, never a partial JSON
+    document that the checksum inventory could accidentally archive.
     """
     path = root / name
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("wb") as handle:
-        handle.write(canonical_json_bytes(payload) + b"\n")
-        handle.flush()
-        os.fsync(handle.fileno())
+    _atomic_write(path, canonical_json_bytes(payload) + b"\n")
     return path
 
 

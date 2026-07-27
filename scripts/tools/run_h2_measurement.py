@@ -618,10 +618,23 @@ def _verify_base_policy_inventory(run_id: str, inventory: Mapping[str, Any]) -> 
 def replay_surviving_evidence(root: Path) -> SurvivingReplay:
     """Replay every durable base/full inventory and packet, even after failure."""
     bases: dict[str, dict[str, Any]] = {}
+    base_records: set[str] = set()
     inventories: dict[str, dict[str, Any]] = {}
     errors: list[str] = []
     for run_id in evidence.RUN_IDS:
         directory = evidence.run_dir(root, SEQUENCE, run_id)
+        mot_path = directory / f"{SEQUENCE}.txt"
+        if mot_path.is_file():
+            try:
+                mot = mot_path.read_bytes()
+                bases[run_id] = {
+                    MOT_MEMBER: {
+                        "length": len(mot),
+                        "sha256": hashlib.sha256(mot).hexdigest(),
+                    }
+                }
+            except OSError as exc:
+                errors.append(f"{SEQUENCE}/{run_id}: durable MOT is unreadable: {exc}")
         base_path = directory / evidence.BASE_POLICY_INVENTORY_NAME
         if base_path.is_file():
             try:
@@ -629,15 +642,22 @@ def replay_surviving_evidence(root: Path) -> SurvivingReplay:
                     root, run_id, evidence.BASE_POLICY_INVENTORY_NAME
                 )
                 _verify_base_policy_inventory(run_id, base)
-                bases[run_id] = base
-                mot_path = directory / f"{SEQUENCE}.txt"
-                mot = mot_path.read_bytes()
-                if base[MOT_MEMBER] != {
-                    "length": len(mot),
-                    "sha256": hashlib.sha256(mot).hexdigest(),
-                }:
+                base_records.add(run_id)
+                durable_mot = bases.get(run_id, {}).get(MOT_MEMBER)
+                if durable_mot is None:
+                    errors.append(
+                        f"{SEQUENCE}/{run_id}: base inventory has no durable MOT"
+                    )
+                elif base[MOT_MEMBER] != durable_mot:
                     errors.append(f"{SEQUENCE}/{run_id}: base MOT identity mismatch")
-            except (ControllerError, OSError) as exc:
+                bases.setdefault(run_id, {}).update(
+                    {
+                        member: base[member]
+                        for member in behavior.A76_EQUALITY_MEMBERS
+                        if member != MOT_MEMBER
+                    }
+                )
+            except ControllerError as exc:
                 errors.append(str(exc))
         if (directory / evidence.POLICY_INVENTORY_NAME).is_file():
             try:
@@ -654,10 +674,10 @@ def replay_surviving_evidence(root: Path) -> SurvivingReplay:
             errors.append(f"{SEQUENCE}/{run_id}: {exc}")
             invalid_inventories.append(run_id)
             continue
-        if run_id not in bases:
+        if run_id not in base_records:
             errors.append(f"{SEQUENCE}/{run_id}: full inventory has no durable base")
         elif any(
-            inventory[member] != bases[run_id][member]
+            member not in bases[run_id] or inventory[member] != bases[run_id][member]
             for member in behavior.A76_EQUALITY_MEMBERS
         ):
             errors.append(f"{SEQUENCE}/{run_id}: full/base inventory mismatch")
@@ -695,6 +715,8 @@ def replay_surviving_evidence(root: Path) -> SurvivingReplay:
             if run_id not in bases:
                 continue
             for member in behavior.A76_EQUALITY_MEMBERS:
+                if member not in bases[off_id] or member not in bases[run_id]:
+                    continue
                 record(
                     off_id,
                     member,
@@ -821,7 +843,7 @@ def replay_surviving_evidence(root: Path) -> SurvivingReplay:
         ),
     }
     complete = (
-        len(bases) == len(evidence.RUN_IDS)
+        len(base_records) == len(evidence.RUN_IDS)
         and required_full_inventories.issubset(inventories)
         and len(packet_states) == len(evidence.CAPTURE_ON_RUNS)
         and all(state != "unavailable" for state in packet_states.values())

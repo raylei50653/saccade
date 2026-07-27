@@ -518,6 +518,42 @@ def _phase_a_launch_records(
         )
     ):
         raise VerificationError("measurement stop boundary is malformed")
+    if (
+        stop["monitor_started"]
+        and stop["revalidation_completed_while_monitored"] is not True
+        and not stop_reasons
+    ):
+        raise VerificationError(
+            "started monitor has no completed revalidation or failure reason"
+        )
+    if (
+        stop.get("checkout_clean") is True
+        and stop["revalidation_completed_while_monitored"] is not True
+    ):
+        raise VerificationError(
+            "clean checkout state was recorded without monitored revalidation"
+        )
+    if (
+        stop["revalidation_completed_while_monitored"] is True
+        and stop.get("checkout_clean") is False
+        and (
+            not stop_reasons
+            or stop_event_reasons != stop_reasons
+            or mutation.get("mutated") is not True
+            or observation.get("bound_input_mutated") is not True
+        )
+    ):
+        raise VerificationError(
+            "dirty checkout after monitored revalidation has no matching "
+            "mutation evidence"
+        )
+    if stop.get("linearization") == "clean_final_drain" and (
+        stop.get("source_head") != checkout["source_head"]
+        or stop.get("source_tree") != checkout["source_tree"]
+    ):
+        raise VerificationError(
+            "clean final-drain source identity differs from the checkout witness"
+        )
     terminal_four_results = {
         result
         for result, terminal in partition.RESULT_TO_TERMINAL.items()
@@ -624,12 +660,29 @@ def _inventories(root: Path, sequence: str) -> dict[str, dict[str, Any]]:
     return present
 
 
-def _base_inventories(root: Path, sequence: str) -> dict[str, dict[str, Any]]:
-    """Load durable policy-visible members produced before packet processing."""
+def _base_inventories(
+    root: Path, sequence: str
+) -> tuple[dict[str, dict[str, Any]], set[str]]:
+    """Load every committed base member, including MOT-only survivors."""
     present: dict[str, dict[str, Any]] = {}
+    base_records: set[str] = set()
     expected = {*A76_EQUALITY_MEMBERS, "schema"}
     for run_id in evidence.RUN_IDS:
         directory = evidence.run_dir(root, sequence, run_id)
+        mot_path = directory / f"{sequence}.txt"
+        if mot_path.is_file():
+            try:
+                mot = mot_path.read_bytes()
+            except OSError as exc:
+                raise VerificationError(
+                    f"{sequence}/{run_id}: durable MOT output is unreadable"
+                ) from exc
+            present[run_id] = {
+                A76_EQUALITY_MEMBERS[0]: {
+                    "length": len(mot),
+                    "sha256": evidence.sha256_file(mot_path),
+                }
+            }
         if not (directory / evidence.BASE_POLICY_INVENTORY_NAME).is_file():
             continue
         inventory = _load(
@@ -652,20 +705,22 @@ def _base_inventories(root: Path, sequence: str) -> dict[str, dict[str, Any]]:
             h0_verifier._verify_policy_inventory(evidence.CAPTURE_OFF_RUN, synthetic)
         except h0_verifier.VerificationError as exc:
             raise VerificationError(f"{sequence}/{run_id}: {exc}") from exc
-        mot_path = directory / f"{sequence}.txt"
-        try:
-            mot = mot_path.read_bytes()
-        except OSError as exc:
+        base_records.add(run_id)
+        durable_mot = present.get(run_id, {}).get(A76_EQUALITY_MEMBERS[0])
+        if durable_mot is None:
             raise VerificationError(
-                f"{sequence}/{run_id}: durable base MOT output is unreadable"
-            ) from exc
-        if inventory[A76_EQUALITY_MEMBERS[0]] != {
-            "length": len(mot),
-            "sha256": evidence.sha256_file(mot_path),
-        }:
+                f"{sequence}/{run_id}: base inventory has no durable MOT output"
+            )
+        if inventory[A76_EQUALITY_MEMBERS[0]] != durable_mot:
             raise VerificationError(f"{sequence}/{run_id}: base MOT identity mismatch")
-        present[run_id] = inventory
-    return present
+        present.setdefault(run_id, {}).update(
+            {
+                member: inventory[member]
+                for member in A76_EQUALITY_MEMBERS
+                if member != A76_EQUALITY_MEMBERS[0]
+            }
+        )
+    return present, base_records
 
 
 def _relations(
@@ -690,6 +745,8 @@ def _relations(
             if run_id not in bases:
                 continue
             for member in A76_EQUALITY_MEMBERS:
+                if member not in bases[off] or member not in bases[run_id]:
+                    continue
                 record(
                     off,
                     member,
@@ -800,15 +857,15 @@ def _cross_check_projections(
 
 
 def _sequence_replay(root: Path, sequence: str) -> SequenceReplay:
-    bases = _base_inventories(root, sequence)
+    bases, base_records = _base_inventories(root, sequence)
     inventories = _inventories(root, sequence)
     for run_id, inventory in inventories.items():
-        if run_id not in bases:
+        if run_id not in base_records:
             raise VerificationError(
                 f"{sequence}/{run_id}: full inventory has no durable base"
             )
         if any(
-            inventory[member] != bases[run_id][member]
+            member not in bases[run_id] or inventory[member] != bases[run_id][member]
             for member in A76_EQUALITY_MEMBERS
         ):
             raise VerificationError(
@@ -870,7 +927,7 @@ def _sequence_replay(root: Path, sequence: str) -> SequenceReplay:
     runs = tuple(
         RunReplay(
             run_id,
-            run_id in bases,
+            run_id in base_records,
             UNAVAILABLE
             if run_id == evidence.CAPTURE_OFF_RUN
             else states[evidence.CAPTURE_ON_RUNS.index(run_id)][0],
@@ -891,7 +948,7 @@ def _sequence_replay(root: Path, sequence: str) -> SequenceReplay:
         ),
     }
     complete = (
-        len(bases) == len(evidence.RUN_IDS)
+        len(base_records) == len(evidence.RUN_IDS)
         and required_full_inventories.issubset(inventories)
         and all(state != UNAVAILABLE for state, _ in states)
     )

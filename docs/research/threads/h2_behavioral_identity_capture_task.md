@@ -147,15 +147,21 @@ freeze, exact-head Layer-P certificate, reference probe, runtime-input manifest
 and published identity; it does not create or seal `I`, `F`, or `S`, and it has
 no Phase-B launch path.
 
-The four policy-visible A7.6 members and their MOT bytes are durably written to
-`policy_base_inventory.json` before packet processing. The raw capture is then
-written before canonicalization, projection or replay. Packet-data shape,
-numeric and binary-layout exceptions declared by `h2_behavioral_identity.py`
-record `packet_invalid`; unclassified implementation exceptions remain
-terminal-4 execution failures. A packet failure never fabricates projection or
-overflow fields and never deletes the already-known base equality evidence.
-After any child outcome, including nonzero, the controller replays every
-surviving base/full inventory and packet before applying terminal priority.
+The raw MOT output is atomically committed and directory-fsynced first; that
+final path is the independent commit point for the `mot_output` A7.6 member.
+`policy_base_inventory.json` is then committed by same-directory temporary
+write, file fsync, atomic replace and directory fsync; that replace is the
+commit point for all four base members. Every other surviving JSON record uses
+the same atomic protocol. If execution stops between the two base commit
+points, controller and verifier replay the MOT-only survivor rather than erase
+its equality relation. The raw capture is written before canonicalization,
+projection or replay. Packet-data shape, numeric and binary-layout exceptions
+declared by `h2_behavioral_identity.py` record `packet_invalid`; unclassified
+implementation exceptions remain terminal-4 execution failures. A packet
+failure never fabricates projection or overflow fields and never deletes the
+already-known base equality evidence. After any child outcome, including
+nonzero, the controller replays every surviving base/full inventory and packet
+before applying terminal priority.
 
 The H2 measurement invocation ends at a clean final monitor drain. With the
 monitor still active, the controller revalidates every bound launch record and

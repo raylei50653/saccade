@@ -26,6 +26,7 @@ import hashlib
 import os
 import struct
 import sys
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
@@ -605,19 +606,16 @@ def validate_products(run_id: str, products: RunProducts) -> None:
 
 
 def _replace_invocation(path: Path, payload: Mapping[str, Any]) -> None:
-    temporary = path.with_name(f".{path.name}.replacement")
-    evidence.write_document(temporary.parent, temporary.name, payload)
-    os.replace(temporary, path)
-    descriptor = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
-    try:
-        os.fsync(descriptor)
-    finally:
-        os.close(descriptor)
+    evidence.write_document(path.parent, path.name, payload)
 
 
 def _write_mot(path: Path, payload: bytes) -> None:
-    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC
-    descriptor = os.open(path, flags, 0o600)
+    descriptor, temporary_name = tempfile.mkstemp(
+        dir=path.parent,
+        prefix=f".{path.name}.",
+        suffix=".tmp",
+    )
+    temporary = Path(temporary_name)
     try:
         view = memoryview(payload)
         while view:
@@ -626,8 +624,17 @@ def _write_mot(path: Path, payload: bytes) -> None:
                 raise OSError("short MOT artifact write")
             view = view[written:]
         os.fsync(descriptor)
-    finally:
         os.close(descriptor)
+        descriptor = -1
+        os.replace(temporary, path)
+        evidence._fsync_directory(path.parent)
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+        try:
+            temporary.unlink()
+        except FileNotFoundError:
+            pass
 
 
 def _persist_base_products(
@@ -636,6 +643,13 @@ def _persist_base_products(
     mot_bytes: bytes,
     inventory: Mapping[str, Any],
 ) -> None:
+    """Commit raw MOT first, then atomically commit all four base members.
+
+    A durable MOT final path is the independent commit point for `mot_output`.
+    The base-inventory replace plus directory fsync is the commit point for the
+    complete four-member base record. Replay deliberately accepts the window
+    between those two points.
+    """
     mot_path = run_dir / f"{sequence}.txt"
     if mot_path.is_file():
         if mot_path.read_bytes() != mot_bytes:
