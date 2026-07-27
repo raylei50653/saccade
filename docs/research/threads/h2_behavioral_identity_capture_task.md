@@ -115,9 +115,13 @@ consumption paths agree.
 Three properties the verifier owes its name:
 
 - **the Phase-A terminal-1 inputs are cross-checked, not merely inventoried.**
-  The archived freeze/certificate/content bindings, launch probe, mutation
-  record and controller result must agree with the observation and the
-  independently selected terminal. Tamper tests pin each relation;
+  The archived freeze/certificate/content bindings, checkout-identity witness,
+  launch probe, mutation record and controller result must agree with the
+  observation and the independently selected terminal. The verifier rebuilds
+  `source_tree` and the decision-relevant, identity-semantics and plumbing file
+  sets from the bound Git commit; it does not import the controller's certificate
+  evaluator. The recorded predicate must equal that recomputation in both
+  directions. Table-driven tamper tests pin every certificate condition;
 - **the admission gate is recomputed, not read.** § C3.6's five conditions are
   rebuilt from the bound Phase-A root, both freeze records, the archived Layer-P
   certificate and the prior-attempt chain, and must equal the record condition
@@ -142,6 +146,23 @@ the artifacts the three tools above verify. The controller consumes an external
 freeze, exact-head Layer-P certificate, reference probe, runtime-input manifest
 and published identity; it does not create or seal `I`, `F`, or `S`, and it has
 no Phase-B launch path.
+
+The raw capture is durably written before canonicalization, projection or replay.
+Those operations form one fail-closed packet-verification operation: any
+structural exception, including numeric or binary-layout failures, records
+`packet_invalid` and remains terminal-3 evidence rather than becoming a
+retryable child-execution failure. No packet-derived projection inventory is
+fabricated when that operation fails.
+
+The H2 measurement invocation ends at the successful
+`post_close_revalidation_complete` boundary. The controller performs its final
+nonblocking drain, closes the monitor, then revalidates every bound launch record
+and the checkout head/tree/cleanliness before writing
+`measurement_stop_boundary.json`. That completed revalidation is the
+linearization point; changes after its snapshot are outside the invocation.
+Failure or mismatch during this stop protocol is recorded as bound-input
+mutation (with terminal-1 priority). Terminal/controller/manifest/checksum writes
+occur only after this boundary and consume no bound input.
 
 Nothing is blocked by this today. Layer P is independently useful without it — it
 is what resolves plumbing coordinates without spending authorizations.
@@ -678,3 +699,15 @@ Additionally, and specific to the accepted decisions:
   as checksum-only files. Review, exact-head Layer-P certification,
   controlled-host re-attestation and separate owner authorization remain
   outstanding.
+
+- **2026-07-27** — PR review remediation closed three producer/verifier gaps.
+  The verifier now independently rebuilds the complete terminal-1 certificate
+  predicate from an archived checkout witness plus the bound Git tree and
+  requires exact bidirectional predicate equality. The child now persists raw
+  capture before one total packet-processing operation, so structural
+  canonicalization/projection/replay failures select terminal 3. The controller
+  now closes the monitor and performs full post-close revalidation before
+  sealing an explicit invocation-end boundary, including a test that mutates a
+  bound input inside `close()`. These changes invalidate the earlier exact head:
+  no Layer-P certificate or seal may be issued until this repaired head is
+  reviewed and re-attested.

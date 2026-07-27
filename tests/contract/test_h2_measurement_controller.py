@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
+import struct
 import subprocess
 import sys
 from pathlib import Path
@@ -88,7 +89,6 @@ def _products(
     invocation: Mapping[str, Any],
     *,
     perturbed_run: str | None = None,
-    invalid_run: str | None = None,
 ) -> child.RunProducts:
     run_id = str(invocation["run_id"])
     mot_bytes = (
@@ -103,12 +103,8 @@ def _products(
     if run_id != evidence.CAPTURE_OFF_RUN:
         capture = _packet(run_uuid=f"{run_id}-uuid")
         proposal, winner = _projection(capture)
-        if run_id == invalid_run:
-            packet = {"capture_schema_version": "invalid"}
-            packet_verification = {"failure": "packet_invalid", "state": "fail"}
-        else:
-            packet = capture
-            packet_verification = {"report": verify_capture(capture), "state": "pass"}
+        packet = capture
+        packet_verification = {"report": verify_capture(capture), "state": "pass"}
     inventory = {
         behavior.BEHAVIOR_MEMBERS[0]: [{"frame": 1, "pairs": [[9, 3], [7, 4]]}],
         behavior.BEHAVIOR_MEMBERS[1]: [
@@ -156,6 +152,9 @@ def _bundle(tmp_path: Path) -> controller.LaunchBundle:
             strict=True,
         )
     )
+    commit_axes = verifier._commit_content_axes(head)
+    coordinate["implementation"] = commit_axes["decision_relevant"]["digest"]
+    coordinate["identity_semantics"] = commit_axes["identity_semantics"]["digest"]
     probe_digest = "a" * 64
     build_dir = tmp_path / "build"
     build_dir.mkdir()
@@ -198,7 +197,7 @@ def _bundle(tmp_path: Path) -> controller.LaunchBundle:
         "decision_relevant_digest": coordinate["implementation"],
         "equivalence": "unproven",
         "identity_semantics_digest": coordinate["identity_semantics"],
-        "plumbing_set_digest": identity.plumbing_axis()["digest"],
+        "plumbing_set_digest": commit_axes["plumbing_only"]["digest"],
         "published_coordinate": coordinate,
         "behavior_probe": probe_digest,
         "build_witness": reference["build_witness"],
@@ -244,6 +243,22 @@ def _bundle(tmp_path: Path) -> controller.LaunchBundle:
     )
 
 
+def _checkout_witness(
+    bundle: controller.LaunchBundle,
+    *,
+    current_head: str,
+    current_tree: str,
+) -> dict[str, Any]:
+    return {
+        "schema": evidence.CHECKOUT_WITNESS_SCHEMA,
+        "axes": verifier._commit_content_axes(current_head),
+        "build_dir": bundle.build_dir.resolve(strict=True).as_posix(),
+        "repository_root": _REPO.resolve(strict=True).as_posix(),
+        "source_head": current_head,
+        "source_tree": current_tree,
+    }
+
+
 def _probe(root: Path, **_: object) -> dict[str, Any]:
     freeze = evidence.load_document(root, evidence.FREEZE_NAME)
     manifest = evidence.load_document(root, evidence.RUNTIME_INPUTS_NAME)
@@ -275,14 +290,26 @@ def _launcher(
         environment: Mapping[str, str],
         **_: object,
     ) -> int:
+        def products(invocation: Mapping[str, Any]) -> child.RunProducts:
+            produced = _products(invocation, perturbed_run=perturbed_run)
+            if str(invocation["run_id"]) != invalid_run:
+                return produced
+            capture = {"capture_schema_version": "invalid"}
+            processed = child.persist_and_process_capture(
+                Path(str(invocation["run_dir"])), capture
+            )
+            assert processed.valid is False
+            return child.RunProducts(
+                mot_bytes=produced.mot_bytes,
+                policy_inventory=None,
+                packet=capture,
+                packet_verification=processed.verification,
+            )
+
         return child.execute_child(
             invocation_path,
             environment=environment,
-            runner=lambda invocation: _products(
-                invocation,
-                perturbed_run=perturbed_run,
-                invalid_run=invalid_run,
-            ),
+            runner=products,
         )
 
     return launch
@@ -305,6 +332,7 @@ def _execute(
         launch_child=_launcher(perturbed_run=perturbed_run, invalid_run=invalid_run),
         monitor_factory=NullMonitor,
         bundle_revalidator=_no_revalidation,
+        checkout_witness_builder=_checkout_witness,
         inherited_environment={},
     )
 
@@ -358,6 +386,7 @@ def test_clean_controller_archive_verifies_as_phase_a_progression(
         launch_child=launch,
         monitor_factory=NullMonitor,
         bundle_revalidator=_no_revalidation,
+        checkout_witness_builder=_checkout_witness,
         inherited_environment={},
     )
     assert selection.terminal is None
@@ -382,6 +411,32 @@ def test_invalid_packet_selects_terminal_3(tmp_path: Path) -> None:
     assert verifier.verify_evidence_root(root)["terminal"] == selection.terminal
 
 
+@pytest.mark.parametrize(
+    "failure",
+    (
+        OverflowError("overflow"),
+        struct.error("binary layout"),
+        KeyError("missing"),
+    ),
+)
+def test_capture_processing_persists_raw_packet_and_classifies_structural_errors(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure: Exception
+) -> None:
+    capture = {"capture_schema_version": "malformed"}
+
+    def reject(_capture: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+        raise failure
+
+    monkeypatch.setattr(child, "_projection_records", reject)
+    outcome = child.persist_and_process_capture(tmp_path, capture)
+    assert outcome.verification == {"failure": "packet_invalid", "state": "fail"}
+    assert evidence.load_document(tmp_path, evidence.PACKET_NAME) == capture
+    assert (
+        evidence.load_document(tmp_path, evidence.PACKET_VERIFICATION_NAME)
+        == outcome.verification
+    )
+
+
 def test_certificate_mismatch_stops_before_any_measurement_run(
     tmp_path: Path,
 ) -> None:
@@ -398,6 +453,7 @@ def test_certificate_mismatch_stops_before_any_measurement_run(
         launch_child=lambda *_args, **_kwargs: pytest.fail("child must not run"),
         monitor_factory=NullMonitor,
         bundle_revalidator=_no_revalidation,
+        checkout_witness_builder=_checkout_witness,
     )
     assert selection.terminal == verifier.partition.TERMINALS[0].name
     assert not (root / evidence.RUNS_DIR).exists()
@@ -430,6 +486,7 @@ def test_launch_probe_mismatch_stops_before_measurement_runs(tmp_path: Path) -> 
         launch_child=lambda *_args, **_kwargs: pytest.fail("child must not run"),
         monitor_factory=NullMonitor,
         bundle_revalidator=_no_revalidation,
+        checkout_witness_builder=_checkout_witness,
     )
     assert selection.terminal == verifier.partition.TERMINALS[0].name
     assert verifier.verify_evidence_root(root)["terminal"] == selection.terminal
@@ -452,6 +509,7 @@ def test_child_failure_is_a_verifiable_terminal_4_envelope(tmp_path: Path) -> No
         launch_child=failed_child,
         monitor_factory=NullMonitor,
         bundle_revalidator=_no_revalidation,
+        checkout_witness_builder=_checkout_witness,
     )
     assert selection.terminal == verifier.partition.EXECUTION_INVALID_TERMINAL
     assert verifier.verify_evidence_root(root)["terminal"] == selection.terminal
@@ -491,6 +549,7 @@ def test_bound_input_drift_has_priority_over_execution_failure(
         launch_child=drift,
         monitor_factory=DriftMonitor,
         bundle_revalidator=_no_revalidation,
+        checkout_witness_builder=_checkout_witness,
     )
     assert selection.terminal == verifier.partition.TERMINALS[0].name
     assert verifier.verify_evidence_root(root)["terminal"] == selection.terminal
@@ -508,6 +567,10 @@ def test_monitor_precedes_revalidation_and_inputs_are_revalidated_post_run(
         def __init__(self, *_: object, **__: object) -> None:
             super().__init__()
             events.append("monitor")
+
+        def close(self) -> None:
+            events.append("close")
+            super().close()
 
     def revalidate(_bundle: controller.LaunchBundle) -> tuple[str, ...]:
         events.append("revalidate")
@@ -538,6 +601,7 @@ def test_monitor_precedes_revalidation_and_inputs_are_revalidated_post_run(
         launch_child=launch,
         monitor_factory=OrderedMonitor,
         bundle_revalidator=revalidate,
+        checkout_witness_builder=_checkout_witness,
         inherited_environment={},
     )
     assert selection.terminal is None
@@ -546,6 +610,7 @@ def test_monitor_precedes_revalidation_and_inputs_are_revalidated_post_run(
         "revalidate",
         "probe",
         *(f"run:{run_id}" for run_id in evidence.RUN_IDS),
+        "close",
         "revalidate",
     ]
 
@@ -572,6 +637,7 @@ def test_post_run_revalidation_failure_has_terminal_1_priority(
         launch_child=_launcher(),
         monitor_factory=NullMonitor,
         bundle_revalidator=moved_after_runs,
+        checkout_witness_builder=_checkout_witness,
         inherited_environment={},
     )
     assert calls == 2
@@ -609,7 +675,52 @@ def test_final_drain_mutation_beats_a_nonzero_child(tmp_path: Path) -> None:
         launch_child=lambda *_args, **_kwargs: 2,
         monitor_factory=LateMutationMonitor,
         bundle_revalidator=_no_revalidation,
+        checkout_witness_builder=_checkout_witness,
     )
+    assert selection.terminal == verifier.partition.TERMINALS[0].name
+    assert verifier.verify_evidence_root(root)["terminal"] == selection.terminal
+
+
+def test_close_gap_mutation_is_caught_by_post_close_revalidation(
+    tmp_path: Path,
+) -> None:
+    bundle = _bundle(tmp_path)
+    original = bundle.runtime_manifest_path.read_bytes()
+    calls = 0
+
+    def revalidate(current: controller.LaunchBundle) -> tuple[str, ...]:
+        nonlocal calls
+        calls += 1
+        return (
+            ()
+            if current.runtime_manifest_path.read_bytes() == original
+            else ("runtime-input manifest changed",)
+        )
+
+    class MutatingCloseMonitor(NullMonitor):
+        def close(self) -> None:
+            bundle.runtime_manifest_path.write_bytes(original + b" ")
+            super().close()
+
+    root, selection = controller.execute_controller(
+        bundle,
+        evidence_parent=tmp_path / "evidence",
+        bound_paths=(bundle.runtime_manifest_path,),
+        require_clean_checkout=False,
+        launch_probe=_probe,
+        launch_child=_launcher(),
+        monitor_factory=MutatingCloseMonitor,
+        bundle_revalidator=revalidate,
+        checkout_witness_builder=_checkout_witness,
+        inherited_environment={},
+    )
+    stop = evidence.load_document(
+        root, evidence.STOP_BOUNDARY_NAME, schema=evidence.STOP_BOUNDARY_SCHEMA
+    )
+    assert calls == 2
+    assert stop["monitor_closed"] is True
+    assert stop["linearization"] == "post_close_revalidation_complete"
+    assert stop["revalidation_reasons"] == ["runtime-input manifest changed"]
     assert selection.terminal == verifier.partition.TERMINALS[0].name
     assert verifier.verify_evidence_root(root)["terminal"] == selection.terminal
 

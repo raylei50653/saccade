@@ -42,6 +42,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -65,7 +66,9 @@ from export_headline_bridge_decision_trace import (  # noqa: E402
 from run_h2_layer_p import CERTIFICATE_SCHEMA  # noqa: E402
 from verify_headline_bridge_decision_trace import verify_capture  # noqa: E402
 
-HEAD_A = "a" * 40
+HEAD_A = subprocess.check_output(
+    ["git", "rev-parse", "HEAD"], cwd=_REPO, text=True
+).strip()
 HEAD_B = "b" * 40
 SEQUENCE_A = evidence.PHASE_SEQUENCES["a"][0]
 ABSENT_ROOT = evidence.phase_a_root_name("9" * 40)
@@ -79,6 +82,9 @@ COORDINATE = dict(
         strict=True,
     )
 )
+_COMMIT_AXES = verifier._commit_content_axes(HEAD_A)
+COORDINATE["implementation"] = _COMMIT_AXES["decision_relevant"]["digest"]
+COORDINATE["identity_semantics"] = _COMMIT_AXES["identity_semantics"]["digest"]
 PROBE = "2d" * 32
 
 
@@ -283,9 +289,10 @@ def _clean_predicates(**overrides: bool) -> dict[str, bool]:
 
 def _write_phase_a_launch_records(root: Path, *, head: str) -> dict[str, Any]:
     build_digest = "b" * 64
+    build_dir = "/archive/h2/build"
     runtime_manifest = {
         "schema": "h2_runtime_input_manifest_v1",
-        "build_artifacts": {"digest": build_digest},
+        "build_artifacts": {"build_dir": build_dir, "digest": build_digest},
         "coordinate_digest": COORDINATE["runtime_inputs"],
         "full_digest": "f" * 64,
     }
@@ -312,8 +319,16 @@ def _write_phase_a_launch_records(root: Path, *, head: str) -> dict[str, Any]:
         "schema": CERTIFICATE_SCHEMA,
         "behavior_probe": PROBE,
         "build_artifact_digest": build_digest,
+        "build_dir": build_dir,
         "build_witness": reference["build_witness"],
+        "changed_path_verdict": {"admissible": True},
+        "decision_relevant_digest": COORDINATE["implementation"],
         "equivalence": "unproven",
+        "fixture": behavior.IDENTITY_SEQUENCE,
+        "identity_semantics_digest": COORDINATE["identity_semantics"],
+        "mode": "identity",
+        "plumbing_set_digest": _COMMIT_AXES["plumbing_only"]["digest"],
+        "probe_schema": behavior.RESULT_SCHEMA,
         "probe_result_file_digest": evidence.sha256_file(
             root / evidence.REFERENCE_PROBE_NAME
         ),
@@ -327,14 +342,46 @@ def _write_phase_a_launch_records(root: Path, *, head: str) -> dict[str, Any]:
         "runtime_input_manifest_file_digest": evidence.sha256_file(
             root / evidence.RUNTIME_INPUTS_NAME
         ),
+        "selected_base": "main",
         "source_head": head,
+        "source_tree": subprocess.check_output(
+            ["git", "rev-parse", f"{head}^{{tree}}"], cwd=_REPO, text=True
+        ).strip(),
     }
     evidence.write_document(root, evidence.CERTIFICATE_NAME, certificate)
     evidence.write_document(root, evidence.LAUNCH_PROBE_NAME, reference)
     evidence.write_document(
         root,
+        evidence.CHECKOUT_WITNESS_NAME,
+        {
+            "schema": evidence.CHECKOUT_WITNESS_SCHEMA,
+            "axes": _COMMIT_AXES,
+            "build_dir": build_dir,
+            "repository_root": _REPO.as_posix(),
+            "source_head": head,
+            "source_tree": certificate["source_tree"],
+        },
+    )
+    evidence.write_document(
+        root,
         evidence.MUTATION_NAME,
         {"schema": evidence.MUTATION_SCHEMA, "events": [], "mutated": False},
+    )
+    evidence.write_document(
+        root,
+        evidence.STOP_BOUNDARY_NAME,
+        {
+            "schema": evidence.STOP_BOUNDARY_SCHEMA,
+            "checkout_clean": True,
+            "completed_utc": "2026-07-27T00:00:00Z",
+            "linearization": "post_close_revalidation_complete",
+            "monitor_closed": True,
+            "monitor_started": True,
+            "post_close_revalidation_complete": True,
+            "revalidation_reasons": [],
+            "source_head": head,
+            "source_tree": certificate["source_tree"],
+        },
     )
     return certificate
 
@@ -568,6 +615,159 @@ def test_certificate_predicate_is_recomputed_from_archived_bindings(
     evidence.write_document(root, evidence.CERTIFICATE_NAME, certificate)
     _refinalize(root)
     with pytest.raises(verifier.VerificationError, match="certificate match"):
+        verifier.verify_evidence_root(root)
+
+
+@pytest.mark.parametrize(
+    "condition",
+    (
+        "binding_digest",
+        "source_head",
+        "source_tree",
+        "selected_base",
+        "changed_path_verdict",
+        "equivalence",
+        "implementation_digest",
+        "identity_semantics_digest",
+        "plumbing_digest",
+        "published_coordinate",
+        "behavior_probe",
+        "published_probe",
+        "runtime_coordinate",
+        "runtime_full",
+        "build_artifact_relation",
+        "runtime_manifest_file_digest",
+        "probe_result_file_digest",
+        "published_identity_file_digest",
+        "reference_support",
+        "probe_declaration",
+        "reference_build_witness",
+        "published_identity_support",
+        "build_directory",
+    ),
+)
+def test_every_certificate_condition_is_independently_recomputed(
+    tmp_path: Path, condition: str
+) -> None:
+    root = phase_a_root(tmp_path)
+    certificate = evidence.load_document(root, evidence.CERTIFICATE_NAME)
+    freeze = evidence.load_document(root, evidence.FREEZE_NAME)
+    runtime = evidence.load_document(root, evidence.RUNTIME_INPUTS_NAME)
+    reference = evidence.load_document(root, evidence.REFERENCE_PROBE_NAME)
+    published = evidence.load_document(root, evidence.PUBLISHED_IDENTITY_NAME)
+
+    if condition == "binding_digest":
+        freeze["layer_p_certificate"]["digest"] = "9" * 64
+    elif condition == "source_head":
+        certificate["source_head"] = "9" * 40
+    elif condition == "source_tree":
+        certificate["source_tree"] = "9" * 40
+    elif condition == "selected_base":
+        certificate["selected_base"] = ""
+    elif condition == "changed_path_verdict":
+        certificate["changed_path_verdict"]["admissible"] = False
+    elif condition == "equivalence":
+        certificate["equivalence"] = "claimed"
+    elif condition == "implementation_digest":
+        certificate["decision_relevant_digest"] = "9" * 64
+    elif condition == "identity_semantics_digest":
+        certificate["identity_semantics_digest"] = "9" * 64
+    elif condition == "plumbing_digest":
+        certificate["plumbing_set_digest"] = "9" * 64
+    elif condition == "published_coordinate":
+        certificate["published_coordinate"] = {
+            **certificate["published_coordinate"],
+            "environment": "9" * 64,
+        }
+    elif condition == "behavior_probe":
+        certificate["behavior_probe"] = "9" * 64
+    elif condition == "published_probe":
+        certificate["published_probe"] = "9" * 64
+    elif condition == "runtime_coordinate":
+        certificate["runtime_input_coordinate_digest"] = "9" * 64
+    elif condition == "runtime_full":
+        certificate["runtime_input_full_digest"] = "9" * 64
+    elif condition == "build_artifact_relation":
+        runtime["build_artifacts"]["digest"] = "9" * 64
+        evidence.write_document(root, evidence.RUNTIME_INPUTS_NAME, runtime)
+        certificate["runtime_input_manifest_file_digest"] = evidence.sha256_file(
+            root / evidence.RUNTIME_INPUTS_NAME
+        )
+    elif condition == "runtime_manifest_file_digest":
+        certificate["runtime_input_manifest_file_digest"] = "9" * 64
+    elif condition == "probe_result_file_digest":
+        certificate["probe_result_file_digest"] = "9" * 64
+    elif condition == "published_identity_file_digest":
+        certificate["published_identity_file_digest"] = "9" * 64
+    elif condition == "reference_support":
+        reference["identical"] = False
+        evidence.write_document(root, evidence.REFERENCE_PROBE_NAME, reference)
+        certificate["probe_result_file_digest"] = evidence.sha256_file(
+            root / evidence.REFERENCE_PROBE_NAME
+        )
+    elif condition == "probe_declaration":
+        certificate["fixture"] = "MOT17-10-FRCNN"
+    elif condition == "reference_build_witness":
+        reference["build_witness"] = {"digest": "9" * 64}
+        evidence.write_document(root, evidence.REFERENCE_PROBE_NAME, reference)
+        certificate["probe_result_file_digest"] = evidence.sha256_file(
+            root / evidence.REFERENCE_PROBE_NAME
+        )
+        certificate["build_witness"] = reference["build_witness"]
+    elif condition == "published_identity_support":
+        published["publication_complete"] = False
+        evidence.write_document(root, evidence.PUBLISHED_IDENTITY_NAME, published)
+        certificate["published_identity_file_digest"] = evidence.sha256_file(
+            root / evidence.PUBLISHED_IDENTITY_NAME
+        )
+    elif condition == "build_directory":
+        runtime["build_artifacts"]["build_dir"] = "/archive/h2/other-build"
+        evidence.write_document(root, evidence.RUNTIME_INPUTS_NAME, runtime)
+        certificate["runtime_input_manifest_file_digest"] = evidence.sha256_file(
+            root / evidence.RUNTIME_INPUTS_NAME
+        )
+    else:  # pragma: no cover - parameter table is exhaustive
+        raise AssertionError(condition)
+
+    evidence.write_document(root, evidence.CERTIFICATE_NAME, certificate)
+    if condition != "binding_digest":
+        freeze["layer_p_certificate"]["digest"] = evidence.digest(certificate)
+    evidence.write_document(root, evidence.FREEZE_NAME, freeze)
+    _refinalize(root)
+    with pytest.raises(verifier.VerificationError, match="certificate match"):
+        verifier.verify_evidence_root(root)
+
+
+def test_recorded_certificate_false_must_equal_independent_recomputation(
+    tmp_path: Path,
+) -> None:
+    root = phase_a_root(tmp_path)
+    observation = evidence.load_document(root, evidence.OBSERVATION_NAME)
+    observation["layer_p_certificate_matches_freeze"] = False
+    evidence.write_document(root, evidence.OBSERVATION_NAME, observation)
+    selection = partition.select_terminal(
+        evidence.observation_predicates(observation), phase="a"
+    )
+    evidence.write_document(root, evidence.TERMINAL_NAME, _terminal_record(selection))
+    controller_record = evidence.load_document(root, evidence.CONTROLLER_NAME)
+    controller_record["certificate_mismatch_reasons"] = ["fabricated mismatch"]
+    controller_record["result"] = selection.result
+    controller_record["terminal"] = selection.terminal
+    evidence.write_document(root, evidence.CONTROLLER_NAME, controller_record)
+    _finalize(root, phase="a", head=HEAD_A, result=selection.result)
+    with pytest.raises(verifier.VerificationError, match="certificate match"):
+        verifier.verify_evidence_root(root)
+
+
+def test_checkout_witness_axes_are_rebuilt_from_the_bound_git_tree(
+    tmp_path: Path,
+) -> None:
+    root = phase_a_root(tmp_path)
+    witness = evidence.load_document(root, evidence.CHECKOUT_WITNESS_NAME)
+    witness["axes"]["plumbing_only"]["digest"] = "9" * 64
+    evidence.write_document(root, evidence.CHECKOUT_WITNESS_NAME, witness)
+    _refinalize(root)
+    with pytest.raises(verifier.VerificationError, match="checkout identity witness"):
         verifier.verify_evidence_root(root)
 
 

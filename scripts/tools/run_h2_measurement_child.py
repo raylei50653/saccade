@@ -79,9 +79,21 @@ class ChildError(RuntimeError):
 @dataclass(frozen=True)
 class RunProducts:
     mot_bytes: bytes
-    policy_inventory: Mapping[str, Any]
+    policy_inventory: Mapping[str, Any] | None
     packet: Mapping[str, Any] | None
     packet_verification: Mapping[str, Any] | None
+
+
+@dataclass(frozen=True)
+class CaptureProcessing:
+    proposal: Mapping[str, Any] | None
+    winner: Mapping[str, Any] | None
+    overflow: list[int] | None
+    verification: Mapping[str, Any]
+
+    @property
+    def valid(self) -> bool:
+        return self.verification.get("state") == "pass"
 
 
 def normalize_active_pairs(
@@ -212,6 +224,29 @@ def _projection_records(
             "records": winner_payload,
         },
     )
+
+
+def persist_and_process_capture(
+    run_dir: Path, capture: Mapping[str, Any]
+) -> CaptureProcessing:
+    """Persist the raw capture before one total packet-verification operation."""
+    evidence.write_document(run_dir, evidence.PACKET_NAME, capture)
+    try:
+        proposal, winner = _projection_records(capture)
+        overflow = [int(capture[field]) for field in OVERFLOW_FIELDS]
+        report = verify_capture(capture)
+    except Exception:
+        verification: Mapping[str, Any] = {
+            "failure": "packet_invalid",
+            "state": "fail",
+        }
+        evidence.write_document(
+            run_dir, evidence.PACKET_VERIFICATION_NAME, verification
+        )
+        return CaptureProcessing(None, None, None, verification)
+    verification = {"report": report, "state": "pass"}
+    evidence.write_document(run_dir, evidence.PACKET_VERIFICATION_NAME, verification)
+    return CaptureProcessing(proposal, winner, overflow, verification)
 
 
 def _binary32_bits(value: float) -> int:
@@ -466,13 +501,18 @@ def repository_runner(invocation: Mapping[str, Any]) -> RunProducts:
             capture_run_uuid=invocation["capture_run_uuid"],
         )
         packet = capture
-        proposal, winner = _projection_records(capture)
-        overflow = [int(capture[field]) for field in OVERFLOW_FIELDS]
-        try:
-            report = verify_capture(capture)
-            packet_verification = {"report": report, "state": "pass"}
-        except (KeyError, TypeError, ValueError):
-            packet_verification = {"failure": "packet_invalid", "state": "fail"}
+        processed = persist_and_process_capture(run_dir, capture)
+        packet_verification = processed.verification
+        if processed.valid:
+            proposal = processed.proposal
+            winner = processed.winner
+            assert processed.overflow is not None
+            overflow = processed.overflow
+        else:
+            # A structurally invalid raw packet is decisive terminal-3
+            # evidence. Do not fabricate packet-derived policy projections.
+            behavior._assert_build_components_consumed(build_dir, extension)
+            return RunProducts(mot_bytes, None, packet, packet_verification)
 
     inventory = {
         ACTIVE_PAIRS_MEMBER: active_pairs,
@@ -493,6 +533,15 @@ def repository_runner(invocation: Mapping[str, Any]) -> RunProducts:
 
 def validate_products(run_id: str, products: RunProducts) -> None:
     inventory = products.policy_inventory
+    if inventory is None:
+        if (
+            run_id == evidence.CAPTURE_OFF_RUN
+            or products.packet is None
+            or products.packet_verification
+            != {"failure": "packet_invalid", "state": "fail"}
+        ):
+            raise ChildError("only a persisted invalid capture may omit its inventory")
+        return
     if set(inventory) != POLICY_MEMBERS:
         raise ChildError("policy inventory has missing or unknown members")
     if inventory.get("schema") != evidence.POLICY_INVENTORY_SCHEMA:
@@ -555,19 +604,38 @@ def execute_child(
         products = runner(invocation)
         validate_products(str(invocation["run_id"]), products)
         _write_mot(run_dir / f"{invocation['sequence']}.txt", products.mot_bytes)
-        evidence.write_document(
-            run_dir,
-            evidence.POLICY_INVENTORY_NAME,
-            products.policy_inventory,
-        )
-        if products.packet is not None:
-            evidence.write_document(run_dir, evidence.PACKET_NAME, products.packet)
-        if products.packet_verification is not None:
+        if products.policy_inventory is not None:
             evidence.write_document(
                 run_dir,
-                evidence.PACKET_VERIFICATION_NAME,
-                products.packet_verification,
+                evidence.POLICY_INVENTORY_NAME,
+                products.policy_inventory,
             )
+        if products.packet is not None:
+            packet_path = run_dir / evidence.PACKET_NAME
+            if packet_path.is_file():
+                if (
+                    evidence.load_document(run_dir, evidence.PACKET_NAME)
+                    != products.packet
+                ):
+                    raise ChildError("persisted raw capture differs from run products")
+            else:
+                evidence.write_document(run_dir, evidence.PACKET_NAME, products.packet)
+        if products.packet_verification is not None:
+            verification_path = run_dir / evidence.PACKET_VERIFICATION_NAME
+            if verification_path.is_file():
+                if (
+                    evidence.load_document(run_dir, evidence.PACKET_VERIFICATION_NAME)
+                    != products.packet_verification
+                ):
+                    raise ChildError(
+                        "persisted packet verification differs from run products"
+                    )
+            else:
+                evidence.write_document(
+                    run_dir,
+                    evidence.PACKET_VERIFICATION_NAME,
+                    products.packet_verification,
+                )
         completed = {**invocation, "state": "completed"}
         _replace_invocation(invocation_path, completed)
         return 0

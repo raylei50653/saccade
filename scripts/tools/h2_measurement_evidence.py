@@ -28,7 +28,9 @@ h2_measure_b_<I40_B>_<F64>           phase B   (§ C3.1; complete digest, never
     launch_probe.json                the launch-time probe used by terminal 1
     runtime_inputs.json              the complete bound-input manifest
     published_identity.json          the coordinate/probe publication F binds
+    checkout_identity_witness.json   source tree and all three content axes
     mutation_observation.json        the BoundInputMonitor record
+    measurement_stop_boundary.json   monitor-stop and post-close revalidation
     authorization_consumed.json      phase B: the § C3.5.1 step-5 write that
                                      *is* the consumption of S_B
     observation.json                 exactly ORDERED_PREDICATES (+ optional
@@ -87,6 +89,8 @@ ADMISSION_SCHEMA = "h2_admission_verdict_v1"
 AUTHORIZATION_SCHEMA = "h2_authorization_consumed_v1"
 CONTROLLER_SCHEMA = "h2_measurement_controller_v1"
 MUTATION_SCHEMA = "h2_bound_input_mutation_v1"
+CHECKOUT_WITNESS_SCHEMA = "h2_checkout_identity_witness_v1"
+STOP_BOUNDARY_SCHEMA = "h2_measurement_stop_boundary_v1"
 
 # Re-exported, never redeclared: the schema identifier is a ruler fact and lives
 # in `h2_behavioral_identity.py`, which owns the A7.6 member definitions (§ 4).
@@ -138,6 +142,8 @@ LAUNCH_PROBE_NAME = "launch_probe.json"
 RUNTIME_INPUTS_NAME = "runtime_inputs.json"
 PUBLISHED_IDENTITY_NAME = "published_identity.json"
 MUTATION_NAME = "mutation_observation.json"
+CHECKOUT_WITNESS_NAME = "checkout_identity_witness.json"
+STOP_BOUNDARY_NAME = "measurement_stop_boundary.json"
 CONTROLLER_NAME = "controller.json"
 
 RUNS_DIR = "runs"

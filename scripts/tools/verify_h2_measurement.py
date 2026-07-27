@@ -41,6 +41,8 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import os
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any, Iterable, Mapping, NamedTuple
@@ -52,6 +54,7 @@ if _TOOLS.as_posix() not in sys.path:
 
 import h2_behavioral_identity as behavior  # noqa: E402
 import h2_measurement_evidence as evidence  # noqa: E402
+import h2_path_partition as path_partition  # noqa: E402
 import h2_terminal_partition as partition  # noqa: E402
 import verify_h0_phase_a as h0_verifier  # noqa: E402  (imported, never modified)
 from build_runtime_identity import ALL_COORDINATE_AXES, IDENTITY_SCHEMA  # noqa: E402
@@ -212,6 +215,93 @@ def _authorization(root: Path, phase: str) -> dict[str, Any] | None:
     )
 
 
+def _git(*args: str) -> str:
+    try:
+        completed = subprocess.run(
+            ["git", *args],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except subprocess.SubprocessError as exc:
+        raise VerificationError(
+            f"archived source commit is unavailable: {exc}"
+        ) from exc
+    return completed.stdout.strip()
+
+
+def _commit_content_axes(head: str) -> dict[str, dict[str, Any]]:
+    """Rebuild all content axes from the archived commit, not controller code."""
+    raw = _git("ls-tree", "-r", "-z", "--full-tree", head)
+    classified: dict[str, list[dict[str, str]]] = {
+        "decision_relevant": [],
+        "identity_semantics": [],
+        "plumbing_only": [],
+    }
+    for entry in raw.split("\0"):
+        if not entry:
+            continue
+        try:
+            metadata, path = entry.split("\t", 1)
+            _mode, object_type, blob = metadata.split(" ", 2)
+        except ValueError as exc:
+            raise VerificationError("git tree listing is malformed") from exc
+        if object_type != "blob" or path.endswith((".md", ".rst", ".txt")):
+            continue
+        path_class = path_partition.classify(path)
+        if path_class in classified:
+            classified[path_class].append({"blob": blob, "path": path})
+    return {
+        path_class: {
+            "digest": evidence.digest(members),
+            "file_count": len(members),
+            "files": members,
+        }
+        for path_class, members in classified.items()
+    }
+
+
+def _checkout_witness(root: Path, head: str) -> dict[str, Any]:
+    witness = _load(
+        root,
+        evidence.CHECKOUT_WITNESS_NAME,
+        schema=evidence.CHECKOUT_WITNESS_SCHEMA,
+    )
+    expected_tree = _git("rev-parse", f"{head}^{{tree}}")
+    expected_axes = _commit_content_axes(head)
+    if (
+        set(witness)
+        != {
+            "axes",
+            "build_dir",
+            "repository_root",
+            "schema",
+            "source_head",
+            "source_tree",
+        }
+        or witness.get("source_head") != head
+        or witness.get("source_tree") != expected_tree
+        or witness.get("axes") != expected_axes
+        or not isinstance(witness.get("repository_root"), str)
+        or not Path(witness["repository_root"]).is_absolute()
+        or not isinstance(witness.get("build_dir"), str)
+        or not Path(witness["build_dir"]).is_absolute()
+    ):
+        raise VerificationError(
+            "checkout identity witness differs from the independently rebuilt "
+            "source tree/content axes"
+        )
+    return witness
+
+
+def _bound_path(value: Any, repository_root: str) -> str:
+    path = Path(str(value))
+    if not path.is_absolute():
+        path = Path(repository_root) / path
+    return os.path.normpath(path.as_posix())
+
+
 def _phase_a_launch_records(
     root: Path,
     name: evidence.RootName,
@@ -226,9 +316,13 @@ def _phase_a_launch_records(
     runtime_manifest = _load(root, evidence.RUNTIME_INPUTS_NAME)
     published = _load(root, evidence.PUBLISHED_IDENTITY_NAME, schema=IDENTITY_SCHEMA)
     mutation = _load(root, evidence.MUTATION_NAME, schema=evidence.MUTATION_SCHEMA)
+    stop = _load(
+        root, evidence.STOP_BOUNDARY_NAME, schema=evidence.STOP_BOUNDARY_SCHEMA
+    )
     controller = _load(
         root, evidence.CONTROLLER_NAME, schema=evidence.CONTROLLER_SCHEMA
     )
+    checkout = _checkout_witness(root, name.i40)
 
     binding = freeze.get("layer_p_certificate")
     coordinate = freeze.get("coordinate")
@@ -241,6 +335,21 @@ def _phase_a_launch_records(
         and binding.get("digest") == evidence.digest(certificate)
         and freeze.get("instrumentation_head") == name.i40
         and certificate.get("source_head") == name.i40
+        and certificate.get("source_tree") == checkout["source_tree"]
+        and isinstance(certificate.get("selected_base"), str)
+        and bool(certificate["selected_base"])
+        and isinstance(certificate.get("changed_path_verdict"), Mapping)
+        and certificate["changed_path_verdict"].get("admissible") is True
+        and certificate.get("equivalence") == "unproven"
+        and isinstance(coordinate, Mapping)
+        and certificate.get("decision_relevant_digest")
+        == coordinate.get("implementation")
+        == checkout["axes"]["decision_relevant"]["digest"]
+        and certificate.get("identity_semantics_digest")
+        == coordinate.get("identity_semantics")
+        == checkout["axes"]["identity_semantics"]["digest"]
+        and certificate.get("plumbing_set_digest")
+        == checkout["axes"]["plumbing_only"]["digest"]
         and certificate.get("published_coordinate") == coordinate
         and certificate.get("behavior_probe") == probe_digest
         and certificate.get("published_probe") == probe_digest
@@ -260,6 +369,9 @@ def _phase_a_launch_records(
         and reference.get("identical") is True
         and reference.get("mode") == "identity"
         and reference.get("sequence") == behavior.IDENTITY_SEQUENCE
+        and certificate.get("probe_schema") == behavior.RESULT_SCHEMA
+        and certificate.get("mode") == "identity"
+        and certificate.get("fixture") == behavior.IDENTITY_SEQUENCE
         and isinstance(reference_witness, Mapping)
         and reference_witness.get("digest") == build_artifacts.get("digest")
         and certificate.get("build_witness") == reference_witness
@@ -269,19 +381,25 @@ def _phase_a_launch_records(
         and isinstance(published.get("equivalence"), Mapping)
         and published["equivalence"].get("state") == "unproven"
         and published.get("publication_complete") is True
+        and _bound_path(certificate.get("build_dir"), checkout["repository_root"])
+        == _bound_path(build_artifacts.get("build_dir"), checkout["repository_root"])
+        == _bound_path(checkout["build_dir"], checkout["repository_root"])
     )
     recorded_certificate_match = observation.get("layer_p_certificate_matches_freeze")
     mismatch_reasons = controller.get("certificate_mismatch_reasons")
-    if recorded_certificate_match is True and not certificate_match:
+    if recorded_certificate_match is not certificate_match:
         raise VerificationError(
             "recorded Layer-P certificate match disagrees with the archived "
-            "freeze/certificate/content bindings"
+            "freeze/certificate/content bindings and independent Git-tree "
+            "recomputation"
         )
-    if recorded_certificate_match is False and (
-        not isinstance(mismatch_reasons, list) or not mismatch_reasons
+    if (
+        not isinstance(mismatch_reasons, list)
+        or bool(mismatch_reasons) is certificate_match
     ):
         raise VerificationError(
-            "recorded Layer-P certificate mismatch has no controller reason"
+            "controller certificate reasons disagree with the independently "
+            "recomputed predicate"
         )
 
     launch_path = root / evidence.LAUNCH_PROBE_NAME
@@ -319,6 +437,49 @@ def _phase_a_launch_records(
     ):
         raise VerificationError(
             "recorded bound-input predicate differs from the mutation record"
+        )
+    stop_reasons = stop.get("revalidation_reasons")
+    stop_event_reasons = [
+        event.get("path")
+        for event in events
+        if isinstance(event, Mapping)
+        and event.get("classification") == "post_close_revalidation"
+    ]
+    if (
+        not isinstance(stop.get("monitor_started"), bool)
+        or not isinstance(stop.get("monitor_closed"), bool)
+        or not isinstance(stop.get("post_close_revalidation_complete"), bool)
+        or not isinstance(stop_reasons, list)
+        or any(not isinstance(reason, str) or not reason for reason in stop_reasons)
+        or (stop.get("linearization") == "post_close_revalidation_complete")
+        is not (stop["monitor_closed"] and stop["post_close_revalidation_complete"])
+        or (bool(stop_reasons) and mutation.get("mutated") is not True)
+        or (
+            isinstance(stop_reasons, list)
+            and bool(stop_reasons)
+            and stop_event_reasons != stop_reasons
+        )
+    ):
+        raise VerificationError("measurement stop boundary is malformed")
+    terminal_four_results = {
+        result
+        for result, terminal in partition.RESULT_TO_TERMINAL.items()
+        if terminal == EXECUTION_INVALID_TERMINAL
+    }
+    if (
+        observation.get("execution_result") not in terminal_four_results
+        and not stop_reasons
+        and (
+            stop["monitor_started"] is not True
+            or stop["monitor_closed"] is not True
+            or stop["post_close_revalidation_complete"] is not True
+            or stop.get("source_head") != checkout["source_head"]
+            or stop.get("source_tree") != checkout["source_tree"]
+        )
+    ):
+        raise VerificationError(
+            "non-execution-invalid archive has no closed-monitor/post-close "
+            "revalidation boundary"
         )
     if (
         controller.get("instrumentation_head") != name.i40
@@ -469,7 +630,7 @@ def _verify_packet(
     try:
         packet_report = verify_capture(capture)
         packet = canonical_semantic_packet(capture)
-    except (KeyError, TypeError, ValueError):
+    except Exception:
         if stored is not None and stored != {
             "failure": "packet_invalid",
             "state": FAIL,

@@ -53,6 +53,9 @@ import run_h2_measurement_child as child  # noqa: E402
 import verify_h0_phase_a as h0_verifier  # noqa: E402
 import verify_h2_measurement as verifier  # noqa: E402
 from run_h2_layer_p import CERTIFICATE_SCHEMA  # noqa: E402
+from export_headline_bridge_decision_trace import (  # noqa: E402
+    canonical_semantic_packet,
+)
 from verify_headline_bridge_decision_trace import verify_capture  # noqa: E402
 
 PHASE = "a"
@@ -218,6 +221,7 @@ def certificate_match_reasons(
     *,
     current_head: str,
     current_tree: str,
+    checkout_witness: Mapping[str, Any],
 ) -> tuple[str, ...]:
     """Return every mismatch; an empty tuple is the terminal-1 predicate pass."""
     freeze = bundle.freeze
@@ -226,6 +230,7 @@ def certificate_match_reasons(
     manifest = bundle.runtime_manifest
     reference = bundle.reference_probe
     binding = freeze["layer_p_certificate"]
+    axes = checkout_witness["axes"]
     reasons: list[str] = []
 
     checks = (
@@ -238,7 +243,9 @@ def certificate_match_reasons(
             "certificate/freeze/current head differ",
         ),
         (
-            certificate.get("source_tree") == current_tree,
+            certificate.get("source_tree")
+            == checkout_witness.get("source_tree")
+            == current_tree,
             "certificate tree differs from the execution checkout",
         ),
         (
@@ -257,17 +264,18 @@ def certificate_match_reasons(
         ),
         (
             certificate.get("decision_relevant_digest")
-            == freeze["coordinate"]["implementation"],
-            "certificate implementation digest differs from F",
+            == freeze["coordinate"]["implementation"]
+            == axes["decision_relevant"]["digest"],
+            "certificate implementation digest differs from F/checkout",
         ),
         (
             certificate.get("identity_semantics_digest")
-            == freeze["coordinate"]["identity_semantics"],
-            "certificate identity-semantics digest differs from F",
+            == freeze["coordinate"]["identity_semantics"]
+            == axes["identity_semantics"]["digest"],
+            "certificate identity-semantics digest differs from F/checkout",
         ),
         (
-            certificate.get("plumbing_set_digest")
-            == identity.plumbing_axis()["digest"],
+            certificate.get("plumbing_set_digest") == axes["plumbing_only"]["digest"],
             "certificate plumbing-set digest differs from the execution checkout",
         ),
         (
@@ -339,12 +347,31 @@ def certificate_match_reasons(
         ),
         (
             bundle.build_dir.resolve(strict=True)
-            == Path(str(manifest["build_artifacts"]["build_dir"])).resolve(strict=True),
+            == Path(str(manifest["build_artifacts"]["build_dir"])).resolve(strict=True)
+            == Path(str(checkout_witness["build_dir"])).resolve(strict=True),
             "selected build directory differs from the runtime manifest",
         ),
     )
     reasons.extend(detail for passed, detail in checks if not passed)
     return tuple(reasons)
+
+
+def build_checkout_witness(
+    bundle: LaunchBundle, *, current_head: str, current_tree: str
+) -> dict[str, Any]:
+    """Capture the live values that an archive verifier rebuilds from Git."""
+    return {
+        "schema": evidence.CHECKOUT_WITNESS_SCHEMA,
+        "axes": {
+            "decision_relevant": identity.implementation_axis(),
+            "identity_semantics": identity.identity_semantics_axis(),
+            "plumbing_only": identity.plumbing_axis(),
+        },
+        "build_dir": bundle.build_dir.resolve(strict=True).as_posix(),
+        "repository_root": REPO_ROOT.resolve(strict=True).as_posix(),
+        "source_head": current_head,
+        "source_tree": current_tree,
+    }
 
 
 def revalidate_bundle(bundle: LaunchBundle) -> tuple[str, ...]:
@@ -551,12 +578,18 @@ def _read_run_document(root: Path, run_id: str, name: str) -> dict[str, Any]:
         raise ControllerError(f"{SEQUENCE}/{run_id}: {exc}") from exc
 
 
-def compare_policy_inventories(root: Path) -> tuple[bool, dict[str, Any]]:
+def compare_policy_inventories(
+    root: Path,
+) -> tuple[bool, dict[str, Any], bool]:
     """Controller-side A7.6 implementation; the verifier recomputes separately."""
-    inventories = {
-        run_id: _read_run_document(root, run_id, evidence.POLICY_INVENTORY_NAME)
-        for run_id in evidence.RUN_IDS
-    }
+    inventories: dict[str, dict[str, Any]] = {}
+    for run_id in evidence.RUN_IDS:
+        directory = evidence.run_dir(root, SEQUENCE, run_id)
+        if not (directory / evidence.POLICY_INVENTORY_NAME).is_file():
+            continue
+        inventories[run_id] = _read_run_document(
+            root, run_id, evidence.POLICY_INVENTORY_NAME
+        )
     for run_id, inventory in inventories.items():
         try:
             h0_verifier._verify_policy_inventory(run_id, inventory)
@@ -586,25 +619,31 @@ def compare_policy_inventories(root: Path) -> tuple[bool, dict[str, Any]]:
         if not equal and first_unequal is None:
             first_unequal = f"{left}:{right}:{member}"
 
-    off = inventories[evidence.CAPTURE_OFF_RUN]
-    for run_id in evidence.CAPTURE_ON_RUNS:
-        for member in behavior.A76_EQUALITY_MEMBERS:
-            record(
-                evidence.CAPTURE_OFF_RUN,
-                member,
-                run_id,
-                off[member] == inventories[run_id][member],
-            )
-    reference = inventories[evidence.CAPTURE_ON_RUNS[0]]
-    for member in behavior.A76_PROJECTION_MEMBERS:
-        for run_id in evidence.CAPTURE_ON_RUNS[1:]:
-            record(
-                evidence.CAPTURE_ON_RUNS[0],
-                member,
-                run_id,
-                reference[member] == inventories[run_id][member],
-            )
-    for run_id in evidence.CAPTURE_ON_RUNS:
+    off_id = evidence.CAPTURE_OFF_RUN
+    if off_id in inventories:
+        for run_id in evidence.CAPTURE_ON_RUNS:
+            if run_id not in inventories:
+                continue
+            for member in behavior.A76_EQUALITY_MEMBERS:
+                record(
+                    off_id,
+                    member,
+                    run_id,
+                    inventories[off_id][member] == inventories[run_id][member],
+                )
+    on_present = [run for run in evidence.CAPTURE_ON_RUNS if run in inventories]
+    if on_present:
+        reference_id = on_present[0]
+        reference = inventories[reference_id]
+        for member in behavior.A76_PROJECTION_MEMBERS:
+            for run_id in on_present[1:]:
+                record(
+                    reference_id,
+                    member,
+                    run_id,
+                    reference[member] == inventories[run_id][member],
+                )
+    for run_id in on_present:
         record(
             run_id,
             behavior.A76_OVERFLOW_MEMBER,
@@ -617,7 +656,7 @@ def compare_policy_inventories(root: Path) -> tuple[bool, dict[str, Any]]:
         "relations": relations,
         "state": "equal" if first_unequal is None else "unequal",
     }
-    return first_unequal is None, comparison
+    return first_unequal is None, comparison, len(inventories) == len(evidence.RUN_IDS)
 
 
 def verify_packets(root: Path) -> bool:
@@ -628,7 +667,8 @@ def verify_packets(root: Path) -> bool:
         stored = _read_run_document(root, run_id, evidence.PACKET_VERIFICATION_NAME)
         try:
             report = verify_capture(packet)
-        except (KeyError, TypeError, ValueError):
+            canonical_semantic_packet(packet)
+        except Exception:
             valid = False
             if stored != {"failure": "packet_invalid", "state": "fail"}:
                 raise ControllerError(
@@ -800,6 +840,7 @@ ProbeRunner = Callable[..., dict[str, Any]]
 ChildLauncher = Callable[..., int]
 MonitorFactory = Callable[..., Monitor]
 BundleRevalidator = Callable[[LaunchBundle], tuple[str, ...]]
+CheckoutWitnessBuilder = Callable[..., dict[str, Any]]
 
 
 def execute_controller(
@@ -812,6 +853,7 @@ def execute_controller(
     launch_child: ChildLauncher = default_child_launcher,
     monitor_factory: MonitorFactory = h0_controller.BoundInputMonitor,
     bundle_revalidator: BundleRevalidator = revalidate_bundle,
+    checkout_witness_builder: CheckoutWitnessBuilder = build_checkout_witness,
     inherited_environment: Mapping[str, str] | None = None,
     clock: Callable[[], float] = time.monotonic,
 ) -> tuple[Path, partition.Selection]:
@@ -849,6 +891,18 @@ def execute_controller(
     mutation_events: list[Any] = []
     monitor: Monitor | None = None
     monitor_failure: BaseException | None = None
+    baseline_head: str | None = None
+    baseline_tree: str | None = None
+    stop_boundary: dict[str, Any] = {
+        "schema": evidence.STOP_BOUNDARY_SCHEMA,
+        "linearization": None,
+        "monitor_closed": False,
+        "monitor_started": False,
+        "post_close_revalidation_complete": False,
+        "revalidation_reasons": [],
+        "source_head": None,
+        "source_tree": None,
+    }
     try:
         # The output root does not exist yet. Install the monitor first, then
         # re-read every launch input and the checkout under that monitor. This
@@ -860,23 +914,35 @@ def execute_controller(
                 else _monitor_paths(bundle),
                 ignored_roots=(incomplete,),
             )
+            stop_boundary["monitor_started"] = True
         except (h0_controller.DriftError, OSError) as exc:
             monitor_failure = exc
 
         incomplete.mkdir()
         _archive_bundle(incomplete, bundle)
+        current_head = _git("rev-parse", "HEAD")
+        current_tree = _git("rev-parse", "HEAD^{tree}")
+        baseline_head = current_head
+        baseline_tree = current_tree
+        checkout_witness = checkout_witness_builder(
+            bundle, current_head=current_head, current_tree=current_tree
+        )
+        evidence.write_document(
+            incomplete, evidence.CHECKOUT_WITNESS_NAME, checkout_witness
+        )
         if monitor_failure is not None:
             raise ControllerError(
                 f"bound-input monitor could not start: {monitor_failure}"
             )
         assert monitor is not None
 
-        current_head = _git("rev-parse", "HEAD")
-        current_tree = _git("rev-parse", "HEAD^{tree}")
-        reasons = list(bundle_revalidator(bundle))
-        reasons.extend(
+        intake_reasons = list(bundle_revalidator(bundle))
+        reasons = list(
             certificate_match_reasons(
-                bundle, current_head=current_head, current_tree=current_tree
+                bundle,
+                current_head=current_head,
+                current_tree=current_tree,
+                checkout_witness=checkout_witness,
             )
         )
         if require_clean_checkout and _git(
@@ -885,7 +951,21 @@ def execute_controller(
             reasons.append("execution checkout changed before monitored revalidation")
         predicates["layer_p_certificate_matches_freeze"] = not reasons
         controller_record["certificate_mismatch_reasons"] = list(reasons)
-        if not reasons:
+        if intake_reasons:
+            mutation_events.extend(
+                type(
+                    "Mutation",
+                    (),
+                    {
+                        "classification": "post_monitor_revalidation",
+                        "mask": 0,
+                        "path": reason,
+                    },
+                )()
+                for reason in intake_reasons
+            )
+            predicates["bound_input_mutated"] = True
+        if not reasons and not intake_reasons:
             probe = launch_probe(
                 incomplete,
                 build_dir=bundle.build_dir.resolve(strict=True),
@@ -908,7 +988,11 @@ def execute_controller(
                 == bundle.runtime_manifest["build_artifacts"]["digest"]
             )
 
-        if not reasons and predicates["behavior_probe_equals_freeze"]:
+        if (
+            not reasons
+            and not intake_reasons
+            and predicates["behavior_probe_equals_freeze"]
+        ):
             policy_fingerprint = identity.decision_surface_axis()[
                 "resolved_bridge_policy_config_v1"
             ]
@@ -936,28 +1020,17 @@ def execute_controller(
                 if returncode != 0 or invocation.get("state") != "completed":
                     raise ControllerError(f"child {run_id} exited nonzero")
 
-            equal, comparison = compare_policy_inventories(incomplete)
+            predicates["packets_valid"] = verify_packets(incomplete)
+            equal, comparison, inventories_complete = compare_policy_inventories(
+                incomplete
+            )
             evidence.write_document(
                 incomplete / evidence.RUNS_DIR / SEQUENCE,
                 evidence.COMPARISON_NAME,
                 comparison,
             )
             predicates["capture_off_on_equal"] = equal
-            predicates["packets_valid"] = verify_packets(incomplete)
-            predicates["execution_complete"] = True
-
-            post_reasons = list(bundle_revalidator(bundle))
-            post_head = _git("rev-parse", "HEAD")
-            post_tree = _git("rev-parse", "HEAD^{tree}")
-            if post_head != current_head or post_tree != current_tree:
-                post_reasons.append("execution checkout head/tree moved during the run")
-            if require_clean_checkout and _git(
-                "status", "--porcelain", "--untracked-files=normal"
-            ):
-                post_reasons.append("execution checkout became dirty during the run")
-            if post_reasons:
-                predicates["layer_p_certificate_matches_freeze"] = False
-                controller_record["certificate_mismatch_reasons"].extend(post_reasons)
+            predicates["execution_complete"] = inventories_complete
     except h0_controller.DriftError as exc:
         if monitor is not None:
             mutation_events.extend(monitor.history)
@@ -1013,13 +1086,66 @@ def execute_controller(
             predicates["bound_input_mutated"] = bool(mutation_events)
             try:
                 monitor.close()
-            except OSError as exc:
+                stop_boundary["monitor_closed"] = True
+            except BaseException as exc:
                 predicates["execution_complete"] = False
                 execution_result = "unclassified_execution_failure"
                 controller_record["failure"] = {
-                    "reason": str(exc),
+                    "reason": str(exc) or type(exc).__name__,
                     "stage": "bound_input_monitor_close",
                 }
+            try:
+                final_reasons = list(bundle_revalidator(bundle))
+                final_head = _git("rev-parse", "HEAD")
+                final_tree = _git("rev-parse", "HEAD^{tree}")
+                checkout_clean = not bool(
+                    _git("status", "--porcelain", "--untracked-files=normal")
+                )
+                if final_head != baseline_head or final_tree != baseline_tree:
+                    final_reasons.append(
+                        "execution checkout head/tree moved before stop linearization"
+                    )
+                if require_clean_checkout and not checkout_clean:
+                    final_reasons.append(
+                        "execution checkout became dirty before stop linearization"
+                    )
+                stop_boundary.update(
+                    {
+                        "checkout_clean": checkout_clean,
+                        "completed_utc": _utc(),
+                        "linearization": (
+                            "post_close_revalidation_complete"
+                            if stop_boundary["monitor_closed"]
+                            else None
+                        ),
+                        "post_close_revalidation_complete": True,
+                        "revalidation_reasons": final_reasons,
+                        "source_head": final_head,
+                        "source_tree": final_tree,
+                    }
+                )
+            except BaseException as exc:
+                final_reasons = [
+                    "post-close bound-input revalidation failed: "
+                    f"{str(exc) or type(exc).__name__}"
+                ]
+                stop_boundary["revalidation_reasons"] = final_reasons
+            if final_reasons:
+                mutation_events.extend(
+                    type(
+                        "Mutation",
+                        (),
+                        {
+                            "classification": "post_close_revalidation",
+                            "mask": 0,
+                            "path": reason,
+                        },
+                    )()
+                    for reason in final_reasons
+                )
+            predicates["bound_input_mutated"] = bool(mutation_events)
+
+    evidence.write_document(incomplete, evidence.STOP_BOUNDARY_NAME, stop_boundary)
 
     return _finalize(
         incomplete,
