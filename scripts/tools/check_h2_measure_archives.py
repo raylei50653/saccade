@@ -65,8 +65,13 @@ REPAIR_VOCABULARY = partition.REPAIR_VOCABULARY
 classify = verifier.classify
 
 
-class CorpusError(RuntimeError):
-    """The corpus does not satisfy § C3.1 / § C3.5 / § C3.5.1. Fail-closed."""
+# The chain rules are the verifier's, because § C3.6(e) makes them part of one
+# root's admissibility: a root whose predecessors are incomplete had no right to
+# consume `S_B`, and that verdict cannot differ depending on whether it was
+# reached through the corpus or through the root. This module raises the same
+# error type and adds only what is genuinely corpus-wide — the § C3.5 ban, which
+# needs each predecessor's verified report.
+CorpusError = verifier.CorpusError
 
 
 class Attempt(NamedTuple):
@@ -143,49 +148,20 @@ def _load_attempt(root: Path) -> Attempt:
 
 
 def _check_prior_attempts(attempts: Iterable[Attempt]) -> None:
-    """Complete, ordered, and § C3.5-admissible, per Phase-A result."""
-    by_group: dict[str, list[Attempt]] = {}
+    """The § C3.5 ban, over chains the verifier has already proved complete."""
     known = {attempt.root.name: attempt for attempt in attempts}
     for attempt in attempts:
         if attempt.name.phase != "b" or attempt.verify_class == INADMISSIBLE:
             continue
-        group = attempt.phase_a_evidence_root
-        if group is None:
-            raise CorpusError(
-                f"{attempt.root.name}: F_B binds no phase_a_evidence root (§ C3.2 item 7)"
+        # Completeness, order, consumed-only membership and per-class verification
+        # are one rule and live in one place; the corpus is where it is applied to
+        # every root rather than where it is restated.
+        verifier.verify_prior_chain(attempt.root, attempt.freeze, visiting=frozenset())
+        for prior_name in attempt.prior_attempts:
+            prior = known.get(prior_name) or _load_attempt(
+                attempt.root.parent / prior_name
             )
-        by_group.setdefault(group, []).append(attempt)
-
-    for group, members in sorted(by_group.items()):
-        chain = sorted(members, key=lambda item: len(item.prior_attempts))
-        for position, attempt in enumerate(chain):
-            priors = attempt.prior_attempts
-            # Existence first: a root naming an attempt that is not in the corpus
-            # is a more basic defect than an out-of-order chain, and reporting the
-            # ordering instead would send a reader looking in the wrong place.
-            for prior_name in priors:
-                prior = known.get(prior_name)
-                if prior is None:
-                    raise CorpusError(
-                        f"{attempt.root.name}: prior attempt {prior_name} does not exist"
-                    )
-                if prior.verify_class == INADMISSIBLE:
-                    raise CorpusError(
-                        f"{attempt.root.name}: {prior_name} was inadmissible and is "
-                        "not a consumed attempt (§ C3.5.1 step 4)"
-                    )
-                _check_re_attempt(attempt, prior)
-            if len(priors) != position:
-                raise CorpusError(
-                    f"{attempt.root.name}: prior_attempts is incomplete for the "
-                    f"Phase-A result {group}: {len(priors)} bound, {position} exist"
-                )
-            expected = [item.root.name for item in chain[:position]]
-            if list(priors) != expected:
-                raise CorpusError(
-                    f"{attempt.root.name}: prior_attempts is not the ordered list of "
-                    f"preceding consumed attempts (expected {expected})"
-                )
+            _check_re_attempt(attempt, prior)
 
 
 def _check_re_attempt(attempt: Attempt, prior: Attempt) -> None:

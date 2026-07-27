@@ -602,16 +602,21 @@ def test_admission_recomputation_verifies_every_prior_attempt(tmp_path: Path) ->
 
 
 def test_the_verify_classes_are_distinguished(tmp_path: Path) -> None:
-    bound = phase_a_root(tmp_path)
-    complete = phase_b_root(tmp_path, phase_a=bound, head="1" * 40)
+    # One corpus per attempt: § C3.6(e) requires the consumed attempts of a
+    # Phase-A result to form a single ordered chain, so three unrelated attempts
+    # sharing one Phase-A root would be an ambiguous chain rather than a fixture.
+    complete = phase_b_root(tmp_path / "c", phase_a=phase_a_root(tmp_path / "c"))
     assert corpus.classify(complete) == "complete"
+    assert verifier.verify_evidence_root(complete)["valid"] is True
 
-    unterminated = phase_b_root(tmp_path, phase_a=bound, head="2" * 40, terminal=False)
+    unterminated = phase_b_root(
+        tmp_path / "u", phase_a=phase_a_root(tmp_path / "u"), terminal=False
+    )
     assert corpus.classify(unterminated) == "unterminated"
     report = verifier.verify_unterminated(unterminated)
     assert report["terminal"] is None and report["valid"] is True
 
-    envelope = phase_b_root(tmp_path, phase_a=bound, head="3" * 40)
+    envelope = phase_b_root(tmp_path / "e", phase_a=phase_a_root(tmp_path / "e"))
     (envelope / evidence.MANIFEST_NAME).unlink()
     (envelope / evidence.OBSERVATION_NAME).unlink()
     evidence.write_checksum_inventory(envelope)
@@ -781,59 +786,133 @@ def test_prior_attempts_must_be_the_complete_ordered_chain(tmp_path: Path) -> No
         tmp_path, phase_a=bound, head="2" * 40, prior_attempts=(first.name,)
     )
     assert len(corpus.check_corpus([first, second])) == 2
-
-    orphan = phase_b_root(tmp_path, phase_a=bound, head="3" * 40)
-    with pytest.raises(corpus.CorpusError, match="prior_attempts is incomplete"):
-        corpus.check_corpus([first, second, orphan])
+    assert verifier.verify_evidence_root(second)["valid"] is True
 
 
-def test_re_attempt_against_the_same_surface_after_a_perturbation_is_banned(
+def test_an_omitted_predecessor_is_caught_by_the_verifier_alone(
     tmp_path: Path,
 ) -> None:
+    """§ C3.6(e) asks whether the chain is *complete*, which a list cannot answer.
+
+    The successor binds no predecessors while a consumed attempt for the same
+    Phase-A result already exists. Walking only what `F_B` supplied would confirm
+    an empty chain; the corpus scan is what makes the omission visible, and it
+    must be visible to the per-root verifier, not only to the corpus checker —
+    the omission is why this attempt had no right to consume `S_B`.
+    """
     bound = phase_a_root(tmp_path)
-    # An attempt whose survivors already show the perturbation carries the ban
-    # even though it never recorded a terminal (§ C3.5.1).
-    banned = phase_b_root(tmp_path, phase_a=bound, head="1" * 40, terminal=False)
+    existing = phase_b_root(tmp_path, phase_a=bound, head="1" * 40)
+    omitting = phase_b_root(tmp_path, phase_a=bound, head="2" * 40)
+    with pytest.raises(
+        verifier.VerificationError, match="differs from the independent recomputation"
+    ):
+        verifier.verify_evidence_root(omitting)
+    with pytest.raises(corpus.CorpusError, match="missing from a successor"):
+        verifier.verify_prior_chain(
+            omitting,
+            json.loads((omitting / evidence.FREEZE_NAME).read_text(encoding="utf-8")),
+            visiting=frozenset(),
+        )
+    del existing
+
+
+def test_an_inadmissible_root_may_not_appear_in_prior_attempts(
+    tmp_path: Path,
+) -> None:
+    """§ C3.5.1 step 4: a refused gate spent nothing and is not a predecessor."""
+    bound = phase_a_root(tmp_path)
+    refused = phase_b_root(
+        tmp_path,
+        phase_a=bound,
+        head="1" * 40,
+        admission=refused_admission(),
+        consume=False,
+        terminal=False,
+    )
+    assert corpus.classify(refused) == partition.INADMISSIBLE_CLASS
+    successor = phase_b_root(
+        tmp_path, phase_a=bound, head="2" * 40, prior_attempts=(refused.name,)
+    )
+    with pytest.raises(
+        verifier.VerificationError, match="differs from the independent recomputation"
+    ):
+        verifier.verify_evidence_root(successor)
+    with pytest.raises(corpus.CorpusError, match="complete ordered list"):
+        verifier.verify_prior_chain(
+            successor,
+            json.loads((successor / evidence.FREEZE_NAME).read_text(encoding="utf-8")),
+            visiting=frozenset(),
+        )
+
+
+def _banned_predecessor(parent: Path) -> tuple[Path, Path]:
+    """A consumed attempt whose survivors already show a perturbation (§ C3.5.1).
+
+    One corpus per case, because a successor is only admissible as *the* next
+    link in the chain: two candidate successors in one directory would be
+    rejected for the chain defect before the § C3.5 ban was ever reached.
+    """
+    bound = phase_a_root(parent)
+    banned = phase_b_root(parent, phase_a=bound, head="1" * 40, terminal=False)
     _write_sequence(banned, SEQUENCE_A, perturbed=True)
     evidence.write_checksum_inventory(banned)
     assert verifier.verify_unterminated(banned)["perturbation_observed"] is True
+    return bound, banned
 
-    same_surface = phase_b_root(
-        tmp_path, phase_a=bound, head="2" * 40, prior_attempts=(banned.name,)
+
+def test_re_attempt_against_the_same_surface_is_banned(tmp_path: Path) -> None:
+    bound, banned = _banned_predecessor(tmp_path / "same")
+    successor = phase_b_root(
+        tmp_path / "same", phase_a=bound, head="2" * 40, prior_attempts=(banned.name,)
     )
     with pytest.raises(corpus.CorpusError, match="same measurement surface"):
-        corpus.check_corpus([banned, same_surface])
+        corpus.check_corpus([banned, successor])
 
-    moved_surface = phase_b_root(
-        tmp_path,
+
+def test_a_moved_surface_alone_does_not_readmit_a_banned_measurement(
+    tmp_path: Path,
+) -> None:
+    bound, banned = _banned_predecessor(tmp_path / "moved")
+    successor = phase_b_root(
+        tmp_path / "moved",
         phase_a=bound,
-        head="3" * 40,
+        head="2" * 40,
         prior_attempts=(banned.name,),
         surface="a" * 64,
     )
     with pytest.raises(corpus.CorpusError, match="never sufficient"):
-        corpus.check_corpus([banned, moved_surface])
+        corpus.check_corpus([banned, successor])
 
-    unnamed_class = phase_b_root(
-        tmp_path,
+
+def test_a_repair_outside_h0_section_6_vocabulary_is_not_a_repair(
+    tmp_path: Path,
+) -> None:
+    bound, banned = _banned_predecessor(tmp_path / "vocab")
+    successor = phase_b_root(
+        tmp_path / "vocab",
         phase_a=bound,
-        head="4" * 40,
+        head="2" * 40,
         prior_attempts=(banned.name,),
         surface="b" * 64,
         defect_repair={"prior_attempt": banned.name, "defect_class": "recalibration"},
     )
     with pytest.raises(corpus.CorpusError, match="repair vocabulary"):
-        corpus.check_corpus([banned, unnamed_class])
+        corpus.check_corpus([banned, successor])
 
-    repaired = phase_b_root(
-        tmp_path,
+
+def test_a_named_defect_repair_on_a_moved_surface_is_admissible(
+    tmp_path: Path,
+) -> None:
+    bound, banned = _banned_predecessor(tmp_path / "repair")
+    successor = phase_b_root(
+        tmp_path / "repair",
         phase_a=bound,
-        head="5" * 40,
+        head="2" * 40,
         prior_attempts=(banned.name,),
         surface="c" * 64,
         defect_repair={"prior_attempt": banned.name, "defect_class": "serialization"},
     )
-    assert len(corpus.check_corpus([banned, repaired])) == 2
+    assert len(corpus.check_corpus([banned, successor])) == 2
 
 
 def test_terminal_4_re_attempts_stay_expressible(tmp_path: Path) -> None:
@@ -844,6 +923,7 @@ def test_terminal_4_re_attempts_stay_expressible(tmp_path: Path) -> None:
         tmp_path, phase_a=bound, head="2" * 40, prior_attempts=(prior.name,)
     )
     assert len(corpus.check_corpus([prior, successor])) == 2
+    assert verifier.verify_evidence_root(successor)["valid"] is True
 
 
 # -- § C3.9's trap --------------------------------------------------------- #

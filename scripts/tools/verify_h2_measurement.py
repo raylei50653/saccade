@@ -99,6 +99,16 @@ class VerificationError(RuntimeError):
     """The archive does not support what it records. Always fail-closed."""
 
 
+class CorpusError(VerificationError):
+    """A defect visible only across roots: chain completeness, order, class.
+
+    A subclass because it *is* a verification failure — § C3.6(e) makes the chain
+    part of one root's admissibility — while staying separately catchable for the
+    corpus checker, which reports it as a corpus verdict rather than as a defect
+    of the root it was raised on.
+    """
+
+
 class RunReplay(NamedTuple):
     run_id: str
     inventory_present: bool
@@ -577,19 +587,114 @@ def recompute_admission(
             and certificate.get("schema") == CERTIFICATE_SCHEMA
         )
 
-    # (e) — every named prior attempt exists and verifies in its own class.
-    priors = freeze.get("prior_attempts")
-    if isinstance(priors, list) and all(isinstance(item, str) for item in priors):
-        try:
-            for name in priors:
-                prior_root = root.parent / name
-                _verify_in_class(
-                    prior_root, classify(prior_root), visiting=visiting | {root.name}
-                )
-        except (VerificationError, OSError):
-            return conditions
-        conditions["prior_attempts_complete_and_verified"] = True
+    # (e) — the chain is complete, ordered, consumed-only, and verified. Note
+    # what this is not: walking the list F_B supplied. A list cannot establish
+    # its own completeness, so the corpus is scanned for the consumed attempts of
+    # this Phase-A result and the list must equal what the scan finds.
+    try:
+        verify_prior_chain(root, freeze, visiting=visiting)
+    except (VerificationError, CorpusError, OSError):
+        return conditions
+    conditions["prior_attempts_complete_and_verified"] = True
     return conditions
+
+
+# -- § C3.6(e): the prior-attempt chain, discovered rather than accepted ---- #
+
+
+def phase_a_group(freeze: Mapping[str, Any]) -> str:
+    """The Phase-A result a Phase-B attempt binds — the chain's grouping key."""
+    section = _required_mapping(freeze, "phase_a_evidence")
+    group = section.get("evidence_root")
+    if not isinstance(group, str):
+        raise VerificationError("F_B binds no phase_a_evidence.evidence_root")
+    return group
+
+
+def _chain_position(freeze: Mapping[str, Any]) -> int:
+    priors = freeze.get("prior_attempts")
+    if not isinstance(priors, list) or any(
+        not isinstance(item, str) for item in priors
+    ):
+        raise VerificationError("prior_attempts is not a list of evidence-root names")
+    return len(priors)
+
+
+def consumed_attempts(parent: Path, group: str) -> list[tuple[int, str]]:
+    """Every consumed attempt for one Phase-A result, discovered from the corpus.
+
+    Discovery is the point: § C3.6(e) asks whether `prior_attempts` is *complete*,
+    and a list can only be checked for completeness against something the list did
+    not produce. Reading the successors' own freeze records is what makes an
+    omitted predecessor visible.
+
+    `inadmissible` roots are excluded here, not merely rejected later: § C3.5.1
+    step 4 says a refused gate is not a consumed attempt at all, so it neither
+    belongs in a chain nor creates a hole by its absence.
+    """
+    members: list[tuple[int, str]] = []
+    for candidate in sorted(
+        parent.glob(f"{evidence.PHASE_B_ROOT_PREFIX}*"),
+        key=lambda item: item.name.encode("utf-8"),
+    ):
+        if not candidate.is_dir():
+            continue
+        freeze = _load(candidate, evidence.FREEZE_NAME, schema=evidence.FREEZE_SCHEMA)
+        if phase_a_group(freeze) != group:
+            continue
+        if classify(candidate) == partition.INADMISSIBLE_CLASS:
+            continue
+        members.append((_chain_position(freeze), candidate.name))
+    return members
+
+
+def verify_prior_chain(
+    root: Path, freeze: Mapping[str, Any], *, visiting: frozenset[str]
+) -> None:
+    """§ C3.6(e) in full: complete, ordered, consumed-only, each verified in class.
+
+    Raises rather than returning a verdict so the same message reaches an
+    operator whether the caller is the per-root verifier or the corpus checker —
+    there is one rule here, and it had better not be enforced twice with two
+    different notions of what "complete" means.
+    """
+    group = phase_a_group(freeze)
+    position = _chain_position(freeze)
+    listed = list(freeze["prior_attempts"])
+    members = consumed_attempts(root.parent, group)
+
+    positions = [count for count, _ in members]
+    duplicated = sorted({count for count in positions if positions.count(count) > 1})
+    if duplicated:
+        raise CorpusError(
+            f"{root.name}: consumed attempts for {group} do not form one ordered "
+            f"chain — position {duplicated} is claimed twice, so an existing "
+            "consumed attempt is missing from a successor's prior_attempts "
+            "(§ C3.6(e))"
+        )
+    expected = [
+        name
+        for count, name in sorted(members)
+        if count < position and name != root.name
+    ]
+    if listed != expected:
+        raise CorpusError(
+            f"{root.name}: prior_attempts is not the complete ordered list of "
+            f"preceding consumed attempts for the Phase-A result {group} "
+            f"(expected {expected}, bound {listed})"
+        )
+    for name in listed:
+        prior_root = root.parent / name
+        if not prior_root.exists():
+            raise CorpusError(f"{root.name}: prior attempt {name} does not exist")
+        prior_class = classify(prior_root)
+        if prior_class not in partition.VERIFY_CLASSES:
+            # Reachable only if a root changed class between discovery and here.
+            raise CorpusError(
+                f"{root.name}: {name} is {prior_class} and is not a consumed "
+                "attempt (§ C3.5.1 step 4)"
+            )
+        _verify_in_class(prior_root, prior_class, visiting=visiting | {root.name})
 
 
 def _admission(

@@ -118,7 +118,13 @@ Two properties the verifier owes its name, both added after review:
   rebuilt from the bound Phase-A root, both freeze records, the archived Layer-P
   certificate and the prior-attempt chain, and must equal the record condition
   for condition. A verifier that recomputes the terminal while believing
-  `admission.json` lets the archive attest its own right to have spent `S_B`;
+  `admission.json` lets the archive attest its own right to have spent `S_B`.
+  Condition (e) is **discovered, not walked**: the corpus is scanned for the
+  consumed attempts of this Phase-A result, because a `prior_attempts` list
+  cannot establish its own completeness, and an omitted predecessor or an
+  `inadmissible` root inside the chain is exactly what makes an attempt
+  ineligible. The chain rule lives in one place (`verify_prior_chain`) and the
+  corpus checker applies it rather than restating it;
 - **surviving evidence accumulates monotonically.** Replay is per run, and a
   later missing artifact can no longer erase an inequality or an invalid packet
   already found — which is the only way § C3.5.1's kill-switch actually bans
