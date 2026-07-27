@@ -6,7 +6,7 @@ doc-module: semantic
 owner-module: semantic
 work-class: mainline-study
 wip-role: non-wip
-activation-gate: "四項 owner decision 已於 2026-07-25 accepted（#286）；Phase-B chain form 已於 2026-07-25 accepted（#290）並成文為 declaration Review Correction 3；C3.9 pre-seal ruler 編輯（七序列 manifest + phase_a_evidence schema + phase-aware partition）已 landed、republish，並於 `7c348f4e` 通過 controlled-host re-attestation（run 30164262580）；Layer-M review 又把語義常數搬回 ruler ⇒ identity_semantics 再動一次（`3edf6953`）已 republish，gate 2 待新 head 的 controlled-host 重驗；剩餘 gate = S4 controller（items 0–4）+ seal head 的 Layer-P pass certificate + 該 head 的 coordinate/工作流綠，然後才談 seal"
+activation-gate: "四項 owner decision 已於 2026-07-25 accepted（#286）；Phase-B chain form 已於 2026-07-25 accepted（#290）並成文為 declaration Review Correction 3；C3.9 pre-seal ruler 編輯（七序列 manifest + phase_a_evidence schema + phase-aware partition）已 landed、republish，並於 `7c348f4e` 通過 controlled-host re-attestation（run 30164262580）；Layer-M review 又把語義常數搬回 ruler ⇒ identity_semantics 再動一次（`3edf6953`）已 republish，並於 `f2c2510a`（run 30243657973）重新通過 controlled-host re-attestation ⇒ gate 2 再度關閉；剩餘 gate = S4 controller（items 0–4）+ seal head 的 Layer-P pass certificate + 該 head 的 coordinate/工作流綠，然後才談 seal"
 target-decision-layer: none
 primary-intent: boundary-diagnostic
 output-class: "diagnostic result | substrate-fidelity edge proposal"
@@ -434,7 +434,7 @@ A Layer-M seal may be proposed only when **all** of these hold:
 1. ✅ the Phase-B chain form is **published** — declaration §5.2 precondition 6
    (Correction 2) is satisfied by **Review Correction 3**, accepted on
    [#290](https://github.com/raylei50653/saccade/issues/290) on 2026-07-25;
-2. ⚠️ **reopened** — the **C3.9 pre-seal ruler edits** are landed, republished, and re-attested
+2. ✅ the **C3.9 pre-seal ruler edits** are landed, republished, and re-attested
    green on the controlled host — `h2_runtime_inputs.py` (seven sequences plus the
    `phase_a_evidence` schema/producer, which by C3.8 must move no published axis)
    and `h2_terminal_partition.py` (phase-scoped terminal-1 metadata, phase-aware
@@ -444,13 +444,14 @@ A Layer-M seal may be proposed only when **all** of these hold:
    `30164262580`: runtime inputs re-bound on the controlled host,
    `coordinate_digest 0b839df0…`, probe recomputed, `--strict` staleness pass).
    The gate is closed for that head only — any later ruler edit reopens it, and
-   one has: the Layer-M review moved the A7.6 member definitions, the verify
+   one did: the Layer-M review moved the A7.6 member definitions, the verify
    classes, the surface-ban terminals and H0 § 6's repair vocabulary out of the
    `plumbing_only` files and into the ruler, so `identity_semantics` moved
    `67b35d8f` → `3edf6953` and was republished. Only that axis moved and the
-   probe is unchanged (`2dabed0bc05e3bc7…`, sixth reproduction), but the gate
-   asks for a green controlled-host run at the head under seal, and that run is
-   pending on this branch;**
+   probe is unchanged. Re-attested green at `f2c2510a` (run `30243657973`,
+   attesting the merge tree `f04d4799`): runtime inputs re-bound, probe
+   recomputed to `2dabed0bc05e3bc7…` — the seventh physically distinct build to
+   reproduce it — and `--strict` staleness pass;**
 3. the S4 items above are implemented, tested, and reviewed;
 4. a Layer-P pass certificate (`h2_layer_p_certificate_v2`) exists for the exact
    head under seal, with `--base` given and the full changed-path verdict clean;
@@ -630,9 +631,21 @@ Additionally, and specific to the accepted decisions:
   verified**, admitting a symlinked root, a Phase-A root carrying a Phase-B-only
   gate, or a name disagreeing with its freeze record; it is a verified class now.
   The ruler edits moved `identity_semantics` `67b35d8f` → `3edf6953`, republished
-  with the probe unchanged (`2dabed0bc05e3bc7…`, sixth reproduction) — so
-  acceptance gate 2 is **reopened** until the controlled-host workflow is green at
-  this head.
+  with the probe unchanged, which **reopened acceptance gate 2**; it closed again
+  when the controlled-host workflow went green at `f2c2510a` (run `30243657973`),
+  reproducing `2dabed0bc05e3bc7…` for the seventh time from a physically distinct
+  build.
   ⚠️ The general lesson is the one the charter already states and this PR still
   got wrong on the first pass: a file that moves no axis may hold no rule. Writing
   "this module holds no ruler" in a docstring is not the check; the scan is.
+
+- **2026-07-27** — second review round closed the last admission gap: § C3.6(e)
+  was still decided by walking the `prior_attempts` list `F_B` supplied, which
+  cannot detect an omitted predecessor or an `inadmissible` root inside the chain
+  — both were caught only later, by the corpus checker. `verify_prior_chain()`
+  now discovers the chain by scanning the corpus for the consumed attempts of the
+  bound Phase-A result, and the corpus checker calls that one rule instead of
+  carrying a second implementation of "complete". ⚠️ The general lesson, and the
+  one worth carrying into the controller: **a completeness check may not take its
+  input from the object being checked.** Both defects in this round were the same
+  shape — trusting a list to describe its own gaps.
