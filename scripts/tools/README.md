@@ -357,6 +357,7 @@ deleting.
 | `check_h0_bridge_decision_trace_contract.py` | stable | cli | Statically admit H0's complete capture ABI before an owner seal. |
 | `check_h0_phase_a_archives.py` | stable | - | Verify every committed H0 Phase-A evidence root through archive codecs. |
 | `check_h0_repair_acceptance_matrix.py` | stable | - | Validate the prospective H0 repair/qualification acceptance matrix. |
+| `check_h2_measure_archives.py` | stable | cli | Corpus checker for committed H2 Layer-M evidence roots. |
 | `check_headline_decision_contract.py` | stable | cli | Static guard for the headline tracker-decision contract (no GPU). |
 | `check_runtime_identity_staleness.py` | stable | cli | Check runtime-coordinate lag without treating probe equality as equivalence. |
 | `check_scan_bwd.py` | diagnostic | - | Validate the CUDA selective-scan backward against the JIT autograd reference. |
@@ -392,6 +393,7 @@ deleting.
 | `h0_launch_hygiene_gate.py` | stable | cli | Non-authoritative launch-hygiene pre-authorization gate for H0 Phase A. |
 | `h0_runtime_confinement.py` | stable | - | Linux fail-closed runtime confinement and file-input attestation. |
 | `h2_behavioral_identity.py` | stable | cli | Compute the H2 behavior probe: a policy-visible digest of one eval run. |
+| `h2_measurement_evidence.py` | stable | cli | The H2 Layer-M evidence-root contract: names, records, and the inventory. |
 | `h2_path_partition.py` | stable | cli | H2 firewall: classify paths and decide Layer-P retry admissibility. |
 | `h2_runtime_inputs.py` | stable | cli | Bind the fixtures and runtime assets consumed by H2. |
 | `h2_terminal_partition.py` | stable | cli | The H2 Layer-M terminal partition: ordered, exhaustive, mechanically decidable. |
@@ -457,6 +459,7 @@ deleting.
 | `verify_h0_phase_a_archive.py` | stable | cli | Versioned archive verifier for immutable H0 Phase-A evidence. |
 | `verify_h0_preseal_freeze.py` | stable | cli | Independently verify a canonical ``h0_preseal_freeze_v3`` artifact. |
 | `verify_h0_r4_qualification_report.py` | stable | cli | Verify a non-authoritative H0 R4 repair qualification report. |
+| `verify_h2_measurement.py` | stable | cli | Independent verifier for an H2 Layer-M evidence root. |
 | `verify_headline_bridge_decision_trace.py` | stable | cli | Replay and validate the sealed H0 bridge-decision trace from capture alone. |
 | `verify_r1_temporal_reduction_replay.py` | stable | cli | Verify R1's estimator replay without reading labels or fitting a score. |
 | `weight_method_safe_region.py` | diagnostic | cli | Compare weighting methods by GT-safe *productive region* (not best FP). |

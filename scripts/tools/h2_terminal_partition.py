@@ -52,6 +52,14 @@ PARTITION_SCHEMA = "h2_terminal_partition_v1"
 
 PHASES: tuple[str, ...] = ("a", "b")
 
+# The completion counts' own field names, so a consumer can index them without
+# restating them (§ C3.9: a `plumbing_only` consumer may hold no ruler fact).
+COMPLETION_KEYS: tuple[str, ...] = (
+    "required_sequences",
+    "required_capture_on_packets",
+    "required_capture_off_runs",
+)
+
 # What "complete" means per phase, in the § 3.3 four-run block: one capture-off
 # run and three capture-on packets per sequence. Phase A runs the measurement
 # fixture alone; Phase B runs the § C3.2 item 10 seven-sequence plan.
@@ -234,6 +242,35 @@ ADMISSION_CONDITIONS: tuple[tuple[str, str], ...] = (
 # An admission failure is Layer-P class (§ 5.1): a coordinate to retry against,
 # not a result about the world.
 ADMISSION_FAILURE_CLASS = "layer_p"
+
+# Terminal 4 by name, for consumers that must recognise the fail-closed
+# catch-all without spelling it out.
+EXECUTION_INVALID_TERMINAL = "H2_MEASUREMENT_EXECUTION_INVALID"
+
+# § C3.5.1's verify classes, plus the step-4 outcome that is not one of them.
+# An `inadmissible` root spent no authorization and is never a consumed attempt;
+# the other three all spent `S_B` and differ only in how much of the measurement
+# survived to be verified.
+VERIFY_CLASSES: tuple[str, ...] = ("complete", "envelope", "unterminated")
+INADMISSIBLE_CLASS = "inadmissible"
+
+# § C3.5: the terminals that are properties of the sealed `F_B` measurement
+# surface rather than of the attempt. A re-attempt against the same surface is
+# forbidden; terminals 1 and 4 stay attempt-local and re-attemptable.
+SURFACE_BAN_TERMINALS: frozenset[str] = frozenset(
+    {TERMINALS[1].name, TERMINALS[2].name}
+)
+
+# H0 § 6, verbatim: "Only repairs that leave all those semantics unchanged —
+# compilation, capacity sizing, serialization, or implementation bugs — may
+# proceed under the same seal." § C3.5's first guard consumes that vocabulary
+# unchanged, so a surface change outside it is not a repair and re-admits
+# nothing. Declared here rather than in the archive checker: what may reopen a
+# banned measurement is a ruler fact, and a `plumbing_only` file could extend it
+# without moving an axis (§ C3.9).
+REPAIR_VOCABULARY: frozenset[str] = frozenset(
+    {"compilation", "capacity_sizing", "serialization", "implementation_bug"}
+)
 
 # Predicates § C3.6 moves out of Phase B's terminal 1 and into admission. Phase B
 # still emits all six (§ C3.4), and these two are then already decided: admission
@@ -458,7 +495,11 @@ def as_payload() -> dict[str, Any]:
         ),
         "admission_conditions": [list(item) for item in ADMISSION_CONDITIONS],
         "admission_failure_class": ADMISSION_FAILURE_CLASS,
+        "inadmissible_class": INADMISSIBLE_CLASS,
         "ordered_predicates": [list(item) for item in ORDERED_PREDICATES],
+        "repair_vocabulary": sorted(REPAIR_VOCABULARY),
+        "surface_ban_terminals": sorted(SURFACE_BAN_TERMINALS),
+        "verify_classes": list(VERIFY_CLASSES),
         "phase_completion": PHASE_COMPLETION,
         # `result_to_terminal` above is the phase-independent union. Phase B
         # narrows it in two ways, both published here: an implementer that

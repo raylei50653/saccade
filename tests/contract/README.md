@@ -18,6 +18,7 @@
 | `test_h0_gctm_static_feasibility_v1.py` | system | contract | active | Contract tests for the bounded H0 to GCTM static feasibility audit. |
 | `test_h0_launch_hygiene_gate.py` | system | regression | active | Contract regression for the H0 launch-hygiene pre-authorization gate. |
 | `test_h2_layer_p_certificate.py` | tracking,system | contract | active | Layer-P cannot skip admissibility and its certificate binds the full coordinate. |
+| `test_h2_measurement_evidence.py` | tracking,system | contract | active | The H2 Layer-M evidence contract: what an archive must support to be believed. |
 | `test_h2_path_partition.py` | tracking,system | contract | active | The H2 firewall must be a partition, and it must fail closed. |
 | `test_h2_runtime_identity.py` | tracking,system | contract | active | The behavior probe is bounded and its publication intake fails closed. |
 | `test_h2_runtime_inputs.py` | tracking,system | contract | active | Runtime fixtures and assets are content-bound, never called non-execution. |

@@ -6,7 +6,7 @@ doc-module: semantic
 owner-module: semantic
 work-class: mainline-study
 wip-role: non-wip
-activation-gate: "四項 owner decision 已於 2026-07-25 accepted（#286）；Phase-B chain form 已於 2026-07-25 accepted（#290）並成文為 declaration Review Correction 3；C3.9 pre-seal ruler 編輯（七序列 manifest + phase_a_evidence schema + phase-aware partition）已 landed 並 republish；剩餘 gate = 該 head 的 controlled-host re-attestation 綠 + S4 Layer-M plumbing 實作 + 一份 Layer-P pass certificate，然後才談 seal"
+activation-gate: "四項 owner decision 已於 2026-07-25 accepted（#286）；Phase-B chain form 已於 2026-07-25 accepted（#290）並成文為 declaration Review Correction 3；C3.9 pre-seal ruler 編輯（七序列 manifest + phase_a_evidence schema + phase-aware partition）已 landed、republish，並於 `7c348f4e` 通過 controlled-host re-attestation（run 30164262580）；Layer-M review 又把語義常數搬回 ruler ⇒ identity_semantics 再動一次（`3edf6953`）已 republish，並於 `f2c2510a`（run 30243657973）重新通過 controlled-host re-attestation ⇒ gate 2 再度關閉；剩餘 gate = S4 controller（items 0–4）+ seal head 的 Layer-P pass certificate + 該 head 的 coordinate/工作流綠，然後才談 seal"
 target-decision-layer: none
 primary-intent: boundary-diagnostic
 output-class: "diagnostic result | substrate-fidelity edge proposal"
@@ -68,7 +68,7 @@ Full argument: declaration §0. Design record:
 | **S1** | ✅ landed — bounded behavior probe, coordinate/probe publisher, runtime-input manifest and path-partition firewall; G1/G2 remain probes, not equivalence evidence | no — default-off research tooling |
 | **S2** | ✅ landed — published coordinate/probe/equivalence split, `captured_under` sidecar, fail-closed static guard, same-repository PR-head + main self-hosted input/probe re-attestation | no |
 | **S3** | ✅ landed — `run_h2_layer_p.py`: required base, retry verdict, build/load proof, monitor-before-hash runtime-input binding, post-run content/membership/symlink revalidation, bounded probe, v2 certificate, append-only retry log | no |
-| **S4** | ⚠️ **partial** — terminal partition landed as an executable module (`h2_terminal_partition.py`, 28 tests) and is now owner-accepted; the measurement run/packet plumbing is **not implemented** (scope below) | no |
+| **S4** | ⚠️ **partial** — terminal partition (`h2_terminal_partition.py`, owner-accepted) plus the evidence-root contract, the independent verifier, the corpus checker and the observation emitter; the **controller and its four ordered runs are not implemented** (scope below) | no |
 
 ### S4 — what is and is not implemented
 
@@ -79,11 +79,61 @@ missing or non-boolean predicates, and a test proving **witness fields cannot
 select a terminal**. This is the epistemic core and the one load-bearing owner
 decision; § 20.8's two-implementer test is not meetable from a table alone.
 
-**Not implemented.** `run_h2_measurement.py` and its verifier: the four ordered
-runs, three capture-on packets, the A7.6 comparison wiring, the packet-verifier
-invocation, the evidence root / manifest / checksum inventory, the independent
-verifier, and an archive checker for the new corpus. The scope of that build is
-fixed in `Current step` below.
+**Also landed — the artifact side of the build** (items 5–8 of `Current step`):
+
+- `h2_measurement_evidence.py` — the evidence-root contract: the § 9 item 3 /
+  § C3.1 root names with the complete `F64` recomputed rather than truncated, the
+  record set, the checksum inventory, and the **observation emitter**, which
+  carries exactly `ORDERED_PREDICATES` plus an optional `execution_result` so a
+  controller can express neither more nor less than the partition decides;
+- `verify_h2_measurement.py` — the independent verifier. Independent means it
+  recomputes: the terminal is re-selected from the archived observation, the A7.6
+  comparison is rebuilt from the archived policy inventories, and every capture-on
+  packet is re-verified through the packet verifier. § 6 is honoured by import —
+  the A7.6 member set, the policy-inventory shape and the packet predicates come
+  from H0's frozen implementation, not from a re-typed copy. It also implements
+  § C3.5.1's three verify classes and the kill-switch;
+- `check_h2_measure_archives.py` — the new corpus checker: classification into
+  `complete` / `envelope` / `unterminated` / `inadmissible`, the § C3.1 root-name
+  digest recomputation, `prior_attempts` completeness and ordering, and the § C3.5
+  ban including the "changed surface is necessary, never sufficient" guard against
+  H0 § 6's own repair vocabulary. An empty corpus passes: no Layer-M
+  authorization has ever been issued.
+
+All three are `plumbing_only` and a test scans **all three** for restated ruler
+facts — C3.9's trap, made mechanical rather than remembered. The first draft
+failed that scan: the A7.6 equality and projection members, the overflow zero
+vector, the policy-inventory schema, the surface-ban terminals and H0 § 6's
+repair vocabulary had all been typed out in the verifier and the corpus checker,
+where an edit would have changed what re-attempt is admissible while
+`identity_semantics` stood still. They now live in the ruler
+(`h2_behavioral_identity.py` for the A7.6 member definitions,
+`h2_terminal_partition.py` for the verify classes, surface-ban terminals, repair
+vocabulary and completion keys) and are published in `as_payload()` so both
+consumption paths agree.
+
+Two properties the verifier owes its name, both added after review:
+
+- **the admission gate is recomputed, not read.** § C3.6's five conditions are
+  rebuilt from the bound Phase-A root, both freeze records, the archived Layer-P
+  certificate and the prior-attempt chain, and must equal the record condition
+  for condition. A verifier that recomputes the terminal while believing
+  `admission.json` lets the archive attest its own right to have spent `S_B`.
+  Condition (e) is **discovered, not walked**: the corpus is scanned for the
+  consumed attempts of this Phase-A result, because a `prior_attempts` list
+  cannot establish its own completeness, and an omitted predecessor or an
+  `inadmissible` root inside the chain is exactly what makes an attempt
+  ineligible. The chain rule lives in one place (`verify_prior_chain`) and the
+  corpus checker applies it rather than restating it;
+- **surviving evidence accumulates monotonically.** Replay is per run, and a
+  later missing artifact can no longer erase an inequality or an invalid packet
+  already found — which is the only way § C3.5.1's kill-switch actually bans
+  anything.
+
+**Not implemented.** `run_h2_measurement.py`, its child/recorder and its argv
+builder: the four ordered runs, the § 5.1.1 recorder normalization, the live A7.6
+and packet-verifier wiring, and the emission of the artifacts the three tools
+above already verify. Items 0–4 of `Current step` below.
 
 Nothing is blocked by this today. Layer P is independently useful without it — it
 is what resolves plumbing coordinates without spending authorizations.
@@ -255,6 +305,9 @@ certificate, **or** the scope is disconfirmed and the charter is re-planned.
 | Artifact | Role |
 |:--|:--|
 | `scripts/tools/h2_terminal_partition.py` | the §7 partition, executable; the only terminal authority |
+| `scripts/tools/h2_measurement_evidence.py` | evidence-root contract + the observation emitter |
+| `scripts/tools/verify_h2_measurement.py` | independent verifier; the three § C3.5.1 verify classes |
+| `scripts/tools/check_h2_measure_archives.py` | corpus checker; `prior_attempts` and the § C3.5 ban |
 | `scripts/tools/run_h2_layer_p.py` | Layer-P controller; emits `h2_layer_p_certificate_v2` |
 | `scripts/tools/h2_behavioral_identity.py` | bounded MOT17-09 probe (four A7.6 members, capture-off) |
 | `scripts/tools/h2_runtime_inputs.py` | `h2_runtime_input_manifest_v1` content binding |
@@ -284,8 +337,10 @@ capture-on packets / 1 capture-off run; Phase B: 7 / 21 / 7), and implements the
 C3.6 gate as `evaluate_admission` — a pre-terminal object whose refusal selects
 no terminal and which `select_terminal` requires before any Phase-B selection.
 `.github/workflows/runtime_identity.yml` binds all seven sequences on the
-controlled host. The coordinate is republished; the remaining ruler gate is the
-green re-attestation at that head.
+controlled host. The coordinate is republished and the controlled-host
+re-attestation is **green at that head** — `7c348f4e`, workflow run
+[`30164262580`](https://github.com/raylei50653/saccade/actions/runs/30164262580) —
+so the ruler gate is closed for that head, and no ruler path has changed since.
 
 C3.9's trap applied to that work directly and was honoured: a *new*
 `scripts/tools/h2_*.py` file classifies as `plumbing_only`, so the admission and
@@ -354,14 +409,23 @@ declaration consequence, not a shortcut):
 4. the recorder normalization of §5.1.1 — write `sorted(raw, key=slot)` and
    assert *no duplicate slot*, never the native `unordered_map` iteration order;
    the frozen `run_h0_phase_a_child.py` is **not** edited;
-5. evidence root `h2_measure_<I40>/` with manifest and checksum inventory;
-6. `verify_h2_measurement.py` — independent verifier;
-7. `check_h2_measure_archives.py` — a **new** corpus checker;
+5. ✅ evidence root `h2_measure_<I40>/` with manifest and checksum inventory —
+   landed as `h2_measurement_evidence.py`, with § C3.1's Phase-B root name and
+   its complete-`F64` rule;
+6. ✅ `verify_h2_measurement.py` — independent verifier, plus § C3.5.1's three
+   verify classes and the kill-switch;
+7. ✅ `check_h2_measure_archives.py` — the **new** corpus checker;
    `check_h0_phase_a_archives.py` is untouched and keeps verifying the frozen v1
    corpus under the v1 schema;
-8. an observation emitter producing exactly `ORDERED_PREDICATES` plus an optional
-   `execution_result`, so the controller cannot express a terminal the partition
-   does not define.
+8. ✅ an observation emitter producing exactly `ORDERED_PREDICATES` plus an
+   optional `execution_result`, so the controller cannot express a terminal the
+   partition does not define.
+
+Items 5–8 verify artifacts nothing yet produces; that is the intended order. The
+artifact contract is what the controller must satisfy, and writing it first means
+the controller is reviewed against a fixed target rather than the target being
+adjusted to whatever the controller happened to emit — the § 5.3 circular-oracle
+hazard in its most ordinary form.
 
 ## Acceptance
 
@@ -370,14 +434,24 @@ A Layer-M seal may be proposed only when **all** of these hold:
 1. ✅ the Phase-B chain form is **published** — declaration §5.2 precondition 6
    (Correction 2) is satisfied by **Review Correction 3**, accepted on
    [#290](https://github.com/raylei50653/saccade/issues/290) on 2026-07-25;
-2. the **C3.9 pre-seal ruler edits** are landed, republished, and re-attested
+2. ✅ the **C3.9 pre-seal ruler edits** are landed, republished, and re-attested
    green on the controlled host — `h2_runtime_inputs.py` (seven sequences plus the
    `phase_a_evidence` schema/producer, which by C3.8 must move no published axis)
    and `h2_terminal_partition.py` (phase-scoped terminal-1 metadata, phase-aware
    terminal-5 metadata, the `phase` argument, updated tests). These are ruler
-   files: after the Phase-A seal they cannot be touched at all. **Edits landed and
-   coordinate republished 2026-07-25; the controlled-host re-attestation at that
-   head is the open half of this gate;**
+   files: after the Phase-A seal they cannot be touched at all. **Landed,
+   republished, and re-attested green on 2026-07-25 at `7c348f4e` (run
+   `30164262580`: runtime inputs re-bound on the controlled host,
+   `coordinate_digest 0b839df0…`, probe recomputed, `--strict` staleness pass).
+   The gate is closed for that head only — any later ruler edit reopens it, and
+   one did: the Layer-M review moved the A7.6 member definitions, the verify
+   classes, the surface-ban terminals and H0 § 6's repair vocabulary out of the
+   `plumbing_only` files and into the ruler, so `identity_semantics` moved
+   `67b35d8f` → `3edf6953` and was republished. Only that axis moved and the
+   probe is unchanged. Re-attested green at `f2c2510a` (run `30243657973`,
+   attesting the merge tree `f04d4799`): runtime inputs re-bound, probe
+   recomputed to `2dabed0bc05e3bc7…` — the seventh physically distinct build to
+   reproduce it — and `--strict` staleness pass;**
 3. the S4 items above are implemented, tested, and reviewed;
 4. a Layer-P pass certificate (`h2_layer_p_certificate_v2`) exists for the exact
    head under seal, with `--base` given and the full changed-path verdict clean;
@@ -509,3 +583,69 @@ Additionally, and specific to the accepted decisions:
   pin. A green suite never established the append was permitted: the byte test
   tolerates trailing content by construction, so only the binding's re-pin log
   can record that the pre-seal rule was honoured.
+- **2026-07-25** — [PR #292](https://github.com/raylei50653/saccade/pull/292)
+  merged (`7c348f4e`): the C3.9 pre-seal ruler edits — seven `MEASUREMENT_SEQUENCES`
+  bound in both phases, the `phase_a_evidence` section bound and watched while
+  belonging to neither digest, a required `phase` argument with per-phase terminal
+  conditions and `PHASE_COMPLETION` counts, and `evaluate_admission` as the C3.6
+  pre-terminal gate. Review found two defects, both fixed before merge: a clean
+  Phase B could return no terminal at all after `S_B` was spent, and `as_payload()`
+  did not publish the Phase-B narrowing, so two implementers reading the payload
+  and the function would disagree. Coordinate republished (`identity_semantics`
+  → `67b35d8f`).
+- **2026-07-25** — controlled-host re-attestation green on `main` at `7c348f4e`
+  (workflow run `30164262580`): runtime inputs re-bound with all seven sequences,
+  `coordinate_digest 0b839df0…`, probe recomputed, `--strict` staleness pass. This
+  closes the open half of acceptance gate 2 for that head. The gate is head-scoped:
+  any later edit to a ruler file reopens it, and no ruler path has changed since.
+  What remains before a seal may be proposed is the S4 Layer-M plumbing and a
+  Layer-P pass certificate for the head under seal.
+- **2026-07-27** — S4's artifact side landed: `h2_measurement_evidence.py`
+  (evidence-root contract + observation emitter), `verify_h2_measurement.py`
+  (independent verifier, § C3.5.1's three classes, the kill-switch) and
+  `check_h2_measure_archives.py` (corpus checker, `prior_attempts`, the § C3.5
+  ban), with 26 contract tests. Written before the controller deliberately: the
+  artifact contract is what the controller is reviewed against, and deriving it
+  from whatever a controller emitted is the § 5.3 hazard in its most ordinary
+  form. Nothing here is a ruler edit — the three files classify as
+  `plumbing_only` and a test pins both that classification and the absence of any
+  phase, admission or terminal fact of their own (C3.9's trap). No `I`/`F`/`S`,
+  no authorization, no capture, no registry write.
+- **2026-07-27** — Layer-M review returned *changes required* on the artifact
+  side, and all four findings were structural rather than missing coverage.
+  **The § C3.6 gate was self-attested:** the verifier recomputed the terminal but
+  read `admission.json`, so an archive could name a non-existent Phase-A root,
+  record the condition as true, and verify — the one claim the gate exists to
+  deny. Admission is now rebuilt from the bound Phase-A root, both freeze records,
+  the archived Layer-P certificate and the prior-attempt chain, and must equal the
+  record condition for condition. **Surviving evidence was not monotone:** replay
+  discarded an already-found `fail` at the first missing later packet, and skipped
+  a whole sequence for one missing inventory, so killing a process right after a
+  perturbation laundered a banned terminal 2/3 into a re-attemptable 4 — the exact
+  hole § C3.5.1 closes. Replay is per run now, and every comparison the survivors
+  allow is made. **Semantic rules were sitting in `plumbing_only` files:** the
+  A7.6 members, the surface-ban terminals and H0 § 6's repair vocabulary were
+  typed out in the verifier and the checker, where an edit moves no axis; they
+  moved to the ruler and the C3.9 scan now covers all three files, which caught
+  two more while being written. **`inadmissible` was classified but never
+  verified**, admitting a symlinked root, a Phase-A root carrying a Phase-B-only
+  gate, or a name disagreeing with its freeze record; it is a verified class now.
+  The ruler edits moved `identity_semantics` `67b35d8f` → `3edf6953`, republished
+  with the probe unchanged, which **reopened acceptance gate 2**; it closed again
+  when the controlled-host workflow went green at `f2c2510a` (run `30243657973`),
+  reproducing `2dabed0bc05e3bc7…` for the seventh time from a physically distinct
+  build.
+  ⚠️ The general lesson is the one the charter already states and this PR still
+  got wrong on the first pass: a file that moves no axis may hold no rule. Writing
+  "this module holds no ruler" in a docstring is not the check; the scan is.
+
+- **2026-07-27** — second review round closed the last admission gap: § C3.6(e)
+  was still decided by walking the `prior_attempts` list `F_B` supplied, which
+  cannot detect an omitted predecessor or an `inadmissible` root inside the chain
+  — both were caught only later, by the corpus checker. `verify_prior_chain()`
+  now discovers the chain by scanning the corpus for the consumed attempts of the
+  bound Phase-A result, and the corpus checker calls that one rule instead of
+  carrying a second implementation of "complete". ⚠️ The general lesson, and the
+  one worth carrying into the controller: **a completeness check may not take its
+  input from the object being checked.** Both defects in this round were the same
+  shape — trusting a list to describe its own gaps.
