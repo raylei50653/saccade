@@ -309,6 +309,12 @@ last_transition: 2026-07-14 — cause 由 foreign-capture 改為 provenance inco
                  consumed; exact S permanently spent; owner acceptance of the truthful
                  negative terminal is the surface of this evidence PR merge only
                  （object state 不變;詳見 reentry_terminal_history re-entry #4 / H0-R4）
+                 2026-07-27 — **H2**（successor unit,非 H0 re-entry）Phase-A single invocation
+                 at head 0a5dffe9 消耗一次授權,controller terminal
+                 `H2_INPUT_MUTATED_DURING_MEASUREMENT`,0/4 ordered runs started,no capture,
+                 archive 被 independent verifier 拒收;adjudicated root cause＝controller
+                 self-mutation（見 reentry_terminal_history 2026-07-27 條）
+                 （object state 不變;H0 五個 spent S 與 sealed history 全部不變）
 admissible_units: []                   # H0 unit 已消費並於 route 1 關閉;現無宣告的補救動作。
                                        # 重進=append-only declaration amendment＋新 I→F→S
                                        # owner reseal＋owner scheduling（§9 重新 review 時再推導）
@@ -459,6 +465,50 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
     ledger_effect: 上方 route-1 永久留帳結論不變（仍無 faithful capture / 無 accepted runtime-fidelity edge / 無 actual H0 guarantee envelope）;候選集仍空;guarantee set 空;Phase B / GCTM / B1 / O1 未啟動; registration-v3 仍為 contract-sealable only; R5 S5 chain permanently spent
     future_reentry_precondition: NONE from this mechanical terminal alone — exact S=6fdb060c permanently spent; any future work requires a separate owner decision
     issues: '#283 (exactly-once authorization surface; consumed at launch) / prior R5 repair chain including 524f7e3 tool_runtime parity + extension/plugin attestation closure'
+  - date: 2026-07-27
+    unit: H2                                # **不是 H0 re-entry**:successor unit,identity layer only;
+                                            # H0 的五個 spent S / sealed history / permanent ledger 全部不變
+    scheduling: owner-scheduled H2 Phase-A single-invocation execution（非本 registry 自動發生;O0 charter 仍 closed,候選集仍空）
+    scope: "sole authorized H2 Phase-A controller invocation at the exact seal-candidate head; Phase B forbidden; no retry/resume"
+    predecessor_head: 0a5dffe921d78fce8e525baf8b4b624fc9ab957c   # source_tree 5530be2d67b8e7c83a7a858a44a2b11a1c347927
+    binding:
+      f64: a03fc4590ca931435fde4a93f28bec8ed156fe852718cd214e780e002d97fd8b
+      layer_p_certificate_digest: d95859cb3cc27eeadb72b0f94fdcf45107c590058dd2c288e14bcd47c3e24802
+      layer_p_selected_base: b2f3c23f419cb03cf89eae677bdf9262a8dd3634
+      bounded_probe: 2dabed0bc05e3bc75ec2115b3213f5c0b1aed3e837c22dd2325109339e4719b5
+      controlled_host_reattestation: "green at this exact head — run 30276844285"
+    authorization:
+      authorized_invocation_count: 1
+      authorization_consumed: true          # spent
+      consumed_at: controller_process_launch
+    invocation: authoritative_count=1; retry/resume/second_invocation_at_this_head=forbidden
+    controller_terminal: H2_INPUT_MUTATED_DURING_MEASUREMENT   # order 1, phase a; controller literal `input_mutated`
+    adjudicated_result: no capture
+    ordered_runs_started: 0/4               # 00_capture_off / 01 / 02 / 03_capture_on — 全未啟動;archive 無 runs/
+    faithful_capture: 0
+    measurement_claim: 未成立                # observation 的 capture_off_on_equal / packets_valid 為未經執行的預設值,不得引用
+    equivalence: unproven                   # 未改動
+    seal: 未完成
+    archive_verifier: 拒收 — "recorded Layer-P certificate match disagrees with the archived
+                       freeze/certificate/content bindings and independent Git-tree recomputation";
+                       controller rc=2;本次無 verifier report
+    adjudicated_root_cause: controller self-mutation / 不可滿足的 checkout invariant
+    label_vs_cause: "`H2_INPUT_MUTATED_DURING_MEASUREMENT` 是 controller 記錄的 terminal label;
+                     它**不是**對實際根因的正確語義描述。實際事件＝controller 在 repo 內建立自身
+                     evidence root,再把該自身產物判定為 execution checkout mutation。"
+    defect_sites:
+      - "scripts/tools/run_h2_measurement.py:1050-1057 — clean-checkout gate 之後立即在同一 checkout 建立未被 gitignore 的 evidence root（EVIDENCE_REL,h2_measurement_evidence.py:103）"
+      - "scripts/tools/run_h2_measurement.py:1140-1145 — checkout hygiene 理由被折進 layer_p_certificate_matches_freeze;archived certificate_mismatch_reasons 僅一句 checkout 字串、零個真正 certificate 不符"
+      - "scripts/tools/run_h2_measurement.py:1291-1293 — stop boundary 重複同一不可滿足要求"
+    pre_launch_conditions: 成立且已獨立驗證（Layer-P certificate 37/37;freeze 22/22,含 controller 自身
+                           terminal-1 predicate 乾跑零 reason）⇒ 失敗不在 binding,而在 controller 時序
+    evidence_packet: docs/modules/semantic/research/evidence/h2_phase_a_failed_attempt_0a5dffe9_20260727/
+    ledger_effect: 上方 route-1 永久留帳結論不變（仍無 faithful capture / 無 accepted runtime-fidelity edge /
+                   無 actual H0 guarantee envelope）;候選集仍空;guarantee set 空;Phase B / GCTM / B1 / O1 未啟動
+    required_successor_action: controller repair on a successor head，followed by a **completely new**
+                               acceptance and authorization cycle — acceptance gate 2、Acceptance items 4/5
+                               與 F 全部須對 successor head 重建;repair 會移動 execution-relevant code,
+                               `0a5dffe9` 的任何 binding 皆不轉移;repair PR 不得宣稱延續本次 seal attempt
 pending_reentry:                          # append-only; pre-seal, no terminal claimed; route-1 永久留帳結論不變
   - date: 2026-07-21
     scheduling: owner-scheduled re-entry #3（滿足 line-337 future_reentry_precondition:launch-hygiene gate 先行）

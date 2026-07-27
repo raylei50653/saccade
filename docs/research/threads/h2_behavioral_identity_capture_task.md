@@ -6,7 +6,7 @@ doc-module: semantic
 owner-module: semantic
 work-class: mainline-study
 wip-role: non-wip
-activation-gate: "四項 owner decision 已於 2026-07-25 accepted（#286）；Phase-B chain form 已於 2026-07-25 accepted（#290）並成文為 declaration Review Correction 3；C3.9 pre-seal ruler 編輯（七序列 manifest + phase_a_evidence schema + phase-aware partition）已 landed、republish，並於 `7c348f4e` 通過 controlled-host re-attestation（run 30164262580）；Layer-M review 又把語義常數搬回 ruler ⇒ identity_semantics 再動一次（`3edf6953`）已 republish，並於 `f2c2510a`（run 30243657973）重新通過 controlled-host re-attestation；PR #295 第二輪修補再次修改 packet-invalid exception boundary 與 terminal-2 surviving-evidence ruler，identity_semantics `93f87a83` 已 republish，並於 `32935d5d`（run 30254189532）重新通過 controlled-host re-attestation ⇒ gate 2 再度關閉；S4 Phase-A controller（items 0–4）已 implemented/tested，**review 已完成、PR #295 已 merge ⇒ S4 code-review gate closed**（reviewed implementation head `4c78b962…`，landed merge commit `b2f3c23f…`）；剩餘 gate 有固定順序（Acceptance items 4→5→6）= ①最終 seal-candidate head 的 coordinate/probe current + controlled-host workflow 綠 ②同一 head 的 Layer-P pass certificate + independent verification ③separate owner exactly-once authorization，才可建立 F/S 並執行 Phase A"
+activation-gate: "四項 owner decision 已於 2026-07-25 accepted（#286）；Phase-B chain form 已於 2026-07-25 accepted（#290）並成文為 declaration Review Correction 3；C3.9 pre-seal ruler 編輯（七序列 manifest + phase_a_evidence schema + phase-aware partition）已 landed、republish，並於 `7c348f4e` 通過 controlled-host re-attestation（run 30164262580）；Layer-M review 又把語義常數搬回 ruler ⇒ identity_semantics 再動一次（`3edf6953`）已 republish，並於 `f2c2510a`（run 30243657973）重新通過 controlled-host re-attestation；PR #295 第二輪修補再次修改 packet-invalid exception boundary 與 terminal-2 surviving-evidence ruler，identity_semantics `93f87a83` 已 republish，並於 `32935d5d`（run 30254189532）重新通過 controlled-host re-attestation ⇒ gate 2 再度關閉；S4 Phase-A controller（items 0–4）已 implemented/tested，**review 已完成、PR #295 已 merge ⇒ S4 code-review gate closed**（reviewed implementation head `4c78b962…`，landed merge commit `b2f3c23f…`）；Acceptance items 4→5→6 已於 2026-07-27 在 head `0a5dffe9` 全部達成（controlled-host run 30276844285 綠、Layer-P certificate `d95859cb…` 37/37 獨立驗證、F64 `a03fc459…` 22/22、owner single-invocation authorization），並已執行一次 ⇒ **authorization spent、controller terminal `H2_INPUT_MUTATED_DURING_MEASUREMENT`、0/4 ordered runs started、no capture、seal 未完成**；adjudicated root cause = controller self-mutation（在 repo 內建 evidence root 後又要求 checkout 乾淨），非 head/binding/ruler 問題 ⇒ **items 4–6 satisfied-then-void，下一步是 successor head 上的 controller repair，之後整個 acceptance + authorization 週期全部重建**；失敗證據見 evidence/h2_phase_a_failed_attempt_0a5dffe9_20260727/"
 target-decision-layer: none
 primary-intent: boundary-diagnostic
 output-class: "diagnostic result | substrate-fidelity edge proposal"
@@ -68,7 +68,7 @@ Full argument: declaration §0. Design record:
 | **S1** | ✅ landed — bounded behavior probe, coordinate/probe publisher, runtime-input manifest and path-partition firewall; G1/G2 remain probes, not equivalence evidence | no — default-off research tooling |
 | **S2** | ✅ landed — published coordinate/probe/equivalence split, `captured_under` sidecar, fail-closed static guard, same-repository PR-head + main self-hosted input/probe re-attestation | no |
 | **S3** | ✅ landed — `run_h2_layer_p.py`: required base, retry verdict, build/load proof, monitor-before-hash runtime-input binding, post-run content/membership/symlink revalidation, bounded probe, v2 certificate, append-only retry log | no |
-| **S4** | ⚠️ **implemented / reviewed / merged — unsealed** — terminal partition, evidence-root contract, independent verifier, corpus checker, observation emitter, and the Phase-A controller with its four ordered runs. This implementation creates no `I`/`F`/`S` and performs no authorized measurement | no |
+| **S4** | ⛔ **implemented / reviewed / merged — executed once and defective** — the one authorized Phase-A invocation reached terminal 1 with 0/4 ordered runs started; repair required before any further attempt — terminal partition, evidence-root contract, independent verifier, corpus checker, observation emitter, and the Phase-A controller with its four ordered runs. This implementation creates no `I`/`F`/`S` and performs no authorized measurement | no |
 
 ### S4 — what is and is not implemented
 
@@ -302,21 +302,30 @@ not sealed**, surviving review or being replaced — was **met on 2026-07-27**: 
 survived review and landed (`Acceptance` item 3), with no `I`/`F`/`S`, no
 authorization, no capture, and no registry state change.
 
-By the next commit point, the build is expected to be **certified at one exact
-head but still unsealed**: a green controlled-host attestation at that head and
-then a Layer-P pass certificate there, independently verified. That state is still
-not an authorization and still writes no registry state.
+That lease was in turn **met and then spent on 2026-07-27**: the head was
+attested, certified and independently verified, authorized once, and executed —
+and the invocation reached terminal 1 with no capture. See `History` and the
+[failure evidence](../../modules/semantic/research/evidence/h2_phase_a_failed_attempt_0a5dffe9_20260727/).
+
+By the next commit point, the controller is expected to be **repaired on a
+successor head, unbound and unauthorized**: the evidence-root placement and the
+predicate ownership fixed, the launch → stop-boundary ordering re-reviewed as a
+sequence rather than as isolated predicates, and no acceptance, certificate,
+freeze or authorization carried over from `0a5dffe9`. That state is still not an
+authorization and still writes no registry state.
 
 ## Commit point
 
-Owner reviews whether state changed when **either** an exact-head Layer-P
-certificate and its independent verification pass at the final seal-candidate head
-— a head already attested green under `Acceptance` item 4 — **or** that
-certification fails and the charter is re-planned. Review
-acceptance of the controller (2026-07-27) was the previous commit point and
-changed no state. The certificate is a seal gate; producing it is still not a
-seal, and the separate owner exactly-once authorization remains a distinct step
-that no artifact in this repository can supply.
+Owner reviews whether state changed when **either** a repaired controller
+demonstrates a reachable success path through its own launch → stop-boundary
+ordering at a successor head — a demonstration that is not an execution and
+spends nothing — **or** the repair shows the two-layer design cannot hold the
+invariants it declares, and the charter is re-planned. The spent `0a5dffe9`
+attempt (2026-07-27) was the previous commit point: it changed no claim-state
+object and produced no measurement. Repair is not a seal gate reopening; a new
+seal requires the whole acceptance chain rebuilt at the repaired head, and the
+separate owner exactly-once authorization remains a distinct step that no
+artifact in this repository can supply.
 
 ## Discard when
 
@@ -369,9 +378,15 @@ that no artifact in this repository can supply.
 
 ## Current step
 
-**Certify one exact seal-candidate head. Do not seal or execute a measurement.**
-The S4 review is finished — see `Acceptance` item 3 — so what is left is entirely
-head-bound, not code-bound.
+**Repair the controller on a successor head. Do not re-run, do not seal, and do
+not treat any `0a5dffe9` binding as carried over.** The one authorized Phase-A
+invocation was spent on 2026-07-27 and reached terminal 1 with zero ordered runs
+started; the cause was the controller's own launch sequence, not the head, the
+bindings or the ruler. What is left is code-bound again — see `History` and the
+[failure evidence](../../modules/semantic/research/evidence/h2_phase_a_failed_attempt_0a5dffe9_20260727/)
+for the two defect sites and the ordering rule they establish. The head-bound
+gates below (`Acceptance` items 4 and 5) were satisfied at `0a5dffe9` and must be
+rebuilt from scratch at whatever head the repair lands on.
 
 Correction 3 puts an ordering constraint on everything below: `identity_semantics`
 must be frozen from the Phase-A seal to the Phase-B seal, so the ruler work comes
@@ -480,6 +495,15 @@ the § 5.3 circular-oracle hazard in its most ordinary form.
 
 ### The remaining work is head-bound, and the head is not the reviewed head
 
+> **Spent at `0a5dffe9` on 2026-07-27.** Steps 1–5 below were all performed and
+> independently verified at that head, and step 6 executed once — reaching
+> terminal 1 with zero ordered runs started. The sequence itself was sound; it
+> ran into a defect *inside* the controller (`History`, and §4 of the
+> [failure evidence](../../modules/semantic/research/evidence/h2_phase_a_failed_attempt_0a5dffe9_20260727/)).
+> Nothing in this ordering carries over: after the repair, every step below must
+> be redone at the successor head, against a controller that has first shown a
+> reachable success path through its own launch → stop-boundary ordering.
+
 Every gate below binds **one exact commit**, so the order is fixed and no step may
 be carried over from an earlier head:
 
@@ -536,21 +560,33 @@ A Layer-M seal may be proposed only when **all** of these hold:
    [PR #295](https://github.com/raylei50653/saccade/pull/295) on 2026-07-27. This
    closes review of the *code*; it certifies no head and authorizes nothing;
 4. the published coordinate and bounded probe are current and the controlled-host
-   workflow is green at the exact final seal-candidate head;
+   workflow is green at the exact final seal-candidate head. **Satisfied at
+   `0a5dffe9` (run `30276844285`) and now void**: it certifies that head, and the
+   repair lands on another one;
 5. a Layer-P pass certificate (`h2_layer_p_certificate_v2`) exists for that **same**
    head, with `--base` given and the full changed-path verdict clean — and its
    bindings independently verified. Neither `4c78b962…` nor `b2f3c23f…` can supply
    this for a later head: `source_head` is part of the certificate and is required
    to equal the executing head, so identical content does not transfer (see
-   `Current step`);
+   `Current step`). **Satisfied at `0a5dffe9` — certificate `d95859cb…`,
+   `selected_base b2f3c23f419cb03c…`, 37/37 bindings independently verified — and
+   void for the same reason as item 4**;
 6. the owner issues a separate exactly-once authorization — this charter is not
-   one and cannot become one.
+   one and cannot become one. **Issued and consumed on 2026-07-27.** It is spent:
+   it authorized one invocation at `0a5dffe9`, that invocation happened, and no
+   part of it survives to the repaired head.
 
 These are numbered in the order they must be performed: 4 → 5 → 6 is the same
 sequence as `Current step` steps 2 → 3–4 → 5, and no item may be satisfied at an
 earlier head than its predecessor. The Phase-A execution itself is not on this
 list — `Acceptance` governs only when a seal may be *proposed*; execution follows
 the authorization of item 6.
+
+**Items 4–6 are satisfied-then-void, not open.** A repaired controller moves
+execution-relevant code, so the head changes and all three must be rebuilt from
+scratch there; a repair PR may not present itself as continuing the `0a5dffe9`
+attempt. Item 3 is unaffected — it closed review of code that the repair will now
+modify, and the repair carries its own review.
 
 A Phase-B seal has its own gates, and they are Correction 3's, not this list's:
 `I_B`, `F_B` and `S_B` per C3.1–C3.3, the C3.6 admission gate passing before
@@ -803,3 +839,31 @@ Additionally, and specific to the accepted decisions:
   certificate binds `source_head`, not content (see `Current step`). Until that
   head exists and is certified, verified, and separately authorized, no `F`/`S`
   may be created and Phase A may not run.
+- **2026-07-27** — **the one authorized Phase-A invocation was spent and produced
+  no capture.** `Acceptance` items 4 → 5 → 6 were all satisfied at head
+  `0a5dffe921d78fce8e525baf8b4b624fc9ab957c`: controlled-host re-attestation green
+  (run `30276844285`, coordinate `0b839df0…`, probe `2dabed0b…` reproduced by a
+  ninth distinct build), a Layer-P pass certificate `d95859cb…` at that exact head
+  with `selected_base b2f3c23f419cb03c…` and 37/37 bindings independently
+  re-derived, an untracked freeze `F64 a03fc459…` verified 22/22 — including the
+  controller's own terminal-1 predicate returning zero mismatch reasons — and then
+  a separate owner single-invocation authorization, consumed at launch. The
+  controller ran once and selected terminal 1
+  `H2_INPUT_MUTATED_DURING_MEASUREMENT`: **0/4 ordered runs started, no `runs/`
+  directory, zero faithful capture, `equivalence` untouched at `unproven`, no
+  seal.** Exit code 2 came from the independent verifier refusing the archive, so
+  there is no verifier report either. The adjudicated root cause is **not** the
+  recorded label: no external input was mutated. The controller creates its own
+  evidence root inside the working tree at a path that is not gitignored
+  (`run_h2_measurement.py:1054-1057`, `h2_measurement_evidence.py:103`) and then
+  requires that same tree to be clean (`:1140-1143`, `:1291-1293`), so its own
+  artifact violates the invariant it enforces — at every head, independently of
+  freeze, certificate, probe or host. A second defect folds that hygiene reason
+  into `layer_p_certificate_matches_freeze` (`:1140-1145`), so the archive records
+  a certificate mismatch that does not exist and contradicts the verifier's
+  recomputation. Items 4–6 are therefore **satisfied-then-void**, the authorization
+  is permanently spent, and the next step is a controller repair on a successor
+  head followed by a completely new acceptance and authorization cycle. Failure
+  evidence, including a disclosed chain-of-custody incident during its
+  registration:
+  [h2_phase_a_failed_attempt_0a5dffe9_20260727](../../modules/semantic/research/evidence/h2_phase_a_failed_attempt_0a5dffe9_20260727/).
