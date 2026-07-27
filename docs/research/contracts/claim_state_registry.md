@@ -507,7 +507,9 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
                    無 actual H0 guarantee envelope）;候選集仍空;guarantee set 空;Phase B / GCTM / B1 / O1 未啟動
     required_successor_action: controller repair on a successor head，followed by a **completely new**
                                acceptance and authorization cycle — acceptance gate 2、Acceptance items 4/5
-                               與 F 全部須對 successor head 重建;repair 會移動 execution-relevant code,
+                               與 F 全部須對 successor head 重建;item 6 不在「重建」之列 —
+                               該 exactly-once authorization 已 consumed 且永久 spent,
+                               successor cycle 必須由 owner 另行簽發一份新授權;repair 會移動 execution-relevant code,
                                `0a5dffe9` 的任何 binding 皆不轉移;repair PR 不得宣稱延續本次 seal attempt
 pending_reentry:                          # append-only; pre-seal, no terminal claimed; route-1 永久留帳結論不變
   - date: 2026-07-21

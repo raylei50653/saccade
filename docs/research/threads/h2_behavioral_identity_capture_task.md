@@ -6,7 +6,7 @@ doc-module: semantic
 owner-module: semantic
 work-class: mainline-study
 wip-role: non-wip
-activation-gate: "四項 owner decision 已於 2026-07-25 accepted（#286）；Phase-B chain form 已於 2026-07-25 accepted（#290）並成文為 declaration Review Correction 3；C3.9 pre-seal ruler 編輯（七序列 manifest + phase_a_evidence schema + phase-aware partition）已 landed、republish，並於 `7c348f4e` 通過 controlled-host re-attestation（run 30164262580）；Layer-M review 又把語義常數搬回 ruler ⇒ identity_semantics 再動一次（`3edf6953`）已 republish，並於 `f2c2510a`（run 30243657973）重新通過 controlled-host re-attestation；PR #295 第二輪修補再次修改 packet-invalid exception boundary 與 terminal-2 surviving-evidence ruler，identity_semantics `93f87a83` 已 republish，並於 `32935d5d`（run 30254189532）重新通過 controlled-host re-attestation ⇒ gate 2 再度關閉；S4 Phase-A controller（items 0–4）已 implemented/tested，**review 已完成、PR #295 已 merge ⇒ S4 code-review gate closed**（reviewed implementation head `4c78b962…`，landed merge commit `b2f3c23f…`）；Acceptance items 4→5→6 已於 2026-07-27 在 head `0a5dffe9` 全部達成（controlled-host run 30276844285 綠、Layer-P certificate `d95859cb…` 37/37 獨立驗證、F64 `a03fc459…` 22/22、owner single-invocation authorization），並已執行一次 ⇒ **authorization spent、controller terminal `H2_INPUT_MUTATED_DURING_MEASUREMENT`、0/4 ordered runs started、no capture、seal 未完成**；adjudicated root cause = controller self-mutation（在 repo 內建 evidence root 後又要求 checkout 乾淨），非 head/binding/ruler 問題 ⇒ **items 4–6 satisfied-then-void，下一步是 successor head 上的 controller repair，之後整個 acceptance + authorization 週期全部重建**；失敗證據見 evidence/h2_phase_a_failed_attempt_0a5dffe9_20260727/"
+activation-gate: "四項 owner decision 已於 2026-07-25 accepted（#286）；Phase-B chain form 已於 2026-07-25 accepted（#290）並成文為 declaration Review Correction 3；C3.9 pre-seal ruler 編輯（七序列 manifest + phase_a_evidence schema + phase-aware partition）已 landed、republish，並於 `7c348f4e` 通過 controlled-host re-attestation（run 30164262580）；Layer-M review 又把語義常數搬回 ruler ⇒ identity_semantics 再動一次（`3edf6953`）已 republish，並於 `f2c2510a`（run 30243657973）重新通過 controlled-host re-attestation；PR #295 第二輪修補再次修改 packet-invalid exception boundary 與 terminal-2 surviving-evidence ruler，identity_semantics `93f87a83` 已 republish，並於 `32935d5d`（run 30254189532）重新通過 controlled-host re-attestation ⇒ gate 2 再度關閉；S4 Phase-A controller（items 0–4）已 implemented/tested，**review 已完成、PR #295 已 merge ⇒ S4 code-review gate closed**（reviewed implementation head `4c78b962…`，landed merge commit `b2f3c23f…`）；Acceptance items 4→5→6 已於 2026-07-27 在 head `0a5dffe9` 全部達成（controlled-host run 30276844285 綠、Layer-P certificate `d95859cb…` 37/37 獨立驗證、F64 `a03fc459…` 22/22、owner single-invocation authorization），並已執行一次 ⇒ **authorization spent、controller terminal `H2_INPUT_MUTATED_DURING_MEASUREMENT`、0/4 ordered runs started、no capture、seal 未完成**；adjudicated root cause = controller self-mutation（在 repo 內建 evidence root 後又要求 checkout 乾淨），非 head/binding/ruler 問題 ⇒ **items 4–5 satisfied-then-void（對 successor head 失效，須重建）；item 6 已 consumed 且永久 spent，不是重建而是由 owner 另行簽發新授權；下一步是 successor head 上的 controller repair，之後整個 acceptance + authorization 週期全部重建**；失敗證據見 evidence/h2_phase_a_failed_attempt_0a5dffe9_20260727/"
 target-decision-layer: none
 primary-intent: boundary-diagnostic
 output-class: "diagnostic result | substrate-fidelity edge proposal"
@@ -386,7 +386,9 @@ bindings or the ruler. What is left is code-bound again — see `History` and th
 [failure evidence](../../modules/semantic/research/evidence/h2_phase_a_failed_attempt_0a5dffe9_20260727/)
 for the two defect sites and the ordering rule they establish. The head-bound
 gates below (`Acceptance` items 4 and 5) were satisfied at `0a5dffe9` and must be
-rebuilt from scratch at whatever head the repair lands on.
+rebuilt from scratch at whatever head the repair lands on. Item 6 is not rebuilt:
+that authorization was consumed at launch and stays permanently spent, so a
+successor cycle needs a new one, separately issued by the owner.
 
 Correction 3 puts an ordering constraint on everything below: `identity_semantics`
 must be frozen from the Phase-A seal to the Phase-B seal, so the ruler work comes
@@ -582,11 +584,15 @@ earlier head than its predecessor. The Phase-A execution itself is not on this
 list — `Acceptance` governs only when a seal may be *proposed*; execution follows
 the authorization of item 6.
 
-**Items 4–6 are satisfied-then-void, not open.** A repaired controller moves
-execution-relevant code, so the head changes and all three must be rebuilt from
-scratch there; a repair PR may not present itself as continuing the `0a5dffe9`
-attempt. Item 3 is unaffected — it closed review of code that the repair will now
-modify, and the repair carries its own review.
+**Items 4–5 were satisfied at `0a5dffe9` and are void for any successor head.
+Item 6 was consumed and remains permanently spent.** The two kinds of exhaustion
+are not interchangeable: a repaired controller moves execution-relevant code, so
+items 4–5 lose their binding and must be rebuilt from scratch at the new head,
+whereas item 6 is not rebuilt at all — the one invocation it authorized happened,
+it counts permanently, and a successor cycle requires a new, separately issued
+authorization from the owner. A repair PR may not present itself as continuing
+the `0a5dffe9` attempt. Item 3 is unaffected — it closed review of code that the
+repair will now modify, and the repair carries its own review.
 
 A Phase-B seal has its own gates, and they are Correction 3's, not this list's:
 `I_B`, `F_B` and `S_B` per C3.1–C3.3, the C3.6 admission gate passing before
@@ -861,9 +867,11 @@ Additionally, and specific to the accepted decisions:
   freeze, certificate, probe or host. A second defect folds that hygiene reason
   into `layer_p_certificate_matches_freeze` (`:1140-1145`), so the archive records
   a certificate mismatch that does not exist and contradicts the verifier's
-  recomputation. Items 4–6 are therefore **satisfied-then-void**, the authorization
-  is permanently spent, and the next step is a controller repair on a successor
-  head followed by a completely new acceptance and authorization cycle. Failure
+  recomputation. Items 4–5 are therefore **satisfied-then-void** for any successor
+  head, item 6 was **consumed and remains permanently spent** — it is not rebuilt
+  but replaced by a new, separately issued authorization — and the next step is a
+  controller repair on a successor head followed by a completely new acceptance
+  and authorization cycle. Failure
   evidence, including a disclosed chain-of-custody incident during its
   registration:
   [h2_phase_a_failed_attempt_0a5dffe9_20260727](../../modules/semantic/research/evidence/h2_phase_a_failed_attempt_0a5dffe9_20260727/).

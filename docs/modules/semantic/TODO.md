@@ -72,7 +72,8 @@
   terminal `H2_INPUT_MUTATED_DURING_MEASUREMENT`、0/4 ordered runs started、
   no capture、no seal、equivalence 仍 unproven；根因＝controller self-mutation
   （自建 evidence root 後又要求 checkout 乾淨），非 head/binding/ruler 問題**；
-  items 4–6 satisfied-then-void；下一步＝successor head 上的 controller repair，
+  items 4–5 satisfied-then-void（須在 successor head 重建）；item 6 已 consumed、
+  永久 spent（不是重建，而是 owner 另行簽發新授權）；下一步＝successor head 上的 controller repair，
   之後整個 acceptance + authorization 週期重建；do not re-run →
   [failure evidence](research/evidence/h2_phase_a_failed_attempt_0a5dffe9_20260727/)
   ·
