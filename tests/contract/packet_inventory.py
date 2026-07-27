@@ -31,6 +31,11 @@ _H0_PHASE_A_EXECUTION_DIR_NAME = re.compile(r"^h0_phase_a_[0-9a-f]{40}$")
 # names (possibly stored outside the packet) and are not resolvable here.
 _INVENTORY_KEYS = ("files", "artifacts", "artifact_sha256")
 
+# Compiled bytecode: gitignored interpreter output, never packet content.
+# Matched by suffix so that a non-bytecode file cannot hide inside a
+# `__pycache__/` directory.
+_INTERPRETER_OUTPUT_SUFFIXES = frozenset({".pyc", ".pyo"})
+
 # Audited exceptions: packets whose manifest carries hash fields the generic
 # checker intentionally does NOT verify. A packet with unresolvable
 # `artifact_hashes` entries must be listed here with a reason, so an
@@ -43,15 +48,22 @@ EXTERNAL_ARTIFACT_HASH_EXCEPTIONS: dict[str, str] = {
 }
 
 
-# Audited exceptions to inventory completeness: files that physically exist in
-# a sealed packet but are not named by its checksum inventory. Each entry is a
-# frozen, exhaustive list, so anything *newly* added to these packets still
-# fails — a legacy gap never becomes a standing licence to add files. Sealed
-# packets are not re-hashed to close these; new packets must list everything.
+# Disclosed legacy integrity gaps: files that physically exist in a sealed
+# packet but are not named by its checksum inventory. Each entry is a frozen,
+# exhaustive list, so anything *newly* added to these packets still fails — a
+# legacy gap never becomes a standing licence to add files. Sealed packets are
+# not re-hashed to close these; new packets must list everything.
+#
+# Scope, stated plainly: this table freezes the *set of paths* that escape the
+# inventory. It stores no digests, so the bytes of these seven files are NOT
+# bound by the generic corpus contract — an in-place edit to one of them passes
+# CI. Closing that needs a separate path->digest post-hoc audit table, which
+# can be added without touching the sealed packets.
 UNINVENTORIED_PACKET_FILES: dict[str, tuple[str, ...]] = {
     # The runner's digest is declared under the logical manifest key
-    # `runner_sha256` rather than in a filename->sha mapping; verified equal to
-    # the file on disk when this exception was recorded (2026-07-28).
+    # `runner_sha256`, which is not in _INVENTORY_KEYS and so is not checked
+    # generically; verified equal to the file on disk by hand when this
+    # exception was recorded (2026-07-28).
     "gap_conditioned_motion_e0_20260711": ("run_e0_audit.py",),
     "gap_conditioned_motion_e1_m0_20260711": ("run_e1_m0.py",),
     "gap_conditioned_motion_e2_family_20260711": ("run_e2_family_freeze.py",),
@@ -247,8 +259,12 @@ def packet_physical_files(packet: Path) -> set[str]:
     Recursive, so a file added in a subdirectory is as visible as one added at
     the top level. Excluded: the inventory source itself (it cannot list its
     own digest), symlinks (reported separately by `packet_symlinks`), and
-    `__pycache__`, which is gitignored interpreter output that is never part of
-    a packet's committed content.
+    compiled bytecode, which is gitignored interpreter output.
+
+    The bytecode exclusion is by file *suffix*, not by directory: excluding
+    everything under `__pycache__/` would leave an additive blind spot, since
+    an arbitrary file such as `__pycache__/extra.json` would then never be
+    enumerated.
     """
     source = checksum_inventory_source(packet)
     return {
@@ -256,7 +272,7 @@ def packet_physical_files(packet: Path) -> set[str]:
         for entry in packet.rglob("*")
         if entry.is_file()
         and not entry.is_symlink()
-        and "__pycache__" not in entry.relative_to(packet).parts
+        and entry.suffix not in _INTERPRETER_OUTPUT_SUFFIXES
         and entry.relative_to(packet).as_posix() != source
     }
 

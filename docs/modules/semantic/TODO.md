@@ -74,7 +74,7 @@
   （自建 evidence root 後又要求 checkout 乾淨），非 head/binding/ruler 問題**；
   items 4–5 satisfied-then-void（須在 successor head 重建）；item 6 已 consumed、
   永久 spent（不是重建，而是 owner 另行簽發新授權）；下一步＝successor head 上的 controller repair，
-  之後整個 acceptance + authorization 週期重建；do not re-run →
+  之後 acceptance 週期在該 head 全部重建、authorization 由 owner 另行簽發；do not re-run →
   [failure evidence](research/evidence/h2_phase_a_failed_attempt_0a5dffe9_20260727/)
   ·
   [task charter](../../research/threads/h2_behavioral_identity_capture_task.md)

@@ -166,6 +166,19 @@ def test_completeness_gate_rejects_added_files_at_any_depth(tmp_path, extra) -> 
     assert inventory_completeness_errors(packet) == [extra]
 
 
+def test_bytecode_is_ignored_but_a_pycache_directory_is_not_a_shelter(
+    tmp_path,
+) -> None:
+    """Only interpreter output is exempt, not everything under `__pycache__/`."""
+    packet = _synthetic_packet(tmp_path, {"manifest.json": "{}"})
+    cache = packet / "__pycache__"
+    cache.mkdir()
+    (cache / "run.cpython-312.pyc").write_bytes(b"\x00bytecode")
+    (cache / "extra.json").write_text("smuggled")
+
+    assert inventory_completeness_errors(packet) == ["__pycache__/extra.json"]
+
+
 def test_completeness_gate_ignores_only_the_inventory_source(tmp_path) -> None:
     packet = _synthetic_packet(tmp_path, {"manifest.json": "{}"})
 
