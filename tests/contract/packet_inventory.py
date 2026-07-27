@@ -43,6 +43,28 @@ EXTERNAL_ARTIFACT_HASH_EXCEPTIONS: dict[str, str] = {
 }
 
 
+# Audited exceptions to inventory completeness: files that physically exist in
+# a sealed packet but are not named by its checksum inventory. Each entry is a
+# frozen, exhaustive list, so anything *newly* added to these packets still
+# fails — a legacy gap never becomes a standing licence to add files. Sealed
+# packets are not re-hashed to close these; new packets must list everything.
+UNINVENTORIED_PACKET_FILES: dict[str, tuple[str, ...]] = {
+    # The runner's digest is declared under the logical manifest key
+    # `runner_sha256` rather than in a filename->sha mapping; verified equal to
+    # the file on disk when this exception was recorded (2026-07-28).
+    "gap_conditioned_motion_e0_20260711": ("run_e0_audit.py",),
+    "gap_conditioned_motion_e1_m0_20260711": ("run_e1_m0.py",),
+    "gap_conditioned_motion_e2_family_20260711": ("run_e2_family_freeze.py",),
+    "gap_conditioned_motion_e3_signals_20260711": ("run_e3_signals.py",),
+    # Sidecar holding the sha256 of the inventoried fixture_pack.json; it
+    # repeats a covered digest and adds no uncovered content.
+    "gctm_d1_substrate_agnostic_ranking_20260723": ("fixture_pack.json.sha256",),
+    # Sealed 2026-07-10 with a metadata sidecar outside SHA256SUMS.json.
+    "m_b1_5_stage2_q45_20260710": ("README.json",),
+    "m_b1_5_t0_region_interpretation_20260710": ("README.json",),
+}
+
+
 def evidence_entries(evidence_root: Path = EVIDENCE_ROOT) -> list[Path]:
     """Return every top-level evidence-root entry without filtering by type."""
     if not evidence_root.is_dir() or evidence_root.is_symlink():
@@ -174,6 +196,17 @@ def load_manifest(packet: Path) -> dict:
     return json.loads((packet / "manifest.json").read_text())
 
 
+def checksum_inventory_source(packet: Path) -> str:
+    """Return the filename the packet's inventory is read from.
+
+    A file cannot list its own digest, so this one name is excluded from the
+    completeness comparison below; every other file must be inventoried.
+    """
+    if (packet / "SHA256SUMS.json").is_file():
+        return "SHA256SUMS.json"
+    return "manifest.json"
+
+
 def checksum_inventory(packet: Path) -> dict[str, str]:
     """Return {relative filename: expected sha256} for a packet.
 
@@ -193,3 +226,49 @@ def checksum_inventory(packet: Path) -> dict[str, str]:
                 {name: sha for name, sha in value.items() if isinstance(sha, str)}
             )
     return inventory
+
+
+def packet_symlinks(packet: Path) -> list[str]:
+    """Return packet-relative paths of symlinks anywhere inside a packet.
+
+    A symlink has no content of its own to hash, so it can carry bytes into a
+    sealed packet that the inventory never covers.
+    """
+    return sorted(
+        entry.relative_to(packet).as_posix()
+        for entry in packet.rglob("*")
+        if entry.is_symlink()
+    )
+
+
+def packet_physical_files(packet: Path) -> set[str]:
+    """Return packet-relative paths of every real file inside a packet.
+
+    Recursive, so a file added in a subdirectory is as visible as one added at
+    the top level. Excluded: the inventory source itself (it cannot list its
+    own digest), symlinks (reported separately by `packet_symlinks`), and
+    `__pycache__`, which is gitignored interpreter output that is never part of
+    a packet's committed content.
+    """
+    source = checksum_inventory_source(packet)
+    return {
+        entry.relative_to(packet).as_posix()
+        for entry in packet.rglob("*")
+        if entry.is_file()
+        and not entry.is_symlink()
+        and "__pycache__" not in entry.relative_to(packet).parts
+        and entry.relative_to(packet).as_posix() != source
+    }
+
+
+def inventory_completeness_errors(packet: Path) -> list[str]:
+    """Return files present in a packet that its inventory does not cover.
+
+    Checksums alone are fail-open against *additive* contamination: every
+    listed file can still verify while an unlisted file sits beside it. This
+    is the reverse direction — enumerate what is physically there and require
+    the inventory to be total over it.
+    """
+    uncovered = packet_physical_files(packet) - set(checksum_inventory(packet))
+    declared = UNINVENTORIED_PACKET_FILES.get(packet.name, ())
+    return sorted(uncovered - set(declared))
