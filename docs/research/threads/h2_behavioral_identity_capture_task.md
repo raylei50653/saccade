@@ -6,7 +6,7 @@ doc-module: semantic
 owner-module: semantic
 work-class: mainline-study
 wip-role: non-wip
-activation-gate: "四項 owner decision 已於 2026-07-25 accepted（#286）；Phase-B chain form 已於 2026-07-25 accepted（#290）並成文為 declaration Review Correction 3；C3.9 pre-seal ruler 編輯（七序列 manifest + phase_a_evidence schema + phase-aware partition）已 landed、republish，並於 `7c348f4e` 通過 controlled-host re-attestation（run 30164262580）；Layer-M review 又把語義常數搬回 ruler ⇒ identity_semantics 再動一次（`3edf6953`）已 republish，並於 `f2c2510a`（run 30243657973）重新通過 controlled-host re-attestation；PR #295 第二輪修補再次修改 packet-invalid exception boundary 與 terminal-2 surviving-evidence ruler，identity_semantics `93f87a83` 已 republish，並於 `32935d5d`（run 30254189532）重新通過 controlled-host re-attestation ⇒ gate 2 再度關閉；S4 Phase-A controller（items 0–4）已 implemented/tested，**review 已完成、PR #295 已 merge ⇒ S4 code-review gate closed**（reviewed implementation head `4c78b962…`，landed merge commit `b2f3c23f…`）；剩餘 gate = 最終 seal-candidate head 的 Layer-P pass certificate + 同一 head 的 coordinate/probe/controlled-host workflow 全綠 + separate owner exactly-once authorization，才可建立 F/S 並執行 Phase A"
+activation-gate: "四項 owner decision 已於 2026-07-25 accepted（#286）；Phase-B chain form 已於 2026-07-25 accepted（#290）並成文為 declaration Review Correction 3；C3.9 pre-seal ruler 編輯（七序列 manifest + phase_a_evidence schema + phase-aware partition）已 landed、republish，並於 `7c348f4e` 通過 controlled-host re-attestation（run 30164262580）；Layer-M review 又把語義常數搬回 ruler ⇒ identity_semantics 再動一次（`3edf6953`）已 republish，並於 `f2c2510a`（run 30243657973）重新通過 controlled-host re-attestation；PR #295 第二輪修補再次修改 packet-invalid exception boundary 與 terminal-2 surviving-evidence ruler，identity_semantics `93f87a83` 已 republish，並於 `32935d5d`（run 30254189532）重新通過 controlled-host re-attestation ⇒ gate 2 再度關閉；S4 Phase-A controller（items 0–4）已 implemented/tested，**review 已完成、PR #295 已 merge ⇒ S4 code-review gate closed**（reviewed implementation head `4c78b962…`，landed merge commit `b2f3c23f…`）；剩餘 gate 有固定順序（Acceptance items 4→5→6）= ①最終 seal-candidate head 的 coordinate/probe current + controlled-host workflow 綠 ②同一 head 的 Layer-P pass certificate + independent verification ③separate owner exactly-once authorization，才可建立 F/S 並執行 Phase A"
 target-decision-layer: none
 primary-intent: boundary-diagnostic
 output-class: "diagnostic result | substrate-fidelity edge proposal"
@@ -303,15 +303,16 @@ survived review and landed (`Acceptance` item 3), with no `I`/`F`/`S`, no
 authorization, no capture, and no registry state change.
 
 By the next commit point, the build is expected to be **certified at one exact
-head but still unsealed**: a Layer-P pass certificate and a green controlled-host
-attestation at that same head, independently verified. That state is still not an
-authorization and still writes no registry state.
+head but still unsealed**: a green controlled-host attestation at that head and
+then a Layer-P pass certificate there, independently verified. That state is still
+not an authorization and still writes no registry state.
 
 ## Commit point
 
 Owner reviews whether state changed when **either** an exact-head Layer-P
-certificate and its independent verification pass at the final seal-candidate
-head, **or** that certification fails and the charter is re-planned. Review
+certificate and its independent verification pass at the final seal-candidate head
+— a head already attested green under `Acceptance` item 4 — **or** that
+certification fails and the charter is re-planned. Review
 acceptance of the controller (2026-07-27) was the previous commit point and
 changed no state. The certificate is a seal gate; producing it is still not a
 seal, and the separate owner exactly-once authorization remains a distinct step
@@ -483,12 +484,14 @@ Every gate below binds **one exact commit**, so the order is fixed and no step m
 be carried over from an earlier head:
 
 1. stop modifying `main`;
-2. controlled-host re-attestation at that final head (`Acceptance` item 5);
+2. the published coordinate/probe current and controlled-host re-attestation green
+   at that final head (`Acceptance` item 4);
 3. a Layer-P pass certificate produced **at that same head**, `--base` given, full
-   changed-path verdict clean (`Acceptance` item 4);
-4. independent verification of every certificate binding;
+   changed-path verdict clean (`Acceptance` item 5);
+4. independent verification of every certificate binding (also item 5);
 5. only then a separate owner exactly-once authorization (`Acceptance` item 6);
-6. only after that authorization, `F`/`S` and the Phase-A execution.
+6. only after that authorization, `F`/`S` and the Phase-A execution — not an
+   `Acceptance` item, because that list ends at proposing a seal.
 
 The reviewed implementation head `4c78b962…` is **not** a seal candidate, and
 neither is the merge commit that landed it. Content equality is not head equality:
@@ -532,16 +535,22 @@ A Layer-M seal may be proposed only when **all** of these hold:
    as merge commit `b2f3c23f…` on `main` via
    [PR #295](https://github.com/raylei50653/saccade/pull/295) on 2026-07-27. This
    closes review of the *code*; it certifies no head and authorizes nothing;
-4. a Layer-P pass certificate (`h2_layer_p_certificate_v2`) exists for the exact
-   head under seal, with `--base` given and the full changed-path verdict clean —
-   and its bindings independently verified. Neither `4c78b962…` nor `b2f3c23f…`
-   can supply this for a later head: `source_head` is part of the certificate and
-   is required to equal the executing head, so identical content does not
-   transfer (see `Current step`);
-5. the published coordinate and bounded probe are current and the controlled-host
-   workflow is green **at that same head**;
+4. the published coordinate and bounded probe are current and the controlled-host
+   workflow is green at the exact final seal-candidate head;
+5. a Layer-P pass certificate (`h2_layer_p_certificate_v2`) exists for that **same**
+   head, with `--base` given and the full changed-path verdict clean — and its
+   bindings independently verified. Neither `4c78b962…` nor `b2f3c23f…` can supply
+   this for a later head: `source_head` is part of the certificate and is required
+   to equal the executing head, so identical content does not transfer (see
+   `Current step`);
 6. the owner issues a separate exactly-once authorization — this charter is not
    one and cannot become one.
+
+These are numbered in the order they must be performed: 4 → 5 → 6 is the same
+sequence as `Current step` steps 2 → 3–4 → 5, and no item may be satisfied at an
+earlier head than its predecessor. The Phase-A execution itself is not on this
+list — `Acceptance` governs only when a seal may be *proposed*; execution follows
+the authorization of item 6.
 
 A Phase-B seal has its own gates, and they are Correction 3's, not this list's:
 `I_B`, `F_B` and `S_B` per C3.1–C3.3, the C3.6 admission gate passing before
@@ -786,8 +795,11 @@ Additionally, and specific to the accepted decisions:
   governance closeout records that state and nothing else: it edits no ruler, no
   controller and no verifier, moves no published axis, issues no certificate,
   creates no `I`/`F`/`S`, and grants no authorization. The remaining gates are
-  `Acceptance` items 4–6, in that order, all bound to **one** final
-  seal-candidate head — which is not `4c78b962…` and not `b2f3c23f…`, because a
+  `Acceptance` items 4 → 5 → 6 — coordinate/probe current plus controlled-host
+  green, then the exact-head certificate and its independent verification, then the
+  separate owner authorization — renumbered here to match that order, since the
+  previous numbering listed the certificate before the attestation it depends on.
+  All three bind **one** final seal-candidate head — which is not `4c78b962…` and not `b2f3c23f…`, because a
   certificate binds `source_head`, not content (see `Current step`). Until that
   head exists and is certified, verified, and separately authorized, no `F`/`S`
   may be created and Phase A may not run.
