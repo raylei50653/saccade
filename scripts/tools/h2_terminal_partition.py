@@ -138,10 +138,11 @@ TERMINALS: tuple[Terminal, ...] = (
         2,
         "H2_CAPTURE_PERTURBS_POLICY",
         {
-            "a": "execution completed and any A7.6 capture-off/on equality differs",
-            "b": "execution completed and any of the seven sequences' A7.6 "
-            "capture-off/on equality differs (§ C3.4: disjunction of failure over "
-            "the seven, so the terminal never depends on execution order)",
+            "a": "surviving evidence establishes that any A7.6 capture-off/on "
+            "equality differs, even if a later packet or child step failed",
+            "b": "surviving evidence establishes that any of the seven sequences' "
+            "A7.6 capture-off/on equality differs (§ C3.4: disjunction of failure "
+            "over the seven, so the terminal never depends on execution order)",
         },
         "closes the observational-capture route itself: decision-neutral shadow "
         "capture is not achievable at this ABI, so grounding must proceed by "

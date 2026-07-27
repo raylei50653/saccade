@@ -67,6 +67,7 @@ POLICY_MEMBERS = frozenset(
         "schema",
     }
 )
+BASE_POLICY_MEMBERS = frozenset({*behavior.A76_EQUALITY_MEMBERS, "schema"})
 OVERFLOW_FIELDS = tuple(OVERFLOW_KEYS[name] for name in STREAMS) + tuple(
     UNIVERSE_OVERFLOW_KEYS[name] for name in UNIVERSE_STREAMS
 )
@@ -79,6 +80,7 @@ class ChildError(RuntimeError):
 @dataclass(frozen=True)
 class RunProducts:
     mot_bytes: bytes
+    policy_base_inventory: Mapping[str, Any]
     policy_inventory: Mapping[str, Any] | None
     packet: Mapping[str, Any] | None
     packet_verification: Mapping[str, Any] | None
@@ -235,7 +237,7 @@ def persist_and_process_capture(
         proposal, winner = _projection_records(capture)
         overflow = [int(capture[field]) for field in OVERFLOW_FIELDS]
         report = verify_capture(capture)
-    except Exception:
+    except behavior.PACKET_INVALID_EXCEPTIONS:
         verification: Mapping[str, Any] = {
             "failure": "packet_invalid",
             "state": "fail",
@@ -487,6 +489,18 @@ def repository_runner(invocation: Mapping[str, Any]) -> RunProducts:
     if len(relink) != 13:
         raise ChildError("native relink debug vector length drift")
 
+    base_inventory = {
+        ACTIVE_PAIRS_MEMBER: active_pairs,
+        FINAL_ROWS_MEMBER: final_rows,
+        MOT_MEMBER: {
+            "length": len(mot_bytes),
+            "sha256": hashlib.sha256(mot_bytes).hexdigest(),
+        },
+        RELINK_MEMBER: relink,
+        "schema": evidence.BASE_POLICY_INVENTORY_SCHEMA,
+    }
+    _persist_base_products(run_dir, sequence, mot_bytes, base_inventory)
+
     packet: Mapping[str, Any] | None = None
     packet_verification: Mapping[str, Any] | None = None
     proposal: Mapping[str, Any] | None = None
@@ -512,7 +526,13 @@ def repository_runner(invocation: Mapping[str, Any]) -> RunProducts:
             # A structurally invalid raw packet is decisive terminal-3
             # evidence. Do not fabricate packet-derived policy projections.
             behavior._assert_build_components_consumed(build_dir, extension)
-            return RunProducts(mot_bytes, None, packet, packet_verification)
+            return RunProducts(
+                mot_bytes,
+                base_inventory,
+                None,
+                packet,
+                packet_verification,
+            )
 
     inventory = {
         ACTIVE_PAIRS_MEMBER: active_pairs,
@@ -528,10 +548,27 @@ def repository_runner(invocation: Mapping[str, Any]) -> RunProducts:
         WINNER_MEMBER: winner,
     }
     behavior._assert_build_components_consumed(build_dir, extension)
-    return RunProducts(mot_bytes, inventory, packet, packet_verification)
+    return RunProducts(
+        mot_bytes,
+        base_inventory,
+        inventory,
+        packet,
+        packet_verification,
+    )
 
 
 def validate_products(run_id: str, products: RunProducts) -> None:
+    base = products.policy_base_inventory
+    if (
+        set(base) != BASE_POLICY_MEMBERS
+        or base.get("schema") != evidence.BASE_POLICY_INVENTORY_SCHEMA
+    ):
+        raise ChildError("base policy inventory schema mismatch")
+    if base[MOT_MEMBER] != {
+        "length": len(products.mot_bytes),
+        "sha256": hashlib.sha256(products.mot_bytes).hexdigest(),
+    }:
+        raise ChildError("MOT bytes differ from the base policy inventory")
     inventory = products.policy_inventory
     if inventory is None:
         if (
@@ -546,6 +583,10 @@ def validate_products(run_id: str, products: RunProducts) -> None:
         raise ChildError("policy inventory has missing or unknown members")
     if inventory.get("schema") != evidence.POLICY_INVENTORY_SCHEMA:
         raise ChildError("policy inventory schema mismatch")
+    if any(
+        inventory[member] != base[member] for member in behavior.A76_EQUALITY_MEMBERS
+    ):
+        raise ChildError("full policy inventory differs from its base members")
     if inventory[MOT_MEMBER] != {
         "length": len(products.mot_bytes),
         "sha256": hashlib.sha256(products.mot_bytes).hexdigest(),
@@ -589,6 +630,35 @@ def _write_mot(path: Path, payload: bytes) -> None:
         os.close(descriptor)
 
 
+def _persist_base_products(
+    run_dir: Path,
+    sequence: str,
+    mot_bytes: bytes,
+    inventory: Mapping[str, Any],
+) -> None:
+    mot_path = run_dir / f"{sequence}.txt"
+    if mot_path.is_file():
+        if mot_path.read_bytes() != mot_bytes:
+            raise ChildError("persisted MOT output differs from run products")
+    else:
+        _write_mot(mot_path, mot_bytes)
+    inventory_path = run_dir / evidence.BASE_POLICY_INVENTORY_NAME
+    if inventory_path.is_file():
+        if (
+            evidence.load_document(run_dir, evidence.BASE_POLICY_INVENTORY_NAME)
+            != inventory
+        ):
+            raise ChildError(
+                "persisted base policy inventory differs from run products"
+            )
+    else:
+        evidence.write_document(
+            run_dir,
+            evidence.BASE_POLICY_INVENTORY_NAME,
+            inventory,
+        )
+
+
 def execute_child(
     invocation_path: Path,
     *,
@@ -603,7 +673,12 @@ def execute_child(
     try:
         products = runner(invocation)
         validate_products(str(invocation["run_id"]), products)
-        _write_mot(run_dir / f"{invocation['sequence']}.txt", products.mot_bytes)
+        _persist_base_products(
+            run_dir,
+            str(invocation["sequence"]),
+            products.mot_bytes,
+            products.policy_base_inventory,
+        )
         if products.policy_inventory is not None:
             evidence.write_document(
                 run_dir,

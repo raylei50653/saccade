@@ -158,6 +158,13 @@ def _policy_inventory(
     return inventory
 
 
+def _base_policy_inventory(inventory: dict[str, Any]) -> dict[str, Any]:
+    return {
+        **{member: inventory[member] for member in behavior.A76_EQUALITY_MEMBERS},
+        "schema": evidence.BASE_POLICY_INVENTORY_SCHEMA,
+    }
+
+
 def _write_sequence(
     root: Path,
     sequence: str,
@@ -172,11 +179,19 @@ def _write_sequence(
         for run_id in evidence.CAPTURE_ON_RUNS
     }
     if evidence.CAPTURE_OFF_RUN not in omit_runs:
+        directory = evidence.run_dir(root, sequence, evidence.CAPTURE_OFF_RUN)
+        inventory = _policy_inventory(capture=None)
         evidence.write_document(
-            evidence.run_dir(root, sequence, evidence.CAPTURE_OFF_RUN),
+            directory,
             evidence.POLICY_INVENTORY_NAME,
-            _policy_inventory(capture=None),
+            inventory,
         )
+        evidence.write_document(
+            directory,
+            evidence.BASE_POLICY_INVENTORY_NAME,
+            _base_policy_inventory(inventory),
+        )
+        (directory / f"{sequence}.txt").write_bytes(b"x" * 11)
     for index, run_id in enumerate(evidence.CAPTURE_ON_RUNS):
         if run_id in omit_runs:
             continue
@@ -184,14 +199,21 @@ def _write_sequence(
         # A perturbation is a policy-visible difference between capture-off and
         # capture-on, which is what A7.6 compares.
         length = 12 if (perturbed and index == 0) else 11
+        inventory = _policy_inventory(capture=captures[run_id], mot_length=length)
         evidence.write_document(
             directory,
             evidence.POLICY_INVENTORY_NAME,
-            _policy_inventory(capture=captures[run_id], mot_length=length),
+            inventory,
         )
+        evidence.write_document(
+            directory,
+            evidence.BASE_POLICY_INVENTORY_NAME,
+            _base_policy_inventory(inventory),
+        )
+        (directory / f"{sequence}.txt").write_bytes(b"x" * length)
         if run_id in invalid_packets:
-            # An invalid packet is one the packet verifier rejects; the policy
-            # inventory stays, because losing it is a different failure.
+            # An invalid packet keeps the durable base inventory; the full
+            # packet-derived inventory is deliberately absent.
             (directory / evidence.POLICY_INVENTORY_NAME).unlink()
             evidence.write_document(
                 directory, evidence.PACKET_NAME, {"capture_schema_version": "wrong"}
@@ -205,15 +227,20 @@ def _write_sequence(
         )
     if not comparison:
         return
+    bases = {}
     inventories = {}
     for run_id in evidence.RUN_IDS:
-        path = evidence.run_dir(root, sequence, run_id) / evidence.POLICY_INVENTORY_NAME
-        if path.is_file():
-            inventories[run_id] = json.loads(path.read_text(encoding="utf-8"))
+        directory = evidence.run_dir(root, sequence, run_id)
+        base_path = directory / evidence.BASE_POLICY_INVENTORY_NAME
+        inventory_path = directory / evidence.POLICY_INVENTORY_NAME
+        if base_path.is_file():
+            bases[run_id] = json.loads(base_path.read_text(encoding="utf-8"))
+        if inventory_path.is_file():
+            inventories[run_id] = json.loads(inventory_path.read_text(encoding="utf-8"))
     evidence.write_document(
         root / evidence.RUNS_DIR / sequence,
         evidence.COMPARISON_NAME,
-        verifier._relations(inventories),
+        verifier._relations(bases, inventories),
     )
 
 
@@ -374,10 +401,11 @@ def _write_phase_a_launch_records(root: Path, *, head: str) -> dict[str, Any]:
             "schema": evidence.STOP_BOUNDARY_SCHEMA,
             "checkout_clean": True,
             "completed_utc": "2026-07-27T00:00:00Z",
-            "linearization": "post_close_revalidation_complete",
+            "final_drain_completed": True,
+            "linearization": "clean_final_drain",
             "monitor_closed": True,
             "monitor_started": True,
-            "post_close_revalidation_complete": True,
+            "revalidation_completed_while_monitored": True,
             "revalidation_reasons": [],
             "source_head": head,
             "source_tree": certificate["source_tree"],
@@ -768,6 +796,22 @@ def test_checkout_witness_axes_are_rebuilt_from_the_bound_git_tree(
     evidence.write_document(root, evidence.CHECKOUT_WITNESS_NAME, witness)
     _refinalize(root)
     with pytest.raises(verifier.VerificationError, match="checkout identity witness"):
+        verifier.verify_evidence_root(root)
+
+
+@pytest.mark.parametrize("tamper", ("checkout_dirty", "extra_member"))
+def test_stop_boundary_is_strict_and_requires_a_clean_checkout(
+    tmp_path: Path, tamper: str
+) -> None:
+    root = phase_a_root(tmp_path)
+    stop = evidence.load_document(root, evidence.STOP_BOUNDARY_NAME)
+    if tamper == "checkout_dirty":
+        stop["checkout_clean"] = False
+    else:
+        stop["unrecognized"] = True
+    evidence.write_document(root, evidence.STOP_BOUNDARY_NAME, stop)
+    _refinalize(root)
+    with pytest.raises(verifier.VerificationError, match="stop boundary"):
         verifier.verify_evidence_root(root)
 
 

@@ -54,6 +54,10 @@ import verify_h0_phase_a as h0_verifier  # noqa: E402
 import verify_h2_measurement as verifier  # noqa: E402
 from run_h2_layer_p import CERTIFICATE_SCHEMA  # noqa: E402
 from export_headline_bridge_decision_trace import (  # noqa: E402
+    OVERFLOW_KEYS,
+    STREAMS,
+    UNIVERSE_OVERFLOW_KEYS,
+    UNIVERSE_STREAMS,
     canonical_semantic_packet,
 )
 from verify_headline_bridge_decision_trace import verify_capture  # noqa: E402
@@ -71,6 +75,9 @@ DEADLINE_SECONDS = h0_controller.DEADLINE_SECONDS
 ) = behavior.BEHAVIOR_MEMBERS
 PROPOSAL_MEMBER, WINNER_MEMBER = behavior.A76_PROJECTION_MEMBERS
 OVERFLOW_MEMBER = behavior.A76_OVERFLOW_MEMBER
+OVERFLOW_FIELDS = tuple(OVERFLOW_KEYS[name] for name in STREAMS) + tuple(
+    UNIVERSE_OVERFLOW_KEYS[name] for name in UNIVERSE_STREAMS
+)
 
 
 class ControllerError(RuntimeError):
@@ -578,58 +585,122 @@ def _read_run_document(root: Path, run_id: str, name: str) -> dict[str, Any]:
         raise ControllerError(f"{SEQUENCE}/{run_id}: {exc}") from exc
 
 
-def compare_policy_inventories(
-    root: Path,
-) -> tuple[bool, dict[str, Any], bool]:
-    """Controller-side A7.6 implementation; the verifier recomputes separately."""
+@dataclass(frozen=True)
+class SurvivingReplay:
+    capture_equal: bool
+    packets_valid: bool
+    complete: bool
+    comparison: dict[str, Any]
+    errors: tuple[str, ...]
+    evidence_present: bool
+
+
+def _verify_base_policy_inventory(run_id: str, inventory: Mapping[str, Any]) -> None:
+    expected = {*behavior.A76_EQUALITY_MEMBERS, "schema"}
+    if (
+        set(inventory) != expected
+        or inventory.get("schema") != evidence.BASE_POLICY_INVENTORY_SCHEMA
+    ):
+        raise ControllerError(f"{SEQUENCE}/{run_id}: base inventory schema mismatch")
+    synthetic = {
+        **inventory,
+        OVERFLOW_MEMBER: list(behavior.A76_OVERFLOW_ZERO_VECTOR),
+        PROPOSAL_MEMBER: None,
+        "schema": evidence.POLICY_INVENTORY_SCHEMA,
+        WINNER_MEMBER: None,
+    }
+    try:
+        h0_verifier._verify_policy_inventory(evidence.CAPTURE_OFF_RUN, synthetic)
+    except h0_verifier.VerificationError as exc:
+        raise ControllerError(f"{SEQUENCE}/{run_id}: {exc}") from exc
+
+
+def replay_surviving_evidence(root: Path) -> SurvivingReplay:
+    """Replay every durable base/full inventory and packet, even after failure."""
+    bases: dict[str, dict[str, Any]] = {}
     inventories: dict[str, dict[str, Any]] = {}
+    errors: list[str] = []
     for run_id in evidence.RUN_IDS:
         directory = evidence.run_dir(root, SEQUENCE, run_id)
-        if not (directory / evidence.POLICY_INVENTORY_NAME).is_file():
-            continue
-        inventories[run_id] = _read_run_document(
-            root, run_id, evidence.POLICY_INVENTORY_NAME
-        )
+        base_path = directory / evidence.BASE_POLICY_INVENTORY_NAME
+        if base_path.is_file():
+            try:
+                base = _read_run_document(
+                    root, run_id, evidence.BASE_POLICY_INVENTORY_NAME
+                )
+                _verify_base_policy_inventory(run_id, base)
+                bases[run_id] = base
+                mot_path = directory / f"{SEQUENCE}.txt"
+                mot = mot_path.read_bytes()
+                if base[MOT_MEMBER] != {
+                    "length": len(mot),
+                    "sha256": hashlib.sha256(mot).hexdigest(),
+                }:
+                    errors.append(f"{SEQUENCE}/{run_id}: base MOT identity mismatch")
+            except (ControllerError, OSError) as exc:
+                errors.append(str(exc))
+        if (directory / evidence.POLICY_INVENTORY_NAME).is_file():
+            try:
+                inventories[run_id] = _read_run_document(
+                    root, run_id, evidence.POLICY_INVENTORY_NAME
+                )
+            except ControllerError as exc:
+                errors.append(str(exc))
+    invalid_inventories: list[str] = []
     for run_id, inventory in inventories.items():
         try:
             h0_verifier._verify_policy_inventory(run_id, inventory)
         except h0_verifier.VerificationError as exc:
-            raise ControllerError(f"{SEQUENCE}/{run_id}: {exc}") from exc
-        mot_path = evidence.run_dir(root, SEQUENCE, run_id) / f"{SEQUENCE}.txt"
-        try:
-            mot = mot_path.read_bytes()
-        except OSError as exc:
-            raise ControllerError(
-                f"{SEQUENCE}/{run_id}: MOT output unreadable"
-            ) from exc
-        if inventory[MOT_MEMBER] != {
-            "length": len(mot),
-            "sha256": hashlib.sha256(mot).hexdigest(),
-        }:
-            raise ControllerError(f"{SEQUENCE}/{run_id}: MOT identity mismatch")
+            errors.append(f"{SEQUENCE}/{run_id}: {exc}")
+            invalid_inventories.append(run_id)
+            continue
+        if run_id not in bases:
+            errors.append(f"{SEQUENCE}/{run_id}: full inventory has no durable base")
+        elif any(
+            inventory[member] != bases[run_id][member]
+            for member in behavior.A76_EQUALITY_MEMBERS
+        ):
+            errors.append(f"{SEQUENCE}/{run_id}: full/base inventory mismatch")
+    for run_id in invalid_inventories:
+        inventories.pop(run_id)
 
     relations: list[dict[str, Any]] = []
     first_unequal: str | None = None
+    base_unequal = False
+    packet_relation_failure = False
 
-    def record(left: str, member: str, right: str, equal: bool) -> None:
-        nonlocal first_unequal
+    def record(
+        left: str,
+        member: str,
+        right: str,
+        equal: bool,
+        *,
+        base_relation: bool,
+    ) -> None:
+        nonlocal base_unequal, first_unequal, packet_relation_failure
         relations.append(
             {"equal": equal, "left": left, "member": member, "right": right}
         )
         if not equal and first_unequal is None:
             first_unequal = f"{left}:{right}:{member}"
+        if not equal:
+            if base_relation:
+                base_unequal = True
+            else:
+                packet_relation_failure = True
 
     off_id = evidence.CAPTURE_OFF_RUN
-    if off_id in inventories:
+    if off_id in bases:
         for run_id in evidence.CAPTURE_ON_RUNS:
-            if run_id not in inventories:
+            if run_id not in bases:
                 continue
             for member in behavior.A76_EQUALITY_MEMBERS:
                 record(
                     off_id,
                     member,
                     run_id,
-                    inventories[off_id][member] == inventories[run_id][member],
+                    bases[off_id][member] == bases[run_id][member],
+                    base_relation=True,
                 )
     on_present = [run for run in evidence.CAPTURE_ON_RUNS if run in inventories]
     if on_present:
@@ -642,6 +713,7 @@ def compare_policy_inventories(
                     member,
                     run_id,
                     reference[member] == inventories[run_id][member],
+                    base_relation=False,
                 )
     for run_id in on_present:
         record(
@@ -650,39 +722,123 @@ def compare_policy_inventories(
             "zero_vector",
             inventories[run_id][behavior.A76_OVERFLOW_MEMBER]
             == list(behavior.A76_OVERFLOW_ZERO_VECTOR),
+            base_relation=False,
         )
     comparison = {
         "first_unequal": first_unequal,
         "relations": relations,
         "state": "equal" if first_unequal is None else "unequal",
     }
-    return first_unequal is None, comparison, len(inventories) == len(evidence.RUN_IDS)
-
-
-def verify_packets(root: Path) -> bool:
-    reports: list[Mapping[str, Any]] = []
-    valid = True
+    packet_states: dict[str, str] = {}
+    semantic_digests: list[str] = []
     for run_id in evidence.CAPTURE_ON_RUNS:
-        packet = _read_run_document(root, run_id, evidence.PACKET_NAME)
-        stored = _read_run_document(root, run_id, evidence.PACKET_VERIFICATION_NAME)
+        directory = evidence.run_dir(root, SEQUENCE, run_id)
+        if not (directory / evidence.PACKET_NAME).is_file():
+            packet_states[run_id] = "unavailable"
+            continue
+        try:
+            packet = _read_run_document(root, run_id, evidence.PACKET_NAME)
+        except ControllerError as exc:
+            errors.append(str(exc))
+            packet_states[run_id] = "unavailable"
+            continue
+        stored: Mapping[str, Any] | None = None
+        if (directory / evidence.PACKET_VERIFICATION_NAME).is_file():
+            try:
+                stored = _read_run_document(
+                    root, run_id, evidence.PACKET_VERIFICATION_NAME
+                )
+            except ControllerError as exc:
+                errors.append(str(exc))
         try:
             report = verify_capture(packet)
-            canonical_semantic_packet(packet)
-        except Exception:
-            valid = False
-            if stored != {"failure": "packet_invalid", "state": "fail"}:
-                raise ControllerError(
-                    f"{SEQUENCE}/{run_id}: packet failure record mismatch"
-                )
+            semantic_packet = canonical_semantic_packet(packet)
+        except behavior.PACKET_INVALID_EXCEPTIONS:
+            packet_states[run_id] = "fail"
+            if stored is not None and stored != {
+                "failure": "packet_invalid",
+                "state": "fail",
+            }:
+                errors.append(f"{SEQUENCE}/{run_id}: packet failure record mismatch")
             continue
-        if stored != {"report": report, "state": "pass"}:
-            raise ControllerError(f"{SEQUENCE}/{run_id}: packet pass record mismatch")
-        reports.append(report)
-    semantic_digests = [report["semantic_digest_sha256"] for report in reports]
-    return (
-        valid
-        and len(reports) == len(evidence.CAPTURE_ON_RUNS)
-        and len(set(semantic_digests)) == 1
+        except Exception as exc:
+            errors.append(
+                f"{SEQUENCE}/{run_id}: packet replay implementation failure: "
+                f"{str(exc) or type(exc).__name__}"
+            )
+            packet_states[run_id] = "unavailable"
+            continue
+        packet_states[run_id] = "pass"
+        semantic_digests.append(str(report["semantic_digest_sha256"]))
+        inventory = inventories.get(run_id)
+        if inventory is not None:
+            streams = semantic_packet["streams"]
+            candidates = [
+                row
+                for row in streams["candidate_records"]
+                if int(row["proposal_emitted"]) == 1
+            ]
+            claims = streams["claim_records"]
+            commits = streams["commit_records"]
+            proposal_payload = {"candidates": candidates, "claims": claims}
+            winner_payload = {
+                "commits": commits,
+                "winning_claims": [row for row in claims if int(row["claim_won"]) == 1],
+            }
+            expected_proposal = {
+                "count": len(candidates),
+                "digest": evidence.digest(proposal_payload),
+                "records": proposal_payload,
+            }
+            expected_winner = {
+                "count": len(commits),
+                "digest": evidence.digest(winner_payload),
+                "records": winner_payload,
+            }
+            expected_overflow = [int(packet[field]) for field in OVERFLOW_FIELDS]
+            if (
+                inventory[PROPOSAL_MEMBER] != expected_proposal
+                or inventory[WINNER_MEMBER] != expected_winner
+                or inventory[OVERFLOW_MEMBER] != expected_overflow
+            ):
+                packet_states[run_id] = "fail"
+        if stored is not None and stored != {"report": report, "state": "pass"}:
+            errors.append(f"{SEQUENCE}/{run_id}: packet pass record mismatch")
+    if len(set(semantic_digests)) > 1:
+        for run_id in evidence.CAPTURE_ON_RUNS:
+            if packet_states.get(run_id) == "pass":
+                packet_states[run_id] = "fail"
+    if packet_relation_failure:
+        for run_id in evidence.CAPTURE_ON_RUNS:
+            if packet_states.get(run_id) == "pass":
+                packet_states[run_id] = "fail"
+    required_full_inventories = {
+        evidence.CAPTURE_OFF_RUN,
+        *(
+            run_id
+            for run_id in evidence.CAPTURE_ON_RUNS
+            if packet_states.get(run_id) == "pass"
+        ),
+    }
+    complete = (
+        len(bases) == len(evidence.RUN_IDS)
+        and required_full_inventories.issubset(inventories)
+        and len(packet_states) == len(evidence.CAPTURE_ON_RUNS)
+        and all(state != "unavailable" for state in packet_states.values())
+        and not errors
+    )
+    return SurvivingReplay(
+        capture_equal=not base_unequal,
+        packets_valid=not packet_relation_failure
+        and not any(state == "fail" for state in packet_states.values()),
+        complete=complete,
+        comparison=comparison,
+        errors=tuple(errors),
+        evidence_present=bool(
+            bases
+            or inventories
+            or any(state != "unavailable" for state in packet_states.values())
+        ),
     )
 
 
@@ -841,6 +997,15 @@ ChildLauncher = Callable[..., int]
 MonitorFactory = Callable[..., Monitor]
 BundleRevalidator = Callable[[LaunchBundle], tuple[str, ...]]
 CheckoutWitnessBuilder = Callable[..., dict[str, Any]]
+CheckoutStateReader = Callable[[], tuple[str, str, bool]]
+
+
+def read_checkout_state() -> tuple[str, str, bool]:
+    return (
+        _git("rev-parse", "HEAD"),
+        _git("rev-parse", "HEAD^{tree}"),
+        not bool(_git("status", "--porcelain", "--untracked-files=normal")),
+    )
 
 
 def execute_controller(
@@ -854,6 +1019,7 @@ def execute_controller(
     monitor_factory: MonitorFactory = h0_controller.BoundInputMonitor,
     bundle_revalidator: BundleRevalidator = revalidate_bundle,
     checkout_witness_builder: CheckoutWitnessBuilder = build_checkout_witness,
+    checkout_state_reader: CheckoutStateReader = read_checkout_state,
     inherited_environment: Mapping[str, str] | None = None,
     clock: Callable[[], float] = time.monotonic,
 ) -> tuple[Path, partition.Selection]:
@@ -893,12 +1059,16 @@ def execute_controller(
     monitor_failure: BaseException | None = None
     baseline_head: str | None = None
     baseline_tree: str | None = None
+    completed_runs: set[str] = set()
     stop_boundary: dict[str, Any] = {
         "schema": evidence.STOP_BOUNDARY_SCHEMA,
+        "checkout_clean": None,
+        "completed_utc": None,
+        "final_drain_completed": False,
         "linearization": None,
         "monitor_closed": False,
         "monitor_started": False,
-        "post_close_revalidation_complete": False,
+        "revalidation_completed_while_monitored": False,
         "revalidation_reasons": [],
         "source_head": None,
         "source_tree": None,
@@ -1019,18 +1189,7 @@ def execute_controller(
                 )
                 if returncode != 0 or invocation.get("state") != "completed":
                     raise ControllerError(f"child {run_id} exited nonzero")
-
-            predicates["packets_valid"] = verify_packets(incomplete)
-            equal, comparison, inventories_complete = compare_policy_inventories(
-                incomplete
-            )
-            evidence.write_document(
-                incomplete / evidence.RUNS_DIR / SEQUENCE,
-                evidence.COMPARISON_NAME,
-                comparison,
-            )
-            predicates["capture_off_on_equal"] = equal
-            predicates["execution_complete"] = inventories_complete
+                completed_runs.add(run_id)
     except h0_controller.DriftError as exc:
         if monitor is not None:
             mutation_events.extend(monitor.history)
@@ -1073,34 +1232,36 @@ def execute_controller(
             "stage": "execution",
         }
     finally:
+        try:
+            replay = replay_surviving_evidence(incomplete)
+            if replay.evidence_present:
+                evidence.write_document(
+                    incomplete / evidence.RUNS_DIR / SEQUENCE,
+                    evidence.COMPARISON_NAME,
+                    replay.comparison,
+                )
+                predicates["capture_off_on_equal"] = replay.capture_equal
+                predicates["packets_valid"] = replay.packets_valid
+            predicates["execution_complete"] = (
+                replay.complete
+                and completed_runs == set(evidence.RUN_IDS)
+                and execution_result is None
+            )
+            if replay.errors:
+                predicates["execution_complete"] = False
+                execution_result = execution_result or "unclassified_execution_failure"
+                controller_record["surviving_replay_errors"] = list(replay.errors)
+        except BaseException as exc:
+            predicates["execution_complete"] = False
+            execution_result = "unclassified_execution_failure"
+            controller_record["surviving_replay_errors"] = [
+                str(exc) or type(exc).__name__
+            ]
+
         if monitor is not None:
             try:
-                mutation_events.extend(monitor.drain())
-            except BaseException as exc:
-                predicates["execution_complete"] = False
-                execution_result = "unclassified_execution_failure"
-                controller_record["failure"] = {
-                    "reason": str(exc) or type(exc).__name__,
-                    "stage": "bound_input_monitor_final_drain",
-                }
-            predicates["bound_input_mutated"] = bool(mutation_events)
-            try:
-                monitor.close()
-                stop_boundary["monitor_closed"] = True
-            except BaseException as exc:
-                predicates["execution_complete"] = False
-                execution_result = "unclassified_execution_failure"
-                controller_record["failure"] = {
-                    "reason": str(exc) or type(exc).__name__,
-                    "stage": "bound_input_monitor_close",
-                }
-            try:
                 final_reasons = list(bundle_revalidator(bundle))
-                final_head = _git("rev-parse", "HEAD")
-                final_tree = _git("rev-parse", "HEAD^{tree}")
-                checkout_clean = not bool(
-                    _git("status", "--porcelain", "--untracked-files=normal")
-                )
+                final_head, final_tree, checkout_clean = checkout_state_reader()
                 if final_head != baseline_head or final_tree != baseline_tree:
                     final_reasons.append(
                         "execution checkout head/tree moved before stop linearization"
@@ -1112,13 +1273,7 @@ def execute_controller(
                 stop_boundary.update(
                     {
                         "checkout_clean": checkout_clean,
-                        "completed_utc": _utc(),
-                        "linearization": (
-                            "post_close_revalidation_complete"
-                            if stop_boundary["monitor_closed"]
-                            else None
-                        ),
-                        "post_close_revalidation_complete": True,
+                        "revalidation_completed_while_monitored": True,
                         "revalidation_reasons": final_reasons,
                         "source_head": final_head,
                         "source_tree": final_tree,
@@ -1126,23 +1281,57 @@ def execute_controller(
                 )
             except BaseException as exc:
                 final_reasons = [
-                    "post-close bound-input revalidation failed: "
+                    "monitored bound-input revalidation failed: "
                     f"{str(exc) or type(exc).__name__}"
                 ]
-                stop_boundary["revalidation_reasons"] = final_reasons
+                stop_boundary.update(
+                    {
+                        "checkout_clean": False,
+                        "revalidation_reasons": final_reasons,
+                        "source_head": baseline_head or "",
+                        "source_tree": baseline_tree or "",
+                    }
+                )
             if final_reasons:
                 mutation_events.extend(
                     type(
                         "Mutation",
                         (),
                         {
-                            "classification": "post_close_revalidation",
+                            "classification": "monitored_revalidation",
                             "mask": 0,
                             "path": reason,
                         },
                     )()
                     for reason in final_reasons
                 )
+            try:
+                mutation_events.extend(monitor.drain())
+                stop_boundary["final_drain_completed"] = True
+                if (
+                    stop_boundary["revalidation_completed_while_monitored"]
+                    and not mutation_events
+                    and stop_boundary["checkout_clean"] is True
+                ):
+                    stop_boundary["linearization"] = "clean_final_drain"
+            except BaseException as exc:
+                predicates["execution_complete"] = False
+                execution_result = "unclassified_execution_failure"
+                controller_record["failure"] = {
+                    "reason": str(exc) or type(exc).__name__,
+                    "stage": "bound_input_monitor_final_drain",
+                }
+            try:
+                monitor.close()
+                stop_boundary["monitor_closed"] = True
+            except BaseException as exc:
+                predicates["execution_complete"] = False
+                execution_result = "unclassified_execution_failure"
+                controller_record["failure"] = {
+                    "reason": str(exc) or type(exc).__name__,
+                    "stage": "bound_input_monitor_close",
+                }
+            stop_boundary["completed_utc"] = _utc()
             predicates["bound_input_mutated"] = bool(mutation_events)
 
     evidence.write_document(incomplete, evidence.STOP_BOUNDARY_NAME, stop_boundary)

@@ -6,7 +6,7 @@ doc-module: semantic
 owner-module: semantic
 work-class: mainline-study
 wip-role: non-wip
-activation-gate: "四項 owner decision 已於 2026-07-25 accepted（#286）；Phase-B chain form 已於 2026-07-25 accepted（#290）並成文為 declaration Review Correction 3；C3.9 pre-seal ruler 編輯（七序列 manifest + phase_a_evidence schema + phase-aware partition）已 landed、republish，並於 `7c348f4e` 通過 controlled-host re-attestation（run 30164262580）；Layer-M review 又把語義常數搬回 ruler ⇒ identity_semantics 再動一次（`3edf6953`）已 republish，並於 `f2c2510a`（run 30243657973）重新通過 controlled-host re-attestation ⇒ gate 2 再度關閉；S4 Phase-A controller（items 0–4）已 implemented/tested、待 review；剩餘 gate = S4 review + seal head 的 Layer-P pass certificate + 該 head 的 coordinate/工作流綠，然後才談 seal"
+activation-gate: "四項 owner decision 已於 2026-07-25 accepted（#286）；Phase-B chain form 已於 2026-07-25 accepted（#290）並成文為 declaration Review Correction 3；C3.9 pre-seal ruler 編輯（七序列 manifest + phase_a_evidence schema + phase-aware partition）已 landed、republish，並於 `7c348f4e` 通過 controlled-host re-attestation（run 30164262580）；Layer-M review 又把語義常數搬回 ruler ⇒ identity_semantics 再動一次（`3edf6953`）已 republish，並於 `f2c2510a`（run 30243657973）重新通過 controlled-host re-attestation；PR #295 第二輪修補再次修改 packet-invalid exception boundary 與 terminal-2 surviving-evidence ruler，identity_semantics `93f87a83` 已 republish、gate 2 等待該 PR head 的 controlled-host re-attestation；S4 Phase-A controller（items 0–4）已 implemented/tested、待 review；剩餘 gate = controlled-host re-attestation + S4 review + seal head 的 Layer-P pass certificate + 該 head 的 coordinate/工作流綠，然後才談 seal"
 target-decision-layer: none
 primary-intent: boundary-diagnostic
 output-class: "diagnostic result | substrate-fidelity edge proposal"
@@ -147,22 +147,24 @@ freeze, exact-head Layer-P certificate, reference probe, runtime-input manifest
 and published identity; it does not create or seal `I`, `F`, or `S`, and it has
 no Phase-B launch path.
 
-The raw capture is durably written before canonicalization, projection or replay.
-Those operations form one fail-closed packet-verification operation: any
-structural exception, including numeric or binary-layout failures, records
-`packet_invalid` and remains terminal-3 evidence rather than becoming a
-retryable child-execution failure. No packet-derived projection inventory is
-fabricated when that operation fails.
+The four policy-visible A7.6 members and their MOT bytes are durably written to
+`policy_base_inventory.json` before packet processing. The raw capture is then
+written before canonicalization, projection or replay. Packet-data shape,
+numeric and binary-layout exceptions declared by `h2_behavioral_identity.py`
+record `packet_invalid`; unclassified implementation exceptions remain
+terminal-4 execution failures. A packet failure never fabricates projection or
+overflow fields and never deletes the already-known base equality evidence.
+After any child outcome, including nonzero, the controller replays every
+surviving base/full inventory and packet before applying terminal priority.
 
-The H2 measurement invocation ends at the successful
-`post_close_revalidation_complete` boundary. The controller performs its final
-nonblocking drain, closes the monitor, then revalidates every bound launch record
-and the checkout head/tree/cleanliness before writing
-`measurement_stop_boundary.json`. That completed revalidation is the
-linearization point; changes after its snapshot are outside the invocation.
-Failure or mismatch during this stop protocol is recorded as bound-input
-mutation (with terminal-1 priority). Terminal/controller/manifest/checksum writes
-occur only after this boundary and consume no bound input.
+The H2 measurement invocation ends at a clean final monitor drain. With the
+monitor still active, the controller revalidates every bound launch record and
+the checkout head/tree/cleanliness; it then performs the final nonblocking drain.
+A drain with no mutation event is the common linearization point. The monitor is
+closed only afterward, and all later writes are evidence-only. Thus a mutation
+during the sequential scan is caught by the monitor, while a mutation after the
+clean drain is explicitly outside the invocation. Failure, mismatch or an event
+during this stop protocol has terminal-1 priority.
 
 Nothing is blocked by this today. Layer P is independently useful without it — it
 is what resolves plumbing coordinates without spending authorizations.
@@ -706,8 +708,20 @@ Additionally, and specific to the accepted decisions:
   requires exact bidirectional predicate equality. The child now persists raw
   capture before one total packet-processing operation, so structural
   canonicalization/projection/replay failures select terminal 3. The controller
-  now closes the monitor and performs full post-close revalidation before
-  sealing an explicit invocation-end boundary, including a test that mutates a
-  bound input inside `close()`. These changes invalidate the earlier exact head:
-  no Layer-P certificate or seal may be issued until this repaired head is
-  reviewed and re-attested.
+  initially attempted a post-close scan as an invocation-end boundary. Second
+  review showed that a sequential scan without the monitor cannot establish one
+  common state, and that dropping the full inventory also dropped higher-priority
+  base inequality evidence.
+
+- **2026-07-27** — second-round remediation separates the four durable base
+  A7.6 members from packet-derived projection/overflow, replays all surviving
+  evidence after every child outcome, and preserves terminal 2 over terminal 3
+  and 4. The stop protocol now revalidates while the monitor remains active and
+  uses the clean final drain as its linearization point; the verifier enforces
+  the exact v2 stop schema and `checkout_clean=true` on a clean progression.
+  The exception/terminal-priority distinction moved `identity_semantics` to
+  `93f87a83`; the publication was regenerated with the runtime-input coordinate
+  and bounded probe digest unchanged, while equivalence remains `unproven`.
+  Acceptance gate 2 remains open until this repaired PR head is reviewed and
+  passes controlled-host re-attestation. No Layer-P certificate or seal may be
+  issued before then.

@@ -30,13 +30,14 @@ h2_measure_b_<I40_B>_<F64>           phase B   (§ C3.1; complete digest, never
     published_identity.json          the coordinate/probe publication F binds
     checkout_identity_witness.json   source tree and all three content axes
     mutation_observation.json        the BoundInputMonitor record
-    measurement_stop_boundary.json   monitor-stop and post-close revalidation
+    measurement_stop_boundary.json   monitored revalidation + final-drain boundary
     authorization_consumed.json      phase B: the § C3.5.1 step-5 write that
                                      *is* the consumption of S_B
     observation.json                 exactly ORDERED_PREDICATES (+ optional
                                      execution_result)
     terminal.json                    the recorded selection
-    runs/<sequence>/<run id>/        policy_inventory.json, packet.json,
+    runs/<sequence>/<run id>/        policy_base_inventory.json, optional full
+                                     policy_inventory.json, packet.json and
                                      packet_verification.json
     runs/<sequence>/comparison.json  the A7.6 reconstruction for that sequence
 ```
@@ -67,6 +68,7 @@ if _TOOLS.as_posix() not in sys.path:
 
 import h2_terminal_partition as partition  # noqa: E402
 from h2_behavioral_identity import (  # noqa: E402
+    A76_BASE_POLICY_INVENTORY_SCHEMA,
     A76_POLICY_INVENTORY_SCHEMA,
     MEASUREMENT_SEQUENCE,
 )
@@ -90,11 +92,12 @@ AUTHORIZATION_SCHEMA = "h2_authorization_consumed_v1"
 CONTROLLER_SCHEMA = "h2_measurement_controller_v1"
 MUTATION_SCHEMA = "h2_bound_input_mutation_v1"
 CHECKOUT_WITNESS_SCHEMA = "h2_checkout_identity_witness_v1"
-STOP_BOUNDARY_SCHEMA = "h2_measurement_stop_boundary_v1"
+STOP_BOUNDARY_SCHEMA = "h2_measurement_stop_boundary_v2"
 
 # Re-exported, never redeclared: the schema identifier is a ruler fact and lives
 # in `h2_behavioral_identity.py`, which owns the A7.6 member definitions (§ 4).
 POLICY_INVENTORY_SCHEMA = A76_POLICY_INVENTORY_SCHEMA
+BASE_POLICY_INVENTORY_SCHEMA = A76_BASE_POLICY_INVENTORY_SCHEMA
 
 EVIDENCE_REL = "docs/modules/semantic/research/evidence"
 
@@ -134,6 +137,7 @@ OBSERVATION_NAME = "observation.json"
 TERMINAL_NAME = "terminal.json"
 COMPARISON_NAME = "comparison.json"
 POLICY_INVENTORY_NAME = "policy_inventory.json"
+BASE_POLICY_INVENTORY_NAME = "policy_base_inventory.json"
 PACKET_NAME = "packet.json"
 PACKET_VERIFICATION_NAME = "packet_verification.json"
 CERTIFICATE_NAME = "layer_p_certificate.json"

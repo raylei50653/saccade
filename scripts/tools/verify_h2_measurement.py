@@ -124,6 +124,7 @@ class SequenceReplay(NamedTuple):
     runs: tuple[RunReplay, ...]
     complete: bool
     inequality_found: bool
+    packet_relation_failure: bool
 
     @property
     def packet_states(self) -> tuple[str, ...]:
@@ -144,7 +145,10 @@ class Replay(NamedTuple):
 
     @property
     def invalid_packet_observed(self) -> bool:
-        return any(FAIL in item.packet_states for item in self.sequences)
+        return any(
+            FAIL in item.packet_states or item.packet_relation_failure
+            for item in self.sequences
+        )
 
     @property
     def all_equal(self) -> bool:
@@ -153,7 +157,8 @@ class Replay(NamedTuple):
     @property
     def all_packets_pass(self) -> bool:
         return self.complete and all(
-            item.packet_states == (PASS,) * len(evidence.CAPTURE_ON_RUNS)
+            not item.packet_relation_failure
+            and item.packet_states == (PASS,) * len(evidence.CAPTURE_ON_RUNS)
             for item in self.sequences
         )
 
@@ -443,21 +448,73 @@ def _phase_a_launch_records(
         event.get("path")
         for event in events
         if isinstance(event, Mapping)
-        and event.get("classification") == "post_close_revalidation"
+        and event.get("classification") == "monitored_revalidation"
     ]
+    expected_stop_members = {
+        "checkout_clean",
+        "completed_utc",
+        "final_drain_completed",
+        "linearization",
+        "monitor_closed",
+        "monitor_started",
+        "revalidation_completed_while_monitored",
+        "revalidation_reasons",
+        "schema",
+        "source_head",
+        "source_tree",
+    }
+    clean_linearization = (
+        stop.get("monitor_started") is True
+        and stop.get("revalidation_completed_while_monitored") is True
+        and stop.get("final_drain_completed") is True
+        and stop.get("checkout_clean") is True
+        and not stop_reasons
+        and not events
+    )
     if (
-        not isinstance(stop.get("monitor_started"), bool)
+        set(stop) != expected_stop_members
+        or not isinstance(stop.get("monitor_started"), bool)
         or not isinstance(stop.get("monitor_closed"), bool)
-        or not isinstance(stop.get("post_close_revalidation_complete"), bool)
+        or not isinstance(stop.get("revalidation_completed_while_monitored"), bool)
+        or not isinstance(stop.get("final_drain_completed"), bool)
         or not isinstance(stop_reasons, list)
         or any(not isinstance(reason, str) or not reason for reason in stop_reasons)
-        or (stop.get("linearization") == "post_close_revalidation_complete")
-        is not (stop["monitor_closed"] and stop["post_close_revalidation_complete"])
+        or stop.get("linearization")
+        != ("clean_final_drain" if clean_linearization else None)
         or (bool(stop_reasons) and mutation.get("mutated") is not True)
+        or (bool(stop_reasons) and stop_event_reasons != stop_reasons)
         or (
-            isinstance(stop_reasons, list)
-            and bool(stop_reasons)
-            and stop_event_reasons != stop_reasons
+            stop["monitor_started"]
+            and (
+                not isinstance(stop.get("completed_utc"), str)
+                or not stop["completed_utc"]
+                or not isinstance(stop.get("checkout_clean"), bool)
+                or not isinstance(stop.get("source_head"), str)
+                or len(stop["source_head"]) != 40
+                or any(char not in "0123456789abcdef" for char in stop["source_head"])
+                or not isinstance(stop.get("source_tree"), str)
+                or len(stop["source_tree"]) != 40
+                or any(char not in "0123456789abcdef" for char in stop["source_tree"])
+            )
+        )
+        or (
+            not stop["monitor_started"]
+            and (
+                stop["monitor_closed"] is not False
+                or stop["revalidation_completed_while_monitored"] is not False
+                or stop["final_drain_completed"] is not False
+                or bool(stop_reasons)
+                or any(
+                    stop.get(field) is not None
+                    for field in (
+                        "checkout_clean",
+                        "completed_utc",
+                        "linearization",
+                        "source_head",
+                        "source_tree",
+                    )
+                )
+            )
         )
     ):
         raise VerificationError("measurement stop boundary is malformed")
@@ -469,17 +526,21 @@ def _phase_a_launch_records(
     if (
         observation.get("execution_result") not in terminal_four_results
         and not stop_reasons
+        and not events
         and (
             stop["monitor_started"] is not True
             or stop["monitor_closed"] is not True
-            or stop["post_close_revalidation_complete"] is not True
+            or stop["revalidation_completed_while_monitored"] is not True
+            or stop["final_drain_completed"] is not True
+            or stop["checkout_clean"] is not True
+            or stop["linearization"] != "clean_final_drain"
             or stop.get("source_head") != checkout["source_head"]
             or stop.get("source_tree") != checkout["source_tree"]
         )
     ):
         raise VerificationError(
-            "non-execution-invalid archive has no closed-monitor/post-close "
-            "revalidation boundary"
+            "clean non-execution-invalid archive has no active-monitor "
+            "revalidation/final-drain boundary"
         )
     if (
         controller.get("instrumentation_head") != name.i40
@@ -563,7 +624,54 @@ def _inventories(root: Path, sequence: str) -> dict[str, dict[str, Any]]:
     return present
 
 
-def _relations(inventories: Mapping[str, Mapping[str, Any]]) -> dict[str, Any]:
+def _base_inventories(root: Path, sequence: str) -> dict[str, dict[str, Any]]:
+    """Load durable policy-visible members produced before packet processing."""
+    present: dict[str, dict[str, Any]] = {}
+    expected = {*A76_EQUALITY_MEMBERS, "schema"}
+    for run_id in evidence.RUN_IDS:
+        directory = evidence.run_dir(root, sequence, run_id)
+        if not (directory / evidence.BASE_POLICY_INVENTORY_NAME).is_file():
+            continue
+        inventory = _load(
+            directory,
+            evidence.BASE_POLICY_INVENTORY_NAME,
+            schema=evidence.BASE_POLICY_INVENTORY_SCHEMA,
+        )
+        if set(inventory) != expected:
+            raise VerificationError(
+                f"base policy inventory schema mismatch: {sequence}/{run_id}"
+            )
+        synthetic = {
+            **inventory,
+            A76_OVERFLOW_MEMBER: list(A76_OVERFLOW_ZERO_VECTOR),
+            A76_PROJECTION_MEMBERS[0]: None,
+            "schema": evidence.POLICY_INVENTORY_SCHEMA,
+            A76_PROJECTION_MEMBERS[1]: None,
+        }
+        try:
+            h0_verifier._verify_policy_inventory(evidence.CAPTURE_OFF_RUN, synthetic)
+        except h0_verifier.VerificationError as exc:
+            raise VerificationError(f"{sequence}/{run_id}: {exc}") from exc
+        mot_path = directory / f"{sequence}.txt"
+        try:
+            mot = mot_path.read_bytes()
+        except OSError as exc:
+            raise VerificationError(
+                f"{sequence}/{run_id}: durable base MOT output is unreadable"
+            ) from exc
+        if inventory[A76_EQUALITY_MEMBERS[0]] != {
+            "length": len(mot),
+            "sha256": evidence.sha256_file(mot_path),
+        }:
+            raise VerificationError(f"{sequence}/{run_id}: base MOT identity mismatch")
+        present[run_id] = inventory
+    return present
+
+
+def _relations(
+    bases: Mapping[str, Mapping[str, Any]],
+    inventories: Mapping[str, Mapping[str, Any]],
+) -> dict[str, Any]:
     """Every comparison the surviving inventories allow (H0's own grouping)."""
     off = evidence.CAPTURE_OFF_RUN
     relations: list[dict[str, Any]] = []
@@ -577,16 +685,16 @@ def _relations(inventories: Mapping[str, Mapping[str, Any]]) -> dict[str, Any]:
         if not equal and first_unequal is None:
             first_unequal = f"{left}:{right}:{member}"
 
-    if off in inventories:
+    if off in bases:
         for run_id in evidence.CAPTURE_ON_RUNS:
-            if run_id not in inventories:
+            if run_id not in bases:
                 continue
             for member in A76_EQUALITY_MEMBERS:
                 record(
                     off,
                     member,
                     run_id,
-                    inventories[off][member] == inventories[run_id][member],
+                    bases[off][member] == bases[run_id][member],
                 )
     on_present = [run for run in evidence.CAPTURE_ON_RUNS if run in inventories]
     if on_present:
@@ -630,7 +738,7 @@ def _verify_packet(
     try:
         packet_report = verify_capture(capture)
         packet = canonical_semantic_packet(capture)
-    except Exception:
+    except behavior.PACKET_INVALID_EXCEPTIONS:
         if stored is not None and stored != {
             "failure": "packet_invalid",
             "state": FAIL,
@@ -640,7 +748,10 @@ def _verify_packet(
             )
         return FAIL, None
     if inventory is not None:
-        _cross_check_projections(packet, capture, inventory, sequence, run_id)
+        try:
+            _cross_check_projections(packet, capture, inventory, sequence, run_id)
+        except VerificationError:
+            return FAIL, packet_report["semantic_digest_sha256"]
     if stored is not None and stored != {"report": packet_report, "state": PASS}:
         raise VerificationError(
             f"packet verifier pass record mismatch: {sequence}/{run_id}"
@@ -689,14 +800,36 @@ def _cross_check_projections(
 
 
 def _sequence_replay(root: Path, sequence: str) -> SequenceReplay:
+    bases = _base_inventories(root, sequence)
     inventories = _inventories(root, sequence)
-    reconstructed = _relations(inventories)
-    complete_inventories = len(inventories) == len(evidence.RUN_IDS)
-
+    for run_id, inventory in inventories.items():
+        if run_id not in bases:
+            raise VerificationError(
+                f"{sequence}/{run_id}: full inventory has no durable base"
+            )
+        if any(
+            inventory[member] != bases[run_id][member]
+            for member in A76_EQUALITY_MEMBERS
+        ):
+            raise VerificationError(
+                f"{sequence}/{run_id}: full/base inventory mismatch"
+            )
+    reconstructed = _relations(bases, inventories)
+    unequal_members = {
+        relation["member"]
+        for relation in reconstructed["relations"]
+        if relation["equal"] is False
+    }
+    base_inequality = bool(unequal_members.intersection(A76_EQUALITY_MEMBERS))
+    packet_relation_failure = bool(
+        unequal_members.intersection((*A76_PROJECTION_MEMBERS, A76_OVERFLOW_MEMBER))
+    )
     recorded_path = root / evidence.RUNS_DIR / sequence / evidence.COMPARISON_NAME
     if recorded_path.is_file():
         recorded = _load(root / evidence.RUNS_DIR / sequence, evidence.COMPARISON_NAME)
-        if complete_inventories:
+        if len(bases) == len(evidence.RUN_IDS) and len(inventories) == len(
+            evidence.RUN_IDS
+        ):
             if recorded != reconstructed:
                 raise VerificationError(
                     f"{sequence}: comparison.json differs from the independent A7.6 "
@@ -728,11 +861,16 @@ def _sequence_replay(root: Path, sequence: str) -> SequenceReplay:
                 continue
             if value != first:
                 states[index] = (FAIL, value)
+    if packet_relation_failure:
+        states = [
+            (FAIL, value) if state == PASS else (state, value)
+            for state, value in states
+        ]
 
     runs = tuple(
         RunReplay(
             run_id,
-            run_id in inventories,
+            run_id in bases,
             UNAVAILABLE
             if run_id == evidence.CAPTURE_OFF_RUN
             else states[evidence.CAPTURE_ON_RUNS.index(run_id)][0],
@@ -744,8 +882,26 @@ def _sequence_replay(root: Path, sequence: str) -> SequenceReplay:
     # how terminal 3 is evidenced.  Only `unavailable` means the completed
     # execution omitted a required packet; `Replay.all_packets_pass` owns the
     # separate validity verdict.
-    complete = complete_inventories and all(state != UNAVAILABLE for state, _ in states)
-    return SequenceReplay(sequence, runs, complete, reconstructed["state"] == "unequal")
+    required_full_inventories = {
+        evidence.CAPTURE_OFF_RUN,
+        *(
+            run_id
+            for run_id, (state, _) in zip(evidence.CAPTURE_ON_RUNS, states, strict=True)
+            if state == PASS
+        ),
+    }
+    complete = (
+        len(bases) == len(evidence.RUN_IDS)
+        and required_full_inventories.issubset(inventories)
+        and all(state != UNAVAILABLE for state, _ in states)
+    )
+    return SequenceReplay(
+        sequence,
+        runs,
+        complete,
+        base_inequality,
+        packet_relation_failure,
+    )
 
 
 def _replay(root: Path, phase: str, *, strict: bool) -> Replay:
