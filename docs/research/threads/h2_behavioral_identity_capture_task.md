@@ -6,7 +6,7 @@ doc-module: semantic
 owner-module: semantic
 work-class: mainline-study
 wip-role: non-wip
-activation-gate: "四項 owner decision 已於 2026-07-25 accepted（#286）；Phase-B chain form 已於 2026-07-25 accepted（#290）並成文為 declaration Review Correction 3；C3.9 pre-seal ruler 編輯（七序列 manifest + phase_a_evidence schema + phase-aware partition）已 landed、republish，並於 `7c348f4e` 通過 controlled-host re-attestation（run 30164262580）；剩餘 gate = S4 Layer-M plumbing 實作 + seal head 的 Layer-P pass certificate + 該 head 的 coordinate/工作流仍綠，然後才談 seal"
+activation-gate: "四項 owner decision 已於 2026-07-25 accepted（#286）；Phase-B chain form 已於 2026-07-25 accepted（#290）並成文為 declaration Review Correction 3；C3.9 pre-seal ruler 編輯（七序列 manifest + phase_a_evidence schema + phase-aware partition）已 landed、republish，並於 `7c348f4e` 通過 controlled-host re-attestation（run 30164262580）；Layer-M review 又把語義常數搬回 ruler ⇒ identity_semantics 再動一次（`3edf6953`）已 republish，gate 2 待新 head 的 controlled-host 重驗；剩餘 gate = S4 controller（items 0–4）+ seal head 的 Layer-P pass certificate + 該 head 的 coordinate/工作流綠，然後才談 seal"
 target-decision-layer: none
 primary-intent: boundary-diagnostic
 output-class: "diagnostic result | substrate-fidelity edge proposal"
@@ -100,9 +100,29 @@ decision; § 20.8's two-implementer test is not meetable from a table alone.
   H0 § 6's own repair vocabulary. An empty corpus passes: no Layer-M
   authorization has ever been issued.
 
-All three are `plumbing_only` and a test pins that they classify that way *and*
-hold no phase, admission or terminal fact of their own — C3.9's trap, made
-mechanical rather than remembered.
+All three are `plumbing_only` and a test scans **all three** for restated ruler
+facts — C3.9's trap, made mechanical rather than remembered. The first draft
+failed that scan: the A7.6 equality and projection members, the overflow zero
+vector, the policy-inventory schema, the surface-ban terminals and H0 § 6's
+repair vocabulary had all been typed out in the verifier and the corpus checker,
+where an edit would have changed what re-attempt is admissible while
+`identity_semantics` stood still. They now live in the ruler
+(`h2_behavioral_identity.py` for the A7.6 member definitions,
+`h2_terminal_partition.py` for the verify classes, surface-ban terminals, repair
+vocabulary and completion keys) and are published in `as_payload()` so both
+consumption paths agree.
+
+Two properties the verifier owes its name, both added after review:
+
+- **the admission gate is recomputed, not read.** § C3.6's five conditions are
+  rebuilt from the bound Phase-A root, both freeze records, the archived Layer-P
+  certificate and the prior-attempt chain, and must equal the record condition
+  for condition. A verifier that recomputes the terminal while believing
+  `admission.json` lets the archive attest its own right to have spent `S_B`;
+- **surviving evidence accumulates monotonically.** Replay is per run, and a
+  later missing artifact can no longer erase an inequality or an invalid packet
+  already found — which is the only way § C3.5.1's kill-switch actually bans
+  anything.
 
 **Not implemented.** `run_h2_measurement.py`, its child/recorder and its argv
 builder: the four ordered runs, the § 5.1.1 recorder normalization, the live A7.6
@@ -408,7 +428,7 @@ A Layer-M seal may be proposed only when **all** of these hold:
 1. ✅ the Phase-B chain form is **published** — declaration §5.2 precondition 6
    (Correction 2) is satisfied by **Review Correction 3**, accepted on
    [#290](https://github.com/raylei50653/saccade/issues/290) on 2026-07-25;
-2. ✅ the **C3.9 pre-seal ruler edits** are landed, republished, and re-attested
+2. ⚠️ **reopened** — the **C3.9 pre-seal ruler edits** are landed, republished, and re-attested
    green on the controlled host — `h2_runtime_inputs.py` (seven sequences plus the
    `phase_a_evidence` schema/producer, which by C3.8 must move no published axis)
    and `h2_terminal_partition.py` (phase-scoped terminal-1 metadata, phase-aware
@@ -417,7 +437,14 @@ A Layer-M seal may be proposed only when **all** of these hold:
    republished, and re-attested green on 2026-07-25 at `7c348f4e` (run
    `30164262580`: runtime inputs re-bound on the controlled host,
    `coordinate_digest 0b839df0…`, probe recomputed, `--strict` staleness pass).
-   The gate is closed for that head only — any later ruler edit reopens it;**
+   The gate is closed for that head only — any later ruler edit reopens it, and
+   one has: the Layer-M review moved the A7.6 member definitions, the verify
+   classes, the surface-ban terminals and H0 § 6's repair vocabulary out of the
+   `plumbing_only` files and into the ruler, so `identity_semantics` moved
+   `67b35d8f` → `3edf6953` and was republished. Only that axis moved and the
+   probe is unchanged (`2dabed0bc05e3bc7…`, sixth reproduction), but the gate
+   asks for a green controlled-host run at the head under seal, and that run is
+   pending on this branch;**
 3. the S4 items above are implemented, tested, and reviewed;
 4. a Layer-P pass certificate (`h2_layer_p_certificate_v2`) exists for the exact
    head under seal, with `--base` given and the full changed-path verdict clean;
@@ -577,3 +604,29 @@ Additionally, and specific to the accepted decisions:
   `plumbing_only` and a test pins both that classification and the absence of any
   phase, admission or terminal fact of their own (C3.9's trap). No `I`/`F`/`S`,
   no authorization, no capture, no registry write.
+- **2026-07-27** — Layer-M review returned *changes required* on the artifact
+  side, and all four findings were structural rather than missing coverage.
+  **The § C3.6 gate was self-attested:** the verifier recomputed the terminal but
+  read `admission.json`, so an archive could name a non-existent Phase-A root,
+  record the condition as true, and verify — the one claim the gate exists to
+  deny. Admission is now rebuilt from the bound Phase-A root, both freeze records,
+  the archived Layer-P certificate and the prior-attempt chain, and must equal the
+  record condition for condition. **Surviving evidence was not monotone:** replay
+  discarded an already-found `fail` at the first missing later packet, and skipped
+  a whole sequence for one missing inventory, so killing a process right after a
+  perturbation laundered a banned terminal 2/3 into a re-attemptable 4 — the exact
+  hole § C3.5.1 closes. Replay is per run now, and every comparison the survivors
+  allow is made. **Semantic rules were sitting in `plumbing_only` files:** the
+  A7.6 members, the surface-ban terminals and H0 § 6's repair vocabulary were
+  typed out in the verifier and the checker, where an edit moves no axis; they
+  moved to the ruler and the C3.9 scan now covers all three files, which caught
+  two more while being written. **`inadmissible` was classified but never
+  verified**, admitting a symlinked root, a Phase-A root carrying a Phase-B-only
+  gate, or a name disagreeing with its freeze record; it is a verified class now.
+  The ruler edits moved `identity_semantics` `67b35d8f` → `3edf6953`, republished
+  with the probe unchanged (`2dabed0bc05e3bc7…`, sixth reproduction) — so
+  acceptance gate 2 is **reopened** until the controlled-host workflow is green at
+  this head.
+  ⚠️ The general lesson is the one the charter already states and this PR still
+  got wrong on the first pass: a file that moves no axis may hold no rule. Writing
+  "this module holds no ruler" in a docstring is not the check; the scan is.
