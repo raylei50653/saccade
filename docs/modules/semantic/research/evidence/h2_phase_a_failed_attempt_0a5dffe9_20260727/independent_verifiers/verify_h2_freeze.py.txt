@@ -1,0 +1,168 @@
+"""Independent verification of the untracked freeze record.
+
+Imports nothing from the generator. Part 1 re-derives every field from primary
+sources with stdlib + git only. Part 2 then hands the record to the controller's
+*own* launch validation and terminal-1 predicate — read-only functions that
+create no evidence root, spend no authorization and execute no measurement — so
+the record is judged by the code that will consume it rather than by any claim
+made in the scratchpad.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+REPO = Path("/home/ray/developer/ai/saccade")
+FREEZE = REPO / "out/h2_seal/freeze.json"
+CERT = REPO / "out/h2_layer_p/cert_full_base.json"
+RECORD_DIR = REPO / "out/h2_layer_p/20260727T151357Z"
+PUBLISHED = REPO / "docs/reference/runtime_identity.generated.json"
+
+results: list[tuple[bool, str, str]] = []
+
+
+def check(ok: bool, name: str, detail: str = "") -> None:
+    results.append((bool(ok), name, detail))
+
+
+def git(*args: str) -> str:
+    return subprocess.run(
+        ["git", *args], cwd=REPO, capture_output=True, text=True, check=True
+    ).stdout.strip()
+
+
+def canonical(value: object) -> bytes:
+    return json.dumps(
+        value, allow_nan=False, ensure_ascii=True, separators=(",", ":"), sort_keys=True
+    ).encode("utf-8")
+
+
+def digest(value: object) -> str:
+    return hashlib.sha256(canonical(value)).hexdigest()
+
+
+raw = FREEZE.read_bytes()
+freeze = json.loads(raw)
+cert_raw = CERT.read_bytes()
+cert = json.loads(cert_raw)
+probe = json.loads((RECORD_DIR / "behavior_probe.json").read_text())
+manifest = json.loads((RECORD_DIR / "runtime_inputs.json").read_text())
+published = json.loads(PUBLISHED.read_text())
+
+# --- part 1: re-derivation from primary sources ----------------------------
+check(freeze["schema"] == "h2_measurement_freeze_v1", "freeze schema")
+check(raw == canonical(freeze) + b"\n", "freeze file is canonical JSON + newline")
+check(
+    sorted(freeze) == ["coordinate", "instrumentation_head", "layer_p_certificate", "probe", "schema"],
+    "freeze carries exactly the consumed fields, no extras",
+)
+head = git("rev-parse", "HEAD")
+check(
+    freeze["instrumentation_head"] == head == "0a5dffe921d78fce8e525baf8b4b624fc9ab957c",
+    "instrumentation_head == git HEAD == seal candidate",
+    head,
+)
+check(
+    cert["source_tree"] == git("rev-parse", "HEAD^{tree}"),
+    "bound certificate's source_tree == current git tree",
+)
+axes = ("decision_surface", "environment", "identity_semantics", "implementation", "runtime_inputs")
+check(tuple(sorted(freeze["coordinate"])) == axes, "coordinate carries exactly five axes")
+check(
+    all(
+        isinstance(freeze["coordinate"][a], str)
+        and len(freeze["coordinate"][a]) == 64
+        and int(freeze["coordinate"][a], 16) >= 0
+        for a in axes
+    ),
+    "every axis is a complete 64-hex digest",
+)
+check(
+    all(freeze["coordinate"][a] == published["axes"][a]["digest"] for a in axes),
+    "every axis equals the published identity file",
+)
+check(
+    freeze["coordinate"] == cert["published_coordinate"],
+    "coordinate is identical to the certificate's published_coordinate",
+)
+check(
+    freeze["coordinate"]["runtime_inputs"] == manifest["coordinate_digest"],
+    "runtime_inputs axis == the runtime-input manifest coordinate digest",
+)
+check(
+    freeze["probe"] == probe["digest"] == cert["behavior_probe"] == published["probe"]["digest"],
+    "probe digest == probe file == certificate == published identity",
+)
+check(
+    probe["schema"] == "h2_behavior_probe_result_v1" and probe.get("identical") is True,
+    "probe schema and repeat-identity",
+)
+check(
+    freeze["layer_p_certificate"]["schema"] == cert["schema"] == "h2_layer_p_certificate_v2",
+    "certificate schema binding",
+)
+check(
+    freeze["layer_p_certificate"]["digest"] == digest(cert),
+    "certificate digest is the real hash of the certificate object",
+)
+check(
+    freeze["layer_p_certificate"]["digest"] == hashlib.sha256(cert_raw[:-1]).hexdigest(),
+    "certificate digest also equals the hash of the on-disk canonical bytes",
+)
+check(cert["equivalence"] == "unproven", "bound certificate keeps equivalence unproven")
+check(
+    len(cert["selected_base"]) == 40 and git("rev-parse", cert["selected_base"]) == cert["selected_base"],
+    "bound certificate's selected_base is a full commit id",
+    cert["selected_base"],
+)
+f64 = digest(freeze)
+check(len(f64) == 64, "F64 recomputable", f64)
+check(
+    Path(str(cert["build_dir"])).name == "h2_layer_p"
+    and (REPO / str(cert["build_dir"])).is_dir(),
+    "the build directory the certificate binds still exists",
+    str(cert["build_dir"]),
+)
+
+# --- part 2: the controller's own validation, read-only --------------------
+sys.path.insert(0, str(REPO / "scripts/tools"))
+import run_h2_measurement as controller  # noqa: E402
+
+try:
+    bundle = controller.load_bundle(
+        freeze_path=FREEZE,
+        certificate_path=CERT,
+        reference_probe_path=RECORD_DIR / "behavior_probe.json",
+        runtime_manifest_path=RECORD_DIR / "runtime_inputs.json",
+        published_identity_path=PUBLISHED,
+    )
+    check(True, "controller load_bundle accepts the launch bundle")
+    check(bundle.head == freeze["instrumentation_head"], "controller reads F's head")
+    current_head = git("rev-parse", "HEAD")
+    current_tree = git("rev-parse", "HEAD^{tree}")
+    witness = controller.build_checkout_witness(
+        bundle, current_head=current_head, current_tree=current_tree
+    )
+    reasons = controller.certificate_match_reasons(
+        bundle,
+        current_head=current_head,
+        current_tree=current_tree,
+        checkout_witness=witness,
+    )
+    check(
+        reasons == (),
+        "controller terminal-1 predicate passes with zero mismatch reasons",
+        "; ".join(reasons) if reasons else "0 reasons",
+    )
+except Exception as exc:  # noqa: BLE001 - report, do not mask
+    check(False, "controller validation raised", f"{type(exc).__name__}: {exc}")
+
+failed = [r for r in results if not r[0]]
+for ok, name, detail in results:
+    print(f"{'PASS' if ok else 'FAIL'}  {name}" + (f"   [{detail}]" if detail else ""))
+print(f"\n{len(results) - len(failed)}/{len(results)} checks passed")
+sys.exit(1 if failed else 0)

@@ -1,0 +1,236 @@
+"""Independent recomputation of every binding in an H2 Layer-P certificate.
+
+Independence here means: recompute from primary sources (file bytes, git, the
+published identity file, and the controlled-host attestation artifact) instead of
+reading the certificate's own claims. Digest aggregation is reimplemented from
+the spec (sha256 of canonical JSON, sorted keys, compact separators) rather than
+imported from the producer. The only project import is the path classifier, which
+*is* the ruler's class definition and cannot be reinvented without changing the
+question being asked.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+REPO = Path("/home/ray/developer/ai/saccade")
+CERT = REPO / (sys.argv[1] if len(sys.argv) > 1 else "out/h2_layer_p/cert.json")
+RECORD_DIR = REPO / (
+    sys.argv[2] if len(sys.argv) > 2 else "out/h2_layer_p/20260727T150041Z"
+)
+PUBLISHED = REPO / "docs/reference/runtime_identity.generated.json"
+ATTEST = Path(
+    "/tmp/claude-1000/-home-ray-developer-ai-saccade/"
+    "0eb97fba-cd04-4a2c-ac78-ba603acc5e69/scratchpad/attest_0a5dffe9/"
+    "runtime-coordinate-probe-0a5dffe921d78fce8e525baf8b4b624fc9ab957c"
+)
+
+results: list[tuple[bool, str, str]] = []
+
+
+def check(ok: bool, name: str, detail: str = "") -> None:
+    results.append((ok, name, detail))
+
+
+def git(*args: str) -> str:
+    return subprocess.run(
+        ["git", *args], cwd=REPO, capture_output=True, text=True, check=True
+    ).stdout.strip()
+
+
+def canonical(value: object) -> bytes:
+    return json.dumps(
+        value, allow_nan=False, ensure_ascii=True, separators=(",", ":"), sort_keys=True
+    ).encode("utf-8")
+
+
+def digest(value: object) -> str:
+    return hashlib.sha256(canonical(value)).hexdigest()
+
+
+def sha256_file(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+cert = json.loads(CERT.read_text())
+pub = json.loads(PUBLISHED.read_text())
+probe_file = json.loads((RECORD_DIR / "behavior_probe.json").read_text())
+manifest = json.loads((RECORD_DIR / "runtime_inputs.json").read_text())
+host_probe = json.loads((ATTEST / "behavior.json").read_text())
+host_inputs = json.loads((ATTEST / "runtime-inputs.json").read_text())
+
+# --- 1. exact-head bindings -------------------------------------------------
+head = git("rev-parse", "HEAD")
+tree = git("rev-parse", "HEAD^{tree}")
+check(cert["source_head"] == head, "source_head == git HEAD", head)
+check(cert["source_tree"] == tree, "source_tree == git HEAD^{tree}", tree)
+check(
+    cert["source_head"] == "0a5dffe921d78fce8e525baf8b4b624fc9ab957c",
+    "source_head == attested seal-candidate head",
+)
+
+# --- 2. selected base and the full changed-path verdict ---------------------
+verdict = cert["changed_path_verdict"]
+base_sha = git("rev-parse", cert["selected_base"])
+tracked = [x for x in git("diff", "--name-only", cert["selected_base"], "--").splitlines() if x]
+untracked = [x for x in git("ls-files", "--others", "--exclude-standard").splitlines() if x]
+recomputed_changed = sorted(set(tracked) | set(untracked))
+check(base_sha.startswith("b2f3c23f"), "selected_base resolves to b2f3c23f", base_sha)
+check(
+    len(cert["selected_base"]) == 40 and cert["selected_base"] == base_sha,
+    "selected_base is the full 40-hex commit id, not an abbreviation",
+    cert["selected_base"],
+)
+check(
+    verdict["base"] == cert["selected_base"],
+    "changed_path_verdict.base == selected_base",
+)
+check(
+    verdict["changed_count"] == len(recomputed_changed) == 3,
+    "changed_count == recomputed diff size",
+    f"cert={verdict['changed_count']} recomputed={len(recomputed_changed)}",
+)
+classes = [
+    "decision_relevant",
+    "identity_semantics",
+    "identity_fixture_input",
+    "measurement_input",
+    "runtime_asset",
+    "plumbing_only",
+    "non_execution",
+    "unclassified",
+]
+listed = sorted(p for key in classes for p in verdict[key])
+check(listed == recomputed_changed, "verdict partition covers exactly the real diff")
+sys.path.insert(0, str(REPO / "scripts/tools"))
+import h2_path_partition as partition  # noqa: E402
+
+reclassified = {p: str(partition.classify(p)) for p in recomputed_changed}
+check(
+    all(v == "non_execution" for v in reclassified.values()),
+    "every changed path reclassifies as non_execution",
+    ", ".join(f"{k}={v}" for k, v in reclassified.items()),
+)
+check(
+    not verdict["unclassified"]
+    and not verdict["decision_relevant"]
+    and not verdict["identity_semantics"]
+    and not verdict["runtime_asset"]
+    and not verdict["identity_fixture_input"]
+    and not verdict["measurement_input"],
+    "no identity-moving class was touched",
+)
+check(verdict["admissible"] is True, "verdict admissible")
+
+# --- 3. file digests recomputed from bytes ---------------------------------
+check(
+    cert["published_identity_file_digest"] == sha256_file(PUBLISHED),
+    "published_identity_file_digest == sha256(runtime_identity.generated.json)",
+)
+check(
+    cert["probe_result_file_digest"] == sha256_file(RECORD_DIR / "behavior_probe.json"),
+    "probe_result_file_digest == sha256(behavior_probe.json)",
+)
+check(
+    cert["runtime_input_manifest_file_digest"]
+    == sha256_file(RECORD_DIR / "runtime_inputs.json"),
+    "runtime_input_manifest_file_digest == sha256(runtime_inputs.json)",
+)
+
+# --- 4. build witness recomputed from the built objects --------------------
+for art in cert["build_witness"]["artifacts"]:
+    p = Path(art["path"])
+    ok = p.is_file() and sha256_file(p) == art["sha256"] and p.stat().st_size == art["length"]
+    check(ok, f"build artifact bytes match: {art['coordinate']}", art["sha256"][:16])
+check(
+    cert["build_artifact_digest"] == cert["build_witness"]["digest"],
+    "build_artifact_digest == build_witness.digest",
+)
+check(
+    cert["build_artifact_digest"] == manifest["build_artifacts"]["digest"],
+    "build_artifact_digest == manifest build_artifacts.digest",
+)
+
+# --- 5. axis digests reimplemented from per-file git blobs ------------------
+for cert_key, axis_name in (
+    ("decision_relevant_digest", "implementation"),
+    ("identity_semantics_digest", "identity_semantics"),
+):
+    axis = pub["axes"][axis_name]
+    check(cert[cert_key] == axis["digest"], f"{cert_key} == published {axis_name}.digest")
+    check(
+        digest(axis["files"]) == axis["digest"],
+        f"published {axis_name}.digest == sha256(canonical(files))",
+        f"{axis['file_count']} files",
+    )
+    bad = [
+        m["path"]
+        for m in axis["files"]
+        if git("hash-object", "--", m["path"]) != m["blob"]
+    ]
+    check(not bad, f"{axis_name}: every blob matches the working tree", f"{len(bad)} mismatched")
+
+members = []
+for path in sorted(
+    p
+    for p in git("ls-files", "--cached", "--others", "--exclude-standard").splitlines()
+    if p and str(partition.classify(p)) == "plumbing_only" and not p.endswith((".md", ".rst", ".txt"))
+):
+    members.append({"blob": git("hash-object", "--", path), "path": path})
+check(
+    cert["plumbing_set_digest"] == digest(members),
+    "plumbing_set_digest reproduced from the classified plumbing set",
+    f"{len(members)} files",
+)
+
+# --- 6. probe and coordinate, cross-checked against the controlled host ----
+check(
+    cert["behavior_probe"] == probe_file["digest"] == cert["published_probe"],
+    "behavior_probe == probe file == published probe",
+)
+check(
+    cert["published_probe"] == pub["probe"]["digest"],
+    "published_probe == published identity probe.digest",
+)
+check(
+    cert["behavior_probe"] == host_probe["digest"],
+    "probe equals the controlled-host attestation (independent host)",
+    host_probe["digest"][:16],
+)
+check(
+    cert["runtime_input_coordinate_digest"]
+    == manifest["coordinate_digest"]
+    == pub["axes"]["runtime_inputs"]["digest"]
+    == host_inputs["coordinate_digest"],
+    "coordinate digest agrees: cert == manifest == published == controlled host",
+)
+check(
+    cert["runtime_input_full_digest"] == manifest["full_digest"],
+    "runtime_input_full_digest == this host's manifest full_digest",
+)
+
+# --- 7. frozen degrees of freedom ------------------------------------------
+check(cert["schema"] == "h2_layer_p_certificate_v2", "certificate schema")
+check(cert["equivalence"] == "unproven", "equivalence stays unproven")
+check(cert["mode"] == "identity" == probe_file["mode"], "mode == identity")
+check(cert["fixture"] == "MOT17-09-SDP" == probe_file["sequence"], "fixture == MOT17-09-SDP")
+check(
+    cert["probe_schema"] == probe_file["schema"] == "h2_behavior_probe_result_v1",
+    "probe schema",
+)
+check(probe_file.get("identical") is True, "probe repeats identical")
+check(pub["publication_complete"] is True, "published identity is complete")
+
+failed = [r for r in results if not r[0]]
+for ok, name, detail in results:
+    print(f"{'PASS' if ok else 'FAIL'}  {name}" + (f"   [{detail}]" if detail else ""))
+print(f"\n{len(results) - len(failed)}/{len(results)} bindings verified")
+sys.exit(1 if failed else 0)
