@@ -305,7 +305,10 @@ def load_bundle(
 
 
 def _authorization_mismatch_reasons(
-    grant: Mapping[str, Any], bundle: LaunchBundle
+    grant: Mapping[str, Any],
+    bundle: LaunchBundle,
+    *,
+    execution_domain_digest: str,
 ) -> tuple[str, ...]:
     controller_digest = bundle.freeze["executed_surfaces"][
         "scripts/tools/run_h2_measurement.py"
@@ -321,6 +324,10 @@ def _authorization_mismatch_reasons(
             "freeze",
         ),
         (grant.get("controller_digest") == controller_digest, "controller"),
+        (
+            grant.get("execution_domain") == execution_domain_digest,
+            "execution domain",
+        ),
         (grant.get("issued_by") == "research_owner", "issuer"),
     )
     return tuple(label for passed, label in checks if not passed)
@@ -331,12 +338,25 @@ def load_authorization(
     bundle: LaunchBundle,
     *,
     invocation_id: str,
+    authorization_ledger: Path | None = None,
 ) -> AuthorizationGrant:
     grant = _load_canonical(path, schema=evidence.AUTHORIZATION_GRANT_SCHEMA)
+    ledger = (
+        authorization_ledger
+        if authorization_ledger is not None
+        else default_authorization_ledger()
+    ).resolve(strict=False)
+    execution_domain_digest = evidence.digest(
+        evidence.authorization_execution_domain(ledger)
+    )
     if (
         not _hex(invocation_id, 64)
         or grant.get("invocation_id") != invocation_id
-        or _authorization_mismatch_reasons(grant, bundle)
+        or _authorization_mismatch_reasons(
+            grant,
+            bundle,
+            execution_domain_digest=execution_domain_digest,
+        )
     ):
         raise ControllerError(
             "exactly-once authorization is absent or bound to another "
@@ -677,6 +697,7 @@ def default_child_launcher(
     monitor: Monitor,
     started: float,
     clock: Callable[[], float],
+    on_started: Callable[[], None],
 ) -> int:
     run_dir = invocation_path.parent
     with (
@@ -693,6 +714,12 @@ def default_child_launcher(
             close_fds=True,
             start_new_session=True,
         )
+        try:
+            on_started()
+        except BaseException:
+            h0_controller._terminate_process_group(process)
+            process.wait()
+            raise
         return h0_controller._wait_with_monitor(
             process,
             started=started,
@@ -1253,7 +1280,13 @@ def _consume_authorization(
     if not isinstance(grant, AuthorizationGrant):
         raise ControllerError("exactly-once authorization is absent")
     current = _load_canonical(grant.path, schema=evidence.AUTHORIZATION_GRANT_SCHEMA)
-    if current != grant.record or _authorization_mismatch_reasons(current, bundle):
+    execution_domain = evidence.authorization_execution_domain(ledger)
+    execution_domain_digest = evidence.digest(execution_domain)
+    if current != grant.record or _authorization_mismatch_reasons(
+        current,
+        bundle,
+        execution_domain_digest=execution_domain_digest,
+    ):
         raise ControllerError("exactly-once authorization changed before consumption")
     receipt = {
         "schema": evidence.AUTHORIZATION_SCHEMA,
@@ -1262,6 +1295,7 @@ def _consume_authorization(
         "capture_phase": CAPTURE_PHASE,
         "consumed_utc": _utc(),
         "controller_digest": grant.record["controller_digest"],
+        "execution_domain": execution_domain_digest,
         "freeze_digest": evidence.freeze_digest(bundle.freeze),
         "instrumentation_head": bundle.head,
         "invocation_id": grant.record["invocation_id"],
@@ -1283,16 +1317,17 @@ def _consume_authorization(
 
 
 def default_authorization_ledger() -> Path:
-    """Return the clone-persistent ledger outside Git's status namespace.
-
-    The git-common directory is shared by every worktree of this clone. A
-    prior marker therefore remains available to reject reuse without making a
-    later, independently authorized invocation fail checkout hygiene.
-    """
-    common = Path(_git("rev-parse", "--git-common-dir"))
-    if not common.is_absolute():
-        common = REPO_ROOT / common
-    return common.resolve(strict=True) / "saccade" / "h2_authorization_consumptions"
+    """Return the controlled-host/operator ledger shared by every clone."""
+    configured = os.environ.get("XDG_STATE_HOME")
+    if configured:
+        state_home = Path(configured)
+        if not state_home.is_absolute():
+            raise ControllerError("XDG_STATE_HOME must be absolute")
+    else:
+        state_home = Path.home() / ".local" / "state"
+    return (state_home / "saccade" / "h2_authorization_consumptions").resolve(
+        strict=False
+    )
 
 
 def execute_controller(
@@ -1319,7 +1354,12 @@ def execute_controller(
     parent = evidence_parent or (REPO_ROOT / evidence.EVIDENCE_REL)
     final = parent / evidence.phase_a_root_name(bundle.head)
     incomplete = final.with_name(final.name + ".incomplete")
-    ledger = authorization_ledger or default_authorization_ledger()
+    ledger = (
+        authorization_ledger
+        if authorization_ledger is not None
+        else default_authorization_ledger()
+    ).resolve(strict=False)
+    execution_domain = evidence.authorization_execution_domain(ledger)
     owned_outputs = (incomplete, final)
     initial_hygiene_reasons = (
         checkout_hygiene_reasons(excluded_roots=owned_outputs)
@@ -1394,6 +1434,11 @@ def execute_controller(
             incomplete,
             evidence.AUTHORIZATION_GRANT_NAME,
             authorization.record,
+        )
+        evidence.write_document(
+            incomplete,
+            evidence.AUTHORIZATION_DOMAIN_NAME,
+            execution_domain,
         )
         evidence.write_document(
             incomplete,
@@ -1515,7 +1560,6 @@ def execute_controller(
             ]
             for run_id in evidence.RUN_IDS:
                 _remaining(started, clock)
-                record_event("child_launch", run_id=run_id)
                 invocation_path, environment = _prepare_run(
                     incomplete,
                     bundle=bundle,
@@ -1523,13 +1567,29 @@ def execute_controller(
                     policy_fingerprint=policy_fingerprint,
                     inherited_environment=inherited_environment,
                 )
+                launch_recorded = False
+
+                def on_started() -> None:
+                    nonlocal launch_recorded
+                    if launch_recorded:
+                        raise ControllerError(
+                            f"child {run_id} reported process start more than once"
+                        )
+                    record_event("child_launch", run_id=run_id)
+                    launch_recorded = True
+
                 returncode = launch_child(
                     invocation_path,
                     environment,
                     monitor=monitor,
                     started=started,
                     clock=clock,
+                    on_started=on_started,
                 )
+                if not launch_recorded:
+                    raise ControllerError(
+                        f"child {run_id} returned without a process-start witness"
+                    )
                 invocation = evidence.load_document(
                     invocation_path.parent,
                     invocation_path.name,
@@ -1753,6 +1813,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.authorization,
             bundle,
             invocation_id=args.invocation_id,
+            authorization_ledger=default_authorization_ledger(),
         )
         root, selection = execute_controller(bundle, authorization=authorization)
         report = verifier.verify_evidence_root(root)

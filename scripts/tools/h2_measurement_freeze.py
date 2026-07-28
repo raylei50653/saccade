@@ -108,10 +108,12 @@ def build_freeze(
         raise FreezeError("certificate selected_base is not full lowercase 40-hex")
     if (
         not isinstance(changed_path_verdict, Mapping)
+        or changed_path_verdict.get("admissible") is not True
         or changed_path_verdict.get("base") != selected_base
     ):
         raise FreezeError(
-            "certificate changed-path verdict base differs from selected_base"
+            "certificate changed-path verdict base/admissibility differs from "
+            "selected_base"
         )
     if set(executed_surfaces) != set(evidence.PHASE_A_EXECUTED_SURFACE_PATHS) or any(
         not _hex(value, 64) for value in executed_surfaces.values()
@@ -241,11 +243,12 @@ def produce(
         not _hex(selected_base, 40)
         or _git_text("rev-parse", f"{selected_base}^{{commit}}") != selected_base
         or not isinstance(changed_path_verdict, Mapping)
+        or changed_path_verdict.get("admissible") is not True
         or changed_path_verdict.get("base") != selected_base
     ):
         raise FreezeError(
-            "selected_base is not an exact available commit or differs from "
-            "the changed-path verdict base"
+            "selected_base is not an exact available commit or the changed-path "
+            "verdict is not admissible for that base"
         )
     return build_freeze(
         certificate=certificate,

@@ -33,6 +33,8 @@ h2_measure_b_<I40_B>_<F64>           phase B   (§ C3.1; complete digest, never
     measurement_stop_boundary.json   monitored revalidation + final-drain boundary
     authorization_grant.json         canonical owner-bound Phase-A grant loaded
                                      before durable consumption
+    authorization_execution_domain.json
+                                     bound host/operator/global-ledger domain
     authorization_consumed.json      the durable receipt identifying the
                                      exactly-once authority consumed before
                                      the first measurement child launch; never
@@ -60,6 +62,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import sys
@@ -94,8 +97,9 @@ OBSERVATION_SCHEMA = "h2_measurement_observation_v1"
 TERMINAL_SCHEMA = "h2_terminal_selection_v1"
 FREEZE_SCHEMA = "h2_measurement_freeze_v1"
 ADMISSION_SCHEMA = "h2_admission_verdict_v1"
-AUTHORIZATION_GRANT_SCHEMA = "h2_exactly_once_authorization_v1"
-AUTHORIZATION_SCHEMA = "h2_authorization_consumed_v1"
+AUTHORIZATION_GRANT_SCHEMA = "h2_exactly_once_authorization_v2"
+AUTHORIZATION_SCHEMA = "h2_authorization_consumed_v2"
+AUTHORIZATION_DOMAIN_SCHEMA = "h2_authorization_execution_domain_v1"
 CONTROLLER_SCHEMA = "h2_measurement_controller_v2"
 MUTATION_SCHEMA = "h2_bound_input_mutation_v1"
 CHECKOUT_WITNESS_SCHEMA = "h2_checkout_identity_witness_v1"
@@ -139,6 +143,7 @@ AUTHORIZATION_GRANT_MEMBERS: frozenset[str] = frozenset(
         "authorization_id",
         "capture_phase",
         "controller_digest",
+        "execution_domain",
         "freeze_digest",
         "instrumentation_head",
         "invocation_id",
@@ -153,11 +158,20 @@ AUTHORIZATION_CONSUMED_MEMBERS: frozenset[str] = frozenset(
         "capture_phase",
         "consumed_utc",
         "controller_digest",
+        "execution_domain",
         "freeze_digest",
         "instrumentation_head",
         "invocation_id",
         "schema",
         "state",
+    }
+)
+AUTHORIZATION_DOMAIN_MEMBERS: frozenset[str] = frozenset(
+    {
+        "host_identity",
+        "ledger_root",
+        "operator_uid",
+        "schema",
     }
 )
 
@@ -201,6 +215,7 @@ FREEZE_NAME = "freeze.json"
 ADMISSION_NAME = "admission.json"
 AUTHORIZATION_NAME = "authorization_consumed.json"
 AUTHORIZATION_GRANT_NAME = "authorization_grant.json"
+AUTHORIZATION_DOMAIN_NAME = "authorization_execution_domain.json"
 OBSERVATION_NAME = "observation.json"
 TERMINAL_NAME = "terminal.json"
 COMPARISON_NAME = "comparison.json"
@@ -224,6 +239,32 @@ RUNS_DIR = "runs"
 
 class EvidenceError(RuntimeError):
     """The evidence root does not satisfy the contract. Always fail-closed."""
+
+
+def authorization_execution_domain(ledger_root: Path) -> dict[str, Any]:
+    """Bind an authorization to one host/operator/global-ledger namespace."""
+    if not ledger_root.is_absolute():
+        raise EvidenceError("authorization ledger root is not absolute")
+    resolved_ledger = ledger_root.resolve(strict=False)
+    machine_identity: bytes | None = None
+    for candidate in (Path("/etc/machine-id"), Path("/var/lib/dbus/machine-id")):
+        try:
+            machine_identity = candidate.read_bytes().strip()
+        except OSError:
+            continue
+        if machine_identity:
+            break
+    if not machine_identity:
+        raise EvidenceError("controlled-host machine identity is unavailable")
+    domain = {
+        "schema": AUTHORIZATION_DOMAIN_SCHEMA,
+        "host_identity": hashlib.sha256(machine_identity).hexdigest(),
+        "operator_uid": os.getuid(),
+        "ledger_root": resolved_ledger.as_posix(),
+    }
+    if set(domain) != AUTHORIZATION_DOMAIN_MEMBERS:
+        raise EvidenceError("internal authorization-domain member drift")
+    return domain
 
 
 class RootName(NamedTuple):
@@ -548,6 +589,8 @@ def describe() -> dict[str, Any]:
             "admission": ADMISSION_NAME,
             "authorization_grant": AUTHORIZATION_GRANT_NAME,
             "authorization_grant_schema": AUTHORIZATION_GRANT_SCHEMA,
+            "authorization_execution_domain": AUTHORIZATION_DOMAIN_NAME,
+            "authorization_execution_domain_schema": AUTHORIZATION_DOMAIN_SCHEMA,
             "authorization_consumed": AUTHORIZATION_NAME,
             "controller": CONTROLLER_NAME,
             "lifecycle": LIFECYCLE_NAME,

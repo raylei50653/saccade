@@ -477,6 +477,10 @@ def _phase_a_freeze(
 def _write_phase_a_authorization(root: Path, freeze: dict[str, Any]) -> None:
     authorization_id = evidence.digest({"root": root.name})
     invocation_id = evidence.digest({"invocation": authorization_id})
+    execution_domain = evidence.authorization_execution_domain(
+        (root.parent / ".authorization-ledger").resolve()
+    )
+    execution_domain_digest = evidence.digest(execution_domain)
     grant = {
         "schema": evidence.AUTHORIZATION_GRANT_SCHEMA,
         "authorization_id": authorization_id,
@@ -484,11 +488,17 @@ def _write_phase_a_authorization(root: Path, freeze: dict[str, Any]) -> None:
         "controller_digest": freeze["executed_surfaces"][
             "scripts/tools/run_h2_measurement.py"
         ],
+        "execution_domain": execution_domain_digest,
         "freeze_digest": evidence.freeze_digest(freeze),
         "instrumentation_head": freeze["instrumentation_head"],
         "invocation_id": invocation_id,
         "issued_by": "research_owner",
     }
+    evidence.write_document(
+        root,
+        evidence.AUTHORIZATION_DOMAIN_NAME,
+        execution_domain,
+    )
     evidence.write_document(root, evidence.AUTHORIZATION_GRANT_NAME, grant)
     evidence.write_document(
         root,
@@ -502,6 +512,7 @@ def _write_phase_a_authorization(root: Path, freeze: dict[str, Any]) -> None:
             "controller_digest": freeze["executed_surfaces"][
                 "scripts/tools/run_h2_measurement.py"
             ],
+            "execution_domain": execution_domain_digest,
             "freeze_digest": evidence.freeze_digest(freeze),
             "instrumentation_head": freeze["instrumentation_head"],
             "invocation_id": invocation_id,
@@ -801,9 +812,13 @@ def test_phase_a_freeze_reconstruction_rejects_every_binding_drift(
     "mutation",
     (
         "grant_absent",
+        "domain_absent",
+        "domain_binding",
         "grant_digest",
+        "grant_execution_domain",
         "absent",
         "authorization_digest",
+        "receipt_execution_domain",
         "authorization_id",
         "invocation_id",
         "head",
@@ -821,9 +836,19 @@ def test_phase_a_authorization_consumption_is_fail_closed(
     grant_path = root / evidence.AUTHORIZATION_GRANT_NAME
     if mutation == "grant_absent":
         grant_path.unlink()
+    elif mutation == "domain_absent":
+        (root / evidence.AUTHORIZATION_DOMAIN_NAME).unlink()
+    elif mutation == "domain_binding":
+        domain = evidence.load_document(root, evidence.AUTHORIZATION_DOMAIN_NAME)
+        domain["ledger_root"] = (tmp_path / "another-ledger").resolve().as_posix()
+        evidence.write_document(root, evidence.AUTHORIZATION_DOMAIN_NAME, domain)
     elif mutation == "grant_digest":
         grant = evidence.load_document(root, evidence.AUTHORIZATION_GRANT_NAME)
         grant["issued_by"] = "not_the_owner"
+        evidence.write_document(root, evidence.AUTHORIZATION_GRANT_NAME, grant)
+    elif mutation == "grant_execution_domain":
+        grant = evidence.load_document(root, evidence.AUTHORIZATION_GRANT_NAME)
+        grant["execution_domain"] = "9" * 64
         evidence.write_document(root, evidence.AUTHORIZATION_GRANT_NAME, grant)
     elif mutation == "absent":
         path.unlink()
@@ -831,6 +856,8 @@ def test_phase_a_authorization_consumption_is_fail_closed(
         receipt = evidence.load_document(root, evidence.AUTHORIZATION_NAME)
         if mutation == "authorization_digest":
             receipt["authorization_digest"] = "not-a-digest"
+        elif mutation == "receipt_execution_domain":
+            receipt["execution_domain"] = "9" * 64
         elif mutation == "authorization_id":
             receipt["authorization_id"] = "not-an-id"
         elif mutation == "invocation_id":
@@ -853,7 +880,7 @@ def test_phase_a_authorization_consumption_is_fail_closed(
         verifier.VerificationError,
         match=(
             "authorization grant/consumption|authorization_consumed|"
-            "authorization_grant.json"
+            "authorization_grant.json|authorization_execution_domain.json"
         ),
     ):
         verifier.verify_evidence_root(root)

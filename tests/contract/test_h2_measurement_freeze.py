@@ -143,3 +143,11 @@ def test_freeze_producer_rejects_changed_path_verdict_for_another_base() -> None
     inputs["certificate_digest"] = evidence.digest(inputs["certificate"])
     with pytest.raises(producer.FreezeError, match="verdict base"):
         producer.build_freeze(**inputs)
+
+
+def test_freeze_producer_rejects_explicitly_blocked_changed_path_verdict() -> None:
+    inputs = _inputs()
+    inputs["certificate"]["changed_path_verdict"]["admissible"] = False
+    inputs["certificate_digest"] = evidence.digest(inputs["certificate"])
+    with pytest.raises(producer.FreezeError, match="admissibility"):
+        producer.build_freeze(**inputs)

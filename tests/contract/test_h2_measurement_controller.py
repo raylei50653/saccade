@@ -298,7 +298,10 @@ def _authorization(
     bundle: controller.LaunchBundle,
     *,
     identity_suffix: str = "",
+    authorization_ledger: Path | None = None,
 ) -> controller.AuthorizationGrant:
+    ledger = authorization_ledger or (tmp_path / "ledger")
+    execution_domain = evidence.digest(evidence.authorization_execution_domain(ledger))
     seed = evidence.digest(
         {
             "path": tmp_path.as_posix(),
@@ -312,6 +315,7 @@ def _authorization(
         "controller_digest": bundle.freeze["executed_surfaces"][
             "scripts/tools/run_h2_measurement.py"
         ],
+        "execution_domain": execution_domain,
         "freeze_digest": evidence.freeze_digest(bundle.freeze),
         "instrumentation_head": bundle.head,
         "invocation_id": evidence.digest({"invocation": seed}),
@@ -323,6 +327,7 @@ def _authorization(
         path,
         bundle,
         invocation_id=grant["invocation_id"],
+        authorization_ledger=ledger,
     )
 
 
@@ -384,8 +389,12 @@ def _launcher(
     def launch(
         invocation_path: Path,
         environment: Mapping[str, str],
-        **_: object,
+        **kwargs: object,
     ) -> int:
+        on_started = kwargs["on_started"]
+        assert callable(on_started)
+        on_started()
+
         def products(invocation: Mapping[str, Any]) -> child.RunProducts:
             produced = _products(invocation, perturbed_run=perturbed_run)
             if (
@@ -418,6 +427,16 @@ def _launcher(
             environment=environment,
             runner=products,
         )
+
+    return launch
+
+
+def _returncode_launcher(returncode: int):
+    def launch(*_args: object, **kwargs: object) -> int:
+        on_started = kwargs["on_started"]
+        assert callable(on_started)
+        on_started()
+        return returncode
 
     return launch
 
@@ -471,6 +490,7 @@ def test_authorization_is_required_and_bound_to_the_exact_invocation(
             grant.path,
             bundle,
             invocation_id="9" * 64,
+            authorization_ledger=tmp_path / "ledger",
         )
 
 
@@ -516,6 +536,7 @@ def test_authorization_bound_to_another_surface_cannot_launch(
             grant.path,
             bundle,
             invocation_id=str(record["invocation_id"]),
+            authorization_ledger=tmp_path / "ledger",
         )
 
 
@@ -564,14 +585,68 @@ def test_authorization_consumption_is_exclusive_across_evidence_roots(
         )
 
 
+def test_default_authorization_ledger_rejects_replay_across_clones(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state_home = (tmp_path / "controlled-host-state").resolve()
+    clone_a = tmp_path / "clone-a"
+    clone_b = tmp_path / "clone-b"
+    clone_a.mkdir()
+    clone_b.mkdir()
+    monkeypatch.setenv("XDG_STATE_HOME", state_home.as_posix())
+    monkeypatch.setattr(controller, "REPO_ROOT", clone_a)
+    ledger_a = controller.default_authorization_ledger()
+    bundle = _bundle(tmp_path)
+    grant = _authorization(
+        tmp_path,
+        bundle,
+        identity_suffix="-cross-clone",
+        authorization_ledger=ledger_a,
+    )
+    receipt = controller._consume_authorization(
+        grant,
+        bundle=bundle,
+        ledger=ledger_a,
+    )
+
+    monkeypatch.setattr(controller, "REPO_ROOT", clone_b)
+    ledger_b = controller.default_authorization_ledger()
+    assert ledger_b == ledger_a
+    assert grant.record["execution_domain"] == receipt["execution_domain"]
+    with pytest.raises(controller.ControllerError, match="already consumed"):
+        controller._consume_authorization(
+            grant,
+            bundle=bundle,
+            ledger=ledger_b,
+        )
+    with pytest.raises(controller.ControllerError, match="another"):
+        controller.load_authorization(
+            grant.path,
+            bundle,
+            invocation_id=str(grant.record["invocation_id"]),
+            authorization_ledger=tmp_path / "different-domain-ledger",
+        )
+
+
 def test_prior_default_ledger_marker_does_not_block_a_new_authorization(
     tmp_path: Path,
 ) -> None:
     assert controller.checkout_hygiene_reasons() == ()
     bundle = _bundle(tmp_path)
-    grant_a = _authorization(tmp_path, bundle, identity_suffix="-ledger-a")
-    grant_b = _authorization(tmp_path, bundle, identity_suffix="-ledger-b")
     ledger = controller.default_authorization_ledger()
+    grant_a = _authorization(
+        tmp_path,
+        bundle,
+        identity_suffix="-ledger-a",
+        authorization_ledger=ledger,
+    )
+    grant_b = _authorization(
+        tmp_path,
+        bundle,
+        identity_suffix="-ledger-b",
+        authorization_ledger=ledger,
+    )
     marker_a = ledger / f"{grant_a.record['authorization_id']}.json"
     marker_b = ledger / f"{grant_b.record['authorization_id']}.json"
     assert not marker_a.exists()
@@ -739,8 +814,11 @@ def test_clean_controller_archive_verifies_as_phase_a_progression(
     def launch(
         invocation_path: Path,
         environment: Mapping[str, str],
-        **_: object,
+        **kwargs: object,
     ) -> int:
+        on_started = kwargs["on_started"]
+        assert callable(on_started)
+        on_started()
         invocation = evidence.load_document(
             invocation_path.parent, invocation_path.name
         )
@@ -781,14 +859,17 @@ def test_repo_owned_archive_is_reachable_with_production_hygiene_enabled(
 ) -> None:
     assert controller.checkout_hygiene_reasons() == ()
     bundle = _bundle(tmp_path)
-    authorization = _authorization(tmp_path, bundle, identity_suffix="-repo")
+    ledger = controller.default_authorization_ledger()
+    authorization = _authorization(
+        tmp_path,
+        bundle,
+        identity_suffix="-repo",
+        authorization_ledger=ledger,
+    )
     expected_root = (
         _REPO / evidence.EVIDENCE_REL / evidence.phase_a_root_name(bundle.head)
     )
-    marker = (
-        controller.default_authorization_ledger()
-        / f"{authorization.record['authorization_id']}.json"
-    )
+    marker = ledger / f"{authorization.record['authorization_id']}.json"
     assert not expected_root.exists()
     assert not marker.exists()
     try:
@@ -916,8 +997,11 @@ def test_child_nonzero_replays_surviving_base_and_invalid_packet(
     def launch(
         invocation_path: Path,
         environment: Mapping[str, str],
-        **_: object,
+        **kwargs: object,
     ) -> int:
+        on_started = kwargs["on_started"]
+        assert callable(on_started)
+        on_started()
         invocation = evidence.load_document(
             invocation_path.parent, invocation_path.name
         )
@@ -981,8 +1065,11 @@ def test_mot_only_survivor_selects_terminal_2_when_base_json_write_fails(
     def launch(
         invocation_path: Path,
         environment: Mapping[str, str],
-        **_: object,
+        **kwargs: object,
     ) -> int:
+        on_started = kwargs["on_started"]
+        assert callable(on_started)
+        on_started()
         invocation = evidence.load_document(
             invocation_path.parent, invocation_path.name
         )
@@ -1066,8 +1153,11 @@ def test_child_nonzero_after_base_without_packet_remains_terminal_4(
     def launch(
         invocation_path: Path,
         environment: Mapping[str, str],
-        **_: object,
+        **kwargs: object,
     ) -> int:
+        on_started = kwargs["on_started"]
+        assert callable(on_started)
+        on_started()
         invocation = evidence.load_document(
             invocation_path.parent, invocation_path.name
         )
@@ -1184,6 +1274,9 @@ def test_child_failure_is_a_verifiable_terminal_4_envelope(tmp_path: Path) -> No
     bound.write_text("frozen\n", encoding="utf-8")
 
     def failed_child(*_args: object, **_kwargs: object) -> int:
+        on_started = _kwargs["on_started"]
+        assert callable(on_started)
+        on_started()
         return 2
 
     root, selection = controller.execute_controller(
@@ -1201,6 +1294,121 @@ def test_child_failure_is_a_verifiable_terminal_4_envelope(tmp_path: Path) -> No
         checkout_state_reader=_checkout_state,
     )
     assert selection.terminal == verifier.partition.EXECUTION_INVALID_TERMINAL
+    assert verifier.verify_evidence_root(root)["terminal"] == selection.terminal
+
+
+def test_prepare_failure_records_no_child_launch(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bundle = _bundle(tmp_path)
+
+    def fail_prepare(*_args: object, **_kwargs: object) -> tuple[Path, dict[str, str]]:
+        raise controller.ControllerError("injected prepare failure")
+
+    monkeypatch.setattr(controller, "_prepare_run", fail_prepare)
+    root, selection = controller.execute_controller(
+        bundle,
+        authorization=_authorization(tmp_path, bundle),
+        evidence_parent=tmp_path / "evidence",
+        authorization_ledger=tmp_path / "ledger",
+        bound_paths=(bundle.runtime_manifest_path,),
+        require_clean_checkout=False,
+        launch_probe=_probe,
+        launch_child=lambda *_args, **_kwargs: pytest.fail(
+            "launcher must not be called"
+        ),
+        monitor_factory=NullMonitor,
+        bundle_revalidator=_no_revalidation,
+        checkout_witness_builder=_checkout_witness,
+        checkout_state_reader=_checkout_state,
+        inherited_environment={},
+    )
+    lifecycle = (root / evidence.LIFECYCLE_NAME).read_text(encoding="utf-8")
+    assert selection.terminal == verifier.partition.EXECUTION_INVALID_TERMINAL
+    assert '"event":"child_launch"' not in lifecycle
+    assert '"event":"child_completed"' not in lifecycle
+    assert verifier.verify_evidence_root(root)["terminal"] == selection.terminal
+
+
+def test_popen_failure_records_no_child_launch(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bundle = _bundle(tmp_path)
+    popen_calls = 0
+    real_popen = controller.subprocess.Popen
+
+    def fail_popen(*args: object, **kwargs: object) -> Any:
+        nonlocal popen_calls
+        vector = args[0] if args else kwargs.get("args")
+        if (
+            isinstance(vector, (list, tuple))
+            and vector
+            and Path(str(vector[0])).name.startswith("python")
+            and any(
+                str(member).endswith("run_h2_measurement_child.py") for member in vector
+            )
+        ):
+            popen_calls += 1
+            raise OSError("injected Popen failure")
+        return real_popen(*args, **kwargs)
+
+    monkeypatch.setattr(controller.subprocess, "Popen", fail_popen)
+    root, selection = controller.execute_controller(
+        bundle,
+        authorization=_authorization(tmp_path, bundle),
+        evidence_parent=tmp_path / "evidence",
+        authorization_ledger=tmp_path / "ledger",
+        bound_paths=(bundle.runtime_manifest_path,),
+        require_clean_checkout=False,
+        launch_probe=_probe,
+        launch_child=controller.default_child_launcher,
+        monitor_factory=NullMonitor,
+        bundle_revalidator=_no_revalidation,
+        checkout_witness_builder=_checkout_witness,
+        checkout_state_reader=_checkout_state,
+        inherited_environment={},
+    )
+    monkeypatch.setattr(controller.subprocess, "Popen", real_popen)
+    lifecycle = (root / evidence.LIFECYCLE_NAME).read_text(encoding="utf-8")
+    assert popen_calls == 1
+    assert selection.terminal == verifier.partition.EXECUTION_INVALID_TERMINAL
+    assert '"event":"child_launch"' not in lifecycle
+    assert '"event":"child_completed"' not in lifecycle
+    assert verifier.verify_evidence_root(root)["terminal"] == selection.terminal
+
+
+def test_started_child_without_completion_is_a_legal_partial_lifecycle(
+    tmp_path: Path,
+) -> None:
+    bundle = _bundle(tmp_path)
+
+    def started_then_failed(*_args: object, **kwargs: object) -> int:
+        on_started = kwargs["on_started"]
+        assert callable(on_started)
+        on_started()
+        raise OSError("injected failure after process start")
+
+    root, selection = controller.execute_controller(
+        bundle,
+        authorization=_authorization(tmp_path, bundle),
+        evidence_parent=tmp_path / "evidence",
+        authorization_ledger=tmp_path / "ledger",
+        bound_paths=(bundle.runtime_manifest_path,),
+        require_clean_checkout=False,
+        launch_probe=_probe,
+        launch_child=started_then_failed,
+        monitor_factory=NullMonitor,
+        bundle_revalidator=_no_revalidation,
+        checkout_witness_builder=_checkout_witness,
+        checkout_state_reader=_checkout_state,
+        inherited_environment={},
+    )
+    lifecycle = (root / evidence.LIFECYCLE_NAME).read_text(encoding="utf-8")
+    assert selection.terminal == verifier.partition.EXECUTION_INVALID_TERMINAL
+    assert lifecycle.count('"event":"child_launch"') == 1
+    assert '"event":"child_completed"' not in lifecycle
     assert verifier.verify_evidence_root(root)["terminal"] == selection.terminal
 
 
@@ -1227,6 +1435,9 @@ def test_bound_input_drift_has_priority_over_execution_failure(
             ]
 
     def drift(*_args: object, **_kwargs: object) -> int:
+        on_started = _kwargs["on_started"]
+        assert callable(on_started)
+        on_started()
         raise controller.h0_controller.DriftError("mutated")
 
     root, selection = controller.execute_controller(
@@ -1275,8 +1486,11 @@ def test_monitor_precedes_revalidation_and_inputs_are_revalidated_post_run(
     def launch(
         invocation_path: Path,
         environment: Mapping[str, str],
-        **_: object,
+        **kwargs: object,
     ) -> int:
+        on_started = kwargs["on_started"]
+        assert callable(on_started)
+        on_started()
         events.append(f"run:{invocation_path.parent.name}")
         return child.execute_child(
             invocation_path,
@@ -1372,7 +1586,7 @@ def test_final_drain_mutation_beats_a_nonzero_child(tmp_path: Path) -> None:
         bound_paths=(bound,),
         require_clean_checkout=False,
         launch_probe=_probe,
-        launch_child=lambda *_args, **_kwargs: 2,
+        launch_child=_returncode_launcher(2),
         monitor_factory=LateMutationMonitor,
         bundle_revalidator=_no_revalidation,
         checkout_witness_builder=_checkout_witness,

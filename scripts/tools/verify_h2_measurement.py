@@ -225,6 +225,22 @@ def _authorization(
         evidence.AUTHORIZATION_GRANT_NAME,
         schema=evidence.AUTHORIZATION_GRANT_SCHEMA,
     )
+    execution_domain = _load(
+        root,
+        evidence.AUTHORIZATION_DOMAIN_NAME,
+        schema=evidence.AUTHORIZATION_DOMAIN_SCHEMA,
+    )
+    ledger_root = execution_domain.get("ledger_root")
+    expected_domain = (
+        evidence.authorization_execution_domain(Path(ledger_root))
+        if isinstance(ledger_root, str) and Path(ledger_root).is_absolute()
+        else None
+    )
+    execution_domain_digest = (
+        evidence.digest(execution_domain)
+        if set(execution_domain) == evidence.AUTHORIZATION_DOMAIN_MEMBERS
+        else None
+    )
     surfaces = freeze.get("executed_surfaces")
     controller_digest = (
         surfaces.get("scripts/tools/run_h2_measurement.py")
@@ -250,6 +266,9 @@ def _authorization(
         or grant.get("freeze_digest") != evidence.freeze_digest(freeze)
         or receipt.get("controller_digest") != controller_digest
         or grant.get("controller_digest") != controller_digest
+        or expected_domain != execution_domain
+        or receipt.get("execution_domain") != execution_domain_digest
+        or grant.get("execution_domain") != execution_domain_digest
         or grant.get("issued_by") != "research_owner"
         or receipt.get("state") != "consumed"
         or not isinstance(receipt.get("consumed_utc"), str)
@@ -565,6 +584,16 @@ def _verify_lifecycle(root: Path, observation: Mapping[str, Any]) -> None:
             unmatched_launch = None
             next_run_index += 1
         position += 1
+
+    # `unmatched_launch` is intentionally legal only for a partial attempt.
+    # The producer appends child_launch from the post-Popen callback, so this
+    # state means a process actually started but did not durably complete. A
+    # prepare/Popen failure has no child_launch and therefore remains
+    # mechanically distinct.
+    if unmatched_launch is not None and observation.get("execution_complete") is True:
+        raise VerificationError(
+            "completed execution retains an unmatched actual child launch"
+        )
 
     tail_order = {
         "monitored_final_revalidation": 0,
