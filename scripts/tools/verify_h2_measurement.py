@@ -41,6 +41,8 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import os
 import subprocess
 import sys
@@ -71,7 +73,7 @@ from h2_behavioral_identity import (  # noqa: E402
     A76_OVERFLOW_ZERO_VECTOR,
     A76_PROJECTION_MEMBERS,
 )
-from h2_runtime_inputs import digest  # noqa: E402
+from h2_runtime_inputs import SCHEMA as RUNTIME_INPUT_SCHEMA, digest  # noqa: E402
 from run_h2_layer_p import CERTIFICATE_SCHEMA  # noqa: E402
 from verify_headline_bridge_decision_trace import verify_capture  # noqa: E402
 
@@ -202,22 +204,46 @@ def _freeze(root: Path, name: evidence.RootName) -> dict[str, Any]:
     return freeze
 
 
-def _authorization(root: Path, phase: str) -> dict[str, Any] | None:
-    path = root / evidence.AUTHORIZATION_NAME
+def _authorization(
+    root: Path,
+    phase: str,
+    *,
+    freeze: Mapping[str, Any],
+    name: evidence.RootName,
+) -> dict[str, Any]:
     if phase == "b":
         # § C3.5.1 step 5: this record's durable write *is* the consumption of
         # S_B, so a Phase-B root without it never spent an authorization.
         return _load(
             root, evidence.AUTHORIZATION_NAME, schema=evidence.AUTHORIZATION_SCHEMA
         )
-    if not path.exists():
-        # Phase A consumes S_A at controller process launch (§ 5.2). The record
-        # is a witness of that launch, not the consumption event, so its absence
-        # is not a defect of the archive.
-        return None
-    return _load(
+    receipt = _load(
         root, evidence.AUTHORIZATION_NAME, schema=evidence.AUTHORIZATION_SCHEMA
     )
+    surfaces = freeze.get("executed_surfaces")
+    controller_digest = (
+        surfaces.get("scripts/tools/run_h2_measurement.py")
+        if isinstance(surfaces, Mapping)
+        else None
+    )
+    if (
+        set(receipt) != evidence.AUTHORIZATION_CONSUMED_MEMBERS
+        or not _hex(receipt.get("authorization_digest"), 64)
+        or not _hex(receipt.get("authorization_id"), 64)
+        or not _hex(receipt.get("invocation_id"), 64)
+        or receipt.get("capture_phase") != evidence.CAPTURE_PHASE[phase]
+        or receipt.get("instrumentation_head") != name.i40
+        or receipt.get("freeze_digest") != evidence.freeze_digest(freeze)
+        or receipt.get("controller_digest") != controller_digest
+        or receipt.get("state") != "consumed"
+        or not isinstance(receipt.get("consumed_utc"), str)
+        or not receipt["consumed_utc"]
+    ):
+        raise VerificationError(
+            "Phase-A authorization consumption record is absent, malformed, "
+            "or bound to another head/freeze/controller/invocation"
+        )
+    return receipt
 
 
 def _git(*args: str) -> str:
@@ -234,6 +260,29 @@ def _git(*args: str) -> str:
             f"archived source commit is unavailable: {exc}"
         ) from exc
     return completed.stdout.strip()
+
+
+def _git_bytes(*args: str) -> bytes:
+    try:
+        completed = subprocess.run(
+            ["git", *args],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            check=True,
+        )
+    except subprocess.SubprocessError as exc:
+        raise VerificationError(
+            f"archived source commit is unavailable: {exc}"
+        ) from exc
+    return completed.stdout
+
+
+def _hex(value: Any, length: int) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == length
+        and all(character in "0123456789abcdef" for character in value)
+    )
 
 
 def _commit_content_axes(head: str) -> dict[str, dict[str, Any]]:
@@ -307,6 +356,148 @@ def _bound_path(value: Any, repository_root: str) -> str:
     return os.path.normpath(path.as_posix())
 
 
+def _phase_a_freeze_bindings(
+    root: Path,
+    name: evidence.RootName,
+    freeze: Mapping[str, Any],
+    *,
+    reference: Mapping[str, Any],
+    runtime_manifest: Mapping[str, Any],
+    published: Mapping[str, Any],
+) -> None:
+    """Reconstruct the formal Phase-A freeze from archived primary artifacts."""
+    head = name.i40
+    runtime_binding = freeze.get("runtime_inputs")
+    build_artifacts = runtime_manifest.get("build_artifacts")
+    executed = freeze.get("executed_surfaces")
+    expected_surfaces = {
+        path: hashlib.sha256(_git_bytes("show", f"{head}:{path}")).hexdigest()
+        for path in evidence.PHASE_A_EXECUTED_SURFACE_PATHS
+    }
+    expected_capture_abi = {
+        "path": evidence.PHASE_A_CAPTURE_ABI_PATH,
+        "sha256": hashlib.sha256(
+            _git_bytes("show", f"{head}:{evidence.PHASE_A_CAPTURE_ABI_PATH}")
+        ).hexdigest(),
+    }
+    if (
+        set(freeze) != evidence.PHASE_A_FREEZE_MEMBERS
+        or freeze.get("capture_phase") != evidence.CAPTURE_PHASE["a"]
+        or freeze.get("instrumentation_head") != head
+        or not _hex(freeze.get("selected_base"), 40)
+        or freeze.get("equivalence") != "unproven"
+        or not isinstance(freeze.get("layer_p_certificate"), Mapping)
+        or freeze["layer_p_certificate"].get("schema") != CERTIFICATE_SCHEMA
+        or not _hex(freeze["layer_p_certificate"].get("digest"), 64)
+        or freeze.get("reference_probe")
+        != {
+            "schema": behavior.RESULT_SCHEMA,
+            "file_digest": evidence.sha256_file(root / evidence.REFERENCE_PROBE_NAME),
+        }
+        or not isinstance(runtime_binding, Mapping)
+        or not isinstance(build_artifacts, Mapping)
+        or runtime_binding
+        != {
+            "schema": RUNTIME_INPUT_SCHEMA,
+            "file_digest": evidence.sha256_file(root / evidence.RUNTIME_INPUTS_NAME),
+            "coordinate_digest": runtime_manifest.get("coordinate_digest"),
+            "full_digest": runtime_manifest.get("full_digest"),
+            "build_artifact_digest": build_artifacts.get("digest"),
+        }
+        or runtime_manifest.get("schema") != RUNTIME_INPUT_SCHEMA
+        or freeze.get("published_identity")
+        != {
+            "schema": IDENTITY_SCHEMA,
+            "file_digest": evidence.sha256_file(
+                root / evidence.PUBLISHED_IDENTITY_NAME
+            ),
+        }
+        or freeze.get("capture_abi") != expected_capture_abi
+        or not isinstance(executed, Mapping)
+        or dict(executed) != expected_surfaces
+        or freeze.get("run_plan")
+        != {
+            "sequence": evidence.expected_sequences("a")[0],
+            "run_ids": list(evidence.RUN_IDS),
+        }
+        or reference.get("digest") != freeze.get("probe")
+        or published.get("coordinate") != freeze.get("coordinate")
+        or not isinstance(published.get("probe"), Mapping)
+        or published["probe"].get("digest") != freeze.get("probe")
+    ):
+        raise VerificationError(
+            "Phase-A freeze differs from independent primary-artifact reconstruction"
+        )
+
+
+def _verify_lifecycle(root: Path, observation: Mapping[str, Any]) -> None:
+    path = root / evidence.LIFECYCLE_NAME
+    try:
+        raw = path.read_bytes()
+    except OSError as exc:
+        raise VerificationError("controller lifecycle event log is absent") from exc
+    if not raw.endswith(b"\n"):
+        raise VerificationError("controller lifecycle event log is not durable JSONL")
+    rows: list[dict[str, Any]] = []
+    for number, line in enumerate(raw.splitlines(), start=1):
+        try:
+            row = json.loads(line.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise VerificationError(f"lifecycle event {number} is unreadable") from exc
+        if (
+            not isinstance(row, dict)
+            or evidence.canonical_json_bytes(row) != line
+            or row.get("schema") != "h2_controller_lifecycle_event_v1"
+            or row.get("ordinal") != number
+            or not isinstance(row.get("event"), str)
+        ):
+            raise VerificationError(f"lifecycle event {number} is malformed")
+        rows.append(row)
+    names = [str(row["event"]) for row in rows]
+    if names[:2] != ["authorization_consumed", "archive_created"]:
+        raise VerificationError(
+            "authorization consumption does not precede archive creation"
+        )
+    if "child_launch" in names and (
+        "monitor_active" not in names
+        or "launch_revalidation" not in names
+        or names.index("child_launch") < names.index("launch_revalidation")
+    ):
+        raise VerificationError("a child launch precedes monitored launch revalidation")
+    launches = [row.get("run_id") for row in rows if row.get("event") == "child_launch"]
+    completions = [
+        row.get("run_id") for row in rows if row.get("event") == "child_completed"
+    ]
+    if launches != list(evidence.RUN_IDS[: len(launches)]):
+        raise VerificationError(
+            "child launch lifecycle order differs from the run plan"
+        )
+    if completions != list(evidence.RUN_IDS[: len(completions)]):
+        raise VerificationError(
+            "child completion lifecycle order differs from the run plan"
+        )
+    if observation.get("execution_complete") is True:
+        expected = [
+            "authorization_consumed",
+            "archive_created",
+            "monitor_active",
+            "launch_revalidation",
+        ]
+        for _run_id in evidence.RUN_IDS:
+            expected.extend(("child_launch", "child_completed"))
+        expected.extend(
+            (
+                "monitored_final_revalidation",
+                "final_monitor_drain",
+                "stop_boundary_recorded",
+            )
+        )
+        if names != expected:
+            raise VerificationError(
+                "completed execution lifecycle differs from launch-to-stop order"
+            )
+
+
 def _phase_a_launch_records(
     root: Path,
     name: evidence.RootName,
@@ -328,68 +519,150 @@ def _phase_a_launch_records(
         root, evidence.CONTROLLER_NAME, schema=evidence.CONTROLLER_SCHEMA
     )
     checkout = _checkout_witness(root, name.i40)
+    _phase_a_freeze_bindings(
+        root,
+        name,
+        freeze,
+        reference=reference,
+        runtime_manifest=runtime_manifest,
+        published=published,
+    )
 
     binding = freeze.get("layer_p_certificate")
     coordinate = freeze.get("coordinate")
     probe_digest = freeze.get("probe")
     build_artifacts = runtime_manifest.get("build_artifacts")
     reference_witness = reference.get("build_witness")
-    certificate_match = (
-        isinstance(binding, Mapping)
-        and binding.get("schema") == CERTIFICATE_SCHEMA
-        and binding.get("digest") == evidence.digest(certificate)
-        and freeze.get("instrumentation_head") == name.i40
-        and certificate.get("source_head") == name.i40
-        and certificate.get("source_tree") == checkout["source_tree"]
-        and isinstance(certificate.get("selected_base"), str)
-        and bool(certificate["selected_base"])
-        and isinstance(certificate.get("changed_path_verdict"), Mapping)
-        and certificate["changed_path_verdict"].get("admissible") is True
-        and certificate.get("equivalence") == "unproven"
-        and isinstance(coordinate, Mapping)
-        and certificate.get("decision_relevant_digest")
-        == coordinate.get("implementation")
-        == checkout["axes"]["decision_relevant"]["digest"]
-        and certificate.get("identity_semantics_digest")
-        == coordinate.get("identity_semantics")
-        == checkout["axes"]["identity_semantics"]["digest"]
-        and certificate.get("plumbing_set_digest")
-        == checkout["axes"]["plumbing_only"]["digest"]
-        and certificate.get("published_coordinate") == coordinate
-        and certificate.get("behavior_probe") == probe_digest
-        and certificate.get("published_probe") == probe_digest
-        and isinstance(build_artifacts, Mapping)
-        and certificate.get("runtime_input_coordinate_digest")
-        == runtime_manifest.get("coordinate_digest")
-        and certificate.get("runtime_input_full_digest")
-        == runtime_manifest.get("full_digest")
-        and certificate.get("build_artifact_digest") == build_artifacts.get("digest")
-        and certificate.get("runtime_input_manifest_file_digest")
-        == evidence.sha256_file(root / evidence.RUNTIME_INPUTS_NAME)
-        and certificate.get("probe_result_file_digest")
-        == evidence.sha256_file(root / evidence.REFERENCE_PROBE_NAME)
-        and certificate.get("published_identity_file_digest")
-        == evidence.sha256_file(root / evidence.PUBLISHED_IDENTITY_NAME)
-        and reference.get("digest") == probe_digest
-        and reference.get("identical") is True
-        and reference.get("mode") == "identity"
-        and reference.get("sequence") == behavior.IDENTITY_SEQUENCE
-        and certificate.get("probe_schema") == behavior.RESULT_SCHEMA
-        and certificate.get("mode") == "identity"
-        and certificate.get("fixture") == behavior.IDENTITY_SEQUENCE
-        and isinstance(reference_witness, Mapping)
-        and reference_witness.get("digest") == build_artifacts.get("digest")
-        and certificate.get("build_witness") == reference_witness
-        and published.get("coordinate") == coordinate
-        and isinstance(published.get("probe"), Mapping)
-        and published["probe"].get("digest") == probe_digest
-        and isinstance(published.get("equivalence"), Mapping)
-        and published["equivalence"].get("state") == "unproven"
-        and published.get("publication_complete") is True
-        and _bound_path(certificate.get("build_dir"), checkout["repository_root"])
-        == _bound_path(build_artifacts.get("build_dir"), checkout["repository_root"])
-        == _bound_path(checkout["build_dir"], checkout["repository_root"])
+    checks = (
+        (
+            isinstance(binding, Mapping)
+            and binding.get("schema") == CERTIFICATE_SCHEMA
+            and binding.get("digest") == evidence.digest(certificate),
+            "certificate digest differs from F",
+        ),
+        (
+            freeze.get("instrumentation_head") == name.i40
+            and certificate.get("source_head") == name.i40,
+            "certificate/freeze/current head differ",
+        ),
+        (
+            certificate.get("source_tree") == checkout["source_tree"],
+            "certificate tree differs from the execution checkout",
+        ),
+        (
+            _hex(certificate.get("selected_base"), 40)
+            and certificate.get("selected_base") == freeze.get("selected_base"),
+            "certificate selected base is not exact or differs from F",
+        ),
+        (
+            isinstance(certificate.get("changed_path_verdict"), Mapping)
+            and certificate["changed_path_verdict"].get("admissible") is True,
+            "certificate changed-path verdict is not clean",
+        ),
+        (
+            certificate.get("equivalence") == "unproven",
+            "certificate claims an undeclared equivalence upgrade",
+        ),
+        (
+            isinstance(coordinate, Mapping)
+            and certificate.get("decision_relevant_digest")
+            == coordinate.get("implementation")
+            == checkout["axes"]["decision_relevant"]["digest"],
+            "certificate implementation digest differs from F/checkout",
+        ),
+        (
+            isinstance(coordinate, Mapping)
+            and certificate.get("identity_semantics_digest")
+            == coordinate.get("identity_semantics")
+            == checkout["axes"]["identity_semantics"]["digest"],
+            "certificate identity-semantics digest differs from F/checkout",
+        ),
+        (
+            certificate.get("plumbing_set_digest")
+            == checkout["axes"]["plumbing_only"]["digest"],
+            "certificate plumbing-set digest differs from the execution checkout",
+        ),
+        (
+            certificate.get("published_coordinate") == coordinate,
+            "certificate coordinate differs from F",
+        ),
+        (
+            certificate.get("behavior_probe") == probe_digest
+            and certificate.get("published_probe") == probe_digest,
+            "certificate probe differs from F",
+        ),
+        (
+            certificate.get("runtime_input_coordinate_digest")
+            == runtime_manifest.get("coordinate_digest"),
+            "certificate runtime-input coordinate differs from the manifest",
+        ),
+        (
+            certificate.get("runtime_input_full_digest")
+            == runtime_manifest.get("full_digest"),
+            "certificate runtime-input full digest differs from the manifest",
+        ),
+        (
+            isinstance(build_artifacts, Mapping)
+            and certificate.get("build_artifact_digest")
+            == build_artifacts.get("digest"),
+            "certificate build artifacts differ from the manifest",
+        ),
+        (
+            certificate.get("runtime_input_manifest_file_digest")
+            == evidence.sha256_file(root / evidence.RUNTIME_INPUTS_NAME),
+            "runtime-input file digest differs from the certificate",
+        ),
+        (
+            certificate.get("probe_result_file_digest")
+            == evidence.sha256_file(root / evidence.REFERENCE_PROBE_NAME),
+            "reference-probe file digest differs from the certificate",
+        ),
+        (
+            certificate.get("published_identity_file_digest")
+            == evidence.sha256_file(root / evidence.PUBLISHED_IDENTITY_NAME),
+            "published-identity file digest differs from the certificate",
+        ),
+        (
+            reference.get("digest") == probe_digest
+            and reference.get("identical") is True
+            and reference.get("mode") == "identity"
+            and reference.get("sequence") == behavior.IDENTITY_SEQUENCE,
+            "reference probe does not support F",
+        ),
+        (
+            certificate.get("probe_schema") == behavior.RESULT_SCHEMA
+            and certificate.get("mode") == "identity"
+            and certificate.get("fixture") == behavior.IDENTITY_SEQUENCE,
+            "certificate probe declaration differs from the identity fixture",
+        ),
+        (
+            isinstance(reference_witness, Mapping)
+            and isinstance(build_artifacts, Mapping)
+            and reference_witness.get("digest") == build_artifacts.get("digest")
+            and certificate.get("build_witness") == reference_witness,
+            "certificate/reference build witness differs from the manifest",
+        ),
+        (
+            published.get("coordinate") == coordinate
+            and isinstance(published.get("probe"), Mapping)
+            and published["probe"].get("digest") == probe_digest
+            and isinstance(published.get("equivalence"), Mapping)
+            and published["equivalence"].get("state") == "unproven"
+            and published.get("publication_complete") is True,
+            "published identity does not support F",
+        ),
+        (
+            isinstance(build_artifacts, Mapping)
+            and _bound_path(certificate.get("build_dir"), checkout["repository_root"])
+            == _bound_path(
+                build_artifacts.get("build_dir"), checkout["repository_root"]
+            )
+            == _bound_path(checkout["build_dir"], checkout["repository_root"]),
+            "selected build directory differs from the runtime manifest",
+        ),
     )
+    independent_mismatch_reasons = [reason for passed, reason in checks if not passed]
+    certificate_match = not independent_mismatch_reasons
     recorded_certificate_match = observation.get("layer_p_certificate_matches_freeze")
     mismatch_reasons = controller.get("certificate_mismatch_reasons")
     if recorded_certificate_match is not certificate_match:
@@ -400,7 +673,7 @@ def _phase_a_launch_records(
         )
     if (
         not isinstance(mismatch_reasons, list)
-        or bool(mismatch_reasons) is certificate_match
+        or mismatch_reasons != independent_mismatch_reasons
     ):
         raise VerificationError(
             "controller certificate reasons disagree with the independently "
@@ -444,14 +717,23 @@ def _phase_a_launch_records(
             "recorded bound-input predicate differs from the mutation record"
         )
     stop_reasons = stop.get("revalidation_reasons")
+    checkout_reasons = stop.get("checkout_hygiene_reasons")
     stop_event_reasons = [
         event.get("path")
         for event in events
         if isinstance(event, Mapping)
         and event.get("classification") == "monitored_revalidation"
     ]
+    all_runtime_revalidation_reasons = [
+        event.get("path")
+        for event in events
+        if isinstance(event, Mapping)
+        and event.get("classification")
+        in {"post_monitor_revalidation", "monitored_revalidation"}
+    ]
     expected_stop_members = {
         "checkout_clean",
+        "checkout_hygiene_reasons",
         "completed_utc",
         "final_drain_completed",
         "linearization",
@@ -468,6 +750,7 @@ def _phase_a_launch_records(
         and stop.get("revalidation_completed_while_monitored") is True
         and stop.get("final_drain_completed") is True
         and stop.get("checkout_clean") is True
+        and not checkout_reasons
         and not stop_reasons
         and not events
     )
@@ -477,6 +760,8 @@ def _phase_a_launch_records(
         or not isinstance(stop.get("monitor_closed"), bool)
         or not isinstance(stop.get("revalidation_completed_while_monitored"), bool)
         or not isinstance(stop.get("final_drain_completed"), bool)
+        or not isinstance(checkout_reasons, list)
+        or any(not isinstance(reason, str) or not reason for reason in checkout_reasons)
         or not isinstance(stop_reasons, list)
         or any(not isinstance(reason, str) or not reason for reason in stop_reasons)
         or stop.get("linearization")
@@ -504,6 +789,7 @@ def _phase_a_launch_records(
                 or stop["revalidation_completed_while_monitored"] is not False
                 or stop["final_drain_completed"] is not False
                 or bool(stop_reasons)
+                or bool(checkout_reasons)
                 or any(
                     stop.get(field) is not None
                     for field in (
@@ -536,16 +822,10 @@ def _phase_a_launch_records(
     if (
         stop["revalidation_completed_while_monitored"] is True
         and stop.get("checkout_clean") is False
-        and (
-            not stop_reasons
-            or stop_event_reasons != stop_reasons
-            or mutation.get("mutated") is not True
-            or observation.get("bound_input_mutated") is not True
-        )
+        and (not checkout_reasons)
     ):
         raise VerificationError(
-            "dirty checkout after monitored revalidation has no matching "
-            "mutation evidence"
+            "dirty checkout after monitored revalidation has no checkout-hygiene reason"
         )
     if stop.get("linearization") == "clean_final_drain" and (
         stop.get("source_head") != checkout["source_head"]
@@ -554,6 +834,37 @@ def _phase_a_launch_records(
         raise VerificationError(
             "clean final-drain source identity differs from the checkout witness"
         )
+    ownership = controller.get("predicate_ownership")
+    if not isinstance(ownership, Mapping) or set(ownership) != {
+        "execution_checkout_hygiene",
+        "layer_p_certificate_matches_freeze",
+        "monitored_runtime_inputs",
+    }:
+        raise VerificationError("controller predicate ownership record is malformed")
+    checkout_owner = ownership["execution_checkout_hygiene"]
+    certificate_owner = ownership["layer_p_certificate_matches_freeze"]
+    runtime_owner = ownership["monitored_runtime_inputs"]
+    controller_checkout_reasons = controller.get("checkout_hygiene_reasons")
+    if (
+        not isinstance(checkout_owner, Mapping)
+        or not isinstance(checkout_owner.get("reasons"), list)
+        or checkout_owner.get("passed") is not (not checkout_owner["reasons"])
+        or not isinstance(controller_checkout_reasons, list)
+        or checkout_owner["reasons"] != controller_checkout_reasons
+        or any(reason not in checkout_owner["reasons"] for reason in checkout_reasons)
+        or not isinstance(certificate_owner, Mapping)
+        or certificate_owner.get("passed") is not certificate_match
+        or certificate_owner.get("reasons") != mismatch_reasons
+        or not isinstance(runtime_owner, Mapping)
+        or runtime_owner.get("mutated") is not mutation["mutated"]
+        or not isinstance(runtime_owner.get("revalidation_reasons"), list)
+        or runtime_owner["revalidation_reasons"] != all_runtime_revalidation_reasons
+    ):
+        raise VerificationError(
+            "controller predicate ownership disagrees with independently "
+            "recomputed certificate, checkout, or runtime-input state"
+        )
+    _verify_lifecycle(root, observation)
     terminal_four_results = {
         result
         for result, terminal in partition.RESULT_TO_TERMINAL.items()
@@ -1339,7 +1650,7 @@ def _verify_complete(root: Path, *, visiting: frozenset[str]) -> dict[str, Any]:
     if manifest.get("freeze_digest") != evidence.freeze_digest(freeze):
         raise VerificationError("manifest freeze digest differs from the freeze record")
     admission = _admission(root, freeze, name.phase, visiting=visiting)
-    _authorization(root, name.phase)
+    _authorization(root, name.phase, freeze=freeze, name=name)
 
     # The observation is read once before the replay, because whether the replay
     # must be exhaustive is itself a recorded claim: only a completed execution
@@ -1418,7 +1729,7 @@ def _verify_spent(
     present = _inventory(root)
     freeze = _freeze(root, name)
     _admission(root, freeze, name.phase, visiting=visiting)
-    _authorization(root, name.phase)
+    _authorization(root, name.phase, freeze=freeze, name=name)
     observation: dict[str, Any] = {}
     if (root / evidence.OBSERVATION_NAME).is_file():
         observation = _load(

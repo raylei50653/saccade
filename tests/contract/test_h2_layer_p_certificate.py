@@ -32,13 +32,25 @@ def test_base_is_required_by_the_cli() -> None:
         layer_p.main([])
 
 
+@pytest.mark.parametrize(
+    "base",
+    ("main", "HEAD", "", "a" * 7, "A" * 40, "a" * 39, "a" * 41),
+)
+def test_selected_base_requires_an_exact_lowercase_commit(base: str) -> None:
+    with pytest.raises(ValueError, match="full lowercase 40-hex"):
+        layer_p.validate_selected_base(base)
+
+
 def test_certificate_binds_every_review_required_coordinate(tmp_path: Path) -> None:
+    selected_base = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=_REPO, text=True
+    ).strip()
     controller = layer_p.LayerP.__new__(layer_p.LayerP)
-    controller.base = "selected-I"
+    controller.base = selected_base
     controller.build_dir_rel = "build/h2"
     controller.retry_verdict = {
         "admissible": True,
-        "base": "selected-I",
+        "base": selected_base,
         "changed_count": 0,
         "decision_relevant": [],
         "identity_semantics": [],
@@ -104,7 +116,7 @@ def test_certificate_binds_every_review_required_coordinate(tmp_path: Path) -> N
         "equivalence",
     }
     assert required <= set(certificate)
-    assert certificate["selected_base"] == "selected-I"
+    assert certificate["selected_base"] == selected_base
     assert certificate["equivalence"] == "unproven"
     assert certificate["changed_path_verdict"]["admissible"] is True
 

@@ -115,6 +115,16 @@ class LaunchBundle:
         return value if value.is_absolute() else REPO_ROOT / value
 
 
+@dataclass(frozen=True)
+class AuthorizationGrant:
+    record: dict[str, Any]
+    path: Path
+
+    @property
+    def digest(self) -> str:
+        return evidence.digest(self.record)
+
+
 def _utc() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -128,6 +138,16 @@ def _git(*args: str) -> str:
         check=True,
     )
     return completed.stdout.strip()
+
+
+def _git_bytes(*args: str) -> bytes:
+    completed = subprocess.run(
+        ["git", *args],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        check=True,
+    )
+    return completed.stdout
 
 
 def _hex(value: Any, length: int) -> bool:
@@ -209,6 +229,64 @@ def load_bundle(
         or not _hex(binding.get("digest"), 64)
     ):
         raise ControllerError("freeze has no Layer-P certificate binding")
+    runtime_binding = freeze.get("runtime_inputs")
+    published_binding = freeze.get("published_identity")
+    reference_binding = freeze.get("reference_probe")
+    capture_abi = freeze.get("capture_abi")
+    run_plan = freeze.get("run_plan")
+    executed = freeze.get("executed_surfaces")
+    selected_base = freeze.get("selected_base")
+    if (
+        set(freeze) != evidence.PHASE_A_FREEZE_MEMBERS
+        or freeze.get("capture_phase") != CAPTURE_PHASE
+        or not _hex(selected_base, 40)
+        or certificate.get("selected_base") != selected_base
+        or certificate.get("source_head") != head
+        or certificate.get("equivalence") != "unproven"
+        or freeze.get("equivalence") != "unproven"
+        or binding.get("digest") != evidence.digest(certificate)
+        or not isinstance(reference_binding, Mapping)
+        or reference_binding
+        != {
+            "schema": behavior.RESULT_SCHEMA,
+            "file_digest": evidence.sha256_file(reference_probe_path),
+        }
+        or not isinstance(runtime_binding, Mapping)
+        or runtime_binding
+        != {
+            "schema": runtime_inputs.SCHEMA,
+            "file_digest": evidence.sha256_file(runtime_manifest_path),
+            "coordinate_digest": manifest.get("coordinate_digest"),
+            "full_digest": manifest.get("full_digest"),
+            "build_artifact_digest": manifest.get("build_artifacts", {}).get("digest"),
+        }
+        or not isinstance(published_binding, Mapping)
+        or published_binding
+        != {
+            "schema": identity.IDENTITY_SCHEMA,
+            "file_digest": evidence.sha256_file(published_identity_path),
+        }
+        or capture_abi
+        != {
+            "path": evidence.PHASE_A_CAPTURE_ABI_PATH,
+            "sha256": hashlib.sha256(
+                _git_bytes("show", f"{head}:{evidence.PHASE_A_CAPTURE_ABI_PATH}")
+            ).hexdigest(),
+        }
+        or not isinstance(executed, Mapping)
+        or set(executed) != set(evidence.PHASE_A_EXECUTED_SURFACE_PATHS)
+        or any(
+            executed.get(path)
+            != hashlib.sha256(_git_bytes("show", f"{head}:{path}")).hexdigest()
+            for path in evidence.PHASE_A_EXECUTED_SURFACE_PATHS
+        )
+        or run_plan
+        != {
+            "sequence": SEQUENCE,
+            "run_ids": list(evidence.RUN_IDS),
+        }
+    ):
+        raise ControllerError("freeze does not reconstruct from its primary bindings")
     return LaunchBundle(
         freeze=dict(freeze),
         certificate=dict(certificate),
@@ -221,6 +299,47 @@ def load_bundle(
         runtime_manifest_path=runtime_manifest_path.resolve(strict=True),
         published_identity_path=published_identity_path.resolve(strict=True),
     )
+
+
+def _authorization_mismatch_reasons(
+    grant: Mapping[str, Any], bundle: LaunchBundle
+) -> tuple[str, ...]:
+    controller_digest = bundle.freeze["executed_surfaces"][
+        "scripts/tools/run_h2_measurement.py"
+    ]
+    checks = (
+        (set(grant) == evidence.AUTHORIZATION_GRANT_MEMBERS, "member set"),
+        (_hex(grant.get("authorization_id"), 64), "authorization id"),
+        (_hex(grant.get("invocation_id"), 64), "invocation id"),
+        (grant.get("capture_phase") == CAPTURE_PHASE, "capture phase"),
+        (grant.get("instrumentation_head") == bundle.head, "head"),
+        (
+            grant.get("freeze_digest") == evidence.freeze_digest(bundle.freeze),
+            "freeze",
+        ),
+        (grant.get("controller_digest") == controller_digest, "controller"),
+        (grant.get("issued_by") == "research_owner", "issuer"),
+    )
+    return tuple(label for passed, label in checks if not passed)
+
+
+def load_authorization(
+    path: Path,
+    bundle: LaunchBundle,
+    *,
+    invocation_id: str,
+) -> AuthorizationGrant:
+    grant = _load_canonical(path, schema=evidence.AUTHORIZATION_GRANT_SCHEMA)
+    if (
+        not _hex(invocation_id, 64)
+        or grant.get("invocation_id") != invocation_id
+        or _authorization_mismatch_reasons(grant, bundle)
+    ):
+        raise ControllerError(
+            "exactly-once authorization is absent or bound to another "
+            "head/freeze/controller/invocation"
+        )
+    return AuthorizationGrant(record=grant, path=path.resolve(strict=True))
 
 
 def certificate_match_reasons(
@@ -256,9 +375,9 @@ def certificate_match_reasons(
             "certificate tree differs from the execution checkout",
         ),
         (
-            isinstance(certificate.get("selected_base"), str)
-            and bool(certificate["selected_base"]),
-            "certificate has no selected base",
+            _hex(certificate.get("selected_base"), 40)
+            and certificate.get("selected_base") == freeze.get("selected_base"),
+            "certificate selected base is not exact or differs from F",
         ),
         (
             isinstance(certificate.get("changed_path_verdict"), Mapping)
@@ -1010,7 +1129,8 @@ def _finalize(
     evidence.write_checksum_inventory(incomplete)
     if final.exists() or final.is_symlink():
         raise ControllerError(f"final evidence root already exists: {final}")
-    incomplete.rename(final)
+    os.replace(incomplete, final)
+    evidence._fsync_directory(final.parent)
     return final, selection
 
 
@@ -1030,10 +1150,138 @@ def read_checkout_state() -> tuple[str, str, bool]:
     )
 
 
+def checkout_hygiene_reasons(*, excluded_roots: Sequence[Path] = ()) -> tuple[str, ...]:
+    """Return dirty paths except exact controller-owned output roots.
+
+    ``--untracked-files=all`` is intentional: Git's default directory
+    collapsing would make a path-bounded exclusion indistinguishable from a
+    repository-wide untracked-directory bypass.
+    """
+    completed = subprocess.run(
+        [
+            "git",
+            "status",
+            "--porcelain=v1",
+            "-z",
+            "--untracked-files=all",
+        ],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        check=True,
+    )
+    entries = completed.stdout.split(b"\0")
+    dirty: list[tuple[str, str]] = []
+    index = 0
+    while index < len(entries):
+        entry = entries[index]
+        index += 1
+        if not entry:
+            continue
+        if len(entry) < 4 or entry[2:3] != b" ":
+            raise ControllerError("git status returned malformed porcelain")
+        status = entry[:2].decode("ascii", errors="strict")
+        path = entry[3:].decode("utf-8", errors="surrogateescape")
+        dirty.append((status, path))
+        if ("R" in status or "C" in status) and index < len(entries):
+            prior = entries[index]
+            index += 1
+            if prior:
+                dirty.append(
+                    (
+                        status,
+                        prior.decode("utf-8", errors="surrogateescape"),
+                    )
+                )
+
+    repository = REPO_ROOT.resolve(strict=True)
+    exclusions: list[Path] = []
+    for root in excluded_roots:
+        resolved = root.resolve(strict=False)
+        if resolved.is_relative_to(repository):
+            exclusions.append(resolved)
+
+    reasons = []
+    for status, relative in dirty:
+        candidate = (REPO_ROOT / relative).resolve(strict=False)
+        if any(
+            candidate == excluded or candidate.is_relative_to(excluded)
+            for excluded in exclusions
+        ):
+            continue
+        reasons.append(f"{status}:{relative}")
+    return tuple(sorted(reasons))
+
+
+def _append_lifecycle(root: Path, ordinal: int, event: str, **fields: Any) -> None:
+    payload = {
+        "schema": "h2_controller_lifecycle_event_v1",
+        "ordinal": ordinal,
+        "event": event,
+        **fields,
+    }
+    path = root / evidence.LIFECYCLE_NAME
+    descriptor = os.open(
+        path,
+        os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_CLOEXEC,
+        0o600,
+    )
+    try:
+        view = memoryview(evidence.canonical_json_bytes(payload) + b"\n")
+        while view:
+            written = os.write(descriptor, view)
+            if written <= 0:
+                raise OSError("short lifecycle-event write")
+            view = view[written:]
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+    evidence._fsync_directory(root)
+
+
+def _consume_authorization(
+    grant: AuthorizationGrant,
+    *,
+    bundle: LaunchBundle,
+    ledger: Path,
+) -> dict[str, Any]:
+    if not isinstance(grant, AuthorizationGrant):
+        raise ControllerError("exactly-once authorization is absent")
+    current = _load_canonical(grant.path, schema=evidence.AUTHORIZATION_GRANT_SCHEMA)
+    if current != grant.record or _authorization_mismatch_reasons(current, bundle):
+        raise ControllerError("exactly-once authorization changed before consumption")
+    receipt = {
+        "schema": evidence.AUTHORIZATION_SCHEMA,
+        "authorization_digest": grant.digest,
+        "authorization_id": grant.record["authorization_id"],
+        "capture_phase": CAPTURE_PHASE,
+        "consumed_utc": _utc(),
+        "controller_digest": grant.record["controller_digest"],
+        "freeze_digest": evidence.freeze_digest(bundle.freeze),
+        "instrumentation_head": bundle.head,
+        "invocation_id": grant.record["invocation_id"],
+        "state": "consumed",
+    }
+    if set(receipt) != evidence.AUTHORIZATION_CONSUMED_MEMBERS:
+        raise ControllerError("internal authorization receipt member drift")
+    try:
+        evidence.write_document_exclusive(
+            ledger,
+            f"{grant.record['authorization_id']}.json",
+            receipt,
+        )
+    except FileExistsError as exc:
+        raise ControllerError(
+            "exactly-once authorization was already consumed"
+        ) from exc
+    return receipt
+
+
 def execute_controller(
     bundle: LaunchBundle,
     *,
+    authorization: AuthorizationGrant,
     evidence_parent: Path | None = None,
+    authorization_ledger: Path | None = None,
     bound_paths: Sequence[Path] | None = None,
     require_clean_checkout: bool = True,
     launch_probe: ProbeRunner = default_launch_probe,
@@ -1045,16 +1293,27 @@ def execute_controller(
     inherited_environment: Mapping[str, str] | None = None,
     clock: Callable[[], float] = time.monotonic,
 ) -> tuple[Path, partition.Selection]:
-    """Execute one externally authorized Phase-A invocation exactly once."""
+    """Consume and execute one machine-bound Phase-A authorization exactly once."""
     started = clock()
-    if require_clean_checkout and _git(
-        "status", "--porcelain", "--untracked-files=normal"
-    ):
-        raise ControllerError("Layer-M requires the exact clean head bound by F")
+    if not isinstance(authorization, AuthorizationGrant):
+        raise ControllerError("exactly-once authorization is absent")
     parent = evidence_parent or (REPO_ROOT / evidence.EVIDENCE_REL)
-    parent.mkdir(parents=True, exist_ok=True)
     final = parent / evidence.phase_a_root_name(bundle.head)
     incomplete = final.with_name(final.name + ".incomplete")
+    ledger = authorization_ledger or (parent / ".h2_authorization_consumptions")
+    marker = ledger / f"{authorization.record['authorization_id']}.json"
+    owned_outputs = (incomplete, final, marker)
+    initial_hygiene_reasons = (
+        checkout_hygiene_reasons(excluded_roots=owned_outputs)
+        if require_clean_checkout
+        else ()
+    )
+    if initial_hygiene_reasons:
+        raise ControllerError(
+            "Layer-M requires the exact clean head bound by F: "
+            + "; ".join(initial_hygiene_reasons)
+        )
+    parent.mkdir(parents=True, exist_ok=True)
     if (
         final.exists()
         or incomplete.exists()
@@ -1062,6 +1321,11 @@ def execute_controller(
         or incomplete.is_symlink()
     ):
         raise ControllerError("stale final or incomplete H2 evidence root")
+    authorization_receipt = _consume_authorization(
+        authorization,
+        bundle=bundle,
+        ledger=ledger,
+    )
 
     predicates = {key: True for key, _ in partition.ORDERED_PREDICATES}
     predicates["bound_input_mutated"] = False
@@ -1085,6 +1349,7 @@ def execute_controller(
     stop_boundary: dict[str, Any] = {
         "schema": evidence.STOP_BOUNDARY_SCHEMA,
         "checkout_clean": None,
+        "checkout_hygiene_reasons": [],
         "completed_utc": None,
         "final_drain_completed": False,
         "linearization": None,
@@ -1095,9 +1360,33 @@ def execute_controller(
         "source_head": None,
         "source_tree": None,
     }
+    runtime_revalidation_reasons: list[str] = []
+    checkout_reasons: list[str] = []
+    certificate_reasons: list[str] = []
+    lifecycle_ordinal = 0
+
+    def record_event(event: str, **fields: Any) -> None:
+        nonlocal lifecycle_ordinal
+        lifecycle_ordinal += 1
+        _append_lifecycle(incomplete, lifecycle_ordinal, event, **fields)
+
     try:
-        # The output root does not exist yet. Install the monitor first, then
-        # re-read every launch input and the checkout under that monitor. This
+        incomplete.mkdir()
+        evidence.write_document(
+            incomplete,
+            evidence.AUTHORIZATION_NAME,
+            authorization_receipt,
+        )
+        record_event(
+            "authorization_consumed",
+            authorization_id=authorization_receipt["authorization_id"],
+            invocation_id=authorization_receipt["invocation_id"],
+        )
+        _archive_bundle(incomplete, bundle)
+        record_event("archive_created")
+
+        # Install the monitor after the controller-owned archive exists, then
+        # re-read every launch input.  The revalidation under the active monitor
         # closes the initial intake -> watch-install TOCTOU window.
         try:
             monitor = monitor_factory(
@@ -1107,11 +1396,10 @@ def execute_controller(
                 ignored_roots=(incomplete,),
             )
             stop_boundary["monitor_started"] = True
+            record_event("monitor_active")
         except (h0_controller.DriftError, OSError) as exc:
             monitor_failure = exc
 
-        incomplete.mkdir()
-        _archive_bundle(incomplete, bundle)
         current_head = _git("rev-parse", "HEAD")
         current_tree = _git("rev-parse", "HEAD^{tree}")
         baseline_head = current_head
@@ -1128,8 +1416,8 @@ def execute_controller(
             )
         assert monitor is not None
 
-        intake_reasons = list(bundle_revalidator(bundle))
-        reasons = list(
+        runtime_revalidation_reasons = list(bundle_revalidator(bundle))
+        certificate_reasons = list(
             certificate_match_reasons(
                 bundle,
                 current_head=current_head,
@@ -1137,13 +1425,16 @@ def execute_controller(
                 checkout_witness=checkout_witness,
             )
         )
-        if require_clean_checkout and _git(
-            "status", "--porcelain", "--untracked-files=normal"
-        ):
-            reasons.append("execution checkout changed before monitored revalidation")
-        predicates["layer_p_certificate_matches_freeze"] = not reasons
-        controller_record["certificate_mismatch_reasons"] = list(reasons)
-        if intake_reasons:
+        checkout_reasons = (
+            list(checkout_hygiene_reasons(excluded_roots=owned_outputs))
+            if require_clean_checkout
+            else []
+        )
+        record_event("launch_revalidation")
+        predicates["layer_p_certificate_matches_freeze"] = not certificate_reasons
+        controller_record["certificate_mismatch_reasons"] = list(certificate_reasons)
+        controller_record["checkout_hygiene_reasons"] = list(checkout_reasons)
+        if runtime_revalidation_reasons:
             mutation_events.extend(
                 type(
                     "Mutation",
@@ -1154,10 +1445,20 @@ def execute_controller(
                         "path": reason,
                     },
                 )()
-                for reason in intake_reasons
+                for reason in runtime_revalidation_reasons
             )
             predicates["bound_input_mutated"] = True
-        if not reasons and not intake_reasons:
+        if checkout_reasons:
+            execution_result = "unclassified_execution_failure"
+            controller_record["failure"] = {
+                "reason": "; ".join(checkout_reasons),
+                "stage": "execution_checkout_hygiene",
+            }
+        if (
+            not certificate_reasons
+            and not runtime_revalidation_reasons
+            and not checkout_reasons
+        ):
             probe = launch_probe(
                 incomplete,
                 build_dir=bundle.build_dir.resolve(strict=True),
@@ -1181,8 +1482,9 @@ def execute_controller(
             )
 
         if (
-            not reasons
-            and not intake_reasons
+            not certificate_reasons
+            and not runtime_revalidation_reasons
+            and not checkout_reasons
             and predicates["behavior_probe_equals_freeze"]
         ):
             policy_fingerprint = identity.decision_surface_axis()[
@@ -1190,6 +1492,7 @@ def execute_controller(
             ]
             for run_id in evidence.RUN_IDS:
                 _remaining(started, clock)
+                record_event("child_launch", run_id=run_id)
                 invocation_path, environment = _prepare_run(
                     incomplete,
                     bundle=bundle,
@@ -1212,6 +1515,7 @@ def execute_controller(
                 if returncode != 0 or invocation.get("state") != "completed":
                     raise ControllerError(f"child {run_id} exited nonzero")
                 completed_runs.add(run_id)
+                record_event("child_completed", run_id=run_id)
     except h0_controller.DriftError as exc:
         if monitor is not None:
             mutation_events.extend(monitor.history)
@@ -1282,39 +1586,50 @@ def execute_controller(
 
         if monitor is not None:
             try:
-                final_reasons = list(bundle_revalidator(bundle))
-                final_head, final_tree, checkout_clean = checkout_state_reader()
+                final_runtime_reasons = list(bundle_revalidator(bundle))
+                final_head, final_tree, injected_checkout_clean = (
+                    checkout_state_reader()
+                )
+                final_checkout_reasons = (
+                    list(checkout_hygiene_reasons(excluded_roots=owned_outputs))
+                    if require_clean_checkout
+                    else ([] if injected_checkout_clean else ["checkout is dirty"])
+                )
                 if final_head != baseline_head or final_tree != baseline_tree:
-                    final_reasons.append(
+                    final_checkout_reasons.append(
                         "execution checkout head/tree moved before stop linearization"
                     )
-                if require_clean_checkout and not checkout_clean:
-                    final_reasons.append(
-                        "execution checkout became dirty before stop linearization"
-                    )
+                runtime_revalidation_reasons.extend(final_runtime_reasons)
+                checkout_reasons.extend(final_checkout_reasons)
+                record_event("monitored_final_revalidation")
                 stop_boundary.update(
                     {
-                        "checkout_clean": checkout_clean,
+                        "checkout_clean": not final_checkout_reasons,
+                        "checkout_hygiene_reasons": final_checkout_reasons,
                         "revalidation_completed_while_monitored": True,
-                        "revalidation_reasons": final_reasons,
+                        "revalidation_reasons": final_runtime_reasons,
                         "source_head": final_head,
                         "source_tree": final_tree,
                     }
                 )
             except BaseException as exc:
-                final_reasons = [
+                final_runtime_reasons = [
                     "monitored bound-input revalidation failed: "
                     f"{str(exc) or type(exc).__name__}"
                 ]
+                runtime_revalidation_reasons.extend(final_runtime_reasons)
                 stop_boundary.update(
                     {
                         "checkout_clean": False,
-                        "revalidation_reasons": final_reasons,
+                        "checkout_hygiene_reasons": [
+                            "checkout hygiene could not be established"
+                        ],
+                        "revalidation_reasons": final_runtime_reasons,
                         "source_head": baseline_head or "",
                         "source_tree": baseline_tree or "",
                     }
                 )
-            if final_reasons:
+            if final_runtime_reasons:
                 mutation_events.extend(
                     type(
                         "Mutation",
@@ -1325,11 +1640,15 @@ def execute_controller(
                             "path": reason,
                         },
                     )()
-                    for reason in final_reasons
+                    for reason in final_runtime_reasons
                 )
+            if stop_boundary["checkout_hygiene_reasons"]:
+                predicates["execution_complete"] = False
+                execution_result = execution_result or "unclassified_execution_failure"
             try:
                 mutation_events.extend(monitor.drain())
                 stop_boundary["final_drain_completed"] = True
+                record_event("final_monitor_drain")
                 if (
                     stop_boundary["revalidation_completed_while_monitored"]
                     and not mutation_events
@@ -1357,6 +1676,22 @@ def execute_controller(
             predicates["bound_input_mutated"] = bool(mutation_events)
 
     evidence.write_document(incomplete, evidence.STOP_BOUNDARY_NAME, stop_boundary)
+    record_event("stop_boundary_recorded")
+    controller_record["checkout_hygiene_reasons"] = list(checkout_reasons)
+    controller_record["predicate_ownership"] = {
+        "execution_checkout_hygiene": {
+            "passed": not checkout_reasons,
+            "reasons": list(checkout_reasons),
+        },
+        "layer_p_certificate_matches_freeze": {
+            "passed": not certificate_reasons,
+            "reasons": list(certificate_reasons),
+        },
+        "monitored_runtime_inputs": {
+            "mutated": bool(mutation_events),
+            "revalidation_reasons": list(runtime_revalidation_reasons),
+        },
+    }
 
     return _finalize(
         incomplete,
@@ -1376,6 +1711,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--reference-probe", type=Path, required=True)
     parser.add_argument("--runtime-inputs", type=Path, required=True)
     parser.add_argument("--published-identity", type=Path, required=True)
+    parser.add_argument("--authorization", type=Path, required=True)
+    parser.add_argument(
+        "--invocation-id",
+        required=True,
+        help="full 64-hex invocation identity bound by the owner authorization",
+    )
     args = parser.parse_args(list(argv) if argv is not None else None)
     try:
         bundle = load_bundle(
@@ -1385,7 +1726,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             runtime_manifest_path=args.runtime_inputs,
             published_identity_path=args.published_identity,
         )
-        root, selection = execute_controller(bundle)
+        authorization = load_authorization(
+            args.authorization,
+            bundle,
+            invocation_id=args.invocation_id,
+        )
+        root, selection = execute_controller(bundle, authorization=authorization)
         report = verifier.verify_evidence_root(root)
     except (
         ControllerError,
