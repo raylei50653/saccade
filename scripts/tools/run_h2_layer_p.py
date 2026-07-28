@@ -27,8 +27,8 @@ extension under test was the one actually imported. Neither needs the loaded fil
 closure enumerated in advance, which is the assumption that failed five times.
 
 Usage:
-  uv run python scripts/tools/run_h2_layer_p.py --base main --emit out/h2_layer_p/cert.json
-  uv run python scripts/tools/run_h2_layer_p.py --base HEAD --skip-build
+  uv run python scripts/tools/run_h2_layer_p.py --base <full-40-hex> \
+    --emit out/h2_layer_p/cert.json
 """
 # status: stable
 
@@ -100,6 +100,22 @@ def _git(*args: str) -> str:
     return completed.stdout.strip()
 
 
+def _full_commit(value: str) -> bool:
+    return len(value) == 40 and all(char in "0123456789abcdef" for char in value)
+
+
+def validate_selected_base(base: str) -> str:
+    if not _full_commit(base):
+        raise ValueError("selected base must be full lowercase 40-hex")
+    try:
+        resolved = _git("rev-parse", f"{base}^{{commit}}")
+    except subprocess.SubprocessError as exc:
+        raise ValueError("selected base commit is unavailable") from exc
+    if resolved != base:
+        raise ValueError("selected base does not resolve to its exact identity")
+    return base
+
+
 class LayerP:
     def __init__(
         self,
@@ -109,7 +125,7 @@ class LayerP:
         fixture: str,
         build_dir: Path | None = None,
     ) -> None:
-        self.base = base
+        self.base = validate_selected_base(base)
         self.skip_build = skip_build
         self.fixture = fixture
         self.build_dir = (build_dir or (REPO_ROOT / BUILD_DIR_REL)).resolve()
@@ -467,11 +483,14 @@ class LayerP:
     ) -> dict[str, Any]:
         if self.retry_verdict is None:
             raise RuntimeError("retry admissibility verdict is absent")
+        selected_base = validate_selected_base(self.base)
+        if self.retry_verdict.get("base") != selected_base:
+            raise RuntimeError("changed-path verdict base differs from selected base")
         return {
             "schema": CERTIFICATE_SCHEMA,
             "source_head": _git("rev-parse", "HEAD"),
             "source_tree": _git("rev-parse", "HEAD^{tree}"),
-            "selected_base": self.base,
+            "selected_base": selected_base,
             "changed_path_verdict": self.retry_verdict,
             "decision_relevant_digest": identity.implementation_axis()["digest"],
             "identity_semantics_digest": identity.identity_semantics_axis()["digest"],
@@ -576,12 +595,16 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    controller = LayerP(
-        base=args.base,
-        skip_build=args.skip_build,
-        fixture=args.fixture,
-        build_dir=args.build_dir,
-    )
+    try:
+        controller = LayerP(
+            base=args.base,
+            skip_build=args.skip_build,
+            fixture=args.fixture,
+            build_dir=args.build_dir,
+        )
+    except ValueError as exc:
+        print(f"plumbing_blocked(selected_base): {exc}", file=sys.stderr)
+        return 2
     code = controller.run()
     if code == 0 and args.emit:
         args.emit.parent.mkdir(parents=True, exist_ok=True)

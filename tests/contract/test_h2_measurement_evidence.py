@@ -348,7 +348,7 @@ def _write_phase_a_launch_records(root: Path, *, head: str) -> dict[str, Any]:
         "build_artifact_digest": build_digest,
         "build_dir": build_dir,
         "build_witness": reference["build_witness"],
-        "changed_path_verdict": {"admissible": True},
+        "changed_path_verdict": {"admissible": True, "base": head},
         "decision_relevant_digest": COORDINATE["implementation"],
         "equivalence": "unproven",
         "fixture": behavior.IDENTITY_SEQUENCE,
@@ -369,7 +369,7 @@ def _write_phase_a_launch_records(root: Path, *, head: str) -> dict[str, Any]:
         "runtime_input_manifest_file_digest": evidence.sha256_file(
             root / evidence.RUNTIME_INPUTS_NAME
         ),
-        "selected_base": "main",
+        "selected_base": head,
         "source_head": head,
         "source_tree": subprocess.check_output(
             ["git", "rev-parse", f"{head}^{{tree}}"], cwd=_REPO, text=True
@@ -400,6 +400,7 @@ def _write_phase_a_launch_records(root: Path, *, head: str) -> dict[str, Any]:
         {
             "schema": evidence.STOP_BOUNDARY_SCHEMA,
             "checkout_clean": True,
+            "checkout_hygiene_reasons": [],
             "completed_utc": "2026-07-27T00:00:00Z",
             "final_drain_completed": True,
             "linearization": "clean_final_drain",
@@ -414,6 +415,163 @@ def _write_phase_a_launch_records(root: Path, *, head: str) -> dict[str, Any]:
     return certificate
 
 
+def _phase_a_freeze(
+    root: Path, certificate: dict[str, Any], head: str
+) -> dict[str, Any]:
+    runtime_manifest = evidence.load_document(root, evidence.RUNTIME_INPUTS_NAME)
+    return {
+        "schema": evidence.FREEZE_SCHEMA,
+        "capture_phase": evidence.CAPTURE_PHASE["a"],
+        "instrumentation_head": head,
+        "selected_base": head,
+        "coordinate": dict(COORDINATE),
+        "probe": PROBE,
+        "equivalence": "unproven",
+        "layer_p_certificate": {
+            "schema": CERTIFICATE_SCHEMA,
+            "digest": evidence.digest(certificate),
+        },
+        "reference_probe": {
+            "schema": behavior.RESULT_SCHEMA,
+            "file_digest": evidence.sha256_file(root / evidence.REFERENCE_PROBE_NAME),
+        },
+        "runtime_inputs": {
+            "schema": runtime_manifest["schema"],
+            "file_digest": evidence.sha256_file(root / evidence.RUNTIME_INPUTS_NAME),
+            "coordinate_digest": runtime_manifest["coordinate_digest"],
+            "full_digest": runtime_manifest["full_digest"],
+            "build_artifact_digest": runtime_manifest["build_artifacts"]["digest"],
+        },
+        "published_identity": {
+            "schema": verifier.IDENTITY_SCHEMA,
+            "file_digest": evidence.sha256_file(
+                root / evidence.PUBLISHED_IDENTITY_NAME
+            ),
+        },
+        "capture_abi": {
+            "path": evidence.PHASE_A_CAPTURE_ABI_PATH,
+            "sha256": hashlib.sha256(
+                subprocess.check_output(
+                    [
+                        "git",
+                        "show",
+                        f"{head}:{evidence.PHASE_A_CAPTURE_ABI_PATH}",
+                    ],
+                    cwd=_REPO,
+                )
+            ).hexdigest(),
+        },
+        "executed_surfaces": {
+            path: hashlib.sha256(
+                subprocess.check_output(["git", "show", f"{head}:{path}"], cwd=_REPO)
+            ).hexdigest()
+            for path in evidence.PHASE_A_EXECUTED_SURFACE_PATHS
+        },
+        "run_plan": {
+            "sequence": SEQUENCE_A,
+            "run_ids": list(evidence.RUN_IDS),
+        },
+    }
+
+
+def _write_phase_a_authorization(root: Path, freeze: dict[str, Any]) -> None:
+    authorization_id = evidence.digest({"root": root.name})
+    invocation_id = evidence.digest({"invocation": authorization_id})
+    execution_domain = evidence.authorization_execution_domain(
+        (root.parent / ".authorization-ledger").resolve()
+    )
+    execution_domain_digest = evidence.digest(execution_domain)
+    grant = {
+        "schema": evidence.AUTHORIZATION_GRANT_SCHEMA,
+        "authorization_id": authorization_id,
+        "capture_phase": evidence.CAPTURE_PHASE["a"],
+        "controller_digest": freeze["executed_surfaces"][
+            "scripts/tools/run_h2_measurement.py"
+        ],
+        "execution_domain": execution_domain_digest,
+        "freeze_digest": evidence.freeze_digest(freeze),
+        "instrumentation_head": freeze["instrumentation_head"],
+        "invocation_id": invocation_id,
+        "issued_by": "research_owner",
+    }
+    evidence.write_document(
+        root,
+        evidence.AUTHORIZATION_DOMAIN_NAME,
+        execution_domain,
+    )
+    evidence.write_document(root, evidence.AUTHORIZATION_GRANT_NAME, grant)
+    evidence.write_document(
+        root,
+        evidence.AUTHORIZATION_NAME,
+        {
+            "schema": evidence.AUTHORIZATION_SCHEMA,
+            "authorization_digest": evidence.digest(grant),
+            "authorization_id": authorization_id,
+            "capture_phase": evidence.CAPTURE_PHASE["a"],
+            "consumed_utc": "2026-07-28T00:00:00Z",
+            "controller_digest": freeze["executed_surfaces"][
+                "scripts/tools/run_h2_measurement.py"
+            ],
+            "execution_domain": execution_domain_digest,
+            "freeze_digest": evidence.freeze_digest(freeze),
+            "instrumentation_head": freeze["instrumentation_head"],
+            "invocation_id": invocation_id,
+            "state": "consumed",
+        },
+    )
+
+
+def _rebind_phase_a_authorization(root: Path, freeze: dict[str, Any]) -> None:
+    grant = evidence.load_document(root, evidence.AUTHORIZATION_GRANT_NAME)
+    grant["freeze_digest"] = evidence.freeze_digest(freeze)
+    grant["controller_digest"] = freeze["executed_surfaces"][
+        "scripts/tools/run_h2_measurement.py"
+    ]
+    evidence.write_document(root, evidence.AUTHORIZATION_GRANT_NAME, grant)
+    receipt = evidence.load_document(root, evidence.AUTHORIZATION_NAME)
+    receipt["authorization_digest"] = evidence.digest(grant)
+    receipt["freeze_digest"] = evidence.freeze_digest(freeze)
+    receipt["controller_digest"] = freeze["executed_surfaces"][
+        "scripts/tools/run_h2_measurement.py"
+    ]
+    evidence.write_document(root, evidence.AUTHORIZATION_NAME, receipt)
+
+
+def _write_phase_a_lifecycle(root: Path) -> None:
+    receipt = evidence.load_document(root, evidence.AUTHORIZATION_NAME)
+    names = [
+        "authorization_consumed",
+        "archive_created",
+        "monitor_active",
+        "launch_revalidation",
+    ]
+    for _run_id in evidence.RUN_IDS:
+        names.extend(("child_launch", "child_completed"))
+    names.extend(
+        (
+            "monitored_final_revalidation",
+            "final_monitor_drain",
+            "stop_boundary_recorded",
+        )
+    )
+    rows = []
+    run_index = 0
+    for ordinal, name in enumerate(names, start=1):
+        row: dict[str, Any] = {
+            "schema": "h2_controller_lifecycle_event_v1",
+            "event": name,
+            "ordinal": ordinal,
+        }
+        if name == "authorization_consumed":
+            row["authorization_id"] = receipt["authorization_id"]
+            row["invocation_id"] = receipt["invocation_id"]
+        if name in {"child_launch", "child_completed"}:
+            row["run_id"] = evidence.RUN_IDS[run_index // 2]
+            run_index += 1
+        rows.append(evidence.canonical_json_bytes(row))
+    (root / evidence.LIFECYCLE_NAME).write_bytes(b"\n".join(rows) + b"\n")
+
+
 def phase_a_root(
     parent: Path,
     *,
@@ -426,17 +584,10 @@ def phase_a_root(
     root = parent / evidence.phase_a_root_name(head)
     root.mkdir()
     certificate = _write_phase_a_launch_records(root, head=head)
-    evidence.write_document(
-        root,
-        evidence.FREEZE_NAME,
-        _freeze_record(
-            instrumentation_head=head,
-            layer_p_certificate={
-                "schema": CERTIFICATE_SCHEMA,
-                "digest": evidence.digest(certificate),
-            },
-        ),
-    )
+    freeze = _phase_a_freeze(root, certificate, head)
+    evidence.write_document(root, evidence.FREEZE_NAME, freeze)
+    _write_phase_a_authorization(root, freeze)
+    _write_phase_a_lifecycle(root)
     if runs:
         _write_sequence(root, SEQUENCE_A, perturbed=perturbed)
     values = predicates or _clean_predicates(capture_off_on_equal=not perturbed)
@@ -453,12 +604,24 @@ def phase_a_root(
             "schema": evidence.CONTROLLER_SCHEMA,
             "capture_phase": evidence.CAPTURE_PHASE["a"],
             "certificate_mismatch_reasons": [],
+            "checkout_hygiene_reasons": [],
             "instrumentation_head": head,
             "ordered_runs": list(evidence.RUN_IDS),
             "result": selection.result,
             "sequence": SEQUENCE_A,
             "state": "terminal",
             "terminal": selection.terminal,
+            "predicate_ownership": {
+                "execution_checkout_hygiene": {"passed": True, "reasons": []},
+                "layer_p_certificate_matches_freeze": {
+                    "passed": True,
+                    "reasons": [],
+                },
+                "monitored_runtime_inputs": {
+                    "mutated": False,
+                    "revalidation_reasons": [],
+                },
+            },
         },
     )
     return _finalize(root, phase="a", head=head, result=selection.result)
@@ -592,6 +755,182 @@ def test_clean_phase_a_archive_verifies_and_selects_no_terminal(
     assert report["capture_phase"] == "phase_a"
 
 
+@pytest.mark.parametrize(
+    "mutation",
+    (
+        "missing_member",
+        "extra_member",
+        "selected_base_symbolic",
+        "selected_base_uppercase",
+        "runtime_input_stale",
+        "executed_surface_stale",
+        "capture_abi_stale",
+        "run_plan_mismatch",
+        "reference_probe_stale",
+        "published_identity_stale",
+        "coordinate_mismatch",
+    ),
+)
+def test_phase_a_freeze_reconstruction_rejects_every_binding_drift(
+    tmp_path: Path, mutation: str
+) -> None:
+    root = phase_a_root(tmp_path)
+    freeze = evidence.load_document(root, evidence.FREEZE_NAME)
+    if mutation == "missing_member":
+        del freeze["run_plan"]
+    elif mutation == "extra_member":
+        freeze["private_binding"] = "not allowed"
+    elif mutation == "selected_base_symbolic":
+        freeze["selected_base"] = "main"
+    elif mutation == "selected_base_uppercase":
+        freeze["selected_base"] = HEAD_A.upper()
+    elif mutation == "runtime_input_stale":
+        freeze["runtime_inputs"]["file_digest"] = "9" * 64
+    elif mutation == "executed_surface_stale":
+        first = evidence.PHASE_A_EXECUTED_SURFACE_PATHS[0]
+        freeze["executed_surfaces"][first] = "9" * 64
+    elif mutation == "capture_abi_stale":
+        freeze["capture_abi"]["sha256"] = "9" * 64
+    elif mutation == "run_plan_mismatch":
+        freeze["run_plan"]["run_ids"] = list(reversed(evidence.RUN_IDS))
+    elif mutation == "reference_probe_stale":
+        freeze["reference_probe"]["file_digest"] = "9" * 64
+    elif mutation == "published_identity_stale":
+        freeze["published_identity"]["file_digest"] = "9" * 64
+    elif mutation == "coordinate_mismatch":
+        freeze["coordinate"]["environment"] = "9" * 64
+    else:  # pragma: no cover
+        raise AssertionError(mutation)
+    evidence.write_document(root, evidence.FREEZE_NAME, freeze)
+    _rebind_phase_a_authorization(root, freeze)
+    _refinalize(root)
+    with pytest.raises(verifier.VerificationError, match="Phase-A freeze"):
+        verifier.verify_evidence_root(root)
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    (
+        "grant_absent",
+        "domain_absent",
+        "domain_binding",
+        "grant_digest",
+        "grant_execution_domain",
+        "absent",
+        "authorization_digest",
+        "receipt_execution_domain",
+        "authorization_id",
+        "invocation_id",
+        "head",
+        "freeze",
+        "controller",
+        "state",
+        "extra",
+    ),
+)
+def test_phase_a_authorization_consumption_is_fail_closed(
+    tmp_path: Path, mutation: str
+) -> None:
+    root = phase_a_root(tmp_path)
+    path = root / evidence.AUTHORIZATION_NAME
+    grant_path = root / evidence.AUTHORIZATION_GRANT_NAME
+    if mutation == "grant_absent":
+        grant_path.unlink()
+    elif mutation == "domain_absent":
+        (root / evidence.AUTHORIZATION_DOMAIN_NAME).unlink()
+    elif mutation == "domain_binding":
+        domain = evidence.load_document(root, evidence.AUTHORIZATION_DOMAIN_NAME)
+        domain["ledger_root"] = (tmp_path / "another-ledger").resolve().as_posix()
+        evidence.write_document(root, evidence.AUTHORIZATION_DOMAIN_NAME, domain)
+    elif mutation == "grant_digest":
+        grant = evidence.load_document(root, evidence.AUTHORIZATION_GRANT_NAME)
+        grant["issued_by"] = "not_the_owner"
+        evidence.write_document(root, evidence.AUTHORIZATION_GRANT_NAME, grant)
+    elif mutation == "grant_execution_domain":
+        grant = evidence.load_document(root, evidence.AUTHORIZATION_GRANT_NAME)
+        grant["execution_domain"] = "9" * 64
+        evidence.write_document(root, evidence.AUTHORIZATION_GRANT_NAME, grant)
+    elif mutation == "absent":
+        path.unlink()
+    else:
+        receipt = evidence.load_document(root, evidence.AUTHORIZATION_NAME)
+        if mutation == "authorization_digest":
+            receipt["authorization_digest"] = "not-a-digest"
+        elif mutation == "receipt_execution_domain":
+            receipt["execution_domain"] = "9" * 64
+        elif mutation == "authorization_id":
+            receipt["authorization_id"] = "not-an-id"
+        elif mutation == "invocation_id":
+            receipt["invocation_id"] = "short"
+        elif mutation == "head":
+            receipt["instrumentation_head"] = "9" * 40
+        elif mutation == "freeze":
+            receipt["freeze_digest"] = "9" * 64
+        elif mutation == "controller":
+            receipt["controller_digest"] = "9" * 64
+        elif mutation == "state":
+            receipt["state"] = "issued"
+        elif mutation == "extra":
+            receipt["grant"] = True
+        else:  # pragma: no cover
+            raise AssertionError(mutation)
+        evidence.write_document(root, evidence.AUTHORIZATION_NAME, receipt)
+    _refinalize(root)
+    with pytest.raises(
+        verifier.VerificationError,
+        match=(
+            "authorization grant/consumption|authorization_consumed|"
+            "authorization_grant.json|authorization_execution_domain.json"
+        ),
+    ):
+        verifier.verify_evidence_root(root)
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    (
+        "completion_without_launch",
+        "duplicate_launch",
+        "duplicate_completion",
+        "wrong_completion_id",
+    ),
+)
+def test_partial_lifecycle_rejects_unpaired_or_duplicate_child_events(
+    tmp_path: Path,
+    mutation: str,
+) -> None:
+    root = phase_a_root(tmp_path)
+    path = root / evidence.LIFECYCLE_NAME
+    rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+    first_launch = next(
+        index for index, row in enumerate(rows) if row["event"] == "child_launch"
+    )
+    first_completion = next(
+        index for index, row in enumerate(rows) if row["event"] == "child_completed"
+    )
+    if mutation == "completion_without_launch":
+        del rows[first_launch]
+    elif mutation == "duplicate_launch":
+        rows.insert(first_launch + 1, dict(rows[first_launch]))
+    elif mutation == "duplicate_completion":
+        rows.insert(first_completion + 1, dict(rows[first_completion]))
+    elif mutation == "wrong_completion_id":
+        rows[first_completion]["run_id"] = evidence.RUN_IDS[1]
+    else:  # pragma: no cover
+        raise AssertionError(mutation)
+    for ordinal, row in enumerate(rows, start=1):
+        row["ordinal"] = ordinal
+    path.write_bytes(
+        b"".join(evidence.canonical_json_bytes(row) + b"\n" for row in rows)
+    )
+    _refinalize(root)
+    with pytest.raises(
+        verifier.VerificationError,
+        match="completion has no unmatched launch|launch lifecycle is duplicated",
+    ):
+        verifier.verify_evidence_root(root)
+
+
 def test_perturbed_archive_verifies_as_terminal_2(tmp_path: Path) -> None:
     report = verifier.verify_evidence_root(phase_a_root(tmp_path, perturbed=True))
     assert report["terminal"] == "H2_CAPTURE_PERTURBS_POLICY"
@@ -654,6 +993,7 @@ def test_certificate_predicate_is_recomputed_from_archived_bindings(
         "source_tree",
         "selected_base",
         "changed_path_verdict",
+        "changed_path_verdict_base",
         "equivalence",
         "implementation_digest",
         "identity_semantics_digest",
@@ -694,6 +1034,8 @@ def test_every_certificate_condition_is_independently_recomputed(
         certificate["selected_base"] = ""
     elif condition == "changed_path_verdict":
         certificate["changed_path_verdict"]["admissible"] = False
+    elif condition == "changed_path_verdict_base":
+        certificate["changed_path_verdict"]["base"] = "9" * 40
     elif condition == "equivalence":
         certificate["equivalence"] = "claimed"
     elif condition == "implementation_digest":
@@ -761,8 +1103,12 @@ def test_every_certificate_condition_is_independently_recomputed(
     if condition != "binding_digest":
         freeze["layer_p_certificate"]["digest"] = evidence.digest(certificate)
     evidence.write_document(root, evidence.FREEZE_NAME, freeze)
+    _rebind_phase_a_authorization(root, freeze)
     _refinalize(root)
-    with pytest.raises(verifier.VerificationError, match="certificate match"):
+    with pytest.raises(
+        verifier.VerificationError,
+        match="certificate match|Phase-A freeze",
+    ):
         verifier.verify_evidence_root(root)
 
 
@@ -899,7 +1245,7 @@ def test_checksum_inventory_is_total_in_both_directions(tmp_path: Path) -> None:
     (root / "stray.json").unlink()
 
     freeze = root / evidence.FREEZE_NAME
-    freeze.write_bytes(freeze.read_bytes().replace(b'"0000', b'"1000'))
+    freeze.write_bytes(freeze.read_bytes().replace(b'"probe":"2d', b'"probe":"3d'))
     with pytest.raises(verifier.VerificationError, match="differ from the inventory"):
         verifier.verify_evidence_root(root)
 
@@ -1351,6 +1697,7 @@ def test_terminal_4_re_attempts_stay_expressible(tmp_path: Path) -> None:
 # -- § C3.9's trap --------------------------------------------------------- #
 
 LAYER_M_FILES = (
+    "scripts/tools/h2_measurement_freeze.py",
     "scripts/tools/h2_measurement_evidence.py",
     "scripts/tools/run_h2_measurement.py",
     "scripts/tools/run_h2_measurement_child.py",

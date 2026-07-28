@@ -31,8 +31,15 @@ h2_measure_b_<I40_B>_<F64>           phase B   (§ C3.1; complete digest, never
     checkout_identity_witness.json   source tree and all three content axes
     mutation_observation.json        the BoundInputMonitor record
     measurement_stop_boundary.json   monitored revalidation + final-drain boundary
-    authorization_consumed.json      phase B: the § C3.5.1 step-5 write that
-                                     *is* the consumption of S_B
+    authorization_grant.json         canonical owner-bound Phase-A grant loaded
+                                     before durable consumption
+    authorization_execution_domain.json
+                                     bound host/operator/global-ledger domain
+    authorization_consumed.json      the durable receipt identifying the
+                                     exactly-once authority consumed before
+                                     the first measurement child launch; never
+                                     itself a grant
+    lifecycle_events.jsonl           durable launch-to-stop event order
     observation.json                 exactly ORDERED_PREDICATES (+ optional
                                      execution_result)
     terminal.json                    the recorded selection
@@ -55,6 +62,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import sys
@@ -89,11 +97,83 @@ OBSERVATION_SCHEMA = "h2_measurement_observation_v1"
 TERMINAL_SCHEMA = "h2_terminal_selection_v1"
 FREEZE_SCHEMA = "h2_measurement_freeze_v1"
 ADMISSION_SCHEMA = "h2_admission_verdict_v1"
-AUTHORIZATION_SCHEMA = "h2_authorization_consumed_v1"
-CONTROLLER_SCHEMA = "h2_measurement_controller_v1"
+AUTHORIZATION_GRANT_SCHEMA = "h2_exactly_once_authorization_v2"
+AUTHORIZATION_SCHEMA = "h2_authorization_consumed_v2"
+AUTHORIZATION_DOMAIN_SCHEMA = "h2_authorization_execution_domain_v1"
+CONTROLLER_SCHEMA = "h2_measurement_controller_v2"
 MUTATION_SCHEMA = "h2_bound_input_mutation_v1"
 CHECKOUT_WITNESS_SCHEMA = "h2_checkout_identity_witness_v1"
-STOP_BOUNDARY_SCHEMA = "h2_measurement_stop_boundary_v2"
+STOP_BOUNDARY_SCHEMA = "h2_measurement_stop_boundary_v3"
+
+# Shape only.  Values are independently reconstructed by the freeze producer,
+# controller, and archive verifier.  Keeping the member set here prevents any
+# one of those plumbing components from accepting private/extra authority
+# bindings while still leaving all semantic evaluation to the primary records.
+PHASE_A_FREEZE_MEMBERS: frozenset[str] = frozenset(
+    {
+        "capture_abi",
+        "capture_phase",
+        "coordinate",
+        "equivalence",
+        "executed_surfaces",
+        "instrumentation_head",
+        "layer_p_certificate",
+        "probe",
+        "published_identity",
+        "reference_probe",
+        "run_plan",
+        "runtime_inputs",
+        "schema",
+        "selected_base",
+    }
+)
+PHASE_A_CAPTURE_ABI_PATH = "scripts/tools/h0_bridge_decision_trace_schema_v2.json"
+PHASE_A_EXECUTED_SURFACE_PATHS: tuple[str, ...] = (
+    "scripts/tools/check_h2_measure_archives.py",
+    "scripts/tools/h2_measurement_evidence.py",
+    "scripts/tools/run_h2_measurement.py",
+    "scripts/tools/run_h2_measurement_child.py",
+    "scripts/tools/verify_h0_phase_a.py",
+    "scripts/tools/verify_h2_measurement.py",
+    "scripts/tools/verify_headline_bridge_decision_trace.py",
+)
+
+AUTHORIZATION_GRANT_MEMBERS: frozenset[str] = frozenset(
+    {
+        "authorization_id",
+        "capture_phase",
+        "controller_digest",
+        "execution_domain",
+        "freeze_digest",
+        "instrumentation_head",
+        "invocation_id",
+        "issued_by",
+        "schema",
+    }
+)
+AUTHORIZATION_CONSUMED_MEMBERS: frozenset[str] = frozenset(
+    {
+        "authorization_digest",
+        "authorization_id",
+        "capture_phase",
+        "consumed_utc",
+        "controller_digest",
+        "execution_domain",
+        "freeze_digest",
+        "instrumentation_head",
+        "invocation_id",
+        "schema",
+        "state",
+    }
+)
+AUTHORIZATION_DOMAIN_MEMBERS: frozenset[str] = frozenset(
+    {
+        "host_identity",
+        "ledger_root",
+        "operator_uid",
+        "schema",
+    }
+)
 
 # Re-exported, never redeclared: the schema identifier is a ruler fact and lives
 # in `h2_behavioral_identity.py`, which owns the A7.6 member definitions (§ 4).
@@ -134,6 +214,8 @@ CHECKSUMS_NAME = "checksums.sha256"
 FREEZE_NAME = "freeze.json"
 ADMISSION_NAME = "admission.json"
 AUTHORIZATION_NAME = "authorization_consumed.json"
+AUTHORIZATION_GRANT_NAME = "authorization_grant.json"
+AUTHORIZATION_DOMAIN_NAME = "authorization_execution_domain.json"
 OBSERVATION_NAME = "observation.json"
 TERMINAL_NAME = "terminal.json"
 COMPARISON_NAME = "comparison.json"
@@ -150,12 +232,39 @@ MUTATION_NAME = "mutation_observation.json"
 CHECKOUT_WITNESS_NAME = "checkout_identity_witness.json"
 STOP_BOUNDARY_NAME = "measurement_stop_boundary.json"
 CONTROLLER_NAME = "controller.json"
+LIFECYCLE_NAME = "lifecycle_events.jsonl"
 
 RUNS_DIR = "runs"
 
 
 class EvidenceError(RuntimeError):
     """The evidence root does not satisfy the contract. Always fail-closed."""
+
+
+def authorization_execution_domain(ledger_root: Path) -> dict[str, Any]:
+    """Bind an authorization to one host/operator/global-ledger namespace."""
+    if not ledger_root.is_absolute():
+        raise EvidenceError("authorization ledger root is not absolute")
+    resolved_ledger = ledger_root.resolve(strict=False)
+    machine_identity: bytes | None = None
+    for candidate in (Path("/etc/machine-id"), Path("/var/lib/dbus/machine-id")):
+        try:
+            machine_identity = candidate.read_bytes().strip()
+        except OSError:
+            continue
+        if machine_identity:
+            break
+    if not machine_identity:
+        raise EvidenceError("controlled-host machine identity is unavailable")
+    domain = {
+        "schema": AUTHORIZATION_DOMAIN_SCHEMA,
+        "host_identity": hashlib.sha256(machine_identity).hexdigest(),
+        "operator_uid": os.getuid(),
+        "ledger_root": resolved_ledger.as_posix(),
+    }
+    if set(domain) != AUTHORIZATION_DOMAIN_MEMBERS:
+        raise EvidenceError("internal authorization-domain member drift")
+    return domain
 
 
 class RootName(NamedTuple):
@@ -310,6 +419,29 @@ def write_document(root: Path, name: str, payload: Mapping[str, Any]) -> Path:
     return path
 
 
+def write_document_exclusive(root: Path, name: str, payload: Mapping[str, Any]) -> Path:
+    """Durably create one record and fail if that identity was already used."""
+    root.mkdir(parents=True, exist_ok=True)
+    path = root / name
+    descriptor = os.open(
+        path,
+        os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC,
+        0o600,
+    )
+    try:
+        view = memoryview(canonical_json_bytes(payload) + b"\n")
+        while view:
+            written = os.write(descriptor, view)
+            if written <= 0:
+                raise OSError("short exclusive evidence-record write")
+            view = view[written:]
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+    _fsync_directory(root)
+    return path
+
+
 def load_document(
     root: Path, name: str, *, schema: str | None = None
 ) -> dict[str, Any]:
@@ -455,8 +587,13 @@ def describe() -> dict[str, Any]:
             "checksums": CHECKSUMS_NAME,
             "freeze": FREEZE_NAME,
             "admission": ADMISSION_NAME,
+            "authorization_grant": AUTHORIZATION_GRANT_NAME,
+            "authorization_grant_schema": AUTHORIZATION_GRANT_SCHEMA,
+            "authorization_execution_domain": AUTHORIZATION_DOMAIN_NAME,
+            "authorization_execution_domain_schema": AUTHORIZATION_DOMAIN_SCHEMA,
             "authorization_consumed": AUTHORIZATION_NAME,
             "controller": CONTROLLER_NAME,
+            "lifecycle": LIFECYCLE_NAME,
             "launch_probe": LAUNCH_PROBE_NAME,
             "mutation_observation": MUTATION_NAME,
             "observation": OBSERVATION_NAME,
