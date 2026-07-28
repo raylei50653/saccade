@@ -394,6 +394,7 @@ deleting.
 | `h0_runtime_confinement.py` | stable | - | Linux fail-closed runtime confinement and file-input attestation. |
 | `h2_behavioral_identity.py` | stable | cli | Compute the H2 behavior probe: a policy-visible digest of one eval run. |
 | `h2_measurement_evidence.py` | stable | cli | The H2 Layer-M evidence-root contract: names, records, and the inventory. |
+| `h2_measurement_freeze.py` | stable | cli | Produce the canonical Phase-A ``h2_measurement_freeze_v1`` record. |
 | `h2_path_partition.py` | stable | cli | H2 firewall: classify paths and decide Layer-P retry admissibility. |
 | `h2_runtime_inputs.py` | stable | cli | Bind the fixtures and runtime assets consumed by H2. |
 | `h2_terminal_partition.py` | stable | cli | The H2 Layer-M terminal partition: ordered, exhaustive, mechanically decidable. |
