@@ -484,6 +484,8 @@ class LayerP:
         if self.retry_verdict is None:
             raise RuntimeError("retry admissibility verdict is absent")
         selected_base = validate_selected_base(self.base)
+        if self.retry_verdict.get("base") != selected_base:
+            raise RuntimeError("changed-path verdict base differs from selected base")
         return {
             "schema": CERTIFICATE_SCHEMA,
             "source_head": _git("rev-parse", "HEAD"),

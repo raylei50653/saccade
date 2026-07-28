@@ -236,11 +236,14 @@ def load_bundle(
     run_plan = freeze.get("run_plan")
     executed = freeze.get("executed_surfaces")
     selected_base = freeze.get("selected_base")
+    changed_path_verdict = certificate.get("changed_path_verdict")
     if (
         set(freeze) != evidence.PHASE_A_FREEZE_MEMBERS
         or freeze.get("capture_phase") != CAPTURE_PHASE
         or not _hex(selected_base, 40)
         or certificate.get("selected_base") != selected_base
+        or not isinstance(changed_path_verdict, Mapping)
+        or changed_path_verdict.get("base") != selected_base
         or certificate.get("source_head") != head
         or certificate.get("equivalence") != "unproven"
         or freeze.get("equivalence") != "unproven"
@@ -381,7 +384,10 @@ def certificate_match_reasons(
         ),
         (
             isinstance(certificate.get("changed_path_verdict"), Mapping)
-            and certificate["changed_path_verdict"].get("admissible") is True,
+            and certificate["changed_path_verdict"].get("admissible") is True
+            and certificate["changed_path_verdict"].get("base")
+            == certificate.get("selected_base")
+            == freeze.get("selected_base"),
             "certificate changed-path verdict is not clean",
         ),
         (
@@ -1276,6 +1282,19 @@ def _consume_authorization(
     return receipt
 
 
+def default_authorization_ledger() -> Path:
+    """Return the clone-persistent ledger outside Git's status namespace.
+
+    The git-common directory is shared by every worktree of this clone. A
+    prior marker therefore remains available to reject reuse without making a
+    later, independently authorized invocation fail checkout hygiene.
+    """
+    common = Path(_git("rev-parse", "--git-common-dir"))
+    if not common.is_absolute():
+        common = REPO_ROOT / common
+    return common.resolve(strict=True) / "saccade" / "h2_authorization_consumptions"
+
+
 def execute_controller(
     bundle: LaunchBundle,
     *,
@@ -1300,9 +1319,8 @@ def execute_controller(
     parent = evidence_parent or (REPO_ROOT / evidence.EVIDENCE_REL)
     final = parent / evidence.phase_a_root_name(bundle.head)
     incomplete = final.with_name(final.name + ".incomplete")
-    ledger = authorization_ledger or (parent / ".h2_authorization_consumptions")
-    marker = ledger / f"{authorization.record['authorization_id']}.json"
-    owned_outputs = (incomplete, final, marker)
+    ledger = authorization_ledger or default_authorization_ledger()
+    owned_outputs = (incomplete, final)
     initial_hygiene_reasons = (
         checkout_hygiene_reasons(excluded_roots=owned_outputs)
         if require_clean_checkout
@@ -1372,6 +1390,11 @@ def execute_controller(
 
     try:
         incomplete.mkdir()
+        evidence.write_document(
+            incomplete,
+            evidence.AUTHORIZATION_GRANT_NAME,
+            authorization.record,
+        )
         evidence.write_document(
             incomplete,
             evidence.AUTHORIZATION_NAME,

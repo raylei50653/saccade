@@ -201,7 +201,7 @@ def _bundle(tmp_path: Path) -> controller.LaunchBundle:
         "source_head": head,
         "source_tree": tree,
         "selected_base": head,
-        "changed_path_verdict": {"admissible": True},
+        "changed_path_verdict": {"admissible": True, "base": head},
         "decision_relevant_digest": coordinate["implementation"],
         "equivalence": "unproven",
         "identity_semantics_digest": coordinate["identity_semantics"],
@@ -473,6 +473,26 @@ def test_authorization_is_required_and_bound_to_the_exact_invocation(
         )
 
 
+def test_controller_rejects_changed_path_verdict_for_another_base(
+    tmp_path: Path,
+) -> None:
+    bundle = _bundle(tmp_path)
+    bundle.certificate["changed_path_verdict"]["base"] = "9" * 40
+    bundle.freeze["layer_p_certificate"]["digest"] = evidence.digest(bundle.certificate)
+    witness = _checkout_witness(
+        bundle,
+        current_head=bundle.head,
+        current_tree=str(bundle.certificate["source_tree"]),
+    )
+    reasons = controller.certificate_match_reasons(
+        bundle,
+        current_head=bundle.head,
+        current_tree=str(bundle.certificate["source_tree"]),
+        checkout_witness=witness,
+    )
+    assert reasons == ("certificate changed-path verdict is not clean",)
+
+
 @pytest.mark.parametrize(
     ("field", "value"),
     (
@@ -520,6 +540,18 @@ def test_authorization_consumption_is_exclusive_across_evidence_roots(
         inherited_environment={},
     )
     assert selection.terminal is None
+    archived_grant = evidence.load_document(
+        first,
+        evidence.AUTHORIZATION_GRANT_NAME,
+        schema=evidence.AUTHORIZATION_GRANT_SCHEMA,
+    )
+    receipt = evidence.load_document(
+        first,
+        evidence.AUTHORIZATION_NAME,
+        schema=evidence.AUTHORIZATION_SCHEMA,
+    )
+    assert archived_grant == grant.record
+    assert receipt["authorization_digest"] == evidence.digest(archived_grant)
     assert (first / evidence.AUTHORIZATION_NAME).is_file()
     with pytest.raises(controller.ControllerError, match="already consumed"):
         controller.execute_controller(
@@ -529,6 +561,51 @@ def test_authorization_consumption_is_exclusive_across_evidence_roots(
             authorization_ledger=ledger,
             require_clean_checkout=False,
         )
+
+
+def test_prior_default_ledger_marker_does_not_block_a_new_authorization(
+    tmp_path: Path,
+) -> None:
+    assert controller.checkout_hygiene_reasons() == ()
+    bundle = _bundle(tmp_path)
+    grant_a = _authorization(tmp_path, bundle, identity_suffix="-ledger-a")
+    grant_b = _authorization(tmp_path, bundle, identity_suffix="-ledger-b")
+    ledger = controller.default_authorization_ledger()
+    marker_a = ledger / f"{grant_a.record['authorization_id']}.json"
+    marker_b = ledger / f"{grant_b.record['authorization_id']}.json"
+    assert not marker_a.exists()
+    assert not marker_b.exists()
+    try:
+        controller._consume_authorization(grant_a, bundle=bundle, ledger=ledger)
+        assert marker_a.is_file()
+        root, selection = controller.execute_controller(
+            bundle,
+            authorization=grant_b,
+            evidence_parent=tmp_path / "second-authorization",
+            bound_paths=(bundle.runtime_manifest_path,),
+            require_clean_checkout=True,
+            launch_probe=_probe,
+            launch_child=_launcher(),
+            monitor_factory=NullMonitor,
+            bundle_revalidator=_no_revalidation,
+            checkout_witness_builder=_checkout_witness,
+            checkout_state_reader=_checkout_state,
+            inherited_environment={},
+        )
+        assert marker_a.is_file()
+        assert marker_b.is_file()
+        assert selection.terminal is None
+        assert verifier.verify_evidence_root(root)["result"] == "measurement_pass"
+        with pytest.raises(controller.ControllerError, match="already consumed"):
+            controller._consume_authorization(
+                grant_a,
+                bundle=bundle,
+                ledger=ledger,
+            )
+    finally:
+        for marker in (marker_a, marker_b):
+            if marker.is_file():
+                marker.unlink()
 
 
 def test_crash_after_consumption_before_child_still_prevents_reuse(
@@ -706,9 +783,7 @@ def test_repo_owned_archive_is_reachable_with_production_hygiene_enabled(
         _REPO / evidence.EVIDENCE_REL / evidence.phase_a_root_name(bundle.head)
     )
     marker = (
-        _REPO
-        / evidence.EVIDENCE_REL
-        / ".h2_authorization_consumptions"
+        controller.default_authorization_ledger()
         / f"{authorization.record['authorization_id']}.json"
     )
     assert not expected_root.exists()
@@ -737,10 +812,6 @@ def test_repo_owned_archive_is_reachable_with_production_hygiene_enabled(
             shutil.rmtree(expected_root)
         if marker.is_file():
             marker.unlink()
-        try:
-            marker.parent.rmdir()
-        except OSError:
-            pass
 
 
 def test_capture_inequality_selects_terminal_2(tmp_path: Path) -> None:

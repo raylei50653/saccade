@@ -98,6 +98,7 @@ def build_freeze(
 ) -> dict[str, Any]:
     head = certificate.get("source_head")
     selected_base = certificate.get("selected_base")
+    changed_path_verdict = certificate.get("changed_path_verdict")
     coordinate = certificate.get("published_coordinate")
     probe = certificate.get("behavior_probe")
     build_artifacts = runtime_manifest.get("build_artifacts")
@@ -105,6 +106,13 @@ def build_freeze(
         raise FreezeError("certificate source_head is not full lowercase 40-hex")
     if not _hex(selected_base, 40):
         raise FreezeError("certificate selected_base is not full lowercase 40-hex")
+    if (
+        not isinstance(changed_path_verdict, Mapping)
+        or changed_path_verdict.get("base") != selected_base
+    ):
+        raise FreezeError(
+            "certificate changed-path verdict base differs from selected_base"
+        )
     if set(executed_surfaces) != set(evidence.PHASE_A_EXECUTED_SURFACE_PATHS) or any(
         not _hex(value, 64) for value in executed_surfaces.values()
     ):
@@ -228,11 +236,17 @@ def produce(
     if _git_text("status", "--porcelain", "--untracked-files=normal"):
         raise FreezeError("freeze production requires a clean checkout")
     selected_base = certificate.get("selected_base")
+    changed_path_verdict = certificate.get("changed_path_verdict")
     if (
         not _hex(selected_base, 40)
         or _git_text("rev-parse", f"{selected_base}^{{commit}}") != selected_base
+        or not isinstance(changed_path_verdict, Mapping)
+        or changed_path_verdict.get("base") != selected_base
     ):
-        raise FreezeError("selected_base is not an exact available commit")
+        raise FreezeError(
+            "selected_base is not an exact available commit or differs from "
+            "the changed-path verdict base"
+        )
     return build_freeze(
         certificate=certificate,
         certificate_digest=evidence.digest(certificate),

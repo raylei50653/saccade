@@ -31,9 +31,12 @@ h2_measure_b_<I40_B>_<F64>           phase B   (§ C3.1; complete digest, never
     checkout_identity_witness.json   source tree and all three content axes
     mutation_observation.json        the BoundInputMonitor record
     measurement_stop_boundary.json   monitored revalidation + final-drain boundary
+    authorization_grant.json         canonical owner-bound Phase-A grant loaded
+                                     before durable consumption
     authorization_consumed.json      the durable receipt identifying the
                                      exactly-once authority consumed before
-                                     the first measurement child launch
+                                     the first measurement child launch; never
+                                     itself a grant
     lifecycle_events.jsonl           durable launch-to-stop event order
     observation.json                 exactly ORDERED_PREDICATES (+ optional
                                      execution_result)
@@ -197,6 +200,7 @@ CHECKSUMS_NAME = "checksums.sha256"
 FREEZE_NAME = "freeze.json"
 ADMISSION_NAME = "admission.json"
 AUTHORIZATION_NAME = "authorization_consumed.json"
+AUTHORIZATION_GRANT_NAME = "authorization_grant.json"
 OBSERVATION_NAME = "observation.json"
 TERMINAL_NAME = "terminal.json"
 COMPARISON_NAME = "comparison.json"
@@ -542,6 +546,7 @@ def describe() -> dict[str, Any]:
             "checksums": CHECKSUMS_NAME,
             "freeze": FREEZE_NAME,
             "admission": ADMISSION_NAME,
+            "authorization_grant": AUTHORIZATION_GRANT_NAME,
             "authorization_grant_schema": AUTHORIZATION_GRANT_SCHEMA,
             "authorization_consumed": AUTHORIZATION_NAME,
             "controller": CONTROLLER_NAME,

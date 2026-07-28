@@ -63,6 +63,7 @@ def _inputs() -> dict[str, Any]:
         "schema": CERTIFICATE_SCHEMA,
         "source_head": head,
         "selected_base": head,
+        "changed_path_verdict": {"admissible": True, "base": head},
         "published_coordinate": coordinate,
         "behavior_probe": probe_digest,
         "published_probe": probe_digest,
@@ -133,4 +134,12 @@ def test_freeze_producer_rejects_malformed_or_mismatched_primary_bindings(
     else:  # pragma: no cover
         raise AssertionError(target)
     with pytest.raises(producer.FreezeError):
+        producer.build_freeze(**inputs)
+
+
+def test_freeze_producer_rejects_changed_path_verdict_for_another_base() -> None:
+    inputs = _inputs()
+    inputs["certificate"]["changed_path_verdict"]["base"] = "9" * 40
+    inputs["certificate_digest"] = evidence.digest(inputs["certificate"])
+    with pytest.raises(producer.FreezeError, match="verdict base"):
         producer.build_freeze(**inputs)

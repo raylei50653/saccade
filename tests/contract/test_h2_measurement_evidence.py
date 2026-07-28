@@ -348,7 +348,7 @@ def _write_phase_a_launch_records(root: Path, *, head: str) -> dict[str, Any]:
         "build_artifact_digest": build_digest,
         "build_dir": build_dir,
         "build_witness": reference["build_witness"],
-        "changed_path_verdict": {"admissible": True},
+        "changed_path_verdict": {"admissible": True, "base": head},
         "decision_relevant_digest": COORDINATE["implementation"],
         "equivalence": "unproven",
         "fixture": behavior.IDENTITY_SEQUENCE,
@@ -476,14 +476,26 @@ def _phase_a_freeze(
 
 def _write_phase_a_authorization(root: Path, freeze: dict[str, Any]) -> None:
     authorization_id = evidence.digest({"root": root.name})
+    invocation_id = evidence.digest({"invocation": authorization_id})
+    grant = {
+        "schema": evidence.AUTHORIZATION_GRANT_SCHEMA,
+        "authorization_id": authorization_id,
+        "capture_phase": evidence.CAPTURE_PHASE["a"],
+        "controller_digest": freeze["executed_surfaces"][
+            "scripts/tools/run_h2_measurement.py"
+        ],
+        "freeze_digest": evidence.freeze_digest(freeze),
+        "instrumentation_head": freeze["instrumentation_head"],
+        "invocation_id": invocation_id,
+        "issued_by": "research_owner",
+    }
+    evidence.write_document(root, evidence.AUTHORIZATION_GRANT_NAME, grant)
     evidence.write_document(
         root,
         evidence.AUTHORIZATION_NAME,
         {
             "schema": evidence.AUTHORIZATION_SCHEMA,
-            "authorization_digest": evidence.digest(
-                {"authorization": authorization_id}
-            ),
+            "authorization_digest": evidence.digest(grant),
             "authorization_id": authorization_id,
             "capture_phase": evidence.CAPTURE_PHASE["a"],
             "consumed_utc": "2026-07-28T00:00:00Z",
@@ -492,14 +504,21 @@ def _write_phase_a_authorization(root: Path, freeze: dict[str, Any]) -> None:
             ],
             "freeze_digest": evidence.freeze_digest(freeze),
             "instrumentation_head": freeze["instrumentation_head"],
-            "invocation_id": evidence.digest({"invocation": authorization_id}),
+            "invocation_id": invocation_id,
             "state": "consumed",
         },
     )
 
 
 def _rebind_phase_a_authorization(root: Path, freeze: dict[str, Any]) -> None:
+    grant = evidence.load_document(root, evidence.AUTHORIZATION_GRANT_NAME)
+    grant["freeze_digest"] = evidence.freeze_digest(freeze)
+    grant["controller_digest"] = freeze["executed_surfaces"][
+        "scripts/tools/run_h2_measurement.py"
+    ]
+    evidence.write_document(root, evidence.AUTHORIZATION_GRANT_NAME, grant)
     receipt = evidence.load_document(root, evidence.AUTHORIZATION_NAME)
+    receipt["authorization_digest"] = evidence.digest(grant)
     receipt["freeze_digest"] = evidence.freeze_digest(freeze)
     receipt["controller_digest"] = freeze["executed_surfaces"][
         "scripts/tools/run_h2_measurement.py"
@@ -508,6 +527,7 @@ def _rebind_phase_a_authorization(root: Path, freeze: dict[str, Any]) -> None:
 
 
 def _write_phase_a_lifecycle(root: Path) -> None:
+    receipt = evidence.load_document(root, evidence.AUTHORIZATION_NAME)
     names = [
         "authorization_consumed",
         "archive_created",
@@ -531,6 +551,9 @@ def _write_phase_a_lifecycle(root: Path) -> None:
             "event": name,
             "ordinal": ordinal,
         }
+        if name == "authorization_consumed":
+            row["authorization_id"] = receipt["authorization_id"]
+            row["invocation_id"] = receipt["invocation_id"]
         if name in {"child_launch", "child_completed"}:
             row["run_id"] = evidence.RUN_IDS[run_index // 2]
             run_index += 1
@@ -777,6 +800,8 @@ def test_phase_a_freeze_reconstruction_rejects_every_binding_drift(
 @pytest.mark.parametrize(
     "mutation",
     (
+        "grant_absent",
+        "grant_digest",
         "absent",
         "authorization_digest",
         "authorization_id",
@@ -793,7 +818,14 @@ def test_phase_a_authorization_consumption_is_fail_closed(
 ) -> None:
     root = phase_a_root(tmp_path)
     path = root / evidence.AUTHORIZATION_NAME
-    if mutation == "absent":
+    grant_path = root / evidence.AUTHORIZATION_GRANT_NAME
+    if mutation == "grant_absent":
+        grant_path.unlink()
+    elif mutation == "grant_digest":
+        grant = evidence.load_document(root, evidence.AUTHORIZATION_GRANT_NAME)
+        grant["issued_by"] = "not_the_owner"
+        evidence.write_document(root, evidence.AUTHORIZATION_GRANT_NAME, grant)
+    elif mutation == "absent":
         path.unlink()
     else:
         receipt = evidence.load_document(root, evidence.AUTHORIZATION_NAME)
@@ -819,7 +851,55 @@ def test_phase_a_authorization_consumption_is_fail_closed(
     _refinalize(root)
     with pytest.raises(
         verifier.VerificationError,
-        match="authorization consumption|authorization_consumed",
+        match=(
+            "authorization grant/consumption|authorization_consumed|"
+            "authorization_grant.json"
+        ),
+    ):
+        verifier.verify_evidence_root(root)
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    (
+        "completion_without_launch",
+        "duplicate_launch",
+        "duplicate_completion",
+        "wrong_completion_id",
+    ),
+)
+def test_partial_lifecycle_rejects_unpaired_or_duplicate_child_events(
+    tmp_path: Path,
+    mutation: str,
+) -> None:
+    root = phase_a_root(tmp_path)
+    path = root / evidence.LIFECYCLE_NAME
+    rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+    first_launch = next(
+        index for index, row in enumerate(rows) if row["event"] == "child_launch"
+    )
+    first_completion = next(
+        index for index, row in enumerate(rows) if row["event"] == "child_completed"
+    )
+    if mutation == "completion_without_launch":
+        del rows[first_launch]
+    elif mutation == "duplicate_launch":
+        rows.insert(first_launch + 1, dict(rows[first_launch]))
+    elif mutation == "duplicate_completion":
+        rows.insert(first_completion + 1, dict(rows[first_completion]))
+    elif mutation == "wrong_completion_id":
+        rows[first_completion]["run_id"] = evidence.RUN_IDS[1]
+    else:  # pragma: no cover
+        raise AssertionError(mutation)
+    for ordinal, row in enumerate(rows, start=1):
+        row["ordinal"] = ordinal
+    path.write_bytes(
+        b"".join(evidence.canonical_json_bytes(row) + b"\n" for row in rows)
+    )
+    _refinalize(root)
+    with pytest.raises(
+        verifier.VerificationError,
+        match="completion has no unmatched launch|launch lifecycle is duplicated",
     ):
         verifier.verify_evidence_root(root)
 
@@ -886,6 +966,7 @@ def test_certificate_predicate_is_recomputed_from_archived_bindings(
         "source_tree",
         "selected_base",
         "changed_path_verdict",
+        "changed_path_verdict_base",
         "equivalence",
         "implementation_digest",
         "identity_semantics_digest",
@@ -926,6 +1007,8 @@ def test_every_certificate_condition_is_independently_recomputed(
         certificate["selected_base"] = ""
     elif condition == "changed_path_verdict":
         certificate["changed_path_verdict"]["admissible"] = False
+    elif condition == "changed_path_verdict_base":
+        certificate["changed_path_verdict"]["base"] = "9" * 40
     elif condition == "equivalence":
         certificate["equivalence"] = "claimed"
     elif condition == "implementation_digest":

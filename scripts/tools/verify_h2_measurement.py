@@ -220,6 +220,11 @@ def _authorization(
     receipt = _load(
         root, evidence.AUTHORIZATION_NAME, schema=evidence.AUTHORIZATION_SCHEMA
     )
+    grant = _load(
+        root,
+        evidence.AUTHORIZATION_GRANT_NAME,
+        schema=evidence.AUTHORIZATION_GRANT_SCHEMA,
+    )
     surfaces = freeze.get("executed_surfaces")
     controller_digest = (
         surfaces.get("scripts/tools/run_h2_measurement.py")
@@ -228,20 +233,32 @@ def _authorization(
     )
     if (
         set(receipt) != evidence.AUTHORIZATION_CONSUMED_MEMBERS
+        or set(grant) != evidence.AUTHORIZATION_GRANT_MEMBERS
         or not _hex(receipt.get("authorization_digest"), 64)
         or not _hex(receipt.get("authorization_id"), 64)
         or not _hex(receipt.get("invocation_id"), 64)
+        or not _hex(grant.get("authorization_id"), 64)
+        or not _hex(grant.get("invocation_id"), 64)
+        or receipt.get("authorization_digest") != evidence.digest(grant)
+        or receipt.get("authorization_id") != grant.get("authorization_id")
+        or receipt.get("invocation_id") != grant.get("invocation_id")
         or receipt.get("capture_phase") != evidence.CAPTURE_PHASE[phase]
+        or grant.get("capture_phase") != evidence.CAPTURE_PHASE[phase]
         or receipt.get("instrumentation_head") != name.i40
+        or grant.get("instrumentation_head") != name.i40
         or receipt.get("freeze_digest") != evidence.freeze_digest(freeze)
+        or grant.get("freeze_digest") != evidence.freeze_digest(freeze)
         or receipt.get("controller_digest") != controller_digest
+        or grant.get("controller_digest") != controller_digest
+        or grant.get("issued_by") != "research_owner"
         or receipt.get("state") != "consumed"
         or not isinstance(receipt.get("consumed_utc"), str)
         or not receipt["consumed_utc"]
     ):
         raise VerificationError(
-            "Phase-A authorization consumption record is absent, malformed, "
-            "or bound to another head/freeze/controller/invocation"
+            "Phase-A authorization grant/consumption record is absent, malformed, "
+            "digest-unreconstructable, or bound to another "
+            "head/freeze/controller/invocation"
         )
     return receipt
 
@@ -361,6 +378,7 @@ def _phase_a_freeze_bindings(
     name: evidence.RootName,
     freeze: Mapping[str, Any],
     *,
+    certificate: Mapping[str, Any],
     reference: Mapping[str, Any],
     runtime_manifest: Mapping[str, Any],
     published: Mapping[str, Any],
@@ -385,6 +403,10 @@ def _phase_a_freeze_bindings(
         or freeze.get("capture_phase") != evidence.CAPTURE_PHASE["a"]
         or freeze.get("instrumentation_head") != head
         or not _hex(freeze.get("selected_base"), 40)
+        or certificate.get("selected_base") != freeze.get("selected_base")
+        or not isinstance(certificate.get("changed_path_verdict"), Mapping)
+        or certificate["changed_path_verdict"].get("base")
+        != freeze.get("selected_base")
         or freeze.get("equivalence") != "unproven"
         or not isinstance(freeze.get("layer_p_certificate"), Mapping)
         or freeze["layer_p_certificate"].get("schema") != CERTIFICATE_SCHEMA
@@ -454,28 +476,116 @@ def _verify_lifecycle(root: Path, observation: Mapping[str, Any]) -> None:
             raise VerificationError(f"lifecycle event {number} is malformed")
         rows.append(row)
     names = [str(row["event"]) for row in rows]
-    if names[:2] != ["authorization_consumed", "archive_created"]:
+    if len(rows) < 3 or names[:2] != [
+        "authorization_consumed",
+        "archive_created",
+    ]:
         raise VerificationError(
             "authorization consumption does not precede archive creation"
         )
-    if "child_launch" in names and (
-        "monitor_active" not in names
-        or "launch_revalidation" not in names
-        or names.index("child_launch") < names.index("launch_revalidation")
-    ):
-        raise VerificationError("a child launch precedes monitored launch revalidation")
-    launches = [row.get("run_id") for row in rows if row.get("event") == "child_launch"]
-    completions = [
-        row.get("run_id") for row in rows if row.get("event") == "child_completed"
-    ]
-    if launches != list(evidence.RUN_IDS[: len(launches)]):
+    if names[-1] != "stop_boundary_recorded":
         raise VerificationError(
-            "child launch lifecycle order differs from the run plan"
+            "controller lifecycle is not a finalized legal event prefix"
         )
-    if completions != list(evidence.RUN_IDS[: len(completions)]):
-        raise VerificationError(
-            "child completion lifecycle order differs from the run plan"
-        )
+    receipt = _load(
+        root, evidence.AUTHORIZATION_NAME, schema=evidence.AUTHORIZATION_SCHEMA
+    )
+
+    base_members = {"event", "ordinal", "schema"}
+    no_field_events = {
+        "archive_created",
+        "monitor_active",
+        "launch_revalidation",
+        "monitored_final_revalidation",
+        "final_monitor_drain",
+        "stop_boundary_recorded",
+    }
+    for row in rows:
+        event = row["event"]
+        if event == "authorization_consumed":
+            if (
+                set(row) != base_members | {"authorization_id", "invocation_id"}
+                or not _hex(row.get("authorization_id"), 64)
+                or not _hex(row.get("invocation_id"), 64)
+                or row.get("authorization_id") != receipt.get("authorization_id")
+                or row.get("invocation_id") != receipt.get("invocation_id")
+            ):
+                raise VerificationError(
+                    "authorization-consumed lifecycle event is malformed"
+                )
+        elif event in {"child_launch", "child_completed"}:
+            if set(row) != base_members | {"run_id"}:
+                raise VerificationError(f"{event} lifecycle event is malformed")
+        elif event in no_field_events:
+            if set(row) != base_members:
+                raise VerificationError(f"{event} lifecycle event is malformed")
+        else:
+            raise VerificationError(f"unknown lifecycle event: {event!r}")
+
+    position = 2
+    monitor_active = False
+    launch_revalidated = False
+    if position < len(rows) and rows[position]["event"] == "monitor_active":
+        monitor_active = True
+        position += 1
+    if position < len(rows) and rows[position]["event"] == "launch_revalidation":
+        if not monitor_active:
+            raise VerificationError(
+                "launch revalidation was recorded without an active monitor"
+            )
+        launch_revalidated = True
+        position += 1
+
+    next_run_index = 0
+    unmatched_launch: str | None = None
+    while position < len(rows) and rows[position]["event"] in {
+        "child_launch",
+        "child_completed",
+    }:
+        row = rows[position]
+        event = row["event"]
+        run_id = row.get("run_id")
+        if event == "child_launch":
+            if (
+                not launch_revalidated
+                or unmatched_launch is not None
+                or next_run_index >= len(evidence.RUN_IDS)
+                or run_id != evidence.RUN_IDS[next_run_index]
+            ):
+                raise VerificationError(
+                    "child launch lifecycle is duplicated, unpaired, or "
+                    "differs from the run plan"
+                )
+            unmatched_launch = str(run_id)
+        elif unmatched_launch is None or run_id != unmatched_launch:
+            raise VerificationError(
+                "child completion has no unmatched launch for the same run id"
+            )
+        else:
+            unmatched_launch = None
+            next_run_index += 1
+        position += 1
+
+    tail_order = {
+        "monitored_final_revalidation": 0,
+        "final_monitor_drain": 1,
+        "stop_boundary_recorded": 2,
+    }
+    previous_tail = -1
+    while position < len(rows):
+        event = str(rows[position]["event"])
+        tail_position = tail_order.get(event)
+        if (
+            tail_position is None
+            or tail_position <= previous_tail
+            or (event != "stop_boundary_recorded" and not monitor_active)
+        ):
+            raise VerificationError(
+                "partial controller lifecycle is not a legal launch-to-stop prefix"
+            )
+        previous_tail = tail_position
+        position += 1
+
     if observation.get("execution_complete") is True:
         expected = [
             "authorization_consumed",
@@ -523,6 +633,7 @@ def _phase_a_launch_records(
         root,
         name,
         freeze,
+        certificate=certificate,
         reference=reference,
         runtime_manifest=runtime_manifest,
         published=published,
@@ -556,7 +667,10 @@ def _phase_a_launch_records(
         ),
         (
             isinstance(certificate.get("changed_path_verdict"), Mapping)
-            and certificate["changed_path_verdict"].get("admissible") is True,
+            and certificate["changed_path_verdict"].get("admissible") is True
+            and certificate["changed_path_verdict"].get("base")
+            == certificate.get("selected_base")
+            == freeze.get("selected_base"),
             "certificate changed-path verdict is not clean",
         ),
         (

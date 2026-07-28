@@ -119,6 +119,30 @@ def test_certificate_binds_every_review_required_coordinate(tmp_path: Path) -> N
     assert certificate["selected_base"] == selected_base
     assert certificate["equivalence"] == "unproven"
     assert certificate["changed_path_verdict"]["admissible"] is True
+    assert certificate["changed_path_verdict"]["base"] == selected_base
+
+
+def test_certificate_rejects_changed_path_verdict_for_another_base(
+    tmp_path: Path,
+) -> None:
+    selected_base = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=_REPO, text=True
+    ).strip()
+    controller = layer_p.LayerP.__new__(layer_p.LayerP)
+    controller.base = selected_base
+    controller.retry_verdict = {
+        "admissible": True,
+        "base": "9" * 40,
+    }
+    with pytest.raises(RuntimeError, match="verdict base"):
+        controller.build_certificate(
+            published={},
+            probe={},
+            manifest={},
+            probe_path=tmp_path / "probe.json",
+            manifest_path=tmp_path / "runtime.json",
+            extension_witness={},
+        )
 
 
 def test_identity_run_monitors_hashing_and_revalidates_before_final_drain(
