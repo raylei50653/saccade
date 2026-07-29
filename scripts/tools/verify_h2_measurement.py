@@ -305,7 +305,7 @@ def _authorization(
         or grant.get("controller_digest") != controller_digest
         or receipt.get("execution_domain") != execution_domain_digest
         or grant.get("execution_domain") != execution_domain_digest
-        or grant.get("issued_by") != "research_owner"
+        or grant.get("issued_by") != evidence.AUTHORIZATION_ISSUER
         or receipt.get("state") != "consumed"
         or not isinstance(receipt.get("consumed_utc"), str)
         or not receipt["consumed_utc"]

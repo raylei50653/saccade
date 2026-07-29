@@ -2032,3 +2032,87 @@ def test_repository_runner_does_not_re_derive_the_ingress_predicate() -> None:
     }
     assert "validate_environment" not in called
     assert "validate_repository_owned_mutation" in called
+
+
+def _issued_grant(
+    tmp_path: Path,
+    bundle: controller.LaunchBundle,
+    *,
+    issuer: str,
+    ledger: Path,
+) -> Path:
+    """One grant that is legal except for whatever the caller varies."""
+    seed = evidence.digest({"issuer": issuer, "path": tmp_path.as_posix()})
+    grant = {
+        "schema": evidence.AUTHORIZATION_GRANT_SCHEMA,
+        "authorization_id": seed,
+        "capture_phase": evidence.CAPTURE_PHASE["a"],
+        "controller_digest": bundle.freeze["executed_surfaces"][
+            "scripts/tools/run_h2_measurement.py"
+        ],
+        "execution_domain": evidence.digest(
+            evidence.authorization_execution_domain(ledger)
+        ),
+        "freeze_digest": evidence.freeze_digest(bundle.freeze),
+        "instrumentation_head": bundle.head,
+        "invocation_id": evidence.digest({"invocation": seed}),
+        "issued_by": issuer,
+    }
+    path = tmp_path / f"grant-{seed[:8]}.json"
+    _write(path, grant)
+    return path
+
+
+def test_controller_admission_reads_the_issuer_from_the_authority_constant(
+    tmp_path, monkeypatch
+) -> None:
+    """Admission must consult `AUTHORIZATION_ISSUER` at call time.
+
+    The two halves move together only if the controller holds no literal of its
+    own: with the authority moved, `research_owner` stops being an issuer and
+    the moved value starts being one.
+    """
+    bundle = _bundle(tmp_path)
+    ledger = tmp_path / "ledger"
+    moved = "successor_research_owner"
+    assert moved != evidence.AUTHORIZATION_ISSUER
+
+    stale = _issued_grant(tmp_path, bundle, issuer="research_owner", ledger=ledger)
+    followed = _issued_grant(tmp_path, bundle, issuer=moved, ledger=ledger)
+
+    def _load(path: Path) -> controller.AuthorizationGrant:
+        record = evidence.load_document(path.parent, path.name)
+        return controller.load_authorization(
+            path,
+            bundle,
+            invocation_id=record["invocation_id"],
+            authorization_ledger=ledger,
+        )
+
+    assert _load(stale).record["issued_by"] == "research_owner"
+    with pytest.raises(controller.ControllerError):
+        _load(followed)
+
+    monkeypatch.setattr(evidence, "AUTHORIZATION_ISSUER", moved)
+    assert _load(followed).record["issued_by"] == moved
+    with pytest.raises(controller.ControllerError):
+        _load(stale)
+
+
+def test_no_production_surface_restates_the_authorization_issuer() -> None:
+    """The issuer literal may exist in exactly one place (§ C3.9).
+
+    A second copy in a producer or a validator is a second, silently drifting
+    answer to who may authorize a measurement — which is what this constant was
+    extracted to prevent. Test fixtures may still spell it out: a fixture is an
+    external contract sample, not an authority.
+    """
+    owner = _TOOLS / "h2_measurement_evidence.py"
+    literal = '"research_owner"'
+    assert owner.read_text(encoding="utf-8").count(literal) == 1
+
+    for name in evidence.PHASE_A_EXECUTED_SURFACE_PATHS:
+        surface = _REPO / name
+        if surface == owner:
+            continue
+        assert literal not in surface.read_text(encoding="utf-8"), name

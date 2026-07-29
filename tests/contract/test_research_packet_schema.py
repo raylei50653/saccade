@@ -707,6 +707,55 @@ def test_h2_archived_execution_domain_shape_is_judged_after_the_digest_chain(
     assert "archived authorization execution domain is malformed" in str(excinfo.value)
 
 
+def _rebind_authorization_grant(root: pathlib.Path, grant: dict) -> None:
+    """Rewrite the grant and the receipt digest that binds it.
+
+    Same reason as `_rebind_execution_domain`: a semantic mutation that dies at
+    `authorization_digest` proves nothing about the predicate under test.
+    """
+    receipt = h2_evidence.load_document(root, h2_evidence.AUTHORIZATION_NAME)
+    receipt["authorization_digest"] = h2_evidence.digest(grant)
+    h2_evidence.write_document(root, h2_evidence.AUTHORIZATION_GRANT_NAME, grant)
+    h2_evidence.write_document(root, h2_evidence.AUTHORIZATION_NAME, receipt)
+
+
+def test_h2_archive_verifier_reads_the_issuer_from_the_authority_constant(
+    tmp_path, monkeypatch
+) -> None:
+    """The verifier must consult `AUTHORIZATION_ISSUER` at call time.
+
+    Both directions are asserted from one fixture: with the authority moved, the
+    archived grant's `research_owner` is no longer an issuer, and a grant naming
+    the moved authority is. A verifier holding its own literal would answer the
+    same in both halves.
+    """
+    source = h2_measurement_execution_dirs()[0]
+    moved = "successor_research_owner"
+    assert moved != h2_evidence.AUTHORIZATION_ISSUER
+
+    root = tmp_path / "stale-issuer"
+    freeze, name = _archived_authorization_fixture(root, source)
+    monkeypatch.setattr(h2_evidence, "AUTHORIZATION_ISSUER", moved)
+    with pytest.raises(measurement_verifier.VerificationError):
+        measurement_verifier._authorization(root, "a", freeze=freeze, name=name)
+
+    followed = tmp_path / "moved-issuer"
+    freeze, name = _archived_authorization_fixture(followed, source)
+    grant = h2_evidence.load_document(followed, h2_evidence.AUTHORIZATION_GRANT_NAME)
+    _rebind_authorization_grant(followed, {**grant, "issued_by": moved})
+    assert (
+        measurement_verifier._authorization(followed, "a", freeze=freeze, name=name)[
+            "state"
+        ]
+        == "consumed"
+    )
+
+
+def test_h2_authorization_issuer_value_is_unchanged() -> None:
+    """Normalizing the literal into a constant must not move the authority."""
+    assert h2_evidence.AUTHORIZATION_ISSUER == "research_owner"
+
+
 @pytest.mark.parametrize("ledger_root", ["/", "/var/lib/h2", "/a/b/c"])
 def test_h2_archived_execution_domain_accepts_canonical_absolute_paths(
     tmp_path, ledger_root: str
