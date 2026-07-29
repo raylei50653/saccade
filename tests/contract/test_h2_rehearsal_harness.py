@@ -30,6 +30,7 @@ import h2_measurement_evidence as evidence  # noqa: E402
 import h2_path_partition as path_partition  # noqa: E402
 import h2_rehearse_measurement as harness  # noqa: E402
 import run_h2_measurement as controller  # noqa: E402
+import run_h2_measurement_child as child  # noqa: E402
 
 from tests.contract.test_h2_measurement_controller import _bundle  # noqa: E402
 
@@ -312,8 +313,38 @@ class _Selection(NamedTuple):
     result: str
 
 
-def _archive(root: Path, *, runs: tuple[str, ...]) -> Path:
-    """The parts of an evidence root the harness projects its verdict from."""
+def _invocation(
+    directory: Path,
+    run_id: str,
+    state: str,
+    *,
+    schema: str = child.INVOCATION_SCHEMA,
+) -> None:
+    """The child's durable lifecycle record, in the shape the child writes it."""
+    evidence.write_document(
+        directory,
+        child.INVOCATION_NAME,
+        {
+            "schema": schema,
+            "capture_phase": evidence.CAPTURE_PHASE["a"],
+            "run_id": run_id,
+            "sequence": controller.SEQUENCE,
+            "state": state,
+        },
+    )
+
+
+def _archive(
+    root: Path,
+    *,
+    runs: tuple[str, ...],
+    states: dict[str, str | None] | None = None,
+) -> Path:
+    """The parts of an evidence root the harness projects its verdict from.
+
+    `states` overrides one run's lifecycle: a state string, or `None` to
+    materialize the directory with no lifecycle record at all.
+    """
     root.mkdir(parents=True)
     sequence = controller.SEQUENCE
     evidence.write_document(
@@ -329,8 +360,13 @@ def _archive(root: Path, *, runs: tuple[str, ...]) -> Path:
             "state": "terminal",
         },
     )
+    overrides = states or {}
     for run_id in runs:
-        evidence.run_dir(root, sequence, run_id).mkdir(parents=True)
+        directory = evidence.run_dir(root, sequence, run_id)
+        directory.mkdir(parents=True)
+        state = overrides.get(run_id, child.RUN_COMPLETED)
+        if state is not None:
+            _invocation(directory, run_id, state)
     evidence.write_checksum_inventory(root)
     return root
 
@@ -459,8 +495,157 @@ def test_the_run_summary_is_projected_from_the_archive(tmp_path: Path) -> None:
     root = _archive(tmp_path / "root", runs=tuple(evidence.RUN_IDS)[:2])
     summary = harness.ordered_run_summary(root)
     assert [item["run_id"] for item in summary] == list(evidence.RUN_IDS)
-    assert [item["present"] for item in summary] == [True, True, False, False]
+    assert [item["materialized"] for item in summary] == [True, True, False, False]
     assert [item["recorded"] for item in summary] == [True, True, False, False]
+    assert [item["completed"] for item in summary] == [True, True, False, False]
+
+
+@pytest.mark.parametrize(
+    ("state", "lifecycle_present", "completed"),
+    [
+        (child.RUN_COMPLETED, True, True),
+        (child.RUN_FAILED, True, False),
+        (child.RUN_RUNNING, True, False),
+        ("something_new", True, False),
+        (None, False, False),
+    ],
+    ids=["completed", "failed", "running", "unknown-state", "no-lifecycle-record"],
+)
+def test_a_materialized_run_is_not_a_completed_run(
+    tmp_path: Path, state: str | None, lifecycle_present: bool, completed: bool
+) -> None:
+    """The 2026-07-29 rehearsal read a failed run as complete.
+
+    Its directory existed, because the controller creates it before the child
+    runs and the child leaves it behind when it dies. Completion is the child's
+    own durable lifecycle record — the one the controller already reads — and
+    anything else, including an unreadable or unknown state, is not completion.
+    """
+    run_id = evidence.RUN_IDS[0]
+    root = _archive(tmp_path / "root", runs=(run_id,), states={run_id: state})
+    first = harness.ordered_run_summary(root)[0]
+    assert first["materialized"] is True
+    assert first["lifecycle_present"] is lifecycle_present
+    assert first["lifecycle_state"] == (state if lifecycle_present else None)
+    assert first["completed"] is completed
+
+
+def test_a_wrong_lifecycle_schema_is_not_present_or_completed(tmp_path: Path) -> None:
+    """Even canonical JSON cannot claim completion under the wrong contract."""
+    run_id = evidence.RUN_IDS[0]
+    root = _archive(tmp_path / "root", runs=(run_id,), states={run_id: None})
+    directory = evidence.run_dir(root, controller.SEQUENCE, run_id)
+    _invocation(
+        directory,
+        run_id,
+        child.RUN_COMPLETED,
+        schema="wrong_invocation_schema",
+    )
+
+    # The ordinary loader accepts the bytes, proving this is canonical JSON;
+    # only the required invocation schema is wrong.
+    record = evidence.load_document(directory, child.INVOCATION_NAME)
+    assert record["schema"] == "wrong_invocation_schema"
+    assert record["state"] == child.RUN_COMPLETED
+
+    first = harness.ordered_run_summary(root)[0]
+    assert first["materialized"] is True
+    assert first["lifecycle_present"] is False
+    assert first["lifecycle_state"] is None
+    assert first["completed"] is False
+
+
+def test_a_failed_run_fails_the_rehearsal_even_with_no_terminal(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """B's whole reason to exist, and it must not lean on the terminal conjunct.
+
+    If the controller ever finishes without selecting a terminal while a child
+    died, the run predicate is the only thing left standing between that archive
+    and a rehearsal reported as passed.
+    """
+    run_id = evidence.RUN_IDS[0]
+    root = _archive(
+        tmp_path / "root",
+        runs=tuple(evidence.RUN_IDS),
+        states={run_id: child.RUN_FAILED},
+    )
+    ledger_dir = tmp_path / "ledger"
+    ledger_dir.mkdir()
+    ledger = harness.DirectoryIdentity(
+        ledger_dir, ledger_dir.stat().st_dev, ledger_dir.stat().st_ino
+    )
+    grant = _grant_record(ledger_dir)
+    _consumed(ledger_dir, grant)
+    monkeypatch.setattr(controller, "checkout_hygiene_reasons", lambda **_: ())
+
+    failures = harness.rehearsal_invariant_failures(
+        root,
+        selection=_Selection(None, "measurement_pass"),
+        report={"valid": True},
+        grant_record=grant,
+        ledger=ledger,
+    )
+    assert [f for f in failures if run_id in f], failures
+    assert all("reached terminal" not in failure for failure in failures)
+
+
+def test_a_terminal_still_dominates_the_rehearsal_verdict(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """A tightened run predicate must not displace the terminal it sits beside."""
+    root = _archive(
+        tmp_path / "root",
+        runs=tuple(evidence.RUN_IDS),
+        states={evidence.RUN_IDS[0]: child.RUN_FAILED},
+    )
+    ledger_dir = tmp_path / "ledger"
+    ledger_dir.mkdir()
+    ledger = harness.DirectoryIdentity(
+        ledger_dir, ledger_dir.stat().st_dev, ledger_dir.stat().st_ino
+    )
+    grant = _grant_record(ledger_dir)
+    _consumed(ledger_dir, grant)
+    monkeypatch.setattr(controller, "checkout_hygiene_reasons", lambda **_: ())
+
+    failures = harness.rehearsal_invariant_failures(
+        root,
+        selection=_Selection("H2_MEASUREMENT_EXECUTION_INVALID", "runner_nonzero"),
+        report={"valid": True},
+        grant_record=grant,
+        ledger=ledger,
+    )
+    assert any("H2_MEASUREMENT_EXECUTION_INVALID" in f for f in failures)
+    assert any(evidence.RUN_IDS[0] in f for f in failures)
+
+
+def test_the_lifecycle_vocabulary_is_the_child_s_own(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Bound by behaviour, not by string-matching.
+
+    The child performs both transitions out of `running`, so it owns the names.
+    Move the authority and the harness's verdict must move with it; a reader
+    holding its own spelling would keep answering with the old one (§ C3.9).
+
+    A literal scan is kept only for the two names the harness has no legitimate
+    use for — `"completed"` and `"failed"` are also its own witness vocabulary,
+    so their presence in the source proves nothing either way.
+    """
+    for literal in ('"running"', '"invocation.json"'):
+        assert literal not in _HARNESS_SOURCE, literal
+
+    run_id = evidence.RUN_IDS[0]
+    monkeypatch.setattr(child, "RUN_COMPLETED", "finished_under_a_new_name")
+    root = _archive(tmp_path / "root", runs=(run_id,), states={run_id: "completed"})
+    assert harness.ordered_run_summary(root)[0]["completed"] is False
+
+    moved = _archive(
+        tmp_path / "moved",
+        runs=(run_id,),
+        states={run_id: "finished_under_a_new_name"},
+    )
+    assert harness.ordered_run_summary(moved)[0]["completed"] is True
 
 
 # -- the witness ------------------------------------------------------------ #
@@ -538,6 +723,7 @@ def test_a_rehearsal_consumes_its_own_grant_and_completes(
     )
 
     assert exit_code == 0
+    assert witness["schema"] == "h2_phase_a_rehearsal_witness_v2"
     assert witness["status"] == "completed"
     assert witness["failure_class"] is None
     assert witness["failures"] == []

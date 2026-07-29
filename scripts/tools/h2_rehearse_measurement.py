@@ -69,9 +69,10 @@ if _TOOLS.as_posix() not in sys.path:
 
 import h2_measurement_evidence as evidence  # noqa: E402
 import run_h2_measurement as controller  # noqa: E402
+import run_h2_measurement_child as child  # noqa: E402
 import verify_h2_measurement as verifier  # noqa: E402
 
-WITNESS_SCHEMA = "h2_phase_a_rehearsal_witness_v1"
+WITNESS_SCHEMA = "h2_phase_a_rehearsal_witness_v2"
 WITNESS_NAME = "rehearsal_witness.json"
 WITNESS_AUTHORITY = "non_evidence_rehearsal"
 
@@ -231,25 +232,61 @@ def synthetic_grant(
     return path, invocation_id
 
 
+def _run_lifecycle(directory: Path) -> tuple[bool, str | None]:
+    """Read the child's own durable lifecycle record for one run.
+
+    The child replaces this document atomically on its way out — `completed` on
+    the success path, `failed` from its except clause — and the controller
+    already decides completion from it (`run_h2_measurement.py`). Reading the
+    same record here keeps one definition of "this run finished"; deriving a
+    second one from the filesystem is how the two come to disagree.
+
+    Anything unreadable is `None`, never an optimistic guess.
+    """
+    try:
+        invocation = evidence.load_document(
+            directory, child.INVOCATION_NAME, schema=child.INVOCATION_SCHEMA
+        )
+    except (evidence.EvidenceError, OSError):
+        return False, None
+    state = invocation.get("state")
+    return True, state if isinstance(state, str) else None
+
+
 def ordered_run_summary(root: Path) -> list[dict[str, Any]]:
     """Project the run inventory out of the archive, never out of a counter.
 
     A count the harness keeps is a second copy of a fact the evidence already
     carries, and it is the copy that would be believed when they disagree.
+
+    Materialization and completion are kept apart on purpose. A run directory
+    exists as soon as the controller starts writing into it, so a child that
+    died leaves one behind; collapsing the two facts into a single field is
+    exactly what let the 2026-07-29 rehearsal report a failed run as complete.
     """
     record = evidence.load_document(
         root, evidence.CONTROLLER_NAME, schema=evidence.CONTROLLER_SCHEMA
     )
     sequence = record["sequence"]
-    return [
-        {
-            "run_id": run_id,
-            "ordinal": ordinal,
-            "recorded": run_id in record.get("ordered_runs", []),
-            "present": evidence.run_dir(root, sequence, run_id).is_dir(),
-        }
-        for ordinal, run_id in enumerate(evidence.RUN_IDS)
-    ]
+    summary: list[dict[str, Any]] = []
+    for ordinal, run_id in enumerate(evidence.RUN_IDS):
+        directory = evidence.run_dir(root, sequence, run_id)
+        materialized = directory.is_dir()
+        lifecycle_present, lifecycle_state = (
+            _run_lifecycle(directory) if materialized else (False, None)
+        )
+        summary.append(
+            {
+                "run_id": run_id,
+                "ordinal": ordinal,
+                "recorded": run_id in record.get("ordered_runs", []),
+                "materialized": materialized,
+                "lifecycle_present": lifecycle_present,
+                "lifecycle_state": lifecycle_state,
+                "completed": lifecycle_state == child.RUN_COMPLETED,
+            }
+        )
+    return summary
 
 
 def rehearsal_invariant_failures(
@@ -290,8 +327,11 @@ def rehearsal_invariant_failures(
             failures.append("receipt does not bind the synthetic grant's digest")
 
     for run in ordered_run_summary(root):
-        if not (run["recorded"] and run["present"]):
-            failures.append(f"ordered run {run['run_id']} did not complete")
+        if not (run["recorded"] and run["completed"]):
+            failures.append(
+                f"ordered run {run['run_id']} did not complete "
+                f"(lifecycle state {run['lifecycle_state']!r})"
+            )
 
     hygiene = controller.checkout_hygiene_reasons()
     if hygiene:

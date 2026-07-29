@@ -691,6 +691,141 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
     orphan_closure: 若 rehearsal 跑完而 owner 最終未簽發第三份授權,witness 不得無限期停在 repo 外
           custody:此時已無 head-bound 授權需要維持,改以 rehearsal-only registration 或
           abandonment 收編,兩條路徑擇一,不留無閉包的 custody
+  rehearsal_execution_failed:               # 上面 orphan_closure 預留的兩條路徑中,走 registration 這條
+    date: 2026-07-29
+    rehearsal_executed: true
+    rehearsal_passed: false
+    failure_class: rehearsal_terminal
+    terminal: H2_MEASUREMENT_EXECUTION_INVALID
+    result: runner_nonzero
+    owner_authorization_consumed: false     # 這是本次登記的重點:第三次結構自我否定,第一次沒花授權
+    faithful_capture: none
+    executed_at_head: ba40b3f841d96dcffc51a62c522a6d34f686b78f
+    ordered_runs: 00_capture_off 的 child 失敗;01/02/03_capture_on 從未啟動
+    witness: schema `h2_phase_a_rehearsal_witness_v1`;三個 artifact digest 皆已由 harness 之外
+          獨立重算吻合——evidence_root_digest `0182a6576b8f4053…2ac64fed`(即 checksum inventory
+          digest,非新發明的 root identity)、verifier_report_digest `3b394d0b02bc93c0…2da2b652`、
+          receipt_digest `d4d931c8f11ce25d…050bbda5`;另綁 harness_digest、
+          source_head=executed_at_head、freeze_digest=F64 `70001e5449b8ad26…d27b6b66`
+    root_cause: **H2 fixed-A5 invocation adapter,不是 generic eval parser、不是 A5 常數、
+          也不是 mutation gate。** 凍結的 A5 執行環境宣告 `SACCADE_DETECT_BARRIER=event` 與
+          `SACCADE_DOUBLE_BUFFER=1`(run_h0_phase_a_child.STATIC_ENV);child 必須以
+          configs/presets/mamba_whole_graph_m.yaml 配置 evaluator,但該 preset 沒有
+          `double_buffer` / `detect_barrier` 欄位,而 run_h2_measurement_child.py:378 只傳
+          `--sequences` 與 `--output` ⇒ `args.double_buffer=False`、`args.detect_barrier=None`
+          ⇒ scripts/eval/mot17_args.py:178-188 強制寫成 `full` / `0`
+          ⇒ validate_repository_owned_mutation fail-closed。與 host、GPU、dataset、授權無關
+    prior_art_missed: **H0 早已解決同一問題** —— run_h0_phase_a.EVALUATOR_ARGV_PREFIX 明確帶
+          `--gpu-decode --double-buffer --detect-barrier event --main-nms-graphed`,把固定選擇
+          送進 parser 宣告的 authoritative surface。H2 adapter 沒有沿用
+    reproduction: 純函式層、host-independent、不需 GPU/dataset/授權/child process:
+          以 preset 建 parser defaults → parse `--sequences/--output` → 對
+          STATIC_ENV baseline 呼叫 configure_runtime_env → `event/1` 變 `full/0`
+          → validate_repository_owned_mutation 拋 ChildError。**可執行版本隨 repair 的
+          regression 一起落地(本 commit 只登記,尚無可執行 reproducer)**
+    argv_divergence_adjudicated: H2 child 與 H0 vector 解出的 args 在 454 個屬性中差 7 個;
+          owner 已逐項裁決,**無 open question**:
+          (1) `detect_barrier` None vs 'event' — 缺陷,本 repair 修正;
+          (2) `double_buffer` False vs True — 缺陷,本 repair 修正;
+          (3) `latency_only` False vs True — **缺陷,本 repair 必須設為 True**:declaration 禁止
+              本次 measurement 讀 GT/FP,evaluator 只在 latency_only 時於 metrics 前 return {}
+              (evaluator.py:3336),否則落地 MOT 輸出並呼叫 run_motmetrics_evaluation;而 child
+              自己要求 `result == {}`(run_h2_measurement_child.py:541,「sole no-metrics
+              boundary」)⇒ 靜態即可確定的下一個矛盾,不應再花一次 item 4/5/F 重建去發現;
+          (4) `warmup_frames` 50 vs 0 — **接受 H2 的 50**:僅影響 latency/throughput/profiling
+              取樣窗,frame 本身照常執行,H2 仍逐 frame 收 active pairs 並要求完整 sequence
+              精確一次 ⇒ telemetry-window 差異,非 κ quantification-space 差異;
+          (5) `max_frames` None vs 0 — **接受 H2 的 None**:兩者皆不設 frame cap,且 H2 另有
+              更強的「canonical sequence 1..frame_count 全部精確一次」契約;
+          (6) `detector` None vs 'SDP' — **接受 H2 的 None**:H2 已指定 MOT17-04-SDP 並直接
+              建立/注入 Mamba detector object,不靠 --detector 發現 sequence 或選 detector;
+          (7) `preset` None vs 'mamba_whole_graph_m' — **接受 H2 的 None**:H2 直讀唯一 A5
+              preset 檔、設為 parser defaults,並對 resolved policy fingerprint 做強制 equality
+              ⇒ policy selection authority 已由位元組與 fingerprint 綁定,`args.preset` 只是字面 metadata
+    harness_defect_found: `ordered_run_summary` 的 `present` 只表示 run 目錄存在 ⇒ failed child
+          留下的目錄被投影成 completed(本次 00_capture_off 即如此,其 invocation.json 記
+          `state: failed`)。本次總判定仍正確,因為 terminal conjunct 獨立成立;但 predicate
+          比它印出的訊息弱。權威記錄早已存在且 controller 自己就在用:invocation.json 的
+          `state ∈ {running, completed, failed}`(child :819/:824 原子替換,
+          controller run_h2_measurement.py:1598 讀它)。修復見 successor
+    harness_contract_held: 隔離、receipt、archive binding、checkout hygiene 與 corpus refusal 全部成立
+          ⇒ **這不是 harness failure**:owner ledger 位元組級未動(同一檔、同 size、同 mtime_ns、
+          同 sha256);synthetic grant 綁 disposable domain `2b35a00e…` 而非 owner domain
+          `e74e7ccf…`;disposable ledger 恰一份 receipt 且 id/invocation_id/grant digest 全一致;
+          checkout_hygiene_before 與 _after 皆為空
+    corpus_refusal_observed: 對**真實 rehearsal archive**實測(複本置於 repo 外的 canonical prefix、
+          同 basename):verify_evidence_root 判 `valid: true`(#301 之後 archive 只由自身位元組判定),
+          而 check_corpus 以 controlled-host execution-domain 兩條理由拒絕。probe 複本已刪除
+    custody: /home/ray/h2_rehearsal_ba40b3f8_20260729T140437Z_424acca1/ — 45 檔、唯讀、
+          SHA256SUMS self-digest `ae965b991e17d993…eba358b4a`;根目錄名中性且永久(witness 記了
+          ledger/evidence parent/evidence root/receipt 四條絕對路徑,此樹不得改名)。
+          **rehearsal archive 永不進 canonical measurement corpus**;git 只登記 digest、
+          inventory、reproduction 與 custody reference
+    upstream_chain_status: item 4(run 30454462387)、item 5(certificate 檔 sha256
+          `d11327752ac092f2…ad908c99`,71/71)、F(F64 `70001e5449b8ad26…d27b6b66`,69/69)在
+          `ba40b3f8` 上 **historically valid**;自本 commit(C_reg)起,對每一個 descendant head
+          **stale**;在 `ba40b3f8` 上**不因此被追溯無效**。失效原因不只 executed-surface digest:
+          item 4 必須在 exact final head 綠、certificate 綁 source_head、F 綁 certificate 與
+          instrumentation head,identical tree 亦不可跨 head 轉移
+    successor_work_item: 本 PR 其餘三個 commit,順序 **C_reg → B → A → C_close**(不得 squash):
+          (B) 以 invocation lifecycle state 收緊 run completion——必須先於 (A),否則存在一個
+          head 同時具備「跑得更遠」與「弱 predicate」= 假綠組合;
+          (A) child 補四個 A5 environment flag 加 `--latency-only`;(C_close) governance closeout。
+          merge 之後才重建 item 4 → item 5 → F,另行送審,經另行批准後只再跑一次 rehearsal,
+          全綠才討論第三份 owner authorization
+    not_established: 無 seal、無 equivalence、無 capture、無新授權、無 S、無 canonical evidence root;
+          rehearsal 只證明到 configuration gate,gate 之後的 detector 建構、capture 初始化、
+          四個 ordered run 與 stop boundary **至今從未有任何一次執行到達過**
+  rehearsal_terminal_repair_landed:
+    date: 2026-07-29
+    unit: h2 rehearsal-terminal repair（一個 PR、四個 commit,順序 **C_reg → B → A → C_close**,
+          不得 squash;B 必須先於 A——非 squash merge 之後每個 commit 都是可執行的 head,
+          「跑得更遠」+「弱 completion predicate」是唯一能產生假綠的組合）
+    c_reg: 上方 rehearsal_execution_failed 區塊（本 PR 第一個 commit）
+    b_run_completion: `ordered_run_summary` 不再把「run 目錄存在」當成完成。目錄由 controller
+          在 child 執行前建立,child 死掉會留下它 ⇒ 2026-07-29 的 failed `00_capture_off` 被
+          投影為 completed。改由 child 自己的 durable lifecycle record 導出,也就是 controller
+          早已用來判同一件事的那份;summary 拆成 `materialized` / `lifecycle_present` /
+          `lifecycle_state` / `completed`,四個事實不再壓成一欄。缺檔、schema 無效、未宣告的
+          state 一律 fail-closed 為 `completed=false`。這個 lifecycle-derived `ordered_runs`
+          shape **自 `h2_phase_a_rehearsal_witness_v2` 開始**;已永久 custody 的首次 rehearsal
+          witness 保持 v1 與原 shape,不修改、不重寫、不重新命名。state 名稱與檔名移進
+          child(它執行兩個 transition,所以它擁有詞彙),controller 與 harness 改用
+          import(§C3.9);綁定以行為
+          測試——移動 authority,harness 的判定必須跟著移動——而非字串掃描
+          (`"completed"`/`"failed"` 同時是 witness 自己的詞彙,掃描證明不了任何事)
+    a_fixed_execution_vector: `run_h2_measurement_child.FIXED_EXECUTION_ARGV` 把已凍結的選擇
+          送進 `mot17_args` 宣告為 authority 的介面(parsed arguments):
+          `--double-buffer --detect-barrier event --gpu-decode --main-nms-graphed --latency-only`。
+          **四個而非兩個**:另外兩個原本靠 preset default 偶然正確,而 preset 是 decision_relevant、
+          可能在本檔毫無所覺的情況下移動;四個全具名之後 repository-owned configuration 對凍結
+          環境成為 **完全 no-op(mutated keys = 空集)**,比「mutation 落在宣告集合內」強一級。
+          `--latency-only` 同批修:evaluator 只在 latency_only 時於 metrics 前 return {}
+          (evaluator.py:3336),否則落地 MOT 輸出並讀 GT,而 child 自己要求 `result == {}`
+          ⇒ 靜態即可判定的下一個矛盾,不值得再花一次 item 4/5/F 重建去發現
+    a_non_options_honoured: 未放寬/未移除 mutation gate、未改 run_h0_phase_a_child.STATIC_ENV、
+          未讓 launch environment 覆蓋 parser authority、未在執行前重寫 os.environ、
+          未改 scripts/eval/mot17_args.py、未改 configs/presets/mamba_whole_graph_m.yaml
+          （後兩者是 decision_relevant;動它們會把 adapter defect 擴張成 decision-surface change）
+    a_regression: 產線 `repository_runner` 走**真實** parser、**真實** preset(從磁碟讀)與
+          **真實** configure_runtime_env,只 stub 帶 GPU 的物件;sentinel 位於 configuration
+          **之後**的 `run_eval`,且 `latency_only is not True` 時主動失敗 ⇒ 「越過 environment
+          gate」不會被誤讀成「越過其後那道 boundary」。拿掉 FIXED_EXECUTION_ARGV 該測試即失敗
+          (已實測)。另有純函式層的舊行為重現(無 GPU/dataset/授權/child)與三個負例
+          （barrier 漂移、SACCADE_STREAM_MODE 洩漏、未宣告 key）確保 gate 沒有因為正路徑
+          no-op 而退化成空檢查
+    test_isolation_fix: `mot17_args` 原本只有在同一 session 先有人跑過 `_import_eval_stack()`
+          之後才 import 得到,使讀取真實 configuration producer 的測試隨選擇順序時綠時紅;
+          測試檔改為自行把 scripts/eval 放上 sys.path
+    upstream_chain_status: item 4 / item 5 / F 在 `ba40b3f8` 上 historically valid,
+          自 C_reg 起對每個 descendant head stale,在 `ba40b3f8` 上不追溯無效
+    not_established: 本 PR **不執行 rehearsal、不建 F、不請求第三份 owner authorization、
+          不產生 S、不宣稱已到達下一個未知 execution boundary**。無 seal、無 equivalence、
+          無 capture、無 canonical evidence root;兩份既有授權仍永久 spent
+    successor_work_item: 在本 PR 的 merge head 依序重建 item 4 → item 5 → F → 另行送審 →
+          經另行批准後**只再跑一次** rehearsal → 全綠之後才討論第三份 owner authorization。
+          rehearsal 是循序發現工具:configuration gate 之後的 detector 建構、capture 初始化、
+          四個 ordered run 與 stop boundary 至今從未執行到達,本 repair 不承諾那是最後一道矛盾
 pending_reentry:                          # append-only; pre-seal, no terminal claimed; route-1 永久留帳結論不變
   - date: 2026-07-21
     scheduling: owner-scheduled re-entry #3（滿足 line-337 future_reentry_precondition:launch-hygiene gate 先行）
