@@ -394,6 +394,7 @@ Total tracked scripts: **421**. Source of truth = each script's own docstring + 
 | `h2_measurement_evidence.py` | stable | cli | The H2 Layer-M evidence-root contract: names, records, and the inventory. |
 | `h2_measurement_freeze.py` | stable | cli | Produce the canonical Phase-A ``h2_measurement_freeze_v1`` record. |
 | `h2_path_partition.py` | stable | cli | H2 firewall: classify paths and decide Layer-P retry admissibility. |
+| `h2_rehearse_measurement.py` | diagnostic | cli | Walk the whole H2 Phase-A launch path without spending the owner's grant. |
 | `h2_runtime_inputs.py` | stable | cli | Bind the fixtures and runtime assets consumed by H2. |
 | `h2_terminal_partition.py` | stable | cli | The H2 Layer-M terminal partition: ordered, exhaustive, mechanically decidable. |
 | `horizon_convergence_probe.py` | experiment | cli | Horizon-convergence probe — does the pedestrian bbox scale field actually converge to a stable horizon line? … |
@@ -415,7 +416,6 @@ Total tracked scripts: **421**. Source of truth = each script's own docstring + 
 | `probe_relink_occlusion_signal.py` | diagnostic | cli | Does an explicit OCCLUSION signal separate true vs false relink bridges? |
 | `qualify_h0_phase_a.py` | stable | cli | Run the repeatable, non-authoritative H0 substrate qualification gate. |
 | `qualify_h0_phase_a_child.py` | stable | cli | Synthetic no-capture child used only by H0 substrate qualification. |
-| `rehearse_h2_measurement.py` | diagnostic | cli | Walk the whole H2 Phase-A launch path without spending the owner's grant. |
 | `remap_gpu_relinks.py` | diagnostic | - | Remap track IDs after GPU relink using global ID mapping. |
 | `render_diffusion_debug.py` | diagnostic | cli | Render bidirectional relink debug events emitted by ``mot17.py``. |
 | `render_mot_result.py` | diagnostic | cli | Render a MOT-format tracking result onto the source frames and encode a video. |

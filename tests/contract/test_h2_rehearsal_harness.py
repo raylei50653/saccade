@@ -27,12 +27,14 @@ if _TOOLS.as_posix() not in sys.path:
     sys.path.insert(0, _TOOLS.as_posix())
 
 import h2_measurement_evidence as evidence  # noqa: E402
-import rehearse_h2_measurement as harness  # noqa: E402
+import h2_path_partition as path_partition  # noqa: E402
+import h2_rehearse_measurement as harness  # noqa: E402
 import run_h2_measurement as controller  # noqa: E402
 
 from tests.contract.test_h2_measurement_controller import _bundle  # noqa: E402
 
-_HARNESS_SOURCE = (_TOOLS / "rehearse_h2_measurement.py").read_text(encoding="utf-8")
+_HARNESS_REL = "scripts/tools/h2_rehearse_measurement.py"
+_HARNESS_SOURCE = (_REPO / _HARNESS_REL).read_text(encoding="utf-8")
 
 
 def _bundle_argv(tmp_path: Path) -> list[str]:
@@ -287,6 +289,19 @@ def test_the_harness_takes_no_authorization_argument() -> None:
     """There is no argument through which the owner's grant could be spent."""
     with pytest.raises(SystemExit):
         harness.main(["--authorization", "/tmp/grant.json"])
+
+
+def test_the_harness_is_classified_plumbing_only() -> None:
+    """`unclassified` is fail-closed, not a resting state.
+
+    `h2_path_partition` rejects unclassified paths from Layer-P retry
+    admissibility on purpose: a path nobody has classified might be anything.
+    This file landed under a name that matched none of the `scripts/tools/`
+    plumbing prefixes, so a later Layer-P run whose base predated an edit to it
+    would have been blocked by a file that only builds diagnostics. The name
+    carries the classification, which makes the name itself a contract.
+    """
+    assert path_partition.classify(_HARNESS_REL) == "plumbing_only"
 
 
 # -- the success conjunction ------------------------------------------------ #

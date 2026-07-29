@@ -87,7 +87,7 @@
   Review Correction 4）；archive 驗證改為只讀 archive 位元組，launch-time host binding 未放寬，
   corpus checker 以完整 git history 接回 CI；兩個缺陷各有一支在 `c2d1c58f` 上未改即失敗的測試。
   repair **不授權、不 seal、不恢復任何授權**。**rehearsal harness 已於 2026-07-29 落地**
-  （`scripts/tools/rehearse_h2_measurement.py`，四個 commit 依 `P → B → A → C`：issuer 正規化 →
+  （`scripts/tools/h2_rehearse_measurement.py`，四個 commit 依 `P → B → A → C`：issuer 正規化 →
   canonical corpus provenance/admission guard → harness → governance；guard 必須先於入口，
   否則 non-squash merge 之後 harness commit 是一個可被 checkout 執行的 head）；harness 自簽
   grant、自帶可丟棄 ledger，走真正的 admission 與 consumption，產出在 repo 外且被 corpus guard 拒收。

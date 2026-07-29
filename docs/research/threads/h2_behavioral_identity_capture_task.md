@@ -512,7 +512,7 @@ walking admission at all logically requires *an* authorization, and "consumes no
 authorization" means the owner's third grant is untouched, not that no
 authorization artifact exists.
 
-`scripts/tools/rehearse_h2_measurement.py` (2026-07-29) issues its own grant
+`scripts/tools/h2_rehearse_measurement.py` (2026-07-29) issues its own grant
 against its own disposable ledger and runs the unmodified controller through the
 real admission and consumption path. Its grant is owner-shaped and is not an
 owner issuance: admission requires the authoritative issuer, so the record names
@@ -1171,7 +1171,7 @@ Additionally, and specific to the accepted decisions:
   provenance guard, not an authority proof: it cannot refuse a forgery, because
   whoever can rewrite a digest chain can write the anchor's content too.
 
-  `A` — `scripts/tools/rehearse_h2_measurement.py` adds no production file and
+  `A` — `scripts/tools/h2_rehearse_measurement.py` adds no production file and
   uses only the seams that already existed. It has no `--authorization` and no
   `--invocation-id`, so there is no argument through which the owner's grant
   could be spent; it issues its own, reading every contract value from its
