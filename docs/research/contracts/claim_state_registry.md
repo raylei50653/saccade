@@ -776,6 +776,56 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
     not_established: 無 seal、無 equivalence、無 capture、無新授權、無 S、無 canonical evidence root;
           rehearsal 只證明到 configuration gate,gate 之後的 detector 建構、capture 初始化、
           四個 ordered run 與 stop boundary **至今從未有任何一次執行到達過**
+  rehearsal_terminal_repair_landed:
+    date: 2026-07-29
+    unit: h2 rehearsal-terminal repair（一個 PR、四個 commit,順序 **C_reg → B → A → C_close**,
+          不得 squash;B 必須先於 A——非 squash merge 之後每個 commit 都是可執行的 head,
+          「跑得更遠」+「弱 completion predicate」是唯一能產生假綠的組合）
+    c_reg: 上方 rehearsal_execution_failed 區塊（本 PR 第一個 commit）
+    b_run_completion: `ordered_run_summary` 不再把「run 目錄存在」當成完成。目錄由 controller
+          在 child 執行前建立,child 死掉會留下它 ⇒ 2026-07-29 的 failed `00_capture_off` 被
+          投影為 completed。改由 child 自己的 durable lifecycle record 導出,也就是 controller
+          早已用來判同一件事的那份;summary 拆成 `materialized` / `lifecycle_present` /
+          `lifecycle_state` / `completed`,四個事實不再壓成一欄。缺檔、schema 無效、未宣告的
+          state 一律 fail-closed 為 `completed=false`。這個 lifecycle-derived `ordered_runs`
+          shape **自 `h2_phase_a_rehearsal_witness_v2` 開始**;已永久 custody 的首次 rehearsal
+          witness 保持 v1 與原 shape,不修改、不重寫、不重新命名。state 名稱與檔名移進
+          child(它執行兩個 transition,所以它擁有詞彙),controller 與 harness 改用
+          import(§C3.9);綁定以行為
+          測試——移動 authority,harness 的判定必須跟著移動——而非字串掃描
+          (`"completed"`/`"failed"` 同時是 witness 自己的詞彙,掃描證明不了任何事)
+    a_fixed_execution_vector: `run_h2_measurement_child.FIXED_EXECUTION_ARGV` 把已凍結的選擇
+          送進 `mot17_args` 宣告為 authority 的介面(parsed arguments):
+          `--double-buffer --detect-barrier event --gpu-decode --main-nms-graphed --latency-only`。
+          **四個而非兩個**:另外兩個原本靠 preset default 偶然正確,而 preset 是 decision_relevant、
+          可能在本檔毫無所覺的情況下移動;四個全具名之後 repository-owned configuration 對凍結
+          環境成為 **完全 no-op(mutated keys = 空集)**,比「mutation 落在宣告集合內」強一級。
+          `--latency-only` 同批修:evaluator 只在 latency_only 時於 metrics 前 return {}
+          (evaluator.py:3336),否則落地 MOT 輸出並讀 GT,而 child 自己要求 `result == {}`
+          ⇒ 靜態即可判定的下一個矛盾,不值得再花一次 item 4/5/F 重建去發現
+    a_non_options_honoured: 未放寬/未移除 mutation gate、未改 run_h0_phase_a_child.STATIC_ENV、
+          未讓 launch environment 覆蓋 parser authority、未在執行前重寫 os.environ、
+          未改 scripts/eval/mot17_args.py、未改 configs/presets/mamba_whole_graph_m.yaml
+          （後兩者是 decision_relevant;動它們會把 adapter defect 擴張成 decision-surface change）
+    a_regression: 產線 `repository_runner` 走**真實** parser、**真實** preset(從磁碟讀)與
+          **真實** configure_runtime_env,只 stub 帶 GPU 的物件;sentinel 位於 configuration
+          **之後**的 `run_eval`,且 `latency_only is not True` 時主動失敗 ⇒ 「越過 environment
+          gate」不會被誤讀成「越過其後那道 boundary」。拿掉 FIXED_EXECUTION_ARGV 該測試即失敗
+          (已實測)。另有純函式層的舊行為重現(無 GPU/dataset/授權/child)與三個負例
+          （barrier 漂移、SACCADE_STREAM_MODE 洩漏、未宣告 key）確保 gate 沒有因為正路徑
+          no-op 而退化成空檢查
+    test_isolation_fix: `mot17_args` 原本只有在同一 session 先有人跑過 `_import_eval_stack()`
+          之後才 import 得到,使讀取真實 configuration producer 的測試隨選擇順序時綠時紅;
+          測試檔改為自行把 scripts/eval 放上 sys.path
+    upstream_chain_status: item 4 / item 5 / F 在 `ba40b3f8` 上 historically valid,
+          自 C_reg 起對每個 descendant head stale,在 `ba40b3f8` 上不追溯無效
+    not_established: 本 PR **不執行 rehearsal、不建 F、不請求第三份 owner authorization、
+          不產生 S、不宣稱已到達下一個未知 execution boundary**。無 seal、無 equivalence、
+          無 capture、無 canonical evidence root;兩份既有授權仍永久 spent
+    successor_work_item: 在本 PR 的 merge head 依序重建 item 4 → item 5 → F → 另行送審 →
+          經另行批准後**只再跑一次** rehearsal → 全綠之後才討論第三份 owner authorization。
+          rehearsal 是循序發現工具:configuration gate 之後的 detector 建構、capture 初始化、
+          四個 ordered run 與 stop boundary 至今從未執行到達,本 repair 不承諾那是最後一道矛盾
 pending_reentry:                          # append-only; pre-seal, no terminal claimed; route-1 永久留帳結論不變
   - date: 2026-07-21
     scheduling: owner-scheduled re-entry #3（滿足 line-337 future_reentry_precondition:launch-hygiene gate 先行）

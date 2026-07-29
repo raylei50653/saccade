@@ -98,7 +98,10 @@
   `--sequences`／`--output`，而 A5 preset 沒有 `double_buffer`／`detect_barrier`，於是
   `configure_runtime_env` 依其宣告的 args authority 把凍結環境改寫成 `full`／`0`；H0 早以
   `EVALUATOR_ARGV_PREFIX` 解決，H2 未沿用。items 4–5 與 F 在 `ba40b3f8` 上 historically valid、
-  對每個 descendant head stale、不追溯無效。下一步＝repair → 重建 items 4–5 與 F →
+  對每個 descendant head stale、不追溯無效。**repair 已 landed**（`C_reg → B → A → C_close`：登記失敗／harness 改由 child lifecycle
+  record 判 run completion／child 以 `FIXED_EXECUTION_ARGV` 送出四個 A5 環境旗標與
+  `--latency-only`／governance closeout；mutation gate、STATIC_ENV、generic parser 與 preset
+  皆未動）。下一步＝在 merge head 重建 items 4–5 與 F →
   再跑一次 rehearsal → 綠了才由 owner 另發第三份授權 →
   [second failure evidence](research/evidence/h2_phase_a_failed_attempt_7646f421_20260728/)
   · [controller archive](research/evidence/h2_measure_7646f421a85a580e37e457def5e8ddc7c4bfa0ab/)

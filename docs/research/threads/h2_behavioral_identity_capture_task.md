@@ -433,10 +433,14 @@ retroactively invalidated at `ba40b3f8`**. Any repair commit moves the head, and
 item 4 must be green at the exact final head, the certificate binds `source_head`,
 and `F` binds the certificate — identical trees do not transfer.
 
-**Repair first, then rebuild the chain, then rehearse once more. Do not seal, do
-not ask for a third grant, and do not treat any `ba40b3f8` binding as carried
-over.** Two authorized Phase-A invocations remain spent and neither produced any
-capture:
+**The repair has landed. Rebuild the chain at this head, then rehearse once
+more. Do not seal, do not ask for a third grant, and do not treat any
+`ba40b3f8` binding as carried over.** The child now sends the frozen A5 choices
+and the no-metrics boundary through the parser that is authoritative over them,
+and the harness derives run completion from the child's lifecycle record rather
+than from a directory existing. Nothing past the configuration gate has ever
+executed, so the next rehearsal is a discovery run, not a formality. Two
+authorized Phase-A invocations remain spent and neither produced any capture:
 
 | | 2026-07-27 at `0a5dffe9` | 2026-07-28 at `7646f421` |
 |:--|:--|:--|
@@ -1275,3 +1279,48 @@ Additionally, and specific to the accepted decisions:
   read-only, `SHA256SUMS` self-digest `ae965b99…eba358b4a`). The archive never
   enters the canonical corpus; git records only digests, inventory, the
   reproduction and the custody reference.
+
+- **2026-07-29 — the rehearsal-terminal repair.** Four commits, `C_reg → B → A →
+  C_close`, in that order and not squashed.
+
+  `B` stops the harness reading "the run directory exists" as "the run
+  completed", which is how the failed `00_capture_off` was projected as
+  complete. Completion now comes from the child's own durable lifecycle record —
+  the one the controller already reads for the same decision — and the summary
+  keeps `materialized`, `lifecycle_present`, `lifecycle_state` and `completed`
+  as four separate facts instead of one. A missing record, an invalid one or an
+  undeclared state is not completion. The state names and the record's filename
+  move into the child, which performs both transitions out of `running`, and the
+  binding is tested by moving that authority and watching the harness's verdict
+  follow. This lifecycle-derived `ordered_runs` shape begins with
+  `h2_phase_a_rehearsal_witness_v2`; the first rehearsal's permanently custodial
+  v1 witness keeps its original shape and is not modified, rewritten or renamed.
+
+  `A` sends the already-frozen choices through the surface `mot17_args` declares
+  authoritative over them. `FIXED_EXECUTION_ARGV` names all four A5-fixed
+  environment knobs rather than the two that were wrong, because the other two
+  only resolved correctly from a decision-relevant preset that can move without
+  this file noticing; with all four named, repository-owned configuration becomes
+  a no-op over the frozen environment rather than a mutation that merely stays
+  inside its declared set. `--latency-only` is fixed in the same commit: the
+  evaluator returns before metrics only under it, otherwise it reads ground truth
+  this measurement may not read and the child refuses the result — a
+  contradiction already decidable from the source, and not worth another rebuild
+  of the head-bound chain to discover.
+
+  Nothing else moved. The mutation gate, `STATIC_ENV`, the generic parser and the
+  preset are untouched; the last two are decision-relevant, and editing them
+  would have turned an adapter defect into a decision-surface change. Four of the
+  seven divergences from H0's vector are accepted as they stand, each because a
+  stronger H2 contract already fixes what H0 fixed through that flag.
+
+  The regression runs the production `repository_runner` over the real parser,
+  the real preset read from disk and the real configuration function, stubbing
+  only the GPU-bearing objects, and its sentinel sits at `run_eval` and refuses
+  anything but `latency_only=True` — clearing the environment gate must not read
+  as clearing the boundary behind it. Removing `FIXED_EXECUTION_ARGV` fails it.
+
+  This repair authorizes nothing, seals nothing and restores nothing. It does not
+  rehearse, does not build `F`, and does not claim any execution boundary past
+  the one it fixes. `Acceptance` items 4 and 5 and `F` are stale for this head
+  and must be rebuilt from scratch before the next single rehearsal.
