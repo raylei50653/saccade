@@ -67,15 +67,26 @@
   H0 sealed history / 五個 spent `S` / permanent ledger 全部不變）；authorizes no
   capture, no `I`/`F`/`S`, no re-entry；Phase-A Layer-M controller implemented,
   contract-tested, reviewed and merged（[PR #295](https://github.com/raylei50653/saccade/pull/295)，
-  merge `b2f3c23f…`）⇒ S4 code-review gate closed；**Acceptance items 4→5→6 已於
-  2026-07-27 在 head `0a5dffe9…` 全部達成並執行一次 ⇒ authorization spent、
-  terminal `H2_INPUT_MUTATED_DURING_MEASUREMENT`、0/4 ordered runs started、
-  no capture、no seal、equivalence 仍 unproven；根因＝controller self-mutation
-  （自建 evidence root 後又要求 checkout 乾淨），非 head/binding/ruler 問題**；
-  items 4–5 satisfied-then-void（須在 successor head 重建）；item 6 已 consumed、
-  永久 spent（不是重建，而是 owner 另行簽發新授權）；下一步＝successor head 上的 controller repair，
-  之後 acceptance 週期在該 head 全部重建、authorization 由 owner 另行簽發；do not re-run →
-  [failure evidence](research/evidence/h2_phase_a_failed_attempt_0a5dffe9_20260727/)
+  merge `b2f3c23f…`）⇒ S4 code-review gate closed；**Acceptance items 4→5→6 已被
+  走過兩次、兩份授權皆 spent、兩次皆 zero capture**：
+  2026-07-27 在 `0a5dffe9…` → terminal 1 `H2_INPUT_MUTATED_DURING_MEASUREMENT`、
+  0/4 ordered runs started、archive 被 verifier 拒收（根因＝controller self-mutation）；
+  controller repair 落地後（[PR #299](https://github.com/raylei50653/saccade/pull/299)，`7646f421`）
+  於該 head 重建整條鏈（run 30334080842 綠、cert `266f4b4c…` 65/65、`F64 f0d1b02e…` 51/51），
+  2026-07-28 再執行一次 → terminal 4 `H2_MEASUREMENT_EXECUTION_INVALID`、
+  1/4 ordered runs started、no capture、no seal、equivalence 仍 unproven。
+  第二次的 archive **完整且通過 independent verifier**（valid=true、complete），
+  第一次登記的四項 controller 缺陷全部關閉；新根因＝child 在 `_import_eval_stack()`
+  之後重套自己的 ingress environment contract，而 cv2 4.11.0 於 import 時改寫環境
+  ⇒ 任何裝 OpenCV 的 host 必失敗，與 head/binding/ruler 無關；
+  items 4–5 第二次 satisfied-then-void（須在新 successor head 再重建）；
+  item 6 兩份皆 consumed、永久 spent（不是重建，而是 owner 另行簽發第三份授權）；
+  下一步＝successor head 上的 **child** repair（授權環境＝import 前的 immutable launch snapshot、
+  不再從 live `os.environ` 重推 ingress predicate、delta 僅作 diagnostic；見 declaration
+  Review Correction 4），並先跑一次不耗授權的 non-evidence 全鏈實跑；do not re-run →
+  [second failure evidence](research/evidence/h2_phase_a_failed_attempt_7646f421_20260728/)
+  · [controller archive](research/evidence/h2_measure_7646f421a85a580e37e457def5e8ddc7c4bfa0ab/)
+  · [first failure evidence](research/evidence/h2_phase_a_failed_attempt_0a5dffe9_20260727/)
   ·
   [task charter](../../research/threads/h2_behavioral_identity_capture_task.md)
   · [declaration](research/headline_bridge_behavioral_identity_capture_declaration_20260725.md)
