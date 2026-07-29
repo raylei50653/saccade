@@ -1,0 +1,17 @@
+{
+ "added_keys": [
+  "QT_QPA_FONTDIR",
+  "QT_QPA_PLATFORM_PLUGIN_PATH"
+ ],
+ "changed_values": [
+  "LD_LIBRARY_PATH"
+ ],
+ "controller_env_key_count": 17,
+ "controller_env_keys_equal_expected": true,
+ "cv2_imported": true,
+ "cv2_version": "4.11.0",
+ "import_eval_stack": "ok",
+ "ingress": "pass",
+ "post_import": "ChildError: child environment keys differ from the frozen A5 execution environment",
+ "schema": "h2_child_environment_ingress_probe_v1"
+}
