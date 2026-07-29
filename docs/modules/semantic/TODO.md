@@ -91,8 +91,15 @@
   canonical corpus provenance/admission guard → harness → governance；guard 必須先於入口，
   否則 non-squash merge 之後 harness commit 是一個可被 checkout 執行的 head）；harness 自簽
   grant、自帶可丟棄 ledger，走真正的 admission 與 consumption，產出在 repo 外且被 corpus guard 拒收。
-  **入口存在 ≠ gate 通過：rehearsal 尚未執行過**。下一步＝`h2_phase_a_rehearsal_execution`：
-  在 merge 後的 head 重建 items 4–5 與 F → 跑一次 rehearsal → 綠了才由 owner 另發第三份授權 →
+  **2026-07-29 在 `ba40b3f8` 重建 items 4–5 與 F（71/71、69/69 獨立驗證）並首次執行 rehearsal
+  ⇒ FAILED**：terminal `H2_MEASUREMENT_EXECUTION_INVALID`、`00_capture_off` 的 child 被拒、
+  01/02/03 未起、**未耗任何授權**；隔離、receipt、archive binding、hygiene 與 corpus refusal
+  全部成立 ⇒ gate failure 而非 harness failure。根因＝H2 fixed-A5 invocation adapter 只傳
+  `--sequences`／`--output`，而 A5 preset 沒有 `double_buffer`／`detect_barrier`，於是
+  `configure_runtime_env` 依其宣告的 args authority 把凍結環境改寫成 `full`／`0`；H0 早以
+  `EVALUATOR_ARGV_PREFIX` 解決，H2 未沿用。items 4–5 與 F 在 `ba40b3f8` 上 historically valid、
+  對每個 descendant head stale、不追溯無效。下一步＝repair → 重建 items 4–5 與 F →
+  再跑一次 rehearsal → 綠了才由 owner 另發第三份授權 →
   [second failure evidence](research/evidence/h2_phase_a_failed_attempt_7646f421_20260728/)
   · [controller archive](research/evidence/h2_measure_7646f421a85a580e37e457def5e8ddc7c4bfa0ab/)
   · [first failure evidence](research/evidence/h2_phase_a_failed_attempt_0a5dffe9_20260727/)

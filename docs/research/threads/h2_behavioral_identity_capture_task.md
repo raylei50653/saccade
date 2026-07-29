@@ -6,7 +6,7 @@ doc-module: semantic
 owner-module: semantic
 work-class: mainline-study
 wip-role: non-wip
-activation-gate: "四項 owner decision 已於 2026-07-25 accepted（#286）；Phase-B chain form 已於 2026-07-25 accepted（#290）並成文為 declaration Review Correction 3；C3.9 pre-seal ruler 編輯（七序列 manifest + phase_a_evidence schema + phase-aware partition）已 landed、republish，並於 `7c348f4e` 通過 controlled-host re-attestation（run 30164262580）；Layer-M review 又把語義常數搬回 ruler ⇒ identity_semantics 再動一次（`3edf6953`）已 republish，並於 `f2c2510a`（run 30243657973）重新通過 controlled-host re-attestation；PR #295 第二輪修補再次修改 packet-invalid exception boundary 與 terminal-2 surviving-evidence ruler，identity_semantics `93f87a83` 已 republish，並於 `32935d5d`（run 30254189532）重新通過 controlled-host re-attestation ⇒ gate 2 再度關閉；S4 Phase-A controller（items 0–4）已 implemented/tested，**review 已完成、PR #295 已 merge ⇒ S4 code-review gate closed**（reviewed implementation head `4c78b962…`，landed merge commit `b2f3c23f…`）；Acceptance items 4→5→6 已於 2026-07-27 在 head `0a5dffe9` 全部達成（controlled-host run 30276844285 綠、Layer-P certificate `d95859cb…` 37/37 獨立驗證、F64 `a03fc459…` 22/22、owner single-invocation authorization），並已執行一次 ⇒ **authorization spent、controller terminal `H2_INPUT_MUTATED_DURING_MEASUREMENT`、0/4 ordered runs started、no capture、seal 未完成**；adjudicated root cause = controller self-mutation（在 repo 內建 evidence root 後又要求 checkout 乾淨），非 head/binding/ruler 問題 ⇒ **items 4–5 satisfied-then-void（對 successor head 失效，須重建）；item 6 已 consumed 且永久 spent，不是重建而是由 owner 另行簽發新授權；下一步是 successor head 上的 controller repair，之後 acceptance 週期在該 head 全部重建、authorization 由 owner 另行簽發**；失敗證據見 evidence/h2_phase_a_failed_attempt_0a5dffe9_20260727/；**2026-07-28 在 successor head `7646f421` 上重建了 items 4–5（controlled-host run 30334080842 綠、Layer-P certificate `266f4b4c…` 65/65 獨立驗證、F64 `f0d1b02e…` 51/51），owner 另行簽發第二份授權並再度執行一次 ⇒ 第二份授權亦 spent、controller terminal `H2_MEASUREMENT_EXECUTION_INVALID`（order 4）、1/4 ordered runs started、zero faithful capture、seal 未完成。這次 archive 完整並通過 independent verifier（valid=true、complete），2026-07-27 登記的四項 controller 缺陷在該 head 全部關閉；新根因＝child 在 `_import_eval_stack()` 之後重新套用自己的 ingress environment contract，而 cv2 4.11.0 於 import 時改寫環境 ⇒ 任何裝 OpenCV 的 host 皆必然失敗，與 head/binding/ruler 無關；owner 已裁定修法（保留 ingress gate、撤掉 import 之後對它的重複套用、pre_import→post_import delta 僅作 diagnostic 不得再參與授權判定）。第二次失敗證據見 evidence/h2_phase_a_failed_attempt_7646f421_20260728/，controller archive 見 evidence/h2_measure_7646f421a85a580e37e457def5e8ddc7c4bfa0ab/**"
+activation-gate: "四項 owner decision 已於 2026-07-25 accepted（#286）；Phase-B chain form 已於 2026-07-25 accepted（#290）並成文為 declaration Review Correction 3；C3.9 pre-seal ruler 編輯（七序列 manifest + phase_a_evidence schema + phase-aware partition）已 landed、republish，並於 `7c348f4e` 通過 controlled-host re-attestation（run 30164262580）；Layer-M review 又把語義常數搬回 ruler ⇒ identity_semantics 再動一次（`3edf6953`）已 republish，並於 `f2c2510a`（run 30243657973）重新通過 controlled-host re-attestation；PR #295 第二輪修補再次修改 packet-invalid exception boundary 與 terminal-2 surviving-evidence ruler，identity_semantics `93f87a83` 已 republish，並於 `32935d5d`（run 30254189532）重新通過 controlled-host re-attestation ⇒ gate 2 再度關閉；S4 Phase-A controller（items 0–4）已 implemented/tested，**review 已完成、PR #295 已 merge ⇒ S4 code-review gate closed**（reviewed implementation head `4c78b962…`，landed merge commit `b2f3c23f…`）；Acceptance items 4→5→6 已於 2026-07-27 在 head `0a5dffe9` 全部達成（controlled-host run 30276844285 綠、Layer-P certificate `d95859cb…` 37/37 獨立驗證、F64 `a03fc459…` 22/22、owner single-invocation authorization），並已執行一次 ⇒ **authorization spent、controller terminal `H2_INPUT_MUTATED_DURING_MEASUREMENT`、0/4 ordered runs started、no capture、seal 未完成**；adjudicated root cause = controller self-mutation（在 repo 內建 evidence root 後又要求 checkout 乾淨），非 head/binding/ruler 問題 ⇒ **items 4–5 satisfied-then-void（對 successor head 失效，須重建）；item 6 已 consumed 且永久 spent，不是重建而是由 owner 另行簽發新授權；下一步是 successor head 上的 controller repair，之後 acceptance 週期在該 head 全部重建、authorization 由 owner 另行簽發**；失敗證據見 evidence/h2_phase_a_failed_attempt_0a5dffe9_20260727/；**2026-07-28 在 successor head `7646f421` 上重建了 items 4–5（controlled-host run 30334080842 綠、Layer-P certificate `266f4b4c…` 65/65 獨立驗證、F64 `f0d1b02e…` 51/51），owner 另行簽發第二份授權並再度執行一次 ⇒ 第二份授權亦 spent、controller terminal `H2_MEASUREMENT_EXECUTION_INVALID`（order 4）、1/4 ordered runs started、zero faithful capture、seal 未完成。這次 archive 完整並通過 independent verifier（valid=true、complete），2026-07-27 登記的四項 controller 缺陷在該 head 全部關閉；新根因＝child 在 `_import_eval_stack()` 之後重新套用自己的 ingress environment contract，而 cv2 4.11.0 於 import 時改寫環境 ⇒ 任何裝 OpenCV 的 host 皆必然失敗，與 head/binding/ruler 無關；owner 已裁定修法（保留 ingress gate、撤掉 import 之後對它的重複套用、pre_import→post_import delta 僅作 diagnostic 不得再參與授權判定）。第二次失敗證據見 evidence/h2_phase_a_failed_attempt_7646f421_20260728/，controller archive 見 evidence/h2_measure_7646f421a85a580e37e457def5e8ddc7c4bfa0ab/**；**2026-07-29 在 `ba40b3f8`（PR #302 harness + PR #303 分類修復之後的 head）上重建了 items 4–5 與 F（controlled-host run 30454462387 綠、certificate 檔 sha256 `d11327752ac092f2…` 71/71 獨立驗證、`F64 70001e5449b8ad26…` 69/69），並**首次執行 rehearsal ⇒ FAILED**：terminal `H2_MEASUREMENT_EXECUTION_INVALID`、`runner_nonzero`、`00_capture_off` 的 child 失敗、01/02/03 未起、**未耗任何 owner authorization**。harness 的隔離／receipt／archive binding／checkout hygiene／corpus refusal 全部成立 ⇒ 這是 gate failure 而非 harness failure。根因＝H2 fixed-A5 invocation adapter：child 只傳 `--sequences`／`--output`，而 A5 preset 沒有 `double_buffer`／`detect_barrier` ⇒ `configure_runtime_env` 依其宣告的 args authority 把凍結環境改寫成 `full`／`0`；H0 早以 `EVALUATOR_ARGV_PREFIX` 解決，H2 未沿用。owner 已裁決 7 項 argv 差異（`detect_barrier`／`double_buffer`／`latency_only` 為缺陷須修，其餘四項接受 H2 現值），並要求 harness 的 run-completion predicate 改由 `invocation.json` 的 lifecycle state 導出且必須先於 child 修復落地。items 4–5 與 F 在 `ba40b3f8` 上 historically valid、對每個 descendant head stale、不追溯無效**"
 target-decision-layer: none
 primary-intent: boundary-diagnostic
 output-class: "diagnostic result | substrate-fidelity edge proposal"
@@ -411,11 +411,32 @@ artifact in this repository can supply.
 
 ## Current step
 
-**The execution-and-archive-verifier repair has landed, and so has the rehearsal
-harness the next gate needs. Rebuild the head-bound chain from the head the
-harness landed on, then rehearse. Do not re-run, do not seal, and do not treat
-any `7646f421` binding as carried over.** Two authorized Phase-A invocations are
-spent and neither produced any capture:
+**The rehearsal ran once, at `ba40b3f8`, and failed — and it cost no
+authorization.** The controller reached terminal `H2_MEASUREMENT_EXECUTION_INVALID`
+in the first ordered run. This is the third structural self-negation in this work
+item and the first one found without spending an owner grant, which is precisely
+what the harness exists for.
+
+The cause is the H2 fixed-A5 invocation adapter, not the generic evaluator, not
+the frozen A5 constants and not the mutation gate. The frozen environment
+declares `SACCADE_DETECT_BARRIER=event` and `SACCADE_DOUBLE_BUFFER=1`; the child
+must configure the evaluator from the one A5 preset, which carries neither knob;
+so `configure_runtime_env` — whose declared authority is the parsed arguments —
+rewrites them to `full` and `0`, and the gate refuses the run. H0 solved this
+long ago by passing the fixed choices through the parser's authoritative surface
+(`run_h0_phase_a.EVALUATOR_ARGV_PREFIX`). The H2 adapter never carried that over.
+
+`Acceptance` items 4 and 5 and `F` were rebuilt at `ba40b3f8` and independently
+verified (71/71 and 69/69). They are **historically valid at that head, stale for
+every descendant head beginning with the registration commit below, and not
+retroactively invalidated at `ba40b3f8`**. Any repair commit moves the head, and
+item 4 must be green at the exact final head, the certificate binds `source_head`,
+and `F` binds the certificate — identical trees do not transfer.
+
+**Repair first, then rebuild the chain, then rehearse once more. Do not seal, do
+not ask for a third grant, and do not treat any `ba40b3f8` binding as carried
+over.** Two authorized Phase-A invocations remain spent and neither produced any
+capture:
 
 | | 2026-07-27 at `0a5dffe9` | 2026-07-28 at `7646f421` |
 |:--|:--|:--|
@@ -1198,3 +1219,59 @@ Additionally, and specific to the accepted decisions:
   a third grant. The witness stays in custody outside the repository until Phase
   A is registered — committing it would move the head and staleness-kill the
   chain the rehearsal exists to protect.
+
+- **2026-07-29 — the rehearsal ran once at `ba40b3f8` and failed, spending no
+  authorization.** `Acceptance` item 4 (controlled-host run `30454462387`), item 5
+  (certificate file `d1132775…ad908c99`, 71/71 bindings independently verified)
+  and `F` (`F64 70001e54…d27b6b66`, 69/69) were rebuilt in order at that head, each
+  with read-only custody outside the repository. The rehearsal then reached
+  controller terminal `H2_MEASUREMENT_EXECUTION_INVALID`, `runner_nonzero`:
+  `00_capture_off`'s child failed and `01/02/03_capture_on` never started.
+
+  Every isolation guarantee the harness offered held. The owner's ledger is
+  unchanged byte for byte; the synthetic grant binds the disposable execution
+  domain and not the owner's; the disposable ledger holds exactly the one matching
+  receipt; the witness's `evidence_root_digest`, `verifier_report_digest` and
+  `receipt_digest` all recompute outside the harness; the checkout was clean
+  before and after. Run on the real archive, the corpus guard did both halves of
+  its job: `verify_evidence_root` accepted it and `check_corpus` refused it for the
+  controlled-host execution domain. **This is a gate failure, not a harness
+  failure.**
+
+  The defect is the H2 fixed-A5 invocation adapter. `run_h2_measurement_child.py`
+  passes only `--sequences` and `--output` and takes everything else from the A5
+  preset, which declares neither `double_buffer` nor `detect_barrier`; the parser
+  therefore resolves them to `False`/`None`, and `mot17_args.configure_runtime_env`
+  — documented as the authority over these knobs — forces `SACCADE_DOUBLE_BUFFER=0`
+  and `SACCADE_DETECT_BARRIER=full`, contradicting the frozen A5 environment. The
+  reproduction is a pure-function chain with no GPU, dataset, authorization or
+  child process, and is host-independent. Comparing the child's resolved arguments
+  with H0's `EVALUATOR_ARGV_PREFIX` shows seven differences out of 454 attributes;
+  the owner adjudicated all seven, leaving no open question: `detect_barrier`,
+  `double_buffer` and `latency_only` are defects this repair fixes, and
+  `warmup_frames`, `max_frames`, `detector` and `preset` are accepted as they are,
+  each because a stronger H2 contract already fixes what H0 fixed through that
+  flag. `latency_only` joins the repair rather than waiting, because the evaluator
+  returns `{}` before metrics only under it (`evaluator.py:3336`) while the child
+  requires exactly that empty result (`run_h2_measurement_child.py:541`) — a
+  contradiction already decidable statically, and not worth another rebuild of the
+  chain to discover.
+
+  Registering the failure surfaced one harness defect: `ordered_run_summary`
+  derives `present` from the run directory existing, so the failed
+  `00_capture_off` was projected as complete. The verdict was still correct here
+  because the terminal conjunct fired independently, but the predicate is weaker
+  than the message it prints. The authoritative record already exists and the
+  controller already reads it — `invocation.json`'s `state`. Tightening the harness
+  lands **before** the child repair: after a non-squash merge each commit is a
+  runnable head, and a head that both reaches further and judges more loosely is
+  the one that could report a false green.
+
+  The rehearsal is a sequential-discovery instrument, and this was the first time
+  anything reached the child's execution body. Everything past the configuration
+  gate — detector construction, capture initialisation, the four ordered runs and
+  the stop boundary — has still never been executed. Custody:
+  `/home/ray/h2_rehearsal_ba40b3f8_20260729T140437Z_424acca1/` (45 files,
+  read-only, `SHA256SUMS` self-digest `ae965b99…eba358b4a`). The archive never
+  enters the canonical corpus; git records only digests, inventory, the
+  reproduction and the custody reference.
