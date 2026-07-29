@@ -204,6 +204,48 @@ def _freeze(root: Path, name: evidence.RootName) -> dict[str, Any]:
     return freeze
 
 
+def _canonical_absolute_posix(value: object) -> bool:
+    """Archive-domain path rule, decided as a string.
+
+    Never `pathlib`: `PurePosixPath("/a/../b").as_posix()` is unchanged, so
+    round-tripping would not reject `..` at all, and `Path` would additionally
+    make the answer depend on the verifying host's OS path semantics — the very
+    coupling this function exists to remove.
+    """
+    if not isinstance(value, str) or not value or "\0" in value:
+        return False
+    if not value.startswith("/") or value.startswith("//"):
+        return False
+    if value == "/":
+        return True
+    if value.endswith("/"):
+        return False
+    return all(part not in ("", ".", "..") for part in value.split("/")[1:])
+
+
+def _execution_domain_defect(domain: Mapping[str, Any]) -> str | None:
+    """Judge the archived execution domain from the archive's own bytes.
+
+    Archive verification never recomputes this record from the verifying host.
+    A grant is bound to one host, operator and ledger namespace at *launch*, and
+    `run_h2_measurement` still enforces that when the authorization is admitted
+    and consumed; carrying the live recomputation into archive verification made
+    a committed attempt verifiable only on the machine that produced it, so no
+    reviewer and no CI runner could read it — see the registration packet
+    `h2_phase_a_failed_attempt_7646f421_20260728`, § 4.2.
+    """
+    if set(domain) != evidence.AUTHORIZATION_DOMAIN_MEMBERS:
+        return "member set differs from the authorization-domain contract"
+    if not _hex(domain.get("host_identity"), 64):
+        return "host_identity is not the complete 64 lowercase hex"
+    uid = domain.get("operator_uid")
+    if not isinstance(uid, int) or isinstance(uid, bool) or uid < 0:
+        return "operator_uid is not a non-negative integer"
+    if not _canonical_absolute_posix(domain.get("ledger_root")):
+        return "ledger_root is not a canonical absolute POSIX path"
+    return None
+
+
 def _authorization(
     root: Path,
     phase: str,
@@ -230,17 +272,12 @@ def _authorization(
         evidence.AUTHORIZATION_DOMAIN_NAME,
         schema=evidence.AUTHORIZATION_DOMAIN_SCHEMA,
     )
-    ledger_root = execution_domain.get("ledger_root")
-    expected_domain = (
-        evidence.authorization_execution_domain(Path(ledger_root))
-        if isinstance(ledger_root, str) and Path(ledger_root).is_absolute()
-        else None
-    )
-    execution_domain_digest = (
-        evidence.digest(execution_domain)
-        if set(execution_domain) == evidence.AUTHORIZATION_DOMAIN_MEMBERS
-        else None
-    )
+    defect = _execution_domain_defect(execution_domain)
+    if defect is not None:
+        raise VerificationError(
+            f"archived authorization execution domain is malformed: {defect}"
+        )
+    execution_domain_digest = evidence.digest(execution_domain)
     surfaces = freeze.get("executed_surfaces")
     controller_digest = (
         surfaces.get("scripts/tools/run_h2_measurement.py")
@@ -266,7 +303,6 @@ def _authorization(
         or grant.get("freeze_digest") != evidence.freeze_digest(freeze)
         or receipt.get("controller_digest") != controller_digest
         or grant.get("controller_digest") != controller_digest
-        or expected_domain != execution_domain
         or receipt.get("execution_domain") != execution_domain_digest
         or grant.get("execution_domain") != execution_domain_digest
         or grant.get("issued_by") != "research_owner"
