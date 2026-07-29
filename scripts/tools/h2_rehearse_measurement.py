@@ -42,7 +42,7 @@ prevented here — only caught. Making it impossible needs `openat`-relative I/O
 throughout production, or a mount namespace, and both are outside this item.
 
 Usage:
-  .venv/bin/python scripts/tools/rehearse_h2_measurement.py \
+  .venv/bin/python scripts/tools/h2_rehearse_measurement.py \
       --freeze F.json --layer-p-certificate C.json --reference-probe P.json \
       --runtime-inputs R.json --published-identity I.json \
       --disposable-ledger /abs/path/ledger --evidence-parent /abs/path/evidence

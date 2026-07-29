@@ -654,11 +654,19 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
           未修改的 rehearsal archive 與任何 execution domain 不同的自洽 archive;
           擋不住偽造——能重寫 grant/receipt/digest chain 的人也能寫入 anchor 的內容。
           不可偽造的簽發需要簽章機制,本 repo 不提供
-    a_harness: `scripts/tools/rehearse_h2_measurement.py`（新檔,零 production 檔案修改;
+    a_harness: `scripts/tools/h2_rehearse_measurement.py`（新檔,零 production 檔案修改;
           只用既有 seam `evidence_parent` / `authorization_ledger`);無 `--authorization`、
           無 `--invocation-id`（沒有任何參數可以餵進 owner 的 grant);grant 全部欄位在 call time
           由 authority 取得;隔離用 filesystem identity(resolve 既存 symlink、component containment
           非字串前綴、目標必須不存在、exclusive mkdir 0700、執行前/後/寫 witness 前重驗 pathname→inode)
+    a_path_classification: harness 落地時的檔名不匹配 `h2_path_partition` 任何 plumbing prefix
+          ⇒ 被判 `unclassified`,而 `unclassified` 在 Layer-P retry admissibility 是 fail-closed。
+          `--base == head` 時 `changed_count == 0` 所以當下擋不到任何事,但只要日後某次
+          Layer-P 的 base 早於一次 harness 修改,就會被一支只產診斷的檔案 block。
+          2026-07-29 改名為 `scripts/tools/h2_rehearse_measurement.py`(匹配既有 `scripts/tools/h2_`
+          prefix),**不動 `h2_path_partition.py`** —— 那是 ruler 檔,改它要 republish identity
+          並重開 acceptance gate 2;改名只動 plumbing、測試與索引,不動任何發布座標軸。
+          分類由 `test_h2_rehearsal_harness.test_the_harness_is_classified_plumbing_only` 綁住
     a_threat_boundary: 只承諾「啟動時的 lexical/symlink/ancestor alias 與意外重用會被拒絕,
           執行期間被抽換會被**檢出**」;不承諾抵抗同 UID 惡意並行程序的 rename/mount/symlink
           substitution——controller 透過 pathname 寫入,持有 dir fd 無法阻止,
