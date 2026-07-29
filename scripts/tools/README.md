@@ -417,6 +417,7 @@ deleting.
 | `probe_relink_occlusion_signal.py` | diagnostic | cli | Does an explicit OCCLUSION signal separate true vs false relink bridges? |
 | `qualify_h0_phase_a.py` | stable | cli | Run the repeatable, non-authoritative H0 substrate qualification gate. |
 | `qualify_h0_phase_a_child.py` | stable | cli | Synthetic no-capture child used only by H0 substrate qualification. |
+| `rehearse_h2_measurement.py` | diagnostic | cli | Walk the whole H2 Phase-A launch path without spending the owner's grant. |
 | `remap_gpu_relinks.py` | diagnostic | - | Remap track IDs after GPU relink using global ID mapping. |
 | `render_diffusion_debug.py` | diagnostic | cli | Render bidirectional relink debug events emitted by ``mot17.py``. |
 | `render_mot_result.py` | diagnostic | cli | Render a MOT-format tracking result onto the source frames and encode a video. |
