@@ -1823,16 +1823,28 @@ def test_repository_owned_env_keys_agree_with_the_producer() -> None:
 def test_ingress_authorization_is_decided_once_against_the_launch_snapshot(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The durable statement of the repair, exercised through `execute_child`.
+    """The durable statement of the repair, through the real `repository_runner`.
 
-    The injected snapshot is deliberately not the process environment, the
-    process environment is deliberately mutated the way a third-party import
-    mutates it, and the run still completes — because the ingress decision was
-    made once, before the import, against the snapshot, and nothing downstream
-    rebuilds it.
+    An injected runner would prove only that `execute_child` judges the snapshot
+    before calling it, and the AST test would prove only that today's source has
+    no *direct* call — a helper or a rename would slip past both. So the
+    production runner is what executes here: only `_import_eval_stack` and the
+    detector builder are stubbed, and the stub mutates the live environment the
+    way cv2 4.11.0 does. The run must reach the post-configuration sentinel,
+    which it cannot do if anything between the import and that point rebuilds
+    the ingress predicate from live state.
     """
+    import yaml as real_yaml
+
     invocation_path, environment, run_dir = _launch_fixture(tmp_path)
-    assert dict(os.environ) != environment
+    build_dir = Path(
+        str(evidence.load_document(run_dir, "invocation.json")["build_dir"])
+    )
+
+    # The process environment is the sanitized one, so the production runner's
+    # own contracts are exercised rather than stepped around — and the injected
+    # snapshot still stops being the live environment the moment cv2 lands.
+    monkeypatch.setattr(os, "environ", dict(environment))
 
     judged: list[dict[str, str]] = []
     real_validate = child.validate_environment
@@ -1843,32 +1855,72 @@ def test_ingress_authorization_is_decided_once_against_the_launch_snapshot(
 
     monkeypatch.setattr(child, "validate_environment", recording)
 
-    def runner(invocation: Mapping[str, Any]) -> child.RunProducts:
-        directory = Path(str(invocation["run_dir"]))
-        before = dict(os.environ)
-        for key, value in _IMPORT_SIDE_EFFECT.items():
-            monkeypatch.setenv(key, value)
-        monkeypatch.setenv(
-            "LD_LIBRARY_PATH", f"{before.get('LD_LIBRARY_PATH', '')}:/opt/cv2/lib"
-        )
-        child.record_import_delta(directory, before, dict(os.environ))
-        # The live environment is now known to fail the ingress predicate. That
-        # is precisely why it is not, and must never become, its input.
-        with pytest.raises(child.ChildError):
-            real_validate(dict(os.environ), invocation)
-        # The repository's own configuration stage judges its own named,
-        # post-import baseline.
-        baseline = dict(environment)
-        baseline["SACCADE_STREAM_MODE"] = "ptds_probe"
-        child.validate_repository_owned_mutation(baseline, dict(environment))
-        return _products(invocation)
+    class _ReachedTheDetector(Exception):
+        """Raised where a real run would start using the GPU."""
 
-    assert (
-        child.execute_child(invocation_path, environment=environment, runner=runner)
-        == 0
-    )
+    def import_eval_stack() -> tuple[Any, ...]:
+        # cv2 4.11.0's registered side effect, plus a leaked shell export for
+        # the configuration stage to clear.
+        os.environ.update(_IMPORT_SIDE_EFFECT)
+        os.environ["LD_LIBRARY_PATH"] = f"{os.environ['LD_LIBRARY_PATH']}:/opt/cv2/lib"
+        os.environ["SACCADE_STREAM_MODE"] = "ptds_probe"
+
+        def build_parser() -> Any:
+            import argparse
+
+            parser = argparse.ArgumentParser()
+            parser.add_argument("--sequences")
+            parser.add_argument("--output")
+            return parser
+
+        def configure_runtime_env(_args: Any, env: Any) -> None:
+            env["SACCADE_GPU_DECODE"] = "1"
+            env.pop("SACCADE_STREAM_MODE", None)
+
+        def build_detector(**_: object) -> Any:
+            raise _ReachedTheDetector()
+
+        return (
+            real_yaml,
+            build_parser,
+            configure_runtime_env,
+            lambda _stem: "1" * 64,
+            None,
+            None,
+            None,
+            build_detector,
+            None,
+        )
+
+    monkeypatch.setattr(behavior, "_import_eval_stack", import_eval_stack)
+    monkeypatch.setattr(behavior, "resolve_build_dir", lambda: build_dir)
+    monkeypatch.setattr(behavior, "_assert_extension_consumed", lambda _dir: "witness")
+
+    with pytest.raises(_ReachedTheDetector):
+        child.execute_child(
+            invocation_path,
+            environment=environment,
+            runner=child.repository_runner,
+        )
+
+    # Judged exactly once, and on the snapshot — never on the live environment,
+    # which by then no longer satisfies the predicate at all.
     assert judged == [environment]
-    assert evidence.load_document(run_dir, "invocation.json")["state"] == "completed"
+    with pytest.raises(child.ChildError):
+        real_validate(
+            dict(os.environ), evidence.load_document(run_dir, "invocation.json")
+        )
+    assert evidence.load_document(run_dir, child.ENVIRONMENT_DELTA_NAME) == {
+        "schema": child.ENVIRONMENT_DELTA_SCHEMA,
+        "authority": "diagnostic_only",
+        "added": [
+            "QT_QPA_FONTDIR",
+            "QT_QPA_PLATFORM_PLUGIN_PATH",
+            "SACCADE_STREAM_MODE",
+        ],
+        "removed": [],
+        "changed": ["LD_LIBRARY_PATH"],
+    }
 
 
 def test_import_delta_document_is_exact_and_carries_no_environment_values(

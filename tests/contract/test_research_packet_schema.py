@@ -575,7 +575,8 @@ def test_h2_phase_a_archive_verification_is_execution_host_independent(
         raise AssertionError("archive verification consulted live host identity")
 
     monkeypatch.setattr(h2_evidence, "authorization_execution_domain", refuse)
-    monkeypatch.setattr(os, "getuid", lambda: os.getuid() + 1)
+    foreign_uid = os.getuid() + 1
+    monkeypatch.setattr(os, "getuid", lambda: foreign_uid)
     repository = REPO.resolve()
     real_read_bytes = pathlib.Path.read_bytes
 
