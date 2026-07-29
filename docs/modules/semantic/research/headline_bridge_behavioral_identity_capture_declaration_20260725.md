@@ -1285,3 +1285,92 @@ H0's closed history, its five spent `S` chains, and the permanent ledger entry o
 `quantity.bridge_capture_provenance` remain unchanged. §5.2 precondition 6 is now
 satisfiable in principle; the remaining gates of the charter's `Acceptance`
 section are untouched.
+
+---
+
+## Review Correction 4 — which environment state carries authorization authority (2026-07-28, pre-seal)
+
+This correction records an owner ruling forced by the second spent Phase-A
+invocation. It changes no authority state, grants no execution, selects no `I`,
+creates no `F`/`S`, issues no exactly-once authorization, runs no sequence, and
+writes no registry or sidecar state. It adds no member to any comparison, moves
+no axis, defines no terminal, and edits neither `EXPECTED_ENV_KEYS` nor
+`STATIC_ENV` — those are H0's frozen ruler, imported here and unchanged (§6). It
+names **which environment state an existing predicate is a predicate about**.
+
+### The ruling
+
+> The authorized environment is the immutable launch snapshot the controller
+> constructs and the child captures before any third-party import. Every
+> evaluation of the ingress predicate takes that snapshot as its input. The
+> environment change caused by importing `cv2` is derived state of the child's
+> execution: it may be observed and recorded, but it may not retroactively
+> rewrite or negate a launch ingress authorization that has already passed.
+
+### Why a correction rather than a repair note
+
+§3.3 requires the measurement fixture to keep H0's environment exactly, and the
+child enforces that as a predicate over the process environment. Nothing in
+§§0–8 said *which* environment state that predicate ranges over, so re-deriving
+it from live `os.environ` at any later point was a legal reading — and that is
+what shipped. It cannot hold once the imported stack mutates the very object
+under test.
+
+The missing contract is not the key set. It is the authoritative observation
+point: without one, a future implementation may again recompute the ingress
+predicate from a live process environment after a third-party import and
+reproduce this defect in a new place. Leaving that unstated in a `plumbing_only`
+file is the C3.9 hazard in its usual direction — a rule that decides whether a
+run is admissible would live where it can be edited without any axis moving.
+
+### What follows, normatively
+
+The subject of this correction is **which environment state carries authorization
+authority**, not how many times a check runs or where a call sits. Those are the
+repair's business; this is the contract it must satisfy.
+
+1. **The authorized environment is an immutable launch snapshot.** It is the
+   environment the controller constructs and the child captures **before** any
+   third-party import, and it is a value, not a live view. `os.environ` after
+   that instant is a different object with a different history.
+2. **Every ingress-predicate evaluation takes that snapshot as its input.** The
+   key set, the static values and the invocation's environment digest are
+   properties *of the snapshot*. Re-verification is permitted and may be
+   defensive — what is forbidden is re-deriving the predicate from live
+   `os.environ`, because that substitutes an observation the authorization was
+   never issued against.
+3. **A passed ingress authorization cannot be invalidated in reverse.** Once the
+   snapshot satisfies the predicate, environment change produced afterwards by
+   third-party imports does not — **through the ingress predicate or the
+   invocation environment digest** — unmake that decision, select an
+   ingress-failure terminal, or render the launch unauthorized. The scope is
+   deliberate: this closes the reverse path through the ingress predicate, and
+   nothing more. A separate contract of the kind clause 4 permits keeps its own
+   terminal-selecting authority over its own subject matter.
+4. **The post-import delta is observable, not an ingress input.** It may be
+   recorded as diagnostic, examined, or governed by a *separate and explicitly
+   stated* contract with its own named baseline — for example a gate on whether
+   the repository's own `configure_runtime_env` mutates anything. Such a contract
+   may not borrow the ingress predicate or the invocation digest to express
+   itself, and its baseline must be stated rather than inherited by proximity.
+5. **The environment is not restored after import.** Undoing a dependency's
+   `LD_LIBRARY_PATH` change would alter what the run loads, which is a change to
+   the measured object, not a fix to a check.
+
+What this leaves open is deliberate. An implementation may validate once at
+ingress and never again, or revalidate the snapshot as often as it likes; it may
+gate `configure_runtime_env` against whichever explicitly named baseline it can
+defend. What it may not do is let the live process environment become the thing
+the authorization is judged against, which is the single defect both the H2 child
+at `:298` and the frozen H0 child at `:372` share.
+
+### What this correction does not do
+
+It does not seal, authorize, or schedule anything; issues no `S_A` and no `S_B`;
+does not revive either spent authorization; does not alter A7.6, the packet
+verifier, the terminal partition, or any of §§0–8 and Corrections 1–3; does not
+edit the frozen H0 child, which carries the same latent post-import
+re-application and stays byte-frozen; and does not unblock `H0_ROUTE5_B1`,
+`GCTM_B1`, or O1. The two spent Phase-A invocations remain spent and produced no
+capture. Evidence:
+[h2_phase_a_failed_attempt_7646f421_20260728](evidence/h2_phase_a_failed_attempt_7646f421_20260728/).

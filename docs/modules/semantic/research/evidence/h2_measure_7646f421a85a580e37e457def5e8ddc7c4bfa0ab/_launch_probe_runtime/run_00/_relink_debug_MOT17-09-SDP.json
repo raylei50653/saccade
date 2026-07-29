@@ -1,0 +1,30 @@
+{
+  "archived_cursor": 0,
+  "births": 0,
+  "revived": 0,
+  "bridge_attempts": 45,
+  "bridge_accepts": 12,
+  "hook_eligible": 0,
+  "hook_rejected": 0,
+  "atom0_score_m_bridge": 0,
+  "atom1_abs_log_h": 0,
+  "atom2_dist_h": 0,
+  "atom3_abs_ratio_m1": 0,
+  "app_veto": 0,
+  "atom4_resid_mean": 0,
+  "raw": [
+    0,
+    0,
+    0,
+    45,
+    12,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+  ]
+}

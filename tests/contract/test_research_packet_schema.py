@@ -12,6 +12,7 @@ tests/research/README.md).
 
 from __future__ import annotations
 
+import hashlib
 import pathlib
 import re
 import sys
@@ -24,6 +25,7 @@ from tests.contract.packet_inventory import (
     H0_PHASE_A_EXECUTION_PACKET,
     H0_PRESEAL_FREEZE_V3_ARTIFACT,
     H0_PRESEAL_FREEZE_V3_FILENAME,
+    H2_MEASUREMENT_EXECUTION_PACKET,
     checksum_inventory,
     evidence_entries,
     evidence_entry_errors,
@@ -31,9 +33,12 @@ from tests.contract.packet_inventory import (
     h0_phase_a_execution_dirs,
     h0_preseal_freeze_v3_dirs,
     h0_preseal_freeze_v3_layout_errors,
+    h2_archive_integrity_errors,
+    h2_measurement_execution_dirs,
     is_generic_dated_packet_name,
     is_h0_phase_a_execution_name,
     is_h0_preseal_freeze_v3_name,
+    is_h2_measurement_execution_name,
     load_manifest,
     packet_dirs,
     packet_ids,
@@ -44,7 +49,9 @@ from tests.contract.packet_inventory import (
 TOOLS = REPO / "scripts" / "tools"
 sys.path.insert(0, TOOLS.as_posix())
 
+import h2_measurement_evidence as h2_evidence  # noqa: E402
 import verify_h0_phase_a as phase_a_verifier  # noqa: E402
+import verify_h2_measurement as measurement_verifier  # noqa: E402
 
 
 def test_evidence_root_exists() -> None:
@@ -133,6 +140,176 @@ def test_h0_phase_a_archive_verification_is_execution_host_independent(
 
 
 @pytest.mark.parametrize(
+    "name",
+    [
+        "h2_measure_" + "a" * 40,
+        "h2_measure_b_" + "a" * 40 + "_" + "b" * 64,
+        "h2_measure_" + "a" * 39,
+        "h2_measure_" + "A" * 40,
+        "h2_measure_b_" + "a" * 40,
+        "h2_measure_b_" + "a" * 40 + "_" + "b" * 63,
+        "h2_measure_",
+        "h2_phase_a_" + "a" * 40,
+        "study_20260728",
+    ],
+)
+def test_h2_family_grammar_agrees_with_the_producer(name: str) -> None:
+    """The classifier's copy of the root-name grammar is bound to the ruler.
+
+    `packet_inventory` re-types the H2 root-name pattern so the contract layer
+    stays importable on its own. C3.9's trap applies: a re-typed grammar can
+    drift while the producer stands still, so agreement with
+    `h2_measurement_evidence.parse_root_name` is asserted, not remembered.
+    """
+    try:
+        h2_evidence.parse_root_name(name)
+    except h2_evidence.EvidenceError:
+        producer_accepts = False
+    else:
+        producer_accepts = True
+
+    assert is_h2_measurement_execution_name(name) == producer_accepts
+
+
+def test_h2_measurement_archives_are_inventory_complete_and_unrotted() -> None:
+    """Committed H2 Layer-M archives keep their own inventory total and exact.
+
+    This is the host-independent half of archive validation: every file present
+    is named by `checksums.sha256`, every named file exists, and every digest
+    still matches. It catches rot, silent edits and additive contamination
+    anywhere a reviewer or CI runs.
+
+    It is deliberately *not* the full verifier. `verify_h2_measurement`
+    recomputes the authorization execution domain from the verifying host's
+    `/etc/machine-id` and `os.getuid()` and requires equality with the archived
+    record, so a Phase-A archive currently verifies only on the machine that
+    produced it — see the 2026-07-28 registration packet, §4.2. Binding the
+    *grant* to one host is intended and correct at launch; carrying that live
+    recomputation into archive verification is not, and until it is repaired a
+    cross-host gate here could only be satisfied by weakening it.
+    """
+    evidence_dirs = h2_measurement_execution_dirs()
+    assert evidence_dirs, "no H2 Layer-M measurement evidence directories were found"
+    failures = {
+        evidence_dir.name: errors
+        for evidence_dir in evidence_dirs
+        if (errors := h2_archive_integrity_errors(evidence_dir))
+    }
+    assert not failures, f"H2 Layer-M archive integrity failures: {failures}"
+
+
+def _h2_archive(root, files: dict[str, bytes], *, extra_lines: tuple[str, ...] = ()):
+    """Build an H2 archive whose inventory covers exactly `files`, plus lines."""
+    archive = root / ("h2_measure_" + "a" * 40)
+    archive.mkdir()
+    rows = []
+    for name, payload in files.items():
+        path = archive / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(payload)
+        rows.append(f"{hashlib.sha256(payload).hexdigest()}  {name}")
+    (archive / "checksums.sha256").write_text(
+        "\n".join(rows + list(extra_lines)) + "\n", encoding="utf-8"
+    )
+    return archive
+
+
+def test_h2_archive_integrity_accepts_an_exactly_inventoried_archive(tmp_path) -> None:
+    archive = _h2_archive(tmp_path, {"terminal.json": b"{}", "runs/a/stderr.log": b"x"})
+
+    assert h2_archive_integrity_errors(archive) == []
+
+
+@pytest.mark.parametrize(
+    ("extra_line", "expected"),
+    [
+        pytest.param(
+            f"{'b' * 64}  terminal.json",
+            "duplicate inventory entry",
+            id="duplicate-path",
+        ),
+        pytest.param("not an inventory line", "malformed inventory line", id="garbage"),
+        pytest.param(f"{'B' * 64}  other.json", "malformed inventory line", id="upper"),
+        pytest.param(f"{'b' * 63}  other.json", "malformed inventory line", id="short"),
+        pytest.param(
+            f"{'b' * 64} other.json", "malformed inventory line", id="1-space"
+        ),
+        pytest.param("", "blank line in the inventory", id="blank"),
+        pytest.param(
+            f"{'b' * 64}  /etc/passwd", "non-canonical inventory path", id="absolute"
+        ),
+        pytest.param(
+            f"{'b' * 64}  ../outside.json", "non-canonical inventory path", id="parent"
+        ),
+        pytest.param(
+            f"{'b' * 64}  ./terminal.json", "non-canonical inventory path", id="dot"
+        ),
+        pytest.param(
+            f"{'b' * 64}  runs\\a.json", "non-canonical inventory path", id="backslash"
+        ),
+        pytest.param(
+            f"{'b' * 64}  checksums.sha256",
+            "the inventory may not list itself",
+            id="self",
+        ),
+    ],
+)
+def test_h2_archive_integrity_rejects_ambiguous_inventory_lines(
+    tmp_path, extra_line: str, expected: str
+) -> None:
+    """An inventory line this checker cannot read is one it cannot enforce.
+
+    The duplicate case is the load-bearing one: a dict assignment would let a
+    second entry for the same path overwrite the first, so any digest at all
+    could be smuggled in behind a correct-looking final line.
+    """
+    archive = _h2_archive(tmp_path, {"terminal.json": b"{}"}, extra_lines=(extra_line,))
+
+    errors = h2_archive_integrity_errors(archive)
+    assert any(expected in error for error in errors), errors
+
+
+def test_h2_archive_integrity_catches_rot_addition_and_removal(tmp_path) -> None:
+    archive = _h2_archive(tmp_path, {"terminal.json": b"{}", "observation.json": b"{}"})
+    (archive / "terminal.json").write_bytes(b"{tampered}")
+    (archive / "observation.json").unlink()
+    (archive / "smuggled.json").write_bytes(b"{}")
+
+    assert sorted(h2_archive_integrity_errors(archive)) == [
+        "digest changed: terminal.json",
+        "inventoried but absent: observation.json",
+        "present but uninventoried: smuggled.json",
+    ]
+
+
+def test_h2_archive_integrity_reports_symlinks(tmp_path) -> None:
+    archive = _h2_archive(tmp_path, {"terminal.json": b"{}"})
+    target = tmp_path / "outside.json"
+    target.write_text("{}")
+    (archive / "link.json").symlink_to(target)
+
+    assert h2_archive_integrity_errors(archive) == [
+        "archive contains a symlink: link.json"
+    ]
+
+
+@pytest.mark.parametrize(
+    "entry_name", [None, "unexpected.json"], ids=["empty", "extra"]
+)
+def test_h2_measurement_execution_layout_is_rejected_by_dedicated_verifier(
+    tmp_path, entry_name: str | None
+) -> None:
+    evidence_dir = tmp_path / ("h2_measure_" + "a" * 40)
+    evidence_dir.mkdir()
+    if entry_name is not None:
+        (evidence_dir / entry_name).write_text("not an archive")
+
+    assert evidence_kind(evidence_dir) == H2_MEASUREMENT_EXECUTION_PACKET
+    with pytest.raises(measurement_verifier.VerificationError):
+        measurement_verifier.verify_evidence_root(evidence_dir)
+
+
+@pytest.mark.parametrize(
     "entry_name", [None, "unexpected.json"], ids=["empty", "extra"]
 )
 def test_h0_phase_a_execution_layout_is_rejected_by_dedicated_verifier(
@@ -187,12 +364,22 @@ def test_packet_has_checksum_inventory(packet) -> None:
         ("h0_preseal_freeze_20260716", GENERIC_RESEARCH_PACKET),
         ("h0_preseal_freeze_" + "a" * 40, H0_PRESEAL_FREEZE_V3_ARTIFACT),
         ("h0_phase_a_" + "a" * 40, H0_PHASE_A_EXECUTION_PACKET),
+        ("h2_measure_" + "a" * 40, H2_MEASUREMENT_EXECUTION_PACKET),
         ("h0_preseal_freeze_" + "a" * 39, None),
         ("h0_preseal_freeze_" + "a" * 41, None),
         ("h0_preseal_freeze_" + "A" * 40, None),
         ("h0_phase_a_" + "a" * 39, None),
         ("h0_phase_a_" + "a" * 41, None),
         ("h0_phase_a_" + "A" * 40, None),
+        (
+            "h2_measure_b_" + "a" * 40 + "_" + "b" * 64,
+            H2_MEASUREMENT_EXECUTION_PACKET,
+        ),
+        ("h2_measure_" + "a" * 39, None),
+        ("h2_measure_" + "a" * 41, None),
+        ("h2_measure_" + "A" * 40, None),
+        ("h2_measure_b_" + "a" * 40, None),
+        ("h2_measure_b_" + "a" * 40 + "_" + "b" * 63, None),
         ("unclassified_evidence", None),
         ("study_٠١٢٣٤٥٦٧", None),
     ],

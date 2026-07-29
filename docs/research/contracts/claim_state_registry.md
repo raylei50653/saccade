@@ -314,6 +314,11 @@ last_transition: 2026-07-14 — cause 由 foreign-capture 改為 provenance inco
                  `H2_INPUT_MUTATED_DURING_MEASUREMENT`,0/4 ordered runs started,no capture,
                  archive 被 independent verifier 拒收;adjudicated root cause＝controller
                  self-mutation（見 reentry_terminal_history 2026-07-27 條）
+                 2026-07-28 — **H2** 第二次 Phase-A single invocation at head 7646f421 消耗第二份授權,
+                 controller terminal `H2_MEASUREMENT_EXECUTION_INVALID`,1/4 ordered runs started,
+                 no capture;archive 通過 independent verifier（valid=true, complete）;
+                 adjudicated root cause＝child 在 import 之後重套 ingress environment contract
+                 （見 reentry_terminal_history 2026-07-28 條）
                  （object state 不變;H0 五個 spent S 與 sealed history 全部不變）
 admissible_units: []                   # H0 unit 已消費並於 route 1 關閉;現無宣告的補救動作。
                                        # 重進=append-only declaration amendment＋新 I→F→S
@@ -511,6 +516,81 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
                                該 exactly-once authorization 已 consumed 且永久 spent,
                                successor cycle 必須由 owner 另行簽發一份新授權;repair 會移動 execution-relevant code,
                                `0a5dffe9` 的任何 binding 皆不轉移;repair PR 不得宣稱延續本次 seal attempt
+  - date: 2026-07-28
+    unit: H2                                # 第二次 Phase-A attempt;仍非 H0 re-entry,H0 五個 spent S 全部不變
+    scheduling: owner-scheduled H2 Phase-A single-invocation execution（第二份授權,與 2026-07-27 那份無關）
+    scope: "sole authorized H2 Phase-A controller invocation at the exact seal-candidate head; Phase B forbidden; no retry/resume"
+    predecessor_head: 7646f421a85a580e37e457def5e8ddc7c4bfa0ab   # source_tree 79ea5ae0ca6c69d7273d558dfaae9e08d6e1a64f
+    binding:
+      f64: f0d1b02e5a162d4949bb2db00f30d73242e7c4a8a833400b712f378c91d31ce4
+      layer_p_certificate_object_digest: e60b98e6f7a2823e9921eac1b2f374d7391c686c433602b1dd41c2c04e1c1618
+      layer_p_certificate_file_digest: 266f4b4ca5b891639d885f795f77ef603bb0b6877990a29922054af06e63d3e2
+      layer_p_selected_base: 7646f421a85a580e37e457def5e8ddc7c4bfa0ab   # changed_count 0
+      bounded_probe: 2dabed0bc05e3bc75ec2115b3213f5c0b1aed3e837c22dd2325109339e4719b5
+      controlled_host_reattestation: "green at this exact head — run 30334080842"
+    authorization:
+      authorized_invocation_count: 1
+      authorization_consumed: true          # spent;authorization_id 342416678caa…
+      consumed_at: controller_process_launch
+    invocation: authoritative_count=1; retry/resume/second_invocation_at_this_head=forbidden
+    controller_terminal: H2_MEASUREMENT_EXECUTION_INVALID   # order 4, phase a; controller literal `runner_nonzero`
+    adjudicated_result: no capture
+    ordered_runs_started: 1/4               # 00_capture_off 啟動並非零退出;01/02/03_capture_on 未達
+    faithful_capture: 0                     # 無 packet / inventory / MOT 輸出
+    measurement_claim: 未成立
+    equivalence: unproven                   # 未改動
+    seal: 未完成
+    archive_verifier: 接受 — valid=true, verify_class=complete, file_count=28;
+                      corpus checker PASS (1 roots; complete=1)。接受的是 archive 自洽性,
+                      **不是** measurement——terminal 為負且 capture 為零。
+                      **限定條件:兩項結果都只在 execution host 上成立**（見 defect_sites
+                      verify_h2_measurement.py:207-280）;CI 目前只強制 host-independent
+                      inventory contract（雙向完整、逐檔重算 digest、禁 symlink）
+    adjudicated_root_cause: child 在 import eval stack 之後重新套用 ingress environment contract;
+                            cv2 4.11.0 於 import 時新增 QT_QPA_FONTDIR / QT_QPA_PLATFORM_PLUGIN_PATH
+                            並在 LD_LIBRARY_PATH 前綴自身 lib 目錄
+    label_vs_cause: "`H2_MEASUREMENT_EXECUTION_INVALID` **是**對根因的正確語義描述
+                     （與 2026-07-27 那次相反）:execution 確實 invalid,partition 依 execution
+                     catch-all 選出該 terminal。"
+    defect_sites:
+      - "scripts/tools/run_h2_measurement_child.py:298 — repository_runner 在 :271 的 _import_eval_stack() 之後重跑整份 ingress predicate"
+      - "scripts/tools/run_h2_measurement_child.py:176-200 — 同一 predicate 有 key-set 與 environment digest 兩個獨立分支;只修 key set 會在 digest 分支得到同一 terminal"
+      - "scripts/tools/run_h0_phase_a_child.py:372 — 同形狀 latent（frozen ruler,不得修改;H0 五次執行都在此行之前終止）"
+      - "scripts/tools/verify_h2_measurement.py:207-280 — archive 驗證時以**驗證主機**的 /etc/machine-id 與 os.getuid()
+         重算 authorization execution domain 並要求與 archived record 相等 ⇒ 已 commit 的 Phase-A archive
+         只能在產生它的那台機器上通過驗證,independent reviewer 與 CI 都不行。grant 綁 host 在 launch 時正確且須保留,
+         但把該 live 重算搬進 archive 驗證是同一種結構錯誤。由本次註冊在 CI 上首次暴露;
+         verify 檔是 F 綁定的 executed surface,修復歸同一個 repair PR 的第二個 commit,不在本次註冊內;
+         修復時應一併補 H2 版 host-independence test（H0 有 test_h0_phase_a_archive_verification_is_execution_host_independent,H2 從來沒有）"
+    sound_and_unchanged:
+      - "scripts/tools/run_h2_measurement.py:602-629 — controller 從零建構 child environment 並在 launch 前斷言 key set（實測恰 17 個 expected keys）"
+      - "scripts/tools/run_h2_measurement_child.py:683 — child ingress 驗證位置正確且通過 ⇒ launch 授權判定本身健全"
+    pre_launch_conditions: 成立且已獨立驗證（Layer-P certificate 65/65;freeze 51/51;controlled host 綠）
+                           ⇒ 失敗不在 binding,而在 child 的環境驗證時序
+    predecessor_defects_closed: 2026-07-27 登記的四項 controller 缺陷在本 head 全部關閉
+                                （checkout hygiene、predicate ownership、stop boundary、archive finalize）;
+                                controller 首次抵達 child_launch
+    why_review_missed_it: child 只以 source review 與合成環境 unit test 檢查;launch probe 雖 import 同一
+                          eval stack,卻是以 operator 繼承環境執行（run_h2_measurement.py:654）,
+                          從不使用那份 sanitized 17-key 環境 ⇒ probe 轉綠不帶任何關於 child 環境契約的資訊
+    evidence_packet: docs/modules/semantic/research/evidence/h2_phase_a_failed_attempt_7646f421_20260728/
+    controller_archive: docs/modules/semantic/research/evidence/h2_measure_7646f421a85a580e37e457def5e8ddc7c4bfa0ab/
+    ledger_effect: 上方 route-1 永久留帳結論不變（仍無 faithful capture / 無 accepted runtime-fidelity edge /
+                   無 actual H0 guarantee envelope）;候選集仍空;guarantee set 空;Phase B / GCTM / B1 / O1 未啟動
+    repair_scope: H2 Phase-A execution-and-archive-verifier repair — 兩個必修 executed surface:
+                  (a) child ingress-authority repair（run_h2_measurement_child.py）
+                  (b) archive-verifier execution-domain repair（verify_h2_measurement.py）
+                  兩者皆使既有 F/cert stale,故必須在**同一個**最終 successor head 上完成;
+                  一個 repair PR、兩個獨立 commit 即可,不必拆成兩個 PR
+    required_successor_action: 上述 repair scope on a successor head，followed by a **completely new**
+                               acceptance and authorization cycle。owner 已裁定修法:保留 ingress gate、
+                               不再從 import 之後的 live `os.environ` 重推 ingress predicate、
+                               pre_import→post_import delta 僅作 diagnostic 記錄且不得重新參與授權判定;
+                               授權環境＝third-party import 前捕獲的 immutable launch snapshot,
+                               成文為 declaration Review Correction 4（只約束語義,不規定檢查次數與位置）;
+                               frozen H0 child 不得修改。
+                               修復落地後 `F64 f0d1b02e…` 與 certificate `266f4b4c…` 即 stale,不得沿用;
+                               item 6 亦不在「重建」之列——第二份授權同樣已 consumed 且永久 spent
 pending_reentry:                          # append-only; pre-seal, no terminal claimed; route-1 永久留帳結論不變
   - date: 2026-07-21
     scheduling: owner-scheduled re-entry #3（滿足 line-337 future_reentry_precondition:launch-hygiene gate 先行）

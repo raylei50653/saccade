@@ -1,0 +1,86 @@
+{
+ "attempt": {
+  "authorization": "spent",
+  "authorization_id": "342416678caa310ce0e73a2805ddf04767b675ffe3c5928f95d51671b8646234",
+  "consumed_utc": "2026-07-28T14:31:26Z",
+  "faithful_capture": false,
+  "finished_utc": "2026-07-28T14:32:06Z",
+  "invocation_id": "4410f5e9726240cf659928be737d560a6f4dd17c856fe87b38b446509ad5aab6",
+  "ordered_runs_started": 1,
+  "result": "runner_nonzero",
+  "source_head": "7646f421a85a580e37e457def5e8ddc7c4bfa0ab",
+  "source_tree": "79ea5ae0ca6c69d7273d558dfaae9e08d6e1a64f",
+  "terminal": "H2_MEASUREMENT_EXECUTION_INVALID",
+  "terminal_order": 4
+ },
+ "child_diagnostic": "H2 measurement child rejected: child environment keys differ from the frozen A5 execution environment",
+ "controller_archive": {
+  "ci_gate": "host-independent inventory contract (total both directions, digests recomputed, no symlinks); full re-verification is not wired into CI until the host-binding defect is repaired",
+  "corpus_checker": "PASS (1 roots; complete=1), execution host only, same cause",
+  "inventory": "checksums.sha256, 28 entries, total over the archive",
+  "location": "docs/modules/semantic/research/evidence/h2_measure_7646f421a85a580e37e457def5e8ddc7c4bfa0ab",
+  "nested_here": false,
+  "verifier": {
+   "qualification": "produced on the execution host; see root_cause_sites entry for verify_h2_measurement.py:207-280 \u2014 Phase-A archive verification recomputes the authorization execution domain from the verifying host and so cannot currently succeed anywhere else",
+   "valid": true,
+   "verify_class": "complete"
+  }
+ },
+ "custody": {
+  "archive_files_modified_during_registration": 0,
+  "repository_external_backup": "/home/ray/h2_phase_a_failed_attempt_7646f421_20260728 (read-only, 28/28 verified before any git operation)",
+  "unavailable_artifact": "the controller's own console output was not redirected to a file for this invocation; no controller_stderr.txt exists and none is reconstructed"
+ },
+ "inventory": "SHA256SUMS.json is the authoritative packet inventory (paths packet-relative); it covers every file here except itself",
+ "predecessor_defects_closed_at_this_head": [
+  "evidence-root creation versus the clean-checkout invariant",
+  "checkout-hygiene reason folded into layer_p_certificate_matches_freeze",
+  "stop boundary repeating the unsatisfiable clean-checkout requirement",
+  "evidence root left unfinalized and rejected by the independent verifier"
+ ],
+ "registered_utc": "2026-07-29T07:10:00Z",
+ "repair_scope": "H2 Phase-A execution-and-archive-verifier repair: (a) child ingress-authority repair, (b) archive-verifier execution-domain repair. Both invalidate the existing F and certificate, so both must land at the same final successor head; one PR with two independent commits",
+ "root_cause_sites": [
+  {
+   "defect": "repository_runner re-applies the full ingress environment contract after the eval-stack import, so third-party import side effects are read as an ingress violation",
+   "file": "scripts/tools/run_h2_measurement_child.py",
+   "lines": "298"
+  },
+  {
+   "defect": "_import_eval_stack() reaches cv2 4.11.0, which adds QT_QPA_FONTDIR and QT_QPA_PLATFORM_PLUGIN_PATH and prepends its lib directory to LD_LIBRARY_PATH",
+   "file": "scripts/tools/run_h2_measurement_child.py",
+   "lines": "271"
+  },
+  {
+   "defect": "the shared predicate fails in two independent branches \u2014 key set and environment digest \u2014 so a key-set-only fix reaches the same terminal at the digest branch",
+   "file": "scripts/tools/run_h2_measurement_child.py",
+   "lines": "176-200"
+  },
+  {
+   "defect": "latent, frozen, not to be edited: the same post-import re-application in the H0 child, unreached only because five H0 invocations terminated earlier",
+   "file": "scripts/tools/run_h0_phase_a_child.py",
+   "lines": "372"
+  },
+  {
+   "defect": "archive verification recomputes the authorization execution domain from the verifying host's /etc/machine-id and os.getuid() and requires equality with the archived record, so a Phase-A archive verifies only on its execution host; the grant's host binding is correct at launch but must not be a live recomputation at verification time",
+   "file": "scripts/tools/verify_h2_measurement.py",
+   "found_by": "this registration, when CI verified the archive off-host",
+   "lines": "207-280",
+   "repair_owner": "the same repair PR as the child fix, as its own commit; verify_h2_measurement.py is an executed surface bound into F and is not edited by this registration. The repair should also add an H2 host-independence test \u2014 H0 has one, H2 never did"
+  }
+ ],
+ "schema": "h2_failure_scene_registration_v1",
+ "sound_and_unchanged": [
+  {
+   "file": "scripts/tools/run_h2_measurement.py",
+   "lines": "602-629",
+   "what": "the controller constructs the child environment from scratch and asserts its key set before launch; measured as exactly the 17 expected keys"
+  },
+  {
+   "file": "scripts/tools/run_h2_measurement_child.py",
+   "lines": "683",
+   "what": "the child's ingress validation is correctly placed before any import and passed"
+  }
+ ],
+ "why_review_missed_it": "the child was reviewed as source and exercised only through unit tests with synthetic environments; the launch probe imports the same eval stack but runs under the operator's inherited environment (run_h2_measurement.py:654), never the sanitized 17-key one, so its green result carried no information about the child's environment contract"
+}

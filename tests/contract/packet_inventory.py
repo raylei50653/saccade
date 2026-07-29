@@ -8,8 +8,9 @@ per-packet regression logic belongs to the study, not here.
 
 from __future__ import annotations
 
+import hashlib
 import json
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
 
 REPO = Path(__file__).resolve().parents[2]
@@ -19,12 +20,27 @@ GENERIC_RESEARCH_PACKET = "generic_research_packet"
 H0_PRESEAL_FREEZE_V3_ARTIFACT = "h0_preseal_freeze_v3_artifact"
 H0_PRESEAL_FREEZE_V3_FILENAME = "h0_preseal_freeze_v3.json"
 H0_PHASE_A_EXECUTION_PACKET = "h0_phase_a_execution_packet"
+H2_MEASUREMENT_EXECUTION_PACKET = "h2_measurement_execution_packet"
 
 # ASCII digits only: `\d` would also accept Unicode digits (e.g. ٠١٢٣),
 # which must stay unclassified and be rejected fail-closed.
 _DATED_PACKET_NAME = re.compile(r".+_[0-9]{8}(T[0-9]{6}Z)?$")
 _H0_PRESEAL_FREEZE_V3_DIR_NAME = re.compile(r"^h0_preseal_freeze_[0-9a-f]{40}$")
 _H0_PHASE_A_EXECUTION_DIR_NAME = re.compile(r"^h0_phase_a_[0-9a-f]{40}$")
+# Both H2 phases, so a Phase-B root can never be silently unclassified. The
+# grammar is owned by h2_measurement_evidence.parse_root_name; the schema
+# contract asserts this pattern agrees with it rather than trusting the copy.
+_H2_MEASUREMENT_EXECUTION_DIR_NAME = re.compile(
+    r"^h2_measure_(b_[0-9a-f]{40}_[0-9a-f]{64}|[0-9a-f]{40})$"
+)
+
+# An H2 archive carries its own inventory in H0's format: exactly
+# `<64 lowercase hex><two spaces><relative posix path>`, which is what
+# `h2_measurement_evidence` writes (`:496`). Parsing is fail-closed on the whole
+# line rather than lenient on the digest, because a line this checker cannot
+# read is a line it cannot enforce.
+H2_ARCHIVE_INVENTORY_NAME = "checksums.sha256"
+_SHA256SUM_LINE = re.compile(r"^(?P<digest>[0-9a-f]{64})  (?P<path>[^\s].*)$")
 
 # manifest.json keys observed to map filename -> sha256 hex digest.
 # `artifact_hashes` is deliberately absent: its keys are logical artifact
@@ -92,6 +108,10 @@ def is_h0_phase_a_execution_name(name: str) -> bool:
     return _H0_PHASE_A_EXECUTION_DIR_NAME.fullmatch(name) is not None
 
 
+def is_h2_measurement_execution_name(name: str) -> bool:
+    return _H2_MEASUREMENT_EXECUTION_DIR_NAME.fullmatch(name) is not None
+
+
 def is_generic_dated_packet_name(name: str) -> bool:
     return _DATED_PACKET_NAME.fullmatch(name) is not None
 
@@ -99,17 +119,20 @@ def is_generic_dated_packet_name(name: str) -> bool:
 def evidence_kind(evidence_dir: Path) -> str | None:
     """Classify one evidence directory, returning None for an unknown kind.
 
-    Exact H0 governance and execution-evidence families are intentionally
-    separate from dated research packets.  Their final 40-hex component has no
-    underscore, so neither can end in the dated ``_[0-9]{8}`` grammar and
-    classification does not depend on check order.  Every other directory must
-    either be a dated packet or be rejected by the schema contract; it must
-    never disappear from generic validation merely because it lacks a manifest.
+    Exact H0 governance and execution-evidence families, and the H2 Layer-M
+    measurement family, are intentionally separate from dated research packets.
+    Their final 40-hex component has no underscore, so none of them can end in
+    the dated ``_[0-9]{8}`` grammar and classification does not depend on check
+    order.  Every other directory must either be a dated packet or be rejected
+    by the schema contract; it must never disappear from generic validation
+    merely because it lacks a manifest.
     """
     if is_h0_preseal_freeze_v3_name(evidence_dir.name):
         return H0_PRESEAL_FREEZE_V3_ARTIFACT
     if is_h0_phase_a_execution_name(evidence_dir.name):
         return H0_PHASE_A_EXECUTION_PACKET
+    if is_h2_measurement_execution_name(evidence_dir.name):
+        return H2_MEASUREMENT_EXECUTION_PACKET
     if is_generic_dated_packet_name(evidence_dir.name):
         return GENERIC_RESEARCH_PACKET
     return None
@@ -147,6 +170,10 @@ def h0_preseal_freeze_v3_dirs() -> list[Path]:
 
 def h0_phase_a_execution_dirs() -> list[Path]:
     return _physical_dirs_of_kind(H0_PHASE_A_EXECUTION_PACKET)
+
+
+def h2_measurement_execution_dirs() -> list[Path]:
+    return _physical_dirs_of_kind(H2_MEASUREMENT_EXECUTION_PACKET)
 
 
 def h0_preseal_freeze_v3_layout_errors(evidence_dir: Path) -> list[str]:
@@ -288,3 +315,87 @@ def inventory_completeness_errors(packet: Path) -> list[str]:
     uncovered = packet_physical_files(packet) - set(checksum_inventory(packet))
     declared = UNINVENTORIED_PACKET_FILES.get(packet.name, ())
     return sorted(uncovered - set(declared))
+
+
+def parse_h2_archive_inventory(text: str) -> tuple[dict[str, str], list[str]]:
+    """Parse an H2 archive's `checksums.sha256` fail-closed.
+
+    Returns `(inventory, errors)`. Everything that could make the mapping
+    ambiguous is an error rather than a silent resolution:
+
+    * a **duplicate path** would otherwise be overwritten by whichever line came
+      last, so a second entry for the same file could carry any digest at all
+      and the inventory would still "verify";
+    * a **malformed line** cannot be enforced, so it must not be skipped;
+    * an **absolute path, a `..` component, a `./` prefix or a backslash** would
+      let an entry name something other than the file it appears to name;
+    * the inventory **cannot list itself** — a self-entry can never hold its own
+      digest, so accepting one only creates a permanently unsatisfiable row.
+    """
+    inventory: dict[str, str] = {}
+    errors: list[str] = []
+    for number, line in enumerate(text.splitlines(), start=1):
+        if not line.strip():
+            errors.append(f"line {number}: blank line in the inventory")
+            continue
+        match = _SHA256SUM_LINE.fullmatch(line)
+        if match is None:
+            errors.append(f"line {number}: malformed inventory line: {line!r}")
+            continue
+        path = match.group("path")
+        parts = PurePosixPath(path).parts
+        if (
+            path != path.strip()
+            or path.startswith("/")
+            or path.startswith("./")
+            or "\\" in path
+            or ".." in parts
+            or "." in parts
+        ):
+            errors.append(f"line {number}: non-canonical inventory path: {path!r}")
+            continue
+        if path == H2_ARCHIVE_INVENTORY_NAME:
+            errors.append(f"line {number}: the inventory may not list itself")
+            continue
+        if path in inventory:
+            errors.append(f"line {number}: duplicate inventory entry: {path!r}")
+            continue
+        inventory[path] = match.group("digest")
+    return inventory, errors
+
+
+def h2_archive_integrity_errors(archive: Path) -> list[str]:
+    """Return every integrity failure of one H2 measurement archive.
+
+    Host- and history-independent by construction: it reads only the archive's
+    own bytes. Bidirectional — an inventoried file that vanished and an
+    uninventoried file that appeared are both failures — and exact, since every
+    digest is recomputed rather than compared to a stored summary.
+    """
+    inventory_path = archive / H2_ARCHIVE_INVENTORY_NAME
+    if not inventory_path.is_file() or inventory_path.is_symlink():
+        return [f"{H2_ARCHIVE_INVENTORY_NAME} is missing or not a regular file"]
+
+    inventory, errors = parse_h2_archive_inventory(
+        inventory_path.read_text(encoding="utf-8")
+    )
+    present: set[str] = set()
+    for entry in sorted(archive.rglob("*")):
+        relative = entry.relative_to(archive).as_posix()
+        if entry.is_symlink():
+            errors.append(f"archive contains a symlink: {relative}")
+        elif entry.is_file() and relative != H2_ARCHIVE_INVENTORY_NAME:
+            present.add(relative)
+
+    errors += [
+        f"present but uninventoried: {name}"
+        for name in sorted(present - set(inventory))
+    ]
+    errors += [
+        f"inventoried but absent: {name}" for name in sorted(set(inventory) - present)
+    ]
+    for name in sorted(set(inventory) & present):
+        actual = hashlib.sha256((archive / name).read_bytes()).hexdigest()
+        if actual != inventory[name]:
+            errors.append(f"digest changed: {name}")
+    return errors

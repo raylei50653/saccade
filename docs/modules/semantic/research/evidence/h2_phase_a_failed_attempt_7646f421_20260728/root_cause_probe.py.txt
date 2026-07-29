@@ -1,0 +1,132 @@
+"""Reproduce the 2026-07-28 H2 Phase-A child failure, without any authorization.
+
+The archived child died with
+
+    H2 measurement child rejected: child environment keys differ from the
+    frozen A5 execution environment
+
+This probe shows *which* of the two `validate_environment` call sites raised it,
+by exercising both in the child's own control-flow order under a real
+`child_environment()` environment:
+
+  ingress   `run_h2_measurement_child.execute_child:683` — before any import
+  post-hoc  `run_h2_measurement_child.repository_runner:298` — after
+            `_import_eval_stack()` and `configure_runtime_env`
+
+It consumes no authorization, writes nothing under the evidence root, does not
+rebuild `build/h2_layer_p`, and runs no evaluation.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
+
+REPO = Path("/home/ray/developer/ai/saccade")
+TOOLS = REPO / "scripts" / "tools"
+sys.path.insert(0, TOOLS.as_posix())
+
+import run_h2_measurement as controller  # noqa: E402
+import run_h2_measurement_child as child  # noqa: E402
+
+BUILD_DIR = REPO / "build" / "h2_layer_p"
+
+CHILD_SNIPPET = r"""
+import json, os, sys
+sys.path.insert(0, "{tools}")
+import run_h2_measurement_child as child
+import h2_behavioral_identity as behavior
+
+invocation = json.load(open("{invocation}"))
+report = {{}}
+
+before = dict(os.environ)
+try:
+    child.validate_environment(dict(os.environ), invocation)
+    report["ingress"] = "pass"
+except BaseException as exc:
+    report["ingress"] = f"{{type(exc).__name__}}: {{exc}}"
+
+try:
+    behavior._import_eval_stack()
+    report["import_eval_stack"] = "ok"
+except BaseException as exc:
+    report["import_eval_stack"] = f"{{type(exc).__name__}}: {{exc}}"
+
+after = dict(os.environ)
+report["added_keys"] = sorted(set(after) - set(before))
+report["changed_values"] = sorted(
+    key for key in set(after) & set(before) if after[key] != before[key]
+)
+report["cv2_imported"] = "cv2" in sys.modules
+report["cv2_version"] = getattr(sys.modules.get("cv2"), "__version__", None)
+
+try:
+    child.validate_environment(dict(os.environ), invocation)
+    report["post_import"] = "pass"
+except BaseException as exc:
+    report["post_import"] = f"{{type(exc).__name__}}: {{exc}}"
+
+print(json.dumps(report, sort_keys=True))
+"""
+
+
+def main() -> int:
+    with tempfile.TemporaryDirectory() as scratch:
+        run_dir = Path(scratch) / "runs" / "MOT17-04-SDP" / "00_capture_off"
+        for leaf in ("home", "tmp", "xdg-cache"):
+            (run_dir / "_env" / leaf).mkdir(parents=True)
+
+        environment = controller.child_environment(run_dir, build_dir=BUILD_DIR)
+        invocation = {
+            "build_dir": BUILD_DIR.as_posix(),
+            "capture_phase": "phase_a",
+            "capture_run_uuid": "00000000-0000-0000-0000-000000000000",
+            "environment_digest": controller._environment_digest(environment),
+            "instrumentation_head": "0" * 40,
+            "policy_fingerprint": "0" * 64,
+            "run_dir": run_dir.as_posix(),
+            "run_id": "00_capture_off",
+            "schema": "h2_measurement_child_invocation_v1",
+            "sequence": "MOT17-04-SDP",
+            "state": "running",
+        }
+        invocation_path = run_dir / "invocation.json"
+        invocation_path.write_text(json.dumps(invocation), encoding="utf-8")
+
+        # The controller's own key-set assertion (run_h2_measurement.py:628)
+        # already guarantees this; recorded so the claim is measured, not argued.
+        parent_side = {
+            "controller_env_key_count": len(environment),
+            "controller_env_keys_equal_expected": (
+                set(environment) == set(child.h0_child.EXPECTED_ENV_KEYS)
+            ),
+        }
+
+        snippet = CHILD_SNIPPET.format(
+            tools=TOOLS.as_posix(), invocation=invocation_path.as_posix()
+        )
+        completed = subprocess.run(
+            [(REPO / ".venv/bin/python").as_posix(), "-c", snippet],
+            cwd=REPO,
+            env=dict(environment),
+            capture_output=True,
+            text=True,
+        )
+        if completed.returncode != 0:
+            print(completed.stdout)
+            print(completed.stderr, file=sys.stderr)
+            return 1
+        report = json.loads(completed.stdout.strip().splitlines()[-1])
+        report.update(parent_side)
+        report["schema"] = "h2_child_environment_ingress_probe_v1"
+        print(json.dumps(report, indent=1, sort_keys=True))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

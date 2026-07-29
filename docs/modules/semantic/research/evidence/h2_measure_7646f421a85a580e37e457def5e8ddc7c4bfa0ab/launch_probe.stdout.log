@@ -1,0 +1,26 @@
+🧊 [MambaBuilder] temporal checkpoint, temporal_T=3, but whole-graph forward is single-frame — temporal blocks BYPASSED (effective T=1).
+[TRTHead] Loaded SelectiveScan plugin: /home/ray/developer/ai/saccade/build/h2_layer_p/libsaccade_scan_plugin.so
+[MambaDetector] TRT MambaHead enabled: /home/ray/developer/ai/saccade/models/yolo/mamba_head_26m.engine
+🕯️ Allocating VRAM Buffers for adaptive 960 tiled eval (1920x1080)...
+🕯️ [TrackerGraph] Captured tracker update for seq MOT17-09-SDP
+🕯️ [WholeDetectGraph] Capturing graphed callable for shape (1, 3, 1080, 1920) img=(1080, 1920)
+🕯️ [MainNMSGraphNoCopyback] Captured main NMS nocopyback graph (graph=<torch.cuda.graphs.CUDAGraph object at 0x70c3eca08530>)
+🕯️ [GMCGraph] Captured C++ cuFFT GMC graph for seq MOT17-09-SDP (img=1080×1920 ds=4)
+🎬 MOT17-09-SDP [100/525]
+🎬 MOT17-09-SDP [200/525]
+🎬 MOT17-09-SDP [300/525]
+🎬 MOT17-09-SDP [400/525]
+🎬 MOT17-09-SDP [500/525]
+
+📊 Production Latency Report for MOT17-09-SDP:
+  - Mean latency: 7.47 ms
+  - P95: 9.47 ms
+  - P99: 10.26 ms
+  - Throughput: 128.06 FPS
+🔗 Relink debug MOT17-09-SDP: archived=0 births=0 revived=0 bridge_attempts=45 bridge_accepts=12 hook_eligible=0 hook_rejected=0 atom0=0 atom1=0 atom2=0 atom3=0 atom4=0 app_veto=0
+🔀 Interpolation: tracks=20 gaps=49 frames_added=351
+✅ Finished MOT17-09-SDP (Total Time: 9.08s)
+
+📈 Overall throughput: 128.06 FPS; mean latency: 7.47 ms
+run 0: behavior=2dabed0bc05e3bc75ec2115b3213f5c0b1aed3e837c22dd2325109339e4719b5 mode=identity
+wrote /home/ray/developer/ai/saccade/docs/modules/semantic/research/evidence/h2_measure_7646f421a85a580e37e457def5e8ddc7c4bfa0ab.incomplete/launch_probe.json

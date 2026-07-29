@@ -1,0 +1,8 @@
+{"authorization_id":"342416678caa310ce0e73a2805ddf04767b675ffe3c5928f95d51671b8646234","event":"authorization_consumed","invocation_id":"4410f5e9726240cf659928be737d560a6f4dd17c856fe87b38b446509ad5aab6","ordinal":1,"schema":"h2_controller_lifecycle_event_v1"}
+{"event":"archive_created","ordinal":2,"schema":"h2_controller_lifecycle_event_v1"}
+{"event":"monitor_active","ordinal":3,"schema":"h2_controller_lifecycle_event_v1"}
+{"event":"launch_revalidation","ordinal":4,"schema":"h2_controller_lifecycle_event_v1"}
+{"event":"child_launch","ordinal":5,"run_id":"00_capture_off","schema":"h2_controller_lifecycle_event_v1"}
+{"event":"monitored_final_revalidation","ordinal":6,"schema":"h2_controller_lifecycle_event_v1"}
+{"event":"final_monitor_drain","ordinal":7,"schema":"h2_controller_lifecycle_event_v1"}
+{"event":"stop_boundary_recorded","ordinal":8,"schema":"h2_controller_lifecycle_event_v1"}

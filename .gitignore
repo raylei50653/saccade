@@ -126,3 +126,12 @@ src/saccade/perception/eval/_cuda/libr1_bridge_replay.build.json
 
 # Agent/session review scratch dumps (session scratchpad lives in /tmp)
 scratchpad/
+
+# Sealed research evidence is inventoried byte-exactly by each archive's own
+# checksum manifest, so the generic `runs/` and `*.log` rules above must never
+# silently drop archive members: a partially committed archive fails its own
+# completeness check, and the most diagnostic file (a failed child's stderr) is
+# exactly the one those rules would eat. Re-include the directory before its
+# contents — git cannot re-include a file inside an excluded directory.
+!docs/modules/semantic/research/evidence/**/runs/
+!docs/modules/semantic/research/evidence/**/*.log

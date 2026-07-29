@@ -6,7 +6,7 @@ doc-module: semantic
 owner-module: semantic
 work-class: mainline-study
 wip-role: non-wip
-activation-gate: "四項 owner decision 已於 2026-07-25 accepted（#286）；Phase-B chain form 已於 2026-07-25 accepted（#290）並成文為 declaration Review Correction 3；C3.9 pre-seal ruler 編輯（七序列 manifest + phase_a_evidence schema + phase-aware partition）已 landed、republish，並於 `7c348f4e` 通過 controlled-host re-attestation（run 30164262580）；Layer-M review 又把語義常數搬回 ruler ⇒ identity_semantics 再動一次（`3edf6953`）已 republish，並於 `f2c2510a`（run 30243657973）重新通過 controlled-host re-attestation；PR #295 第二輪修補再次修改 packet-invalid exception boundary 與 terminal-2 surviving-evidence ruler，identity_semantics `93f87a83` 已 republish，並於 `32935d5d`（run 30254189532）重新通過 controlled-host re-attestation ⇒ gate 2 再度關閉；S4 Phase-A controller（items 0–4）已 implemented/tested，**review 已完成、PR #295 已 merge ⇒ S4 code-review gate closed**（reviewed implementation head `4c78b962…`，landed merge commit `b2f3c23f…`）；Acceptance items 4→5→6 已於 2026-07-27 在 head `0a5dffe9` 全部達成（controlled-host run 30276844285 綠、Layer-P certificate `d95859cb…` 37/37 獨立驗證、F64 `a03fc459…` 22/22、owner single-invocation authorization），並已執行一次 ⇒ **authorization spent、controller terminal `H2_INPUT_MUTATED_DURING_MEASUREMENT`、0/4 ordered runs started、no capture、seal 未完成**；adjudicated root cause = controller self-mutation（在 repo 內建 evidence root 後又要求 checkout 乾淨），非 head/binding/ruler 問題 ⇒ **items 4–5 satisfied-then-void（對 successor head 失效，須重建）；item 6 已 consumed 且永久 spent，不是重建而是由 owner 另行簽發新授權；下一步是 successor head 上的 controller repair，之後 acceptance 週期在該 head 全部重建、authorization 由 owner 另行簽發**；失敗證據見 evidence/h2_phase_a_failed_attempt_0a5dffe9_20260727/"
+activation-gate: "四項 owner decision 已於 2026-07-25 accepted（#286）；Phase-B chain form 已於 2026-07-25 accepted（#290）並成文為 declaration Review Correction 3；C3.9 pre-seal ruler 編輯（七序列 manifest + phase_a_evidence schema + phase-aware partition）已 landed、republish，並於 `7c348f4e` 通過 controlled-host re-attestation（run 30164262580）；Layer-M review 又把語義常數搬回 ruler ⇒ identity_semantics 再動一次（`3edf6953`）已 republish，並於 `f2c2510a`（run 30243657973）重新通過 controlled-host re-attestation；PR #295 第二輪修補再次修改 packet-invalid exception boundary 與 terminal-2 surviving-evidence ruler，identity_semantics `93f87a83` 已 republish，並於 `32935d5d`（run 30254189532）重新通過 controlled-host re-attestation ⇒ gate 2 再度關閉；S4 Phase-A controller（items 0–4）已 implemented/tested，**review 已完成、PR #295 已 merge ⇒ S4 code-review gate closed**（reviewed implementation head `4c78b962…`，landed merge commit `b2f3c23f…`）；Acceptance items 4→5→6 已於 2026-07-27 在 head `0a5dffe9` 全部達成（controlled-host run 30276844285 綠、Layer-P certificate `d95859cb…` 37/37 獨立驗證、F64 `a03fc459…` 22/22、owner single-invocation authorization），並已執行一次 ⇒ **authorization spent、controller terminal `H2_INPUT_MUTATED_DURING_MEASUREMENT`、0/4 ordered runs started、no capture、seal 未完成**；adjudicated root cause = controller self-mutation（在 repo 內建 evidence root 後又要求 checkout 乾淨），非 head/binding/ruler 問題 ⇒ **items 4–5 satisfied-then-void（對 successor head 失效，須重建）；item 6 已 consumed 且永久 spent，不是重建而是由 owner 另行簽發新授權；下一步是 successor head 上的 controller repair，之後 acceptance 週期在該 head 全部重建、authorization 由 owner 另行簽發**；失敗證據見 evidence/h2_phase_a_failed_attempt_0a5dffe9_20260727/；**2026-07-28 在 successor head `7646f421` 上重建了 items 4–5（controlled-host run 30334080842 綠、Layer-P certificate `266f4b4c…` 65/65 獨立驗證、F64 `f0d1b02e…` 51/51），owner 另行簽發第二份授權並再度執行一次 ⇒ 第二份授權亦 spent、controller terminal `H2_MEASUREMENT_EXECUTION_INVALID`（order 4）、1/4 ordered runs started、zero faithful capture、seal 未完成。這次 archive 完整並通過 independent verifier（valid=true、complete），2026-07-27 登記的四項 controller 缺陷在該 head 全部關閉；新根因＝child 在 `_import_eval_stack()` 之後重新套用自己的 ingress environment contract，而 cv2 4.11.0 於 import 時改寫環境 ⇒ 任何裝 OpenCV 的 host 皆必然失敗，與 head/binding/ruler 無關；owner 已裁定修法（保留 ingress gate、撤掉 import 之後對它的重複套用、pre_import→post_import delta 僅作 diagnostic 不得再參與授權判定）。第二次失敗證據見 evidence/h2_phase_a_failed_attempt_7646f421_20260728/，controller archive 見 evidence/h2_measure_7646f421a85a580e37e457def5e8ddc7c4bfa0ab/**"
 target-decision-layer: none
 primary-intent: boundary-diagnostic
 output-class: "diagnostic result | substrate-fidelity edge proposal"
@@ -68,7 +68,7 @@ Full argument: declaration §0. Design record:
 | **S1** | ✅ landed — bounded behavior probe, coordinate/probe publisher, runtime-input manifest and path-partition firewall; G1/G2 remain probes, not equivalence evidence | no — default-off research tooling |
 | **S2** | ✅ landed — published coordinate/probe/equivalence split, `captured_under` sidecar, fail-closed static guard, same-repository PR-head + main self-hosted input/probe re-attestation | no |
 | **S3** | ✅ landed — `run_h2_layer_p.py`: required base, retry verdict, build/load proof, monitor-before-hash runtime-input binding, post-run content/membership/symlink revalidation, bounded probe, v2 certificate, append-only retry log | no |
-| **S4** | ⛔ **implemented / reviewed / merged — executed once and defective** — the one authorized Phase-A invocation reached terminal 1 with 0/4 ordered runs started; repair required before any further attempt — terminal partition, evidence-root contract, independent verifier, corpus checker, observation emitter, and the Phase-A controller with its four ordered runs. This implementation creates no `I`/`F`/`S` and performs no authorized measurement | no |
+| **S4** | ⛔ **implemented / reviewed / merged — executed twice, both defective** — the 2026-07-27 invocation reached terminal 1 with 0/4 ordered runs started (controller defect, since repaired); the 2026-07-28 invocation at `7646f421` reached terminal 4 with 1/4 started and still zero capture (child environment-validation ordering defect). Two authorizations are spent; an execution-and-archive-verifier repair is required before any further attempt — terminal partition, evidence-root contract, independent verifier, corpus checker, observation emitter, and the Phase-A controller with its four ordered runs. This implementation creates no `I`/`F`/`S` and performs no authorized measurement | no |
 
 ### S4 — what is and is not implemented
 
@@ -307,22 +307,34 @@ attested, certified and independently verified, authorized once, and executed �
 and the invocation reached terminal 1 with no capture. See `History` and the
 [failure evidence](../../modules/semantic/research/evidence/h2_phase_a_failed_attempt_0a5dffe9_20260727/).
 
-By the next commit point, the controller is expected to be **repaired on a
-successor head, unbound and unauthorized**: the evidence-root placement and the
-predicate ownership fixed, the launch → stop-boundary ordering re-reviewed as a
-sequence rather than as isolated predicates, and no acceptance, certificate,
-freeze or authorization carried over from `0a5dffe9`. That state is still not an
-authorization and still writes no registry state.
+That repair landed, the whole chain was rebuilt on it, and the successor lease
+was **met and spent in turn on 2026-07-28**: `7646f421` was attested, certified
+and independently verified, authorized once more, and executed — and the
+invocation reached terminal 4 with `00_capture_off` exiting non-zero and still no
+capture. See `History` and the
+[second failure evidence](../../modules/semantic/research/evidence/h2_phase_a_failed_attempt_7646f421_20260728/).
+
+By the next commit point, the **child** is expected to be repaired on a further
+successor head, unbound and unauthorized: the post-import re-application of the
+ingress environment contract removed under the owner-adopted shape in
+`Current step`, and — the part the two spent attempts have earned — a real
+non-evidence run through controller → child → eval-stack import → environment
+validation → capture initialisation → first stop boundary, consuming no
+authorization and writing no evidence root. No acceptance, certificate, freeze or
+authorization carries over from `0a5dffe9` or `7646f421`. That state is still not
+an authorization and still writes no registry state.
 
 ## Commit point
 
-Owner reviews whether state changed when **either** a repaired controller
-demonstrates a reachable success path through its own launch → stop-boundary
-ordering at a successor head — a demonstration that is not an execution and
-spends nothing — **or** the repair shows the two-layer design cannot hold the
-invariants it declares, and the charter is re-planned. The spent `0a5dffe9`
-attempt (2026-07-27) was the previous commit point: it changed no claim-state
-object and produced no measurement. Repair is not a seal gate reopening; a new
+Owner reviews whether state changed when **either** a repaired controller and
+child together demonstrate a reachable success path from launch to the first
+stop boundary at a successor head, as a real run under the real constructed
+environment — a demonstration that is not an execution and spends nothing —
+**or** the repair shows the two-layer design cannot hold the invariants it
+declares, and the charter is re-planned. The spent `7646f421` attempt
+(2026-07-28) was the previous commit point, as the spent `0a5dffe9` attempt
+(2026-07-27) was the one before it: neither changed a claim-state object and
+neither produced a measurement. Repair is not a seal gate reopening; a new
 seal requires the whole acceptance chain rebuilt at the repaired head, and the
 separate owner exactly-once authorization remains a distinct step that no
 artifact in this repository can supply.
@@ -375,20 +387,103 @@ artifact in this repository can supply.
 | `docs/reference/runtime_identity.generated.json` | published coordinate + probe |
 | `../contracts/runtime_identity_bindings_v1.json` | `captured_under` sidecar home |
 | `.github/workflows/runtime_identity.yml` | controlled-host re-attestation (same-repo PR head + main) |
+| `../../modules/semantic/research/evidence/h2_measure_7646f421a85a580e37e457def5e8ddc7c4bfa0ab/` | the 2026-07-28 controller archive — a spent attempt with a negative terminal and zero capture, committed at its canonical corpus position; CI enforces its inventory, and full re-verification waits on the host-binding defect of §4.2 |
+| `../../modules/semantic/research/evidence/h2_phase_a_failed_attempt_7646f421_20260728/` | that attempt's adjudication, root-cause reproduction and custody record |
+| `../../modules/semantic/research/evidence/h2_phase_a_failed_attempt_0a5dffe9_20260727/` | the 2026-07-27 attempt's failure evidence, including its own controller archive |
 
 ## Current step
 
-**Repair the controller on a successor head. Do not re-run, do not seal, and do
-not treat any `0a5dffe9` binding as carried over.** The one authorized Phase-A
-invocation was spent on 2026-07-27 and reached terminal 1 with zero ordered runs
-started; the cause was the controller's own launch sequence, not the head, the
-bindings or the ruler. What is left is code-bound again — see `History` and the
-[failure evidence](../../modules/semantic/research/evidence/h2_phase_a_failed_attempt_0a5dffe9_20260727/)
-for the two defect sites and the ordering rule they establish. The head-bound
-gates below (`Acceptance` items 4 and 5) were satisfied at `0a5dffe9` and must be
-rebuilt from scratch at whatever head the repair lands on. Item 6 is not rebuilt:
-that authorization was consumed at launch and stays permanently spent, so a
-successor cycle needs a new one, separately issued by the owner.
+**Repair the measurement child on a successor head. Do not re-run, do not seal,
+and do not treat any `7646f421` binding as carried over.** Two authorized
+Phase-A invocations are now spent and neither produced any capture:
+
+| | 2026-07-27 at `0a5dffe9` | 2026-07-28 at `7646f421` |
+|:--|:--|:--|
+| terminal | 1 `H2_INPUT_MUTATED_DURING_MEASUREMENT` | 4 `H2_MEASUREMENT_EXECUTION_INVALID` |
+| ordered runs started | 0/4 | 1/4 |
+| faithful capture | none | none |
+| archive | refused by the independent verifier | **accepted** — `valid: true`, `complete` |
+| defect | the controller's own launch sequence | the child's environment validation |
+| label describes the cause | no | yes |
+
+The second attempt is a real advance and must not be flattened into "failed
+again": every defect registered against the first was closed, the controller
+reached `child_launch` for the first time, checkout hygiene and predicate
+ownership were clean at launch and at the stop boundary, and the evidence root
+finalized at its canonical corpus position, where the independent verifier and
+the corpus checker both accept it — on the execution host. Registering it
+surfaced a third defect of the same shape: archive verification recomputes the
+authorization execution domain from the *verifying* host, so a committed archive
+verifies nowhere else. CI therefore enforces the host-independent inventory
+contract, and full re-verification is part of the repair, not of this
+registration.
+
+What remains is code-bound again, one layer deeper. `cv2` 4.11.0 rewrites the
+process environment when imported — two added keys and a mutated
+`LD_LIBRARY_PATH` — and `run_h2_measurement_child.py:298` re-applies the child's
+*ingress* environment contract after `_import_eval_stack()` at `:271`. The
+ingress gate itself (`:683`) is correctly placed before any import and passed;
+the controller's construction of that environment (`run_h2_measurement.py:602-629`)
+is sound and measured correct. See
+[the failure evidence](../../modules/semantic/research/evidence/h2_phase_a_failed_attempt_7646f421_20260728/)
+for the reproduction, the defect sites, the latent H0 twin, and the review rule
+this attempt establishes.
+
+The owner-adopted repair shape, stated once so the repair PR does not re-derive
+it:
+
+> The authorized environment is the immutable launch snapshot captured before
+> any third-party import; every evaluation of the ingress predicate takes that
+> snapshot as its input; and the environment delta produced by importing `cv2`
+> may be observed but may not retroactively negate an ingress authorization that
+> has already passed.
+
+That is declaration [Review Correction 4](../../modules/semantic/research/headline_bridge_behavioral_identity_capture_declaration_20260725.md#review-correction-4--which-environment-state-carries-authorization-authority-2026-07-28-pre-seal),
+and it constrains the semantics only: the number of checks and their placement
+are the repair's to choose. Concretely, what this repair is expected to do —
+keep the ingress gate; stop re-deriving the ingress predicate from live
+`os.environ` after the import; record the `pre_import → post_import` delta as
+diagnostic that re-enters no authorization decision; do not restore the
+environment after the import; do not edit `run_h0_phase_a_child.py`, which is
+frozen and carries the same latent shape at its `:372`; do not widen
+`EXPECTED_ENV_KEYS`, which is the frozen H0 ruler, imported rather than owned
+here.
+
+Two traps for the repair PR. A key-set-only fix is insufficient — the mutated
+`LD_LIBRARY_PATH` fails the digest branch of the same predicate. And if the
+property that `configure_runtime_env` mutates nothing repo-owned is to be kept
+as a gate, it needs its own explicitly named baseline: taking the ingress
+snapshot as that baseline reproduces this exact failure, because the recorded
+import delta is still sitting in the comparison.
+
+**A third site belongs to the same repair.** Registering the archive found that
+`verify_h2_measurement._authorization` recomputes the authorization execution
+domain from the *verifying* host's `/etc/machine-id` and `os.getuid()` and
+requires equality with the archived record, so a committed Phase-A archive
+verifies only on the machine that produced it. Host-binding the grant is correct
+at launch and must stay; consulting live host state at archive-verification time
+is the same structural error as the other two, and it is what stops an
+independent reviewer — or CI — from re-adjudicating a committed archive at all.
+The consistency archive verification can honestly assert is already beside it:
+the receipt's and grant's `execution_domain` must equal the digest of the
+archived domain object. Until that lands, CI enforces the host-independent
+inventory contract over `h2_measure_*` archives; wiring `verify_h2_measurement`
+and `check_h2_measure_archives.py` into CI is part of the repair.
+
+Before the next authorization is requested there is one further gate the two
+spent attempts have earned: a **non-evidence full run** — controller → child
+process → eval-stack import → environment validation → capture initialisation →
+first valid stop boundary — consuming no authorization and writing no evidence
+root. Source review, unit tests with synthetic environments, and a green launch
+probe running under the *operator's* environment have now each failed to predict
+an execution-time structural self-negation.
+
+The head-bound gates below (`Acceptance` items 4 and 5) were satisfied at
+`7646f421` and die the moment the repair lands: `F64 f0d1b02e…` and Layer-P
+certificate `266f4b4c…` are stale from that commit, are not partially reused,
+and must be rebuilt at whatever head the repair lands on. Item 6 is not rebuilt
+either time: both authorizations were consumed at launch and stay permanently
+spent, so a successor cycle needs a third, separately issued by the owner.
 
 Correction 3 puts an ordering constraint on everything below: `identity_semantics`
 must be frozen from the Phase-A seal to the Phase-B seal, so the ruler work comes
@@ -497,14 +592,17 @@ the § 5.3 circular-oracle hazard in its most ordinary form.
 
 ### The remaining work is head-bound, and the head is not the reviewed head
 
-> **Spent at `0a5dffe9` on 2026-07-27.** Steps 1–5 below were all performed and
-> independently verified at that head, and step 6 executed once — reaching
-> terminal 1 with zero ordered runs started. The sequence itself was sound; it
-> ran into a defect *inside* the controller (`History`, and §4 of the
-> [failure evidence](../../modules/semantic/research/evidence/h2_phase_a_failed_attempt_0a5dffe9_20260727/)).
+> **Spent twice — at `0a5dffe9` on 2026-07-27 and at `7646f421` on 2026-07-28.**
+> Steps 1–5 below were performed and independently verified at each head in turn,
+> and step 6 executed once at each. The ordering itself is sound and has now been
+> walked end to end twice; both attempts ran into a defect *downstream* of it —
+> first inside the controller, then inside the child
+> (`History`, and §4 of the
+> [second failure evidence](../../modules/semantic/research/evidence/h2_phase_a_failed_attempt_7646f421_20260728/)).
 > Nothing in this ordering carries over: after the repair, every step below must
-> be redone at the successor head, against a controller that has first shown a
-> reachable success path through its own launch → stop-boundary ordering.
+> be redone at the successor head, against a controller **and child** that have
+> first shown a reachable success path through a real launch → stop-boundary run
+> that consumes no authorization.
 
 Every gate below binds **one exact commit**, so the order is fixed and no step may
 be carried over from an earlier head:
@@ -562,21 +660,25 @@ A Layer-M seal may be proposed only when **all** of these hold:
    [PR #295](https://github.com/raylei50653/saccade/pull/295) on 2026-07-27. This
    closes review of the *code*; it certifies no head and authorizes nothing;
 4. the published coordinate and bounded probe are current and the controlled-host
-   workflow is green at the exact final seal-candidate head. **Satisfied at
-   `0a5dffe9` (run `30276844285`) and now void**: it certifies that head, and the
-   repair lands on another one;
+   workflow is green at the exact final seal-candidate head. **Satisfied twice and
+   void twice** — at `0a5dffe9` (run `30276844285`) and, after the controller
+   repair, at `7646f421` (run `30334080842`): each certifies its own head, and the
+   repair lands on a third;
 5. a Layer-P pass certificate (`h2_layer_p_certificate_v2`) exists for that **same**
    head, with `--base` given and the full changed-path verdict clean — and its
    bindings independently verified. Neither `4c78b962…` nor `b2f3c23f…` can supply
    this for a later head: `source_head` is part of the certificate and is required
    to equal the executing head, so identical content does not transfer (see
-   `Current step`). **Satisfied at `0a5dffe9` — certificate `d95859cb…`,
-   `selected_base b2f3c23f419cb03c…`, 37/37 bindings independently verified — and
-   void for the same reason as item 4**;
+   `Current step`). **Satisfied twice and void twice** — at `0a5dffe9`
+   (certificate `d95859cb…`, `selected_base b2f3c23f419cb03c…`, 37/37 bindings
+   independently verified) and at `7646f421` (certificate `266f4b4c…`,
+   `selected_base 7646f421a85a580e…` with `changed_count 0`, 65/65 bindings
+   independently verified) — **void for the same reason as item 4**;
 6. the owner issues a separate exactly-once authorization — this charter is not
-   one and cannot become one. **Issued and consumed on 2026-07-27.** It is spent:
-   it authorized one invocation at `0a5dffe9`, that invocation happened, and no
-   part of it survives to the repaired head.
+   one and cannot become one. **Issued and consumed twice, on 2026-07-27 and on
+   2026-07-28.** Both are spent: each authorized one invocation, at `0a5dffe9`
+   and at `7646f421` respectively, both invocations happened, and no part of
+   either survives to the repaired head.
 
 These are numbered in the order they must be performed: 4 → 5 → 6 is the same
 sequence as `Current step` steps 2 → 3–4 → 5, and no item may be satisfied at an
@@ -584,15 +686,18 @@ earlier head than its predecessor. The Phase-A execution itself is not on this
 list — `Acceptance` governs only when a seal may be *proposed*; execution follows
 the authorization of item 6.
 
-**Items 4–5 were satisfied at `0a5dffe9` and are void for any successor head.
-Item 6 was consumed and remains permanently spent.** The two kinds of exhaustion
-are not interchangeable: a repaired controller moves execution-relevant code, so
-items 4–5 lose their binding and must be rebuilt from scratch at the new head,
-whereas item 6 is not rebuilt at all — the one invocation it authorized happened,
-it counts permanently, and a successor cycle requires a new, separately issued
-authorization from the owner. A repair PR may not present itself as continuing
-the `0a5dffe9` attempt. Item 3 is unaffected — it closed review of code that the
-repair will now modify, and the repair carries its own review.
+**Items 4–5 were last satisfied at `7646f421` and are void for any successor
+head. Both issued authorizations are consumed and remain permanently spent.**
+The two kinds of exhaustion are not interchangeable: a repaired child moves
+execution-relevant code, so items 4–5 lose their binding and must be rebuilt
+from scratch at the new head, whereas item 6 is not rebuilt at all — each
+invocation it authorized happened, each counts permanently, and a successor
+cycle requires a third, separately issued authorization from the owner. The
+rebuild is not cheap and has now been paid for twice: coordinate republication,
+a controlled-host run, a Layer-P certificate with independent verification, and
+a new `F`. A repair PR may not present itself as continuing either attempt.
+Item 3 is unaffected — it closed review of code that the repair will now modify,
+and the repair carries its own review.
 
 A Phase-B seal has its own gates, and they are Correction 3's, not this list's:
 `I_B`, `F_B` and `S_B` per C3.1–C3.3, the C3.6 admission gate passing before
@@ -875,3 +980,62 @@ Additionally, and specific to the accepted decisions:
   evidence, including a disclosed chain-of-custody incident during its
   registration:
   [h2_phase_a_failed_attempt_0a5dffe9_20260727](../../modules/semantic/research/evidence/h2_phase_a_failed_attempt_0a5dffe9_20260727/).
+- **2026-07-28** — the controller repair landed
+  ([PR #299](https://github.com/raylei50653/saccade/pull/299), `7646f421`) and the
+  acceptance cycle was rebuilt on it: controlled-host re-attestation green (run
+  `30334080842`), a Layer-P pass certificate `266f4b4c…` at that exact head with
+  `selected_base 7646f421a85a580e…`, `changed_count 0` and 65/65 bindings
+  independently re-derived, and an untracked freeze `F64 f0d1b02e…` verified
+  51/51. `identity_semantics` moved `93f87a83` → `08d2db6a` when the repair
+  touched a ruler member, was republished, and gate 2 was re-closed by that same
+  controlled-host run.
+- **2026-07-28** — **a second authorized Phase-A invocation was spent and again
+  produced no capture.** The owner issued a second single-invocation
+  authorization, consumed at launch. The controller selected terminal 4
+  `H2_MEASUREMENT_EXECUTION_INVALID`: `00_capture_off` launched and exited
+  non-zero, `01/02/03_capture_on` were never reached, **zero faithful capture,
+  `equivalence` untouched at `unproven`, no seal.**
+
+  What changed for the better, and must not be lost inside a second failure:
+  every defect registered against `0a5dffe9` is closed at this head. The
+  controller reached `child_launch` for the first time; checkout hygiene passed at
+  launch and at the stop boundary; `certificate_mismatch_reasons` is empty and
+  `bound_input_mutated` false with no events; the stop boundary linearized as
+  `clean_final_drain`; the evidence root finalized at its canonical corpus
+  position with a complete 28-entry inventory; and the independent verifier
+  **accepts** it (`valid: true`, `verify_class: complete`), as does the corpus
+  checker. Unlike the first attempt, the recorded terminal is also a correct
+  semantic description of the cause.
+
+  The adjudicated root cause is one layer deeper. `cv2` 4.11.0 rewrites the
+  process environment on import — it adds `QT_QPA_FONTDIR` and
+  `QT_QPA_PLATFORM_PLUGIN_PATH` and prepends its own lib directory to
+  `LD_LIBRARY_PATH` — and it is reached transitively by `_import_eval_stack()`.
+  The child validates its environment twice with the *same* ingress predicate:
+  at `run_h2_measurement_child.py:683`, before any import, where it passes, and
+  again at `:298`, after the import at `:271`, where it cannot. Any host with
+  OpenCV installed fails identically, independently of GPU, build, dataset and
+  model state — structural self-negation for the second consecutive attempt. The
+  controller's construction of that environment (`run_h2_measurement.py:602-629`)
+  and the child's ingress gate are both sound and were measured correct, so the
+  launch authorization decision itself was not at fault. Removing the two added
+  keys would not be sufficient: the mutated `LD_LIBRARY_PATH` fails the digest
+  branch of the same predicate. The frozen `run_h0_phase_a_child.py:372` carries
+  the identical post-import re-application, latent and not to be edited.
+
+  Pre-authorization review missed it because the 2026-07-27 rule was applied
+  within the controller but not across the process boundary: the child was
+  reviewed as source and exercised only through unit tests with synthetic
+  environments, while the launch probe — which does import the same eval stack
+  successfully — runs under the operator's inherited environment
+  (`run_h2_measurement.py:654`), never the sanitized one, so its green result
+  carried no information about the child's own contract.
+
+  Items 4–5 are therefore satisfied-then-void a second time, both authorizations
+  remain permanently spent, and the next step is the execution-and-archive-verifier
+  repair on a successor
+  head under the owner-adopted shape recorded in `Current step`, gated behind a
+  non-evidence full run that consumes no authorization. Failure evidence:
+  [h2_phase_a_failed_attempt_7646f421_20260728](../../modules/semantic/research/evidence/h2_phase_a_failed_attempt_7646f421_20260728/);
+  controller archive, committed with its inventory enforced in CI:
+  [h2_measure_7646f421…](../../modules/semantic/research/evidence/h2_measure_7646f421a85a580e37e457def5e8ddc7c4bfa0ab/).
