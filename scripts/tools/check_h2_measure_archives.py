@@ -6,7 +6,12 @@ keeps verifying the frozen H0 v1 corpus under the v1 schema and never sees an H2
 root (§ 9 item 3), which is why the evidence prefix is `h2_measure_` in the first
 place.
 
-Three things live here because § C3.1 and § C3.5.1 put them here, and nowhere
+This module is the canonical corpus admission owner. Archive verification is a
+different question with a different answer: `verify_h2_measurement` decides
+whether one root is internally consistent, and a root can be perfectly
+consistent and still not belong to this corpus.
+
+Four things live here because § C3.1 and § C3.5.1 put them here, and nowhere
 else in the unit enforces them:
 
   * **classification.** Every root is exactly one of `complete`, `envelope`,
@@ -23,10 +28,14 @@ else in the unit enforces them:
     whose survivors already show one) may not be re-attempted against the same
     bound measurement surface, and a changed surface is admissible only with a
     named defect repair in H0 § 6's own repair vocabulary.
+  * **execution-domain admission.** Every consumed attempt was consumed under
+    the controlled host's authorization ledger, and not some other one. A run
+    against a disposable ledger — a rehearsal — produces an archive of exactly
+    the canonical shape whose every internal binding holds, so nothing inside
+    the root can refuse it and the corpus must.
 
-An empty corpus passes. No Layer-M authorization has ever been issued, so there
-is nothing to verify; a checker that failed here would be reporting the absence
-of a measurement as a defect in the archive.
+An empty corpus passes: a checker that failed on an empty corpus would be
+reporting the absence of a measurement as a defect in the archive.
 
 Usage:
   uv run python scripts/tools/check_h2_measure_archives.py
@@ -49,6 +58,9 @@ import h2_terminal_partition as partition  # noqa: E402
 import verify_h2_measurement as verifier  # noqa: E402
 
 EVIDENCE_ROOT = REPO_ROOT / evidence.EVIDENCE_REL
+CONTROLLED_HOST_DOMAIN_PATH = (
+    REPO_ROOT / "docs/research/contracts/h2_controlled_host_execution_domain_v1.json"
+)
 
 # Every semantic name below is imported, never restated. Which terminals are
 # properties of the measurement surface, and which repairs may reopen one, decide
@@ -119,6 +131,81 @@ class Attempt(NamedTuple):
             self.report.get("perturbation_observed")
             or self.report.get("invalid_packet_observed")
         )
+
+
+def controlled_host_execution_domain() -> dict[str, Any]:
+    """The one execution domain the canonical corpus admits attempts from."""
+    return evidence.load_document(
+        CONTROLLED_HOST_DOMAIN_PATH.parent,
+        CONTROLLED_HOST_DOMAIN_PATH.name,
+        schema=evidence.AUTHORIZATION_DOMAIN_SCHEMA,
+    )
+
+
+def execution_domain_admission_reasons(
+    root: Path, verify_class: str, phase: str
+) -> tuple[str, ...]:
+    """Why `root` is not an attempt of the controlled host, if it is not.
+
+    The reusable policy predicate behind `check_corpus`, kept separate because
+    more than one reader decides what the corpus contains and they must not
+    answer differently. Two archived objects are compared — the tracked anchor
+    and the root's own record — so the verdict is the same on every host, which
+    is the property the 2026-07-29 verifier repair established and this must
+    not undo.
+
+    Formatting is not identity: both sides are parsed, then their member sets
+    and values are required to be equal. A reordered or re-serialized document
+    with the same content is the same domain.
+
+    Scope. This is a provenance/admission guard, not an authority proof. It
+    refuses an attempt consumed under some other ledger — a rehearsal, another
+    operator, another host — including one that is perfectly self-consistent and
+    that the archive verifier therefore accepts. It cannot refuse a forgery: an
+    author able to rewrite a grant, a receipt and the digest chain can write the
+    anchor's bytes too. Unforgeable issuance needs a signature, which nothing in
+    this repository supplies.
+    """
+    # An `inadmissible` root is a refused admission gate: no authorization was
+    # consumed and no execution domain was ever recorded, so there is nothing
+    # here to judge and its absence is not a defect.
+    if verify_class == INADMISSIBLE:
+        return ()
+    # Phase A only, and deliberately. § C3.5.1 step 5 makes the receipt the whole
+    # of a Phase-B consumption, and that record's shape is not specified yet — no
+    # Phase-B attempt exists to specify it against. Judging it here would be this
+    # file inventing a contract instead of applying one. When Phase-B
+    # consumption is specified, its own domain binding belongs in this predicate.
+    if phase != "a":
+        return ()
+    expected = controlled_host_execution_domain()
+    reasons: list[str] = []
+    receipt = evidence.load_document(
+        root, evidence.AUTHORIZATION_NAME, schema=evidence.AUTHORIZATION_SCHEMA
+    )
+    if receipt.get("execution_domain") != evidence.digest(expected):
+        reasons.append(
+            f"{root.name}: the consumption receipt was not written against the "
+            "controlled host's authorization ledger"
+        )
+    archived = evidence.load_document(
+        root,
+        evidence.AUTHORIZATION_DOMAIN_NAME,
+        schema=evidence.AUTHORIZATION_DOMAIN_SCHEMA,
+    )
+    if set(archived) != set(expected):
+        reasons.append(
+            f"{root.name}: archived execution domain members "
+            f"{sorted(archived)} are not the controlled host's {sorted(expected)}"
+        )
+    else:
+        reasons.extend(
+            f"{root.name}: archived execution domain {member} is not the "
+            "controlled host's"
+            for member in sorted(expected)
+            if archived[member] != expected[member]
+        )
+    return tuple(reasons)
 
 
 def archive_roots(root: Path = EVIDENCE_ROOT) -> list[Path]:
@@ -198,7 +285,21 @@ def _check_re_attempt(attempt: Attempt, prior: Attempt) -> None:
 
 
 def check_corpus(roots: Iterable[Path]) -> list[Attempt]:
+    """The canonical corpus admission owner.
+
+    Archive-verifier success alone has no canonical-admission meaning: it says
+    a root is internally consistent, not that this corpus may contain it.
+    """
     attempts = [_load_attempt(root) for root in roots]
+    reasons = [
+        reason
+        for attempt in attempts
+        for reason in execution_domain_admission_reasons(
+            attempt.root, attempt.verify_class, attempt.name.phase
+        )
+    ]
+    if reasons:
+        raise CorpusError("; ".join(reasons))
     _check_prior_attempts(attempts)
     return attempts
 
