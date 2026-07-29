@@ -543,9 +543,10 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
     archive_verifier: 接受 — valid=true, verify_class=complete, file_count=28;
                       corpus checker PASS (1 roots; complete=1)。接受的是 archive 自洽性,
                       **不是** measurement——terminal 為負且 capture 為零。
-                      **限定條件:兩項結果都只在 execution host 上成立**（見 defect_sites
-                      verify_h2_measurement.py:207-280）;CI 目前只強制 host-independent
-                      inventory contract（雙向完整、逐檔重算 digest、禁 symlink）
+                      **註冊當時的限定條件:兩項結果都只在 execution host 上成立**（見 defect_sites
+                      verify_h2_measurement.py:207-280）;該限制已由 2026-07-29 repair 解除
+                      （見 repair_landed.b），corpus checker 已以完整 git history 接回 CI,
+                      host-independent inventory contract 仍並存
     adjudicated_root_cause: child 在 import eval stack 之後重新套用 ingress environment contract;
                             cv2 4.11.0 於 import 時新增 QT_QPA_FONTDIR / QT_QPA_PLATFORM_PLUGIN_PATH
                             並在 LD_LIBRARY_PATH 前綴自身 lib 目錄
@@ -591,6 +592,39 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
                                frozen H0 child 不得修改。
                                修復落地後 `F64 f0d1b02e…` 與 certificate `266f4b4c…` 即 stale,不得沿用;
                                item 6 亦不在「重建」之列——第二份授權同樣已 consumed 且永久 spent
+    required_successor_action_status: FULFILLED 2026-07-29 — repair_scope (a)(b) 兩個 executed surface
+                               皆已修復並落地,見下方 repair_landed。**只履行 repair,未履行 acceptance /
+                               authorization cycle**:未 seal、未恢復任何授權、equivalence 仍 unproven、
+                               兩份授權仍永久 spent、item 4/5 仍待在新 head 重建
+    repair_landed:
+      date: 2026-07-29
+      repair_implementation_head: 7cae46d8      # commit (b);commit (a) = cc02a0b0
+                                                # 此欄指「修復實作所在的 commit」,不是重建 item 4/5 的 head——
+                                                # 後者是本工作 merge 之後的最終 head,另行記錄
+      unit: H2 Phase-A execution-and-archive-verifier repair（一個 PR、三個獨立 commit:(a) child、
+            (b) archive verifier + CI、(c) 本 governance transition）
+      a_child_ingress_authority: launch snapshot 於 execute_child 恰一次消費;import 之後不再從 live
+            os.environ 重推 ingress predicate;pre_import→post_import delta 僅記 key 名稱
+            （environment_import_delta.json,authority=diagnostic_only,不含任何 value 或 value 指紋）;
+            configure_runtime_env 的 mutation gate 改用 **post-import 的具名 baseline**（用 ingress
+            snapshot 當 baseline 會把 cv2 delta 誤算成 repo-owned mutation,即第三次同型失敗）;
+            REPOSITORY_OWNED_ENV_KEYS 以 equality（非 subset）綁 producer 實際行為;
+            EXPECTED_ENV_KEYS / STATIC_ENV / run_h0_phase_a_child.py 一 byte 未改,H0 :372 twin 仍 latent
+      b_archive_verifier_execution_domain: archive 驗證只讀 archive 位元組(member set、host_identity、
+            operator_uid、canonical absolute POSIX ledger_root 以純字串判定 + 原有 digest binding);
+            launch-time host binding 未放寬(controller 於 admission/consumption 仍 live 推導且
+            無 machine identity 時 fail-close);corpus checker 以完整 git history 接回 CI
+      old_head_reproduction: 兩個缺陷各有一支在 c2d1c58f 上未經修改即失敗的測試
+            （child = AST reproducer;verifier = live-derivation sentinel,失敗於 verify_h2_measurement.py:235）
+      not_established: 無 seal、無 equivalence、無 capture、無新授權、無 registry object state 改變
+      successor_work_item: h2_phase_a_rehearsal_harness — non-evidence full run 目前沒有入口
+            （run_h2_measurement.py 僅單一路徑,--authorization required,ledger 為 default);
+            **不得**在 repair 內新增 production rehearsal mode（admission 前分支等於沒測到 admission,
+            admission 後跳過 consumption 等於改變 production authorization invariant);
+            「不耗授權」＝不動 owner 第三份 grant,而非完全沒有 authorization artifact 走過 admission。
+            harness 契約:不改 production controller / 完全隔離可丟棄 ledger + synthetic grant /
+            走原本 admission 與 consumption 路徑 / 不接觸 owner ledger /
+            產出永不進 canonical corpus,亦不得充當 item 4、item 5、F 或 S 的證據。另行審查
 pending_reentry:                          # append-only; pre-seal, no terminal claimed; route-1 永久留帳結論不變
   - date: 2026-07-21
     scheduling: owner-scheduled re-entry #3（滿足 line-337 future_reentry_precondition:launch-hygiene gate 先行）

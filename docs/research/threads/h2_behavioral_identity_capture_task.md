@@ -314,15 +314,20 @@ invocation reached terminal 4 with `00_capture_off` exiting non-zero and still n
 capture. See `History` and the
 [second failure evidence](../../modules/semantic/research/evidence/h2_phase_a_failed_attempt_7646f421_20260728/).
 
-By the next commit point, the **child** is expected to be repaired on a further
-successor head, unbound and unauthorized: the post-import re-application of the
-ingress environment contract removed under the owner-adopted shape in
-`Current step`, and — the part the two spent attempts have earned — a real
-non-evidence run through controller → child → eval-stack import → environment
-validation → capture initialisation → first stop boundary, consuming no
-authorization and writing no evidence root. No acceptance, certificate, freeze or
-authorization carries over from `0a5dffe9` or `7646f421`. That state is still not
-an authorization and still writes no registry state.
+The first half of the successor lease is **met on 2026-07-29**: the
+execution-and-archive-verifier repair landed on a further successor head,
+unbound and unauthorized — the post-import re-application of the ingress
+environment contract removed under the owner-adopted shape in `Current step`,
+and archive verification freed from the verifying host. No `I`/`F`/`S`, no
+authorization, no capture, no registry state change.
+
+What the lease still expects, unmet: a real non-evidence run through
+controller → child → eval-stack import → environment validation → capture
+initialisation → first stop boundary, spending none of the owner's authority and
+writing no evidence root — which first needs the rehearsal harness described in
+`Current step`. No acceptance, certificate, freeze or authorization carries over
+from `0a5dffe9` or `7646f421`. That state is still not an authorization and still
+writes no registry state.
 
 ## Commit point
 
@@ -393,9 +398,10 @@ artifact in this repository can supply.
 
 ## Current step
 
-**Repair the measurement child on a successor head. Do not re-run, do not seal,
-and do not treat any `7646f421` binding as carried over.** Two authorized
-Phase-A invocations are now spent and neither produced any capture:
+**The execution-and-archive-verifier repair has landed. Rebuild the head-bound
+chain from the head it landed on. Do not re-run, do not seal, and do not treat
+any `7646f421` binding as carried over.** Two authorized Phase-A invocations are
+spent and neither produced any capture:
 
 | | 2026-07-27 at `0a5dffe9` | 2026-07-28 at `7646f421` |
 |:--|:--|:--|
@@ -440,46 +446,66 @@ it:
 
 That is declaration [Review Correction 4](../../modules/semantic/research/headline_bridge_behavioral_identity_capture_declaration_20260725.md#review-correction-4--which-environment-state-carries-authorization-authority-2026-07-28-pre-seal),
 and it constrains the semantics only: the number of checks and their placement
-are the repair's to choose. Concretely, what this repair is expected to do —
-keep the ingress gate; stop re-deriving the ingress predicate from live
-`os.environ` after the import; record the `pre_import → post_import` delta as
-diagnostic that re-enters no authorization decision; do not restore the
-environment after the import; do not edit `run_h0_phase_a_child.py`, which is
-frozen and carries the same latent shape at its `:372`; do not widen
-`EXPECTED_ENV_KEYS`, which is the frozen H0 ruler, imported rather than owned
-here.
+are the repair's to choose.
 
-Two traps for the repair PR. A key-set-only fix is insufficient — the mutated
-`LD_LIBRARY_PATH` fails the digest branch of the same predicate. And if the
-property that `configure_runtime_env` mutates nothing repo-owned is to be kept
-as a gate, it needs its own explicitly named baseline: taking the ingress
-snapshot as that baseline reproduces this exact failure, because the recorded
-import delta is still sitting in the comparison.
+**What the repair did.** The ingress gate stayed where it was; the launch
+snapshot is consumed exactly once, in `execute_child`, and nothing downstream
+compares against it or rebuilds the predicate from live state. The
+`pre_import → post_import` delta is recorded as key names only — diagnostic,
+outside every gate and the invocation digest — and the environment is not
+restored after the import. The property that `configure_runtime_env` mutates
+nothing outside its own declared keys survives as a separately named contract
+with its own baseline, taken *after* the import: both traps registered here were
+real, and taking the ingress snapshot as that baseline would have charged cv2's
+injection to the repository and reproduced the failure under a new name. A
+key-set-only fix was never attempted for the reason registered — the mutated
+`LD_LIBRARY_PATH` fails the digest branch of the same predicate. The frozen H0
+ruler is untouched: `EXPECTED_ENV_KEYS`, `STATIC_ENV` and
+`run_h0_phase_a_child.py` are unchanged, and H0's twin at its `:372` stays
+latent and out of scope.
 
-**A third site belongs to the same repair.** Registering the archive found that
-`verify_h2_measurement._authorization` recomputes the authorization execution
-domain from the *verifying* host's `/etc/machine-id` and `os.getuid()` and
-requires equality with the archived record, so a committed Phase-A archive
-verifies only on the machine that produced it. Host-binding the grant is correct
-at launch and must stay; consulting live host state at archive-verification time
-is the same structural error as the other two, and it is what stops an
-independent reviewer — or CI — from re-adjudicating a committed archive at all.
-The consistency archive verification can honestly assert is already beside it:
-the receipt's and grant's `execution_domain` must equal the digest of the
-archived domain object. Until that lands, CI enforces the host-independent
-inventory contract over `h2_measure_*` archives; wiring `verify_h2_measurement`
-and `check_h2_measure_archives.py` into CI is part of the repair.
+**A third site belonged to the same repair, and landed with it.** Registering the
+archive found that `verify_h2_measurement._authorization` recomputed the
+authorization execution domain from the *verifying* host's `/etc/machine-id` and
+`os.getuid()` and required equality with the archived record, so a committed
+Phase-A archive verified only on the machine that produced it. Host-binding the
+grant is correct at launch and stays — `run_h2_measurement` still derives the
+domain live when an authorization is admitted and consumed, and still
+fail-closes when the controlled host has no machine identity. Archive
+verification now judges the archived record from the archive's own bytes: member
+set, `host_identity` shape, `operator_uid` shape, a canonical absolute POSIX
+`ledger_root` decided as a string rather than through `pathlib`, and the digest
+binding that was always the honest assertion — the receipt's and grant's
+`execution_domain` must equal the digest of the archived domain object. With the
+coupling gone, `check_h2_measure_archives.py` is wired into CI over full git
+history, which the verifier legitimately needs to rebuild each archived
+attempt's content axes.
 
 Before the next authorization is requested there is one further gate the two
 spent attempts have earned: a **non-evidence full run** — controller → child
 process → eval-stack import → environment validation → capture initialisation →
-first valid stop boundary — consuming no authorization and writing no evidence
-root. Source review, unit tests with synthetic environments, and a green launch
-probe running under the *operator's* environment have now each failed to predict
-an execution-time structural self-negation.
+first valid stop boundary — consuming no *owner* authorization and writing no
+evidence root. Source review, unit tests with synthetic environments, and a green
+launch probe running under the *operator's* environment have now each failed to
+predict an execution-time structural self-negation.
+
+That gate has no entry point yet, and building one is a separate work item, not
+part of this repair. `run_h2_measurement.py` has a single path: `--authorization`
+is required and the ledger is the default one, so there is no rehearsal mode, and
+adding one would create a second controller execution path — branching before
+admission would not exercise admission, and branching after it while skipping
+consumption would change the production authorization invariant. Under the
+existing contract, walking admission at all logically requires *an*
+authorization; "consumes no authorization" therefore means the owner's third
+grant is untouched, not that no authorization artifact exists. The successor
+work item is a **rehearsal harness** that does not modify the production
+controller, uses a wholly isolated disposable ledger and a synthetic grant, walks
+the real admission and consumption path, never touches the owner ledger, and
+whose output never enters the canonical corpus and can never stand in for
+`Acceptance` items 4–5, `F` or `S`. Its contract is reviewed on its own.
 
 The head-bound gates below (`Acceptance` items 4 and 5) were satisfied at
-`7646f421` and die the moment the repair lands: `F64 f0d1b02e…` and Layer-P
+`7646f421` and died when the repair landed: `F64 f0d1b02e…` and Layer-P
 certificate `266f4b4c…` are stale from that commit, are not partially reused,
 and must be rebuilt at whatever head the repair lands on. Item 6 is not rebuilt
 either time: both authorizations were consumed at launch and stay permanently
@@ -1039,3 +1065,49 @@ Additionally, and specific to the accepted decisions:
   [h2_phase_a_failed_attempt_7646f421_20260728](../../modules/semantic/research/evidence/h2_phase_a_failed_attempt_7646f421_20260728/);
   controller archive, committed with its inventory enforced in CI:
   [h2_measure_7646f421…](../../modules/semantic/research/evidence/h2_measure_7646f421a85a580e37e457def5e8ddc7c4bfa0ab/).
+
+- **2026-07-29** — the **execution-and-archive-verifier repair** landed as two
+  independent commits, closing both registered executed-surface defects without
+  moving any ruler, spending nothing, and binding no head.
+
+  `cc02a0b0` — the child decides ingress authorization once, in `execute_child`,
+  against the launch snapshot captured before any third-party import, and
+  nothing downstream compares against that snapshot or rebuilds the predicate
+  from live state. The import's environment side effect is recorded as key names
+  only (`environment_import_delta.json`, `authority: diagnostic_only`): outside
+  every gate, outside the invocation digest, and carrying no fingerprint of any
+  environment value, because a non-authoritative document has no reason to hold
+  one. `configure_runtime_env` keeps a mutation gate, but as separate subject
+  matter with its own baseline taken *after* the import — the registered trap,
+  had the ingress snapshot been used, was that cv2's injection would have been
+  charged to the repository and reproduced the same failure. The declared
+  repository-owned key set is bound to the producer's actual behaviour by
+  equality, not subset: a subset assertion would have left the allowlist itself
+  free to widen. `EXPECTED_ENV_KEYS`, `STATIC_ENV` and `run_h0_phase_a_child.py`
+  are untouched, and H0's twin at `:372` stays latent.
+
+  `7cae46d8` — archive verification judges the archived authorization execution
+  domain from the archive's own bytes and no longer recomputes it from the
+  verifying host's `/etc/machine-id` and `os.getuid()`. Shape predicates
+  (`host_identity`, `operator_uid`, a canonical absolute POSIX `ledger_root`
+  decided as a string, never through `pathlib`, whose round-trip would not reject
+  `..` and whose answer would otherwise depend on the verifying host's OS) sit
+  behind the unchanged digest binding. Launch-time host binding is not relaxed:
+  the controller still derives the domain live at admission and consumption and
+  still fail-closes without a machine identity. With the coupling gone the corpus
+  checker is wired back into CI over full git history.
+
+  Both defects are held closed by tests that fail unmodified at `c2d1c58f`: an
+  AST reproducer for the child, which states the defect as source structure, and
+  a live-derivation sentinel for the verifier, which fails there at
+  `verify_h2_measurement.py:235`. The verifier's negatives come in two classes —
+  breaking the digest chain, and recomputing it so an illegal record is
+  internally consistent and must die on the shape predicate it violates — because
+  only the second kind can prove a shape predicate exists at all.
+
+  This repair authorizes nothing, seals nothing, and restores no authorization.
+  `F64 f0d1b02e…` and certificate `266f4b4c…` are stale from `cc02a0b0`, and the
+  rebuild of `Acceptance` items 4 and 5 belongs at the head this work merges to,
+  never at either repair commit. The non-evidence full run still stands between
+  the rebuild and any request for a third authorization, and it now has a named
+  predecessor of its own: the rehearsal harness described in `Current step`.

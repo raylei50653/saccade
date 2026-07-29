@@ -179,14 +179,13 @@ def test_h2_measurement_archives_are_inventory_complete_and_unrotted() -> None:
     still matches. It catches rot, silent edits and additive contamination
     anywhere a reviewer or CI runs.
 
-    It is deliberately *not* the full verifier. `verify_h2_measurement`
-    recomputes the authorization execution domain from the verifying host's
-    `/etc/machine-id` and `os.getuid()` and requires equality with the archived
-    record, so a Phase-A archive currently verifies only on the machine that
-    produced it — see the 2026-07-28 registration packet, §4.2. Binding the
-    *grant* to one host is intended and correct at launch; carrying that live
-    recomputation into archive verification is not, and until it is repaired a
-    cross-host gate here could only be satisfied by weakening it.
+    It is deliberately *not* the full verifier, which additionally needs the
+    archived head's git history. The host coupling that once kept the full
+    verifier out of reach here — recomputing the authorization execution domain
+    from the verifying host's `/etc/machine-id` and `os.getuid()`, registered in
+    the 2026-07-28 packet §4.2 — is repaired, and
+    `test_h2_phase_a_archive_verification_is_execution_host_independent` holds
+    it repaired.
     """
     evidence_dirs = h2_measurement_execution_dirs()
     assert evidence_dirs, "no H2 Layer-M measurement evidence directories were found"
@@ -510,3 +509,217 @@ def test_h0_preseal_freeze_v3_layout_rejects_noncanonical_entries(
         (evidence_dir / name).write_text("{}")
 
     assert h0_preseal_freeze_v3_layout_errors(evidence_dir)
+
+
+# -- H2 archive verification is host-independent ---------------------------- #
+
+
+def _archived_authorization_fixture(
+    destination: pathlib.Path, source: pathlib.Path
+) -> tuple[dict, object]:
+    """Copy the three authorization documents an archive binds together."""
+    destination.mkdir(parents=True, exist_ok=True)
+    for name in (
+        h2_evidence.AUTHORIZATION_NAME,
+        h2_evidence.AUTHORIZATION_GRANT_NAME,
+        h2_evidence.AUTHORIZATION_DOMAIN_NAME,
+    ):
+        (destination / name).write_bytes((source / name).read_bytes())
+    freeze = h2_evidence.load_document(source, h2_evidence.FREEZE_NAME)
+    return freeze, h2_evidence.parse_root_name(source.name)
+
+
+def _rebind_execution_domain(root: pathlib.Path, domain: dict) -> None:
+    """Rewrite the whole digest chain so a fixture is internally consistent.
+
+    domain -> digest(domain) -> grant["execution_domain"] -> digest(grant)
+           -> receipt["execution_domain"], receipt["authorization_digest"]
+
+    Without this, a semantic mutation dies at the digest binding and proves
+    nothing about the predicates that judge the record's own shape.
+    """
+    grant = h2_evidence.load_document(root, h2_evidence.AUTHORIZATION_GRANT_NAME)
+    receipt = h2_evidence.load_document(root, h2_evidence.AUTHORIZATION_NAME)
+    digest = h2_evidence.digest(domain)
+    grant["execution_domain"] = digest
+    receipt["execution_domain"] = digest
+    receipt["authorization_digest"] = h2_evidence.digest(grant)
+    h2_evidence.write_document(root, h2_evidence.AUTHORIZATION_DOMAIN_NAME, domain)
+    h2_evidence.write_document(root, h2_evidence.AUTHORIZATION_GRANT_NAME, grant)
+    h2_evidence.write_document(root, h2_evidence.AUTHORIZATION_NAME, receipt)
+
+
+def test_h2_phase_a_archive_verification_is_execution_host_independent(
+    monkeypatch,
+) -> None:
+    """A committed attempt must verify on any host, not only its producer.
+
+    Until 2026-07-29 `_authorization` recomputed the authorization execution
+    domain from the *verifying* host's `/etc/machine-id` and `os.getuid()` and
+    required equality with the archived record, so a Phase-A archive verified
+    only on the machine that produced it — neither an independent reviewer nor
+    CI could read it. Binding a grant to one host at launch is intended and
+    still enforced by `run_h2_measurement`; carrying that live recomputation
+    into archive verification was not.
+
+    The guards below are the negative control: the live-host derivation is made
+    to raise, the uid is moved, and the machine-identity files are made
+    unreadable. Any reintroduction of a live-host read fails here.
+    """
+    import os
+
+    archives = h2_measurement_execution_dirs()
+    assert archives, "no H2 Layer-M measurement evidence directories were found"
+
+    def refuse(*_args: object, **_kwargs: object) -> dict:
+        raise AssertionError("archive verification consulted live host identity")
+
+    monkeypatch.setattr(h2_evidence, "authorization_execution_domain", refuse)
+    foreign_uid = os.getuid() + 1
+    monkeypatch.setattr(os, "getuid", lambda: foreign_uid)
+    repository = REPO.resolve()
+    real_read_bytes = pathlib.Path.read_bytes
+
+    def guarded_read_bytes(self: pathlib.Path) -> bytes:
+        absolute = pathlib.Path(self).absolute()
+        if absolute.as_posix() in (
+            "/etc/machine-id",
+            "/var/lib/dbus/machine-id",
+        ) or not absolute.is_relative_to(repository):
+            raise FileNotFoundError(f"host-coupled read during verification: {self}")
+        return real_read_bytes(self)
+
+    monkeypatch.setattr(pathlib.Path, "read_bytes", guarded_read_bytes)
+    for archive in archives:
+        report = measurement_verifier.verify_evidence_root(archive)
+        assert isinstance(report, dict) and report.get("valid") is True
+        assert report.get("verify_class") == "complete"
+
+
+def test_h2_launch_time_host_binding_is_not_relaxed(monkeypatch) -> None:
+    """The repair frees archive verification only, never the grant.
+
+    `run_h2_measurement` still derives the execution domain live when an
+    authorization is admitted and consumed, and still fail-closes when the
+    controlled host has no machine identity.
+    """
+    monkeypatch.setattr(
+        pathlib.Path,
+        "read_bytes",
+        lambda self: (_ for _ in ()).throw(OSError("absent")),
+    )
+    with pytest.raises(h2_evidence.EvidenceError):
+        h2_evidence.authorization_execution_domain(pathlib.Path("/var/lib/h2"))
+
+
+def test_h2_archived_execution_domain_integrity_is_still_fail_closed(
+    tmp_path,
+) -> None:
+    """Class 1: mutate the domain alone and the digest binding must refuse."""
+    source = h2_measurement_execution_dirs()[0]
+    for mutation in (
+        {"host_identity": "f" * 64},
+        {"operator_uid": 4242},
+        {"ledger_root": "/var/lib/other"},
+    ):
+        root = tmp_path / f"integrity_{sorted(mutation)[0]}"
+        freeze, name = _archived_authorization_fixture(root, source)
+        domain = h2_evidence.load_document(root, h2_evidence.AUTHORIZATION_DOMAIN_NAME)
+        h2_evidence.write_document(
+            root, h2_evidence.AUTHORIZATION_DOMAIN_NAME, {**domain, **mutation}
+        )
+        with pytest.raises(measurement_verifier.VerificationError) as excinfo:
+            measurement_verifier._authorization(root, "a", freeze=freeze, name=name)
+        assert "digest-unreconstructable" in str(excinfo.value)
+
+    root = tmp_path / "integrity_member"
+    freeze, name = _archived_authorization_fixture(root, source)
+    domain = h2_evidence.load_document(root, h2_evidence.AUTHORIZATION_DOMAIN_NAME)
+    domain.pop("operator_uid")
+    h2_evidence.write_document(root, h2_evidence.AUTHORIZATION_DOMAIN_NAME, domain)
+    with pytest.raises(measurement_verifier.VerificationError):
+        measurement_verifier._authorization(root, "a", freeze=freeze, name=name)
+
+
+def test_h2_archived_authorization_fixture_is_accepted_unmutated(tmp_path) -> None:
+    """The base fixture must pass, or every negative below proves nothing."""
+    source = h2_measurement_execution_dirs()[0]
+    freeze, name = _archived_authorization_fixture(tmp_path / "base", source)
+    receipt = measurement_verifier._authorization(
+        tmp_path / "base", "a", freeze=freeze, name=name
+    )
+    assert receipt["state"] == "consumed"
+
+    # A rebind that changes nothing must also survive, so a later failure is
+    # attributable to the mutation and not to the rebinding machinery.
+    root = tmp_path / "rebound"
+    freeze, name = _archived_authorization_fixture(root, source)
+    domain = h2_evidence.load_document(root, h2_evidence.AUTHORIZATION_DOMAIN_NAME)
+    _rebind_execution_domain(root, domain)
+    assert (
+        measurement_verifier._authorization(root, "a", freeze=freeze, name=name)[
+            "state"
+        ]
+        == "consumed"
+    )
+
+
+@pytest.mark.parametrize(
+    "member,value",
+    [
+        ("host_identity", "a" * 63),
+        ("host_identity", "a" * 65),
+        ("host_identity", "A" * 64),
+        ("host_identity", "g" * 64),
+        ("host_identity", None),
+        ("host_identity", 1),
+        ("operator_uid", True),
+        ("operator_uid", "1000"),
+        ("operator_uid", -1),
+        ("operator_uid", 1.0),
+        ("operator_uid", None),
+        ("ledger_root", "relative/ledger"),
+        ("ledger_root", "/var/../etc/ledger"),
+        ("ledger_root", "/var//lib/ledger"),
+        ("ledger_root", "/var/./lib/ledger"),
+        ("ledger_root", "/var/lib/ledger/"),
+        ("ledger_root", "//var/lib/ledger"),
+        ("ledger_root", ""),
+        ("ledger_root", "/var/lib/led\0ger"),
+        ("ledger_root", 17),
+    ],
+)
+def test_h2_archived_execution_domain_shape_is_judged_after_the_digest_chain(
+    tmp_path, member: str, value: object
+) -> None:
+    """Class 2: internally consistent, semantically illegal.
+
+    The whole digest chain is recomputed so the record passes the binding
+    clauses and dies precisely on the shape predicate it violates.
+    """
+    source = h2_measurement_execution_dirs()[0]
+    root = tmp_path / "shape"
+    freeze, name = _archived_authorization_fixture(root, source)
+    domain = h2_evidence.load_document(root, h2_evidence.AUTHORIZATION_DOMAIN_NAME)
+    _rebind_execution_domain(root, {**domain, member: value})
+    with pytest.raises(measurement_verifier.VerificationError) as excinfo:
+        measurement_verifier._authorization(root, "a", freeze=freeze, name=name)
+    assert "archived authorization execution domain is malformed" in str(excinfo.value)
+
+
+@pytest.mark.parametrize("ledger_root", ["/", "/var/lib/h2", "/a/b/c"])
+def test_h2_archived_execution_domain_accepts_canonical_absolute_paths(
+    tmp_path, ledger_root: str
+) -> None:
+    """The shape rule must not be so strict it refuses legal ledger roots."""
+    source = h2_measurement_execution_dirs()[0]
+    root = tmp_path / "canonical"
+    freeze, name = _archived_authorization_fixture(root, source)
+    domain = h2_evidence.load_document(root, h2_evidence.AUTHORIZATION_DOMAIN_NAME)
+    _rebind_execution_domain(root, {**domain, "ledger_root": ledger_root})
+    assert (
+        measurement_verifier._authorization(root, "a", freeze=freeze, name=name)[
+            "state"
+        ]
+        == "consumed"
+    )

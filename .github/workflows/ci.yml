@@ -88,6 +88,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The H2 archive corpus checker rebuilds each archived attempt's
+          # content axes from the head it was produced at, so it reads git
+          # history rather than the checkout. That is the verifier's legitimate
+          # input, not a coupling to relax.
+          fetch-depth: 0
       - name: Install System Dependencies
         run: |
           sudo apt-get update -q
@@ -119,6 +125,8 @@ jobs:
         run: uv run python scripts/tools/check_h0_repair_acceptance_matrix.py
       - name: H0 Immutable Archive Corpus
         run: uv run python scripts/tools/check_h0_phase_a_archives.py
+      - name: H2 Measurement Archive Corpus
+        run: uv run python scripts/tools/check_h2_measure_archives.py
       - name: Scripts Structure Contract
         run: uv run python scripts/tools/check_scripts_structure.py --strict
       - name: Doc Freshness Check (warn-only)

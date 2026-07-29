@@ -1725,3 +1725,310 @@ def test_controller_files_remain_plumbing_only() -> None:
         path_partition.classify("scripts/tools/run_h2_measurement_child.py")
         == "plumbing_only"
     )
+
+
+# -- ingress authorization authority (declaration Review Correction 4) ------- #
+#
+# The 2026-07-28 Phase-A attempt died at terminal 4 because `repository_runner`
+# re-derived the ingress predicate from the live environment *after* importing
+# the eval stack, and cv2 4.11.0 mutates the environment as an import side
+# effect.  The registered delta, reproduced verbatim from the registration
+# packet's `root_cause_probe.json`.
+_IMPORT_SIDE_EFFECT = {
+    "QT_QPA_FONTDIR": "/nonexistent/fonts",
+    "QT_QPA_PLATFORM_PLUGIN_PATH": "/nonexistent/plugins/platforms",
+}
+
+
+def _launch_fixture(tmp_path: Path) -> tuple[Path, dict[str, str], Path]:
+    """One canonical child invocation, without running the controller."""
+    run_dir = tmp_path / "runs" / evidence.MEASUREMENT_SEQUENCE / evidence.RUN_IDS[0]
+    for leaf in ("home", "tmp", "xdg-cache"):
+        (run_dir / "_env" / leaf).mkdir(parents=True)
+    build_dir = tmp_path / "build"
+    build_dir.mkdir()
+    environment = controller.child_environment(
+        run_dir, build_dir=build_dir, inherited={}
+    )
+    invocation = {
+        "schema": child.INVOCATION_SCHEMA,
+        "build_dir": build_dir.as_posix(),
+        "capture_phase": evidence.CAPTURE_PHASE["a"],
+        "capture_run_uuid": "fixture-uuid",
+        "environment_digest": child._environment_digest(environment),
+        "instrumentation_head": "0" * 40,
+        "policy_fingerprint": "1" * 64,
+        "run_dir": run_dir.as_posix(),
+        "run_id": evidence.RUN_IDS[0],
+        "sequence": evidence.MEASUREMENT_SEQUENCE,
+        "state": "running",
+    }
+    path = evidence.write_document(run_dir, "invocation.json", invocation)
+    return path, environment, run_dir
+
+
+def test_repository_owned_env_keys_agree_with_the_producer() -> None:
+    """The declared set is exactly what `configure_runtime_env` may touch.
+
+    A subset assertion alone would only stop the producer from growing new
+    undeclared behaviour; it would let the allowlist itself be widened, and a
+    widened allowlist is a gate that waves through the next key.  So every
+    configuration must stay inside the set, and their union must exhaust it.
+    """
+    import argparse
+
+    from mot17_args import configure_runtime_env
+
+    def mutated(environ: dict[str, str], **flags: object) -> set[str]:
+        before = dict(environ)
+        configure_runtime_env(argparse.Namespace(**flags), environ)
+        return {
+            key
+            for key in set(before) | set(environ)
+            if before.get(key) != environ.get(key)
+        }
+
+    # `SACCADE_STREAM_MODE` must be present up front or its removal is
+    # unobservable.
+    configurations = [
+        {
+            "double_buffer": True,
+            "detect_barrier": "event",
+            "no_gpu_decode": False,
+            "main_nms_graphed": True,
+        },
+        {
+            "double_buffer": False,
+            "detect_barrier": None,
+            "no_gpu_decode": True,
+            "main_nms_graphed": False,
+        },
+        {
+            "double_buffer": False,
+            "detect_barrier": "full",
+            "no_gpu_decode": False,
+            "main_nms_graphed": True,
+        },
+    ]
+    observed: set[str] = set()
+    for flags in configurations:
+        keys = mutated({"SACCADE_STREAM_MODE": "ptds_probe"}, **flags)
+        assert keys <= child.REPOSITORY_OWNED_ENV_KEYS, sorted(
+            keys - child.REPOSITORY_OWNED_ENV_KEYS
+        )
+        observed |= keys
+    assert observed == child.REPOSITORY_OWNED_ENV_KEYS
+
+
+def test_ingress_authorization_is_decided_once_against_the_launch_snapshot(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The durable statement of the repair, through the real `repository_runner`.
+
+    An injected runner would prove only that `execute_child` judges the snapshot
+    before calling it, and the AST test would prove only that today's source has
+    no *direct* call — a helper or a rename would slip past both. So the
+    production runner is what executes here: only `_import_eval_stack` and the
+    detector builder are stubbed, and the stub mutates the live environment the
+    way cv2 4.11.0 does. The run must reach the post-configuration sentinel,
+    which it cannot do if anything between the import and that point rebuilds
+    the ingress predicate from live state.
+    """
+    import yaml as real_yaml
+
+    invocation_path, environment, run_dir = _launch_fixture(tmp_path)
+    build_dir = Path(
+        str(evidence.load_document(run_dir, "invocation.json")["build_dir"])
+    )
+
+    # The process environment is the sanitized one, so the production runner's
+    # own contracts are exercised rather than stepped around — and the injected
+    # snapshot still stops being the live environment the moment cv2 lands.
+    monkeypatch.setattr(os, "environ", dict(environment))
+
+    judged: list[dict[str, str]] = []
+    real_validate = child.validate_environment
+
+    def recording(env: Mapping[str, str], invocation: Mapping[str, Any]) -> None:
+        judged.append(dict(env))
+        real_validate(env, invocation)
+
+    monkeypatch.setattr(child, "validate_environment", recording)
+
+    class _ReachedTheDetector(Exception):
+        """Raised where a real run would start using the GPU."""
+
+    def import_eval_stack() -> tuple[Any, ...]:
+        # cv2 4.11.0's registered side effect, plus a leaked shell export for
+        # the configuration stage to clear.
+        os.environ.update(_IMPORT_SIDE_EFFECT)
+        os.environ["LD_LIBRARY_PATH"] = f"{os.environ['LD_LIBRARY_PATH']}:/opt/cv2/lib"
+        os.environ["SACCADE_STREAM_MODE"] = "ptds_probe"
+
+        def build_parser() -> Any:
+            import argparse
+
+            parser = argparse.ArgumentParser()
+            parser.add_argument("--sequences")
+            parser.add_argument("--output")
+            return parser
+
+        def configure_runtime_env(_args: Any, env: Any) -> None:
+            env["SACCADE_GPU_DECODE"] = "1"
+            env.pop("SACCADE_STREAM_MODE", None)
+
+        def build_detector(**_: object) -> Any:
+            raise _ReachedTheDetector()
+
+        return (
+            real_yaml,
+            build_parser,
+            configure_runtime_env,
+            lambda _stem: "1" * 64,
+            None,
+            None,
+            None,
+            build_detector,
+            None,
+        )
+
+    monkeypatch.setattr(behavior, "_import_eval_stack", import_eval_stack)
+    monkeypatch.setattr(behavior, "resolve_build_dir", lambda: build_dir)
+    monkeypatch.setattr(behavior, "_assert_extension_consumed", lambda _dir: "witness")
+
+    with pytest.raises(_ReachedTheDetector):
+        child.execute_child(
+            invocation_path,
+            environment=environment,
+            runner=child.repository_runner,
+        )
+
+    # Judged exactly once, and on the snapshot — never on the live environment,
+    # which by then no longer satisfies the predicate at all.
+    assert judged == [environment]
+    with pytest.raises(child.ChildError):
+        real_validate(
+            dict(os.environ), evidence.load_document(run_dir, "invocation.json")
+        )
+    assert evidence.load_document(run_dir, child.ENVIRONMENT_DELTA_NAME) == {
+        "schema": child.ENVIRONMENT_DELTA_SCHEMA,
+        "authority": "diagnostic_only",
+        "added": [
+            "QT_QPA_FONTDIR",
+            "QT_QPA_PLATFORM_PLUGIN_PATH",
+            "SACCADE_STREAM_MODE",
+        ],
+        "removed": [],
+        "changed": ["LD_LIBRARY_PATH"],
+    }
+
+
+def test_import_delta_document_is_exact_and_carries_no_environment_values(
+    tmp_path: Path,
+) -> None:
+    """Diagnostic only, so it records key names and nothing else."""
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    # Every value is a distinctive sentinel: a low-entropy fixture ("0", "1")
+    # would collide with the document's own schema string and make the
+    # value-absence assertion below meaningless rather than strict.
+    secret = "b3d1f0e2c4a5"
+    before = {
+        "KEPT": f"kept-{secret}",
+        "LD_LIBRARY_PATH": f"build-{secret}",
+        "REMOVED": f"removed-{secret}",
+    }
+    after = {
+        "KEPT": f"kept-{secret}",
+        "LD_LIBRARY_PATH": f"build-{secret}:cv2-{secret}",
+        "QT_QPA_FONTDIR": f"fonts-{secret}",
+    }
+    document = child.record_import_delta(run_dir, before, after)
+    assert document == {
+        "schema": "h2_child_environment_import_delta_v1",
+        "authority": "diagnostic_only",
+        "added": ["QT_QPA_FONTDIR"],
+        "removed": ["REMOVED"],
+        "changed": ["LD_LIBRARY_PATH"],
+    }
+    written = (run_dir / child.ENVIRONMENT_DELTA_NAME).read_text(encoding="utf-8")
+    assert evidence.load_document(run_dir, child.ENVIRONMENT_DELTA_NAME) == document
+    assert secret not in written
+    for value in (*before.values(), *after.values()):
+        assert value not in written
+
+
+def test_repository_owned_mutation_gate_rejects_foreign_keys() -> None:
+    baseline = dict(child.h0_child.STATIC_ENV)
+    applied = {**baseline, "QT_QPA_FONTDIR": "/nonexistent/fonts"}
+    with pytest.raises(child.ChildError) as excinfo:
+        child.validate_repository_owned_mutation(baseline, applied)
+    message = str(excinfo.value)
+    assert "outside its declared set" in message
+    assert "QT_QPA_FONTDIR" in message
+    # Never the ingress vocabulary: this contract has its own subject matter.
+    assert "frozen A5 execution environment" not in message
+
+    with pytest.raises(child.ChildError):
+        child.validate_repository_owned_mutation(
+            {**baseline, "PATH": "/usr/bin"}, baseline
+        )
+
+
+def test_repository_owned_mutation_gate_is_blind_to_the_import_delta() -> None:
+    """The baseline is post-import, so the import's delta is on neither side.
+
+    Taking the launch snapshot as this baseline instead would charge cv2's
+    injection to the repository and reproduce the registered failure under a
+    new name; the same delta applied *after* the baseline is a violation,
+    because by then nothing but `configure_runtime_env` may write.
+    """
+    snapshot = dict(child.h0_child.STATIC_ENV)
+    post_import = {**snapshot, **_IMPORT_SIDE_EFFECT}
+
+    baseline = dict(post_import)
+    applied = dict(post_import)
+    baseline["SACCADE_STREAM_MODE"] = "ptds_probe"
+    child.validate_repository_owned_mutation(baseline, applied)
+
+    with pytest.raises(child.ChildError):
+        child.validate_repository_owned_mutation(snapshot, post_import)
+
+
+def test_repository_owned_mutation_gate_pins_the_frozen_values() -> None:
+    baseline = dict(child.h0_child.STATIC_ENV)
+    with pytest.raises(child.ChildError) as excinfo:
+        child.validate_repository_owned_mutation(
+            baseline, {**baseline, "SACCADE_GPU_DECODE": "0"}
+        )
+    assert "frozen A5 execution environment" in str(excinfo.value)
+
+    with pytest.raises(child.ChildError) as excinfo:
+        child.validate_repository_owned_mutation(
+            baseline, {**baseline, "SACCADE_STREAM_MODE": "ptds_probe"}
+        )
+    assert "SACCADE_STREAM_MODE" in str(excinfo.value)
+
+
+def test_repository_runner_does_not_re_derive_the_ingress_predicate() -> None:
+    """The 2026-07-28 defect, stated as source structure.
+
+    Standalone by construction — no fixture, no helper added by this repair —
+    so it can be run unmodified against the pre-repair head, where it fails on
+    the call at `repository_runner`'s configuration stage.
+    """
+    import ast
+
+    source = (_TOOLS / "run_h2_measurement_child.py").read_text(encoding="utf-8")
+    functions = {
+        node.name: node
+        for node in ast.parse(source).body
+        if isinstance(node, ast.FunctionDef)
+    }
+    called = {
+        node.func.id
+        for node in ast.walk(functions["repository_runner"])
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+    }
+    assert "validate_environment" not in called
+    assert "validate_repository_owned_mutation" in called

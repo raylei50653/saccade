@@ -81,9 +81,13 @@
   ⇒ 任何裝 OpenCV 的 host 必失敗，與 head/binding/ruler 無關；
   items 4–5 第二次 satisfied-then-void（須在新 successor head 再重建）；
   item 6 兩份皆 consumed、永久 spent（不是重建，而是 owner 另行簽發第三份授權）；
-  下一步＝successor head 上的 **child** repair（授權環境＝import 前的 immutable launch snapshot、
-  不再從 live `os.environ` 重推 ingress predicate、delta 僅作 diagnostic；見 declaration
-  Review Correction 4），並先跑一次不耗授權的 non-evidence 全鏈實跑；do not re-run →
+  **execution-and-archive-verifier repair 已於 2026-07-29 落地**（commit `cc02a0b0` child
+  ingress authority＋`7cae46d8` archive verifier／CI）：授權環境＝import 前的 immutable launch
+  snapshot、只在 `execute_child` 判定一次、import delta 僅記 key 名稱作 diagnostic（見 declaration
+  Review Correction 4）；archive 驗證改為只讀 archive 位元組，launch-time host binding 未放寬，
+  corpus checker 以完整 git history 接回 CI；兩個缺陷各有一支在 `c2d1c58f` 上未改即失敗的測試。
+  repair **不授權、不 seal、不恢復任何授權**；下一步＝在 merge 後的 head 重建 items 4–5，
+  其前置為 rehearsal harness（現無 non-evidence 全鏈入口，且不得為此新增 production rehearsal mode）→
   [second failure evidence](research/evidence/h2_phase_a_failed_attempt_7646f421_20260728/)
   · [controller archive](research/evidence/h2_measure_7646f421a85a580e37e457def5e8ddc7c4bfa0ab/)
   · [first failure evidence](research/evidence/h2_phase_a_failed_attempt_0a5dffe9_20260727/)

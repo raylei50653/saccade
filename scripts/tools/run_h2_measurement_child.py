@@ -51,6 +51,23 @@ from verify_headline_bridge_decision_trace import verify_capture  # noqa: E402
 
 CHILD_SCHEMA = "h2_measurement_child_v1"
 INVOCATION_SCHEMA = "h2_measurement_child_invocation_v1"
+ENVIRONMENT_DELTA_SCHEMA = "h2_child_environment_import_delta_v1"
+ENVIRONMENT_DELTA_NAME = "environment_import_delta.json"
+
+# The keys `scripts/eval/mot17_args.configure_runtime_env` is allowed to write
+# or clear.  Restated here because this file must gate the mutation, and bound
+# to the producer's actual behaviour by a contract test rather than remembered
+# (§ C3.9: a re-typed fact in an editable file drifts while the producer stands
+# still).
+REPOSITORY_OWNED_ENV_KEYS = frozenset(
+    {
+        "SACCADE_DETECT_BARRIER",
+        "SACCADE_DOUBLE_BUFFER",
+        "SACCADE_GPU_DECODE",
+        "SACCADE_MAIN_NMS_GRAPHED",
+        "SACCADE_STREAM_MODE",
+    }
+)
 
 (
     ACTIVE_PAIRS_MEMBER,
@@ -200,6 +217,67 @@ def validate_environment(
             raise ChildError(f"derived environment directory mismatch for {key}")
 
 
+def record_import_delta(
+    run_dir: Path, before: Mapping[str, str], after: Mapping[str, str]
+) -> dict[str, Any]:
+    """Record the eval stack import's environment side effect. Never a gate.
+
+    Declaration Review Correction 4: the authorization environment is the
+    immutable launch snapshot `execute_child` validated before any third-party
+    import.  What an import does to the live environment afterwards is derived
+    state.  It is recorded here so the side effect is not invisible, and it is
+    recorded as key names only — this document is diagnostic, so it has no
+    reason to carry a stable fingerprint of any environment value.
+    """
+    before_keys, after_keys = set(before), set(after)
+    document = {
+        "schema": ENVIRONMENT_DELTA_SCHEMA,
+        "authority": "diagnostic_only",
+        "added": sorted(after_keys - before_keys),
+        "removed": sorted(before_keys - after_keys),
+        "changed": sorted(
+            key for key in before_keys & after_keys if before[key] != after[key]
+        ),
+    }
+    evidence.write_document(run_dir, ENVIRONMENT_DELTA_NAME, document)
+    return document
+
+
+def validate_repository_owned_mutation(
+    baseline: Mapping[str, str], applied: Mapping[str, str]
+) -> None:
+    """Gate `configure_runtime_env` against its own explicitly named baseline.
+
+    Separate subject matter from the ingress authorization predicate, and it
+    never re-derives it: the baseline is taken *after* the eval stack import
+    and immediately before the repository's own runtime configuration runs, so
+    the import's side effect lies on neither side of this comparison.  Taking
+    the launch snapshot as this baseline would charge the import's delta to the
+    repository and reproduce the 2026-07-28 failure under a new name.
+    """
+    mutated = {
+        key
+        for key in set(baseline) | set(applied)
+        if baseline.get(key) != applied.get(key)
+    }
+    outside = sorted(mutated - REPOSITORY_OWNED_ENV_KEYS)
+    if outside:
+        raise ChildError(
+            "repository-owned runtime configuration mutated keys outside its "
+            f"declared set: {outside}"
+        )
+    for key, value in h0_child.STATIC_ENV.items():
+        if applied.get(key) != value:
+            raise ChildError(
+                f"repository-owned runtime configuration left {key} outside the "
+                "frozen A5 execution environment"
+            )
+    if "SACCADE_STREAM_MODE" in applied:
+        raise ChildError(
+            "repository-owned runtime configuration left SACCADE_STREAM_MODE set"
+        )
+
+
 def _projection_records(
     capture: Mapping[str, Any],
 ) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -257,7 +335,16 @@ def _binary32_bits(value: float) -> int:
 
 
 def repository_runner(invocation: Mapping[str, Any]) -> RunProducts:
-    """Run the fixed A5 policy once and return the complete run-local products."""
+    """Run the fixed A5 policy once and return the complete run-local products.
+
+    The ingress authorization decision belongs to `execute_child`, which made it
+    once against the immutable launch snapshot before this file imported
+    anything third-party.  Nothing here re-derives it: the two live observations
+    below are compared only against each other, and their contracts are named
+    separately.
+    """
+    run_dir = Path(str(invocation["run_dir"]))
+    pre_import = dict(os.environ)
     (
         yaml,
         build_parser,
@@ -269,10 +356,10 @@ def repository_runner(invocation: Mapping[str, Any]) -> RunProducts:
         build_mamba_gated_detector,
         set_postprocess_compile,
     ) = behavior._import_eval_stack()
+    record_import_delta(run_dir, pre_import, dict(os.environ))
 
     run_id = str(invocation["run_id"])
     sequence = str(invocation["sequence"])
-    run_dir = Path(str(invocation["run_dir"]))
     build_dir = Path(str(invocation["build_dir"]))
     if behavior.resolve_build_dir() != build_dir:
         raise ChildError("runtime build selection differs from the invocation")
@@ -294,8 +381,9 @@ def repository_runner(invocation: Mapping[str, Any]) -> RunProducts:
     resolved = fingerprint(behavior.POLICY_PRESET_STEM)
     if resolved != invocation["policy_fingerprint"]:
         raise ChildError("resolved policy fingerprint differs from the invocation")
+    configuration_baseline = dict(os.environ)
     configure_runtime_env(args, os.environ)
-    validate_environment(os.environ, invocation)
+    validate_repository_owned_mutation(configuration_baseline, dict(os.environ))
 
     tiling = getattr(args, "tiling", "native_640")
     detector = build_mamba_gated_detector(
@@ -680,9 +768,12 @@ def execute_child(
     runner: Callable[[Mapping[str, Any]], RunProducts] = repository_runner,
 ) -> int:
     invocation = load_invocation(invocation_path)
-    validate_environment(
-        dict(os.environ if environment is None else environment), invocation
-    )
+    # Declaration Review Correction 4: the authorization environment is this
+    # immutable snapshot, captured before any third-party import and consumed
+    # exactly once.  `environment` overrides where the snapshot is taken from,
+    # never how it is judged, and nothing downstream compares against it.
+    launch_environment = dict(os.environ if environment is None else environment)
+    validate_environment(launch_environment, invocation)
     run_dir = invocation_path.parent
     try:
         products = runner(invocation)
