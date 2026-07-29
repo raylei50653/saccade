@@ -321,13 +321,26 @@ environment contract removed under the owner-adopted shape in `Current step`,
 and archive verification freed from the verifying host. No `I`/`F`/`S`, no
 authorization, no capture, no registry state change.
 
+The rehearsal harness that run needed **landed on 2026-07-29**, with the corpus
+admission guard that has to precede it and an issuer normalization that gives
+the guard something to bind to. It authorizes nothing and it has not been run.
+
 What the lease still expects, unmet: a real non-evidence run through
 controller → child → eval-stack import → environment validation → capture
 initialisation → first stop boundary, spending none of the owner's authority and
-writing no evidence root — which first needs the rehearsal harness described in
-`Current step`. No acceptance, certificate, freeze or authorization carries over
-from `0a5dffe9` or `7646f421`. That state is still not an authorization and still
-writes no registry state.
+writing no evidence root. It has an entry point now; it has not been walked. No
+acceptance, certificate, freeze or authorization carries over from `0a5dffe9` or
+`7646f421`. That state is still not an authorization and still writes no
+registry state.
+
+An ordering trap the two spent attempts have already taught: the rehearsal
+witness may **not** be committed before Phase A. Every commit moves the head,
+and `F` and the Layer-P certificate bind `source_head`, so committing the
+witness would staleness-kill the very chain the rehearsal was run to protect.
+It stays in read-only custody outside the repository and is registered together
+with the Phase-A outcome. If the owner ultimately issues no third grant, that
+custody is closed out by a rehearsal-only registration or an abandonment rather
+than left open.
 
 ## Commit point
 
@@ -398,8 +411,9 @@ artifact in this repository can supply.
 
 ## Current step
 
-**The execution-and-archive-verifier repair has landed. Rebuild the head-bound
-chain from the head it landed on. Do not re-run, do not seal, and do not treat
+**The execution-and-archive-verifier repair has landed, and so has the rehearsal
+harness the next gate needs. Rebuild the head-bound chain from the head the
+harness landed on, then rehearse. Do not re-run, do not seal, and do not treat
 any `7646f421` binding as carried over.** Two authorized Phase-A invocations are
 spent and neither produced any capture:
 
@@ -489,20 +503,35 @@ evidence root. Source review, unit tests with synthetic environments, and a gree
 launch probe running under the *operator's* environment have now each failed to
 predict an execution-time structural self-negation.
 
-That gate has no entry point yet, and building one is a separate work item, not
-part of this repair. `run_h2_measurement.py` has a single path: `--authorization`
-is required and the ledger is the default one, so there is no rehearsal mode, and
-adding one would create a second controller execution path — branching before
-admission would not exercise admission, and branching after it while skipping
-consumption would change the production authorization invariant. Under the
-existing contract, walking admission at all logically requires *an*
-authorization; "consumes no authorization" therefore means the owner's third
-grant is untouched, not that no authorization artifact exists. The successor
-work item is a **rehearsal harness** that does not modify the production
-controller, uses a wholly isolated disposable ledger and a synthetic grant, walks
-the real admission and consumption path, never touches the owner ledger, and
-whose output never enters the canonical corpus and can never stand in for
-`Acceptance` items 4–5, `F` or `S`. Its contract is reviewed on its own.
+**That gate now has an entry point, and has not been walked.**
+`run_h2_measurement.py` still has a single path: `--authorization` is required
+and the ledger is the default one. It did not grow a rehearsal mode — branching
+before admission would not exercise admission, and branching after it while
+skipping consumption would change the production authorization invariant. So
+walking admission at all logically requires *an* authorization, and "consumes no
+authorization" means the owner's third grant is untouched, not that no
+authorization artifact exists.
+
+`scripts/tools/rehearse_h2_measurement.py` (2026-07-29) issues its own grant
+against its own disposable ledger and runs the unmodified controller through the
+real admission and consumption path. Its grant is owner-shaped and is not an
+owner issuance: admission requires the authoritative issuer, so the record names
+the research owner in bytes, and what separates it is the execution domain,
+which binds the ledger root. That makes a rehearsal grant arithmetically
+unusable against the owner ledger. Its outputs live outside the repository, its
+archive is refused by the corpus admission guard that landed with it, and it can
+never stand in for `Acceptance` items 4–5, `F` or `S`.
+
+Two boundaries are stated rather than implied. The harness refuses launch-time
+lexical, symlink and ancestor aliases of the repository and the owner ledger and
+*detects* a destination substituted mid-run; it does not resist a hostile
+concurrent process running as the same user, because the controller writes
+through pathnames. And the corpus guard is a provenance guard, not an authority
+proof: it refuses an attempt consumed under another ledger, including a
+self-consistent one, but whoever can rewrite a digest chain can write the
+anchor's content too.
+
+**The harness landing is not the gate passing.** The rehearsal has not been run.
 
 The head-bound gates below (`Acceptance` items 4 and 5) were satisfied at
 `7646f421` and died when the repair landed: `F64 f0d1b02e…` and Layer-P
@@ -1111,3 +1140,61 @@ Additionally, and specific to the accepted decisions:
   never at either repair commit. The non-evidence full run still stands between
   the rebuild and any request for a third authorization, and it now has a named
   predecessor of its own: the rehearsal harness described in `Current step`.
+
+- **2026-07-29** — the rehearsal harness landed, in four commits ordered
+  `P → B → A → C`. The order is the point: after a non-squash merge the commit
+  that introduces the entry point is a head someone can check out and run, so
+  the guard cannot be a later commit in the same pull request.
+
+  `P` — `issued_by == "research_owner"` was written out twice in production, in
+  the controller's admission predicate and in the archive verifier, so who may
+  authorize a measurement had two independent answers and § C3.9's trap applied
+  to both. `AUTHORIZATION_ISSUER` now lives in `h2_measurement_evidence` with the
+  grant schema, the member sets and the canonical digest. The value is unchanged;
+  the tests move the authority and require both validators' verdicts to move with
+  it, in both directions.
+
+  `B` — a rehearsal produces an archive of exactly the canonical shape whose
+  every internal binding holds, and after `7cae46d8` the archive verifier
+  correctly judges a root from its own bytes, so it will call that archive valid
+  anywhere. `archive_roots` globs by prefix. The corpus is therefore the only
+  layer that can refuse it: `execution_domain_admission_reasons` compares the
+  attempt's archived execution domain against a tracked anchor, two archived
+  objects and never the running host, so the verdict is identical everywhere.
+  The anchor is the domain both spent attempts were actually consumed under and
+  a test holds it to that. Phase A only — § C3.5.1 step 5 makes the receipt the
+  whole of a Phase-B consumption and that shape is not specified yet. The
+  layering is now written where both readers can see it: `verify_evidence_root`
+  decides internal validity and has no canonical-admission meaning alone,
+  `check_corpus` owns admission, and `test_research_packet_schema`, which had
+  been reading `valid is True` as acceptance, asserts the conjunction. It is a
+  provenance guard, not an authority proof: it cannot refuse a forgery, because
+  whoever can rewrite a digest chain can write the anchor's content too.
+
+  `A` — `scripts/tools/rehearse_h2_measurement.py` adds no production file and
+  uses only the seams that already existed. It has no `--authorization` and no
+  `--invocation-id`, so there is no argument through which the owner's grant
+  could be spent; it issues its own, reading every contract value from its
+  authority at call time. Isolation is filesystem identity, not string
+  comparison — destinations are resolved through existing symlinks, compared by
+  path components rather than prefixes, required not to exist, and created
+  exclusively at `0700` — and the threat model is bounded in the file: launch-
+  time aliases are refused, a mid-run substitution is detected and not
+  prevented, because the controller writes through pathnames. Success is a
+  conjunction, not a `None` terminal: the archive must verify, the disposable
+  ledger must hold exactly the one receipt that binds the synthetic grant, every
+  ordered run must have completed — projected from the archive, never from a
+  counter the harness kept — and the checkout must be clean afterwards. A
+  harness invariant violation is recorded separately from a rehearsal that ran
+  and reached a terminal. The witness is exclusive-created as `started` and
+  atomically replaced, so a crash cannot leave an archive with no rehearsal
+  marker, and a refusal that happens before a safe destination exists writes no
+  witness at all.
+
+  Nothing here authorizes, seals or restores anything, and the harness has not
+  been run. The next work item is `h2_phase_a_rehearsal_execution`: rebuild
+  `Acceptance` items 4 and 5 at the head this merges to, build `F`, rehearse
+  once with both outputs outside the repository, and only then ask the owner for
+  a third grant. The witness stays in custody outside the repository until Phase
+  A is registered — committing it would move the head and staleness-kill the
+  chain the rehearsal exists to protect.

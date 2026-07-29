@@ -86,8 +86,13 @@
   snapshot、只在 `execute_child` 判定一次、import delta 僅記 key 名稱作 diagnostic（見 declaration
   Review Correction 4）；archive 驗證改為只讀 archive 位元組，launch-time host binding 未放寬，
   corpus checker 以完整 git history 接回 CI；兩個缺陷各有一支在 `c2d1c58f` 上未改即失敗的測試。
-  repair **不授權、不 seal、不恢復任何授權**；下一步＝在 merge 後的 head 重建 items 4–5，
-  其前置為 rehearsal harness（現無 non-evidence 全鏈入口，且不得為此新增 production rehearsal mode）→
+  repair **不授權、不 seal、不恢復任何授權**。**rehearsal harness 已於 2026-07-29 落地**
+  （`scripts/tools/rehearse_h2_measurement.py`，四個 commit 依 `P → B → A → C`：issuer 正規化 →
+  canonical corpus provenance/admission guard → harness → governance；guard 必須先於入口，
+  否則 non-squash merge 之後 harness commit 是一個可被 checkout 執行的 head）；harness 自簽
+  grant、自帶可丟棄 ledger，走真正的 admission 與 consumption，產出在 repo 外且被 corpus guard 拒收。
+  **入口存在 ≠ gate 通過：rehearsal 尚未執行過**。下一步＝`h2_phase_a_rehearsal_execution`：
+  在 merge 後的 head 重建 items 4–5 與 F → 跑一次 rehearsal → 綠了才由 owner 另發第三份授權 →
   [second failure evidence](research/evidence/h2_phase_a_failed_attempt_7646f421_20260728/)
   · [controller archive](research/evidence/h2_measure_7646f421a85a580e37e457def5e8ddc7c4bfa0ab/)
   · [first failure evidence](research/evidence/h2_phase_a_failed_attempt_0a5dffe9_20260727/)

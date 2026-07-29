@@ -601,8 +601,11 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
       repair_implementation_head: 7cae46d8      # commit (b);commit (a) = cc02a0b0
                                                 # 此欄指「修復實作所在的 commit」,不是重建 item 4/5 的 head——
                                                 # 後者是本工作 merge 之後的最終 head,另行記錄
-      unit: H2 Phase-A execution-and-archive-verifier repair（一個 PR、三個獨立 commit:(a) child、
-            (b) archive verifier + CI、(c) 本 governance transition）
+      unit: H2 Phase-A execution-and-archive-verifier repair（一個 PR、四個 commit:(a) child、
+            (b) archive verifier + CI、(c) governance transition、(d) 審查中補上的
+            production-runner regression;(d) 在 (c) 之後才加入,故 (c) 的 commit message 寫「三個」）
+      merged_head: bb98dd61                     # merge commit（非 squash,四個 commit 全在 main）
+                                                # 這才是重建 item 4/5 所用的最終 head
       a_child_ingress_authority: launch snapshot 於 execute_child 恰一次消費;import 之後不再從 live
             os.environ 重推 ingress predicate;pre_import→post_import delta 僅記 key 名稱
             （environment_import_delta.json,authority=diagnostic_only,不含任何 value 或 value 指紋）;
@@ -625,6 +628,61 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
             harness 契約:不改 production controller / 完全隔離可丟棄 ledger + synthetic grant /
             走原本 admission 與 consumption 路徑 / 不接觸 owner ledger /
             產出永不進 canonical corpus,亦不得充當 item 4、item 5、F 或 S 的證據。另行審查
+  rehearsal_harness_landed:
+    date: 2026-07-29
+    harness_landed: true                      # 入口存在
+    rehearsal_passed: false                   # gate 未通過:harness 尚未被執行過一次
+    unit: h2_phase_a_rehearsal_harness（一個 PR、四個 commit,順序 P → B → A → C:
+          (P) authorization issuer 正規化、(B) canonical corpus provenance/admission guard、
+          (A) rehearsal harness、(C) 本 governance transition。guard 必須先於入口落地——
+          非 squash merge 之後 (A) 那個 head 可被 checkout 並執行,
+          「PR 末端有 guard」不構成原子安全）
+    p_authorization_issuer: `issued_by == "research_owner"` 原本在 controller 與 archive verifier
+          各寫一份字面值 ⇒ 「誰可以授權」有兩個互不相干的答案（§C3.9）。改為
+          `h2_measurement_evidence.AUTHORIZATION_ISSUER` 單一 authoritative constant,值未變;
+          測試以行為(移動 authority ⇒ 兩個 validator 的判斷同步反向)而非字串比對來綁定
+    b_corpus_admission_guard: rehearsal archive 與 canonical archive **同形且自洽**,
+          archive verifier(修復後只讀 archive 位元組)必然判它 valid ⇒ 只有 corpus 層擋得住。
+          新增 tracked anchor `docs/research/contracts/h2_controlled_host_execution_domain_v1.json`
+          （內容即已在主線的 7646f421 archive 之 authorization_execution_domain.json,零新增揭露）;
+          `check_h2_measure_archives.execution_domain_admission_reasons` 比較 **parsed object**
+          （member set + 逐欄位值,格式化不是 identity）,兩邊都是 archive 位元組、**不觀察驗證主機**,
+          host-independence 未被回退;僅限 Phase A（§C3.5.1 step 5 的 Phase-B consumption 形狀
+          尚未被規範,在此判它等於發明契約);`test_research_packet_schema` 原本把 `valid=True`
+          單獨當 canonical acceptance,已改為斷言 conjunction
+    b_threat_boundary: 這是 provenance/admission guard,**不是** authority proof。它擋得住
+          未修改的 rehearsal archive 與任何 execution domain 不同的自洽 archive;
+          擋不住偽造——能重寫 grant/receipt/digest chain 的人也能寫入 anchor 的內容。
+          不可偽造的簽發需要簽章機制,本 repo 不提供
+    a_harness: `scripts/tools/rehearse_h2_measurement.py`（新檔,零 production 檔案修改;
+          只用既有 seam `evidence_parent` / `authorization_ledger`);無 `--authorization`、
+          無 `--invocation-id`（沒有任何參數可以餵進 owner 的 grant);grant 全部欄位在 call time
+          由 authority 取得;隔離用 filesystem identity(resolve 既存 symlink、component containment
+          非字串前綴、目標必須不存在、exclusive mkdir 0700、執行前/後/寫 witness 前重驗 pathname→inode)
+    a_threat_boundary: 只承諾「啟動時的 lexical/symlink/ancestor alias 與意外重用會被拒絕,
+          執行期間被抽換會被**檢出**」;不承諾抵抗同 UID 惡意並行程序的 rename/mount/symlink
+          substitution——controller 透過 pathname 寫入,持有 dir fd 無法阻止,
+          要真正阻止需要 openat-relative I/O 或 mount namespace,超出本工作項
+    a_success_predicate: terminal is None **且** verifier valid **且** disposable ledger 內恰一份
+          receipt 且其 id/digest 對得上 synthetic grant **且** 四個 ordered run 皆完成
+          （由 archive 投影,不用 harness 自己的計數器)**且** 執行後 checkout hygiene 為空
+          **且** witness 落地;harness invariant violation 與 rehearsal terminal 在 witness 中
+          以 failure_class 區分
+    a_witness: schema `h2_phase_a_rehearsal_witness_v1`;開跑前 exclusive-create `status: started`,
+          結束時原子替換為 completed/failed ⇒ crash 不會留下「archive 看似完整卻無 rehearsal 標記」;
+          安全輸出位置成立**之前**的拒絕(pre-witness refusal)一律 exit 2、不建立 witness、
+          回滾已建立的目錄
+    not_established: 無 seal、無 equivalence、無 capture、無新授權、無 registry object state 改變;
+          harness 落地只代表入口存在,不代表 gate 已通過
+    successor_work_item: h2_phase_a_rehearsal_execution — 在本 PR merge 後的 head 依序:
+          重建 item 4（controlled-host run）與 item 5（Layer-P certificate)、建 F、
+          執行一次 rehearsal（disposable ledger 與 evidence parent 皆在 repo 外,
+          witness 只做 repo 外唯讀 custody copy;**不得在 Phase A 之前 commit witness**——
+          任何 commit 都會移動 head 而使 F 與 certificate stale)、
+          綠了才由 owner 另行簽發第三份授權。兩份既有授權仍永久 spent
+    orphan_closure: 若 rehearsal 跑完而 owner 最終未簽發第三份授權,witness 不得無限期停在 repo 外
+          custody:此時已無 head-bound 授權需要維持,改以 rehearsal-only registration 或
+          abandonment 收編,兩條路徑擇一,不留無閉包的 custody
 pending_reentry:                          # append-only; pre-seal, no terminal claimed; route-1 永久留帳結論不變
   - date: 2026-07-21
     scheduling: owner-scheduled re-entry #3（滿足 line-337 future_reentry_precondition:launch-hygiene gate 先行）
