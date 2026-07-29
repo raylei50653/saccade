@@ -22,10 +22,17 @@ _REPO = Path(__file__).resolve().parents[2]
 _TOOLS = _REPO / "scripts" / "tools"
 if _TOOLS.as_posix() not in sys.path:
     sys.path.insert(0, _TOOLS.as_posix())
+# `mot17_args` is otherwise importable only after something in the session has
+# run `behavior._import_eval_stack()`, which made the tests that read the real
+# configuration producer pass or fail depending on selection order.
+_EVAL = _REPO / "scripts" / "eval"
+if _EVAL.as_posix() not in sys.path:
+    sys.path.insert(0, _EVAL.as_posix())
 
 import build_runtime_identity as identity  # noqa: E402
 import h2_behavioral_identity as behavior  # noqa: E402
 import h2_measurement_evidence as evidence  # noqa: E402
+import run_h0_phase_a_child as h0_child  # noqa: E402
 import run_h2_measurement as controller  # noqa: E402
 import run_h2_measurement_child as child  # noqa: E402
 import verify_h2_measurement as verifier  # noqa: E402
@@ -1865,13 +1872,9 @@ def test_ingress_authorization_is_decided_once_against_the_launch_snapshot(
         os.environ["LD_LIBRARY_PATH"] = f"{os.environ['LD_LIBRARY_PATH']}:/opt/cv2/lib"
         os.environ["SACCADE_STREAM_MODE"] = "ptds_probe"
 
-        def build_parser() -> Any:
-            import argparse
-
-            parser = argparse.ArgumentParser()
-            parser.add_argument("--sequences")
-            parser.add_argument("--output")
-            return parser
+        # The real parser, so this stub cannot drift out of step with the
+        # fixed execution vector the child now sends through it.
+        from mot17_args import build_parser
 
         def configure_runtime_env(_args: Any, env: Any) -> None:
             env["SACCADE_GPU_DECODE"] = "1"
@@ -2116,3 +2119,242 @@ def test_no_production_surface_restates_the_authorization_issuer() -> None:
         if surface == owner:
             continue
         assert literal not in surface.read_text(encoding="utf-8"), name
+
+
+# -- the fixed A5 execution vector (2026-07-29 rehearsal terminal) ------------ #
+
+# The rehearsal at `ba40b3f8` reached `H2_MEASUREMENT_EXECUTION_INVALID` because
+# the child took every knob but the sequence and the output from the A5 preset,
+# and the preset declares neither `double_buffer` nor `detect_barrier`. The
+# parser resolved them to `False`/`None`, and `configure_runtime_env` — which
+# documents the parsed arguments as its authority — rewrote the frozen A5 pair
+# to `full`/`0`. H0 had always sent its fixed choices through that same surface.
+
+
+def _preset_parser() -> Any:
+    """The parser the child builds: real flags, real preset defaults."""
+    import yaml
+
+    from mot17_args import build_parser
+
+    defaults = yaml.safe_load(
+        (_REPO / behavior.POLICY_PRESET_REL).read_text(encoding="utf-8")
+    )
+    parser = build_parser()
+    parser.set_defaults(**defaults)
+    return parser
+
+
+def test_the_preset_alone_contradicts_the_frozen_a5_environment() -> None:
+    """The defect itself, as a standing statement rather than an anecdote.
+
+    Nothing here is host-specific: no GPU, no dataset, no authorization and no
+    child process. Drop `FIXED_EXECUTION_ARGV` and this is what the launch path
+    does on every machine.
+    """
+    from mot17_args import configure_runtime_env
+
+    args = _preset_parser().parse_args(
+        ["--sequences", evidence.MEASUREMENT_SEQUENCE, "--output", "/tmp/unused"]
+    )
+    assert args.double_buffer is False
+    assert args.detect_barrier is None
+
+    environment = dict(h0_child.STATIC_ENV)
+    configure_runtime_env(args, environment)
+    assert environment["SACCADE_DETECT_BARRIER"] == "full"
+    assert environment["SACCADE_DOUBLE_BUFFER"] == "0"
+
+    with pytest.raises(child.ChildError) as excinfo:
+        child.validate_repository_owned_mutation(dict(h0_child.STATIC_ENV), environment)
+    assert "outside the frozen A5 execution environment" in str(excinfo.value)
+
+
+def test_the_fixed_vector_makes_repository_configuration_a_no_op() -> None:
+    """Not "mutations stay inside the declared set" — no mutations at all.
+
+    Two of the four A5-named keys already resolved correctly from the preset.
+    That was luck: the preset is decision-relevant and may move without this
+    file noticing. Naming all four leaves nothing for a preset edit to break.
+    """
+    from mot17_args import configure_runtime_env
+
+    args = _preset_parser().parse_args(
+        [
+            "--sequences",
+            evidence.MEASUREMENT_SEQUENCE,
+            "--output",
+            "/tmp/unused",
+            *child.FIXED_EXECUTION_ARGV,
+        ]
+    )
+    baseline = dict(h0_child.STATIC_ENV)
+    environment = dict(baseline)
+    configure_runtime_env(args, environment)
+
+    assert environment["SACCADE_DETECT_BARRIER"] == "event"
+    assert environment["SACCADE_DOUBLE_BUFFER"] == "1"
+    assert environment["SACCADE_GPU_DECODE"] == "1"
+    assert environment["SACCADE_MAIN_NMS_GRAPHED"] == "1"
+    mutated = {
+        key
+        for key in set(baseline) | set(environment)
+        if baseline.get(key) != environment.get(key)
+    }
+    assert mutated == set()
+    child.validate_repository_owned_mutation(baseline, environment)
+
+
+def test_the_fixed_vector_selects_the_sole_no_metrics_boundary() -> None:
+    """`latency_only` is the difference between returning `{}` and reading GT.
+
+    The evaluator returns before metrics only under it; otherwise it writes MOT
+    output and calls `run_motmetrics_evaluation`, and this child then refuses the
+    result for not being the sole no-metrics boundary.
+    """
+    args = _preset_parser().parse_args(
+        [
+            "--sequences",
+            evidence.MEASUREMENT_SEQUENCE,
+            "--output",
+            "/tmp/unused",
+            *child.FIXED_EXECUTION_ARGV,
+        ]
+    )
+    assert args.latency_only is True
+
+
+def test_the_mutation_gate_still_refuses_a_real_violation() -> None:
+    """The gate must not have degraded into a check that can no longer fire.
+
+    A repaired happy path that never mutates anything would pass a gate that
+    had been deleted, so the negative cases are what keep it meaningful.
+    """
+    baseline = dict(h0_child.STATIC_ENV)
+
+    drifted = {**baseline, "SACCADE_DETECT_BARRIER": "full"}
+    with pytest.raises(child.ChildError):
+        child.validate_repository_owned_mutation(baseline, drifted)
+
+    leaked = {**baseline, "SACCADE_STREAM_MODE": "ptds_probe"}
+    with pytest.raises(child.ChildError) as excinfo:
+        child.validate_repository_owned_mutation(baseline, leaked)
+    assert "SACCADE_STREAM_MODE" in str(excinfo.value)
+
+    undeclared = {**baseline, "SACCADE_SOMETHING_NEW": "1"}
+    with pytest.raises(child.ChildError) as excinfo:
+        child.validate_repository_owned_mutation(baseline, undeclared)
+    assert "outside its declared set" in str(excinfo.value)
+
+
+def test_the_production_runner_reaches_run_eval_with_the_frozen_choices(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The repair, through the real parser, preset and configuration function.
+
+    An injected substitute for any of those three would prove only that the
+    child passes flags to something. Here `_import_eval_stack` returns the real
+    `build_parser` and the real `configure_runtime_env`, the production runner
+    reads the real preset from disk, and the production mutation gate judges the
+    result. Only the GPU-bearing objects are stubs.
+
+    The sentinel sits *after* configuration, at `run_eval`, and refuses anything
+    but `latency_only=True` — otherwise this test would prove the environment
+    gate was cleared while saying nothing about the boundary immediately behind
+    it, which is the next contradiction the same launch would have hit.
+    """
+    import types
+
+    import yaml as real_yaml
+
+    from mot17_args import build_parser, configure_runtime_env
+
+    invocation_path, environment, run_dir = _launch_fixture(tmp_path)
+    build_dir = Path(
+        str(evidence.load_document(run_dir, child.INVOCATION_NAME)["build_dir"])
+    )
+    monkeypatch.setattr(os, "environ", dict(environment))
+
+    seen_args: list[Any] = []
+    baselines: list[dict[str, str]] = []
+
+    def recording_configure(args: Any, env: Any) -> None:
+        seen_args.append(args)
+        baselines.append(dict(env))
+        configure_runtime_env(args, env)
+
+    class _ReachedRunEval(Exception):
+        """Raised where a real run would start consuming frames."""
+
+    eval_kwargs: dict[str, Any] = {}
+
+    def run_eval(**keywords: Any) -> dict[str, Any]:
+        eval_kwargs.update(keywords)
+        if keywords.get("latency_only") is not True:
+            raise AssertionError(
+                "run_eval was reached without latency_only: this run would have "
+                "written MOT output and read ground truth"
+            )
+        raise _ReachedRunEval()
+
+    class _EvalPipeline:
+        def __init__(self, *_: Any, **__: Any) -> None:  # pragma: no cover - stub
+            raise AssertionError("the pipeline is never constructed here")
+
+    evaluator_module = types.SimpleNamespace(
+        run_eval=run_eval,
+        _run_frame=lambda *a, **k: None,
+        _fast_emit_mot_lines=lambda *a, **k: None,
+        EvalPipeline=_EvalPipeline,
+    )
+    stages_module = types.SimpleNamespace(_fast_emit_mot_lines=lambda *a, **k: None)
+    head = types.SimpleNamespace(
+        set_head_compile=lambda _value: None, set_block_compile=lambda _value: None
+    )
+    detector = types.SimpleNamespace(mamba_head=head)
+
+    def import_eval_stack() -> tuple[Any, ...]:
+        os.environ.update(_IMPORT_SIDE_EFFECT)
+        os.environ["SACCADE_STREAM_MODE"] = "ptds_probe"
+        return (
+            real_yaml,
+            build_parser,
+            recording_configure,
+            lambda _stem: "1" * 64,
+            evaluator_module,
+            stages_module,
+            _EvalPipeline,
+            lambda **_: detector,
+            lambda _value: None,
+        )
+
+    monkeypatch.setattr(behavior, "_import_eval_stack", import_eval_stack)
+    monkeypatch.setattr(behavior, "resolve_build_dir", lambda: build_dir)
+    monkeypatch.setattr(behavior, "_assert_extension_consumed", lambda _dir: "witness")
+
+    with pytest.raises(_ReachedRunEval):
+        child.execute_child(
+            invocation_path,
+            environment=environment,
+            runner=child.repository_runner,
+        )
+
+    # The frozen choices arrived through the parser, not through the environment.
+    (args,) = seen_args
+    assert args.double_buffer is True
+    assert args.detect_barrier == "event"
+    assert args.latency_only is True
+    assert eval_kwargs["latency_only"] is True
+
+    # And repository-owned configuration changed nothing the A5 contract fixes.
+    for key, value in h0_child.STATIC_ENV.items():
+        assert os.environ.get(key) == value, key
+    (baseline,) = baselines
+    mutated = {
+        key
+        for key in set(baseline) | set(os.environ)
+        if baseline.get(key) != os.environ.get(key)
+    }
+    # The leaked shell export is the one thing configuration is expected to move.
+    assert mutated == {"SACCADE_STREAM_MODE"}
+    assert "SACCADE_STREAM_MODE" not in os.environ
