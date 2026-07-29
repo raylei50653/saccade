@@ -54,6 +54,16 @@ INVOCATION_SCHEMA = "h2_measurement_child_invocation_v1"
 ENVIRONMENT_DELTA_SCHEMA = "h2_child_environment_import_delta_v1"
 ENVIRONMENT_DELTA_NAME = "environment_import_delta.json"
 
+# One run's durable lifecycle record, and the only vocabulary for its states.
+# This file performs both transitions out of `running`, so the names live with
+# the transitions; the controller and any reader of an archive must import them
+# rather than restate them (§ C3.9). "The run directory exists" is not one of
+# these states and never answers whether a run finished.
+INVOCATION_NAME = "invocation.json"
+RUN_RUNNING = "running"
+RUN_COMPLETED = "completed"
+RUN_FAILED = "failed"
+
 # The keys `scripts/eval/mot17_args.configure_runtime_env` is allowed to write
 # or clear.  Restated here because this file must gate the mutation, and bound
 # to the producer's actual behaviour by a contract test rather than remembered
@@ -178,7 +188,7 @@ def load_invocation(path: Path) -> dict[str, Any]:
         or not build_dir.is_dir()
     ):
         raise ChildError("invocation path binding is absent or inconsistent")
-    if invocation["state"] != "running":
+    if invocation["state"] != RUN_RUNNING:
         raise ChildError("invocation is not in the running state")
     run_uuid = invocation["capture_run_uuid"]
     if not isinstance(run_uuid, str) or not run_uuid:
@@ -816,12 +826,12 @@ def execute_child(
                     evidence.PACKET_VERIFICATION_NAME,
                     products.packet_verification,
                 )
-        completed = {**invocation, "state": "completed"}
+        completed = {**invocation, "state": RUN_COMPLETED}
         _replace_invocation(invocation_path, completed)
         return 0
     except BaseException:
         try:
-            _replace_invocation(invocation_path, {**invocation, "state": "failed"})
+            _replace_invocation(invocation_path, {**invocation, "state": RUN_FAILED})
         except BaseException:
             pass
         raise

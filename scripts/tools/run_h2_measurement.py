@@ -1115,9 +1115,11 @@ def _prepare_run(
         "run_dir": run_dir.resolve(strict=True).as_posix(),
         "run_id": run_id,
         "sequence": SEQUENCE,
-        "state": "running",
+        "state": child.RUN_RUNNING,
     }
-    invocation_path = evidence.write_document(run_dir, "invocation.json", invocation)
+    invocation_path = evidence.write_document(
+        run_dir, child.INVOCATION_NAME, invocation
+    )
     return invocation_path, environment
 
 
@@ -1595,7 +1597,7 @@ def execute_controller(
                     invocation_path.name,
                     schema=child.INVOCATION_SCHEMA,
                 )
-                if returncode != 0 or invocation.get("state") != "completed":
+                if returncode != 0 or invocation.get("state") != child.RUN_COMPLETED:
                     raise ControllerError(f"child {run_id} exited nonzero")
                 completed_runs.add(run_id)
                 record_event("child_completed", run_id=run_id)
