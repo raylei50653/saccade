@@ -15,6 +15,13 @@ things, not one:
     trusting `admission.json` would let a Phase-B archive assert its own
     eligibility, which is the one claim the gate exists to deny.
 
+**This file is not the canonical corpus admission authority.** Success here —
+including CLI exit 0 — certifies internal archive validity and nothing more; it
+must never be read as canonical corpus admission. That question belongs to
+`check_h2_measure_archives.check_corpus`, whose reusable policy predicate is
+`execution_domain_admission_reasons`. A root consumed against some other
+authorization ledger is internally perfect and this verifier will say so.
+
 **Nothing in this file is a comparison or terminal authority.** § 6 forbids H2
 from introducing comparison vocabulary of its own and § C3.9 pins why a
 `plumbing_only` file must hold none: it can be edited without moving an axis, so
@@ -305,7 +312,7 @@ def _authorization(
         or grant.get("controller_digest") != controller_digest
         or receipt.get("execution_domain") != execution_domain_digest
         or grant.get("execution_domain") != execution_domain_digest
-        or grant.get("issued_by") != "research_owner"
+        or grant.get("issued_by") != evidence.AUTHORIZATION_ISSUER
         or receipt.get("state") != "consumed"
         or not isinstance(receipt.get("consumed_utc"), str)
         or not receipt["consumed_utc"]

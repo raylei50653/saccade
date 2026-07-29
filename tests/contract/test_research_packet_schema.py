@@ -15,6 +15,7 @@ from __future__ import annotations
 import hashlib
 import pathlib
 import re
+import subprocess
 import sys
 
 import pytest
@@ -49,6 +50,7 @@ from tests.contract.packet_inventory import (
 TOOLS = REPO / "scripts" / "tools"
 sys.path.insert(0, TOOLS.as_posix())
 
+import check_h2_measure_archives as measurement_corpus  # noqa: E402
 import h2_measurement_evidence as h2_evidence  # noqa: E402
 import verify_h0_phase_a as phase_a_verifier  # noqa: E402
 import verify_h2_measurement as measurement_verifier  # noqa: E402
@@ -705,6 +707,163 @@ def test_h2_archived_execution_domain_shape_is_judged_after_the_digest_chain(
     with pytest.raises(measurement_verifier.VerificationError) as excinfo:
         measurement_verifier._authorization(root, "a", freeze=freeze, name=name)
     assert "archived authorization execution domain is malformed" in str(excinfo.value)
+
+
+def test_h2_controlled_host_domain_anchor_agrees_with_the_committed_corpus() -> None:
+    """The anchor must be the domain attempts were actually consumed under.
+
+    A tracked anchor that matched no archive would be an authority invented by
+    the file that declares it. Every committed Phase-A attempt is checked, so
+    the anchor cannot be moved to admit a root the corpus never contained.
+    """
+    anchor = measurement_corpus.controlled_host_execution_domain()
+    assert set(anchor) == set(h2_evidence.AUTHORIZATION_DOMAIN_MEMBERS)
+
+    # An untracked file could define the authority without ever being reviewed.
+    subprocess.run(
+        [
+            "git",
+            "ls-files",
+            "--error-unmatch",
+            measurement_corpus.CONTROLLED_HOST_DOMAIN_PATH.relative_to(REPO).as_posix(),
+        ],
+        cwd=REPO,
+        check=True,
+        capture_output=True,
+    )
+
+    archives = [
+        root
+        for root in h2_measurement_execution_dirs()
+        if h2_evidence.parse_root_name(root.name).phase == "a"
+    ]
+    assert archives, "no committed Phase-A attempt to anchor against"
+    for root in archives:
+        assert (
+            h2_evidence.load_document(root, h2_evidence.AUTHORIZATION_DOMAIN_NAME)
+            == anchor
+        ), root.name
+
+
+def test_h2_committed_archives_are_admitted_by_the_controlled_host_domain() -> None:
+    """Archive validity alone is not canonical acceptance.
+
+    `verify_evidence_root` answers whether a root is internally consistent. The
+    corpus additionally requires that it was consumed under the controlled
+    host's ledger, so this test asserts the conjunction rather than treating
+    `valid is True` as admission on its own.
+    """
+    for root in h2_measurement_execution_dirs():
+        verify_class = measurement_verifier.classify(root)
+        phase = h2_evidence.parse_root_name(root.name).phase
+        assert measurement_verifier.VERIFIERS[verify_class](root)["valid"] is True
+        assert (
+            measurement_corpus.execution_domain_admission_reasons(
+                root, verify_class, phase
+            )
+            == ()
+        ), root.name
+
+
+def test_h2_rehearsal_shaped_archive_is_archive_valid_and_corpus_refused() -> None:
+    """The hazard the guard exists for, built from a real committed attempt.
+
+    A rehearsal runs the production controller against a disposable ledger, so
+    its evidence root has the canonical shape and every internal binding holds.
+    The surrogate here is that archive: the whole digest chain is recomputed
+    from the archived producers, not patched by hand, so the only thing that
+    distinguishes it is the ledger it was consumed against.
+
+    Both halves matter. If the archive verifier refused it, the corpus rule
+    would be redundant; if the corpus admitted it, a rehearsal could be
+    registered as a measurement.
+    """
+    import shutil
+    import tempfile
+
+    source = h2_measurement_execution_dirs()[0]
+    with tempfile.TemporaryDirectory() as workspace:
+        root = pathlib.Path(workspace) / source.name
+        shutil.copytree(source, root)
+        before = {
+            path.relative_to(root).as_posix(): path.read_bytes()
+            for path in sorted(root.rglob("*"))
+            if path.is_file()
+        }
+
+        domain = h2_evidence.load_document(root, h2_evidence.AUTHORIZATION_DOMAIN_NAME)
+        _rebind_execution_domain(
+            root, {**domain, "ledger_root": "/tmp/h2-rehearsal-ledger"}
+        )
+        h2_evidence.write_checksum_inventory(root)
+
+        after = {
+            path.relative_to(root).as_posix(): path.read_bytes()
+            for path in sorted(root.rglob("*"))
+            if path.is_file()
+        }
+        assert set(after) == set(before), "the surrogate added or dropped a file"
+        assert {name for name in after if after[name] != before[name]} == {
+            h2_evidence.AUTHORIZATION_DOMAIN_NAME,
+            h2_evidence.AUTHORIZATION_GRANT_NAME,
+            h2_evidence.AUTHORIZATION_NAME,
+            "checksums.sha256",
+        }
+
+        assert measurement_verifier.verify_evidence_root(root)["valid"] is True
+
+        with pytest.raises(measurement_corpus.CorpusError) as excinfo:
+            measurement_corpus.check_corpus([root])
+        assert "controlled host" in str(excinfo.value)
+
+
+def _rebind_authorization_grant(root: pathlib.Path, grant: dict) -> None:
+    """Rewrite the grant and the receipt digest that binds it.
+
+    Same reason as `_rebind_execution_domain`: a semantic mutation that dies at
+    `authorization_digest` proves nothing about the predicate under test.
+    """
+    receipt = h2_evidence.load_document(root, h2_evidence.AUTHORIZATION_NAME)
+    receipt["authorization_digest"] = h2_evidence.digest(grant)
+    h2_evidence.write_document(root, h2_evidence.AUTHORIZATION_GRANT_NAME, grant)
+    h2_evidence.write_document(root, h2_evidence.AUTHORIZATION_NAME, receipt)
+
+
+def test_h2_archive_verifier_reads_the_issuer_from_the_authority_constant(
+    tmp_path, monkeypatch
+) -> None:
+    """The verifier must consult `AUTHORIZATION_ISSUER` at call time.
+
+    Both directions are asserted from one fixture: with the authority moved, the
+    archived grant's `research_owner` is no longer an issuer, and a grant naming
+    the moved authority is. A verifier holding its own literal would answer the
+    same in both halves.
+    """
+    source = h2_measurement_execution_dirs()[0]
+    moved = "successor_research_owner"
+    assert moved != h2_evidence.AUTHORIZATION_ISSUER
+
+    root = tmp_path / "stale-issuer"
+    freeze, name = _archived_authorization_fixture(root, source)
+    monkeypatch.setattr(h2_evidence, "AUTHORIZATION_ISSUER", moved)
+    with pytest.raises(measurement_verifier.VerificationError):
+        measurement_verifier._authorization(root, "a", freeze=freeze, name=name)
+
+    followed = tmp_path / "moved-issuer"
+    freeze, name = _archived_authorization_fixture(followed, source)
+    grant = h2_evidence.load_document(followed, h2_evidence.AUTHORIZATION_GRANT_NAME)
+    _rebind_authorization_grant(followed, {**grant, "issued_by": moved})
+    assert (
+        measurement_verifier._authorization(followed, "a", freeze=freeze, name=name)[
+            "state"
+        ]
+        == "consumed"
+    )
+
+
+def test_h2_authorization_issuer_value_is_unchanged() -> None:
+    """Normalizing the literal into a constant must not move the authority."""
+    assert h2_evidence.AUTHORIZATION_ISSUER == "research_owner"
 
 
 @pytest.mark.parametrize("ledger_root", ["/", "/var/lib/h2", "/a/b/c"])

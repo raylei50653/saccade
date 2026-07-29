@@ -328,7 +328,7 @@ def _authorization_mismatch_reasons(
             grant.get("execution_domain") == execution_domain_digest,
             "execution domain",
         ),
-        (grant.get("issued_by") == "research_owner", "issuer"),
+        (grant.get("issued_by") == evidence.AUTHORIZATION_ISSUER, "issuer"),
     )
     return tuple(label for passed, label in checks if not passed)
 

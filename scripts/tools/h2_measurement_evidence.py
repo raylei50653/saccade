@@ -105,6 +105,13 @@ MUTATION_SCHEMA = "h2_bound_input_mutation_v1"
 CHECKOUT_WITNESS_SCHEMA = "h2_checkout_identity_witness_v1"
 STOP_BOUNDARY_SCHEMA = "h2_measurement_stop_boundary_v3"
 
+# The only issuer a Phase-A grant may name.  It lives here with the grant schema,
+# the member sets and the canonical digest because they are one authorization
+# evidence contract; every producer and every validator must read it from here.
+# A component that restates the literal owns a second, silently drifting copy of
+# who may authorize a measurement (§ C3.9).
+AUTHORIZATION_ISSUER = "research_owner"
+
 # Shape only.  Values are independently reconstructed by the freeze producer,
 # controller, and archive verifier.  Keeping the member set here prevents any
 # one of those plumbing components from accepting private/extra authority
