@@ -958,7 +958,7 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
   successor_implementation_order_planned:
     date: 2026-07-30
     authority: charter staging order（navigation）; normative narrowing belongs to a declaration correction landed with W2
-    status: planned; W1 landed as this governance record; W2–W5 not implemented
+    status: W1 and W2 landed（見下方 successor_verdict_algebra_landed）; W3–W5 not implemented
     w1_governance: confirmed state + gap registration + staging order; docs only; no ruler edit, no re-pin, no republish
     w2_verdict_algebra: >-
       cross-verdict constraints in the two already-ruler schemas (measurement branch; valid as the checks
@@ -981,6 +981,35 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
     working_detail: "~/.claude/plans/delightful-launching-gosling.md（working plan, not authority）"
     authorization_effect: none
     not_established: no Phase-A execution; no third authorization; no S; no seal; no corpus admission; no equivalence claim; two owner authorizations remain permanently spent with zero faithful capture
+  successor_verdict_algebra_landed:
+    date: 2026-07-30
+    authority: "H2 declaration Review Correction 9"
+    status: W2 landed（two commits:契約層 + ruler 層,各自帶自己的 republish）
+    one_partition_two_spellings:
+      renames: {bound_input_unchanged: bound_input_mutated, behavior_probe_equals_spec: behavior_probe_equals_freeze, runtime_binding_matches_spec: layer_p_certificate_matches_freeze}
+      inverted_polarity: [bound_input_unchanged]         # legacy true = broken, successor true = intact
+      superseded_result: {certificate_mismatch: runtime_binding_mismatch}   # 兩者同選 terminal 1;歷史 archive 保留舊 token
+      mixed_record: refused（不半讀兩套詞彙）
+    four_state_predicate_rules:
+      decided_failure_outranks_undecided: >-
+        early error/not_run 不得把後面的 capture-perturbation 或 invalid-packet **finding** 洗成 terminal 4
+        （那正是把 §C3.5 禁止的 terminal 洗成可重試的手法）;decided failure 之間仍依 §7 順序
+      undecided_requires_incomplete_execution: 沒有 fail 但有未判定 ⇒ execution_complete 必須非 pass;兩者並存的紀錄自相矛盾,refuse 不 map
+      diagnostic: 恆為 diagnostic_complete、永不選 terminal;該 token 對 measurement 不可用
+    schema_constraints_added:
+      result: [result↔terminal 精確映射, "measurement_pass ⇒ measurement authority + null terminal + 六個 pass", "非 null terminal ⇒ 觀測非全 pass", "failure 必須指名自己的 predicate 且無更早的 decided failure", "undecided 不得與 complete execution 並存", "diagnostic token 不得帶 measurement authority"]
+      verification: "valid ⇔ 六個 check 的 conjunction;valid 時 reasons 必空,不 valid 時必非空"
+    result_tokens_readmitted: [build_failed, extension_load_failed]   # RC5 保留 build 與 extension_load 兩 stage ⇒ 其失敗必須可指名;皆映 terminal 4,terminal 邊界未移
+    published_via: h2_terminal_partition.as_payload().successor_vocabulary   # §20.8 兩條消費路徑一致
+    ruler_movement:
+      sealed_prefix: 92048 bytes / 3e2330cb114fda22336dd72721e28cfb639c0ef2ada9fb47e6fef781d9d338d5
+      identity_semantics: 2f84391e → 44b7df41（契約層）→ 24ee5fe1（ruler 層）
+      unchanged: decision_surface 9b7faeb0 / environment 3cf9ae3e / implementation 5ede10f0 / runtime_inputs 0b839df0 / probe 2dabed0b
+      republished_from: existing read-only probe + runtime-input records（out/h2_layer_p/20260730T032612Z）;no controlled-host or native rebuild
+    tests: +39 contract tests;期望值由 schema 推導後與 ruler 雙向比對,含「ruler 自己的 verdict 是 schema 唯一接受的 verdict」整組
+    authorization_effect: none
+    not_established: no producer; no verifier; no diagnostic mode; no execution; no authorization; no F/S; no seal; no corpus admission; no equivalence claim
+    next: W3 archive-only verifier（verification.json + checksums.sha256,producer_invoked=false / verification_host_inputs_used=false,constraints 由本輪 import 不重打）
 pending_reentry:                          # append-only; pre-seal, no terminal claimed; route-1 永久留帳結論不變
   - date: 2026-07-21
     scheduling: owner-scheduled re-entry #3（滿足 line-337 future_reentry_precondition:launch-hygiene gate 先行）
