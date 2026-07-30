@@ -63,6 +63,19 @@ _POLICY_SURFACE = (
     "scripts/eval/mot17.py",
     "scripts/eval/mot17_args.py",
 )
+
+# The successor artifact schemas and RunSpec resolver define what one H2
+# execution means. They are exact ruler paths: docs/ and scripts/tools/h2_* are
+# otherwise non-execution/plumbing prefixes, and allowing those broad rules to
+# win would let the artifact authority move without the identity-semantics axis.
+EXECUTION_ARTIFACT_SCHEMA_PATHS: tuple[str, ...] = (
+    "docs/research/contracts/h2_phase_a_run_spec_v1.json",
+    "docs/research/contracts/h2_runtime_binding_v1.json",
+    "docs/research/contracts/h2_execution_result_v1.json",
+    "docs/research/contracts/h2_execution_verification_v1.json",
+)
+RUN_SPEC_RESOLVER_PATH = "scripts/tools/h2_run_spec.py"
+
 DECISION_RELEVANT_PATHS: frozenset[str] = frozenset(
     _ADMITTED_RUNTIME_PATHS + _OBSERVATION_SITES + _POLICY_SURFACE
 )
@@ -86,6 +99,8 @@ IDENTITY_SEMANTICS_PATHS: frozenset[str] = frozenset(
         "scripts/tools/h2_runtime_inputs.py",
         "scripts/tools/h2_terminal_partition.py",
         "scripts/tools/run_h2_layer_p.py",
+        *EXECUTION_ARTIFACT_SCHEMA_PATHS,
+        RUN_SPEC_RESOLVER_PATH,
     )
 )
 

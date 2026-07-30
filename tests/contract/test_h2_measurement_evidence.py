@@ -47,6 +47,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import jsonschema
 import pytest
 
 _REPO = Path(__file__).resolve().parents[2]
@@ -87,6 +88,13 @@ COORDINATE["implementation"] = _COMMIT_AXES["decision_relevant"]["digest"]
 COORDINATE["identity_semantics"] = _COMMIT_AXES["identity_semantics"]["digest"]
 PROBE = "2d" * 32
 
+_SUCCESSOR_SCHEMA_PATHS = {
+    "run_spec": _REPO / "docs/research/contracts/h2_phase_a_run_spec_v1.json",
+    "runtime_binding": _REPO / "docs/research/contracts/h2_runtime_binding_v1.json",
+    "result": _REPO / "docs/research/contracts/h2_execution_result_v1.json",
+    "verification": _REPO / "docs/research/contracts/h2_execution_verification_v1.json",
+}
+
 
 def _h0_packet_builder():
     """H0's own valid capture, loaded from the test that owns it."""
@@ -99,6 +107,93 @@ def _h0_packet_builder():
 
 
 _packet = _h0_packet_builder()
+
+
+# -- successor artifact contract ------------------------------------------ #
+
+
+@pytest.mark.parametrize("name", sorted(_SUCCESSOR_SCHEMA_PATHS))
+def test_successor_artifact_schemas_are_valid_closed_draft_2020_12(name: str) -> None:
+    schema = json.loads(_SUCCESSOR_SCHEMA_PATHS[name].read_text(encoding="utf-8"))
+    jsonschema.Draft202012Validator.check_schema(schema)
+    assert schema["type"] == "object"
+    assert schema["additionalProperties"] is False
+    assert schema["required"]
+
+
+def test_run_spec_projection_declares_the_complete_content_set() -> None:
+    schema = json.loads(_SUCCESSOR_SCHEMA_PATHS["run_spec"].read_text(encoding="utf-8"))
+    members = schema["$defs"]["execution_semantics_projection"]["properties"]["members"]
+    declared = {
+        clause["contains"]["properties"]["path"]["const"] for clause in members["allOf"]
+    }
+    expected = {
+        *evidence.PHASE_A_EXECUTED_SURFACE_PATHS,
+        evidence.PHASE_A_CAPTURE_ABI_PATH,
+        "scripts/eval/mot17_args.py",
+        "docs/research/contracts/h2_phase_a_run_spec_v1.json",
+        "scripts/tools/h2_run_spec.py",
+    }
+    assert declared == expected
+    assert members["minItems"] == members["maxItems"] == len(expected)
+
+
+def test_verification_schema_forbids_producer_and_host_derived_completion() -> None:
+    schema = json.loads(
+        _SUCCESSOR_SCHEMA_PATHS["verification"].read_text(encoding="utf-8")
+    )
+    properties = schema["properties"]
+    assert properties["verification_process"]["const"] == (
+        "independent_command_separate_process"
+    )
+    assert properties["producer_invoked"]["const"] is False
+    assert properties["verification_host_inputs_used"]["const"] is False
+
+
+def test_diagnostic_result_cannot_carry_measurement_authority() -> None:
+    schema = json.loads(_SUCCESSOR_SCHEMA_PATHS["result"].read_text(encoding="utf-8"))
+    validator = jsonschema.Draft202012Validator(schema)
+    instance = {
+        "schema": "h2_execution_result_v1",
+        "execution_id": "diagnostic-1",
+        "authority": "non_qualifying_diagnostic",
+        "authorization_binding_digest": "1" * 64,
+        "resolved_run_spec_digest": "2" * 64,
+        "execution_semantics_projection_digest": "3" * 64,
+        "run_plan": {
+            "sequence": "MOT17-04-SDP",
+            "run_ids": [
+                "00_capture_off",
+                "01_capture_on",
+                "02_capture_on",
+                "03_capture_on",
+            ],
+        },
+        "predicate_results": {
+            name: {"state": "pass", "reasons": []}
+            for name in (
+                "behavior_probe_equals_spec",
+                "bound_input_unchanged",
+                "capture_off_on_equal",
+                "execution_complete",
+                "packets_valid",
+                "runtime_binding_matches_spec",
+            )
+        },
+        "ordered_runs": [
+            {
+                "run_id": run_id,
+                "state": "completed",
+                "artifact_digest": "4" * 64,
+            }
+            for run_id in evidence.RUN_IDS
+        ],
+        "result": "measurement_pass",
+        "terminal": None,
+    }
+    messages = [error.message for error in validator.iter_errors(instance)]
+    assert any("is not of type 'null'" in message for message in messages)
+    assert any("'diagnostic_complete' was expected" in message for message in messages)
 
 
 # -- evidence-root construction -------------------------------------------- #

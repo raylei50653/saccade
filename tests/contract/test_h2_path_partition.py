@@ -90,7 +90,24 @@ def test_prose_is_non_execution_wherever_it_lives() -> None:
         ("scripts/tools/h2_behavioral_identity.py", "identity_semantics"),
         ("scripts/tools/h2_runtime_inputs.py", "identity_semantics"),
         ("scripts/tools/h2_terminal_partition.py", "identity_semantics"),
+        ("scripts/tools/h2_run_spec.py", "identity_semantics"),
         ("scripts/tools/build_runtime_identity.py", "identity_semantics"),
+        (
+            "docs/research/contracts/h2_phase_a_run_spec_v1.json",
+            "identity_semantics",
+        ),
+        (
+            "docs/research/contracts/h2_runtime_binding_v1.json",
+            "identity_semantics",
+        ),
+        (
+            "docs/research/contracts/h2_execution_result_v1.json",
+            "identity_semantics",
+        ),
+        (
+            "docs/research/contracts/h2_execution_verification_v1.json",
+            "identity_semantics",
+        ),
         ("docs/modules/semantic/TODO.md", "non_execution"),
         ("tests/contract/test_h2_path_partition.py", "non_execution"),
         (
@@ -140,6 +157,20 @@ def test_the_guard_cannot_be_edited_by_the_retry_it_guards() -> None:
     assert not verdict.admissible
     assert verdict.identity_semantics == ("scripts/tools/h2_behavioral_identity.py",)
     assert "cannot edit itself" in verdict.reason()
+
+
+def test_successor_artifact_authority_cannot_hide_under_broad_prefixes() -> None:
+    """Schemas under docs/ and the future h2_* resolver are ruler members."""
+    expected = {
+        *partition.EXECUTION_ARTIFACT_SCHEMA_PATHS,
+        partition.RUN_SPEC_RESOLVER_PATH,
+    }
+    assert expected <= partition.IDENTITY_SEMANTICS_PATHS
+    for path in expected:
+        assert partition.classify(path) == "identity_semantics"
+        verdict = partition.check_retry([path])
+        assert not verdict.admissible
+        assert verdict.identity_semantics == (path,)
 
 
 def test_prefix_rules_do_not_overlap_across_classes() -> None:

@@ -1,0 +1,292 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://saccade.local/contracts/h2_phase_a_run_spec_v1.json",
+  "title": "H2 Phase-A resolved RunSpec v1",
+  "description": "The complete canonical evaluator namespace and sole execution-configuration authority for H2 Phase A.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "canonicalization",
+    "execution_semantics_projection",
+    "execution_semantics_projection_digest",
+    "namespace_schema",
+    "phase",
+    "resolved_namespace",
+    "resolved_namespace_digest",
+    "resolved_namespace_keys",
+    "resolved_run_spec_digest",
+    "schema"
+  ],
+  "properties": {
+    "schema": {
+      "const": "h2_phase_a_run_spec_v1"
+    },
+    "phase": {
+      "const": "phase_a"
+    },
+    "namespace_schema": {
+      "const": "mot17_args_resolved_namespace_v1"
+    },
+    "canonicalization": {
+      "const": "utf8_lexicographic_keys_compact_finite_trailing_lf_v1"
+    },
+    "resolved_namespace": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/json_value"
+      }
+    },
+    "resolved_namespace_keys": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+      }
+    },
+    "resolved_namespace_digest": {
+      "$ref": "#/$defs/sha256"
+    },
+    "resolved_run_spec_digest": {
+      "$ref": "#/$defs/sha256"
+    },
+    "execution_semantics_projection_digest": {
+      "$ref": "#/$defs/sha256"
+    },
+    "execution_semantics_projection": {
+      "$ref": "#/$defs/execution_semantics_projection"
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "json_value": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "integer"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/json_value"
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/json_value"
+          }
+        }
+      ]
+    },
+    "content_member": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "length",
+        "path",
+        "sha256"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
+        },
+        "length": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "execution_semantics_projection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "algorithm",
+        "digest",
+        "members",
+        "schema"
+      ],
+      "properties": {
+        "schema": {
+          "const": "h2_execution_semantics_projection_v1"
+        },
+        "algorithm": {
+          "const": "sha256_canonical_json_content_members_v1"
+        },
+        "digest": {
+          "$ref": "#/$defs/sha256"
+        },
+        "members": {
+          "type": "array",
+          "minItems": 11,
+          "maxItems": 11,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/content_member"
+          },
+          "allOf": [
+            {
+              "contains": {
+                "properties": {
+                  "path": {
+                    "const": "scripts/tools/check_h2_measure_archives.py"
+                  }
+                },
+                "required": [
+                  "path"
+                ]
+              }
+            },
+            {
+              "contains": {
+                "properties": {
+                  "path": {
+                    "const": "scripts/tools/h2_measurement_evidence.py"
+                  }
+                },
+                "required": [
+                  "path"
+                ]
+              }
+            },
+            {
+              "contains": {
+                "properties": {
+                  "path": {
+                    "const": "scripts/tools/run_h2_measurement.py"
+                  }
+                },
+                "required": [
+                  "path"
+                ]
+              }
+            },
+            {
+              "contains": {
+                "properties": {
+                  "path": {
+                    "const": "scripts/tools/run_h2_measurement_child.py"
+                  }
+                },
+                "required": [
+                  "path"
+                ]
+              }
+            },
+            {
+              "contains": {
+                "properties": {
+                  "path": {
+                    "const": "scripts/tools/verify_h0_phase_a.py"
+                  }
+                },
+                "required": [
+                  "path"
+                ]
+              }
+            },
+            {
+              "contains": {
+                "properties": {
+                  "path": {
+                    "const": "scripts/tools/verify_h2_measurement.py"
+                  }
+                },
+                "required": [
+                  "path"
+                ]
+              }
+            },
+            {
+              "contains": {
+                "properties": {
+                  "path": {
+                    "const": "scripts/tools/verify_headline_bridge_decision_trace.py"
+                  }
+                },
+                "required": [
+                  "path"
+                ]
+              }
+            },
+            {
+              "contains": {
+                "properties": {
+                  "path": {
+                    "const": "scripts/tools/h0_bridge_decision_trace_schema_v2.json"
+                  }
+                },
+                "required": [
+                  "path"
+                ]
+              }
+            },
+            {
+              "contains": {
+                "properties": {
+                  "path": {
+                    "const": "scripts/eval/mot17_args.py"
+                  }
+                },
+                "required": [
+                  "path"
+                ]
+              }
+            },
+            {
+              "contains": {
+                "properties": {
+                  "path": {
+                    "const": "docs/research/contracts/h2_phase_a_run_spec_v1.json"
+                  }
+                },
+                "required": [
+                  "path"
+                ]
+              }
+            },
+            {
+              "contains": {
+                "properties": {
+                  "path": {
+                    "const": "scripts/tools/h2_run_spec.py"
+                  }
+                },
+                "required": [
+                  "path"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

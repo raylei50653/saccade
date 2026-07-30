@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://saccade.local/contracts/h2_execution_verification_v1.json",
+  "title": "H2 independent execution verification v1",
+  "description": "A foreign-host-independent verdict over one closed H2 execution archive.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "artifact_digests",
+    "checks",
+    "execution_id",
+    "execution_semantics_projection_digest",
+    "producer_invoked",
+    "reasons",
+    "resolved_run_spec_digest",
+    "schema",
+    "valid",
+    "verification_host_inputs_used",
+    "verification_process"
+  ],
+  "properties": {
+    "schema": {
+      "const": "h2_execution_verification_v1"
+    },
+    "execution_id": {
+      "$ref": "#/$defs/execution_id"
+    },
+    "resolved_run_spec_digest": {
+      "$ref": "#/$defs/sha256"
+    },
+    "execution_semantics_projection_digest": {
+      "$ref": "#/$defs/sha256"
+    },
+    "artifact_digests": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "result.json",
+        "run_spec.json",
+        "runtime_binding.json"
+      ],
+      "properties": {
+        "run_spec.json": {
+          "$ref": "#/$defs/sha256"
+        },
+        "runtime_binding.json": {
+          "$ref": "#/$defs/sha256"
+        },
+        "result.json": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "checks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_schemas",
+        "checksum_closure",
+        "execution_binding",
+        "projection_binding",
+        "result_binding",
+        "run_spec_binding"
+      ],
+      "properties": {
+        "artifact_schemas": {
+          "type": "boolean"
+        },
+        "checksum_closure": {
+          "type": "boolean"
+        },
+        "execution_binding": {
+          "type": "boolean"
+        },
+        "projection_binding": {
+          "type": "boolean"
+        },
+        "result_binding": {
+          "type": "boolean"
+        },
+        "run_spec_binding": {
+          "type": "boolean"
+        }
+      }
+    },
+    "verification_process": {
+      "const": "independent_command_separate_process"
+    },
+    "producer_invoked": {
+      "const": false
+    },
+    "verification_host_inputs_used": {
+      "const": false
+    },
+    "valid": {
+      "type": "boolean"
+    },
+    "reasons": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "execution_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+    }
+  }
+}
