@@ -17,8 +17,8 @@ document:
   path: headline_bridge_behavioral_identity_capture_declaration_20260725.md
 
 sealed_prefix:
-  bytes: 97948
-  sha256: "c73d5ed6d5a31adec8942b63b4e6cf120bbfd259abeab5caaf5712f2f5a153fa"
+  bytes: 100171
+  sha256: "95581df9dc486342c036c1587ba52d48e58f56dcf95992b9d764c25d85346a3c"
   # Re-pin log (each entry was a deliberate pre-seal edit, not a slip):
   #   Review reset — coordinate / bounded probe / equivalence split; content-bound
   #                  fixtures/assets/build products; v2 Layer-P certificate.
@@ -128,6 +128,18 @@ sealed_prefix:
   #             set of verdicts that may carry subordinate stage evidence is
   #             derived from Phase-A reachability rather than from "not terminal
   #             4", which had leaked terminal 5 into it. Re-pinned to the complete
+  #             revised body.
+  #   Review Correction 9 revision 4 — owner review, fourth round, still before
+  #             merge. Revision 3's own table was exhaustive over *terminals*, and
+  #             so published the previous round's mutation case as the general rule:
+  #             terminals 2 and 3 were admissible beside a stage failure, i.e. a
+  #             capture-perturbation or invalid-packet finding from an execution
+  #             that stopped at `build` and started no run. Reachability is now
+  #             explicit — a stage failure requires every ordered run unstarted and
+  #             admits only the stage-independent findings, `runtime_binding_mismatch`
+  #             being adjudicated from the binding members required at every stage —
+  #             and `result.json` itself may no longer claim a decided capture or
+  #             packet verdict without a started run. Re-pinned to the complete
   #             revised body.
 
 policy_target:

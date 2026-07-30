@@ -46,7 +46,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Any, Mapping, NamedTuple
+from typing import Any, Mapping, NamedTuple, Sequence
 
 PARTITION_SCHEMA = "h2_terminal_partition_v1"
 
@@ -315,6 +315,29 @@ CATCH_ALL_FAILURE_STAGES: tuple[str, ...] = ("build_binding", "identity_run")
 # The monitor is the only witness of terminal 1, and terminal 1 outranks every
 # other result, so a recorded change and `input_mutated` imply each other.
 RESULT_REQUIRES_INPUT_MUTATION = "input_mutated"
+
+# Which findings are *reachable* at which point in the execution — the axis a
+# terminal-level classification loses. A terminal is not a time: two results
+# sharing terminal 1 can differ in whether the evidence they name could exist yet.
+#
+#   * stage-independent — decidable from the binding members
+#     `h2_runtime_binding_v1` requires at every stage (`runtime_inputs`,
+#     `executed_surfaces`, `capture_abi`, `source_audit`, `input_monitor`), so they
+#     survive a build failure. `input_mutated` belongs here because the monitor
+#     starts before the binding by contract;
+#   * probe-derived — needs the computed identity probe, which exists only when no
+#     stage failed;
+#   * run-derived — needs a measurement run to have started; no run starts until
+#     every retained stage completed, and Correction 5's measurement mode is
+#     fail-fast, so a stage failure means these findings cannot exist yet.
+STAGE_INDEPENDENT_RESULTS: tuple[str, ...] = (
+    "input_mutated",
+    "runtime_binding_mismatch",
+)
+PROBE_DERIVED_RESULTS: tuple[str, ...] = ("behavior_probe_moved",)
+RUN_DERIVED_RESULTS: tuple[str, ...] = ("capture_perturbs_policy", "packet_invalid")
+RUN_STATES: tuple[str, ...] = ("completed", "failed", "not_run")
+RUN_NOT_STARTED_STATE = "not_run"
 
 # The § C3.6 admission gate, in the clause's own order (a–e). These are NOT
 # predicates of the partition: they are evaluated *before* the § C3.5.1 step-5
@@ -657,6 +680,8 @@ def binding_agreement_reasons(
     selected_terminal: str | None,
     failed_stage: str | None,
     input_monitor: Mapping[str, Any],
+    ordered_runs: Sequence[Mapping[str, Any]],
+    identity_probe_present: bool,
 ) -> tuple[str, ...]:
     """Cross-check `result.json` against `runtime_binding.json`.
 
@@ -687,6 +712,15 @@ def binding_agreement_reasons(
       `failed_stage` would have the two files describing different executions.
       Subordinate evidence is admissible under a terminal, never under the
       non-terminal progression.
+    * **A finding must be reachable at the point the execution stopped**, which a
+      terminal-level rule cannot express because a terminal is not a time. A stage
+      failure means no measurement run ever started, so `capture_perturbs_policy`
+      and `packet_invalid` name evidence that cannot exist yet, and
+      `behavior_probe_moved` names a probe the binding is forbidden to carry.
+      Only the stage-independent findings — a monitored mutation, or a binding that
+      disagrees with the spec on members required at every stage — survive a stage
+      failure. This is the axis the previous revision lost by generalising the
+      mutation case into "terminals 1 to 3 may carry any stage failure".
 
     `selected_terminal` is the terminal the ruler selects from the *predicates*
     (`select_successor_result(...).terminal`), never the terminal the archive
@@ -711,6 +745,16 @@ def binding_agreement_reasons(
     for key in ("changed_count", "final_drain_clean"):
         if key not in input_monitor:
             raise PartitionError(f"input monitor record is missing {key}")
+    run_states: list[str] = []
+    for index, run in enumerate(ordered_runs):
+        state = run.get("state")
+        if state not in RUN_STATES:
+            raise PartitionError(
+                f"ordered run {index} has an unknown state: {state!r}; expected one "
+                f"of {list(RUN_STATES)}"
+            )
+        run_states.append(state)
+    started = [state for state in run_states if state != RUN_NOT_STARTED_STATE]
 
     if authority == "non_qualifying_diagnostic":
         if selected_terminal is not None:
@@ -741,6 +785,38 @@ def binding_agreement_reasons(
             f"binding records {failed_stage!r}: a passed measurement decided every "
             "predicate, so no retained stage can have failed"
         )
+
+    if failed_stage is not None:
+        # No measurement run starts until every retained stage completed, and
+        # measurement mode is fail-fast, so a stage failure means none did.
+        if started:
+            reasons.append(
+                f"failed_stage {failed_stage!r} stopped the execution before the "
+                f"measurement runs, so all four must be {RUN_NOT_STARTED_STATE!r}, "
+                f"and {len(started)} of them are not"
+            )
+        if result in RUN_DERIVED_RESULTS:
+            reasons.append(
+                f"{result} names run-derived evidence, which cannot exist under "
+                f"failed_stage {failed_stage!r}: no measurement run started"
+            )
+        if result in PROBE_DERIVED_RESULTS:
+            # Subsumes the presence check below and says *why* the probe is absent;
+            # emitting both would report one condition twice.
+            reasons.append(
+                f"{result} names the identity probe, which the binding cannot carry "
+                f"under failed_stage {failed_stage!r}"
+            )
+    else:
+        if result in RUN_DERIVED_RESULTS and not started:
+            reasons.append(
+                f"{result} names run-derived evidence while no measurement run started"
+            )
+        if result in PROBE_DERIVED_RESULTS and not identity_probe_present:
+            reasons.append(
+                f"{result} requires a computed identity probe, and the binding "
+                "records none"
+            )
 
     if failed_stage is not None and selected_terminal == EXECUTION_INVALID_TERMINAL:
         expected = [
@@ -876,17 +952,26 @@ def as_payload() -> dict[str, Any]:
             "failed_stage_requires_result_only_when_terminal": (
                 EXECUTION_INVALID_TERMINAL
             ),
-            # Terminals 1–3, derived rather than listed: a Phase-A-reachable
-            # terminal that is not the execution catch-all. Deriving it from "not
-            # terminal 4" would have included terminal 5, which this successor
-            # ruler cannot select at all — and a payload-only implementer would
-            # then read the faithful terminal as able to carry a stage failure.
-            "failed_stage_is_subordinate_evidence_under_terminals": sorted(
-                terminal.name
-                for terminal in TERMINALS
-                if terminal.phase_a_reachable
-                and terminal.name != EXECUTION_INVALID_TERMINAL
+            # Reachability, not terminals. A terminal is not a time: two results
+            # sharing terminal 1 differ in whether their evidence can exist yet, so
+            # the admissible companions of a stage failure are named per result.
+            # The earlier terminal-level form said "terminals 1–3 may carry any
+            # stage failure", which admitted a capture-perturbation finding from an
+            # execution that stopped at `build`.
+            "stage_independent_results": list(STAGE_INDEPENDENT_RESULTS),
+            "probe_derived_results": list(PROBE_DERIVED_RESULTS),
+            "run_derived_results": list(RUN_DERIVED_RESULTS),
+            "results_admissible_with_a_failed_stage": sorted(
+                {
+                    *STAGE_INDEPENDENT_RESULTS,
+                    *(
+                        result
+                        for result, terminal in RESULT_TO_TERMINAL.items()
+                        if terminal == EXECUTION_INVALID_TERMINAL
+                    ),
+                }
             ),
+            "failed_stage_requires_unstarted_runs": True,
             "failed_stage_forbidden_under_non_terminal_progression": True,
             # Biconditional under measurement authority only: terminal 1 is the
             # highest order, so a recorded change cannot lose to anything.

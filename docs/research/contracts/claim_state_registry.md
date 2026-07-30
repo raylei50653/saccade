@@ -1069,6 +1069,34 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
         改成對每個 stage 枚舉「所有 candidate verdict」並斷言 admitting set 恰為 Phase-A reachable terminals
       re_pin: 96615 → 97948 bytes / c73d5ed6…
       identity_semantics: 027c3472 → e8669807
+    owner_review_revision_4:                  # revision 3 自己的表把上一輪的特例泛化成通則
+      defect: >-
+        terminal 2／3 可與 non-null `failed_stage` 並存 ⇒ 可形成「binding 說 build 就失敗、
+        result 說四個 run 全 completed 且 capture_off_on_equal=fail」而 checker 判 agreement。
+        根因=revision 3 的 property 對 **terminal** 窮舉並斷言每個 phase_a_reachable terminal 都接受任意 stage failure;
+        mutation 反例只證明「monitor 在 binding 前啟動 ⇒ 監測到的 mutation 能與 build failure 共存」,
+        不能推廣到「從未起跑的 run 所導出的 finding」
+      temporal_axis: >-
+        RC5 保留順序 build → build_binding → extension_load → identity_run → 四個 ordered run,
+        且 measurement 是 fail-fast ⇒ non-null failed_stage ⇒ 所有 ordered run 必為 not_run（artifact_digest null）
+        ⇒ capture 比較與 packet 判定 undecided ⇒ terminal 2／3 不可選
+      reachability_classes:                   # 已發布並由 checker 執行;取代 terminal-level 清單
+        stage_independent: [input_mutated, runtime_binding_mismatch]
+        probe_derived: [behavior_probe_moved]     # 需 computed identity probe ⇒ 只有 failed_stage=null
+        run_derived: [capture_perturbs_policy, packet_invalid]
+      runtime_binding_mismatch_adjudication: >-
+        由 `h2_runtime_binding_v1` **無條件 required** 的成員裁決（runtime_inputs／executed_surfaces／
+        capture_abi／source_audit／input_monitor 在每個 stage 都存在）⇒ 只要 binding 存在就可判定;
+        **不是**從 terminal 1 的共同名稱推導
+      intra_file_closure:                     # result.json 自己不得宣稱其 run 紀錄否認的證據
+        - "execution_complete=pass ⇒ 四個 run 全 completed"
+        - "decided capture_off_on_equal ⇒ capture-off 與至少一個 capture-on 已起跑（failed 也算起跑,not_run 不算）"
+        - "decided packets_valid ⇒ 至少一個 capture-on 已起跑"
+        - "completed run ⇒ artifact_digest 必須是 sha256"
+      checker_signature_extended: binding_agreement_reasons(..., ordered_runs, identity_probe_present)   # 兩者皆 keyword-only 無 default ⇒ 舊呼叫端會炸不會靜默跳過
+      test_axis_change: terminal × failed_stage → **result × failed_stage × run reachability**
+      re_pin: 97948 → 100171 bytes / 95581df9…
+      identity_semantics: e8669807 → d7600437
     tests: +67 contract tests;期望值由 schema 推導後與 ruler 雙向比對,含「ruler 自己的 verdict 是 schema 唯一接受的 verdict」整組
     authorization_effect: none
     not_established: no producer; no verifier; no diagnostic mode; no execution; no authorization; no F/S; no seal; no corpus admission; no equivalence claim

@@ -863,6 +863,201 @@
           "predicate_results"
         ]
       }
+    },
+    {
+      "if": {
+        "properties": {
+          "predicate_results": {
+            "properties": {
+              "execution_complete": {
+                "properties": {
+                  "state": {
+                    "const": "pass"
+                  }
+                },
+                "required": [
+                  "state"
+                ]
+              }
+            },
+            "required": [
+              "execution_complete"
+            ]
+          }
+        },
+        "required": [
+          "predicate_results"
+        ]
+      },
+      "then": {
+        "properties": {
+          "ordered_runs": {
+            "$ref": "#/$defs/all_runs_completed"
+          }
+        },
+        "required": [
+          "ordered_runs"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "predicate_results": {
+            "properties": {
+              "capture_off_on_equal": {
+                "properties": {
+                  "state": {
+                    "enum": [
+                      "pass",
+                      "fail"
+                    ]
+                  }
+                },
+                "required": [
+                  "state"
+                ]
+              }
+            },
+            "required": [
+              "capture_off_on_equal"
+            ]
+          }
+        },
+        "required": [
+          "predicate_results"
+        ]
+      },
+      "then": {
+        "allOf": [
+          {
+            "properties": {
+              "ordered_runs": {
+                "prefixItems": [
+                  {
+                    "properties": {
+                      "state": {
+                        "not": {
+                          "const": "not_run"
+                        }
+                      }
+                    },
+                    "required": [
+                      "state"
+                    ]
+                  }
+                ]
+              }
+            },
+            "required": [
+              "ordered_runs"
+            ]
+          },
+          {
+            "properties": {
+              "ordered_runs": {
+                "contains": {
+                  "allOf": [
+                    {
+                      "properties": {
+                        "run_id": {
+                          "not": {
+                            "const": "00_capture_off"
+                          }
+                        }
+                      },
+                      "required": [
+                        "run_id"
+                      ]
+                    },
+                    {
+                      "properties": {
+                        "state": {
+                          "not": {
+                            "const": "not_run"
+                          }
+                        }
+                      },
+                      "required": [
+                        "state"
+                      ]
+                    }
+                  ]
+                }
+              }
+            },
+            "required": [
+              "ordered_runs"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "predicate_results": {
+            "properties": {
+              "packets_valid": {
+                "properties": {
+                  "state": {
+                    "enum": [
+                      "pass",
+                      "fail"
+                    ]
+                  }
+                },
+                "required": [
+                  "state"
+                ]
+              }
+            },
+            "required": [
+              "packets_valid"
+            ]
+          }
+        },
+        "required": [
+          "predicate_results"
+        ]
+      },
+      "then": {
+        "properties": {
+          "ordered_runs": {
+            "contains": {
+              "allOf": [
+                {
+                  "properties": {
+                    "run_id": {
+                      "not": {
+                        "const": "00_capture_off"
+                      }
+                    }
+                  },
+                  "required": [
+                    "run_id"
+                  ]
+                },
+                {
+                  "properties": {
+                    "state": {
+                      "not": {
+                        "const": "not_run"
+                      }
+                    }
+                  },
+                  "required": [
+                    "state"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "required": [
+          "ordered_runs"
+        ]
+      }
     }
   ],
   "$defs": {
@@ -930,7 +1125,31 @@
             }
           ]
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "const": "completed"
+              }
+            },
+            "required": [
+              "state"
+            ]
+          },
+          "then": {
+            "properties": {
+              "artifact_digest": {
+                "$ref": "#/$defs/sha256"
+              }
+            },
+            "required": [
+              "artifact_digest"
+            ]
+          }
+        }
+      ]
     },
     "capture_off_run": {
       "allOf": [
@@ -1048,6 +1267,19 @@
         "error",
         "not_run"
       ]
+    },
+    "all_runs_completed": {
+      "type": "array",
+      "items": {
+        "properties": {
+          "state": {
+            "const": "completed"
+          }
+        },
+        "required": [
+          "state"
+        ]
+      }
     }
   }
 }

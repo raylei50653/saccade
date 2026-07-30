@@ -1720,12 +1720,34 @@ ignores either makes truthful records unformable.
   mutation or a failed stage to change its result would contradict the authority
   boundary this correction states three paragraphs above.
 
-Where a non-null `failed_stage` may therefore sit, exhaustively: under terminals 1
-to 3 as subordinate evidence, under terminal 4 with the token its stage requires,
-under a diagnostic as a recorded observation, and nowhere else. Terminal 5 is
-absent from that list because this successor path selects Phase-A verdicts only,
-and the published set is derived from Phase-A reachability rather than from "not
-terminal 4" so the faithful terminal cannot be read as carrying a stage failure.
+- **A finding must be reachable at the point the execution stopped.** A terminal
+  is not a time, so a terminal-level rule cannot express this: two results sharing
+  terminal 1 differ in whether the evidence they name could exist yet. The
+  retained order is `build` → `build_binding` → `extension_load` → `identity_run`,
+  and only then the four measurement runs; measurement mode is fail-fast. So a
+  non-null `failed_stage` implies every ordered run is `not_run` with no artifact
+  digest, which in turn implies the capture comparison and the packet verdict are
+  undecided and terminals 2 and 3 unselectable. `behavior_probe_moved` needs the
+  computed identity probe, which the binding is forbidden to carry unless
+  `failed_stage` is null.
+
+The findings that *do* survive a stage failure are the **stage-independent** ones:
+a monitored mutation, because the monitor starts before the binding by contract,
+and a binding that disagrees with the spec on the members
+`h2_runtime_binding_v1` requires at *every* stage — `runtime_inputs`,
+`executed_surfaces`, `capture_abi`, `source_audit`, `input_monitor`. That is the
+adjudication for `runtime_binding_mismatch`: it is decidable whenever a binding
+exists at all, from the schema's own unconditional required set, not from sharing
+terminal 1's name. Terminal 5 never appears, because this successor path selects
+Phase-A verdicts only.
+
+Correspondingly, `result.json` alone must not claim evidence its own run records
+deny: a passing `execution_complete` requires all four runs `completed`, a decided
+capture comparison requires the capture-off block and at least one capture-on
+block to have started, a decided packet verdict requires a started capture-on
+block, and a `completed` run requires its artifact digest. A *failed* run still
+counts as started — surviving evidence accumulates (§ C3.5.1) — but a `not_run`
+block produced nothing to read.
 
 The archive-only verifier of W3 must enforce all of it, and no producer exists in
 between.
@@ -1738,7 +1760,7 @@ as in § 7, so no terminal boundary moves.
 
 ### What this correction does not do
 
-This correction was revised in place three times under owner review before merge,
+This correction was revised in place four times under owner review before merge,
 which is why the rules above read as they do rather than as appended passes: the
 correction had not merged and nothing was sealed, so revising the text is more
 honest than layering a correction onto an unsealed one, and the re-pin log records
@@ -1756,11 +1778,21 @@ not cover rather than by rereading the prose:
 4. a stage failure was admissible beside `measurement_pass` — found by enumerating
    the verdicts a stage failure may sit under, which is the closure the third
    repair's own grid still left open: it fixed the verdict at terminal 4 for every
-   clean cell and so never exercised the non-terminal progression.
+   clean cell and so never exercised the non-terminal progression;
+5. terminals 2 and 3 were admissible beside a stage failure — found because the
+   fourth repair's own table, enumerated over *terminals*, published that
+   generalisation as correct. The mutation case proved only that a monitored change
+   survives a stage failure; it does not follow that a finding derived from runs
+   that never started does. Enumerating over *results* rather than terminals is
+   what makes the difference visible.
 
-The pattern is that a multi-condition rule is closed by an exhaustive
-classification with an invariant per cell, never by a list of cases: each defect
-above lived in a cell no case had asked about.
+Two patterns, and the second is the one that keeps recurring. A multi-condition
+rule is closed by an exhaustive classification with an invariant per cell, never by
+a list of cases: each defect above lived in a cell no case had asked about. And a
+classification is only as good as its axes — three of the five defects came from an
+enumeration that was exhaustive over the wrong dimension, so the fix is to name
+what varies (authority, ordered verdict, reachable evidence) before enumerating,
+and to check whether the new grid holds any dimension constant.
 
 It implements no producer, no verifier, no diagnostic mode and no controller
 change; the archive-only verifier and the producer remain the next two staged
