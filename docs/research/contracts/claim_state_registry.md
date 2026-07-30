@@ -1049,6 +1049,26 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
                   （每格至少一個 admissible result;有 mutation 時恰好只有 input_mutated）
       re_pin: 94893 → 96615 bytes / cf7563bb…
       identity_semantics: 06f7cfa3 → 027c3472
+    owner_review_revision_3:                  # 收斂枚舉找到 gated 形式仍留的一格
+      defect: >-
+        `measurement_pass` 可與 non-null `failed_stage` 並存 ⇒ 一份 artifact 說完整成功、
+        另一份說 retained stage 失敗,而 checker 兩邊都同意（stage→token 只在 terminal 4 執行,
+        selected_terminal=None 時整段略過,monitor 又乾淨 ⇒ 回空 reasons）
+      fix: measurement 下 `selected_terminal is None ⇒ failed_stage is null`
+      classification_table:                   # non-null failed_stage 可以坐在哪
+        terminal_1_to_3: subordinate evidence（不改 verdict）
+        terminal_4: 必須依 stage 選對 token
+        diagnostic: recorded observation,不要求換 result
+        null_terminal: FORBIDDEN — stage failure 與 complete execution 矛盾
+      payload_leak: >-
+        `failed_stage_is_subordinate_evidence_under_terminals` 原本由「所有非 terminal-4」生成 ⇒
+        含 terminal 5（`H2_FULL_COMMIT_CAPTURE_FAITHFUL`）。改為由 **Phase-A reachability** 推導,
+        terminal 5 本來就不可能由 successor ruler 選出
+      test_gap_closed: >-
+        第三輪自己那個 grid 在 mutated=False 時把 verdict 固定成 terminal 4 ⇒ 所有 clean 格都只測 terminal-4 branch。
+        改成對每個 stage 枚舉「所有 candidate verdict」並斷言 admitting set 恰為 Phase-A reachable terminals
+      re_pin: 96615 → 97948 bytes / c73d5ed6…
+      identity_semantics: 027c3472 → e8669807
     tests: +67 contract tests;期望值由 schema 推導後與 ruler 雙向比對,含「ruler 自己的 verdict 是 schema 唯一接受的 verdict」整組
     authorization_effect: none
     not_established: no producer; no verifier; no diagnostic mode; no execution; no authorization; no F/S; no seal; no corpus admission; no equivalence claim

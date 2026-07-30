@@ -2408,11 +2408,20 @@ def test_the_cross_artifact_rules_are_published_for_the_verifier() -> None:
         published["failed_stage_requires_result_only_when_terminal"]
         == partition.EXECUTION_INVALID_TERMINAL
     )
+    # Terminals 1-3 only: deriving this from "not terminal 4" leaked terminal 5,
+    # which this ruler cannot select, into the list of verdicts that may carry a
+    # stage failure.
     assert published["failed_stage_is_subordinate_evidence_under_terminals"] == sorted(
         terminal.name
         for terminal in partition.TERMINALS
-        if terminal.name != partition.EXECUTION_INVALID_TERMINAL
+        if terminal.phase_a_reachable
+        and terminal.name != partition.EXECUTION_INVALID_TERMINAL
     )
+    assert (
+        "H2_FULL_COMMIT_CAPTURE_FAITHFUL"
+        not in (published["failed_stage_is_subordinate_evidence_under_terminals"])
+    )
+    assert published["failed_stage_forbidden_under_non_terminal_progression"] is True
     assert published["diagnostic_records_evidence_without_demanding_a_result"] is True
     schema = json.loads(
         _SUCCESSOR_SCHEMA_PATHS["runtime_binding"].read_text(encoding="utf-8")
@@ -2475,6 +2484,14 @@ _T4 = "H2_MEASUREMENT_EXECUTION_INVALID"
             ("outranks every other finding",),
         ),
         ("measurement_pass", None, None, False, ()),
+        ("measurement_pass", None, "build", False, ("requires failed_stage null",)),
+        (
+            "measurement_pass",
+            None,
+            "identity_run",
+            False,
+            ("requires failed_stage null",),
+        ),
     ],
 )
 def test_the_cross_artifact_rules_respect_authority_and_precedence(
@@ -2496,6 +2513,26 @@ def test_the_cross_artifact_rules_respect_authority_and_precedence(
         assert fragment in reason
 
 
+def _admissible_results(
+    *, selected_terminal: str | None, stage: str | None, mutated: bool
+) -> list[str]:
+    """Every measurement result that agrees with this binding, under this verdict."""
+    monitor = _MONITOR_MUTATED if mutated else _MONITOR_CLEAN
+    return [
+        result
+        for result, terminal in partition.RESULT_TO_TERMINAL.items()
+        if result not in partition.LEGACY_RESULT_SUPERSEDED_BY
+        and terminal == selected_terminal
+        and not partition.binding_agreement_reasons(
+            result,
+            authority="exactly_once_measurement",
+            selected_terminal=selected_terminal,
+            failed_stage=stage,
+            input_monitor=monitor,
+        )
+    ]
+
+
 @pytest.mark.parametrize(
     "stage", [None, "build", "build_binding", "extension_load", "identity_run"]
 )
@@ -2510,27 +2547,57 @@ def test_a_moved_input_always_leaves_one_admissible_result(
     build failure and `build_failed` was refused for ignoring the mutation, so a
     truthful archive had no admissible result at all.
     """
-    monitor = _MONITOR_MUTATED if mutated else _MONITOR_CLEAN
     terminal = _T1 if mutated else _T4
-    admissible = [
-        result
-        for result in partition.RESULT_TO_TERMINAL
-        if result not in partition.LEGACY_RESULT_SUPERSEDED_BY
-        and partition.RESULT_TO_TERMINAL[result] == terminal
-        and not partition.binding_agreement_reasons(
-            result,
-            authority="exactly_once_measurement",
-            selected_terminal=terminal,
-            failed_stage=stage,
-            input_monitor=monitor,
-        )
-    ]
+    admissible = _admissible_results(
+        selected_terminal=terminal, stage=stage, mutated=mutated
+    )
     assert admissible, (
         f"no result agrees with failed_stage={stage!r} and mutated={mutated} — the "
         "cross-artifact rules deadlock on a formable observation"
     )
     if mutated:
         assert admissible == ["input_mutated"]
+
+
+@pytest.mark.parametrize(
+    "stage", ["build", "build_binding", "extension_load", "identity_run"]
+)
+def test_a_non_terminal_pass_cannot_carry_a_stage_failure(stage: str) -> None:
+    """`measurement_pass` requires `execution_complete` to pass; a failed stage denies it.
+
+    This is the branch the grid above never reached: with `mutated=False` it fixes
+    the verdict at terminal 4, so every clean cell exercised the terminal-4 rule
+    and none exercised the non-terminal progression.
+    """
+    reasons = partition.binding_agreement_reasons(
+        "measurement_pass",
+        authority="exactly_once_measurement",
+        selected_terminal=None,
+        failed_stage=stage,
+        input_monitor=_MONITOR_CLEAN,
+    )
+    assert reasons, (
+        "one file said the measurement passed and the other said a retained stage "
+        "failed, and the checker agreed with both"
+    )
+    assert "failed_stage null" in reasons[0]
+    assert _admissible_results(selected_terminal=None, stage=stage, mutated=False) == []
+
+
+@pytest.mark.parametrize(
+    "stage", ["build", "build_binding", "extension_load", "identity_run"]
+)
+def test_a_stage_failure_admits_only_the_ordered_terminals(stage: str) -> None:
+    """Where subordinate stage evidence may sit, enumerated over every verdict."""
+    candidates: list[str | None] = [None, *(t.name for t in partition.TERMINALS)]
+    admitting = [
+        terminal
+        for terminal in candidates
+        if _admissible_results(selected_terminal=terminal, stage=stage, mutated=False)
+    ]
+    assert admitting == [
+        terminal.name for terminal in partition.TERMINALS if terminal.phase_a_reachable
+    ], "a stage failure was admitted under the non-terminal progression or terminal 5"
 
 
 @pytest.mark.parametrize(

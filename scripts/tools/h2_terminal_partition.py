@@ -682,6 +682,11 @@ def binding_agreement_reasons(
       re-admitted tokens exist to avoid.
     * **The mutation rule stays biconditional for a measurement**, because
       terminal 1 is the highest order: a recorded change cannot lose to anything.
+    * **A measurement that selected no terminal cannot carry a failed stage.**
+      `measurement_pass` requires `execution_complete` to pass, so a non-null
+      `failed_stage` would have the two files describing different executions.
+      Subordinate evidence is admissible under a terminal, never under the
+      non-terminal progression.
 
     `selected_terminal` is the terminal the ruler selects from the *predicates*
     (`select_successor_result(...).terminal`), never the terminal the archive
@@ -723,6 +728,18 @@ def binding_agreement_reasons(
         reasons.append(
             f"{result} requires failed_stage {required!r}, and the binding "
             f"records {failed_stage!r}"
+        )
+
+    if failed_stage is not None and selected_terminal is None:
+        # The one verdict a stage failure cannot sit under. `measurement_pass`
+        # requires `execution_complete` to pass, and a failed stage says the
+        # execution did not reach the end of the retained six — so the two files
+        # would be describing different executions. Subordinate evidence is
+        # admissible under a *terminal*, never under the non-terminal progression.
+        reasons.append(
+            "a non-terminal measurement pass requires failed_stage null, and the "
+            f"binding records {failed_stage!r}: a passed measurement decided every "
+            "predicate, so no retained stage can have failed"
         )
 
     if failed_stage is not None and selected_terminal == EXECUTION_INVALID_TERMINAL:
@@ -859,11 +876,18 @@ def as_payload() -> dict[str, Any]:
             "failed_stage_requires_result_only_when_terminal": (
                 EXECUTION_INVALID_TERMINAL
             ),
+            # Terminals 1–3, derived rather than listed: a Phase-A-reachable
+            # terminal that is not the execution catch-all. Deriving it from "not
+            # terminal 4" would have included terminal 5, which this successor
+            # ruler cannot select at all — and a payload-only implementer would
+            # then read the faithful terminal as able to carry a stage failure.
             "failed_stage_is_subordinate_evidence_under_terminals": sorted(
                 terminal.name
                 for terminal in TERMINALS
-                if terminal.name != EXECUTION_INVALID_TERMINAL
+                if terminal.phase_a_reachable
+                and terminal.name != EXECUTION_INVALID_TERMINAL
             ),
+            "failed_stage_forbidden_under_non_terminal_progression": True,
             # Biconditional under measurement authority only: terminal 1 is the
             # highest order, so a recorded change cannot lose to anything.
             "result_requires_input_mutation": RESULT_REQUIRES_INPUT_MUTATION,

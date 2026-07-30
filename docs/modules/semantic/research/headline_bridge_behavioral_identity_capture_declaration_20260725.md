@@ -1710,10 +1710,22 @@ ignores either makes truthful records unformable.
   final drain, in both directions, because terminal 1 is the highest order and a
   recorded change cannot lose to anything. Relaxing the monitor is what makes
   terminal 1 recordable; this biconditional is what keeps it honest.
+- **A measurement that selected no terminal carries no failed stage.**
+  `measurement_pass` requires `execution_complete` to pass, so a non-null
+  `failed_stage` beside it has the two files describing different executions.
+  Subordinate evidence is admissible under a terminal, never under the
+  non-terminal progression.
 - **A diagnostic demands nothing.** It records every failed predicate and every
   stage failure and still resolves to `diagnostic_complete`, so requiring a
   mutation or a failed stage to change its result would contradict the authority
   boundary this correction states three paragraphs above.
+
+Where a non-null `failed_stage` may therefore sit, exhaustively: under terminals 1
+to 3 as subordinate evidence, under terminal 4 with the token its stage requires,
+under a diagnostic as a recorded observation, and nowhere else. Terminal 5 is
+absent from that list because this successor path selects Phase-A verdicts only,
+and the published set is derived from Phase-A reachability rather than from "not
+terminal 4" so the faithful terminal cannot be read as carrying a stage failure.
 
 The archive-only verifier of W3 must enforce all of it, and no producer exists in
 between.
@@ -1726,19 +1738,29 @@ as in § 7, so no terminal boundary moves.
 
 ### What this correction does not do
 
-This correction was revised in place twice under owner review before merge, which
-is why the rules above read as they do rather than as appended passes: the
+This correction was revised in place three times under owner review before merge,
+which is why the rules above read as they do rather than as appended passes: the
 correction had not merged and nothing was sealed, so revising the text is more
 honest than layering a correction onto an unsealed one, and the re-pin log records
-each revision. Three defects were fixed. A named finding admitted any non-pass
-state. The runtime binding made every stage failure unformable. And the
-cross-artifact rules were stated unconditionally, which contradicted both the
-authority boundary and the § 7 order — a build failure under a moved input had no
-admissible result, and a diagnostic that observed either could not stay
-`diagnostic_complete`. Each was found by a case the tests did not cover: the first
-by substituting a result rather than a terminal, the second by asking whether a
-truthful negative can be archived at all, the third by combining two conditions
-that had only ever been varied one at a time.
+each revision. Four defects were fixed, and each was found by a case the tests did
+not cover rather than by rereading the prose:
+
+1. a named finding admitted any non-pass state — found by substituting a *result*
+   where the sweep had only substituted a terminal;
+2. the runtime binding made every stage failure, terminal 1 included, unformable —
+   found by asking whether a truthful negative can be archived at all;
+3. the cross-artifact rules were unconditional, so a build failure under a moved
+   input had no admissible result and a diagnostic could not stay
+   `diagnostic_complete` — found by combining two conditions that had only ever
+   been varied one at a time;
+4. a stage failure was admissible beside `measurement_pass` — found by enumerating
+   the verdicts a stage failure may sit under, which is the closure the third
+   repair's own grid still left open: it fixed the verdict at terminal 4 for every
+   clean cell and so never exercised the non-terminal progression.
+
+The pattern is that a multi-condition rule is closed by an exhaustive
+classification with an invariant per cell, never by a list of cases: each defect
+above lived in a cell no case had asked about.
 
 It implements no producer, no verifier, no diagnostic mode and no controller
 change; the archive-only verifier and the producer remain the next two staged

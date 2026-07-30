@@ -17,8 +17,8 @@ document:
   path: headline_bridge_behavioral_identity_capture_declaration_20260725.md
 
 sealed_prefix:
-  bytes: 96615
-  sha256: "cf7563bbf95b5d891b4e624f50d6f90e479d13dae6886592357bf40c2c50621e"
+  bytes: 97948
+  sha256: "c73d5ed6d5a31adec8942b63b4e6cf120bbfd259abeab5caaf5712f2f5a153fa"
   # Re-pin log (each entry was a deliberate pre-seal edit, not a slip):
   #   Review reset — coordinate / bounded probe / equivalence split; content-bound
   #                  fixtures/assets/build products; v2 Layer-P certificate.
@@ -119,6 +119,16 @@ sealed_prefix:
   #             gated on terminal 4 being the ordered winner, `failed_stage` is
   #             subordinate evidence under terminals 1–3, and a diagnostic demands
   #             nothing. Re-pinned to the complete revised body.
+  #   Review Correction 9 revision 3 — owner review, third round, still before
+  #             merge. Convergent enumeration found the one verdict the gated form
+  #             had left open: `measurement_pass` was admissible beside a non-null
+  #             `failed_stage`, so one artifact could say the measurement passed
+  #             while the other said a retained stage failed. A stage failure is
+  #             now forbidden under the non-terminal progression, and the published
+  #             set of verdicts that may carry subordinate stage evidence is
+  #             derived from Phase-A reachability rather than from "not terminal
+  #             4", which had leaked terminal 5 into it. Re-pinned to the complete
+  #             revised body.
 
 policy_target:
   kind: headline
