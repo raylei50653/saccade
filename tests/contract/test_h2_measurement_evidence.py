@@ -268,6 +268,239 @@ def test_diagnostic_result_cannot_carry_measurement_authority() -> None:
     assert any("'diagnostic_complete' was expected" in message for message in messages)
 
 
+# -- cross-verdict constraints (Review Correction 9) ----------------------- #
+#
+# The schema and the ruler are two consumption paths over one partition, so the
+# expectations below are *derived* from the schema and compared to the ruler.
+# Retyping either side would let them drift and still pass.
+
+
+def _result_validator() -> jsonschema.Draft202012Validator:
+    schema = json.loads(_SUCCESSOR_SCHEMA_PATHS["result"].read_text(encoding="utf-8"))
+    return jsonschema.Draft202012Validator(schema)
+
+
+def _successor_states(**states: str) -> dict[str, dict[str, Any]]:
+    record = {
+        key: {"state": "pass", "reasons": []}
+        for key, _ in partition.SUCCESSOR_PREDICATES
+    }
+    for key, state in states.items():
+        record[key] = {"state": state, "reasons": [] if state == "pass" else ["why"]}
+    return record
+
+
+def _result_instance(
+    selection: partition.Selection, states: dict[str, dict[str, Any]]
+) -> dict[str, Any]:
+    measurement = selection.result != partition.DIAGNOSTIC_RESULT
+    return {
+        "schema": "h2_execution_result_v1",
+        "execution_id": "successor-1",
+        "authority": (
+            "exactly_once_measurement" if measurement else "non_qualifying_diagnostic"
+        ),
+        "authorization_binding_digest": "1" * 64 if measurement else None,
+        "resolved_run_spec_digest": "2" * 64,
+        "execution_semantics_projection_digest": "3" * 64,
+        "run_plan": {"sequence": "MOT17-04-SDP", "run_ids": list(evidence.RUN_IDS)},
+        "predicate_results": states,
+        "ordered_runs": [
+            {"run_id": run_id, "state": "completed", "artifact_digest": "4" * 64}
+            for run_id in evidence.RUN_IDS
+        ],
+        "result": selection.result,
+        "terminal": selection.terminal,
+    }
+
+
+def test_the_result_schema_and_the_ruler_share_one_vocabulary() -> None:
+    schema = json.loads(_SUCCESSOR_SCHEMA_PATHS["result"].read_text(encoding="utf-8"))
+    assert set(schema["properties"]["predicate_results"]["required"]) == {
+        key for key, _ in partition.SUCCESSOR_PREDICATES
+    }
+    assert set(
+        schema["$defs"]["predicate_result"]["properties"]["state"]["enum"]
+    ) == set(partition.PREDICATE_STATES)
+    # The successor enum is the ruler's mapping with the retired token dropped and
+    # the diagnostic token added — not an independently maintained list.
+    assert set(schema["properties"]["result"]["enum"]) == (
+        set(partition.RESULT_TO_TERMINAL) - set(partition.LEGACY_RESULT_SUPERSEDED_BY)
+        | {partition.DIAGNOSTIC_RESULT}
+    )
+    assert set(schema["properties"]["terminal"]["oneOf"][0]["enum"]) == {
+        name for name in partition.RESULT_TO_TERMINAL.values() if name
+    }
+
+
+def test_the_schema_pins_every_result_to_the_terminal_the_ruler_selects() -> None:
+    schema = json.loads(_SUCCESSOR_SCHEMA_PATHS["result"].read_text(encoding="utf-8"))
+    declared: dict[str, str] = {}
+    for clause in schema["allOf"]:
+        condition = clause.get("if", {}).get("properties", {}).get("result")
+        terminal = clause.get("then", {}).get("properties", {}).get("terminal", {})
+        if not condition or "const" not in terminal:
+            continue
+        for result in condition.get("enum", [condition.get("const")]):
+            declared[result] = terminal["const"]
+    assert declared == {
+        result: name
+        for result, name in partition.RESULT_TO_TERMINAL.items()
+        if name and result not in partition.LEGACY_RESULT_SUPERSEDED_BY
+    }
+
+
+@pytest.mark.parametrize(
+    "states",
+    [
+        {},
+        {"bound_input_unchanged": "fail"},
+        {"behavior_probe_equals_spec": "fail"},
+        {"runtime_binding_matches_spec": "fail"},
+        {"capture_off_on_equal": "fail"},
+        {"packets_valid": "fail"},
+        {"execution_complete": "fail"},
+        {"capture_off_on_equal": "fail", "execution_complete": "fail"},
+        {"capture_off_on_equal": "not_run", "execution_complete": "not_run"},
+    ],
+)
+def test_the_rulers_verdict_is_the_only_one_the_schema_accepts(
+    states: dict[str, str],
+) -> None:
+    """§ 20.8, mechanised across the two paths rather than asserted on each."""
+    validator = _result_validator()
+    record = _successor_states(**states)
+    for authority in partition.AUTHORITIES:
+        selection = partition.select_successor_result(
+            record, authority=authority, phase="a"
+        )
+        instance = _result_instance(selection, record)
+        assert not list(validator.iter_errors(instance)), (
+            f"the ruler's own verdict for {states} under {authority} is rejected by "
+            "the artifact schema — the two consumption paths disagree"
+        )
+        if selection.terminal is None:
+            continue
+        for other in {
+            name for name in partition.RESULT_TO_TERMINAL.values() if name
+        } - {selection.terminal}:
+            assert list(validator.iter_errors({**instance, "terminal": other})), (
+                "the schema accepted a terminal the ruler did not select"
+            )
+
+
+def test_the_schema_refuses_a_spent_authorization_with_no_terminal() -> None:
+    """The successor shape of § C3.5.1's unformable state."""
+    validator = _result_validator()
+    record = _successor_states(execution_complete="fail")
+    selection = partition.select_successor_result(
+        record, authority="exactly_once_measurement", phase="a"
+    )
+    instance = _result_instance(selection, record)
+    assert not list(validator.iter_errors(instance))
+    assert list(validator.iter_errors({**instance, "terminal": None}))
+
+
+def test_the_schema_refuses_a_clean_observation_carrying_a_terminal() -> None:
+    validator = _result_validator()
+    record = _successor_states()
+    passing = _result_instance(
+        partition.select_successor_result(
+            record, authority="exactly_once_measurement", phase="a"
+        ),
+        record,
+    )
+    assert list(
+        validator.iter_errors(
+            {
+                **passing,
+                "result": "input_mutated",
+                "terminal": "H2_INPUT_MUTATED_DURING_MEASUREMENT",
+            }
+        )
+    )
+
+
+def test_the_schema_refuses_washing_an_earlier_finding_into_terminal_four() -> None:
+    """Surviving evidence accumulates: terminal 2 may not be relabelled as 4."""
+    validator = _result_validator()
+    record = _successor_states(capture_off_on_equal="fail", execution_complete="fail")
+    selection = partition.select_successor_result(
+        record, authority="exactly_once_measurement", phase="a"
+    )
+    assert selection.order == 2
+    assert list(
+        validator.iter_errors(
+            {
+                **_result_instance(selection, record),
+                "result": "runner_nonzero",
+                "terminal": partition.EXECUTION_INVALID_TERMINAL,
+            }
+        )
+    )
+
+
+def test_the_schema_refuses_an_undecided_predicate_under_a_complete_execution() -> None:
+    validator = _result_validator()
+    record = _successor_states(capture_off_on_equal="not_run")
+    instance = _result_instance(
+        partition.Selection(
+            "runner_nonzero", partition.EXECUTION_INVALID_TERMINAL, 4, None, True, "a"
+        ),
+        record,
+    )
+    assert list(validator.iter_errors(instance))
+    with pytest.raises(partition.PartitionError, match="contradicts itself"):
+        partition.select_successor_result(
+            record, authority="exactly_once_measurement", phase="a"
+        )
+
+
+def test_the_verification_schema_binds_valid_to_its_own_checks() -> None:
+    schema = json.loads(
+        _SUCCESSOR_SCHEMA_PATHS["verification"].read_text(encoding="utf-8")
+    )
+    validator = jsonschema.Draft202012Validator(schema)
+    checks = list(schema["properties"]["checks"]["required"])
+    assert set(schema["$defs"]["all_checks_true"]["required"]) == set(checks)
+
+    def instance(**overrides: Any) -> dict[str, Any]:
+        base = {
+            "schema": "h2_execution_verification_v1",
+            "execution_id": "successor-1",
+            "resolved_run_spec_digest": "1" * 64,
+            "execution_semantics_projection_digest": "2" * 64,
+            "artifact_digests": {
+                "run_spec.json": "3" * 64,
+                "runtime_binding.json": "4" * 64,
+                "result.json": "5" * 64,
+            },
+            "checks": {name: True for name in checks},
+            "verification_process": "independent_command_separate_process",
+            "producer_invoked": False,
+            "verification_host_inputs_used": False,
+            "valid": True,
+            "reasons": [],
+        }
+        base.update(overrides)
+        return base
+
+    assert not list(validator.iter_errors(instance()))
+    assert list(validator.iter_errors(instance(valid=False, reasons=["late"])))
+    assert list(validator.iter_errors(instance(reasons=["unexplained"])))
+    for name in checks:
+        failed = {**{key: True for key in checks}, name: False}
+        assert list(validator.iter_errors(instance(checks=failed))), (
+            f"check {name} could be false while the verdict stayed valid"
+        )
+        assert not list(
+            validator.iter_errors(
+                instance(checks=failed, valid=False, reasons=[f"{name} failed"])
+            )
+        )
+        assert list(validator.iter_errors(instance(checks=failed, valid=False)))
+
+
 # -- evidence-root construction -------------------------------------------- #
 
 

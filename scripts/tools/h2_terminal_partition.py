@@ -196,6 +196,7 @@ RESULT_TO_TERMINAL: dict[str, str | None] = {
     "input_mutated": "H2_INPUT_MUTATED_DURING_MEASUREMENT",
     "behavior_probe_moved": "H2_INPUT_MUTATED_DURING_MEASUREMENT",
     "certificate_mismatch": "H2_INPUT_MUTATED_DURING_MEASUREMENT",
+    "runtime_binding_mismatch": "H2_INPUT_MUTATED_DURING_MEASUREMENT",
     # -> terminal 2
     "capture_perturbs_policy": "H2_CAPTURE_PERTURBS_POLICY",
     # -> terminal 3
@@ -226,6 +227,66 @@ ORDERED_PREDICATES: tuple[tuple[str, str], ...] = (
 
 # Predicates whose *false* value selects the failure, vs whose *true* value does.
 _TRUE_IS_FAILURE = frozenset({"bound_input_mutated"})
+
+# ---------------------------------------------------------------------------
+# The successor vocabulary (Review Correction 9)
+#
+# `h2_execution_result_v1` names the same partition with different words: three
+# predicates are renamed, one of them with inverted polarity, and a predicate is
+# no longer a bool. Both vocabularies must resolve to *this* partition or the two
+# archive generations answer differently about the same world — and the schema
+# alone cannot compute a selection, so the mapping lives here and is published.
+# ---------------------------------------------------------------------------
+
+AUTHORITIES: tuple[str, ...] = ("non_qualifying_diagnostic", "exactly_once_measurement")
+
+# The only result a diagnostic may record. A diagnostic records every failed
+# predicate and selects no terminal: it is not a measurement that happened to
+# pass, and no green diagnostic qualifies or authorizes one (§ Review
+# Correction 5).
+DIAGNOSTIC_RESULT = "diagnostic_complete"
+
+PREDICATE_STATES: tuple[str, ...] = ("pass", "fail", "error", "not_run")
+PASS_STATE = "pass"
+FAIL_STATE = "fail"
+# Neither a pass nor a decided failure: the measurement did not decide this
+# predicate. Reading either as a pass is how a fail-closed check becomes
+# fail-open, so they are non-passes that name no result of their own.
+UNDECIDED_STATES: tuple[str, ...] = ("error", "not_run")
+
+# The successor spelling of `ORDERED_PREDICATES`, in the same order — the order
+# is the partition, so it may not drift between the two vocabularies.
+SUCCESSOR_PREDICATES: tuple[tuple[str, str], ...] = (
+    ("bound_input_unchanged", "input_mutated"),
+    ("behavior_probe_equals_spec", "behavior_probe_moved"),
+    ("runtime_binding_matches_spec", "runtime_binding_mismatch"),
+    ("capture_off_on_equal", "capture_perturbs_policy"),
+    ("packets_valid", "packet_invalid"),
+    ("execution_complete", "unclassified_execution_failure"),
+)
+
+# Successor predicate key -> the legacy key it renames. Historical archives keep
+# the legacy spelling, so the two must remain mutually resolvable.
+SUCCESSOR_TO_LEGACY_PREDICATE: dict[str, str] = {
+    "bound_input_unchanged": "bound_input_mutated",
+    "behavior_probe_equals_spec": "behavior_probe_equals_freeze",
+    "runtime_binding_matches_spec": "layer_p_certificate_matches_freeze",
+    "capture_off_on_equal": "capture_off_on_equal",
+    "packets_valid": "packets_valid",
+    "execution_complete": "execution_complete",
+}
+
+# The rename that also flips polarity: the legacy predicate is true when the
+# world is *broken*, the successor predicate is true when it is intact. A
+# consumer that maps names without the polarity gets terminal 1 exactly backwards.
+INVERTED_POLARITY_PREDICATES = frozenset({"bound_input_unchanged"})
+
+# Correction 5 retires the Layer-P certificate, so the result it named is
+# superseded rather than deleted: the historical archives that recorded
+# `certificate_mismatch` keep their meaning, and both tokens select terminal 1.
+LEGACY_RESULT_SUPERSEDED_BY: dict[str, str] = {
+    "certificate_mismatch": "runtime_binding_mismatch",
+}
 
 # The § C3.6 admission gate, in the clause's own order (a–e). These are NOT
 # predicates of the partition: they are evaluated *before* the § C3.5.1 step-5
@@ -445,12 +506,10 @@ def select_terminal(
         if result == "unclassified_execution_failure":
             # Let the caller name the execution cause; every legal name still maps
             # to terminal 4, so a mislabelled cause cannot change the terminal.
-            named = observation.get("execution_result", result)
-            if RESULT_TO_TERMINAL.get(named) != "H2_MEASUREMENT_EXECUTION_INVALID":
-                raise PartitionError(
-                    f"execution_result {named!r} does not map to terminal 4"
-                )
-            result = named
+            # Shared with the successor vocabulary: one rule, one implementation.
+            result = _named_execution_result(
+                observation.get("execution_result"), result
+            )
         return _selection(result, phase=phase)
 
     if phase == "b":
@@ -465,6 +524,111 @@ def select_terminal(
             "measurement_pass", phase=phase, terminal_override=TERMINALS[4].name
         )
     return _selection("measurement_pass", phase=phase)
+
+
+def select_successor_result(
+    predicate_results: Mapping[str, Any],
+    *,
+    authority: str,
+    phase: str,
+    execution_result: str | None = None,
+) -> Selection:
+    """Select from a `h2_execution_result_v1` observation. Total and fail-closed.
+
+    The successor artifact widened a predicate from a bool to four states, so the
+    two undecided states need a rule the legacy partition never had, and getting
+    it wrong reintroduces two defects this unit already paid for:
+
+    * **A decided failure outranks an undecided predicate, wherever it sits.**
+      Not "first applicable over the raw states": an `error` on an early
+      predicate must not wash a later capture-perturbation or invalid-packet
+      *finding* into terminal 4, or killing a process on sight would launder a
+      banned terminal into a re-attemptable one. Among decided failures the
+      partition's order decides, exactly as before.
+    * **An undecided predicate cannot coexist with a complete execution.**
+      If nothing failed but something was not decided, the execution did not
+      complete, and `execution_complete` must say so; a record claiming both is
+      internally contradictory and is refused rather than mapped.
+
+    A diagnostic selects `diagnostic_complete` and no terminal whatever its
+    predicates say — that is the authority boundary, not a shortcut.
+    """
+    if authority not in AUTHORITIES:
+        raise PartitionError(
+            f"unknown authority: {authority!r}; expected one of {list(AUTHORITIES)}"
+        )
+    if _checked_phase(phase) != "a":
+        raise PartitionError(
+            "the successor artifact contract defines the Phase-A four-run plan only; "
+            "a Phase-B run plan is not part of h2_execution_result_v1 (§ C3.2 item 10)"
+        )
+
+    states: dict[str, str] = {}
+    for key, _ in SUCCESSOR_PREDICATES:
+        record = predicate_results.get(key)
+        if not isinstance(record, Mapping) or "state" not in record:
+            raise PartitionError(f"predicate {key} is missing its state record")
+        state = record["state"]
+        if state not in PREDICATE_STATES:
+            raise PartitionError(
+                f"predicate {key} has an unknown state: {state!r}; expected one of "
+                f"{list(PREDICATE_STATES)}"
+            )
+        states[key] = state
+    unknown = sorted(set(predicate_results) - set(states))
+    if unknown:
+        raise PartitionError(
+            f"observation carries predicates outside the partition: {unknown}"
+        )
+
+    if authority == "non_qualifying_diagnostic":
+        if execution_result is not None:
+            raise PartitionError(
+                "a diagnostic selects no terminal, so it names no execution result"
+            )
+        return Selection(DIAGNOSTIC_RESULT, None, None, None, True, phase)
+
+    for key, result in SUCCESSOR_PREDICATES:
+        if states[key] != FAIL_STATE:
+            continue
+        if result == "unclassified_execution_failure":
+            return _selection(
+                _named_execution_result(execution_result, result), phase=phase
+            )
+        if execution_result is not None:
+            raise PartitionError(
+                f"predicate {key} failed, which selects {result!r}: an execution "
+                "result may name terminal 4's cause only when terminal 4 is selected"
+            )
+        return _selection(result, phase=phase)
+
+    undecided = sorted(key for key, state in states.items() if state != PASS_STATE)
+    if undecided:
+        if states["execution_complete"] == PASS_STATE:
+            raise PartitionError(
+                f"predicates {undecided} are undecided while execution_complete "
+                "passed: a complete execution decides every predicate, so this "
+                "record contradicts itself"
+            )
+        return _selection(
+            _named_execution_result(execution_result, "unclassified_execution_failure"),
+            phase=phase,
+        )
+
+    if execution_result is not None:
+        raise PartitionError(
+            "every predicate passed, so no execution result may be named"
+        )
+    return _selection("measurement_pass", phase=phase)
+
+
+def _named_execution_result(named: str | None, default: str) -> str:
+    """Let the caller name terminal 4's cause; every legal name still maps to it."""
+    if named is None:
+        return default
+    if RESULT_TO_TERMINAL.get(named) != EXECUTION_INVALID_TERMINAL:
+        raise PartitionError(f"execution_result {named!r} does not map to terminal 4")
+    return named
 
 
 def _selection(
@@ -523,6 +687,23 @@ def as_payload() -> dict[str, Any]:
         },
         "phases": list(PHASES),
         "result_to_terminal": RESULT_TO_TERMINAL,
+        # The successor vocabulary, published for the same reason as the phase
+        # narrowing above: an implementer reading only this payload must reach the
+        # verdict `select_successor_result` reaches, including the two rules the
+        # four-state predicate needs (§ 20.8).
+        "successor_vocabulary": {
+            "authorities": list(AUTHORITIES),
+            "diagnostic_result": DIAGNOSTIC_RESULT,
+            "diagnostic_selects_no_terminal": True,
+            "ordered_predicates": [list(item) for item in SUCCESSOR_PREDICATES],
+            "predicate_states": list(PREDICATE_STATES),
+            "undecided_states": list(UNDECIDED_STATES),
+            "decided_failure_outranks_undecided": True,
+            "undecided_requires_incomplete_execution": True,
+            "predicate_renames": dict(SUCCESSOR_TO_LEGACY_PREDICATE),
+            "inverted_polarity_predicates": sorted(INVERTED_POLARITY_PREDICATES),
+            "legacy_result_superseded_by": dict(LEGACY_RESULT_SUPERSEDED_BY),
+        },
         "terminals": [terminal._asdict() for terminal in TERMINALS],
     }
 
