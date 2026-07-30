@@ -1,13 +1,14 @@
-name: Runtime Coordinate + Probe Re-attestation
+name: H2 Controlled-host Runtime Diagnostic
 
-# Static coordinate axes are checked on every push. This controlled-host job also
-# content-binds fixtures/assets and reruns the bounded MOT17-09 behavior probe.
-# Probe equality does not establish equivalence.
+# Manual, non-qualifying diagnostic only. It content-binds fixtures/assets,
+# rebuilds the native extension and reruns the bounded MOT17-09 behavior probe
+# when an operator explicitly asks for that observation.
 #
-# It publishes nothing and seals nothing. It answers exactly one question: does
-# the committed `docs/reference/runtime_identity.generated.json` still describes
-# this coordinate and bounded probe? A mismatch requires republication or
-# re-attestation; equality is not an equivalence proof.
+# It is not a pull-request or main-branch gate, publishes nothing, seals nothing
+# and grants no execution authority. The successor execution-integrity path
+# records the bytes used by one execution; it does not require another host to
+# reproduce this workflow's build, environment or bounded observation. Probe
+# equality remains diagnostic and does not establish equivalence.
 
 on:
   workflow_dispatch:
@@ -17,79 +18,6 @@ on:
         required: true
         default: main
         type: string
-  pull_request:
-    branches: [main]
-    paths:
-      - "src/**"
-      - "include/**"
-      - "configs/presets/mamba_whole_graph_m.yaml"
-      - "scripts/eval/**"
-      - "scripts/tools/resolved_bridge_policy_config.py"
-      - "CMakeLists.txt"
-      - "pyproject.toml"
-      - "uv.lock"
-      - "datasets/**"
-      - "models/**"
-      - "runs/**"
-      - "third_party/**"
-      - ".github/workflows/runtime_identity.yml"
-      - "scripts/pre_push.sh"
-      - "scripts/tools/h2_behavioral_identity.py"
-      - "scripts/tools/h2_path_partition.py"
-      - "scripts/tools/h2_runtime_inputs.py"
-      - "scripts/tools/h2_terminal_partition.py"
-      - "scripts/tools/h2_run_spec.py"
-      - "scripts/tools/build_runtime_identity.py"
-      - "scripts/tools/check_runtime_identity_staleness.py"
-      - "scripts/tools/run_h2_layer_p.py"
-      - "docs/research/contracts/h2_phase_a_authoring_profile_v1.json"
-      - "docs/research/contracts/h2_phase_a_authoring_profile_v1.schema.json"
-      - "docs/research/contracts/h2_phase_a_run_spec_authoring_decision_v1.json"
-      - "docs/research/contracts/h2_phase_a_run_spec_v1.json"
-      - "docs/research/contracts/h2_runtime_binding_v1.json"
-      - "docs/research/contracts/h2_execution_result_v1.json"
-      - "docs/research/contracts/h2_execution_verification_v1.json"
-      - "docs/modules/semantic/research/headline_bridge_behavioral_identity_capture_declaration_20260725.policy.yaml"
-      - "docs/reference/runtime_identity.generated.json"
-  push:
-    branches: [main]
-    paths:
-      # Implementation coordinate.
-      - "src/**"
-      - "include/**"
-      - "configs/presets/mamba_whole_graph_m.yaml"
-      - "scripts/eval/**"
-      - "scripts/tools/resolved_bridge_policy_config.py"
-      # Environment/plumbing coordinate.
-      - "CMakeLists.txt"
-      - "pyproject.toml"
-      - "uv.lock"
-      # Versioned runtime inputs (ignored host-local assets are still rebound
-      # when another trigger runs this job).
-      - "datasets/**"
-      - "models/**"
-      - "runs/**"
-      - "third_party/**"
-      # The ruler itself.
-      - ".github/workflows/runtime_identity.yml"
-      - "scripts/pre_push.sh"
-      - "scripts/tools/h2_behavioral_identity.py"
-      - "scripts/tools/h2_path_partition.py"
-      - "scripts/tools/h2_runtime_inputs.py"
-      - "scripts/tools/h2_terminal_partition.py"
-      - "scripts/tools/h2_run_spec.py"
-      - "scripts/tools/build_runtime_identity.py"
-      - "scripts/tools/check_runtime_identity_staleness.py"
-      - "scripts/tools/run_h2_layer_p.py"
-      - "docs/research/contracts/h2_phase_a_authoring_profile_v1.json"
-      - "docs/research/contracts/h2_phase_a_authoring_profile_v1.schema.json"
-      - "docs/research/contracts/h2_phase_a_run_spec_authoring_decision_v1.json"
-      - "docs/research/contracts/h2_phase_a_run_spec_v1.json"
-      - "docs/research/contracts/h2_runtime_binding_v1.json"
-      - "docs/research/contracts/h2_execution_result_v1.json"
-      - "docs/research/contracts/h2_execution_verification_v1.json"
-      - "docs/modules/semantic/research/headline_bridge_behavioral_identity_capture_declaration_20260725.policy.yaml"
-      - "docs/reference/runtime_identity.generated.json"
 
 permissions:
   contents: read
@@ -99,19 +27,15 @@ env:
   UV_EXTRA_INDEX_URL: https://pypi.nvidia.com/
 
 jobs:
-  behavior-axis:
-    # Never execute untrusted fork code on the controlled self-hosted runner.
-    if: >-
-      github.event_name != 'pull_request' ||
-      github.event.pull_request.head.repo.full_name == github.repository
+  controlled-host-diagnostic:
     # Same controlled host as H0 qualification: it supplies the real CUDA /
-    # TensorRT runtime closure. This job enters no research authority and reads
-    # no research inputs; it only recomputes a digest and compares it.
+    # TensorRT runtime closure. This job enters no research authority; it only
+    # recomputes a diagnostic digest and compares it.
     runs-on: [self-hosted, linux, x64, h0-qualification]
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.ref || github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ inputs.ref }}
           fetch-depth: 1
 
       - name: Bind controlled host-local runtime inputs into the checkout

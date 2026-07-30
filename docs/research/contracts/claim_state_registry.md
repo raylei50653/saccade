@@ -830,7 +830,7 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
     date: 2026-07-30
     authority: "H2 declaration Review Correction 5"
     requirement: "execution integrity, not environment reproducibility"
-    status: declared; artifact contract / resolver / producer / verifier / controller migration not yet implemented
+    status: artifact schemas / frozen authoring profile / resolver landed in PR #305; producer / verifier / controller migration not yet implemented
     sole_configuration_authority: complete canonical resolved RunSpec namespace
     diagnostic_measurement_bridge:
       - resolved_run_spec_digest
@@ -867,7 +867,7 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
   run_spec_authoring_profile_decided:
     date: 2026-07-30
     authority: "H2 declaration Review Correction 6 / research_owner"
-    status: decided; frozen authoring profile and resolver implemented in staged PR #305
+    status: decided; frozen authoring profile and resolver implemented and merged in PR #305
     profile: docs/research/contracts/h2_phase_a_authoring_profile_v1.json
     profile_sha256: cadcfeb56c3ecfef1f208f901bed92f931438158b8d8c3c05779c7db7bccacfe
     profile_schema: docs/research/contracts/h2_phase_a_authoring_profile_v1.schema.json
@@ -899,7 +899,7 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
   run_spec_canonical_byte_domains_clarified:
     date: 2026-07-30
     authority: "H2 declaration Review Correction 7"
-    status: clarified in staged PR #305; no authoring-profile change
+    status: clarified and merged in PR #305; no authoring-profile change
     object_canonicalization: utf8_lexicographic_keys_compact_finite_no_trailing_lf_v1
     artifact_serialization: utf8_lexicographic_keys_compact_finite_single_trailing_lf_v1
     object_digest_domain: finite compact canonical JSON bytes with lexicographic keys and no trailing LF
@@ -908,6 +908,25 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
     profile_sha256_unchanged: cadcfeb56c3ecfef1f208f901bed92f931438158b8d8c3c05779c7db7bccacfe
     authorization_effect: none
     not_established: no Phase-A execution; no authorization; no F/S; no seal; no corpus admission; no equivalence claim
+  controlled_host_diagnostic_downgraded:
+    date: 2026-07-30
+    authority: "H2 declaration Review Correction 8 / research_owner"
+    requirement: "execution integrity retains independent verification, not foreign-host reconstruction"
+    workflow: .github/workflows/runtime_identity.yml
+    trigger: workflow_dispatch only
+    status: manual non-qualifying diagnostic; not a PR, main, seal, admission or measurement gate
+    diagnostic_scope:
+      - controlled-host dependency and native build health
+      - runtime-input binding
+      - bounded MOT17-09 observation drift
+    successor_authority:
+      retained: per-execution build_binding / extension_load / identity_run and runtime_binding.json
+      verifier: archive-only and foreign-host-independent; does not rebuild the execution
+      published_coordinate_probe_equality: recorded observation only
+    history_preserved: pre-correction workflow run records, Item 4 records, runtime-coordinate publication and both historical H2 archive paths remain historical facts
+    publication_transition: legacy static axes republished once from existing read-only probe/runtime-input records; no controlled-host or native rebuild
+    authorization_effect: none
+    not_established: no workflow dispatch; no controlled-host/native rebuild; no Phase-A execution; no authorization; no F/S; no seal; no corpus admission; no equivalence claim
 pending_reentry:                          # append-only; pre-seal, no terminal claimed; route-1 永久留帳結論不變
   - date: 2026-07-21
     scheduling: owner-scheduled re-entry #3（滿足 line-337 future_reentry_precondition:launch-hygiene gate 先行）

@@ -404,7 +404,7 @@ artifact in this repository can supply.
 | `scripts/tools/build_runtime_identity.py` · `check_runtime_identity_staleness.py` | coordinate/probe publisher and staleness verdicts |
 | `docs/reference/runtime_identity.generated.json` | published coordinate + probe |
 | `../contracts/runtime_identity_bindings_v1.json` | `captured_under` sidecar home |
-| `.github/workflows/runtime_identity.yml` | controlled-host re-attestation (same-repo PR head + main) |
+| `.github/workflows/runtime_identity.yml` | manual, non-qualifying controlled-host runtime diagnostic |
 | `../../modules/semantic/research/evidence/h2_measure_7646f421a85a580e37e457def5e8ddc7c4bfa0ab/` | the 2026-07-28 controller archive — a spent attempt with a negative terminal and zero capture, committed at its canonical corpus position; CI enforces its inventory, and full re-verification waits on the host-binding defect of §4.2 |
 | `../../modules/semantic/research/evidence/h2_phase_a_failed_attempt_7646f421_20260728/` | that attempt's adjudication, root-cause reproduction and custody record |
 | `../../modules/semantic/research/evidence/h2_phase_a_failed_attempt_0a5dffe9_20260727/` | the 2026-07-27 attempt's failure evidence, including its own controller archive |
@@ -439,6 +439,15 @@ coordinate/probe equality as a measurement gate, and commit/tree identity as a
 validity gate. The bounded probe remains a recorded observation and
 `equivalence` remains `unproven`. The two historical archives retain their
 original schema and full verifier path.
+
+Declaration Review Correction 8 applies that boundary to CI:
+`.github/workflows/runtime_identity.yml` is now a `workflow_dispatch`-only,
+non-qualifying controlled-host diagnostic. It no longer runs automatically for
+pull requests or `main`, and its result cannot qualify or invalidate a successor
+execution. The successor producer still performs the retained build, binding,
+extension-load and identity-run stages inside the execution whose bytes it
+records; independent archive verification remains foreign-host independent and
+does not rebuild the execution.
 
 At the declaration base head
 `1a74276527b682587c7f23babd03eb6fb4bcf6b7`, Item 4 (workflow run
@@ -1404,3 +1413,17 @@ Additionally, and specific to the accepted decisions:
   identifiers: object digests cover compact finite canonical JSON with no
   trailing LF, while `run_spec.json` serialization adds exactly one trailing
   LF. The frozen 454-key authoring profile and its SHA-256 remain unchanged.
+
+- **2026-07-30 — controlled-host workflow downgraded to manual diagnostic.**
+  Review Correction 8 removes the pull-request and `main` triggers from
+  `.github/workflows/runtime_identity.yml`. Correction 5 already retired
+  cross-host reconstruction, published coordinate/probe equality and unrelated-
+  commit re-attestation as successor validity gates; keeping the expensive
+  rebuild automatic would preserve their cost without their authority. Manual
+  runs remain available for CUDA/TensorRT/input/probe diagnosis only. The
+  successor execution still owns its build binding, extension load and identity
+  run, and its archive remains independently verifiable without reconstruction.
+  The legacy publication's static axes were regenerated from the existing
+  read-only probe/runtime-input records; no workflow was dispatched and no
+  controlled-host or native artifact was rebuilt. No authorization, execution,
+  seal, corpus admission or equivalence transition occurred.

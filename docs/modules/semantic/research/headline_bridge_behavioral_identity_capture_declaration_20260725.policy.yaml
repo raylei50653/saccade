@@ -17,8 +17,8 @@ document:
   path: headline_bridge_behavioral_identity_capture_declaration_20260725.md
 
 sealed_prefix:
-  bytes: 85687
-  sha256: "d289523b133fefdff432fd4fe95245117a22b76eb47a03dcbdbcca7b8195deb2"
+  bytes: 87763
+  sha256: "8052042eae637d84ea60e03aba2fada81ae53371ebda61e3b8b7d666841de02e"
   # Re-pin log (each entry was a deliberate pre-seal edit, not a slip):
   #   Review reset — coordinate / bounded probe / equivalence split; content-bound
   #                  fixtures/assets/build products; v2 Layer-P certificate.
@@ -85,6 +85,12 @@ sealed_prefix:
   #   Review Correction 7 — separates no-trailing-LF object canonicalization
   #             from single-trailing-LF RunSpec artifact serialization so an
   #             archive-only verifier has one unambiguous digest byte domain.
+  #             Re-pinned to the complete post-correction body.
+  #   Review Correction 8 — makes the controlled-host reconstruction workflow
+  #             manual diagnostic only after Correction 5 retired environment
+  #             reproducibility and published coordinate/probe equality as
+  #             successor gates. Foreign-host-independent archive verification
+  #             and per-execution build/load/identity binding remain required.
   #             Re-pinned to the complete post-correction body.
 
 policy_target:

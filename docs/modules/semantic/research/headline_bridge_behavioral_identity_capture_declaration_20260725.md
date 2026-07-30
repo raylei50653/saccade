@@ -1572,3 +1572,39 @@ This clarification changes no frozen authoring-profile bytes, values, lineage,
 authority or interpretation closure. It issues no authorization, executes no
 sequence, rebuilds no native artifact, creates no `F`/`S`, seals nothing,
 admits nothing to the corpus and makes no equivalence claim.
+
+## Review Correction 8 — controlled-host reconstruction is diagnostic only (2026-07-30, pre-seal)
+
+Correction 5 retired environment reproducibility and equality with a published
+coordinate or bounded probe as successor measurement gates. The remaining
+automatic pull-request and `main` triggers for
+`.github/workflows/runtime_identity.yml` would nevertheless keep paying that
+retired cost: bind a controlled host's complete runtime inputs, rebuild native
+artifacts and reproduce the bounded observation for every matching source or
+ruler edit.
+
+The workflow is therefore **manual diagnostic only**:
+
+- `workflow_dispatch` is its sole trigger;
+- it is not a required pull-request, merge, seal, admission or measurement gate;
+- its output may report controlled-host build, input or bounded-probe drift, but
+  cannot invalidate or qualify a successor execution record;
+- probe equality remains only a recorded observation and cannot establish
+  behavior preservation or equivalence.
+
+This does not remove execution-time integrity. The successor producer still
+retains Layer P's ordered `build`, `build_binding`, `extension_load` and
+`identity_run` stages. `runtime_binding.json` records the code, input and native
+bytes actually consumed by that execution, and the independent verifier judges
+the resulting archive without rebuilding it or consulting the verification
+host. Foreign-host-independent **verification** remains required; foreign-host
+reconstruction does not.
+
+The checked-in runtime-coordinate publication, all pre-correction workflow run
+records, historical Item 4 records and both historical H2 archive verifier paths
+remain truthful history. None becomes successor authority. The legacy
+publication's static axes are republished once for this ruler edit from the
+existing read-only probe and runtime-input records; no controlled-host or native
+rebuild is performed. This correction does not dispatch the manual workflow, run
+any sequence, issue or consume authorization, create `F`/`S`, seal or admit an
+archive, or change `equivalence.state` from `unproven`.
