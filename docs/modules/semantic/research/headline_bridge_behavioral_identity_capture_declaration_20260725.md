@@ -1689,15 +1689,34 @@ Absence, never a fabricated success shape, is how an unreached stage is recorded
 by `unclassified_execution_failure` with the stage named in the binding: the
 cause is recorded without inventing a terminal boundary.
 
-**Two cross-artifact rules the schemas cannot express** are published by
+**The cross-artifact rules the schemas cannot express** are published by
 `h2_terminal_partition.as_payload()` and are **verifier obligations**, since no
-JSON Schema sees two files at once: `build_failed` holds exactly when
-`failed_stage` is `build` and `extension_load_failed` exactly when it is
-`extension_load` — otherwise the two new tokens are interchangeable labels rather
-than stage evidence — and `input_mutated` holds exactly when the monitor recorded
-a change or an unclean final drain. Relaxing the monitor is what makes terminal 1
-recordable, and the biconditional is what keeps it honest; the archive-only
-verifier of W3 must enforce both, and no producer exists in between.
+JSON Schema sees two files at once. They are not unconditional: stage evidence is
+subordinate to the authority boundary and to the § 7 order, and a rule that
+ignores either makes truthful records unformable.
+
+- `build_failed` requires `failed_stage` to be `build`, and
+  `extension_load_failed` requires `extension_load`. This direction is
+  unconditional: a named cause that does not name a failed stage is a label, which
+  is the defect the two re-admitted tokens exist to avoid.
+- The reverse direction holds **only when terminal 4 is the ordered winner**. A
+  build that failed while a bound input moved is a real observation: terminal 1
+  outranks terminal 4, so the result is `input_mutated` while `failed_stage`
+  remains `build` as subordinate evidence. Under terminals 1 to 3 a non-null
+  `failed_stage` is recorded and changes no verdict; demanding its token there
+  would let stage evidence overturn a higher-order finding, and combined with the
+  mutation rule would leave that observation with **no admissible result at all**.
+- `input_mutated` holds exactly when the monitor recorded a change or an unclean
+  final drain, in both directions, because terminal 1 is the highest order and a
+  recorded change cannot lose to anything. Relaxing the monitor is what makes
+  terminal 1 recordable; this biconditional is what keeps it honest.
+- **A diagnostic demands nothing.** It records every failed predicate and every
+  stage failure and still resolves to `diagnostic_complete`, so requiring a
+  mutation or a failed stage to change its result would contradict the authority
+  boundary this correction states three paragraphs above.
+
+The archive-only verifier of W3 must enforce all of it, and no producer exists in
+between.
 
 **`build_failed` and `extension_load_failed` are re-admitted as result tokens.**
 Correction 5 *retains* the `build` and `extension_load` stages, so their failures
@@ -1707,12 +1726,19 @@ as in § 7, so no terminal boundary moves.
 
 ### What this correction does not do
 
-This correction was revised in place under owner review before merge, which is
-why the rules above read as they do rather than as an appended fourth pass: the
+This correction was revised in place twice under owner review before merge, which
+is why the rules above read as they do rather than as appended passes: the
 correction had not merged and nothing was sealed, so revising the text is more
-honest than layering a correction onto an unsealed one. Two defects were fixed —
-a named finding admitted any non-pass state, and the runtime binding made every
-stage failure unformable — and the re-pin log records the revision.
+honest than layering a correction onto an unsealed one, and the re-pin log records
+each revision. Three defects were fixed. A named finding admitted any non-pass
+state. The runtime binding made every stage failure unformable. And the
+cross-artifact rules were stated unconditionally, which contradicted both the
+authority boundary and the § 7 order — a build failure under a moved input had no
+admissible result, and a diagnostic that observed either could not stay
+`diagnostic_complete`. Each was found by a case the tests did not cover: the first
+by substituting a result rather than a terminal, the second by asking whether a
+truthful negative can be archived at all, the third by combining two conditions
+that had only ever been varied one at a time.
 
 It implements no producer, no verifier, no diagnostic mode and no controller
 change; the archive-only verifier and the producer remain the next two staged

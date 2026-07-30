@@ -2402,6 +2402,18 @@ def test_the_cross_artifact_rules_are_published_for_the_verifier() -> None:
         "extension_load_failed": "extension_load",
     }
     assert published["result_requires_input_mutation"] == "input_mutated"
+    # The reverse direction is gated on the ordered verdict, and the payload must
+    # say so or a payload-only implementer rebuilds the deadlock.
+    assert (
+        published["failed_stage_requires_result_only_when_terminal"]
+        == partition.EXECUTION_INVALID_TERMINAL
+    )
+    assert published["failed_stage_is_subordinate_evidence_under_terminals"] == sorted(
+        terminal.name
+        for terminal in partition.TERMINALS
+        if terminal.name != partition.EXECUTION_INVALID_TERMINAL
+    )
+    assert published["diagnostic_records_evidence_without_demanding_a_result"] is True
     schema = json.loads(
         _SUCCESSOR_SCHEMA_PATHS["runtime_binding"].read_text(encoding="utf-8")
     )
@@ -2410,53 +2422,166 @@ def test_the_cross_artifact_rules_are_published_for_the_verifier() -> None:
     )
 
 
+_MONITOR_CLEAN = {
+    "started_before_binding": True,
+    "changed_count": 0,
+    "final_drain_clean": True,
+}
+_MONITOR_MUTATED = {
+    "started_before_binding": True,
+    "changed_count": 1,
+    "final_drain_clean": False,
+}
+_T1 = "H2_INPUT_MUTATED_DURING_MEASUREMENT"
+_T4 = "H2_MEASUREMENT_EXECUTION_INVALID"
+
+
 @pytest.mark.parametrize(
-    ("result", "failed_stage", "changed", "expected"),
+    ("result", "terminal", "stage", "mutated", "expected"),
     [
-        ("measurement_pass", None, 0, ()),
-        ("build_failed", "build", 0, ()),
-        ("build_failed", None, 0, ("build_failed requires failed_stage 'build'",)),
+        # the token -> stage direction is unconditional
+        ("build_failed", _T4, "build", False, ()),
+        ("build_failed", _T4, None, False, ("requires failed_stage 'build'",)),
         (
+            # violates both directions at once, and says both
             "build_failed",
+            _T4,
             "extension_load",
-            0,
-            ("build_failed requires failed_stage 'build'",),
+            False,
+            (
+                "requires failed_stage 'build'",
+                "requires result 'extension_load_failed'",
+            ),
         ),
-        ("extension_load_failed", "extension_load", 0, ()),
-        ("runner_nonzero", None, 0, ()),
-        (
-            "runner_nonzero",
-            "build",
-            0,
-            ("failed_stage 'build' requires result 'build_failed'",),
-        ),
-        ("unclassified_execution_failure", "build_binding", 0, ()),
-        ("unclassified_execution_failure", "identity_run", 0, ()),
-        ("input_mutated", None, 2, ()),
-        ("input_mutated", None, 0, ("input_mutated requires the monitor",)),
+        ("extension_load_failed", _T4, "extension_load", False, ()),
+        # the stage -> token direction only when terminal 4 is the ordered winner
+        ("runner_nonzero", _T4, None, False, ()),
+        ("runner_nonzero", _T4, "build", False, ("requires result 'build_failed'",)),
+        ("unclassified_execution_failure", _T4, "build_binding", False, ()),
+        ("unclassified_execution_failure", _T4, "identity_run", False, ()),
+        ("runner_timeout", _T4, "identity_run", False, ("no dedicated result token",)),
+        # terminal 1 wins and the stage stays as subordinate evidence
+        ("input_mutated", _T1, "build", True, ()),
+        ("input_mutated", _T1, "extension_load", True, ()),
+        ("input_mutated", _T1, None, True, ()),
+        ("build_failed", _T1, "build", True, ("outranks every other finding",)),
+        # the mutation rule stays biconditional for a measurement
+        ("input_mutated", _T1, None, False, ("requires the monitor to record",)),
         (
             "packet_invalid",
+            "H2_PACKET_INVALID",
             None,
-            2,
-            ("a recorded input change requires result 'input_mutated'",),
+            True,
+            ("outranks every other finding",),
         ),
+        ("measurement_pass", None, None, False, ()),
     ],
 )
-def test_the_binding_agreement_checker_is_a_biconditional(
-    result: str, failed_stage: str | None, changed: int, expected: tuple[str, ...]
+def test_the_cross_artifact_rules_respect_authority_and_precedence(
+    result: str,
+    terminal: str | None,
+    stage: str | None,
+    mutated: bool,
+    expected: tuple[str, ...],
 ) -> None:
     reasons = partition.binding_agreement_reasons(
         result,
-        failed_stage=failed_stage,
-        input_monitor={
-            "started_before_binding": True,
-            "changed_count": changed,
-            "final_drain_clean": True,
-        },
+        authority="exactly_once_measurement",
+        selected_terminal=terminal,
+        failed_stage=stage,
+        input_monitor=_MONITOR_MUTATED if mutated else _MONITOR_CLEAN,
     )
-    assert len(reasons) == len(expected)
+    assert len(reasons) == len(expected), reasons
     for reason, fragment in zip(reasons, expected):
         assert fragment in reason
+
+
+@pytest.mark.parametrize(
+    "stage", [None, "build", "build_binding", "extension_load", "identity_run"]
+)
+@pytest.mark.parametrize("mutated", [False, True])
+def test_a_moved_input_always_leaves_one_admissible_result(
+    stage: str | None, mutated: bool
+) -> None:
+    """The combination the single-factor matrix missed: no cell may be a deadlock.
+
+    A build that failed while a bound input moved is a real observation. With the
+    stage rule running unconditionally, `input_mutated` was refused for naming no
+    build failure and `build_failed` was refused for ignoring the mutation, so a
+    truthful archive had no admissible result at all.
+    """
+    monitor = _MONITOR_MUTATED if mutated else _MONITOR_CLEAN
+    terminal = _T1 if mutated else _T4
+    admissible = [
+        result
+        for result in partition.RESULT_TO_TERMINAL
+        if result not in partition.LEGACY_RESULT_SUPERSEDED_BY
+        and partition.RESULT_TO_TERMINAL[result] == terminal
+        and not partition.binding_agreement_reasons(
+            result,
+            authority="exactly_once_measurement",
+            selected_terminal=terminal,
+            failed_stage=stage,
+            input_monitor=monitor,
+        )
+    ]
+    assert admissible, (
+        f"no result agrees with failed_stage={stage!r} and mutated={mutated} — the "
+        "cross-artifact rules deadlock on a formable observation"
+    )
+    if mutated:
+        assert admissible == ["input_mutated"]
+
+
+@pytest.mark.parametrize(
+    "stage", [None, "build", "build_binding", "extension_load", "identity_run"]
+)
+@pytest.mark.parametrize("mutated", [False, True])
+def test_a_diagnostic_records_stage_evidence_without_demanding_a_result(
+    stage: str | None, mutated: bool
+) -> None:
+    """A diagnostic stays `diagnostic_complete` however red it is (Correction 5)."""
+    assert (
+        partition.binding_agreement_reasons(
+            partition.DIAGNOSTIC_RESULT,
+            authority="non_qualifying_diagnostic",
+            selected_terminal=None,
+            failed_stage=stage,
+            input_monitor=_MONITOR_MUTATED if mutated else _MONITOR_CLEAN,
+        )
+        == ()
+    )
+
+
+def test_the_cross_artifact_checker_fails_closed_on_its_own_inputs() -> None:
+    for kwargs in (
+        {"authority": "rehearsal", "selected_terminal": None},
+        {"authority": "exactly_once_measurement", "selected_terminal": "H2_UNKNOWN"},
+        {"authority": "non_qualifying_diagnostic", "selected_terminal": _T1},
+    ):
+        with pytest.raises(partition.PartitionError):
+            partition.binding_agreement_reasons(
+                "measurement_pass",
+                failed_stage=None,
+                input_monitor=_MONITOR_CLEAN,
+                **kwargs,
+            )
+    with pytest.raises(partition.PartitionError, match="unknown failed stage"):
+        partition.binding_agreement_reasons(
+            "measurement_pass",
+            authority="exactly_once_measurement",
+            selected_terminal=None,
+            failed_stage="preflight",
+            input_monitor=_MONITOR_CLEAN,
+        )
+    with pytest.raises(partition.PartitionError, match="missing changed_count"):
+        partition.binding_agreement_reasons(
+            "measurement_pass",
+            authority="exactly_once_measurement",
+            selected_terminal=None,
+            failed_stage=None,
+            input_monitor={"started_before_binding": True, "final_drain_clean": True},
+        )
 
 
 def test_an_unclean_final_drain_is_a_recorded_mutation() -> None:
@@ -2467,12 +2592,20 @@ def test_an_unclean_final_drain_is_a_recorded_mutation() -> None:
     }
     assert (
         partition.binding_agreement_reasons(
-            "input_mutated", failed_stage=None, input_monitor=monitor
+            "input_mutated",
+            authority="exactly_once_measurement",
+            selected_terminal=_T1,
+            failed_stage=None,
+            input_monitor=monitor,
         )
         == ()
     )
     assert partition.binding_agreement_reasons(
-        "measurement_pass", failed_stage=None, input_monitor=monitor
+        "measurement_pass",
+        authority="exactly_once_measurement",
+        selected_terminal=None,
+        failed_stage=None,
+        input_monitor=monitor,
     )
 
 
@@ -2502,14 +2635,26 @@ def test_terminal_four_causes_are_separated_by_stage_evidence() -> None:
             "the result schema is not the place this is decided"
         )
         assert partition.binding_agreement_reasons(
-            token, failed_stage=None, input_monitor=monitor
+            token,
+            authority="exactly_once_measurement",
+            selected_terminal=partition.EXECUTION_INVALID_TERMINAL,
+            failed_stage=None,
+            input_monitor=monitor,
         ), f"{token} was accepted against a binding that completed every stage"
         assert (
             partition.binding_agreement_reasons(
-                token, failed_stage=stage, input_monitor=monitor
+                token,
+                authority="exactly_once_measurement",
+                selected_terminal=partition.EXECUTION_INVALID_TERMINAL,
+                failed_stage=stage,
+                input_monitor=monitor,
             )
             == ()
         )
         assert partition.binding_agreement_reasons(
-            "runner_nonzero", failed_stage=stage, input_monitor=monitor
+            "runner_nonzero",
+            authority="exactly_once_measurement",
+            selected_terminal=partition.EXECUTION_INVALID_TERMINAL,
+            failed_stage=stage,
+            input_monitor=monitor,
         ), "a stage failure was accepted under a result that does not name it"

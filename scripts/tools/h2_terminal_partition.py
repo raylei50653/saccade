@@ -653,19 +653,51 @@ def select_successor_result(
 def binding_agreement_reasons(
     result: str,
     *,
+    authority: str,
+    selected_terminal: str | None,
     failed_stage: str | None,
     input_monitor: Mapping[str, Any],
 ) -> tuple[str, ...]:
-    """Cross-check `result.json` against `runtime_binding.json`. Both directions.
+    """Cross-check `result.json` against `runtime_binding.json`.
 
-    No JSON Schema sees two files at once, so the two biconditionals of Review
-    Correction 9 live here and the archive-only verifier imports them. Stating
-    them one-way would be worse than not stating them: a named cause that never
-    has to agree with the stage evidence is a label, and an unrecorded mutation
-    that never has to select terminal 1 is a lost finding.
+    No JSON Schema sees two files at once, so Review Correction 9's cross-artifact
+    rules live here and the archive-only verifier imports them. What they are
+    **not** is unconditional: stage evidence is subordinate to the authority
+    boundary and to the § 7 order, and a rule that ignores either makes truthful
+    records unformable.
+
+    * **A diagnostic records stage evidence and demands nothing.** It resolves to
+      `diagnostic_complete` whatever it observed, so requiring a failed stage or a
+      recorded mutation to change its result would contradict the very rule
+      `select_successor_result` implements.
+    * **The stage → token direction holds only when terminal 4 is the ordered
+      winner.** A build that failed *and* a bound input that moved is a real
+      observation: terminal 1 outranks terminal 4, so the result is
+      `input_mutated` while `failed_stage` stays `build` as subordinate evidence.
+      Demanding `build_failed` there would let stage evidence overturn a
+      higher-order finding — and, combined with the mutation rule, would leave no
+      admissible result at all.
+    * **The token → stage direction holds unconditionally.** `build_failed` that
+      does not name a failed build is a label, which is the defect the two
+      re-admitted tokens exist to avoid.
+    * **The mutation rule stays biconditional for a measurement**, because
+      terminal 1 is the highest order: a recorded change cannot lose to anything.
+
+    `selected_terminal` is the terminal the ruler selects from the *predicates*
+    (`select_successor_result(...).terminal`), never the terminal the archive
+    recorded — deriving it from `result` would make this check circular, since
+    `result` is what it is checking.
     """
+    if authority not in AUTHORITIES:
+        raise PartitionError(
+            f"unknown authority: {authority!r}; expected one of {list(AUTHORITIES)}"
+        )
     if result not in RESULT_TO_TERMINAL and result != DIAGNOSTIC_RESULT:
         raise PartitionError(f"unmapped controller result: {result}")
+    if selected_terminal is not None and selected_terminal not in {
+        terminal.name for terminal in TERMINALS
+    }:
+        raise PartitionError(f"unknown selected terminal: {selected_terminal!r}")
     if failed_stage is not None and failed_stage not in BINDABLE_FAILURE_STAGES:
         raise PartitionError(
             f"unknown failed stage: {failed_stage!r}; expected null or one of "
@@ -675,6 +707,16 @@ def binding_agreement_reasons(
         if key not in input_monitor:
             raise PartitionError(f"input monitor record is missing {key}")
 
+    if authority == "non_qualifying_diagnostic":
+        if selected_terminal is not None:
+            raise PartitionError(
+                "a diagnostic selects no terminal, so it has no selected terminal to "
+                "cross-check (§ Review Correction 5)"
+            )
+        # Every failed predicate and every stage failure is recorded; none of it
+        # changes `diagnostic_complete`, and none of it may be demanded here.
+        return ()
+
     reasons: list[str] = []
     required = RESULT_REQUIRES_FAILED_STAGE.get(result)
     if required is not None and failed_stage != required:
@@ -682,23 +724,27 @@ def binding_agreement_reasons(
             f"{result} requires failed_stage {required!r}, and the binding "
             f"records {failed_stage!r}"
         )
-    if failed_stage is not None and required is None:
+
+    if failed_stage is not None and selected_terminal == EXECUTION_INVALID_TERMINAL:
         expected = [
             name
             for name, stage in RESULT_REQUIRES_FAILED_STAGE.items()
             if stage == failed_stage
         ]
-        if expected:
+        if expected and result != expected[0]:
             reasons.append(
-                f"failed_stage {failed_stage!r} requires result {expected[0]!r}, and "
-                f"the result is {result!r}"
+                f"the ordered verdict is {EXECUTION_INVALID_TERMINAL}, so failed_stage "
+                f"{failed_stage!r} requires result {expected[0]!r}, not {result!r}"
             )
-        elif failed_stage in CATCH_ALL_FAILURE_STAGES:
-            if result != "unclassified_execution_failure":
-                reasons.append(
-                    f"failed_stage {failed_stage!r} has no dedicated result token, so "
-                    f"it requires 'unclassified_execution_failure', not {result!r}"
-                )
+        elif (
+            failed_stage in CATCH_ALL_FAILURE_STAGES
+            and result != "unclassified_execution_failure"
+        ):
+            reasons.append(
+                f"the ordered verdict is {EXECUTION_INVALID_TERMINAL} and failed_stage "
+                f"{failed_stage!r} has no dedicated result token, so it requires "
+                f"'unclassified_execution_failure', not {result!r}"
+            )
 
     mutated = bool(input_monitor["changed_count"]) or not bool(
         input_monitor["final_drain_clean"]
@@ -710,8 +756,8 @@ def binding_agreement_reasons(
         )
     if mutated and result != RESULT_REQUIRES_INPUT_MUTATION:
         reasons.append(
-            "a recorded input change requires result "
-            f"{RESULT_REQUIRES_INPUT_MUTATION!r}, and the result is {result!r}"
+            "a recorded input change outranks every other finding, so it requires "
+            f"result {RESULT_REQUIRES_INPUT_MUTATION!r}, and the result is {result!r}"
         )
     return tuple(reasons)
 
@@ -803,9 +849,25 @@ def as_payload() -> dict[str, Any]:
             "named_finding_requires_decided_fail": True,
             "binding_stages": list(BINDING_STAGES),
             "bindable_failure_stages": list(BINDABLE_FAILURE_STAGES),
+            # Unconditional: a named cause must name its stage.
             "result_requires_failed_stage": dict(RESULT_REQUIRES_FAILED_STAGE),
             "catch_all_failure_stages": list(CATCH_ALL_FAILURE_STAGES),
+            # Conditional: the reverse direction would otherwise let subordinate
+            # stage evidence overturn a higher-order finding, and together with the
+            # mutation rule would leave a build failure under a moved input with no
+            # admissible result at all.
+            "failed_stage_requires_result_only_when_terminal": (
+                EXECUTION_INVALID_TERMINAL
+            ),
+            "failed_stage_is_subordinate_evidence_under_terminals": sorted(
+                terminal.name
+                for terminal in TERMINALS
+                if terminal.name != EXECUTION_INVALID_TERMINAL
+            ),
+            # Biconditional under measurement authority only: terminal 1 is the
+            # highest order, so a recorded change cannot lose to anything.
             "result_requires_input_mutation": RESULT_REQUIRES_INPUT_MUTATION,
+            "diagnostic_records_evidence_without_demanding_a_result": True,
             "cross_artifact_checker": "binding_agreement_reasons",
         },
         "terminals": [terminal._asdict() for terminal in TERMINALS],
