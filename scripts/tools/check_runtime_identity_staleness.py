@@ -165,14 +165,16 @@ def compare_publication(
             )
     else:
         warnings.append(
-            "host-specific environment was not recomputed; controlled "
-            "re-attestation or Layer P must verify it"
+            "host-specific environment was not recomputed; the manual controlled-host "
+            "diagnostic may observe it, while successor executions bind their own "
+            "runtime environment and artifacts"
         )
 
     if runtime_input_manifest is None:
         warnings.append(
             "runtime-input content was not recomputed; fixture/model/engine currentness "
-            "is unresolved until --runtime-inputs-from is supplied"
+            "is unresolved for this legacy publication until --runtime-inputs-from is "
+            "supplied; successor executions bind the inputs they consume"
         )
     else:
         current_inputs = runtime_inputs.publication_axis(runtime_input_manifest)[

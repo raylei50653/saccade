@@ -8,8 +8,10 @@ The publication deliberately keeps three concepts separate:
 * ``probe`` records what MOT17-09 observed under the deterministic probe mode;
 * ``equivalence`` is unproven. Probe equality never upgrades it.
 
-Physical extension/plugin bytes belong to a Layer-P certificate and eventual
-freeze, not to cross-build equivalence.
+This v1 publication remains a historical/diagnostic coordinate. Successor
+executions bind the physical extension/plugin bytes they actually consume in
+``runtime_binding.json``; they do not derive validity from reproducing this
+publication on another host.
 """
 # status: stable
 

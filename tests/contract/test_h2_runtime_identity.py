@@ -361,28 +361,27 @@ def test_identity_semantics_axis_binds_the_ruler_itself() -> None:
     } <= files
 
 
-def test_gpu_reattestation_triggers_when_the_ruler_changes() -> None:
+def test_controlled_host_diagnostic_is_manual_only() -> None:
     workflow = (_REPO / ".github/workflows/runtime_identity.yml").read_text(
         encoding="utf-8"
     )
-    for path in sorted(identity.partition.IDENTITY_SEMANTICS_PATHS):
-        assert f'- "{path}"' in workflow, (
-            f"runtime re-attestation does not trigger when {path} changes"
-        )
+    triggers = workflow.split("\non:\n", 1)[1].split("\npermissions:", 1)[0]
+    assert "workflow_dispatch:" in triggers
+    assert "pull_request:" not in triggers
+    assert "push:" not in triggers
+    assert "paths:" not in triggers
 
 
-def test_gpu_reattestation_runs_for_same_repository_pull_requests_only() -> None:
+def test_controlled_host_diagnostic_checks_out_only_the_dispatched_ref() -> None:
     workflow = (_REPO / ".github/workflows/runtime_identity.yml").read_text(
         encoding="utf-8"
     )
-    assert "pull_request:" in workflow
-    assert (
-        "github.event.pull_request.head.repo.full_name == github.repository" in workflow
-    )
-    assert "github.event.pull_request.head.sha || github.sha" in workflow
+    assert "controlled-host-diagnostic:" in workflow
+    assert "github.event.pull_request" not in workflow
+    assert "ref: ${{ inputs.ref }}" in workflow
 
 
-def test_gpu_reattestation_binds_controlled_host_runtime_inputs_lexically() -> None:
+def test_controlled_host_diagnostic_binds_runtime_inputs_lexically() -> None:
     workflow = (_REPO / ".github/workflows/runtime_identity.yml").read_text(
         encoding="utf-8"
     )

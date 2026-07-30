@@ -56,6 +56,13 @@ closure 寫出；缺欄位不得透過重跑 producer 補齊。獨立 verifier �
 `checksums.sha256`；`verification.json` 不反向包含該 checksum-file digest，
 避免自我雜湊循環。
 
+`.github/workflows/runtime_identity.yml` 只保留為
+`workflow_dispatch` 的 controlled-host diagnostic。它可觀察 CUDA/TensorRT
+build、runtime-input 與 bounded probe drift，但不是 PR／main／seal／measurement
+gate。successor 仍在每次 execution 內完成 build binding、extension load 與
+identity run，並由 foreign-host-independent verifier 只讀 archive bytes 驗證；
+這不要求驗證主機重建 execution。
+
 ## Precedence（衝突時誰說了算）
 
 ```text

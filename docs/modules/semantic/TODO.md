@@ -102,7 +102,16 @@
   record 判 run completion／child 以 `FIXED_EXECUTION_ARGV` 送出四個 A5 環境旗標與
   `--latency-only`／governance closeout；mutation gate、STATIC_ENV、generic parser 與 preset
   皆未動）。下一步＝在 merge head 重建 items 4–5 與 F →
-  再跑一次 rehearsal → 綠了才由 owner 另發第三份授權 →
+  再跑一次 rehearsal → 綠了才由 owner 另發第三份授權。**此舊路徑已被
+  2026-07-30 Review Correction 5 supersede**：PR #305 已落地 execution-integrity
+  artifact schemas、454-key frozen RunSpec authority 與 runtime projection；
+  successor 不再以 cross-host reconstruction、published coordinate/probe equality、
+  Layer-P certificate 或 `F` 作 validity gate。Review Correction 8 進一步把
+  `.github/workflows/runtime_identity.yml` 降為 `workflow_dispatch`-only、
+  non-qualifying diagnostic；不再對 PR／`main` 自動重建。仍保留 per-execution
+  build binding／extension load／identity run 與 foreign-host-independent
+  archive verification。下一個 implementation obligation 是 successor
+  producer＋archive-only verifier/checksum closure，不是重建舊 items 4–5／`F` →
   [second failure evidence](research/evidence/h2_phase_a_failed_attempt_7646f421_20260728/)
   · [controller archive](research/evidence/h2_measure_7646f421a85a580e37e457def5e8ddc7c4bfa0ab/)
   · [first failure evidence](research/evidence/h2_phase_a_failed_attempt_0a5dffe9_20260727/)
