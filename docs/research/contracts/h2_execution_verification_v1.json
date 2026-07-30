@@ -113,6 +113,79 @@
       "minLength": 1,
       "maxLength": 128,
       "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+    },
+    "all_checks_true": {
+      "type": "object",
+      "required": [
+        "artifact_schemas",
+        "checksum_closure",
+        "execution_binding",
+        "projection_binding",
+        "result_binding",
+        "run_spec_binding"
+      ],
+      "properties": {
+        "artifact_schemas": {
+          "const": true
+        },
+        "checksum_closure": {
+          "const": true
+        },
+        "execution_binding": {
+          "const": true
+        },
+        "projection_binding": {
+          "const": true
+        },
+        "result_binding": {
+          "const": true
+        },
+        "run_spec_binding": {
+          "const": true
+        }
+      }
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "checks": {
+            "$ref": "#/$defs/all_checks_true"
+          }
+        },
+        "required": [
+          "checks"
+        ]
+      },
+      "then": {
+        "properties": {
+          "valid": {
+            "const": true
+          },
+          "reasons": {
+            "maxItems": 0
+          }
+        },
+        "required": [
+          "reasons",
+          "valid"
+        ]
+      },
+      "else": {
+        "properties": {
+          "valid": {
+            "const": false
+          },
+          "reasons": {
+            "minItems": 1
+          }
+        },
+        "required": [
+          "reasons",
+          "valid"
+        ]
+      }
+    }
+  ]
 }

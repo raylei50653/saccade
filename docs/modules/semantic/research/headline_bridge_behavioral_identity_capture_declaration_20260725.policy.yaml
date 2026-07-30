@@ -17,8 +17,8 @@ document:
   path: headline_bridge_behavioral_identity_capture_declaration_20260725.md
 
 sealed_prefix:
-  bytes: 87763
-  sha256: "8052042eae637d84ea60e03aba2fada81ae53371ebda61e3b8b7d666841de02e"
+  bytes: 92048
+  sha256: "3e2330cb114fda22336dd72721e28cfb639c0ef2ada9fb47e6fef781d9d338d5"
   # Re-pin log (each entry was a deliberate pre-seal edit, not a slip):
   #   Review reset — coordinate / bounded probe / equivalence split; content-bound
   #                  fixtures/assets/build products; v2 Layer-P certificate.
@@ -91,6 +91,12 @@ sealed_prefix:
   #             reproducibility and published coordinate/probe equality as
   #             successor gates. Foreign-host-independent archive verification
   #             and per-execution build/load/identity binding remain required.
+  #             Re-pinned to the complete post-correction body.
+  #   Review Correction 9 — joins the successor artifact vocabulary to the § 7
+  #             partition: the three renames including the inverted predicate, the
+  #             superseded certificate token, the two rules the four-state
+  #             predicate needs, and the joint result/terminal/predicate and
+  #             valid/checks constraints the two artifact schemas had left open.
   #             Re-pinned to the complete post-correction body.
 
 policy_target:

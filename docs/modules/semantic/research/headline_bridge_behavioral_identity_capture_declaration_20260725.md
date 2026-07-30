@@ -1608,3 +1608,76 @@ existing read-only probe and runtime-input records; no controlled-host or native
 rebuild is performed. This correction does not dispatch the manual workflow, run
 any sequence, issue or consume authorization, create `F`/`S`, seal or admit an
 archive, or change `equivalence.state` from `unproven`.
+
+---
+
+## Review Correction 9 — the successor verdict algebra (2026-07-30, pre-seal)
+
+Corrections 5 to 7 froze the successor artifact contract; Correction 8 removed
+the reconstruction gate. What none of them fixed is that the successor artifacts
+and the executable partition of § 7 now describe the same partition in two
+vocabularies, and no rule joined them:
+
+- three predicates are renamed, and one of the renames **inverts polarity**:
+  `bound_input_unchanged` is true when the world is intact, while
+  `bound_input_mutated` is true when it is broken;
+- `runtime_binding_matches_spec` replaces `layer_p_certificate_matches_freeze`
+  after Correction 5 retired the certificate, so the result token
+  `certificate_mismatch` is **superseded, not deleted** — the historical archives
+  that recorded it keep their meaning, and both tokens select terminal 1;
+- a predicate is no longer a bool. `pass` / `fail` / `error` / `not_run` needs a
+  rule the two-valued partition never had;
+- `h2_execution_result_v1` constrained only its diagnostic branch, so under
+  `exactly_once_measurement` a failure result with `terminal: null` validated —
+  the successor spelling of the state § C3.5.1 exists to make unformable — and
+  `h2_execution_verification_v1` bound `valid` to nothing at all, so `valid: true`
+  validated with every check false.
+
+### The rules
+
+**One partition, two spellings.** The successor predicate order is the § 7 order;
+the rename map, the inverted predicate and the superseded result token are
+published by `h2_terminal_partition.as_payload()` so a payload-only implementer
+resolves the same verdict as one calling the function (§ 20.8). A record mixing
+the two spellings is refused rather than half-read.
+
+**A decided failure outranks an undecided predicate, wherever it sits.** Not
+first-applicable over raw states: an `error` on an early predicate must never
+wash a later capture-perturbation or invalid-packet *finding* into terminal 4,
+or killing a process on sight would launder a § C3.5-banned terminal into a
+re-attemptable one. Among decided failures the § 7 order decides, unchanged.
+
+**An undecided predicate cannot coexist with a complete execution.** If nothing
+failed but something was not decided, the execution did not complete and
+`execution_complete` must say so. A record claiming both is internally
+contradictory and is refused, not mapped.
+
+**A diagnostic selects no terminal.** It records every failed predicate and
+resolves to `diagnostic_complete` whatever they say; that token is unavailable to
+a measurement, and no diagnostic qualifies or authorizes one (Correction 5).
+
+**The two artifacts carry the joint constraints mechanically**, so any validator
+enforces them without executing the ruler: each result pins exactly the terminal
+the partition selects; `measurement_pass` requires measurement authority, a null
+terminal and six passing predicates; a selected terminal requires a non-passing
+observation; a failure names its own predicate and no earlier predicate may have
+decided-failed; and `valid` is exactly the conjunction of the verification
+checks, with reasons empty when it holds and non-empty when it does not.
+
+**`build_failed` and `extension_load_failed` are re-admitted as result tokens.**
+Correction 5 *retains* the `build` and `extension_load` stages, so their failures
+must remain nameable; folding them into `runner_nonzero` would have destroyed a
+cause the predecessor partition already recorded. Both map to terminal 4, exactly
+as in § 7, so no terminal boundary moves.
+
+### What this correction does not do
+
+It implements no producer, no verifier, no diagnostic mode and no controller
+change; the archive-only verifier and the producer remain the next two staged
+obligations. It builds no artifact, executes no sequence, selects no `I`, creates
+no `F`/`S`, issues no third authorization, seals nothing, admits nothing to the
+canonical corpus and leaves `equivalence.state` at `unproven`. The two spent
+owner authorizations and both historical archives are untouched, and their
+verifier path keeps the legacy vocabulary it recorded. This ruler edit republishes
+the legacy publication's static axes from the existing read-only probe and
+runtime-input records; no controlled-host or native rebuild is performed.

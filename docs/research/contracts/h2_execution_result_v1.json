@@ -128,6 +128,8 @@
         "runtime_binding_mismatch",
         "capture_perturbs_policy",
         "packet_invalid",
+        "build_failed",
+        "extension_load_failed",
         "runner_nonzero",
         "runner_timeout",
         "serialization_failed",
@@ -183,6 +185,693 @@
             "$ref": "#/$defs/sha256"
           }
         }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "authority": {
+            "const": "exactly_once_measurement"
+          }
+        },
+        "required": [
+          "authority"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "not": {
+              "const": "diagnostic_complete"
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "result": {
+            "enum": [
+              "input_mutated",
+              "behavior_probe_moved",
+              "runtime_binding_mismatch"
+            ]
+          }
+        },
+        "required": [
+          "result"
+        ]
+      },
+      "then": {
+        "properties": {
+          "terminal": {
+            "const": "H2_INPUT_MUTATED_DURING_MEASUREMENT"
+          }
+        },
+        "required": [
+          "terminal"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "result": {
+            "enum": [
+              "capture_perturbs_policy"
+            ]
+          }
+        },
+        "required": [
+          "result"
+        ]
+      },
+      "then": {
+        "properties": {
+          "terminal": {
+            "const": "H2_CAPTURE_PERTURBS_POLICY"
+          }
+        },
+        "required": [
+          "terminal"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "result": {
+            "enum": [
+              "packet_invalid"
+            ]
+          }
+        },
+        "required": [
+          "result"
+        ]
+      },
+      "then": {
+        "properties": {
+          "terminal": {
+            "const": "H2_PACKET_INVALID"
+          }
+        },
+        "required": [
+          "terminal"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "result": {
+            "enum": [
+              "build_failed",
+              "extension_load_failed",
+              "runner_nonzero",
+              "runner_timeout",
+              "serialization_failed",
+              "artifact_missing_or_unreadable",
+              "unclassified_execution_failure"
+            ]
+          }
+        },
+        "required": [
+          "result"
+        ]
+      },
+      "then": {
+        "properties": {
+          "terminal": {
+            "const": "H2_MEASUREMENT_EXECUTION_INVALID"
+          }
+        },
+        "required": [
+          "terminal"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "result": {
+            "const": "measurement_pass"
+          }
+        },
+        "required": [
+          "result"
+        ]
+      },
+      "then": {
+        "properties": {
+          "authority": {
+            "const": "exactly_once_measurement"
+          },
+          "terminal": {
+            "type": "null"
+          },
+          "predicate_results": {
+            "$ref": "#/$defs/all_predicates_pass"
+          }
+        },
+        "required": [
+          "authority",
+          "predicate_results",
+          "terminal"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "terminal": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "terminal"
+        ]
+      },
+      "then": {
+        "properties": {
+          "predicate_results": {
+            "not": {
+              "$ref": "#/$defs/all_predicates_pass"
+            }
+          }
+        },
+        "required": [
+          "predicate_results"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "result": {
+            "const": "input_mutated"
+          }
+        },
+        "required": [
+          "result"
+        ]
+      },
+      "then": {
+        "properties": {
+          "predicate_results": {
+            "properties": {
+              "bound_input_unchanged": {
+                "properties": {
+                  "state": {
+                    "not": {
+                      "const": "pass"
+                    }
+                  }
+                }
+              }
+            },
+            "required": [
+              "bound_input_unchanged"
+            ]
+          }
+        },
+        "required": [
+          "predicate_results"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "result": {
+            "const": "behavior_probe_moved"
+          }
+        },
+        "required": [
+          "result"
+        ]
+      },
+      "then": {
+        "properties": {
+          "predicate_results": {
+            "properties": {
+              "behavior_probe_equals_spec": {
+                "properties": {
+                  "state": {
+                    "not": {
+                      "const": "pass"
+                    }
+                  }
+                }
+              },
+              "bound_input_unchanged": {
+                "properties": {
+                  "state": {
+                    "not": {
+                      "const": "fail"
+                    }
+                  }
+                }
+              }
+            },
+            "required": [
+              "behavior_probe_equals_spec"
+            ]
+          }
+        },
+        "required": [
+          "predicate_results"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "result": {
+            "const": "runtime_binding_mismatch"
+          }
+        },
+        "required": [
+          "result"
+        ]
+      },
+      "then": {
+        "properties": {
+          "predicate_results": {
+            "properties": {
+              "runtime_binding_matches_spec": {
+                "properties": {
+                  "state": {
+                    "not": {
+                      "const": "pass"
+                    }
+                  }
+                }
+              },
+              "bound_input_unchanged": {
+                "properties": {
+                  "state": {
+                    "not": {
+                      "const": "fail"
+                    }
+                  }
+                }
+              },
+              "behavior_probe_equals_spec": {
+                "properties": {
+                  "state": {
+                    "not": {
+                      "const": "fail"
+                    }
+                  }
+                }
+              }
+            },
+            "required": [
+              "runtime_binding_matches_spec"
+            ]
+          }
+        },
+        "required": [
+          "predicate_results"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "result": {
+            "const": "capture_perturbs_policy"
+          }
+        },
+        "required": [
+          "result"
+        ]
+      },
+      "then": {
+        "properties": {
+          "predicate_results": {
+            "properties": {
+              "capture_off_on_equal": {
+                "properties": {
+                  "state": {
+                    "not": {
+                      "const": "pass"
+                    }
+                  }
+                }
+              },
+              "bound_input_unchanged": {
+                "properties": {
+                  "state": {
+                    "not": {
+                      "const": "fail"
+                    }
+                  }
+                }
+              },
+              "behavior_probe_equals_spec": {
+                "properties": {
+                  "state": {
+                    "not": {
+                      "const": "fail"
+                    }
+                  }
+                }
+              },
+              "runtime_binding_matches_spec": {
+                "properties": {
+                  "state": {
+                    "not": {
+                      "const": "fail"
+                    }
+                  }
+                }
+              }
+            },
+            "required": [
+              "capture_off_on_equal"
+            ]
+          }
+        },
+        "required": [
+          "predicate_results"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "result": {
+            "const": "packet_invalid"
+          }
+        },
+        "required": [
+          "result"
+        ]
+      },
+      "then": {
+        "properties": {
+          "predicate_results": {
+            "properties": {
+              "packets_valid": {
+                "properties": {
+                  "state": {
+                    "not": {
+                      "const": "pass"
+                    }
+                  }
+                }
+              },
+              "bound_input_unchanged": {
+                "properties": {
+                  "state": {
+                    "not": {
+                      "const": "fail"
+                    }
+                  }
+                }
+              },
+              "behavior_probe_equals_spec": {
+                "properties": {
+                  "state": {
+                    "not": {
+                      "const": "fail"
+                    }
+                  }
+                }
+              },
+              "runtime_binding_matches_spec": {
+                "properties": {
+                  "state": {
+                    "not": {
+                      "const": "fail"
+                    }
+                  }
+                }
+              },
+              "capture_off_on_equal": {
+                "properties": {
+                  "state": {
+                    "not": {
+                      "const": "fail"
+                    }
+                  }
+                }
+              }
+            },
+            "required": [
+              "packets_valid"
+            ]
+          }
+        },
+        "required": [
+          "predicate_results"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "result": {
+            "enum": [
+              "build_failed",
+              "extension_load_failed",
+              "runner_nonzero",
+              "runner_timeout",
+              "serialization_failed",
+              "artifact_missing_or_unreadable",
+              "unclassified_execution_failure"
+            ]
+          }
+        },
+        "required": [
+          "result"
+        ]
+      },
+      "then": {
+        "properties": {
+          "predicate_results": {
+            "properties": {
+              "execution_complete": {
+                "properties": {
+                  "state": {
+                    "not": {
+                      "const": "pass"
+                    }
+                  }
+                }
+              },
+              "bound_input_unchanged": {
+                "properties": {
+                  "state": {
+                    "not": {
+                      "const": "fail"
+                    }
+                  }
+                }
+              },
+              "behavior_probe_equals_spec": {
+                "properties": {
+                  "state": {
+                    "not": {
+                      "const": "fail"
+                    }
+                  }
+                }
+              },
+              "runtime_binding_matches_spec": {
+                "properties": {
+                  "state": {
+                    "not": {
+                      "const": "fail"
+                    }
+                  }
+                }
+              },
+              "capture_off_on_equal": {
+                "properties": {
+                  "state": {
+                    "not": {
+                      "const": "fail"
+                    }
+                  }
+                }
+              },
+              "packets_valid": {
+                "properties": {
+                  "state": {
+                    "not": {
+                      "const": "fail"
+                    }
+                  }
+                }
+              }
+            },
+            "required": [
+              "execution_complete"
+            ]
+          }
+        },
+        "required": [
+          "predicate_results"
+        ]
+      }
+    },
+    {
+      "if": {
+        "anyOf": [
+          {
+            "properties": {
+              "predicate_results": {
+                "properties": {
+                  "bound_input_unchanged": {
+                    "properties": {
+                      "state": {
+                        "$ref": "#/$defs/undecided_state"
+                      }
+                    }
+                  }
+                },
+                "required": [
+                  "bound_input_unchanged"
+                ]
+              }
+            },
+            "required": [
+              "predicate_results"
+            ]
+          },
+          {
+            "properties": {
+              "predicate_results": {
+                "properties": {
+                  "behavior_probe_equals_spec": {
+                    "properties": {
+                      "state": {
+                        "$ref": "#/$defs/undecided_state"
+                      }
+                    }
+                  }
+                },
+                "required": [
+                  "behavior_probe_equals_spec"
+                ]
+              }
+            },
+            "required": [
+              "predicate_results"
+            ]
+          },
+          {
+            "properties": {
+              "predicate_results": {
+                "properties": {
+                  "runtime_binding_matches_spec": {
+                    "properties": {
+                      "state": {
+                        "$ref": "#/$defs/undecided_state"
+                      }
+                    }
+                  }
+                },
+                "required": [
+                  "runtime_binding_matches_spec"
+                ]
+              }
+            },
+            "required": [
+              "predicate_results"
+            ]
+          },
+          {
+            "properties": {
+              "predicate_results": {
+                "properties": {
+                  "capture_off_on_equal": {
+                    "properties": {
+                      "state": {
+                        "$ref": "#/$defs/undecided_state"
+                      }
+                    }
+                  }
+                },
+                "required": [
+                  "capture_off_on_equal"
+                ]
+              }
+            },
+            "required": [
+              "predicate_results"
+            ]
+          },
+          {
+            "properties": {
+              "predicate_results": {
+                "properties": {
+                  "packets_valid": {
+                    "properties": {
+                      "state": {
+                        "$ref": "#/$defs/undecided_state"
+                      }
+                    }
+                  }
+                },
+                "required": [
+                  "packets_valid"
+                ]
+              }
+            },
+            "required": [
+              "predicate_results"
+            ]
+          },
+          {
+            "properties": {
+              "predicate_results": {
+                "properties": {
+                  "execution_complete": {
+                    "properties": {
+                      "state": {
+                        "$ref": "#/$defs/undecided_state"
+                      }
+                    }
+                  }
+                },
+                "required": [
+                  "execution_complete"
+                ]
+              }
+            },
+            "required": [
+              "predicate_results"
+            ]
+          }
+        ]
+      },
+      "then": {
+        "properties": {
+          "predicate_results": {
+            "properties": {
+              "execution_complete": {
+                "properties": {
+                  "state": {
+                    "not": {
+                      "const": "pass"
+                    }
+                  }
+                }
+              }
+            },
+            "required": [
+              "execution_complete"
+            ]
+          }
+        },
+        "required": [
+          "predicate_results"
+        ]
       }
     }
   ],
@@ -307,6 +996,67 @@
             }
           }
         }
+      ]
+    },
+    "all_predicates_pass": {
+      "type": "object",
+      "required": [
+        "bound_input_unchanged",
+        "behavior_probe_equals_spec",
+        "runtime_binding_matches_spec",
+        "capture_off_on_equal",
+        "packets_valid",
+        "execution_complete"
+      ],
+      "properties": {
+        "bound_input_unchanged": {
+          "properties": {
+            "state": {
+              "const": "pass"
+            }
+          }
+        },
+        "behavior_probe_equals_spec": {
+          "properties": {
+            "state": {
+              "const": "pass"
+            }
+          }
+        },
+        "runtime_binding_matches_spec": {
+          "properties": {
+            "state": {
+              "const": "pass"
+            }
+          }
+        },
+        "capture_off_on_equal": {
+          "properties": {
+            "state": {
+              "const": "pass"
+            }
+          }
+        },
+        "packets_valid": {
+          "properties": {
+            "state": {
+              "const": "pass"
+            }
+          }
+        },
+        "execution_complete": {
+          "properties": {
+            "state": {
+              "const": "pass"
+            }
+          }
+        }
+      }
+    },
+    "undecided_state": {
+      "enum": [
+        "error",
+        "not_run"
       ]
     }
   }
