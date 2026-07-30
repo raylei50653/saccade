@@ -1028,6 +1028,27 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
       where_terminal_four_cause_is_decided: 不在 result.json（其 terminal-4 token 共用同一 predicate）而在 stage evidence;已用專門測試釘住「schema 在此保持沉默、checker 不沉默」
       re_pin: 92048 → 94893 bytes / 046c4bc5…      # RC9 就地修訂（未 merge、未 seal ⇒ 就地改比再 append 誠實）
       identity_semantics: 24ee5fe1 → 32d2c37d（宣言修訂）→ 06f7cfa3（schema+ruler 修訂）
+    owner_review_revision_2:                  # 同一輪 review 的第三個 blocking defect;兩個症狀同根
+      root_cause: cross-artifact 規則寫成無條件,未受 authority boundary 與 §7 terminal precedence 約束
+      deadlock: >-
+        failed_stage=build 且 monitor 記到 mutation ⇒ 沒有任何 result 可通過:
+        stage 規則要 build_failed、mutation 規則要 input_mutated,而 terminal 1 順位高於 terminal 4 ⇒
+        真實紀錄（input_mutated + failed_stage 仍記 build 當 subordinate evidence）被拒
+      diagnostic: checker 沒收 authority ⇒ diagnostic 只要記到 mutation 或 stage failure 就無法維持 diagnostic_complete
+                  （`select_successor_result` 本身早就正確,是 cross-artifact checker 漏了 authority）
+      fix_signature: binding_agreement_reasons(result, *, authority, selected_terminal, failed_stage, input_monitor)
+      selected_terminal_semantics: ruler 從 **predicates** 重算的 terminal（select_successor_result().terminal）,
+                  **不是** archive 記錄的 terminal —— 從 result 反推會讓這個檢查變成循環
+      gated_rules:
+        - "diagnostic：mutation 與 failed stage 都是被記錄的 observation,不要求換 result"
+        - "token → stage：無條件（具名 cause 必須指名自己的 stage）"
+        - "stage → token：只在 selected_terminal 是 terminal 4 時執行"
+        - "terminal 1–3 勝出時：non-null failed_stage 是 subordinate evidence,不改 verdict"
+        - "mutation ⇔ input_mutated：measurement 下維持雙向（terminal 1 最高順位）"
+      test_gap_closed: 原矩陣只有單因子案例 ⇒ 換成 mutation × failed_stage 全格 grid + 「任何一格都不得 deadlock」不變式
+                  （每格至少一個 admissible result;有 mutation 時恰好只有 input_mutated）
+      re_pin: 94893 → 96615 bytes / cf7563bb…
+      identity_semantics: 06f7cfa3 → 027c3472
     tests: +67 contract tests;期望值由 schema 推導後與 ruler 雙向比對,含「ruler 自己的 verdict 是 schema 唯一接受的 verdict」整組
     authorization_effect: none
     not_established: no producer; no verifier; no diagnostic mode; no execution; no authorization; no F/S; no seal; no corpus admission; no equivalence claim
