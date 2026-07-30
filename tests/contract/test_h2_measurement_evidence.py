@@ -387,6 +387,26 @@ def test_the_rulers_verdict_is_the_only_one_the_schema_accepts(
             assert list(validator.iter_errors({**instance, "terminal": other})), (
                 "the schema accepted a terminal the ruler did not select"
             )
+        # Substituting the *result* while keeping the terminal is the case a
+        # terminal-only sweep misses: two results share terminal 1, and an
+        # undecided predicate must not let the wrong one stand.
+        for other_result, other_terminal in partition.RESULT_TO_TERMINAL.items():
+            if other_result in (selection.result, "measurement_pass"):
+                continue
+            if other_result in partition.LEGACY_RESULT_SUPERSEDED_BY:
+                continue
+            if other_terminal != selection.terminal:
+                continue
+            if other_terminal == partition.EXECUTION_INVALID_TERMINAL:
+                # Terminal 4's named cause is not decidable from result.json: its
+                # tokens differ in which retained stage failed, which lives in
+                # runtime_binding.json. That separation is asserted by
+                # test_terminal_four_causes_are_separated_by_stage_evidence.
+                continue
+            assert list(validator.iter_errors({**instance, "result": other_result})), (
+                f"the schema accepted result {other_result!r} for an observation the "
+                f"ruler resolves to {selection.result!r} — same terminal, wrong cause"
+            )
 
 
 def test_the_schema_refuses_a_spent_authorization_with_no_terminal() -> None:
@@ -2179,3 +2199,317 @@ def test_the_evidence_module_holds_no_phase_completion_of_its_own() -> None:
     assert [key for key in emitted if key != "schema"] == [
         key for key, _ in partition.ORDERED_PREDICATES
     ]
+
+
+# -- stage-aware runtime binding (Review Correction 9, revision 1) ---------- #
+#
+# The first pass re-admitted `build_failed` and `extension_load_failed` as result
+# tokens while `h2_runtime_binding_v1` still required two complete build
+# artifacts, a successful load, a computed probe and a zero-change monitor
+# unconditionally. Both tokens — and terminal 1 — were therefore unformable: a
+# contract cannot narrow anything by making its own truthful negatives
+# unrecordable.
+
+
+def _binding_validator() -> jsonschema.Draft202012Validator:
+    schema = json.loads(
+        _SUCCESSOR_SCHEMA_PATHS["runtime_binding"].read_text(encoding="utf-8")
+    )
+    return jsonschema.Draft202012Validator(schema)
+
+
+_DROP = object()
+
+
+def _binding(**overrides: Any) -> dict[str, Any]:
+    """A complete successful binding, with its shape read off the schema."""
+    schema = json.loads(
+        _SUCCESSOR_SCHEMA_PATHS["runtime_binding"].read_text(encoding="utf-8")
+    )
+    surfaces = [
+        clause["contains"]["properties"]["path"]["const"]
+        for clause in schema["properties"]["executed_surfaces"]["allOf"]
+    ]
+    roles = schema["$defs"]["build_artifact"]["properties"]["role"]["enum"]
+    document: dict[str, Any] = {
+        "schema": "h2_runtime_binding_v1",
+        "execution_id": "successor-1",
+        "resolved_run_spec_digest": "1" * 64,
+        "execution_semantics_projection_digest": "2" * 64,
+        "failed_stage": None,
+        "build_artifacts": [
+            {
+                "role": role,
+                "path": f"build/h2_layer_p/{role}.so",
+                "sha256": "a" * 64,
+                "length": 16,
+            }
+            for role in roles
+        ],
+        "extension_load": {
+            "loaded_path": "/build/h2_layer_p/tracking.so",
+            "length": 16,
+            "sha256": "b" * 64,
+        },
+        "identity_probe": {
+            "schema": "h2_behavior_probe_result_v1",
+            "role": "recorded_observation_not_equivalence_or_gate",
+            "state": "computed",
+            "digest": "c" * 64,
+            "build_artifact_digest": "d" * 64,
+        },
+        "input_monitor": {
+            "started_before_binding": True,
+            "changed_count": 0,
+            "final_drain_clean": True,
+        },
+        "runtime_inputs": {
+            "manifest_schema": "h2_runtime_input_manifest_v1",
+            "manifest_digest": "e" * 64,
+            "members": [
+                {
+                    "path": "data/MOT17/train/MOT17-04-SDP/img1/000001.jpg",
+                    "role": "measurement_sequence",
+                    "sha256": "f" * 64,
+                    "length": 1,
+                }
+            ],
+        },
+        "executed_surfaces": [
+            {"path": path, "sha256": "0" * 64, "length": 1} for path in surfaces
+        ],
+        "capture_abi": {
+            "path": "scripts/tools/h0_bridge_decision_trace_schema_v2.json",
+            "sha256": "1" * 64,
+            "length": 1,
+        },
+        "source_audit": {"head": "a" * 40, "tree": "b" * 40},
+    }
+    document.update(overrides)
+    return {key: value for key, value in document.items() if value is not _DROP}
+
+
+def test_a_successful_binding_is_exactly_as_strict_as_before() -> None:
+    validator = _binding_validator()
+    assert not list(validator.iter_errors(_binding()))
+    partial = _binding()
+    partial["build_artifacts"] = partial["build_artifacts"][:1]
+    assert list(validator.iter_errors(partial))
+    assert list(validator.iter_errors(_binding(extension_load=_DROP)))
+    assert list(validator.iter_errors(_binding(identity_probe=_DROP)))
+    assert list(validator.iter_errors(_binding(failed_stage=_DROP)))
+    assert list(validator.iter_errors(_binding(failed_stage="preflight")))
+
+
+@pytest.mark.parametrize(
+    ("failed_stage", "keep_artifacts", "keep_load"),
+    [
+        ("build", False, False),
+        ("build_binding", True, False),
+        ("extension_load", True, False),
+        ("identity_run", True, True),
+    ],
+)
+def test_every_stage_failure_can_form_a_binding(
+    failed_stage: str, keep_artifacts: bool, keep_load: bool
+) -> None:
+    validator = _binding_validator()
+    document = _binding(
+        failed_stage=failed_stage,
+        identity_probe=_DROP,
+        **({} if keep_load else {"extension_load": _DROP}),
+    )
+    if not keep_artifacts:
+        document["build_artifacts"] = []
+    assert not list(validator.iter_errors(document)), (
+        f"a genuine {failed_stage} failure cannot be recorded, so its result token "
+        "can never appear in a valid archive"
+    )
+
+
+@pytest.mark.parametrize(
+    ("failed_stage", "fabricated"),
+    [
+        ("build", "extension_load"),
+        ("build", "identity_probe"),
+        ("build_binding", "extension_load"),
+        ("extension_load", "extension_load"),
+        ("extension_load", "identity_probe"),
+        ("identity_run", "identity_probe"),
+    ],
+)
+def test_an_unreached_stage_cannot_be_fabricated(
+    failed_stage: str, fabricated: str
+) -> None:
+    """Absence records an unreached stage; a success shape would be a claim."""
+    validator = _binding_validator()
+    document = _binding(failed_stage=failed_stage)
+    if failed_stage == "build":
+        document["build_artifacts"] = []
+    for key in ("extension_load", "identity_probe"):
+        if key != fabricated:
+            document.pop(key, None)
+    assert list(validator.iter_errors(document))
+
+
+def test_a_stage_failure_still_binds_what_it_did_reach() -> None:
+    validator = _binding_validator()
+    document = _binding(
+        failed_stage="extension_load", extension_load=_DROP, identity_probe=_DROP
+    )
+    document["build_artifacts"] = document["build_artifacts"][:1]
+    assert list(validator.iter_errors(document)), (
+        "a load failure implies the build completed, so its artifacts stay complete"
+    )
+
+
+def test_a_detected_mutation_is_recordable() -> None:
+    """Otherwise terminal 1 has no archive, which is the defect not the guard."""
+    validator = _binding_validator()
+    assert not list(
+        validator.iter_errors(
+            _binding(
+                input_monitor={
+                    "started_before_binding": True,
+                    "changed_count": 3,
+                    "final_drain_clean": False,
+                }
+            )
+        )
+    )
+    assert list(
+        validator.iter_errors(
+            _binding(
+                input_monitor={
+                    "started_before_binding": False,
+                    "changed_count": 0,
+                    "final_drain_clean": True,
+                }
+            )
+        )
+    )
+
+
+def test_the_cross_artifact_rules_are_published_for_the_verifier() -> None:
+    """No JSON Schema sees two files, so these are ruler facts W3 must import."""
+    published = partition.as_payload()["successor_vocabulary"]
+    assert published["binding_stages"] == list(partition.BINDING_STAGES)
+    assert published["bindable_failure_stages"] == list(
+        partition.BINDABLE_FAILURE_STAGES
+    )
+    assert published["result_requires_failed_stage"] == {
+        "build_failed": "build",
+        "extension_load_failed": "extension_load",
+    }
+    assert published["result_requires_input_mutation"] == "input_mutated"
+    schema = json.loads(
+        _SUCCESSOR_SCHEMA_PATHS["runtime_binding"].read_text(encoding="utf-8")
+    )
+    assert set(schema["properties"]["failed_stage"]["oneOf"][0]["enum"]) == set(
+        partition.BINDABLE_FAILURE_STAGES
+    )
+
+
+@pytest.mark.parametrize(
+    ("result", "failed_stage", "changed", "expected"),
+    [
+        ("measurement_pass", None, 0, ()),
+        ("build_failed", "build", 0, ()),
+        ("build_failed", None, 0, ("build_failed requires failed_stage 'build'",)),
+        (
+            "build_failed",
+            "extension_load",
+            0,
+            ("build_failed requires failed_stage 'build'",),
+        ),
+        ("extension_load_failed", "extension_load", 0, ()),
+        ("runner_nonzero", None, 0, ()),
+        (
+            "runner_nonzero",
+            "build",
+            0,
+            ("failed_stage 'build' requires result 'build_failed'",),
+        ),
+        ("unclassified_execution_failure", "build_binding", 0, ()),
+        ("unclassified_execution_failure", "identity_run", 0, ()),
+        ("input_mutated", None, 2, ()),
+        ("input_mutated", None, 0, ("input_mutated requires the monitor",)),
+        (
+            "packet_invalid",
+            None,
+            2,
+            ("a recorded input change requires result 'input_mutated'",),
+        ),
+    ],
+)
+def test_the_binding_agreement_checker_is_a_biconditional(
+    result: str, failed_stage: str | None, changed: int, expected: tuple[str, ...]
+) -> None:
+    reasons = partition.binding_agreement_reasons(
+        result,
+        failed_stage=failed_stage,
+        input_monitor={
+            "started_before_binding": True,
+            "changed_count": changed,
+            "final_drain_clean": True,
+        },
+    )
+    assert len(reasons) == len(expected)
+    for reason, fragment in zip(reasons, expected):
+        assert fragment in reason
+
+
+def test_an_unclean_final_drain_is_a_recorded_mutation() -> None:
+    monitor = {
+        "started_before_binding": True,
+        "changed_count": 0,
+        "final_drain_clean": False,
+    }
+    assert (
+        partition.binding_agreement_reasons(
+            "input_mutated", failed_stage=None, input_monitor=monitor
+        )
+        == ()
+    )
+    assert partition.binding_agreement_reasons(
+        "measurement_pass", failed_stage=None, input_monitor=monitor
+    )
+
+
+def test_terminal_four_causes_are_separated_by_stage_evidence() -> None:
+    """Where the named cause is pinned, and where it deliberately is not.
+
+    Within `result.json` the terminal-4 tokens are interchangeable — they share a
+    terminal and the same failing predicate — so a validator cannot tell
+    `build_failed` from `runner_nonzero`. What separates them is the stage the
+    binding says failed, which is why the biconditional is a verifier obligation
+    and not a schema constraint: no JSON Schema sees two files.
+    """
+    validator = _result_validator()
+    record = _successor_states(execution_complete="fail")
+    selection = partition.select_successor_result(
+        record, authority="exactly_once_measurement", phase="a"
+    )
+    instance = _result_instance(selection, record)
+    monitor = {
+        "started_before_binding": True,
+        "changed_count": 0,
+        "final_drain_clean": True,
+    }
+    for token, stage in partition.RESULT_REQUIRES_FAILED_STAGE.items():
+        swapped = {**instance, "result": token}
+        assert not list(validator.iter_errors(swapped)), (
+            "the result schema is not the place this is decided"
+        )
+        assert partition.binding_agreement_reasons(
+            token, failed_stage=None, input_monitor=monitor
+        ), f"{token} was accepted against a binding that completed every stage"
+        assert (
+            partition.binding_agreement_reasons(
+                token, failed_stage=stage, input_monitor=monitor
+            )
+            == ()
+        )
+        assert partition.binding_agreement_reasons(
+            "runner_nonzero", failed_stage=stage, input_monitor=monitor
+        ), "a stage failure was accepted under a result that does not name it"

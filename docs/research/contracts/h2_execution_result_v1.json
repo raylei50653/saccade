@@ -384,9 +384,7 @@
               "bound_input_unchanged": {
                 "properties": {
                   "state": {
-                    "not": {
-                      "const": "pass"
-                    }
+                    "const": "fail"
                   }
                 }
               }
@@ -419,9 +417,7 @@
               "behavior_probe_equals_spec": {
                 "properties": {
                   "state": {
-                    "not": {
-                      "const": "pass"
-                    }
+                    "const": "fail"
                   }
                 }
               },
@@ -463,9 +459,7 @@
               "runtime_binding_matches_spec": {
                 "properties": {
                   "state": {
-                    "not": {
-                      "const": "pass"
-                    }
+                    "const": "fail"
                   }
                 }
               },
@@ -516,9 +510,7 @@
               "capture_off_on_equal": {
                 "properties": {
                   "state": {
-                    "not": {
-                      "const": "pass"
-                    }
+                    "const": "fail"
                   }
                 }
               },
@@ -578,9 +570,7 @@
               "packets_valid": {
                 "properties": {
                   "state": {
-                    "not": {
-                      "const": "pass"
-                    }
+                    "const": "fail"
                   }
                 }
               },

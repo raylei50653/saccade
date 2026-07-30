@@ -288,6 +288,34 @@ LEGACY_RESULT_SUPERSEDED_BY: dict[str, str] = {
     "certificate_mismatch": "runtime_binding_mismatch",
 }
 
+# Layer P's retained stages in order (§ Review Correction 5). The first two run
+# before any bytes are bound, so a failure there forms no archive at all — which
+# is why only the last four can appear as a binding's `failed_stage`.
+BINDING_STAGES: tuple[str, ...] = (
+    "retry_admissibility",
+    "preflight",
+    "build",
+    "build_binding",
+    "extension_load",
+    "identity_run",
+)
+BINDABLE_FAILURE_STAGES: tuple[str, ...] = BINDING_STAGES[2:]
+
+# Which named cause requires which stage to have failed. Without this the two
+# re-admitted tokens are interchangeable labels rather than stage evidence: a
+# `build_failed` whose binding shows a completed build says nothing. The
+# biconditional runs both ways — `build_binding` and `identity_run` have no
+# dedicated token and are carried by the catch-all with the stage named.
+RESULT_REQUIRES_FAILED_STAGE: dict[str, str] = {
+    "build_failed": "build",
+    "extension_load_failed": "extension_load",
+}
+CATCH_ALL_FAILURE_STAGES: tuple[str, ...] = ("build_binding", "identity_run")
+
+# The monitor is the only witness of terminal 1, and terminal 1 outranks every
+# other result, so a recorded change and `input_mutated` imply each other.
+RESULT_REQUIRES_INPUT_MUTATION = "input_mutated"
+
 # The § C3.6 admission gate, in the clause's own order (a–e). These are NOT
 # predicates of the partition: they are evaluated *before* the § C3.5.1 step-5
 # write that consumes S_B, and their failure selects no terminal at all. Adding
@@ -622,6 +650,72 @@ def select_successor_result(
     return _selection("measurement_pass", phase=phase)
 
 
+def binding_agreement_reasons(
+    result: str,
+    *,
+    failed_stage: str | None,
+    input_monitor: Mapping[str, Any],
+) -> tuple[str, ...]:
+    """Cross-check `result.json` against `runtime_binding.json`. Both directions.
+
+    No JSON Schema sees two files at once, so the two biconditionals of Review
+    Correction 9 live here and the archive-only verifier imports them. Stating
+    them one-way would be worse than not stating them: a named cause that never
+    has to agree with the stage evidence is a label, and an unrecorded mutation
+    that never has to select terminal 1 is a lost finding.
+    """
+    if result not in RESULT_TO_TERMINAL and result != DIAGNOSTIC_RESULT:
+        raise PartitionError(f"unmapped controller result: {result}")
+    if failed_stage is not None and failed_stage not in BINDABLE_FAILURE_STAGES:
+        raise PartitionError(
+            f"unknown failed stage: {failed_stage!r}; expected null or one of "
+            f"{list(BINDABLE_FAILURE_STAGES)} — the earlier stages bind nothing"
+        )
+    for key in ("changed_count", "final_drain_clean"):
+        if key not in input_monitor:
+            raise PartitionError(f"input monitor record is missing {key}")
+
+    reasons: list[str] = []
+    required = RESULT_REQUIRES_FAILED_STAGE.get(result)
+    if required is not None and failed_stage != required:
+        reasons.append(
+            f"{result} requires failed_stage {required!r}, and the binding "
+            f"records {failed_stage!r}"
+        )
+    if failed_stage is not None and required is None:
+        expected = [
+            name
+            for name, stage in RESULT_REQUIRES_FAILED_STAGE.items()
+            if stage == failed_stage
+        ]
+        if expected:
+            reasons.append(
+                f"failed_stage {failed_stage!r} requires result {expected[0]!r}, and "
+                f"the result is {result!r}"
+            )
+        elif failed_stage in CATCH_ALL_FAILURE_STAGES:
+            if result != "unclassified_execution_failure":
+                reasons.append(
+                    f"failed_stage {failed_stage!r} has no dedicated result token, so "
+                    f"it requires 'unclassified_execution_failure', not {result!r}"
+                )
+
+    mutated = bool(input_monitor["changed_count"]) or not bool(
+        input_monitor["final_drain_clean"]
+    )
+    if result == RESULT_REQUIRES_INPUT_MUTATION and not mutated:
+        reasons.append(
+            f"{result} requires the monitor to record a change or an unclean final "
+            "drain, and it records neither"
+        )
+    if mutated and result != RESULT_REQUIRES_INPUT_MUTATION:
+        reasons.append(
+            "a recorded input change requires result "
+            f"{RESULT_REQUIRES_INPUT_MUTATION!r}, and the result is {result!r}"
+        )
+    return tuple(reasons)
+
+
 def _named_execution_result(named: str | None, default: str) -> str:
     """Let the caller name terminal 4's cause; every legal name still maps to it."""
     if named is None:
@@ -703,6 +797,16 @@ def as_payload() -> dict[str, Any]:
             "predicate_renames": dict(SUCCESSOR_TO_LEGACY_PREDICATE),
             "inverted_polarity_predicates": sorted(INVERTED_POLARITY_PREDICATES),
             "legacy_result_superseded_by": dict(LEGACY_RESULT_SUPERSEDED_BY),
+            # The cross-artifact rules. A named finding also requires its own
+            # predicate to be `fail`: an undecided predicate names nothing, or two
+            # results would share one terminal for one observation.
+            "named_finding_requires_decided_fail": True,
+            "binding_stages": list(BINDING_STAGES),
+            "bindable_failure_stages": list(BINDABLE_FAILURE_STAGES),
+            "result_requires_failed_stage": dict(RESULT_REQUIRES_FAILED_STAGE),
+            "catch_all_failure_stages": list(CATCH_ALL_FAILURE_STAGES),
+            "result_requires_input_mutation": RESULT_REQUIRES_INPUT_MUTATION,
+            "cross_artifact_checker": "binding_agreement_reasons",
         },
         "terminals": [terminal._asdict() for terminal in TERMINALS],
     }
