@@ -927,6 +927,60 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
     publication_transition: legacy static axes republished once from existing read-only probe/runtime-input records; no controlled-host or native rebuild
     authorization_effect: none
     not_established: no workflow dispatch; no controlled-host/native rebuild; no Phase-A execution; no authorization; no F/S; no seal; no corpus admission; no equivalence claim
+  successor_verdict_algebra_gap_registered:
+    date: 2026-07-30
+    confirmed_at_head: 290fd0c10b3bff070b50fc1ebcd760c98ee36507   # PR #306 merge; clean worktree; HEAD == origin/main; no open PR
+    confirmation:
+      contract_tests: 1158 passed / 4 skipped / 3 xfailed
+      corpus_checker: "PASS (1 roots; complete=1)"
+      staleness_checker: "rc=0 with three legacy unresolved-axis warnings; no environment/runtime-input/probe recomputation; no equality claimed"
+    what_landed: contracts and configuration authority only（four v1 schemas、frozen 454-key authoring profile + owner decision、h2_run_spec resolver、RunSpec-derived child argv/env）
+    what_is_absent: no producer of the three artifacts; no independent verifier; nothing executable reads the successor vocabulary
+    gap:                                    # 全部在此 head 機械可複現;不是推測
+      predicate_vocabulary_divergence: >-
+        h2_execution_result_v1 requires behavior_probe_equals_spec / runtime_binding_matches_spec /
+        bound_input_unchanged; h2_terminal_partition.ORDERED_PREDICATES carries
+        behavior_probe_equals_freeze / layer_p_certificate_matches_freeze / bound_input_mutated
+        (the last in _TRUE_IS_FAILURE ⇒ inverted polarity)
+      predicate_state_space: schema predicate_result.state = pass/fail/error/not_run; select_terminal raises on any non-bool predicate
+      ruler_results_without_successor_token: [build_failed, extension_load_failed, certificate_mismatch]   # while RC5 retains the build and extension_load stages
+      successor_results_without_ruler_mapping: [runtime_binding_mismatch, diagnostic_complete]
+      measurement_branch_unconstrained: >-
+        h2_execution_result_v1.allOf constrains only the non_qualifying_diagnostic branch; under
+        exactly_once_measurement a failure result with terminal: null validates — the successor shape
+        of the "authorization spent, no terminal" state §C3.5.1 exists to make unformable
+      valid_unconstrained: h2_execution_verification_v1 has no cross-constraint; valid=true with every checks.*=false and non-empty reasons validates
+      no_consumer: no verify_h2_execution.py; every result.json reference under scripts/ belongs to H0's legacy schema
+    retired_constraints_confirmed: source_head / source_tree / F / layer_p_certificate / published coordinate-probe equality are no longer successor gates ⇒ main need not stand still and items 4–5 need not be rebuilt per commit
+    live_build_constraint: build/h2_layer_p still holds item 5's certificate bytes at 1a742765 — rename aside (never delete) only when a stage actually requires a build
+    authorization_effect: none
+    not_established: no Phase-A execution; no authorization; no F/S; no seal; no corpus admission; no equivalence claim
+  successor_implementation_order_planned:
+    date: 2026-07-30
+    authority: charter staging order（navigation）; normative narrowing belongs to a declaration correction landed with W2
+    status: planned; W1 landed as this governance record; W2–W5 not implemented
+    w1_governance: confirmed state + gap registration + staging order; docs only; no ruler edit, no re-pin, no republish
+    w2_verdict_algebra: >-
+      cross-verdict constraints in the two already-ruler schemas (measurement branch; valid as the checks
+      conjunction) + successor↔legacy vocabulary mapping and four-state handling in h2_terminal_partition.py,
+      published via as_payload() so the payload and function paths cannot disagree (§20.8); lands with
+      declaration Review Correction 9 + sealed_prefix re-pin + identity_semantics republish; build/extension_load
+      failures must keep a named successor token or be adjudicated as folded
+    w3_archive_only_verifier: >-
+      verification.json + checksums.sha256 from archive bytes only (producer_invoked=false,
+      verification_host_inputs_used=false, no UID/host identity/checkout/build input) — also the closure of the
+      2026-07-28 verifying-host dependence defect; imports W2's constraints rather than restating them; C3.9-style
+      scan over every successor plumbing file; fixtures synthesised from the frozen schemas, never captured from
+      producer output (§5.3)
+    w4_producer: three producer artifacts inside the retained six-stage order + diagnostic/exactly-once measurement split; requires a build
+    w5_closure: transient mid-execution namespace mutation, evaluator/pipeline/tracker execution-code closure, successor archive admission in check_h2_measure_archives, witness v3, governance closeout
+    ordering_rationale:
+      - "#294→#295 precedent: artifact contract and independent verifier before the controller, else the contract is defined by whatever the producer emits (§5.3 everyday form)"
+      - "#302 / #304 precedent: guard before entry — a non-squash merge leaves every intermediate commit checkout-able, so a head that emits self-consistent four-JSON archives with no verifier and no admission gate is the false-green combination both PRs were reordered to avoid"
+      - "W2–W3 need no build ⇒ item 5's live build/h2_layer_p bytes stay untouched and the rename-aside decision defers to W4"
+    working_detail: "~/.claude/plans/delightful-launching-gosling.md（working plan, not authority）"
+    authorization_effect: none
+    not_established: no Phase-A execution; no third authorization; no S; no seal; no corpus admission; no equivalence claim; two owner authorizations remain permanently spent with zero faithful capture
 pending_reentry:                          # append-only; pre-seal, no terminal claimed; route-1 永久留帳結論不變
   - date: 2026-07-21
     scheduling: owner-scheduled re-entry #3（滿足 line-337 future_reentry_precondition:launch-hygiene gate 先行）

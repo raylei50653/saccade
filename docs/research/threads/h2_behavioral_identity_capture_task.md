@@ -416,9 +416,10 @@ artifact in this repository can supply.
 Declaration
 [Review Correction 5](../../modules/semantic/research/headline_bridge_behavioral_identity_capture_declaration_20260725.md#review-correction-5--execution-integrity-is-the-requirement-2026-07-30-pre-seal)
 supersedes the future acceptance target described below: this H2 unit now
-requires **execution integrity**, not environment reproducibility. The text
-below remains the historical account of how the existing head-bound chain was
-built, failed and repaired; it is not authority to rebuild that chain again.
+requires **execution integrity**, not environment reproducibility. *Historical
+account — the head-bound chain* below remains the record of how the existing
+head-bound chain was built, failed and repaired; it is not authority to rebuild
+that chain again.
 
 The migration target is content-bound:
 
@@ -462,6 +463,64 @@ seal, canonical-corpus admission or an equivalence update. Authoring the
 full-namespace RunSpec requires a new explicit decision on `detector`,
 `max_frames`, `preset` and `warmup_frames`; the prior adapter ruling remains
 historically true but does not silently author the new sole authority.
+
+### 2026-07-30 successor implementation order — planned, not implemented
+
+Confirmed mechanically at `290fd0c10b3bff070b50fc1ebcd760c98ee36507` (PR #306
+merge; clean worktree, `HEAD == origin/main`, no open pull request): the
+migration's **contracts and configuration authority** have landed and nothing
+executable consumes them yet. `tests/contract` is 1158 passed / 4 skipped /
+3 xfailed, the corpus checker is `PASS (1 roots; complete=1)`, and the staleness
+checker exits 0 with the three legacy unresolved-axis warnings — no host
+environment, runtime-input content or probe was recomputed, and no equality was
+claimed.
+
+Two constraints are gone: with `source_head` / `source_tree` / `F` / the Layer-P
+certificate / published coordinate-probe equality retired as successor gates,
+`main` no longer has to stand still and Items 4–5 no longer have to be rebuilt
+for every commit. This is what makes ordinary staged review possible again.
+
+What blocks the successor path is a **verdict-algebra gap**: the successor
+artifact vocabulary and the ruler's executable partition disagree, and no code
+reads the successor vocabulary at all.
+
+| gap | evidence at this head |
+|:--|:--|
+| three predicate names diverge, one with inverted polarity | `h2_execution_result_v1` requires `behavior_probe_equals_spec`, `runtime_binding_matches_spec` and `bound_input_unchanged`; `h2_terminal_partition.ORDERED_PREDICATES` carries `behavior_probe_equals_freeze`, `layer_p_certificate_matches_freeze` and `bound_input_mutated` (the last in `_TRUE_IS_FAILURE`) |
+| the predicate state space widened from two values to four | the schema's `predicate_result.state` is `pass` / `fail` / `error` / `not_run`; `select_terminal` raises on any non-`bool` predicate |
+| three ruler results have no successor token | `build_failed`, `extension_load_failed` and `certificate_mismatch` — while Correction 5 explicitly **retains** the `build` and `extension_load` stages, so their failures must still land somewhere by name |
+| two successor results have no ruler mapping | `runtime_binding_mismatch` and `diagnostic_complete` |
+| measurement verdicts are jointly unconstrained | `h2_execution_result_v1.allOf` constrains only the `non_qualifying_diagnostic` branch; under `exactly_once_measurement` a failure `result` with `terminal: null` validates — the successor shape of the "authorization spent, no terminal" state § C3.5.1 exists to make unformable |
+| `valid` is unconstrained | `h2_execution_verification_v1` has no cross-constraint at all: `valid: true` with every `checks.*: false` and a non-empty `reasons` validates |
+| nothing consumes the four artifacts | there is no `verify_h2_execution.py`; every `result.json` reference under `scripts/` belongs to H0's legacy schema |
+
+The staged order this charter fixes, each stage a separate reviewable landing:
+
+| | stage | needs a build / GPU |
+|:--|:--|:--|
+| **W1** | this governance landing — confirmed state, the gap table, the order. Docs only: no ruler edit, no re-pin, no republish | no |
+| **W2** | **verdict algebra.** Cross-verdict constraints in the two already-ruler schemas (measurement branch; `valid` as the `checks` conjunction) plus the successor↔legacy vocabulary mapping and four-state handling in `h2_terminal_partition.py`, published through `as_payload()` so the payload path and the function path cannot disagree (§ 20.8). Lands with declaration Review Correction 9, the `sealed_prefix` re-pin and the `identity_semantics` republish. `build` / `extension_load` failures must keep a named successor token or be adjudicated as folded | no |
+| **W3** | **archive-only verifier.** `verification.json` + `checksums.sha256` closure computed from archive bytes only — `producer_invoked: false`, `verification_host_inputs_used: false`, no UID, host identity, checkout or build input, which is also the closure of the 2026-07-28 verifying-host dependence defect. It **imports** W2's constraints rather than restating them, and the C3.9-style scan covers every successor plumbing file. Fixtures are synthesised from the frozen schemas, never captured from producer output (§ 5.3) | no |
+| **W4** | **producer.** The three producer artifacts emitted inside the retained six-stage order, plus the diagnostic / exactly-once measurement split | yes |
+| **W5** | **closure.** Transient mid-execution namespace mutation, evaluator/pipeline/tracker execution-code closure, successor archive admission in the corpus checker, witness v3, governance closeout | yes |
+
+W3 precedes W4 for three reasons, two of them this unit's own scars. PR #294
+wrote the evidence contract and the independent verifier **before** the
+controller of PR #295, because the reverse order defines the contract from
+whatever the producer happens to emit — § 5.3's everyday form. PRs #302 and #304
+were both reordered so the guard landed before the entry point, because a
+non-squash merge leaves every intermediate commit checkout-able: a head that can
+emit self-consistent four-JSON archives with no verifier and no admission gate is
+exactly that false-green combination. And W2–W3 need no build, so item 5's live
+`build/h2_layer_p` bytes stay untouched and the rename-aside decision belongs to
+W4, where a build is actually required.
+
+This staging authorizes no execution. It selects no `I`, creates no `F`/`S`,
+requests no third grant, seals nothing, admits nothing to the canonical corpus
+and changes no equivalence claim. Working detail (not authority):
+`~/.claude/plans/delightful-launching-gosling.md`.
+
+### Historical account — the head-bound chain
 
 **The rehearsal ran once, at `ba40b3f8`, and failed — and it cost no
 authorization.** The controller reached terminal `H2_MEASUREMENT_EXECUTION_INVALID`
