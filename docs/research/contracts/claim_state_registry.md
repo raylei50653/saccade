@@ -1006,7 +1006,29 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
       identity_semantics: 2f84391e → 44b7df41（契約層）→ 24ee5fe1（ruler 層）
       unchanged: decision_surface 9b7faeb0 / environment 3cf9ae3e / implementation 5ede10f0 / runtime_inputs 0b839df0 / probe 2dabed0b
       republished_from: existing read-only probe + runtime-input records（out/h2_layer_p/20260730T032612Z）;no controlled-host or native rebuild
-    tests: +39 contract tests;期望值由 schema 推導後與 ruler 雙向比對,含「ruler 自己的 verdict 是 schema 唯一接受的 verdict」整組
+    owner_review_revision_1:                  # 2026-07-30 owner review of PR #308,兩個 blocking defect
+      named_finding_required_only_non_pass: >-
+        schema 對 finding 自身 predicate 寫 `not const pass` ⇒ `error`/`not_run` 也能選具名 finding。
+        owner 反例(bound_input_unchanged=error / behavior_probe_equals_spec=fail / execution_complete=fail)
+        ruler 判 behavior_probe_moved,但 schema 也接受 input_mutated —— 兩者同 terminal 1,
+        原本只替換 terminal 的 cross-path 測試看不到。修法=自身 predicate 改 `const fail`;
+        cross-path battery 加上「同 terminal 換 result」;mutation 驗過(改回舊條件反例又通過)
+      terminal_four_failure_archives_were_unformable: >-
+        `h2_runtime_binding_v1` 無條件要求兩個完整 build artifact + 成功 extension_load +
+        `identity_probe.state==computed`;**且 `input_monitor.changed_count` 釘 `const 0`、
+        `final_drain_clean` 釘 `const true` ⇒ terminal 1 的 input_mutated 同樣不可形成**(owner 未列但同類)。
+        修法=`failed_stage` sum type(null/build/build_binding/extension_load/identity_run),
+        證據只在執行真的到達處被要求,未到達的 stage 以**缺席**紀錄而非偽造成功形狀;
+        `failed_stage: null` 的成功 archive 嚴格度完全不變
+      no_dedicated_token_stages: [build_binding, identity_run]   # 由 unclassified_execution_failure 承載 + binding 指名 stage;不新增 terminal 邊界
+      cross_artifact_biconditionals:            # JSON Schema 看不到兩個檔 ⇒ ruler 持有、W3 verifier 必須 import
+        checker: h2_terminal_partition.binding_agreement_reasons
+        rules: ["build_failed ⇔ failed_stage=build", "extension_load_failed ⇔ failed_stage=extension_load", "input_mutated ⇔ monitor 記錄到 change 或 unclean final drain"]
+        both_directions: true                   # 單向會讓具名 cause 變成標籤,或讓已記錄的 mutation 不必選 terminal 1
+      where_terminal_four_cause_is_decided: 不在 result.json（其 terminal-4 token 共用同一 predicate）而在 stage evidence;已用專門測試釘住「schema 在此保持沉默、checker 不沉默」
+      re_pin: 92048 → 94893 bytes / 046c4bc5…      # RC9 就地修訂（未 merge、未 seal ⇒ 就地改比再 append 誠實）
+      identity_semantics: 24ee5fe1 → 32d2c37d（宣言修訂）→ 06f7cfa3（schema+ruler 修訂）
+    tests: +67 contract tests;期望值由 schema 推導後與 ruler 雙向比對,含「ruler 自己的 verdict 是 schema 唯一接受的 verdict」整組
     authorization_effect: none
     not_established: no producer; no verifier; no diagnostic mode; no execution; no authorization; no F/S; no seal; no corpus admission; no equivalence claim
     next: W3 archive-only verifier（verification.json + checksums.sha256,producer_invoked=false / verification_host_inputs_used=false,constraints 由本輪 import 不重打）
