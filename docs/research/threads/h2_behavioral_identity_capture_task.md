@@ -1385,3 +1385,22 @@ Additionally, and specific to the accepted decisions:
   rehearse, does not build `F`, and does not claim any execution boundary past
   the one it fixes. `Acceptance` items 4 and 5 and `F` are stale for this head
   and must be rebuilt from scratch before the next single rehearsal.
+
+- **2026-07-30 — frozen RunSpec authoring profile (PR #305 review).** The
+  complete 454-key
+  `docs/research/contracts/h2_phase_a_authoring_profile_v1.json` replaces
+  Python `OWNER_DECLARED_VALUES` and live preset/parser-default resolution as
+  the authoring authority. It is owner-bound by
+  `h2_phase_a_run_spec_authoring_decision_v1.json`; `detector=null`,
+  `max_frames=null`, `preset=null`, and `warmup_frames=50`.
+  `mamba_whole_graph_m.yaml` remains authoring lineage only, with no runtime
+  preset load. The profile, profile schema and owner decision join the declared
+  execution-semantics projection. This resolves only authoring authority; the
+  execution-code closure, transient-mutation gap and cross-verdict constraints
+  remain successor implementation obligations.
+
+- **2026-07-30 — RunSpec canonical byte domains (PR #305 review).** The
+  ambiguous single canonicalization identifier is replaced by two required
+  identifiers: object digests cover compact finite canonical JSON with no
+  trailing LF, while `run_spec.json` serialization adds exactly one trailing
+  LF. The frozen 454-key authoring profile and its SHA-256 remain unchanged.

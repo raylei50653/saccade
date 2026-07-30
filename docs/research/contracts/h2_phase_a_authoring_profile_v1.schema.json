@@ -1,0 +1,146 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://saccade.local/contracts/h2_phase_a_authoring_profile_v1.schema.json",
+  "title": "H2 Phase-A frozen RunSpec authoring profile v1",
+  "description": "The complete owner-adjudicated evaluator namespace used once to author an H2 Phase-A RunSpec. It is never a runtime preset.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "authoring_lineage",
+    "key_count",
+    "namespace_schema",
+    "resolved_namespace",
+    "resolved_namespace_digest",
+    "schema",
+    "serialization"
+  ],
+  "properties": {
+    "schema": {
+      "const": "h2_phase_a_authoring_profile_v1"
+    },
+    "namespace_schema": {
+      "const": "mot17_args_resolved_namespace_v1"
+    },
+    "serialization": {
+      "const": "utf8_lexicographic_keys_indent_2_finite_trailing_lf_v1"
+    },
+    "key_count": {
+      "const": 454
+    },
+    "authoring_lineage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "derived_from",
+        "resolution",
+        "runtime_preset_loader",
+        "source_sha256"
+      ],
+      "properties": {
+        "derived_from": {
+          "const": "configs/presets/mamba_whole_graph_m.yaml"
+        },
+        "resolution": {
+          "const": "one_time_parser_resolution_plus_owner_adjudication"
+        },
+        "runtime_preset_loader": {
+          "const": false
+        },
+        "source_sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "resolved_namespace": {
+      "type": "object",
+      "minProperties": 454,
+      "maxProperties": 454,
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+      },
+      "properties": {
+        "detect_barrier": {
+          "const": "event"
+        },
+        "detector": {
+          "type": "null"
+        },
+        "double_buffer": {
+          "const": true
+        },
+        "gpu_decode": {
+          "const": true
+        },
+        "latency_only": {
+          "const": true
+        },
+        "main_nms_graphed": {
+          "const": true
+        },
+        "max_frames": {
+          "type": "null"
+        },
+        "no_gpu_decode": {
+          "const": false
+        },
+        "output": {
+          "const": "${H2_RUN_DIR}/_runtime"
+        },
+        "preset": {
+          "type": "null"
+        },
+        "sequences": {
+          "const": "MOT17-04-SDP"
+        },
+        "warmup_frames": {
+          "const": 50
+        }
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/json_value"
+      }
+    },
+    "resolved_namespace_digest": {
+      "$ref": "#/$defs/sha256"
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "json_value": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "integer"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/json_value"
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/json_value"
+          }
+        }
+      ]
+    }
+  }
+}

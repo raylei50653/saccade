@@ -59,6 +59,7 @@ import check_h2_measure_archives as corpus  # noqa: E402
 import h2_behavioral_identity as behavior  # noqa: E402
 import h2_measurement_evidence as evidence  # noqa: E402
 import h2_path_partition as path_partition  # noqa: E402
+import h2_run_spec as run_spec  # noqa: E402
 import h2_terminal_partition as partition  # noqa: E402
 import verify_h2_measurement as verifier  # noqa: E402
 from export_headline_bridge_decision_trace import (  # noqa: E402
@@ -89,6 +90,9 @@ COORDINATE["identity_semantics"] = _COMMIT_AXES["identity_semantics"]["digest"]
 PROBE = "2d" * 32
 
 _SUCCESSOR_SCHEMA_PATHS = {
+    "authoring_profile": (
+        _REPO / "docs/research/contracts/h2_phase_a_authoring_profile_v1.schema.json"
+    ),
     "run_spec": _REPO / "docs/research/contracts/h2_phase_a_run_spec_v1.json",
     "runtime_binding": _REPO / "docs/research/contracts/h2_runtime_binding_v1.json",
     "result": _REPO / "docs/research/contracts/h2_execution_result_v1.json",
@@ -130,12 +134,80 @@ def test_run_spec_projection_declares_the_complete_content_set() -> None:
     expected = {
         *evidence.PHASE_A_EXECUTED_SURFACE_PATHS,
         evidence.PHASE_A_CAPTURE_ABI_PATH,
+        run_spec.AUTHORING_PROFILE_REL,
+        run_spec.AUTHORING_PROFILE_SCHEMA_REL,
+        run_spec.AUTHORING_DECISION_REL,
         "scripts/eval/mot17_args.py",
         "docs/research/contracts/h2_phase_a_run_spec_v1.json",
         "scripts/tools/h2_run_spec.py",
     }
     assert declared == expected
+    assert set(run_spec.EXECUTION_SEMANTICS_PATHS) == expected
     assert members["minItems"] == members["maxItems"] == len(expected)
+
+
+def test_run_spec_schema_names_distinct_object_and_artifact_byte_domains() -> None:
+    schema = json.loads(_SUCCESSOR_SCHEMA_PATHS["run_spec"].read_text(encoding="utf-8"))
+    properties = schema["properties"]
+    assert "canonicalization" not in properties
+    assert properties["object_canonicalization"]["const"] == (
+        "utf8_lexicographic_keys_compact_finite_no_trailing_lf_v1"
+    )
+    assert properties["artifact_serialization"]["const"] == (
+        "utf8_lexicographic_keys_compact_finite_single_trailing_lf_v1"
+    )
+
+
+def test_frozen_authoring_profile_is_complete_and_owner_bound() -> None:
+    profile_path = _REPO / run_spec.AUTHORING_PROFILE_REL
+    profile_schema = json.loads(
+        (_REPO / run_spec.AUTHORING_PROFILE_SCHEMA_REL).read_text(encoding="utf-8")
+    )
+    profile = json.loads(profile_path.read_text(encoding="utf-8"))
+    decision = json.loads(
+        (_REPO / run_spec.AUTHORING_DECISION_REL).read_text(encoding="utf-8")
+    )
+
+    jsonschema.Draft202012Validator(profile_schema).validate(profile)
+    assert profile["key_count"] == len(profile["resolved_namespace"]) == 454
+    assert profile["resolved_namespace_digest"] == evidence.digest(
+        profile["resolved_namespace"]
+    )
+    assert profile["resolved_namespace"]["preset"] is None
+    assert (
+        decision["profile_sha256"]
+        == hashlib.sha256(profile_path.read_bytes()).hexdigest()
+    )
+    assert decision["explicit_adjudications"] == {
+        key: profile["resolved_namespace"][key]
+        for key in ("detector", "max_frames", "preset", "warmup_frames")
+    }
+
+
+def test_authoring_profile_tamper_fails_before_run_spec_issuance(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    real_load = run_spec._load_pretty_document
+
+    def tampered_load(
+        relative: str, *, require_canonical: bool = True
+    ) -> tuple[dict[str, Any], bytes]:
+        payload, raw = real_load(relative, require_canonical=require_canonical)
+        if relative != run_spec.AUTHORING_PROFILE_REL:
+            return payload, raw
+        payload = json.loads(json.dumps(payload))
+        payload["resolved_namespace"]["acc_alpha"] = 0.16
+        payload["resolved_namespace_digest"] = evidence.digest(
+            payload["resolved_namespace"]
+        )
+        raw = (
+            json.dumps(payload, ensure_ascii=True, indent=2, sort_keys=True) + "\n"
+        ).encode("utf-8")
+        return payload, raw
+
+    monkeypatch.setattr(run_spec, "_load_pretty_document", tampered_load)
+    with pytest.raises(run_spec.RunSpecError, match="does not bind"):
+        run_spec.build_run_spec()
 
 
 def test_verification_schema_forbids_producer_and_host_derived_completion() -> None:

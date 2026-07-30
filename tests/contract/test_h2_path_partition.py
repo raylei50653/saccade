@@ -108,6 +108,18 @@ def test_prose_is_non_execution_wherever_it_lives() -> None:
             "docs/research/contracts/h2_execution_verification_v1.json",
             "identity_semantics",
         ),
+        (
+            "docs/research/contracts/h2_phase_a_authoring_profile_v1.json",
+            "identity_semantics",
+        ),
+        (
+            "docs/research/contracts/h2_phase_a_authoring_profile_v1.schema.json",
+            "identity_semantics",
+        ),
+        (
+            "docs/research/contracts/h2_phase_a_run_spec_authoring_decision_v1.json",
+            "identity_semantics",
+        ),
         ("docs/modules/semantic/TODO.md", "non_execution"),
         ("tests/contract/test_h2_path_partition.py", "non_execution"),
         (
@@ -163,6 +175,7 @@ def test_successor_artifact_authority_cannot_hide_under_broad_prefixes() -> None
     """Schemas under docs/ and the future h2_* resolver are ruler members."""
     expected = {
         *partition.EXECUTION_ARTIFACT_SCHEMA_PATHS,
+        *partition.RUN_SPEC_AUTHORING_PATHS,
         partition.RUN_SPEC_RESOLVER_PATH,
     }
     assert expected <= partition.IDENTITY_SEMANTICS_PATHS

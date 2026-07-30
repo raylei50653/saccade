@@ -2,14 +2,16 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://saccade.local/contracts/h2_phase_a_run_spec_v1.json",
   "title": "H2 Phase-A resolved RunSpec v1",
-  "description": "The complete canonical evaluator namespace and sole execution-configuration authority for H2 Phase A.",
+  "description": "The complete canonical evaluator namespace issued from the frozen owner-adjudicated profile and used as the sole execution-configuration authority for H2 Phase A.",
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "canonicalization",
+    "artifact_serialization",
+    "authoring_profile",
     "execution_semantics_projection",
     "execution_semantics_projection_digest",
     "namespace_schema",
+    "object_canonicalization",
     "phase",
     "resolved_namespace",
     "resolved_namespace_digest",
@@ -18,6 +20,9 @@
     "schema"
   ],
   "properties": {
+    "authoring_profile": {
+      "$ref": "#/$defs/authoring_profile"
+    },
     "schema": {
       "const": "h2_phase_a_run_spec_v1"
     },
@@ -27,16 +32,25 @@
     "namespace_schema": {
       "const": "mot17_args_resolved_namespace_v1"
     },
-    "canonicalization": {
-      "const": "utf8_lexicographic_keys_compact_finite_trailing_lf_v1"
+    "object_canonicalization": {
+      "const": "utf8_lexicographic_keys_compact_finite_no_trailing_lf_v1"
+    },
+    "artifact_serialization": {
+      "const": "utf8_lexicographic_keys_compact_finite_single_trailing_lf_v1"
     },
     "resolved_namespace": {
       "type": "object",
-      "minProperties": 1,
+      "minProperties": 454,
+      "maxProperties": 454,
       "propertyNames": {
         "type": "string",
         "minLength": 1,
         "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+      },
+      "properties": {
+        "preset": {
+          "type": "null"
+        }
       },
       "additionalProperties": {
         "$ref": "#/$defs/json_value"
@@ -66,6 +80,67 @@
     }
   },
   "$defs": {
+    "authoring_profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "authoring_lineage",
+        "owner_decision",
+        "owner_decision_sha256",
+        "profile",
+        "profile_schema",
+        "profile_schema_sha256",
+        "profile_sha256",
+        "schema"
+      ],
+      "properties": {
+        "schema": {
+          "const": "h2_run_spec_authoring_binding_v1"
+        },
+        "profile": {
+          "const": "docs/research/contracts/h2_phase_a_authoring_profile_v1.json"
+        },
+        "profile_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "profile_schema": {
+          "const": "docs/research/contracts/h2_phase_a_authoring_profile_v1.schema.json"
+        },
+        "profile_schema_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "owner_decision": {
+          "const": "docs/research/contracts/h2_phase_a_run_spec_authoring_decision_v1.json"
+        },
+        "owner_decision_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "authoring_lineage": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "derived_from",
+            "resolution",
+            "runtime_preset_loader",
+            "source_sha256"
+          ],
+          "properties": {
+            "derived_from": {
+              "const": "configs/presets/mamba_whole_graph_m.yaml"
+            },
+            "resolution": {
+              "const": "one_time_parser_resolution_plus_owner_adjudication"
+            },
+            "runtime_preset_loader": {
+              "const": false
+            },
+            "source_sha256": {
+              "$ref": "#/$defs/sha256"
+            }
+          }
+        }
+      }
+    },
     "sha256": {
       "type": "string",
       "pattern": "^[0-9a-f]{64}$"
@@ -145,13 +220,49 @@
         },
         "members": {
           "type": "array",
-          "minItems": 11,
-          "maxItems": 11,
+          "minItems": 14,
+          "maxItems": 14,
           "uniqueItems": true,
           "items": {
             "$ref": "#/$defs/content_member"
           },
           "allOf": [
+            {
+              "contains": {
+                "properties": {
+                  "path": {
+                    "const": "docs/research/contracts/h2_phase_a_authoring_profile_v1.json"
+                  }
+                },
+                "required": [
+                  "path"
+                ]
+              }
+            },
+            {
+              "contains": {
+                "properties": {
+                  "path": {
+                    "const": "docs/research/contracts/h2_phase_a_authoring_profile_v1.schema.json"
+                  }
+                },
+                "required": [
+                  "path"
+                ]
+              }
+            },
+            {
+              "contains": {
+                "properties": {
+                  "path": {
+                    "const": "docs/research/contracts/h2_phase_a_run_spec_authoring_decision_v1.json"
+                  }
+                },
+                "required": [
+                  "path"
+                ]
+              }
+            },
             {
               "contains": {
                 "properties": {

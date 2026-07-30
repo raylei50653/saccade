@@ -864,6 +864,50 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
     authorization_effect: none
     not_established: no Phase-A execution; no third authorization; no S; no seal; no corpus admission; no equivalence claim
     history_preserved: two owner authorizations remain permanently spent and produced zero faithful capture; H0 unchanged
+  run_spec_authoring_profile_decided:
+    date: 2026-07-30
+    authority: "H2 declaration Review Correction 6 / research_owner"
+    status: decided; frozen authoring profile and resolver implemented in staged PR #305
+    profile: docs/research/contracts/h2_phase_a_authoring_profile_v1.json
+    profile_sha256: cadcfeb56c3ecfef1f208f901bed92f931438158b8d8c3c05779c7db7bccacfe
+    profile_schema: docs/research/contracts/h2_phase_a_authoring_profile_v1.schema.json
+    owner_decision: docs/research/contracts/h2_phase_a_run_spec_authoring_decision_v1.json
+    key_count: 454
+    explicit_adjudications:
+      detector: null
+      max_frames: null
+      preset: null
+      warmup_frames: 50
+    authoring_lineage:
+      derived_from: configs/presets/mamba_whole_graph_m.yaml
+      source_sha256: 496c4ec22b497c70bc8409227513939b4cd86834bf2210475d0ad655be6937af
+      runtime_preset_loader: false
+    runtime_authority: invocation RunSpec only; profile is source and identity-bound audit input, not a runtime preset
+    interpretation_closure:
+      - frozen authoring profile
+      - authoring profile schema
+      - owner decision
+      - RunSpec schema and resolver
+      - scripts/eval/mot17_args.py
+      - capture ABI and executed surfaces
+    remaining_obligations:
+      - diagnostic/measurement complete execution-code closure
+      - protection against transient mid-execution namespace mutation
+      - cross-verdict constraints among valid, predicates and terminals
+    authorization_effect: none
+    not_established: no Phase-A execution; no authorization; no F/S; no seal; no corpus admission; no equivalence claim
+  run_spec_canonical_byte_domains_clarified:
+    date: 2026-07-30
+    authority: "H2 declaration Review Correction 7"
+    status: clarified in staged PR #305; no authoring-profile change
+    object_canonicalization: utf8_lexicographic_keys_compact_finite_no_trailing_lf_v1
+    artifact_serialization: utf8_lexicographic_keys_compact_finite_single_trailing_lf_v1
+    object_digest_domain: finite compact canonical JSON bytes with lexicographic keys and no trailing LF
+    artifact_file_domain: complete object bytes followed by exactly one trailing LF
+    deprecated_alias: utf8_lexicographic_keys_compact_finite_trailing_lf_v1
+    profile_sha256_unchanged: cadcfeb56c3ecfef1f208f901bed92f931438158b8d8c3c05779c7db7bccacfe
+    authorization_effect: none
+    not_established: no Phase-A execution; no authorization; no F/S; no seal; no corpus admission; no equivalence claim
 pending_reentry:                          # append-only; pre-seal, no terminal claimed; route-1 永久留帳結論不變
   - date: 2026-07-21
     scheduling: owner-scheduled re-entry #3（滿足 line-337 future_reentry_precondition:launch-hygiene gate 先行）

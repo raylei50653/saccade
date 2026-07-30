@@ -45,10 +45,10 @@ import build_runtime_identity as identity  # noqa: E402
 import check_runtime_identity_staleness as staleness  # noqa: E402
 import h2_behavioral_identity as behavior  # noqa: E402
 import h2_measurement_evidence as evidence  # noqa: E402
+import h2_run_spec as run_spec  # noqa: E402
 import h2_runtime_inputs as runtime_inputs  # noqa: E402
 import h2_terminal_partition as partition  # noqa: E402
 import run_h0_phase_a as h0_controller  # noqa: E402
-import run_h0_phase_a_child as h0_child  # noqa: E402
 import run_h2_measurement_child as child  # noqa: E402
 import verify_h0_phase_a as h0_verifier  # noqa: E402
 import verify_h2_measurement as verifier  # noqa: E402
@@ -603,10 +603,15 @@ def child_environment(
     run_dir: Path,
     *,
     build_dir: Path,
+    document: Mapping[str, Any],
     inherited: Mapping[str, str] | None = None,
 ) -> dict[str, str]:
     source = dict(os.environ if inherited is None else inherited)
-    environment = dict(h0_child.STATIC_ENV)
+    try:
+        projected = run_spec.environment_projection(document)
+    except run_spec.RunSpecError as exc:
+        raise ControllerError(f"cannot derive child environment: {exc}") from exc
+    environment = {**child.HYGIENE_ENV, **projected}
     environment.update(
         {
             "CUDA_VISIBLE_DEVICES": source.get("CUDA_VISIBLE_DEVICES", "0"),
@@ -625,7 +630,7 @@ def child_environment(
             "XDG_CACHE_HOME": (run_dir / "_env" / "xdg-cache").as_posix(),
         }
     )
-    if set(environment) != h0_child.EXPECTED_ENV_KEYS:
+    if set(environment) != child.EXPECTED_ENV_KEYS:
         raise ControllerError("internal child environment key drift")
     return environment
 
@@ -1092,7 +1097,7 @@ def _prepare_run(
     *,
     bundle: LaunchBundle,
     run_id: str,
-    policy_fingerprint: str,
+    document: Mapping[str, Any],
     inherited_environment: Mapping[str, str] | None,
 ) -> tuple[Path, dict[str, str]]:
     run_dir = evidence.run_dir(root, SEQUENCE, run_id)
@@ -1102,6 +1107,7 @@ def _prepare_run(
     environment = child_environment(
         run_dir,
         build_dir=bundle.build_dir.resolve(strict=True),
+        document=document,
         inherited=inherited_environment,
     )
     invocation = {
@@ -1111,7 +1117,7 @@ def _prepare_run(
         "capture_run_uuid": str(uuid.uuid4()),
         "environment_digest": _environment_digest(environment),
         "instrumentation_head": bundle.head,
-        "policy_fingerprint": policy_fingerprint,
+        "run_spec": document,
         "run_dir": run_dir.resolve(strict=True).as_posix(),
         "run_id": run_id,
         "sequence": SEQUENCE,
@@ -1557,16 +1563,14 @@ def execute_controller(
             and not checkout_reasons
             and predicates["behavior_probe_equals_freeze"]
         ):
-            policy_fingerprint = identity.decision_surface_axis()[
-                "resolved_bridge_policy_config_v1"
-            ]
+            document = run_spec.build_run_spec()
             for run_id in evidence.RUN_IDS:
                 _remaining(started, clock)
                 invocation_path, environment = _prepare_run(
                     incomplete,
                     bundle=bundle,
                     run_id=run_id,
-                    policy_fingerprint=policy_fingerprint,
+                    document=document,
                     inherited_environment=inherited_environment,
                 )
                 launch_recorded = False

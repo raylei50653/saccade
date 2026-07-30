@@ -1,0 +1,18 @@
+{
+  "authority": "research_owner",
+  "decision_date": "2026-07-30",
+  "explicit_adjudications": {
+    "detector": null,
+    "max_frames": null,
+    "preset": null,
+    "warmup_frames": 50
+  },
+  "key_count": 454,
+  "profile": "docs/research/contracts/h2_phase_a_authoring_profile_v1.json",
+  "profile_sha256": "cadcfeb56c3ecfef1f208f901bed92f931438158b8d8c3c05779c7db7bccacfe",
+  "runtime_interpretation": {
+    "preset_loader": false,
+    "profile_kind": "frozen_authoring_profile_not_runtime_preset"
+  },
+  "schema": "h2_phase_a_run_spec_authoring_decision_v1"
+}

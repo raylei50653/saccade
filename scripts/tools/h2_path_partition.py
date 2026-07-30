@@ -74,6 +74,11 @@ EXECUTION_ARTIFACT_SCHEMA_PATHS: tuple[str, ...] = (
     "docs/research/contracts/h2_execution_result_v1.json",
     "docs/research/contracts/h2_execution_verification_v1.json",
 )
+RUN_SPEC_AUTHORING_PATHS: tuple[str, ...] = (
+    "docs/research/contracts/h2_phase_a_authoring_profile_v1.json",
+    "docs/research/contracts/h2_phase_a_authoring_profile_v1.schema.json",
+    "docs/research/contracts/h2_phase_a_run_spec_authoring_decision_v1.json",
+)
 RUN_SPEC_RESOLVER_PATH = "scripts/tools/h2_run_spec.py"
 
 DECISION_RELEVANT_PATHS: frozenset[str] = frozenset(
@@ -100,6 +105,7 @@ IDENTITY_SEMANTICS_PATHS: frozenset[str] = frozenset(
         "scripts/tools/h2_terminal_partition.py",
         "scripts/tools/run_h2_layer_p.py",
         *EXECUTION_ARTIFACT_SCHEMA_PATHS,
+        *RUN_SPEC_AUTHORING_PATHS,
         RUN_SPEC_RESOLVER_PATH,
     )
 )

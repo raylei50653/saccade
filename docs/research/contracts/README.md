@@ -19,7 +19,7 @@
 | **[gctm_b1_slot_identity_decision_v1.json](gctm_b1_slot_identity_decision_v1.json)** | **Owner-accepted、machine-readable B1-slot identity 決策。** 固定 `GCTM_B1 != H0_ROUTE5_B1` 與 `relation: coexist`，隔離 `GCTM_D1` diagnostic authority，記錄 runtime compatibility fail-closed gate，並投影空候選集／空 WIP。通用 schema 與 validator 位於 `scripts/tools/research_slot_governance_*`。 |
 | **[research_lock_v1.json](research_lock_v1.json)** | **online 與 research 互斥的當前狀態（machine-readable）。** 規則在 §20.10、執行在 `tests/contract/test_research_lock.py`，本檔只承載 state：`ONLINE_OPEN` / `RESEARCH_OPEN` / `RESEARCH_CLOSED`、開啟中實例所凍結的座標軸、以及 append-only 的轉移紀錄。轉移只由 `scripts/tools/research_lock.py` 執行；**缺檔 = 被刪除的 guard，不是 `ONLINE_OPEN`**。 |
 | **[h2_controlled_host_execution_domain_v1.json](h2_controlled_host_execution_domain_v1.json)** | **H2 canonical corpus 的 admission anchor。** 唯一被 canonical measurement corpus 接納的 authorization execution domain（controlled host／operator／ledger namespace）。規則在 `check_h2_measure_archives.execution_domain_admission_reasons`，比對的是 archive 位元組與本檔位元組、**不觀察驗證主機**。它是 provenance/admission guard,**不是** authority proof：能重寫 grant／receipt／digest chain 的人也能寫入本檔內容,不可偽造的簽發需要簽章機制,本 repo 不提供。 |
-| **[H2 execution-integrity artifact suite](h2_phase_a_run_spec_v1.json)** | **H2 successor execution 的 machine-readable artifact contract。** `h2_phase_a_run_spec_v1` 固定完整 resolved namespace 與 declared content projection；[`h2_runtime_binding_v1`](h2_runtime_binding_v1.json) 綁實際 code/input/build bytes；[`h2_execution_result_v1`](h2_execution_result_v1.json) 區分 non-qualifying diagnostic 與 exactly-once measurement；[`h2_execution_verification_v1`](h2_execution_verification_v1.json) 只容許獨立 process 產生 foreign-host-independent verdict。 |
+| **[H2 execution-integrity artifact suite](h2_phase_a_run_spec_v1.json)** | **H2 successor execution 的 machine-readable artifact contract。** [`h2_phase_a_authoring_profile_v1`](h2_phase_a_authoring_profile_v1.json) 是完整 454-key frozen authoring authority（非 runtime preset）；`h2_phase_a_run_spec_v1` 固定其發行出的 resolved namespace 與 declared content projection；[`h2_runtime_binding_v1`](h2_runtime_binding_v1.json) 綁實際 code/input/build bytes；[`h2_execution_result_v1`](h2_execution_result_v1.json) 區分 non-qualifying diagnostic 與 exactly-once measurement；[`h2_execution_verification_v1`](h2_execution_verification_v1.json) 只容許獨立 process 產生 foreign-host-independent verdict。 |
 | **[boolean_composition_semantics_contract.md](boolean_composition_semantics_contract.md)** | **組合語義。** Ω/Θ 分型、三值 predicate、universe identity、threshold edge、role closure、canonical grammar、closed-loop firewall |
 | **[safe_region_asset_contract.md](safe_region_asset_contract.md)** | **打包契約（R0-B RegionAsset）。** 把已封存的 evidence 決定性地打包成 region asset；claim level 與成熟度；**transfer / intervention / production 皆尚未授權** |
 
@@ -29,13 +29,23 @@
 
 四份 H2 schema 固定兩條不可由 producer 改寫的規則：
 
-1. **Configuration authority。** `run_spec.json` 必須包含 evaluator parser
-   暴露的完整 canonical resolved namespace。Preset、parser default、environment
-   與 argv 都只是由 RunSpec 導出的 transport；parse 後每個 key 都必須與
-   RunSpec 相等，任何一處不得另行 originate value。
+1. **Configuration authority。** [`h2_phase_a_authoring_profile_v1.json`](h2_phase_a_authoring_profile_v1.json)
+   是完整 454-key、owner-adjudicated、byte-frozen 的 authoring profile，
+   不是 runtime preset；其 [schema](h2_phase_a_authoring_profile_v1.schema.json)
+   與 [owner decision](h2_phase_a_run_spec_authoring_decision_v1.json) 必須先
+   驗證通過，resolver 才能機械發行 `run_spec.json`。RunSpec 內 `preset`
+   固定為 `null`，一般 preset 與 parser defaults 只存在於 profile 的一次性
+   authoring lineage，runtime 不重讀。`run_spec.json` 必須包含 evaluator
+   parser 暴露的完整 canonical resolved namespace；runtime parser defaults、
+   environment 與 argv 都只是由 RunSpec 導出的 transport，parse 後每個 key
+   都必須與 RunSpec 相等，任何一處不得另行 originate value。RunSpec object
+   digest 的 canonical JSON bytes 不含 trailing LF；`run_spec.json` artifact
+   serialization 則在相同 bytes 後恰加一個 LF，兩個 byte domain 以獨立必填
+   identifier 固定。
 2. **Projection authority。** `execution_semantics_projection` 是 declared
    content set 的 byte digest equality，成員固定包含 executed surfaces、
-   capture ABI、`mot17_args.py`、RunSpec schema 與 resolver。它不讀
+   capture ABI、`mot17_args.py`、frozen authoring profile、profile schema、
+   owner decision、RunSpec schema 與 resolver。它不讀
    `h2_path_partition` 的分類結果；分類器只保護 ruler edit，不能反過來決定
    哪些 bytes 具有 execution semantics。
 

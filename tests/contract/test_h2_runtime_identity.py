@@ -357,6 +357,7 @@ def test_identity_semantics_axis_binds_the_ruler_itself() -> None:
         "scripts/tools/check_runtime_identity_staleness.py",
         "scripts/tools/run_h2_layer_p.py",
         *identity.partition.EXECUTION_ARTIFACT_SCHEMA_PATHS,
+        *identity.partition.RUN_SPEC_AUTHORING_PATHS,
     } <= files
 
 
