@@ -38,8 +38,8 @@ if _TOOLS.as_posix() not in sys.path:
 
 import h2_behavioral_identity as behavior  # noqa: E402
 import h2_measurement_evidence as evidence  # noqa: E402
+import h2_run_spec as run_spec  # noqa: E402
 import run_h0_phase_a as h0_controller  # noqa: E402
-import run_h0_phase_a_child as h0_child  # noqa: E402
 from export_headline_bridge_decision_trace import (  # noqa: E402
     OVERFLOW_KEYS,
     STREAMS,
@@ -64,48 +64,32 @@ RUN_RUNNING = "running"
 RUN_COMPLETED = "completed"
 RUN_FAILED = "failed"
 
-# The choices this measurement has already frozen, sent through the surface
-# `mot17_args` declares authoritative over them: the parsed arguments.
-#
-# The first four name every key `configure_runtime_env` writes that the frozen
-# A5 environment also fixes. Leaving any of them to a preset default is how the
-# 2026-07-29 rehearsal died — the preset carries neither `double_buffer` nor
-# `detect_barrier`, so the parser resolved them to `False`/`None` and the
-# configuration function dutifully rewrote `event`/`1` to `full`/`0`. Two of the
-# four happened to resolve correctly from the preset; that was luck, and the
-# preset is a decision-relevant file that may move without this file noticing.
-# Named here, repository-owned configuration becomes a no-op over the frozen
-# environment rather than a mutation that merely stays inside its declared set.
-#
-# `--latency-only` is the same kind of fact about a different contract. The
-# evaluator returns before metrics only under it; otherwise it writes MOT output
-# and runs `run_motmetrics_evaluation`, which reads ground truth this measurement
-# is not permitted to read — and this file then refuses the result for not being
-# the sole no-metrics boundary. H0 sends all five the same way
-# (`run_h0_phase_a.EVALUATOR_ARGV_PREFIX`); this adapter had not.
-FIXED_EXECUTION_ARGV: tuple[str, ...] = (
-    "--double-buffer",
-    "--detect-barrier",
-    "event",
-    "--gpu-decode",
-    "--main-nms-graphed",
-    "--latency-only",
-)
-
-# The keys `scripts/eval/mot17_args.configure_runtime_env` is allowed to write
-# or clear.  Restated here because this file must gate the mutation, and bound
-# to the producer's actual behaviour by a contract test rather than remembered
-# (§ C3.9: a re-typed fact in an editable file drifts while the producer stands
-# still).
-REPOSITORY_OWNED_ENV_KEYS = frozenset(
+# Launch hygiene remains process policy, not evaluator configuration.  The four
+# SACCADE configuration keys formerly mixed into H0's STATIC_ENV are now derived
+# exclusively from the RunSpec by `h2_run_spec.environment_projection`.
+HYGIENE_ENV = {
+    "CUDA_DEVICE_ORDER": "PCI_BUS_ID",
+    "LANG": "C.UTF-8",
+    "LC_ALL": "C.UTF-8",
+    "PYTHONHASHSEED": "0",
+    "PYTHONNOUSERSITE": "1",
+    "TZ": "UTC",
+}
+DYNAMIC_ENV_KEYS = frozenset(
     {
-        "SACCADE_DETECT_BARRIER",
-        "SACCADE_DOUBLE_BUFFER",
-        "SACCADE_GPU_DECODE",
-        "SACCADE_MAIN_NMS_GRAPHED",
-        "SACCADE_STREAM_MODE",
+        "CUDA_VISIBLE_DEVICES",
+        "HOME",
+        "LD_LIBRARY_PATH",
+        "PATH",
+        "SACCADE_BUILD_PATH",
+        "TMPDIR",
+        "XDG_CACHE_HOME",
     }
 )
+EXPECTED_ENV_KEYS = frozenset(
+    {*HYGIENE_ENV, *run_spec.CONFIG_ENV_KEYS, *DYNAMIC_ENV_KEYS}
+)
+REPOSITORY_OWNED_ENV_KEYS = run_spec.REPOSITORY_OWNED_ENV_KEYS
 
 (
     ACTIVE_PAIRS_MEMBER,
@@ -188,7 +172,7 @@ def load_invocation(path: Path) -> dict[str, Any]:
         "capture_run_uuid",
         "environment_digest",
         "instrumentation_head",
-        "policy_fingerprint",
+        "run_spec",
         "run_dir",
         "run_id",
         "schema",
@@ -218,6 +202,10 @@ def load_invocation(path: Path) -> dict[str, Any]:
         raise ChildError("invocation path binding is absent or inconsistent")
     if invocation["state"] != RUN_RUNNING:
         raise ChildError("invocation is not in the running state")
+    try:
+        run_spec.validate_run_spec(invocation["run_spec"], verify_projection=True)
+    except (KeyError, TypeError, run_spec.RunSpecError) as exc:
+        raise ChildError(f"invocation RunSpec is invalid: {exc}") from exc
     run_uuid = invocation["capture_run_uuid"]
     if not isinstance(run_uuid, str) or not run_uuid:
         raise ChildError("invocation has no capture_run_uuid")
@@ -231,13 +219,18 @@ def _environment_digest(environment: Mapping[str, str]) -> str:
 def validate_environment(
     environment: Mapping[str, str], invocation: Mapping[str, Any]
 ) -> None:
-    if set(environment) != h0_child.EXPECTED_ENV_KEYS:
-        raise ChildError(
-            "child environment keys differ from the frozen A5 execution environment"
-        )
-    for key, value in h0_child.STATIC_ENV.items():
+    if set(environment) != EXPECTED_ENV_KEYS:
+        raise ChildError("child environment keys differ from the H2 launch contract")
+    for key, value in HYGIENE_ENV.items():
         if environment.get(key) != value:
             raise ChildError(f"child environment value mismatch for {key}")
+    try:
+        projected = run_spec.environment_projection(invocation["run_spec"])
+    except run_spec.RunSpecError as exc:
+        raise ChildError(f"child RunSpec environment projection failed: {exc}") from exc
+    for key, value in projected.items():
+        if environment.get(key) != value:
+            raise ChildError(f"child RunSpec environment mismatch for {key}")
     if environment.get("SACCADE_BUILD_PATH") != invocation["build_dir"]:
         raise ChildError("selected build directory differs from the invocation")
     if environment.get("SACCADE_GPU_DECODE") != "1":
@@ -282,7 +275,9 @@ def record_import_delta(
 
 
 def validate_repository_owned_mutation(
-    baseline: Mapping[str, str], applied: Mapping[str, str]
+    baseline: Mapping[str, str],
+    applied: Mapping[str, str],
+    document: Mapping[str, Any],
 ) -> None:
     """Gate `configure_runtime_env` against its own explicitly named baseline.
 
@@ -298,18 +293,26 @@ def validate_repository_owned_mutation(
         for key in set(baseline) | set(applied)
         if baseline.get(key) != applied.get(key)
     }
-    outside = sorted(mutated - REPOSITORY_OWNED_ENV_KEYS)
+    outside = sorted(mutated - run_spec.REPOSITORY_OWNED_ENV_KEYS)
     if outside:
         raise ChildError(
             "repository-owned runtime configuration mutated keys outside its "
             f"declared set: {outside}"
         )
-    for key, value in h0_child.STATIC_ENV.items():
-        if applied.get(key) != value:
-            raise ChildError(
-                f"repository-owned runtime configuration left {key} outside the "
-                "frozen A5 execution environment"
-            )
+    try:
+        projected = run_spec.environment_projection(document)
+    except run_spec.RunSpecError as exc:
+        raise ChildError(
+            f"repository-owned runtime configuration has invalid RunSpec: {exc}"
+        ) from exc
+    mismatches = sorted(
+        key for key, value in projected.items() if applied.get(key) != value
+    )
+    if mismatches:
+        raise ChildError(
+            "repository-owned runtime configuration violated RunSpec values: "
+            f"{mismatches}"
+        )
     if "SACCADE_STREAM_MODE" in applied:
         raise ChildError(
             "repository-owned runtime configuration left SACCADE_STREAM_MODE set"
@@ -382,12 +385,13 @@ def repository_runner(invocation: Mapping[str, Any]) -> RunProducts:
     separately.
     """
     run_dir = Path(str(invocation["run_dir"]))
+    document = invocation["run_spec"]
     pre_import = dict(os.environ)
     (
-        yaml,
+        _yaml,
         build_parser,
         configure_runtime_env,
-        fingerprint,
+        _fingerprint,
         evaluator_module,
         stages_module,
         EvalPipeline,
@@ -403,31 +407,21 @@ def repository_runner(invocation: Mapping[str, Any]) -> RunProducts:
         raise ChildError("runtime build selection differs from the invocation")
     extension = behavior._assert_extension_consumed(build_dir)
 
-    defaults = (
-        yaml.safe_load(
-            (REPO_ROOT / behavior.POLICY_PRESET_REL).read_text(encoding="utf-8")
+    try:
+        args = run_spec.parse_runtime_namespace(
+            document, run_dir, parser=build_parser()
         )
-        or {}
-    )
-    if not isinstance(defaults, dict):
-        raise ChildError("policy preset is not a mapping")
-    parser = build_parser()
-    parser.set_defaults(**defaults)
-    args = parser.parse_args(
-        [
-            "--sequences",
-            sequence,
-            "--output",
-            (run_dir / "_runtime").as_posix(),
-            *FIXED_EXECUTION_ARGV,
-        ]
-    )
-    resolved = fingerprint(behavior.POLICY_PRESET_STEM)
-    if resolved != invocation["policy_fingerprint"]:
-        raise ChildError("resolved policy fingerprint differs from the invocation")
+    except run_spec.RunSpecError as exc:
+        raise ChildError(f"cannot project runtime parser namespace: {exc}") from exc
     configuration_baseline = dict(os.environ)
     configure_runtime_env(args, os.environ)
-    validate_repository_owned_mutation(configuration_baseline, dict(os.environ))
+    validate_repository_owned_mutation(
+        configuration_baseline, dict(os.environ), document
+    )
+    try:
+        run_spec.assert_runtime_matches(document, args, os.environ, run_dir)
+    except run_spec.RunSpecError as exc:
+        raise ChildError(f"pre-execution RunSpec mismatch: {exc}") from exc
 
     tiling = getattr(args, "tiling", "native_640")
     detector = build_mamba_gated_detector(
@@ -582,6 +576,10 @@ def repository_runner(invocation: Mapping[str, Any]) -> RunProducts:
         evaluator_module._run_frame = original_frame
         evaluator_module._fast_emit_mot_lines = original_evaluator_emit
         stages_module._fast_emit_mot_lines = original_stages_emit
+        try:
+            run_spec.assert_runtime_matches(document, args, os.environ, run_dir)
+        except run_spec.RunSpecError as exc:
+            raise ChildError(f"post-execution RunSpec mismatch: {exc}") from exc
     if result != {} or len(emitted) != 1 or len(pipelines) != 1:
         raise ChildError("evaluator did not return at the sole no-metrics boundary")
 

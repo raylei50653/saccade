@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
+import json
 import os
 import shutil
 import struct
@@ -32,7 +33,7 @@ if _EVAL.as_posix() not in sys.path:
 import build_runtime_identity as identity  # noqa: E402
 import h2_behavioral_identity as behavior  # noqa: E402
 import h2_measurement_evidence as evidence  # noqa: E402
-import run_h0_phase_a_child as h0_child  # noqa: E402
+import h2_run_spec as run_spec  # noqa: E402
 import run_h2_measurement as controller  # noqa: E402
 import run_h2_measurement_child as child  # noqa: E402
 import verify_h2_measurement as verifier  # noqa: E402
@@ -1754,8 +1755,9 @@ def _launch_fixture(tmp_path: Path) -> tuple[Path, dict[str, str], Path]:
         (run_dir / "_env" / leaf).mkdir(parents=True)
     build_dir = tmp_path / "build"
     build_dir.mkdir()
+    document = run_spec.build_run_spec()
     environment = controller.child_environment(
-        run_dir, build_dir=build_dir, inherited={}
+        run_dir, build_dir=build_dir, document=document, inherited={}
     )
     invocation = {
         "schema": child.INVOCATION_SCHEMA,
@@ -1764,7 +1766,7 @@ def _launch_fixture(tmp_path: Path) -> tuple[Path, dict[str, str], Path]:
         "capture_run_uuid": "fixture-uuid",
         "environment_digest": child._environment_digest(environment),
         "instrumentation_head": "0" * 40,
-        "policy_fingerprint": "1" * 64,
+        "run_spec": document,
         "run_dir": run_dir.as_posix(),
         "run_id": evidence.RUN_IDS[0],
         "sequence": evidence.MEASUREMENT_SEQUENCE,
@@ -1962,10 +1964,14 @@ def test_import_delta_document_is_exact_and_carries_no_environment_values(
 
 
 def test_repository_owned_mutation_gate_rejects_foreign_keys() -> None:
-    baseline = dict(child.h0_child.STATIC_ENV)
+    document = run_spec.build_run_spec()
+    baseline = {
+        **child.HYGIENE_ENV,
+        **run_spec.environment_projection(document),
+    }
     applied = {**baseline, "QT_QPA_FONTDIR": "/nonexistent/fonts"}
     with pytest.raises(child.ChildError) as excinfo:
-        child.validate_repository_owned_mutation(baseline, applied)
+        child.validate_repository_owned_mutation(baseline, applied, document)
     message = str(excinfo.value)
     assert "outside its declared set" in message
     assert "QT_QPA_FONTDIR" in message
@@ -1974,7 +1980,7 @@ def test_repository_owned_mutation_gate_rejects_foreign_keys() -> None:
 
     with pytest.raises(child.ChildError):
         child.validate_repository_owned_mutation(
-            {**baseline, "PATH": "/usr/bin"}, baseline
+            {**baseline, "PATH": "/usr/bin"}, baseline, document
         )
 
 
@@ -1986,29 +1992,39 @@ def test_repository_owned_mutation_gate_is_blind_to_the_import_delta() -> None:
     new name; the same delta applied *after* the baseline is a violation,
     because by then nothing but `configure_runtime_env` may write.
     """
-    snapshot = dict(child.h0_child.STATIC_ENV)
+    document = run_spec.build_run_spec()
+    snapshot = {
+        **child.HYGIENE_ENV,
+        **run_spec.environment_projection(document),
+    }
     post_import = {**snapshot, **_IMPORT_SIDE_EFFECT}
 
     baseline = dict(post_import)
     applied = dict(post_import)
     baseline["SACCADE_STREAM_MODE"] = "ptds_probe"
-    child.validate_repository_owned_mutation(baseline, applied)
+    child.validate_repository_owned_mutation(baseline, applied, document)
 
     with pytest.raises(child.ChildError):
-        child.validate_repository_owned_mutation(snapshot, post_import)
+        child.validate_repository_owned_mutation(snapshot, post_import, document)
 
 
-def test_repository_owned_mutation_gate_pins_the_frozen_values() -> None:
-    baseline = dict(child.h0_child.STATIC_ENV)
+def test_repository_owned_mutation_gate_pins_the_run_spec_values() -> None:
+    document = run_spec.build_run_spec()
+    baseline = {
+        **child.HYGIENE_ENV,
+        **run_spec.environment_projection(document),
+    }
     with pytest.raises(child.ChildError) as excinfo:
         child.validate_repository_owned_mutation(
-            baseline, {**baseline, "SACCADE_GPU_DECODE": "0"}
+            baseline, {**baseline, "SACCADE_GPU_DECODE": "0"}, document
         )
-    assert "frozen A5 execution environment" in str(excinfo.value)
+    assert "RunSpec values" in str(excinfo.value)
 
     with pytest.raises(child.ChildError) as excinfo:
         child.validate_repository_owned_mutation(
-            baseline, {**baseline, "SACCADE_STREAM_MODE": "ptds_probe"}
+            baseline,
+            {**baseline, "SACCADE_STREAM_MODE": "ptds_probe"},
+            document,
         )
     assert "SACCADE_STREAM_MODE" in str(excinfo.value)
 
@@ -2121,7 +2137,7 @@ def test_no_production_surface_restates_the_authorization_issuer() -> None:
         assert literal not in surface.read_text(encoding="utf-8"), name
 
 
-# -- the fixed A5 execution vector (2026-07-29 rehearsal terminal) ------------ #
+# -- the sole-authority resolved RunSpec ------------------------------------- #
 
 # The rehearsal at `ba40b3f8` reached `H2_MEASUREMENT_EXECUTION_INVALID` because
 # the child took every knob but the sequence and the output from the A5 preset,
@@ -2131,132 +2147,126 @@ def test_no_production_surface_restates_the_authorization_issuer() -> None:
 # to `full`/`0`. H0 had always sent its fixed choices through that same surface.
 
 
-def _preset_parser() -> Any:
-    """The parser the child builds: real flags, real preset defaults."""
-    import yaml
+def test_run_spec_issues_the_complete_owner_declared_namespace() -> None:
+    profile, _binding = run_spec.load_authoring_profile()
+    document = run_spec.build_run_spec()
+    resolved = document["resolved_namespace"]
+    assert len(resolved) == 454
+    assert document["resolved_namespace_keys"] == sorted(resolved)
+    assert resolved == profile["resolved_namespace"]
+    assert resolved["detector"] is None
+    assert resolved["max_frames"] is None
+    assert resolved["preset"] is None
+    assert resolved["warmup_frames"] == 50
+    assert resolved["sequences"] == evidence.MEASUREMENT_SEQUENCE
+    assert resolved["output"] == run_spec.RUN_DIR_OUTPUT_TOKEN
 
-    from mot17_args import build_parser
 
-    defaults = yaml.safe_load(
-        (_REPO / behavior.POLICY_PRESET_REL).read_text(encoding="utf-8")
+def test_run_spec_separates_object_and_artifact_byte_domains(tmp_path: Path) -> None:
+    target = tmp_path / "run_spec.json"
+    assert run_spec.main(["--emit", target.as_posix()]) == 0
+
+    raw = target.read_bytes()
+    document = json.loads(raw)
+    object_bytes = run_spec.canonical_json_bytes(document)
+    digest_payload = run_spec._run_spec_digest_payload(document)
+    digest_bytes = run_spec.canonical_json_bytes(digest_payload)
+
+    assert document["object_canonicalization"] == (
+        "utf8_lexicographic_keys_compact_finite_no_trailing_lf_v1"
     )
-    parser = build_parser()
-    parser.set_defaults(**defaults)
-    return parser
+    assert document["artifact_serialization"] == (
+        "utf8_lexicographic_keys_compact_finite_single_trailing_lf_v1"
+    )
+    assert "canonicalization" not in document
+    assert not object_bytes.endswith(b"\n")
+    assert raw == object_bytes + b"\n"
+    assert (
+        document["resolved_run_spec_digest"] == hashlib.sha256(digest_bytes).hexdigest()
+    )
+    assert (
+        document["resolved_run_spec_digest"]
+        != hashlib.sha256(digest_bytes + b"\n").hexdigest()
+    )
 
 
-def test_the_preset_alone_contradicts_the_frozen_a5_environment() -> None:
-    """The defect itself, as a standing statement rather than an anecdote.
+def test_run_spec_authoring_does_not_consult_live_parser_defaults(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import mot17_args
 
-    Nothing here is host-specific: no GPU, no dataset, no authorization and no
-    child process. Drop `FIXED_EXECUTION_ARGV` and this is what the launch path
-    does on every machine.
-    """
+    expected = run_spec.build_run_spec()
+
+    def forbidden_parser() -> Any:
+        raise AssertionError("frozen-profile authoring consulted the live parser")
+
+    monkeypatch.setattr(mot17_args, "build_parser", forbidden_parser)
+    assert run_spec.build_run_spec() == expected
+
+
+def test_runtime_parser_and_environment_are_only_run_spec_projections(
+    tmp_path: Path,
+) -> None:
     from mot17_args import configure_runtime_env
 
-    args = _preset_parser().parse_args(
-        ["--sequences", evidence.MEASUREMENT_SEQUENCE, "--output", "/tmp/unused"]
-    )
-    assert args.double_buffer is False
-    assert args.detect_barrier is None
-
-    environment = dict(h0_child.STATIC_ENV)
-    configure_runtime_env(args, environment)
-    assert environment["SACCADE_DETECT_BARRIER"] == "full"
-    assert environment["SACCADE_DOUBLE_BUFFER"] == "0"
-
-    with pytest.raises(child.ChildError) as excinfo:
-        child.validate_repository_owned_mutation(dict(h0_child.STATIC_ENV), environment)
-    assert "outside the frozen A5 execution environment" in str(excinfo.value)
-
-
-def test_the_fixed_vector_makes_repository_configuration_a_no_op() -> None:
-    """Not "mutations stay inside the declared set" — no mutations at all.
-
-    Two of the four A5-named keys already resolved correctly from the preset.
-    That was luck: the preset is decision-relevant and may move without this
-    file noticing. Naming all four leaves nothing for a preset edit to break.
-    """
-    from mot17_args import configure_runtime_env
-
-    args = _preset_parser().parse_args(
-        [
-            "--sequences",
-            evidence.MEASUREMENT_SEQUENCE,
-            "--output",
-            "/tmp/unused",
-            *child.FIXED_EXECUTION_ARGV,
-        ]
-    )
-    baseline = dict(h0_child.STATIC_ENV)
+    document = run_spec.build_run_spec()
+    run_dir = tmp_path.resolve()
+    args = run_spec.parse_runtime_namespace(document, run_dir)
+    baseline = {
+        **child.HYGIENE_ENV,
+        **run_spec.environment_projection(document),
+    }
     environment = dict(baseline)
     configure_runtime_env(args, environment)
 
-    assert environment["SACCADE_DETECT_BARRIER"] == "event"
-    assert environment["SACCADE_DOUBLE_BUFFER"] == "1"
-    assert environment["SACCADE_GPU_DECODE"] == "1"
-    assert environment["SACCADE_MAIN_NMS_GRAPHED"] == "1"
-    mutated = {
-        key
-        for key in set(baseline) | set(environment)
-        if baseline.get(key) != environment.get(key)
-    }
-    assert mutated == set()
-    child.validate_repository_owned_mutation(baseline, environment)
-
-
-def test_the_fixed_vector_selects_the_sole_no_metrics_boundary() -> None:
-    """`latency_only` is the difference between returning `{}` and reading GT.
-
-    The evaluator returns before metrics only under it; otherwise it writes MOT
-    output and calls `run_motmetrics_evaluation`, and this child then refuses the
-    result for not being the sole no-metrics boundary.
-    """
-    args = _preset_parser().parse_args(
-        [
-            "--sequences",
-            evidence.MEASUREMENT_SEQUENCE,
-            "--output",
-            "/tmp/unused",
-            *child.FIXED_EXECUTION_ARGV,
-        ]
-    )
+    assert environment == baseline
+    assert vars(args)["output"] == (run_dir / "_runtime").as_posix()
     assert args.latency_only is True
+    run_spec.assert_runtime_matches(document, args, environment, run_dir)
 
 
-def test_the_mutation_gate_still_refuses_a_real_violation() -> None:
-    """The gate must not have degraded into a check that can no longer fire.
+def test_run_spec_gates_full_namespace_and_environment_drift(tmp_path: Path) -> None:
+    document = run_spec.build_run_spec()
+    run_dir = tmp_path.resolve()
+    args = run_spec.parse_runtime_namespace(document, run_dir)
+    environment = run_spec.environment_projection(document)
 
-    A repaired happy path that never mutates anything would pass a gate that
-    had been deleted, so the negative cases are what keep it meaningful.
-    """
-    baseline = dict(h0_child.STATIC_ENV)
+    args.warmup_frames = 0
+    with pytest.raises(run_spec.RunSpecError, match="warmup_frames"):
+        run_spec.assert_runtime_matches(document, args, environment, run_dir)
 
-    drifted = {**baseline, "SACCADE_DETECT_BARRIER": "full"}
-    with pytest.raises(child.ChildError):
-        child.validate_repository_owned_mutation(baseline, drifted)
+    args.warmup_frames = 50
+    drifted = {**environment, "SACCADE_DETECT_BARRIER": "full"}
+    with pytest.raises(run_spec.RunSpecError, match="SACCADE_DETECT_BARRIER"):
+        run_spec.assert_runtime_matches(document, args, drifted, run_dir)
 
-    leaked = {**baseline, "SACCADE_STREAM_MODE": "ptds_probe"}
-    with pytest.raises(child.ChildError) as excinfo:
-        child.validate_repository_owned_mutation(baseline, leaked)
-    assert "SACCADE_STREAM_MODE" in str(excinfo.value)
 
-    undeclared = {**baseline, "SACCADE_SOMETHING_NEW": "1"}
-    with pytest.raises(child.ChildError) as excinfo:
-        child.validate_repository_owned_mutation(baseline, undeclared)
-    assert "outside its declared set" in str(excinfo.value)
+def test_child_has_no_fixed_argv_or_runtime_preset_reload() -> None:
+    source = (_TOOLS / "run_h2_measurement_child.py").read_text(encoding="utf-8")
+    assert "FIXED_EXECUTION_ARGV" not in source
+    repository_runner = source[
+        source.index("def repository_runner") : source.index(
+            "\ndef validate_products", source.index("def repository_runner")
+        )
+    ]
+    assert "POLICY_PRESET_REL" not in repository_runner
+    assert "safe_load" not in repository_runner
+    assert repository_runner.count("run_spec.assert_runtime_matches") == 2
+    resolver = (_TOOLS / "h2_run_spec.py").read_text(encoding="utf-8")
+    assert "resolve_namespace" not in resolver
+    assert "_load_preset" not in resolver
+    assert "import yaml" not in resolver
 
 
 def test_the_production_runner_reaches_run_eval_with_the_frozen_choices(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The repair, through the real parser, preset and configuration function.
+    """The repair, through the real parser and configuration function.
 
-    An injected substitute for any of those three would prove only that the
-    child passes flags to something. Here `_import_eval_stack` returns the real
-    `build_parser` and the real `configure_runtime_env`, the production runner
-    reads the real preset from disk, and the production mutation gate judges the
-    result. Only the GPU-bearing objects are stubs.
+    Here `_import_eval_stack` returns the real `build_parser` and real
+    `configure_runtime_env`; the complete defaults come from the invocation's
+    RunSpec, and no preset bytes are read at runtime. Only GPU-bearing objects
+    are stubs.
 
     The sentinel sits *after* configuration, at `run_eval`, and refuses anything
     but `latency_only=True` — otherwise this test would prove the environment
@@ -2339,15 +2349,17 @@ def test_the_production_runner_reaches_run_eval_with_the_frozen_choices(
             runner=child.repository_runner,
         )
 
-    # The frozen choices arrived through the parser, not through the environment.
+    document = evidence.load_document(run_dir, child.INVOCATION_NAME)["run_spec"]
+
+    # All 454 choices arrived through the RunSpec-projected parser namespace.
     (args,) = seen_args
-    assert args.double_buffer is True
-    assert args.detect_barrier == "event"
-    assert args.latency_only is True
+    actual = dict(vars(args))
+    actual["output"] = run_spec.RUN_DIR_OUTPUT_TOKEN
+    assert actual == document["resolved_namespace"]
     assert eval_kwargs["latency_only"] is True
 
-    # And repository-owned configuration changed nothing the A5 contract fixes.
-    for key, value in h0_child.STATIC_ENV.items():
+    # Repository configuration preserves all RunSpec-owned environment values.
+    for key, value in run_spec.environment_projection(document).items():
         assert os.environ.get(key) == value, key
     (baseline,) = baselines
     mutated = {

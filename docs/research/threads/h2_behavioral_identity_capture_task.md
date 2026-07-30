@@ -411,6 +411,49 @@ artifact in this repository can supply.
 
 ## Current step
 
+### 2026-07-30 requirement narrowing — declared, not implemented
+
+Declaration
+[Review Correction 5](../../modules/semantic/research/headline_bridge_behavioral_identity_capture_declaration_20260725.md#review-correction-5--execution-integrity-is-the-requirement-2026-07-30-pre-seal)
+supersedes the future acceptance target described below: this H2 unit now
+requires **execution integrity**, not environment reproducibility. The text
+below remains the historical account of how the existing head-bound chain was
+built, failed and repaired; it is not authority to rebuild that chain again.
+
+The migration target is content-bound:
+
+- one complete resolved RunSpec is the sole configuration authority; preset
+  defaults, parser defaults, env and argv are derived transports;
+- diagnostic and measurement share `resolved_run_spec_digest` and
+  `execution_semantics_projection_digest`;
+- the producer emits `run_spec.json`, `runtime_binding.json` and `result.json`;
+  only a separate verifier process writes `verification.json`;
+- the projection is digest equality over its declared content set and does not
+  consult `h2_path_partition`;
+- the verifier remains foreign-host independent and fails closed without
+  invoking the producer.
+
+The six Layer-P stages stay in order, but the successor path retires the
+independent Layer-P certificate, `freeze.json` / `F`, published
+coordinate/probe equality as a measurement gate, and commit/tree identity as a
+validity gate. The bounded probe remains a recorded observation and
+`equivalence` remains `unproven`. The two historical archives retain their
+original schema and full verifier path.
+
+At the declaration base head
+`1a74276527b682587c7f23babd03eb6fb4bcf6b7`, Item 4 (workflow run
+`30510440753`) and Item 5 (certificate file `6f338926…`, object digest
+`8996ee13…`) were valid and held in read-only external custody. `F` was never
+built at that head. The live `build/h2_layer_p` belongs to Item 5 and must not be
+rebuilt or removed while that historical certificate is live.
+
+This declaration does not itself implement the migration or authorize any
+execution. In particular it does not authorize Phase A, a third grant, `S`,
+seal, canonical-corpus admission or an equivalence update. Authoring the
+full-namespace RunSpec requires a new explicit decision on `detector`,
+`max_frames`, `preset` and `warmup_frames`; the prior adapter ruling remains
+historically true but does not silently author the new sole authority.
+
 **The rehearsal ran once, at `ba40b3f8`, and failed — and it cost no
 authorization.** The controller reached terminal `H2_MEASUREMENT_EXECUTION_INVALID`
 in the first ordered run. This is the third structural self-negation in this work
@@ -711,6 +754,14 @@ stops moving, which is the head step 2 must attest.
 
 ## Acceptance
 
+**Migration boundary (2026-07-30).** The numbered matrix below is retained as
+the acceptance history of the environment-reproducibility design. Review
+Correction 5 retires items 4–5, their certificate/freeze coupling and
+head-equality gates for the successor execution-integrity path. It does not
+retroactively invalidate any record produced under that matrix. A replacement
+acceptance matrix must be reviewed against the new artifact contract before any
+measurement; until then no seal may be proposed and no execution is authorized.
+
 A Layer-M seal may be proposed only when **all** of these hold:
 
 1. ✅ the Phase-B chain form is **published** — declaration §5.2 precondition 6
@@ -810,6 +861,16 @@ Additionally, and specific to the accepted decisions:
   as any mainline transition.
 
 ## History
+
+- **2026-07-30 — requirement narrowed, implementation not started.** Declaration
+  Review Correction 5 records that H2 requires execution integrity rather than
+  environment reproducibility. It declares the sole-authority resolved RunSpec,
+  content-keyed execution-semantics projection, three-artifact producer and
+  independent fourth-artifact verifier; retains Layer-P's six stages; and
+  retires the independent certificate, `F`, published probe equality and
+  source-head/tree validity gates for the successor path. This governance
+  change builds and executes nothing, restores no authorization, leaves
+  `equivalence` unproven and preserves every historical record.
 
 - **2026-07-25** — S0 landed: this charter, the H2 declaration, navigation, and
   the registry field proposal.
@@ -1324,3 +1385,22 @@ Additionally, and specific to the accepted decisions:
   rehearse, does not build `F`, and does not claim any execution boundary past
   the one it fixes. `Acceptance` items 4 and 5 and `F` are stale for this head
   and must be rebuilt from scratch before the next single rehearsal.
+
+- **2026-07-30 — frozen RunSpec authoring profile (PR #305 review).** The
+  complete 454-key
+  `docs/research/contracts/h2_phase_a_authoring_profile_v1.json` replaces
+  Python `OWNER_DECLARED_VALUES` and live preset/parser-default resolution as
+  the authoring authority. It is owner-bound by
+  `h2_phase_a_run_spec_authoring_decision_v1.json`; `detector=null`,
+  `max_frames=null`, `preset=null`, and `warmup_frames=50`.
+  `mamba_whole_graph_m.yaml` remains authoring lineage only, with no runtime
+  preset load. The profile, profile schema and owner decision join the declared
+  execution-semantics projection. This resolves only authoring authority; the
+  execution-code closure, transient-mutation gap and cross-verdict constraints
+  remain successor implementation obligations.
+
+- **2026-07-30 — RunSpec canonical byte domains (PR #305 review).** The
+  ambiguous single canonicalization identifier is replaced by two required
+  identifiers: object digests cover compact finite canonical JSON with no
+  trailing LF, while `run_spec.json` serialization adds exactly one trailing
+  LF. The frozen 454-key authoring profile and its SHA-256 remain unchanged.

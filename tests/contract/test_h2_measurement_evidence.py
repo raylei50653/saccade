@@ -47,6 +47,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import jsonschema
 import pytest
 
 _REPO = Path(__file__).resolve().parents[2]
@@ -58,6 +59,7 @@ import check_h2_measure_archives as corpus  # noqa: E402
 import h2_behavioral_identity as behavior  # noqa: E402
 import h2_measurement_evidence as evidence  # noqa: E402
 import h2_path_partition as path_partition  # noqa: E402
+import h2_run_spec as run_spec  # noqa: E402
 import h2_terminal_partition as partition  # noqa: E402
 import verify_h2_measurement as verifier  # noqa: E402
 from export_headline_bridge_decision_trace import (  # noqa: E402
@@ -87,6 +89,16 @@ COORDINATE["implementation"] = _COMMIT_AXES["decision_relevant"]["digest"]
 COORDINATE["identity_semantics"] = _COMMIT_AXES["identity_semantics"]["digest"]
 PROBE = "2d" * 32
 
+_SUCCESSOR_SCHEMA_PATHS = {
+    "authoring_profile": (
+        _REPO / "docs/research/contracts/h2_phase_a_authoring_profile_v1.schema.json"
+    ),
+    "run_spec": _REPO / "docs/research/contracts/h2_phase_a_run_spec_v1.json",
+    "runtime_binding": _REPO / "docs/research/contracts/h2_runtime_binding_v1.json",
+    "result": _REPO / "docs/research/contracts/h2_execution_result_v1.json",
+    "verification": _REPO / "docs/research/contracts/h2_execution_verification_v1.json",
+}
+
 
 def _h0_packet_builder():
     """H0's own valid capture, loaded from the test that owns it."""
@@ -99,6 +111,161 @@ def _h0_packet_builder():
 
 
 _packet = _h0_packet_builder()
+
+
+# -- successor artifact contract ------------------------------------------ #
+
+
+@pytest.mark.parametrize("name", sorted(_SUCCESSOR_SCHEMA_PATHS))
+def test_successor_artifact_schemas_are_valid_closed_draft_2020_12(name: str) -> None:
+    schema = json.loads(_SUCCESSOR_SCHEMA_PATHS[name].read_text(encoding="utf-8"))
+    jsonschema.Draft202012Validator.check_schema(schema)
+    assert schema["type"] == "object"
+    assert schema["additionalProperties"] is False
+    assert schema["required"]
+
+
+def test_run_spec_projection_declares_the_complete_content_set() -> None:
+    schema = json.loads(_SUCCESSOR_SCHEMA_PATHS["run_spec"].read_text(encoding="utf-8"))
+    members = schema["$defs"]["execution_semantics_projection"]["properties"]["members"]
+    declared = {
+        clause["contains"]["properties"]["path"]["const"] for clause in members["allOf"]
+    }
+    expected = {
+        *evidence.PHASE_A_EXECUTED_SURFACE_PATHS,
+        evidence.PHASE_A_CAPTURE_ABI_PATH,
+        run_spec.AUTHORING_PROFILE_REL,
+        run_spec.AUTHORING_PROFILE_SCHEMA_REL,
+        run_spec.AUTHORING_DECISION_REL,
+        "scripts/eval/mot17_args.py",
+        "docs/research/contracts/h2_phase_a_run_spec_v1.json",
+        "scripts/tools/h2_run_spec.py",
+    }
+    assert declared == expected
+    assert set(run_spec.EXECUTION_SEMANTICS_PATHS) == expected
+    assert members["minItems"] == members["maxItems"] == len(expected)
+
+
+def test_run_spec_schema_names_distinct_object_and_artifact_byte_domains() -> None:
+    schema = json.loads(_SUCCESSOR_SCHEMA_PATHS["run_spec"].read_text(encoding="utf-8"))
+    properties = schema["properties"]
+    assert "canonicalization" not in properties
+    assert properties["object_canonicalization"]["const"] == (
+        "utf8_lexicographic_keys_compact_finite_no_trailing_lf_v1"
+    )
+    assert properties["artifact_serialization"]["const"] == (
+        "utf8_lexicographic_keys_compact_finite_single_trailing_lf_v1"
+    )
+
+
+def test_frozen_authoring_profile_is_complete_and_owner_bound() -> None:
+    profile_path = _REPO / run_spec.AUTHORING_PROFILE_REL
+    profile_schema = json.loads(
+        (_REPO / run_spec.AUTHORING_PROFILE_SCHEMA_REL).read_text(encoding="utf-8")
+    )
+    profile = json.loads(profile_path.read_text(encoding="utf-8"))
+    decision = json.loads(
+        (_REPO / run_spec.AUTHORING_DECISION_REL).read_text(encoding="utf-8")
+    )
+
+    jsonschema.Draft202012Validator(profile_schema).validate(profile)
+    assert profile["key_count"] == len(profile["resolved_namespace"]) == 454
+    assert profile["resolved_namespace_digest"] == evidence.digest(
+        profile["resolved_namespace"]
+    )
+    assert profile["resolved_namespace"]["preset"] is None
+    assert (
+        decision["profile_sha256"]
+        == hashlib.sha256(profile_path.read_bytes()).hexdigest()
+    )
+    assert decision["explicit_adjudications"] == {
+        key: profile["resolved_namespace"][key]
+        for key in ("detector", "max_frames", "preset", "warmup_frames")
+    }
+
+
+def test_authoring_profile_tamper_fails_before_run_spec_issuance(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    real_load = run_spec._load_pretty_document
+
+    def tampered_load(
+        relative: str, *, require_canonical: bool = True
+    ) -> tuple[dict[str, Any], bytes]:
+        payload, raw = real_load(relative, require_canonical=require_canonical)
+        if relative != run_spec.AUTHORING_PROFILE_REL:
+            return payload, raw
+        payload = json.loads(json.dumps(payload))
+        payload["resolved_namespace"]["acc_alpha"] = 0.16
+        payload["resolved_namespace_digest"] = evidence.digest(
+            payload["resolved_namespace"]
+        )
+        raw = (
+            json.dumps(payload, ensure_ascii=True, indent=2, sort_keys=True) + "\n"
+        ).encode("utf-8")
+        return payload, raw
+
+    monkeypatch.setattr(run_spec, "_load_pretty_document", tampered_load)
+    with pytest.raises(run_spec.RunSpecError, match="does not bind"):
+        run_spec.build_run_spec()
+
+
+def test_verification_schema_forbids_producer_and_host_derived_completion() -> None:
+    schema = json.loads(
+        _SUCCESSOR_SCHEMA_PATHS["verification"].read_text(encoding="utf-8")
+    )
+    properties = schema["properties"]
+    assert properties["verification_process"]["const"] == (
+        "independent_command_separate_process"
+    )
+    assert properties["producer_invoked"]["const"] is False
+    assert properties["verification_host_inputs_used"]["const"] is False
+
+
+def test_diagnostic_result_cannot_carry_measurement_authority() -> None:
+    schema = json.loads(_SUCCESSOR_SCHEMA_PATHS["result"].read_text(encoding="utf-8"))
+    validator = jsonschema.Draft202012Validator(schema)
+    instance = {
+        "schema": "h2_execution_result_v1",
+        "execution_id": "diagnostic-1",
+        "authority": "non_qualifying_diagnostic",
+        "authorization_binding_digest": "1" * 64,
+        "resolved_run_spec_digest": "2" * 64,
+        "execution_semantics_projection_digest": "3" * 64,
+        "run_plan": {
+            "sequence": "MOT17-04-SDP",
+            "run_ids": [
+                "00_capture_off",
+                "01_capture_on",
+                "02_capture_on",
+                "03_capture_on",
+            ],
+        },
+        "predicate_results": {
+            name: {"state": "pass", "reasons": []}
+            for name in (
+                "behavior_probe_equals_spec",
+                "bound_input_unchanged",
+                "capture_off_on_equal",
+                "execution_complete",
+                "packets_valid",
+                "runtime_binding_matches_spec",
+            )
+        },
+        "ordered_runs": [
+            {
+                "run_id": run_id,
+                "state": "completed",
+                "artifact_digest": "4" * 64,
+            }
+            for run_id in evidence.RUN_IDS
+        ],
+        "result": "measurement_pass",
+        "terminal": None,
+    }
+    messages = [error.message for error in validator.iter_errors(instance)]
+    assert any("is not of type 'null'" in message for message in messages)
+    assert any("'diagnostic_complete' was expected" in message for message in messages)
 
 
 # -- evidence-root construction -------------------------------------------- #

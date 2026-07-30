@@ -1,0 +1,388 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://saccade.local/contracts/h2_runtime_binding_v1.json",
+  "title": "H2 execution runtime binding v1",
+  "description": "The code, input and native-binary bytes actually bound to one H2 execution.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "build_artifacts",
+    "capture_abi",
+    "execution_id",
+    "execution_semantics_projection_digest",
+    "executed_surfaces",
+    "extension_load",
+    "identity_probe",
+    "input_monitor",
+    "resolved_run_spec_digest",
+    "runtime_inputs",
+    "schema",
+    "source_audit"
+  ],
+  "properties": {
+    "schema": {
+      "const": "h2_runtime_binding_v1"
+    },
+    "execution_id": {
+      "$ref": "#/$defs/execution_id"
+    },
+    "resolved_run_spec_digest": {
+      "$ref": "#/$defs/sha256"
+    },
+    "execution_semantics_projection_digest": {
+      "$ref": "#/$defs/sha256"
+    },
+    "source_audit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "head",
+        "tree"
+      ],
+      "properties": {
+        "head": {
+          "$ref": "#/$defs/sha1"
+        },
+        "tree": {
+          "$ref": "#/$defs/sha1"
+        }
+      }
+    },
+    "executed_surfaces": {
+      "type": "array",
+      "minItems": 7,
+      "maxItems": 7,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/content_member"
+      },
+      "allOf": [
+        {
+          "contains": {
+            "properties": {
+              "path": {
+                "const": "scripts/tools/check_h2_measure_archives.py"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          }
+        },
+        {
+          "contains": {
+            "properties": {
+              "path": {
+                "const": "scripts/tools/h2_measurement_evidence.py"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          }
+        },
+        {
+          "contains": {
+            "properties": {
+              "path": {
+                "const": "scripts/tools/run_h2_measurement.py"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          }
+        },
+        {
+          "contains": {
+            "properties": {
+              "path": {
+                "const": "scripts/tools/run_h2_measurement_child.py"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          }
+        },
+        {
+          "contains": {
+            "properties": {
+              "path": {
+                "const": "scripts/tools/verify_h0_phase_a.py"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          }
+        },
+        {
+          "contains": {
+            "properties": {
+              "path": {
+                "const": "scripts/tools/verify_h2_measurement.py"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          }
+        },
+        {
+          "contains": {
+            "properties": {
+              "path": {
+                "const": "scripts/tools/verify_headline_bridge_decision_trace.py"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          }
+        }
+      ]
+    },
+    "capture_abi": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/content_member"
+        },
+        {
+          "properties": {
+            "path": {
+              "const": "scripts/tools/h0_bridge_decision_trace_schema_v2.json"
+            }
+          }
+        }
+      ]
+    },
+    "runtime_inputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "manifest_digest",
+        "manifest_schema",
+        "members"
+      ],
+      "properties": {
+        "manifest_schema": {
+          "const": "h2_runtime_input_manifest_v1"
+        },
+        "manifest_digest": {
+          "$ref": "#/$defs/sha256"
+        },
+        "members": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/runtime_input_member"
+          }
+        }
+      }
+    },
+    "build_artifacts": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/build_artifact"
+      },
+      "allOf": [
+        {
+          "contains": {
+            "properties": {
+              "role": {
+                "const": "tracking_extension"
+              }
+            },
+            "required": [
+              "role"
+            ]
+          }
+        },
+        {
+          "contains": {
+            "properties": {
+              "role": {
+                "const": "tensorrt_scan_plugin"
+              }
+            },
+            "required": [
+              "role"
+            ]
+          }
+        }
+      ]
+    },
+    "extension_load": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "length",
+        "loaded_path",
+        "sha256"
+      ],
+      "properties": {
+        "loaded_path": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^/"
+        },
+        "length": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "input_monitor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "changed_count",
+        "final_drain_clean",
+        "started_before_binding"
+      ],
+      "properties": {
+        "started_before_binding": {
+          "const": true
+        },
+        "changed_count": {
+          "const": 0
+        },
+        "final_drain_clean": {
+          "const": true
+        }
+      }
+    },
+    "identity_probe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "build_artifact_digest",
+        "digest",
+        "role",
+        "schema",
+        "state"
+      ],
+      "properties": {
+        "schema": {
+          "const": "h2_behavior_probe_result_v1"
+        },
+        "role": {
+          "const": "recorded_observation_not_equivalence_or_gate"
+        },
+        "state": {
+          "const": "computed"
+        },
+        "digest": {
+          "$ref": "#/$defs/sha256"
+        },
+        "build_artifact_digest": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "sha1": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "execution_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+    },
+    "relative_path": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
+    },
+    "content_member": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "length",
+        "path",
+        "sha256"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/relative_path"
+        },
+        "length": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "runtime_input_member": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "length",
+        "path",
+        "role",
+        "sha256"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/relative_path"
+        },
+        "role": {
+          "type": "string",
+          "minLength": 1
+        },
+        "length": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "build_artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "length",
+        "path",
+        "role",
+        "sha256"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/relative_path"
+        },
+        "role": {
+          "enum": [
+            "tracking_extension",
+            "tensorrt_scan_plugin"
+          ]
+        },
+        "length": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    }
+  }
+}

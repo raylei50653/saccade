@@ -17,8 +17,8 @@ document:
   path: headline_bridge_behavioral_identity_capture_declaration_20260725.md
 
 sealed_prefix:
-  bytes: 70274
-  sha256: "c26ef917d9e811646a27dfcffa37231fab92725a3b4e32944b23b601b28b775f"
+  bytes: 85687
+  sha256: "d289523b133fefdff432fd4fe95245117a22b76eb47a03dcbdbcca7b8195deb2"
   # Re-pin log (each entry was a deliberate pre-seal edit, not a slip):
   #   Review reset — coordinate / bounded probe / equivalence split; content-bound
   #                  fixtures/assets/build products; v2 Layer-P certificate.
@@ -70,6 +70,22 @@ sealed_prefix:
   #             the launch follows it, and the one-authorization cost of a crash
   #             in that window is stated as a deliberate loss rather than a
   #             bookkeeping artifact. Re-pinned to the entire revised body.
+  #   Review Correction 5 — narrows H2 to execution integrity, declares the
+  #             complete resolved RunSpec as sole configuration authority,
+  #             fixes the independent four-artifact verification boundary, and
+  #             retires certificate/F/head equality as successor validity gates.
+  #             Commit 1 appended the governance decision; the artifact-contract
+  #             commit deliberately re-pins it while moving the ruler and
+  #             publishing the new schema/resolver path classes.
+  #   Review Correction 6 — replaces Python-authored owner values and live
+  #             preset/default resolution with one complete 454-key frozen
+  #             authoring profile; records preset=null as runtime truth and
+  #             binds the profile, schema and owner decision into execution
+  #             semantics. Re-pinned to the complete post-correction body.
+  #   Review Correction 7 — separates no-trailing-LF object canonicalization
+  #             from single-trailing-LF RunSpec artifact serialization so an
+  #             archive-only verifier has one unambiguous digest byte domain.
+  #             Re-pinned to the complete post-correction body.
 
 policy_target:
   kind: headline

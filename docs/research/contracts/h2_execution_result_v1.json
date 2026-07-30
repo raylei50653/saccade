@@ -1,0 +1,313 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://saccade.local/contracts/h2_execution_result_v1.json",
+  "title": "H2 execution result v1",
+  "description": "The result of one diagnostic or exactly-once measurement execution.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "authority",
+    "authorization_binding_digest",
+    "execution_id",
+    "execution_semantics_projection_digest",
+    "ordered_runs",
+    "predicate_results",
+    "resolved_run_spec_digest",
+    "result",
+    "run_plan",
+    "schema",
+    "terminal"
+  ],
+  "properties": {
+    "schema": {
+      "const": "h2_execution_result_v1"
+    },
+    "execution_id": {
+      "$ref": "#/$defs/execution_id"
+    },
+    "authority": {
+      "enum": [
+        "non_qualifying_diagnostic",
+        "exactly_once_measurement"
+      ]
+    },
+    "authorization_binding_digest": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/sha256"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "resolved_run_spec_digest": {
+      "$ref": "#/$defs/sha256"
+    },
+    "execution_semantics_projection_digest": {
+      "$ref": "#/$defs/sha256"
+    },
+    "run_plan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run_ids",
+        "sequence"
+      ],
+      "properties": {
+        "sequence": {
+          "const": "MOT17-04-SDP"
+        },
+        "run_ids": {
+          "const": [
+            "00_capture_off",
+            "01_capture_on",
+            "02_capture_on",
+            "03_capture_on"
+          ]
+        }
+      }
+    },
+    "predicate_results": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "behavior_probe_equals_spec",
+        "bound_input_unchanged",
+        "capture_off_on_equal",
+        "execution_complete",
+        "packets_valid",
+        "runtime_binding_matches_spec"
+      ],
+      "properties": {
+        "behavior_probe_equals_spec": {
+          "$ref": "#/$defs/predicate_result"
+        },
+        "bound_input_unchanged": {
+          "$ref": "#/$defs/predicate_result"
+        },
+        "capture_off_on_equal": {
+          "$ref": "#/$defs/predicate_result"
+        },
+        "execution_complete": {
+          "$ref": "#/$defs/predicate_result"
+        },
+        "packets_valid": {
+          "$ref": "#/$defs/predicate_result"
+        },
+        "runtime_binding_matches_spec": {
+          "$ref": "#/$defs/predicate_result"
+        }
+      }
+    },
+    "ordered_runs": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "prefixItems": [
+        {
+          "$ref": "#/$defs/capture_off_run"
+        },
+        {
+          "$ref": "#/$defs/capture_on_1_run"
+        },
+        {
+          "$ref": "#/$defs/capture_on_2_run"
+        },
+        {
+          "$ref": "#/$defs/capture_on_3_run"
+        }
+      ],
+      "items": false
+    },
+    "result": {
+      "enum": [
+        "measurement_pass",
+        "input_mutated",
+        "behavior_probe_moved",
+        "runtime_binding_mismatch",
+        "capture_perturbs_policy",
+        "packet_invalid",
+        "runner_nonzero",
+        "runner_timeout",
+        "serialization_failed",
+        "artifact_missing_or_unreadable",
+        "unclassified_execution_failure",
+        "diagnostic_complete"
+      ]
+    },
+    "terminal": {
+      "oneOf": [
+        {
+          "enum": [
+            "H2_INPUT_MUTATED_DURING_MEASUREMENT",
+            "H2_CAPTURE_PERTURBS_POLICY",
+            "H2_PACKET_INVALID",
+            "H2_MEASUREMENT_EXECUTION_INVALID"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "authority": {
+            "const": "non_qualifying_diagnostic"
+          }
+        },
+        "required": [
+          "authority"
+        ]
+      },
+      "then": {
+        "properties": {
+          "authorization_binding_digest": {
+            "type": "null"
+          },
+          "result": {
+            "const": "diagnostic_complete"
+          },
+          "terminal": {
+            "type": "null"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "authorization_binding_digest": {
+            "$ref": "#/$defs/sha256"
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "execution_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+    },
+    "predicate_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reasons",
+        "state"
+      ],
+      "properties": {
+        "state": {
+          "enum": [
+            "pass",
+            "fail",
+            "error",
+            "not_run"
+          ]
+        },
+        "reasons": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "run": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_digest",
+        "run_id",
+        "state"
+      ],
+      "properties": {
+        "run_id": {
+          "type": "string"
+        },
+        "state": {
+          "enum": [
+            "completed",
+            "failed",
+            "not_run"
+          ]
+        },
+        "artifact_digest": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/sha256"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "capture_off_run": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/run"
+        },
+        {
+          "properties": {
+            "run_id": {
+              "const": "00_capture_off"
+            }
+          }
+        }
+      ]
+    },
+    "capture_on_1_run": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/run"
+        },
+        {
+          "properties": {
+            "run_id": {
+              "const": "01_capture_on"
+            }
+          }
+        }
+      ]
+    },
+    "capture_on_2_run": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/run"
+        },
+        {
+          "properties": {
+            "run_id": {
+              "const": "02_capture_on"
+            }
+          }
+        }
+      ]
+    },
+    "capture_on_3_run": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/run"
+        },
+        {
+          "properties": {
+            "run_id": {
+              "const": "03_capture_on"
+            }
+          }
+        }
+      ]
+    }
+  }
+}
