@@ -1660,9 +1660,44 @@ a measurement, and no diagnostic qualifies or authorizes one (Correction 5).
 enforces them without executing the ruler: each result pins exactly the terminal
 the partition selects; `measurement_pass` requires measurement authority, a null
 terminal and six passing predicates; a selected terminal requires a non-passing
-observation; a failure names its own predicate and no earlier predicate may have
-decided-failed; and `valid` is exactly the conjunction of the verification
-checks, with reasons empty when it holds and non-empty when it does not.
+observation; **a named finding requires its own predicate to be `fail`** — an
+`error` or `not_run` is undecided and selects nothing by name, so admitting any
+non-pass state there would let two different results share one terminal for the
+same observation, which is § 20.8's failure and not its test; no earlier
+predicate may have decided-failed; and `valid` is exactly the conjunction of the
+verification checks, with reasons empty when it holds and non-empty when it does
+not.
+
+**The runtime binding is stage-aware, because a failure archive must be
+formable.** `h2_runtime_binding_v1` required two complete build artifacts, a
+successful extension load, a `computed` identity probe and a zero-change input
+monitor unconditionally. Under that shape the tokens this correction re-admits
+could never appear in a `valid: true` archive — a genuine `build_failed` has no
+loaded extension to record — and neither could terminal 1: `changed_count` was
+pinned to zero, so a detected mutation was unrecordable. A contract that makes
+its own truthful negatives unformable does not narrow anything; it only moves the
+failure to where nothing checks it.
+
+The binding therefore declares `failed_stage`: null, or the retained stage that
+failed. Evidence is required exactly where the execution reached it — a build
+failure requires no artifacts, load or probe; a `build_binding` or
+`extension_load` failure requires the complete build artifacts but no load or
+probe; an `identity_run` failure requires both artifacts and load but no probe;
+and a null `failed_stage` requires all three, exactly as strictly as before.
+Absence, never a fabricated success shape, is how an unreached stage is recorded.
+`build_binding` and `identity_run` have no dedicated result token and are carried
+by `unclassified_execution_failure` with the stage named in the binding: the
+cause is recorded without inventing a terminal boundary.
+
+**Two cross-artifact rules the schemas cannot express** are published by
+`h2_terminal_partition.as_payload()` and are **verifier obligations**, since no
+JSON Schema sees two files at once: `build_failed` holds exactly when
+`failed_stage` is `build` and `extension_load_failed` exactly when it is
+`extension_load` — otherwise the two new tokens are interchangeable labels rather
+than stage evidence — and `input_mutated` holds exactly when the monitor recorded
+a change or an unclean final drain. Relaxing the monitor is what makes terminal 1
+recordable, and the biconditional is what keeps it honest; the archive-only
+verifier of W3 must enforce both, and no producer exists in between.
 
 **`build_failed` and `extension_load_failed` are re-admitted as result tokens.**
 Correction 5 *retains* the `build` and `extension_load` stages, so their failures
@@ -1671,6 +1706,13 @@ cause the predecessor partition already recorded. Both map to terminal 4, exactl
 as in § 7, so no terminal boundary moves.
 
 ### What this correction does not do
+
+This correction was revised in place under owner review before merge, which is
+why the rules above read as they do rather than as an appended fourth pass: the
+correction had not merged and nothing was sealed, so revising the text is more
+honest than layering a correction onto an unsealed one. Two defects were fixed —
+a named finding admitted any non-pass state, and the runtime binding made every
+stage failure unformable — and the re-pin log records the revision.
 
 It implements no producer, no verifier, no diagnostic mode and no controller
 change; the archive-only verifier and the producer remain the next two staged
