@@ -110,8 +110,18 @@
   `.github/workflows/runtime_identity.yml` 降為 `workflow_dispatch`-only、
   non-qualifying diagnostic；不再對 PR／`main` 自動重建。仍保留 per-execution
   build binding／extension load／identity run 與 foreign-host-independent
-  archive verification。下一個 implementation obligation 是 successor
-  producer＋archive-only verifier/checksum closure，不是重建舊 items 4–5／`F` →
+  archive verification。**2026-07-30 已在 `290fd0c1` 機械確認現況**（contract tests
+  1158 passed、corpus checker PASS、staleness rc=0 且三個 legacy 軸仍 unresolved）：
+  落地的只有 contracts 與 configuration authority，**沒有任何可執行碼讀 successor
+  vocabulary**；且 `h2_execution_result_v1` 與 ruler `h2_terminal_partition.py`
+  的 predicate 名／polarity／state space／result token 互不相符，`terminal: null`
+  在 measurement authority 下仍 schema-legal（＝§C3.5.1 要讓它形不成的那個形狀），
+  `valid` 與 `checks` 之間無任何約束。因此順序固定為
+  **W1 治理（本次）→ W2 verdict algebra（ruler＋Review Correction 9＋republish）
+  → W3 archive-only verifier／checksum closure → W4 producer（需 build）
+  → W5 closure**；W3 先於 W4 的理由＝#294→#295 的契約先行與 #302／#304 的
+  guard-before-entry，且 W2–W3 不需 build ⇒ item 5 的 `build/h2_layer_p`
+  位元不動。不是重建舊 items 4–5／`F` →
   [second failure evidence](research/evidence/h2_phase_a_failed_attempt_7646f421_20260728/)
   · [controller archive](research/evidence/h2_measure_7646f421a85a580e37e457def5e8ddc7c4bfa0ab/)
   · [first failure evidence](research/evidence/h2_phase_a_failed_attempt_0a5dffe9_20260727/)
