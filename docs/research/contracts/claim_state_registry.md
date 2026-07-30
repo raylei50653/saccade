@@ -826,6 +826,44 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
           經另行批准後**只再跑一次** rehearsal → 全綠之後才討論第三份 owner authorization。
           rehearsal 是循序發現工具:configuration gate 之後的 detector 建構、capture 初始化、
           四個 ordered run 與 stop boundary 至今從未執行到達,本 repair 不承諾那是最後一道矛盾
+  execution_integrity_migration_declared:
+    date: 2026-07-30
+    authority: "H2 declaration Review Correction 5"
+    requirement: "execution integrity, not environment reproducibility"
+    status: declared; artifact contract / resolver / producer / verifier / controller migration not yet implemented
+    sole_configuration_authority: complete canonical resolved RunSpec namespace
+    diagnostic_measurement_bridge:
+      - resolved_run_spec_digest
+      - execution_semantics_projection_digest
+    projection_rule: declared content-set digest equality; independent of h2_path_partition
+    successor_artifacts:
+      producer: [run_spec.json, runtime_binding.json, result.json]
+      independent_verifier: verification.json
+      closure: checksums.sha256
+    retained:
+      - "Layer-P six-stage order: retry_admissibility → preflight → build → build_binding → extension_load → identity_run"
+      - runtime binding of the code / input / build bytes actually used
+      - foreign-host-independent verification
+      - two historical archive schemas and their full verifier paths
+      - bounded probe as recorded observation only
+      - equivalence remains unproven
+    retired_for_successor_path:
+      - layer_p_certificate as independent admission artifact
+      - freeze.json / F
+      - published coordinate or probe equality as a measurement gate
+      - source_head / source_tree as validity gates
+      - unrelated-commit full-chain rebuild requirement
+    declaration_base_state:
+      head: 1a74276527b682587c7f23babd03eb6fb4bcf6b7
+      item_4: "valid at that head; controlled-host run 30510440753; historical after descendant changes"
+      item_5: "valid at that head; certificate file 6f338926… / object 8996ee13…; historical after descendant changes"
+      f_built: false
+      live_build: build/h2_layer_p belongs to Item 5; do not rebuild or remove while its certificate is live
+    unresolved_run_spec_values: [detector, max_frames, preset, warmup_frames]
+    prior_adapter_ruling: remains historical fact; does not choose sole-authority RunSpec values
+    authorization_effect: none
+    not_established: no Phase-A execution; no third authorization; no S; no seal; no corpus admission; no equivalence claim
+    history_preserved: two owner authorizations remain permanently spent and produced zero faithful capture; H0 unchanged
 pending_reentry:                          # append-only; pre-seal, no terminal claimed; route-1 永久留帳結論不變
   - date: 2026-07-21
     scheduling: owner-scheduled re-entry #3（滿足 line-337 future_reentry_precondition:launch-hygiene gate 先行）

@@ -1374,3 +1374,129 @@ re-application and stays byte-frozen; and does not unblock `H0_ROUTE5_B1`,
 `GCTM_B1`, or O1. The two spent Phase-A invocations remain spent and produced no
 capture. Evidence:
 [h2_phase_a_failed_attempt_7646f421_20260728](evidence/h2_phase_a_failed_attempt_7646f421_20260728/).
+
+---
+
+## Review Correction 5 — execution integrity is the requirement (2026-07-30, pre-seal)
+
+This correction narrows the requirement for the H2 successor unit. H2 requires
+**execution integrity**, not environment reproducibility:
+
+> A qualifying H2 record must prove that this execution used the resolved
+> configuration it names, that no other configuration source silently changed
+> that namespace, that the code, input and native-binary bytes actually used are
+> the bytes recorded for this execution, that the bound inputs did not change
+> during it, and that the result and verification belong to this execution.
+
+It is not a claim that a foreign host can reproduce the same build bytes,
+runtime environment or bounded observation. Source commit and tree identity
+remain audit metadata; neither is a validity gate for the new record.
+
+### The sole configuration authority
+
+The new `run_spec.json` is the complete canonical resolved evaluator namespace
+and the sole authority over execution configuration. The preset, parser
+defaults, process environment and child argv are transports or projections,
+never independent value sources:
+
+1. the RunSpec resolver produces the full namespace, not a selected subset;
+2. argv and the repository-owned environment projection are derived from that
+   resolved object;
+3. after parsing, every namespace member must equal the resolved RunSpec;
+4. the runtime is checked immediately before and after execution so neither
+   import-time nor execution-time mutation can silently change the declared
+   configuration.
+
+The H0 producers remain byte-frozen. Their constants may be consulted once as a
+documented derivation source while the RunSpec is authored, but the new H2 path
+must not import a live configuration authority from H0.
+
+The existing adapter review truthfully recorded four accepted differences for
+the then-current child. Promoting values into a complete, sole-authority RunSpec
+is a new decision surface: `detector`, `max_frames`, `preset`, and
+`warmup_frames` therefore require explicit owner adjudication when the RunSpec
+is authored. This correction chooses none of them and does not rewrite the
+historical adapter ruling.
+
+### Content identity and the independent verifier
+
+Diagnostic and measurement executions bridge on both
+`resolved_run_spec_digest` and `execution_semantics_projection_digest`. The
+execution-semantics projection is digest equality over a declared content set:
+executed-surface source bytes, the capture ABI schema,
+`scripts/eval/mot17_args.py`, and the RunSpec schema and resolver bytes. It does
+not depend on path classification. The schema and resolver belong in the set so
+unchanged RunSpec bytes cannot silently acquire new meaning.
+
+The producer emits exactly three artifacts:
+
+- `run_spec.json` — the complete resolved namespace and its declared execution
+  semantics projection;
+- `runtime_binding.json` — the code, input and build bytes actually used;
+- `result.json` — this execution's result.
+
+It must not write `verification.json`. A separate command in a separate process
+reads only the emitted artifacts, archive bytes and checksum closure, fails
+closed on every missing required member or field, and writes
+`verification.json`. It may run on a foreign host, but its verdict must not
+depend on that host's machine identity, UID, checkout, build or runtime
+environment, and it may not call the producer to fill in or re-derive missing
+evidence.
+
+New archives contain those four JSON files plus `checksums.sha256`. The two
+historical H2 archives keep their original schema, bytes and verifier path at
+full validity. They are not migrated, rewritten, renamed or downgraded to
+inventory-only.
+
+### What is retained and what is retired
+
+Layer P retains its six ordered stages unchanged:
+`retry_admissibility`, `preflight`, `build`, `build_binding`,
+`extension_load`, and `identity_run`. Preflight remains fail-closed, the
+identity run still proves that the extension loads and executes, and the
+runtime binding still records the build bytes actually consumed.
+
+For the successor artifact path this correction retires:
+
+- `layer_p_certificate` as an independent admission artifact;
+- `freeze.json` and `F`;
+- equality with the published coordinate or bounded probe as a measurement
+  gate;
+- `source_head` and `source_tree` as validity gates;
+- the rule that an unrelated commit requires a controlled-host
+  re-attestation, Layer-P certificate and freeze rebuild.
+
+The identity-run probe remains a recorded observation, not an equivalence
+oracle. Probe equality still establishes no behavior preservation and no
+equivalence; `equivalence.state` remains `unproven`.
+
+The retirement has a deliberate cost. The controlled-host and local Layer-P
+runs were not duplicate probes: their agreement across distinct hosts and
+builds made the published observation non-circular and exposed a verifier
+host-dependence defect that local execution could not reveal. The narrowed
+requirement no longer pays that reproducibility cost. **Reproducibility is
+retired; independent verifiability is not.**
+
+### Diagnostic and measurement authority
+
+A diagnostic mode may run repeatedly without owner authorization, records every
+independent failed predicate, and is always
+`authority: non_qualifying_diagnostic`. A green diagnostic cannot complete,
+qualify or authorize a measurement witness.
+
+Measurement mode retains the real fail-fast control flow and consumes one
+separately issued exactly-once authorization. Nothing in this correction, a
+RunSpec, either digest, any diagnostic, or any verification record issues or
+restores such authority.
+
+### What this correction does not do
+
+It implements no schema, resolver, producer, verifier, controller or diagnostic
+mode; builds no artifact; executes no sequence; selects no `I`; creates no
+`F`/`S`; issues no third authorization; seals nothing; admits nothing to the
+canonical corpus; and makes no equivalence claim. The two prior owner
+authorizations remain permanently spent and produced zero faithful capture.
+The Item 4 and Item 5 records at `1a742765` remain truthful historical evidence;
+this correction does not extend them to a descendant head or convert them into
+execution authority. H0's producers, declarations, sealed history and five
+spent chains remain untouched.
