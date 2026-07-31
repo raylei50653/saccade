@@ -422,6 +422,19 @@ class Execution:
             else run_spec_module.build_run_spec()
         )
 
+        try:
+            return self._produce(root, spec)
+        except BaseException:
+            # Every exit releases the monitor this execution started, including
+            # the ones that write nothing. `abandon` produces no record, so a
+            # refused execution cannot leave a binding behind — it only stops the
+            # watch descriptors outliving the attempt that opened them.
+            abandon = getattr(self.stages, "abandon", None)
+            if callable(abandon):
+                abandon()
+            raise
+
+    def _produce(self, root: Path, spec: Mapping[str, Any]) -> dict[str, Any]:
         evidence_record = self.stages.run()
         if evidence_record.failed_stage is not None:
             # Fail-fast is not a shortcut: no run started, so nothing the runs

@@ -1338,6 +1338,22 @@ def default_authorization_ledger() -> Path:
     )
 
 
+class ReachedRunFailure(ControllerError):
+    """A run that started and did not complete. An outcome, not a defect.
+
+    Separated from the orchestration errors that share `ControllerError` because
+    the two must not be handled the same way: a child that exited nonzero is a
+    truthful negative the archive should record, while a run reported twice or a
+    run outside the plan says the bookkeeping is broken and nothing about the
+    measurement can be believed.
+    """
+
+    def __init__(self, run_id: str, detail: str) -> None:
+        super().__init__(f"child {run_id} {detail}")
+        self.run_id = run_id
+        self.detail = detail
+
+
 def launch_ordered_runs(
     root: Path,
     *,
@@ -1349,6 +1365,8 @@ def launch_ordered_runs(
     clock: Callable[[], float],
     launch_child: ChildLauncher = default_child_launcher,
     record_event: Callable[..., None] = lambda event, **fields: None,
+    completed: set[str] | None = None,
+    started_runs: set[str] | None = None,
 ) -> set[str]:
     """Launch the four ordered runs, in order, and return which ones completed.
 
@@ -1361,8 +1379,15 @@ def launch_ordered_runs(
     no process-start witness, or reports one twice raises, because those are
     statements about the launch this function owns — not verdicts about what was
     measured.
+
+    `completed` and `started_runs` are the caller's accumulators, filled as the
+    loop proceeds. An execution that stops partway raises, and the return value
+    is then never delivered — so a caller that must record what actually happened
+    needs the partial sets to live somewhere it still holds. Without them a
+    truthful negative from inside the run phase cannot be archived at all.
     """
-    completed: set[str] = set()
+    completed = set() if completed is None else completed
+    started_runs = set() if started_runs is None else started_runs
     for run_id in evidence.RUN_IDS:
         _remaining(started, clock)
         invocation_path, environment = _prepare_run(
@@ -1381,6 +1406,7 @@ def launch_ordered_runs(
                     f"child {run_id} reported process start more than once"
                 )
             record_event("child_launch", run_id=run_id)
+            started_runs.add(run_id)
             launch_recorded = True
 
         returncode = launch_child(
@@ -1401,7 +1427,7 @@ def launch_ordered_runs(
             schema=child.INVOCATION_SCHEMA,
         )
         if returncode != 0 or invocation.get("state") != child.RUN_COMPLETED:
-            raise ControllerError(f"child {run_id} exited nonzero")
+            raise ReachedRunFailure(run_id, f"exited {returncode}")
         completed.add(run_id)
         record_event("child_completed", run_id=run_id)
     return completed

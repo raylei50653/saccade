@@ -207,6 +207,236 @@ def test_the_recorded_order_is_the_declared_order_not_the_completion_order(
     assert [record["run_id"] for record in records] == list(ids)
 
 
+# -- a run phase that ended badly is still evidence -------------------------- #
+
+
+def _runs(
+    session: driver.MonitorSession, *, launch: Any, root: Path
+) -> driver.MeasurementRuns:
+    return driver.MeasurementRuns(
+        root=root,
+        bundle=object(),
+        document={"resolved_run_spec_digest": "d" * 64},
+        session=session,
+        started=0.0,
+        clock=lambda: 0.0,
+        launch_child=launch,
+    )
+
+
+class _Replay:
+    """What `replay_surviving_evidence` returns for a partial run phase."""
+
+    def __init__(self, *, present: bool = True, complete: bool = False) -> None:
+        self.capture_equal = True
+        self.packets_valid = True
+        self.complete = complete
+        self.comparison: dict[str, Any] = {}
+        self.errors: tuple[str, ...] = ()
+        self.evidence_present = present
+
+
+def _stub_runner(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    completes: tuple[str, ...],
+    starts: tuple[str, ...],
+    raises: BaseException | None,
+    replay: _Replay | None = None,
+) -> None:
+    """Stand in for the runner: fill the caller's accumulators, then stop as it would."""
+
+    def _launch(root: Path, **kwargs: Any) -> set[str]:
+        kwargs["started_runs"].update(starts)
+        kwargs["completed"].update(completes)
+        if raises is not None:
+            raise raises
+        return set(completes)
+
+    monkeypatch.setattr(driver.layer_m, "launch_ordered_runs", _launch)
+    monkeypatch.setattr(
+        driver.layer_m,
+        "replay_surviving_evidence",
+        lambda root: replay if replay is not None else _Replay(),
+    )
+    monkeypatch.setattr(driver, "run_artifact_digest", lambda root, run_id: "e" * 64)
+    # The two predicates this driver cannot decide are Correction 10's subject,
+    # not this file's: their retirement is reviewed separately, and pinning the
+    # run-phase outcome here must not wait on it.
+    monkeypatch.setattr(
+        driver.producer,
+        "predicate_names",
+        lambda: (
+            "bound_input_unchanged",
+            "capture_off_on_equal",
+            "packets_valid",
+            "execution_complete",
+        ),
+    )
+
+
+def test_a_run_that_exited_nonzero_still_yields_archivable_evidence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The first real gap: the runner stops by raising, and an outcome is not an error.
+
+    A child that exited nonzero ends the measurement. If that exception reached
+    the producer, the monitor would never be closed and no binding, result or
+    archive would exist — so the one execution most worth recording would be the
+    one that cannot be recorded at all.
+    """
+    ids = _run_ids()
+    _stub_runner(
+        monkeypatch,
+        completes=(ids[0],),
+        starts=(ids[0], ids[1]),
+        raises=driver.layer_m.ReachedRunFailure(ids[1], "exited 1"),
+    )
+    session = _session()
+    session.bind()
+    ordered, predicates, named = _runs(
+        session, launch=lambda *a, **k: 0, root=tmp_path
+    ).run(_stage_evidence())
+
+    assert [record["state"] for record in ordered] == [
+        "completed",
+        "failed",
+        "not_run",
+        "not_run",
+    ]
+    assert predicates["execution_complete"]["state"] == "fail"
+    assert predicates["execution_complete"]["reasons"] == [f"{ids[1]}: exited 1"]
+    assert named is None
+
+
+def test_a_run_that_never_started_is_not_reported_as_failed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`failed` claims a launch. Two runs never reached one, and say so.
+
+    This is the other direction of the same rule that forbids synthesising
+    `not_run`: the driver may not invent a state for a run whose fate it does not
+    know, and it does know — `started_runs` is filled at the process-start
+    witness, so a run outside it demonstrably never began.
+    """
+    ids = _run_ids()
+    _stub_runner(
+        monkeypatch,
+        completes=(ids[0],),
+        starts=(ids[0], ids[1]),
+        raises=driver.layer_m.ReachedRunFailure(ids[1], "exited 2"),
+    )
+    session = _session()
+    session.bind()
+    ordered, _, _ = _runs(session, launch=lambda *a, **k: 0, root=tmp_path).run(
+        _stage_evidence()
+    )
+    states = {record["run_id"]: record["state"] for record in ordered}
+    assert states[ids[1]] == "failed"
+    assert states[ids[2]] == states[ids[3]] == "not_run"
+    assert [record["artifact_digest"] for record in ordered][1:] == [None, None, None]
+
+
+def test_a_mutation_the_wait_loop_drained_still_reaches_the_binding(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The second real gap: the session owned the monitor's life, not its observations.
+
+    `_wait_with_monitor` drains the monitor while a child is alive and stops the
+    run when it sees a bound input move. Those events never pass through the
+    session's own `drain`, so counting only its drains reported zero for exactly
+    the case the monitor exists to catch. `BoundInputMonitor.drain` appends to a
+    durable `history`, and that is what the record must be built from.
+    """
+    ids = _run_ids()
+    session = _session()
+    session.bind()
+    # The wait loop drains through the raw monitor, exactly as the real one does.
+    session.monitor.history = ["datasets/MOT17/train/MOT17-04-SDP/img1/000001.jpg"]
+
+    _stub_runner(
+        monkeypatch,
+        completes=(),
+        starts=(ids[0],),
+        raises=_drift_error("bound-input mutation observation"),
+    )
+    _, predicates, _ = _runs(session, launch=lambda *a, **k: 0, root=tmp_path).run(
+        _stage_evidence()
+    )
+    assert predicates["bound_input_unchanged"]["state"] == "fail"
+
+    record = session.finalize()
+    assert record["changed_count"] == 1
+    assert record["started_before_binding"] is True
+
+
+def test_an_orchestration_defect_is_not_turned_into_an_outcome(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A doubled or foreign run says the bookkeeping is broken, not the measurement."""
+    ids = _run_ids()
+    _stub_runner(
+        monkeypatch,
+        completes=(),
+        starts=(),
+        raises=driver.layer_m.ControllerError(
+            f"child {ids[0]} reported process start more than once"
+        ),
+    )
+    session = _session()
+    session.bind()
+    with pytest.raises(driver.layer_m.ControllerError, match="more than once"):
+        _runs(session, launch=lambda *a, **k: 0, root=tmp_path).run(_stage_evidence())
+
+
+def test_a_completed_run_without_a_start_witness_is_refused(tmp_path: Path) -> None:
+    """Completion without a launch is not a partial execution; it is a broken record."""
+    ids = _run_ids()
+    with pytest.raises(driver.DriverError, match="without a process-start witness"):
+        driver.ordered_run_records(tmp_path, completed=ids[:2], launched=ids[:1])
+
+
+def test_every_exit_closes_the_same_monitor_session(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A refused execution writes nothing and still releases what it opened."""
+    _stub_runner(
+        monkeypatch,
+        completes=(),
+        starts=(),
+        raises=driver.layer_m.ControllerError("foreign run"),
+    )
+    session = _session()
+    stages = driver.LayerPStages(layer_p=_FakeLayerP(), session=session)
+    execution = producer.Execution(
+        execution_id="h2exec-20260731T000000Z",
+        authority="non_qualifying_diagnostic",
+        stages=stages,
+        runs=_runs(session, launch=lambda *a, **k: 0, root=tmp_path),
+    )
+    with pytest.raises(Exception):
+        execution.produce(tmp_path / "archive")
+    assert session.closed is True
+    assert session.monitor.closed is True
+
+
+def _drift_error(message: str) -> BaseException:
+    import run_h0_phase_a as h0_controller
+
+    return h0_controller.DriftError(message)
+
+
+def _stage_evidence() -> producer.StageEvidence:
+    return producer.StageEvidence(
+        source_audit={"head": "a" * 40, "tree": "b" * 40},
+        runtime_inputs={
+            "manifest_digest": "c" * 64,
+            "manifest_schema": "h2_runtime_input_manifest_v1",
+            "members": [],
+        },
+    )
+
+
 # -- it holds no verdict ----------------------------------------------------- #
 
 

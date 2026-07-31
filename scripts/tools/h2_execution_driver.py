@@ -135,6 +135,21 @@ class MonitorSession:
         self.last_drain_clean = not events
         return len(events)
 
+    def observed(self) -> int:
+        """Every event the monitor has seen, including drains this session did not make.
+
+        The child wait loop drains the monitor itself while a run is alive, and
+        that is where a mutation *during the measurement* is seen — so counting
+        only this session's own drains would report zero for exactly the case the
+        monitor exists to catch. `BoundInputMonitor.drain` appends to a durable
+        `history`, which is therefore the session's record rather than a second
+        one: owning the monitor's lifetime is not the same as owning what it saw.
+        """
+        history = getattr(self.monitor, "history", None)
+        if history is None:
+            return self.changed_count
+        return max(self.changed_count, len(history))
+
     def finalize(self) -> dict[str, Any]:
         """Drain once more, close, and project the binding's `input_monitor`.
 
@@ -154,13 +169,20 @@ class MonitorSession:
                 f"{bound_at}: a monitor cannot witness what preceded it"
             )
         self.drain()
-        self.monitor.close()
-        self.closed = True
-        return {
-            "changed_count": self.changed_count,
+        record = {
+            "changed_count": self.observed(),
             "final_drain_clean": self.last_drain_clean,
             "started_before_binding": True,
         }
+        self.monitor.close()
+        self.closed = True
+        return record
+
+    def abandon(self) -> None:
+        """Release the monitor without producing a record. Safe to call twice."""
+        if not self.closed:
+            self.monitor.close()
+            self.closed = True
 
 
 def start_monitor(
@@ -261,6 +283,10 @@ class LayerPStages:
         """Close the one session this execution started, after the runs."""
         return self.session.finalize()
 
+    def abandon(self) -> None:
+        """Release the session without a record, for the exits that write nothing."""
+        self.session.abandon()
+
     def _manifest(self, failed_stage: str | None) -> Mapping[str, Any]:
         """The inputs this execution bound, in the form its outcome allows.
 
@@ -309,45 +335,114 @@ class MeasurementRuns:
     def run(
         self, stages: producer.StageEvidence
     ) -> tuple[list[dict[str, Any]], dict[str, Any], str | None]:
-        completed = layer_m.launch_ordered_runs(
-            self.root,
-            bundle=self.bundle,
-            document=self.document,
-            inherited_environment=self.inherited_environment,
-            monitor=self.session.monitor,
-            started=self.started,
-            clock=self.clock,
-            **({"launch_child": self.launch_child} if self.launch_child else {}),
-        )
+        """Launch the runs, and return evidence whether or not they all finished.
+
+        The failures that end a measurement from *inside* the run phase — a
+        mutation the wait loop saw, a child that exited nonzero, the deadline —
+        are outcomes, not errors. They arrive as exceptions because that is how
+        the runner stops, and letting them propagate would mean the one thing an
+        execution most needs to record is the one thing it cannot: the producer
+        would never close the monitor, never build a binding, never write an
+        archive. The partial sets are read from accumulators this caller owns,
+        because the runner's return value is not delivered when it raises.
+
+        Orchestration defects still propagate. A run reported twice, a run
+        outside the plan, unreadable evidence: those say the bookkeeping cannot
+        be trusted, and there is nothing truthful to archive about them.
+        """
+        completed: set[str] = set()
+        launched: set[str] = set()
+        outcome: str | None = None
+        try:
+            layer_m.launch_ordered_runs(
+                self.root,
+                bundle=self.bundle,
+                document=self.document,
+                inherited_environment=self.inherited_environment,
+                monitor=self.session.monitor,
+                started=self.started,
+                clock=self.clock,
+                completed=completed,
+                started_runs=launched,
+                **({"launch_child": self.launch_child} if self.launch_child else {}),
+            )
+        except layer_m.ReachedRunFailure as failure:
+            outcome = f"{failure.run_id}: {failure.detail}"
+        except TimeoutError as expired:
+            outcome = f"the measurement deadline expired: {expired}"
+        except _mutation_errors() as moved:
+            # The wait loop drained the monitor and stopped the child. The event
+            # is in the monitor's durable history, so the session still reports
+            # it, and the ruler — not this module — decides what it outranks.
+            outcome = f"a bound input moved while a run was live: {moved}"
+
         replay = layer_m.replay_surviving_evidence(self.root)
-        ordered = ordered_run_records(self.root, completed=completed)
-        observed = _predicates(replay, completed=completed, session=self.session)
+        ordered = ordered_run_records(self.root, completed=completed, launched=launched)
+        observed = _predicates(
+            replay, completed=completed, session=self.session, outcome=outcome
+        )
         return ordered, observed, None
 
 
+def _mutation_errors() -> tuple[type[BaseException], ...]:
+    import run_h0_phase_a as h0_controller
+
+    return (h0_controller.DriftError,)
+
+
 def ordered_run_records(
-    root: Path, *, completed: Iterable[str]
+    root: Path,
+    *,
+    completed: Iterable[str],
+    launched: Iterable[str] | None = None,
 ) -> list[dict[str, Any]]:
     """One record per declared run, in the declared order, from its own evidence.
 
-    Fail-closed on the run plan itself: the runner reporting a run outside the
-    plan, or reporting one twice, is a statement about the plan and not about the
-    measurement, so it raises rather than being trimmed into a legal shape.
+    Three states, and each is something observed rather than inferred:
+
+    * `completed` — the runner reported it finished;
+    * `failed` — it reached a launch boundary and did not finish;
+    * `not_run` — the loop stopped before it, so it never started.
+
+    `not_run` here is not the synthesis this module refuses. What it must never
+    do is *invent* the state for a run whose fate it does not know, and it does
+    know: `launched` is filled at the process-start witness, so a run outside
+    that set demonstrably never began. Recording it as `failed` would claim a
+    launch that did not happen, which is the same fabrication in the other
+    direction. `launched=None` means the caller is asking only about the runs it
+    named, and everything else is reported as having failed to finish.
+
+    Fail-closed on the run plan itself: a run outside the plan, or one reported
+    twice, is a statement about the bookkeeping and not about the measurement, so
+    it raises rather than being trimmed into a legal shape.
     """
     finished = list(completed)
-    unknown = sorted(set(finished) - set(evidence.RUN_IDS))
+    started = set(finished if launched is None else launched)
+    unknown = sorted((set(finished) | started) - set(evidence.RUN_IDS))
     if unknown:
         raise DriverError(f"the runner reported runs outside the plan: {unknown}")
     if len(finished) != len(set(finished)):
         raise DriverError("the runner reported the same run more than once")
     done = set(finished)
+    if not done <= started:
+        raise DriverError(
+            f"the runner reported {sorted(done - started)} as completed without a "
+            "process-start witness"
+        )
+    unstarted = set() if launched is None else set(evidence.RUN_IDS) - started
     return [
         {
             "artifact_digest": run_artifact_digest(root, run_id)
             if run_id in done
             else None,
             "run_id": run_id,
-            "state": "completed" if run_id in done else "failed",
+            "state": (
+                "completed"
+                if run_id in done
+                else "not_run"
+                if run_id in unstarted
+                else "failed"
+            ),
         }
         for run_id in evidence.RUN_IDS
     ]
@@ -368,26 +463,39 @@ def run_artifact_digest(root: Path, run_id: str) -> str:
 
 
 def _predicates(
-    replay: Any, *, completed: Iterable[str], session: MonitorSession
+    replay: Any,
+    *,
+    completed: Iterable[str],
+    session: MonitorSession,
+    outcome: str | None = None,
 ) -> dict[str, Any]:
     """Project what this execution observed into the successor's predicate records.
 
     Fail-closed on coverage rather than on shape: the predicate *set* belongs to
     the frozen result schema, so a predicate this driver cannot decide raises
-    here instead of being defaulted to `pass`. `not_run` never appears — these
-    runs started, and that state belongs to the producer's stage-failure path.
+    here instead of being defaulted to `pass`.
+
+    The mutation predicate reads `session.observed()`, not the session's own
+    drain count. A mutation during a live run is seen by the child wait loop, and
+    a driver that counted only its own drains would report the execution clean in
+    exactly the case the monitor exists to catch.
     """
     every_run = set(completed) == set(evidence.RUN_IDS)
     decided = bool(getattr(replay, "evidence_present", False))
-    mutated = session.changed_count > 0 or not session.last_drain_clean
+    mutated = session.observed() > 0 or not session.last_drain_clean
     observed = {
         "bound_input_unchanged": _state(not mutated),
         "capture_off_on_equal": _state(replay.capture_equal) if decided else _error(),
         "packets_valid": _state(replay.packets_valid) if decided else _error(),
         "execution_complete": _state(
-            bool(replay.complete) and every_run and not replay.errors
+            bool(replay.complete)
+            and every_run
+            and not replay.errors
+            and outcome is None
         ),
     }
+    if outcome is not None:
+        observed["execution_complete"]["reasons"] = [outcome]
     undecidable = sorted(set(producer.predicate_names()) - set(observed))
     if undecidable:
         raise DriverError(
