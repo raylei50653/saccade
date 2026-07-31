@@ -371,6 +371,84 @@ def persist_and_process_capture(
     return CaptureProcessing(proposal, winner, overflow, verification)
 
 
+def record_raw_emission(
+    rows: list[dict[str, Any]],
+    *,
+    lines: Sequence[str],
+    track_results: Mapping[str, Any],
+    frame: int,
+    person_class: int,
+) -> None:
+    """Record one emission's binary32 evidence, or refuse the emission.
+
+    This is the *local* observation surface: at the moment `_fast_emit_mot_lines`
+    returns, the boxes and scores still in `track_results` are the ones that
+    produced exactly these lines, so the two must agree here — same cardinality,
+    same frame, same track id per row. That agreement is what makes the recorded
+    bits evidence rather than a parallel guess.
+
+    It says nothing about the sequence-level MOT output. The evaluator applies
+    deferred alias remapping, the low-quality tracklet filter and interpolation
+    after the last emission, so the rows below and the rows the sequence callback
+    finally delivers are two observations taken at two times. A7.6 records them as
+    two members — `final_track_rows` and `mot_output` — each compared capture-off
+    to capture-on on its own, and no contract asks for a row projection between
+    them.
+    """
+    count = int(track_results["count"])
+    if len(lines) != count:
+        raise ChildError("raw emission cardinality or sequence mismatch")
+    boxes = track_results["boxes"][:count].numpy()
+    scores = track_results["scores"][:count].numpy()
+    classes_value = track_results.get("classes")
+    classes = (
+        [person_class] * count
+        if classes_value is None
+        else [int(value) for value in classes_value[:count].numpy()]
+    )
+    row_base = sum(1 for row in rows if row["frame"] == frame)
+    for offset, (line, box, score, class_id) in enumerate(
+        zip(lines, boxes, scores, classes, strict=True)
+    ):
+        fields = line.split(",")
+        if len(fields) != 10 or int(fields[0]) != frame:
+            raise ChildError("raw emission and MOT row disagree")
+        x1, y1, x2, y2 = (float(value) for value in box)
+        rows.append(
+            {
+                "binary32_bits": [
+                    _binary32_bits(value)
+                    for value in (x1, y1, x2 - x1, y2 - y1, float(score))
+                ],
+                "class": class_id,
+                "frame": frame,
+                "row_index": row_base + offset,
+                "track_id": int(fields[1]),
+            }
+        )
+
+
+def canonical_callback_bytes(lines: Sequence[str]) -> bytes:
+    """The sequence callback's own evidence: its bytes, and its rows' shape.
+
+    Every row must be a canonical ten-field MOT row whose frame and track id
+    parse. What is deliberately *not* checked is any correspondence with the raw
+    emission rows: their cardinality, their ids and their order may all differ,
+    because a legal sequence-level transformation may add rows, remove rows or
+    rename ids after the last emission was recorded.
+    """
+    for line in lines:
+        fields = line.split(",")
+        if len(fields) != 10:
+            raise ChildError("non-canonical MOT result row")
+        try:
+            int(fields[0])
+            int(fields[1])
+        except ValueError as exc:
+            raise ChildError("non-canonical MOT result row") from exc
+    return ("\n".join(lines) + "\n").encode("utf-8")
+
+
 def _binary32_bits(value: float) -> int:
     return struct.unpack("!I", struct.pack("!f", value))[0]
 
@@ -444,7 +522,10 @@ def repository_runner(invocation: Mapping[str, Any]) -> RunProducts:
     detector.mamba_head.set_block_compile(True)
 
     active_pairs: list[dict[str, Any]] = []
-    final_rows: list[dict[str, Any]] = []
+    # Named for when it is taken, not for what the sequence finally emits: these
+    # rows are the per-emission observation, and the MOT output the callback
+    # delivers is a later one. The archive member keeps its frozen name.
+    raw_emission_rows: list[dict[str, Any]] = []
     pipelines: list[Any] = []
     emitted: list[tuple[str, tuple[str, ...]]] = []
     original_init = EvalPipeline.__init__
@@ -489,39 +570,15 @@ def repository_runner(invocation: Mapping[str, Any]) -> RunProducts:
         original: Callable[..., list[str]], **keywords: Any
     ) -> list[str]:
         lines = original(**keywords)
-        tracks = keywords["track_results"]
-        count = int(tracks["count"])
-        if len(lines) != count or keywords["seq"] != sequence:
+        if keywords["seq"] != sequence:
             raise ChildError("raw emission cardinality or sequence mismatch")
-        boxes = tracks["boxes"][:count].numpy()
-        scores = tracks["scores"][:count].numpy()
-        classes_value = tracks.get("classes")
-        classes = (
-            [int(getattr(args, "person_class", 0))] * count
-            if classes_value is None
-            else [int(value) for value in classes_value[:count].numpy()]
+        record_raw_emission(
+            raw_emission_rows,
+            lines=lines,
+            track_results=keywords["track_results"],
+            frame=int(keywords["frame_id"]),
+            person_class=int(getattr(args, "person_class", 0)),
         )
-        frame = int(keywords["frame_id"])
-        row_base = sum(1 for row in final_rows if row["frame"] == frame)
-        for offset, (line, box, score, class_id) in enumerate(
-            zip(lines, boxes, scores, classes, strict=True)
-        ):
-            fields = line.split(",")
-            if len(fields) != 10 or int(fields[0]) != frame:
-                raise ChildError("raw emission and MOT row disagree")
-            x1, y1, x2, y2 = (float(value) for value in box)
-            final_rows.append(
-                {
-                    "binary32_bits": [
-                        _binary32_bits(value)
-                        for value in (x1, y1, x2 - x1, y2 - y1, float(score))
-                    ],
-                    "class": class_id,
-                    "frame": frame,
-                    "row_index": row_base + offset,
-                    "track_id": int(fields[1]),
-                }
-            )
         return lines
 
     def callback(name: str, lines: tuple[str, ...]) -> None:
@@ -596,24 +653,16 @@ def repository_runner(invocation: Mapping[str, Any]) -> RunProducts:
     if [row["frame"] for row in active_pairs] != list(range(1, frame_count + 1)):
         raise ChildError("child did not process the complete sequence exactly once")
 
+    # Two evidence sets, each complete on its own terms. The equality that used to
+    # stand here — the raw emission keys against the callback's rows — was never a
+    # contract requirement: A7.6 names `final_track_rows` and `mot_output` as two
+    # members and asks each to be identical between the capture-off and capture-on
+    # runs, not to be projections of one another. It was also unsatisfiable under
+    # this RunSpec, because deferred alias remapping, the low-quality tracklet
+    # filter and interpolation all run after the last emission and may rename,
+    # remove or insert rows. Requiring it made a truthful execution unrecordable.
     lines = emitted[0][1]
-    mot_bytes = ("\n".join(lines) + "\n").encode("utf-8")
-    callback_rows: list[tuple[int, int, int]] = []
-    row_positions: dict[int, int] = {}
-    for line in lines:
-        fields = line.split(",")
-        if len(fields) != 10:
-            raise ChildError("non-canonical MOT result row")
-        frame = int(fields[0])
-        position = row_positions.get(frame, 0)
-        row_positions[frame] = position + 1
-        callback_rows.append((frame, position, int(fields[1])))
-    raw_keys = [
-        (int(row["frame"]), int(row["row_index"]), int(row["track_id"]))
-        for row in final_rows
-    ]
-    if raw_keys != callback_rows:
-        raise ChildError("raw binary32 emission rows differ from callback order")
+    mot_bytes = canonical_callback_bytes(lines)
 
     tracker = pipelines[0].detector.tracker
     relink = [int(value) for value in tracker.get_relink_debug()]
@@ -622,7 +671,7 @@ def repository_runner(invocation: Mapping[str, Any]) -> RunProducts:
 
     base_inventory = {
         ACTIVE_PAIRS_MEMBER: active_pairs,
-        FINAL_ROWS_MEMBER: final_rows,
+        FINAL_ROWS_MEMBER: raw_emission_rows,
         MOT_MEMBER: {
             "length": len(mot_bytes),
             "sha256": hashlib.sha256(mot_bytes).hexdigest(),
@@ -667,7 +716,7 @@ def repository_runner(invocation: Mapping[str, Any]) -> RunProducts:
 
     inventory = {
         ACTIVE_PAIRS_MEMBER: active_pairs,
-        FINAL_ROWS_MEMBER: final_rows,
+        FINAL_ROWS_MEMBER: raw_emission_rows,
         MOT_MEMBER: {
             "length": len(mot_bytes),
             "sha256": hashlib.sha256(mot_bytes).hexdigest(),
