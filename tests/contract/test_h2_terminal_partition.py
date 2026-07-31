@@ -515,3 +515,232 @@ def test_the_cli_refuses_a_failed_admission_before_any_selection(
         )
         == 1
     )
+
+
+# --------------------------------------------------------------------------- #
+# The successor vocabulary (Review Correction 9)                               #
+#                                                                              #
+# `h2_execution_result_v1` renames three predicates — one with inverted         #
+# polarity — and widens a predicate from a bool to four states. Two vocabularies #
+# for one partition is exactly the § C5 shape that drifts on the next edit, so   #
+# the mapping is pinned here in both directions, and so are the two rules the    #
+# four-state predicate needs.                                                   #
+# --------------------------------------------------------------------------- #
+def _successor(**states: str) -> dict[str, dict[str, object]]:
+    """A successor observation with every predicate passing unless overridden."""
+    record = {
+        key: {"state": "pass", "reasons": []} for key, _ in tp.SUCCESSOR_PREDICATES
+    }
+    for key, state in states.items():
+        record[key] = {"state": state, "reasons": [] if state == "pass" else ["why"]}
+    return record
+
+
+def test_the_two_vocabularies_describe_the_same_ordered_partition() -> None:
+    assert [result for _, result in tp.SUCCESSOR_PREDICATES] == [
+        tp.LEGACY_RESULT_SUPERSEDED_BY.get(result, result)
+        for _, result in tp.ORDERED_PREDICATES
+    ]
+    assert [
+        tp.SUCCESSOR_TO_LEGACY_PREDICATE[key] for key, _ in tp.SUCCESSOR_PREDICATES
+    ] == [key for key, _ in tp.ORDERED_PREDICATES]
+    # Every renamed result still selects the terminal its legacy name selected.
+    for legacy, successor in tp.LEGACY_RESULT_SUPERSEDED_BY.items():
+        assert tp.RESULT_TO_TERMINAL[successor] == tp.RESULT_TO_TERMINAL[legacy]
+
+
+def test_the_inverted_predicate_is_the_one_whose_polarity_flipped() -> None:
+    """Mapping the names without the polarity gets terminal 1 exactly backwards."""
+    inverted = {
+        key
+        for key, _ in tp.SUCCESSOR_PREDICATES
+        if tp.SUCCESSOR_TO_LEGACY_PREDICATE[key] in tp._TRUE_IS_FAILURE
+    }
+    assert inverted == set(tp.INVERTED_POLARITY_PREDICATES)
+    healthy = tp.select_successor_result(
+        _successor(), authority="exactly_once_measurement", phase="a"
+    )
+    assert healthy.result == "measurement_pass"
+    mutated = tp.select_successor_result(
+        _successor(bound_input_unchanged="fail"),
+        authority="exactly_once_measurement",
+        phase="a",
+    )
+    assert mutated.order == 1
+
+
+@pytest.mark.parametrize(
+    ("failing", "expected_order"),
+    [
+        ("bound_input_unchanged", 1),
+        ("behavior_probe_equals_spec", 1),
+        ("runtime_binding_matches_spec", 1),
+        ("capture_off_on_equal", 2),
+        ("packets_valid", 3),
+        ("execution_complete", 4),
+    ],
+)
+def test_each_successor_predicate_selects_its_own_terminal(
+    failing: str, expected_order: int
+) -> None:
+    selection = tp.select_successor_result(
+        _successor(**{failing: "fail"}),
+        authority="exactly_once_measurement",
+        phase="a",
+    )
+    assert selection.order == expected_order
+    assert selection.terminal == tp.RESULT_TO_TERMINAL[selection.result]
+
+
+def test_a_decided_failure_outranks_an_undecided_predicate() -> None:
+    """Otherwise killing a process on sight launders a banned terminal into 4."""
+    selection = tp.select_successor_result(
+        _successor(
+            behavior_probe_equals_spec="error",
+            capture_off_on_equal="fail",
+            execution_complete="fail",
+        ),
+        authority="exactly_once_measurement",
+        phase="a",
+    )
+    assert selection.result == "capture_perturbs_policy"
+    assert selection.order == 2
+
+
+def test_undecided_predicates_alone_select_the_execution_terminal() -> None:
+    selection = tp.select_successor_result(
+        _successor(
+            capture_off_on_equal="not_run",
+            packets_valid="not_run",
+            execution_complete="not_run",
+        ),
+        authority="exactly_once_measurement",
+        phase="a",
+    )
+    assert selection.result == "unclassified_execution_failure"
+    assert selection.order == 4
+
+
+def test_an_undecided_predicate_cannot_coexist_with_a_complete_execution() -> None:
+    with pytest.raises(tp.PartitionError, match="contradicts itself"):
+        tp.select_successor_result(
+            _successor(capture_off_on_equal="not_run"),
+            authority="exactly_once_measurement",
+            phase="a",
+        )
+
+
+def test_a_diagnostic_selects_no_terminal_whatever_its_predicates_say() -> None:
+    """Correction 5: a green diagnostic qualifies nothing, and a red one is not a terminal."""
+    for states in ({}, {"capture_off_on_equal": "fail"}, {"packets_valid": "error"}):
+        selection = tp.select_successor_result(
+            _successor(**states), authority="non_qualifying_diagnostic", phase="a"
+        )
+        assert selection.result == tp.DIAGNOSTIC_RESULT
+        assert selection.terminal is None
+        assert selection.order is None
+
+
+def test_a_diagnostic_result_is_unavailable_to_a_measurement() -> None:
+    assert tp.DIAGNOSTIC_RESULT not in tp.RESULT_TO_TERMINAL
+    for authority in tp.AUTHORITIES:
+        selection = tp.select_successor_result(
+            _successor(), authority=authority, phase="a"
+        )
+        assert (selection.result == tp.DIAGNOSTIC_RESULT) == (
+            authority == "non_qualifying_diagnostic"
+        )
+
+
+def test_a_named_execution_cause_needs_terminal_four_to_be_selected() -> None:
+    named = tp.select_successor_result(
+        _successor(execution_complete="fail"),
+        authority="exactly_once_measurement",
+        phase="a",
+        execution_result="runner_timeout",
+    )
+    assert named.result == "runner_timeout"
+    assert named.order == 4
+    with pytest.raises(tp.PartitionError, match="terminal 4"):
+        tp.select_successor_result(
+            _successor(execution_complete="fail"),
+            authority="exactly_once_measurement",
+            phase="a",
+            execution_result="packet_invalid",
+        )
+    with pytest.raises(tp.PartitionError, match="only when terminal 4"):
+        tp.select_successor_result(
+            _successor(packets_valid="fail"),
+            authority="exactly_once_measurement",
+            phase="a",
+            execution_result="runner_nonzero",
+        )
+    with pytest.raises(tp.PartitionError, match="no execution result"):
+        tp.select_successor_result(
+            _successor(),
+            authority="exactly_once_measurement",
+            phase="a",
+            execution_result="runner_nonzero",
+        )
+    with pytest.raises(tp.PartitionError, match="names no execution result"):
+        tp.select_successor_result(
+            _successor(),
+            authority="non_qualifying_diagnostic",
+            phase="a",
+            execution_result="runner_nonzero",
+        )
+
+
+@pytest.mark.parametrize("key", [key for key, _ in tp.SUCCESSOR_PREDICATES])
+def test_a_missing_or_unknown_successor_state_fails_closed(key: str) -> None:
+    missing = _successor()
+    del missing[key]
+    with pytest.raises(tp.PartitionError, match="missing its state record"):
+        tp.select_successor_result(
+            missing, authority="exactly_once_measurement", phase="a"
+        )
+    with pytest.raises(tp.PartitionError, match="unknown state"):
+        tp.select_successor_result(
+            _successor(**{key: "skipped"}),
+            authority="exactly_once_measurement",
+            phase="a",
+        )
+
+
+def test_the_legacy_spelling_is_not_silently_accepted_as_a_successor_record() -> None:
+    """A mixed record means one of the two vocabularies was misread."""
+    mixed = {**_successor(), "bound_input_mutated": {"state": "pass", "reasons": []}}
+    with pytest.raises(tp.PartitionError, match="outside the partition"):
+        tp.select_successor_result(
+            mixed, authority="exactly_once_measurement", phase="a"
+        )
+
+
+def test_the_successor_contract_covers_phase_a_only() -> None:
+    with pytest.raises(tp.PartitionError, match="Phase-A four-run plan"):
+        tp.select_successor_result(
+            _successor(), authority="exactly_once_measurement", phase="b"
+        )
+    with pytest.raises(tp.PartitionError, match="unknown authority"):
+        tp.select_successor_result(_successor(), authority="rehearsal", phase="a")
+
+
+def test_the_payload_publishes_the_successor_rules_it_executes() -> None:
+    """§ 20.8: the payload reader and the function caller must agree."""
+    published = tp.as_payload()["successor_vocabulary"]
+    assert published["authorities"] == list(tp.AUTHORITIES)
+    assert published["ordered_predicates"] == [
+        list(item) for item in tp.SUCCESSOR_PREDICATES
+    ]
+    assert published["predicate_states"] == list(tp.PREDICATE_STATES)
+    assert published["undecided_states"] == list(tp.UNDECIDED_STATES)
+    assert published["predicate_renames"] == tp.SUCCESSOR_TO_LEGACY_PREDICATE
+    assert published["inverted_polarity_predicates"] == sorted(
+        tp.INVERTED_POLARITY_PREDICATES
+    )
+    assert published["legacy_result_superseded_by"] == tp.LEGACY_RESULT_SUPERSEDED_BY
+    assert published["diagnostic_result"] == tp.DIAGNOSTIC_RESULT
+    # The two rules a payload-only implementer would otherwise have to invent.
+    assert published["decided_failure_outranks_undecided"] is True
+    assert published["undecided_requires_incomplete_execution"] is True
+    assert published["diagnostic_selects_no_terminal"] is True

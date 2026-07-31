@@ -1608,3 +1608,198 @@ existing read-only probe and runtime-input records; no controlled-host or native
 rebuild is performed. This correction does not dispatch the manual workflow, run
 any sequence, issue or consume authorization, create `F`/`S`, seal or admit an
 archive, or change `equivalence.state` from `unproven`.
+
+---
+
+## Review Correction 9 — the successor verdict algebra (2026-07-30, pre-seal)
+
+Corrections 5 to 7 froze the successor artifact contract; Correction 8 removed
+the reconstruction gate. What none of them fixed is that the successor artifacts
+and the executable partition of § 7 now describe the same partition in two
+vocabularies, and no rule joined them:
+
+- three predicates are renamed, and one of the renames **inverts polarity**:
+  `bound_input_unchanged` is true when the world is intact, while
+  `bound_input_mutated` is true when it is broken;
+- `runtime_binding_matches_spec` replaces `layer_p_certificate_matches_freeze`
+  after Correction 5 retired the certificate, so the result token
+  `certificate_mismatch` is **superseded, not deleted** — the historical archives
+  that recorded it keep their meaning, and both tokens select terminal 1;
+- a predicate is no longer a bool. `pass` / `fail` / `error` / `not_run` needs a
+  rule the two-valued partition never had;
+- `h2_execution_result_v1` constrained only its diagnostic branch, so under
+  `exactly_once_measurement` a failure result with `terminal: null` validated —
+  the successor spelling of the state § C3.5.1 exists to make unformable — and
+  `h2_execution_verification_v1` bound `valid` to nothing at all, so `valid: true`
+  validated with every check false.
+
+### The rules
+
+**One partition, two spellings.** The successor predicate order is the § 7 order;
+the rename map, the inverted predicate and the superseded result token are
+published by `h2_terminal_partition.as_payload()` so a payload-only implementer
+resolves the same verdict as one calling the function (§ 20.8). A record mixing
+the two spellings is refused rather than half-read.
+
+**A decided failure outranks an undecided predicate, wherever it sits.** Not
+first-applicable over raw states: an `error` on an early predicate must never
+wash a later capture-perturbation or invalid-packet *finding* into terminal 4,
+or killing a process on sight would launder a § C3.5-banned terminal into a
+re-attemptable one. Among decided failures the § 7 order decides, unchanged.
+
+**An undecided predicate cannot coexist with a complete execution.** If nothing
+failed but something was not decided, the execution did not complete and
+`execution_complete` must say so. A record claiming both is internally
+contradictory and is refused, not mapped.
+
+**A diagnostic selects no terminal.** It records every failed predicate and
+resolves to `diagnostic_complete` whatever they say; that token is unavailable to
+a measurement, and no diagnostic qualifies or authorizes one (Correction 5).
+
+**The two artifacts carry the joint constraints mechanically**, so any validator
+enforces them without executing the ruler: each result pins exactly the terminal
+the partition selects; `measurement_pass` requires measurement authority, a null
+terminal and six passing predicates; a selected terminal requires a non-passing
+observation; **a named finding requires its own predicate to be `fail`** — an
+`error` or `not_run` is undecided and selects nothing by name, so admitting any
+non-pass state there would let two different results share one terminal for the
+same observation, which is § 20.8's failure and not its test; no earlier
+predicate may have decided-failed; and `valid` is exactly the conjunction of the
+verification checks, with reasons empty when it holds and non-empty when it does
+not.
+
+**The runtime binding is stage-aware, because a failure archive must be
+formable.** `h2_runtime_binding_v1` required two complete build artifacts, a
+successful extension load, a `computed` identity probe and a zero-change input
+monitor unconditionally. Under that shape the tokens this correction re-admits
+could never appear in a `valid: true` archive — a genuine `build_failed` has no
+loaded extension to record — and neither could terminal 1: `changed_count` was
+pinned to zero, so a detected mutation was unrecordable. A contract that makes
+its own truthful negatives unformable does not narrow anything; it only moves the
+failure to where nothing checks it.
+
+The binding therefore declares `failed_stage`: null, or the retained stage that
+failed. Evidence is required exactly where the execution reached it — a build
+failure requires no artifacts, load or probe; a `build_binding` or
+`extension_load` failure requires the complete build artifacts but no load or
+probe; an `identity_run` failure requires both artifacts and load but no probe;
+and a null `failed_stage` requires all three, exactly as strictly as before.
+Absence, never a fabricated success shape, is how an unreached stage is recorded.
+`build_binding` and `identity_run` have no dedicated result token and are carried
+by `unclassified_execution_failure` with the stage named in the binding: the
+cause is recorded without inventing a terminal boundary.
+
+**The cross-artifact rules the schemas cannot express** are published by
+`h2_terminal_partition.as_payload()` and are **verifier obligations**, since no
+JSON Schema sees two files at once. They are not unconditional: stage evidence is
+subordinate to the authority boundary and to the § 7 order, and a rule that
+ignores either makes truthful records unformable.
+
+- `build_failed` requires `failed_stage` to be `build`, and
+  `extension_load_failed` requires `extension_load`. This direction is
+  unconditional: a named cause that does not name a failed stage is a label, which
+  is the defect the two re-admitted tokens exist to avoid.
+- The reverse direction holds **only when terminal 4 is the ordered winner**. A
+  build that failed while a bound input moved is a real observation: terminal 1
+  outranks terminal 4, so the result is `input_mutated` while `failed_stage`
+  remains `build` as subordinate evidence. Under terminals 1 to 3 a non-null
+  `failed_stage` is recorded and changes no verdict; demanding its token there
+  would let stage evidence overturn a higher-order finding, and combined with the
+  mutation rule would leave that observation with **no admissible result at all**.
+- `input_mutated` holds exactly when the monitor recorded a change or an unclean
+  final drain, in both directions, because terminal 1 is the highest order and a
+  recorded change cannot lose to anything. Relaxing the monitor is what makes
+  terminal 1 recordable; this biconditional is what keeps it honest.
+- **A measurement that selected no terminal carries no failed stage.**
+  `measurement_pass` requires `execution_complete` to pass, so a non-null
+  `failed_stage` beside it has the two files describing different executions.
+  Subordinate evidence is admissible under a terminal, never under the
+  non-terminal progression.
+- **A diagnostic demands nothing.** It records every failed predicate and every
+  stage failure and still resolves to `diagnostic_complete`, so requiring a
+  mutation or a failed stage to change its result would contradict the authority
+  boundary this correction states three paragraphs above.
+
+- **A finding must be reachable at the point the execution stopped.** A terminal
+  is not a time, so a terminal-level rule cannot express this: two results sharing
+  terminal 1 differ in whether the evidence they name could exist yet. The
+  retained order is `build` → `build_binding` → `extension_load` → `identity_run`,
+  and only then the four measurement runs; measurement mode is fail-fast. So a
+  non-null `failed_stage` implies every ordered run is `not_run` with no artifact
+  digest, which in turn implies the capture comparison and the packet verdict are
+  undecided and terminals 2 and 3 unselectable. `behavior_probe_moved` needs the
+  computed identity probe, which the binding is forbidden to carry unless
+  `failed_stage` is null.
+
+The findings that *do* survive a stage failure are the **stage-independent** ones:
+a monitored mutation, because the monitor starts before the binding by contract,
+and a binding that disagrees with the spec on the members
+`h2_runtime_binding_v1` requires at *every* stage — `runtime_inputs`,
+`executed_surfaces`, `capture_abi`, `source_audit`, `input_monitor`. That is the
+adjudication for `runtime_binding_mismatch`: it is decidable whenever a binding
+exists at all, from the schema's own unconditional required set, not from sharing
+terminal 1's name. Terminal 5 never appears, because this successor path selects
+Phase-A verdicts only.
+
+Correspondingly, `result.json` alone must not claim evidence its own run records
+deny: a passing `execution_complete` requires all four runs `completed`, a decided
+capture comparison requires the capture-off block and at least one capture-on
+block to have started, a decided packet verdict requires a started capture-on
+block, and a `completed` run requires its artifact digest. A *failed* run still
+counts as started — surviving evidence accumulates (§ C3.5.1) — but a `not_run`
+block produced nothing to read.
+
+The archive-only verifier of W3 must enforce all of it, and no producer exists in
+between.
+
+**`build_failed` and `extension_load_failed` are re-admitted as result tokens.**
+Correction 5 *retains* the `build` and `extension_load` stages, so their failures
+must remain nameable; folding them into `runner_nonzero` would have destroyed a
+cause the predecessor partition already recorded. Both map to terminal 4, exactly
+as in § 7, so no terminal boundary moves.
+
+### What this correction does not do
+
+This correction was revised in place four times under owner review before merge,
+which is why the rules above read as they do rather than as appended passes: the
+correction had not merged and nothing was sealed, so revising the text is more
+honest than layering a correction onto an unsealed one, and the re-pin log records
+each revision. Four defects were fixed, and each was found by a case the tests did
+not cover rather than by rereading the prose:
+
+1. a named finding admitted any non-pass state — found by substituting a *result*
+   where the sweep had only substituted a terminal;
+2. the runtime binding made every stage failure, terminal 1 included, unformable —
+   found by asking whether a truthful negative can be archived at all;
+3. the cross-artifact rules were unconditional, so a build failure under a moved
+   input had no admissible result and a diagnostic could not stay
+   `diagnostic_complete` — found by combining two conditions that had only ever
+   been varied one at a time;
+4. a stage failure was admissible beside `measurement_pass` — found by enumerating
+   the verdicts a stage failure may sit under, which is the closure the third
+   repair's own grid still left open: it fixed the verdict at terminal 4 for every
+   clean cell and so never exercised the non-terminal progression;
+5. terminals 2 and 3 were admissible beside a stage failure — found because the
+   fourth repair's own table, enumerated over *terminals*, published that
+   generalisation as correct. The mutation case proved only that a monitored change
+   survives a stage failure; it does not follow that a finding derived from runs
+   that never started does. Enumerating over *results* rather than terminals is
+   what makes the difference visible.
+
+Two patterns, and the second is the one that keeps recurring. A multi-condition
+rule is closed by an exhaustive classification with an invariant per cell, never by
+a list of cases: each defect above lived in a cell no case had asked about. And a
+classification is only as good as its axes — three of the five defects came from an
+enumeration that was exhaustive over the wrong dimension, so the fix is to name
+what varies (authority, ordered verdict, reachable evidence) before enumerating,
+and to check whether the new grid holds any dimension constant.
+
+It implements no producer, no verifier, no diagnostic mode and no controller
+change; the archive-only verifier and the producer remain the next two staged
+obligations. It builds no artifact, executes no sequence, selects no `I`, creates
+no `F`/`S`, issues no third authorization, seals nothing, admits nothing to the
+canonical corpus and leaves `equivalence.state` at `unproven`. The two spent
+owner authorizations and both historical archives are untouched, and their
+verifier path keeps the legacy vocabulary it recorded. This ruler edit republishes
+the legacy publication's static axes from the existing read-only probe and
+runtime-input records; no controlled-host or native rebuild is performed.

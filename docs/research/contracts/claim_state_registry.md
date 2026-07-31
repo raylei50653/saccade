@@ -958,7 +958,7 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
   successor_implementation_order_planned:
     date: 2026-07-30
     authority: charter staging order（navigation）; normative narrowing belongs to a declaration correction landed with W2
-    status: planned; W1 landed as this governance record; W2–W5 not implemented
+    status: W1 and W2 landed（見下方 successor_verdict_algebra_landed）; W3–W5 not implemented
     w1_governance: confirmed state + gap registration + staging order; docs only; no ruler edit, no re-pin, no republish
     w2_verdict_algebra: >-
       cross-verdict constraints in the two already-ruler schemas (measurement branch; valid as the checks
@@ -981,6 +981,126 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
     working_detail: "~/.claude/plans/delightful-launching-gosling.md（working plan, not authority）"
     authorization_effect: none
     not_established: no Phase-A execution; no third authorization; no S; no seal; no corpus admission; no equivalence claim; two owner authorizations remain permanently spent with zero faithful capture
+  successor_verdict_algebra_landed:
+    date: 2026-07-30
+    authority: "H2 declaration Review Correction 9"
+    status: W2 landed（two commits:契約層 + ruler 層,各自帶自己的 republish）
+    one_partition_two_spellings:
+      renames: {bound_input_unchanged: bound_input_mutated, behavior_probe_equals_spec: behavior_probe_equals_freeze, runtime_binding_matches_spec: layer_p_certificate_matches_freeze}
+      inverted_polarity: [bound_input_unchanged]         # legacy true = broken, successor true = intact
+      superseded_result: {certificate_mismatch: runtime_binding_mismatch}   # 兩者同選 terminal 1;歷史 archive 保留舊 token
+      mixed_record: refused（不半讀兩套詞彙）
+    four_state_predicate_rules:
+      decided_failure_outranks_undecided: >-
+        early error/not_run 不得把後面的 capture-perturbation 或 invalid-packet **finding** 洗成 terminal 4
+        （那正是把 §C3.5 禁止的 terminal 洗成可重試的手法）;decided failure 之間仍依 §7 順序
+      undecided_requires_incomplete_execution: 沒有 fail 但有未判定 ⇒ execution_complete 必須非 pass;兩者並存的紀錄自相矛盾,refuse 不 map
+      diagnostic: 恆為 diagnostic_complete、永不選 terminal;該 token 對 measurement 不可用
+    schema_constraints_added:
+      result: [result↔terminal 精確映射, "measurement_pass ⇒ measurement authority + null terminal + 六個 pass", "非 null terminal ⇒ 觀測非全 pass", "failure 必須指名自己的 predicate 且無更早的 decided failure", "undecided 不得與 complete execution 並存", "diagnostic token 不得帶 measurement authority"]
+      verification: "valid ⇔ 六個 check 的 conjunction;valid 時 reasons 必空,不 valid 時必非空"
+    result_tokens_readmitted: [build_failed, extension_load_failed]   # RC5 保留 build 與 extension_load 兩 stage ⇒ 其失敗必須可指名;皆映 terminal 4,terminal 邊界未移
+    published_via: h2_terminal_partition.as_payload().successor_vocabulary   # §20.8 兩條消費路徑一致
+    ruler_movement:
+      sealed_prefix: 92048 bytes / 3e2330cb114fda22336dd72721e28cfb639c0ef2ada9fb47e6fef781d9d338d5
+      identity_semantics: 2f84391e → 44b7df41（契約層）→ 24ee5fe1（ruler 層）
+      unchanged: decision_surface 9b7faeb0 / environment 3cf9ae3e / implementation 5ede10f0 / runtime_inputs 0b839df0 / probe 2dabed0b
+      republished_from: existing read-only probe + runtime-input records（out/h2_layer_p/20260730T032612Z）;no controlled-host or native rebuild
+    owner_review_revision_1:                  # 2026-07-30 owner review of PR #308,兩個 blocking defect
+      named_finding_required_only_non_pass: >-
+        schema 對 finding 自身 predicate 寫 `not const pass` ⇒ `error`/`not_run` 也能選具名 finding。
+        owner 反例(bound_input_unchanged=error / behavior_probe_equals_spec=fail / execution_complete=fail)
+        ruler 判 behavior_probe_moved,但 schema 也接受 input_mutated —— 兩者同 terminal 1,
+        原本只替換 terminal 的 cross-path 測試看不到。修法=自身 predicate 改 `const fail`;
+        cross-path battery 加上「同 terminal 換 result」;mutation 驗過(改回舊條件反例又通過)
+      terminal_four_failure_archives_were_unformable: >-
+        `h2_runtime_binding_v1` 無條件要求兩個完整 build artifact + 成功 extension_load +
+        `identity_probe.state==computed`;**且 `input_monitor.changed_count` 釘 `const 0`、
+        `final_drain_clean` 釘 `const true` ⇒ terminal 1 的 input_mutated 同樣不可形成**(owner 未列但同類)。
+        修法=`failed_stage` sum type(null/build/build_binding/extension_load/identity_run),
+        證據只在執行真的到達處被要求,未到達的 stage 以**缺席**紀錄而非偽造成功形狀;
+        `failed_stage: null` 的成功 archive 嚴格度完全不變
+      no_dedicated_token_stages: [build_binding, identity_run]   # 由 unclassified_execution_failure 承載 + binding 指名 stage;不新增 terminal 邊界
+      cross_artifact_biconditionals:            # JSON Schema 看不到兩個檔 ⇒ ruler 持有、W3 verifier 必須 import
+        checker: h2_terminal_partition.binding_agreement_reasons
+        rules: ["build_failed ⇔ failed_stage=build", "extension_load_failed ⇔ failed_stage=extension_load", "input_mutated ⇔ monitor 記錄到 change 或 unclean final drain"]
+        both_directions: true                   # 單向會讓具名 cause 變成標籤,或讓已記錄的 mutation 不必選 terminal 1
+      where_terminal_four_cause_is_decided: 不在 result.json（其 terminal-4 token 共用同一 predicate）而在 stage evidence;已用專門測試釘住「schema 在此保持沉默、checker 不沉默」
+      re_pin: 92048 → 94893 bytes / 046c4bc5…      # RC9 就地修訂（未 merge、未 seal ⇒ 就地改比再 append 誠實）
+      identity_semantics: 24ee5fe1 → 32d2c37d（宣言修訂）→ 06f7cfa3（schema+ruler 修訂）
+    owner_review_revision_2:                  # 同一輪 review 的第三個 blocking defect;兩個症狀同根
+      root_cause: cross-artifact 規則寫成無條件,未受 authority boundary 與 §7 terminal precedence 約束
+      deadlock: >-
+        failed_stage=build 且 monitor 記到 mutation ⇒ 沒有任何 result 可通過:
+        stage 規則要 build_failed、mutation 規則要 input_mutated,而 terminal 1 順位高於 terminal 4 ⇒
+        真實紀錄（input_mutated + failed_stage 仍記 build 當 subordinate evidence）被拒
+      diagnostic: checker 沒收 authority ⇒ diagnostic 只要記到 mutation 或 stage failure 就無法維持 diagnostic_complete
+                  （`select_successor_result` 本身早就正確,是 cross-artifact checker 漏了 authority）
+      fix_signature: binding_agreement_reasons(result, *, authority, selected_terminal, failed_stage, input_monitor)
+      selected_terminal_semantics: ruler 從 **predicates** 重算的 terminal（select_successor_result().terminal）,
+                  **不是** archive 記錄的 terminal —— 從 result 反推會讓這個檢查變成循環
+      gated_rules:
+        - "diagnostic：mutation 與 failed stage 都是被記錄的 observation,不要求換 result"
+        - "token → stage：無條件（具名 cause 必須指名自己的 stage）"
+        - "stage → token：只在 selected_terminal 是 terminal 4 時執行"
+        - "terminal 1–3 勝出時：non-null failed_stage 是 subordinate evidence,不改 verdict"
+        - "mutation ⇔ input_mutated：measurement 下維持雙向（terminal 1 最高順位）"
+      test_gap_closed: 原矩陣只有單因子案例 ⇒ 換成 mutation × failed_stage 全格 grid + 「任何一格都不得 deadlock」不變式
+                  （每格至少一個 admissible result;有 mutation 時恰好只有 input_mutated）
+      re_pin: 94893 → 96615 bytes / cf7563bb…
+      identity_semantics: 06f7cfa3 → 027c3472
+    owner_review_revision_3:                  # 收斂枚舉找到 gated 形式仍留的一格
+      defect: >-
+        `measurement_pass` 可與 non-null `failed_stage` 並存 ⇒ 一份 artifact 說完整成功、
+        另一份說 retained stage 失敗,而 checker 兩邊都同意（stage→token 只在 terminal 4 執行,
+        selected_terminal=None 時整段略過,monitor 又乾淨 ⇒ 回空 reasons）
+      fix: measurement 下 `selected_terminal is None ⇒ failed_stage is null`
+      classification_table:                   # non-null failed_stage 可以坐在哪
+        terminal_1_to_3: subordinate evidence（不改 verdict）
+        terminal_4: 必須依 stage 選對 token
+        diagnostic: recorded observation,不要求換 result
+        null_terminal: FORBIDDEN — stage failure 與 complete execution 矛盾
+      payload_leak: >-
+        `failed_stage_is_subordinate_evidence_under_terminals` 原本由「所有非 terminal-4」生成 ⇒
+        含 terminal 5（`H2_FULL_COMMIT_CAPTURE_FAITHFUL`）。改為由 **Phase-A reachability** 推導,
+        terminal 5 本來就不可能由 successor ruler 選出
+      test_gap_closed: >-
+        第三輪自己那個 grid 在 mutated=False 時把 verdict 固定成 terminal 4 ⇒ 所有 clean 格都只測 terminal-4 branch。
+        改成對每個 stage 枚舉「所有 candidate verdict」並斷言 admitting set 恰為 Phase-A reachable terminals
+      re_pin: 96615 → 97948 bytes / c73d5ed6…
+      identity_semantics: 027c3472 → e8669807
+    owner_review_revision_4:                  # revision 3 自己的表把上一輪的特例泛化成通則
+      defect: >-
+        terminal 2／3 可與 non-null `failed_stage` 並存 ⇒ 可形成「binding 說 build 就失敗、
+        result 說四個 run 全 completed 且 capture_off_on_equal=fail」而 checker 判 agreement。
+        根因=revision 3 的 property 對 **terminal** 窮舉並斷言每個 phase_a_reachable terminal 都接受任意 stage failure;
+        mutation 反例只證明「monitor 在 binding 前啟動 ⇒ 監測到的 mutation 能與 build failure 共存」,
+        不能推廣到「從未起跑的 run 所導出的 finding」
+      temporal_axis: >-
+        RC5 保留順序 build → build_binding → extension_load → identity_run → 四個 ordered run,
+        且 measurement 是 fail-fast ⇒ non-null failed_stage ⇒ 所有 ordered run 必為 not_run（artifact_digest null）
+        ⇒ capture 比較與 packet 判定 undecided ⇒ terminal 2／3 不可選
+      reachability_classes:                   # 已發布並由 checker 執行;取代 terminal-level 清單
+        stage_independent: [input_mutated, runtime_binding_mismatch]
+        probe_derived: [behavior_probe_moved]     # 需 computed identity probe ⇒ 只有 failed_stage=null
+        run_derived: [capture_perturbs_policy, packet_invalid]
+      runtime_binding_mismatch_adjudication: >-
+        由 `h2_runtime_binding_v1` **無條件 required** 的成員裁決（runtime_inputs／executed_surfaces／
+        capture_abi／source_audit／input_monitor 在每個 stage 都存在）⇒ 只要 binding 存在就可判定;
+        **不是**從 terminal 1 的共同名稱推導
+      intra_file_closure:                     # result.json 自己不得宣稱其 run 紀錄否認的證據
+        - "execution_complete=pass ⇒ 四個 run 全 completed"
+        - "decided capture_off_on_equal ⇒ capture-off 與至少一個 capture-on 已起跑（failed 也算起跑,not_run 不算）"
+        - "decided packets_valid ⇒ 至少一個 capture-on 已起跑"
+        - "completed run ⇒ artifact_digest 必須是 sha256"
+      checker_signature_extended: binding_agreement_reasons(..., ordered_runs, identity_probe_present)   # 兩者皆 keyword-only 無 default ⇒ 舊呼叫端會炸不會靜默跳過
+      test_axis_change: terminal × failed_stage → **result × failed_stage × run reachability**
+      re_pin: 97948 → 100171 bytes / 95581df9…
+      identity_semantics: e8669807 → d7600437
+    tests: +67 contract tests;期望值由 schema 推導後與 ruler 雙向比對,含「ruler 自己的 verdict 是 schema 唯一接受的 verdict」整組
+    authorization_effect: none
+    not_established: no producer; no verifier; no diagnostic mode; no execution; no authorization; no F/S; no seal; no corpus admission; no equivalence claim
+    next: W3 archive-only verifier（verification.json + checksums.sha256,producer_invoked=false / verification_host_inputs_used=false,constraints 由本輪 import 不重打）
 pending_reentry:                          # append-only; pre-seal, no terminal claimed; route-1 永久留帳結論不變
   - date: 2026-07-21
     scheduling: owner-scheduled re-entry #3（滿足 line-337 future_reentry_precondition:launch-hygiene gate 先行）

@@ -117,7 +117,10 @@
   的 predicate 名／polarity／state space／result token 互不相符，`terminal: null`
   在 measurement authority 下仍 schema-legal（＝§C3.5.1 要讓它形不成的那個形狀），
   `valid` 與 `checks` 之間無任何約束。因此順序固定為
-  **W1 治理（本次）→ W2 verdict algebra（ruler＋Review Correction 9＋republish）
+  **W1 治理 → W2 verdict algebra（Review Correction 9＋ruler＋republish，**已落地**：
+  三個 rename／極性反轉／`certificate_mismatch` 被 `runtime_binding_mismatch` supersede、
+  4 態 predicate 的兩條規則、六項 schema joint constraint、`valid ⇔ checks`；
+  `build_failed`／`extension_load_failed` 重新入列而非併入 `runner_nonzero`）
   → W3 archive-only verifier／checksum closure → W4 producer（需 build）
   → W5 closure**；W3 先於 W4 的理由＝#294→#295 的契約先行與 #302／#304 的
   guard-before-entry，且 W2–W3 不需 build ⇒ item 5 的 `build/h2_layer_p`

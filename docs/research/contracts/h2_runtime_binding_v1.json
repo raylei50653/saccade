@@ -6,13 +6,11 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "build_artifacts",
     "capture_abi",
+    "executed_surfaces",
     "execution_id",
     "execution_semantics_projection_digest",
-    "executed_surfaces",
-    "extension_load",
-    "identity_probe",
+    "failed_stage",
     "input_monitor",
     "resolved_run_spec_digest",
     "runtime_inputs",
@@ -182,40 +180,23 @@
         }
       }
     },
-    "build_artifacts": {
-      "type": "array",
-      "minItems": 2,
-      "maxItems": 2,
-      "uniqueItems": true,
-      "items": {
-        "$ref": "#/$defs/build_artifact"
-      },
-      "allOf": [
+    "failed_stage": {
+      "oneOf": [
         {
-          "contains": {
-            "properties": {
-              "role": {
-                "const": "tracking_extension"
-              }
-            },
-            "required": [
-              "role"
-            ]
-          }
+          "enum": [
+            "build",
+            "build_binding",
+            "extension_load",
+            "identity_run"
+          ]
         },
         {
-          "contains": {
-            "properties": {
-              "role": {
-                "const": "tensorrt_scan_plugin"
-              }
-            },
-            "required": [
-              "role"
-            ]
-          }
+          "type": "null"
         }
       ]
+    },
+    "build_artifacts": {
+      "$ref": "#/$defs/build_artifacts_partial"
     },
     "extension_load": {
       "type": "object",
@@ -253,10 +234,11 @@
           "const": true
         },
         "changed_count": {
-          "const": 0
+          "type": "integer",
+          "minimum": 0
         },
         "final_drain_clean": {
-          "const": true
+          "type": "boolean"
         }
       }
     },
@@ -383,6 +365,179 @@
           "$ref": "#/$defs/sha256"
         }
       }
+    },
+    "build_artifacts_complete": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/build_artifact"
+      },
+      "allOf": [
+        {
+          "contains": {
+            "properties": {
+              "role": {
+                "const": "tracking_extension"
+              }
+            },
+            "required": [
+              "role"
+            ]
+          }
+        },
+        {
+          "contains": {
+            "properties": {
+              "role": {
+                "const": "tensorrt_scan_plugin"
+              }
+            },
+            "required": [
+              "role"
+            ]
+          }
+        }
+      ]
+    },
+    "build_artifacts_partial": {
+      "type": "array",
+      "maxItems": 2,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/build_artifact"
+      }
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "failed_stage": {
+            "type": "null"
+          }
+        },
+        "required": [
+          "failed_stage"
+        ]
+      },
+      "then": {
+        "properties": {
+          "build_artifacts": {
+            "$ref": "#/$defs/build_artifacts_complete"
+          }
+        },
+        "required": [
+          "build_artifacts",
+          "extension_load",
+          "identity_probe"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "failed_stage": {
+            "const": "build"
+          }
+        },
+        "required": [
+          "failed_stage"
+        ]
+      },
+      "then": {
+        "properties": {
+          "extension_load": {
+            "not": {}
+          },
+          "identity_probe": {
+            "not": {}
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "failed_stage": {
+            "const": "build_binding"
+          }
+        },
+        "required": [
+          "failed_stage"
+        ]
+      },
+      "then": {
+        "properties": {
+          "build_artifacts": {
+            "$ref": "#/$defs/build_artifacts_complete"
+          },
+          "extension_load": {
+            "not": {}
+          },
+          "identity_probe": {
+            "not": {}
+          }
+        },
+        "required": [
+          "build_artifacts"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "failed_stage": {
+            "const": "extension_load"
+          }
+        },
+        "required": [
+          "failed_stage"
+        ]
+      },
+      "then": {
+        "properties": {
+          "build_artifacts": {
+            "$ref": "#/$defs/build_artifacts_complete"
+          },
+          "extension_load": {
+            "not": {}
+          },
+          "identity_probe": {
+            "not": {}
+          }
+        },
+        "required": [
+          "build_artifacts"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "failed_stage": {
+            "const": "identity_run"
+          }
+        },
+        "required": [
+          "failed_stage"
+        ]
+      },
+      "then": {
+        "properties": {
+          "build_artifacts": {
+            "$ref": "#/$defs/build_artifacts_complete"
+          },
+          "identity_probe": {
+            "not": {}
+          }
+        },
+        "required": [
+          "build_artifacts",
+          "extension_load"
+        ]
+      }
+    }
+  ]
 }
