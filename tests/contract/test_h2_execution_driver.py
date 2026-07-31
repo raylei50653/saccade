@@ -258,6 +258,17 @@ def _stub_runner(
     """Stand in for the runner: fill the caller's accumulators, then stop as it would."""
 
     def _launch(root: Path, **kwargs: Any) -> set[str]:
+        # Drive the caller's own launcher so the launch-boundary capture is
+        # exercised rather than bypassed: a run that started has an observation.
+        for run_id in starts:
+            kwargs["launch_child"](
+                root / run_id / "invocation.json",
+                {"SACCADE_DETECT_BARRIER": "event"},
+                monitor=kwargs.get("monitor"),
+                started=0.0,
+                clock=lambda: 0.0,
+                on_started=lambda: None,
+            )
         kwargs["started_runs"].update(starts)
         kwargs["completed"].update(completes)
         if raises is not None:
@@ -271,19 +282,6 @@ def _stub_runner(
         lambda root: replay if replay is not None else _Replay(),
     )
     monkeypatch.setattr(driver, "run_artifact_digest", lambda root, run_id: "e" * 64)
-    # The two predicates this driver cannot decide are Correction 10's subject,
-    # not this file's: their retirement is reviewed separately, and pinning the
-    # run-phase outcome here must not wait on it.
-    monkeypatch.setattr(
-        driver.producer,
-        "predicate_names",
-        lambda: (
-            "bound_input_unchanged",
-            "capture_off_on_equal",
-            "packets_valid",
-            "execution_complete",
-        ),
-    )
 
 
 def test_a_run_that_exited_nonzero_still_yields_archivable_evidence(
@@ -305,9 +303,10 @@ def test_a_run_that_exited_nonzero_still_yields_archivable_evidence(
     )
     session = _session()
     session.bind()
-    ordered, predicates, named = _runs(
-        session, launch=lambda *a, **k: 0, root=tmp_path
-    ).run(_stage_evidence())
+    evidence = _runs(session, launch=lambda *a, **k: 0, root=tmp_path).run(
+        _stage_evidence()
+    )
+    ordered, predicates = evidence.ordered_runs, evidence.predicate_results
 
     assert [record["state"] for record in ordered] == [
         "completed",
@@ -317,7 +316,10 @@ def test_a_run_that_exited_nonzero_still_yields_archivable_evidence(
     ]
     assert predicates["execution_complete"]["state"] == "fail"
     assert predicates["execution_complete"]["reasons"] == [f"{ids[1]}: exited 1"]
-    assert named is None
+    assert evidence.execution_result is None
+    # One observation per run that reached a launch boundary; none for the rest.
+    observed = evidence.launch_projection["observations"]
+    assert [item["run_id"] for item in observed] == [ids[0], ids[1]]
 
 
 def test_a_run_that_never_started_is_not_reported_as_failed(
@@ -339,8 +341,10 @@ def test_a_run_that_never_started_is_not_reported_as_failed(
     )
     session = _session()
     session.bind()
-    ordered, _, _ = _runs(session, launch=lambda *a, **k: 0, root=tmp_path).run(
-        _stage_evidence()
+    ordered = (
+        _runs(session, launch=lambda *a, **k: 0, root=tmp_path)
+        .run(_stage_evidence())
+        .ordered_runs
     )
     states = {record["run_id"]: record["state"] for record in ordered}
     assert states[ids[1]] == "failed"
@@ -371,8 +375,10 @@ def test_a_mutation_the_wait_loop_drained_still_reaches_the_binding(
         starts=(ids[0],),
         raises=_drift_error("bound-input mutation observation"),
     )
-    _, predicates, _ = _runs(session, launch=lambda *a, **k: 0, root=tmp_path).run(
-        _stage_evidence()
+    predicates = (
+        _runs(session, launch=lambda *a, **k: 0, root=tmp_path)
+        .run(_stage_evidence())
+        .predicate_results
     )
     assert predicates["bound_input_unchanged"]["state"] == "fail"
 
@@ -401,8 +407,10 @@ def test_a_clean_exit_that_never_completed_says_so_rather_than_exited_zero(
     )
     session = _session()
     session.bind()
-    _, predicates, _ = _runs(session, launch=lambda *a, **k: 0, root=tmp_path).run(
-        _stage_evidence()
+    predicates = (
+        _runs(session, launch=lambda *a, **k: 0, root=tmp_path)
+        .run(_stage_evidence())
+        .predicate_results
     )
     assert predicates["execution_complete"]["reasons"] == [
         f"{ids[0]}: recorded invocation state 'running'"

@@ -551,13 +551,19 @@ def _predicates(
     }
     if outcome is not None:
         observed["execution_complete"]["reasons"] = [outcome]
-    undecidable = sorted(set(producer.predicate_names()) - set(observed))
+    # The projection predicate is the producer's: this module records what the
+    # launch boundary received and compares nothing, so deciding it here would be
+    # the observing side answering its own question. Everything else the schema
+    # names must be covered, and a gap raises rather than defaulting to `pass`.
+    undecidable = sorted(
+        set(producer.predicate_names())
+        - set(observed)
+        - {producer.PROJECTION_PREDICATE}
+    )
     if undecidable:
         raise DriverError(
-            f"this execution observed nothing that decides {undecidable}: the "
-            "resolved RunSpec carries no reference to compare against, because "
-            "Review Correction 5 retired the published probe and the Layer-P "
-            "certificate as gates. Reporting a state here would invent evidence"
+            f"this execution observed nothing that decides {undecidable}, and "
+            "reporting a state for them would invent evidence"
         )
     return observed
 
