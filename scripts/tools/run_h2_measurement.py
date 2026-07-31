@@ -1426,8 +1426,15 @@ def launch_ordered_runs(
             invocation_path.name,
             schema=child.INVOCATION_SCHEMA,
         )
-        if returncode != 0 or invocation.get("state") != child.RUN_COMPLETED:
+        # Two different failures, and merging them wrote `exited 0` into the
+        # archive for a child that exited cleanly while recording that it never
+        # finished. The reason a run did not complete is evidence, so it has to
+        # say which of the two happened.
+        if returncode != 0:
             raise ReachedRunFailure(run_id, f"exited {returncode}")
+        state = invocation.get("state")
+        if state != child.RUN_COMPLETED:
+            raise ReachedRunFailure(run_id, f"recorded invocation state {state!r}")
         completed.add(run_id)
         record_event("child_completed", run_id=run_id)
     return completed

@@ -13,11 +13,13 @@ failed is reported as the stage that failed; what that means is decided in
 the selector to raise and runs both adapters to completion, because an absent
 import is weaker evidence than an oracle that would have been consulted.
 
-**It cannot synthesise a run.** `not_run` is produced by the producer's own
-control flow when a stage failure stopped the execution before the runs began.
-This module never writes that state: a run plan that comes back short, doubled,
-reordered or oversized raises, because padding it to the shape the schema wants
-is the one repair that would look exactly like evidence.
+**It does not guess a run's state.** Every ordered run is recorded from a
+witness: `completed` and `failed` both require a process-start witness and differ
+only in whether the runner reported completion, and `not_run` means no such
+witness exists because the ordered loop never reached that run. Nothing is
+inferred from the shape the schema wants — a run plan that comes back doubled,
+reordered or outside the declared set raises instead, because padding it into a
+legal shape is the one repair that would look exactly like evidence.
 
 **The monitor is a capability, not a claim.** `started_before_binding` is a
 `const: true` in the frozen schema — a value a driver could simply write. Here
@@ -394,30 +396,29 @@ def ordered_run_records(
     root: Path,
     *,
     completed: Iterable[str],
-    launched: Iterable[str] | None = None,
+    launched: Iterable[str],
 ) -> list[dict[str, Any]]:
     """One record per declared run, in the declared order, from its own evidence.
 
-    Three states, and each is something observed rather than inferred:
+    Three states, each decided by a witness rather than inferred:
 
-    * `completed` — the runner reported it finished;
-    * `failed` — it reached a launch boundary and did not finish;
-    * `not_run` — the loop stopped before it, so it never started.
+    * `completed` — a process-start witness, and the runner reported it finished;
+    * `failed` — a process-start witness, and it did not finish;
+    * `not_run` — no process-start witness: the ordered loop never reached it.
 
-    `not_run` here is not the synthesis this module refuses. What it must never
-    do is *invent* the state for a run whose fate it does not know, and it does
-    know: `launched` is filled at the process-start witness, so a run outside
-    that set demonstrably never began. Recording it as `failed` would claim a
-    launch that did not happen, which is the same fabrication in the other
-    direction. `launched=None` means the caller is asking only about the runs it
-    named, and everything else is reported as having failed to finish.
+    `launched` is required, and that is the point. Without it this function
+    cannot tell a run that started and failed from one that never started, and
+    picking either would be a fabrication: `failed` claims a launch that did not
+    happen, `not_run` claims the execution stopped earlier than it did. A default
+    would let any other caller mint `failed` claims with no witness behind them,
+    which is the same defect the real adapter was just fixed for.
 
     Fail-closed on the run plan itself: a run outside the plan, or one reported
     twice, is a statement about the bookkeeping and not about the measurement, so
     it raises rather than being trimmed into a legal shape.
     """
     finished = list(completed)
-    started = set(finished if launched is None else launched)
+    started = set(launched)
     unknown = sorted((set(finished) | started) - set(evidence.RUN_IDS))
     if unknown:
         raise DriverError(f"the runner reported runs outside the plan: {unknown}")
@@ -429,7 +430,7 @@ def ordered_run_records(
             f"the runner reported {sorted(done - started)} as completed without a "
             "process-start witness"
         )
-    unstarted = set() if launched is None else set(evidence.RUN_IDS) - started
+    unstarted = set(evidence.RUN_IDS) - started
     return [
         {
             "artifact_digest": run_artifact_digest(root, run_id)

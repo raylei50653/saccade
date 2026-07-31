@@ -6,8 +6,9 @@ the real adapters must have before an execution is ever run:
 
   * **no verdict** — not merely no import of the ruler, but no consultation of
     it: the selector is monkeypatched to raise and both adapters still complete;
-  * **no synthesised run** — a run plan that comes back short, doubled or
-    outside the declared set raises, so `not_run` stays the producer's to emit;
+  * **no guessed run state** — `completed`, `failed` and `not_run` are each
+    decided by a witness, and a run plan that comes back doubled or outside the
+    declared set raises rather than being trimmed into a legal shape;
   * **the monitor is a capability** — `started_before_binding` is obtainable
     only from a session that observed its own start before the binding mark, and
     only from the session the binding announced itself to;
@@ -166,36 +167,44 @@ def _run_ids() -> tuple[str, ...]:
 
 def test_a_run_outside_the_declared_plan_raises(tmp_path: Path) -> None:
     with pytest.raises(driver.DriverError, match="outside the plan"):
-        driver.ordered_run_records(tmp_path, completed=[*_run_ids(), "99_extra"])
+        driver.ordered_run_records(
+            tmp_path, completed=[*_run_ids(), "99_extra"], launched=_run_ids()
+        )
 
 
 def test_a_run_reported_twice_raises(tmp_path: Path) -> None:
     ids = _run_ids()
     with pytest.raises(driver.DriverError, match="more than once"):
-        driver.ordered_run_records(tmp_path, completed=[*ids, ids[0]])
+        driver.ordered_run_records(tmp_path, completed=[*ids, ids[0]], launched=ids)
 
 
-def test_a_short_run_plan_is_recorded_as_failed_never_as_not_run(
+def test_a_run_with_no_start_witness_is_not_run_and_one_that_started_is_failed(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """`not_run` is a claim about an execution that stopped before the runs.
+    """The three states, each from its own witness.
 
-    These runs started. A driver that reported the missing ones as `not_run`
-    would be moving the execution into the producer's stage-failure shape from
-    the outside, which is exactly the synthesis this adapter must not do.
+    Two runs completed, one reached a launch boundary and did not finish, one was
+    never reached. Calling the last of those `failed` would claim a launch that
+    never happened; calling the third `not_run` would claim the execution stopped
+    before a run it actually started.
     """
     monkeypatch.setattr(driver, "run_artifact_digest", lambda root, run_id: "a" * 64)
     ids = _run_ids()
-    records = driver.ordered_run_records(tmp_path, completed=ids[:2])
+    records = driver.ordered_run_records(tmp_path, completed=ids[:2], launched=ids[:3])
     assert [record["run_id"] for record in records] == list(ids)
     assert [record["state"] for record in records] == [
         "completed",
         "completed",
         "failed",
-        "failed",
+        "not_run",
     ]
-    assert "not_run" not in {record["state"] for record in records}
     assert [record["artifact_digest"] for record in records][2:] == [None, None]
+
+
+def test_the_run_records_refuse_to_be_built_without_start_witnesses() -> None:
+    """No default: without `launched` the two negative states are indistinguishable."""
+    with pytest.raises(TypeError):
+        driver.ordered_run_records(Path("."), completed=_run_ids())  # type: ignore[call-arg]
 
 
 def test_the_recorded_order_is_the_declared_order_not_the_completion_order(
@@ -203,7 +212,9 @@ def test_the_recorded_order_is_the_declared_order_not_the_completion_order(
 ) -> None:
     monkeypatch.setattr(driver, "run_artifact_digest", lambda root, run_id: "b" * 64)
     ids = _run_ids()
-    records = driver.ordered_run_records(tmp_path, completed=list(reversed(ids)))
+    records = driver.ordered_run_records(
+        tmp_path, completed=list(reversed(ids)), launched=ids
+    )
     assert [record["run_id"] for record in records] == list(ids)
 
 
@@ -370,6 +381,71 @@ def test_a_mutation_the_wait_loop_drained_still_reaches_the_binding(
     assert record["started_before_binding"] is True
 
 
+def test_a_clean_exit_that_never_completed_says_so_rather_than_exited_zero(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Two different failures, and the archive has to record which one happened.
+
+    A child can exit 0 while its own invocation record says it never reached
+    completion. Reporting that as `exited 0` puts a reason in the archive that is
+    both true and irrelevant, and hides the one that is neither.
+    """
+    ids = _run_ids()
+    _stub_runner(
+        monkeypatch,
+        completes=(),
+        starts=(ids[0],),
+        raises=driver.layer_m.ReachedRunFailure(
+            ids[0], "recorded invocation state 'running'"
+        ),
+    )
+    session = _session()
+    session.bind()
+    _, predicates, _ = _runs(session, launch=lambda *a, **k: 0, root=tmp_path).run(
+        _stage_evidence()
+    )
+    assert predicates["execution_complete"]["reasons"] == [
+        f"{ids[0]}: recorded invocation state 'running'"
+    ]
+    assert "exited 0" not in predicates["execution_complete"]["reasons"][0]
+
+
+def test_the_runner_separates_a_nonzero_exit_from_an_incomplete_invocation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The split, checked where it is made rather than where it is reported."""
+    ids = _run_ids()
+    invocation_path = tmp_path / ids[0] / "invocation.json"
+    monkeypatch.setattr(
+        driver.layer_m,
+        "_prepare_run",
+        lambda root, **kwargs: (invocation_path, {}),
+    )
+    monkeypatch.setattr(
+        driver.layer_m.evidence,
+        "load_document",
+        lambda directory, name, schema=None: {"state": "running"},
+    )
+
+    def _launch(path: Path, environment: Any, *, on_started: Any, **kwargs: Any) -> int:
+        on_started()
+        return 0
+
+    with pytest.raises(driver.layer_m.ReachedRunFailure) as raised:
+        driver.layer_m.launch_ordered_runs(
+            tmp_path,
+            bundle=object(),
+            document={},
+            inherited_environment=None,
+            monitor=None,
+            started=0.0,
+            clock=lambda: 0.0,
+            launch_child=_launch,
+        )
+    assert "recorded invocation state 'running'" in str(raised.value)
+    assert "exited" not in str(raised.value)
+
+
 def test_an_orchestration_defect_is_not_turned_into_an_outcome(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -520,7 +596,9 @@ def test_neither_adapter_consults_the_ruler_even_when_it_could(
 
     session = _session()
     session.bind()
-    assert driver.ordered_run_records(tmp_path, completed=_run_ids())
+    assert driver.ordered_run_records(
+        tmp_path, completed=_run_ids(), launched=_run_ids()
+    )
     assert session.finalize()["started_before_binding"] is True
 
 
