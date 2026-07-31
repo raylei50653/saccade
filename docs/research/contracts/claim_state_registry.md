@@ -1225,6 +1225,49 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
     authorization_effect: none
     not_established: no execution; no build; no diagnostic run; no authorization; no F/S; no seal; no corpus admission; no equivalence claim; driver 尚未綁定
     next: 綁定 driver 並跑一次 non-qualifying diagnostic（需 build ⇒ 先把 build/h2_layer_p 改名讓開,絕不刪除）,再進 W5 closure
+  successor_correction_10_probe_retired:
+    date: 2026-07-31
+    authority: "owner adjudication 2026-07-31 (H2 W4b segment 1 review): retire ④-A, narrow ④-B, do not add references to the RunSpec"
+    status: implementation landed and green; declaration Correction 10 text and sealed_prefix re-pin NOT yet written
+    what_was_retired: >-
+      `behavior_probe_equals_spec` leaves the successor predicates (6 -> 5) and
+      `behavior_probe_moved` leaves the successor result vocabulary. It keeps its terminal
+      for the historical archives that recorded it, has NO superseding token, and
+      `PROBE_DERIVED_RESULTS == ()`. The probe is now `diagnostics.behavior_probe`,
+      optional at every stage, carrying computed|failed|not_run — its absence, failure or
+      change cannot move a predicate, a result, a terminal or `valid`.
+    what_was_narrowed: >-
+      `runtime_binding_matches_spec` -> `runtime_projection_matches_resolved_run_spec`.
+      Left side = what the launch boundary actually received over the four RunSpec-owned
+      environment keys; right side = the canonical projection from the resolved RunSpec.
+      Deliberately NOT mapped to the legacy `layer_p_certificate_matches_freeze`
+      (`SUCCESSOR_WITHOUT_LEGACY_PREDICATE`): the legacy predicate compared a whole binding
+      against a published certificate, which is the gate Correction 5 retired, and mapping
+      the names would let it return through a rename.
+    reachability_moved: >-
+      **`runtime_binding_mismatch` left STAGE_INDEPENDENT_RESULTS for RUN_DERIVED_RESULTS.**
+      It was stage-independent because every member of the old comparison existed at every
+      bindable stage. Narrowed to a launch-boundary observation, its left side is something
+      no stage failure ever reaches. Owner confirmed: leaving it stage-independent would
+      require a fabricated left value or a filled-in predicate.
+    two_implementations: >-
+      producer -> `h2_run_spec.environment_projection` (the canonical API);
+      verifier -> `_independent_launch_environment`, its own derivation from the archived
+      RunSpec's namespace, never calling the canonical API and never reading the producer's
+      predicate to decide the answer. Only the four key names are shared, from the frozen
+      binding schema. The driver captures the observation by wrapping the child launcher —
+      never from the canonical API, or expectation and observation would be one computation.
+    two_failure_kinds: >-
+      values differ => predicate fail => `runtime_binding_mismatch` with `valid: true`
+      (a truthful negative is a valid archive); observation missing/doubled/foreign/
+      unreachable => unusable evidence => producer refuses to emit, verifier records
+      `valid: false`. Cardinality and run-id correspondence live in the ruler
+      (`launch_projection_reasons`), imported by both sides, never restated.
+    layering: "schema = single-file shape and local uniqueness; agreement verifier = cross-file reachability and one-to-one; checksum/closure = diagnostic structural corruption; ruler = the five reachable successor predicates"
+    ruler_cost: "h2_terminal_partition.py + h2_execution_result_v1.json + h2_runtime_binding_v1.json + h2_execution_verification_v1.json moved; coordinate republished 092c2c01 -> fd082481; no sealed_prefix re-pin yet (the declaration document is untouched so far)"
+    tests: "full suite green (2881 passed); new: no successor predicate vector can select a retired result (exhaustive over the 4^5 state space), the retired token keeps its terminal and leaves the vocabulary, the launch projection is captured at the boundary"
+    not_established: no execution; no build; no diagnostic run; no authorization; no F/S; no seal; no corpus admission; no equivalence claim
+    next: "write Correction 10 against this verified behaviour, then sealed_prefix re-pin + republish + full pre_push"
 pending_reentry:                          # append-only; pre-seal, no terminal claimed; route-1 永久留帳結論不變
   - date: 2026-07-21
     scheduling: owner-scheduled re-entry #3（滿足 line-337 future_reentry_precondition:launch-hygiene gate 先行）
