@@ -18,9 +18,14 @@ verdict; a separate command reads only those bytes and their closure and writes
     archive still verifies. This is Correction 5's retirement of reproducibility
     stated as a test rather than as a comment;
   * **a defect inside a formable archive is a verdict, not a crash** — schema
-    violations, disagreeing digests and refused verdicts are recorded as
-    `valid: false`; only an archive that cannot fill the verification record's
-    own required fields fails closed with no record at all.
+    violations, malformed members, disagreeing digests and refused verdicts are
+    recorded as `valid: false`. Two rules together decide what is unformable
+    instead: the verification record's own required fields must be fillable, and
+    the root must be physically flat;
+  * **the closure is a three-state machine** — neither closing record, or both.
+    A half-closed archive must not verify, because `O_EXCL` will not let it be
+    completed; and a stored verdict is compared, not merely counted, since
+    re-deriving *a* verdict says nothing about the one the archive carries.
 
 Every fixture is synthesised from the frozen schemas and the frozen authoring
 profile, never from producer output: § 5.3's circular-oracle rule says the
@@ -509,6 +514,40 @@ def test_an_uncanonical_run_spec_serialization_is_invalid(tmp_path: Path) -> Non
     assert any("artifact serialization" in reason for reason in record["reasons"])
 
 
+# -- a malformed member is a verdict, not a traceback ----------------------- #
+
+
+@pytest.mark.parametrize(
+    ("overrides", "fragment"),
+    [
+        ({"predicate_results": []}, "predicate_results that are not an object"),
+        ({"ordered_runs": "x"}, "ordered_runs that are not a list of objects"),
+        (
+            {"ordered_runs": [None, None, None, None]},
+            "ordered_runs that are not a list of objects",
+        ),
+    ],
+)
+def test_a_malformed_container_is_recorded_not_raised(
+    tmp_path: Path, overrides: dict[str, Any], fragment: str
+) -> None:
+    """Formable identity plus readable JSON plus an invalid shape is still a verdict.
+
+    The ruler is total over observations, but only over observations: it names
+    every unknown predicate and run *state*, and a list where an object belongs
+    is not a state. Guarding the container shape here keeps the fail-closed rule
+    at the plumbing boundary instead of widening the ruler's tolerance — and
+    `ordered_runs` needs `list`, because a string satisfies `Sequence` and would
+    walk into the algebra one character at a time.
+    """
+    record = verifier.verify_archive(_archive(tmp_path, result=_result(**overrides)))
+    assert record["valid"] is False
+    assert record["checks"]["result_binding"] is False
+    assert record["checks"]["artifact_schemas"] is False
+    assert any(fragment in reason for reason in record["reasons"])
+    verifier.validate_verification(record)
+
+
 # -- the closure ------------------------------------------------------------ #
 
 
@@ -547,6 +586,65 @@ def test_a_tampered_inventory_is_invalid(tmp_path: Path) -> None:
     )
     record = verifier.verify_archive(root)
     assert record["checks"]["checksum_closure"] is False
+
+
+@pytest.mark.parametrize(
+    "interrupted", [verifier.VERIFICATION_NAME, verifier.CHECKSUMS_NAME]
+)
+def test_a_half_closed_archive_is_invalid(tmp_path: Path, interrupted: str) -> None:
+    """The state between the two writes must not verify.
+
+    `commit_verification` writes the verdict and then the inventory, so a crash
+    between them leaves an archive with one and not the other. Without this
+    parity the half-closed archive verified as valid *and* could not be
+    completed, because `O_EXCL` refuses to write the verdict twice: a state that
+    is simultaneously believable and unrepairable.
+    """
+    root = _archive(tmp_path)
+    verifier.commit_verification(root)
+    (root / interrupted).unlink()
+    record = verifier.verify_archive(root)
+    assert record["valid"] is False
+    assert record["checks"]["checksum_closure"] is False
+    assert any("half closed" in reason for reason in record["reasons"])
+
+
+def test_a_rewritten_verdict_is_invalid_even_with_a_matching_inventory(
+    tmp_path: Path,
+) -> None:
+    """Re-deriving *a* verdict is not proof that the archive carries that one."""
+    root = _archive(tmp_path)
+    _, record = verifier.commit_verification(root)
+
+    forged = {**record, "execution_id": "h2exec-someone-else"}
+    (root / verifier.VERIFICATION_NAME).write_bytes(
+        runtime_inputs.canonical_json_bytes(forged) + b"\n"
+    )
+    evidence.write_checksum_inventory(root)
+
+    rechecked = verifier.verify_archive(root)
+    assert rechecked["valid"] is False
+    assert rechecked["checks"]["checksum_closure"] is False
+    assert any("stored verdict" in reason for reason in rechecked["reasons"])
+
+
+def test_the_stored_verdict_comparison_is_not_its_own_subject(tmp_path: Path) -> None:
+    """The closure check excludes its own field, so re-verification is stable.
+
+    A verdict stored while the closure was still open records
+    `checksum_closure: false`; comparing that field against a later, closed
+    recomputation would make the check disagree with itself forever.
+    """
+    root = _archive(tmp_path)
+    open_closure = verifier.verify_archive(root)
+    assert open_closure["checks"]["checksum_closure"] is True
+
+    verifier.commit_verification(root)
+    stored = json.loads((root / verifier.VERIFICATION_NAME).read_text(encoding="utf-8"))
+    assert verifier._closure_independent(stored) == verifier._closure_independent(
+        open_closure
+    )
+    assert verifier.verify_archive(root)["valid"] is True
 
 
 # -- what cannot be a verdict at all ---------------------------------------- #

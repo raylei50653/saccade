@@ -42,13 +42,15 @@ Correction 5 retired, and `tests/contract/test_h2_execution_verifier.py` proves
 the line holds by making that function raise and verifying a valid archive
 anyway.
 
-Two failure classes, and the schema decides which is which. A defect *inside* a
-formable archive — a schema violation, a digest that does not match, a verdict
-that disagrees with the observation — is a recorded `valid: false` with reasons,
-because that is a verdict about the archive. A missing or unreadable artifact is
-not: `h2_execution_verification_v1` requires an execution id and three artifact
-digests, so no verification record can be formed at all, and this command fails
-closed with a non-zero exit and writes nothing.
+Two failure classes, drawn by two rules together. A defect *inside* a formable
+archive — a schema violation, a malformed member, a digest that does not match, a
+verdict that disagrees with the observation — is a recorded `valid: false` with
+reasons, because that is a verdict about the archive. An archive is unformable
+when either rule refuses it: `h2_execution_verification_v1` requires an execution
+id and three artifact digests, so a missing or unreadable artifact leaves the
+record's own required fields unfillable; and admission requires a physical flat
+root, so a symlink, a subdirectory or a non-regular file is refused before any
+schema is consulted. Either way this command writes nothing and exits non-zero.
 """
 # status: stable
 
@@ -244,12 +246,52 @@ def _check_artifact_schemas(
     return reasons
 
 
-def _check_checksum_closure(root: Path, raws: Mapping[str, bytes]) -> list[str]:
-    """The archive holds these bytes and nothing else, and says so if it says anything.
+CHECKSUM_CLOSURE = "checksum_closure"
 
-    Before this command runs, a closed archive is the three producer artifacts.
-    An inventory may already exist only when the archive was verified before; it
-    is then total both ways, over the same bytes.
+# The record members a stored verdict must still agree on when it is re-read.
+# `valid` and `reasons` are excluded on purpose, and so is the closure check
+# itself: all three are functions of every check, including this one, so
+# comparing them here would make the check its own subject.
+_CLOSURE_INDEPENDENT_MEMBERS = (
+    "artifact_digests",
+    "execution_id",
+    "execution_semantics_projection_digest",
+    "producer_invoked",
+    "resolved_run_spec_digest",
+    "schema",
+    "verification_host_inputs_used",
+    "verification_process",
+)
+
+
+def _closure_independent(record: Mapping[str, Any]) -> dict[str, Any]:
+    checks = record.get("checks")
+    return {
+        "checks": {
+            name: value
+            for name, value in (checks if isinstance(checks, Mapping) else {}).items()
+            if name != CHECKSUM_CLOSURE
+        },
+        **{member: record.get(member) for member in _CLOSURE_INDEPENDENT_MEMBERS},
+    }
+
+
+def _check_checksum_closure(
+    root: Path, raws: Mapping[str, bytes], *, core: Mapping[str, Any]
+) -> list[str]:
+    """The archive holds these bytes and nothing else, and says the same thing twice.
+
+    Three states are closed, and only three. Before this command runs, the
+    archive is the three producer artifacts and neither closing record exists.
+    After it runs, both exist and the inventory is total both ways over the same
+    bytes. Anything between them is a half-committed archive — a verdict with no
+    closure, or a closure with no verdict — and a crash between the two writes
+    must not leave a record that verifies while `O_EXCL` refuses to redo it.
+
+    When a verdict is already stored it is not merely present, it is compared:
+    re-deriving *a* verdict from the producer artifacts says nothing about
+    whether the verdict this archive carries is that one. Rewriting
+    `verification.json` and regenerating the inventory would otherwise pass.
     """
     reasons: list[str] = []
     files = _archive_files(root)
@@ -263,23 +305,50 @@ def _check_checksum_closure(root: Path, raws: Mapping[str, bytes]) -> list[str]:
         if sha256_file(files[name]) != hashlib.sha256(raws[name]).hexdigest():
             # Unreachable while the file is stable; a moving archive is not one.
             reasons.append(f"{name} changed while it was being verified")
-    if CHECKSUMS_NAME in files:
+
+    has_verdict = VERIFICATION_NAME in files
+    has_inventory = CHECKSUMS_NAME in files
+    if has_verdict != has_inventory:
+        present, absent = (
+            (VERIFICATION_NAME, CHECKSUMS_NAME)
+            if has_verdict
+            else (CHECKSUMS_NAME, VERIFICATION_NAME)
+        )
+        reasons.append(
+            f"the archive is half closed: it holds {present} without {absent}, so "
+            "the verdict and its closure do not describe the same archive"
+        )
+
+    if has_verdict:
+        try:
+            stored, _ = _load_artifact(files[VERIFICATION_NAME], VERIFICATION_NAME)
+        except ExecutionVerificationError as exc:
+            reasons.append(f"the stored verdict is unreadable: {exc}")
+        else:
+            if _closure_independent(stored) != _closure_independent(core):
+                reasons.append(
+                    "the stored verdict is not the verdict these artifacts produce"
+                )
+
+    if has_inventory:
         try:
             inventory = evidence.read_checksum_inventory(root)
         except evidence.EvidenceError as exc:
             reasons.append(f"checksum inventory is unusable: {exc}")
         else:
-            present = {
+            present_digests = {
                 name: sha256_file(path)
                 for name, path in files.items()
                 if name != CHECKSUMS_NAME
             }
-            for missing in sorted(set(present) - set(inventory)):
+            for missing in sorted(set(present_digests) - set(inventory)):
                 reasons.append(f"checksum inventory does not name {missing}")
-            for absent in sorted(set(inventory) - set(present)):
-                reasons.append(f"checksum inventory names an absent file: {absent}")
-            for name in sorted(set(present) & set(inventory)):
-                if present[name] != inventory[name]:
+            for absent_name in sorted(set(inventory) - set(present_digests)):
+                reasons.append(
+                    f"checksum inventory names an absent file: {absent_name}"
+                )
+            for name in sorted(set(present_digests) & set(inventory)):
+                if present_digests[name] != inventory[name]:
                     reasons.append(f"{name} differs from the checksum inventory")
     return reasons
 
@@ -427,10 +496,24 @@ def _check_result_binding(documents: Mapping[str, Mapping[str, Any]]) -> list[st
     The recorded `result` is passed to the selector only where the contract lets
     an archive name something the predicates cannot: terminal 4's cause. Every
     other recorded verdict is an answer being checked, not an input.
+
+    The container shapes are checked here, at the plumbing boundary, before the
+    ruler is asked anything. The ruler is total over *observations* — it names
+    every unknown predicate state and every unknown run state — but a JSON
+    document that reached this far is only guaranteed to be an object, and an
+    archive whose `predicate_results` is a list or whose `ordered_runs` is a
+    string is a schema violation, which is a verdict this command must record
+    rather than a shape it may hand onward. Widening the ruler's tolerance
+    instead would put a fail-closed rule in the file that holds none.
     """
     reasons: list[str] = []
     binding = documents["runtime_binding.json"]
     result = documents["result.json"]
+
+    predicates = result.get("predicate_results")
+    if not isinstance(predicates, Mapping):
+        return ["result.json records predicate_results that are not an object"]
+
     recorded = result.get("result")
     named = (
         recorded
@@ -440,7 +523,7 @@ def _check_result_binding(documents: Mapping[str, Mapping[str, Any]]) -> list[st
     )
     try:
         selection = partition.select_successor_result(
-            result.get("predicate_results", {}),
+            predicates,
             authority=result.get("authority"),
             phase=PHASE,
             execution_result=named,
@@ -461,8 +544,17 @@ def _check_result_binding(documents: Mapping[str, Mapping[str, Any]]) -> list[st
 
     monitor = binding.get("input_monitor")
     runs = result.get("ordered_runs")
-    if not isinstance(monitor, Mapping) or not isinstance(runs, Sequence):
-        # The schema check already reported the shape; the algebra needs both.
+    if not isinstance(monitor, Mapping):
+        reasons.append(
+            "runtime_binding.json records an input_monitor that is not an object"
+        )
+        return reasons
+    # `list`, not `Sequence`: a string is a Sequence whose members are characters,
+    # so the looser test admits exactly the archive this guard exists to refuse.
+    if not isinstance(runs, list) or any(not isinstance(run, Mapping) for run in runs):
+        reasons.append(
+            "result.json records ordered_runs that are not a list of objects"
+        )
         return reasons
     try:
         reasons.extend(
@@ -494,35 +586,46 @@ CHECKS = (
 
 
 def verify_archive(root: Path) -> dict[str, Any]:
-    """Build the verification record for one archive. Writes nothing."""
+    """Build the verification record for one archive. Writes nothing.
+
+    The five artifact checks run first because the closure check compares an
+    already-stored verdict against this one, and it can only do that once this
+    one exists. Its own field is excluded from that comparison, so the ordering
+    is a dependency, not a cycle.
+    """
     documents, raws = load_archive(root)
     execution_id, spec_digest, projection_digest = _identity(documents)
 
     reasons_by_check: dict[str, list[str]] = {
         "artifact_schemas": _check_artifact_schemas(documents, raws),
-        "checksum_closure": _check_checksum_closure(root, raws),
         "execution_binding": _check_execution_binding(documents),
         "projection_binding": _check_projection_binding(documents),
         "result_binding": _check_result_binding(documents),
         "run_spec_binding": _check_run_spec_binding(documents),
     }
-    checks = {name: not reasons_by_check[name] for name in CHECKS}
-    reasons = [reason for name in CHECKS for reason in reasons_by_check[name]]
-    return {
+    core: dict[str, Any] = {
         "artifact_digests": {
             name: hashlib.sha256(raws[name]).hexdigest()
             for name in sorted(PRODUCER_ARTIFACTS)
         },
-        "checks": checks,
+        "checks": {name: not reasons for name, reasons in reasons_by_check.items()},
         "execution_id": execution_id,
         "execution_semantics_projection_digest": projection_digest,
         "producer_invoked": False,
-        "reasons": reasons,
         "resolved_run_spec_digest": spec_digest,
         "schema": VERIFICATION_SCHEMA,
-        "valid": all(checks.values()),
         "verification_host_inputs_used": False,
         "verification_process": VERIFICATION_PROCESS,
+    }
+    reasons_by_check[CHECKSUM_CLOSURE] = _check_checksum_closure(root, raws, core=core)
+
+    checks = {name: not reasons_by_check[name] for name in CHECKS}
+    reasons = [reason for name in CHECKS for reason in reasons_by_check[name]]
+    return {
+        **core,
+        "checks": checks,
+        "reasons": reasons,
+        "valid": all(checks.values()),
         # `verification.json` never carries the checksum-file digest: the
         # inventory covers this record, so a back-reference would be a cycle.
     }

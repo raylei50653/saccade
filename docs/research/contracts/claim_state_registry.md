@@ -1142,12 +1142,33 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
       h2_run_spec.execution_semantics_projection(),因此一律以 verify_projection=False 呼叫;
       **該 flag 就是 execution integrity 與 Correction 5 已 retire 的 environment reproducibility 之間那條線**。
       測試以 monkeypatch 讓該函式 raise 來機械證明（不是靠註解宣稱）。
-    two_failure_classes:                    # 由 verification schema 的 required 欄位決定,不是自訂
-      recorded_invalid: schema 違反／digest 不符／verdict 不成立 ⇒ valid=false + reasons（這是對 archive 的裁決）
-      not_formable: 缺檔／不可讀／symlink／子目錄 ⇒ execution_id 與三個 artifact digest 填不出來 ⇒ 不寫任何紀錄,non-zero exit
+    two_failure_classes:                    # 由**兩條規則共同**決定,不是自訂:verification schema 必填欄位的可形成性 + physical flat-root admission
+      recorded_invalid: schema 違反／成員型別錯／digest 不符／verdict 不成立 ⇒ valid=false + reasons（這是對 archive 的裁決）
+      not_formable_missing_identity: 缺檔／不可讀 ⇒ execution_id 與三個 artifact digest 填不出來
+      not_formable_admission: root symlink／子目錄／symlink entry／非 regular file ⇒ 在任何 schema 驗證之前就被 `_archive_files()` 拒絕
+    owner_review_defects:                   # 2026-07-31 第一輪 owner review;兩者都只動 verifier 與測試,不移動 verdict algebra
+      defect_6_formable_schema_invalid_archive_crashed: >-
+        identity 可形成 + JSON 可讀 + artifact schema invalid ⇒ 不是 valid=false 而是**非受控 crash**,
+        直接違反本輪自己宣告的失敗分類。`predicate_results: []` ⇒ selector 的 `.get` 炸 AttributeError;
+        `ordered_runs: "x"` 更隱蔽——**字串符合 `collections.abc.Sequence`** 所以通過原本的 guard,
+        然後 checker 逐字元跑 `run.get("state")`。修法=在 **plumbing 邊界**先驗容器形狀
+        （`predicate_results` 必須是 Mapping;`ordered_runs` 必須是 **list** 且成員皆 Mapping——不可用 Sequence）,
+        **不擴大 ruler 的容錯**:ruler 對 observation 是 total（它會命名每個未知 state）,但「list 出現在該是 object 的地方」不是 state,
+        把 fail-closed 規則放進 ruler 會讓持有規則的檔案多一條規則。三個反證:`[]`／`"x"`／`[None]*4`。
+      defect_7_half_committed_closure_verified: >-
+        `commit_verification` 的順序是 verify → O_EXCL 寫 verification.json → 寫 checksums.sha256,
+        但 closure check 原本只在 inventory **存在時**才檢查它 ⇒ 兩次寫入之間中斷所留下的 archive
+        **既可被判 valid,又因 O_EXCL 無法重做 commit**（同時可信且不可修）。
+        修法=(a) presence parity:`verification.json` 與 `checksums.sha256` 必須同時存在或同時不存在
+        ⇒ closure 是三態機（未封閉／已封閉／半封閉被拒）;
+        (b) 兩者皆存在時,**比較既有 verification.json 與本次重算的 record**——重新推導出「一個」verdict
+        不證明 archive 保存的就是它（同時改寫 verification 與 inventory 原本可過）。
+        比較刻意排除 `checksum_closure` 自己與 `valid`／`reasons`（三者都是含本 check 在內的函數,比了就自我指涉）;
+        因此 `verify_archive` 先跑五格再組 core、最後才跑 closure ⇒ 是相依而非循環。
+      mutation_checked: 三處修補各自反轉後,對應的新測試都轉紅（guard 拿掉→3 紅;parity 拿掉→2 紅;停止比較 stored verdict→1 紅）
     write_order: verification.json 以 O_EXCL 建立（一次 execution 只有一個 verdict）,之後才原子寫涵蓋四份 JSON 的最終 checksums.sha256;verification.json 不反向含 checksum-file digest
     fixtures: 由 frozen schema 與 frozen authoring profile 合成（含 454-key namespace 與 14 個 projection 成員的合成 digest）,**從不取自 producer 輸出**（§5.3;此刻也還沒有 producer）
-    tests: tests/contract/test_h2_execution_verifier.py — 24 tests;含 schema-legal 但 ruler 拒絕的 stage-reachability 反例、C3.9 restatement 掃描、AST-based host-state 掃描
+    tests: tests/contract/test_h2_execution_verifier.py — 31 tests;含 schema-legal 但 ruler 拒絕的 stage-reachability 反例、malformed container 的三個反證、半封閉與被改寫 verdict 的 closure 反證、C3.9 restatement 掃描、AST-based host-state 掃描
     authorization_effect: none
     not_established: no producer; no diagnostic mode; no execution; no authorization; no F/S; no seal; no corpus admission; no equivalence claim; 尚未有任何真實 archive 可驗
     next: W4 producer（三份 artifact 在保留的六 stage 內產出 + diagnostic／exactly-once measurement 分流;需 build ⇒ 先把 build/h2_layer_p 改名讓開,絕不刪除）
