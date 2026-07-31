@@ -189,6 +189,13 @@ def identity_probe_record(
 
 
 def runtime_input_binding(manifest: Mapping[str, Any]) -> dict[str, Any]:
+    """Project a runtime-input manifest into the binding's member list.
+
+    The section names come from `h2_runtime_inputs`, which declares them, and the
+    form comes from the manifest's own `schema`: an execution that stopped at
+    `build` carries the coordinate form, and claiming the full one for it would
+    assert build artifacts that were never hashed.
+    """
     members = [
         {
             "length": item["length"],
@@ -196,12 +203,15 @@ def runtime_input_binding(manifest: Mapping[str, Any]) -> dict[str, Any]:
             "role": item["role"],
             "sha256": item["sha256"],
         }
-        for section in manifest["sections"]
+        for section in runtime_inputs.FULL_DIGEST_SECTIONS
+        if section in manifest
         for item in manifest[section]["files"]
     ]
+    if not members:
+        raise ProducerError("the runtime-input manifest binds no members")
     return {
         "manifest_digest": manifest["coordinate_digest"],
-        "manifest_schema": runtime_inputs.SCHEMA,
+        "manifest_schema": manifest["schema"],
         "members": sorted(members, key=lambda item: (item["role"], item["path"])),
     }
 
@@ -218,7 +228,6 @@ class StageEvidence:
     probe, which is the same rule stated as a data shape.
     """
 
-    input_monitor: Mapping[str, Any]
     source_audit: Mapping[str, Any]
     runtime_inputs: Mapping[str, Any]
     failed_stage: str | None = None
@@ -228,7 +237,11 @@ class StageEvidence:
 
 
 def build_runtime_binding(
-    *, execution_id: str, run_spec: Mapping[str, Any], stages: StageEvidence
+    *,
+    execution_id: str,
+    run_spec: Mapping[str, Any],
+    stages: StageEvidence,
+    input_monitor: Mapping[str, Any],
 ) -> dict[str, Any]:
     """Assemble `runtime_binding.json` and refuse to emit one the schema rejects."""
     surfaces, abi = declared_content(run_spec["execution_semantics_projection"])
@@ -240,7 +253,7 @@ def build_runtime_binding(
             "execution_semantics_projection_digest"
         ],
         "failed_stage": stages.failed_stage,
-        "input_monitor": dict(stages.input_monitor),
+        "input_monitor": dict(input_monitor),
         "resolved_run_spec_digest": run_spec["resolved_run_spec_digest"],
         "runtime_inputs": dict(stages.runtime_inputs),
         "schema": BINDING_SCHEMA,
@@ -351,6 +364,17 @@ class Stages(Protocol):
 
     def run(self) -> StageEvidence: ...
 
+    def close(self) -> Mapping[str, Any]:
+        """The bound-input monitor's final record, taken after the runs.
+
+        Not part of `StageEvidence`, because the monitor does not describe the
+        stages: the ruler reads `input_monitor` as the whole execution's, and
+        refuses any result but `input_mutated` when it records a change. A
+        monitor closed when the stages ended would answer about a shorter
+        execution than the one the binding attests, and the four measurement
+        runs — the part most able to move a bound input — would fall outside it.
+        """
+
 
 class Runs(Protocol):
     """The four ordered measurement runs, and the predicates they decide."""
@@ -398,23 +422,39 @@ class Execution:
             else run_spec_module.build_run_spec()
         )
 
+        try:
+            return self._produce(root, spec)
+        except BaseException:
+            # Every exit releases the monitor this execution started, including
+            # the ones that write nothing. `abandon` produces no record, so a
+            # refused execution cannot leave a binding behind — it only stops the
+            # watch descriptors outliving the attempt that opened them.
+            abandon = getattr(self.stages, "abandon", None)
+            if callable(abandon):
+                abandon()
+            raise
+
+    def _produce(self, root: Path, spec: Mapping[str, Any]) -> dict[str, Any]:
         evidence_record = self.stages.run()
         if evidence_record.failed_stage is not None:
             # Fail-fast is not a shortcut: no run started, so nothing the runs
             # would have decided may be reported as decided.
-            ordered, predicates, named = (
-                unstarted_runs(),
-                undecided_predicates(
-                    decided=_stage_decided(evidence_record.input_monitor)
-                ),
-                _stage_result(evidence_record.failed_stage),
-            )
+            ordered = unstarted_runs()
+            named: str | None = _stage_result(evidence_record.failed_stage)
+            monitor = self.stages.close()
+            predicates = undecided_predicates(decided=_stage_decided(monitor))
         else:
             ordered, predicates, named = self.runs.run(evidence_record)
+            # After the runs, never before: the monitor's record is the whole
+            # execution's, and the runs are inside it.
+            monitor = self.stages.close()
 
         observation = _snapshot(predicates)
         binding = build_runtime_binding(
-            execution_id=self.execution_id, run_spec=spec, stages=evidence_record
+            execution_id=self.execution_id,
+            run_spec=spec,
+            stages=evidence_record,
+            input_monitor=monitor,
         )
         result = build_result(
             execution_id=self.execution_id,

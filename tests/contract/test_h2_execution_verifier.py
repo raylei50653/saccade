@@ -219,7 +219,14 @@ def _binding(**overrides: Any) -> dict[str, Any]:
         "resolved_run_spec_digest": _SPEC_DIGEST,
         "runtime_inputs": {
             "manifest_digest": _fake("manifest"),
-            "manifest_schema": "h2_runtime_input_manifest_v1",
+            # An execution that stopped at `build` hashed no build artifacts, so
+            # it records the coordinate form; every other binding records the
+            # full manifest. The schema pins which one, per failed stage.
+            "manifest_schema": (
+                "h2_runtime_input_coordinate_v1"
+                if overrides.get("failed_stage") == "build"
+                else "h2_runtime_input_manifest_v1"
+            ),
             "members": [
                 {
                     "length": 512,

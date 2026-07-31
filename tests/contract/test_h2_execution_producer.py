@@ -75,10 +75,15 @@ def _monitor(*, changed: int = 0, drained: bool = True) -> dict[str, Any]:
     }
 
 
-def _runtime_inputs() -> dict[str, Any]:
+def _runtime_inputs(*, binds_build: bool = True) -> dict[str, Any]:
+    """The coordinate form is what an execution that never built has to record."""
     return {
         "manifest_digest": _fake("manifest"),
-        "manifest_schema": "h2_runtime_input_manifest_v1",
+        "manifest_schema": (
+            "h2_runtime_input_manifest_v1"
+            if binds_build
+            else "h2_runtime_input_coordinate_v1"
+        ),
         "members": [
             {
                 "length": 512,
@@ -114,7 +119,6 @@ def _complete_stages(**overrides: Any) -> producer.StageEvidence:
         "identity_probe": producer.identity_probe_record(
             {"digest": _fake("probe")}, build_artifact_digest=_EXTENSION
         ),
-        "input_monitor": _monitor(),
         "runtime_inputs": _runtime_inputs(),
         "source_audit": {"head": "a" * 40, "tree": "b" * 40},
     }
@@ -126,8 +130,7 @@ def _stopped_stages(stage: str, **overrides: Any) -> producer.StageEvidence:
     """A binding from an execution that stopped: partial artifacts, no load, no probe."""
     defaults: dict[str, Any] = {
         "failed_stage": stage,
-        "input_monitor": _monitor(),
-        "runtime_inputs": _runtime_inputs(),
+        "runtime_inputs": _runtime_inputs(binds_build=stage != "build"),
         "source_audit": {"head": "a" * 40, "tree": "b" * 40},
     }
     if stage != "build":
@@ -137,11 +140,23 @@ def _stopped_stages(stage: str, **overrides: Any) -> producer.StageEvidence:
 
 
 class _FixedStages:
-    def __init__(self, evidence: producer.StageEvidence) -> None:
+    """A stage surface whose monitor record is taken when the producer closes it."""
+
+    def __init__(
+        self,
+        evidence: producer.StageEvidence,
+        monitor: dict[str, Any] | None = None,
+    ) -> None:
         self._evidence = evidence
+        self._monitor = monitor if monitor is not None else _monitor()
+        self.closed_after: list[str] = []
 
     def run(self) -> producer.StageEvidence:
         return self._evidence
+
+    def close(self) -> dict[str, Any]:
+        self.closed_after.append("close")
+        return self._monitor
 
 
 class _FixedRuns:
@@ -170,13 +185,16 @@ def _execution(
     stages: producer.StageEvidence | None = None,
     runs: Any = None,
     authority: str = "exactly_once_measurement",
+    monitor: dict[str, Any] | None = None,
 ) -> producer.Execution:
     """A diagnostic carries no authorization digest; the schema requires null."""
     measurement = authority == "exactly_once_measurement"
     return producer.Execution(
         execution_id=EXECUTION_ID,
         authority=authority,
-        stages=_FixedStages(stages if stages is not None else _complete_stages()),
+        stages=_FixedStages(
+            stages if stages is not None else _complete_stages(), monitor
+        ),
         runs=runs if runs is not None else _FixedRuns(),
         authorization_binding_digest=_fake("authorization") if measurement else None,
         run_spec=spec,
@@ -264,9 +282,8 @@ def test_a_moved_input_outranks_the_stage_that_failed(
     root = tmp_path / "archive"
     result = _execution(
         run_spec,
-        stages=_stopped_stages(
-            "build", input_monitor=_monitor(changed=1, drained=False)
-        ),
+        stages=_stopped_stages("build"),
+        monitor=_monitor(changed=1, drained=False),
     ).produce(root)
 
     assert result["result"] == "input_mutated"
@@ -278,6 +295,65 @@ def test_a_moved_input_outranks_the_stage_that_failed(
     assert record["valid"] is True, record["reasons"]
     binding = json.loads((root / "runtime_binding.json").read_text(encoding="utf-8"))
     assert binding["failed_stage"] == "build"
+
+
+def test_the_monitor_is_closed_after_the_runs_not_after_the_stages(
+    tmp_path: Path, run_spec: dict[str, Any]
+) -> None:
+    """The binding's `input_monitor` covers the whole execution, runs included.
+
+    The ruler reads a recorded change as outranking every other finding, so the
+    window it describes decides which findings can exist. Closing the monitor
+    when the stages ended would leave the four measurement runs — the part most
+    able to move a bound input — outside the window the archive attests.
+    """
+    order: list[str] = []
+
+    class _OrderedRuns(_FixedRuns):
+        def run(
+            self, stages: producer.StageEvidence
+        ) -> tuple[list[dict[str, Any]], dict[str, Any], str | None]:
+            order.append("runs")
+            return super().run(stages)
+
+    class _OrderedStages(_FixedStages):
+        def close(self) -> dict[str, Any]:
+            order.append("close")
+            return super().close()
+
+    execution = producer.Execution(
+        execution_id=EXECUTION_ID,
+        authority="exactly_once_measurement",
+        stages=_OrderedStages(_complete_stages()),
+        runs=_OrderedRuns(),
+        authorization_binding_digest=_fake("authorization"),
+        run_spec=run_spec,
+    )
+    execution.produce(tmp_path / "archive")
+    assert order == ["runs", "close"]
+
+
+def test_a_stage_failure_still_closes_the_monitor(
+    tmp_path: Path, run_spec: dict[str, Any]
+) -> None:
+    """No run started, but the window still has to be closed and reported.
+
+    A stage failure is the case where the monitor's record is the *only*
+    execution-wide evidence there is: the runs decided nothing, so a change it
+    recorded is the finding that outranks the stage.
+    """
+    stages = _FixedStages(_stopped_stages("build"), _monitor(changed=2))
+    execution = producer.Execution(
+        execution_id=EXECUTION_ID,
+        authority="exactly_once_measurement",
+        stages=stages,
+        runs=_FixedRuns(),
+        authorization_binding_digest=_fake("authorization"),
+        run_spec=run_spec,
+    )
+    result = execution.produce(tmp_path / "archive")
+    assert stages.closed_after == ["close"]
+    assert result["result"] == "input_mutated"
 
 
 # -- what the producer may not do ------------------------------------------- #
@@ -351,7 +427,7 @@ def test_the_producer_names_a_terminal_4_cause_only_under_a_measurement(
     [
         {},
         {"stages": _stopped_stages("build")},
-        {"stages": _stopped_stages("build", input_monitor=_monitor(changed=1))},
+        {"stages": _stopped_stages("build"), "monitor": _monitor(changed=1)},
         {
             "stages": _stopped_stages(
                 "identity_run", extension_load=_complete_stages().extension_load

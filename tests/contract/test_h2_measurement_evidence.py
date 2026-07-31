@@ -2264,7 +2264,13 @@ def _binding(**overrides: Any) -> dict[str, Any]:
             "final_drain_clean": True,
         },
         "runtime_inputs": {
-            "manifest_schema": "h2_runtime_input_manifest_v1",
+            # A `build` failure hashed no build artifacts, so the manifest it can
+            # record is the coordinate form. The full form asserts artifacts.
+            "manifest_schema": (
+                "h2_runtime_input_coordinate_v1"
+                if overrides.get("failed_stage") == "build"
+                else "h2_runtime_input_manifest_v1"
+            ),
             "manifest_digest": "e" * 64,
             "members": [
                 {

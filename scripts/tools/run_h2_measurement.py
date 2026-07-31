@@ -1338,6 +1338,108 @@ def default_authorization_ledger() -> Path:
     )
 
 
+class ReachedRunFailure(ControllerError):
+    """A run that started and did not complete. An outcome, not a defect.
+
+    Separated from the orchestration errors that share `ControllerError` because
+    the two must not be handled the same way: a child that exited nonzero is a
+    truthful negative the archive should record, while a run reported twice or a
+    run outside the plan says the bookkeeping is broken and nothing about the
+    measurement can be believed.
+    """
+
+    def __init__(self, run_id: str, detail: str) -> None:
+        super().__init__(f"child {run_id} {detail}")
+        self.run_id = run_id
+        self.detail = detail
+
+
+def launch_ordered_runs(
+    root: Path,
+    *,
+    bundle: LaunchBundle,
+    document: Mapping[str, Any],
+    inherited_environment: Mapping[str, str] | None,
+    monitor: Monitor | None,
+    started: float,
+    clock: Callable[[], float],
+    launch_child: ChildLauncher = default_child_launcher,
+    record_event: Callable[..., None] = lambda event, **fields: None,
+    completed: set[str] | None = None,
+    started_runs: set[str] | None = None,
+) -> set[str]:
+    """Launch the four ordered runs, in order, and return which ones completed.
+
+    Extracted from `execute_controller` so the successor execution path can drive
+    the same four launches without also consuming a legacy authorization or
+    selecting a legacy terminal. Two orchestrations of the same runs would be two
+    things that can drift; this is one, called twice.
+
+    It decides nothing about the measurement. A run that exits nonzero, reports
+    no process-start witness, or reports one twice raises, because those are
+    statements about the launch this function owns — not verdicts about what was
+    measured.
+
+    `completed` and `started_runs` are the caller's accumulators, filled as the
+    loop proceeds. An execution that stops partway raises, and the return value
+    is then never delivered — so a caller that must record what actually happened
+    needs the partial sets to live somewhere it still holds. Without them a
+    truthful negative from inside the run phase cannot be archived at all.
+    """
+    completed = set() if completed is None else completed
+    started_runs = set() if started_runs is None else started_runs
+    for run_id in evidence.RUN_IDS:
+        _remaining(started, clock)
+        invocation_path, environment = _prepare_run(
+            root,
+            bundle=bundle,
+            run_id=run_id,
+            document=document,
+            inherited_environment=inherited_environment,
+        )
+        launch_recorded = False
+
+        def on_started(run_id: str = run_id) -> None:
+            nonlocal launch_recorded
+            if launch_recorded:
+                raise ControllerError(
+                    f"child {run_id} reported process start more than once"
+                )
+            record_event("child_launch", run_id=run_id)
+            started_runs.add(run_id)
+            launch_recorded = True
+
+        returncode = launch_child(
+            invocation_path,
+            environment,
+            monitor=monitor,
+            started=started,
+            clock=clock,
+            on_started=on_started,
+        )
+        if not launch_recorded:
+            raise ControllerError(
+                f"child {run_id} returned without a process-start witness"
+            )
+        invocation = evidence.load_document(
+            invocation_path.parent,
+            invocation_path.name,
+            schema=child.INVOCATION_SCHEMA,
+        )
+        # Two different failures, and merging them wrote `exited 0` into the
+        # archive for a child that exited cleanly while recording that it never
+        # finished. The reason a run did not complete is evidence, so it has to
+        # say which of the two happened.
+        if returncode != 0:
+            raise ReachedRunFailure(run_id, f"exited {returncode}")
+        state = invocation.get("state")
+        if state != child.RUN_COMPLETED:
+            raise ReachedRunFailure(run_id, f"recorded invocation state {state!r}")
+        completed.add(run_id)
+        record_event("child_completed", run_id=run_id)
+    return completed
+
+
 def execute_controller(
     bundle: LaunchBundle,
     *,
@@ -1563,48 +1665,19 @@ def execute_controller(
             and not checkout_reasons
             and predicates["behavior_probe_equals_freeze"]
         ):
-            document = run_spec.build_run_spec()
-            for run_id in evidence.RUN_IDS:
-                _remaining(started, clock)
-                invocation_path, environment = _prepare_run(
+            completed_runs.update(
+                launch_ordered_runs(
                     incomplete,
                     bundle=bundle,
-                    run_id=run_id,
-                    document=document,
+                    document=run_spec.build_run_spec(),
                     inherited_environment=inherited_environment,
-                )
-                launch_recorded = False
-
-                def on_started() -> None:
-                    nonlocal launch_recorded
-                    if launch_recorded:
-                        raise ControllerError(
-                            f"child {run_id} reported process start more than once"
-                        )
-                    record_event("child_launch", run_id=run_id)
-                    launch_recorded = True
-
-                returncode = launch_child(
-                    invocation_path,
-                    environment,
                     monitor=monitor,
                     started=started,
                     clock=clock,
-                    on_started=on_started,
+                    launch_child=launch_child,
+                    record_event=record_event,
                 )
-                if not launch_recorded:
-                    raise ControllerError(
-                        f"child {run_id} returned without a process-start witness"
-                    )
-                invocation = evidence.load_document(
-                    invocation_path.parent,
-                    invocation_path.name,
-                    schema=child.INVOCATION_SCHEMA,
-                )
-                if returncode != 0 or invocation.get("state") != child.RUN_COMPLETED:
-                    raise ControllerError(f"child {run_id} exited nonzero")
-                completed_runs.add(run_id)
-                record_event("child_completed", run_id=run_id)
+            )
     except h0_controller.DriftError as exc:
         if monitor is not None:
             mutation_events.extend(monitor.history)

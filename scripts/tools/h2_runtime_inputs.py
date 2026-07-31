@@ -53,6 +53,11 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCHEMA = "h2_runtime_input_manifest_v1"
+# The same four build-independent sections, recorded by an execution that never
+# reached build artifacts to hash. `coordinate_digest` is bit-identical to the
+# full manifest's at the same coordinate — that is the point, and a test pins it.
+# There is no `full_digest`, because the quantity it names does not exist yet.
+COORDINATE_SCHEMA = "h2_runtime_input_coordinate_v1"
 POLICY_PRESET_REL = "configs/presets/mamba_whole_graph_m.yaml"
 IDENTITY_SEQUENCE = "MOT17-09-SDP"
 
@@ -453,7 +458,7 @@ def discover_bound_paths(
 
 def build_manifest(
     *,
-    build_dir: Path,
+    build_dir: Path | None,
     data_root: Path | None = None,
     identity_sequence: str = IDENTITY_SEQUENCE,
     measurement_sequences: Iterable[str] = MEASUREMENT_SEQUENCES,
@@ -463,6 +468,14 @@ def build_manifest(
 
     `phase_a_evidence_root` is supplied only when an `F_B` is being constructed;
     it adds the § C3.8 section and moves neither digest.
+
+    `build_dir=None` records the **coordinate form**: the same four sections, the
+    same `coordinate_digest`, no build artifacts and no `full_digest`. It exists
+    for an execution that stopped at or before `build` and so has no artifacts to
+    hash — an execution whose bound fixtures, assets and third-party components
+    were nonetheless real and are recorded rather than omitted. Passing a build
+    directory is not optional in the other direction: an execution that did build
+    must hash what it built.
     """
     sequences = _checked_sequences(identity_sequence, measurement_sequences)
     root = _absolute_lexical(data_root or (REPO_ROOT / DEFAULT_DATA_ROOT))
@@ -475,8 +488,9 @@ def build_manifest(
         ),
         "runtime_assets": _runtime_assets_section(REPO_ROOT / POLICY_PRESET_REL),
         "third_party_runtime": _third_party_section(),
-        "build_artifacts": _build_artifacts_section(build_dir),
     }
+    if build_dir is not None:
+        sections["build_artifacts"] = _build_artifacts_section(build_dir)
     if phase_a_evidence_root is not None:
         sections[PHASE_A_EVIDENCE_SECTION] = _phase_a_evidence_section(
             phase_a_evidence_root
@@ -484,20 +498,21 @@ def build_manifest(
     coordinate_digest = digest(
         {name: sections[name]["digest"] for name in COORDINATE_SECTIONS}
     )
-    full_digest = digest(
-        {
-            "coordinate_digest": coordinate_digest,
-            "build_artifacts": sections["build_artifacts"]["digest"],
-        }
-    )
-    return {
+    manifest = {
         **sections,
         "coordinate_digest": coordinate_digest,
         "data_root": root.as_posix(),
-        "full_digest": full_digest,
         "policy_preset": POLICY_PRESET_REL,
-        "schema": SCHEMA,
+        "schema": SCHEMA if build_dir is not None else COORDINATE_SCHEMA,
     }
+    if build_dir is not None:
+        manifest["full_digest"] = digest(
+            {
+                "coordinate_digest": coordinate_digest,
+                "build_artifacts": sections["build_artifacts"]["digest"],
+            }
+        )
+    return manifest
 
 
 def _valid_sha256(value: Any) -> bool:
@@ -549,14 +564,23 @@ def _validate_measurement_sequences(section: Mapping[str, Any]) -> None:
 def validate_manifest(
     payload: Mapping[str, Any], *, verify_files: bool = False
 ) -> dict[str, Any]:
-    if payload.get("schema") != SCHEMA:
-        raise RuntimeInputError(f"not a {SCHEMA} payload")
+    schema = payload.get("schema")
+    if schema not in (SCHEMA, COORDINATE_SCHEMA):
+        raise RuntimeInputError(f"not a {SCHEMA} or {COORDINATE_SCHEMA} payload")
+    binds_build = schema == SCHEMA
     if payload.get("policy_preset") != POLICY_PRESET_REL:
         raise RuntimeInputError("runtime-input manifest preset mismatch")
     data_root = Path(str(payload.get("data_root", "")))
     if not data_root.is_absolute():
         raise RuntimeInputError("runtime-input manifest data_root is not absolute")
-    present = list(FULL_DIGEST_SECTIONS)
+    # The coordinate form is a different claim, not a shorter one: it must not
+    # carry the two members that assert an execution reached its build outputs.
+    if not binds_build and ("build_artifacts" in payload or "full_digest" in payload):
+        raise RuntimeInputError(
+            f"a {COORDINATE_SCHEMA} payload binds no build artifacts, so it may "
+            "carry neither build_artifacts nor full_digest"
+        )
+    present = list(FULL_DIGEST_SECTIONS if binds_build else COORDINATE_SECTIONS)
     if PHASE_A_EVIDENCE_SECTION in payload:
         present.append(PHASE_A_EVIDENCE_SECTION)
     sections: dict[str, Mapping[str, Any]] = {}
@@ -633,15 +657,19 @@ def validate_manifest(
     )
     if payload.get("coordinate_digest") != coordinate:
         raise RuntimeInputError("runtime-input coordinate digest mismatch")
-    full = digest(
-        {
-            "coordinate_digest": coordinate,
-            "build_artifacts": sections["build_artifacts"]["digest"],
-        }
-    )
-    if payload.get("full_digest") != full:
-        raise RuntimeInputError("runtime-input full digest mismatch")
-    if verify_files:
+    if binds_build:
+        full = digest(
+            {
+                "coordinate_digest": coordinate,
+                "build_artifacts": sections["build_artifacts"]["digest"],
+            }
+        )
+        if payload.get("full_digest") != full:
+            raise RuntimeInputError("runtime-input full digest mismatch")
+    # Membership reconciliation is build-rooted — `discover_bound_paths` walks a
+    # build directory — so the coordinate form verifies its own files without it.
+    # It claims no build, so there is no membership across a build to reconcile.
+    if verify_files and binds_build:
         build_dir = Path(str(sections["build_artifacts"].get("build_dir", "")))
         if not build_dir.is_absolute():
             raise RuntimeInputError(
