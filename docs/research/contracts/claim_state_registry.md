@@ -1273,7 +1273,29 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
       forces a second republish, fd082481 -> **dd354e130b0b21a2…**.
       Both republishes move `identity_semantics` only; the probe and the other four axes
       do not move, and neither performs a controlled-host run or a native rebuild.
-    tests: "full suite green (2881 passed); new: no successor predicate vector can select a retired result (exhaustive over the 4^5 state space), the retired token keeps its terminal and leaves the vocabulary, the launch projection is captured at the boundary"
+    tests: "full suite green (2894 passed); new: no successor predicate vector can select a retired result (exhaustive over the 4^5 state space), the retired token keeps its terminal and leaves the vocabulary, the launch projection is captured at the boundary"
+    owner_review_round_1: >-
+      PR #312, two blocking defects, **both in the archive-only verifier's defence and
+      recomputation, none in Correction 10's adjudication** (the owner confirmed the
+      contract split, the reachability move and the governance ledger as correct).
+      (1) `_check_launch_projection` handed `runtime_projection` to the ruler before
+      checking its container shape, and the ruler calls `.get()` on the projection and on
+      each observation ⇒ `runtime_projection: []` and `observations: [None]` left by
+      AttributeError instead of `valid:false`, violating the rule the same file already
+      pins for `predicate_results` / `ordered_runs` / a non-object binding. Guard moved
+      **before** the ruler call; the ruler's tolerance was NOT widened (it is total over
+      the observations it names, not over arbitrary JSON containers).
+      (2) the state comparison only refused the *wrong* decision (`state != "fail"` /
+      `state == "fail"`), so a recomputed `pass` still admitted `error` / `not_run` ⇒ an
+      archive could keep an undecided projection predicate while a later `execution_complete=fail`
+      rode the selector's "decided failure outranks undecided" to terminal 4 — the second
+      implementation declining to answer. Now exact equality against the recomputed state
+      (failed-stage archives carry no projection and return earlier, so nothing demands a
+      `pass` from an execution that reached no launch boundary).
+      Four regressions added, each mutation-verified red against the pre-fix code.
+      **verifier is `plumbing_only` ⇒ no ruler edit, no re-pin, no republish for this round.**
+      ⚠️ 教訓:新加一個 container 到既有 verifier,要同時把它加進「malformed container 是 verdict 不是
+      traceback」那張參數化表;以及**「重算」若只拒絕相反決定,就沒有真的把重算結果記下來**——比較必須是相等。
     not_established: no execution; no build; no diagnostic run; no authorization; no F/S; no seal; no corpus admission; no equivalence claim
     next: "republish after the re-pin + full pre_push, then W4b segment 2: bind the driver and run one non-qualifying diagnostic (needs a build ⇒ rename `build/h2_layer_p` aside first, never delete)"
 pending_reentry:                          # append-only; pre-seal, no terminal claimed; route-1 永久留帳結論不變
