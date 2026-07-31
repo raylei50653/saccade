@@ -1228,7 +1228,7 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
   successor_correction_10_probe_retired:
     date: 2026-07-31
     authority: "owner adjudication 2026-07-31 (H2 W4b segment 1 review): retire ④-A, narrow ④-B, do not add references to the RunSpec"
-    status: implementation landed and green; declaration Correction 10 text and sealed_prefix re-pin NOT yet written
+    status: implementation landed and green; declaration Review Correction 10 written against the verified behaviour, sealed_prefix re-pinned to the complete post-correction body
     what_was_retired: >-
       `behavior_probe_equals_spec` leaves the successor predicates (6 -> 5) and
       `behavior_probe_moved` leaves the successor result vocabulary. It keeps its terminal
@@ -1264,10 +1264,18 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
       `valid: false`. Cardinality and run-id correspondence live in the ruler
       (`launch_projection_reasons`), imported by both sides, never restated.
     layering: "schema = single-file shape and local uniqueness; agreement verifier = cross-file reachability and one-to-one; checksum/closure = diagnostic structural corruption; ruler = the five reachable successor predicates"
-    ruler_cost: "h2_terminal_partition.py + h2_execution_result_v1.json + h2_runtime_binding_v1.json + h2_execution_verification_v1.json moved; coordinate republished 092c2c01 -> fd082481; no sealed_prefix re-pin yet (the declaration document is untouched so far)"
+    ruler_cost: >-
+      four ruler members moved for the implementation — `h2_terminal_partition.py` +
+      `h2_execution_result_v1.json` + `h2_runtime_binding_v1.json` +
+      `h2_execution_verification_v1.json` — republished 092c2c01 -> fd082481.
+      The correction text then moves a fifth: `sealed_prefix` re-pinned
+      100171 -> **108275 bytes / f53da415a67e78b5…**, which moves `.policy.yaml` and
+      forces the second republish (digest recorded in that commit's message).
+      Both republishes move `identity_semantics` only; the probe and the other four axes
+      do not move, and neither performs a controlled-host run or a native rebuild.
     tests: "full suite green (2881 passed); new: no successor predicate vector can select a retired result (exhaustive over the 4^5 state space), the retired token keeps its terminal and leaves the vocabulary, the launch projection is captured at the boundary"
     not_established: no execution; no build; no diagnostic run; no authorization; no F/S; no seal; no corpus admission; no equivalence claim
-    next: "write Correction 10 against this verified behaviour, then sealed_prefix re-pin + republish + full pre_push"
+    next: "republish after the re-pin + full pre_push, then W4b segment 2: bind the driver and run one non-qualifying diagnostic (needs a build ⇒ rename `build/h2_layer_p` aside first, never delete)"
 pending_reentry:                          # append-only; pre-seal, no terminal claimed; route-1 永久留帳結論不變
   - date: 2026-07-21
     scheduling: owner-scheduled re-entry #3（滿足 line-337 future_reentry_precondition:launch-hygiene gate 先行）

@@ -17,8 +17,8 @@ document:
   path: headline_bridge_behavioral_identity_capture_declaration_20260725.md
 
 sealed_prefix:
-  bytes: 100171
-  sha256: "95581df9dc486342c036c1587ba52d48e58f56dcf95992b9d764c25d85346a3c"
+  bytes: 108275
+  sha256: "f53da415a67e78b511d21e80ecaf2b92108dd0c3386dee09f06211a1dc649766"
   # Re-pin log (each entry was a deliberate pre-seal edit, not a slip):
   #   Review reset — coordinate / bounded probe / equivalence split; content-bound
   #                  fixtures/assets/build products; v2 Layer-P certificate.
@@ -141,6 +141,21 @@ sealed_prefix:
   #             and `result.json` itself may no longer claim a decided capture or
   #             packet verdict without a started run. Re-pinned to the complete
   #             revised body.
+  #   Review Correction 10 — owner adjudication while binding the real driver: two
+  #             of Correction 9's six predicates had lost their right-hand side.
+  #             `behavior_probe_equals_spec` and `behavior_probe_moved` are retired
+  #             (not superseded — no successor spelling, no mapping) and the probe
+  #             becomes `diagnostics.behavior_probe`, an optional recorded
+  #             observation that may not move a predicate, result, terminal or
+  #             `valid`; `runtime_binding_matches_spec` is narrowed to
+  #             `runtime_projection_matches_resolved_run_spec`, comparing what each
+  #             launch boundary received against the resolved RunSpec's canonical
+  #             projection, and is deliberately mapped to no legacy predicate so the
+  #             retired certificate gate cannot return through a rename. Neither is
+  #             restored by writing reference values into the RunSpec. The finding
+  #             `runtime_binding_mismatch` becomes run-derived, and an observation
+  #             that does not correspond to the run plan is unusable evidence rather
+  #             than a mismatch. Re-pinned to the complete post-correction body.
 
 policy_target:
   kind: headline

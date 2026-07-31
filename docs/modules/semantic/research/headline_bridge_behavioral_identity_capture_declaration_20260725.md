@@ -1803,3 +1803,137 @@ owner authorizations and both historical archives are untouched, and their
 verifier path keeps the legacy vocabulary it recorded. This ruler edit republishes
 the legacy publication's static axes from the existing read-only probe and
 runtime-input records; no controlled-host or native rebuild is performed.
+
+## Review Correction 10 — the probe is retired as a verdict, and the binding predicate becomes a launch projection (2026-07-31, pre-seal)
+
+Correction 9 froze the successor verdict algebra over six predicates. Binding the
+real driver exposed that two of the six had lost their right-hand side, in
+opposite ways:
+
+- `behavior_probe_equals_spec` names an equality Correction 5 already retired.
+  Once equality with the published coordinate or bounded probe stopped being a
+  measurement gate, no artifact on the successor path carries a value the probe
+  could be equal *to*. The predicate survived as a name, and `behavior_probe_moved`
+  survived as a finding derived from a comparison nobody makes.
+- `runtime_binding_matches_spec` was written as the successor of
+  `layer_p_certificate_matches_freeze`: a whole binding against a published
+  reference. What has to be true at execution time is narrower than that, and it
+  has a live authority — whether each launch boundary received what the resolved
+  RunSpec specifies.
+
+The owner adjudicated the pair together: retire the first, narrow the second, and
+**restore neither by writing reference values into the RunSpec**. That last clause
+is the load-bearing one. A retired gate returns just as completely through a fresh
+right-hand side placed in the run plan as it does through a rename, and the run
+plan is exactly where such a value would look legitimate.
+
+### What is retired
+
+`behavior_probe_equals_spec` leaves the successor predicates — six become five —
+and `behavior_probe_moved` leaves the successor result vocabulary. Unlike
+`certificate_mismatch` in Correction 9 this token is **retired, not superseded**:
+there is no successor spelling, nothing is added to the supersession map, and
+`RETIRED_SUCCESSOR_RESULTS` names it so that no reader infers a mapping that was
+deliberately not made. It keeps its terminal for the historical archives that
+recorded it — those archives still parse and still resolve to terminal 1 — and the
+retirement is enforced where a successor archive is *read*, not only by the schema
+enum that keeps the token out of a new one.
+
+The probe is not discarded; it stops being a verdict. The binding records it as
+`diagnostics.behavior_probe`, optional at every stage, carrying `computed`,
+`failed` or `not_run` under the role
+`recorded_diagnostic_observation_selects_nothing`. **Its absence, its failure and a
+digest that moved may not move a predicate, a result, a terminal or `valid`.** The
+archive-only verifier therefore checks nothing about it, and that silence is
+deliberate: a rule refusing an archive over what the probe observed would
+re-establish the retired gate as a verification failure rather than as a terminal,
+which is the same gate wearing the only remaining hat. A structurally broken
+record is a different question, and the schema and the closure already ask it.
+
+`PROBE_DERIVED_RESULTS` is consequently empty, and the emptiness is the claim.
+
+### What is narrowed
+
+`runtime_binding_matches_spec` becomes
+`runtime_projection_matches_resolved_run_spec`. Its left-hand side is what the
+launch boundary actually received, per run, over the four RunSpec-owned
+environment keys the frozen binding schema names; its right-hand side is the
+canonical projection of the resolved RunSpec the archive itself carries.
+
+It is deliberately **not** mapped onto the legacy predicate. It is published
+instead as a successor predicate that renames nothing
+(`predicates_without_a_legacy_name`), because the two compare different quantities
+against different authorities, and a rename map joining them would let the
+certificate gate return as a legacy alias — the second door the owner's
+adjudication closes.
+
+### The finding changes reachability class
+
+`runtime_binding_mismatch` leaves the stage-independent findings and becomes
+run-derived. Correction 9's adjudication was right for the quantity it had: a whole
+binding was compared against a published reference, and every member of that
+comparison — `runtime_inputs`, `executed_surfaces`, `capture_abi`, `source_audit`,
+`input_monitor` — exists at every bindable stage, so the finding survived a build
+failure. Narrowed to the launch projection, its left-hand side is something no
+stage failure ever reaches. Keeping it stage-independent would require either a
+fabricated left value or a predicate decided for runs that never started, and
+both are precisely what Correction 9's reachability rule exists to forbid.
+`STAGE_INDEPENDENT_RESULTS` is therefore `input_mutated` alone — the monitor still
+starts before the binding by contract — and the binding schema forbids
+`runtime_projection` exactly where it forbade the probe: wherever a stage failed.
+
+### Two derivations, and where they may not meet
+
+§ 20.8 asks for two implementations, not for one helper called twice. The producer
+derives the expected projection through `h2_run_spec.environment_projection`, the
+canonical API. The verifier derives it again in its own code, from the archived
+RunSpec's resolved namespace, never calling that API and never reading the
+producer's predicate to decide the answer; only the four key names are shared, and
+they come from the frozen schema. The driver's part is narrower still: it captures
+what each launch boundary received by wrapping the child launcher, never by asking
+the canonical API — otherwise expectation and observation are one computation and
+the predicate can only pass.
+
+### Two kinds of failure, kept apart
+
+- **Values that differ are a finding.** The predicate fails,
+  `runtime_binding_mismatch` selects terminal 1, and the archive is `valid: true`.
+  A truthful negative is a valid archive, exactly as for the stage failures
+  Correction 9 re-admitted.
+- **An observation that does not correspond to the run plan is unusable
+  evidence.** Missing for a run that reached a boundary, recorded twice, recorded
+  for a run that never started, or taken against a different resolved RunSpec: the
+  execution did not disagree with its spec — the record failed to say what
+  happened. Reporting that as a mismatch would convert a bookkeeping failure into a
+  measurement finding. The producer refuses to emit such an archive, and the
+  verifier records `valid: false` through a `launch_projection` check that
+  `h2_execution_verification_v1` requires both in its check set and in the
+  conjunction `valid` is defined as.
+
+The correspondence rule itself — cardinality, run-id correspondence, and the
+reachability direction — lives in the ruler and is imported by both sides, never
+restated on either.
+
+So the layering this correction settles reads: single-file shape and local
+uniqueness belong to the schemas; cross-file correspondence and one-to-one
+reachability to the agreement verifier; a structurally broken archive to the
+checksum closure; and the five reachable successor predicates to the ruler.
+
+### What this correction does not do
+
+The rules above are written against behaviour the tests already pin, not against
+an intention: the implementation landed first and the text describes what it does,
+which is the order the owner set for exactly this reason — a correction written
+ahead of its implementation records the design one hoped for.
+
+It executes no sequence and builds nothing: `build/h2_layer_p` is untouched, the
+rename-aside and the one non-qualifying diagnostic remain W4b's obligations, and
+no driver has yet been bound to a real build. It issues no authorization, selects
+no `I`, creates no `F`/`S`, seals nothing, admits nothing to the canonical corpus
+and leaves `equivalence.state` at `unproven`. The two spent owner authorizations
+and both historical archives are untouched; the archives keep the vocabulary they
+recorded, including the result token this correction retires from new ones. Four
+ruler members moved — `h2_terminal_partition.py` and the three frozen successor
+schemas — so `identity_semantics` is republished from the existing read-only probe
+and runtime-input records; the probe axis and the other four axes do not move, and
+no controlled-host run or native rebuild is performed.
