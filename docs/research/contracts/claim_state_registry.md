@@ -1297,7 +1297,7 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
       ⚠️ 教訓:新加一個 container 到既有 verifier,要同時把它加進「malformed container 是 verdict 不是
       traceback」那張參數化表;以及**「重算」若只拒絕相反決定,就沒有真的把重算結果記下來**——比較必須是相等。
     not_established: no execution; no build; no diagnostic run; no authorization; no F/S; no seal; no corpus admission; no equivalence claim
-    next: "republish after the re-pin + full pre_push, then W4b segment 2: bind the driver and run one non-qualifying diagnostic (needs a build ⇒ rename `build/h2_layer_p` aside first, never delete)"
+    next: "owner review / merge of PR #312 (re-pin, republish and full pre_push are all complete); after merge, W4b segment 2 — rename `build/h2_layer_p` aside and record its custody first (never delete), then build, bind the driver and run one non-qualifying diagnostic"
 pending_reentry:                          # append-only; pre-seal, no terminal claimed; route-1 永久留帳結論不變
   - date: 2026-07-21
     scheduling: owner-scheduled re-entry #3（滿足 line-337 future_reentry_precondition:launch-hygiene gate 先行）
