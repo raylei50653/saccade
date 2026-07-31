@@ -17,6 +17,7 @@
 | `test_h0_gctm_guarantee_registration_v3.py` | system | contract | active | Contract for the H0 GCTM guarantee-registration verifier (universe-completeness v3). |
 | `test_h0_gctm_static_feasibility_v1.py` | system | contract | active | Contract tests for the bounded H0 to GCTM static feasibility audit. |
 | `test_h0_launch_hygiene_gate.py` | system | regression | active | Contract regression for the H0 launch-hygiene pre-authorization gate. |
+| `test_h2_execution_verifier.py` | tracking,system | contract | active | The archive-only verifier: what a closed H2 execution must survive to be believed. |
 | `test_h2_layer_p_certificate.py` | tracking,system | contract | active | Layer-P cannot skip admissibility and its certificate binds the full coordinate. |
 | `test_h2_measurement_controller.py` | tracking,system | contract | active | The H2 S4 controller must produce exactly what the independent verifier reads. |
 | `test_h2_measurement_evidence.py` | tracking,system | contract | active | The H2 Layer-M evidence contract: what an archive must support to be believed. |

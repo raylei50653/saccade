@@ -464,6 +464,7 @@ deleting.
 | `verify_h0_phase_a_archive.py` | stable | cli | Versioned archive verifier for immutable H0 Phase-A evidence. |
 | `verify_h0_preseal_freeze.py` | stable | cli | Independently verify a canonical ``h0_preseal_freeze_v3`` artifact. |
 | `verify_h0_r4_qualification_report.py` | stable | cli | Verify a non-authoritative H0 R4 repair qualification report. |
+| `verify_h2_execution.py` | stable | cli | Verify one closed H2 successor execution archive from its bytes alone. |
 | `verify_h2_measurement.py` | stable | cli | Independent verifier for an H2 Layer-M evidence root. |
 | `verify_headline_bridge_decision_trace.py` | stable | cli | Replay and validate the sealed H0 bridge-decision trace from capture alone. |
 | `verify_r1_temporal_reduction_replay.py` | stable | cli | Verify R1's estimator replay without reading labels or fitting a score. |

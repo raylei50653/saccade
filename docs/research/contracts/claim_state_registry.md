@@ -1101,6 +1101,56 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
     authorization_effect: none
     not_established: no producer; no verifier; no diagnostic mode; no execution; no authorization; no F/S; no seal; no corpus admission; no equivalence claim
     next: W3 archive-only verifier（verification.json + checksums.sha256,producer_invoked=false / verification_host_inputs_used=false,constraints 由本輪 import 不重打）
+    owner_acceptance: >-
+      2026-07-31 — defect 1–5 全部修畢並經 owner 語義審查通過（無 defect 6）,PR #308 merged（main cedeb496）。
+      owner 認可的分類依據:**terminal 只表示 ordered verdict,不表示產生該 finding 所需的證據是否已存在**;
+      分類必須落在 predicate 的證據依賴,不是 result 名稱、也不是 terminal。跨 H2 保留的元規則:
+      窮舉不是充分條件,窮舉空間必須由 authority、ordered verdict、evidence reachability 等**獨立變量生成**,
+      不得由**預期答案反向定義**。
+  successor_archive_verifier_landed:
+    date: 2026-07-31
+    authority: "H2 declaration Review Correction 5（producer/verifier 分離）+ docs/research/contracts/README.md（checksum 收尾順序）"
+    status: W3 landed;**無 ruler edit、無 re-pin、無 republish**
+    no_ruler_edit_rationale: >-
+      scripts/tools/verify_h2_execution.py 命中 plumbing_only 前綴 scripts/tools/verify_h2_,
+      因為它**只組合不持有規則**;一個會重打 verdict algebra 的 verifier 反而必須升格為 ruler member。
+      「import 不重述」與「不移動 identity_semantics」在此是同一件事的兩面（§C3.9）。
+    composition:                            # owner 明訂;W3 不得理解或重寫這套規則
+      - validate(run_spec.json / runtime_binding.json / result.json against the frozen schemas)
+      - recompute selection from predicate_results
+      - recorded result/terminal agree with the recomputed selection
+      - binding_agreement_reasons(...) == ()
+      - digest / execution identity bindings agree
+    circularity_guard: >-
+      binding_agreement_reasons 收到的是**重算出的** selection.terminal,不是 archive 記錄的 terminal;
+      archive 只能在契約允許之處 name 一件 predicate 推不出來的事——terminal 4 的 cause——其餘 recorded verdict
+      一律是被檢查的答案而非輸入
+    admissible_union_is_not_a_whitelist: >-
+      payload 的 results_admissible_with_a_failed_stage 只是粗略聯集;精確合法性由 ordered verdict、
+      token→stage、terminal-4 下 stage→token、monitor biconditional、probe/run reachability 同時裁決,
+      verifier 一律走 select_successor_result + binding_agreement_reasons 兩支函式,不查表
+    six_checks:
+      artifact_schemas: 三份 producer artifact 各過自己的 frozen schema;RunSpec 另驗 Correction 7 的 artifact serialization（canonical object bytes + 恰一個 LF）
+      checksum_closure: archive root 為 flat、無 symlink、無子目錄,且只含這五個名字;既有 inventory 必須雙向 total 且 byte 相符
+      run_spec_binding: validate_run_spec(..., verify_projection=False) + 另兩份 artifact 指名同一個 resolved_run_spec_digest
+      projection_binding: 三份 artifact 的 projection digest 相等,且 executed_surfaces 與 capture_abi 的每個成員（path/sha256/length）都等於 declared content set 的成員——digest 相等不等於跑的是同一批 bytes
+      execution_binding: 單一 execution_id;**載入的 extension bytes = 這次 build 出來的 extension bytes**;identity probe 觀察的 build artifact 也必須是它
+      result_binding: 上述 composition
+    host_independence_boundary: >-
+      verdict 只依賴兩個 byte source:archive,以及本 repo 的 frozen contract schema（這是本命令對「自己在驗什麼」
+      的版本化定義,不是對驗證主機的觀測）。ruler 裡唯一會讀 checkout 的是
+      h2_run_spec.execution_semantics_projection(),因此一律以 verify_projection=False 呼叫;
+      **該 flag 就是 execution integrity 與 Correction 5 已 retire 的 environment reproducibility 之間那條線**。
+      測試以 monkeypatch 讓該函式 raise 來機械證明（不是靠註解宣稱）。
+    two_failure_classes:                    # 由 verification schema 的 required 欄位決定,不是自訂
+      recorded_invalid: schema 違反／digest 不符／verdict 不成立 ⇒ valid=false + reasons（這是對 archive 的裁決）
+      not_formable: 缺檔／不可讀／symlink／子目錄 ⇒ execution_id 與三個 artifact digest 填不出來 ⇒ 不寫任何紀錄,non-zero exit
+    write_order: verification.json 以 O_EXCL 建立（一次 execution 只有一個 verdict）,之後才原子寫涵蓋四份 JSON 的最終 checksums.sha256;verification.json 不反向含 checksum-file digest
+    fixtures: 由 frozen schema 與 frozen authoring profile 合成（含 454-key namespace 與 14 個 projection 成員的合成 digest）,**從不取自 producer 輸出**（§5.3;此刻也還沒有 producer）
+    tests: tests/contract/test_h2_execution_verifier.py — 24 tests;含 schema-legal 但 ruler 拒絕的 stage-reachability 反例、C3.9 restatement 掃描、AST-based host-state 掃描
+    authorization_effect: none
+    not_established: no producer; no diagnostic mode; no execution; no authorization; no F/S; no seal; no corpus admission; no equivalence claim; 尚未有任何真實 archive 可驗
+    next: W4 producer（三份 artifact 在保留的六 stage 內產出 + diagnostic／exactly-once measurement 分流;需 build ⇒ 先把 build/h2_layer_p 改名讓開,絕不刪除）
 pending_reentry:                          # append-only; pre-seal, no terminal claimed; route-1 永久留帳結論不變
   - date: 2026-07-21
     scheduling: owner-scheduled re-entry #3（滿足 line-337 future_reentry_precondition:launch-hygiene gate 先行）
