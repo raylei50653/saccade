@@ -30,6 +30,7 @@ look at a checkout at all.
 from __future__ import annotations
 
 import ast
+import functools
 import hashlib
 import json
 import sys
@@ -116,9 +117,14 @@ def _complete_stages(**overrides: Any) -> producer.StageEvidence:
             "loaded_path": "/opt/saccade/build/h2_layer_p/saccade_tracking_ext.so",
             "sha256": _EXTENSION,
         },
-        "identity_probe": producer.identity_probe_record(
-            {"digest": _fake("probe")}, build_artifact_digest=_EXTENSION
-        ),
+        "diagnostics": {
+            "behavior_probe": {
+                "digest": _fake("probe"),
+                "role": "recorded_diagnostic_observation_selects_nothing",
+                "schema": "h2_behavior_probe_result_v1",
+                "state": "computed",
+            }
+        },
         "runtime_inputs": _runtime_inputs(),
         "source_audit": {"head": "a" * 40, "tree": "b" * 40},
     }
@@ -159,15 +165,41 @@ class _FixedStages:
         return self._monitor
 
 
+@functools.lru_cache(maxsize=1)
+def _canonical_environment() -> tuple[tuple[str, str], ...]:
+    spec = run_spec_module.build_run_spec()
+    return tuple(sorted(producer.canonical_launch_environment(spec).items()))
+
+
+def _launch_projection(
+    *, environment: dict[str, Any] | None = None, run_ids: tuple[str, ...] | None = None
+) -> dict[str, Any]:
+    """What the launch boundary received — matching the RunSpec unless a test says otherwise."""
+    received = dict(_canonical_environment()) if environment is None else environment
+    return {
+        "observations": [
+            {"environment": dict(received), "run_id": run_id}
+            for run_id in (run_ids if run_ids is not None else producer.run_ids())
+        ],
+        "resolved_run_spec_digest": run_spec_module.build_run_spec()[
+            "resolved_run_spec_digest"
+        ],
+    }
+
+
 class _FixedRuns:
     """Four completed runs and a decided observation, or whatever a test asks for."""
 
-    def __init__(self, *, states: dict[str, str] | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        states: dict[str, str] | None = None,
+        projection: dict[str, Any] | None = None,
+    ) -> None:
         self._states = states or {}
+        self._projection = projection
 
-    def run(
-        self, stages: producer.StageEvidence
-    ) -> tuple[list[dict[str, Any]], dict[str, Any], str | None]:
+    def run(self, stages: producer.StageEvidence) -> producer.RunEvidence:
         ordered = [
             {"artifact_digest": _fake(run_id), "run_id": run_id, "state": "completed"}
             for run_id in producer.run_ids()
@@ -175,8 +207,13 @@ class _FixedRuns:
         predicates = {
             name: {"reasons": [], "state": self._states.get(name, "pass")}
             for name in producer.predicate_names()
+            if name != producer.PROJECTION_PREDICATE
         }
-        return ordered, predicates, None
+        return producer.RunEvidence(
+            ordered_runs=ordered,
+            predicate_results=predicates,
+            launch_projection=self._projection or _launch_projection(),
+        )
 
 
 def _execution(
@@ -385,9 +422,14 @@ def test_the_producer_transcribes_the_rulers_selection(
 ) -> None:
     """Not a copy of the ruler's answer — the ruler's answer."""
     runs = _FixedRuns(states={"capture_off_on_equal": "fail"})
-    ordered, predicates, _ = runs.run(_complete_stages())
+    evidence = runs.run(_complete_stages())
     expected = partition.select_successor_result(
-        predicates, authority="exactly_once_measurement", phase="a"
+        {
+            **evidence.predicate_results,
+            producer.PROJECTION_PREDICATE: {"reasons": [], "state": "pass"},
+        },
+        authority="exactly_once_measurement",
+        phase="a",
     )
     result = _execution(run_spec, runs=runs).produce(tmp_path / "archive")
     assert (result["result"], result["terminal"]) == (
@@ -524,11 +566,13 @@ def test_an_observation_that_drifts_under_the_reader_is_read_once(
             return len(self._base)
 
     class _DriftingRuns(_FixedRuns):
-        def run(
-            self, stages: producer.StageEvidence
-        ) -> tuple[list[dict[str, Any]], Any, str | None]:
-            ordered, predicates, named = super().run(stages)
-            return ordered, _Drifting(predicates), named
+        def run(self, stages: producer.StageEvidence) -> producer.RunEvidence:
+            evidence = super().run(stages)
+            return producer.RunEvidence(
+                ordered_runs=evidence.ordered_runs,
+                predicate_results=_Drifting(evidence.predicate_results),
+                launch_projection=evidence.launch_projection,
+            )
 
     root = tmp_path / "archive"
     result = _execution(run_spec, runs=_DriftingRuns()).produce(root)

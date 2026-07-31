@@ -269,16 +269,7 @@ class LayerPStages:
                 if witness is not None
                 else None
             ),
-            identity_probe=(
-                producer.identity_probe_record(
-                    probe,
-                    build_artifact_digest=manifest["build_artifacts"]["files"][0][
-                        "sha256"
-                    ],
-                )
-                if probe is not None
-                else None
-            ),
+            diagnostics=_diagnostics(probe),
         )
 
     def close(self) -> Mapping[str, Any]:
@@ -334,9 +325,7 @@ class MeasurementRuns:
     inherited_environment: Mapping[str, str] | None = None
     launch_child: Any = None
 
-    def run(
-        self, stages: producer.StageEvidence
-    ) -> tuple[list[dict[str, Any]], dict[str, Any], str | None]:
+    def run(self, stages: producer.StageEvidence) -> producer.RunEvidence:
         """Launch the runs, and return evidence whether or not they all finished.
 
         The failures that end a measurement from *inside* the run phase — a
@@ -351,9 +340,15 @@ class MeasurementRuns:
         Orchestration defects still propagate. A run reported twice, a run
         outside the plan, unreadable evidence: those say the bookkeeping cannot
         be trusted, and there is nothing truthful to archive about them.
+
+        The launch projection is captured by the wrapping launcher, so a run that
+        started and then failed still records what it received — which is what
+        makes the projection correspond to the runs that reached a boundary
+        rather than to the runs that finished.
         """
         completed: set[str] = set()
         launched: set[str] = set()
+        observed_launches: list[dict[str, Any]] = []
         outcome: str | None = None
         try:
             layer_m.launch_ordered_runs(
@@ -366,7 +361,10 @@ class MeasurementRuns:
                 clock=self.clock,
                 completed=completed,
                 started_runs=launched,
-                **({"launch_child": self.launch_child} if self.launch_child else {}),
+                launch_child=_capturing_launcher(
+                    self.launch_child or layer_m.default_child_launcher,
+                    observed_launches,
+                ),
             )
         except layer_m.ReachedRunFailure as failure:
             outcome = f"{failure.run_id}: {failure.detail}"
@@ -379,11 +377,67 @@ class MeasurementRuns:
             outcome = f"a bound input moved while a run was live: {moved}"
 
         replay = layer_m.replay_surviving_evidence(self.root)
-        ordered = ordered_run_records(self.root, completed=completed, launched=launched)
-        observed = _predicates(
-            replay, completed=completed, session=self.session, outcome=outcome
+        return producer.RunEvidence(
+            ordered_runs=ordered_run_records(
+                self.root, completed=completed, launched=launched
+            ),
+            predicate_results=_predicates(
+                replay, completed=completed, session=self.session, outcome=outcome
+            ),
+            launch_projection={
+                "observations": observed_launches,
+                "resolved_run_spec_digest": self.document["resolved_run_spec_digest"],
+            },
         )
-        return ordered, observed, None
+
+
+def _diagnostics(probe: Mapping[str, Any] | None) -> dict[str, Any] | None:
+    """Record the behaviour probe as an observation that selects nothing.
+
+    Correction 10 retired the verdict chain the probe stood in, so what is
+    recorded here is its outcome — computed, failed, or never run — and nothing
+    downstream may read it into a predicate, a result, a terminal or `valid`. A
+    probe that did not run is a stated `not_run`, not an omission, because an
+    absent record and a record of absence are different claims.
+    """
+    if probe is None:
+        return None
+    digest = probe.get("digest")
+    return {
+        "behavior_probe": {
+            "digest": digest,
+            "role": "recorded_diagnostic_observation_selects_nothing",
+            "schema": producer.PROBE_SCHEMA,
+            "state": "computed" if digest else "failed",
+        }
+    }
+
+
+def _capturing_launcher(inner: Any, observed: list[dict[str, Any]]) -> Any:
+    """Wrap the child launcher and record what it was actually handed.
+
+    Captured at the launch boundary itself, from the environment mapping the
+    launcher receives — never from the canonical projection API. Reading the
+    canonical value here would make the observation and the expectation the same
+    computation, and the comparison that follows could no longer see a drift
+    between deriving the environment and handing it to a process.
+    """
+
+    def launch(
+        invocation_path: Path, environment: Mapping[str, str], **kwargs: Any
+    ) -> Any:
+        observed.append(
+            {
+                "environment": {
+                    key: environment.get(key)
+                    for key in producer.runspec_environment_keys()
+                },
+                "run_id": invocation_path.parent.name,
+            }
+        )
+        return inner(invocation_path, environment, **kwargs)
+
+    return launch
 
 
 def _mutation_errors() -> tuple[type[BaseException], ...]:
@@ -497,13 +551,19 @@ def _predicates(
     }
     if outcome is not None:
         observed["execution_complete"]["reasons"] = [outcome]
-    undecidable = sorted(set(producer.predicate_names()) - set(observed))
+    # The projection predicate is the producer's: this module records what the
+    # launch boundary received and compares nothing, so deciding it here would be
+    # the observing side answering its own question. Everything else the schema
+    # names must be covered, and a gap raises rather than defaulting to `pass`.
+    undecidable = sorted(
+        set(producer.predicate_names())
+        - set(observed)
+        - {producer.PROJECTION_PREDICATE}
+    )
     if undecidable:
         raise DriverError(
-            f"this execution observed nothing that decides {undecidable}: the "
-            "resolved RunSpec carries no reference to compare against, because "
-            "Review Correction 5 retired the published probe and the Layer-P "
-            "certificate as gates. Reporting a state here would invent evidence"
+            f"this execution observed nothing that decides {undecidable}, and "
+            "reporting a state for them would invent evidence"
         )
     return observed
 

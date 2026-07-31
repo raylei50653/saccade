@@ -1225,6 +1225,79 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
     authorization_effect: none
     not_established: no execution; no build; no diagnostic run; no authorization; no F/S; no seal; no corpus admission; no equivalence claim; driver 尚未綁定
     next: 綁定 driver 並跑一次 non-qualifying diagnostic（需 build ⇒ 先把 build/h2_layer_p 改名讓開,絕不刪除）,再進 W5 closure
+  successor_correction_10_probe_retired:
+    date: 2026-07-31
+    authority: "owner adjudication 2026-07-31 (H2 W4b segment 1 review): retire ④-A, narrow ④-B, do not add references to the RunSpec"
+    status: implementation landed and green; declaration Review Correction 10 written against the verified behaviour, sealed_prefix re-pinned to the complete post-correction body
+    what_was_retired: >-
+      `behavior_probe_equals_spec` leaves the successor predicates (6 -> 5) and
+      `behavior_probe_moved` leaves the successor result vocabulary. It keeps its terminal
+      for the historical archives that recorded it, has NO superseding token, and
+      `PROBE_DERIVED_RESULTS == ()`. The probe is now `diagnostics.behavior_probe`,
+      optional at every stage, carrying computed|failed|not_run — its absence, failure or
+      change cannot move a predicate, a result, a terminal or `valid`.
+    what_was_narrowed: >-
+      `runtime_binding_matches_spec` -> `runtime_projection_matches_resolved_run_spec`.
+      Left side = what the launch boundary actually received over the four RunSpec-owned
+      environment keys; right side = the canonical projection from the resolved RunSpec.
+      Deliberately NOT mapped to the legacy `layer_p_certificate_matches_freeze`
+      (`SUCCESSOR_WITHOUT_LEGACY_PREDICATE`): the legacy predicate compared a whole binding
+      against a published certificate, which is the gate Correction 5 retired, and mapping
+      the names would let it return through a rename.
+    reachability_moved: >-
+      **`runtime_binding_mismatch` left STAGE_INDEPENDENT_RESULTS for RUN_DERIVED_RESULTS.**
+      It was stage-independent because every member of the old comparison existed at every
+      bindable stage. Narrowed to a launch-boundary observation, its left side is something
+      no stage failure ever reaches. Owner confirmed: leaving it stage-independent would
+      require a fabricated left value or a filled-in predicate.
+    two_implementations: >-
+      producer -> `h2_run_spec.environment_projection` (the canonical API);
+      verifier -> `_independent_launch_environment`, its own derivation from the archived
+      RunSpec's namespace, never calling the canonical API and never reading the producer's
+      predicate to decide the answer. Only the four key names are shared, from the frozen
+      binding schema. The driver captures the observation by wrapping the child launcher —
+      never from the canonical API, or expectation and observation would be one computation.
+    two_failure_kinds: >-
+      values differ => predicate fail => `runtime_binding_mismatch` with `valid: true`
+      (a truthful negative is a valid archive); observation missing/doubled/foreign/
+      unreachable => unusable evidence => producer refuses to emit, verifier records
+      `valid: false`. Cardinality and run-id correspondence live in the ruler
+      (`launch_projection_reasons`), imported by both sides, never restated.
+    layering: "schema = single-file shape and local uniqueness; agreement verifier = cross-file reachability and one-to-one; checksum/closure = diagnostic structural corruption; ruler = the five reachable successor predicates"
+    ruler_cost: >-
+      four ruler members moved for the implementation — `h2_terminal_partition.py` +
+      `h2_execution_result_v1.json` + `h2_runtime_binding_v1.json` +
+      `h2_execution_verification_v1.json` — republished 092c2c01 -> fd082481.
+      The correction text then moves a fifth: `sealed_prefix` re-pinned
+      100171 -> **108275 bytes / f53da415a67e78b5…**, which moves `.policy.yaml` and
+      forces a second republish, fd082481 -> **dd354e130b0b21a2…**.
+      Both republishes move `identity_semantics` only; the probe and the other four axes
+      do not move, and neither performs a controlled-host run or a native rebuild.
+    tests: "full suite green (2894 passed); new: no successor predicate vector can select a retired result (exhaustive over the 4^5 state space), the retired token keeps its terminal and leaves the vocabulary, the launch projection is captured at the boundary"
+    owner_review_round_1: >-
+      PR #312, two blocking defects, **both in the archive-only verifier's defence and
+      recomputation, none in Correction 10's adjudication** (the owner confirmed the
+      contract split, the reachability move and the governance ledger as correct).
+      (1) `_check_launch_projection` handed `runtime_projection` to the ruler before
+      checking its container shape, and the ruler calls `.get()` on the projection and on
+      each observation ⇒ `runtime_projection: []` and `observations: [None]` left by
+      AttributeError instead of `valid:false`, violating the rule the same file already
+      pins for `predicate_results` / `ordered_runs` / a non-object binding. Guard moved
+      **before** the ruler call; the ruler's tolerance was NOT widened (it is total over
+      the observations it names, not over arbitrary JSON containers).
+      (2) the state comparison only refused the *wrong* decision (`state != "fail"` /
+      `state == "fail"`), so a recomputed `pass` still admitted `error` / `not_run` ⇒ an
+      archive could keep an undecided projection predicate while a later `execution_complete=fail`
+      rode the selector's "decided failure outranks undecided" to terminal 4 — the second
+      implementation declining to answer. Now exact equality against the recomputed state
+      (failed-stage archives carry no projection and return earlier, so nothing demands a
+      `pass` from an execution that reached no launch boundary).
+      Four regressions added, each mutation-verified red against the pre-fix code.
+      **verifier is `plumbing_only` ⇒ no ruler edit, no re-pin, no republish for this round.**
+      ⚠️ 教訓:新加一個 container 到既有 verifier,要同時把它加進「malformed container 是 verdict 不是
+      traceback」那張參數化表;以及**「重算」若只拒絕相反決定,就沒有真的把重算結果記下來**——比較必須是相等。
+    not_established: no execution; no build; no diagnostic run; no authorization; no F/S; no seal; no corpus admission; no equivalence claim
+    next: "owner review / merge of PR #312 (re-pin, republish and full pre_push are all complete); after merge, W4b segment 2 — rename `build/h2_layer_p` aside and record its custody first (never delete), then build, bind the driver and run one non-qualifying diagnostic"
 pending_reentry:                          # append-only; pre-seal, no terminal claimed; route-1 永久留帳結論不變
   - date: 2026-07-21
     scheduling: owner-scheduled re-entry #3（滿足 line-337 future_reentry_precondition:launch-hygiene gate 先行）

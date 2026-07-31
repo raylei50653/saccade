@@ -244,12 +244,11 @@ def test_diagnostic_result_cannot_carry_measurement_authority() -> None:
         "predicate_results": {
             name: {"state": "pass", "reasons": []}
             for name in (
-                "behavior_probe_equals_spec",
                 "bound_input_unchanged",
                 "capture_off_on_equal",
                 "execution_complete",
                 "packets_valid",
-                "runtime_binding_matches_spec",
+                "runtime_projection_matches_resolved_run_spec",
             )
         },
         "ordered_runs": [
@@ -325,7 +324,9 @@ def test_the_result_schema_and_the_ruler_share_one_vocabulary() -> None:
     # The successor enum is the ruler's mapping with the retired token dropped and
     # the diagnostic token added — not an independently maintained list.
     assert set(schema["properties"]["result"]["enum"]) == (
-        set(partition.RESULT_TO_TERMINAL) - set(partition.LEGACY_RESULT_SUPERSEDED_BY)
+        set(partition.RESULT_TO_TERMINAL)
+        - set(partition.LEGACY_RESULT_SUPERSEDED_BY)
+        - set(partition.RETIRED_SUCCESSOR_RESULTS)
         | {partition.DIAGNOSTIC_RESULT}
     )
     assert set(schema["properties"]["terminal"]["oneOf"][0]["enum"]) == {
@@ -346,7 +347,9 @@ def test_the_schema_pins_every_result_to_the_terminal_the_ruler_selects() -> Non
     assert declared == {
         result: name
         for result, name in partition.RESULT_TO_TERMINAL.items()
-        if name and result not in partition.LEGACY_RESULT_SUPERSEDED_BY
+        if name
+        and result not in partition.LEGACY_RESULT_SUPERSEDED_BY
+        and result not in partition.RETIRED_SUCCESSOR_RESULTS
     }
 
 
@@ -355,8 +358,7 @@ def test_the_schema_pins_every_result_to_the_terminal_the_ruler_selects() -> Non
     [
         {},
         {"bound_input_unchanged": "fail"},
-        {"behavior_probe_equals_spec": "fail"},
-        {"runtime_binding_matches_spec": "fail"},
+        {"runtime_projection_matches_resolved_run_spec": "fail"},
         {"capture_off_on_equal": "fail"},
         {"packets_valid": "fail"},
         {"execution_complete": "fail"},
@@ -394,6 +396,8 @@ def test_the_rulers_verdict_is_the_only_one_the_schema_accepts(
             if other_result in (selection.result, "measurement_pass"):
                 continue
             if other_result in partition.LEGACY_RESULT_SUPERSEDED_BY:
+                continue
+            if other_result in partition.RETIRED_SUCCESSOR_RESULTS:
                 continue
             if other_terminal != selection.terminal:
                 continue
@@ -2251,12 +2255,27 @@ def _binding(**overrides: Any) -> dict[str, Any]:
             "length": 16,
             "sha256": "b" * 64,
         },
-        "identity_probe": {
-            "schema": "h2_behavior_probe_result_v1",
-            "role": "recorded_observation_not_equivalence_or_gate",
-            "state": "computed",
-            "digest": "c" * 64,
-            "build_artifact_digest": "d" * 64,
+        "diagnostics": {
+            "behavior_probe": {
+                "schema": "h2_behavior_probe_result_v1",
+                "role": "recorded_diagnostic_observation_selects_nothing",
+                "state": "computed",
+                "digest": "c" * 64,
+            }
+        },
+        "runtime_projection": {
+            "observations": [
+                {
+                    "environment": {
+                        "SACCADE_DETECT_BARRIER": "event",
+                        "SACCADE_DOUBLE_BUFFER": "1",
+                        "SACCADE_GPU_DECODE": "1",
+                        "SACCADE_MAIN_NMS_GRAPHED": "1",
+                    },
+                    "run_id": "00_capture_off",
+                }
+            ],
+            "resolved_run_spec_digest": "9" * 64,
         },
         "input_monitor": {
             "started_before_binding": True,
@@ -2302,7 +2321,10 @@ def test_a_successful_binding_is_exactly_as_strict_as_before() -> None:
     partial["build_artifacts"] = partial["build_artifacts"][:1]
     assert list(validator.iter_errors(partial))
     assert list(validator.iter_errors(_binding(extension_load=_DROP)))
-    assert list(validator.iter_errors(_binding(identity_probe=_DROP)))
+    # `diagnostics` is optional at every stage: Correction 10 forbids a probe's
+    # absence from deciding anything, and unformability is deciding something.
+    assert not list(validator.iter_errors(_binding(diagnostics=_DROP)))
+    assert list(validator.iter_errors(_binding(runtime_projection=_DROP)))
     assert list(validator.iter_errors(_binding(failed_stage=_DROP)))
     assert list(validator.iter_errors(_binding(failed_stage="preflight")))
 
@@ -2322,7 +2344,10 @@ def test_every_stage_failure_can_form_a_binding(
     validator = _binding_validator()
     document = _binding(
         failed_stage=failed_stage,
-        identity_probe=_DROP,
+        diagnostics=_DROP,
+        # No run reached a launch boundary, so there is nothing to record and the
+        # schema forbids recording it anyway.
+        runtime_projection=_DROP,
         **({} if keep_load else {"extension_load": _DROP}),
     )
     if not keep_artifacts:
@@ -2337,11 +2362,11 @@ def test_every_stage_failure_can_form_a_binding(
     ("failed_stage", "fabricated"),
     [
         ("build", "extension_load"),
-        ("build", "identity_probe"),
+        ("build", "runtime_projection"),
         ("build_binding", "extension_load"),
         ("extension_load", "extension_load"),
-        ("extension_load", "identity_probe"),
-        ("identity_run", "identity_probe"),
+        ("extension_load", "runtime_projection"),
+        ("identity_run", "runtime_projection"),
     ],
 )
 def test_an_unreached_stage_cannot_be_fabricated(
@@ -2352,7 +2377,7 @@ def test_an_unreached_stage_cannot_be_fabricated(
     document = _binding(failed_stage=failed_stage)
     if failed_stage == "build":
         document["build_artifacts"] = []
-    for key in ("extension_load", "identity_probe"):
+    for key in ("extension_load", "runtime_projection"):
         if key != fabricated:
             document.pop(key, None)
     assert list(validator.iter_errors(document))
@@ -2361,7 +2386,7 @@ def test_an_unreached_stage_cannot_be_fabricated(
 def test_a_stage_failure_still_binds_what_it_did_reach() -> None:
     validator = _binding_validator()
     document = _binding(
-        failed_stage="extension_load", extension_load=_DROP, identity_probe=_DROP
+        failed_stage="extension_load", extension_load=_DROP, diagnostics=_DROP
     )
     document["build_artifacts"] = document["build_artifacts"][:1]
     assert list(validator.iter_errors(document)), (
@@ -2524,12 +2549,20 @@ def _agreement(
         ("input_mutated", _T1, "build", True, ()),
         ("input_mutated", _T1, "extension_load", True, ()),
         ("input_mutated", _T1, None, True, ()),
-        ("runtime_binding_mismatch", _T1, "build", False, ()),
+        # Correction 10 narrowed this to what a launch boundary received, which no
+        # stage failure ever reaches — so it left the stage-independent class.
+        (
+            "runtime_binding_mismatch",
+            _T1,
+            "build",
+            False,
+            ("run-derived evidence",),
+        ),
+        ("runtime_binding_mismatch", _T1, None, False, ()),
         ("build_failed", _T1, "build", True, ("outranks every other finding",)),
         # a finding whose evidence the execution never reached
         ("capture_perturbs_policy", _T2, "build", False, ("run-derived evidence",)),
         ("packet_invalid", _T3, "identity_run", False, ("run-derived evidence",)),
-        ("behavior_probe_moved", _T1, "identity_run", False, ("identity probe",)),
         # the mutation rule stays biconditional for a measurement
         ("input_mutated", _T1, None, False, ("requires the monitor to record",)),
         ("packet_invalid", _T3, None, True, ("outranks every other finding",)),

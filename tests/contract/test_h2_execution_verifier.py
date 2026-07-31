@@ -88,6 +88,11 @@ CAPTURE_ABI_PATH = _BINDING_SCHEMA["properties"]["capture_abi"]["allOf"][1][
 PREDICATES: tuple[str, ...] = tuple(
     _RESULT_SCHEMA["properties"]["predicate_results"]["required"]
 )
+# The predicate Correction 10 narrowed. Named once here and checked against the
+# frozen schema's own predicate set, so a rename cannot leave these tests
+# asserting about a predicate that no longer exists.
+PROJECTION_PREDICATE = "runtime_projection_matches_resolved_run_spec"
+assert PROJECTION_PREDICATE in PREDICATES
 
 EXECUTION_ID = "h2exec-20260731T000000Z"
 
@@ -176,6 +181,42 @@ _RUN_SPEC = _run_spec()
 _SPEC_DIGEST = _RUN_SPEC["resolved_run_spec_digest"]
 _PROJECTION_DIGEST = _RUN_SPEC["execution_semantics_projection_digest"]
 
+# What the launch boundary received, synthesised from the frozen profile's own
+# namespace by this file's reading of the four RunSpec-owned keys. Deriving it
+# by calling either implementation would make the fixture agree with whichever
+# one it called, which is the circularity § 5.3 forbids.
+_LAUNCH_ENVIRONMENT: dict[str, str] = {
+    "SACCADE_DETECT_BARRIER": (
+        "event"
+        if _RUN_SPEC["resolved_namespace"]["double_buffer"]
+        else (_RUN_SPEC["resolved_namespace"].get("detect_barrier") or "full")
+    ),
+    "SACCADE_DOUBLE_BUFFER": (
+        "1" if _RUN_SPEC["resolved_namespace"]["double_buffer"] else "0"
+    ),
+    "SACCADE_GPU_DECODE": (
+        "0" if _RUN_SPEC["resolved_namespace"]["no_gpu_decode"] else "1"
+    ),
+    "SACCADE_MAIN_NMS_GRAPHED": (
+        "1" if _RUN_SPEC["resolved_namespace"]["main_nms_graphed"] else "0"
+    ),
+}
+
+
+def _launch_projection(
+    *, environment: dict[str, Any] | None = None, run_ids: tuple[str, ...] = RUN_IDS
+) -> dict[str, Any]:
+    received = _LAUNCH_ENVIRONMENT if environment is None else environment
+    return {
+        "observations": [
+            {"environment": dict(received), "run_id": run_id} for run_id in run_ids
+        ],
+        "resolved_run_spec_digest": _SPEC_DIGEST,
+    }
+
+
+_LAUNCH_PROJECTION = _launch_projection()
+
 
 def _binding(**overrides: Any) -> dict[str, Any]:
     declared = _by_path()
@@ -204,13 +245,15 @@ def _binding(**overrides: Any) -> dict[str, Any]:
             "sha256": _EXTENSION_DIGEST,
         },
         "failed_stage": None,
-        "identity_probe": {
-            "build_artifact_digest": _EXTENSION_DIGEST,
-            "digest": _fake("probe"),
-            "role": "recorded_observation_not_equivalence_or_gate",
-            "schema": "h2_behavior_probe_result_v1",
-            "state": "computed",
+        "diagnostics": {
+            "behavior_probe": {
+                "digest": _fake("probe"),
+                "role": "recorded_diagnostic_observation_selects_nothing",
+                "schema": "h2_behavior_probe_result_v1",
+                "state": "computed",
+            }
         },
+        "runtime_projection": _LAUNCH_PROJECTION,
         "input_monitor": {
             "changed_count": 0,
             "final_drain_clean": True,
@@ -412,6 +455,7 @@ def test_a_stage_failure_that_names_a_started_run_is_invalid(tmp_path: Path) -> 
         tmp_path,
         binding=_binding(
             failed_stage="build",
+            runtime_projection=_ABSENT,
             build_artifacts=[
                 {
                     "length": 4096,
@@ -442,6 +486,7 @@ def test_a_stage_failure_must_name_the_result_its_stage_requires(
         tmp_path,
         binding=_binding(
             failed_stage="build",
+            runtime_projection=_ABSENT,
             build_artifacts=[
                 {
                     "length": 4096,
@@ -555,6 +600,70 @@ def test_a_malformed_container_is_recorded_not_raised(
     verifier.validate_verification(record)
 
 
+@pytest.mark.parametrize(
+    ("projection", "fragment"),
+    [
+        ([], "runtime_projection that is not an object"),
+        (
+            {"observations": [None], "resolved_run_spec_digest": _SPEC_DIGEST},
+            "observation that is not an object",
+        ),
+    ],
+)
+def test_a_malformed_launch_projection_is_recorded_not_raised(
+    tmp_path: Path, projection: Any, fragment: str
+) -> None:
+    """The same boundary as `ordered_runs`, for the newest container to cross it.
+
+    The ruler calls `.get()` on the projection and on every observation, so a list
+    where the object belongs — or a null inside the observation list — reached it
+    as an `AttributeError` rather than as a verdict. The guard belongs before the
+    ruler call, not after it.
+    """
+    record = verifier.verify_archive(
+        _archive(tmp_path, binding=_binding(runtime_projection=projection))
+    )
+    assert record["valid"] is False
+    assert record["checks"]["launch_projection"] is False
+    assert record["checks"]["artifact_schemas"] is False
+    assert any(fragment in reason for reason in record["reasons"])
+    verifier.validate_verification(record)
+
+
+@pytest.mark.parametrize("state", ["error", "not_run"])
+def test_an_undecided_projection_predicate_is_invalid_when_it_recomputes(
+    tmp_path: Path, state: str
+) -> None:
+    """Recomputing the predicate means recording the state, not just refusing one.
+
+    Every launch observation matches the resolved RunSpec, so this verifier has
+    decided the predicate: `pass`. An archive that keeps it undecided while a later
+    predicate fails would ride the selector's "a decided failure outranks an
+    undecided predicate" to terminal 4 with a verdict the verifier itself has
+    contradicted, which is the second implementation declining to answer.
+    """
+    record = verifier.verify_archive(
+        _archive(
+            tmp_path,
+            result=_result(
+                predicate_results=_predicates(
+                    **{
+                        PROJECTION_PREDICATE: state,
+                        "execution_complete": "fail",
+                    }
+                ),
+                result="unclassified_execution_failure",
+                terminal=partition.EXECUTION_INVALID_TERMINAL,
+                ordered_runs=_runs("failed"),
+            ),
+        )
+    )
+    assert record["valid"] is False
+    assert record["checks"]["launch_projection"] is False
+    assert any("recomputes to 'pass'" in reason for reason in record["reasons"])
+    verifier.validate_verification(record)
+
+
 def test_a_non_string_result_token_is_recorded_not_raised(tmp_path: Path) -> None:
     """The recorded token is a lookup key, so it must be hashable before it is one.
 
@@ -578,7 +687,7 @@ def test_a_non_object_runtime_binding_is_a_verdict_not_an_unformable_archive(
     and this artifact's digest from its bytes — so every required member of the
     verification record can be filled. A `runtime_binding.json` that is not an
     object is therefore a schema violation inside a formable archive, and the
-    three checks that need to read it say so individually.
+    four checks that need to read it say so individually.
     """
     root = _archive(tmp_path)
     (root / "runtime_binding.json").write_bytes(b"[]\n")
@@ -590,6 +699,7 @@ def test_a_non_object_runtime_binding_is_a_verdict_not_an_unformable_archive(
         "artifact_schemas": False,
         "checksum_closure": True,
         "execution_binding": False,
+        "launch_projection": False,
         "projection_binding": False,
         "result_binding": False,
         "run_spec_binding": False,

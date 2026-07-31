@@ -525,19 +525,178 @@ def _check_execution_binding(documents: Mapping[str, Any]) -> list[str]:
                 "execution built"
             )
 
-    probe = binding.get("identity_probe")
-    if isinstance(probe, Mapping):
-        if extension is None:
-            reasons.append(
-                "runtime_binding.json recorded an identity probe without the build "
-                "artifact it observed"
-            )
-        elif probe.get("build_artifact_digest") != extension:
-            reasons.append(
-                "the identity probe observed a build artifact this execution did "
-                "not build"
-            )
+    # Correction 10: the behaviour probe is `diagnostics.behavior_probe` and is
+    # checked nowhere here. Its absence, its failure and a digest that moved must
+    # not reach `valid`, so a rule that refused an archive over what the probe
+    # observed would re-establish the gate Correction 5 retired — this time as a
+    # verification failure rather than a terminal. A structurally broken record is
+    # a different question, and the schema and the closure already ask it.
     return reasons
+
+
+def _check_launch_projection(documents: Mapping[str, Any]) -> list[str]:
+    """Recompute what the launch boundary should have received, independently.
+
+    The producer derives this through `h2_run_spec.environment_projection`. This
+    does not call it, and does not read the producer's predicate to decide the
+    answer: the derivation below is the verifier's own, from the resolved RunSpec
+    the archive carries. Two calls into one helper would prove that the helper is
+    deterministic, which is not what § 20.8 asks (§ C3.9 is satisfied because the
+    *key names* still come from the frozen schema, and only the values are
+    derived here).
+
+    Two failure kinds, kept apart:
+
+    * values that disagree are a **finding**, not an error — the predicate says
+      so, `_check_result_binding` checks the ruler agrees, and this returns no
+      reason at all, because a truthful negative is a valid archive;
+    * an observation that does not correspond to the run plan is **unusable
+      evidence**, and the ruler's cross-artifact rule is imported to say so.
+    """
+    binding = _object(documents, "runtime_binding.json")
+    result = _object(documents, "result.json")
+    if binding is None:
+        return _not_an_object("runtime_binding.json")
+    if result is None:
+        return _not_an_object("result.json")
+
+    runs = result.get("ordered_runs")
+    # The ruler is total over observations, not over containers: a list where an
+    # object belongs is not a state it names, so the shape is checked here.
+    if not isinstance(runs, list) or any(not isinstance(run, Mapping) for run in runs):
+        return [
+            "result.json records ordered_runs that are not a list of objects, so "
+            "which runs reached a launch boundary cannot be decided"
+        ]
+    # Same boundary as `ordered_runs` above, and for the same reason: the ruler is
+    # total over the *observations* it names, not over arbitrary JSON containers,
+    # so a list where an object belongs — or a null where an observation belongs —
+    # is a schema violation this plumbing must name before the ruler is handed it.
+    # Widening the ruler here would put a fail-closed rule in a file that holds
+    # none, and leaving the guard after the call is too late: the ruler calls
+    # `.get()` on both.
+    projection = binding.get("runtime_projection")
+    if projection is not None and not isinstance(projection, Mapping):
+        return [
+            "runtime_binding.json records a runtime_projection that is not an "
+            "object, so what the launch boundaries received cannot be decided"
+        ]
+    if isinstance(projection, Mapping):
+        observations = projection.get("observations")
+        if isinstance(observations, list) and any(
+            not isinstance(item, Mapping) for item in observations
+        ):
+            return [
+                "the launch projection records an observation that is not an object"
+            ]
+
+    reasons = list(
+        partition.launch_projection_reasons(
+            projection,
+            failed_stage=binding.get("failed_stage"),
+            ordered_runs=runs,
+            resolved_run_spec_digest=str(binding.get("resolved_run_spec_digest")),
+        )
+    )
+    if reasons or not isinstance(projection, Mapping):
+        return reasons
+
+    spec = _object(documents, "run_spec.json")
+    if spec is None:
+        return _not_an_object("run_spec.json")
+    try:
+        expected = _independent_launch_environment(spec)
+    except _ProjectionUndecidable as exc:
+        return [f"the archived RunSpec does not decide the launch projection: {exc}"]
+
+    recomputed: list[str] = []
+    for observation in projection.get("observations", []):
+        received = observation.get("environment")
+        if not isinstance(received, Mapping):
+            return ["a launch observation records an environment that is not an object"]
+        for key in sorted(expected):
+            if received.get(key) != expected[key]:
+                recomputed.append(f"{observation.get('run_id')}:{key}")
+
+    predicate = result.get("predicate_results")
+    claimed = (
+        predicate.get(_PROJECTION_PREDICATE, {})
+        if isinstance(predicate, Mapping)
+        else {}
+    )
+    state = claimed.get("state") if isinstance(claimed, Mapping) else None
+    # Exact equality, not "anything but the wrong decision". This check *is* the
+    # second implementation: having recomputed the predicate from the archive's own
+    # RunSpec, leaving `error` or `not_run` admissible beside a recomputed `pass`
+    # would let an archive keep an undecided predicate the verifier has in fact
+    # decided — and the selector's "a later decided failure outranks an earlier
+    # undecided predicate" would then carry that archive to a terminal it did not
+    # earn. A failed stage records no projection at all and returns above, so this
+    # never demands a `pass` from an execution that reached no launch boundary.
+    expected_state = "fail" if recomputed else "pass"
+    if state != expected_state:
+        detail = (
+            f" — the launch boundary received {sorted(set(recomputed))} against what "
+            "the resolved RunSpec specifies"
+            if recomputed
+            else " — every launch observation matches the resolved RunSpec"
+        )
+        reasons.append(
+            f"{_PROJECTION_PREDICATE} recomputes to {expected_state!r}, and "
+            f"result.json records {state!r}{detail}"
+        )
+    return reasons
+
+
+class _ProjectionUndecidable(RuntimeError):
+    """The archived RunSpec cannot decide what a launch boundary should receive."""
+
+
+def _independent_launch_environment(spec: Mapping[str, Any]) -> dict[str, str]:
+    """The verifier's own derivation of the four RunSpec-owned launch values."""
+    namespace = spec.get("resolved_namespace")
+    if not isinstance(namespace, Mapping):
+        raise _ProjectionUndecidable("the resolved namespace is not an object")
+    flags = {}
+    for name in ("double_buffer", "no_gpu_decode", "main_nms_graphed"):
+        value = namespace.get(name)
+        if not isinstance(value, bool):
+            raise _ProjectionUndecidable(f"{name} is not a boolean")
+        flags[name] = value
+    barrier = namespace.get("detect_barrier")
+    if flags["double_buffer"]:
+        if barrier not in (None, "event"):
+            raise _ProjectionUndecidable(
+                "a double-buffered run specifies a barrier other than the event barrier"
+            )
+        barrier = "event"
+    elif barrier is None:
+        barrier = "full"
+    if barrier not in ("event", "full", "no_postproc"):
+        raise _ProjectionUndecidable(
+            f"detect_barrier {barrier!r} is not a known barrier"
+        )
+    derived = {
+        "SACCADE_DETECT_BARRIER": str(barrier),
+        "SACCADE_DOUBLE_BUFFER": "1" if flags["double_buffer"] else "0",
+        "SACCADE_GPU_DECODE": "0" if flags["no_gpu_decode"] else "1",
+        "SACCADE_MAIN_NMS_GRAPHED": "1" if flags["main_nms_graphed"] else "0",
+    }
+    named = set(_launch_environment_keys())
+    if set(derived) != named:
+        raise _ProjectionUndecidable(
+            f"this derivation covers {sorted(derived)} and the contract names {sorted(named)}"
+        )
+    return derived
+
+
+def _launch_environment_keys() -> tuple[str, ...]:
+    contract = _load_contract(PRODUCER_ARTIFACTS["runtime_binding.json"])
+    observation = contract["$defs"]["launch_observation"]
+    return tuple(observation["properties"]["environment"]["required"])
+
+
+_PROJECTION_PREDICATE = "runtime_projection_matches_resolved_run_spec"
 
 
 def _check_result_binding(documents: Mapping[str, Any]) -> list[str]:
@@ -639,6 +798,7 @@ CHECKS = (
     "artifact_schemas",
     "checksum_closure",
     "execution_binding",
+    "launch_projection",
     "projection_binding",
     "result_binding",
     "run_spec_binding",
@@ -695,6 +855,7 @@ def verify_archive(root: Path) -> dict[str, Any]:
     reasons_by_check: dict[str, list[str]] = {
         "artifact_schemas": _check_artifact_schemas(documents, raws),
         "execution_binding": _check_execution_binding(documents),
+        "launch_projection": _check_launch_projection(documents),
         "projection_binding": _check_projection_binding(documents),
         "result_binding": _check_result_binding(documents),
         "run_spec_binding": _check_run_spec_binding(documents),

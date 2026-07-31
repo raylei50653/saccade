@@ -258,8 +258,7 @@ UNDECIDED_STATES: tuple[str, ...] = ("error", "not_run")
 # is the partition, so it may not drift between the two vocabularies.
 SUCCESSOR_PREDICATES: tuple[tuple[str, str], ...] = (
     ("bound_input_unchanged", "input_mutated"),
-    ("behavior_probe_equals_spec", "behavior_probe_moved"),
-    ("runtime_binding_matches_spec", "runtime_binding_mismatch"),
+    ("runtime_projection_matches_resolved_run_spec", "runtime_binding_mismatch"),
     ("capture_off_on_equal", "capture_perturbs_policy"),
     ("packets_valid", "packet_invalid"),
     ("execution_complete", "unclassified_execution_failure"),
@@ -269,12 +268,21 @@ SUCCESSOR_PREDICATES: tuple[tuple[str, str], ...] = (
 # the legacy spelling, so the two must remain mutually resolvable.
 SUCCESSOR_TO_LEGACY_PREDICATE: dict[str, str] = {
     "bound_input_unchanged": "bound_input_mutated",
-    "behavior_probe_equals_spec": "behavior_probe_equals_freeze",
-    "runtime_binding_matches_spec": "layer_p_certificate_matches_freeze",
     "capture_off_on_equal": "capture_off_on_equal",
     "packets_valid": "packets_valid",
     "execution_complete": "execution_complete",
 }
+
+# One successor predicate is not a rename of anything. The legacy
+# `layer_p_certificate_matches_freeze` compared a whole binding against a
+# published certificate — the gate Correction 5 retired. Its successor compares
+# a narrower quantity against a different authority: the RunSpec-owned launch
+# projection, recomputed from the resolved RunSpec the archive itself carries.
+# Mapping the two names would claim they measure the same thing, which is how a
+# retired gate returns through a rename.
+SUCCESSOR_WITHOUT_LEGACY_PREDICATE: frozenset[str] = frozenset(
+    {"runtime_projection_matches_resolved_run_spec"}
+)
 
 # The rename that also flips polarity: the legacy predicate is true when the
 # world is *broken*, the successor predicate is true when it is intact. A
@@ -287,6 +295,14 @@ INVERTED_POLARITY_PREDICATES = frozenset({"bound_input_unchanged"})
 LEGACY_RESULT_SUPERSEDED_BY: dict[str, str] = {
     "certificate_mismatch": "runtime_binding_mismatch",
 }
+
+# Correction 10 retires a verdict chain rather than renaming it. `behavior_probe_moved`
+# keeps its terminal for the historical archives that recorded it, and is refused
+# to a successor archive: nothing in a successor execution may select it, because
+# the comparison that once produced it has no normative right-hand side left. It
+# has no successor spelling and no superseding token — the finding is gone, not
+# moved, and a probe is now a diagnostic observation.
+RETIRED_SUCCESSOR_RESULTS: frozenset[str] = frozenset({"behavior_probe_moved"})
 
 # Layer P's retained stages in order (§ Review Correction 5). The first two run
 # before any bytes are bound, so a failure there forms no archive at all — which
@@ -324,18 +340,28 @@ RESULT_REQUIRES_INPUT_MUTATION = "input_mutated"
 #     `h2_runtime_binding_v1` requires at every stage (`runtime_inputs`,
 #     `executed_surfaces`, `capture_abi`, `source_audit`, `input_monitor`), so they
 #     survive a build failure. `input_mutated` belongs here because the monitor
-#     starts before the binding by contract;
-#   * probe-derived — needs the computed identity probe, which exists only when no
-#     stage failed;
+#     starts before the binding by contract. **`runtime_binding_mismatch` left this
+#     class in Correction 10**: it was stage-independent because the whole binding
+#     was compared against a published reference, and every member of that
+#     comparison existed at every bindable stage. Narrowed to the RunSpec-owned
+#     launch projection, its left-hand side is what a launch boundary actually
+#     received — which no stage failure ever reaches;
+#   * probe-derived — **empty, and empty is the claim.** The behaviour probe was
+#     the sole member, and Correction 10 retires the verdict chain it stood in:
+#     Correction 5 had already retired the published probe and the Layer-P
+#     certificate as gates, leaving `behavior_probe_equals_spec` a name with no
+#     normative right-hand side. A probe is worth recording and is recorded, as a
+#     diagnostic observation that selects nothing;
 #   * run-derived — needs a measurement run to have started; no run starts until
 #     every retained stage completed, and Correction 5's measurement mode is
 #     fail-fast, so a stage failure means these findings cannot exist yet.
-STAGE_INDEPENDENT_RESULTS: tuple[str, ...] = (
-    "input_mutated",
+STAGE_INDEPENDENT_RESULTS: tuple[str, ...] = ("input_mutated",)
+PROBE_DERIVED_RESULTS: tuple[str, ...] = ()
+RUN_DERIVED_RESULTS: tuple[str, ...] = (
+    "capture_perturbs_policy",
+    "packet_invalid",
     "runtime_binding_mismatch",
 )
-PROBE_DERIVED_RESULTS: tuple[str, ...] = ("behavior_probe_moved",)
-RUN_DERIVED_RESULTS: tuple[str, ...] = ("capture_perturbs_policy", "packet_invalid")
 RUN_STATES: tuple[str, ...] = ("completed", "failed", "not_run")
 RUN_NOT_STARTED_STATE = "not_run"
 
@@ -767,6 +793,16 @@ def binding_agreement_reasons(
         return ()
 
     reasons: list[str] = []
+    if result in RETIRED_SUCCESSOR_RESULTS:
+        # The retirement stated where a successor archive is read, not only in the
+        # schema enum that keeps the token out. A historical archive that recorded
+        # it still parses and still selects its terminal; a successor observation
+        # may not reach it at all, because the comparison that produced it has no
+        # normative right-hand side left (§ Review Correction 10).
+        reasons.append(
+            f"{result} is retired: it names a comparison the successor path no "
+            "longer makes, and a probe now selects nothing"
+        )
     required = RESULT_REQUIRES_FAILED_STAGE.get(result)
     if required is not None and failed_stage != required:
         reasons.append(
@@ -855,6 +891,77 @@ def binding_agreement_reasons(
     return tuple(reasons)
 
 
+def launch_projection_reasons(
+    projection: Mapping[str, Any] | None,
+    *,
+    failed_stage: str | None,
+    ordered_runs: Sequence[Mapping[str, Any]],
+    resolved_run_spec_digest: str,
+) -> tuple[str, ...]:
+    """Cross-artifact correspondence for the recorded launch projection.
+
+    Correction 10 narrowed `runtime_binding_mismatch` to what a launch boundary
+    received, which makes the observation's *correspondence to the run plan* a
+    precondition for the finding rather than part of it. The distinction this
+    enforces is the one the owner drew:
+
+    * a projection whose values differ from the resolved RunSpec is a truthful
+      negative — the predicate fails, the archive is valid, and none of that is
+      decided here;
+    * a projection with a missing, doubled, foreign or unreachable observation
+      is **unusable evidence**. The execution did not disagree with its spec; the
+      record failed to say what happened, and calling that a mismatch would
+      convert a bookkeeping failure into a measurement finding.
+
+    Reachability runs in the same direction as everywhere else: a run that never
+    started reaches no launch boundary, so an observation for it is fabricated,
+    and no observation may be synthesised for it either.
+    """
+    launched = [
+        str(run.get("run_id"))
+        for run in ordered_runs
+        if run.get("state") != RUN_NOT_STARTED_STATE
+    ]
+    if failed_stage is not None:
+        if projection is not None:
+            return (
+                f"failed_stage {failed_stage!r} stopped the execution before any run "
+                "reached a launch boundary, so the binding records no launch "
+                "projection",
+            )
+        return ()
+    if projection is None:
+        return (
+            "no stage failed, so the runs reached a launch boundary and the binding "
+            "must record what it received",
+        )
+    reasons: list[str] = []
+    if projection.get("resolved_run_spec_digest") != resolved_run_spec_digest:
+        reasons.append(
+            "the launch projection was taken against a different resolved RunSpec "
+            "than the one the binding names"
+        )
+    observations = projection.get("observations")
+    if not isinstance(observations, list):
+        return (*reasons, "the launch projection records no observations")
+    observed = [str(item.get("run_id")) for item in observations]
+    if len(observed) != len(set(observed)):
+        reasons.append("the launch projection records a run more than once")
+    missing = sorted(set(launched) - set(observed))
+    if missing:
+        reasons.append(
+            f"runs {missing} reached a launch boundary and the projection records "
+            "nothing they received"
+        )
+    unreachable = sorted(set(observed) - set(launched))
+    if unreachable:
+        reasons.append(
+            f"the projection records what runs {unreachable} received, and no run "
+            "of that name started"
+        )
+    return tuple(reasons)
+
+
 def _named_execution_result(named: str | None, default: str) -> str:
     """Let the caller name terminal 4's cause; every legal name still maps to it."""
     if named is None:
@@ -934,8 +1041,15 @@ def as_payload() -> dict[str, Any]:
             "decided_failure_outranks_undecided": True,
             "undecided_requires_incomplete_execution": True,
             "predicate_renames": dict(SUCCESSOR_TO_LEGACY_PREDICATE),
+            # Not every successor predicate renames a legacy one, and saying so is
+            # what stops a reader from inferring the missing mapping.
+            "predicates_without_a_legacy_name": sorted(
+                SUCCESSOR_WITHOUT_LEGACY_PREDICATE
+            ),
             "inverted_polarity_predicates": sorted(INVERTED_POLARITY_PREDICATES),
             "legacy_result_superseded_by": dict(LEGACY_RESULT_SUPERSEDED_BY),
+            # Retired, not superseded: no successor observation selects these.
+            "retired_successor_results": sorted(RETIRED_SUCCESSOR_RESULTS),
             # The cross-artifact rules. A named finding also requires its own
             # predicate to be `fail`: an undecided predicate names nothing, or two
             # results would share one terminal for one observation.

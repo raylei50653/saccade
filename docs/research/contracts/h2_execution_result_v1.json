@@ -72,17 +72,13 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "behavior_probe_equals_spec",
         "bound_input_unchanged",
         "capture_off_on_equal",
         "execution_complete",
         "packets_valid",
-        "runtime_binding_matches_spec"
+        "runtime_projection_matches_resolved_run_spec"
       ],
       "properties": {
-        "behavior_probe_equals_spec": {
-          "$ref": "#/$defs/predicate_result"
-        },
         "bound_input_unchanged": {
           "$ref": "#/$defs/predicate_result"
         },
@@ -95,7 +91,7 @@
         "packets_valid": {
           "$ref": "#/$defs/predicate_result"
         },
-        "runtime_binding_matches_spec": {
+        "runtime_projection_matches_resolved_run_spec": {
           "$ref": "#/$defs/predicate_result"
         }
       }
@@ -124,7 +120,6 @@
       "enum": [
         "measurement_pass",
         "input_mutated",
-        "behavior_probe_moved",
         "runtime_binding_mismatch",
         "capture_perturbs_policy",
         "packet_invalid",
@@ -214,7 +209,6 @@
           "result": {
             "enum": [
               "input_mutated",
-              "behavior_probe_moved",
               "runtime_binding_mismatch"
             ]
           }
@@ -403,48 +397,6 @@
       "if": {
         "properties": {
           "result": {
-            "const": "behavior_probe_moved"
-          }
-        },
-        "required": [
-          "result"
-        ]
-      },
-      "then": {
-        "properties": {
-          "predicate_results": {
-            "properties": {
-              "behavior_probe_equals_spec": {
-                "properties": {
-                  "state": {
-                    "const": "fail"
-                  }
-                }
-              },
-              "bound_input_unchanged": {
-                "properties": {
-                  "state": {
-                    "not": {
-                      "const": "fail"
-                    }
-                  }
-                }
-              }
-            },
-            "required": [
-              "behavior_probe_equals_spec"
-            ]
-          }
-        },
-        "required": [
-          "predicate_results"
-        ]
-      }
-    },
-    {
-      "if": {
-        "properties": {
-          "result": {
             "const": "runtime_binding_mismatch"
           }
         },
@@ -456,7 +408,7 @@
         "properties": {
           "predicate_results": {
             "properties": {
-              "runtime_binding_matches_spec": {
+              "runtime_projection_matches_resolved_run_spec": {
                 "properties": {
                   "state": {
                     "const": "fail"
@@ -471,19 +423,10 @@
                     }
                   }
                 }
-              },
-              "behavior_probe_equals_spec": {
-                "properties": {
-                  "state": {
-                    "not": {
-                      "const": "fail"
-                    }
-                  }
-                }
               }
             },
             "required": [
-              "runtime_binding_matches_spec"
+              "runtime_projection_matches_resolved_run_spec"
             ]
           }
         },
@@ -523,16 +466,7 @@
                   }
                 }
               },
-              "behavior_probe_equals_spec": {
-                "properties": {
-                  "state": {
-                    "not": {
-                      "const": "fail"
-                    }
-                  }
-                }
-              },
-              "runtime_binding_matches_spec": {
+              "runtime_projection_matches_resolved_run_spec": {
                 "properties": {
                   "state": {
                     "not": {
@@ -583,16 +517,7 @@
                   }
                 }
               },
-              "behavior_probe_equals_spec": {
-                "properties": {
-                  "state": {
-                    "not": {
-                      "const": "fail"
-                    }
-                  }
-                }
-              },
-              "runtime_binding_matches_spec": {
+              "runtime_projection_matches_resolved_run_spec": {
                 "properties": {
                   "state": {
                     "not": {
@@ -662,16 +587,7 @@
                   }
                 }
               },
-              "behavior_probe_equals_spec": {
-                "properties": {
-                  "state": {
-                    "not": {
-                      "const": "fail"
-                    }
-                  }
-                }
-              },
-              "runtime_binding_matches_spec": {
+              "runtime_projection_matches_resolved_run_spec": {
                 "properties": {
                   "state": {
                     "not": {
@@ -737,7 +653,7 @@
             "properties": {
               "predicate_results": {
                 "properties": {
-                  "behavior_probe_equals_spec": {
+                  "runtime_projection_matches_resolved_run_spec": {
                     "properties": {
                       "state": {
                         "$ref": "#/$defs/undecided_state"
@@ -746,28 +662,7 @@
                   }
                 },
                 "required": [
-                  "behavior_probe_equals_spec"
-                ]
-              }
-            },
-            "required": [
-              "predicate_results"
-            ]
-          },
-          {
-            "properties": {
-              "predicate_results": {
-                "properties": {
-                  "runtime_binding_matches_spec": {
-                    "properties": {
-                      "state": {
-                        "$ref": "#/$defs/undecided_state"
-                      }
-                    }
-                  }
-                },
-                "required": [
-                  "runtime_binding_matches_spec"
+                  "runtime_projection_matches_resolved_run_spec"
                 ]
               }
             },
@@ -1211,8 +1106,7 @@
       "type": "object",
       "required": [
         "bound_input_unchanged",
-        "behavior_probe_equals_spec",
-        "runtime_binding_matches_spec",
+        "runtime_projection_matches_resolved_run_spec",
         "capture_off_on_equal",
         "packets_valid",
         "execution_complete"
@@ -1225,14 +1119,7 @@
             }
           }
         },
-        "behavior_probe_equals_spec": {
-          "properties": {
-            "state": {
-              "const": "pass"
-            }
-          }
-        },
-        "runtime_binding_matches_spec": {
+        "runtime_projection_matches_resolved_run_spec": {
           "properties": {
             "state": {
               "const": "pass"

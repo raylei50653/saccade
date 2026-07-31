@@ -108,6 +108,57 @@ def predicate_names() -> tuple[str, ...]:
     return tuple(_result_contract()["properties"]["predicate_results"]["required"])
 
 
+def runspec_environment_keys() -> tuple[str, ...]:
+    """The RunSpec-owned launch keys, named by the frozen binding schema.
+
+    Shared vocabulary, not a shared derivation: the verifier reads the same key
+    names and computes their values with its own implementation, because two
+    calls into one helper prove only that the helper is deterministic (§ 20.8).
+    """
+    observation = _binding_contract()["$defs"]["launch_observation"]
+    return tuple(observation["properties"]["environment"]["required"])
+
+
+PROJECTION_PREDICATE = "runtime_projection_matches_resolved_run_spec"
+
+
+def canonical_launch_environment(run_spec: Mapping[str, Any]) -> dict[str, str]:
+    """What the RunSpec says a launch boundary should receive. The canonical API."""
+    projected = run_spec_module.environment_projection(run_spec)
+    expected = set(runspec_environment_keys())
+    if set(projected) != expected:
+        raise ProducerError(
+            f"the canonical projection covers {sorted(projected)}, and the binding "
+            f"contract names {sorted(expected)}"
+        )
+    return dict(projected)
+
+
+def projection_disagreements(
+    projection: Mapping[str, Any], *, run_spec: Mapping[str, Any]
+) -> list[str]:
+    """Per-run value disagreements between what was received and what was specified.
+
+    Only values. Cardinality, run-id correspondence and reachability are checked
+    by the caller before this runs, because a projection that does not correspond
+    to the run plan is unusable evidence rather than a measurement finding: the
+    execution did not disagree with its spec, the record failed to say what
+    happened.
+    """
+    canonical = canonical_launch_environment(run_spec)
+    reasons: list[str] = []
+    for observation in projection["observations"]:
+        observed = observation["environment"]
+        for key in sorted(canonical):
+            if observed.get(key) != canonical[key]:
+                reasons.append(
+                    f"{observation['run_id']}: the launch boundary received "
+                    f"{key}={observed.get(key)!r}, and the resolved RunSpec "
+                    f"specifies {canonical[key]!r}"
+                )
+    return reasons
+
+
 # -- projecting the retained modules' evidence into the frozen shapes -------- #
 
 
@@ -233,7 +284,7 @@ class StageEvidence:
     failed_stage: str | None = None
     build_artifacts: Sequence[Mapping[str, Any]] | None = None
     extension_load: Mapping[str, Any] | None = None
-    identity_probe: Mapping[str, Any] | None = None
+    diagnostics: Mapping[str, Any] | None = None
 
 
 def build_runtime_binding(
@@ -242,6 +293,7 @@ def build_runtime_binding(
     run_spec: Mapping[str, Any],
     stages: StageEvidence,
     input_monitor: Mapping[str, Any],
+    projection: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Assemble `runtime_binding.json` and refuse to emit one the schema rejects."""
     surfaces, abi = declared_content(run_spec["execution_semantics_projection"])
@@ -263,8 +315,10 @@ def build_runtime_binding(
         document["build_artifacts"] = [dict(item) for item in stages.build_artifacts]
     if stages.extension_load is not None:
         document["extension_load"] = dict(stages.extension_load)
-    if stages.identity_probe is not None:
-        document["identity_probe"] = dict(stages.identity_probe)
+    if stages.diagnostics is not None:
+        document["diagnostics"] = dict(stages.diagnostics)
+    if projection is not None:
+        document["runtime_projection"] = dict(projection)
     _validate(document, "runtime_binding.json")
     return document
 
@@ -376,13 +430,26 @@ class Stages(Protocol):
         """
 
 
+@dataclass(frozen=True)
+class RunEvidence:
+    """What the four ordered runs produced, and what their launches received.
+
+    `launch_projection` is an *observation*, not a verdict: the runs record what
+    the launch boundary was handed, and this module compares it against the
+    canonical projection. A `Runs` implementation that returned a comparison
+    would be deciding the predicate from the same side that produced its input.
+    """
+
+    ordered_runs: list[dict[str, Any]]
+    predicate_results: dict[str, Any]
+    launch_projection: Mapping[str, Any]
+    execution_result: str | None = None
+
+
 class Runs(Protocol):
     """The four ordered measurement runs, and the predicates they decide."""
 
-    def run(
-        self, stages: StageEvidence
-    ) -> tuple[list[dict], dict[str, Any], str | None]:
-        """Return `(ordered_runs, predicate_results, execution_result)`."""
+    def run(self, stages: StageEvidence) -> RunEvidence: ...
 
 
 def unstarted_runs() -> list[dict[str, Any]]:
@@ -441,13 +508,23 @@ class Execution:
             # would have decided may be reported as decided.
             ordered = unstarted_runs()
             named: str | None = _stage_result(evidence_record.failed_stage)
+            projection: Mapping[str, Any] | None = None
             monitor = self.stages.close()
             predicates = undecided_predicates(decided=_stage_decided(monitor))
         else:
-            ordered, predicates, named = self.runs.run(evidence_record)
+            run_evidence = self.runs.run(evidence_record)
+            ordered = run_evidence.ordered_runs
+            named = run_evidence.execution_result
+            projection = run_evidence.launch_projection
             # After the runs, never before: the monitor's record is the whole
             # execution's, and the runs are inside it.
             monitor = self.stages.close()
+            predicates = {
+                **run_evidence.predicate_results,
+                PROJECTION_PREDICATE: _projection_predicate(
+                    projection, run_spec=spec, ordered_runs=ordered
+                ),
+            }
 
         observation = _snapshot(predicates)
         binding = build_runtime_binding(
@@ -455,6 +532,7 @@ class Execution:
             run_spec=spec,
             stages=evidence_record,
             input_monitor=monitor,
+            projection=projection,
         )
         result = build_result(
             execution_id=self.execution_id,
@@ -469,6 +547,37 @@ class Execution:
         )
         emit_archive(root, run_spec=spec, runtime_binding=binding, result=result)
         return result
+
+
+def _projection_predicate(
+    projection: Mapping[str, Any],
+    *,
+    run_spec: Mapping[str, Any],
+    ordered_runs: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Decide the projection predicate: correspondence first, then values.
+
+    Correspondence is the ruler's cross-artifact rule, imported rather than
+    restated, and a failure of it is refused outright — an archive whose
+    projection does not correspond to its own run plan is not evidence of a
+    disagreement, so emitting it as `runtime_binding_mismatch` would report a
+    bookkeeping failure as a measurement finding. Only once the observation
+    corresponds does the value comparison decide pass or fail, and a `fail` is a
+    truthful negative that the archive records and the verifier accepts.
+    """
+    unusable = partition.launch_projection_reasons(
+        projection,
+        failed_stage=None,
+        ordered_runs=ordered_runs,
+        resolved_run_spec_digest=run_spec["resolved_run_spec_digest"],
+    )
+    if unusable:
+        raise ProducerError(
+            "the recorded launch projection does not correspond to the run plan: "
+            + "; ".join(unusable)
+        )
+    reasons = projection_disagreements(projection, run_spec=run_spec)
+    return {"reasons": reasons, "state": "fail" if reasons else "pass"}
 
 
 def _stage_decided(monitor: Mapping[str, Any]) -> dict[str, str]:
