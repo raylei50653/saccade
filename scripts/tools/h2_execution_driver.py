@@ -306,6 +306,27 @@ class LayerPStages:
 # -- Runs: the four ordered measurement runs -------------------------------- #
 
 
+@dataclass(frozen=True)
+class LaunchSite:
+    """The two facts `launch_ordered_runs` reads off a bundle, and nothing else.
+
+    The legacy `LaunchBundle` carries a freeze, a certificate, a reference probe
+    and a published identity because the legacy controller checks an execution
+    against them. Correction 5 retired those as successor gates, and a diagnostic
+    has no `F` to build one from — so what the launches actually need is stated
+    here instead of a bundle-shaped object with five members left empty.
+
+    Empty members would be worse than absent ones: `bundle.runtime_manifest` and
+    `bundle.freeze` are read elsewhere in the legacy controller, and a stub that
+    answers them would let a code path that believes it is holding a freeze run
+    against something that never was one. This object answers the two questions
+    the launch path asks and raises on everything else.
+    """
+
+    build_dir: Path
+    head: str
+
+
 @dataclass
 class MeasurementRuns:
     """Launch Layer M's four ordered runs and transcribe what came back.
@@ -580,7 +601,18 @@ def _error() -> dict[str, Any]:
 
 
 def bound_paths(*, build_dir: Path) -> tuple[Path, ...]:
-    """Every path this execution binds, for the monitor to watch from the start."""
+    """Every path this execution binds, for the monitor to watch from the start.
+
+    When the build directory does not exist yet, the build artifacts are left out
+    — not silently, but because an execution that builds inside itself cannot
+    watch its own outputs from before it started. The monitor must start ahead of
+    the binding, and at that moment those files do not exist; watching their
+    parent instead would record this execution's own build as a change to a bound
+    input. What binds them is content, not surveillance: the manifest, the
+    `build_artifacts` members and the load witness all record their digests after
+    the build, and the RunSpec projection pins the executed surfaces. The watch
+    covers the inputs the execution consumed and did not create.
+    """
     import h2_behavioral_identity as identity
 
     discovered = runtime_inputs.discover_bound_paths(build_dir=build_dir)
