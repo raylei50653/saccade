@@ -430,6 +430,7 @@ deleting.
 | `run_gctm_d1_diagnostic.py` | experiment | cli | GCTM D1 substrate-agnostic ranking diagnostic runner. |
 | `run_h0_phase_a.py` | stable | cli | A7/RC1 fail-closed Phase-A parent controller. |
 | `run_h0_phase_a_child.py` | stable | - | RC1 fixed Phase-A runtime child (parent-only entry point). |
+| `run_h2_execution.py` | stable | cli | Produce one H2 successor execution archive: three artifacts, no verdict about itself. |
 | `run_h2_layer_p.py` | stable | cli | H2 Layer P: retryable pre-seal plumbing, with no epistemic budget attached. |
 | `run_h2_measurement.py` | stable | cli | H2 S4 Phase-A Layer-M controller. |
 | `run_h2_measurement_child.py` | stable | cli | H2 Phase-A measurement child and recorder. |
