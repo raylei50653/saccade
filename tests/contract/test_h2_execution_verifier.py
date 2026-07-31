@@ -176,6 +176,42 @@ _RUN_SPEC = _run_spec()
 _SPEC_DIGEST = _RUN_SPEC["resolved_run_spec_digest"]
 _PROJECTION_DIGEST = _RUN_SPEC["execution_semantics_projection_digest"]
 
+# What the launch boundary received, synthesised from the frozen profile's own
+# namespace by this file's reading of the four RunSpec-owned keys. Deriving it
+# by calling either implementation would make the fixture agree with whichever
+# one it called, which is the circularity § 5.3 forbids.
+_LAUNCH_ENVIRONMENT: dict[str, str] = {
+    "SACCADE_DETECT_BARRIER": (
+        "event"
+        if _RUN_SPEC["resolved_namespace"]["double_buffer"]
+        else (_RUN_SPEC["resolved_namespace"].get("detect_barrier") or "full")
+    ),
+    "SACCADE_DOUBLE_BUFFER": (
+        "1" if _RUN_SPEC["resolved_namespace"]["double_buffer"] else "0"
+    ),
+    "SACCADE_GPU_DECODE": (
+        "0" if _RUN_SPEC["resolved_namespace"]["no_gpu_decode"] else "1"
+    ),
+    "SACCADE_MAIN_NMS_GRAPHED": (
+        "1" if _RUN_SPEC["resolved_namespace"]["main_nms_graphed"] else "0"
+    ),
+}
+
+
+def _launch_projection(
+    *, environment: dict[str, Any] | None = None, run_ids: tuple[str, ...] = RUN_IDS
+) -> dict[str, Any]:
+    received = _LAUNCH_ENVIRONMENT if environment is None else environment
+    return {
+        "observations": [
+            {"environment": dict(received), "run_id": run_id} for run_id in run_ids
+        ],
+        "resolved_run_spec_digest": _SPEC_DIGEST,
+    }
+
+
+_LAUNCH_PROJECTION = _launch_projection()
+
 
 def _binding(**overrides: Any) -> dict[str, Any]:
     declared = _by_path()
@@ -204,13 +240,15 @@ def _binding(**overrides: Any) -> dict[str, Any]:
             "sha256": _EXTENSION_DIGEST,
         },
         "failed_stage": None,
-        "identity_probe": {
-            "build_artifact_digest": _EXTENSION_DIGEST,
-            "digest": _fake("probe"),
-            "role": "recorded_observation_not_equivalence_or_gate",
-            "schema": "h2_behavior_probe_result_v1",
-            "state": "computed",
+        "diagnostics": {
+            "behavior_probe": {
+                "digest": _fake("probe"),
+                "role": "recorded_diagnostic_observation_selects_nothing",
+                "schema": "h2_behavior_probe_result_v1",
+                "state": "computed",
+            }
         },
+        "runtime_projection": _LAUNCH_PROJECTION,
         "input_monitor": {
             "changed_count": 0,
             "final_drain_clean": True,
@@ -412,6 +450,7 @@ def test_a_stage_failure_that_names_a_started_run_is_invalid(tmp_path: Path) -> 
         tmp_path,
         binding=_binding(
             failed_stage="build",
+            runtime_projection=_ABSENT,
             build_artifacts=[
                 {
                     "length": 4096,
@@ -442,6 +481,7 @@ def test_a_stage_failure_must_name_the_result_its_stage_requires(
         tmp_path,
         binding=_binding(
             failed_stage="build",
+            runtime_projection=_ABSENT,
             build_artifacts=[
                 {
                     "length": 4096,
@@ -578,7 +618,7 @@ def test_a_non_object_runtime_binding_is_a_verdict_not_an_unformable_archive(
     and this artifact's digest from its bytes — so every required member of the
     verification record can be filled. A `runtime_binding.json` that is not an
     object is therefore a schema violation inside a formable archive, and the
-    three checks that need to read it say so individually.
+    four checks that need to read it say so individually.
     """
     root = _archive(tmp_path)
     (root / "runtime_binding.json").write_bytes(b"[]\n")
@@ -590,6 +630,7 @@ def test_a_non_object_runtime_binding_is_a_verdict_not_an_unformable_archive(
         "artifact_schemas": False,
         "checksum_closure": True,
         "execution_binding": False,
+        "launch_projection": False,
         "projection_binding": False,
         "result_binding": False,
         "run_spec_binding": False,

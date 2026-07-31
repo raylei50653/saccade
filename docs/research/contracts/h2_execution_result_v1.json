@@ -652,17 +652,6 @@
           {
             "properties": {
               "predicate_results": {
-                "properties": {},
-                "required": []
-              }
-            },
-            "required": [
-              "predicate_results"
-            ]
-          },
-          {
-            "properties": {
-              "predicate_results": {
                 "properties": {
                   "runtime_projection_matches_resolved_run_spec": {
                     "properties": {

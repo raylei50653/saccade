@@ -793,6 +793,16 @@ def binding_agreement_reasons(
         return ()
 
     reasons: list[str] = []
+    if result in RETIRED_SUCCESSOR_RESULTS:
+        # The retirement stated where a successor archive is read, not only in the
+        # schema enum that keeps the token out. A historical archive that recorded
+        # it still parses and still selects its terminal; a successor observation
+        # may not reach it at all, because the comparison that produced it has no
+        # normative right-hand side left (§ Review Correction 10).
+        reasons.append(
+            f"{result} is retired: it names a comparison the successor path no "
+            "longer makes, and a probe now selects nothing"
+        )
     required = RESULT_REQUIRES_FAILED_STAGE.get(result)
     if required is not None and failed_stage != required:
         reasons.append(
@@ -877,6 +887,77 @@ def binding_agreement_reasons(
         reasons.append(
             "a recorded input change outranks every other finding, so it requires "
             f"result {RESULT_REQUIRES_INPUT_MUTATION!r}, and the result is {result!r}"
+        )
+    return tuple(reasons)
+
+
+def launch_projection_reasons(
+    projection: Mapping[str, Any] | None,
+    *,
+    failed_stage: str | None,
+    ordered_runs: Sequence[Mapping[str, Any]],
+    resolved_run_spec_digest: str,
+) -> tuple[str, ...]:
+    """Cross-artifact correspondence for the recorded launch projection.
+
+    Correction 10 narrowed `runtime_binding_mismatch` to what a launch boundary
+    received, which makes the observation's *correspondence to the run plan* a
+    precondition for the finding rather than part of it. The distinction this
+    enforces is the one the owner drew:
+
+    * a projection whose values differ from the resolved RunSpec is a truthful
+      negative — the predicate fails, the archive is valid, and none of that is
+      decided here;
+    * a projection with a missing, doubled, foreign or unreachable observation
+      is **unusable evidence**. The execution did not disagree with its spec; the
+      record failed to say what happened, and calling that a mismatch would
+      convert a bookkeeping failure into a measurement finding.
+
+    Reachability runs in the same direction as everywhere else: a run that never
+    started reaches no launch boundary, so an observation for it is fabricated,
+    and no observation may be synthesised for it either.
+    """
+    launched = [
+        str(run.get("run_id"))
+        for run in ordered_runs
+        if run.get("state") != RUN_NOT_STARTED_STATE
+    ]
+    if failed_stage is not None:
+        if projection is not None:
+            return (
+                f"failed_stage {failed_stage!r} stopped the execution before any run "
+                "reached a launch boundary, so the binding records no launch "
+                "projection",
+            )
+        return ()
+    if projection is None:
+        return (
+            "no stage failed, so the runs reached a launch boundary and the binding "
+            "must record what it received",
+        )
+    reasons: list[str] = []
+    if projection.get("resolved_run_spec_digest") != resolved_run_spec_digest:
+        reasons.append(
+            "the launch projection was taken against a different resolved RunSpec "
+            "than the one the binding names"
+        )
+    observations = projection.get("observations")
+    if not isinstance(observations, list):
+        return (*reasons, "the launch projection records no observations")
+    observed = [str(item.get("run_id")) for item in observations]
+    if len(observed) != len(set(observed)):
+        reasons.append("the launch projection records a run more than once")
+    missing = sorted(set(launched) - set(observed))
+    if missing:
+        reasons.append(
+            f"runs {missing} reached a launch boundary and the projection records "
+            "nothing they received"
+        )
+    unreachable = sorted(set(observed) - set(launched))
+    if unreachable:
+        reasons.append(
+            f"the projection records what runs {unreachable} received, and no run "
+            "of that name started"
         )
     return tuple(reasons)
 

@@ -58,6 +58,7 @@
         "artifact_schemas",
         "checksum_closure",
         "execution_binding",
+        "launch_projection",
         "projection_binding",
         "result_binding",
         "run_spec_binding"
@@ -70,6 +71,9 @@
           "type": "boolean"
         },
         "execution_binding": {
+          "type": "boolean"
+        },
+        "launch_projection": {
           "type": "boolean"
         },
         "projection_binding": {
@@ -120,6 +124,7 @@
         "artifact_schemas",
         "checksum_closure",
         "execution_binding",
+        "launch_projection",
         "projection_binding",
         "result_binding",
         "run_spec_binding"
@@ -132,6 +137,9 @@
           "const": true
         },
         "execution_binding": {
+          "const": true
+        },
+        "launch_projection": {
           "const": true
         },
         "projection_binding": {

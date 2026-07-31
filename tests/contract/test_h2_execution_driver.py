@@ -789,5 +789,5 @@ def test_the_producers_protocols_are_what_this_driver_implements() -> None:
         "failed_stage",
         "build_artifacts",
         "extension_load",
-        "identity_probe",
+        "diagnostics",
     }

@@ -30,6 +30,8 @@ Phase B's terminal 1 meaning bound-input mutation alone.
 
 from __future__ import annotations
 
+import itertools
+
 import json
 import sys
 from pathlib import Path
@@ -536,17 +538,68 @@ def _successor(**states: str) -> dict[str, dict[str, object]]:
     return record
 
 
-def test_the_two_vocabularies_describe_the_same_ordered_partition() -> None:
-    assert [result for _, result in tp.SUCCESSOR_PREDICATES] == [
+def test_the_successor_partition_is_the_legacy_one_minus_what_was_retired() -> None:
+    """Correction 10 shortened the partition; it did not reorder or renumber it.
+
+    The successor is the legacy order with the retired probe entry removed and
+    the certificate slot replaced by a narrower quantity that keeps the
+    superseded result token. Stating it as a derivation rather than as a second
+    literal list is the point: a future edit to either vocabulary that is not
+    also one of these two operations fails here.
+    """
+    expected = [
         tp.LEGACY_RESULT_SUPERSEDED_BY.get(result, result)
         for _, result in tp.ORDERED_PREDICATES
+        if result not in tp.RETIRED_SUCCESSOR_RESULTS
     ]
+    assert [result for _, result in tp.SUCCESSOR_PREDICATES] == expected
     assert [
-        tp.SUCCESSOR_TO_LEGACY_PREDICATE[key] for key, _ in tp.SUCCESSOR_PREDICATES
-    ] == [key for key, _ in tp.ORDERED_PREDICATES]
+        tp.SUCCESSOR_TO_LEGACY_PREDICATE[key]
+        for key, _ in tp.SUCCESSOR_PREDICATES
+        if key not in tp.SUCCESSOR_WITHOUT_LEGACY_PREDICATE
+    ] == [
+        key
+        for key, result in tp.ORDERED_PREDICATES
+        if result not in tp.RETIRED_SUCCESSOR_RESULTS
+        and result not in tp.LEGACY_RESULT_SUPERSEDED_BY
+    ]
     # Every renamed result still selects the terminal its legacy name selected.
     for legacy, successor in tp.LEGACY_RESULT_SUPERSEDED_BY.items():
         assert tp.RESULT_TO_TERMINAL[successor] == tp.RESULT_TO_TERMINAL[legacy]
+
+
+def test_a_retired_result_keeps_its_terminal_and_leaves_the_successor_vocabulary() -> (
+    None
+):
+    """Retired, not deleted: the historical archives that recorded it still parse.
+
+    `PROBE_DERIVED_RESULTS == ()` is the executable half of the same claim — no
+    successor observation reaches the finding, because the class it belonged to
+    is now empty.
+    """
+    assert tp.PROBE_DERIVED_RESULTS == ()
+    for retired in tp.RETIRED_SUCCESSOR_RESULTS:
+        assert retired in tp.RESULT_TO_TERMINAL
+        assert retired not in {result for _, result in tp.SUCCESSOR_PREDICATES}
+        assert retired not in tp.LEGACY_RESULT_SUPERSEDED_BY.values()
+
+
+def test_no_successor_observation_can_select_a_retired_result() -> None:
+    """Exhaustive over the predicate vector, not over the answers we expected."""
+    states = ("pass", "fail", "error", "not_run")
+    keys = [key for key, _ in tp.SUCCESSOR_PREDICATES]
+    for combination in itertools.product(states, repeat=len(keys)):
+        observation = {
+            key: {"reasons": [], "state": state}
+            for key, state in zip(keys, combination)
+        }
+        try:
+            selection = tp.select_successor_result(
+                observation, authority="exactly_once_measurement", phase="a"
+            )
+        except tp.PartitionError:
+            continue
+        assert selection.result not in tp.RETIRED_SUCCESSOR_RESULTS
 
 
 def test_the_inverted_predicate_is_the_one_whose_polarity_flipped() -> None:
@@ -554,7 +607,7 @@ def test_the_inverted_predicate_is_the_one_whose_polarity_flipped() -> None:
     inverted = {
         key
         for key, _ in tp.SUCCESSOR_PREDICATES
-        if tp.SUCCESSOR_TO_LEGACY_PREDICATE[key] in tp._TRUE_IS_FAILURE
+        if tp.SUCCESSOR_TO_LEGACY_PREDICATE.get(key) in tp._TRUE_IS_FAILURE
     }
     assert inverted == set(tp.INVERTED_POLARITY_PREDICATES)
     healthy = tp.select_successor_result(
@@ -573,8 +626,7 @@ def test_the_inverted_predicate_is_the_one_whose_polarity_flipped() -> None:
     ("failing", "expected_order"),
     [
         ("bound_input_unchanged", 1),
-        ("behavior_probe_equals_spec", 1),
-        ("runtime_binding_matches_spec", 1),
+        ("runtime_projection_matches_resolved_run_spec", 1),
         ("capture_off_on_equal", 2),
         ("packets_valid", 3),
         ("execution_complete", 4),
@@ -596,7 +648,6 @@ def test_a_decided_failure_outranks_an_undecided_predicate() -> None:
     """Otherwise killing a process on sight launders a banned terminal into 4."""
     selection = tp.select_successor_result(
         _successor(
-            behavior_probe_equals_spec="error",
             capture_off_on_equal="fail",
             execution_complete="fail",
         ),
