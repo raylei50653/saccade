@@ -1270,7 +1270,7 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
       `h2_execution_verification_v1.json` — republished 092c2c01 -> fd082481.
       The correction text then moves a fifth: `sealed_prefix` re-pinned
       100171 -> **108275 bytes / f53da415a67e78b5…**, which moves `.policy.yaml` and
-      forces the second republish (digest recorded in that commit's message).
+      forces a second republish, fd082481 -> **dd354e130b0b21a2…**.
       Both republishes move `identity_semantics` only; the probe and the other four axes
       do not move, and neither performs a controlled-host run or a native rebuild.
     tests: "full suite green (2881 passed); new: no successor predicate vector can select a retired result (exhaustive over the 4^5 state space), the retired token keeps its terminal and leaves the vocabulary, the launch projection is captured at the boundary"
