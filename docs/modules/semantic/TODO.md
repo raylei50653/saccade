@@ -121,7 +121,13 @@
   三個 rename／極性反轉／`certificate_mismatch` 被 `runtime_binding_mismatch` supersede、
   4 態 predicate 的兩條規則、六項 schema joint constraint、`valid ⇔ checks`；
   `build_failed`／`extension_load_failed` 重新入列而非併入 `runner_nonzero`）
-  → W3 archive-only verifier／checksum closure → W4 producer（需 build）
+  → W3 archive-only verifier／checksum closure（**已落地**：`verify_h2_execution.py`
+  只組合不持有規則 ⇒ 命中 `plumbing_only`、**不需 ruler edit／re-pin／republish**；
+  verdict 由 predicates 重算後才餵給 cross-artifact checker；
+  `verify_projection=False` 是 execution integrity 與已 retire 的 environment
+  reproducibility 之間那條線，並以 monkeypatch 機械證明；
+  可形成的 archive 之瑕疵記為 `valid: false`，填不出必填欄位者不寫紀錄並非零退出）
+  → W4 producer（需 build）
   → W5 closure**；W3 先於 W4 的理由＝#294→#295 的契約先行與 #302／#304 的
   guard-before-entry，且 W2–W3 不需 build ⇒ item 5 的 `build/h2_layer_p`
   位元不動。不是重建舊 items 4–5／`F` →
