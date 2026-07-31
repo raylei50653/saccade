@@ -1298,6 +1298,56 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
       traceback」那張參數化表;以及**「重算」若只拒絕相反決定,就沒有真的把重算結果記下來**——比較必須是相等。
     not_established: no execution; no build; no diagnostic run; no authorization; no F/S; no seal; no corpus admission; no equivalence claim
     next: "owner review / merge of PR #312 (re-pin, republish and full pre_push are all complete); after merge, W4b segment 2 — rename `build/h2_layer_p` aside and record its custody first (never delete), then build, bind the driver and run one non-qualifying diagnostic"
+  successor_w4b_first_bound_execution:
+    date: 2026-07-31
+    authority: "W4b charter row (five owner review points) + owner adjudication 2026-07-31 on the monitor/build fork: build first, bind the result (`--skip-build`)"
+    status: >-
+      first bound-driver execution ran; **`non_qualifying_diagnostic` /
+      `result: diagnostic_complete` / `terminal: null`**; the independent verifier records
+      `valid: true` with all seven checks passing. PR #312 merged as `a8af65d7`; this work sits on
+      `feat/h2-w4b-diagnostic-execution` (entry point `6dfc5249`, watch-set fix `342d457e`).
+    the_fork_the_owner_settled: >-
+      An execution that builds **inside** itself cannot watch its own build outputs: the monitor must
+      start before the binding, and at that moment the artifacts do not exist (`discover_bound_paths`
+      raises on an absent build dir; watching the parent would record the execution's own build as a
+      change to a bound input). Owner chose: **Layer P builds first, the diagnostic binds the result
+      with `--skip-build`** ⇒ the build artifacts stay under the watch for the whole run phase, as the
+      legacy controller's did. Cost: this run records the `build` stage as skipped, so the in-execution
+      build path is not what a measurement will exercise either — that is the precedent now set.
+      Two rejected options are recorded: watch only pre-existing inputs (weaker than legacy), and widen
+      `discover_bound_paths` to tolerate an absent build dir (ruler edit ⇒ re-pin + republish).
+    what_the_diagnostic_found: >-
+      **`00_capture_off` ran the complete sequence (1050 frames, 262.9 FPS) and the child's own recorder
+      rejected it: `raw binary32 emission rows differ from callback order`.** Mechanism, read off
+      `src/saccade/perception/eval/evaluator.py`: the sequence result callback receives `results_lines`
+      **after** deferred alias remapping, the low-quality tracklet filter and `interpolate_tracklets`,
+      while the child's `final_rows` come from the per-frame emission hook, which runs **before** all
+      three. This run interpolated 777 frames into 242 gaps ⇒ the two row sets cannot be equal.
+      **The frozen child asserts an invariant the RunSpec's own configuration falsifies** — the same
+      shape as the § 5.1.1 slot-order defect Layer P found for free, and found again before any
+      authorization existed to spend. Adjudication is the owner's: `run_h2_measurement_child.py` is an
+      execution-semantics member, so changing it moves the RunSpec's declared content projection
+      (it is **not** an `identity_semantics` member, so no re-pin/republish would follow).
+    fail_fast_recorded_truthfully: "runs 01–03 are `not_run` (never launched), `capture_off_on_equal` and `packets_valid` are `error` (the surviving evidence decides neither), `execution_complete` is `fail` with the child's reason, and `bound_input_unchanged` / `runtime_projection_matches_resolved_run_spec` both `pass`"
+    a_defect_this_found_in_the_driver: >-
+      `h2_execution_driver.bound_paths` read `tracked_files_for_class` from `h2_behavioral_identity`,
+      where it does not live (it is published by `build_runtime_identity`, which is where the legacy
+      controller's `_monitor_paths` reads it from). **Nothing had ever called the helper** — it exists
+      only for an entry point, and until W4b there was none — so the first real execution died before
+      its monitor started. Fixed, plus a test that calls it against the real repository.
+      ⚠️ 通用律:只有 CLI 會走到的 helper,就只有 CLI 會測到它;綁 entry point 時要把這種 helper 逐個實跑。
+    custody_of_the_superseded_build: >-
+      `build/h2_layer_p` → `build/h2_layer_p.superseded-20260731T120621Z`, **moved, never deleted or
+      overwritten**; 4355 regular files / 51 symlinks / 378 093 331 bytes; full per-file SHA-256
+      inventory digest `cf52c7f7234121be…`, recomputed **after** the new build and **after** the
+      diagnostic and unchanged both times, so the new build drew nothing from it. The two artifacts
+      item 5 pinned were verified against the published digests before the move. Record:
+      `out/h2_seal/layer_p_rename_aside_20260731T120621Z.json` (read-only copy in the packet below).
+    new_build: "rebuilt at branch head; `plumbing_pass`; probe reproduced `2dabed0bc05e3bc7…` on a physically new build (tracking extension `9953abc4…` ≠ the superseded tree's `f6ede077…` — a bit-different rebuild, as § 4.1 expects)"
+    evidence: "archive + failed run + Layer-P record + rename custody = `/home/ray/h2_w4b_diagnostic_20260731T133441Z` (read-only, SHA256SUMS self-sealed); working copies under `out/h2_execution/20260731T133441Z/`"
+    authorization_effect: none
+    not_established: no authorization issued or consumed; no F/S; no seal; no corpus admission; no equivalence claim; no measurement; the four ordered runs did not complete
+    next: "owner adjudication of the child's callback-order invariant (execution-semantics change ⇒ new RunSpec projection digest); until then no measurement can complete, because run 00 stops every execution at the same point"
 pending_reentry:                          # append-only; pre-seal, no terminal claimed; route-1 永久留帳結論不變
   - date: 2026-07-21
     scheduling: owner-scheduled re-entry #3（滿足 line-337 future_reentry_precondition:launch-hygiene gate 先行）
