@@ -1348,6 +1348,44 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
     authorization_effect: none
     not_established: no authorization issued or consumed; no F/S; no seal; no corpus admission; no equivalence claim; no measurement; the four ordered runs did not complete
     next: "owner adjudication of the child's callback-order invariant (execution-semantics change ⇒ new RunSpec projection digest); until then no measurement can complete, because run 00 stops every execution at the same point"
+  successor_child_cross_boundary_equality_retired:
+    date: 2026-07-31
+    authority: "owner adjudication 2026-07-31 on the W4b finding: delete the assertion; it is an unauthorised cross-member predicate, not a production invariant"
+    ruling: >-
+      `raw_keys != callback_rows ⇒ ChildError` is **retired**. The child was comparing two
+      observation surfaces taken at two times: `raw_emission_rows` is recorded inside each
+      `_fast_emit_mot_lines` call from the `track_results` that produced exactly those lines, while the
+      sequence callback receives `results_lines` after deferred alias remapping, the low-quality
+      tracklet filter and interpolation have run — any of which legally renames, removes or inserts
+      rows. **A7.6 already defines them as two members** (`final_track_rows`, `mot_output`), each
+      compared capture-off ↔ capture-on on its own; **no contract asks for a row projection between
+      them**, so the child had invented a cross-member predicate.
+    what_was_kept: >-
+      per emission: `len(lines) == track_results["count"]`, matching frame, per-row track id, binary32
+      bits straight from the tensor, contiguous unique `row_index` within a frame; per callback: one
+      sequence, tuple type, ten fields, parseable frame/id, `mot_bytes` wholly from the callback.
+      Both moved out of the closure into `record_raw_emission()` / `canonical_callback_bytes()` so they
+      are testable without a GPU — the reason the defect survived was that only a GPU run reached them.
+      Local name `final_rows` → `raw_emission_rows`; the archive member keeps `final_track_rows`;
+      no schema and no A7.6 vocabulary moved.
+    forbidden_repairs_not_taken: "no post-processing disabled; no binary32 reconstructed from decimal MOT text; no fabricated bits for interpolated rows; no remapped id written back into a recorded row; `final_track_rows` keeps its capture-off/on equality"
+    cost: >-
+      `run_h2_measurement_child.py` is an **execution-semantics** member only ⇒ the RunSpec's declared
+      content projection moved (`e81c3ee7… → 478570c5…`, resolved RunSpec `4ccc25f4… → 9e0ee525…`) and
+      **nothing else**: no ruler edit, no Correction 11, no sealed-prefix re-pin, no identity republish.
+      The earlier failing diagnostic is **not** invalidated — it correctly proved the old execution
+      semantics could not complete under the frozen RunSpec.
+    re_run: >-
+      second diagnostic at the repaired head: **all four ordered runs `completed`, all five predicates
+      `pass`, and the result is still `diagnostic_complete` with `terminal: null`** — a fully green
+      diagnostic does not become a measurement (owner review point 3, shown by execution). Independent
+      verifier `valid: true`, seven checks, `verification_host_inputs_used: false`. The superseded build
+      tree's inventory digest `cf52c7f7…` is unchanged after a rebuild and two executions.
+      Evidence: `/home/ray/h2_w4b_diagnostic_20260731T140040Z` (read-only, self-sealed).
+    tests: "four owner-named cells — interpolation inserts rows, the quality filter removes rows, deferred alias renames ids (all three: both records stand), and an emission disagreeing with its own `track_results` still fails closed — plus a source-level test that the retired comparison is gone. ⚠️ 誠實註記:前三格對舊 code 不會變紅(舊斷言只活在 GPU 才走得到的路徑),機械證據是 source-level test 與這次 re-run"
+    authorization_effect: none
+    not_established: no authorization; no F/S; no seal; no corpus admission; no equivalence claim; no measurement
+    next: "owner review of the repair PR; then W5 closure (transient namespace mutation, execution-code closure, successor archive admission in the corpus checker, witness v3, governance closeout)"
 pending_reentry:                          # append-only; pre-seal, no terminal claimed; route-1 永久留帳結論不變
   - date: 2026-07-21
     scheduling: owner-scheduled re-entry #3（滿足 line-337 future_reentry_precondition:launch-hygiene gate 先行）
