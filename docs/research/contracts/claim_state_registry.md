@@ -1207,6 +1207,12 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
       而 predicate 推不出來的,只有 terminal 4 的 cause。**是否可以指名也由 ruler 回答**:
       先問一次不帶 cause 的 selection,只有落在 terminal 4 才帶 —— 否則「更高順位 finding 勝出」與
       「diagnostic 不選 terminal」這兩種錯法會變成本檔自己持有的 precedence 規則。
+    one_frozen_observation: >-                # owner review of W4（2026-07-31）點名要釘住的一項
+      兩次 selection 必須看到**同一份不可變 observation**,否則第二次可能回答第一次沒被問過的問題。
+      實作=`_snapshot()` 在 runs 交回時 deep-copy 並包成 MappingProxyType(driver 的 alias 從此構不到 artifact),
+      而非倚賴呼叫順序這種時間性巧合。斷言的不變式是「指名 cause 只動 cause」:
+      terminal 兩次相同;result 只能由 `unclassified_execution_failure` 收斂到一個**同樣映到 terminal 4** 的 cause。
+      注意 `unnamed.result == named.result` **不**成立、也不該成立——ruler 的設計就是「指名」才是改變 result token 的動作。
     injected_sequencing: >-
       `Stages`／`Runs` 是 Protocol ⇒ 本模組**自己擁有的控制流**（fail-fast 順序、stage failure ⇒ 四個 run 全 not_run、
       authority 分流）不需 build／GPU 即可被測。真正的 driver 尚未綁定,CLI 會明確以 exit 2 拒絕執行。
@@ -1215,7 +1221,7 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
       會產出 `build_failed` 而 ruler 要的是 `input_mutated` ⇒ **W3 verifier 立刻判 invalid**。
       修法=stage failure 時同時判 monitor 的 predicate（monitor 依契約在 binding 之前啟動,是 stage-independent 證據）。
       這正是 W3 先於 W4 要買的東西:producer 的錯由獨立 verifier 抓到,而不是由 producer 自己的期望值抓到。
-    tests: tests/contract/test_h2_execution_producer.py — 22 tests;含四種 stage failure 的端到端（produce → verify_h2_execution valid）、diagnostic、mutation 勝出、拒絕覆寫既有 archive、C3.9 restatement 掃描、AST 掃描證明從不寫 verification.json／checksums.sha256
+    tests: tests/contract/test_h2_execution_producer.py — 29 tests;含四種 stage failure 的端到端（produce → verify_h2_execution valid）、diagnostic、mutation 勝出、拒絕覆寫既有 archive、C3.9 restatement 掃描、AST 掃描證明從不寫 verification.json／checksums.sha256
     authorization_effect: none
     not_established: no execution; no build; no diagnostic run; no authorization; no F/S; no seal; no corpus admission; no equivalence claim; driver 尚未綁定
     next: 綁定 driver 並跑一次 non-qualifying diagnostic（需 build ⇒ 先把 build/h2_layer_p 改名讓開,絕不刪除）,再進 W5 closure

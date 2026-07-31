@@ -33,6 +33,7 @@ import ast
 import hashlib
 import json
 import sys
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -342,6 +343,122 @@ def test_the_producer_names_a_terminal_4_cause_only_under_a_measurement(
         stages=_stopped_stages("extension_load"),
     ).produce(root)
     assert result["result"] == partition.DIAGNOSTIC_RESULT
+    assert verifier.verify_archive(root)["valid"] is True
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        {},
+        {"stages": _stopped_stages("build")},
+        {"stages": _stopped_stages("build", input_monitor=_monitor(changed=1))},
+        {
+            "stages": _stopped_stages(
+                "identity_run", extension_load=_complete_stages().extension_load
+            )
+        },
+        {"runs": _FixedRuns(states={"packets_valid": "fail"})},
+        {
+            "authority": "non_qualifying_diagnostic",
+            "runs": _FixedRuns(states={"packets_valid": "fail"}),
+        },
+    ],
+    ids=[
+        "measurement_pass",
+        "stage_failure",
+        "moved_input_outranks_the_stage",
+        "late_stage_failure",
+        "run_decided_failure",
+        "diagnostic",
+    ],
+)
+def test_naming_the_cause_moves_nothing_but_the_cause(
+    tmp_path: Path, run_spec: dict[str, Any], case: dict[str, Any]
+) -> None:
+    """The second selection may refine terminal 4's cause and nothing else.
+
+    The producer asks the ruler twice: once unnamed, to learn whether a cause may
+    be named at all, then again carrying it. Replaying both selections over the
+    observation the archive recorded pins the property that separates a refined
+    verdict from a different one — the terminal never moves, and the result token
+    moves only from `unclassified_execution_failure` to a cause that maps to the
+    same terminal 4. Anything else would mean the producer's own sequencing, not
+    the ruler, decided where the execution landed.
+    """
+    result = _execution(run_spec, **case).produce(tmp_path / "archive")
+    observation = result["predicate_results"]
+    authority = result["authority"]
+
+    unnamed = partition.select_successor_result(
+        observation, authority=authority, phase="a"
+    )
+    assert (result["result"], result["terminal"]) == (
+        partition.select_successor_result(
+            observation,
+            authority=authority,
+            phase="a",
+            execution_result=(
+                result["result"]
+                if unnamed.terminal == partition.EXECUTION_INVALID_TERMINAL
+                else None
+            ),
+        ).result,
+        result["terminal"],
+    )
+    assert result["terminal"] == unnamed.terminal
+    if unnamed.terminal != partition.EXECUTION_INVALID_TERMINAL:
+        assert result["result"] == unnamed.result
+    else:
+        assert unnamed.result == "unclassified_execution_failure"
+        assert (
+            partition.RESULT_TO_TERMINAL[result["result"]]
+            == partition.EXECUTION_INVALID_TERMINAL
+        )
+
+
+def test_an_observation_that_drifts_under_the_reader_is_read_once(
+    tmp_path: Path, run_spec: dict[str, Any]
+) -> None:
+    """The observation is frozen when the runs hand it over, not when it is read.
+
+    Two selections over a live structure would answer about two executions, and
+    the archive would record the second — a verdict nothing ever authorised. A
+    `Runs` implementation that returns a mapping still under its own control is
+    the ordinary way that happens, so the drift is made explicit here: this
+    observation reports `pass` to its first reader and `fail` to every one after.
+    The archive records the first, because there is only one reader.
+    """
+
+    class _Drifting(Mapping):
+        def __init__(self, base: Mapping[str, Any]) -> None:
+            self._base = dict(base)
+            self.reads = 0
+
+        def __getitem__(self, key: str) -> Any:
+            record = dict(self._base[key])
+            if key == "packets_valid":
+                self.reads += 1
+                record["state"] = "pass" if self.reads == 1 else "fail"
+            return record
+
+        def __iter__(self) -> Any:
+            return iter(self._base)
+
+        def __len__(self) -> int:
+            return len(self._base)
+
+    class _DriftingRuns(_FixedRuns):
+        def run(
+            self, stages: producer.StageEvidence
+        ) -> tuple[list[dict[str, Any]], Any, str | None]:
+            ordered, predicates, named = super().run(stages)
+            return ordered, _Drifting(predicates), named
+
+    root = tmp_path / "archive"
+    result = _execution(run_spec, runs=_DriftingRuns()).produce(root)
+    assert result["predicate_results"]["packets_valid"]["state"] == "pass"
+    assert result["result"] == "measurement_pass"
+    assert result["terminal"] is None
     assert verifier.verify_archive(root)["valid"] is True
 
 

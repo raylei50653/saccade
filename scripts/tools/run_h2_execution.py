@@ -12,7 +12,10 @@ enforced rather than against whatever this file happens to emit (§ 5.3).
 terminal from the recorded predicates; this module transcribes that selection. A
 producer that wrote its own `result` field would be answering the question its
 own archive exists to pose, and the § 20.8 two-implementer test would then be
-comparing a copy against itself.
+comparing a copy against itself. The selection runs twice — unnamed, to ask
+whether terminal 4's cause may be named at all, then carrying it — over one
+frozen observation, so the second call cannot answer a question the first was
+never asked.
 
 **It executes nothing of its own.** The six retained stages come from
 `run_h2_layer_p`, the four ordered runs from the Layer-M runner, the runtime
@@ -32,11 +35,13 @@ implementations bind the retained modules; nothing here re-implements them.
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any, Protocol
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -407,6 +412,7 @@ class Execution:
         else:
             ordered, predicates, named = self.runs.run(evidence_record)
 
+        observation = _snapshot(predicates)
         binding = build_runtime_binding(
             execution_id=self.execution_id, run_spec=spec, stages=evidence_record
         )
@@ -415,10 +421,10 @@ class Execution:
             run_spec=spec,
             authority=self.authority,
             authorization_binding_digest=self.authorization_binding_digest,
-            predicate_results=predicates,
+            predicate_results=observation,
             ordered_runs=ordered,
             execution_result=named
-            if _may_name_a_cause(predicates, authority=self.authority)
+            if _may_name_a_cause(observation, authority=self.authority)
             else None,
         )
         emit_archive(root, run_spec=spec, runtime_binding=binding, result=result)
@@ -442,6 +448,29 @@ def _stage_decided(monitor: Mapping[str, Any]) -> dict[str, str]:
     if mutated:
         decided[partition.SUCCESSOR_PREDICATES[0][0]] = "fail"
     return decided
+
+
+def _snapshot(predicate_results: Mapping[str, Any]) -> Mapping[str, Any]:
+    """One frozen observation, selected on twice.
+
+    The verdict is selected twice — once unnamed, to ask the ruler whether a
+    cause may be named at all, and once carrying that cause. Both calls must see
+    the *same* observation, or the second could return a verdict the first never
+    authorised. Passing the same object is already true of the call site above,
+    but only as an accident of statement order; copying it here makes it a
+    property of the value. The copy also drops the driver's aliases: whatever a
+    `Runs` implementation still holds a reference to can no longer reach the
+    artifact between the two selections, or after either of them.
+
+    Records that are not mappings pass through untouched — the ruler decides
+    what an unusable record is, and it says so in its own words.
+    """
+    return MappingProxyType(
+        {
+            name: copy.deepcopy(dict(record)) if isinstance(record, Mapping) else record
+            for name, record in predicate_results.items()
+        }
+    )
 
 
 def _may_name_a_cause(predicate_results: Mapping[str, Any], *, authority: str) -> bool:
