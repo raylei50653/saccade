@@ -568,15 +568,36 @@ def _check_launch_projection(documents: Mapping[str, Any]) -> list[str]:
             "result.json records ordered_runs that are not a list of objects, so "
             "which runs reached a launch boundary cannot be decided"
         ]
+    # Same boundary as `ordered_runs` above, and for the same reason: the ruler is
+    # total over the *observations* it names, not over arbitrary JSON containers,
+    # so a list where an object belongs — or a null where an observation belongs —
+    # is a schema violation this plumbing must name before the ruler is handed it.
+    # Widening the ruler here would put a fail-closed rule in a file that holds
+    # none, and leaving the guard after the call is too late: the ruler calls
+    # `.get()` on both.
+    projection = binding.get("runtime_projection")
+    if projection is not None and not isinstance(projection, Mapping):
+        return [
+            "runtime_binding.json records a runtime_projection that is not an "
+            "object, so what the launch boundaries received cannot be decided"
+        ]
+    if isinstance(projection, Mapping):
+        observations = projection.get("observations")
+        if isinstance(observations, list) and any(
+            not isinstance(item, Mapping) for item in observations
+        ):
+            return [
+                "the launch projection records an observation that is not an object"
+            ]
+
     reasons = list(
         partition.launch_projection_reasons(
-            binding.get("runtime_projection"),
+            projection,
             failed_stage=binding.get("failed_stage"),
             ordered_runs=runs,
             resolved_run_spec_digest=str(binding.get("resolved_run_spec_digest")),
         )
     )
-    projection = binding.get("runtime_projection")
     if reasons or not isinstance(projection, Mapping):
         return reasons
 
@@ -590,10 +611,6 @@ def _check_launch_projection(documents: Mapping[str, Any]) -> list[str]:
 
     recomputed: list[str] = []
     for observation in projection.get("observations", []):
-        if not isinstance(observation, Mapping):
-            return [
-                "the launch projection records an observation that is not an object"
-            ]
         received = observation.get("environment")
         if not isinstance(received, Mapping):
             return ["a launch observation records an environment that is not an object"]
@@ -608,16 +625,25 @@ def _check_launch_projection(documents: Mapping[str, Any]) -> list[str]:
         else {}
     )
     state = claimed.get("state") if isinstance(claimed, Mapping) else None
-    if recomputed and state != "fail":
-        reasons.append(
-            f"the launch boundary received {sorted(set(recomputed))} against what the "
-            f"resolved RunSpec specifies, and result.json records "
-            f"{_PROJECTION_PREDICATE} as {state!r}"
+    # Exact equality, not "anything but the wrong decision". This check *is* the
+    # second implementation: having recomputed the predicate from the archive's own
+    # RunSpec, leaving `error` or `not_run` admissible beside a recomputed `pass`
+    # would let an archive keep an undecided predicate the verifier has in fact
+    # decided — and the selector's "a later decided failure outranks an earlier
+    # undecided predicate" would then carry that archive to a terminal it did not
+    # earn. A failed stage records no projection at all and returns above, so this
+    # never demands a `pass` from an execution that reached no launch boundary.
+    expected_state = "fail" if recomputed else "pass"
+    if state != expected_state:
+        detail = (
+            f" — the launch boundary received {sorted(set(recomputed))} against what "
+            "the resolved RunSpec specifies"
+            if recomputed
+            else " — every launch observation matches the resolved RunSpec"
         )
-    if not recomputed and state == "fail":
         reasons.append(
-            f"result.json records {_PROJECTION_PREDICATE} as failed, and every launch "
-            "observation matches the resolved RunSpec"
+            f"{_PROJECTION_PREDICATE} recomputes to {expected_state!r}, and "
+            f"result.json records {state!r}{detail}"
         )
     return reasons
 

@@ -88,6 +88,11 @@ CAPTURE_ABI_PATH = _BINDING_SCHEMA["properties"]["capture_abi"]["allOf"][1][
 PREDICATES: tuple[str, ...] = tuple(
     _RESULT_SCHEMA["properties"]["predicate_results"]["required"]
 )
+# The predicate Correction 10 narrowed. Named once here and checked against the
+# frozen schema's own predicate set, so a rename cannot leave these tests
+# asserting about a predicate that no longer exists.
+PROJECTION_PREDICATE = "runtime_projection_matches_resolved_run_spec"
+assert PROJECTION_PREDICATE in PREDICATES
 
 EXECUTION_ID = "h2exec-20260731T000000Z"
 
@@ -592,6 +597,70 @@ def test_a_malformed_container_is_recorded_not_raised(
     assert record["checks"]["result_binding"] is False
     assert record["checks"]["artifact_schemas"] is False
     assert any(fragment in reason for reason in record["reasons"])
+    verifier.validate_verification(record)
+
+
+@pytest.mark.parametrize(
+    ("projection", "fragment"),
+    [
+        ([], "runtime_projection that is not an object"),
+        (
+            {"observations": [None], "resolved_run_spec_digest": _SPEC_DIGEST},
+            "observation that is not an object",
+        ),
+    ],
+)
+def test_a_malformed_launch_projection_is_recorded_not_raised(
+    tmp_path: Path, projection: Any, fragment: str
+) -> None:
+    """The same boundary as `ordered_runs`, for the newest container to cross it.
+
+    The ruler calls `.get()` on the projection and on every observation, so a list
+    where the object belongs — or a null inside the observation list — reached it
+    as an `AttributeError` rather than as a verdict. The guard belongs before the
+    ruler call, not after it.
+    """
+    record = verifier.verify_archive(
+        _archive(tmp_path, binding=_binding(runtime_projection=projection))
+    )
+    assert record["valid"] is False
+    assert record["checks"]["launch_projection"] is False
+    assert record["checks"]["artifact_schemas"] is False
+    assert any(fragment in reason for reason in record["reasons"])
+    verifier.validate_verification(record)
+
+
+@pytest.mark.parametrize("state", ["error", "not_run"])
+def test_an_undecided_projection_predicate_is_invalid_when_it_recomputes(
+    tmp_path: Path, state: str
+) -> None:
+    """Recomputing the predicate means recording the state, not just refusing one.
+
+    Every launch observation matches the resolved RunSpec, so this verifier has
+    decided the predicate: `pass`. An archive that keeps it undecided while a later
+    predicate fails would ride the selector's "a decided failure outranks an
+    undecided predicate" to terminal 4 with a verdict the verifier itself has
+    contradicted, which is the second implementation declining to answer.
+    """
+    record = verifier.verify_archive(
+        _archive(
+            tmp_path,
+            result=_result(
+                predicate_results=_predicates(
+                    **{
+                        PROJECTION_PREDICATE: state,
+                        "execution_complete": "fail",
+                    }
+                ),
+                result="unclassified_execution_failure",
+                terminal=partition.EXECUTION_INVALID_TERMINAL,
+                ordered_runs=_runs("failed"),
+            ),
+        )
+    )
+    assert record["valid"] is False
+    assert record["checks"]["launch_projection"] is False
+    assert any("recomputes to 'pass'" in reason for reason in record["reasons"])
     verifier.validate_verification(record)
 
 
