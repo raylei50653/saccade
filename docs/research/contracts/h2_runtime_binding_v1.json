@@ -165,7 +165,10 @@
       ],
       "properties": {
         "manifest_schema": {
-          "const": "h2_runtime_input_manifest_v1"
+          "enum": [
+            "h2_runtime_input_manifest_v1",
+            "h2_runtime_input_coordinate_v1"
+          ]
         },
         "manifest_digest": {
           "$ref": "#/$defs/sha256"
@@ -453,6 +456,38 @@
           },
           "identity_probe": {
             "not": {}
+          },
+          "runtime_inputs": {
+            "properties": {
+              "manifest_schema": {
+                "const": "h2_runtime_input_coordinate_v1"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "not": {
+          "properties": {
+            "failed_stage": {
+              "const": "build"
+            }
+          },
+          "required": [
+            "failed_stage"
+          ]
+        }
+      },
+      "then": {
+        "properties": {
+          "runtime_inputs": {
+            "properties": {
+              "manifest_schema": {
+                "const": "h2_runtime_input_manifest_v1"
+              }
+            }
           }
         }
       }
