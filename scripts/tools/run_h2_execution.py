@@ -37,7 +37,9 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import subprocess
 import sys
+import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -120,6 +122,11 @@ def runspec_environment_keys() -> tuple[str, ...]:
 
 
 PROJECTION_PREDICATE = "runtime_projection_matches_resolved_run_spec"
+
+# The ruler owns both authority tokens. This names the only one the command-line
+# entry point may bind, and a contract test pins it against `partition.AUTHORITIES`
+# so the name cannot drift from the ruler's.
+DIAGNOSTIC_AUTHORITY = "non_qualifying_diagnostic"
 
 
 def canonical_launch_environment(run_spec: Mapping[str, Any]) -> dict[str, str]:
@@ -657,16 +664,125 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help="issue and print the RunSpec without executing anything",
     )
+    parser.add_argument(
+        "--run-root",
+        type=Path,
+        default=None,
+        help=(
+            "where the four ordered runs write their evidence tree; required to "
+            "execute, and never inside --archive, which must stay a flat root"
+        ),
+    )
+    parser.add_argument(
+        "--selected-base",
+        default=None,
+        help="the full 40-hex base Layer P checks its retry admissibility against",
+    )
+    parser.add_argument("--build-dir", type=Path, default=None)
+    parser.add_argument(
+        "--skip-build",
+        action="store_true",
+        help=(
+            "bind an already-built directory instead of building inside the "
+            "execution, so the monitor watches the build outputs from before the "
+            "binding; Layer P records the stage as skipped"
+        ),
+    )
     args = parser.parse_args(argv)
     if args.emit_run_spec_only:
         print(json.dumps(run_spec_module.build_run_spec(), indent=2, sort_keys=True))
         return 0
-    print(
-        "no execution driver is bound: the stage and run surfaces are injected, "
-        "and binding them to a build is a separate landing",
-        file=sys.stderr,
+
+    # A measurement consumes a separately issued exactly-once authorization, and
+    # this entry point has no way to receive one. Refusing here is the fail-closed
+    # reading: an execution that cannot bind a grant must not be able to claim the
+    # authority whose whole content is that a grant was spent.
+    if args.authority != DIAGNOSTIC_AUTHORITY:
+        print(
+            f"this entry point binds {DIAGNOSTIC_AUTHORITY} only: a measurement "
+            "consumes a separately issued exactly-once authorization, which is not "
+            "plumbed here",
+            file=sys.stderr,
+        )
+        return 2
+    if args.run_root is None or args.selected_base is None:
+        print("--run-root and --selected-base are required to execute", file=sys.stderr)
+        return 2
+
+    import h2_execution_driver as driver
+    import run_h2_layer_p as layer_p_module
+
+    archive_root = args.archive.resolve()
+    run_root = args.run_root.resolve()
+    if archive_root == run_root or run_root.is_relative_to(archive_root):
+        print(
+            "--run-root must be outside --archive: the verified archive root holds "
+            "exactly the emitted artifacts and their closure, and a run tree inside "
+            "it would be bytes the closure never names",
+            file=sys.stderr,
+        )
+        return 2
+
+    spec = run_spec_module.build_run_spec()
+    build_dir = (
+        args.build_dir or layer_p_module.REPO_ROOT / layer_p_module.BUILD_DIR_REL
+    ).resolve()
+    layer_p = layer_p_module.LayerP(
+        base=args.selected_base,
+        skip_build=args.skip_build,
+        fixture=layer_p_module.IDENTITY_SEQUENCE,
+        build_dir=build_dir,
     )
-    return 2
+    order = driver.ExecutionOrder()
+    # Started before the binding, and observably so: the session records its own
+    # start against the same order the binding marks itself in, and refuses to
+    # report `started_before_binding` if it cannot show it came first.
+    session = driver.start_monitor(driver.bound_paths(build_dir=build_dir), order=order)
+    clock = time.monotonic
+    execution = Execution(
+        execution_id=args.execution_id,
+        authority=args.authority,
+        stages=driver.LayerPStages(layer_p=layer_p, session=session),
+        runs=driver.MeasurementRuns(
+            root=run_root,
+            bundle=driver.LaunchSite(build_dir=build_dir, head=_current_head()),
+            document=spec,
+            session=session,
+            started=clock(),
+            clock=clock,
+        ),
+        run_spec=spec,
+    )
+    result = execution.produce(archive_root)
+    print(
+        json.dumps(
+            {
+                "archive": archive_root.as_posix(),
+                "authority": result["authority"],
+                "result": result["result"],
+                "run_root": run_root.as_posix(),
+                "terminal": result["terminal"],
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
+    return 0
+
+
+def _current_head() -> str:
+    """The head the runs record as their instrumentation coordinate.
+
+    Correction 5 retired head equality as a validity gate, so this is recorded,
+    not checked: it says which checkout the children were launched from.
+    """
+    return subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        capture_output=True,
+        check=True,
+        cwd=REPO_ROOT,
+        text=True,
+    ).stdout.strip()
 
 
 if __name__ == "__main__":  # pragma: no cover

@@ -37,6 +37,7 @@ _TOOLS = _REPO / "scripts" / "tools"
 if str(_TOOLS) not in sys.path:
     sys.path.insert(0, str(_TOOLS))
 
+import build_runtime_identity as identity_paths  # noqa: E402
 import h2_execution_driver as driver  # noqa: E402
 import h2_path_partition as path_partition  # noqa: E402
 import h2_terminal_partition as partition  # noqa: E402
@@ -776,6 +777,35 @@ def _coordinate_manifest() -> dict[str, Any]:
         "policy_preset": driver.runtime_inputs.POLICY_PRESET_REL,
         "schema": driver.runtime_inputs.COORDINATE_SCHEMA,
     }
+
+
+# -- the watch set is real, not merely written -------------------------------- #
+
+
+def test_the_watch_set_is_composed_from_the_modules_that_publish_it() -> None:
+    """Call it for real: this helper named a function on the wrong module.
+
+    Nothing exercised `bound_paths` until an entry point existed, so it read
+    `tracked_files_for_class` from `h2_behavioral_identity`, where it does not
+    live, and the first real execution died before its monitor started. A helper
+    only the command line calls is a helper only the command line tests, so this
+    calls it against the real repository and asserts what it is for: the bound
+    fixtures, assets and third-party components are watched, the build artifacts
+    are watched, and the ruler's own files are watched.
+    """
+    build_dir = (_REPO / "build" / "h2_layer_p").resolve()
+    if not build_dir.is_dir():
+        pytest.skip("no Layer-P build directory on this host")
+    watched = set(driver.bound_paths(build_dir=build_dir))
+    assert watched, "the watch set is empty"
+    assert any(build_dir in path.parents for path in watched)
+    assert any("datasets/MOT17" in path.as_posix() for path in watched)
+    identity_members = {
+        _REPO / relative
+        for relative in identity_paths.tracked_files_for_class("identity_semantics")
+        if (_REPO / relative).is_file()
+    }
+    assert identity_members and identity_members <= watched
 
 
 # -- classification ---------------------------------------------------------- #

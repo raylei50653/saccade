@@ -711,22 +711,87 @@ def test_the_producer_never_writes_the_verdict_or_the_closure() -> None:
     assert "verify_archive" not in referenced
 
 
-def test_the_command_line_refuses_to_execute_without_a_bound_driver(
+def test_the_command_line_refuses_to_execute_without_the_launch_arguments(
     capsys: pytest.CaptureFixture[str], tmp_path: Path
 ) -> None:
-    """W4 landed the producer, not an execution: binding a build is a separate step."""
+    """W4b bound the driver, so the refusal moved: it is now about what is missing."""
     code = producer.main(
         [
             "--execution-id",
             EXECUTION_ID,
             "--authority",
-            "non_qualifying_diagnostic",
+            producer.DIAGNOSTIC_AUTHORITY,
             "--archive",
             str(tmp_path / "archive"),
         ]
     )
     assert code == 2
-    assert "no execution driver is bound" in capsys.readouterr().err
+    assert "--run-root and --selected-base are required" in capsys.readouterr().err
+    assert not (tmp_path / "archive").exists()
+
+
+def test_the_diagnostic_authority_is_the_rulers_own_token() -> None:
+    """Named once in the producer, and never allowed to drift from the ruler's list."""
+    assert producer.DIAGNOSTIC_AUTHORITY in partition.AUTHORITIES
+
+
+def test_the_command_line_refuses_to_bind_a_measurement(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path
+) -> None:
+    """The authority whose content is a spent grant may not be claimed without one.
+
+    This entry point has no way to receive an exactly-once authorization, so it
+    refuses the authority outright rather than emitting an archive that claims a
+    grant was consumed and leaves the field it would have been recorded in empty.
+    """
+    other = [
+        name for name in partition.AUTHORITIES if name != producer.DIAGNOSTIC_AUTHORITY
+    ]
+    code = producer.main(
+        [
+            "--execution-id",
+            EXECUTION_ID,
+            "--authority",
+            other[0],
+            "--archive",
+            str(tmp_path / "archive"),
+            "--run-root",
+            str(tmp_path / "runs"),
+            "--selected-base",
+            "a" * 40,
+        ]
+    )
+    assert code == 2
+    assert "exactly-once authorization" in capsys.readouterr().err
+    assert not (tmp_path / "archive").exists()
+
+
+def test_the_run_tree_may_not_live_inside_the_verified_archive(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path
+) -> None:
+    """The archive root is flat by contract, and a run tree inside it is a subdirectory.
+
+    The verifier refuses a root holding a subdirectory before any schema is read,
+    so a run tree written there would make every archive unformable — and its
+    bytes would be ones the closure never names.
+    """
+    code = producer.main(
+        [
+            "--execution-id",
+            EXECUTION_ID,
+            "--authority",
+            producer.DIAGNOSTIC_AUTHORITY,
+            "--archive",
+            str(tmp_path / "archive"),
+            "--run-root",
+            str(tmp_path / "archive" / "runs"),
+            "--selected-base",
+            "a" * 40,
+        ]
+    )
+    assert code == 2
+    assert "--run-root must be outside --archive" in capsys.readouterr().err
+    assert not (tmp_path / "archive").exists()
 
 
 def test_the_command_line_can_issue_a_run_spec_without_executing(

@@ -306,6 +306,27 @@ class LayerPStages:
 # -- Runs: the four ordered measurement runs -------------------------------- #
 
 
+@dataclass(frozen=True)
+class LaunchSite:
+    """The two facts `launch_ordered_runs` reads off a bundle, and nothing else.
+
+    The legacy `LaunchBundle` carries a freeze, a certificate, a reference probe
+    and a published identity because the legacy controller checks an execution
+    against them. Correction 5 retired those as successor gates, and a diagnostic
+    has no `F` to build one from — so what the launches actually need is stated
+    here instead of a bundle-shaped object with five members left empty.
+
+    Empty members would be worse than absent ones: `bundle.runtime_manifest` and
+    `bundle.freeze` are read elsewhere in the legacy controller, and a stub that
+    answers them would let a code path that believes it is holding a freeze run
+    against something that never was one. This object answers the two questions
+    the launch path asks and raises on everything else.
+    """
+
+    build_dir: Path
+    head: str
+
+
 @dataclass
 class MeasurementRuns:
     """Launch Layer M's four ordered runs and transcribe what came back.
@@ -580,8 +601,22 @@ def _error() -> dict[str, Any]:
 
 
 def bound_paths(*, build_dir: Path) -> tuple[Path, ...]:
-    """Every path this execution binds, for the monitor to watch from the start."""
-    import h2_behavioral_identity as identity
+    """Every path this execution binds, for the monitor to watch from the start.
+
+    The build directory must already hold the artifacts. That is the owner's
+    adjudication of a fork this function is where you meet: an execution that
+    builds inside itself cannot watch its own outputs from before the binding,
+    because at that moment they do not exist, and watching their parent instead
+    would record the execution's own build as a change to a bound input. Building
+    first and binding the result keeps the build artifacts under the watch for the
+    whole run phase, as the legacy controller's did.
+
+    `tracked_files_for_class` lives in `build_runtime_identity`, which is where
+    the path classes are published from — the same module the legacy controller's
+    `_monitor_paths` reads them from, so the two watch sets are drawn from one
+    source rather than from two similar-looking ones.
+    """
+    import build_runtime_identity as identity
 
     discovered = runtime_inputs.discover_bound_paths(build_dir=build_dir)
     watched: set[Path] = set(runtime_inputs.watch_paths(discovered))
