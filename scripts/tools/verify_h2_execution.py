@@ -156,7 +156,14 @@ def _archive_files(root: Path) -> dict[str, Path]:
     return found
 
 
-def _load_artifact(path: Path, name: str) -> tuple[dict[str, Any], bytes]:
+def _load_artifact(path: Path, name: str) -> tuple[Any, bytes]:
+    """Readable JSON is all the loader demands. Being an *object* is a verdict.
+
+    Only unreadable bytes make an archive unformable here. Whether a document is
+    an object is a schema question, and a schema question about a formable
+    archive is answered with `valid: false` — so each check that needs a
+    particular artifact's members says so itself.
+    """
     try:
         raw = path.read_bytes()
         document = json.loads(raw.decode("utf-8"), parse_constant=_reject_nonfinite)
@@ -164,12 +171,10 @@ def _load_artifact(path: Path, name: str) -> tuple[dict[str, Any], bytes]:
         raise ExecutionVerificationError(
             f"execution artifact is unreadable JSON: {name}"
         ) from exc
-    if not isinstance(document, dict):
-        raise ExecutionVerificationError(f"execution artifact is not an object: {name}")
     return document, raw
 
 
-def load_archive(root: Path) -> tuple[dict[str, dict[str, Any]], dict[str, bytes]]:
+def load_archive(root: Path) -> tuple[dict[str, Any], dict[str, bytes]]:
     """Read the three producer artifacts, or refuse to form a verdict."""
     files = _archive_files(root)
     missing = sorted(set(PRODUCER_ARTIFACTS) - set(files))
@@ -177,17 +182,40 @@ def load_archive(root: Path) -> tuple[dict[str, dict[str, Any]], dict[str, bytes
         raise ExecutionVerificationError(
             f"execution archive is missing producer artifacts: {missing}"
         )
-    documents: dict[str, dict[str, Any]] = {}
+    documents: dict[str, Any] = {}
     raws: dict[str, bytes] = {}
     for name in sorted(PRODUCER_ARTIFACTS):
         documents[name], raws[name] = _load_artifact(files[name], name)
     return documents, raws
 
 
-def _identity(documents: Mapping[str, Mapping[str, Any]]) -> tuple[str, str, str]:
-    """The three scalars `h2_execution_verification_v1` requires to exist."""
-    result = documents["result.json"]
-    run_spec = documents["run_spec.json"]
+def _object(documents: Mapping[str, Any], name: str) -> Mapping[str, Any] | None:
+    """The artifact's members, or `None` for the check to report as its own defect."""
+    document = documents.get(name)
+    return document if isinstance(document, Mapping) else None
+
+
+def _not_an_object(name: str) -> list[str]:
+    return [f"{name} is not an object, so this check has nothing to read"]
+
+
+def _identity(documents: Mapping[str, Any]) -> tuple[str, str, str]:
+    """The three scalars `h2_execution_verification_v1` requires to exist.
+
+    Only these two artifacts can make an archive unformable, and only by failing
+    to carry them: the third artifact's digest comes from its bytes, so a
+    `runtime_binding.json` that is not even an object is still a schema violation
+    inside a formable archive rather than a reason to write nothing.
+    """
+    result = _object(documents, "result.json")
+    run_spec = _object(documents, "run_spec.json")
+    for name, document in (("result.json", result), ("run_spec.json", run_spec)):
+        if document is None:
+            raise ExecutionVerificationError(
+                f"{name} is not an object, so the verification record's required "
+                "fields cannot be filled"
+            )
+    assert result is not None and run_spec is not None
     execution_id = result.get("execution_id")
     spec_digest = run_spec.get("resolved_run_spec_digest")
     projection_digest = run_spec.get("execution_semantics_projection_digest")
@@ -211,7 +239,7 @@ def _identity(documents: Mapping[str, Mapping[str, Any]]) -> tuple[str, str, str
 
 
 def _check_artifact_schemas(
-    documents: Mapping[str, Mapping[str, Any]], raws: Mapping[str, bytes]
+    documents: Mapping[str, Any], raws: Mapping[str, bytes]
 ) -> list[str]:
     """Each artifact validates against its frozen schema, in its own byte domain."""
     import jsonschema
@@ -232,6 +260,8 @@ def _check_artifact_schemas(
     # both, so it is the artifact whose serialization is checkable: object bytes
     # carry no trailing LF, the file adds exactly one.
     run_spec = documents["run_spec.json"]
+    if not isinstance(run_spec, Mapping):
+        return reasons
     if run_spec.get("artifact_serialization") == run_spec_module.ARTIFACT_SERIALIZATION:
         try:
             expected = canonical_json_bytes(run_spec) + b"\n"
@@ -248,50 +278,19 @@ def _check_artifact_schemas(
 
 CHECKSUM_CLOSURE = "checksum_closure"
 
-# The record members a stored verdict must still agree on when it is re-read.
-# `valid` and `reasons` are excluded on purpose, and so is the closure check
-# itself: all three are functions of every check, including this one, so
-# comparing them here would make the check its own subject.
-_CLOSURE_INDEPENDENT_MEMBERS = (
-    "artifact_digests",
-    "execution_id",
-    "execution_semantics_projection_digest",
-    "producer_invoked",
-    "resolved_run_spec_digest",
-    "schema",
-    "verification_host_inputs_used",
-    "verification_process",
-)
 
+def _physical_closure_reasons(root: Path, raws: Mapping[str, bytes]) -> list[str]:
+    """The archive holds these bytes and nothing else, in one of three states.
 
-def _closure_independent(record: Mapping[str, Any]) -> dict[str, Any]:
-    checks = record.get("checks")
-    return {
-        "checks": {
-            name: value
-            for name, value in (checks if isinstance(checks, Mapping) else {}).items()
-            if name != CHECKSUM_CLOSURE
-        },
-        **{member: record.get(member) for member in _CLOSURE_INDEPENDENT_MEMBERS},
-    }
+    Before this command runs, the archive is the three producer artifacts and
+    neither closing record exists. After it runs, both exist and the inventory is
+    total both ways over the same bytes. Anything between them is half committed
+    — a verdict with no closure, or a closure with no verdict — and a crash
+    between the two writes must not leave a record that verifies while `O_EXCL`
+    refuses to redo it.
 
-
-def _check_checksum_closure(
-    root: Path, raws: Mapping[str, bytes], *, core: Mapping[str, Any]
-) -> list[str]:
-    """The archive holds these bytes and nothing else, and says the same thing twice.
-
-    Three states are closed, and only three. Before this command runs, the
-    archive is the three producer artifacts and neither closing record exists.
-    After it runs, both exist and the inventory is total both ways over the same
-    bytes. Anything between them is a half-committed archive — a verdict with no
-    closure, or a closure with no verdict — and a crash between the two writes
-    must not leave a record that verifies while `O_EXCL` refuses to redo it.
-
-    When a verdict is already stored it is not merely present, it is compared:
-    re-deriving *a* verdict from the producer artifacts says nothing about
-    whether the verdict this archive carries is that one. Rewriting
-    `verification.json` and regenerating the inventory would otherwise pass.
+    This half of the check reads no stored verdict, which is what lets the other
+    half compare one.
     """
     reasons: list[str] = []
     files = _archive_files(root)
@@ -319,17 +318,6 @@ def _check_checksum_closure(
             "the verdict and its closure do not describe the same archive"
         )
 
-    if has_verdict:
-        try:
-            stored, _ = _load_artifact(files[VERIFICATION_NAME], VERIFICATION_NAME)
-        except ExecutionVerificationError as exc:
-            reasons.append(f"the stored verdict is unreadable: {exc}")
-        else:
-            if _closure_independent(stored) != _closure_independent(core):
-                reasons.append(
-                    "the stored verdict is not the verdict these artifacts produce"
-                )
-
     if has_inventory:
         try:
             inventory = evidence.read_checksum_inventory(root)
@@ -353,10 +341,50 @@ def _check_checksum_closure(
     return reasons
 
 
-def _check_run_spec_binding(documents: Mapping[str, Mapping[str, Any]]) -> list[str]:
+def _stored_verdict_reasons(path: Path, expected: Mapping[str, Any]) -> list[str]:
+    """The archive must carry *this* verdict, whole — not merely carry one.
+
+    The comparison is over the complete record, including `valid`, `reasons` and
+    every check, and the stored document is validated against its own contract
+    first so an extra member or a wrong type is named rather than silently
+    ignored. Nothing weaker works: every member excluded from the comparison is a
+    member an editor may rewrite while the archive still verifies.
+
+    `expected` is built before this function is called and never depends on the
+    stored document, so re-reading a verdict cannot change the verdict it is
+    compared against. What the recomputation may add is this reason.
+    """
+    try:
+        stored, _ = _load_artifact(path, VERIFICATION_NAME)
+    except ExecutionVerificationError as exc:
+        return [f"the stored verdict is unreadable: {exc}"]
+    if not isinstance(stored, Mapping):
+        return ["the stored verdict is not an object"]
+    reasons: list[str] = []
+    try:
+        validate_verification(stored)
+    except ExecutionVerificationError as exc:
+        reasons.append(f"the stored verdict is not a valid record: {exc}")
+    if stored != expected:
+        differing = sorted(
+            member
+            for member in set(stored) | set(expected)
+            if stored.get(member) != expected.get(member)
+        )
+        reasons.append(
+            "the stored verdict is not the verdict these artifacts produce; it "
+            f"differs on {differing}"
+        )
+    return reasons
+
+
+def _check_run_spec_binding(documents: Mapping[str, Any]) -> list[str]:
     """The RunSpec is internally whole, and the other two name that RunSpec."""
     reasons: list[str] = []
-    run_spec = documents["run_spec.json"]
+    run_spec = _object(documents, "run_spec.json")
+    binding = _object(documents, "runtime_binding.json")
+    if run_spec is None:
+        return _not_an_object("run_spec.json")
     try:
         # `verify_projection=False` is the archive-only boundary: the projection
         # members are checked against the recorded RunSpec, never re-hashed from
@@ -368,8 +396,15 @@ def _check_run_spec_binding(documents: Mapping[str, Mapping[str, Any]]) -> list[
         reasons.append(f"run_spec.json cannot be validated: {exc}")
 
     spec_digest = run_spec.get("resolved_run_spec_digest")
-    for name in ("runtime_binding.json", "result.json"):
-        recorded = documents[name].get("resolved_run_spec_digest")
+    if binding is None:
+        reasons.extend(_not_an_object("runtime_binding.json"))
+    for name, document in (
+        ("runtime_binding.json", binding),
+        ("result.json", _object(documents, "result.json")),
+    ):
+        if document is None:
+            continue
+        recorded = document.get("resolved_run_spec_digest")
         if recorded != spec_digest:
             reasons.append(
                 f"{name} names RunSpec {recorded!r}, and the archive carries "
@@ -390,7 +425,7 @@ def _projection_members(run_spec: Mapping[str, Any]) -> dict[str, Mapping[str, A
     }
 
 
-def _check_projection_binding(documents: Mapping[str, Mapping[str, Any]]) -> list[str]:
+def _check_projection_binding(documents: Mapping[str, Any]) -> list[str]:
     """The bytes the execution used are the bytes the projection declares.
 
     Digest equality across the three artifacts says they agree on a number. This
@@ -401,18 +436,29 @@ def _check_projection_binding(documents: Mapping[str, Mapping[str, Any]]) -> lis
     execution-integrity requirement forbids.
     """
     reasons: list[str] = []
-    run_spec = documents["run_spec.json"]
+    run_spec = _object(documents, "run_spec.json")
+    binding = _object(documents, "runtime_binding.json")
+    if run_spec is None:
+        return _not_an_object("run_spec.json")
     expected = run_spec.get("execution_semantics_projection_digest")
-    for name in ("runtime_binding.json", "result.json"):
-        recorded = documents[name].get("execution_semantics_projection_digest")
+    if binding is None:
+        reasons.extend(_not_an_object("runtime_binding.json"))
+    for name, document in (
+        ("runtime_binding.json", binding),
+        ("result.json", _object(documents, "result.json")),
+    ):
+        if document is None:
+            continue
+        recorded = document.get("execution_semantics_projection_digest")
         if recorded != expected:
             reasons.append(
                 f"{name} names projection {recorded!r}, and the RunSpec declares "
                 f"{expected!r}"
             )
 
+    if binding is None:
+        return reasons
     declared = _projection_members(run_spec)
-    binding = documents["runtime_binding.json"]
     observed: list[Mapping[str, Any]] = []
     surfaces = binding.get("executed_surfaces")
     if isinstance(surfaces, list):
@@ -441,11 +487,15 @@ def _check_projection_binding(documents: Mapping[str, Mapping[str, Any]]) -> lis
     return reasons
 
 
-def _check_execution_binding(documents: Mapping[str, Mapping[str, Any]]) -> list[str]:
+def _check_execution_binding(documents: Mapping[str, Any]) -> list[str]:
     """One execution: one id, and the bytes that loaded are the bytes that were built."""
     reasons: list[str] = []
-    binding = documents["runtime_binding.json"]
-    result = documents["result.json"]
+    binding = _object(documents, "runtime_binding.json")
+    result = _object(documents, "result.json")
+    if binding is None:
+        return _not_an_object("runtime_binding.json")
+    if result is None:
+        return _not_an_object("result.json")
     if binding.get("execution_id") != result.get("execution_id"):
         reasons.append(
             f"runtime_binding.json records execution {binding.get('execution_id')!r} "
@@ -490,7 +540,7 @@ def _check_execution_binding(documents: Mapping[str, Mapping[str, Any]]) -> list
     return reasons
 
 
-def _check_result_binding(documents: Mapping[str, Mapping[str, Any]]) -> list[str]:
+def _check_result_binding(documents: Mapping[str, Any]) -> list[str]:
     """Recompute the verdict from the observation, then ask the ruler if it fits.
 
     The recorded `result` is passed to the selector only where the contract lets
@@ -507,17 +557,24 @@ def _check_result_binding(documents: Mapping[str, Mapping[str, Any]]) -> list[st
     instead would put a fail-closed rule in the file that holds none.
     """
     reasons: list[str] = []
-    binding = documents["runtime_binding.json"]
-    result = documents["result.json"]
+    binding = _object(documents, "runtime_binding.json")
+    result = _object(documents, "result.json")
+    if result is None:
+        return _not_an_object("result.json")
 
     predicates = result.get("predicate_results")
     if not isinstance(predicates, Mapping):
         return ["result.json records predicate_results that are not an object"]
 
+    # The recorded token is a lookup key, so it must be hashable before it is one:
+    # `result: []` is the same defect class as the two containers above, and an
+    # unhashable key would raise where a verdict belongs. A non-string token names
+    # no terminal-4 cause, and the mismatch against the recomputed result reports it.
     recorded = result.get("result")
     named = (
         recorded
-        if partition.RESULT_TO_TERMINAL.get(recorded)
+        if isinstance(recorded, str)
+        and partition.RESULT_TO_TERMINAL.get(recorded)
         == partition.EXECUTION_INVALID_TERMINAL
         else None
     )
@@ -542,6 +599,9 @@ def _check_result_binding(documents: Mapping[str, Mapping[str, Any]]) -> list[st
             f"predicates select {selection.terminal!r}"
         )
 
+    if binding is None:
+        reasons.extend(_not_an_object("runtime_binding.json"))
+        return reasons
     monitor = binding.get("input_monitor")
     runs = result.get("ordered_runs")
     if not isinstance(monitor, Mapping):
@@ -585,16 +645,52 @@ CHECKS = (
 )
 
 
+def _record(
+    *,
+    identity: tuple[str, str, str],
+    digests: Mapping[str, str],
+    reasons_by_check: Mapping[str, list[str]],
+) -> dict[str, Any]:
+    """Assemble one complete record. Total in its inputs, so it is comparable."""
+    execution_id, spec_digest, projection_digest = identity
+    checks = {name: not reasons_by_check[name] for name in CHECKS}
+    return {
+        "artifact_digests": dict(digests),
+        "checks": checks,
+        "execution_id": execution_id,
+        "execution_semantics_projection_digest": projection_digest,
+        "producer_invoked": False,
+        "reasons": [reason for name in CHECKS for reason in reasons_by_check[name]],
+        "resolved_run_spec_digest": spec_digest,
+        "schema": VERIFICATION_SCHEMA,
+        "valid": all(checks.values()),
+        "verification_host_inputs_used": False,
+        "verification_process": VERIFICATION_PROCESS,
+        # `verification.json` never carries the checksum-file digest: the
+        # inventory covers this record, so a back-reference would be a cycle.
+    }
+
+
 def verify_archive(root: Path) -> dict[str, Any]:
     """Build the verification record for one archive. Writes nothing.
 
-    The five artifact checks run first because the closure check compares an
-    already-stored verdict against this one, and it can only do that once this
-    one exists. Its own field is excluded from that comparison, so the ordering
-    is a dependency, not a cycle.
+    Two passes, and the order is a dependency rather than a cycle. The first pass
+    runs the five artifact checks and the *physical* half of the closure — none
+    of which read a stored verdict — and assembles the complete record those
+    inputs imply. That record is what a stored verdict is compared against. The
+    second pass may then add one reason, that the archive carries a different
+    verdict, and nothing the comparison produces feeds back into what it compared
+    against.
+
+    For an untouched archive the two passes agree, so re-verifying a closed
+    archive reproduces the stored record exactly.
     """
     documents, raws = load_archive(root)
-    execution_id, spec_digest, projection_digest = _identity(documents)
+    identity = _identity(documents)
+    digests = {
+        name: hashlib.sha256(raws[name]).hexdigest()
+        for name in sorted(PRODUCER_ARTIFACTS)
+    }
 
     reasons_by_check: dict[str, list[str]] = {
         "artifact_schemas": _check_artifact_schemas(documents, raws),
@@ -602,33 +698,21 @@ def verify_archive(root: Path) -> dict[str, Any]:
         "projection_binding": _check_projection_binding(documents),
         "result_binding": _check_result_binding(documents),
         "run_spec_binding": _check_run_spec_binding(documents),
+        CHECKSUM_CLOSURE: _physical_closure_reasons(root, raws),
     }
-    core: dict[str, Any] = {
-        "artifact_digests": {
-            name: hashlib.sha256(raws[name]).hexdigest()
-            for name in sorted(PRODUCER_ARTIFACTS)
-        },
-        "checks": {name: not reasons for name, reasons in reasons_by_check.items()},
-        "execution_id": execution_id,
-        "execution_semantics_projection_digest": projection_digest,
-        "producer_invoked": False,
-        "resolved_run_spec_digest": spec_digest,
-        "schema": VERIFICATION_SCHEMA,
-        "verification_host_inputs_used": False,
-        "verification_process": VERIFICATION_PROCESS,
-    }
-    reasons_by_check[CHECKSUM_CLOSURE] = _check_checksum_closure(root, raws, core=core)
+    expected = _record(
+        identity=identity, digests=digests, reasons_by_check=reasons_by_check
+    )
 
-    checks = {name: not reasons_by_check[name] for name in CHECKS}
-    reasons = [reason for name in CHECKS for reason in reasons_by_check[name]]
-    return {
-        **core,
-        "checks": checks,
-        "reasons": reasons,
-        "valid": all(checks.values()),
-        # `verification.json` never carries the checksum-file digest: the
-        # inventory covers this record, so a back-reference would be a cycle.
-    }
+    stored_path = root / VERIFICATION_NAME
+    if stored_path.is_file():
+        reasons_by_check[CHECKSUM_CLOSURE] = [
+            *reasons_by_check[CHECKSUM_CLOSURE],
+            *_stored_verdict_reasons(stored_path, expected),
+        ]
+    return _record(
+        identity=identity, digests=digests, reasons_by_check=reasons_by_check
+    )
 
 
 def validate_verification(document: Mapping[str, Any]) -> None:

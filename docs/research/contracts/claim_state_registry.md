@@ -1144,7 +1144,7 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
       測試以 monkeypatch 讓該函式 raise 來機械證明（不是靠註解宣稱）。
     two_failure_classes:                    # 由**兩條規則共同**決定,不是自訂:verification schema 必填欄位的可形成性 + physical flat-root admission
       recorded_invalid: schema 違反／成員型別錯／digest 不符／verdict 不成立 ⇒ valid=false + reasons（這是對 archive 的裁決）
-      not_formable_missing_identity: 缺檔／不可讀 ⇒ execution_id 與三個 artifact digest 填不出來
+      not_formable_missing_identity: 缺檔／不可讀 JSON／result.json 或 run_spec.json 非 object ⇒ execution_id 與兩個 digest 填不出來（**runtime_binding.json 非 object 不算**——它的 digest 來自原始 bytes）
       not_formable_admission: root symlink／子目錄／symlink entry／非 regular file ⇒ 在任何 schema 驗證之前就被 `_archive_files()` 拒絕
     owner_review_defects:                   # 2026-07-31 第一輪 owner review;兩者都只動 verifier 與測試,不移動 verdict algebra
       defect_6_formable_schema_invalid_archive_crashed: >-
@@ -1163,12 +1163,32 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
         ⇒ closure 是三態機（未封閉／已封閉／半封閉被拒）;
         (b) 兩者皆存在時,**比較既有 verification.json 與本次重算的 record**——重新推導出「一個」verdict
         不證明 archive 保存的就是它（同時改寫 verification 與 inventory 原本可過）。
-        比較刻意排除 `checksum_closure` 自己與 `valid`／`reasons`（三者都是含本 check 在內的函數,比了就自我指涉）;
-        因此 `verify_archive` 先跑五格再組 core、最後才跑 closure ⇒ 是相依而非循環。
-      mutation_checked: 三處修補各自反轉後,對應的新測試都轉紅（guard 拿掉→3 紅;parity 拿掉→2 紅;停止比較 stored verdict→1 紅）
+        （**第一版比較刻意排除 `checksum_closure`／`valid`／`reasons`,那是 defect 8,見下**）
+      defect_8_stored_verdict_partially_rewritable: >-
+        第一版的 stored-verdict 比較用 allowlist core（排除 `checksum_closure` 自己與 `valid`／`reasons`,
+        額外欄位也被忽略）,且未先用 `h2_execution_verification_v1` 驗既有 verification.json ⇒
+        改寫 `valid`／`reasons`／`checks.checksum_closure`／新增任意欄位 + 重生 inventory **仍判 valid:true**。
+        它證明的只是「stored 的部分 core 相同」,不是「archive 保存的 verification artifact 就是重算出的 verdict」。
+        **凡是被排除在比較外的成員,就是可被改寫而仍通過驗證的成員。**
+        另外 owner 指出我原本的循環理由與自己的測試相反:首次寫入前 closure 就已是 `true`,
+        完整 verdict 在正常前後本來就穩定。修法=**兩階段**:五格 artifact check + **physical** closure（parity／inventory／多餘檔）
+        → 組出**完整 expected document** → 驗 stored 的 schema → **完整相等比較** → 不符才追加 stored-mismatch reason。
+        expected 的生成完全不依賴 stored ⇒ 仍是 DAG。
+      defect_9_formable_schema_violation_still_crashed_or_vanished: >-
+        (9a) `result: []` ⇒ `RESULT_TO_TERMINAL.get(recorded)` 拋 `TypeError: unhashable type`——
+        與剛修好的三個 malformed container 同類,只是晚一個 call site;修法=lookup 前要求 `recorded` 是 str,
+        非字串就不當 terminal-4 named cause,由 schema failure 與 recorded-result mismatch 記錄。
+        (9b) 非 object 的 `runtime_binding.json` 被錯分成 unformable,但 verification 必填資料**全部可得**
+        （execution id 來自 result.json、兩個 digest 來自 run_spec.json、binding 的 artifact digest 來自原始 bytes）⇒
+        依本輪自己的分類這是 **formable schema violation**。修法=載入層只要求 JSON 可讀;
+        「是否為 object」由需要該 artifact 語義的各 check 個別判定;**只有 result.json／run_spec.json 無法提供必填 identity 時才真正不可形成**。
+      mutation_checked: >-
+        五處修補各自反轉後對應測試都轉紅——container guard→3 紅;parity→2 紅;stored-verdict 比較→1 紅;
+        回到 allowlist core 比較→3 紅（valid/reasons、closure 自己、額外欄位）;拿掉 token 型別 guard→1 紅;
+        把非 object binding 改回 unformable→1 紅
     write_order: verification.json 以 O_EXCL 建立（一次 execution 只有一個 verdict）,之後才原子寫涵蓋四份 JSON 的最終 checksums.sha256;verification.json 不反向含 checksum-file digest
     fixtures: 由 frozen schema 與 frozen authoring profile 合成（含 454-key namespace 與 14 個 projection 成員的合成 digest）,**從不取自 producer 輸出**（§5.3;此刻也還沒有 producer）
-    tests: tests/contract/test_h2_execution_verifier.py — 31 tests;含 schema-legal 但 ruler 拒絕的 stage-reachability 反例、malformed container 的三個反證、半封閉與被改寫 verdict 的 closure 反證、C3.9 restatement 掃描、AST-based host-state 掃描
+    tests: tests/contract/test_h2_execution_verifier.py — 38 tests;含 schema-legal 但 ruler 拒絕的 stage-reachability 反例、malformed container／非字串 result token 的四個反證、半封閉與四種被改寫 verdict 的 closure 反證、formable-vs-unformable 的三個切分反證、C3.9 restatement 掃描、AST-based host-state 掃描
     authorization_effect: none
     not_established: no producer; no diagnostic mode; no execution; no authorization; no F/S; no seal; no corpus admission; no equivalence claim; 尚未有任何真實 archive 可驗
     next: W4 producer（三份 artifact 在保留的六 stage 內產出 + diagnostic／exactly-once measurement 分流;需 build ⇒ 先把 build/h2_layer_p 改名讓開,絕不刪除）

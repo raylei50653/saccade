@@ -548,6 +548,62 @@ def test_a_malformed_container_is_recorded_not_raised(
     verifier.validate_verification(record)
 
 
+def test_a_non_string_result_token_is_recorded_not_raised(tmp_path: Path) -> None:
+    """The recorded token is a lookup key, so it must be hashable before it is one.
+
+    `result: []` reached `RESULT_TO_TERMINAL.get(...)` and raised `TypeError:
+    unhashable type` — the same defect class as a list where an object belongs,
+    one call site further along.
+    """
+    record = verifier.verify_archive(_archive(tmp_path, result=_result(result=[])))
+    assert record["valid"] is False
+    assert record["checks"]["result_binding"] is False
+    assert record["checks"]["artifact_schemas"] is False
+    verifier.validate_verification(record)
+
+
+def test_a_non_object_runtime_binding_is_a_verdict_not_an_unformable_archive(
+    tmp_path: Path,
+) -> None:
+    """Formability is about the record's own fields, not about every artifact.
+
+    The execution id comes from `result.json`, both digests from `run_spec.json`,
+    and this artifact's digest from its bytes — so every required member of the
+    verification record can be filled. A `runtime_binding.json` that is not an
+    object is therefore a schema violation inside a formable archive, and the
+    three checks that need to read it say so individually.
+    """
+    root = _archive(tmp_path)
+    (root / "runtime_binding.json").write_bytes(b"[]\n")
+
+    record = verifier.verify_archive(root)
+    verifier.validate_verification(record)
+    assert record["valid"] is False
+    assert record["checks"] == {
+        "artifact_schemas": False,
+        "checksum_closure": True,
+        "execution_binding": False,
+        "projection_binding": False,
+        "result_binding": False,
+        "run_spec_binding": False,
+    }
+    assert (
+        record["artifact_digests"]["runtime_binding.json"]
+        == hashlib.sha256(b"[]\n").hexdigest()
+    )
+
+
+@pytest.mark.parametrize("name", ["result.json", "run_spec.json"])
+def test_a_non_object_identity_artifact_forms_no_record(
+    tmp_path: Path, name: str
+) -> None:
+    """These two are different: without them the record's own fields are unfillable."""
+    root = _archive(tmp_path)
+    (root / name).write_bytes(b"[]\n")
+    with pytest.raises(verifier.ExecutionVerificationError):
+        verifier.verify_archive(root)
+
+
 # -- the closure ------------------------------------------------------------ #
 
 
@@ -609,16 +665,46 @@ def test_a_half_closed_archive_is_invalid(tmp_path: Path, interrupted: str) -> N
     assert any("half closed" in reason for reason in record["reasons"])
 
 
+@pytest.mark.parametrize(
+    "forge",
+    [
+        pytest.param(
+            lambda record: {**record, "execution_id": "h2exec-someone-else"},
+            id="identity",
+        ),
+        pytest.param(
+            lambda record: {**record, "valid": False, "reasons": ["forged"]},
+            id="valid-and-reasons",
+        ),
+        pytest.param(
+            lambda record: {
+                **record,
+                "checks": {**record["checks"], "checksum_closure": False},
+                "valid": False,
+                "reasons": ["forged"],
+            },
+            id="the-closure-check-itself",
+        ),
+        pytest.param(
+            lambda record: {**record, "smuggled": "anything"}, id="extra-member"
+        ),
+    ],
+)
 def test_a_rewritten_verdict_is_invalid_even_with_a_matching_inventory(
-    tmp_path: Path,
+    tmp_path: Path, forge: Any
 ) -> None:
-    """Re-deriving *a* verdict is not proof that the archive carries that one."""
+    """Re-deriving *a* verdict is not proof that the archive carries that one.
+
+    The comparison covers the whole record, because every member left out of it
+    is a member an editor may rewrite while the archive still verifies. An
+    earlier form compared only a closure-independent core, which left exactly
+    these four doors open: `valid`, `reasons`, the closure check's own field, and
+    any additional property.
+    """
     root = _archive(tmp_path)
     _, record = verifier.commit_verification(root)
-
-    forged = {**record, "execution_id": "h2exec-someone-else"}
     (root / verifier.VERIFICATION_NAME).write_bytes(
-        runtime_inputs.canonical_json_bytes(forged) + b"\n"
+        runtime_inputs.canonical_json_bytes(forge(record)) + b"\n"
     )
     evidence.write_checksum_inventory(root)
 
@@ -628,23 +714,26 @@ def test_a_rewritten_verdict_is_invalid_even_with_a_matching_inventory(
     assert any("stored verdict" in reason for reason in rechecked["reasons"])
 
 
-def test_the_stored_verdict_comparison_is_not_its_own_subject(tmp_path: Path) -> None:
-    """The closure check excludes its own field, so re-verification is stable.
+def test_re_verifying_a_closed_archive_reproduces_the_stored_record(
+    tmp_path: Path,
+) -> None:
+    """The comparison must be stable, or a closed archive would rot on re-reading.
 
-    A verdict stored while the closure was still open records
-    `checksum_closure: false`; comparing that field against a later, closed
-    recomputation would make the check disagree with itself forever.
+    What a stored verdict is compared against is built from the artifact checks
+    and the *physical* closure alone, so it never depends on the stored verdict.
+    The record computed before the two closing writes and the one recomputed
+    after them are therefore the same document — which is what makes comparing
+    the complete record, rather than a subset of it, a dependency and not a
+    cycle.
     """
     root = _archive(tmp_path)
-    open_closure = verifier.verify_archive(root)
-    assert open_closure["checks"]["checksum_closure"] is True
+    before = verifier.verify_archive(root)
+    assert before["checks"]["checksum_closure"] is True
 
-    verifier.commit_verification(root)
+    _, committed = verifier.commit_verification(root)
     stored = json.loads((root / verifier.VERIFICATION_NAME).read_text(encoding="utf-8"))
-    assert verifier._closure_independent(stored) == verifier._closure_independent(
-        open_closure
-    )
-    assert verifier.verify_archive(root)["valid"] is True
+    assert stored == before == committed
+    assert verifier.verify_archive(root) == stored
 
 
 # -- what cannot be a verdict at all ---------------------------------------- #
