@@ -245,31 +245,67 @@
         }
       }
     },
-    "identity_probe": {
+    "diagnostics": {
       "type": "object",
       "additionalProperties": false,
+      "description": "Recorded observations that select nothing. Correction 10: the behaviour probe's absence, failure, or change may not move a predicate, a result, a terminal, or `valid`. A structurally broken record is archive corruption and is a different question from a probe that ran and failed.",
+      "properties": {
+        "behavior_probe": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "role",
+            "schema",
+            "state"
+          ],
+          "properties": {
+            "schema": {
+              "const": "h2_behavior_probe_result_v1"
+            },
+            "role": {
+              "const": "recorded_diagnostic_observation_selects_nothing"
+            },
+            "state": {
+              "enum": [
+                "computed",
+                "failed",
+                "not_run"
+              ]
+            },
+            "digest": {
+              "$ref": "#/$defs/sha256"
+            },
+            "build_artifact_digest": {
+              "$ref": "#/$defs/sha256"
+            },
+            "detail": {
+              "type": "string",
+              "maxLength": 4096
+            }
+          }
+        }
+      }
+    },
+    "runtime_projection": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "What the launch boundary actually received, for each run that reached it. Captured at the boundary, never copied from the canonical API, so a plumbing drift between the two has something to disagree with.",
       "required": [
-        "build_artifact_digest",
-        "digest",
-        "role",
-        "schema",
-        "state"
+        "observations",
+        "resolved_run_spec_digest"
       ],
       "properties": {
-        "schema": {
-          "const": "h2_behavior_probe_result_v1"
-        },
-        "role": {
-          "const": "recorded_observation_not_equivalence_or_gate"
-        },
-        "state": {
-          "const": "computed"
-        },
-        "digest": {
+        "resolved_run_spec_digest": {
           "$ref": "#/$defs/sha256"
         },
-        "build_artifact_digest": {
-          "$ref": "#/$defs/sha256"
+        "observations": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/launch_observation"
+          }
         }
       }
     }
@@ -411,6 +447,72 @@
       "items": {
         "$ref": "#/$defs/build_artifact"
       }
+    },
+    "launch_observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "environment",
+        "run_id"
+      ],
+      "properties": {
+        "run_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "environment": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "SACCADE_DETECT_BARRIER",
+            "SACCADE_DOUBLE_BUFFER",
+            "SACCADE_GPU_DECODE",
+            "SACCADE_MAIN_NMS_GRAPHED"
+          ],
+          "properties": {
+            "SACCADE_DETECT_BARRIER": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "SACCADE_DOUBLE_BUFFER": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "SACCADE_GPU_DECODE": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "SACCADE_MAIN_NMS_GRAPHED": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        }
+      }
     }
   },
   "allOf": [
@@ -434,7 +536,7 @@
         "required": [
           "build_artifacts",
           "extension_load",
-          "identity_probe"
+          "runtime_projection"
         ]
       }
     },
@@ -454,15 +556,15 @@
           "extension_load": {
             "not": {}
           },
-          "identity_probe": {
-            "not": {}
-          },
           "runtime_inputs": {
             "properties": {
               "manifest_schema": {
                 "const": "h2_runtime_input_coordinate_v1"
               }
             }
+          },
+          "runtime_projection": {
+            "not": {}
           }
         }
       }
@@ -511,7 +613,7 @@
           "extension_load": {
             "not": {}
           },
-          "identity_probe": {
+          "runtime_projection": {
             "not": {}
           }
         },
@@ -539,7 +641,7 @@
           "extension_load": {
             "not": {}
           },
-          "identity_probe": {
+          "runtime_projection": {
             "not": {}
           }
         },
@@ -564,7 +666,7 @@
           "build_artifacts": {
             "$ref": "#/$defs/build_artifacts_complete"
           },
-          "identity_probe": {
+          "runtime_projection": {
             "not": {}
           }
         },

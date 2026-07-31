@@ -340,7 +340,12 @@ RESULT_REQUIRES_INPUT_MUTATION = "input_mutated"
 #     `h2_runtime_binding_v1` requires at every stage (`runtime_inputs`,
 #     `executed_surfaces`, `capture_abi`, `source_audit`, `input_monitor`), so they
 #     survive a build failure. `input_mutated` belongs here because the monitor
-#     starts before the binding by contract;
+#     starts before the binding by contract. **`runtime_binding_mismatch` left this
+#     class in Correction 10**: it was stage-independent because the whole binding
+#     was compared against a published reference, and every member of that
+#     comparison existed at every bindable stage. Narrowed to the RunSpec-owned
+#     launch projection, its left-hand side is what a launch boundary actually
+#     received — which no stage failure ever reaches;
 #   * probe-derived — **empty, and empty is the claim.** The behaviour probe was
 #     the sole member, and Correction 10 retires the verdict chain it stood in:
 #     Correction 5 had already retired the published probe and the Layer-P
@@ -350,12 +355,13 @@ RESULT_REQUIRES_INPUT_MUTATION = "input_mutated"
 #   * run-derived — needs a measurement run to have started; no run starts until
 #     every retained stage completed, and Correction 5's measurement mode is
 #     fail-fast, so a stage failure means these findings cannot exist yet.
-STAGE_INDEPENDENT_RESULTS: tuple[str, ...] = (
-    "input_mutated",
+STAGE_INDEPENDENT_RESULTS: tuple[str, ...] = ("input_mutated",)
+PROBE_DERIVED_RESULTS: tuple[str, ...] = ()
+RUN_DERIVED_RESULTS: tuple[str, ...] = (
+    "capture_perturbs_policy",
+    "packet_invalid",
     "runtime_binding_mismatch",
 )
-PROBE_DERIVED_RESULTS: tuple[str, ...] = ()
-RUN_DERIVED_RESULTS: tuple[str, ...] = ("capture_perturbs_policy", "packet_invalid")
 RUN_STATES: tuple[str, ...] = ("completed", "failed", "not_run")
 RUN_NOT_STARTED_STATE = "not_run"
 
