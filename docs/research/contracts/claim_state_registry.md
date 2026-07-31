@@ -1192,6 +1192,39 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
     authorization_effect: none
     not_established: no producer; no diagnostic mode; no execution; no authorization; no F/S; no seal; no corpus admission; no equivalence claim; 尚未有任何真實 archive 可驗
     next: W4 producer（三份 artifact 在保留的六 stage 內產出 + diagnostic／exactly-once measurement 分流;需 build ⇒ 先把 build/h2_layer_p 改名讓開,絕不刪除）
+  successor_producer_landed:
+    date: 2026-07-31
+    authority: "H2 declaration Review Correction 5（producer 只寫三份 artifact、不得寫 verification.json）"
+    status: W4 landed（**code only**;無 build、無執行、無 build/h2_layer_p 改名、無 ruler edit、無 re-pin、無 republish）
+    owner_adjudications:                    # 2026-07-31 開工前送審,兩題
+      runner: 沿用 Layer-M 的 run_h2_measurement / run_h2_measurement_child 跑四個 ordered run ⇒ binding 記的 7 個 executed_surfaces 正是實際執行的碼 ⇒ EXECUTION_SEMANTICS_PATHS(14) 與 executed_surfaces(7/7) 皆不動
+      build: W4 不跑 diagnostic ⇒ item 5 的 build/h2_layer_p 位元一個都不動;改名與執行留待後續
+    orchestrator_is_not_a_surface: >-
+      `run_h2_execution.py` 與既有 `run_h2_layer_p.py` 一樣**不入 projection**——這是既有先例
+      （14 個成員裡沒有 Layer-P runner）,不是本輪新造的例外。它只 orchestrate,不決定 execution semantics。
+    no_verdict_of_its_own: >-
+      `result`／`terminal` 一律由 `select_successor_result` 選出後**轉錄**;producer 唯一可以指名、
+      而 predicate 推不出來的,只有 terminal 4 的 cause。**是否可以指名也由 ruler 回答**:
+      先問一次不帶 cause 的 selection,只有落在 terminal 4 才帶 —— 否則「更高順位 finding 勝出」與
+      「diagnostic 不選 terminal」這兩種錯法會變成本檔自己持有的 precedence 規則。
+    one_frozen_observation: >-                # owner review of W4（2026-07-31）點名要釘住的一項
+      兩次 selection 必須看到**同一份不可變 observation**,否則第二次可能回答第一次沒被問過的問題。
+      實作=`_snapshot()` 在 runs 交回時 deep-copy 並包成 MappingProxyType(driver 的 alias 從此構不到 artifact),
+      而非倚賴呼叫順序這種時間性巧合。斷言的不變式是「指名 cause 只動 cause」:
+      terminal 兩次相同;result 只能由 `unclassified_execution_failure` 收斂到一個**同樣映到 terminal 4** 的 cause。
+      注意 `unnamed.result == named.result` **不**成立、也不該成立——ruler 的設計就是「指名」才是改變 result token 的動作。
+    injected_sequencing: >-
+      `Stages`／`Runs` 是 Protocol ⇒ 本模組**自己擁有的控制流**（fail-fast 順序、stage failure ⇒ 四個 run 全 not_run、
+      authority 分流）不需 build／GPU 即可被測。真正的 driver 尚未綁定,CLI 會明確以 exit 2 拒絕執行。
+    bug_found_by_the_w3_verifier: >-
+      第一版在 stage failure 時只判 `execution_complete=fail`,於是「build 失敗 + monitor 記到 mutation」
+      會產出 `build_failed` 而 ruler 要的是 `input_mutated` ⇒ **W3 verifier 立刻判 invalid**。
+      修法=stage failure 時同時判 monitor 的 predicate（monitor 依契約在 binding 之前啟動,是 stage-independent 證據）。
+      這正是 W3 先於 W4 要買的東西:producer 的錯由獨立 verifier 抓到,而不是由 producer 自己的期望值抓到。
+    tests: tests/contract/test_h2_execution_producer.py — 29 tests;含四種 stage failure 的端到端（produce → verify_h2_execution valid）、diagnostic、mutation 勝出、拒絕覆寫既有 archive、C3.9 restatement 掃描、AST 掃描證明從不寫 verification.json／checksums.sha256
+    authorization_effect: none
+    not_established: no execution; no build; no diagnostic run; no authorization; no F/S; no seal; no corpus admission; no equivalence claim; driver 尚未綁定
+    next: 綁定 driver 並跑一次 non-qualifying diagnostic（需 build ⇒ 先把 build/h2_layer_p 改名讓開,絕不刪除）,再進 W5 closure
 pending_reentry:                          # append-only; pre-seal, no terminal claimed; route-1 永久留帳結論不變
   - date: 2026-07-21
     scheduling: owner-scheduled re-entry #3（滿足 line-337 future_reentry_precondition:launch-hygiene gate 先行）

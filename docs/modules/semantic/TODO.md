@@ -127,7 +127,8 @@
   `verify_projection=False` 是 execution integrity 與已 retire 的 environment
   reproducibility 之間那條線，並以 monkeypatch 機械證明；
   可形成的 archive 之瑕疵記為 `valid: false`，填不出必填欄位者不寫紀錄並非零退出）
-  → W4 producer（需 build）
+  → W4 producer（**已落地,code only**:`run_h2_execution.py` 只寫三份 artifact、從不寫 verification.json／checksums.sha256;verdict 由 ruler 選出後轉錄,連「可不可以指名 terminal 4 cause」都先問 ruler;四個 ordered run 沿用 Layer-M runner ⇒ executed_surfaces 不動、不需 re-pin;Stages／Runs 為 Protocol ⇒ 控制流不需 build 即可測;W3 verifier 當場抓到 producer 的 stage-failure 藏住 mutation 的 bug）
+  → W4b 綁 driver 並跑一次 diagnostic（需 build,先把 build/h2_layer_p 改名讓開）
   → W5 closure**；W3 先於 W4 的理由＝#294→#295 的契約先行與 #302／#304 的
   guard-before-entry，且 W2–W3 不需 build ⇒ item 5 的 `build/h2_layer_p`
   位元不動。不是重建舊 items 4–5／`F` →
