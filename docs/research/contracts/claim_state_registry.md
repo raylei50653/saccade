@@ -1386,6 +1386,58 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
     authorization_effect: none
     not_established: no authorization; no F/S; no seal; no corpus admission; no equivalence claim; no measurement
     next: "owner review of the repair PR; then W5 closure (transient namespace mutation, execution-code closure, successor archive admission in the corpus checker, witness v3, governance closeout)"
+  successor_execution_code_closure_declared:
+    date: 2026-08-01
+    unit: H2
+    stage: "W5a — the declared execution-code closure (PR #315, rebased onto `36923739`)"
+    status: >-
+      **landed, code + contract only.** The declared content set was fourteen tooling files, so the code
+      that actually computes a tracking row was bound by nothing: two records could share one
+      `execution_semantics_projection_digest` and have run different trackers, while Correction 5
+      requires that the bytes actually used are the bytes recorded for this execution.
+    roots_not_names: >-
+      The closure is declared as roots (`include/`, `src/` ⇒ 198 files), not as an enumerated list.
+      The cost of the alternative is already on this unit's record: **`interpolate_tracklets` lives in
+      `src/saccade/perception/eval/post_merge.py`**, which is not among the seven files
+      `h2_path_partition` names as admitted runtime paths or observation sites — and its behaviour
+      decided the entire W4b finding. A contract test pins that the closure contains it.
+      Selector is `--cached --others --exclude-standard`: a file an author has not committed yet is
+      still a file the interpreter can import. The resolver still never consults `h2_path_partition`
+      — a path class is a governance verdict about what an edit means, and this is a set of bytes.
+    identifiers_that_moved: >-
+      The projection digest now covers the named members and the closure digest **together**, so
+      neither half can move without moving it. Correction 7's rule applies to the renames:
+      `h2_execution_semantics_projection_v1` → `_v2`, and
+      `sha256_canonical_json_content_members_v1` → `sha256_canonical_json_named_members_and_code_closure_v1`.
+      The v1 spellings are not permitted aliases, and a test pins that.
+    the_closure_needed_its_own_member_type: >-
+      `src/saccade/__init__.py` is empty, ordinary Python and genuinely imported. `closure_member`
+      admits zero length; `content_member` still refuses it. The tempting repair — silently skipping
+      empty files — would have put the first exception into a rule that has none. There is likewise
+      no extension filter.
+    deliberately_not_asked: >-
+      Whether the closure is **complete**. That is not answerable from these bytes, and asking it here
+      would mean checking a document against itself; it is checked in W5b against the observed import
+      record, which this document did not produce. Nothing added here reads the checkout to verify an
+      archive: `validate_run_spec(verify_projection=False)` decides the closure by arithmetic alone,
+      so the archive-only verifier stays foreign-host independent.
+    cost: >-
+      Both the RunSpec schema and the resolver are `identity_semantics` members ⇒ axis moved and was
+      republished from the existing read-only probe and runtime-input records of the current build
+      (no probe recomputed, no native artifact rebuilt): `identity_semantics` `dd354e13…` →
+      `73d9a164…`; `implementation` `5ede10f0…`, `runtime_inputs` `0b839df0…` and probe
+      `2dabed0bc05e3bc7…` all unchanged; `--strict` rc=0; sidecar still unattested.
+      RunSpec projection digest `7b4db638…` → `57b0fe5a…`, closure digest `f9e70894…` over 198 members,
+      `resolved_run_spec_digest` `e2de17fa…`. The pre-value is **not** W4b's `478570c5…`: this landing was
+      rebased onto `36923739` (PR #314), whose child repair moved a named projection member, so the base
+      the closure is measured against moved with it. The closure digest itself is unaffected — #314
+      touched neither declared root. **`sealed_prefix` deliberately not
+      re-pinned**: per the order Correction 10 records, the Review Correction describing W5 is written
+      after the code it describes and lands once, in W5d.
+    verification: "1390 contract tests; `pre_push` 2909 passed; CI 7/7. Two load-bearing guards mutation-checked — removing the outside-a-root refusal and removing the closure digest from the projection fold each turn exactly their own test red"
+    authorization_effect: none
+    not_established: no authorization issued or consumed; no F/S; no seal; no corpus admission; no equivalence claim; no execution; no build
+    next: "W5b — the child records the digests of every repository module it actually imported, the verifier checks the declared closure against that observation, and the resolved namespace is write-protected for the run rather than sampled (Correction 6 already disclaims pre/post equality as a transient-mutation detector)"
 pending_reentry:                          # append-only; pre-seal, no terminal claimed; route-1 永久留帳結論不變
   - date: 2026-07-21
     scheduling: owner-scheduled re-entry #3（滿足 line-337 future_reentry_precondition:launch-hygiene gate 先行）

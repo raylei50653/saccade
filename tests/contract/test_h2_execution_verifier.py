@@ -120,6 +120,35 @@ def _by_path() -> dict[str, dict[str, Any]]:
     return {str(member["path"]): member for member in _projection_members()}
 
 
+def _code_closure() -> dict[str, Any]:
+    """A synthetic execution-code closure, including the zero-length member.
+
+    The paths are invented under the declared roots rather than read from the
+    tree, so this stays a fixture built from the frozen schema (§ 5.3). One
+    member is empty on purpose: that is the case the named content set forbids
+    and this one must accept.
+    """
+    members = sorted(
+        (
+            {
+                "length": length,
+                "path": f"{run_spec_module.EXECUTION_CODE_ROOTS[0]}fixture_{index}.hpp",
+                "sha256": _fake(f"closure-{index}"),
+            }
+            for index, length in enumerate((0, 2048, 4096))
+        ),
+        key=lambda member: str(member["path"]),
+    )
+    return {
+        "algorithm": run_spec_module.CONTENT_MEMBER_ALGORITHM,
+        "digest": runtime_inputs.digest(members),
+        "members": members,
+        "roots": list(run_spec_module.EXECUTION_CODE_ROOTS),
+        "schema": run_spec_module.CODE_CLOSURE_SCHEMA,
+        "selector": run_spec_module.CODE_CLOSURE_SELECTOR,
+    }
+
+
 def _run_spec() -> dict[str, Any]:
     """A RunSpec the resolver accepts, built from the frozen profile's namespace."""
     profile = json.loads(
@@ -130,9 +159,13 @@ def _run_spec() -> dict[str, Any]:
     resolved = dict(profile["resolved_namespace"])
     members = _projection_members()
     declared = _by_path()
+    closure = _code_closure()
     projection = {
-        "algorithm": "sha256_canonical_json_content_members_v1",
-        "digest": runtime_inputs.digest(members),
+        "algorithm": run_spec_module.PROJECTION_ALGORITHM,
+        "digest": runtime_inputs.digest(
+            {"execution_code_closure": closure["digest"], "members": members}
+        ),
+        "execution_code_closure": closure,
         "members": members,
         "schema": run_spec_module.PROJECTION_SCHEMA,
     }

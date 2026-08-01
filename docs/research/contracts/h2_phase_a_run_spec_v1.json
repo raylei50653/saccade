@@ -199,21 +199,95 @@
         }
       }
     },
+    "closure_member": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "length",
+        "path",
+        "sha256"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
+        },
+        "length": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      },
+      "description": "A closure member may be zero-length. src/saccade/__init__.py is empty, ordinary Python and genuinely imported; the alternative repair \u2014 skipping empty files \u2014 would have put the first exception into a rule that has none."
+    },
+    "execution_code_closure": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Every file the working tree carries under the declared roots, digested as one content set. The named member list above is tooling a reviewer can enumerate; this is the code that computes a tracking result, which is not enumerable that way. Without it two records could share one projection digest and have run different trackers. Roots, not names: a hand-written list of the obviously relevant modules omitted src/saccade/perception/eval/post_merge.py, the home of interpolate_tracklets, whose behaviour produced the W4b finding.",
+      "required": [
+        "algorithm",
+        "digest",
+        "members",
+        "roots",
+        "schema",
+        "selector"
+      ],
+      "properties": {
+        "schema": {
+          "const": "h2_execution_code_closure_v1"
+        },
+        "selector": {
+          "const": "git_tracked_and_unignored_files_under_declared_roots_v1",
+          "description": "Present and unignored, not merely committed: a file an author has not yet committed is still a file the interpreter can import."
+        },
+        "algorithm": {
+          "const": "sha256_canonical_json_content_members_v1"
+        },
+        "roots": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9_./-]+/$"
+          },
+          "description": "Declared literally here and in the resolver. This content set never consults a path classification: a path class is a governance verdict about what an edit means, and this is a set of bytes."
+        },
+        "digest": {
+          "$ref": "#/$defs/sha256"
+        },
+        "members": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/closure_member"
+          },
+          "description": "Sorted by path, no extension filter. A rule with exceptions is a rule an editor may work in."
+        }
+      }
+    },
     "execution_semantics_projection": {
       "type": "object",
       "additionalProperties": false,
       "required": [
         "algorithm",
         "digest",
+        "execution_code_closure",
         "members",
         "schema"
       ],
       "properties": {
         "schema": {
-          "const": "h2_execution_semantics_projection_v1"
+          "const": "h2_execution_semantics_projection_v2"
         },
         "algorithm": {
-          "const": "sha256_canonical_json_content_members_v1"
+          "const": "sha256_canonical_json_named_members_and_code_closure_v1",
+          "description": "The digest covers the named members and the closure digest together. The v1 identifiers are not permitted aliases: the digest's domain changed, and a changed meaning may not keep the old name (Correction 7)."
         },
         "digest": {
           "$ref": "#/$defs/sha256"
@@ -396,6 +470,9 @@
               }
             }
           ]
+        },
+        "execution_code_closure": {
+          "$ref": "#/$defs/execution_code_closure"
         }
       }
     }
