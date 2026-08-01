@@ -37,6 +37,7 @@ if _TOOLS.as_posix() not in sys.path:
     sys.path.insert(0, _TOOLS.as_posix())
 
 import h2_behavioral_identity as behavior  # noqa: E402
+import h2_import_witness as import_witness  # noqa: E402
 import h2_measurement_evidence as evidence  # noqa: E402
 import h2_run_spec as run_spec  # noqa: E402
 import run_h0_phase_a as h0_controller  # noqa: E402
@@ -271,6 +272,35 @@ def record_import_delta(
         ),
     }
     evidence.write_document(run_dir, ENVIRONMENT_DELTA_NAME, document)
+    return document
+
+
+def persist_import_witness(
+    run_dir: Path, invocation: Mapping[str, Any]
+) -> dict[str, Any] | None:
+    """Write what this process actually loaded, when it was bootstrapped.
+
+    Written here, required elsewhere.  `check_h2_measure_archives` refuses a run
+    directory whose witness is absent or invalid, so a child launched outside the
+    bootstrap produces a directory that is not admissible evidence rather than
+    one that quietly passes.  Keeping the gate in the archive checker instead of
+    here is what makes it unbypassable by a caller: this function is a producer,
+    and a producer that also judged itself would be the circular oracle § 5.3
+    exists to forbid.
+
+    It runs after the runner returns, not before, so late and dynamic imports —
+    everything the evaluator stack pulls in while tracking — are inside the
+    record rather than after it.
+    """
+    recorder = import_witness.active()
+    if recorder is None:
+        return None
+    document = import_witness.build_witness(
+        recorder,
+        document=invocation["run_spec"],
+        build_dir=Path(str(invocation["build_dir"])),
+    )
+    evidence.write_document(run_dir, import_witness.WITNESS_NAME, document)
     return document
 
 
@@ -907,6 +937,7 @@ def execute_child(
                     evidence.PACKET_VERIFICATION_NAME,
                     products.packet_verification,
                 )
+        persist_import_witness(run_dir, invocation)
         completed = {**invocation, "state": RUN_COMPLETED}
         _replace_invocation(invocation_path, completed)
         return 0

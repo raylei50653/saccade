@@ -930,7 +930,10 @@ def test_child_vector_is_h2_specific_and_binds_one_invocation(tmp_path: Path) ->
     invocation = (tmp_path / "invocation.json").resolve()
     vector = controller.child_argv(invocation)
     assert vector[-2:] == ("--invocation", invocation.as_posix())
-    assert vector[3].endswith("run_h2_measurement_child.py")
+    # The bootstrap, not the child directly: the import recorder has to be
+    # running before the child module's own top-level imports resolve, and by
+    # the time any statement in that file executes they already have.
+    assert vector[3].endswith("h2_child_bootstrap.py")
     assert "run_h0_phase_a_child.py" not in vector
 
 
@@ -1477,9 +1480,7 @@ def test_popen_failure_records_no_child_launch(
             isinstance(vector, (list, tuple))
             and vector
             and Path(str(vector[0])).name.startswith("python")
-            and any(
-                str(member).endswith("run_h2_measurement_child.py") for member in vector
-            )
+            and any(str(member).endswith("h2_child_bootstrap.py") for member in vector)
         ):
             popen_calls += 1
             raise OSError("injected Popen failure")

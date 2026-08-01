@@ -138,6 +138,7 @@ def test_run_spec_projection_declares_the_complete_content_set() -> None:
         run_spec.AUTHORING_PROFILE_REL,
         run_spec.AUTHORING_PROFILE_SCHEMA_REL,
         run_spec.AUTHORING_DECISION_REL,
+        run_spec.IMPORT_WITNESS_SCHEMA_REL,
         "scripts/eval/mot17_args.py",
         "docs/research/contracts/h2_phase_a_run_spec_v1.json",
         "scripts/tools/h2_run_spec.py",
@@ -165,7 +166,9 @@ def test_the_execution_code_closure_binds_the_code_that_computes_a_result() -> N
     assert "src/saccade/perception/eval/evaluator.py" in paths
     assert "src/saccade/perception/eval/pipeline.py" in paths
     assert "src/tracking/tracker_gpu.cu" in paths
-    assert all(path.startswith(run_spec.EXECUTION_CODE_ROOTS) for path in paths)
+    assert all(
+        path.startswith(run_spec.DECLARED_EXECUTION_CODE_ROOTS) for path in paths
+    )
 
 
 def test_the_closure_carries_no_extension_filter() -> None:

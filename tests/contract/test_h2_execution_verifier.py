@@ -132,7 +132,7 @@ def _code_closure() -> dict[str, Any]:
         (
             {
                 "length": length,
-                "path": f"{run_spec_module.EXECUTION_CODE_ROOTS[0]}fixture_{index}.hpp",
+                "path": f"{run_spec_module.DECLARED_EXECUTION_CODE_ROOTS[0]}fixture_{index}.hpp",
                 "sha256": _fake(f"closure-{index}"),
             }
             for index, length in enumerate((0, 2048, 4096))
@@ -143,7 +143,7 @@ def _code_closure() -> dict[str, Any]:
         "algorithm": run_spec_module.CONTENT_MEMBER_ALGORITHM,
         "digest": runtime_inputs.digest(members),
         "members": members,
-        "roots": list(run_spec_module.EXECUTION_CODE_ROOTS),
+        "roots": list(run_spec_module.DECLARED_EXECUTION_CODE_ROOTS),
         "schema": run_spec_module.CODE_CLOSURE_SCHEMA,
         "selector": run_spec_module.CODE_CLOSURE_SELECTOR,
     }

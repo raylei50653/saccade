@@ -21,6 +21,7 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any, Mapping, MutableMapping, Sequence
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -47,6 +48,7 @@ AUTHORING_PROFILE_SCHEMA_REL = (
 AUTHORING_DECISION_REL = (
     "docs/research/contracts/h2_phase_a_run_spec_authoring_decision_v1.json"
 )
+IMPORT_WITNESS_SCHEMA_REL = "docs/research/contracts/h2_import_witness_v1.json"
 AUTHORING_PROFILE_SCHEMA = "h2_phase_a_authoring_profile_v1"
 AUTHORING_DECISION_SCHEMA = "h2_phase_a_run_spec_authoring_decision_v1"
 AUTHORING_BINDING_SCHEMA = "h2_run_spec_authoring_binding_v1"
@@ -61,6 +63,7 @@ EXECUTION_SEMANTICS_PATHS: tuple[str, ...] = (
     AUTHORING_PROFILE_REL,
     AUTHORING_PROFILE_SCHEMA_REL,
     AUTHORING_DECISION_REL,
+    IMPORT_WITNESS_SCHEMA_REL,
     "docs/research/contracts/h2_phase_a_run_spec_v1.json",
     "scripts/eval/mot17_args.py",
     "scripts/tools/check_h2_measure_archives.py",
@@ -74,15 +77,31 @@ EXECUTION_SEMANTICS_PATHS: tuple[str, ...] = (
     "scripts/tools/verify_headline_bridge_decision_trace.py",
 )
 
-# The execution code this unit runs, declared as roots rather than as names.
+# The repository source namespace that may take part in an execution, declared
+# as roots rather than as names.
 #
 # The named set above is tooling: every member of it is a file whose identity a
 # reviewer can hold in mind, which is why it is enumerated.  The code that
 # actually computes a tracking result is not enumerable that way, and the cost of
-# pretending otherwise is on record: `interpolate_tracklets`, the function whose
-# behaviour produced the whole W4b finding, lives in
+# pretending otherwise is on record twice.  `interpolate_tracklets`, the function
+# whose behaviour produced the whole W4b finding, lives in
 # `src/saccade/perception/eval/post_merge.py` — a file no hand-written list of
-# the "obviously relevant" modules contained.
+# the "obviously relevant" modules contained.  Then the first witnessed execution
+# found seventeen more the named set had missed, among them the module defining
+# the canonicalization every digest here rests on, the function that selects
+# which evaluator stack loads at all, and the whole of `scripts/eval/config`.
+#
+# `scripts/` is therefore a root, and it is the whole of `scripts/` rather than
+# the two subdirectories that happened to appear in that import graph.  Choosing
+# roots from an observed call path is the same mistake as choosing names from
+# one, one level up.  What a root tuple declares is which repository source is
+# *allowed* to participate; proving what actually did is the witness's job, and
+# the two must not be derived from each other.
+#
+# The cost is conservative failure, not a weaker claim: 459 additional members
+# mean unrelated edits move this digest and force a republish.  That direction is
+# sound — a record over-binds and is merely inconvenient.  The other direction is
+# the one Correction 5 forbids.
 #
 # The roots are literal here and in the schema.  This module still never consults
 # `h2_path_partition`: a path class is a governance verdict about what an edit
@@ -92,7 +111,7 @@ EXECUTION_SEMANTICS_PATHS: tuple[str, ...] = (
 # There is no extension filter.  A rule with exceptions is a rule an editor may
 # work in, and a `.md` under `src/` moving this digest is a cheaper failure than
 # an executed file that some filter decided was not code.
-EXECUTION_CODE_ROOTS: tuple[str, ...] = ("include/", "src/")
+DECLARED_EXECUTION_CODE_ROOTS: tuple[str, ...] = ("include/", "scripts/", "src/")
 
 CONFIG_ENV_KEYS = frozenset(
     {
@@ -280,7 +299,7 @@ def _paths_under_execution_code_roots() -> tuple[str, ...]:
     paths = {
         entry
         for entry in completed.stdout.decode("utf-8").split("\0")
-        if entry and entry.startswith(EXECUTION_CODE_ROOTS)
+        if entry and entry.startswith(DECLARED_EXECUTION_CODE_ROOTS)
     }
     if not paths:
         raise RunSpecError("the execution-code closure is empty")
@@ -304,7 +323,7 @@ def execution_code_closure() -> dict[str, Any]:
         "algorithm": CONTENT_MEMBER_ALGORITHM,
         "digest": digest(members),
         "members": members,
-        "roots": list(EXECUTION_CODE_ROOTS),
+        "roots": list(DECLARED_EXECUTION_CODE_ROOTS),
         "schema": CODE_CLOSURE_SCHEMA,
         "selector": CODE_CLOSURE_SELECTOR,
     }
@@ -411,7 +430,7 @@ def _validate_code_closure(closure: Any) -> str:
         closure.get("schema") != CODE_CLOSURE_SCHEMA
         or closure.get("algorithm") != CONTENT_MEMBER_ALGORITHM
         or closure.get("selector") != CODE_CLOSURE_SELECTOR
-        or closure.get("roots") != list(EXECUTION_CODE_ROOTS)
+        or closure.get("roots") != list(DECLARED_EXECUTION_CODE_ROOTS)
     ):
         raise RunSpecError("RunSpec execution-code closure identity mismatch")
     members = closure.get("members")
@@ -420,7 +439,7 @@ def _validate_code_closure(closure: Any) -> str:
     paths = _validated_member_paths(members, label="execution-code closure member")
     if paths != sorted(set(paths)):
         raise RunSpecError("RunSpec execution-code closure is unsorted or repeats")
-    if any(not path.startswith(EXECUTION_CODE_ROOTS) for path in paths):
+    if any(not path.startswith(DECLARED_EXECUTION_CODE_ROOTS) for path in paths):
         raise RunSpecError("RunSpec execution-code closure names a path outside a root")
     closure_digest = closure.get("digest")
     if closure_digest != digest(members):
@@ -664,6 +683,66 @@ def assert_runtime_matches(
         raise RunSpecError(f"runtime environment differs from RunSpec: {mismatches}")
     if "SACCADE_STREAM_MODE" in environ:
         raise RunSpecError("runtime environment retained SACCADE_STREAM_MODE")
+
+
+def _freeze(value: Any, *, path: str) -> Any:
+    """Rebuild one value as an immutable structure that aliases nothing.
+
+    Rebuilding rather than wrapping is the whole point.  A proxy placed over a
+    dict the caller still holds protects nothing: the caller mutates the dict it
+    kept and the proxy reports the new value.  Every container here is
+    constructed fresh, so the only reference to the underlying mapping is the
+    one the proxy closes over, which no caller can reach.
+
+    Anything that is not a mapping, a sequence, or a JSON scalar is refused
+    rather than frozen.  A consumer's own object cannot be made immutable from
+    outside — freezing its attributes would leave its internals writable and the
+    guarantee would be a comment.  The resolved namespace is JSON, so refusal
+    costs nothing and closes the case the acceptance set asks about.
+    """
+    if isinstance(value, Mapping):
+        frozen = {}
+        for key, item in value.items():
+            if not isinstance(key, str):
+                raise RunSpecError(f"authority namespace key is not a string at {path}")
+            frozen[key] = _freeze(item, path=f"{path}.{key}")
+        return MappingProxyType(frozen)
+    if isinstance(value, (list, tuple)):
+        return tuple(
+            _freeze(item, path=f"{path}[{index}]") for index, item in enumerate(value)
+        )
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    raise RunSpecError(
+        f"authority namespace holds an unfreezable {type(value).__name__} at {path}"
+    )
+
+
+def frozen_authority_namespace(document: Mapping[str, Any]) -> Mapping[str, Any]:
+    """The resolved namespace as an alias-free, recursively immutable mapping.
+
+    This is the authority, not the run's working state.  A tracker must mutate
+    things to track; what it may not do is mutate these.  A consumer that needs
+    a writable structure derives one with `working_namespace`, which shares no
+    object with what this returns — so mutating the copy cannot reach back, and
+    mutate-then-restore, the sequence a before/after digest comparison cannot
+    see, has nowhere to happen.
+    """
+    validate_run_spec(document, verify_projection=False)
+    return _freeze(document["resolved_namespace"], path="resolved_namespace")
+
+
+def working_namespace(frozen: Mapping[str, Any]) -> dict[str, Any]:
+    """Derive a fully mutable copy that shares no object with the authority."""
+
+    def rebuild(value: Any) -> Any:
+        if isinstance(value, Mapping):
+            return {key: rebuild(item) for key, item in value.items()}
+        if isinstance(value, tuple):
+            return [rebuild(item) for item in value]
+        return value
+
+    return {key: rebuild(item) for key, item in frozen.items()}
 
 
 def main(argv: Sequence[str] | None = None) -> int:
