@@ -803,6 +803,129 @@ def test_slot_normalization_sorts_by_slot_and_rejects_duplicates() -> None:
         child.normalize_active_pairs([[5, 2], [9, 2]], frame_id=7)
 
 
+# -- the two observation surfaces are separate evidence ---------------------- #
+
+
+class _FakeTensor:
+    """The two attributes the recorder uses: slicing, then `.numpy()`."""
+
+    def __init__(self, values: list[list[float]] | list[float]) -> None:
+        self._values = values
+
+    def __getitem__(self, item: slice) -> "_FakeTensor":
+        return _FakeTensor(self._values[item])
+
+    def numpy(self) -> list[Any]:
+        return self._values
+
+
+def _track_results(count: int) -> dict[str, Any]:
+    return {
+        "boxes": _FakeTensor([[1.0, 2.0, 5.0, 9.0] for _ in range(count)]),
+        "classes": None,
+        "count": count,
+        "scores": _FakeTensor([0.9 for _ in range(count)]),
+    }
+
+
+def _emitted_line(frame: int, track_id: int) -> str:
+    return f"{frame},{track_id},1.0,2.0,4.0,7.0,0.9,-1,-1,-1"
+
+
+def _recorded(frames: dict[int, list[int]]) -> list[dict[str, Any]]:
+    """Record the raw evidence for one emission per frame, as the child does."""
+    rows: list[dict[str, Any]] = []
+    for frame, track_ids in frames.items():
+        lines = [_emitted_line(frame, track_id) for track_id in track_ids]
+        child.record_raw_emission(
+            rows,
+            lines=lines,
+            track_results=_track_results(len(lines)),
+            frame=frame,
+            person_class=0,
+        )
+    return rows
+
+
+def test_interpolated_rows_do_not_invalidate_the_raw_emission_evidence() -> None:
+    """The sequence callback may deliver rows no emission ever produced.
+
+    Interpolation fills gaps after the last emission, so the callback carries rows
+    with frames the raw evidence never saw. Both records stand: A7.6 compares
+    `final_track_rows` and `mot_output` capture-off to capture-on, each on its own,
+    and asks for no projection between them.
+    """
+    rows = _recorded({1: [7], 3: [7]})
+    interpolated = (
+        _emitted_line(1, 7),
+        _emitted_line(2, 7),  # the interpolated row
+        _emitted_line(3, 7),
+    )
+    assert len(child.canonical_callback_bytes(interpolated).splitlines()) == 3
+    assert len(rows) == 2
+
+
+def test_filtered_rows_do_not_invalidate_the_raw_emission_evidence() -> None:
+    """The quality filter removes whole tracklets after they were emitted."""
+    rows = _recorded({1: [7, 8], 2: [7, 8]})
+    filtered = (_emitted_line(1, 7), _emitted_line(2, 7))
+    assert child.canonical_callback_bytes(filtered)
+    assert len(rows) == 4
+
+
+def test_remapped_ids_do_not_invalidate_the_raw_emission_evidence() -> None:
+    """Deferred alias resolution renames ids the raw rows recorded under."""
+    rows = _recorded({1: [7], 2: [7]})
+    remapped = (_emitted_line(1, 42), _emitted_line(2, 42))
+    assert child.canonical_callback_bytes(remapped)
+    assert {row["track_id"] for row in rows} == {7}
+
+
+def test_an_emission_that_disagrees_with_its_own_track_results_still_fails() -> None:
+    """Retiring the cross-boundary equality did not retire the local one.
+
+    At the moment of emission the boxes still in `track_results` are the ones that
+    produced exactly those lines, so a disagreement there is a broken recorder and
+    not a later transformation.
+    """
+    rows: list[dict[str, Any]] = []
+    with pytest.raises(child.ChildError, match="cardinality"):
+        child.record_raw_emission(
+            rows,
+            lines=[_emitted_line(1, 7)],
+            track_results=_track_results(2),
+            frame=1,
+            person_class=0,
+        )
+    with pytest.raises(child.ChildError, match="disagree"):
+        child.record_raw_emission(
+            rows,
+            lines=[_emitted_line(9, 7)],
+            track_results=_track_results(1),
+            frame=1,
+            person_class=0,
+        )
+    assert rows == []
+
+
+def test_the_callback_still_refuses_a_non_canonical_row() -> None:
+    for lines in ((("1,7,1.0,2.0,4.0,7.0,0.9,-1,-1"),), (("x,7,1,2,3,4,5,-1,-1,-1"),)):
+        with pytest.raises(child.ChildError, match="non-canonical MOT result row"):
+            child.canonical_callback_bytes(lines)
+
+
+def test_the_child_holds_no_equality_between_the_two_surfaces() -> None:
+    """The retired assertion, pinned as retired.
+
+    Reads the source rather than the behaviour, because the defect was a
+    comparison that existed at all: any reintroduction under another name would
+    reproduce it.
+    """
+    source = (_TOOLS / "run_h2_measurement_child.py").read_text(encoding="utf-8")
+    assert "differ from callback order" not in source
+    assert "callback_rows" not in source
+
+
 def test_child_vector_is_h2_specific_and_binds_one_invocation(tmp_path: Path) -> None:
     invocation = (tmp_path / "invocation.json").resolve()
     vector = controller.child_argv(invocation)
