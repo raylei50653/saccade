@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any, Mapping, MutableMapping, Sequence
@@ -31,7 +32,11 @@ from h2_runtime_inputs import canonical_json_bytes, digest  # noqa: E402
 
 RUN_SPEC_SCHEMA = "h2_phase_a_run_spec_v1"
 NAMESPACE_SCHEMA = "mot17_args_resolved_namespace_v1"
-PROJECTION_SCHEMA = "h2_execution_semantics_projection_v1"
+PROJECTION_SCHEMA = "h2_execution_semantics_projection_v2"
+CODE_CLOSURE_SCHEMA = "h2_execution_code_closure_v1"
+PROJECTION_ALGORITHM = "sha256_canonical_json_named_members_and_code_closure_v1"
+CONTENT_MEMBER_ALGORITHM = "sha256_canonical_json_content_members_v1"
+CODE_CLOSURE_SELECTOR = "git_tracked_and_unignored_files_under_declared_roots_v1"
 OBJECT_CANONICALIZATION = "utf8_lexicographic_keys_compact_finite_no_trailing_lf_v1"
 ARTIFACT_SERIALIZATION = "utf8_lexicographic_keys_compact_finite_single_trailing_lf_v1"
 
@@ -68,6 +73,26 @@ EXECUTION_SEMANTICS_PATHS: tuple[str, ...] = (
     "scripts/tools/verify_h2_measurement.py",
     "scripts/tools/verify_headline_bridge_decision_trace.py",
 )
+
+# The execution code this unit runs, declared as roots rather than as names.
+#
+# The named set above is tooling: every member of it is a file whose identity a
+# reviewer can hold in mind, which is why it is enumerated.  The code that
+# actually computes a tracking result is not enumerable that way, and the cost of
+# pretending otherwise is on record: `interpolate_tracklets`, the function whose
+# behaviour produced the whole W4b finding, lives in
+# `src/saccade/perception/eval/post_merge.py` — a file no hand-written list of
+# the "obviously relevant" modules contained.
+#
+# The roots are literal here and in the schema.  This module still never consults
+# `h2_path_partition`: a path class is a governance verdict about what an edit
+# means, and this is a content set.  That the two currently overlap is a fact
+# about the tree, not a dependency.
+#
+# There is no extension filter.  A rule with exceptions is a rule an editor may
+# work in, and a `.md` under `src/` moving this digest is a cheaper failure than
+# an executed file that some filter decided was not code.
+EXECUTION_CODE_ROOTS: tuple[str, ...] = ("include/", "src/")
 
 CONFIG_ENV_KEYS = frozenset(
     {
@@ -210,30 +235,104 @@ def load_authoring_profile() -> tuple[dict[str, Any], dict[str, Any]]:
     return profile, binding
 
 
-def execution_semantics_projection() -> dict[str, Any]:
-    """Digest the exact schema-declared execution-semantics content set."""
-    members: list[dict[str, Any]] = []
-    for relative in EXECUTION_SEMANTICS_PATHS:
-        path = REPO_ROOT / relative
-        if path.is_symlink() or not path.is_file():
-            raise RunSpecError(
-                f"execution-semantics member is not a physical file: {relative}"
-            )
-        payload = path.read_bytes()
-        if not payload:
-            raise RunSpecError(f"execution-semantics member is empty: {relative}")
-        members.append(
-            {
-                "length": len(payload),
-                "path": relative,
-                "sha256": _sha256_bytes(payload),
-            }
-        )
-    members.sort(key=lambda member: str(member["path"]))
-    projection_digest = digest(members)
+def _content_member(
+    relative: str, *, label: str, allow_empty: bool = False
+) -> dict[str, Any]:
+    """Digest one file.
+
+    `allow_empty` splits the two content sets on a real difference. An empty
+    member of the named tooling set is a mistake; an empty member of the
+    execution-code closure is `src/saccade/__init__.py`, which is both ordinary
+    Python and genuinely imported. Refusing it would have made the closure
+    unbuildable, and the tempting repair — quietly skipping empty files — would
+    have put the first exception into a rule that has none.
+    """
+    path = REPO_ROOT / relative
+    if path.is_symlink() or not path.is_file():
+        raise RunSpecError(f"{label} is not a physical file: {relative}")
+    payload = path.read_bytes()
+    if not payload and not allow_empty:
+        raise RunSpecError(f"{label} is empty: {relative}")
     return {
-        "algorithm": "sha256_canonical_json_content_members_v1",
-        "digest": projection_digest,
+        "length": len(payload),
+        "path": relative,
+        "sha256": _sha256_bytes(payload),
+    }
+
+
+def _paths_under_execution_code_roots() -> tuple[str, ...]:
+    """Every file the working tree carries under the declared roots.
+
+    `--others --exclude-standard` is deliberate: a file that is present but not
+    yet committed is still a file the interpreter can import, so a closure built
+    from the index alone would leave exactly the edit an author is mid-way
+    through unbound.
+    """
+    try:
+        completed = subprocess.run(
+            ["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"],
+            capture_output=True,
+            check=True,
+            cwd=REPO_ROOT,
+        )
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise RunSpecError("the execution-code closure is not enumerable") from exc
+    paths = {
+        entry
+        for entry in completed.stdout.decode("utf-8").split("\0")
+        if entry and entry.startswith(EXECUTION_CODE_ROOTS)
+    }
+    if not paths:
+        raise RunSpecError("the execution-code closure is empty")
+    return tuple(sorted(paths))
+
+
+def execution_code_closure() -> dict[str, Any]:
+    """Digest every file under the declared execution-code roots.
+
+    This is what makes two records comparable on the code that produced their
+    rows.  Before it, the named content set was tooling only, so a diagnostic and
+    a measurement could carry one projection digest and run different trackers.
+    """
+    members = [
+        _content_member(
+            relative, label="execution-code closure member", allow_empty=True
+        )
+        for relative in _paths_under_execution_code_roots()
+    ]
+    return {
+        "algorithm": CONTENT_MEMBER_ALGORITHM,
+        "digest": digest(members),
+        "members": members,
+        "roots": list(EXECUTION_CODE_ROOTS),
+        "schema": CODE_CLOSURE_SCHEMA,
+        "selector": CODE_CLOSURE_SELECTOR,
+    }
+
+
+def _projection_digest_payload(
+    members: Sequence[Mapping[str, Any]], closure_digest: str
+) -> dict[str, Any]:
+    return {"execution_code_closure": closure_digest, "members": list(members)}
+
+
+def execution_semantics_projection() -> dict[str, Any]:
+    """Digest the schema-declared content set and the execution-code closure.
+
+    The two halves stay separately addressable — a reviewer reads the named set,
+    and the closure carries whatever the roots hold — but one digest covers both,
+    so neither can move without moving the projection.
+    """
+    members = [
+        _content_member(relative, label="execution-semantics member")
+        for relative in EXECUTION_SEMANTICS_PATHS
+    ]
+    members.sort(key=lambda member: str(member["path"]))
+    closure = execution_code_closure()
+    return {
+        "algorithm": PROJECTION_ALGORITHM,
+        "digest": digest(_projection_digest_payload(members, closure["digest"])),
+        "execution_code_closure": closure,
         "members": members,
         "schema": PROJECTION_SCHEMA,
     }
@@ -277,6 +376,56 @@ def _require_exact_members(
         raise RunSpecError(
             f"{label} has missing or unknown members: {sorted(set(value) ^ expected)}"
         )
+
+
+def _validated_member_paths(members: Sequence[Any], *, label: str) -> list[str]:
+    paths: list[str] = []
+    for member in members:
+        if not isinstance(member, dict):
+            raise RunSpecError(f"RunSpec {label} is not an object")
+        _require_exact_members(member, {"length", "path", "sha256"}, label=label)
+        path = member.get("path")
+        if not isinstance(path, str):
+            raise RunSpecError(f"RunSpec {label} path is not a string")
+        paths.append(path)
+    return paths
+
+
+def _validate_code_closure(closure: Any) -> str:
+    """Check the closure's internal consistency, from its own bytes only.
+
+    Nothing here reads the checkout.  Whether the closure is *complete* — whether
+    it names every repository file the execution actually imported — is not a
+    question these bytes can answer, and it is deliberately not asked here: it is
+    answered against the observed import record, which this document did not
+    produce.
+    """
+    if not isinstance(closure, dict):
+        raise RunSpecError("RunSpec execution-code closure is not an object")
+    _require_exact_members(
+        closure,
+        {"algorithm", "digest", "members", "roots", "schema", "selector"},
+        label="execution-code closure",
+    )
+    if (
+        closure.get("schema") != CODE_CLOSURE_SCHEMA
+        or closure.get("algorithm") != CONTENT_MEMBER_ALGORITHM
+        or closure.get("selector") != CODE_CLOSURE_SELECTOR
+        or closure.get("roots") != list(EXECUTION_CODE_ROOTS)
+    ):
+        raise RunSpecError("RunSpec execution-code closure identity mismatch")
+    members = closure.get("members")
+    if not isinstance(members, list) or not members:
+        raise RunSpecError("RunSpec execution-code closure is empty")
+    paths = _validated_member_paths(members, label="execution-code closure member")
+    if paths != sorted(set(paths)):
+        raise RunSpecError("RunSpec execution-code closure is unsorted or repeats")
+    if any(not path.startswith(EXECUTION_CODE_ROOTS) for path in paths):
+        raise RunSpecError("RunSpec execution-code closure names a path outside a root")
+    closure_digest = closure.get("digest")
+    if closure_digest != digest(members):
+        raise RunSpecError("RunSpec execution-code closure digest mismatch")
+    return str(closure_digest)
 
 
 def validate_run_spec(
@@ -371,29 +520,22 @@ def validate_run_spec(
     if not isinstance(projection, dict):
         raise RunSpecError("RunSpec execution-semantics projection is absent")
     _require_exact_members(
-        projection, {"algorithm", "digest", "members", "schema"}, label="projection"
+        projection,
+        {"algorithm", "digest", "execution_code_closure", "members", "schema"},
+        label="projection",
     )
     if (
         projection.get("schema") != PROJECTION_SCHEMA
-        or projection.get("algorithm") != "sha256_canonical_json_content_members_v1"
+        or projection.get("algorithm") != PROJECTION_ALGORITHM
     ):
         raise RunSpecError("RunSpec projection schema or algorithm mismatch")
     members = projection.get("members")
     if not isinstance(members, list) or len(members) != len(EXECUTION_SEMANTICS_PATHS):
         raise RunSpecError("RunSpec projection member cardinality mismatch")
-    member_paths: list[str] = []
-    for member in members:
-        if not isinstance(member, dict):
-            raise RunSpecError("RunSpec projection member is not an object")
-        _require_exact_members(
-            member, {"length", "path", "sha256"}, label="projection member"
-        )
-        path = member.get("path")
-        if not isinstance(path, str):
-            raise RunSpecError("RunSpec projection path is not a string")
-        member_paths.append(path)
+    member_paths = _validated_member_paths(members, label="projection member")
     if member_paths != sorted(EXECUTION_SEMANTICS_PATHS):
         raise RunSpecError("RunSpec projection does not name the declared content set")
+    closure_digest = _validate_code_closure(projection["execution_code_closure"])
     member_by_path = {str(member["path"]): member for member in members}
     for binding_key, relative in (
         ("profile_sha256", AUTHORING_PROFILE_REL),
@@ -404,7 +546,9 @@ def validate_run_spec(
             raise RunSpecError(
                 f"RunSpec authoring binding differs from projection: {binding_key}"
             )
-    if projection.get("digest") != digest(members):
+    if projection.get("digest") != digest(
+        _projection_digest_payload(members, closure_digest)
+    ):
         raise RunSpecError("RunSpec projection digest mismatch")
     if document.get("execution_semantics_projection_digest") != projection.get(
         "digest"

@@ -60,6 +60,7 @@ import h2_behavioral_identity as behavior  # noqa: E402
 import h2_measurement_evidence as evidence  # noqa: E402
 import h2_path_partition as path_partition  # noqa: E402
 import h2_run_spec as run_spec  # noqa: E402
+import h2_runtime_inputs as runtime_inputs  # noqa: E402
 import h2_terminal_partition as partition  # noqa: E402
 import verify_h2_measurement as verifier  # noqa: E402
 from export_headline_bridge_decision_trace import (  # noqa: E402
@@ -144,6 +145,142 @@ def test_run_spec_projection_declares_the_complete_content_set() -> None:
     assert declared == expected
     assert set(run_spec.EXECUTION_SEMANTICS_PATHS) == expected
     assert members["minItems"] == members["maxItems"] == len(expected)
+
+
+def _built_closure() -> dict[str, Any]:
+    return run_spec.execution_code_closure()
+
+
+def test_the_execution_code_closure_binds_the_code_that_computes_a_result() -> None:
+    """The named content set is tooling; this is what produced the rows.
+
+    `post_merge.py` is the assertion that matters. It is not one of the modules a
+    reviewer would list from memory, and `interpolate_tracklets` inside it
+    decided the whole W4b finding — so a closure that does not contain it is a
+    closure enumerated the way that already failed once.
+    """
+    closure = _built_closure()
+    paths = {str(member["path"]) for member in closure["members"]}
+    assert "src/saccade/perception/eval/post_merge.py" in paths
+    assert "src/saccade/perception/eval/evaluator.py" in paths
+    assert "src/saccade/perception/eval/pipeline.py" in paths
+    assert "src/tracking/tracker_gpu.cu" in paths
+    assert all(path.startswith(run_spec.EXECUTION_CODE_ROOTS) for path in paths)
+
+
+def test_the_closure_carries_no_extension_filter() -> None:
+    """A rule with exceptions is a rule an editor may work in."""
+    tracked = {
+        path
+        for path in run_spec._paths_under_execution_code_roots()
+        if path.endswith((".md", ".txt"))
+    }
+    assert tracked, "the tree no longer exercises this case"
+    paths = {str(member["path"]) for member in _built_closure()["members"]}
+    assert tracked <= paths
+
+
+def test_the_schema_and_the_resolver_name_one_closure_identity() -> None:
+    schema = json.loads(_SUCCESSOR_SCHEMA_PATHS["run_spec"].read_text(encoding="utf-8"))
+    closure = schema["$defs"]["execution_code_closure"]["properties"]
+    assert closure["schema"]["const"] == run_spec.CODE_CLOSURE_SCHEMA
+    assert closure["selector"]["const"] == run_spec.CODE_CLOSURE_SELECTOR
+    assert closure["algorithm"]["const"] == run_spec.CONTENT_MEMBER_ALGORITHM
+    projection = schema["$defs"]["execution_semantics_projection"]
+    assert "execution_code_closure" in projection["required"]
+    assert projection["properties"]["schema"]["const"] == run_spec.PROJECTION_SCHEMA
+    assert (
+        projection["properties"]["algorithm"]["const"] == run_spec.PROJECTION_ALGORITHM
+    )
+
+
+def test_the_v1_projection_identifiers_are_not_permitted_aliases() -> None:
+    """Correction 7's rule: a changed digest domain may not keep the old name."""
+    assert run_spec.PROJECTION_SCHEMA.endswith("_v2")
+    assert run_spec.PROJECTION_ALGORITHM != run_spec.CONTENT_MEMBER_ALGORITHM
+    document = run_spec.build_run_spec()
+    projection = dict(document["execution_semantics_projection"])
+    projection["algorithm"] = run_spec.CONTENT_MEMBER_ALGORITHM
+    document["execution_semantics_projection"] = projection
+    with pytest.raises(run_spec.RunSpecError, match="schema or algorithm mismatch"):
+        run_spec.validate_run_spec(document, verify_projection=False)
+
+
+def test_the_closure_moves_the_projection_digest() -> None:
+    """Neither half of the projection can move without moving the digest."""
+    document = run_spec.build_run_spec()
+    projection = document["execution_semantics_projection"]
+    closure = dict(projection["execution_code_closure"])
+    members = [dict(member) for member in closure["members"]]
+    members[0]["sha256"] = "0" * 64
+    closure["members"] = members
+    closure["digest"] = runtime_inputs.digest(members)
+    moved = dict(projection)
+    moved["execution_code_closure"] = closure
+    assert (
+        runtime_inputs.digest(
+            {
+                "execution_code_closure": closure["digest"],
+                "members": projection["members"],
+            }
+        )
+        != projection["digest"]
+    )
+    document["execution_semantics_projection"] = moved
+    with pytest.raises(run_spec.RunSpecError, match="projection digest mismatch"):
+        run_spec.validate_run_spec(document, verify_projection=False)
+
+
+@pytest.mark.parametrize(
+    ("mutate", "message"),
+    (
+        (lambda closure: closure.update(digest="0" * 64), "closure digest mismatch"),
+        (
+            lambda closure: closure.update(roots=["docs/"]),
+            "closure identity mismatch",
+        ),
+        (
+            lambda closure: closure.update(selector="filesystem_walk_v1"),
+            "closure identity mismatch",
+        ),
+        (lambda closure: closure.update(members=[]), "closure is empty"),
+    ),
+)
+def test_a_closure_is_checked_from_its_own_bytes(mutate: Any, message: str) -> None:
+    """Every one of these is decidable without reading the checkout."""
+    document = run_spec.build_run_spec()
+    projection = dict(document["execution_semantics_projection"])
+    closure = dict(projection["execution_code_closure"])
+    mutate(closure)
+    projection["execution_code_closure"] = closure
+    document["execution_semantics_projection"] = projection
+    with pytest.raises(run_spec.RunSpecError, match=message):
+        run_spec.validate_run_spec(document, verify_projection=False)
+
+
+def test_a_closure_member_outside_a_declared_root_is_refused() -> None:
+    document = run_spec.build_run_spec()
+    projection = dict(document["execution_semantics_projection"])
+    closure = dict(projection["execution_code_closure"])
+    members = [dict(member) for member in closure["members"]]
+    members.append({"length": 1, "path": "docs/smuggled.py", "sha256": "1" * 64})
+    members.sort(key=lambda member: str(member["path"]))
+    closure["members"] = members
+    closure["digest"] = runtime_inputs.digest(members)
+    projection["execution_code_closure"] = closure
+    document["execution_semantics_projection"] = projection
+    with pytest.raises(run_spec.RunSpecError, match="outside a root"):
+        run_spec.validate_run_spec(document, verify_projection=False)
+
+
+def test_a_zero_length_closure_member_is_admitted() -> None:
+    """`src/saccade/__init__.py` is empty, imported, and not an error."""
+    closure = _built_closure()
+    empty = [member for member in closure["members"] if int(member["length"]) == 0]
+    assert empty, "the tree no longer exercises this case"
+    schema = json.loads(_SUCCESSOR_SCHEMA_PATHS["run_spec"].read_text(encoding="utf-8"))
+    assert schema["$defs"]["closure_member"]["properties"]["length"]["minimum"] == 0
+    assert schema["$defs"]["content_member"]["properties"]["length"]["minimum"] == 1
 
 
 def test_run_spec_schema_names_distinct_object_and_artifact_byte_domains() -> None:
