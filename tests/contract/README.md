@@ -20,6 +20,7 @@
 | `test_h2_execution_driver.py` | tracking,system | contract | active | The real driver: faithful transcription, and a monitor that cannot be claimed. |
 | `test_h2_execution_producer.py` | tracking,system | contract | active | The successor producer: what it must emit, and what it must never claim. |
 | `test_h2_execution_verifier.py` | tracking,system | contract | active | The archive-only verifier: what a closed H2 execution must survive to be believed. |
+| `test_h2_import_witness.py` | tracking,system | contract | active | The import witness: proving an execution stayed inside its declared namespace. |
 | `test_h2_layer_p_certificate.py` | tracking,system | contract | active | Layer-P cannot skip admissibility and its certificate binds the full coordinate. |
 | `test_h2_measurement_controller.py` | tracking,system | contract | active | The H2 S4 controller must produce exactly what the independent verifier reads. |
 | `test_h2_measurement_evidence.py` | tracking,system | contract | active | The H2 Layer-M evidence contract: what an archive must support to be believed. |

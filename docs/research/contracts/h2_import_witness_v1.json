@@ -1,0 +1,182 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://saccade.local/h2/import_witness_v1.json",
+  "title": "H2 import witness",
+  "description": "What the execution actually loaded, observed at import time rather than declared. The RunSpec's execution-code closure declares which repository source bytes are eligible to take part in an execution; this document proves one execution did not step outside that namespace. The two are not the same claim and neither substitutes for the other: a closure alone cannot say what ran, and a witness alone has nothing to be measured against. Correction 5 requires the first direction — the bytes used are the bytes recorded — so the gate is containment, `observed repo-local code` in `declared authority domains`, never equality with the closure. Requiring every declared member to appear would make any run that imports less than the whole repository fail, which is every run.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "algorithm",
+    "authority",
+    "bootstrap",
+    "declared",
+    "digest",
+    "observations",
+    "schema"
+  ],
+  "properties": {
+    "schema": {
+      "const": "h2_import_witness_v1"
+    },
+    "algorithm": {
+      "const": "sha256_canonical_json_observed_repo_local_files_v1"
+    },
+    "authority": {
+      "const": "execution_integrity_gate",
+      "description": "Not diagnostic. An observation carrying no authority domain fails the run closed; contrast environment_import_delta.json, which records a side effect and gates nothing."
+    },
+    "digest": {
+      "$ref": "#/$defs/sha256"
+    },
+    "bootstrap": {
+      "$ref": "#/$defs/bootstrap"
+    },
+    "declared": {
+      "$ref": "#/$defs/declared"
+    },
+    "observations": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/observation"
+      },
+      "description": "Every repository-local file the import system resolved, sorted by path, whatever its domain. Third-party and build objects are classified here, not filtered out at the recorder: a filter at the entrance would delete the evidence before anything judged it, and the file most worth seeing is exactly the one nobody expected to be loaded."
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "repo_relative_path": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
+    },
+    "authority_domain": {
+      "enum": [
+        "build_witness",
+        "declared_execution_code_closure",
+        "environment_external",
+        "named_execution_semantics"
+      ],
+      "description": "declared_execution_code_closure: selectable repository source under a declared root, byte identity checked against the closure member. named_execution_semantics: a member of the named execution-semantics content set, byte identity checked against that member. build_witness: a native object under the invocation's bound build directory, whose identity the build witness carries. environment_external: an ignored path outside every declared root, held by the environment axis."
+    },
+    "bootstrap": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Evidence that the recorder was running before the code it is meant to witness. A hook installed inside the child's main() is already too late: the child's own top-level imports resolve while the module object is being created, so an in-child hook would witness everything except the modules that decide what runs. The recorder is therefore installed by a separate entry point which then loads the child.",
+      "required": [
+        "entry_module",
+        "preloaded_repo_local_paths",
+        "recorder_installed_before_entry_import",
+        "schema"
+      ],
+      "properties": {
+        "schema": {
+          "const": "h2_import_witness_bootstrap_v1"
+        },
+        "entry_module": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Imported only after the recorder is installed, so its own top-level imports are witnessed."
+        },
+        "recorder_installed_before_entry_import": {
+          "const": true
+        },
+        "preloaded_repo_local_paths": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/repo_relative_path"
+          },
+          "description": "Repository-local files already in sys.modules when the recorder installed — the bootstrap's own reachable set and nothing else. Recorded rather than asserted away so the claim is checkable: the verifier bounds this list, which is what makes 'installed early enough' a measurement instead of a comment."
+        }
+      }
+    },
+    "declared": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The authority this witness was measured against, pinned by digest so a record cannot later be read against a different declaration.",
+      "required": [
+        "execution_code_closure_digest",
+        "execution_semantics_projection_digest",
+        "roots"
+      ],
+      "properties": {
+        "execution_code_closure_digest": {
+          "$ref": "#/$defs/sha256"
+        },
+        "execution_semantics_projection_digest": {
+          "$ref": "#/$defs/sha256"
+        },
+        "roots": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9_./-]+/$"
+          }
+        }
+      }
+    },
+    "observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "authority_domains",
+        "length",
+        "loader",
+        "module_names",
+        "origin_kind",
+        "path",
+        "sha256"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/repo_relative_path",
+          "description": "The resolved origin, symlinks followed, relative to the repository root. A module name is not a byte identity: the same file may be imported under several names, and the same name may resolve to different files."
+        },
+        "module_names": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Every name this one file was bound to. Sorted, so re-import order does not move the digest."
+        },
+        "origin_kind": {
+          "enum": [
+            "extension",
+            "source"
+          ]
+        },
+        "loader": {
+          "type": "string",
+          "minLength": 1
+        },
+        "length": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256",
+          "description": "Taken when the import system resolved the file, not after the run, so a file rewritten mid-execution is recorded as it was used."
+        },
+        "authority_domains": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/authority_domain"
+          },
+          "description": "A set, not a discriminated kind. Since scripts/ became a declared root the domains genuinely overlap: the named execution-semantics tooling under scripts/ is also a closure member, and both bindings apply to it. Reporting may prefer one label for readability, but admission may not depend on that precedence — a file is admitted when this set is non-empty and every binding it names agrees on the bytes. An empty set is the unbound case and fails the run closed."
+        }
+      }
+    }
+  }
+}

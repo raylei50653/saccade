@@ -1386,6 +1386,82 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
     authorization_effect: none
     not_established: no authorization; no F/S; no seal; no corpus admission; no equivalence claim; no measurement
     next: "owner review of the repair PR; then W5 closure (transient namespace mutation, execution-code closure, successor archive admission in the corpus checker, witness v3, governance closeout)"
+  successor_import_witness_observed:
+    date: 2026-08-01
+    unit: H2
+    stage: "W5b — the observed import witness, the wider roots, and namespace write-protection (branched from `ccdf0d08`, the #315 merge head)"
+    status: >-
+      **landed, code + contract only.** Scoped as a witness; contains a declaration repair, because the
+      witness's first act was to find one. W5a declared which repository source bytes were *eligible*
+      and was careful not to claim they were the bytes that ran. Measuring one execution's actual
+      imports against that declaration found **seventeen loaded repository files bound by no content
+      set**.
+    what_the_witness_found: >-
+      `h2_runtime_inputs` (defines `canonical_json_bytes`/`digest` — the canonicalization every digest
+      in this unit rests on), `h2_behavioral_identity` (whose `_import_eval_stack` chooses which
+      evaluator stack loads at all), `resolved_bridge_policy_config`, `run_h0_phase_a`,
+      `export_headline_bridge_decision_trace`, and all eleven modules of `scripts/eval/config` (the
+      policy configuration). `h2_path_partition` already classifies every one of them as
+      `decision_relevant` or `identity_semantics` — governance said they counted while no content set
+      held their bytes. That is the `post_merge.py` finding one layer up, in the half W5a left alone.
+    roots_widened: >-
+      `DECLARED_EXECUTION_CODE_ROOTS` = (`include/`, `scripts/`, `src/`) ⇒ 659 members. Owner ruling:
+      a root tuple defines the repository source namespace *allowed* to participate; the observed
+      import record only proves this execution did not leave it. So the seventeen files may not form
+      an allowlist, and the roots may not be `scripts/eval/` + `scripts/tools/` chosen from the
+      current call graph — that is choosing roots from an observed path, the same error as choosing
+      names from one. The 459 extra members cause **conservative failure and republish cost, not an
+      integrity gap**; under-binding canonicalization, configuration or import-selection code is the
+      failure Correction 5 forbids. Widening the root tuple is instance data, so the projection
+      algorithm keeps its name.
+    domains_are_a_set: >-
+      Five named `EXECUTION_SEMANTICS_PATHS` members now live under a declared root and are therefore
+      also closure members. The classifier returns `authority_domains: set`, not a discriminated kind:
+      admission requires the set be non-empty and every binding it names agree on the bytes, and may
+      **not** depend on a reporting precedence. The double binding is stated in the contract and
+      pinned by a test so a later reader does not remove it as redundancy.
+    three_boundaries: >-
+      (1) **Observe first, classify second** — `.venv` packages and `build/` objects reach the recorder
+      and are classified there. `.gitignore`/`--exclude-standard` is the classification input, never an
+      entrance filter, so a misplaced untracked file under a declared root lands unbound instead of
+      disappearing before judgement; a native object from an unbound build directory likewise.
+      (2) **The recorder precedes what it witnesses** — `h2_child_bootstrap.py` is an independent
+      process entry point importing nothing of the repository but the recorder, then importing the
+      child; the controller launches it. A hook in the child's `main()` would already have missed that
+      module's top-level imports, which are exactly the ones deciding what runs. The two files that
+      cannot be witnessed are recorded and bounded by the verifier rather than assumed away.
+      (3) **Authority frozen, working state not** — the resolved namespace is rebuilt alias-free and
+      recursively immutable, not wrapped (a proxy over a mapping the caller still holds protects
+      nothing); consumer objects are refused rather than pretended frozen; the mutable copy shares no
+      container, so mutate-then-restore has nowhere to happen.
+    containment_never_equality: >-
+      The gate is `observed repo-local code ⊆ declared authority domains`. Requiring every declared
+      member to be imported would fail every honest run. The measurement verifier re-derives the
+      judgement from archive bytes (§ 20.8) instead of calling the recorder's classifier, which would
+      only establish that the producer agrees with itself, and checks misclassification in **both**
+      directions. The child writes the witness and does not judge it (§ 5.3).
+    cost: >-
+      `identity_semantics` `73d9a164…` → `32bee186…`, 18 → 19 files (the RunSpec schema and resolver
+      are members, and `h2_import_witness_v1.json` joins the exact ruler paths since every sibling H2
+      contract is `identity_semantics`). Republished from existing read-only probe and runtime-input
+      records; no probe recomputed, no native artifact rebuilt. `decision_surface` `9b7faeb0…`,
+      `environment` `3cf9ae3e…`, `implementation` `5ede10f0…`, `runtime_inputs` `0b839df0…` and probe
+      `2dabed0bc05e3bc7…` all unchanged — the confirmation that the recorder, bootstrap and verifier
+      are `plumbing_only`. RunSpec projection `57b0fe5a…` → `44ed14bf…`, closure digest `e5b1ef09…`
+      over 659 members, `resolved_run_spec_digest` `66c031fe…`. **`sealed_prefix` still deliberately
+      not re-pinned** — Correction 11 lands once, in W5d, after the code it describes.
+    verification: >-
+      End to end on this checkout: 1414 observations, **zero unbound**, five files carrying both
+      domains. 34 new contract tests; `pre_push` 2949 passed. Four load-bearing guards
+      mutation-checked — removing the unbound fail-close, removing the unbound-build-directory
+      exclusion, wrapping instead of rebuilding in the freeze, and pointing the controller back at the
+      child each turn exactly their own tests red.
+    authorization_effect: none
+    not_established: >-
+      no authorization issued or consumed; no F/S; no seal; no corpus admission; no equivalence claim;
+      **no execution** — GPU execution is deliberately withheld until the three-root projection,
+      republish and final tree are all fixed, and pre-rebase evidence may not be reused
+    next: "W5c — successor archive admission in the corpus checker and witness v3; then W5d writes Correction 11, re-pins `sealed_prefix` and republishes once; W5e runs the single diagnostic re-run"
   successor_execution_code_closure_declared:
     date: 2026-08-01
     unit: H2

@@ -73,6 +73,7 @@ EXECUTION_ARTIFACT_SCHEMA_PATHS: tuple[str, ...] = (
     "docs/research/contracts/h2_runtime_binding_v1.json",
     "docs/research/contracts/h2_execution_result_v1.json",
     "docs/research/contracts/h2_execution_verification_v1.json",
+    "docs/research/contracts/h2_import_witness_v1.json",
 )
 RUN_SPEC_AUTHORING_PATHS: tuple[str, ...] = (
     "docs/research/contracts/h2_phase_a_authoring_profile_v1.json",

@@ -226,7 +226,7 @@
     "execution_code_closure": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Every file the working tree carries under the declared roots, digested as one content set. The named member list above is tooling a reviewer can enumerate; this is the code that computes a tracking result, which is not enumerable that way. Without it two records could share one projection digest and have run different trackers. Roots, not names: a hand-written list of the obviously relevant modules omitted src/saccade/perception/eval/post_merge.py, the home of interpolate_tracklets, whose behaviour produced the W4b finding.",
+      "description": "Every file the working tree carries under the declared roots, digested as one content set. The named member list above is tooling a reviewer can enumerate; this is the code that computes a tracking result, which is not enumerable that way. Without it two records could share one projection digest and have run different trackers. Roots, not names: a hand-written list of the obviously relevant modules omitted src/saccade/perception/eval/post_merge.py, the home of interpolate_tracklets, whose behaviour produced the W4b finding. scripts/ joined the roots after the first witnessed execution found seventeen loaded repository files that no content set bound, among them the module defining the canonicalization every digest here rests on and the function selecting which evaluator stack loads. It is the whole of scripts/ rather than the subdirectories that happened to appear in that import graph: choosing roots from an observed call path is the same error as choosing names from one. The cost is conservative failure -- unrelated edits move this digest and force a republish -- which is the sound direction to fail in.",
       "required": [
         "algorithm",
         "digest",
@@ -255,7 +255,7 @@
             "minLength": 1,
             "pattern": "^[A-Za-z0-9_./-]+/$"
           },
-          "description": "Declared literally here and in the resolver. This content set never consults a path classification: a path class is a governance verdict about what an edit means, and this is a set of bytes."
+          "description": "Declared literally here and in the resolver. This content set never consults a path classification: a path class is a governance verdict about what an edit means, and this is a set of bytes. A root declares which repository source is allowed to take part in an execution; which of it actually did is the import witness's subject, and neither may be derived from the other."
         },
         "digest": {
           "$ref": "#/$defs/sha256"
@@ -294,13 +294,25 @@
         },
         "members": {
           "type": "array",
-          "minItems": 14,
-          "maxItems": 14,
+          "minItems": 15,
+          "maxItems": 15,
           "uniqueItems": true,
           "items": {
             "$ref": "#/$defs/content_member"
           },
           "allOf": [
+            {
+              "contains": {
+                "properties": {
+                  "path": {
+                    "const": "docs/research/contracts/h2_import_witness_v1.json"
+                  }
+                },
+                "required": [
+                  "path"
+                ]
+              }
+            },
             {
               "contains": {
                 "properties": {
@@ -341,6 +353,30 @@
               "contains": {
                 "properties": {
                   "path": {
+                    "const": "docs/research/contracts/h2_phase_a_run_spec_v1.json"
+                  }
+                },
+                "required": [
+                  "path"
+                ]
+              }
+            },
+            {
+              "contains": {
+                "properties": {
+                  "path": {
+                    "const": "scripts/eval/mot17_args.py"
+                  }
+                },
+                "required": [
+                  "path"
+                ]
+              }
+            },
+            {
+              "contains": {
+                "properties": {
+                  "path": {
                     "const": "scripts/tools/check_h2_measure_archives.py"
                   }
                 },
@@ -353,7 +389,31 @@
               "contains": {
                 "properties": {
                   "path": {
+                    "const": "scripts/tools/h0_bridge_decision_trace_schema_v2.json"
+                  }
+                },
+                "required": [
+                  "path"
+                ]
+              }
+            },
+            {
+              "contains": {
+                "properties": {
+                  "path": {
                     "const": "scripts/tools/h2_measurement_evidence.py"
+                  }
+                },
+                "required": [
+                  "path"
+                ]
+              }
+            },
+            {
+              "contains": {
+                "properties": {
+                  "path": {
+                    "const": "scripts/tools/h2_run_spec.py"
                   }
                 },
                 "required": [
@@ -420,61 +480,14 @@
                   "path"
                 ]
               }
-            },
-            {
-              "contains": {
-                "properties": {
-                  "path": {
-                    "const": "scripts/tools/h0_bridge_decision_trace_schema_v2.json"
-                  }
-                },
-                "required": [
-                  "path"
-                ]
-              }
-            },
-            {
-              "contains": {
-                "properties": {
-                  "path": {
-                    "const": "scripts/eval/mot17_args.py"
-                  }
-                },
-                "required": [
-                  "path"
-                ]
-              }
-            },
-            {
-              "contains": {
-                "properties": {
-                  "path": {
-                    "const": "docs/research/contracts/h2_phase_a_run_spec_v1.json"
-                  }
-                },
-                "required": [
-                  "path"
-                ]
-              }
-            },
-            {
-              "contains": {
-                "properties": {
-                  "path": {
-                    "const": "scripts/tools/h2_run_spec.py"
-                  }
-                },
-                "required": [
-                  "path"
-                ]
-              }
             }
           ]
         },
         "execution_code_closure": {
           "$ref": "#/$defs/execution_code_closure"
         }
-      }
+      },
+      "description": "Since scripts/ became a root the two halves overlap: five named members live under it and are therefore also closure members, so their bytes are bound twice and folded into this digest through both halves. That is deliberate and lossless, not an accident of the wider roots, and it is stated here so a later reader does not remove it as redundancy. Widening the root tuple changes which files the closure holds, which is instance data; changing how the two halves fold together would change the algorithm, and would have to take a new algorithm name."
     }
   }
 }

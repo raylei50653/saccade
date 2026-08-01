@@ -593,7 +593,10 @@ def child_argv(invocation_path: Path) -> tuple[str, ...]:
         (REPO_ROOT / ".venv/bin/python").as_posix(),
         "-I",
         "-B",
-        (REPO_ROOT / "scripts/tools/run_h2_measurement_child.py").as_posix(),
+        # The bootstrap, not the child.  The recorder has to be running before
+        # the child's own top-level imports resolve, and by the time any code in
+        # the child file executes they already have.
+        (REPO_ROOT / "scripts/tools/h2_child_bootstrap.py").as_posix(),
         "--invocation",
         invocation_path.as_posix(),
     )

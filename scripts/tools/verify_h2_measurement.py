@@ -62,7 +62,9 @@ if _TOOLS.as_posix() not in sys.path:
     sys.path.insert(0, _TOOLS.as_posix())
 
 import h2_behavioral_identity as behavior  # noqa: E402
+import h2_import_witness as import_witness  # noqa: E402
 import h2_measurement_evidence as evidence  # noqa: E402
+import run_h2_measurement_child as child  # noqa: E402
 import h2_path_partition as path_partition  # noqa: E402
 import h2_terminal_partition as partition  # noqa: E402
 import verify_h0_phase_a as h0_verifier  # noqa: E402  (imported, never modified)
@@ -1313,6 +1315,113 @@ def _verify_packet(
     return PASS, packet_report["semantic_digest_sha256"]
 
 
+def _declared_member_digests(
+    run_spec: Mapping[str, Any],
+) -> tuple[dict[str, str], dict[str, str]]:
+    projection = run_spec["execution_semantics_projection"]
+    return (
+        {
+            str(member["path"]): str(member["sha256"])
+            for member in projection["execution_code_closure"]["members"]
+        },
+        {
+            str(member["path"]): str(member["sha256"])
+            for member in projection["members"]
+        },
+    )
+
+
+def _verify_import_witness(root: Path, sequence: str, run_id: str) -> str:
+    """The code this run loaded lay inside the namespace its RunSpec declared.
+
+    Independently derived (§ 20.8).  Nothing here calls the recorder's classifier:
+    re-running the producer's own logic over the producer's own output would only
+    establish that it agrees with itself.  The frozen key and domain names are
+    imported, because a verifier that restated them would drift; the judgement is
+    rebuilt from the archive's bytes.
+
+    Containment, never equality.  A run imports the part of the declared source
+    namespace its configuration reaches, and demanding it import all 657 members
+    would fail every honest execution.  The direction that matters is the other
+    one: nothing loaded from outside.
+
+    Misclassification is checked in both directions.  It is not enough that each
+    observation names *some* domain — an observation that claimed
+    `environment_external` for a file the closure declares would otherwise slip
+    past, so a declared path must claim its declared domain.
+    """
+    directory = evidence.run_dir(root, sequence, run_id)
+    if not (directory / import_witness.WITNESS_NAME).is_file():
+        return UNAVAILABLE
+    witness = _load(directory, import_witness.WITNESS_NAME)
+    invocation = _load(directory, child.INVOCATION_NAME)
+    label = f"{sequence}/{run_id}"
+
+    observations = witness.get("observations")
+    if witness.get("authority") != import_witness.WITNESS_AUTHORITY:
+        raise VerificationError(f"import witness is not a gate: {label}")
+    if not isinstance(observations, list) or not observations:
+        raise VerificationError(f"import witness observed nothing: {label}")
+    if witness.get("digest") != digest(observations):
+        raise VerificationError(f"import witness digest mismatch: {label}")
+
+    try:
+        run_spec = invocation["run_spec"]
+        closure_members, named_members = _declared_member_digests(run_spec)
+        declared = witness["declared"]
+        bootstrap = witness["bootstrap"]
+    except (KeyError, TypeError) as exc:
+        raise VerificationError(f"import witness is malformed: {label}") from exc
+
+    if (
+        declared.get("execution_semantics_projection_digest")
+        != run_spec["execution_semantics_projection_digest"]
+        or declared.get("execution_code_closure_digest")
+        != run_spec["execution_semantics_projection"]["execution_code_closure"][
+            "digest"
+        ]
+    ):
+        raise VerificationError(
+            f"import witness was measured against another declaration: {label}"
+        )
+    if bootstrap.get("recorder_installed_before_entry_import") is not True:
+        raise VerificationError(f"import witness claims no early recorder: {label}")
+    # Third-party files under a checkout-local virtualenv load from `.pth` hooks
+    # before any repository code can run.  They are the environment axis's
+    # subject, so their being early is not a recorder failure.
+    external = {
+        str(observation.get("path"))
+        for observation in observations
+        if import_witness.DOMAIN_ENVIRONMENT
+        in (observation.get("authority_domains") or ())
+    }
+    early = set(bootstrap.get("preloaded_repo_local_paths") or ())
+    if early - set(import_witness.BOOTSTRAP_SELF_PATHS) - external:
+        raise VerificationError(
+            f"repository code loaded before the recorder installed: {label}"
+        )
+
+    for observation in observations:
+        path = str(observation.get("path"))
+        observed = observation.get("sha256")
+        domains = set(observation.get("authority_domains") or ())
+        if not domains:
+            raise VerificationError(f"unbound repository code loaded: {path} @ {label}")
+        for domain, table in (
+            (import_witness.DOMAIN_CLOSURE, closure_members),
+            (import_witness.DOMAIN_NAMED, named_members),
+        ):
+            if (path in table) != (domain in domains):
+                raise VerificationError(
+                    f"import witness misclassified {path} for {domain}: {label}"
+                )
+            if domain in domains and table[path] != observed:
+                raise VerificationError(
+                    f"loaded bytes differ from the declaration: {path} @ {label}"
+                )
+    return PASS
+
+
 def _cross_check_projections(
     packet: Mapping[str, Any],
     capture: Mapping[str, Any],
@@ -1396,6 +1505,12 @@ def _sequence_replay(root: Path, sequence: str) -> SequenceReplay:
                 f"{sequence}: comparison.json records equality while the surviving "
                 "inventories show an inequality"
             )
+
+    # Every run, not only the capture-on ones: what code a run loaded is a fact
+    # about the run, and the capture-off run is the one the others are compared
+    # against.
+    for run_id in evidence.RUN_IDS:
+        _verify_import_witness(root, sequence, run_id)
 
     states: list[tuple[str, str | None]] = []
     for run_id in evidence.CAPTURE_ON_RUNS:
