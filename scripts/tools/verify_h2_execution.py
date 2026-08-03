@@ -72,6 +72,7 @@ if str(_TOOLS) not in sys.path:
 import h2_measurement_evidence as evidence  # noqa: E402
 import h2_path_partition as path_partition  # noqa: E402
 import h2_run_spec as run_spec_module  # noqa: E402
+import h2_successor_authorization as successor_authorization  # noqa: E402
 import h2_terminal_partition as partition  # noqa: E402
 from h2_runtime_inputs import canonical_json_bytes, sha256_file  # noqa: E402
 
@@ -79,6 +80,7 @@ CONTRACT_DIR = REPO_ROOT / "docs" / "research" / "contracts"
 VERIFICATION_NAME = "verification.json"
 CHECKSUMS_NAME = evidence.CHECKSUMS_NAME
 VERIFICATION_SCHEMA = "h2_execution_verification_v1"
+VERIFICATION_SCHEMA_V2 = successor_authorization.VERIFICATION_SCHEMA_V2
 VERIFICATION_PROCESS = "independent_command_separate_process"
 
 # Which archive file carries which frozen contract. The schema paths come from
@@ -96,6 +98,12 @@ PRODUCER_ARTIFACTS: dict[str, str] = {
     "result.json": _SCHEMA_BY_BASENAME["h2_execution_result_v1.json"],
 }
 VERIFICATION_CONTRACT = _SCHEMA_BY_BASENAME["h2_execution_verification_v1.json"]
+PRODUCER_ARTIFACTS_V2: dict[str, str] = {
+    "run_spec.json": _SCHEMA_BY_BASENAME["h2_phase_a_run_spec_v1.json"],
+    "runtime_binding.json": _SCHEMA_BY_BASENAME["h2_runtime_binding_v1.json"],
+    "result.json": _SCHEMA_BY_BASENAME["h2_execution_result_v2.json"],
+}
+VERIFICATION_CONTRACT_V2 = _SCHEMA_BY_BASENAME["h2_execution_verification_v2.json"]
 
 # `h2_execution_result_v1` is the Phase-A contract: its run plan is the frozen
 # four-run Phase-A sequence, and `select_successor_result` refuses any other
@@ -126,6 +134,23 @@ def _load_contract(relative: str) -> dict[str, Any]:
             f"frozen contract is not an object: {relative}"
         )
     return payload
+
+
+def artifact_contracts(documents: Mapping[str, Any]) -> dict[str, str]:
+    """Select the frozen artifact suite by the result's explicit schema."""
+    result = documents.get("result.json")
+    schema = result.get("schema") if isinstance(result, Mapping) else None
+    if schema == successor_authorization.RESULT_SCHEMA_V2:
+        return PRODUCER_ARTIFACTS_V2
+    return PRODUCER_ARTIFACTS
+
+
+def verification_schema_for(documents: Mapping[str, Any]) -> str:
+    return (
+        VERIFICATION_SCHEMA_V2
+        if artifact_contracts(documents) is PRODUCER_ARTIFACTS_V2
+        else VERIFICATION_SCHEMA
+    )
 
 
 def _archive_files(root: Path) -> dict[str, Path]:
@@ -245,7 +270,7 @@ def _check_artifact_schemas(
     import jsonschema
 
     reasons: list[str] = []
-    for name, relative in sorted(PRODUCER_ARTIFACTS.items()):
+    for name, relative in sorted(artifact_contracts(documents).items()):
         schema = _load_contract(relative)
         try:
             jsonschema.validate(instance=documents[name], schema=schema)
@@ -810,6 +835,7 @@ def _record(
     identity: tuple[str, str, str],
     digests: Mapping[str, str],
     reasons_by_check: Mapping[str, list[str]],
+    verification_schema: str,
 ) -> dict[str, Any]:
     """Assemble one complete record. Total in its inputs, so it is comparable."""
     execution_id, spec_digest, projection_digest = identity
@@ -822,7 +848,7 @@ def _record(
         "producer_invoked": False,
         "reasons": [reason for name in CHECKS for reason in reasons_by_check[name]],
         "resolved_run_spec_digest": spec_digest,
-        "schema": VERIFICATION_SCHEMA,
+        "schema": verification_schema,
         "valid": all(checks.values()),
         "verification_host_inputs_used": False,
         "verification_process": VERIFICATION_PROCESS,
@@ -846,6 +872,7 @@ def verify_archive(root: Path) -> dict[str, Any]:
     archive reproduces the stored record exactly.
     """
     documents, raws = load_archive(root)
+    verification_schema = verification_schema_for(documents)
     identity = _identity(documents)
     digests = {
         name: hashlib.sha256(raws[name]).hexdigest()
@@ -862,7 +889,10 @@ def verify_archive(root: Path) -> dict[str, Any]:
         CHECKSUM_CLOSURE: _physical_closure_reasons(root, raws),
     }
     expected = _record(
-        identity=identity, digests=digests, reasons_by_check=reasons_by_check
+        identity=identity,
+        digests=digests,
+        reasons_by_check=reasons_by_check,
+        verification_schema=verification_schema,
     )
 
     stored_path = root / VERIFICATION_NAME
@@ -872,7 +902,10 @@ def verify_archive(root: Path) -> dict[str, Any]:
             *_stored_verdict_reasons(stored_path, expected),
         ]
     return _record(
-        identity=identity, digests=digests, reasons_by_check=reasons_by_check
+        identity=identity,
+        digests=digests,
+        reasons_by_check=reasons_by_check,
+        verification_schema=verification_schema,
     )
 
 
@@ -880,12 +913,21 @@ def validate_verification(document: Mapping[str, Any]) -> None:
     """Fail closed if this command would emit a record its own contract refuses."""
     import jsonschema
 
-    schema = _load_contract(VERIFICATION_CONTRACT)
+    record_schema = document.get("schema")
+    if record_schema == VERIFICATION_SCHEMA_V2:
+        contract = VERIFICATION_CONTRACT_V2
+    elif record_schema == VERIFICATION_SCHEMA:
+        contract = VERIFICATION_CONTRACT
+    else:
+        raise ExecutionVerificationError(
+            f"unknown verification schema: {record_schema!r}"
+        )
+    schema = _load_contract(contract)
     try:
         jsonschema.validate(instance=document, schema=schema)
     except jsonschema.ValidationError as exc:
         raise ExecutionVerificationError(
-            f"verification record violates {VERIFICATION_SCHEMA}: {exc.message}"
+            f"verification record violates {record_schema}: {exc.message}"
         ) from exc
 
 

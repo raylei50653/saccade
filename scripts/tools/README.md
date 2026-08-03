@@ -400,8 +400,10 @@ deleting.
 | `h2_measurement_freeze.py` | stable | cli | Produce the canonical Phase-A ``h2_measurement_freeze_v1`` record. |
 | `h2_path_partition.py` | stable | cli | H2 firewall: classify paths and decide Layer-P retry admissibility. |
 | `h2_rehearse_measurement.py` | diagnostic | cli | Walk the whole H2 Phase-A launch path without spending the owner's grant. |
+| `h2_rehearse_successor_measurement.py` | diagnostic | cli | Walk the v2 successor measurement path with a disposable-ledger grant. |
 | `h2_run_spec.py` | stable | cli | Issue, validate, and project the sole-authority H2 Phase-A RunSpec. |
 | `h2_runtime_inputs.py` | stable | cli | Bind the fixtures and runtime assets consumed by H2. |
+| `h2_successor_authorization.py` | stable | - | Successor exactly-once authorization request, grant and receipt contract. |
 | `h2_terminal_partition.py` | stable | cli | The H2 Layer-M terminal partition: ordered, exhaustive, mechanically decidable. |
 | `horizon_convergence_probe.py` | experiment | cli | Horizon-convergence probe — does the pedestrian bbox scale field actually converge to a stable horizon line? … |
 | `horizon_detector_test.py` | experiment | cli | Horizon homothety on REAL detections vs GT — does the vertex-homothety horizon survive detector truncation / … |
@@ -437,6 +439,7 @@ deleting.
 | `run_h2_layer_p.py` | stable | cli | H2 Layer P: retryable pre-seal plumbing, with no epistemic budget attached. |
 | `run_h2_measurement.py` | stable | cli | H2 S4 Phase-A Layer-M controller. |
 | `run_h2_measurement_child.py` | stable | cli | H2 Phase-A measurement child and recorder. |
+| `run_h2_successor_measurement.py` | stable | cli | Consume one successor grant and produce one v2 measurement archive. |
 | `run_m_b1_5_stage2_q1q3.py` | experiment | cli | M-B1.5 Stage 2 Q1–Q3 runner: D_online label join + safe-negative mass audit. |
 | `run_m_b1_5_stage2_q4.py` | experiment | cli | M-B1.5 Stage 2 Q4 runner: signal separability on D_online. |
 | `run_m_b1_5_stage2_q45_atlas.py` | experiment | cli | M-B1.5 Stage 2 Q4.5: structured threshold-combination atlas. |
@@ -470,6 +473,7 @@ deleting.
 | `verify_h0_r4_qualification_report.py` | stable | cli | Verify a non-authoritative H0 R4 repair qualification report. |
 | `verify_h2_execution.py` | stable | cli | Verify one closed H2 successor execution archive from its bytes alone. |
 | `verify_h2_measurement.py` | stable | cli | Independent verifier for an H2 Layer-M evidence root. |
+| `verify_h2_measurement_envelope.py` | stable | cli | Independently verify and close one successor measurement authority envelope. |
 | `verify_headline_bridge_decision_trace.py` | stable | cli | Replay and validate the sealed H0 bridge-decision trace from capture alone. |
 | `verify_r1_temporal_reduction_replay.py` | stable | cli | Verify R1's estimator replay without reading labels or fitting a score. |
 | `weight_method_safe_region.py` | diagnostic | cli | Compare weighting methods by GT-safe *productive region* (not best FP). |

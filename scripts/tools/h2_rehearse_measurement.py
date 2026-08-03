@@ -68,6 +68,7 @@ if _TOOLS.as_posix() not in sys.path:
     sys.path.insert(0, _TOOLS.as_posix())
 
 import h2_measurement_evidence as evidence  # noqa: E402
+import h2_terminal_partition as partition  # noqa: E402
 import check_h2_measure_archives as corpus  # noqa: E402
 import run_h2_measurement as controller  # noqa: E402
 import run_h2_measurement_child as child  # noqa: E402
@@ -299,7 +300,13 @@ def corpus_admission_witness(root: Path) -> dict[str, Any]:
     """
     try:
         corpus.check_corpus([root])
-    except corpus.CorpusError as exc:
+    except (
+        corpus.CorpusError,
+        evidence.EvidenceError,
+        partition.PartitionError,
+        verifier.VerificationError,
+        OSError,
+    ) as exc:
         return {"admitted": False, "reasons": [str(exc)]}
     return {"admitted": True, "reasons": []}
 

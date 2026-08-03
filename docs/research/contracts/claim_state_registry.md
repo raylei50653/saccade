@@ -1514,6 +1514,54 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
       W5 is owner-accepted and complete. Stop at verdict registration. Observation 1 is a separately
       scoped non-blocking follow-up, not an automatic repair. Any later successor execution or
       measurement is a separate owner decision and authority event, not a continuation authorized by W5.
+  successor_w6_formal_measurement_path:
+    date: 2026-08-03
+    unit: H2
+    stage: "W6 — successor formal-measurement authority envelope and disposable rehearsal"
+    status: >-
+      **implementation in progress; no owner grant and no formal measurement.** The owner separately
+      selected the formal-measurement plan after accepting W5 closure. This record does not relabel that
+      plan as execution authorization: implementation may proceed through a final-projection rehearsal,
+      then must stop for an independently owner-issued third grant.
+    content_scope: >-
+      Reuse W5e's MOT17-04-SDP content choice, four ordered runs and complete 454-key RunSpec/capture ABI.
+      Do not reuse W5e's diagnostic authority or archive and do not resurrect the retired legacy
+      source-head/certificate/F/S gates or either spent historical authorization.
+    authority_contract: >-
+      A non-authoritative request binds execution id, Phase A, resolved RunSpec, execution-semantics
+      projection and controlled execution domain. A separately supplied owner grant must match all five.
+      The exclusive durable `<controlled-ledger>/<authorization_id>.json` receipt is the sole consumption
+      event; its canonical digest is recorded by v2 `result.json`. A crash after the receipt spends the
+      grant and leaves truthful incomplete custody; a second invocation cannot reach the producer.
+    independent_closure: >-
+      v1 result/verifier dispatch remains historical. Formal measurement uses a v2 inner archive plus an
+      outer request/grant/domain/receipt/run-evidence envelope. Inner validity, outer validity and corpus
+      admission are independent verdicts. The corpus admits only an envelope whose archived execution
+      domain equals `h2_controlled_host_execution_domain_v1`; naked measurement archives are refused.
+    rehearsal_gate: >-
+      Before a grant request, the real controller and both independent verifiers must complete once on the
+      final committed implementation projection against a disposable external ledger. Required outcome:
+      `measurement_pass`, `terminal: null`, inner valid, envelope valid, and exactly one corpus refusal for
+      controlled-domain mismatch. A synthetic rehearsal grant is not owner authority and is not a
+      measurement.
+    repaired_observation: >-
+      W5 owner-review observation 1 is addressed in the same projection-moving unit:
+      `corpus_admission_witness` now catches the corpus CLI's full fail-closed exception surface. This does
+      not alter the accepted W5 verdict and does not authorize a second W5 diagnostic.
+    success_disposition: >-
+      After exact-head review, a separately owner-issued matching grant and one consumed execution, success
+      requires independently valid inner and outer closures, canonical corpus admission and an owner review
+      verdict accepting H2 measurement closure. It ends Phase A; it does not establish Phase B,
+      equivalence, I/F/S, a seal, H0 re-entry or any automatic next execution.
+    authorization_effect: none
+    not_established: >-
+      no third grant exists; no controlled-ledger authorization consumed; no formal measurement; no corpus
+      admission; no measurement-closure verdict; no Phase B; no equivalence; no I/F/S; no seal; no H0
+      re-entry
+    next: >-
+      Finish implementation review and one disposable-ledger final-projection rehearsal. Then emit a
+      request from the exact clean merged head and stop. Formal execution remains blocked on the owner's
+      separate matching grant.
   successor_import_witness_observed:
     date: 2026-08-01
     unit: H2

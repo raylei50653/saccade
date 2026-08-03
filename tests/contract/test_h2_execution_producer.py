@@ -224,6 +224,8 @@ def _execution(
     runs: Any = None,
     authority: str = "exactly_once_measurement",
     monitor: dict[str, Any] | None = None,
+    result_schema: str = producer.RESULT_SCHEMA,
+    authorization_binding_digest: str | None = None,
 ) -> producer.Execution:
     """A diagnostic carries no authorization digest; the schema requires null."""
     measurement = authority == "exactly_once_measurement"
@@ -234,8 +236,15 @@ def _execution(
             stages if stages is not None else _complete_stages(), monitor
         ),
         runs=runs if runs is not None else _FixedRuns(),
-        authorization_binding_digest=_fake("authorization") if measurement else None,
+        authorization_binding_digest=(
+            authorization_binding_digest
+            if authorization_binding_digest is not None
+            else _fake("authorization")
+            if measurement
+            else None
+        ),
         run_spec=spec,
+        result_schema=result_schema,
     )
 
 
@@ -753,7 +762,7 @@ def test_successor_discovery_uses_a_family_specific_anchor(tmp_path: Path) -> No
     assert corpus._is_successor_archive(successor) is True
 
 
-def test_a_closed_successor_measurement_is_admitted(
+def test_a_naked_successor_measurement_is_refused(
     tmp_path: Path, run_spec: dict[str, Any]
 ) -> None:
     root = tmp_path / "a-name-is-navigation-not-identity"
@@ -761,12 +770,22 @@ def test_a_closed_successor_measurement_is_admitted(
     _, verification = verifier.commit_verification(root)
     assert verification["valid"] is True
 
-    attempts = corpus.check_corpus([root])
-    assert len(attempts) == 1
-    attempt = attempts[0]
-    assert isinstance(attempt, corpus.SuccessorAttempt)
-    assert attempt.result["authority"] == partition.MEASUREMENT_AUTHORITY
-    assert attempt.verification == verification
+    with pytest.raises(corpus.CorpusError, match="no durable authorization envelope"):
+        corpus.check_corpus([root])
+
+
+def test_a_v2_measurement_uses_the_v2_independent_verdict(
+    tmp_path: Path, run_spec: dict[str, Any]
+) -> None:
+    root = tmp_path / "v2-archive"
+    result = _execution(
+        run_spec,
+        result_schema=producer.RESULT_SCHEMA_V2,
+    ).produce(root)
+    assert result["schema"] == producer.RESULT_SCHEMA_V2
+    _, verification = verifier.commit_verification(root)
+    assert verification["schema"] == verifier.VERIFICATION_SCHEMA_V2
+    assert verification["valid"] is True
 
 
 def test_a_green_diagnostic_is_valid_but_corpus_refused(

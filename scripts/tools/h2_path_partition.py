@@ -72,8 +72,15 @@ EXECUTION_ARTIFACT_SCHEMA_PATHS: tuple[str, ...] = (
     "docs/research/contracts/h2_phase_a_run_spec_v1.json",
     "docs/research/contracts/h2_runtime_binding_v1.json",
     "docs/research/contracts/h2_execution_result_v1.json",
+    "docs/research/contracts/h2_execution_result_v2.json",
     "docs/research/contracts/h2_execution_verification_v1.json",
+    "docs/research/contracts/h2_execution_verification_v2.json",
     "docs/research/contracts/h2_import_witness_v1.json",
+    "docs/research/contracts/h2_successor_authorization_request_v1.json",
+    "docs/research/contracts/h2_successor_exactly_once_authorization_v1.json",
+    "docs/research/contracts/h2_successor_authorization_consumed_v1.json",
+    "docs/research/contracts/h2_successor_measurement_envelope_verification_v1.json",
+    "docs/research/contracts/h2_successor_measurement_rehearsal_witness_v1.json",
 )
 RUN_SPEC_AUTHORING_PATHS: tuple[str, ...] = (
     "docs/research/contracts/h2_phase_a_authoring_profile_v1.json",
@@ -103,6 +110,7 @@ IDENTITY_SEMANTICS_PATHS: frozenset[str] = frozenset(
         "scripts/tools/h2_behavioral_identity.py",
         "scripts/tools/h2_path_partition.py",
         "scripts/tools/h2_runtime_inputs.py",
+        "scripts/tools/h2_successor_authorization.py",
         "scripts/tools/h2_terminal_partition.py",
         "scripts/tools/run_h2_layer_p.py",
         *EXECUTION_ARTIFACT_SCHEMA_PATHS,

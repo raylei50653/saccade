@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://saccade.local/contracts/h2_successor_authorization_consumed_v1.json",
+  "title": "H2 successor authorization consumed v1",
+  "description": "The durable exactly-once consumption receipt whose canonical digest is bound by result.json.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "authority",
+    "authorization_digest",
+    "authorization_id",
+    "consumed_utc",
+    "execution_domain",
+    "execution_id",
+    "execution_semantics_projection_digest",
+    "phase",
+    "resolved_run_spec_digest",
+    "schema",
+    "state"
+  ],
+  "properties": {
+    "schema": {
+      "const": "h2_successor_authorization_consumed_v1"
+    },
+    "authority": {
+      "const": "exactly_once_measurement"
+    },
+    "authorization_digest": {
+      "$ref": "#/$defs/sha256"
+    },
+    "authorization_id": {
+      "$ref": "#/$defs/sha256"
+    },
+    "consumed_utc": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "execution_domain": {
+      "$ref": "#/$defs/sha256"
+    },
+    "execution_id": {
+      "$ref": "#/$defs/execution_id"
+    },
+    "execution_semantics_projection_digest": {
+      "$ref": "#/$defs/sha256"
+    },
+    "phase": {
+      "const": "a"
+    },
+    "resolved_run_spec_digest": {
+      "$ref": "#/$defs/sha256"
+    },
+    "state": {
+      "const": "consumed"
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "execution_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+    }
+  }
+}

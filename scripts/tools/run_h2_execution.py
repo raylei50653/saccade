@@ -60,6 +60,7 @@ import verify_h2_execution as archive  # noqa: E402
 PHASE = archive.PHASE
 BINDING_SCHEMA = "h2_runtime_binding_v1"
 RESULT_SCHEMA = "h2_execution_result_v1"
+RESULT_SCHEMA_V2 = "h2_execution_result_v2"
 PROBE_SCHEMA = "h2_behavior_probe_result_v1"
 PROBE_ROLE = "recorded_observation_not_equivalence_or_gate"
 PROBE_STATE = "computed"
@@ -339,6 +340,7 @@ def build_result(
     predicate_results: Mapping[str, Any],
     ordered_runs: Sequence[Mapping[str, Any]],
     execution_result: str | None = None,
+    result_schema: str = RESULT_SCHEMA,
 ) -> dict[str, Any]:
     """Assemble `result.json`. The verdict is selected by the ruler, not written here.
 
@@ -367,7 +369,7 @@ def build_result(
         "resolved_run_spec_digest": run_spec["resolved_run_spec_digest"],
         "result": selection.result,
         "run_plan": {"run_ids": list(run_ids()), "sequence": sequence()},
-        "schema": RESULT_SCHEMA,
+        "schema": result_schema,
         "terminal": selection.terminal,
     }
     _validate(document, "result.json")
@@ -377,7 +379,10 @@ def build_result(
 def _validate(document: Mapping[str, Any], name: str) -> None:
     import jsonschema
 
-    schema = archive._load_contract(archive.PRODUCER_ARTIFACTS[name])
+    contracts = archive.PRODUCER_ARTIFACTS
+    if name == "result.json" and document.get("schema") == RESULT_SCHEMA_V2:
+        contracts = archive.PRODUCER_ARTIFACTS_V2
+    schema = archive._load_contract(contracts[name])
     try:
         jsonschema.validate(instance=document, schema=schema)
     except jsonschema.ValidationError as exc:
@@ -486,6 +491,7 @@ class Execution:
     runs: Runs
     authorization_binding_digest: str | None = None
     run_spec: Mapping[str, Any] | None = None
+    result_schema: str = RESULT_SCHEMA
 
     def produce(self, root: Path) -> dict[str, Any]:
         if self.authority not in partition.AUTHORITIES:
@@ -551,6 +557,7 @@ class Execution:
             execution_result=named
             if _may_name_a_cause(observation, authority=self.authority)
             else None,
+            result_schema=self.result_schema,
         )
         emit_archive(root, run_spec=spec, runtime_binding=binding, result=result)
         return result
@@ -709,9 +716,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         print("--run-root and --selected-base are required to execute", file=sys.stderr)
         return 2
 
-    import h2_execution_driver as driver
-    import run_h2_layer_p as layer_p_module
-
     archive_root = args.archive.resolve()
     run_root = args.run_root.resolve()
     if archive_root == run_root or run_root.is_relative_to(archive_root):
@@ -723,35 +727,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         return 2
 
-    spec = run_spec_module.build_run_spec()
-    build_dir = (
-        args.build_dir or layer_p_module.REPO_ROOT / layer_p_module.BUILD_DIR_REL
-    ).resolve()
-    layer_p = layer_p_module.LayerP(
-        base=args.selected_base,
-        skip_build=args.skip_build,
-        fixture=layer_p_module.IDENTITY_SEQUENCE,
-        build_dir=build_dir,
-    )
-    order = driver.ExecutionOrder()
-    # Started before the binding, and observably so: the session records its own
-    # start against the same order the binding marks itself in, and refuses to
-    # report `started_before_binding` if it cannot show it came first.
-    session = driver.start_monitor(driver.bound_paths(build_dir=build_dir), order=order)
-    clock = time.monotonic
-    execution = Execution(
+    execution = configured_execution(
         execution_id=args.execution_id,
         authority=args.authority,
-        stages=driver.LayerPStages(layer_p=layer_p, session=session),
-        runs=driver.MeasurementRuns(
-            root=run_root,
-            bundle=driver.LaunchSite(build_dir=build_dir, head=_current_head()),
-            document=spec,
-            session=session,
-            started=clock(),
-            clock=clock,
-        ),
-        run_spec=spec,
+        authorization_binding_digest=None,
+        run_root=run_root,
+        selected_base=args.selected_base,
+        build_dir=args.build_dir,
+        skip_build=args.skip_build,
     )
     result = execution.produce(archive_root)
     print(
@@ -768,6 +751,61 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
     )
     return 0
+
+
+def configured_execution(
+    *,
+    execution_id: str,
+    authority: str,
+    authorization_binding_digest: str | None,
+    run_root: Path,
+    selected_base: str,
+    build_dir: Path | None,
+    skip_build: bool,
+    run_spec: Mapping[str, Any] | None = None,
+    result_schema: str = RESULT_SCHEMA,
+) -> Execution:
+    """Bind the real retained stages/runs and start their monitor.
+
+    The successor measurement controller calls this before consuming its grant,
+    so the monitor is active before the durable receipt and remains active over
+    every stage and run.  Constructing this object executes no stage and spends
+    no authority.
+    """
+    import h2_execution_driver as driver
+    import run_h2_layer_p as layer_p_module
+
+    spec = dict(run_spec) if run_spec is not None else run_spec_module.build_run_spec()
+    selected_build = (
+        build_dir or layer_p_module.REPO_ROOT / layer_p_module.BUILD_DIR_REL
+    ).resolve()
+    layer_p = layer_p_module.LayerP(
+        base=selected_base,
+        skip_build=skip_build,
+        fixture=layer_p_module.IDENTITY_SEQUENCE,
+        build_dir=selected_build,
+    )
+    order = driver.ExecutionOrder()
+    session = driver.start_monitor(
+        driver.bound_paths(build_dir=selected_build), order=order
+    )
+    clock = time.monotonic
+    return Execution(
+        execution_id=execution_id,
+        authority=authority,
+        stages=driver.LayerPStages(layer_p=layer_p, session=session),
+        runs=driver.MeasurementRuns(
+            root=run_root,
+            bundle=driver.LaunchSite(build_dir=selected_build, head=_current_head()),
+            document=spec,
+            session=session,
+            started=clock(),
+            clock=clock,
+        ),
+        authorization_binding_digest=authorization_binding_digest,
+        run_spec=spec,
+        result_schema=result_schema,
+    )
 
 
 def _current_head() -> str:

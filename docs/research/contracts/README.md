@@ -19,7 +19,8 @@
 | **[gctm_b1_slot_identity_decision_v1.json](gctm_b1_slot_identity_decision_v1.json)** | **Owner-accepted、machine-readable B1-slot identity 決策。** 固定 `GCTM_B1 != H0_ROUTE5_B1` 與 `relation: coexist`，隔離 `GCTM_D1` diagnostic authority，記錄 runtime compatibility fail-closed gate，並投影空候選集／空 WIP。通用 schema 與 validator 位於 `scripts/tools/research_slot_governance_*`。 |
 | **[research_lock_v1.json](research_lock_v1.json)** | **online 與 research 互斥的當前狀態（machine-readable）。** 規則在 §20.10、執行在 `tests/contract/test_research_lock.py`，本檔只承載 state：`ONLINE_OPEN` / `RESEARCH_OPEN` / `RESEARCH_CLOSED`、開啟中實例所凍結的座標軸、以及 append-only 的轉移紀錄。轉移只由 `scripts/tools/research_lock.py` 執行；**缺檔 = 被刪除的 guard，不是 `ONLINE_OPEN`**。 |
 | **[h2_controlled_host_execution_domain_v1.json](h2_controlled_host_execution_domain_v1.json)** | **H2 canonical corpus 的 admission anchor。** 唯一被 canonical measurement corpus 接納的 authorization execution domain（controlled host／operator／ledger namespace）。規則在 `check_h2_measure_archives.execution_domain_admission_reasons`，比對的是 archive 位元組與本檔位元組、**不觀察驗證主機**。它是 provenance/admission guard,**不是** authority proof：能重寫 grant／receipt／digest chain 的人也能寫入本檔內容,不可偽造的簽發需要簽章機制,本 repo 不提供。 |
-| **[H2 execution-integrity artifact suite](h2_phase_a_run_spec_v1.json)** | **H2 successor execution 的 machine-readable artifact contract。** [`h2_phase_a_authoring_profile_v1`](h2_phase_a_authoring_profile_v1.json) 是完整 454-key frozen authoring authority（非 runtime preset）；`h2_phase_a_run_spec_v1` 固定其發行出的 resolved namespace 與 declared content projection；[`h2_runtime_binding_v1`](h2_runtime_binding_v1.json) 綁實際 code/input/build bytes；[`h2_execution_result_v1`](h2_execution_result_v1.json) 區分 non-qualifying diagnostic 與 exactly-once measurement；[`h2_execution_verification_v1`](h2_execution_verification_v1.json) 只容許獨立 process 產生 foreign-host-independent verdict。 |
+| **[H2 execution-integrity artifact suite](h2_phase_a_run_spec_v1.json)** | **H2 successor execution 的 machine-readable artifact contract。** [`h2_phase_a_authoring_profile_v1`](h2_phase_a_authoring_profile_v1.json) 是完整 454-key frozen authoring authority（非 runtime preset）；`h2_phase_a_run_spec_v1` 固定其發行出的 resolved namespace 與 declared content projection；[`h2_runtime_binding_v1`](h2_runtime_binding_v1.json) 綁實際 code/input/build bytes；[`h2_execution_result_v1`](h2_execution_result_v1.json)／[`h2_execution_verification_v1`](h2_execution_verification_v1.json) 保留 diagnostic/historical custody；正式 measurement 使用 [`h2_execution_result_v2`](h2_execution_result_v2.json)／[`h2_execution_verification_v2`](h2_execution_verification_v2.json)，再由 successor authorization envelope 獨立連結 durable receipt。 |
+| **[H2 successor measurement authority envelope](h2_successor_exactly_once_authorization_v1.json)** | **正式 successor measurement 的 authority/custody contract。** 非權威 request、owner grant、exclusive durable consumption receipt、outer envelope verification 與 disposable-ledger rehearsal witness 分別由 [`request`](h2_successor_authorization_request_v1.json)、[`grant`](h2_successor_exactly_once_authorization_v1.json)、[`receipt`](h2_successor_authorization_consumed_v1.json)、[`envelope verdict`](h2_successor_measurement_envelope_verification_v1.json)、[`rehearsal witness`](h2_successor_measurement_rehearsal_witness_v1.json) 固定。這是 structural attribution，不是 cryptographic signature。 |
 | **[boolean_composition_semantics_contract.md](boolean_composition_semantics_contract.md)** | **組合語義。** Ω/Θ 分型、三值 predicate、universe identity、threshold edge、role closure、canonical grammar、closed-loop firewall |
 | **[safe_region_asset_contract.md](safe_region_asset_contract.md)** | **打包契約（R0-B RegionAsset）。** 把已封存的 evidence 決定性地打包成 region asset；claim level 與成熟度；**transfer / intervention / production 皆尚未授權** |
 
@@ -69,6 +70,17 @@ producer-only archive 與任何 `non_qualifying_diagnostic`（即使七項 check
 都必須拒收。這是 structural provenance/admission guard，不是 signature-based
 authority proof；本 repo 不提供不可偽造的 owner 簽章。Rehearsal witness v3 記錄
 canonical checker 的實際拒收與非空 reasons，historical v1/v2 不回寫。
+
+正式 successor measurement 另要求 durable authority envelope。Request 本身不
+授權；grant 必須逐欄綁 execution id、resolved RunSpec、execution-semantics
+projection 與 controlled execution domain。`authorization_consumed.json` 以外部
+ledger 的 exclusive create 作唯一 consumption event，v2 `result.json` 綁其
+canonical digest。inner v2 verifier 關閉 archive，outer verifier 再連結 grant、
+receipt、archived domain 與四個 run directories 並關閉整個 packet。Canonical
+corpus 只接納 inner valid + envelope valid + controlled-domain equality；裸
+`exactly_once_measurement` archive 一律拒收。Disposable-ledger rehearsal 必須走
+同一路徑，但只容許因 domain mismatch 被 corpus 拒收，且不構成 owner authorization
+或 measurement。
 
 `.github/workflows/runtime_identity.yml` 只保留為
 `workflow_dispatch` 的 controlled-host diagnostic。它可觀察 CUDA/TensorRT
