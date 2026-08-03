@@ -17,8 +17,8 @@ document:
   path: headline_bridge_behavioral_identity_capture_declaration_20260725.md
 
 sealed_prefix:
-  bytes: 108275
-  sha256: "f53da415a67e78b511d21e80ecaf2b92108dd0c3386dee09f06211a1dc649766"
+  bytes: 114906
+  sha256: "3925b24044d4c0173517c267ad0e9d7fbc22a46206f15f82b0c281253b9ea9d9"
   # Re-pin log (each entry was a deliberate pre-seal edit, not a slip):
   #   Review reset — coordinate / bounded probe / equivalence split; content-bound
   #                  fixtures/assets/build products; v2 Layer-P certificate.
@@ -156,6 +156,15 @@ sealed_prefix:
   #             `runtime_binding_mismatch` becomes run-derived, and an observation
   #             that does not correspond to the run plan is unusable evidence rather
   #             than a mismatch. Re-pinned to the complete post-correction body.
+  #   Review Correction 11 — records W5a's declared execution-code closure,
+  #             W5b's observed-import containment repair and immutable namespace,
+  #             and W5c's successor corpus admission boundary. Fully closed,
+  #             independently valid exactly-once measurement archives may be
+  #             admitted; green diagnostics remain refused, and structural
+  #             provenance is not cryptographic authority proof. Rehearsal witness
+  #             v3 records the canonical corpus owner's actual refusal while
+  #             historical v1/v2 custody remains unchanged. Re-pinned to the
+  #             complete post-correction body.
 
 policy_target:
   kind: headline

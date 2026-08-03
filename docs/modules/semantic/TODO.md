@@ -128,8 +128,16 @@
   reproducibility 之間那條線，並以 monkeypatch 機械證明；
   可形成的 archive 之瑕疵記為 `valid: false`，填不出必填欄位者不寫紀錄並非零退出）
   → W4 producer（**已落地,code only**:`run_h2_execution.py` 只寫三份 artifact、從不寫 verification.json／checksums.sha256;verdict 由 ruler 選出後轉錄,連「可不可以指名 terminal 4 cause」都先問 ruler;四個 ordered run 沿用 Layer-M runner ⇒ executed_surfaces 不動、不需 re-pin;Stages／Runs 為 Protocol ⇒ 控制流不需 build 即可測;W3 verifier 當場抓到 producer 的 stage-failure 藏住 mutation 的 bug）
-  → W4b 綁 driver 並跑一次 diagnostic（需 build,先把 build/h2_layer_p 改名讓開）
-  → W5 closure**；W3 先於 W4 的理由＝#294→#295 的契約先行與 #302／#304 的
+  → W4b 綁 driver 並完成 diagnostic（修正 child 自造的 cross-member equality 後，
+  4/4 runs completed、五項 predicates pass、仍只得 `diagnostic_complete`）
+  → W5a–W5d closure **已落地**：三-root 659-member execution-code closure、1414
+  observed imports / zero unbound、alias-free immutable RunSpec namespace、successor
+  canonical corpus admission 與 rehearsal witness v3、Review Correction 11／re-pin／
+  republish／governance closeout。archive validity 不等於 corpus admission；任何
+  non-qualifying diagnostic 即使全綠仍拒收。**下一步只剩 W5e：所有
+  projection-moving edit 合併後，在 final mainline projection 跑一次 diagnostic**；
+  它不消耗或產生 authorization、不是 measurement、不建 F/S、不 seal、不證明
+  equivalence，也不恢復兩份 spent authorization。W3 先於 W4 的理由＝#294→#295 的契約先行與 #302／#304 的
   guard-before-entry，且 W2–W3 不需 build ⇒ item 5 的 `build/h2_layer_p`
   位元不動。不是重建舊 items 4–5／`F` →
   [second failure evidence](research/evidence/h2_phase_a_failed_attempt_7646f421_20260728/)

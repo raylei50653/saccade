@@ -1386,6 +1386,47 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
     authorization_effect: none
     not_established: no authorization; no F/S; no seal; no corpus admission; no equivalence claim; no measurement
     next: "owner review of the repair PR; then W5 closure (transient namespace mutation, execution-code closure, successor archive admission in the corpus checker, witness v3, governance closeout)"
+  successor_w5_code_and_governance_closed:
+    date: 2026-08-03
+    unit: H2
+    stage: "W5c–W5d — successor corpus admission, witness v3, Review Correction 11 and governance closeout"
+    status: >-
+      **landed, code + contract + governance; W5e diagnostic still pending.** The successor family is
+      now connected to the canonical corpus checker, and the declaration describes W5a–W5c only after
+      their implementation landed, as Correction 10 required.
+    corpus_admission: >-
+      Archive roots are discovered by family-specific members, never by a root-name prefix. Admission
+      requires `verification.json`, final `checksums.sha256`, an independently recomputed
+      `verification.valid: true`, and recorded `exactly_once_measurement` authority. Producer-only,
+      independently invalid and non-qualifying diagnostic archives are refused; a green diagnostic is
+      valid evidence of what it observed but is not canonical measurement evidence. The diagnostic and
+      measurement spellings are ruler-owned constants with unchanged meanings.
+    authority_limit: >-
+      This is structural provenance/admission, not cryptographic authority proof. The repository has no
+      signature mechanism; a party able to rewrite the grant, receipt and digest chain can also write the
+      structural authority fields. W5c does not issue or verify an unforgeable owner grant.
+    rehearsal_v3: >-
+      `h2_phase_a_rehearsal_witness_v3` asks `check_h2_measure_archives.check_corpus`
+      directly and records `admitted: false` plus non-empty reasons. Historical v1/v2 custody is not
+      rewritten. Rehearsal success requires the canonical corpus owner's refusal, not a duplicated
+      harness-local prediction.
+    projection_cost: >-
+      W5c edits declared `scripts/` closure members, so the 659-member closure moves `e5b1ef09…` →
+      `4aa029b4…`, projection `44ed14bf…` → `93009c65…`, and resolved RunSpec `66c031fe…` →
+      `835a2110…`. It also edits ruler member `h2_terminal_partition.py`; Review Correction 11 re-pins
+      the complete declaration at 114906 bytes / `3925b240…`, and runtime identity is republished once
+      from existing read-only W4b probe and runtime-input records. No probe or native build is run.
+    verification: >-
+      Focused W5c contract suite 83 passed; extended successor contract suite 502 passed; ruff and mypy
+      pass. Final pre-push and CI are required before merge.
+    authorization_effect: none
+    not_established: >-
+      no third authorization; no authorization consumed; no I/F/S; no measurement; no seal; no corpus
+      admission produced by this work; no H0 re-entry; equivalence remains unproven
+    next: >-
+      W5e only — after this projection-moving change is merged, run one non-qualifying GPU diagnostic on
+      the final mainline projection, independently verify it, confirm canonical corpus refusal, and
+      register the diagnostic evidence without upgrading it to qualification or measurement.
   successor_import_witness_observed:
     date: 2026-08-01
     unit: H2

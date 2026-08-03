@@ -1937,3 +1937,105 @@ ruler members moved — `h2_terminal_partition.py` and the three frozen successo
 schemas — so `identity_semantics` is republished from the existing read-only probe
 and runtime-input records; the probe axis and the other four axes do not move, and
 no controlled-host run or native rebuild is performed.
+
+## Review Correction 11 — the execution closure is observed, and corpus admission is a separate verdict (2026-08-03, pre-seal)
+
+Correction 10 required the implementation to land before the declaration described
+it. W5a through W5c are now that implementation. They close two boundaries that the
+three-artifact producer and the archive-only verifier could not close for
+themselves: which repository source bytes were allowed to participate in an
+execution, and which independently valid successor archives the canonical corpus
+will accept.
+
+### The content set is a root declaration, not a remembered call graph
+
+W5a replaced the fourteen named tooling files as the whole execution-content claim
+with a declared code closure. The first declaration covered `include/` and `src/`.
+That was already necessary: `interpolate_tracklets` in
+`src/saccade/perception/eval/post_merge.py` decided W4b's first diagnostic finding,
+yet it was absent from the old named set. The selector includes tracked files and
+present unignored working-copy files under the declared roots, admits empty ordinary
+files, applies no extension allowlist and never consults the governance path
+classifier. The resulting closure is folded together with the named semantic
+members into the execution-semantics projection; an archive-only reader verifies
+the archived closure arithmetically and does not inspect its own checkout.
+
+W5b then measured one real execution's imports and disproved the first root
+declaration. Seventeen loaded repository files were bound by no content set:
+`h2_runtime_inputs`, the import selector in `h2_behavioral_identity`, the resolved
+policy builder, the H0 runner and trace exporter, and all eleven modules under
+`scripts/eval/config`. These are not incidental names: they choose
+canonicalization, configuration, imports and execution. The declared roots are
+therefore `include/`, `scripts/` and `src/`, 659 files on the W5b tree. The roots
+state which repository source *may* participate; the witness proves only that one
+execution's observed repository-local imports were a subset of those authority
+domains. Neither set is derived from the other, and equality is not required.
+
+The recorder observes before it classifies. Repository-local imports from ignored
+environments and native build products reach it instead of disappearing behind an
+entrance filter. An independent bootstrap installs the recorder before it imports
+the child, so the child's top-level imports are not missed. The two bootstrap
+members that necessarily precede their own observation are named and bounded by
+the verifier. Authority domains form a set rather than a precedence-ordered kind:
+five named execution-semantics members also live under the declared roots, and
+every binding that names a member must agree on its bytes.
+
+The RunSpec namespace is rebuilt recursively into an alias-free immutable
+authority object, with a separately rebuilt mutable working copy. Wrapping a caller
+mapping would have left an alias that could mutate and restore the apparent
+authority. Consumer objects that cannot be frozen are refused instead of being
+labelled immutable. The end-to-end W5b witness recorded 1,414 import observations,
+zero unbound repository-local code and the five intentional double-domain members.
+That result establishes containment for the diagnostic it observed; it is not a
+general proof that no future execution can import different code. Every successor
+execution carries its own witness and is checked again.
+
+### Archive validity and corpus admission are different decisions
+
+W5c connects the successor family to the canonical corpus checker. Archive roots
+are discovered by family-specific members, never by a directory-name prefix: a
+root name and a source head remain navigation witnesses, not validity. A successor
+archive is admitted only when it is fully closed by `verification.json` and
+`checksums.sha256`, independently recomputes as valid under the successor
+archive-only verifier, and records `exactly_once_measurement` authority. A producer
+directory containing only `run_spec.json`, `runtime_binding.json` and `result.json`
+is not canonical evidence even when a prospective verifier could validate those
+three files.
+
+A green `non_qualifying_diagnostic` is refused by the corpus for exactly the same
+reason as a red one: diagnostic observations select no measurement claim. Thus
+`verification.valid: true` means that the archive truthfully satisfies the
+successor artifact contract; it does **not** mean the corpus admits it. The ruler
+now publishes the two existing authority spellings as named constants so the
+producer and corpus consumer cannot silently fork their tokens; this adds no new
+authority and changes no result or terminal meaning.
+
+This admission check is a structural provenance guard, not cryptographic authority
+proof. The repository has no signature mechanism. A party able to rewrite a grant,
+receipt and their digest chain can also write the expected structural fields. The
+checker establishes closure, independent artifact validity and the recorded
+measurement-authority class; it does not claim an unforgeable owner signature.
+
+The rehearsal witness becomes `h2_phase_a_rehearsal_witness_v3` and records the
+actual verdict returned by the canonical corpus checker. Rehearsal succeeds only
+when its otherwise complete archive is refused with a non-empty reason set. The
+historical v1 and v2 witnesses stay in custody and retain the schemas they recorded;
+they are not rewritten to look like v3.
+
+### Cost and remaining boundary
+
+W5c edits files under the declared `scripts/` root, so the 659-member closure,
+execution-semantics projection and resolved RunSpec all move. It also edits
+`h2_terminal_partition.py`, an `identity_semantics` ruler member. This correction
+therefore re-pins the declaration's entire pre-seal body and republishes runtime
+identity from the existing read-only W4b probe and runtime-input records. It runs no
+probe, performs no controlled-host reconstruction and rebuilds no native artifact.
+
+W5a through W5d issue and consume no authorization, select no `I`, create no
+`F`/`S`, execute no measurement, seal nothing and leave
+`equivalence.state = unproven`. They do not restore either spent historical
+authorization and do not issue a third one. W5e remains one non-qualifying
+diagnostic, to be run only after every projection-moving edit above has merged and
+the final projection is known. Its outcome may diagnose the successor path; pass or
+fail, it cannot qualify a measurement, enter the canonical measurement corpus,
+authorize a later execution or establish equivalence.
