@@ -27,6 +27,7 @@ import h2_import_witness as import_witness  # noqa: E402
 import h2_measurement_evidence as evidence  # noqa: E402
 import h2_run_spec as run_spec_module  # noqa: E402
 import h2_successor_authorization as authority  # noqa: E402
+import test_h2_measurement_evidence as measurement_fixtures  # noqa: E402
 import test_h2_execution_producer as producer_fixtures  # noqa: E402
 import verify_h2_execution as inner_verifier  # noqa: E402
 import verify_h2_measurement_envelope as envelope_verifier  # noqa: E402
@@ -125,14 +126,10 @@ def _packet(tmp_path: Path, run_spec: dict[str, Any]) -> tuple[Path, dict[str, A
 
     result_path = archive / "result.json"
     result = json.loads(result_path.read_text(encoding="utf-8"))
+    measurement_fixtures._write_sequence(root, result["run_plan"]["sequence"])
     for run in result["ordered_runs"]:
         directory = evidence.run_dir(
             runs_root, result["run_plan"]["sequence"], run["run_id"]
-        )
-        _write(
-            directory,
-            evidence.POLICY_INVENTORY_NAME,
-            {"schema": evidence.POLICY_INVENTORY_SCHEMA},
         )
         _write(directory, import_witness.WITNESS_NAME, _import_witness(run_spec))
         run["artifact_digest"] = driver.run_artifact_digest(runs_root, run["run_id"])
@@ -242,6 +239,23 @@ def test_unbound_import_invalidates_run_evidence(
     observed = envelope_verifier.verify_packet(root)
     assert observed["valid"] is False
     assert any("unbound repository code" in reason for reason in observed["reasons"])
+
+
+def test_run_replay_refuses_a_pass_over_changed_mot_bytes(
+    tmp_path: Path, run_spec: dict[str, Any]
+) -> None:
+    root, _ = _packet(tmp_path, run_spec)
+    mot = (
+        root
+        / authority.RUNS_DIR
+        / driver.producer.sequence()
+        / "01_capture_on"
+        / f"{driver.producer.sequence()}.txt"
+    )
+    mot.write_bytes(mot.read_bytes() + b"x")
+    observed = envelope_verifier.verify_packet(root)
+    assert observed["valid"] is False
+    assert any("execution_complete" in reason for reason in observed["reasons"])
 
 
 def test_request_without_packet_identity_is_unformable(

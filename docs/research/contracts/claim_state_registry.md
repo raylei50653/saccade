@@ -1555,10 +1555,12 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
     second_rehearsal_finding: >-
       The repaired run at `c4821e9e…` proved single-layer custody and again reached `measurement_pass`,
       valid inner/outer verdicts and domain-only refusal. Review then found outer `run_evidence` trusted the
-      child's import-containment gate: it recomputed policy-inventory digests but did not itself validate
-      each archived `import_witness.json`. The envelope verifier now schema-validates every completed-run
-      witness and re-derives early-recorder, non-empty authority-domain and archived-RunSpec byte
-      containment. An unbound observation fails the outer verdict. This verifier edit moves the projection,
+      child's run-evidence gates: it recomputed policy-inventory digests but did not itself validate each
+      archived `import_witness.json` or replay the run-derived pass predicates. The envelope verifier now
+      schema-validates every completed-run witness; re-derives early-recorder, non-empty authority-domain
+      and archived-RunSpec byte containment; and replays A7.6 inventories, MOT bytes and packets before
+      accepting `capture_off_on_equal`, `packets_valid` or a passing `execution_complete`. Unbound imports
+      and changed MOT bytes each fail the outer verdict. This verifier edit moves the projection,
       so the packet at `/home/ray/h2_w6_successor_rehearsal_20260803T160837Z` is also superseded rehearsal
       evidence and one further disposable run is required.
     repaired_observation: >-

@@ -289,6 +289,46 @@ def _run_reasons(
                 run_spec=run_spec,
             )
         )
+
+    predicates = result.get("predicate_results")
+    if not isinstance(predicates, Mapping):
+        reasons.append("inner result has no usable predicate record for run replay")
+        return reasons
+    try:
+        replay = driver.layer_m.replay_surviving_evidence(root)
+    except (driver.layer_m.ControllerError, OSError, KeyError, TypeError) as exc:
+        reasons.append(f"run evidence replay cannot be formed: {exc}")
+        return reasons
+
+    def state(name: str) -> Any:
+        record = predicates.get(name)
+        return record.get("state") if isinstance(record, Mapping) else None
+
+    if replay.evidence_present:
+        for name, observed in (
+            ("capture_off_on_equal", replay.capture_equal),
+            ("packets_valid", replay.packets_valid),
+        ):
+            expected = "pass" if observed else "fail"
+            if state(name) != expected:
+                reasons.append(
+                    f"{name} replays to {expected!r}, and result.json records "
+                    f"{state(name)!r}"
+                )
+    elif state("capture_off_on_equal") == "pass" or state("packets_valid") == "pass":
+        reasons.append("run-derived predicates pass without replayable run evidence")
+
+    all_completed = all(
+        isinstance(record, Mapping) and record.get("state") == "completed"
+        for record in by_id.values()
+    ) and set(by_id) == set(driver.producer.run_ids())
+    if state("execution_complete") == "pass" and (
+        not replay.complete or replay.errors or not all_completed
+    ):
+        reasons.append(
+            "execution_complete records pass, but archived run evidence does not "
+            f"replay complete: errors={list(replay.errors)!r}"
+        )
     return reasons
 
 
