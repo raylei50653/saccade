@@ -516,8 +516,10 @@ At reviewed `main` `136b9eea337f6f7188902bea0dc17ddb632fb854`, the owner verdict
 **`ACCEPT — W5 implementation/evidence closure`**. The accepted scope is W5c's
 implementation, W5d's governance and runtime-identity publication, W5e's exact
 final-projection diagnostic evidence, and PR #318's non-execution registration.
-The review independently re-derived the load-bearing identities and relations rather
-than accepting their prose projections: discovery and cross-family isolation;
+The mechanical rederivation was performed by a reviewing agent under owner direction;
+the owner reviewed and adopted it as the basis for the verdict. The rederivation covered
+the load-bearing identities and relations rather than accepting their prose projections:
+discovery and cross-family isolation;
 closed/valid/measurement-authority corpus admission; witness-v3 delegation to the
 corpus owner; policy pin and identity-axis movement; the 659-member closure,
 projection and RunSpec; packet and archive closure; four run artifacts, output

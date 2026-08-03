@@ -1471,6 +1471,7 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
       date: 2026-08-03
       reviewed_main: 136b9eea337f6f7188902bea0dc17ddb632fb854
       verdict: "ACCEPT — W5 implementation/evidence closure"
+      rederivation_performed_by: "reviewing agent under owner direction; verdict adopted by owner"
       scope: >-
         W5c implementation, W5d governance/runtime identity, the W5e final-projection diagnostic
         archive, and PR #318's non-execution registration projections. W5a/W5b were reviewed only as
