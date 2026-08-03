@@ -1391,9 +1391,10 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
     unit: H2
     stage: "W5c–W5d — successor corpus admission, witness v3, Review Correction 11 and governance closeout"
     status: >-
-      **landed, code + contract + governance; W5e diagnostic still pending.** The successor family is
-      now connected to the canonical corpus checker, and the declaration describes W5a–W5c only after
-      their implementation landed, as Correction 10 required.
+      **landed, code + contract + governance; W5e diagnostic complete.** The successor family is now
+      connected to the canonical corpus checker, and the declaration describes W5a–W5c only after
+      their implementation landed, as Correction 10 required. PR #317 merged as `e94407f2…`; the
+      final-projection diagnostic is registered in the next record.
     corpus_admission: >-
       Archive roots are discovered by the family-specific first artifact `run_spec.json`, never by a
       root-name prefix. PR CI caught the first rule treating shared `result.json` / `verification.json`
@@ -1425,15 +1426,57 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
     verification: >-
       Focused W5c contract suite 83 passed; extended successor contract suite 502 passed; the CI-found
       cross-family discovery repair passes the canonical corpus check plus 312 directly related tests;
-      ruff and mypy pass. Final pre-push and CI are required before merge.
+      ruff and mypy pass. Final pre-push: 2957 passed, 14 skipped, 105 deselected, 5 xfailed. PR #317's
+      six Python CI jobs and C++ build passed at exact head `4653a717…` before merge.
     authorization_effect: none
     not_established: >-
       no third authorization; no authorization consumed; no I/F/S; no measurement; no seal; no corpus
       admission produced by this work; no H0 re-entry; equivalence remains unproven
     next: >-
-      W5e only — after this projection-moving change is merged, run one non-qualifying GPU diagnostic on
-      the final mainline projection, independently verify it, confirm canonical corpus refusal, and
-      register the diagnostic evidence without upgrading it to qualification or measurement.
+      no automatic successor execution. W5e is complete below. Any future measurement requires a
+      separate owner-issued exactly-once authorization path not supplied by W5; this record authorizes
+      none.
+  successor_w5e_final_projection_diagnostic:
+    date: 2026-08-03
+    unit: H2
+    stage: "W5e — the single final-projection non-qualifying diagnostic"
+    status: >-
+      **complete; diagnostic evidence only.** Exactly one W5e GPU execution ran after every
+      projection-moving W5 edit had merged. It bound clean `main` at merge `e94407f2…`, source tree
+      `3661cd70…`, with retry base equal to that head and zero changed paths.
+    execution: >-
+      `execution_id: h2-w5e-20260803T132933Z`, authority `non_qualifying_diagnostic`.
+      All four ordered MOT17-04-SDP runs completed; all five predicates pass; result
+      `diagnostic_complete`; `terminal: null`. The bound-input monitor started before binding, observed
+      zero changes and completed a clean final drain. The retained live identity stage records probe
+      `2dabed0b…`; equality is not equivalence and `equivalence.state` remains `unproven`.
+    bound_projection: >-
+      659-member execution-code closure `fab25fba…`; execution-semantics projection `34ad9734…`;
+      resolved RunSpec `5e648186…`. Bound build artifacts remain scan plugin `22ed99a2…` and tracking
+      extension `9953abc4…`; the execution used `--skip-build` and did not rewrite them.
+    independent_verification: >-
+      `valid: true`; all seven checks pass (`artifact_schemas`, `checksum_closure`,
+      `execution_binding`, `launch_projection`, `projection_binding`, `result_binding`,
+      `run_spec_binding`); `verification_host_inputs_used: false`.
+    corpus_admission: >-
+      independently recomputed and refused for exactly one reason: authority
+      `non_qualifying_diagnostic` is not exactly-once measurement authority; a diagnostic is never
+      canonical measurement evidence. Archive validity and corpus admission therefore remain distinct.
+    evidence: >-
+      `/home/ray/h2_w5e_diagnostic_20260803T132933Z` (read-only external custody; 512 inventoried
+      members, 82 MB; packet `checksums.sha256` digest `c25baf48…`).
+    registration_scope: >-
+      only non-execution governance projections are edited after the run. `h2_path_partition.py`
+      classifies the registry, semantic TODO, task charter and navigation README as `non_execution`;
+      no declared execution-code, identity-semantics, decision, fixture, measurement-input or runtime
+      asset byte moves, so there is no second diagnostic.
+    authorization_effect: none
+    not_established: >-
+      no third authorization; no authorization consumed; no measurement or qualification; no I/F/S;
+      no seal; no canonical corpus admission; no H0 re-entry; no equivalence claim
+    next: >-
+      W5 is complete. Stop at diagnostic registration. Any later successor execution or measurement is
+      a separate owner decision and authority event, not a continuation authorized by W5.
   successor_import_witness_observed:
     date: 2026-08-01
     unit: H2
