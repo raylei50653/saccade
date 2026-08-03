@@ -68,11 +68,12 @@ if _TOOLS.as_posix() not in sys.path:
     sys.path.insert(0, _TOOLS.as_posix())
 
 import h2_measurement_evidence as evidence  # noqa: E402
+import check_h2_measure_archives as corpus  # noqa: E402
 import run_h2_measurement as controller  # noqa: E402
 import run_h2_measurement_child as child  # noqa: E402
 import verify_h2_measurement as verifier  # noqa: E402
 
-WITNESS_SCHEMA = "h2_phase_a_rehearsal_witness_v2"
+WITNESS_SCHEMA = "h2_phase_a_rehearsal_witness_v3"
 WITNESS_NAME = "rehearsal_witness.json"
 WITNESS_AUTHORITY = "non_evidence_rehearsal"
 
@@ -289,6 +290,20 @@ def ordered_run_summary(root: Path) -> list[dict[str, Any]]:
     return summary
 
 
+def corpus_admission_witness(root: Path) -> dict[str, Any]:
+    """Record the canonical corpus owner's answer, never infer it.
+
+    Archive validity and corpus admission are deliberately different decisions.
+    Witness v3 carries the second decision explicitly so a later reader does not
+    have to trust the harness's prose that a disposable-ledger run was refused.
+    """
+    try:
+        corpus.check_corpus([root])
+    except corpus.CorpusError as exc:
+        return {"admitted": False, "reasons": [str(exc)]}
+    return {"admitted": True, "reasons": []}
+
+
 def rehearsal_invariant_failures(
     root: Path,
     *,
@@ -296,6 +311,7 @@ def rehearsal_invariant_failures(
     report: Mapping[str, Any],
     grant_record: Mapping[str, Any],
     ledger: DirectoryIdentity,
+    corpus_admission: Mapping[str, Any],
 ) -> tuple[str, ...]:
     """Everything that must hold for a rehearsal to have demonstrated anything.
 
@@ -308,6 +324,10 @@ def rehearsal_invariant_failures(
         failures.append(f"controller reached terminal {selection.terminal}")
     if report.get("valid") is not True:
         failures.append("the independent verifier refused the rehearsal archive")
+    if corpus_admission.get("admitted") is not False or not corpus_admission.get(
+        "reasons"
+    ):
+        failures.append("the canonical corpus did not refuse the rehearsal archive")
 
     receipts = sorted(path.name for path in ledger.path.iterdir())
     expected = f"{grant_record['authorization_id']}.json"
@@ -387,6 +407,7 @@ def rehearse(
         "controller_terminal": None,
         "controller_result": None,
         "verifier_report": None,
+        "corpus_admission": None,
         "checkout_hygiene_before": list(pre_hygiene),
         "checkout_hygiene_after": None,
     }
@@ -437,6 +458,8 @@ def rehearse(
         witness["controller_result"] = selection.result
         witness["verifier_report"] = dict(report)
         witness["verifier_report_digest"] = evidence.digest(dict(report))
+        admission = corpus_admission_witness(root)
+        witness["corpus_admission"] = admission
         witness["ordered_runs"] = ordered_run_summary(root)
         receipt_path = ledger.path / receipt_name
         witness["receipt"] = receipt_path.as_posix()
@@ -455,6 +478,7 @@ def rehearse(
             report=report,
             grant_record=grant.record,
             ledger=ledger,
+            corpus_admission=admission,
         )
         witness["checkout_hygiene_after"] = list(controller.checkout_hygiene_reasons())
         witness["failures"] = list(failures)

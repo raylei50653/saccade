@@ -126,7 +126,7 @@ PROJECTION_PREDICATE = "runtime_projection_matches_resolved_run_spec"
 # The ruler owns both authority tokens. This names the only one the command-line
 # entry point may bind, and a contract test pins it against `partition.AUTHORITIES`
 # so the name cannot drift from the ruler's.
-DIAGNOSTIC_AUTHORITY = "non_qualifying_diagnostic"
+DIAGNOSTIC_AUTHORITY = partition.DIAGNOSTIC_AUTHORITY
 
 
 def canonical_launch_environment(run_spec: Mapping[str, Any]) -> dict[str, str]:

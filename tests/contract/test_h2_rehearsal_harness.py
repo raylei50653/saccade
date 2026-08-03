@@ -417,6 +417,7 @@ def _grant_record(ledger: Path) -> dict[str, Any]:
         ("extra_receipt", "not exactly the one receipt"),
         ("foreign_receipt", "receipt authorization_id is not the synthetic grant's"),
         ("short_runs", "did not complete"),
+        ("corpus_admitted", "canonical corpus did not refuse"),
     ],
 )
 def test_success_requires_every_conjunct_not_only_the_terminal(
@@ -457,6 +458,11 @@ def test_success_requires_every_conjunct_not_only_the_terminal(
         report={"valid": defect != "invalid"},
         grant_record=grant,
         ledger=ledger,
+        corpus_admission=(
+            {"admitted": True, "reasons": []}
+            if defect == "corpus_admitted"
+            else {"admitted": False, "reasons": ["controlled host mismatch"]}
+        ),
     )
     if expected is None:
         assert failures == ()
@@ -486,6 +492,10 @@ def test_a_dirty_checkout_after_the_run_is_a_failure(
         report={"valid": True},
         grant_record=grant,
         ledger=ledger,
+        corpus_admission={
+            "admitted": False,
+            "reasons": ["controlled host mismatch"],
+        },
     )
     assert any("left the checkout dirty" in failure for failure in failures)
 
@@ -585,6 +595,10 @@ def test_a_failed_run_fails_the_rehearsal_even_with_no_terminal(
         report={"valid": True},
         grant_record=grant,
         ledger=ledger,
+        corpus_admission={
+            "admitted": False,
+            "reasons": ["controlled host mismatch"],
+        },
     )
     assert [f for f in failures if run_id in f], failures
     assert all("reached terminal" not in failure for failure in failures)
@@ -614,6 +628,10 @@ def test_a_terminal_still_dominates_the_rehearsal_verdict(
         report={"valid": True},
         grant_record=grant,
         ledger=ledger,
+        corpus_admission={
+            "admitted": False,
+            "reasons": ["controlled host mismatch"],
+        },
     )
     assert any("H2_MEASUREMENT_EXECUTION_INVALID" in f for f in failures)
     assert any(evidence.RUN_IDS[0] in f for f in failures)
@@ -713,6 +731,13 @@ def test_a_rehearsal_consumes_its_own_grant_and_completes(
     monkeypatch.setattr(controller, "checkout_hygiene_reasons", lambda **_: ())
     monkeypatch.setattr(harness.verifier, "classify", lambda _root: "complete")
     monkeypatch.setattr(harness.verifier, "VERIFIERS", {"complete": lambda _r: report})
+    corpus_refusal = {
+        "admitted": False,
+        "reasons": ["the disposable ledger is not the controlled host"],
+    }
+    monkeypatch.setattr(
+        harness, "corpus_admission_witness", lambda _root: corpus_refusal
+    )
 
     witness, exit_code = harness.rehearse(
         bundle=bundle,
@@ -723,11 +748,12 @@ def test_a_rehearsal_consumes_its_own_grant_and_completes(
     )
 
     assert exit_code == 0
-    assert witness["schema"] == "h2_phase_a_rehearsal_witness_v2"
+    assert witness["schema"] == "h2_phase_a_rehearsal_witness_v3"
     assert witness["status"] == "completed"
     assert witness["failure_class"] is None
     assert witness["failures"] == []
     assert witness["verifier_report"] == report
+    assert witness["corpus_admission"] == corpus_refusal
     assert witness["source_head"] == bundle.head
     assert witness["disposable_ledger"]["path"] == ledger.path.as_posix()
     assert Path(witness["receipt"]).parent == ledger.path
@@ -847,6 +873,14 @@ def test_the_owner_ledger_is_untouched_by_a_whole_rehearsal(
     monkeypatch.setattr(
         harness.verifier, "VERIFIERS", {"complete": lambda _r: {"valid": True}}
     )
+    monkeypatch.setattr(
+        harness,
+        "corpus_admission_witness",
+        lambda _root: {
+            "admitted": False,
+            "reasons": ["the disposable ledger is not the controlled host"],
+        },
+    )
 
     _, exit_code = harness.rehearse(
         bundle=bundle,
@@ -857,3 +891,31 @@ def test_the_owner_ledger_is_untouched_by_a_whole_rehearsal(
     )
     assert exit_code == 0
     assert _state(owner_ledger) == before
+
+
+def test_witness_v3_records_the_corpus_owners_refusal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "archive"
+    root.mkdir()
+
+    def refused(_roots: list[Path]) -> None:
+        raise harness.corpus.CorpusError("controlled host domain mismatch")
+
+    monkeypatch.setattr(harness.corpus, "check_corpus", refused)
+    assert harness.corpus_admission_witness(root) == {
+        "admitted": False,
+        "reasons": ["controlled host domain mismatch"],
+    }
+
+
+def test_witness_v3_does_not_turn_corpus_admission_into_refusal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "archive"
+    root.mkdir()
+    monkeypatch.setattr(harness.corpus, "check_corpus", lambda _roots: [])
+    assert harness.corpus_admission_witness(root) == {
+        "admitted": True,
+        "reasons": [],
+    }

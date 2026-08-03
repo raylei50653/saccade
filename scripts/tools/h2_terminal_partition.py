@@ -238,7 +238,9 @@ _TRUE_IS_FAILURE = frozenset({"bound_input_mutated"})
 # alone cannot compute a selection, so the mapping lives here and is published.
 # ---------------------------------------------------------------------------
 
-AUTHORITIES: tuple[str, ...] = ("non_qualifying_diagnostic", "exactly_once_measurement")
+DIAGNOSTIC_AUTHORITY = "non_qualifying_diagnostic"
+MEASUREMENT_AUTHORITY = "exactly_once_measurement"
+AUTHORITIES: tuple[str, ...] = (DIAGNOSTIC_AUTHORITY, MEASUREMENT_AUTHORITY)
 
 # The only result a diagnostic may record. A diagnostic records every failed
 # predicate and selects no terminal: it is not a measurement that happened to
@@ -658,7 +660,7 @@ def select_successor_result(
             f"observation carries predicates outside the partition: {unknown}"
         )
 
-    if authority == "non_qualifying_diagnostic":
+    if authority == DIAGNOSTIC_AUTHORITY:
         if execution_result is not None:
             raise PartitionError(
                 "a diagnostic selects no terminal, so it names no execution result"
@@ -782,7 +784,7 @@ def binding_agreement_reasons(
         run_states.append(state)
     started = [state for state in run_states if state != RUN_NOT_STARTED_STATE]
 
-    if authority == "non_qualifying_diagnostic":
+    if authority == DIAGNOSTIC_AUTHORITY:
         if selected_terminal is not None:
             raise PartitionError(
                 "a diagnostic selects no terminal, so it has no selected terminal to "

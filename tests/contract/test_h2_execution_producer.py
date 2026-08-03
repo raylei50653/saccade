@@ -45,6 +45,7 @@ _TOOLS = _REPO / "scripts" / "tools"
 if str(_TOOLS) not in sys.path:
     sys.path.insert(0, str(_TOOLS))
 
+import check_h2_measure_archives as corpus  # noqa: E402
 import h2_path_partition as path_partition  # noqa: E402
 import h2_run_spec as run_spec_module  # noqa: E402
 import h2_terminal_partition as partition  # noqa: E402
@@ -732,7 +733,68 @@ def test_the_command_line_refuses_to_execute_without_the_launch_arguments(
 
 def test_the_diagnostic_authority_is_the_rulers_own_token() -> None:
     """Named once in the producer, and never allowed to drift from the ruler's list."""
-    assert producer.DIAGNOSTIC_AUTHORITY in partition.AUTHORITIES
+    assert producer.DIAGNOSTIC_AUTHORITY is partition.DIAGNOSTIC_AUTHORITY
+
+
+# -- canonical-corpus admission (W5c) -------------------------------------- #
+
+
+def test_a_closed_successor_measurement_is_admitted(
+    tmp_path: Path, run_spec: dict[str, Any]
+) -> None:
+    root = tmp_path / "a-name-is-navigation-not-identity"
+    _execution(run_spec).produce(root)
+    _, verification = verifier.commit_verification(root)
+    assert verification["valid"] is True
+
+    attempts = corpus.check_corpus([root])
+    assert len(attempts) == 1
+    attempt = attempts[0]
+    assert isinstance(attempt, corpus.SuccessorAttempt)
+    assert attempt.result["authority"] == partition.MEASUREMENT_AUTHORITY
+    assert attempt.verification == verification
+
+
+def test_a_green_diagnostic_is_valid_but_corpus_refused(
+    tmp_path: Path, run_spec: dict[str, Any]
+) -> None:
+    root = tmp_path / "diagnostic"
+    _execution(run_spec, authority=partition.DIAGNOSTIC_AUTHORITY).produce(root)
+    _, verification = verifier.commit_verification(root)
+    assert verification["valid"] is True
+    assert corpus.archive_roots(tmp_path) == [root]
+
+    with pytest.raises(corpus.CorpusError, match="diagnostic is never canonical"):
+        corpus.check_corpus([root])
+
+
+def test_an_unclosed_successor_measurement_is_not_canonical(
+    tmp_path: Path, run_spec: dict[str, Any]
+) -> None:
+    root = tmp_path / "producer-only"
+    _execution(run_spec).produce(root)
+    assert verifier.verify_archive(root)["valid"] is True
+
+    with pytest.raises(corpus.CorpusError, match="is not closed"):
+        corpus.check_corpus([root])
+
+
+def test_an_independently_invalid_successor_archive_is_not_canonical(
+    tmp_path: Path, run_spec: dict[str, Any]
+) -> None:
+    root = tmp_path / "invalid"
+    _execution(run_spec).produce(root)
+    binding = json.loads((root / "runtime_binding.json").read_text(encoding="utf-8"))
+    binding["execution_id"] = "someone-else"
+    (root / "runtime_binding.json").write_text(
+        json.dumps(binding, separators=(",", ":"), sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    _, verification = verifier.commit_verification(root)
+    assert verification["valid"] is False
+
+    with pytest.raises(corpus.CorpusError, match="not independently valid"):
+        corpus.check_corpus([root])
 
 
 def test_the_command_line_refuses_to_bind_a_measurement(
