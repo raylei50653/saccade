@@ -510,6 +510,40 @@ The staged order this charter fixes, each stage a separate reviewable landing:
 | **W5d** | ✅ **landed — declaration and governance closeout.** Review Correction 11 describes the code after it landed: W5a's root closure, W5b's independent observed-import containment and immutable namespace, and W5c's validity-versus-admission boundary. Its pre-merge revision records CI's cross-family discovery finding. The full pre-seal declaration is re-pinned at 115473 bytes / `717dde08…`; runtime identity is republished from the existing read-only W4b probe and runtime-input records, with no controlled-host probe or native rebuild. `identity_semantics` moves from W5b's `32bee186…` to final `89d4bb41…`; decision surface, environment, implementation, runtime inputs and probe `2dabed0b…` remain unchanged, and equivalence remains unproven. Governance projections now point only to the final non-qualifying diagnostic W5e; no authorization, measurement, `I`/`F`/`S`, seal, corpus admission or equivalence follows | no |
 | **W5e** | ✅ **complete — the single final-projection diagnostic.** PR #317 merged W5c–W5d as `e94407f2…`; clean local `main` matched that merge and the retry base named the same head with zero changed paths. Exactly one `non_qualifying_diagnostic` then ran: all four ordered MOT17-04-SDP runs completed, all five predicates passed, the bound-input monitor observed zero changes with a clean final drain, and the retained identity stage recorded probe `2dabed0b…`. The producer still returned `diagnostic_complete`, `terminal: null`. The archive-only verifier independently records `valid: true`, all seven checks passing and `verification_host_inputs_used: false`; the canonical corpus owner independently recomputed it and refused it for exactly one reason — diagnostic authority is not exactly-once measurement authority. This is the intended W5c separation between internal validity and admission, not a near-measurement. External self-sealed custody: `/home/ray/h2_w5e_diagnostic_20260803T132933Z` (512 inventory members, 82 MB, inventory digest `c25baf48…`). The only post-run edits are these non-execution governance projections, mechanically classified as such; no final projection byte moved and no second diagnostic exists. W5 is closed with no automatic next: no authorization issued or consumed, no measurement/qualification, no `I`/`F`/`S`, no seal, no corpus admission and no equivalence claim | yes |
 
+### W5 owner-review acceptance — 2026-08-03
+
+At reviewed `main` `136b9eea337f6f7188902bea0dc17ddb632fb854`, the owner verdict is
+**`ACCEPT — W5 implementation/evidence closure`**. The accepted scope is W5c's
+implementation, W5d's governance and runtime-identity publication, W5e's exact
+final-projection diagnostic evidence, and PR #318's non-execution registration.
+The review independently re-derived the load-bearing identities and relations rather
+than accepting their prose projections: discovery and cross-family isolation;
+closed/valid/measurement-authority corpus admission; witness-v3 delegation to the
+corpus owner; policy pin and identity-axis movement; the 659-member closure,
+projection and RunSpec; packet and archive closure; four run artifacts, output
+equality and zero-unbound import witnesses; independent 7/7 verification; and the
+single expected diagnostic-authority refusal.
+
+The accepted external packet binding is the full packet-inventory digest:
+
+    c25baf48b8425543a1f430b83b0381bcc2dc72386398d54acf22e41103bea268
+
+Two observations are explicitly non-blocking. First,
+`corpus_admission_witness` catches only `CorpusError`, whereas the canonical corpus
+CLI also converts `EvidenceError`, `PartitionError`, `VerificationError` and
+`OSError` into refusal exits. The narrower harness path remains fail-closed but may
+abort without writing v3's `admitted: false` answer. That is a separate plumbing
+follow-up, not repaired here: the file is inside the declared `scripts/` closure, so
+any future edit moves the projection and needs a separate disposition; this
+acceptance authorizes neither that edit nor a re-run. Second, the earlier 8-hex packet
+digest was navigation only for external custody; this registration records the full
+digest without changing packet bytes.
+
+This acceptance closes only W5 implementation/evidence review. It is not measurement
+acceptance or qualification, issues no authorization, creates no `I`/`F`/`S`, admits
+nothing to the canonical measurement corpus, seals nothing, reopens no H0 path and
+leaves equivalence `unproven`. There is no automatic next.
+
 W3 precedes W4 for three reasons, two of them this unit's own scars. PR #294
 wrote the evidence contract and the independent verifier **before** the
 controller of PR #295, because the reverse order defines the contract from

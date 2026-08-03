@@ -1441,9 +1441,10 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
     unit: H2
     stage: "W5e — the single final-projection non-qualifying diagnostic"
     status: >-
-      **complete; diagnostic evidence only.** Exactly one W5e GPU execution ran after every
-      projection-moving W5 edit had merged. It bound clean `main` at merge `e94407f2…`, source tree
-      `3661cd70…`, with retry base equal to that head and zero changed paths.
+      **complete and owner-accepted as W5 implementation/evidence closure; diagnostic evidence only.**
+      Exactly one W5e GPU execution ran after every projection-moving W5 edit had merged. It bound
+      clean `main` at merge `e94407f2…`, source tree `3661cd70…`, with retry base equal to that head
+      and zero changed paths.
     execution: >-
       `execution_id: h2-w5e-20260803T132933Z`, authority `non_qualifying_diagnostic`.
       All four ordered MOT17-04-SDP runs completed; all five predicates pass; result
@@ -1464,7 +1465,41 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
       canonical measurement evidence. Archive validity and corpus admission therefore remain distinct.
     evidence: >-
       `/home/ray/h2_w5e_diagnostic_20260803T132933Z` (read-only external custody; 512 inventoried
-      members, 82 MB; packet `checksums.sha256` digest `c25baf48…`).
+      members, 82 MB; packet `checksums.sha256` digest
+      `c25baf48b8425543a1f430b83b0381bcc2dc72386398d54acf22e41103bea268`).
+    owner_review:
+      date: 2026-08-03
+      reviewed_main: 136b9eea337f6f7188902bea0dc17ddb632fb854
+      verdict: "ACCEPT — W5 implementation/evidence closure"
+      scope: >-
+        W5c implementation, W5d governance/runtime identity, the W5e final-projection diagnostic
+        archive, and PR #318's non-execution registration projections. W5a/W5b were reviewed only as
+        already-landed premises of that closure, not reopened as a new execution or authority surface.
+      independently_rederived: >-
+        Family-specific successor discovery; H0 cross-family isolation; closed + independently valid +
+        exactly-once-measurement admission; diagnostic refusal; witness-v3 use of the canonical corpus
+        owner; single-held authority tokens; the 115473-byte / `717dde08…` policy pin; identity-semantics-
+        only movement to `89d4bb41…`; exact 659-member `fab25fba…` closure; `34ad9734…` projection;
+        `5e648186…` RunSpec; packet closure and full inventory; four completed runs; five passing
+        predicates; per-run artifact digests, output equality and import containment; independent 7/7
+        verification; one-reason canonical refusal; and non-execution-only registration at PR #318.
+      accepted_meaning: >-
+        W5 implementation/evidence closure is accepted. This does not accept, qualify or authorize a
+        measurement; does not admit the diagnostic to the canonical corpus; does not create `I`, `F`
+        or `S`; does not seal or reopen H0; and leaves equivalence `unproven`.
+      non_blocking_observations:
+        corpus_witness_exception_surface: >-
+          `corpus_admission_witness` catches only `CorpusError`, while the corpus owner's CLI also
+          catches `EvidenceError`, `PartitionError`, `VerificationError` and `OSError`. Those failures
+          still abort fail-closed, but v3 may exit without recording an `admitted: false` witness.
+          Accepted as a separate non-blocking plumbing follow-up; no code repair is included here.
+          Because `h2_rehearse_measurement.py` is inside the declared `scripts/` closure, any future
+          repair moves the projection and requires its own disposition; this verdict authorizes neither
+          that edit nor another execution.
+        external_packet_digest_navigation: >-
+          the earlier 8-hex `c25baf48…` reference was navigation rather than a committed integrity
+          binding for an external packet. This registration records the full 64-hex packet inventory
+          digest above; the packet bytes and both archive closures are unchanged.
     registration_scope: >-
       only non-execution governance projections are edited after the run. `h2_path_partition.py`
       classifies the registry, semantic TODO, task charter and navigation README as `non_execution`;
@@ -1475,8 +1510,9 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
       no third authorization; no authorization consumed; no measurement or qualification; no I/F/S;
       no seal; no canonical corpus admission; no H0 re-entry; no equivalence claim
     next: >-
-      W5 is complete. Stop at diagnostic registration. Any later successor execution or measurement is
-      a separate owner decision and authority event, not a continuation authorized by W5.
+      W5 is owner-accepted and complete. Stop at verdict registration. Observation 1 is a separately
+      scoped non-blocking follow-up, not an automatic repair. Any later successor execution or
+      measurement is a separate owner decision and authority event, not a continuation authorized by W5.
   successor_import_witness_observed:
     date: 2026-08-01
     unit: H2
