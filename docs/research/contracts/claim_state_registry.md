@@ -1395,7 +1395,10 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
       now connected to the canonical corpus checker, and the declaration describes W5a–W5c only after
       their implementation landed, as Correction 10 required.
     corpus_admission: >-
-      Archive roots are discovered by family-specific members, never by a root-name prefix. Admission
+      Archive roots are discovered by the family-specific first artifact `run_spec.json`, never by a
+      root-name prefix. PR CI caught the first rule treating shared `result.json` / `verification.json`
+      names as successor markers and misclassifying an H0 archive; cross-family isolation is now pinned.
+      Admission
       requires `verification.json`, final `checksums.sha256`, an independently recomputed
       `verification.valid: true`, and recorded `exactly_once_measurement` authority. Producer-only,
       independently invalid and non-qualifying diagnostic archives are refused; a green diagnostic is
@@ -1412,15 +1415,17 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
       harness-local prediction.
     projection_cost: >-
       W5c edits declared `scripts/` closure members, so the 659-member closure moves `e5b1ef09…` →
-      `4aa029b4…`, projection `44ed14bf…` → `93009c65…`, and resolved RunSpec `66c031fe…` →
-      `835a2110…`. It also edits ruler member `h2_terminal_partition.py`; Review Correction 11 re-pins
-      the complete declaration at 114906 bytes / `3925b240…`, and runtime identity is republished once
+      `fab25fba…`, projection `44ed14bf…` → `34ad9734…`, and resolved RunSpec `66c031fe…` →
+      `5e648186…`. It also edits ruler member `h2_terminal_partition.py`; Review Correction 11 and its
+      pre-merge discovery revision re-pin the complete declaration at 115473 bytes / `717dde08…`, and
+      runtime identity is republished
       from existing read-only W4b probe and runtime-input records. `identity_semantics` moves
       `32bee186…` → `bfcb454d…`; the other coordinate axes and probe `2dabed0b…` do not move. No probe
       or native build is run, and equivalence stays unproven.
     verification: >-
-      Focused W5c contract suite 83 passed; extended successor contract suite 502 passed; ruff and mypy
-      pass. Final pre-push and CI are required before merge.
+      Focused W5c contract suite 83 passed; extended successor contract suite 502 passed; the CI-found
+      cross-family discovery repair passes the canonical corpus check plus 312 directly related tests;
+      ruff and mypy pass. Final pre-push and CI are required before merge.
     authorization_effect: none
     not_established: >-
       no third authorization; no authorization consumed; no I/F/S; no measurement; no seal; no corpus

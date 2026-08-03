@@ -61,7 +61,8 @@ closure 寫出；缺欄位不得透過重跑 producer 補齊。獨立 verifier �
 避免自我雜湊循環。
 
 Canonical corpus admission 是 verifier 之後的另一個 verdict。successor archive
-以 family-specific members 發現，不以 root 名稱判真；只有同時存在
+以該 family 第一份專屬 artifact `run_spec.json` 發現，不以 root 名稱判真；
+`result.json`／`verification.json` 與 H0 共用，不能當 family marker。只有同時存在
 `verification.json` 與 `checksums.sha256`、由獨立 successor verifier 重算為
 `valid: true`、且 authority 記為 `exactly_once_measurement` 的 archive 才可接納。
 producer-only archive 與任何 `non_qualifying_diagnostic`（即使七項 checks 全綠）

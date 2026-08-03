@@ -739,6 +739,20 @@ def test_the_diagnostic_authority_is_the_rulers_own_token() -> None:
 # -- canonical-corpus admission (W5c) -------------------------------------- #
 
 
+def test_successor_discovery_uses_a_family_specific_anchor(tmp_path: Path) -> None:
+    h0 = tmp_path / "h0_phase_a_existing"
+    h0.mkdir()
+    (h0 / "result.json").write_text("{}\n", encoding="utf-8")
+    (h0 / "verification.json").write_text("{}\n", encoding="utf-8")
+    successor = tmp_path / "arbitrary-successor-name"
+    successor.mkdir()
+    (successor / corpus.SUCCESSOR_DISCOVERY_NAME).write_text("{}\n", encoding="utf-8")
+
+    assert corpus.archive_roots(tmp_path) == [successor]
+    assert corpus._is_successor_archive(h0) is False
+    assert corpus._is_successor_archive(successor) is True
+
+
 def test_a_closed_successor_measurement_is_admitted(
     tmp_path: Path, run_spec: dict[str, Any]
 ) -> None:

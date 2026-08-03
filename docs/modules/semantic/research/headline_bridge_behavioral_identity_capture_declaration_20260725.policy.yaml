@@ -17,8 +17,8 @@ document:
   path: headline_bridge_behavioral_identity_capture_declaration_20260725.md
 
 sealed_prefix:
-  bytes: 114906
-  sha256: "3925b24044d4c0173517c267ad0e9d7fbc22a46206f15f82b0c281253b9ea9d9"
+  bytes: 115473
+  sha256: "717dde082d02bf25b41544b59a3cec52310bc8f7dfb7a9f36a95f2d61b332916"
   # Re-pin log (each entry was a deliberate pre-seal edit, not a slip):
   #   Review reset — coordinate / bounded probe / equivalence split; content-bound
   #                  fixtures/assets/build products; v2 Layer-P certificate.
@@ -165,6 +165,14 @@ sealed_prefix:
   #             v3 records the canonical corpus owner's actual refusal while
   #             historical v1/v2 custody remains unchanged. Re-pinned to the
   #             complete post-correction body.
+  #   Review Correction 11 revision 1 — PR CI exercised the full evidence
+  #             corpus and found the discovery rule confusing H0's shared
+  #             `result.json` / `verification.json` names with successor family
+  #             identity. Discovery now anchors on the successor producer's
+  #             first family-specific artifact, `run_spec.json`; incomplete
+  #             producer roots remain visible and H0 roots stay on their own
+  #             verifier path. Re-pinned before merge to the complete revised
+  #             body.
 
 policy_target:
   kind: headline

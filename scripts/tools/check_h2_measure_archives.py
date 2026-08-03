@@ -72,6 +72,14 @@ INADMISSIBLE = partition.INADMISSIBLE_CLASS
 SURFACE_TERMINALS = partition.SURFACE_BAN_TERMINALS
 REPAIR_VOCABULARY = partition.REPAIR_VOCABULARY
 
+# `result.json` and `verification.json` are shared by other evidence families.
+# `run_spec.json` is the successor family's discovery anchor: every producer
+# writes it first, so even an unclosed producer archive stays visible without
+# turning an H0 archive into an H2 successor by filename collision.
+SUCCESSOR_DISCOVERY_NAME = "run_spec.json"
+if SUCCESSOR_DISCOVERY_NAME not in successor_verifier.PRODUCER_ARTIFACTS:
+    raise RuntimeError("successor discovery anchor is not a producer artifact")
+
 # The § C3.5.1 classification itself lives with the verifier, which needs it to
 # verify a prior attempt in its own class before the admission gate that binds it
 # can be recomputed. This is where it is applied to the corpus.
@@ -241,27 +249,19 @@ def archive_roots(root: Path = EVIDENCE_ROOT) -> list[Path]:
     }
     # Successor root names are audit metadata, not validity gates (Correction
     # 5).  Discovery therefore uses the artifact family, not a new name prefix.
-    # Any one family-specific member is enough to make an incomplete root
-    # visible to the fail-closed verifier rather than letting it disappear.
-    successor_markers = {
-        *successor_verifier.PRODUCER_ARTIFACTS,
-        successor_verifier.VERIFICATION_NAME,
-    }
+    # The producer's first, family-specific member makes an incomplete root
+    # visible without confusing shared filenames with family identity.
     successor = {
         path
         for path in root.iterdir()
         if (path.is_dir() or path.is_symlink())
-        and any((path / name).exists() for name in successor_markers)
+        and (path / SUCCESSOR_DISCOVERY_NAME).exists()
     }
     return sorted(legacy | successor, key=lambda item: item.name.encode("utf-8"))
 
 
 def _is_successor_archive(root: Path) -> bool:
-    markers = {
-        *successor_verifier.PRODUCER_ARTIFACTS,
-        successor_verifier.VERIFICATION_NAME,
-    }
-    return any((root / name).exists() for name in markers)
+    return (root / SUCCESSOR_DISCOVERY_NAME).exists()
 
 
 def successor_admission_reasons(root: Path) -> tuple[str, ...]:

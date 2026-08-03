@@ -1993,8 +1993,15 @@ execution carries its own witness and is checked again.
 ### Archive validity and corpus admission are different decisions
 
 W5c connects the successor family to the canonical corpus checker. Archive roots
-are discovered by family-specific members, never by a directory-name prefix: a
-root name and a source head remain navigation witnesses, not validity. A successor
+are discovered by the family-specific `run_spec.json`, never by a directory-name
+prefix: a root name and a source head remain navigation witnesses, not validity.
+The first implementation treated every successor artifact filename as a discovery
+marker. The full-history corpus check disproved that rule: `result.json` and
+`verification.json` are shared with H0, so an H0 archive was misclassified as an
+unclosed successor. `run_spec.json` is the successor producer's first artifact and
+is not shared with that family; using it keeps producer-only successor roots visible
+without turning a common filename into family identity. Roots explicitly handed to
+the corpus still fail closed when required members are missing. A successor
 archive is admitted only when it is fully closed by `verification.json` and
 `checksums.sha256`, independently recomputes as valid under the successor
 archive-only verifier, and records `exactly_once_measurement` authority. A producer
