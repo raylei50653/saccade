@@ -55,6 +55,7 @@ if _TOOLS.as_posix() not in sys.path:
 
 import h2_measurement_evidence as evidence  # noqa: E402
 import h2_terminal_partition as partition  # noqa: E402
+import verify_h2_execution as successor_verifier  # noqa: E402
 import verify_h2_measurement as verifier  # noqa: E402
 
 EVIDENCE_ROOT = REPO_ROOT / evidence.EVIDENCE_REL
@@ -70,6 +71,14 @@ CONSUMED_CLASSES = partition.VERIFY_CLASSES
 INADMISSIBLE = partition.INADMISSIBLE_CLASS
 SURFACE_TERMINALS = partition.SURFACE_BAN_TERMINALS
 REPAIR_VOCABULARY = partition.REPAIR_VOCABULARY
+
+# `result.json` and `verification.json` are shared by other evidence families.
+# `run_spec.json` is the successor family's discovery anchor: every producer
+# writes it first, so even an unclosed producer archive stays visible without
+# turning an H0 archive into an H2 successor by filename collision.
+SUCCESSOR_DISCOVERY_NAME = "run_spec.json"
+if SUCCESSOR_DISCOVERY_NAME not in successor_verifier.PRODUCER_ARTIFACTS:
+    raise RuntimeError("successor discovery anchor is not a producer artifact")
 
 # The § C3.5.1 classification itself lives with the verifier, which needs it to
 # verify a prior attempt in its own class before the admission gate that binds it
@@ -131,6 +140,28 @@ class Attempt(NamedTuple):
             self.report.get("perturbation_observed")
             or self.report.get("invalid_packet_observed")
         )
+
+
+class SuccessorAttempt(NamedTuple):
+    """One admitted four-artifact successor execution.
+
+    The successor archive deliberately has no legacy freeze, root-name identity
+    or verify class.  Its identity and terminal live in the result and the
+    independently reproduced verification record instead.
+    """
+
+    root: Path
+    result: dict[str, Any]
+    verification: dict[str, Any]
+
+    @property
+    def verify_class(self) -> str:
+        return "successor"
+
+    @property
+    def terminal(self) -> str | None:
+        value = self.result.get("terminal")
+        return value if isinstance(value, str) else None
 
 
 def controlled_host_execution_domain() -> dict[str, Any]:
@@ -211,14 +242,94 @@ def execution_domain_admission_reasons(
 def archive_roots(root: Path = EVIDENCE_ROOT) -> list[Path]:
     if not root.is_dir():
         return []
-    return [
+    legacy = {
         path
-        for path in sorted(
-            root.glob(f"{evidence.PHASE_A_ROOT_PREFIX}*"),
-            key=lambda item: item.name.encode("utf-8"),
+        for path in root.glob(f"{evidence.PHASE_A_ROOT_PREFIX}*")
+        if path.is_dir() or path.is_symlink()
+    }
+    # Successor root names are audit metadata, not validity gates (Correction
+    # 5).  Discovery therefore uses the artifact family, not a new name prefix.
+    # The producer's first, family-specific member makes an incomplete root
+    # visible without confusing shared filenames with family identity.
+    successor = {
+        path
+        for path in root.iterdir()
+        if (path.is_dir() or path.is_symlink())
+        and (path / SUCCESSOR_DISCOVERY_NAME).exists()
+    }
+    return sorted(legacy | successor, key=lambda item: item.name.encode("utf-8"))
+
+
+def _is_successor_archive(root: Path) -> bool:
+    return (root / SUCCESSOR_DISCOVERY_NAME).exists()
+
+
+def successor_admission_reasons(root: Path) -> tuple[str, ...]:
+    """Why a successor archive cannot enter the measurement corpus.
+
+    The independent verifier answers internal consistency.  This owner adds the
+    one corpus fact it alone can add: a diagnostic is non-qualifying even when
+    every predicate and every verifier check passes.  The authority tokens come
+    from the ruler rather than being restated here.
+    """
+    reasons: list[str] = []
+    verdict_path = root / successor_verifier.VERIFICATION_NAME
+    inventory_path = root / successor_verifier.CHECKSUMS_NAME
+    if not verdict_path.is_file() or not inventory_path.is_file():
+        missing = [
+            name
+            for name, path in (
+                (successor_verifier.VERIFICATION_NAME, verdict_path),
+                (successor_verifier.CHECKSUMS_NAME, inventory_path),
+            )
+            if not path.is_file()
+        ]
+        reasons.append(
+            f"{root.name}: successor archive is not closed; missing {missing}"
         )
-        if path.is_dir()
-    ]
+
+    try:
+        documents, _ = successor_verifier.load_archive(root)
+        verification = successor_verifier.verify_archive(root)
+        successor_verifier.validate_verification(verification)
+    except (
+        successor_verifier.ExecutionVerificationError,
+        evidence.EvidenceError,
+        OSError,
+    ) as exc:
+        reasons.append(
+            f"{root.name}: successor archive verification cannot be formed: {exc}"
+        )
+        return tuple(reasons)
+
+    if verification.get("valid") is not True:
+        detail = verification.get("reasons")
+        reasons.append(
+            f"{root.name}: successor archive is not independently valid: {detail}"
+        )
+
+    result = documents.get("result.json")
+    if not isinstance(result, Mapping):
+        reasons.append(f"{root.name}: successor result is not an object")
+    elif result.get("authority") != partition.MEASUREMENT_AUTHORITY:
+        reasons.append(
+            f"{root.name}: authority {result.get('authority')!r} is not the "
+            "exactly-once measurement authority; a diagnostic is never canonical "
+            "measurement evidence"
+        )
+    return tuple(reasons)
+
+
+def _load_successor_attempt(root: Path) -> SuccessorAttempt:
+    reasons = successor_admission_reasons(root)
+    if reasons:
+        raise CorpusError("; ".join(reasons))
+    documents, _ = successor_verifier.load_archive(root)
+    result = documents["result.json"]
+    verification = successor_verifier.verify_archive(root)
+    if not isinstance(result, dict):  # held by the admission verdict above
+        raise CorpusError(f"{root.name}: successor result is not an object")
+    return SuccessorAttempt(root, result, verification)
 
 
 def _load_attempt(root: Path) -> Attempt:
@@ -284,23 +395,31 @@ def _check_re_attempt(attempt: Attempt, prior: Attempt) -> None:
         )
 
 
-def check_corpus(roots: Iterable[Path]) -> list[Attempt]:
+def check_corpus(roots: Iterable[Path]) -> list[Attempt | SuccessorAttempt]:
     """The canonical corpus admission owner.
 
     Archive-verifier success alone has no canonical-admission meaning: it says
     a root is internally consistent, not that this corpus may contain it.
     """
-    attempts = [_load_attempt(root) for root in roots]
+    attempts: list[Attempt | SuccessorAttempt] = []
+    legacy_attempts: list[Attempt] = []
+    for root in roots:
+        if _is_successor_archive(root):
+            attempts.append(_load_successor_attempt(root))
+        else:
+            attempt = _load_attempt(root)
+            attempts.append(attempt)
+            legacy_attempts.append(attempt)
     reasons = [
         reason
-        for attempt in attempts
+        for attempt in legacy_attempts
         for reason in execution_domain_admission_reasons(
             attempt.root, attempt.verify_class, attempt.name.phase
         )
     ]
     if reasons:
         raise CorpusError("; ".join(reasons))
-    _check_prior_attempts(attempts)
+    _check_prior_attempts(legacy_attempts)
     return attempts
 
 

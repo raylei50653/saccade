@@ -17,8 +17,8 @@ document:
   path: headline_bridge_behavioral_identity_capture_declaration_20260725.md
 
 sealed_prefix:
-  bytes: 108275
-  sha256: "f53da415a67e78b511d21e80ecaf2b92108dd0c3386dee09f06211a1dc649766"
+  bytes: 115473
+  sha256: "717dde082d02bf25b41544b59a3cec52310bc8f7dfb7a9f36a95f2d61b332916"
   # Re-pin log (each entry was a deliberate pre-seal edit, not a slip):
   #   Review reset — coordinate / bounded probe / equivalence split; content-bound
   #                  fixtures/assets/build products; v2 Layer-P certificate.
@@ -156,6 +156,23 @@ sealed_prefix:
   #             `runtime_binding_mismatch` becomes run-derived, and an observation
   #             that does not correspond to the run plan is unusable evidence rather
   #             than a mismatch. Re-pinned to the complete post-correction body.
+  #   Review Correction 11 — records W5a's declared execution-code closure,
+  #             W5b's observed-import containment repair and immutable namespace,
+  #             and W5c's successor corpus admission boundary. Fully closed,
+  #             independently valid exactly-once measurement archives may be
+  #             admitted; green diagnostics remain refused, and structural
+  #             provenance is not cryptographic authority proof. Rehearsal witness
+  #             v3 records the canonical corpus owner's actual refusal while
+  #             historical v1/v2 custody remains unchanged. Re-pinned to the
+  #             complete post-correction body.
+  #   Review Correction 11 revision 1 — PR CI exercised the full evidence
+  #             corpus and found the discovery rule confusing H0's shared
+  #             `result.json` / `verification.json` names with successor family
+  #             identity. Discovery now anchors on the successor producer's
+  #             first family-specific artifact, `run_spec.json`; incomplete
+  #             producer roots remain visible and H0 roots stay on their own
+  #             verifier path. Re-pinned before merge to the complete revised
+  #             body.
 
 policy_target:
   kind: headline

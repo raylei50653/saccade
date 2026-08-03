@@ -45,7 +45,11 @@
 2. **Projection authority。** `execution_semantics_projection` 是 declared
    content set 的 byte digest equality，成員固定包含 executed surfaces、
    capture ABI、`mot17_args.py`、frozen authoring profile、profile schema、
-   owner decision、RunSpec schema 與 resolver。它不讀
+   owner decision、RunSpec schema 與 resolver，並一起折入 `include/`、
+   `scripts/`、`src/` 三個 declared roots 的完整 source closure。observed import
+   witness 證明單次 execution 的 repo-local code 是這些 authority domains 的
+   子集，不要求 closure 每個 member 都被 import；每次 execution 都重新記錄並
+   驗證 containment。它不讀
    `h2_path_partition` 的分類結果；分類器只保護 ruler edit，不能反過來決定
    哪些 bytes 具有 execution semantics。
 
@@ -55,6 +59,16 @@ closure 寫出；缺欄位不得透過重跑 producer 補齊。獨立 verifier �
 `verification.json` 後才原子提交涵蓋四份 JSON 的最終
 `checksums.sha256`；`verification.json` 不反向包含該 checksum-file digest，
 避免自我雜湊循環。
+
+Canonical corpus admission 是 verifier 之後的另一個 verdict。successor archive
+以該 family 第一份專屬 artifact `run_spec.json` 發現，不以 root 名稱判真；
+`result.json`／`verification.json` 與 H0 共用，不能當 family marker。只有同時存在
+`verification.json` 與 `checksums.sha256`、由獨立 successor verifier 重算為
+`valid: true`、且 authority 記為 `exactly_once_measurement` 的 archive 才可接納。
+producer-only archive 與任何 `non_qualifying_diagnostic`（即使七項 checks 全綠）
+都必須拒收。這是 structural provenance/admission guard，不是 signature-based
+authority proof；本 repo 不提供不可偽造的 owner 簽章。Rehearsal witness v3 記錄
+canonical checker 的實際拒收與非空 reasons，historical v1/v2 不回寫。
 
 `.github/workflows/runtime_identity.yml` 只保留為
 `workflow_dispatch` 的 controlled-host diagnostic。它可觀察 CUDA/TensorRT
