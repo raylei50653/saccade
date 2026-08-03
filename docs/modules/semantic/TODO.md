@@ -154,7 +154,16 @@
   mismatch 拒收。之後 exact clean merged head 只可 emit request 並停止，等待 owner 另行
   簽發第三份 matching grant。Plan/implementation/rehearsal 都不是 authorization；正式
   success disposition 是 owner-reviewed measurement closure + canonical corpus admission，
-  不含 Phase B、equivalence、I/F/S、seal 或自動 next。W3 先於 W4 的理由＝#294→#295 的契約先行與 #302／#304 的
+  不含 Phase B、equivalence、I/F/S、seal 或自動 next。**W6 implementation 與 final
+  disposable rehearsal 已在 feature head `f0ee5da3…` 完成**：前兩次 rehearsal review
+  分別抓到 double-`runs/` custody 與 outer verifier 未獨立重驗 import/A7.6 的
+  self-consistency 缺口；修後 final packet 為 `measurement_pass`／`terminal: null`、4/4、
+  五 predicates pass、inner 7/7、outer 7/7、每 run 3355 imports / zero unbound，corpus
+  僅以 disposable-domain mismatch 拒收。Custody
+  `/home/ray/h2_w6_successor_rehearsal_20260803T163028Z`，inventory
+  `bc748a7a4659ee0aaaeec7e3408cdc54cc3ec21b5a845f3a83c7ad503f8a3e41`。
+  下一步不是 execution：先 review/merge，exact clean merged head 才 emit request 並停在 owner
+  matching grant gate；目前沒有第三份 grant。W3 先於 W4 的理由＝#294→#295 的契約先行與 #302／#304 的
   guard-before-entry，且 W2–W3 不需 build ⇒ item 5 的 `build/h2_layer_p`
   位元不動。不是重建舊 items 4–5／`F` →
   [second failure evidence](research/evidence/h2_phase_a_failed_attempt_7646f421_20260728/)

@@ -1519,10 +1519,10 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
     unit: H2
     stage: "W6 — successor formal-measurement authority envelope and disposable rehearsal"
     status: >-
-      **implementation in progress; no owner grant and no formal measurement.** The owner separately
-      selected the formal-measurement plan after accepting W5 closure. This record does not relabel that
-      plan as execution authorization: implementation may proceed through a final-projection rehearsal,
-      then must stop for an independently owner-issued third grant.
+      **implementation and final-projection rehearsal complete; stopped before owner grant.** The owner
+      separately selected the formal-measurement plan after accepting W5 closure. This record does not
+      relabel that plan or its rehearsal as execution authorization. The feature head still requires review
+      and merge; no request or matching third grant exists.
     content_scope: >-
       Reuse W5e's MOT17-04-SDP content choice, four ordered runs and complete 454-key RunSpec/capture ABI.
       Do not reuse W5e's diagnostic authority or archive and do not resurrect the retired legacy
@@ -1563,6 +1563,33 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
       and changed MOT bytes each fail the outer verdict. This verifier edit moves the projection,
       so the packet at `/home/ray/h2_w6_successor_rehearsal_20260803T160837Z` is also superseded rehearsal
       evidence and one further disposable run is required.
+    final_projection_rehearsal:
+      head: f0ee5da315d4ea6ced70532a955b63564715e6f1
+      execution_id: h2-w6-rehearsal-20260803T163028Z
+      custody: /home/ray/h2_w6_successor_rehearsal_20260803T163028Z
+      packet_inventory_digest: bc748a7a4659ee0aaaeec7e3408cdc54cc3ec21b5a845f3a83c7ad503f8a3e41
+      projection: >-
+        663-member execution-code closure `ca150e3b985f92438a654fb1b0b6a873ca2d75c6e8e6f22148a87ab054030659`;
+        execution-semantics projection `508f10f408ef59725985a0ea6263cdd7e7f41874d932859c8ca7de74532db991`;
+        resolved RunSpec `796d85f7385ee15776a3a81060c0c86ce7b993038a2fab73209d97d73b67f93f`.
+      execution: >-
+        `measurement_pass`, `terminal: null`; 4/4 ordered runs completed and all five predicates pass.
+        Per-run policy-inventory digests recompute, all four MOT outputs are byte-identical, and independent
+        A7.6 replay is complete/equal/packet-valid with zero errors.
+      import_custody: >-
+        Each run has exactly 3,355 observations, zero unbound, zero byte-containment failures and
+        `recorder_installed_before_entry_import: true`; custody is physically single-rooted at
+        `runs/MOT17-04-SDP/<run-id>`.
+      verification: >-
+        inner `h2_execution_verification_v2`: valid, 7/7; outer
+        `h2_successor_measurement_envelope_verification_v1`: valid, 7/7; both record
+        `verification_host_inputs_used: false`. Root checksum closure covers 516 listed members plus the
+        inventory itself (517 files, 83,911,256 bytes).
+      authority_boundary: >-
+        The receipt digest joins v2 result and the synthetic grant digest joins its durable receipt. The
+        receipt exists only in `/home/ray/.local/state/saccade/h2_w6_disposable_rehearsal_20260803T163028Z`;
+        the controlled ledger contains no receipt for that authorization id. Canonical corpus refusal has
+        exactly one reason: the archived execution domain is not the controlled domain.
     repaired_observation: >-
       W5 owner-review observation 1 is addressed in the same projection-moving unit:
       `corpus_admission_witness` now catches the corpus CLI's full fail-closed exception surface. This does
@@ -1578,10 +1605,9 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
       admission; no measurement-closure verdict; no Phase B; no equivalence; no I/F/S; no seal; no H0
       re-entry
     next: >-
-      Land the independent import-witness verification repair and complete one new disposable-ledger
-      final-projection rehearsal. Then emit a
-      request from the exact clean merged head and stop. Formal execution remains blocked on the owner's
-      separate matching grant.
+      Review and merge the implementation without moving its execution projection. Then emit a request from
+      the exact clean merged head and stop. Formal execution remains blocked on the owner's separate
+      matching grant; this record supplies none.
   successor_import_witness_observed:
     date: 2026-08-01
     unit: H2
