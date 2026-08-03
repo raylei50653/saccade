@@ -157,8 +157,11 @@ def execute(
     _write_packet_record(incomplete, authority.REQUEST_NAME, request)
     _write_packet_record(incomplete, authority.GRANT_NAME, grant)
     _write_packet_record(incomplete, authority.DOMAIN_NAME, domain)
-    run_root = incomplete / authority.RUNS_DIR
-    run_root.mkdir()
+    # The retained Layer-M runner owns the `runs/<sequence>/<run-id>` suffix.
+    # Give it the packet root, while creating the required top-level custody
+    # directory now so even a pre-run stage failure leaves a formable layout.
+    (incomplete / authority.RUNS_DIR).mkdir()
+    run_root = incomplete
 
     execution = producer.configured_execution(
         execution_id=execution_id,

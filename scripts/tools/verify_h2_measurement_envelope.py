@@ -215,7 +215,7 @@ def _run_reasons(root: Path, result: Mapping[str, Any]) -> list[str]:
             reasons.append(f"run evidence has no result record for {run_id}")
             continue
         try:
-            observed = driver.run_artifact_digest(root / authority.RUNS_DIR, run_id)
+            observed = driver.run_artifact_digest(root, run_id)
         except (driver.DriverError, OSError) as exc:
             reasons.append(f"{run_id} run evidence is unusable: {exc}")
             continue

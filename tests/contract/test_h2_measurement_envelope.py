@@ -63,7 +63,7 @@ def _grant(request: dict[str, Any]) -> dict[str, Any]:
 def _packet(tmp_path: Path, run_spec: dict[str, Any]) -> tuple[Path, dict[str, Any]]:
     root = tmp_path / "measurement-packet"
     archive = root / authority.ARCHIVE_DIR
-    runs_root = root / authority.RUNS_DIR
+    runs_root = root
     ledger = tmp_path / "ledger"
     request = authority.build_request(
         execution_id=producer_fixtures.EXECUTION_ID,
@@ -114,6 +114,14 @@ def test_closed_measurement_envelope_is_independently_valid(
     _, committed = envelope_verifier.commit_verification(root)
     assert committed["valid"] is True
     assert envelope_verifier.verify_packet(root) == committed
+    assert (
+        root
+        / authority.RUNS_DIR
+        / driver.producer.sequence()
+        / "00_capture_off"
+        / evidence.POLICY_INVENTORY_NAME
+    ).is_file()
+    assert not (root / authority.RUNS_DIR / authority.RUNS_DIR).exists()
 
 
 def test_half_closed_measurement_envelope_is_refused(

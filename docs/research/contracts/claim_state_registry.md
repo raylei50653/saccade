@@ -1544,6 +1544,14 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
       `measurement_pass`, `terminal: null`, inner valid, envelope valid, and exactly one corpus refusal for
       controlled-domain mismatch. A synthetic rehearsal grant is not owner authority and is not a
       measurement.
+    first_rehearsal_finding: >-
+      The disposable run at implementation head `84583eed…` reached the requested result and both validity
+      verdicts, then post-run rederivation found run custody nested as `runs/runs/MOT17-04-SDP/...`.
+      Controller and verifier had applied the same extra prefix, so self-consistency hid the layout error.
+      The packet is retained as truthful superseded rehearsal evidence at
+      `/home/ray/h2_w6_successor_rehearsal_20260803T155451Z`, inventory digest `9f28ff5d…`; it is not the
+      final-projection rehearsal, owner authority, measurement or corpus evidence. The repair moves the
+      execution projection and requires one new disposable run.
     repaired_observation: >-
       W5 owner-review observation 1 is addressed in the same projection-moving unit:
       `corpus_admission_witness` now catches the corpus CLI's full fail-closed exception surface. This does
@@ -1559,7 +1567,8 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
       admission; no measurement-closure verdict; no Phase B; no equivalence; no I/F/S; no seal; no H0
       re-entry
     next: >-
-      Finish implementation review and one disposable-ledger final-projection rehearsal. Then emit a
+      Land the single-layer run-custody repair and complete one new disposable-ledger final-projection
+      rehearsal. Then emit a
       request from the exact clean merged head and stop. Formal execution remains blocked on the owner's
       separate matching grant.
   successor_import_witness_observed:
