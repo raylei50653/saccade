@@ -19,6 +19,7 @@ if str(_TOOLS) not in sys.path:
     sys.path.insert(0, str(_TOOLS))
 
 import h2_execution_driver as driver  # noqa: E402
+import h2_import_witness as import_witness  # noqa: E402
 import h2_measurement_evidence as evidence  # noqa: E402
 import h2_successor_authorization as authority  # noqa: E402
 import h2_terminal_partition as partition  # noqa: E402
@@ -203,7 +204,64 @@ def _inner_reasons(root: Path) -> tuple[list[str], dict[str, Any], dict[str, Any
     return reasons, documents, verification
 
 
-def _run_reasons(root: Path, result: Mapping[str, Any]) -> list[str]:
+def _import_witness_reasons(
+    directory: Path,
+    *,
+    run_id: str,
+    run_spec: Mapping[str, Any],
+) -> list[str]:
+    import jsonschema
+
+    reasons: list[str] = []
+    try:
+        witness = evidence.load_document(
+            directory,
+            import_witness.WITNESS_NAME,
+            schema=import_witness.WITNESS_SCHEMA,
+        )
+        schema = inner_verifier._load_contract(
+            inner_verifier._SCHEMA_BY_BASENAME["h2_import_witness_v1.json"]
+        )
+        jsonschema.validate(instance=witness, schema=schema)
+        import_witness.validate_witness(witness)
+        reasons.extend(
+            import_witness.containment_failures(
+                witness["observations"], document=run_spec
+            )
+        )
+    except (
+        KeyError,
+        TypeError,
+        evidence.EvidenceError,
+        import_witness.WitnessError,
+        jsonschema.ValidationError,
+        OSError,
+    ) as exc:
+        return [f"{run_id} import witness is unusable: {exc}"]
+
+    projection = run_spec.get("execution_semantics_projection")
+    closure = (
+        projection.get("execution_code_closure")
+        if isinstance(projection, Mapping)
+        else None
+    )
+    if not isinstance(closure, Mapping):
+        return [f"{run_id} import witness has no usable RunSpec declaration"]
+    expected_declared = {
+        "execution_code_closure_digest": closure.get("digest"),
+        "execution_semantics_projection_digest": projection.get("digest"),
+        "roots": closure.get("roots"),
+    }
+    if witness.get("declared") != expected_declared:
+        reasons.append(f"{run_id} import witness binds a different declaration")
+    return reasons
+
+
+def _run_reasons(
+    root: Path,
+    result: Mapping[str, Any],
+    run_spec: Mapping[str, Any],
+) -> list[str]:
     ordered = result.get("ordered_runs")
     if not isinstance(ordered, list):
         return ["inner result ordered_runs is not a list"]
@@ -214,6 +272,8 @@ def _run_reasons(root: Path, result: Mapping[str, Any]) -> list[str]:
         if not isinstance(record, Mapping):
             reasons.append(f"run evidence has no result record for {run_id}")
             continue
+        if record.get("state") != "completed":
+            continue
         try:
             observed = driver.run_artifact_digest(root, run_id)
         except (driver.DriverError, OSError) as exc:
@@ -221,6 +281,14 @@ def _run_reasons(root: Path, result: Mapping[str, Any]) -> list[str]:
             continue
         if record.get("artifact_digest") != observed:
             reasons.append(f"{run_id} artifact digest differs from its run evidence")
+        directory = evidence.run_dir(root, driver.producer.sequence(), run_id)
+        reasons.extend(
+            _import_witness_reasons(
+                directory,
+                run_id=run_id,
+                run_spec=run_spec,
+            )
+        )
     return reasons
 
 
@@ -312,6 +380,9 @@ def verify_packet(root: Path) -> dict[str, Any]:
     if not isinstance(result, Mapping):
         raise EnvelopeVerificationError("inner result cannot identify the envelope")
     archive_root = root / authority.ARCHIVE_DIR
+    run_spec = inner_documents.get("run_spec.json")
+    if not isinstance(run_spec, Mapping):
+        raise EnvelopeVerificationError("inner RunSpec cannot identify run authority")
     reasons_by_check = {
         "artifact_schemas": _artifact_schema_reasons(documents, raws),
         "authorization_binding": _authorization_reasons(documents, inner_documents),
@@ -319,7 +390,7 @@ def verify_packet(root: Path) -> dict[str, Any]:
         "execution_domain": _domain_reasons(documents),
         "inner_archive": inner_reasons,
         "packet_layout": layout,
-        "run_evidence": _run_reasons(root, result),
+        "run_evidence": _run_reasons(root, result, run_spec),
     }
     expected = _record(documents, raws, archive_root, reasons_by_check)
     stored_path = root / authority.ENVELOPE_VERIFICATION_NAME

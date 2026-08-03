@@ -23,6 +23,7 @@ for path in (_TOOLS, _CONTRACT_TESTS):
 
 import check_h2_measure_archives as corpus  # noqa: E402
 import h2_execution_driver as driver  # noqa: E402
+import h2_import_witness as import_witness  # noqa: E402
 import h2_measurement_evidence as evidence  # noqa: E402
 import h2_run_spec as run_spec_module  # noqa: E402
 import h2_successor_authorization as authority  # noqa: E402
@@ -57,6 +58,41 @@ def _grant(request: dict[str, Any]) -> dict[str, Any]:
         "phase": request["phase"],
         "resolved_run_spec_digest": request["resolved_run_spec_digest"],
         "schema": authority.GRANT_SCHEMA,
+    }
+
+
+def _import_witness(run_spec: dict[str, Any]) -> dict[str, Any]:
+    projection = run_spec["execution_semantics_projection"]
+    closure = projection["execution_code_closure"]
+    member = closure["members"][0]
+    observations = [
+        {
+            "authority_domains": [import_witness.DOMAIN_CLOSURE],
+            "length": member["length"],
+            "loader": "SourceFileLoader",
+            "module_names": ["fixture.module"],
+            "origin_kind": "source",
+            "path": member["path"],
+            "sha256": member["sha256"],
+        }
+    ]
+    return {
+        "algorithm": import_witness.WITNESS_ALGORITHM,
+        "authority": import_witness.WITNESS_AUTHORITY,
+        "bootstrap": {
+            "entry_module": "run_h2_measurement_child",
+            "preloaded_repo_local_paths": sorted(import_witness.BOOTSTRAP_SELF_PATHS),
+            "recorder_installed_before_entry_import": True,
+            "schema": import_witness.BOOTSTRAP_SCHEMA,
+        },
+        "declared": {
+            "execution_code_closure_digest": closure["digest"],
+            "execution_semantics_projection_digest": projection["digest"],
+            "roots": closure["roots"],
+        },
+        "digest": evidence.digest(observations),
+        "observations": observations,
+        "schema": import_witness.WITNESS_SCHEMA,
     }
 
 
@@ -98,6 +134,7 @@ def _packet(tmp_path: Path, run_spec: dict[str, Any]) -> tuple[Path, dict[str, A
             evidence.POLICY_INVENTORY_NAME,
             {"schema": evidence.POLICY_INVENTORY_SCHEMA},
         )
+        _write(directory, import_witness.WITNESS_NAME, _import_witness(run_spec))
         run["artifact_digest"] = driver.run_artifact_digest(runs_root, run["run_id"])
     _write(archive, "result.json", result)
     _, inner = inner_verifier.commit_verification(archive)
@@ -185,6 +222,26 @@ def test_receipt_digest_mismatch_invalidates_the_envelope(
     envelope = envelope_verifier.verify_packet(root)
     assert envelope["valid"] is False
     assert any("consumption receipt" in reason for reason in envelope["reasons"])
+
+
+def test_unbound_import_invalidates_run_evidence(
+    tmp_path: Path, run_spec: dict[str, Any]
+) -> None:
+    root, _ = _packet(tmp_path, run_spec)
+    path = (
+        root
+        / authority.RUNS_DIR
+        / driver.producer.sequence()
+        / "00_capture_off"
+        / import_witness.WITNESS_NAME
+    )
+    witness = json.loads(path.read_text(encoding="utf-8"))
+    witness["observations"][0]["authority_domains"] = []
+    witness["digest"] = evidence.digest(witness["observations"])
+    _write(path.parent, path.name, witness)
+    observed = envelope_verifier.verify_packet(root)
+    assert observed["valid"] is False
+    assert any("unbound repository code" in reason for reason in observed["reasons"])
 
 
 def test_request_without_packet_identity_is_unformable(

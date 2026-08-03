@@ -1552,6 +1552,15 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
       `/home/ray/h2_w6_successor_rehearsal_20260803T155451Z`, inventory digest `9f28ff5d…`; it is not the
       final-projection rehearsal, owner authority, measurement or corpus evidence. The repair moves the
       execution projection and requires one new disposable run.
+    second_rehearsal_finding: >-
+      The repaired run at `c4821e9e…` proved single-layer custody and again reached `measurement_pass`,
+      valid inner/outer verdicts and domain-only refusal. Review then found outer `run_evidence` trusted the
+      child's import-containment gate: it recomputed policy-inventory digests but did not itself validate
+      each archived `import_witness.json`. The envelope verifier now schema-validates every completed-run
+      witness and re-derives early-recorder, non-empty authority-domain and archived-RunSpec byte
+      containment. An unbound observation fails the outer verdict. This verifier edit moves the projection,
+      so the packet at `/home/ray/h2_w6_successor_rehearsal_20260803T160837Z` is also superseded rehearsal
+      evidence and one further disposable run is required.
     repaired_observation: >-
       W5 owner-review observation 1 is addressed in the same projection-moving unit:
       `corpus_admission_witness` now catches the corpus CLI's full fail-closed exception surface. This does
@@ -1567,8 +1576,8 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
       admission; no measurement-closure verdict; no Phase B; no equivalence; no I/F/S; no seal; no H0
       re-entry
     next: >-
-      Land the single-layer run-custody repair and complete one new disposable-ledger final-projection
-      rehearsal. Then emit a
+      Land the independent import-witness verification repair and complete one new disposable-ledger
+      final-projection rehearsal. Then emit a
       request from the exact clean merged head and stop. Formal execution remains blocked on the owner's
       separate matching grant.
   successor_import_witness_observed:
