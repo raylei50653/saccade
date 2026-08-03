@@ -1420,7 +1420,7 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
       pre-merge discovery revision re-pin the complete declaration at 115473 bytes / `717dde08…`, and
       runtime identity is republished
       from existing read-only W4b probe and runtime-input records. `identity_semantics` moves
-      `32bee186…` → `bfcb454d…`; the other coordinate axes and probe `2dabed0b…` do not move. No probe
+      `32bee186…` → `89d4bb41…`; the other coordinate axes and probe `2dabed0b…` do not move. No probe
       or native build is run, and equivalence stays unproven.
     verification: >-
       Focused W5c contract suite 83 passed; extended successor contract suite 502 passed; the CI-found
