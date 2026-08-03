@@ -1415,7 +1415,9 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
       `4aa029b4…`, projection `44ed14bf…` → `93009c65…`, and resolved RunSpec `66c031fe…` →
       `835a2110…`. It also edits ruler member `h2_terminal_partition.py`; Review Correction 11 re-pins
       the complete declaration at 114906 bytes / `3925b240…`, and runtime identity is republished once
-      from existing read-only W4b probe and runtime-input records. No probe or native build is run.
+      from existing read-only W4b probe and runtime-input records. `identity_semantics` moves
+      `32bee186…` → `bfcb454d…`; the other coordinate axes and probe `2dabed0b…` do not move. No probe
+      or native build is run, and equivalence stays unproven.
     verification: >-
       Focused W5c contract suite 83 passed; extended successor contract suite 502 passed; ruff and mypy
       pass. Final pre-push and CI are required before merge.
