@@ -135,3 +135,8 @@ scratchpad/
 # contents — git cannot re-include a file inside an excluded directory.
 !docs/modules/semantic/research/evidence/**/runs/
 !docs/modules/semantic/research/evidence/**/*.log
+# A measurement child runs under a closed HOME/TMPDIR/XDG_CACHE_HOME inside its
+# own run directory, so the compiler caches it materialises (Triton's
+# `cuda_utils…so`) are inventoried archive members like any other. The generic
+# `*.so` rule above would drop exactly those seven files and break the closure.
+!docs/modules/semantic/research/evidence/**/*.so

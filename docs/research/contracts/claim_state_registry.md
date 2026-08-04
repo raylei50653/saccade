@@ -1608,6 +1608,98 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
       Review and merge the implementation without moving its execution projection. Then emit a request from
       the exact clean merged head and stop. Formal execution remains blocked on the owner's separate
       matching grant; this record supplies none.
+  successor_formal_measurement_executed:
+    date: 2026-08-04
+    unit: H2
+    stage: "W7 — the third authorization consumed, one formal measurement, canonical corpus admission"
+    status: >-
+      **executed and admitted; awaiting the owner measurement-closure verdict.** The owner directed the
+      whole chain in session. One request was emitted from the exact clean merged head `c570dd92`, one
+      grant was drafted against it, the grant was consumed, and the resulting packet passed both
+      independent verifiers and canonical corpus admission. This record is evidence registration; it is
+      not the closure verdict it exists to request.
+    execution:
+      head: c570dd9202498f390083dd02503d5675f900e027
+      execution_id: h2-w6-formal-20260804T052122Z
+      result: "`measurement_pass`, `terminal: null`; four ordered runs (`00_capture_off`, `01`-`03_capture_on`)"
+      projection: >-
+        execution-semantics projection `508f10f408ef59725985a0ea6263cdd7e7f41874d932859c8ca7de74532db991`;
+        resolved RunSpec `796d85f7385ee15776a3a81060c0c86ce7b993038a2fab73209d97d73b67f93f`. Both equal the
+        W6 final-projection rehearsal at `f0ee5da3`, so the merge moved no projection and no further
+        rehearsal was owed.
+      packet: >-
+        `docs/modules/semantic/research/evidence/h2_measure_envelope_c570dd9202498f390083dd02503d5675f900e027`,
+        admitted from the external custody copy at
+        `/home/ray/h2_w6_formal_measurement_20260804T052122Z`. The admitted root is renamed into the
+        envelope family grammar; root names are audit metadata rather than validity gates (Correction 5),
+        the corpus discovers the packet by artifact family, and the inventory binds paths relative to the
+        root, so the rename moves no byte. Inventory
+        digest `0a3728099b98a39efd4be48d674cfd1195d8debbccfce096d684da4f3725c3e0`; 519 listed members plus
+        the inventory itself (520 files, 83,984,880 bytes); `sha256sum -c` 519/519. Run custody is
+        single-rooted at `runs/MOT17-04-SDP/<run-id>`.
+    authority:
+      authorization_id: c2f11ab13b95da0b216be80c4fd3a49dc2633cf72281071c6290832a1df5ec54
+      receipt: >-
+        `<controlled-ledger>/c2f11ab13b95da0b216be80c4fd3a49dc2633cf72281071c6290832a1df5ec54.json`. The
+        controlled ledger now holds two receipts: the 2026-07-28 one (`342416678c...`, older schema
+        family) and this one. This authorization is permanently spent regardless of any later verdict.
+      grant_provenance: >-
+        **Stated plainly because this scheme carries no signature.** The grant document was drafted by the
+        assistant - it copies the six request fields verbatim, sets `issued_by`, and mints one random
+        `authorization_id`, so its content holds no judgement. The drafting script ran under the owner's
+        uid (1000 `ray` @ `DESKTOP-0FLA6SQ`, 2026-08-04T05:33:29Z), and the owner ran the consuming
+        command and the packet finalization directly. The owner's authorization was given
+        conversationally, not as a separate signed artifact. Auditors should read this authority as
+        owner-directed and assistant-drafted, not as an independently signed owner act.
+      abandoned_first_chain: >-
+        An earlier chain at the same head, `execution_id` `h2-w6-formal-20260804T050633Z`, was discarded
+        **unconsumed**. Its grant file (`authorization_id` `6be3824d...`) was found already present at a
+        path only this session could have named, while every assistant attempt to create it had been
+        refused by the local permission layer and the owner's own run failed with `FileExistsError` from
+        the `O_EXCL` create. Contents were field-for-field correct and third-party origin is excluded by
+        the path being session-invented, but who wrote it and when could not be established. Since
+        provenance is the only thing a grant carries, the chain was discarded rather than explained after
+        the fact. No receipt for `6be3824d...` exists in the controlled ledger. Both directories are
+        retained unmodified at `/home/ray/h2_successor_authorization_request_c570dd92_20260804T050633Z`
+        and `/home/ray/h2_successor_grant_c570dd92_20260804T050633Z`.
+    independent_closure: >-
+      Inner `h2_execution_verification_v2`: `valid: true`, 7/7, `reasons: []`. Outer
+      `h2_successor_measurement_envelope_verification_v1`: `valid: true`, 7/7, `reasons: []`. Both ran as
+      separate processes and record `verification_host_inputs_used: false`. The outer verifier recomputes
+      import custody and replays A7.6 itself rather than trusting the producer or the inner verifier.
+    corpus_admission: >-
+      `check_h2_measure_archives` reports `PASS (2 roots; complete=1, successor=1)`, and
+      `successor_packet_admission_reasons` returns empty against this packet. This is the first packet the
+      canonical corpus has admitted under the v2 envelope family.
+    evidence_taxonomy: >-
+      Admission also needed a repository-side class. `packet_inventory.evidence_kind` classifies evidence
+      directories by name, and neither existing H2 family fits: the flat-archive family rejects a nested
+      `archive/` + `runs/` packet outright, and everything else falls through to the generic dated packet,
+      which demands a `manifest.json` the envelope verifier's `unexpected = present - permitted` layout
+      check would then reject, losing admission. A fourth kind,
+      `H2_MEASUREMENT_ENVELOPE_PACKET` (`h2_measure_envelope_<40-hex>`), routes these roots to the verifier
+      that owns them. Membership is deliberately stricter, not an exemption: the packet answers to the
+      dedicated envelope verifier and to bidirectional inventory recomputation, both of which check more
+      than the manifest contract. The grammar ends in bare hex, so it cannot collide with the dated
+      grammar and classification stays order-independent; a test pins that disjointness directly.
+    gitignore_repair: >-
+      Admission surfaced one contract gap. The block re-including sealed evidence already covered `runs/`
+      and `*.log`, on the stated principle that generic rules must never silently drop an inventoried
+      archive member. A measurement child runs under a closed HOME/TMPDIR/XDG_CACHE_HOME inside its own
+      run directory, so Triton materialises seven `cuda_utils...so` files that are inventoried members and
+      that the generic `*.so` rule would have dropped, breaking the closure at commit time while every
+      external check still passed. The negation list is extended by
+      `!docs/modules/semantic/research/evidence/**/*.so`; `git add -f` was deliberately not used, because
+      it leaves no durable record and the next admission would silently drop them again.
+    authorization_effect: >-
+      the third owner authorization is consumed and permanently spent; two authorizations remain spent
+      from earlier attempts
+    not_established: >-
+      no owner measurement-closure verdict; no Phase B; no equivalence; no I/F/S; no seal; no H0 re-entry.
+      A passing, admitted measurement is not an accepted measurement.
+    next: >-
+      Owner review of this packet for the H2 measurement-closure verdict. Accepting it ends Phase A only.
+      There is no automatic next execution and this record issues no further authority.
   successor_import_witness_observed:
     date: 2026-08-01
     unit: H2
