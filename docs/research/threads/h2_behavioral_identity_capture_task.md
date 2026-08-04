@@ -595,11 +595,10 @@ envelope verdict each closed it 7/7 with empty reasons and
 `verification_host_inputs_used: false`; and the canonical corpus admitted the packet —
 the first admission under the v2 envelope family.
 
-**The authoritative named limits and the adjudication are held exclusively in the
-[claim-state registry](../contracts/claim_state_registry.md) entry
-`successor_formal_measurement_executed.owner_review`.** This section carries the state
-boundary only; it names no limit and reproduces no part of the reasoning, so there is
-nothing here that can drift out of step with the registry.
+This section carries the state boundary only. For the named limits and the
+adjudication, see the [claim-state registry](../contracts/claim_state_registry.md)
+entry `successor_formal_measurement_executed.owner_review`, which holds them
+exclusively.
 
 This acceptance **ends Phase A and nothing else**. It establishes and authorizes no
 Phase B, proves no equivalence (`equivalence.state` remains `unproven`), creates no

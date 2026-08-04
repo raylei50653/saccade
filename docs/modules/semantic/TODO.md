@@ -173,9 +173,9 @@
   Owner verdict＝**`ACCEPT WITH NAMED LIMITS — H2 measurement closure`**。
   接受只終結 Phase A：不建立 Phase B、equivalence 仍 `unproven`、無 I/F/S、無 seal、無 H0 re-entry、
   **沒有自動 next**；任何後續執行都是另一次 owner 決策。
-  **具名 limits 與 adjudication 僅由** registry
+  具名 limits 與 adjudication 由 registry
   [`successor_formal_measurement_executed.owner_review`](../../research/contracts/claim_state_registry.md)
-  **持有**；本表不記其名稱、摘要或理由。
+  獨家持有。
   W3 先於 W4 的理由＝#294→#295 的契約先行與 #302／#304 的
   guard-before-entry，且 W2–W3 不需 build ⇒ item 5 的 `build/h2_layer_p`
   位元不動。不是重建舊 items 4–5／`F` →

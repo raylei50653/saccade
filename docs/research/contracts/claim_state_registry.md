@@ -1616,7 +1616,8 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
       **executed, admitted, and owner-accepted with named limits as H2 measurement closure
       (2026-08-04).** The owner directed the whole chain in session. One request was emitted from the
       exact clean merged head `c570dd92`, one grant was drafted against it, the grant was consumed, and
-      the resulting packet passed both independent verifiers and canonical corpus admission. The
+      the resulting packet produced a passing inner verdict and a passing independently executed outer
+      envelope verdict, and passed canonical corpus admission. The
       execution, authority, closure and admission fields below are the evidence registration written
       before the verdict; `owner_review` is the verdict itself and is the only field that accepts
       anything.
