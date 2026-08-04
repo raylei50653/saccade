@@ -36,6 +36,7 @@ from tests.contract.packet_inventory import (
     h0_preseal_freeze_v3_dirs,
     h0_preseal_freeze_v3_layout_errors,
     h2_archive_integrity_errors,
+    h2_measurement_envelope_dirs,
     h2_measurement_execution_dirs,
     is_generic_dated_packet_name,
     is_h0_phase_a_execution_name,
@@ -334,6 +335,29 @@ def test_h2_measurement_envelope_layout_is_rejected_by_dedicated_verifier(
     assert evidence_kind(evidence_dir) == H2_MEASUREMENT_ENVELOPE_PACKET
     with pytest.raises(envelope_verifier.EnvelopeVerificationError):
         envelope_verifier.verify_packet(evidence_dir)
+
+
+def test_h2_measurement_envelope_packets_are_inventory_complete() -> None:
+    """Every admitted envelope packet still answers to its own inventory.
+
+    The envelope verifier owns validity; this owns the property that generic
+    repository tooling is most likely to break, and that the corpus checker
+    would only notice later: an inventoried member that was dropped at commit
+    time or rewritten in place by a source formatter.
+
+    It lands with the first admitted packet rather than with the classifier,
+    because a non-empty assertion about admitted evidence is only meaningful
+    once some exists — and asserting it earlier would make the guard commit
+    itself un-checkoutable.
+    """
+    packets = h2_measurement_envelope_dirs()
+    assert packets, "no H2 measurement envelope packets were found"
+    failures = {
+        packet.name: errors
+        for packet in packets
+        if (errors := h2_archive_integrity_errors(packet))
+    }
+    assert not failures, f"H2 measurement envelope integrity failures: {failures}"
 
 
 def test_h2_measurement_envelope_names_never_collide_with_another_family() -> None:

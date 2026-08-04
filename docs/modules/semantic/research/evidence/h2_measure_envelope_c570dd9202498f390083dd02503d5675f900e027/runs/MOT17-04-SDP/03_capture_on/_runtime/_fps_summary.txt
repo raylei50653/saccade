@@ -1,0 +1,2 @@
+MOT17-04-SDP	fps=23.26	mean_ms=85.43	frames=1000
+OVERALL	fps=23.26	mean_ms=85.43	frames=1000
