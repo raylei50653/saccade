@@ -590,18 +590,16 @@ walked exactly as staged: one request emitted from the exact clean merged head
 consumed it. That authorization (`c2f11ab1…`) is permanently spent, and the
 controlled ledger now holds two receipts. The single formal execution
 `h2-w6-formal-20260804T052122Z` reached `measurement_pass` with `terminal: null`
-across four ordered runs; the inner and outer verifiers each closed it 7/7 with empty
-reasons and `verification_host_inputs_used: false`; and the canonical corpus admitted
-the packet — the first admission under the v2 envelope family.
+across four ordered runs; the inner verdict and the independently executed outer
+envelope verdict each closed it 7/7 with empty reasons and
+`verification_host_inputs_used: false`; and the canonical corpus admitted the packet —
+the first admission under the v2 envelope family.
 
-**The verdict lives in the [claim-state registry](../contracts/claim_state_registry.md)
-entry `successor_formal_measurement_executed.owner_review`; this section is navigation
-and restates neither the limits nor their reasoning.** Two limits are named there —
-the accepted authority is owner-directed and assistant-drafted rather than
-independently signed, and the discarded first chain's grant origin remains unresolved
-— and one question the assistant deliberately refused to settle for itself, whether
-adding the fourth evidence kind in the same unit that admits the evidence it
-classifies is a self-issued exemption, was put to the owner and adjudicated as sound.
+**The authoritative named limits and the adjudication are held exclusively in the
+[claim-state registry](../contracts/claim_state_registry.md) entry
+`successor_formal_measurement_executed.owner_review`.** This section carries the state
+boundary only; it names no limit and reproduces no part of the reasoning, so there is
+nothing here that can drift out of step with the registry.
 
 This acceptance **ends Phase A and nothing else**. It establishes and authorizes no
 Phase B, proves no equivalence (`equivalence.state` remains `unproven`), creates no

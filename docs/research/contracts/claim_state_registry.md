@@ -1705,15 +1705,23 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
       scope: >-
         the admitted packet
         `h2_measure_envelope_c570dd9202498f390083dd02503d5675f900e027`, the single formal execution
-        `h2-w6-formal-20260804T052122Z` that produced it, its two independent closures and its canonical
-        corpus admission. W6 and everything earlier is reviewed only as an already-landed premise of that
-        closure, not reopened.
+        `h2-w6-formal-20260804T052122Z` that produced it, the inner verdict and the independently
+        executed outer envelope verdict that closed it, and its canonical corpus admission. W6 and
+        everything earlier is reviewed only as an already-landed premise of that closure, not reopened.
+      what_independence_means_here: >-
+        stated narrowly so the acceptance is not read as more than it is. What the schema guarantees is
+        `independent_command_separate_process`: the outer verdict is produced by a separate command and
+        recomputes import custody and the A7.6 replay itself rather than inheriting them. It is **not**
+        N-version implementation independence — `verify_h2_measurement_envelope` imports
+        `verify_h2_execution` and calls the inner implementation to complete its `inner_archive` check.
+        A defect common to that shared implementation is therefore not excluded by two passing verdicts,
+        and nothing in this acceptance claims otherwise.
       reconfirmed_at_the_verdict_head: >-
         worktree clean at `e4879d5f`; packet checksum closure re-run with `sha256sum -c`, 519/519 and zero
         failures; `check_h2_measure_archives` re-run at the merged head reports
         `PASS (2 roots; complete=1, successor=1)`. This re-confirms the registered facts still hold at the
-        head being accepted; it is a re-check, not a third independent verification, and the accepted
-        closures remain the inner and outer verdicts recorded above.
+        head being accepted; it is a re-check, not a third verification, and what is accepted remains the
+        inner and outer verdicts recorded above.
       accepted_meaning: >-
         H2 measurement closure is accepted and **Phase A ends here**. It does not establish or authorize
         Phase B, does not prove equivalence (`equivalence.state` remains `unproven`), does not create
