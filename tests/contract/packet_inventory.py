@@ -21,6 +21,7 @@ H0_PRESEAL_FREEZE_V3_ARTIFACT = "h0_preseal_freeze_v3_artifact"
 H0_PRESEAL_FREEZE_V3_FILENAME = "h0_preseal_freeze_v3.json"
 H0_PHASE_A_EXECUTION_PACKET = "h0_phase_a_execution_packet"
 H2_MEASUREMENT_EXECUTION_PACKET = "h2_measurement_execution_packet"
+H2_MEASUREMENT_ENVELOPE_PACKET = "h2_measurement_envelope_packet"
 
 # ASCII digits only: `\d` would also accept Unicode digits (e.g. ٠١٢٣),
 # which must stay unclassified and be rejected fail-closed.
@@ -33,6 +34,16 @@ _H0_PHASE_A_EXECUTION_DIR_NAME = re.compile(r"^h0_phase_a_[0-9a-f]{40}$")
 _H2_MEASUREMENT_EXECUTION_DIR_NAME = re.compile(
     r"^h2_measure_(b_[0-9a-f]{40}_[0-9a-f]{64}|[0-9a-f]{40})$"
 )
+# The v2 successor envelope is a *packet*: `archive/` and `runs/` beside the
+# authorization records, which the flat-archive family above rejects outright.
+# The canonical corpus discovers it by artifact family and treats root names as
+# audit metadata (Correction 5), so no producer owns this grammar; it exists
+# only so the repository-side taxonomy has a class for it. It ends in the
+# instrumentation head's 40 hex characters, so like every other exact family it
+# cannot end in the dated `_[0-9]{8}` grammar and classification stays
+# order-independent. Membership buys stricter validation, not less: these roots
+# are held to their own inventory *and* to the dedicated envelope verifier.
+_H2_MEASUREMENT_ENVELOPE_DIR_NAME = re.compile(r"^h2_measure_envelope_[0-9a-f]{40}$")
 
 # An H2 archive carries its own inventory in H0's format: exactly
 # `<64 lowercase hex><two spaces><relative posix path>`, which is what
@@ -112,6 +123,10 @@ def is_h2_measurement_execution_name(name: str) -> bool:
     return _H2_MEASUREMENT_EXECUTION_DIR_NAME.fullmatch(name) is not None
 
 
+def is_h2_measurement_envelope_name(name: str) -> bool:
+    return _H2_MEASUREMENT_ENVELOPE_DIR_NAME.fullmatch(name) is not None
+
+
 def is_generic_dated_packet_name(name: str) -> bool:
     return _DATED_PACKET_NAME.fullmatch(name) is not None
 
@@ -119,13 +134,21 @@ def is_generic_dated_packet_name(name: str) -> bool:
 def evidence_kind(evidence_dir: Path) -> str | None:
     """Classify one evidence directory, returning None for an unknown kind.
 
-    Exact H0 governance and execution-evidence families, and the H2 Layer-M
-    measurement family, are intentionally separate from dated research packets.
-    Their final 40-hex component has no underscore, so none of them can end in
-    the dated ``_[0-9]{8}`` grammar and classification does not depend on check
-    order.  Every other directory must either be a dated packet or be rejected
-    by the schema contract; it must never disappear from generic validation
-    merely because it lacks a manifest.
+    Exact H0 governance and execution-evidence families, and both H2 families
+    (the Layer-M flat archive and the v2 successor envelope packet), are
+    intentionally separate from dated research packets.  Their final 40-hex
+    component has no underscore, so none of them can end in the dated
+    ``_[0-9]{8}`` grammar and classification does not depend on check order.
+    Every other directory must either be a dated packet or be rejected by the
+    schema contract; it must never disappear from generic validation merely
+    because it lacks a manifest.
+
+    A family is a *stricter* class, never an exemption: each one is held to its
+    own inventory and to its own dedicated verifier, both of which check more
+    than the generic manifest contract does.  Adding a family to escape a
+    failing generic check, rather than to route evidence to the verifier that
+    actually owns it, would invert that and is the failure this docstring has
+    always warned about.
     """
     if is_h0_preseal_freeze_v3_name(evidence_dir.name):
         return H0_PRESEAL_FREEZE_V3_ARTIFACT
@@ -133,6 +156,8 @@ def evidence_kind(evidence_dir: Path) -> str | None:
         return H0_PHASE_A_EXECUTION_PACKET
     if is_h2_measurement_execution_name(evidence_dir.name):
         return H2_MEASUREMENT_EXECUTION_PACKET
+    if is_h2_measurement_envelope_name(evidence_dir.name):
+        return H2_MEASUREMENT_ENVELOPE_PACKET
     if is_generic_dated_packet_name(evidence_dir.name):
         return GENERIC_RESEARCH_PACKET
     return None
@@ -174,6 +199,10 @@ def h0_phase_a_execution_dirs() -> list[Path]:
 
 def h2_measurement_execution_dirs() -> list[Path]:
     return _physical_dirs_of_kind(H2_MEASUREMENT_EXECUTION_PACKET)
+
+
+def h2_measurement_envelope_dirs() -> list[Path]:
+    return _physical_dirs_of_kind(H2_MEASUREMENT_ENVELOPE_PACKET)
 
 
 def h0_preseal_freeze_v3_layout_errors(evidence_dir: Path) -> list[str]:

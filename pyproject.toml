@@ -113,7 +113,21 @@ module = [
 ignore_errors = true
 
 [tool.ruff]
-exclude = ["tests/benchmarks/archive", "storage/", "runs/", "results/", "third_party/", "scratch/"]
+# Sealed research evidence is inventoried byte-exactly by each archive's own
+# checksum manifest. A measurement child runs under a closed HOME/TMPDIR inside
+# its own run directory, so Torch Inductor materialises generated `.py` kernels
+# that are inventoried archive members. Formatting them rewrites sealed bytes in
+# place and breaks the archive's own completeness check, so the evidence root is
+# never source for lint or format purposes.
+exclude = [
+    "tests/benchmarks/archive",
+    "storage/",
+    "runs/",
+    "results/",
+    "third_party/",
+    "scratch/",
+    "docs/modules/semantic/research/evidence/",
+]
 
 [tool.ruff.lint]
 ignore = ["E701"]

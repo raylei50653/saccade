@@ -26,6 +26,7 @@ from tests.contract.packet_inventory import (
     H0_PHASE_A_EXECUTION_PACKET,
     H0_PRESEAL_FREEZE_V3_ARTIFACT,
     H0_PRESEAL_FREEZE_V3_FILENAME,
+    H2_MEASUREMENT_ENVELOPE_PACKET,
     H2_MEASUREMENT_EXECUTION_PACKET,
     checksum_inventory,
     evidence_entries,
@@ -39,6 +40,7 @@ from tests.contract.packet_inventory import (
     is_generic_dated_packet_name,
     is_h0_phase_a_execution_name,
     is_h0_preseal_freeze_v3_name,
+    is_h2_measurement_envelope_name,
     is_h2_measurement_execution_name,
     load_manifest,
     packet_dirs,
@@ -54,6 +56,7 @@ import check_h2_measure_archives as measurement_corpus  # noqa: E402
 import h2_measurement_evidence as h2_evidence  # noqa: E402
 import verify_h0_phase_a as phase_a_verifier  # noqa: E402
 import verify_h2_measurement as measurement_verifier  # noqa: E402
+import verify_h2_measurement_envelope as envelope_verifier  # noqa: E402
 
 
 def test_evidence_root_exists() -> None:
@@ -313,6 +316,45 @@ def test_h2_measurement_execution_layout_is_rejected_by_dedicated_verifier(
 @pytest.mark.parametrize(
     "entry_name", [None, "unexpected.json"], ids=["empty", "extra"]
 )
+def test_h2_measurement_envelope_layout_is_rejected_by_dedicated_verifier(
+    tmp_path, entry_name: str | None
+) -> None:
+    """Envelope membership must route to a stricter owner, not out of checking.
+
+    An empty directory and a directory holding one stray file both carry the
+    family name, so nothing but the dedicated verifier stands between them and
+    the corpus.  Asserting it refuses them is what makes this class stricter
+    than the generic manifest contract rather than an exemption from it.
+    """
+    evidence_dir = tmp_path / ("h2_measure_envelope_" + "a" * 40)
+    evidence_dir.mkdir()
+    if entry_name is not None:
+        (evidence_dir / entry_name).write_text("not a packet")
+
+    assert evidence_kind(evidence_dir) == H2_MEASUREMENT_ENVELOPE_PACKET
+    with pytest.raises(envelope_verifier.EnvelopeVerificationError):
+        envelope_verifier.verify_packet(evidence_dir)
+
+
+def test_h2_measurement_envelope_names_never_collide_with_another_family() -> None:
+    """The envelope grammar is disjoint, so classification order cannot matter.
+
+    Every exact family ends in bare hex, and this one is checked after the flat
+    archive family.  Pinning disjointness directly means a later edit to either
+    pattern fails here instead of silently re-routing sealed evidence to the
+    wrong verifier.
+    """
+    name = "h2_measure_envelope_" + "a" * 40
+    assert is_h2_measurement_envelope_name(name)
+    assert not is_h2_measurement_execution_name(name)
+    assert not is_generic_dated_packet_name(name)
+    assert not is_h0_phase_a_execution_name(name)
+    assert not is_h0_preseal_freeze_v3_name(name)
+
+
+@pytest.mark.parametrize(
+    "entry_name", [None, "unexpected.json"], ids=["empty", "extra"]
+)
 def test_h0_phase_a_execution_layout_is_rejected_by_dedicated_verifier(
     tmp_path, entry_name: str | None
 ) -> None:
@@ -380,6 +422,11 @@ def test_packet_has_checksum_inventory(packet) -> None:
         ("h2_measure_" + "a" * 41, None),
         ("h2_measure_" + "A" * 40, None),
         ("h2_measure_b_" + "a" * 40, None),
+        ("h2_measure_envelope_" + "a" * 40, H2_MEASUREMENT_ENVELOPE_PACKET),
+        ("h2_measure_envelope_" + "a" * 39, None),
+        ("h2_measure_envelope_" + "a" * 41, None),
+        ("h2_measure_envelope_" + "A" * 40, None),
+        ("h2_measure_envelope_20260804", GENERIC_RESEARCH_PACKET),
         ("h2_measure_b_" + "a" * 40 + "_" + "b" * 63, None),
         ("unclassified_evidence", None),
         ("study_٠١٢٣٤٥٦٧", None),
