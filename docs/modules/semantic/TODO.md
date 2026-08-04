@@ -143,11 +143,27 @@
   `/home/ray/h2_w5e_diagnostic_20260803T132933Z` (512-member self-sealed packet;
   inventory
   `c25baf48b8425543a1f430b83b0381bcc2dc72386398d54acf22e41103bea268`)。
-  Owner review 的 exception-surface observation 是獨立 non-blocking plumbing
-  follow-up，未在本次修改 `scripts/`，也不自動授權 repair 或 re-run。它不消耗或產生 authorization、不是 measurement、
+  Owner review 的 exception-surface observation 已納入後續 W6 projection-moving
+  implementation：witness catch 面與 corpus CLI 對齊；這不改寫 W5 verdict，也不授權第二次 W5 diagnostic。W5 不消耗或產生 authorization、不是 measurement、
   不建 F/S、不 seal、不證明 equivalence，也不恢復兩份 spent
-  authorization。**W5 沒有自動 next**；任何後續 measurement 皆需另一個
-  owner decision 與 authority event。W3 先於 W4 的理由＝#294→#295 的契約先行與 #302／#304 的
+  authorization。**W5 本身沒有自動 next**。Owner 已另外選定 W6 formal-measurement
+  plan：新增 successor-specific request/grant/durable-receipt envelope、v2 inner
+  archive、outer verifier 與 controlled-domain corpus guard，沿用 MOT17-04-SDP／4 runs／
+  454-key RunSpec；先在 final committed projection 走一次 disposable-ledger rehearsal，
+  必須得到 `measurement_pass`／`terminal: null`、inner+outer valid，且 corpus 僅因 domain
+  mismatch 拒收。之後 exact clean merged head 只可 emit request 並停止，等待 owner 另行
+  簽發第三份 matching grant。Plan/implementation/rehearsal 都不是 authorization；正式
+  success disposition 是 owner-reviewed measurement closure + canonical corpus admission，
+  不含 Phase B、equivalence、I/F/S、seal 或自動 next。**W6 implementation 與 final
+  disposable rehearsal 已在 feature head `f0ee5da3…` 完成**：前兩次 rehearsal review
+  分別抓到 double-`runs/` custody 與 outer verifier 未獨立重驗 import/A7.6 的
+  self-consistency 缺口；修後 final packet 為 `measurement_pass`／`terminal: null`、4/4、
+  五 predicates pass、inner 7/7、outer 7/7、每 run 3355 imports / zero unbound，corpus
+  僅以 disposable-domain mismatch 拒收。Custody
+  `/home/ray/h2_w6_successor_rehearsal_20260803T163028Z`，inventory
+  `bc748a7a4659ee0aaaeec7e3408cdc54cc3ec21b5a845f3a83c7ad503f8a3e41`。
+  下一步不是 execution：先 review/merge，exact clean merged head 才 emit request 並停在 owner
+  matching grant gate；目前沒有第三份 grant。W3 先於 W4 的理由＝#294→#295 的契約先行與 #302／#304 的
   guard-before-entry，且 W2–W3 不需 build ⇒ item 5 的 `build/h2_layer_p`
   位元不動。不是重建舊 items 4–5／`F` →
   [second failure evidence](research/evidence/h2_phase_a_failed_attempt_7646f421_20260728/)

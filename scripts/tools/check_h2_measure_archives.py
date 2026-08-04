@@ -54,8 +54,10 @@ if _TOOLS.as_posix() not in sys.path:
     sys.path.insert(0, _TOOLS.as_posix())
 
 import h2_measurement_evidence as evidence  # noqa: E402
+import h2_successor_authorization as successor_authority  # noqa: E402
 import h2_terminal_partition as partition  # noqa: E402
 import verify_h2_execution as successor_verifier  # noqa: E402
+import verify_h2_measurement_envelope as envelope_verifier  # noqa: E402
 import verify_h2_measurement as verifier  # noqa: E402
 
 EVIDENCE_ROOT = REPO_ROOT / evidence.EVIDENCE_REL
@@ -257,11 +259,24 @@ def archive_roots(root: Path = EVIDENCE_ROOT) -> list[Path]:
         if (path.is_dir() or path.is_symlink())
         and (path / SUCCESSOR_DISCOVERY_NAME).exists()
     }
-    return sorted(legacy | successor, key=lambda item: item.name.encode("utf-8"))
+    successor_packets = {
+        path
+        for path in root.iterdir()
+        if (path.is_dir() or path.is_symlink())
+        and (path / successor_authority.ARCHIVE_DIR / SUCCESSOR_DISCOVERY_NAME).exists()
+    }
+    return sorted(
+        legacy | successor | successor_packets,
+        key=lambda item: item.name.encode("utf-8"),
+    )
 
 
 def _is_successor_archive(root: Path) -> bool:
     return (root / SUCCESSOR_DISCOVERY_NAME).exists()
+
+
+def _is_successor_packet(root: Path) -> bool:
+    return (root / successor_authority.ARCHIVE_DIR / SUCCESSOR_DISCOVERY_NAME).exists()
 
 
 def successor_admission_reasons(root: Path) -> tuple[str, ...]:
@@ -317,6 +332,67 @@ def successor_admission_reasons(root: Path) -> tuple[str, ...]:
             "exactly-once measurement authority; a diagnostic is never canonical "
             "measurement evidence"
         )
+    else:
+        reasons.append(
+            f"{root.name}: a naked successor measurement archive has no durable "
+            "authorization envelope"
+        )
+    return tuple(reasons)
+
+
+def successor_packet_admission_reasons(root: Path) -> tuple[str, ...]:
+    """Why one v2 measurement envelope cannot enter the canonical corpus."""
+    reasons: list[str] = []
+    try:
+        envelope = envelope_verifier.verify_packet(root)
+        envelope_verifier.validate_verification(envelope)
+    except (
+        envelope_verifier.EnvelopeVerificationError,
+        successor_authority.AuthorizationError,
+        evidence.EvidenceError,
+        OSError,
+    ) as exc:
+        return (f"{root.name}: measurement envelope cannot be verified: {exc}",)
+    if envelope.get("valid") is not True:
+        reasons.append(
+            f"{root.name}: measurement envelope is not independently valid: "
+            f"{envelope.get('reasons')}"
+        )
+
+    archive = root / successor_authority.ARCHIVE_DIR
+    try:
+        documents, _ = successor_verifier.load_archive(archive)
+        inner = successor_verifier.verify_archive(archive)
+    except (successor_verifier.ExecutionVerificationError, OSError) as exc:
+        reasons.append(f"{root.name}: inner successor archive is unusable: {exc}")
+        return tuple(reasons)
+    result = documents.get("result.json")
+    if not isinstance(result, Mapping):
+        reasons.append(f"{root.name}: successor result is not an object")
+    elif result.get("authority") != partition.MEASUREMENT_AUTHORITY:
+        reasons.append(f"{root.name}: envelope does not carry measurement authority")
+    elif result.get("schema") != successor_authority.RESULT_SCHEMA_V2:
+        reasons.append(
+            f"{root.name}: envelope does not carry the v2 measurement result"
+        )
+    if inner.get("valid") is not True:
+        reasons.append(f"{root.name}: inner successor archive is not valid")
+
+    expected_domain = controlled_host_execution_domain()
+    try:
+        archived_domain = evidence.load_document(
+            root,
+            successor_authority.DOMAIN_NAME,
+            schema=evidence.AUTHORIZATION_DOMAIN_SCHEMA,
+        )
+    except evidence.EvidenceError as exc:
+        reasons.append(f"{root.name}: archived execution domain is invalid: {exc}")
+    else:
+        if archived_domain != expected_domain:
+            reasons.append(
+                f"{root.name}: measurement was not consumed in the controlled "
+                "authorization execution domain"
+            )
     return tuple(reasons)
 
 
@@ -328,6 +404,19 @@ def _load_successor_attempt(root: Path) -> SuccessorAttempt:
     result = documents["result.json"]
     verification = successor_verifier.verify_archive(root)
     if not isinstance(result, dict):  # held by the admission verdict above
+        raise CorpusError(f"{root.name}: successor result is not an object")
+    return SuccessorAttempt(root, result, verification)
+
+
+def _load_successor_packet(root: Path) -> SuccessorAttempt:
+    reasons = successor_packet_admission_reasons(root)
+    if reasons:
+        raise CorpusError("; ".join(reasons))
+    archive = root / successor_authority.ARCHIVE_DIR
+    documents, _ = successor_verifier.load_archive(archive)
+    result = documents["result.json"]
+    verification = envelope_verifier.verify_packet(root)
+    if not isinstance(result, dict):
         raise CorpusError(f"{root.name}: successor result is not an object")
     return SuccessorAttempt(root, result, verification)
 
@@ -404,7 +493,9 @@ def check_corpus(roots: Iterable[Path]) -> list[Attempt | SuccessorAttempt]:
     attempts: list[Attempt | SuccessorAttempt] = []
     legacy_attempts: list[Attempt] = []
     for root in roots:
-        if _is_successor_archive(root):
+        if _is_successor_packet(root):
+            attempts.append(_load_successor_packet(root))
+        elif _is_successor_archive(root):
             attempts.append(_load_successor_attempt(root))
         else:
             attempt = _load_attempt(root)

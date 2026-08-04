@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://saccade.local/contracts/h2_successor_exactly_once_authorization_v1.json",
+  "title": "H2 successor exactly-once authorization v1",
+  "description": "One structurally owner-issued grant for the exact successor RunSpec, projection, execution id and controlled execution domain.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "authority",
+    "authorization_id",
+    "execution_domain",
+    "execution_id",
+    "execution_semantics_projection_digest",
+    "issued_by",
+    "phase",
+    "resolved_run_spec_digest",
+    "schema"
+  ],
+  "properties": {
+    "schema": {
+      "const": "h2_successor_exactly_once_authorization_v1"
+    },
+    "authority": {
+      "const": "exactly_once_measurement"
+    },
+    "authorization_id": {
+      "$ref": "#/$defs/sha256"
+    },
+    "execution_domain": {
+      "$ref": "#/$defs/sha256"
+    },
+    "execution_id": {
+      "$ref": "#/$defs/execution_id"
+    },
+    "execution_semantics_projection_digest": {
+      "$ref": "#/$defs/sha256"
+    },
+    "issued_by": {
+      "const": "research_owner"
+    },
+    "phase": {
+      "const": "a"
+    },
+    "resolved_run_spec_digest": {
+      "$ref": "#/$defs/sha256"
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "execution_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+    }
+  }
+}

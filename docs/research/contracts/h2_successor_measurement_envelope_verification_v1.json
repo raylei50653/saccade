@@ -1,0 +1,130 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://saccade.local/contracts/h2_successor_measurement_envelope_verification_v1.json",
+  "title": "H2 successor measurement envelope verification v1",
+  "description": "A host-independent structural verdict joining owner request, grant, durable receipt, run custody and one closed v2 execution archive.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "artifact_digests",
+    "checks",
+    "execution_id",
+    "execution_semantics_projection_digest",
+    "producer_invoked",
+    "reasons",
+    "resolved_run_spec_digest",
+    "schema",
+    "valid",
+    "verification_host_inputs_used",
+    "verification_process"
+  ],
+  "properties": {
+    "schema": {
+      "const": "h2_successor_measurement_envelope_verification_v1"
+    },
+    "execution_id": {
+      "$ref": "#/$defs/execution_id"
+    },
+    "resolved_run_spec_digest": {
+      "$ref": "#/$defs/sha256"
+    },
+    "execution_semantics_projection_digest": {
+      "$ref": "#/$defs/sha256"
+    },
+    "artifact_digests": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "authorization_consumed.json",
+        "authorization_execution_domain.json",
+        "authorization_grant.json",
+        "authorization_request.json",
+        "archive/checksums.sha256"
+      ],
+      "properties": {
+        "authorization_consumed.json": {
+          "$ref": "#/$defs/sha256"
+        },
+        "authorization_execution_domain.json": {
+          "$ref": "#/$defs/sha256"
+        },
+        "authorization_grant.json": {
+          "$ref": "#/$defs/sha256"
+        },
+        "authorization_request.json": {
+          "$ref": "#/$defs/sha256"
+        },
+        "archive/checksums.sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "checks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_schemas",
+        "authorization_binding",
+        "checksum_closure",
+        "execution_domain",
+        "inner_archive",
+        "packet_layout",
+        "run_evidence"
+      ],
+      "properties": {
+        "artifact_schemas": {
+          "type": "boolean"
+        },
+        "authorization_binding": {
+          "type": "boolean"
+        },
+        "checksum_closure": {
+          "type": "boolean"
+        },
+        "execution_domain": {
+          "type": "boolean"
+        },
+        "inner_archive": {
+          "type": "boolean"
+        },
+        "packet_layout": {
+          "type": "boolean"
+        },
+        "run_evidence": {
+          "type": "boolean"
+        }
+      }
+    },
+    "producer_invoked": {
+      "const": false
+    },
+    "reasons": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "valid": {
+      "type": "boolean"
+    },
+    "verification_host_inputs_used": {
+      "const": false
+    },
+    "verification_process": {
+      "const": "independent_command_separate_process"
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "execution_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+    }
+  }
+}

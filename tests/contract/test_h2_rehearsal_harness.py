@@ -909,6 +909,33 @@ def test_witness_v3_records_the_corpus_owners_refusal(
     }
 
 
+@pytest.mark.parametrize(
+    "exception",
+    [
+        harness.evidence.EvidenceError("evidence failure"),
+        harness.partition.PartitionError("partition failure"),
+        harness.verifier.VerificationError("verification failure"),
+        OSError("io failure"),
+    ],
+)
+def test_witness_v3_records_every_refusal_class_the_corpus_cli_handles(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    exception: Exception,
+) -> None:
+    root = tmp_path / "archive"
+    root.mkdir()
+
+    def refused(_roots: list[Path]) -> None:
+        raise exception
+
+    monkeypatch.setattr(harness.corpus, "check_corpus", refused)
+    assert harness.corpus_admission_witness(root) == {
+        "admitted": False,
+        "reasons": [str(exception)],
+    }
+
+
 def test_witness_v3_does_not_turn_corpus_admission_into_refusal(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

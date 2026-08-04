@@ -1,0 +1,199 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://saccade.local/contracts/h2_execution_verification_v2.json",
+  "title": "H2 independent execution verification v2",
+  "description": "A foreign-host-independent verdict over one closed H2 v2 execution archive. Measurement authority is joined to its durable receipt by the separate envelope verifier.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "artifact_digests",
+    "checks",
+    "execution_id",
+    "execution_semantics_projection_digest",
+    "producer_invoked",
+    "reasons",
+    "resolved_run_spec_digest",
+    "schema",
+    "valid",
+    "verification_host_inputs_used",
+    "verification_process"
+  ],
+  "properties": {
+    "schema": {
+      "const": "h2_execution_verification_v2"
+    },
+    "execution_id": {
+      "$ref": "#/$defs/execution_id"
+    },
+    "resolved_run_spec_digest": {
+      "$ref": "#/$defs/sha256"
+    },
+    "execution_semantics_projection_digest": {
+      "$ref": "#/$defs/sha256"
+    },
+    "artifact_digests": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "result.json",
+        "run_spec.json",
+        "runtime_binding.json"
+      ],
+      "properties": {
+        "run_spec.json": {
+          "$ref": "#/$defs/sha256"
+        },
+        "runtime_binding.json": {
+          "$ref": "#/$defs/sha256"
+        },
+        "result.json": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "checks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_schemas",
+        "checksum_closure",
+        "execution_binding",
+        "launch_projection",
+        "projection_binding",
+        "result_binding",
+        "run_spec_binding"
+      ],
+      "properties": {
+        "artifact_schemas": {
+          "type": "boolean"
+        },
+        "checksum_closure": {
+          "type": "boolean"
+        },
+        "execution_binding": {
+          "type": "boolean"
+        },
+        "launch_projection": {
+          "type": "boolean"
+        },
+        "projection_binding": {
+          "type": "boolean"
+        },
+        "result_binding": {
+          "type": "boolean"
+        },
+        "run_spec_binding": {
+          "type": "boolean"
+        }
+      }
+    },
+    "verification_process": {
+      "const": "independent_command_separate_process"
+    },
+    "producer_invoked": {
+      "const": false
+    },
+    "verification_host_inputs_used": {
+      "const": false
+    },
+    "valid": {
+      "type": "boolean"
+    },
+    "reasons": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "execution_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+    },
+    "all_checks_true": {
+      "type": "object",
+      "required": [
+        "artifact_schemas",
+        "checksum_closure",
+        "execution_binding",
+        "launch_projection",
+        "projection_binding",
+        "result_binding",
+        "run_spec_binding"
+      ],
+      "properties": {
+        "artifact_schemas": {
+          "const": true
+        },
+        "checksum_closure": {
+          "const": true
+        },
+        "execution_binding": {
+          "const": true
+        },
+        "launch_projection": {
+          "const": true
+        },
+        "projection_binding": {
+          "const": true
+        },
+        "result_binding": {
+          "const": true
+        },
+        "run_spec_binding": {
+          "const": true
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "checks": {
+            "$ref": "#/$defs/all_checks_true"
+          }
+        },
+        "required": [
+          "checks"
+        ]
+      },
+      "then": {
+        "properties": {
+          "valid": {
+            "const": true
+          },
+          "reasons": {
+            "maxItems": 0
+          }
+        },
+        "required": [
+          "reasons",
+          "valid"
+        ]
+      },
+      "else": {
+        "properties": {
+          "valid": {
+            "const": false
+          },
+          "reasons": {
+            "minItems": 1
+          }
+        },
+        "required": [
+          "reasons",
+          "valid"
+        ]
+      }
+    }
+  ]
+}

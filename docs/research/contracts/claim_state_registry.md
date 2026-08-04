@@ -1514,6 +1514,100 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
       W5 is owner-accepted and complete. Stop at verdict registration. Observation 1 is a separately
       scoped non-blocking follow-up, not an automatic repair. Any later successor execution or
       measurement is a separate owner decision and authority event, not a continuation authorized by W5.
+  successor_w6_formal_measurement_path:
+    date: 2026-08-03
+    unit: H2
+    stage: "W6 — successor formal-measurement authority envelope and disposable rehearsal"
+    status: >-
+      **implementation and final-projection rehearsal complete; stopped before owner grant.** The owner
+      separately selected the formal-measurement plan after accepting W5 closure. This record does not
+      relabel that plan or its rehearsal as execution authorization. The feature head still requires review
+      and merge; no request or matching third grant exists.
+    content_scope: >-
+      Reuse W5e's MOT17-04-SDP content choice, four ordered runs and complete 454-key RunSpec/capture ABI.
+      Do not reuse W5e's diagnostic authority or archive and do not resurrect the retired legacy
+      source-head/certificate/F/S gates or either spent historical authorization.
+    authority_contract: >-
+      A non-authoritative request binds execution id, Phase A, resolved RunSpec, execution-semantics
+      projection and controlled execution domain. A separately supplied owner grant must match all five.
+      The exclusive durable `<controlled-ledger>/<authorization_id>.json` receipt is the sole consumption
+      event; its canonical digest is recorded by v2 `result.json`. A crash after the receipt spends the
+      grant and leaves truthful incomplete custody; a second invocation cannot reach the producer.
+    independent_closure: >-
+      v1 result/verifier dispatch remains historical. Formal measurement uses a v2 inner archive plus an
+      outer request/grant/domain/receipt/run-evidence envelope. Inner validity, outer validity and corpus
+      admission are independent verdicts. The corpus admits only an envelope whose archived execution
+      domain equals `h2_controlled_host_execution_domain_v1`; naked measurement archives are refused.
+    rehearsal_gate: >-
+      Before a grant request, the real controller and both independent verifiers must complete once on the
+      final committed implementation projection against a disposable external ledger. Required outcome:
+      `measurement_pass`, `terminal: null`, inner valid, envelope valid, and exactly one corpus refusal for
+      controlled-domain mismatch. A synthetic rehearsal grant is not owner authority and is not a
+      measurement.
+    first_rehearsal_finding: >-
+      The disposable run at implementation head `84583eed…` reached the requested result and both validity
+      verdicts, then post-run rederivation found run custody nested as `runs/runs/MOT17-04-SDP/...`.
+      Controller and verifier had applied the same extra prefix, so self-consistency hid the layout error.
+      The packet is retained as truthful superseded rehearsal evidence at
+      `/home/ray/h2_w6_successor_rehearsal_20260803T155451Z`, inventory digest `9f28ff5d…`; it is not the
+      final-projection rehearsal, owner authority, measurement or corpus evidence. The repair moves the
+      execution projection and requires one new disposable run.
+    second_rehearsal_finding: >-
+      The repaired run at `c4821e9e…` proved single-layer custody and again reached `measurement_pass`,
+      valid inner/outer verdicts and domain-only refusal. Review then found outer `run_evidence` trusted the
+      child's run-evidence gates: it recomputed policy-inventory digests but did not itself validate each
+      archived `import_witness.json` or replay the run-derived pass predicates. The envelope verifier now
+      schema-validates every completed-run witness; re-derives early-recorder, non-empty authority-domain
+      and archived-RunSpec byte containment; and replays A7.6 inventories, MOT bytes and packets before
+      accepting `capture_off_on_equal`, `packets_valid` or a passing `execution_complete`. Unbound imports
+      and changed MOT bytes each fail the outer verdict. This verifier edit moves the projection,
+      so the packet at `/home/ray/h2_w6_successor_rehearsal_20260803T160837Z` is also superseded rehearsal
+      evidence and one further disposable run is required.
+    final_projection_rehearsal:
+      head: f0ee5da315d4ea6ced70532a955b63564715e6f1
+      execution_id: h2-w6-rehearsal-20260803T163028Z
+      custody: /home/ray/h2_w6_successor_rehearsal_20260803T163028Z
+      packet_inventory_digest: bc748a7a4659ee0aaaeec7e3408cdc54cc3ec21b5a845f3a83c7ad503f8a3e41
+      projection: >-
+        663-member execution-code closure `ca150e3b985f92438a654fb1b0b6a873ca2d75c6e8e6f22148a87ab054030659`;
+        execution-semantics projection `508f10f408ef59725985a0ea6263cdd7e7f41874d932859c8ca7de74532db991`;
+        resolved RunSpec `796d85f7385ee15776a3a81060c0c86ce7b993038a2fab73209d97d73b67f93f`.
+      execution: >-
+        `measurement_pass`, `terminal: null`; 4/4 ordered runs completed and all five predicates pass.
+        Per-run policy-inventory digests recompute, all four MOT outputs are byte-identical, and independent
+        A7.6 replay is complete/equal/packet-valid with zero errors.
+      import_custody: >-
+        Each run has exactly 3,355 observations, zero unbound, zero byte-containment failures and
+        `recorder_installed_before_entry_import: true`; custody is physically single-rooted at
+        `runs/MOT17-04-SDP/<run-id>`.
+      verification: >-
+        inner `h2_execution_verification_v2`: valid, 7/7; outer
+        `h2_successor_measurement_envelope_verification_v1`: valid, 7/7; both record
+        `verification_host_inputs_used: false`. Root checksum closure covers 516 listed members plus the
+        inventory itself (517 files, 83,911,256 bytes).
+      authority_boundary: >-
+        The receipt digest joins v2 result and the synthetic grant digest joins its durable receipt. The
+        receipt exists only in `/home/ray/.local/state/saccade/h2_w6_disposable_rehearsal_20260803T163028Z`;
+        the controlled ledger contains no receipt for that authorization id. Canonical corpus refusal has
+        exactly one reason: the archived execution domain is not the controlled domain.
+    repaired_observation: >-
+      W5 owner-review observation 1 is addressed in the same projection-moving unit:
+      `corpus_admission_witness` now catches the corpus CLI's full fail-closed exception surface. This does
+      not alter the accepted W5 verdict and does not authorize a second W5 diagnostic.
+    success_disposition: >-
+      After exact-head review, a separately owner-issued matching grant and one consumed execution, success
+      requires independently valid inner and outer closures, canonical corpus admission and an owner review
+      verdict accepting H2 measurement closure. It ends Phase A; it does not establish Phase B,
+      equivalence, I/F/S, a seal, H0 re-entry or any automatic next execution.
+    authorization_effect: none
+    not_established: >-
+      no third grant exists; no controlled-ledger authorization consumed; no formal measurement; no corpus
+      admission; no measurement-closure verdict; no Phase B; no equivalence; no I/F/S; no seal; no H0
+      re-entry
+    next: >-
+      Review and merge the implementation without moving its execution projection. Then emit a request from
+      the exact clean merged head and stop. Formal execution remains blocked on the owner's separate
+      matching grant; this record supplies none.
   successor_import_witness_observed:
     date: 2026-08-01
     unit: H2

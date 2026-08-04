@@ -23,12 +23,15 @@
 | `test_h2_import_witness.py` | tracking,system | contract | active | The import witness: proving an execution stayed inside its declared namespace. |
 | `test_h2_layer_p_certificate.py` | tracking,system | contract | active | Layer-P cannot skip admissibility and its certificate binds the full coordinate. |
 | `test_h2_measurement_controller.py` | tracking,system | contract | active | The H2 S4 controller must produce exactly what the independent verifier reads. |
+| `test_h2_measurement_envelope.py` | tracking,system | contract | active | Independent v2 authority-envelope verification and corpus admission. |
 | `test_h2_measurement_evidence.py` | tracking,system | contract | active | The H2 Layer-M evidence contract: what an archive must support to be believed. |
 | `test_h2_measurement_freeze.py` | tracking,system | contract | active | The repository-owned H2 Phase-A freeze producer is deterministic and strict. |
 | `test_h2_path_partition.py` | tracking,system | contract | active | The H2 firewall must be a partition, and it must fail closed. |
 | `test_h2_rehearsal_harness.py` | tracking,system | contract | active | The rehearsal harness must be unable to touch the owner's authorization. |
 | `test_h2_runtime_identity.py` | tracking,system | contract | active | The behavior probe is bounded and its publication intake fails closed. |
 | `test_h2_runtime_inputs.py` | tracking,system | contract | active | Runtime fixtures and assets are content-bound, never called non-execution. |
+| `test_h2_successor_authorization.py` | tracking,system | contract | active | Successor grant/receipt binding and exactly-once consumption contract. |
+| `test_h2_successor_measurement_controller.py` | tracking,system | contract | active | Successor measurement controller consumption ordering and fail-closed CLI. |
 | `test_h2_terminal_partition.py` | tracking,system | contract | active | The terminal partition must be ordered, exhaustive, and blind to witness data. |
 | `test_migration_manifest_v0.py` | system | contract | active | Contract for the doc migration manifest parser and master-map generator. |
 | `test_old_flagship_inventory.py` | system | contract | active | Contract for the old-flagship per-study inventory parser. |

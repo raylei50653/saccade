@@ -2046,3 +2046,88 @@ diagnostic, to be run only after every projection-moving edit above has merged a
 the final projection is known. Its outcome may diagnose the successor path; pass or
 fail, it cannot qualify a measurement, enter the canonical measurement corpus,
 authorize a later execution or establish equivalence.
+
+## Review Correction 12 — successor measurement authority is a durable envelope (2026-08-03, pre-seal)
+
+W5 closed the execution-integrity implementation and its final-projection
+diagnostic, but deliberately supplied no way to distinguish a naked archive that
+*says* `exactly_once_measurement` from an execution that consumed a separately
+issued owner grant. Formal successor measurement therefore uses a new envelope;
+it does not revive either historical Phase-A authorization and does not inherit
+the retired head/certificate/`F`/`S` chain.
+
+### The grant binds the successor's live authorities
+
+An authorization request is non-authoritative. It names one execution id, Phase A,
+the resolved RunSpec digest, the execution-semantics projection digest and the
+controlled authorization execution-domain digest. Only a separately supplied
+`h2_successor_exactly_once_authorization_v1` object with issuer
+`research_owner`, a fresh 64-hex authorization id and exact equality on those
+coordinates can pass the entry gate. The grant contains no `source_head`,
+certificate, freeze, `I`, `F` or `S`: Correction 5 retired those as successor
+validity gates, and a new envelope may not smuggle them back in.
+
+The repository has no signature mechanism. `issued_by: research_owner` and the
+digest chain establish structural attribution, not an unforgeable signature. The
+manual owner hand-off is therefore an external authority event. A rehearsal may
+construct the same shape only against a disposable ledger and must be refused by
+the canonical corpus because that archived execution domain differs from the
+controlled anchor.
+
+### One durable receipt is the consumption event
+
+The sole linearization point is exclusive durable creation of
+`h2_successor_authorization_consumed_v1` at
+`<controlled-ledger>/<authorization_id>.json`. The receipt binds the canonical
+grant digest and repeats the request coordinates. It is written and flushed before
+the producer runs; a crash after that write spends the grant and leaves truthful
+`.incomplete` custody. A second invocation with the same id must fail before the
+producer. Replacing or deleting the receipt is not a retry mechanism.
+
+The formal controller exposes no production ledger override. Before consumption
+it requires an exact clean committed checkout, an already-built Layer-P directory,
+external physical grant/packet/ledger paths, an exact grant/request join and an
+active bound-input monitor. It always binds the existing build with `--skip-build`.
+The producer writes a v2 result whose `authorization_binding_digest` is the
+canonical receipt digest; it still writes no verdict about itself and closes
+nothing.
+
+### Inner validity, envelope validity and corpus admission remain three verdicts
+
+The archive-only verifier dispatches v1 and v2 by the explicit `result.json`
+schema. Historical v1 diagnostics, including W5e, keep their original contract.
+The v2 inner verifier closes the three producer artifacts exactly as before. A
+second independent verifier then joins request, grant, archived execution domain,
+receipt, the closed v2 archive and the four run-evidence directories; it writes an
+outer verdict and a recursive packet inventory, then atomically renames the
+`.incomplete` packet to its final path. A half-closed envelope, changed receipt,
+changed grant, mismatched run artifact or naked v1/v2 measurement archive is
+refused.
+
+Only the canonical corpus owner compares the archived execution domain to
+`h2_controlled_host_execution_domain_v1`. Admission requires all three layers:
+the inner archive independently valid, the outer authority envelope independently
+valid, and the archived domain exactly equal to the controlled anchor. The W5
+rehearsal-witness exception surface is widened to the same fail-closed exception
+set as the corpus CLI in this projection-moving implementation; this closes the
+accepted non-blocking observation without rewriting the W5 verdict or owing a
+second W5 diagnostic.
+
+### Execution and success boundary
+
+Before any formal grant is requested, the real controller and both verifiers must
+complete once against a disposable ledger on the final implementation projection.
+Rehearsal success is `measurement_pass`, `terminal: null`, valid inner and outer
+verdicts, followed by exactly one canonical-corpus refusal reason: the disposable
+execution domain is not the controlled domain. That rehearsal issues or consumes
+no owner authorization and is not a measurement.
+
+After the implementation is reviewed and present on the exact clean execution
+head, the controller may emit one request. It must then stop until the owner
+separately issues the matching third grant. A successful authorized run is not
+closed merely because `result.json` says `measurement_pass`: both independent
+closures must reproduce and the canonical corpus must admit the final packet.
+The requested disposition is then **owner-reviewed H2 measurement closure plus
+canonical corpus admission**. It creates no Phase-B authorization, no `I`/`F`/`S`
+or seal, does not reopen H0 and leaves `equivalence.state = unproven`. No later
+execution or phase follows automatically.

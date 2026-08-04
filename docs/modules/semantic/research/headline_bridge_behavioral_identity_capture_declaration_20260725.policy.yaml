@@ -17,8 +17,8 @@ document:
   path: headline_bridge_behavioral_identity_capture_declaration_20260725.md
 
 sealed_prefix:
-  bytes: 115473
-  sha256: "717dde082d02bf25b41544b59a3cec52310bc8f7dfb7a9f36a95f2d61b332916"
+  bytes: 120600
+  sha256: "e1f946437b56caf31ffe1c38394d93c6e9be62b9bdeafd4079470517fabaf14e"
   # Re-pin log (each entry was a deliberate pre-seal edit, not a slip):
   #   Review reset — coordinate / bounded probe / equivalence split; content-bound
   #                  fixtures/assets/build products; v2 Layer-P certificate.
@@ -173,6 +173,15 @@ sealed_prefix:
   #             producer roots remain visible and H0 roots stay on their own
   #             verifier path. Re-pinned before merge to the complete revised
   #             body.
+  #   Review Correction 12 — defines the successor-specific formal-measurement
+  #             authority envelope: non-authoritative request, separately
+  #             owner-issued grant, one exclusive durable receipt as the sole
+  #             consumption event, v2 inner archive, outer independent closure
+  #             and controlled-domain corpus admission. It also fixes W5's
+  #             accepted rehearsal-witness exception-surface observation and
+  #             requires a disposable-ledger final-projection rehearsal before
+  #             an exact-head request may stop at the third-grant owner gate.
+  #             Re-pinned to the complete post-correction body.
 
 policy_target:
   kind: headline
