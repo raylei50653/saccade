@@ -163,7 +163,20 @@
   `/home/ray/h2_w6_successor_rehearsal_20260803T163028Z`，inventory
   `bc748a7a4659ee0aaaeec7e3408cdc54cc3ec21b5a845f3a83c7ad503f8a3e41`。
   下一步不是 execution：先 review/merge，exact clean merged head 才 emit request 並停在 owner
-  matching grant gate；目前沒有第三份 grant。W3 先於 W4 的理由＝#294→#295 的契約先行與 #302／#304 的
+  matching grant gate。**W7 已走完那條鏈並於 2026-08-04 被 owner 接受 ⇒ Phase A 結束。**
+  在 exact clean merged head `c570dd92…` emit 一份 request、owner 另行簽發並消耗第三份授權
+  （`c2f11ab1…`，永久 spent），formal measurement `h2-w6-formal-20260804T052122Z` 得到
+  `measurement_pass`／`terminal: null`、4/4 runs、inner 與 outer verifier 各 7/7、
+  canonical corpus `PASS (2 roots)` ⇒ v2 envelope 家族第一次被收
+  （[admitted packet](research/evidence/h2_measure_envelope_c570dd9202498f390083dd02503d5675f900e027/)，
+  [PR #321](https://github.com/raylei50653/saccade/pull/321)，merge `e4879d5f`）。
+  Owner verdict＝**`ACCEPT WITH NAMED LIMITS — H2 measurement closure`**，兩項具名 limit
+  （grant provenance 是 owner-directed／assistant-drafted、非獨立簽署；作廢首鏈的 grant 來源仍未查明）
+  與一項 adjudication（第四個 evidence kind 成立、非自開豁免）**由 registry 持有，本表不複述**。
+  接受只終結 Phase A：不建立 Phase B、equivalence 仍 `unproven`、無 I/F/S、無 seal、無 H0 re-entry、
+  **沒有自動 next**；任何後續執行都是另一次 owner 決策 →
+  [registry entry](../../research/contracts/claim_state_registry.md)。
+  W3 先於 W4 的理由＝#294→#295 的契約先行與 #302／#304 的
   guard-before-entry，且 W2–W3 不需 build ⇒ item 5 的 `build/h2_layer_p`
   位元不動。不是重建舊 items 4–5／`F` →
   [second failure evidence](research/evidence/h2_phase_a_failed_attempt_7646f421_20260728/)

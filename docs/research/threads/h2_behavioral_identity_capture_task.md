@@ -581,6 +581,35 @@ requests no third grant, seals nothing, admits nothing to the canonical corpus
 and changes no equivalence claim. Working detail (not authority):
 `~/.claude/plans/delightful-launching-gosling.md`.
 
+### W7 measurement-closure acceptance — 2026-08-04 — Phase A ends
+
+At reviewed `main` `e4879d5fe916f80e1d4a1e8a95fa28ba9d77bd4a`, the owner verdict is
+**`ACCEPT WITH NAMED LIMITS — H2 measurement closure`**. The W6 stop boundary was
+walked exactly as staged: one request emitted from the exact clean merged head
+`c570dd92`, then a stop; the owner separately issued the matching third grant and
+consumed it. That authorization (`c2f11ab1…`) is permanently spent, and the
+controlled ledger now holds two receipts. The single formal execution
+`h2-w6-formal-20260804T052122Z` reached `measurement_pass` with `terminal: null`
+across four ordered runs; the inner and outer verifiers each closed it 7/7 with empty
+reasons and `verification_host_inputs_used: false`; and the canonical corpus admitted
+the packet — the first admission under the v2 envelope family.
+
+**The verdict lives in the [claim-state registry](../contracts/claim_state_registry.md)
+entry `successor_formal_measurement_executed.owner_review`; this section is navigation
+and restates neither the limits nor their reasoning.** Two limits are named there —
+the accepted authority is owner-directed and assistant-drafted rather than
+independently signed, and the discarded first chain's grant origin remains unresolved
+— and one question the assistant deliberately refused to settle for itself, whether
+adding the fourth evidence kind in the same unit that admits the evidence it
+classifies is a self-issued exemption, was put to the owner and adjudicated as sound.
+
+This acceptance **ends Phase A and nothing else**. It establishes and authorizes no
+Phase B, proves no equivalence (`equivalence.state` remains `unproven`), creates no
+`I`/`F`/`S`, seals nothing, reopens no H0 path, and issues no fourth authorization.
+There is no automatic next. This charter's own disposition beyond Phase A is likewise
+not decided here: it stays `proposed` / non-WIP, because Phase-A closure is not unit
+closure and a terminal slot may not be filled by inference.
+
 ### Historical account — the head-bound chain
 
 **The rehearsal ran once, at `ba40b3f8`, and failed — and it cost no
