@@ -1613,11 +1613,14 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
     unit: H2
     stage: "W7 — the third authorization consumed, one formal measurement, canonical corpus admission"
     status: >-
-      **executed and admitted; awaiting the owner measurement-closure verdict.** The owner directed the
-      whole chain in session. One request was emitted from the exact clean merged head `c570dd92`, one
-      grant was drafted against it, the grant was consumed, and the resulting packet passed both
-      independent verifiers and canonical corpus admission. This record is evidence registration; it is
-      not the closure verdict it exists to request.
+      **executed, admitted, and owner-accepted with named limits as H2 measurement closure
+      (2026-08-04).** The owner directed the whole chain in session. One request was emitted from the
+      exact clean merged head `c570dd92`, one grant was drafted against it, the grant was consumed, and
+      the resulting packet produced a passing inner verdict and a passing independently executed outer
+      envelope verdict, and passed canonical corpus admission. The
+      execution, authority, closure and admission fields below are the evidence registration written
+      before the verdict; `owner_review` is the verdict itself and is the only field that accepts
+      anything.
     execution:
       head: c570dd9202498f390083dd02503d5675f900e027
       execution_id: h2-w6-formal-20260804T052122Z
@@ -1691,15 +1694,79 @@ reentry_terminal_history:                 # append-only;不改上面 route-1 永
       external check still passed. The negation list is extended by
       `!docs/modules/semantic/research/evidence/**/*.so`; `git add -f` was deliberately not used, because
       it leaves no durable record and the next admission would silently drop them again.
+    owner_review:
+      date: 2026-08-04
+      reviewed_main: e4879d5fe916f80e1d4a1e8a95fa28ba9d77bd4a
+      verdict: "ACCEPT WITH NAMED LIMITS — H2 measurement closure"
+      decided_by: >-
+        research_owner, in session. The assistant issued no verdict and adopted none by default. It
+        certifies neither the limits nor the adjudication below: each was put to the owner as an open
+        question — including the one question whose honest answer could have invalidated the assistant's
+        own work — and each was answered by the owner.
+      scope: >-
+        the admitted packet
+        `h2_measure_envelope_c570dd9202498f390083dd02503d5675f900e027`, the single formal execution
+        `h2-w6-formal-20260804T052122Z` that produced it, the inner verdict and the independently
+        executed outer envelope verdict that closed it, and its canonical corpus admission. W6 and
+        everything earlier is reviewed only as an already-landed premise of that closure, not reopened.
+      what_independence_means_here: >-
+        stated narrowly so the acceptance is not read as more than it is. What the schema guarantees is
+        `independent_command_separate_process`: the outer verdict is produced by a separate command and
+        recomputes import custody and the A7.6 replay itself rather than inheriting them. It is **not**
+        N-version implementation independence — `verify_h2_measurement_envelope` imports
+        `verify_h2_execution` and calls the inner implementation to complete its `inner_archive` check.
+        A defect common to that shared implementation is therefore not excluded by two passing verdicts,
+        and nothing in this acceptance claims otherwise.
+      reconfirmed_at_the_verdict_head: >-
+        worktree clean at `e4879d5f`; packet checksum closure re-run with `sha256sum -c`, 519/519 and zero
+        failures; `check_h2_measure_archives` re-run at the merged head reports
+        `PASS (2 roots; complete=1, successor=1)`. This re-confirms the registered facts still hold at the
+        head being accepted; it is a re-check, not a third verification, and what is accepted remains the
+        inner and outer verdicts recorded above.
+      accepted_meaning: >-
+        H2 measurement closure is accepted and **Phase A ends here**. It does not establish or authorize
+        Phase B, does not prove equivalence (`equivalence.state` remains `unproven`), does not create
+        `I`, `F` or `S`, does not seal, does not reopen H0, and starts no successor execution. It issues
+        no authority of any kind: a fourth authorization, should one ever exist, is a separate owner act
+        that this verdict neither grants nor prepares.
+      limits:
+        grant_provenance: >-
+          **The accepted authority is owner-directed and assistant-drafted, not an independently signed
+          owner act, and this limit is permanent.** The scheme carries no signature member, so the grant
+          document holds no judgement of its own: it copies the six request fields verbatim and mints one
+          random `authorization_id`. What makes it authority is that the owner directed it, ran the
+          consuming command and finalized the packet — and that direction was given conversationally, not
+          as a separate signed artifact. The owner adjudicated this as adequate for a permanent record on
+          condition that it be carried as a named limit rather than left implicit. Auditors must read the
+          authority of this measurement accordingly. A stronger provenance form would require a schema
+          change (a signature member), which is not part of this verdict.
+        abandoned_chain_origin_unresolved: >-
+          accepting this closure does not explain, excuse or close the discarded first chain recorded
+          under `authority.abandoned_first_chain`. Who wrote grant `6be3824d...` remains unknown. It was
+          never consumed, holds no receipt in the controlled ledger, and both directories are retained
+          unmodified; it stays an open fact of the record rather than a resolved one.
+      adjudicated_not_a_limit:
+        evidence_taxonomy: >-
+          the fourth evidence kind `H2_MEASUREMENT_ENVELOPE_PACKET` **stands as landed**. The owner was
+          asked directly whether adding it in the same unit that admits the evidence it classifies is a
+          self-issued exemption, and adjudicated that it is not: membership is strictly narrower, not
+          wider, because the packet answers both to the dedicated envelope verifier and to bidirectional
+          inventory recomputation, each of which checks more than the manifest contract it replaces; the
+          grammar ends in bare hex so it cannot collide with the dated grammar and classification stays
+          order-independent, with a test pinning that disjointness. Recorded as adjudicated rather than
+          as a limit because nothing about it is being tolerated.
     authorization_effect: >-
       the third owner authorization is consumed and permanently spent; two authorizations remain spent
-      from earlier attempts
+      from earlier attempts. The verdict itself consumes and issues nothing.
     not_established: >-
-      no owner measurement-closure verdict; no Phase B; no equivalence; no I/F/S; no seal; no H0 re-entry.
-      A passing, admitted measurement is not an accepted measurement.
+      no Phase B; no equivalence; no I/F/S; no seal; no H0 re-entry; no fourth authorization. Phase A is
+      closed by acceptance, not carried forward by it.
     next: >-
-      Owner review of this packet for the H2 measurement-closure verdict. Accepting it ends Phase A only.
-      There is no automatic next execution and this record issues no further authority.
+      **None.** Phase A is owner-accepted and complete; stop at verdict registration. Any later execution,
+      Phase-B chain, seal or H0 re-entry is a separate owner decision and authority event, not a
+      continuation authorized here. The two named limits are recorded facts, not queued work: closing the
+      provenance limit would require a signature member in the authorization schema, which no record in
+      this registry authorizes.
   successor_import_witness_observed:
     date: 2026-08-01
     unit: H2
