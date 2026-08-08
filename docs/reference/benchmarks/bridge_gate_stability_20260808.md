@@ -203,7 +203,11 @@ AND term 說的是「\(h_{lo}>a \wedge h_{hi}<b\)」,\(a,b\) 各為常數,**表�
 
 ---
 
-## 6. 候選變更(**未套用**)
+## 6. 候選變更(**未套用**;**已於 cross-dataset 驗證中被否決**)
+
+> ⛔ **本節候選已被 [bridge_gate_cross_dataset_20260808](bridge_gate_cross_dataset_20260808.md) 否決**:
+> 在 MOT20 上中性(−0.013)、在 DanceTrack 上有害(−0.753),且本文 §2/§4 的 cliff/plateau
+> 結構在該二資料集上**均不重現**。以下內容保留為當時的候選與其推導,**不得作為變更依據**。
 
 `configs/presets/mamba_whole_graph_m.yaml`:
 
@@ -257,6 +261,7 @@ BASE="scripts/eval/mot17.py --preset mamba_whole_graph_m --detector SDP \
 
 ## 相關
 
+- [bridge_gate_cross_dataset_20260808.md](bridge_gate_cross_dataset_20260808.md) — **後續:本文候選的 cross-dataset 否決**
 - [reid_handover_ablation_20260808.md](reid_handover_ablation_20260808.md) — 同批 run 的 ReID / handover 部分
 - [frozen_v2_ablation.md](frozen_v2_ablation.md) — 現行 headline 累積消融
 - [math_model.md](../math_model.md) — §1.1 s/m preset delta 與 §10 bridge relink 模型
