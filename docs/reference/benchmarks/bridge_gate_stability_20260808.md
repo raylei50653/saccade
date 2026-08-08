@@ -8,7 +8,8 @@
 > IDF1 由存下的 MOT 輸出**重算至三位小數**(eval 只印一位,不足以分辨平台與懸崖)。
 >
 > ⚠️ **leakage:in-sample(training-set)絕對值**,與 [frozen_v2_ablation](frozen_v2_ablation.md) 同一限制。
-> §3 的 LOSO 處理的是**選擇洩漏**,**不處理** detector leakage。
+> §3 的 LOSO 只縮小「單一序列驅動」這一種**選擇洩漏**,**不處理** detector leakage,
+> 也不排除 grid / 候選 family / 分析方法本身看過這七條序列。
 >
 > 姊妹文件:[reid_handover_ablation_20260808](reid_handover_ablation_20260808.md)(同一批 run 的 ReID / handover 部分)。
 
@@ -96,7 +97,9 @@ Hessian 主軸 **25.7° / 115.7°**,非 0/90°;主曲率 −0.412(沿 25.7°)、
 Leave-one-sequence-out(以另六條的**彙總計數**選,IDF1 是比值不可取逐序列平均):
 
 **7/7 fold 都選最緊的 `w=0.29`**;連「同時調 `px`」的貪婪版也每一 fold 都選 `px=0.4, w=0.29`。
-⇒ 選擇不依賴任何單一序列,**無選擇洩漏**。
+⇒ 選擇不依賴任何單一序列;**LOSO 未觀察到 single-sequence-driven selection instability**。
+LOSO **不能**排除整個 grid、候選 family 與分析方法本身都看過這七條序列 —— 它縮小的是
+單一序列驅動這一種選擇洩漏,不是全部。
 
 逐序列(實際 config,非 grid 近似):
 
@@ -111,11 +114,14 @@ Leave-one-sequence-out(以另六條的**彙總計數**選,IDF1 是比值不可�
 | MOT17-13 | 78.094 | 78.076 | −0.018 |
 | **POOLED** | **80.447** | **81.161** | **+0.714** |
 
-**從不傷害**(最差 −0.021,噪聲級;兩條 bit-identical),但**增益高度集中**:
+**未見實質退化**(量測最差 −0.021;兩條 bit-identical)。
+注意 §0 已建立 `--no-gpu-decode` 下 bit-exact ⇒ `−0.021` / `−0.018` **不是 run-to-run noise,
+而是可重現但極小的負 delta**,不以「噪聲」替其開脫。但**增益高度集中**:
 all-7 **+0.714** → 去掉 11 剩 **+0.200** → 再去掉 05 只剩 **+0.052**。
 
-⇒ 誠實的賣點不是「+0.714 accuracy」,而是**從懸崖移到平台的 robustness 修正**;
-即使不採信該 accuracy 數字,robustness 論證獨立成立。
+⇒ 誠實的賣點不是「+0.714 accuracy」,而是**從懸崖移到平台**這件事。
+**即使不把 +0.714 視為可泛化的 accuracy gain,「這批資料上的局部參數穩定性(cliff → plateau)」
+仍獨立成立。** 但該穩定性也僅在 MOT17-train 這批資料上建立,不是跨資料集或跨 detector 的 robustness。
 
 ---
 
@@ -173,13 +179,14 @@ AND term 說的是「\(h_{lo}>a \wedge h_{hi}<b\)」,\(a,b\) 各為常數,**表�
 ## 5. 這份文件建立與未建立什麼
 
 **建立**:上述曲面在 main `f1dfc616` 上可重現;`h_hi` 在 1.7 附近存在真實不連續;
-出貨 m 落在其錯誤側;`h_lo≈0.76` 列存在寬平台;`w` 的選擇通過 LOSO;
+出貨 m 落在其錯誤側;`h_lo≈0.76` 列存在寬平台;`w` 的選擇在 LOSO 7/7 fold 下穩定;
 `(h_lo, h_hi)` 的跳躍界線非軸對齊。
 
 **未建立**:
 
 - **不是 preset 變更。** production 與所有 preset **未改動**;§6 是候選不是決定。
-- **未跨資料集驗證。** LOSO 只擋選擇洩漏;detector 在這七條上訓練過。
+- **未跨資料集驗證。** LOSO 只縮小「單一序列驅動」這一種選擇洩漏 —— 整個 grid、候選 family
+  與分析方法本身都看過這七條序列;detector 也在這七條上訓練過。
   MOT20 / DanceTrack / SportsMOT / PersonPath22 都在 `datasets/` 下但**未使用**。
 - **不是舊 safe-region 研究線的續作。** 本文量的是 **IDF1 曲面的穩定性**,
   舊線量的是 **GT-retention 安全準則** —— 不同物件,勿當同一件事登記。

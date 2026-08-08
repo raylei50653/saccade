@@ -31,11 +31,16 @@ FPS 仍是 timing 量測,有系統噪聲。
 | **`reid_mode: off`**(出貨組態) | **80.4** | 81.6 | 74.4 | 75.4 | 73.5 | 344 | **245.1** |
 | `--reid-mode tracker`(mnv4 mainline) | **80.4** | 81.6 | 74.4 | 75.4 | 73.5 | 345 | **160.9** |
 
-**每一個品質指標小數點都相同;差異只有 1 個 ID switch 與 7 個 FN(噪聲級)。**
+**每一個品質指標小數點都相同;差異只有 1 個 ID switch 與 7 個 FN。**
+(§0 已建立 bit-exactness ⇒ 這 1 ID / 7 FN 是**可重現的極小差異,不是 run-to-run noise**。)
 ReID 買到 **0.0 IDF1**,付掉 **84 FPS(−34%)**。
 
 這比先前的歷史對照(reid-off 79.5 / reid-tracker 79.7)更乾淨 —— 當時還有 0.2 的差,現在是零。
-tracker 自身的 relink + bridge 已經把 appearance 這條路能接回的身份接完了。
+
+嚴格的敘述是:**在目前 tracker、資料與 ReID implementation 下,appearance stack
+未提供額外可量測的身份恢復收益。** 這個 ablation **無法區分**「geometry(relink + bridge)
+已完全吸收 appearance 能接回的 headroom」與「embedding / gating / integration 本身未有效利用
+appearance」—— 兩者都會產出 0.0 的 delta。前者是 interpretation,不是本文建立的機制。
 
 ⇒ [`configs/presets/mamba_whole_graph_m.yaml`](../../../configs/presets/mamba_whole_graph_m.yaml) 的
 `reid_mode: "off"` 是正確設定,與 [mot17_default_config.md](../mot17_default_config.md) §ReID 一致。
@@ -43,7 +48,7 @@ tracker 自身的 relink + bridge 已經把 appearance 這條路能接回的身�
 
 ---
 
-## 2. Offline handover:reid-off base 上 **+0.4 IDF1**,FPS 零成本
+## 2. Offline handover:reid-off base 上 **+0.4 IDF1**,per-frame FPS 無量測成本
 
 `--module-lifecycle configs/modules/cheb_gr_offline_mnv4.yaml`,base 為 §1 的 `reid_mode: off`。
 
@@ -53,8 +58,10 @@ tracker 自身的 relink + bridge 已經把 appearance 這條路能接回的身�
 | + offline handover | **80.8** | 81.5 | 74.5 | **338** | 54 | 254.6 |
 | **Δ** | **+0.4** | −0.1 | +0.1 | **−6** | 54 | ~0 |
 
-FPS 不受影響:offline handover 是 **output-layer post-process**,跑在 tracker 輸出完成之後,
-不在 per-frame critical path 內(245 vs 254 的差是 timing 噪聲)。代價是序列末多一個 pass。
+**no measured per-frame tracker FPS cost;仍有 sequence-end post-process cost。**
+offline handover 是 **output-layer post-process**,跑在 tracker 輸出完成之後,
+不在 per-frame critical path 內,因此不進入 tracker 的 FPS 計數(245 vs 254 的差是 timing 噪聲)。
+**計算成本不是零** —— 序列末多一個 pass,只是它不落在被計數的那條路徑上。
 
 GPU decode 開著時的同一組對照為 80.3 → 80.6(+0.3),方向一致 ⇒ **+0.4 不是雜訊**。
 
@@ -79,13 +86,21 @@ base 自己漲了 +0.9,把 handover 原本填的 headroom 吃掉大半。
 | bank(requery off) | 75.9 | 80.2 | 70.7 | 519 | 159 |
 | bank + borderline requery | 75.7 | 80.0 | 70.6 | 544 | 168 |
 
-**159 次 handover = −4.5 IDF1 / +174 IDs**,平均每次製造約 1.1 個 ID switch ⇒ 這批 handover 幾乎全錯。
+**159 次 accepted handover 對應 −4.5 IDF1 / 相對 base +174 IDs**,約等於每個 accepted handover
+對應 **+1.1 IDs 的 aggregate degradation**。
+
+> ⚠️ 這是 **aggregate ratio,不可逐次歸因**。IDSW 不是 handover 的一對一 attribution metric ——
+> 一次錯誤的 handover 可以在後續多幀引發連鎖 switch,而一次正確的 handover 也可能消掉數個。
+> 本文**未**建立「每次 handover 製造 1.1 個 switch」或「這批 handover 幾乎全錯」。
 
 ### 兩個結構性問題
 
 1. **它只能跑在 reid-ON base 上。** 兩個 `online_ho_mnv4_*.yaml` 的 header 都強制
    `--reid-mode tracker`,因為 live C++ relinker 靠 `feed_frame_embeddings` 吃 tracker ReID 的 embedding。
-   結合 §1 ⇒ 真實生產命題是:**先付 −34% FPS 開一個買 0.0 IDF1 的 ReID stack,再在上面賠 −4.5 IDF1。**
+   結合 §1:**現行 live path 先要求 reid-on,而 §1 顯示 ReID 在 shipped execution path 上
+   沒有品質收益且有顯著 FPS 成本;live path 本身又不能使用 `--double-buffer`。**
+   ⚠️ **本文未量測完整 live stack 的端到端 FPS** —— §1 的 −34% 是 double-buffer 條件下的
+   ReID A/B,§3 是 no-double-buffer 的 live path,兩者不可直接相加成一個 stack cost。
 2. **主缺陷不是 borderline requery。** requery 只值 −0.2(75.9 → 75.7),
    在 −4.5 的量級前可忽略;調 band/top 不會改變結論。
 
@@ -102,7 +117,8 @@ requery 的判決則從 −0.7 收斂到 −0.2,且 IDs 軸符號翻轉(當時�
 ## 4. 這份文件建立與未建立什麼
 
 **建立**:上述四個組態在 2026-08-08 main `f1dfc616` 上的可重現 delta;
-`reid_mode: off` 的正當性;offline handover 目前值 +0.4 IDF1 / −6 IDs 且 FPS 零成本。
+`reid_mode: off` 的正當性;offline handover 目前值 +0.4 IDF1 / −6 IDs,
+無量測到的 per-frame tracker FPS 成本(但有 sequence-end post-process 成本)。
 
 **未建立**:
 
