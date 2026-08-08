@@ -146,8 +146,10 @@ Manifest: `docs/ownership/doc_migration_manifest.yaml`
 - `docs/reference/PIPELINE_REFERENCE.md`
 - `docs/reference/README.md`
 - `docs/reference/benchmarks/README.md`
+- `docs/reference/benchmarks/bridge_gate_stability_20260808.md`
 - `docs/reference/benchmarks/frozen_v2_ablation.md`
 - `docs/reference/benchmarks/latency_log.md`
+- `docs/reference/benchmarks/reid_handover_ablation_20260808.md`
 - `docs/reference/benchmarks/throughput.md`
 - `docs/reference/code_health_audit.md`
 - `docs/reference/concurrent_eval.md`
@@ -340,6 +342,6 @@ Excluded from the active index and default search view.
 
 ## Inventory summary
 
-- documents: 290
-- active: 235
+- documents: 292
+- active: 237
 - grayed out: 55

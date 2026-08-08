@@ -148,6 +148,12 @@ s/m 共用：`match_thresh`、`new_track_thresh`、`confirm_*`、`oao_*`、
 | `relink_bridge_h_lo` / `_h_hi` | 0.75 / 1.33 | **0.6 / 1.7** | m 較寬高度比 gate（小框 recovery） |
 | `relink_bridge_dir_bonus` | 0.8 | **0.0**（explicit） | m 關閉方向 bonus；s 保留 |
 
+> ⚠️ **`relink_bridge_h_lo` / `_h_hi` 這一列的「小框 recovery」意圖未被量測支持。**
+> 2026-08-08 的 gate sweep 顯示 `h_hi` 在 1.7 附近存在真實不連續（1.07% 的變動＝pooled
+> −0.44 IDF1、MOT17-11 −5.17），而 m 的 `1.7` 正落在其錯誤側；收窄至 s 量級可得
+> +0.714 IDF1。**上表值仍是現行出貨值**（production 未改動），候選變更與其限制見
+> [bridge_gate_stability_20260808](benchmarks/bridge_gate_stability_20260808.md)。
+
 完整 pipeline 路徑合約見
 [docs/research/pipeline/](../research/pipeline/)；決策面 ACTIVE/LATENT/NO-GO 見
 [tracker-decision](../research/tracker-decision/README.md)。
