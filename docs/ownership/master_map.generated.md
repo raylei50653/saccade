@@ -146,6 +146,7 @@ Manifest: `docs/ownership/doc_migration_manifest.yaml`
 - `docs/reference/PIPELINE_REFERENCE.md`
 - `docs/reference/README.md`
 - `docs/reference/benchmarks/README.md`
+- `docs/reference/benchmarks/bridge_gate_cross_dataset_20260808.md`
 - `docs/reference/benchmarks/bridge_gate_stability_20260808.md`
 - `docs/reference/benchmarks/frozen_v2_ablation.md`
 - `docs/reference/benchmarks/latency_log.md`
@@ -342,6 +343,6 @@ Excluded from the active index and default search view.
 
 ## Inventory summary
 
-- documents: 292
-- active: 237
+- documents: 293
+- active: 238
 - grayed out: 55
