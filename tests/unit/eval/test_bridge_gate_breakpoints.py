@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -667,3 +668,236 @@ def test_abort_inside_a_bracket_is_not_reported_as_never_reached() -> None:
     never = [r for r in reasons if "before reaching this bracket" in r]
     assert started, reasons
     assert never, reasons
+
+
+# --------------------------------------------------------------------------
+# the fingerprint has to still be true when the measurement ends
+# --------------------------------------------------------------------------
+
+
+def _watched_runner(tmp_path, monkeypatch, watched: list[Path]):
+    """A Runner whose context is fake and whose watched set is exactly *watched*."""
+    monkeypatch.setattr(
+        bp, "context_fingerprint", lambda args, env: _fake_context("abc")
+    )
+    monkeypatch.setattr(bp, "_witness_paths", lambda args, context: list(watched))
+    runner = bp.Runner(_args(work_dir=str(tmp_path / "bp")))
+    monkeypatch.setattr(
+        runner, "_score", lambda out_dir: {"S1": {"idtp": 10, "idfp": 1, "idfn": 2}}
+    )
+    return runner
+
+
+def test_a_point_measured_across_a_change_is_not_stored(tmp_path, monkeypatch) -> None:
+    """Reproduced before the fix: the fingerprint was taken once, before the scan.
+
+    Everything measured afterwards was filed under it, so a source edit or a
+    rebuild halfway through a forty-minute run produced a cache holding two
+    measurement regimes under one context.
+    """
+    watched = tmp_path / "watched.cu"
+    watched.write_text("original\n", "utf-8")
+    runner = _watched_runner(tmp_path, monkeypatch, [watched])
+    monkeypatch.setattr(
+        runner, "_run_eval", lambda params, out_dir: watched.write_text("edited\n")
+    )
+
+    with pytest.raises(bp.ContextDrift) as excinfo:
+        runner.measure(1.5)
+
+    assert str(watched) in str(excinfo.value)
+    assert runner.cache == {}
+    assert runner.seen == {}
+
+
+def test_an_edit_that_is_reverted_is_still_caught(tmp_path, monkeypatch) -> None:
+    """Re-hashing at the end cannot see this; the eval that read it did.
+
+    The file is restored byte for byte and its mtime put back, so every content
+    digest before and after the run agrees.  st_ctime_ns cannot be set back by
+    utime(), which is the whole reason the witness is a stat and not a hash.
+    """
+    watched = tmp_path / "watched.cu"
+    watched.write_text("original\n", "utf-8")
+    before_stat = watched.stat()
+    digest_before = bp._sha256_file(watched)
+    runner = _watched_runner(tmp_path, monkeypatch, [watched])
+
+    def tamper_and_restore(params, out_dir):
+        watched.write_text("tampered\n", "utf-8")
+        watched.write_text("original\n", "utf-8")
+        os.utime(watched, ns=(before_stat.st_atime_ns, before_stat.st_mtime_ns))
+
+    monkeypatch.setattr(runner, "_run_eval", tamper_and_restore)
+
+    with pytest.raises(bp.ContextDrift):
+        runner.measure(1.5)
+
+    assert bp._sha256_file(watched) == digest_before
+    assert watched.stat().st_mtime_ns == before_stat.st_mtime_ns
+    assert runner.cache == {}
+
+
+def test_a_stable_context_stores_the_point(tmp_path, monkeypatch) -> None:
+    """Fail-closed is only usable if it closes on something that moved."""
+    watched = tmp_path / "watched.cu"
+    watched.write_text("original\n", "utf-8")
+    runner = _watched_runner(tmp_path, monkeypatch, [watched])
+    monkeypatch.setattr(runner, "_run_eval", lambda params, out_dir: None)
+
+    measurement = runner.measure(1.5)
+
+    assert measurement.value == 1.5
+    assert len(runner.cache) == 1
+    assert runner.checks == 3  # the baseline, then both sides of the evaluation
+
+
+def test_the_watched_set_is_the_set_that_was_hashed(tmp_path) -> None:
+    """The witness must not be a second, hand-maintained list of what matters.
+
+    It is built from the same enumerators the digest walks, so a repainted
+    frame -- same name, same size -- is watched because it is hashed.
+    """
+    root = tmp_path / "DS"
+    _make_sequence(root / "train", "SEQ-01-SDP", b"\xff\xd8original")
+    args = _args("--data-root", str(root), "--split", "train")
+    witness = bp.ContextWitness(args, {"bound": {"runtime": {"native_extensions": {}}}})
+
+    frame = root / "train" / "SEQ-01-SDP" / "img1" / "000001.jpg"
+    frame.write_bytes(b"\xff\xd8repainted"[: len(b"\xff\xd8original")])
+    changes = witness.drift()
+
+    assert frame.stat().st_size == len(b"\xff\xd8original")
+    assert any(str(frame) in line for line in changes), changes
+    # and a sequence this run does not read is not watched: closing on it would
+    # abort real runs for a reason that cannot change a number
+    _make_sequence(root / "train", "SEQ-02-DPM", b"\xff\xd8other")
+    unrelated = [line for line in witness.drift() if "SEQ-02-DPM" in line]
+    assert unrelated == []
+
+
+def test_content_change_the_witness_missed_quarantines_the_cache(
+    tmp_path, monkeypatch
+) -> None:
+    """If the witness is silent while the bytes moved, it cannot be trusted here.
+
+    Nothing in the cache is then provably bracketed, and restoring the tree
+    would otherwise make those numbers servable again by a later run.
+    """
+    work = tmp_path / "bp"
+    monkeypatch.setattr(bp, "_witness_paths", lambda args, context: [])
+    monkeypatch.setattr(
+        bp, "context_fingerprint", lambda args, env: _fake_context("abc")
+    )
+    runner = bp.Runner(_args(work_dir=str(work)))
+    runner.cache = {"{}": {"idf1": 80.0, "per_seq": {}, "out_dir": "x"}}
+
+    monkeypatch.setattr(
+        bp, "context_fingerprint", lambda args, env: _fake_context("moved")
+    )
+    verification = runner.final_verification()
+
+    assert verification["content_changed"] == ["source"]
+    assert verification["witness_changes"] == []
+    assert verification["quarantined"]
+    # and the quarantine survives a tree that is put back the way it was
+    monkeypatch.setattr(
+        bp, "context_fingerprint", lambda args, env: _fake_context("abc")
+    )
+    with pytest.raises(bp.CacheContextMismatch) as excinfo:
+        bp.Runner(_args(work_dir=str(work)))
+    assert "quarantined" in str(excinfo.value)
+
+
+def _stub_eval(monkeypatch, on_run) -> None:
+    monkeypatch.setattr(bp.Runner, "_run_eval", lambda self, params, out_dir: on_run())
+    monkeypatch.setattr(
+        bp.Runner,
+        "_score",
+        lambda self, out_dir: {"S1": {"idtp": 10, "idfp": 1, "idfn": 2}},
+    )
+
+
+def test_a_run_whose_context_moved_writes_no_report(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    watched = tmp_path / "watched.cu"
+    watched.write_text("original\n", "utf-8")
+    report_path = tmp_path / "report.json"
+    monkeypatch.setattr(
+        bp, "context_fingerprint", lambda args, env: _fake_context("abc")
+    )
+    monkeypatch.setattr(bp, "_witness_paths", lambda args, context: [watched])
+    _stub_eval(monkeypatch, lambda: watched.write_text("edited\n", "utf-8"))
+
+    code = bp.main(
+        [
+            "--axis",
+            "h_hi",
+            "--lo",
+            "1.2",
+            "--hi",
+            "1.4",
+            "--scan",
+            "2",
+            "--work-dir",
+            str(tmp_path / "bp"),
+            "--json",
+            str(report_path),
+        ]
+    )
+
+    assert code == 2
+    assert "REFUSING TO REPORT" in capsys.readouterr().err
+    assert not report_path.exists()
+
+
+def test_a_stable_run_records_what_was_verified(tmp_path, monkeypatch) -> None:
+    """The report says what the check covered and what it cannot cover."""
+    watched = tmp_path / "watched.cu"
+    watched.write_text("original\n", "utf-8")
+    report_path = tmp_path / "report.json"
+    monkeypatch.setattr(
+        bp, "context_fingerprint", lambda args, env: _fake_context("abc")
+    )
+    monkeypatch.setattr(bp, "_witness_paths", lambda args, context: [watched])
+    _stub_eval(monkeypatch, lambda: None)
+
+    code = bp.main(
+        [
+            "--axis",
+            "h_hi",
+            "--lo",
+            "1.2",
+            "--hi",
+            "1.4",
+            "--scan",
+            "2",
+            "--work-dir",
+            str(tmp_path / "bp"),
+            "--json",
+            str(report_path),
+        ]
+    )
+
+    assert code == 0
+    verification = json.loads(report_path.read_text("utf-8"))["context_verification"]
+    assert verification["checks"] == 6  # baseline, two per evaluation, one final
+    assert any("ctime" in limit for limit in verification["limits"])
+
+
+def test_a_report_cannot_claim_a_verification_that_failed() -> None:
+    """The block says nothing moved, so a report is refused when something did."""
+    with pytest.raises(ValueError) as excinfo:
+        bp.build_report(
+            _args(),
+            [_measurement(1.5, {"S1": {"idtp": 10, "idfp": 1, "idfn": 2}})],
+            runs=1,
+            verification={
+                "witness_changes": ["modified: src/tracking/tracker_gpu.cu"],
+                "content_changed": ["source"],
+                "quarantined": None,
+                "checks": 4,
+            },
+        )
+    assert "tracker_gpu.cu" in str(excinfo.value)

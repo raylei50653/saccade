@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# status: diagnostic
 """Locate the exact jump discontinuities of pooled IDF1 along one bridge-gate axis.
 
 Why this exists instead of another grid sweep
@@ -31,6 +32,17 @@ the whole child environment, the preset and every model/engine file it names,
 every dataset byte, interpreter/torch/GPU): a mismatch fails closed rather than
 mixing two measurement regimes, so point ``--work-dir`` somewhere fresh.
 
+A fingerprint describes the instant it was taken, and a scan runs for tens of
+minutes.  Every fingerprinted file is therefore re-checked (size, mtime, ctime)
+on both sides of every fresh evaluation, and re-hashed in full before the
+report: a point whose inputs moved while it was being measured is discarded,
+and a run that saw anything move refuses to report at all.  Those two checks
+are not the same one twice -- a file edited and restored between two hashes is
+invisible to hashing and visible in ctime, and a filesystem that does not keep
+ctime is the reverse -- and neither sees a file created and removed again
+inside one window.  The report states this; the measured points stay in the
+cache, so a re-run on a stable tree adopts them without evaluating again.
+
 Limits (these are properties of the method, not of the implementation)
 ----------------------------------------------------------------------
 1. ``f(a) == f(b)`` does **not** prove there is no jump inside ``(a, b)`` -- two
@@ -57,7 +69,6 @@ Usage: one axis per invocation
   # dataset without a detector suffix (MOT20 / DanceTrack)
   ... --data-root datasets/MOT20/MOT20 --split train   # and omit --detector
 """
-# status: diagnostic
 
 from __future__ import annotations
 
@@ -190,6 +201,10 @@ json.dump(out, sys.stdout)
 
 class CacheContextMismatch(RuntimeError):
     """The cache under --work-dir was measured under a different context."""
+
+
+class ContextDrift(RuntimeError):
+    """Something the fingerprint binds changed while this run was measuring."""
 
 
 @dataclass
@@ -380,19 +395,33 @@ def _digest(payload: object) -> str:
     ).hexdigest()
 
 
-def _source_component() -> dict:
-    digest = hashlib.sha256()
-    files = 0
+def _source_files() -> list[Path]:
+    """Every source file the fingerprint hashes, in digest order.
+
+    Enumeration is split out from hashing so the witness below watches exactly
+    the set that was bound -- a second, parallel walk would be free to drift
+    away from it.
+    """
+    out: list[Path] = []
     for root in SOURCE_ROOTS:
         base = REPO_ROOT / root
         if not base.is_dir():
             continue
-        for path in sorted(base.rglob("*")):
-            if path.suffix not in SOURCE_SUFFIXES or not path.is_file():
-                continue
-            digest.update(str(path.relative_to(REPO_ROOT)).encode())
-            digest.update(_sha256_file(path).encode())
-            files += 1
+        out.extend(
+            path
+            for path in sorted(base.rglob("*"))
+            if path.suffix in SOURCE_SUFFIXES and path.is_file()
+        )
+    return out
+
+
+def _source_component() -> dict:
+    digest = hashlib.sha256()
+    files = 0
+    for path in _source_files():
+        digest.update(str(path.relative_to(REPO_ROOT)).encode())
+        digest.update(_sha256_file(path).encode())
+        files += 1
     return {"roots": list(SOURCE_ROOTS), "files": files, "digest": digest.hexdigest()}
 
 
@@ -404,10 +433,15 @@ def _file_digests(paths: list[Path]) -> dict[str, str | None]:
     return out
 
 
-def _config_component(args: argparse.Namespace) -> dict:
+def _preset_path(args: argparse.Namespace) -> Path:
+    return REPO_ROOT / "configs" / "presets" / f"{args.preset}.yaml"
+
+
+def _referenced_config_files(args: argparse.Namespace) -> list[Path]:
+    """Every existing file the preset -- or --eval-arg -- names."""
     import yaml
 
-    preset_path = REPO_ROOT / "configs" / "presets" / f"{args.preset}.yaml"
+    preset_path = _preset_path(args)
     referenced: list[Path] = []
     if preset_path.is_file():
         loaded = yaml.safe_load(preset_path.read_text(encoding="utf-8")) or {}
@@ -427,48 +461,61 @@ def _config_component(args: argparse.Namespace) -> dict:
             candidate = REPO_ROOT / candidate
         if raw and candidate.is_file():
             referenced.append(candidate)
+    return sorted(set(referenced))
+
+
+def _config_component(args: argparse.Namespace) -> dict:
+    preset_path = _preset_path(args)
     return {
         "preset": args.preset,
         "preset_sha256": _sha256_file(preset_path) if preset_path.is_file() else None,
-        "referenced_files": _file_digests(sorted(set(referenced))),
+        "referenced_files": _file_digests(_referenced_config_files(args)),
         "extra_eval_args": list(args.eval_arg),
     }
 
 
-def _dataset_component(args: argparse.Namespace) -> dict:
+def _dataset_split_dir(args: argparse.Namespace) -> Path:
     root = Path(args.data_root)
     if not root.is_absolute():
         root = REPO_ROOT / root
-    split_dir = root / args.split
+    return root / args.split
+
+
+def _dataset_sequences(args: argparse.Namespace) -> list[Path]:
+    split_dir = _dataset_split_dir(args)
+    if not split_dir.is_dir():
+        return []
+    return [
+        path
+        for path in sorted(split_dir.iterdir())
+        if path.is_dir() and (not args.detector or path.name.endswith(args.detector))
+    ]
+
+
+def _sequence_files(seq: Path) -> list[Path]:
+    return [path for path in sorted(seq.rglob("*")) if path.is_file()]
+
+
+def _dataset_component(args: argparse.Namespace) -> dict:
     digest = hashlib.sha256()
-    sequences = 0
     files = 0
     payload = 0
-    dirs = (
-        sorted(p for p in split_dir.iterdir() if p.is_dir())
-        if split_dir.is_dir()
-        else []
-    )
+    sequences = _dataset_sequences(args)
     # The bound unit is the whole sequence directory -- frames, ground truth,
     # public detections, labels, seqinfo -- digested by content.  Picking out
     # "the files that matter" is the judgement call that let a repainted frame
     # through when frames were bound by (name, size).
-    for seq in dirs:
-        if args.detector and not seq.name.endswith(args.detector):
-            continue
-        sequences += 1
+    for seq in sequences:
         digest.update(seq.name.encode())
-        for path in sorted(seq.rglob("*")):
-            if not path.is_file():
-                continue
+        for path in _sequence_files(seq):
             files += 1
             payload += path.stat().st_size
             digest.update(str(path.relative_to(seq)).encode())
             digest.update(_sha256_file(path).encode())
     return {
-        "split_dir": str(split_dir),
+        "split_dir": str(_dataset_split_dir(args)),
         "detector": args.detector,
-        "sequences": sequences,
+        "sequences": len(sequences),
         "files": files,
         "bytes": payload,
         "digest": digest.hexdigest(),
@@ -570,6 +617,90 @@ def _git_head() -> str:
     return proc.stdout.strip() if proc.returncode == 0 else "unavailable"
 
 
+# --------------------------------------------------------------------------
+# the fingerprint has to still be true when the measurement ends
+# --------------------------------------------------------------------------
+
+
+def _witness_paths(args: argparse.Namespace, context: dict) -> list[Path]:
+    """Every file the fingerprint hashed, from the same enumerators it used."""
+    natives = (
+        context.get("bound", {}).get("runtime", {}).get("native_extensions", {}) or {}
+    )
+    paths = _source_files() + _referenced_config_files(args)
+    preset_path = _preset_path(args)
+    if preset_path.is_file():
+        paths.append(preset_path)
+    for seq in _dataset_sequences(args):
+        paths.extend(_sequence_files(seq))
+    paths.extend(
+        Path(info["origin"])
+        for info in natives.values()
+        if info.get("origin") and info.get("sha256") is not None
+    )
+    return paths
+
+
+def _stat_witness(paths: list[Path]) -> dict[str, tuple[int, int, int]]:
+    out: dict[str, tuple[int, int, int]] = {}
+    for path in paths:
+        try:
+            st = path.stat()
+        except OSError:
+            continue  # gone since enumeration; the key diff reports it
+        out[str(path)] = (st.st_size, st.st_mtime_ns, st.st_ctime_ns)
+    return out
+
+
+class ContextWitness:
+    """Metadata witness for every file the content fingerprint hashed.
+
+    A content digest can only speak for the instant it was computed.  Hashing
+    again at the end of a run does not close that gap: a file edited and then
+    restored in between hashes to the same bytes, while an evaluation was
+    reading it, leaves both digests identical and the measurement wrong.
+
+    ``st_ctime_ns`` moves on every write and cannot be set back by ``utime()``,
+    so re-stating around each evaluation catches exactly the edit-and-revert a
+    re-hash is blind to, at the cost of a stat walk rather than a full re-read.
+
+    Two things it does not see, both stated in the report rather than papered
+    over: a filesystem that does not maintain ctime (some network and DrvFS
+    mounts) leaves the witness silent -- which is why the content re-check at
+    the end still runs and, if it disagrees with a silent witness, quarantines
+    the cache instead of trusting it -- and a file created and removed again
+    inside one window leaves no path to stat at either end.
+    """
+
+    def __init__(self, args: argparse.Namespace, context: dict) -> None:
+        self.args = args
+        self.context = context
+        self.baseline = _stat_witness(_witness_paths(args, context))
+
+    def drift(self) -> list[str]:
+        """What changed since the baseline, as human-readable lines."""
+        current = _stat_witness(_witness_paths(self.args, self.context))
+        changes: list[str] = []
+        for path in sorted(set(self.baseline) | set(current)):
+            before, after = self.baseline.get(path), current.get(path)
+            if before == after:
+                continue
+            if before is None:
+                changes.append(f"added: {path}")
+            elif after is None:
+                changes.append(f"removed: {path}")
+            else:
+                changes.append(f"modified: {path}")
+        return changes
+
+
+def _summarise(changes: list[str], limit: int = 5) -> str:
+    shown = "; ".join(changes[:limit])
+    if len(changes) > limit:
+        shown += f"; and {len(changes) - limit} more"
+    return shown
+
+
 class Runner:
     """Runs eval at a threshold value and scores it, with an on-disk cache."""
 
@@ -580,11 +711,17 @@ class Runner:
         self.cache_path = self.work_dir / "cache.json"
         self.env = eval_env()
         self.context = context_fingerprint(args, self.env)
+        self._quarantine: str | None = None
         self.cache: dict[str, dict] = {}
         if self.cache_path.exists():
             stored = json.loads(self.cache_path.read_text(encoding="utf-8"))
             self._check_context(stored)
             self.cache = stored["entries"]
+        # Taken before the first evaluation and re-checked around every fresh
+        # one: the fingerprint alone only describes the moment it was computed,
+        # and this run is about to spend a long time measuring.
+        self.witness = ContextWitness(args, self.context)
+        self.checks = 1
         self.runs = 0
         # Every point measured this session, fresh or served from cache.  The
         # report is derived from all of them, never from the scan grid alone.
@@ -597,6 +734,13 @@ class Runner:
                 f"{self.cache_path} was written by a different version of this "
                 f"tool and carries no context fingerprint; its numbers cannot be "
                 f"shown to be comparable. Use a fresh --work-dir."
+            )
+        if stored.get("quarantine"):
+            raise CacheContextMismatch(
+                f"{self.cache_path} was quarantined by an earlier run: "
+                f"{stored['quarantine']}. Restoring the tree does not restore "
+                f"these numbers -- what they were measured against is unknown. "
+                f"Use a fresh --work-dir."
             )
         old = stored.get("context", {})
         if old.get("digest") == self.context["digest"]:
@@ -678,10 +822,15 @@ class Runner:
 
         params = params_for(self.args, value)
         out_dir = out_dir_for(self.args, params)
+        # A fresh evaluation is bracketed by two context checks, so a point only
+        # ever enters the cache if nothing it was measured against moved while
+        # it was being measured.
+        self._checkpoint(f"before measuring {self.args.axis}={value:.10g}")
         self._run_eval(params, out_dir)
         per_seq = self._score(out_dir)
         if not per_seq:
             raise RuntimeError(f"no scored sequences in {out_dir}")
+        self._checkpoint(f"while measuring {self.args.axis}={value:.10g}")
         measurement = Measurement(value, _pooled_idf1(per_seq), per_seq, str(out_dir))
         self.cache[key] = {
             "idf1": measurement.idf1,
@@ -693,17 +842,62 @@ class Runner:
         self.seen[value] = measurement
         return measurement
 
+    def _checkpoint(self, when: str) -> None:
+        """Fail closed if anything the fingerprint binds has moved.
+
+        Raising here discards the measurement in flight rather than filing it
+        under a context it may not have run in.
+        """
+        self.checks += 1
+        changes = self.witness.drift()
+        if changes:
+            raise ContextDrift(f"the context moved {when}: {_summarise(changes)}")
+
+    def final_verification(self) -> dict:
+        """Close the run: re-stat the witness, then re-hash every bound byte.
+
+        The witness is a metadata check; this is the content check it stands in
+        for.  Running it once at the end makes "nothing moved" something the run
+        looked at rather than something it assumed.
+
+        A content change the witness did not see means the witness cannot be
+        trusted on this filesystem, or that something moved while the
+        fingerprint itself was being computed.  Either way no cached point here
+        is provably bracketed, so the cache is quarantined rather than left for
+        a later run -- reverting the tree would otherwise make it servable
+        again.
+        """
+        witness_changes = self.witness.drift()
+        self.checks += 1
+        fresh = context_fingerprint(self.args, self.env)
+        content_changed = sorted(
+            name
+            for name, digest in fresh["component_digests"].items()
+            if self.context["component_digests"].get(name) != digest
+        )
+        if content_changed and not witness_changes:
+            self._quarantine = (
+                f"the content re-check found {', '.join(content_changed)} "
+                f"changed while the per-measurement witness saw nothing"
+            )
+            self._save_cache()
+        return {
+            "witness_changes": witness_changes,
+            "content_changed": content_changed,
+            "quarantined": self._quarantine,
+            "checks": self.checks,
+        }
+
     def _save_cache(self) -> None:
+        payload = {
+            "schema": CACHE_SCHEMA,
+            "context": self.context,
+            "entries": self.cache,
+        }
+        if self._quarantine is not None:
+            payload["quarantine"] = self._quarantine
         self.cache_path.write_text(
-            json.dumps(
-                {
-                    "schema": CACHE_SCHEMA,
-                    "context": self.context,
-                    "entries": self.cache,
-                },
-                indent=2,
-                sort_keys=True,
-            ),
+            json.dumps(payload, indent=2, sort_keys=True),
             encoding="utf-8",
         )
 
@@ -876,6 +1070,7 @@ def build_report(
     brackets: list[Bracket] | None = None,
     aborted: str | None = None,
     context: dict | None = None,
+    verification: dict | None = None,
 ) -> dict:
     """Derive plateaus and jumps from *every* measured point.
 
@@ -964,6 +1159,39 @@ def build_report(
     }
     if context is not None:
         report["context"] = context
+    if verification is not None:
+        moved = verification["witness_changes"] or verification["content_changed"]
+        if moved:
+            # The block below states that nothing moved. Refusing here is what
+            # makes that a fact about the run rather than a sentence about it.
+            raise ValueError(
+                "a report cannot be built from a run whose context moved: "
+                f"{_summarise(moved)}"
+            )
+        report["context_verification"] = {
+            "checks": verification["checks"],
+            "witness": (
+                "size, mtime_ns and ctime_ns of every fingerprinted file, "
+                "compared before and after each fresh evaluation and once more "
+                "before this report was written"
+            ),
+            "content_recheck": (
+                "every bound component re-hashed after the last measurement; "
+                "all component digests still match the fingerprint above"
+            ),
+            "covers": (
+                "the whole run, from the fingerprint to this report: a point "
+                "measured across a change is discarded and no report is written"
+            ),
+            "limits": [
+                "an edit made and reverted inside one evaluation's window is "
+                "visible only through ctime; on a filesystem that does not "
+                "maintain it (some network and DrvFS mounts) that window is "
+                "left to the content re-check alone",
+                "a file created and removed again inside one evaluation's "
+                "window leaves nothing to stat at either end and is not seen",
+            ],
+        }
     return report
 
 
@@ -1116,22 +1344,39 @@ def main(argv: list[str] | None = None) -> int:
         print(f"REFUSING CACHE: {exc}", file=sys.stderr)
         return 2
 
-    samples = scan(runner, args.lo, args.hi, args.scan)
-    brackets = brackets_from_scan(samples)
-    print(f"\n{len(brackets)} bracket(s) contain a jump", file=sys.stderr, flush=True)
-
     failure: str | None = None
-    if not args.scan_only:
-        for i, bracket in enumerate(brackets, 1):
-            print(f"[refine {i}/{len(brackets)}]", file=sys.stderr, flush=True)
-            try:
-                bisect(runner, bracket, args.tol)
-            except RuntimeError as exc:
-                # Do not throw away the brackets already refined: report what is
-                # known, leave the rest unrefined, and fail loudly at the end.
-                failure = str(exc)
-                print(f"  ABORTED: {exc}", file=sys.stderr, flush=True)
-                break
+    brackets: list[Bracket] = []
+    try:
+        samples = scan(runner, args.lo, args.hi, args.scan)
+        brackets = brackets_from_scan(samples)
+        print(
+            f"\n{len(brackets)} bracket(s) contain a jump", file=sys.stderr, flush=True
+        )
+        if not args.scan_only:
+            for i, bracket in enumerate(brackets, 1):
+                print(f"[refine {i}/{len(brackets)}]", file=sys.stderr, flush=True)
+                try:
+                    bisect(runner, bracket, args.tol)
+                except ContextDrift:
+                    raise
+                except RuntimeError as exc:
+                    # Do not throw away the brackets already refined: report what
+                    # is known, leave the rest unrefined, and fail loudly at the
+                    # end.
+                    failure = str(exc)
+                    print(f"  ABORTED: {exc}", file=sys.stderr, flush=True)
+                    break
+    except ContextDrift as exc:
+        # Every point already stored was bracketed by two passing checks, so the
+        # cache stays; what cannot be done is report from a run whose inputs
+        # moved under it.
+        print(f"REFUSING TO REPORT: {exc}", file=sys.stderr)
+        print(
+            "the points measured before this stay in the cache; re-run once the "
+            "tree is stable and they will be adopted without evaluating again",
+            file=sys.stderr,
+        )
+        return 2
 
     adopted = runner.adopt_cached_range(args.lo, args.hi)
     if adopted:
@@ -1140,6 +1385,28 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
 
+    verification = runner.final_verification()
+    if verification["witness_changes"] or verification["content_changed"]:
+        detail = _summarise(verification["witness_changes"]) or ", ".join(
+            verification["content_changed"]
+        )
+        print(
+            f"REFUSING TO REPORT: the context moved during this run ({detail})",
+            file=sys.stderr,
+        )
+        if verification["quarantined"]:
+            print(
+                f"cache quarantined: {verification['quarantined']}",
+                file=sys.stderr,
+            )
+        else:
+            print(
+                "the points measured stay in the cache; re-run once the tree is "
+                "stable and they will be adopted without evaluating again",
+                file=sys.stderr,
+            )
+        return 2
+
     report = build_report(
         args,
         list(runner.seen.values()),
@@ -1147,6 +1414,7 @@ def main(argv: list[str] | None = None) -> int:
         brackets=brackets,
         aborted=failure,
         context=runner.context,
+        verification=verification,
     )
     if failure is not None:
         report["incomplete"] = failure
