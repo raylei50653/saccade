@@ -38,12 +38,15 @@ class _StepRunner:
     def __init__(self, jumps: list[float]) -> None:
         self.jumps = jumps
         self.runs = 0
+        self.seen: dict[float, object] = {}
 
     def measure(self, value: float):
         self.runs += 1
         level = sum(1 for j in self.jumps if value > j)
         per_seq = {"S1": {"idtp": 1000 - 10 * level, "idfp": 5, "idfn": 20}}
-        return _measurement(value, per_seq)
+        m = _measurement(value, per_seq)
+        self.seen[value] = m
+        return m
 
 
 def test_pooled_idf1_pools_counts_instead_of_averaging() -> None:
@@ -124,7 +127,7 @@ def test_report_has_one_more_plateau_than_breakpoints() -> None:
     args = bp.parse_args(
         ["--axis", "h_hi", "--lo", "1.2", "--hi", "1.8", "--work-dir", "unused"]
     )
-    report = bp.build_report(args, samples, brackets, runner.runs)
+    report = bp.build_report(args, list(runner.seen.values()), runner.runs)
 
     assert len(report["breakpoints"]) == 2
     assert len(report["plateaus"]) == 3
@@ -136,11 +139,60 @@ def test_report_has_one_more_plateau_than_breakpoints() -> None:
 def test_report_states_that_a_plateau_is_not_a_proof() -> None:
     """The tool must never let a 'no jump detected' read as 'no jump exists'."""
     runner = _StepRunner([])
-    samples = bp.scan(runner, 1.2, 1.8, 3)
+    bp.scan(runner, 1.2, 1.8, 3)
     args = bp.parse_args(
         ["--axis", "h_hi", "--lo", "1.2", "--hi", "1.8", "--work-dir", "unused"]
     )
-    report = bp.build_report(args, samples, [], runner.runs)
+    report = bp.build_report(args, list(runner.seen.values()), runner.runs)
 
     assert report["breakpoints"] == []
     assert any("do not prove" in limit for limit in report["limits"])
+
+
+def test_plateau_never_contradicts_a_measured_point() -> None:
+    """Regression: a plateau must not span a value that measured differently.
+
+    The first version derived plateaus from the coarse scan grid only, so the
+    bisection's own midpoints could sit inside a reported plateau while holding
+    a different value. On real MOT17 data that produced a report claiming
+    [1.616, 1.652] was flat at 80.892 while its own measurement at 1.616 said
+    80.788 -- the tool asserting more than it had measured.
+    """
+    runner = _StepRunner([1.62, 1.64, 1.66])
+    samples = bp.scan(runner, 1.6, 1.8, 5)
+    for bracket in bp.brackets_from_scan(samples):
+        bp.bisect(runner, bracket, 1e-3)
+
+    args = bp.parse_args(
+        ["--axis", "h_hi", "--lo", "1.6", "--hi", "1.8", "--work-dir", "unused"]
+    )
+    report = bp.build_report(args, list(runner.seen.values()), runner.runs)
+
+    for plateau in report["plateaus"]:
+        inside = [
+            m
+            for m in runner.seen.values()
+            if plateau["from"] <= m.value <= plateau["to"]
+        ]
+        assert inside, "a plateau must be backed by measurements"
+        for m in inside:
+            assert m.idf1 == pytest.approx(plateau["idf1"]), (
+                f"plateau {plateau['from']}..{plateau['to']} claims "
+                f"{plateau['idf1']} but {m.value} measured {m.idf1}"
+            )
+
+
+def test_unrefined_jumps_are_flagged() -> None:
+    """A jump wider than --tol may hide siblings and must say so."""
+    runner = _StepRunner([1.62, 1.64, 1.66])
+    samples = bp.scan(runner, 1.6, 1.8, 5)
+    for bracket in bp.brackets_from_scan(samples):
+        bp.bisect(runner, bracket, 1e-3)
+
+    args = bp.parse_args(
+        ["--axis", "h_hi", "--lo", "1.6", "--hi", "1.8", "--work-dir", "unused"]
+    )
+    report = bp.build_report(args, list(runner.seen.values()), runner.runs)
+
+    assert any(not b["refined"] for b in report["breakpoints"])
+    assert all(b["width"] <= args.tol for b in report["breakpoints"] if b["refined"])

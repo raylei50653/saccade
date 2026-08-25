@@ -64,6 +64,16 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
+
+# Eval occasionally dies inside CUDA-graph capture (DALI touching the stream
+# mid-capture).  It is transient and a plain re-run clears it, so a bisection
+# should not lose fifteen completed evaluations to one of them.
+TRANSIENT_MARKERS = (
+    "cudaErrorStreamCaptureInvalidated",
+    "cudaErrorStreamCaptureUnsupported",
+    "operation failed due to a previous error during capture",
+    "operation not permitted when stream is capturing",
+)
 AXES = ("px", "h_lo", "h_hi")
 FLAG = {
     "px": "--relink-bridge-px",
@@ -119,6 +129,9 @@ class Runner:
         if self.cache_path.exists():
             self.cache = json.loads(self.cache_path.read_text(encoding="utf-8"))
         self.runs = 0
+        # Every point measured this session, fresh or served from cache.  The
+        # report is derived from all of them, never from the scan grid alone.
+        self.seen: dict[float, Measurement] = {}
 
     def _params(self, value: float) -> dict[str, float]:
         params = {
@@ -143,11 +156,52 @@ class Runner:
             sort_keys=True,
         )
 
+    def adopt_cached_range(self, lo: float, hi: float) -> int:
+        """Pull every already-measured point in [lo, hi] into this report.
+
+        The cache outlives a single invocation, so a targeted refinement run
+        leaves behind points that a later full-range run would never visit. Not
+        adopting them makes the report understate what has actually been
+        measured -- it would re-label an already-bisected jump UNREFINED.
+        """
+        adopted = 0
+        for key, hit in self.cache.items():
+            entry = json.loads(key)
+            if entry.get(self.args.axis) is None:
+                continue
+            value = float(entry[self.args.axis])
+            if not lo <= value <= hi or value in self.seen:
+                continue
+            same_context = all(
+                entry.get(field) == expected
+                for field, expected in (
+                    ("preset", self.args.preset),
+                    ("data_root", self.args.data_root),
+                    ("split", self.args.split),
+                    ("detector", self.args.detector),
+                    ("eval_arg", self.args.eval_arg),
+                )
+            )
+            fixed_match = all(
+                entry.get(axis) == f"{getattr(self.args, axis):.10g}"
+                for axis in AXES
+                if axis != self.args.axis
+            )
+            if not (same_context and fixed_match):
+                continue
+            self.seen[value] = Measurement(
+                value, hit["idf1"], hit["per_seq"], hit["out_dir"]
+            )
+            adopted += 1
+        return adopted
+
     def measure(self, value: float) -> Measurement:
         key = self._key(value)
         if key in self.cache:
             hit = self.cache[key]
-            return Measurement(value, hit["idf1"], hit["per_seq"], hit["out_dir"])
+            cached = Measurement(value, hit["idf1"], hit["per_seq"], hit["out_dir"])
+            self.seen[value] = cached
+            return cached
 
         params = self._params(value)
         tag = "_".join(f"{k}{params[k]:.10g}" for k in AXES)
@@ -166,6 +220,7 @@ class Runner:
             json.dumps(self.cache, indent=2, sort_keys=True), encoding="utf-8"
         )
         self.runs += 1
+        self.seen[value] = measurement
         return measurement
 
     def _run_eval(self, params: dict[str, float], out_dir: Path) -> None:
@@ -198,14 +253,36 @@ class Runner:
         print(f"  run {' '.join(cmd[-8:])}", file=sys.stderr, flush=True)
         if self.args.dry_run:
             return
-        log_path = out_dir.parent / f"{out_dir.name}.log"
-        out_dir.mkdir(parents=True, exist_ok=True)
-        with log_path.open("w", encoding="utf-8") as log:
-            proc = subprocess.run(
-                cmd, cwd=REPO_ROOT, env=env, stdout=log, stderr=subprocess.STDOUT
+
+        for attempt in range(1, self.args.retries + 2):
+            suffix = "" if attempt == 1 else f".attempt{attempt}"
+            log_path = out_dir.parent / f"{out_dir.name}{suffix}.log"
+            # A retry must not score leftovers from the failed attempt.
+            if out_dir.exists():
+                for stale in out_dir.glob("*.txt"):
+                    stale.unlink()
+            out_dir.mkdir(parents=True, exist_ok=True)
+            with log_path.open("w", encoding="utf-8") as log:
+                proc = subprocess.run(
+                    cmd,
+                    cwd=REPO_ROOT,
+                    env=env,
+                    stdout=log,
+                    stderr=subprocess.STDOUT,
+                )
+            if proc.returncode == 0:
+                return
+
+            tail = log_path.read_text(encoding="utf-8", errors="replace")[-8000:]
+            transient = next((m for m in TRANSIENT_MARKERS if m in tail), None)
+            if transient is None or attempt > self.args.retries:
+                raise RuntimeError(f"eval failed ({proc.returncode}); see {log_path}")
+            print(
+                f"    transient failure ({transient}); "
+                f"retry {attempt}/{self.args.retries}",
+                file=sys.stderr,
+                flush=True,
             )
-        if proc.returncode != 0:
-            raise RuntimeError(f"eval failed ({proc.returncode}); see {log_path}")
 
     def _score(self, out_dir: Path) -> dict[str, dict[str, int]]:
         """Recompute IDF1 counts at full precision from the saved MOT output."""
@@ -289,48 +366,53 @@ def bisect(runner: Runner, bracket: Bracket, tol: float) -> Bracket:
 
 def build_report(
     args: argparse.Namespace,
-    samples: list[Measurement],
-    brackets: list[Bracket],
+    seen: list[Measurement],
     runs: int,
 ) -> dict:
-    breakpoints = [
+    """Derive plateaus and jumps from *every* measured point.
+
+    Deriving them from the scan grid alone lets the report assert a plateau that
+    the bisection's own midpoints refute -- the tool would be claiming more than
+    it measured.  Grouping all measured points by fingerprint cannot do that: a
+    plateau is exactly a maximal run of consecutive points that behaved
+    identically, and a jump is exactly the gap between two such runs.
+    """
+    points = sorted(seen, key=lambda m: m.value)
+    groups: list[list[Measurement]] = []
+    for point in points:
+        if groups and groups[-1][0].fingerprint == point.fingerprint:
+            groups[-1].append(point)
+        else:
+            groups.append([point])
+
+    plateaus = [
         {
-            "lower_bound": b.low.value,
-            "upper_bound": b.high.value,
-            "width": b.width,
-            "idf1_below": b.low.idf1,
-            "idf1_above": b.high.idf1,
-            "delta_idf1": b.high.idf1 - b.low.idf1,
-            "per_seq_delta_idf1": {
-                seq: b.high.per_seq_idf1()[seq] - value
-                for seq, value in b.low.per_seq_idf1().items()
-            },
-            "refined": b.refined,
-            "bisections": len(b.history),
+            "from": g[0].value,
+            "to": g[-1].value,
+            "width": g[-1].value - g[0].value,
+            "idf1": g[0].idf1,
+            "per_seq_idf1": g[0].per_seq_idf1(),
+            "measured_points": len(g),
         }
-        for b in brackets
+        for g in groups
     ]
 
-    plateaus = []
-    bounds = [(b.low.value, b.high.value) for b in brackets]
-    starts = [samples[0].value] + [hi for _, hi in bounds]
-    ends = [lo for lo, _ in bounds] + [samples[-1].value]
-    for start, end in zip(starts, ends):
-        rep = min(
-            (s for s in samples if start <= s.value <= end),
-            key=lambda s: abs(s.value - 0.5 * (start + end)),
-            default=None,
-        )
-        if rep is None:
-            continue
-        plateaus.append(
+    breakpoints = []
+    for below, above in zip(groups, groups[1:]):
+        low, high = below[-1], above[0]
+        breakpoints.append(
             {
-                "from": start,
-                "to": end,
-                "width": end - start,
-                "idf1": rep.idf1,
-                "per_seq_idf1": rep.per_seq_idf1(),
-                "representative_value": rep.value,
+                "lower_bound": low.value,
+                "upper_bound": high.value,
+                "width": high.value - low.value,
+                "idf1_below": low.idf1,
+                "idf1_above": high.idf1,
+                "delta_idf1": high.idf1 - low.idf1,
+                "per_seq_delta_idf1": {
+                    seq: high.per_seq_idf1()[seq] - value
+                    for seq, value in low.per_seq_idf1().items()
+                },
+                "refined": (high.value - low.value) <= args.tol,
             }
         )
 
@@ -347,15 +429,10 @@ def build_report(
             "extra_eval_args": list(args.eval_arg),
         },
         "equality_predicate": "per-sequence (idtp, idfp, idfn) vector",
-        "scan": {
-            "lo": args.lo,
-            "hi": args.hi,
-            "points": args.scan,
-            "samples": [
-                {"value": s.value, "idf1": s.idf1, "out_dir": s.out_dir}
-                for s in samples
-            ],
-        },
+        "scan": {"lo": args.lo, "hi": args.hi, "points": args.scan},
+        "measurements": [
+            {"value": m.value, "idf1": m.idf1, "out_dir": m.out_dir} for m in points
+        ],
         "tolerance": args.tol,
         "eval_runs_executed": runs,
         "breakpoints": breakpoints,
@@ -363,7 +440,8 @@ def build_report(
         "limits": [
             "equal endpoints do not prove the absence of a jump between them; "
             "plateaus mean 'no jump detected at the scan resolution'",
-            "a scan bracket containing several jumps yields one of them; "
+            "an unrefined jump (width > --tol) means the scan bracket held "
+            "more than one jump and bisection converged to a different one; "
             "raise --scan to separate them",
             "breakpoint locations are data values, so they are a property of "
             "this dataset's feature distribution, not of the gate",
@@ -375,23 +453,24 @@ def print_table(report: dict) -> None:
     print(f"\naxis={report['axis']}  fixed={report['fixed_axes']}")
     print(f"eval runs executed: {report['eval_runs_executed']}")
 
-    print("\nplateaus (no jump detected within):")
-    print(f"  {'from':>12}  {'to':>12}  {'width':>10}  {'IDF1':>9}")
+    print("\nplateaus (identical outcome across every measured point inside):")
+    print(f"  {'from':>12}  {'to':>12}  {'width':>10}  {'IDF1':>9}  {'pts':>4}")
     for p in report["plateaus"]:
         print(
-            f"  {p['from']:>12.6g}  {p['to']:>12.6g}  "
-            f"{p['width']:>10.4g}  {p['idf1']:>9.3f}"
+            f"  {p['from']:>12.7g}  {p['to']:>12.7g}  "
+            f"{p['width']:>10.4g}  {p['idf1']:>9.3f}  {p['measured_points']:>4d}"
         )
 
     print("\nbreakpoints (jump localised to):")
     if not report["breakpoints"]:
         print("  none detected at this scan resolution")
     for b in report["breakpoints"]:
+        mark = "" if b["refined"] else "   [UNREFINED - may hide further jumps]"
         print(
             f"  ({b['lower_bound']:.8g}, {b['upper_bound']:.8g}]  "
             f"width={b['width']:.3g}  "
             f"IDF1 {b['idf1_below']:.3f} -> {b['idf1_above']:.3f}  "
-            f"(delta {b['delta_idf1']:+.3f})"
+            f"(delta {b['delta_idf1']:+.3f}){mark}"
         )
         worst = sorted(b["per_seq_delta_idf1"].items(), key=lambda kv: kv[1])[:2]
         for seq, delta in worst:
@@ -444,6 +523,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--json", help="Write the full report here.")
     p.add_argument("--python", default=".venv/bin/python")
     p.add_argument(
+        "--retries",
+        type=int,
+        default=2,
+        help=(
+            "Re-run an eval this many times when it dies with a known "
+            "transient CUDA-graph capture error. Default 2."
+        ),
+    )
+    p.add_argument(
         "--scan-only",
         action="store_true",
         help="Find brackets but skip bisection.",
@@ -467,16 +555,37 @@ def main(argv: list[str] | None = None) -> int:
     brackets = brackets_from_scan(samples)
     print(f"\n{len(brackets)} bracket(s) contain a jump", file=sys.stderr, flush=True)
 
+    failure: str | None = None
     if not args.scan_only:
         for i, bracket in enumerate(brackets, 1):
             print(f"[refine {i}/{len(brackets)}]", file=sys.stderr, flush=True)
-            bisect(runner, bracket, args.tol)
+            try:
+                bisect(runner, bracket, args.tol)
+            except RuntimeError as exc:
+                # Do not throw away the brackets already refined: report what is
+                # known, leave the rest unrefined, and fail loudly at the end.
+                failure = str(exc)
+                print(f"  ABORTED: {exc}", file=sys.stderr, flush=True)
+                break
 
-    report = build_report(args, samples, brackets, runner.runs)
+    adopted = runner.adopt_cached_range(args.lo, args.hi)
+    if adopted:
+        print(
+            f"adopted {adopted} previously measured point(s) from the cache",
+            file=sys.stderr,
+        )
+
+    report = build_report(args, list(runner.seen.values()), runner.runs)
+    if failure is not None:
+        report["incomplete"] = failure
     if args.json:
         Path(args.json).write_text(json.dumps(report, indent=2), encoding="utf-8")
         print(f"\nreport -> {args.json}", file=sys.stderr)
     print_table(report)
+    if failure is not None:
+        print(f"\nINCOMPLETE: {failure}", file=sys.stderr)
+        print("cached results are kept; re-run to resume", file=sys.stderr)
+        return 1
     return 0
 
 
