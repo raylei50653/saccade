@@ -3,15 +3,17 @@
 
 Why this exists instead of another grid sweep
 ---------------------------------------------
-The bridge scale gate is ``h_lo < ratio < h_hi`` applied to a *finite* set of
-evaluated candidate pairs.  Moving a threshold continuously changes nothing at
-all until it crosses one of the ratio values actually observed in the data, at
-which point one or more decisions flip and the metric jumps.  The metric surface
-is therefore **piecewise constant with jumps**, not a smooth ridge, and a grid
-sweep reports an arbitrary sampling of a step function: the reported "optimum"
-is a grid artefact and "distance to the nearest bad cell" carries no stability
-information (this is what made the old ``nearest_unsafe_distance=1`` result
-vacuous).
+The bridge scale gate admits a pair when ``h_lo <= ratio <= h_hi`` -- the CUDA
+kernel rejects only on ``hr < bridge_h_lo || hr > bridge_h_hi``
+(``src/tracking/tracker_gpu.cu``), so both bounds are inclusive and a threshold
+set exactly to an observed ratio still admits that pair.  It is applied to a
+*finite* set of evaluated candidate pairs, so moving a threshold changes nothing
+until it crosses one of the ratio values actually observed in the data, at which
+point decisions flip and the metric jumps.  The metric surface is therefore
+**piecewise constant with jumps**, not a smooth ridge, and a grid sweep reports
+an arbitrary sampling of a step function: the "optimum" is a grid artefact and
+"distance to the nearest bad cell" carries no stability information (this is
+what made the old ``nearest_unsafe_distance=1`` result vacuous).
 
 The right objects are the **plateau** you operate on and the **jump** at its
 edge.  This tool finds them by bisection rather than by sampling.
@@ -20,28 +22,32 @@ Bisection is available here because the underlying measurement is bit-exact
 (``reid_mode: off`` + ``--no-gpu-decode``, so N=1 suffices), which makes
 *equality* a usable predicate.  A bracket whose endpoints differ can then be
 narrowed to any width in O(log(1/tol)) evaluations instead of O(1/tol) grid
-points.
+points.  Endpoints are compared on the **per-sequence (idtp, idfp, idfn)
+vector**, not on pooled IDF1: two genuinely different decision sets can collide
+on a rounded (or even exact) pooled scalar.
 
-Equality predicate
-------------------
-Endpoints are compared on the **per-sequence (idtp, idfp, idfn) vector**, not on
-pooled IDF1.  Two genuinely different decision sets can collide on a rounded (or
-even exact) pooled scalar; the count vector is a far tighter fingerprint of "the
-tracker did the same thing".
+Measurements are cached under ``--work-dir`` and bound to a context fingerprint
+(source tree, native extensions, preset and the model/engine files it names,
+dataset contents, interpreter/torch/GPU): a mismatch fails closed rather than
+mixing two measurement regimes, so point ``--work-dir`` somewhere fresh.
 
 Limits (these are properties of the method, not of the implementation)
 ----------------------------------------------------------------------
-1. ``f(a) == f(b)`` does **not** prove there is no jump inside ``(a, b)`` — two
+1. ``f(a) == f(b)`` does **not** prove there is no jump inside ``(a, b)`` -- two
    jumps can cancel.  Every "plateau" below means *no jump detected at the scan
    resolution*, never *no jump exists*.
 2. If a scan bracket contains several jumps, bisection converges to one of them
-   and the others are missed.  Raise ``--scan`` to separate them.
+   and the others are missed; raise ``--scan`` to separate them.  Each reported
+   breakpoint carries the ``reason`` it is or is not narrowed to ``--tol``.
 3. Breakpoint locations are **data values**, i.e. a property of this dataset's
    ratio distribution rather than of the gate.  Do not expect them to transfer
    to another dataset; see the 2026-08-08 cross-dataset note.
+4. The fingerprint digests ground truth and sequence metadata by content but
+   image frames by (name, size) only: a different dataset, not a repainted pixel.
 
-Usage
------
+Usage: one axis per invocation
+------------------------------
+  # --dry-run prints these commands and exits, touching neither eval nor cache
   .venv/bin/python scripts/eval/diagnostics/bridge_gate_breakpoints.py \
       --axis h_hi --lo 1.2 --hi 1.8 --scan 7 --tol 1e-3 \
       --px 0.4 --h-lo 0.6 \
@@ -56,6 +62,7 @@ Usage
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import subprocess
@@ -80,6 +87,70 @@ FLAG = {
     "h_lo": "--relink-bridge-h-lo",
     "h_hi": "--relink-bridge-h-hi",
 }
+
+# Flags this tool owns and therefore refuses to let --eval-arg carry.  mot17.py
+# parses with the argparse default (last occurrence wins), so a second copy
+# appended after ours would silently decide the run while the report kept
+# labelling the point with the value *we* asked for -- a measurement filed under
+# the wrong coordinates.  --reid-mode and the decode flags are owned at one
+# remove: they are what makes the measurement bit-exact, so moving them
+# invalidates the equality predicate the whole bisection rests on.
+TOOL_OWNED_FLAGS = (
+    "--preset",
+    "--data-root",
+    "--split",
+    "--detector",
+    "--output",
+    "--double-buffer",
+    "--gpu-decode",
+    "--no-gpu-decode",
+    "--reid-mode",
+    "--relink-bridge-px",
+    "--relink-bridge-h-lo",
+    "--relink-bridge-h-hi",
+)
+
+CACHE_SCHEMA = 2
+# Source that can change what an eval computes.  Digested by content: the git
+# head alone is both too weak (dirty tree) and too strong (a docs commit moves
+# it without touching a measurement).
+SOURCE_ROOTS = ("include", "src", "scripts/eval", "configs")
+SOURCE_SUFFIXES = frozenset(
+    {".py", ".pyi", ".cu", ".cuh", ".h", ".hpp", ".cc", ".cpp", ".yaml", ".yml"}
+)
+NATIVE_MODULES = (
+    "saccade_tracking_ext",
+    "saccade_perception_ext",
+    "saccade_eval_ext",
+    "saccade_media_ext",
+)
+
+_PROBE_SRC = """
+import importlib.util, json, sys
+
+out = {"executable": sys.executable, "python_version": sys.version.split()[0]}
+mods = {}
+for name in json.loads(sys.argv[1]):
+    try:
+        spec = importlib.util.find_spec(name)
+        mods[name] = spec.origin if spec is not None else None
+    except Exception as exc:  # noqa: BLE001 - reported, not handled
+        mods[name] = "unimportable: %s" % (exc,)
+out["modules"] = mods
+try:
+    import torch
+
+    out["torch"] = torch.__version__
+    out["torch_cuda"] = torch.version.cuda
+except Exception as exc:  # noqa: BLE001 - reported, not handled
+    out["torch"] = "unimportable: %s" % (exc,)
+    out["torch_cuda"] = None
+json.dump(out, sys.stdout)
+"""
+
+
+class CacheContextMismatch(RuntimeError):
+    """The cache under --work-dir was measured under a different context."""
 
 
 @dataclass
@@ -117,6 +188,267 @@ def _pooled_idf1(per_seq: dict[str, dict[str, int]]) -> float:
     return _idf1(total)
 
 
+# --------------------------------------------------------------------------
+# eval command construction (shared by the real runner and --dry-run)
+# --------------------------------------------------------------------------
+
+
+def params_for(args: argparse.Namespace, value: float) -> dict[str, float]:
+    params = {"px": args.px, "h_lo": args.h_lo, "h_hi": args.h_hi}
+    params[args.axis] = value
+    return params
+
+
+def out_dir_for(args: argparse.Namespace, params: dict[str, float]) -> Path:
+    tag = "_".join(f"{k}{params[k]:.10g}" for k in AXES)
+    return Path(args.work_dir) / f"run_{tag}"
+
+
+def eval_command(
+    args: argparse.Namespace, params: dict[str, float], out_dir: Path
+) -> list[str]:
+    cmd = [
+        args.python,
+        "scripts/eval/mot17.py",
+        "--preset",
+        args.preset,
+        "--data-root",
+        args.data_root,
+        "--split",
+        args.split,
+        "--output",
+        str(out_dir),
+    ]
+    if args.detector:
+        cmd += ["--detector", args.detector]
+    cmd += ["--double-buffer", "--no-gpu-decode"]
+    for axis in AXES:
+        cmd += [FLAG[axis], f"{params[axis]:.10g}"]
+    cmd += list(args.eval_arg)
+    return cmd
+
+
+def eval_env() -> dict[str, str]:
+    env = dict(os.environ)
+    torch_lib = REPO_ROOT / ".venv/lib/python3.12/site-packages/torch/lib"
+    if torch_lib.is_dir():
+        env["LD_LIBRARY_PATH"] = f"{torch_lib}:{env.get('LD_LIBRARY_PATH', '')}".rstrip(
+            ":"
+        )
+    return env
+
+
+def rejected_eval_args(eval_args: list[str]) -> list[tuple[str, str]]:
+    """Tokens in --eval-arg that could resolve to a flag this tool owns.
+
+    mot17.py's parser leaves ``allow_abbrev`` on, so ``--relink-bridge-h-h`` is
+    just as effective an override as the full flag; the check is therefore on
+    prefixes, not on exact names.
+    """
+    bad: list[tuple[str, str]] = []
+    for token in eval_args:
+        name = token.split("=", 1)[0]
+        if not name.startswith("--"):
+            continue
+        for owned in TOOL_OWNED_FLAGS:
+            if name == owned or owned.startswith(name):
+                bad.append((token, owned))
+                break
+    return bad
+
+
+# --------------------------------------------------------------------------
+# context fingerprint
+# --------------------------------------------------------------------------
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _digest(payload: object) -> str:
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True, default=str).encode()
+    ).hexdigest()
+
+
+def _source_component() -> dict:
+    digest = hashlib.sha256()
+    files = 0
+    for root in SOURCE_ROOTS:
+        base = REPO_ROOT / root
+        if not base.is_dir():
+            continue
+        for path in sorted(base.rglob("*")):
+            if path.suffix not in SOURCE_SUFFIXES or not path.is_file():
+                continue
+            digest.update(str(path.relative_to(REPO_ROOT)).encode())
+            digest.update(_sha256_file(path).encode())
+            files += 1
+    return {"roots": list(SOURCE_ROOTS), "files": files, "digest": digest.hexdigest()}
+
+
+def _file_digests(paths: list[Path]) -> dict[str, str | None]:
+    out: dict[str, str | None] = {}
+    for path in paths:
+        key = str(path if path.is_absolute() else REPO_ROOT / path)
+        out[key] = _sha256_file(path) if path.is_file() else None
+    return out
+
+
+def _config_component(args: argparse.Namespace) -> dict:
+    import yaml
+
+    preset_path = REPO_ROOT / "configs" / "presets" / f"{args.preset}.yaml"
+    referenced: list[Path] = []
+    if preset_path.is_file():
+        loaded = yaml.safe_load(preset_path.read_text(encoding="utf-8")) or {}
+        for value in loaded.values():
+            if not isinstance(value, str) or not value:
+                continue
+            candidate = Path(value)
+            if not candidate.is_absolute():
+                candidate = REPO_ROOT / candidate
+            if candidate.is_file():
+                referenced.append(candidate)
+    # Anything the caller forwarded that names a file is part of the config too.
+    for token in args.eval_arg:
+        raw = token.split("=", 1)[-1]
+        candidate = Path(raw)
+        if not candidate.is_absolute():
+            candidate = REPO_ROOT / candidate
+        if raw and candidate.is_file():
+            referenced.append(candidate)
+    return {
+        "preset": args.preset,
+        "preset_sha256": _sha256_file(preset_path) if preset_path.is_file() else None,
+        "referenced_files": _file_digests(sorted(set(referenced))),
+        "extra_eval_args": list(args.eval_arg),
+    }
+
+
+def _dataset_component(args: argparse.Namespace) -> dict:
+    root = Path(args.data_root)
+    if not root.is_absolute():
+        root = REPO_ROOT / root
+    split_dir = root / args.split
+    digest = hashlib.sha256()
+    sequences = 0
+    frames = 0
+    dirs = (
+        sorted(p for p in split_dir.iterdir() if p.is_dir())
+        if split_dir.is_dir()
+        else []
+    )
+    for seq in dirs:
+        if args.detector and not seq.name.endswith(args.detector):
+            continue
+        sequences += 1
+        digest.update(seq.name.encode())
+        for meta in (seq / "gt" / "gt.txt", seq / "seqinfo.ini"):
+            digest.update(_sha256_file(meta).encode() if meta.is_file() else b"absent")
+        img_dir = seq / "img1"
+        if img_dir.is_dir():
+            for frame in sorted(img_dir.iterdir()):
+                frames += 1
+                digest.update(f"{frame.name}:{frame.stat().st_size}".encode())
+    return {
+        "split_dir": str(split_dir),
+        "detector": args.detector,
+        "sequences": sequences,
+        "frames": frames,
+        "digest": digest.hexdigest(),
+        "frame_coverage": "name+size only (contents not digested)",
+    }
+
+
+def _gpu_identity() -> str:
+    try:
+        proc = subprocess.run(
+            ["nvidia-smi", "--query-gpu=name,driver_version", "--format=csv,noheader"],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return f"unavailable: {exc}"
+    if proc.returncode != 0:
+        return f"unavailable: nvidia-smi exit {proc.returncode}"
+    return " | ".join(line.strip() for line in proc.stdout.strip().splitlines())
+
+
+def _runtime_component(args: argparse.Namespace) -> dict:
+    proc = subprocess.run(
+        [args.python, "-c", _PROBE_SRC, json.dumps(list(NATIVE_MODULES))],
+        cwd=REPO_ROOT,
+        env=eval_env(),
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"runtime probe failed ({proc.returncode}): {proc.stderr.strip()[-2000:]}"
+        )
+    info = json.loads(proc.stdout)
+    natives: dict[str, dict] = {}
+    for name, origin in sorted(info["modules"].items()):
+        path = Path(origin) if origin else None
+        natives[name] = {
+            "origin": origin,
+            "sha256": _sha256_file(path)
+            if path is not None and path.is_file()
+            else None,
+        }
+    return {
+        "interpreter": info["executable"],
+        "python_version": info["python_version"],
+        "torch": info["torch"],
+        "torch_cuda": info["torch_cuda"],
+        "native_extensions": natives,
+        "gpu": _gpu_identity(),
+    }
+
+
+def context_fingerprint(args: argparse.Namespace) -> dict:
+    """Everything a cached measurement is only valid under.
+
+    ``bound`` is what the cache is checked against; ``informational`` is
+    recorded for the reader and deliberately excluded, because a git head moves
+    for reasons that cannot change a measurement.
+    """
+    bound = {
+        "source": _source_component(),
+        "config": _config_component(args),
+        "dataset": _dataset_component(args),
+        "runtime": _runtime_component(args),
+    }
+    return {
+        "schema": CACHE_SCHEMA,
+        "bound": bound,
+        "component_digests": {name: _digest(part) for name, part in bound.items()},
+        "digest": _digest(bound),
+        "informational": {"git_head": _git_head()},
+    }
+
+
+def _git_head() -> str:
+    try:
+        proc = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return f"unavailable: {exc}"
+    return proc.stdout.strip() if proc.returncode == 0 else "unavailable"
+
+
 class Runner:
     """Runs eval at a threshold value and scores it, with an on-disk cache."""
 
@@ -125,25 +457,41 @@ class Runner:
         self.work_dir = Path(args.work_dir)
         self.work_dir.mkdir(parents=True, exist_ok=True)
         self.cache_path = self.work_dir / "cache.json"
+        self.context = context_fingerprint(args)
         self.cache: dict[str, dict] = {}
         if self.cache_path.exists():
-            self.cache = json.loads(self.cache_path.read_text(encoding="utf-8"))
+            stored = json.loads(self.cache_path.read_text(encoding="utf-8"))
+            self._check_context(stored)
+            self.cache = stored["entries"]
         self.runs = 0
         # Every point measured this session, fresh or served from cache.  The
         # report is derived from all of them, never from the scan grid alone.
         self.seen: dict[float, Measurement] = {}
 
-    def _params(self, value: float) -> dict[str, float]:
-        params = {
-            "px": self.args.px,
-            "h_lo": self.args.h_lo,
-            "h_hi": self.args.h_hi,
-        }
-        params[self.args.axis] = value
-        return params
+    def _check_context(self, stored: dict) -> None:
+        """Refuse a cache measured under a different context (fail closed)."""
+        if not isinstance(stored, dict) or stored.get("schema") != CACHE_SCHEMA:
+            raise CacheContextMismatch(
+                f"{self.cache_path} was written by a different version of this "
+                f"tool and carries no context fingerprint; its numbers cannot be "
+                f"shown to be comparable. Use a fresh --work-dir."
+            )
+        old = stored.get("context", {})
+        if old.get("digest") == self.context["digest"]:
+            return
+        changed = [
+            name
+            for name, digest in self.context["component_digests"].items()
+            if old.get("component_digests", {}).get(name) != digest
+        ]
+        raise CacheContextMismatch(
+            f"{self.cache_path} was measured under a different context "
+            f"(changed: {', '.join(changed) or 'unknown'}). Cached and fresh "
+            f"numbers would not be comparable. Use a fresh --work-dir."
+        )
 
     def _key(self, value: float) -> str:
-        params = self._params(value)
+        params = params_for(self.args, value)
         return json.dumps(
             {
                 "preset": self.args.preset,
@@ -163,6 +511,9 @@ class Runner:
         leaves behind points that a later full-range run would never visit. Not
         adopting them makes the report understate what has actually been
         measured -- it would re-label an already-bisected jump UNREFINED.
+
+        Only reachable once the context check above has passed, so every point
+        adopted here was measured under this exact context.
         """
         adopted = 0
         for key, hit in self.cache.items():
@@ -203,9 +554,8 @@ class Runner:
             self.seen[value] = cached
             return cached
 
-        params = self._params(value)
-        tag = "_".join(f"{k}{params[k]:.10g}" for k in AXES)
-        out_dir = self.work_dir / f"run_{tag}"
+        params = params_for(self.args, value)
+        out_dir = out_dir_for(self.args, params)
         self._run_eval(params, out_dir)
         per_seq = self._score(out_dir)
         if not per_seq:
@@ -216,44 +566,30 @@ class Runner:
             "per_seq": per_seq,
             "out_dir": str(out_dir),
         }
-        self.cache_path.write_text(
-            json.dumps(self.cache, indent=2, sort_keys=True), encoding="utf-8"
-        )
+        self._save_cache()
         self.runs += 1
         self.seen[value] = measurement
         return measurement
 
-    def _run_eval(self, params: dict[str, float], out_dir: Path) -> None:
-        cmd = [
-            self.args.python,
-            "scripts/eval/mot17.py",
-            "--preset",
-            self.args.preset,
-            "--data-root",
-            self.args.data_root,
-            "--split",
-            self.args.split,
-            "--output",
-            str(out_dir),
-        ]
-        if self.args.detector:
-            cmd += ["--detector", self.args.detector]
-        cmd += ["--double-buffer", "--no-gpu-decode"]
-        for axis in AXES:
-            cmd += [FLAG[axis], f"{params[axis]:.10g}"]
-        cmd += list(self.args.eval_arg)
+    def _save_cache(self) -> None:
+        self.cache_path.write_text(
+            json.dumps(
+                {
+                    "schema": CACHE_SCHEMA,
+                    "context": self.context,
+                    "entries": self.cache,
+                },
+                indent=2,
+                sort_keys=True,
+            ),
+            encoding="utf-8",
+        )
 
-        env = dict(os.environ)
-        torch_lib = REPO_ROOT / ".venv/lib/python3.12/site-packages/torch/lib"
-        if torch_lib.is_dir():
-            env["LD_LIBRARY_PATH"] = (
-                f"{torch_lib}:{env.get('LD_LIBRARY_PATH', '')}".rstrip(":")
-            )
+    def _run_eval(self, params: dict[str, float], out_dir: Path) -> None:
+        cmd = eval_command(self.args, params, out_dir)
+        env = eval_env()
 
         print(f"  run {' '.join(cmd[-8:])}", file=sys.stderr, flush=True)
-        if self.args.dry_run:
-            return
-
         for attempt in range(1, self.args.retries + 2):
             suffix = "" if attempt == 1 else f".attempt{attempt}"
             log_path = out_dir.parent / f"{out_dir.name}{suffix}.log"
@@ -286,8 +622,6 @@ class Runner:
 
     def _score(self, out_dir: Path) -> dict[str, dict[str, int]]:
         """Recompute IDF1 counts at full precision from the saved MOT output."""
-        if self.args.dry_run:
-            return {"_dry_run": {"idtp": 1, "idfp": 0, "idfn": 0}}
         src = str(REPO_ROOT / "src")
         if src not in sys.path:
             sys.path.insert(0, src)
@@ -364,10 +698,50 @@ def bisect(runner: Runner, bracket: Bracket, tol: float) -> Bracket:
     return bracket
 
 
+def _refinement_reason(
+    low: Measurement,
+    high: Measurement,
+    args: argparse.Namespace,
+    bisected_edges: set[tuple[float, float]],
+    unfinished: list[Bracket],
+    aborted: str | None,
+) -> str:
+    """Say why this gap is (or is not) narrowed to --tol -- never guess.
+
+    'Wider than --tol' has several distinct causes, and reporting the most
+    interesting one for all of them (a scan bracket holding several jumps) is a
+    claim about the data that the run may not have made.
+    """
+    width = high.value - low.value
+    bisected = (low.value, high.value) in bisected_edges
+    if width <= args.tol:
+        if bisected:
+            return "bisected to <= --tol"
+        return "already within --tol at the scan resolution"
+    if bisected:
+        return "bisection stopped early: float resolution exhausted before --tol"
+    if args.scan_only:
+        return "not bisected: --scan-only"
+    inside_unfinished = any(
+        b.low.value <= low.value and high.value <= b.high.value for b in unfinished
+    )
+    if inside_unfinished:
+        if aborted is not None:
+            return f"not bisected: run aborted before this bracket ({aborted})"
+        return "not bisected: bisection did not reach this bracket"
+    return (
+        "residual gap: the enclosing scan bracket held more than one jump and "
+        "bisection isolated a different one -- raise --scan to separate them"
+    )
+
+
 def build_report(
     args: argparse.Namespace,
     seen: list[Measurement],
     runs: int,
+    brackets: list[Bracket] | None = None,
+    aborted: str | None = None,
+    context: dict | None = None,
 ) -> dict:
     """Derive plateaus and jumps from *every* measured point.
 
@@ -377,6 +751,10 @@ def build_report(
     plateau is exactly a maximal run of consecutive points that behaved
     identically, and a jump is exactly the gap between two such runs.
     """
+    brackets = list(brackets or [])
+    bisected_edges = {(b.low.value, b.high.value) for b in brackets if b.refined}
+    unfinished = [b for b in brackets if not b.refined]
+
     points = sorted(seen, key=lambda m: m.value)
     groups: list[list[Measurement]] = []
     for point in points:
@@ -413,12 +791,15 @@ def build_report(
                     for seq, value in low.per_seq_idf1().items()
                 },
                 "refined": (high.value - low.value) <= args.tol,
+                "reason": _refinement_reason(
+                    low, high, args, bisected_edges, unfinished, aborted
+                ),
             }
         )
 
-    return {
+    report = {
         "tool": "bridge_gate_breakpoints",
-        "schema_version": 1,
+        "schema_version": 2,
         "axis": args.axis,
         "fixed_axes": {a: getattr(args, a) for a in AXES if a != args.axis},
         "dataset": {
@@ -429,6 +810,7 @@ def build_report(
             "extra_eval_args": list(args.eval_arg),
         },
         "equality_predicate": "per-sequence (idtp, idfp, idfn) vector",
+        "gate_contract": "h_lo <= ratio <= h_hi (both bounds inclusive)",
         "scan": {"lo": args.lo, "hi": args.hi, "points": args.scan},
         "measurements": [
             {"value": m.value, "idf1": m.idf1, "out_dir": m.out_dir} for m in points
@@ -440,13 +822,17 @@ def build_report(
         "limits": [
             "equal endpoints do not prove the absence of a jump between them; "
             "plateaus mean 'no jump detected at the scan resolution'",
-            "an unrefined jump (width > --tol) means the scan bracket held "
-            "more than one jump and bisection converged to a different one; "
-            "raise --scan to separate them",
+            "a jump wider than --tol is not by itself evidence of anything: "
+            "each breakpoint carries a 'reason' saying why it was not narrowed",
             "breakpoint locations are data values, so they are a property of "
             "this dataset's feature distribution, not of the gate",
+            "the context fingerprint digests image frames by name and size "
+            "only, so it detects a different dataset, not a repainted frame",
         ],
     }
+    if context is not None:
+        report["context"] = context
+    return report
 
 
 def print_table(report: dict) -> None:
@@ -465,13 +851,13 @@ def print_table(report: dict) -> None:
     if not report["breakpoints"]:
         print("  none detected at this scan resolution")
     for b in report["breakpoints"]:
-        mark = "" if b["refined"] else "   [UNREFINED - may hide further jumps]"
         print(
             f"  ({b['lower_bound']:.8g}, {b['upper_bound']:.8g}]  "
             f"width={b['width']:.3g}  "
             f"IDF1 {b['idf1_below']:.3f} -> {b['idf1_above']:.3f}  "
-            f"(delta {b['delta_idf1']:+.3f}){mark}"
+            f"(delta {b['delta_idf1']:+.3f})"
         )
+        print(f"      {'refined' if b['refined'] else 'UNREFINED'}: {b['reason']}")
         worst = sorted(b["per_seq_delta_idf1"].items(), key=lambda kv: kv[1])[:2]
         for seq, delta in worst:
             if abs(delta) >= 0.05:
@@ -516,7 +902,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help=(
             "Extra argument forwarded verbatim to mot17.py (repeatable). Use "
             "the equals form for values starting with '-', e.g. "
-            "--eval-arg=--seq-limit --eval-arg=2."
+            "--eval-arg=--seq-limit --eval-arg=2. Flags this tool owns "
+            "(gate/preset/dataset/output/decode/reid-mode) are rejected."
         ),
     )
     p.add_argument("--work-dir", required=True, help="Run outputs and result cache.")
@@ -539,9 +926,41 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument(
         "--dry-run",
         action="store_true",
-        help="Print the planned eval commands without running them.",
+        help=(
+            "Print the planned scan-grid eval commands and exit. Runs nothing, "
+            "reads nothing from the cache and writes nothing to it."
+        ),
     )
-    return p.parse_args(argv)
+    args = p.parse_args(argv)
+    bad = rejected_eval_args(args.eval_arg)
+    if bad:
+        p.error(
+            "--eval-arg may not carry flags this tool owns: "
+            + "; ".join(f"{token!r} resolves to {owned}" for token, owned in bad)
+        )
+    return args
+
+
+def dry_run(args: argparse.Namespace) -> int:
+    """Print the scan-grid commands. No eval, no cache, no report.
+
+    A report would have to invent measurements, and the bisection's own
+    evaluations cannot be planned at all: which midpoints get measured is
+    decided by what the earlier measurements say.
+    """
+    step = (args.hi - args.lo) / (args.scan - 1)
+    print(f"# {args.scan} scan point(s) on --axis {args.axis}; nothing is executed")
+    for i in range(args.scan):
+        value = args.lo + i * step
+        params = params_for(args, value)
+        cmd = eval_command(args, params, out_dir_for(args, params))
+        print(f"[scan {i + 1}/{args.scan}] {value:.6g}")
+        print("  " + " ".join(cmd))
+    print(
+        "# bisection evaluations depend on these results and cannot be listed "
+        "in advance"
+    )
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -549,8 +968,18 @@ def main(argv: list[str] | None = None) -> int:
     if args.hi <= args.lo:
         print("--hi must exceed --lo", file=sys.stderr)
         return 2
+    if args.scan < 2:
+        print("--scan must be at least 2", file=sys.stderr)
+        return 2
+    if args.dry_run:
+        return dry_run(args)
 
-    runner = Runner(args)
+    try:
+        runner = Runner(args)
+    except CacheContextMismatch as exc:
+        print(f"REFUSING CACHE: {exc}", file=sys.stderr)
+        return 2
+
     samples = scan(runner, args.lo, args.hi, args.scan)
     brackets = brackets_from_scan(samples)
     print(f"\n{len(brackets)} bracket(s) contain a jump", file=sys.stderr, flush=True)
@@ -575,7 +1004,14 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
 
-    report = build_report(args, list(runner.seen.values()), runner.runs)
+    report = build_report(
+        args,
+        list(runner.seen.values()),
+        runner.runs,
+        brackets=brackets,
+        aborted=failure,
+        context=runner.context,
+    )
     if failure is not None:
         report["incomplete"] = failure
     if args.json:

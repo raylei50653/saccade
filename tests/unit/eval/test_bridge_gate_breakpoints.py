@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 from pathlib import Path
 
@@ -33,20 +34,35 @@ def _measurement(value: float, per_seq: dict[str, dict[str, int]]):
 
 
 class _StepRunner:
-    """Synthetic piecewise-constant metric with jumps at known locations."""
+    """Synthetic piecewise-constant metric with jumps at known locations.
 
-    def __init__(self, jumps: list[float]) -> None:
+    ``inclusive`` models the real gate, whose bounds are closed (the CUDA kernel
+    rejects only outside ``[h_lo, h_hi]``): a threshold set exactly to an
+    observed ratio already behaves like the values above it.
+    """
+
+    def __init__(self, jumps: list[float], inclusive: bool = False) -> None:
         self.jumps = jumps
+        self.inclusive = inclusive
         self.runs = 0
         self.seen: dict[float, object] = {}
 
     def measure(self, value: float):
         self.runs += 1
-        level = sum(1 for j in self.jumps if value > j)
+        if self.inclusive:
+            level = sum(1 for j in self.jumps if value >= j)
+        else:
+            level = sum(1 for j in self.jumps if value > j)
         per_seq = {"S1": {"idtp": 1000 - 10 * level, "idfp": 5, "idfn": 20}}
         m = _measurement(value, per_seq)
         self.seen[value] = m
         return m
+
+
+def _args(*extra: str, lo: str = "1.2", hi: str = "1.8", work_dir: str = "unused"):
+    return bp.parse_args(
+        ["--axis", "h_hi", "--lo", lo, "--hi", hi, "--work-dir", work_dir, *extra]
+    )
 
 
 def test_pooled_idf1_pools_counts_instead_of_averaging() -> None:
@@ -186,13 +202,305 @@ def test_unrefined_jumps_are_flagged() -> None:
     """A jump wider than --tol may hide siblings and must say so."""
     runner = _StepRunner([1.62, 1.64, 1.66])
     samples = bp.scan(runner, 1.6, 1.8, 5)
-    for bracket in bp.brackets_from_scan(samples):
+    brackets = bp.brackets_from_scan(samples)
+    for bracket in brackets:
         bp.bisect(runner, bracket, 1e-3)
 
-    args = bp.parse_args(
-        ["--axis", "h_hi", "--lo", "1.6", "--hi", "1.8", "--work-dir", "unused"]
+    args = _args(lo="1.6", hi="1.8")
+    report = bp.build_report(
+        args, list(runner.seen.values()), runner.runs, brackets=brackets
     )
-    report = bp.build_report(args, list(runner.seen.values()), runner.runs)
 
     assert any(not b["refined"] for b in report["breakpoints"])
     assert all(b["width"] <= args.tol for b in report["breakpoints"] if b["refined"])
+
+
+# --------------------------------------------------------------------------
+# why a jump is unrefined: reported, never presumed
+# --------------------------------------------------------------------------
+
+
+def test_unrefined_reason_names_multiple_jumps_only_when_that_is_the_cause() -> None:
+    """A wide gap after a full bisection is the multiple-jump residual.
+
+    The tool used to print that explanation for *every* unrefined jump, so
+    --scan-only, an aborted run and a bracket nobody reached all read as "this
+    bracket held several jumps" -- a claim about the data the run never made.
+    """
+    runner = _StepRunner([1.62, 1.64, 1.66])
+    samples = bp.scan(runner, 1.6, 1.8, 5)
+    brackets = bp.brackets_from_scan(samples)
+    for bracket in brackets:
+        bp.bisect(runner, bracket, 1e-3)
+
+    args = _args(lo="1.6", hi="1.8")
+    report = bp.build_report(
+        args, list(runner.seen.values()), runner.runs, brackets=brackets
+    )
+
+    wide = [b for b in report["breakpoints"] if not b["refined"]]
+    assert wide, "this fixture must leave a residual gap"
+    assert all("more than one jump" in b["reason"] for b in wide)
+    for b in report["breakpoints"]:
+        if b["refined"]:
+            assert "more than one jump" not in b["reason"]
+            assert "--tol" in b["reason"]
+
+
+def test_scan_only_says_bisection_was_never_attempted() -> None:
+    runner = _StepRunner([1.35])
+    samples = bp.scan(runner, 1.2, 1.8, 7)
+    brackets = bp.brackets_from_scan(samples)
+
+    args = _args("--scan-only")
+    report = bp.build_report(
+        args, list(runner.seen.values()), runner.runs, brackets=brackets
+    )
+
+    assert len(report["breakpoints"]) == 1
+    reason = report["breakpoints"][0]["reason"]
+    assert "--scan-only" in reason
+    assert "more than one jump" not in reason
+
+
+def test_aborted_run_says_it_never_reached_the_bracket() -> None:
+    runner = _StepRunner([1.35, 1.75])
+    samples = bp.scan(runner, 1.2, 1.8, 7)
+    brackets = bp.brackets_from_scan(samples)
+    assert len(brackets) == 2
+    bp.bisect(runner, brackets[0], 1e-4)  # the second one never runs
+
+    args = _args()
+    report = bp.build_report(
+        args,
+        list(runner.seen.values()),
+        runner.runs,
+        brackets=brackets,
+        aborted="eval failed (1); see run.log",
+    )
+
+    reasons = {b["reason"] for b in report["breakpoints"] if not b["refined"]}
+    assert any("aborted" in r for r in reasons), reasons
+    assert all("more than one jump" not in r for r in reasons)
+
+
+def test_bisected_jump_reports_how_it_was_narrowed() -> None:
+    runner = _StepRunner([1.35])
+    samples = bp.scan(runner, 1.2, 1.8, 7)
+    brackets = bp.brackets_from_scan(samples)
+    bp.bisect(runner, brackets[0], 1e-4)
+
+    args = _args("--tol", "1e-4")
+    report = bp.build_report(
+        args, list(runner.seen.values()), runner.runs, brackets=brackets
+    )
+
+    refined = [b for b in report["breakpoints"] if b["refined"]]
+    assert len(refined) == 1
+    assert refined[0]["reason"] == "bisected to <= --tol"
+
+
+# --------------------------------------------------------------------------
+# the gate is closed on both bounds
+# --------------------------------------------------------------------------
+
+
+def test_documented_gate_contract_matches_the_cuda_kernel() -> None:
+    """The docstring said ``h_lo < ratio < h_hi``; the kernel disagrees.
+
+    tracker_gpu.cu rejects only outside the band, so both bounds are inclusive.
+    A tool that documents a strict gate mis-describes which side of a breakpoint
+    a threshold sitting exactly on an observed ratio lands on.
+    """
+    kernel = (PROJECT_ROOT / "src/tracking/tracker_gpu.cu").read_text()
+    assert "hr < bridge_h_lo || hr > bridge_h_hi" in kernel, (
+        "the gate's comparison moved; re-check the documented contract"
+    )
+
+    doc = TOOL_PATH.read_text()
+    assert "h_lo <= ratio <= h_hi" in doc
+    assert "h_lo < ratio < h_hi" not in doc
+
+
+def test_closed_gate_boundary_belongs_to_the_upper_plateau() -> None:
+    """With a closed gate, the jump happens *at* the observed ratio.
+
+    The reported bracket is half-open on the left, ``(lower, upper]``, so the
+    breakpoint value itself must be the upper bound -- not an interior point of
+    a plateau claimed to be flat.
+    """
+    jump = 1.5  # sits exactly on a scan grid point of this range
+    runner = _StepRunner([jump], inclusive=True)
+    samples = bp.scan(runner, 1.2, 1.8, 7)
+    brackets = bp.brackets_from_scan(samples)
+    assert len(brackets) == 1
+    assert brackets[0].high.value == pytest.approx(jump)
+
+    bp.bisect(runner, brackets[0], 1e-4)
+    assert brackets[0].low.value < jump <= brackets[0].high.value
+
+    args = _args("--tol", "1e-4")
+    report = bp.build_report(
+        args, list(runner.seen.values()), runner.runs, brackets=brackets
+    )
+    at_boundary = [m for m in runner.seen.values() if m.value == pytest.approx(jump)]
+    assert at_boundary
+    upper = [p for p in report["plateaus"] if p["from"] <= jump <= p["to"]][0]
+    assert upper["from"] == pytest.approx(jump), "the boundary opens the plateau"
+    assert report["gate_contract"].startswith("h_lo <= ratio <= h_hi")
+
+
+# --------------------------------------------------------------------------
+# --eval-arg may not override what the tool owns
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "token",
+    [
+        "--relink-bridge-h-hi",
+        "--relink-bridge-h-hi=9",
+        "--relink-bridge-h-h",  # mot17.py keeps argparse abbreviation on
+        "--preset",
+        "--output",
+        "--data-root",
+        "--no-gpu-decode",
+        "--reid-mode",
+    ],
+)
+def test_eval_arg_rejects_flags_the_tool_owns(token: str) -> None:
+    """A forwarded copy wins in mot17.py, so the report would mislabel the point.
+
+    Reproduced before the fix: --eval-arg=--relink-bridge-h-hi --eval-arg=9 on a
+    point measured at 1.2 ran the eval at 9.0 while the report still said 1.2.
+    """
+    with pytest.raises(SystemExit) as excinfo:
+        _args(f"--eval-arg={token}", "--eval-arg=9")
+    assert excinfo.value.code == 2
+
+
+def test_eval_arg_still_forwards_unrelated_flags() -> None:
+    args = _args("--eval-arg=--seq-limit", "--eval-arg=2")
+    assert args.eval_arg == ["--seq-limit", "2"]
+
+
+def test_eval_arg_values_are_not_mistaken_for_flags() -> None:
+    args = _args("--eval-arg=--sequences", "--eval-arg=MOT17-02-SDP")
+    assert args.eval_arg[1] == "MOT17-02-SDP"
+
+
+# --------------------------------------------------------------------------
+# --dry-run must not fabricate measurements
+# --------------------------------------------------------------------------
+
+
+def test_dry_run_writes_nothing_to_the_cache(tmp_path, capsys) -> None:
+    """Reproduced before the fix: --dry-run stored IDF1=100 for every point.
+
+    The fake entries were keyed exactly like real ones, so the next real run in
+    the same --work-dir served them as cache hits and executed no eval at all.
+    """
+    work = tmp_path / "bp"
+    code = bp.main(
+        [
+            "--axis",
+            "h_hi",
+            "--lo",
+            "1.2",
+            "--hi",
+            "1.4",
+            "--scan",
+            "2",
+            "--work-dir",
+            str(work),
+            "--dry-run",
+        ]
+    )
+    out = capsys.readouterr().out
+
+    assert code == 0
+    assert not (work / "cache.json").exists()
+    # and no report either: every number in one would have been invented
+    assert "IDF1" not in out
+    assert "plateaus" not in out
+    assert out.count("scripts/eval/mot17.py") == 2
+    assert "--relink-bridge-h-hi 1.2" in out
+
+
+# --------------------------------------------------------------------------
+# the cache is only valid under the context it was measured in
+# --------------------------------------------------------------------------
+
+
+def _fake_context(digest: str) -> dict:
+    return {
+        "schema": bp.CACHE_SCHEMA,
+        "bound": {"source": digest},
+        "component_digests": {"source": digest, "runtime": "same"},
+        "digest": digest,
+        "informational": {"git_head": "0" * 40},
+    }
+
+
+def _write_cache(work: Path, context: dict, entries: dict) -> None:
+    work.mkdir(parents=True, exist_ok=True)
+    (work / "cache.json").write_text(
+        json.dumps(
+            {"schema": bp.CACHE_SCHEMA, "context": context, "entries": entries},
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_cache_serves_points_measured_under_the_same_context(
+    tmp_path, monkeypatch
+) -> None:
+    work = tmp_path / "bp"
+    monkeypatch.setattr(bp, "context_fingerprint", lambda args: _fake_context("abc"))
+    args = _args(work_dir=str(work))
+    _write_cache(work, _fake_context("abc"), {})
+
+    runner = bp.Runner(args)
+    assert runner.cache == {}
+
+
+def test_cache_from_a_different_context_is_refused(tmp_path, monkeypatch) -> None:
+    """A stale binary or edited source must not be mixed into a fresh report.
+
+    The key held only paths and CLI values, so re-running after a rebuild in the
+    same --work-dir silently reused the old numbers.
+    """
+    work = tmp_path / "bp"
+    _write_cache(work, _fake_context("old"), {"{}": {}})
+    monkeypatch.setattr(bp, "context_fingerprint", lambda args: _fake_context("new"))
+
+    with pytest.raises(bp.CacheContextMismatch) as excinfo:
+        bp.Runner(_args(work_dir=str(work)))
+    assert "source" in str(excinfo.value)
+
+
+def test_cache_without_a_context_fingerprint_is_refused(tmp_path, monkeypatch) -> None:
+    """Caches written before this check carry no evidence of what produced them."""
+    work = tmp_path / "bp"
+    work.mkdir(parents=True)
+    (work / "cache.json").write_text(json.dumps({"{}": {"idf1": 80.0}}), "utf-8")
+    monkeypatch.setattr(bp, "context_fingerprint", lambda args: _fake_context("new"))
+
+    with pytest.raises(bp.CacheContextMismatch):
+        bp.Runner(_args(work_dir=str(work)))
+
+
+def test_context_mismatch_fails_closed_at_the_command_line(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    work = tmp_path / "bp"
+    _write_cache(work, _fake_context("old"), {})
+    monkeypatch.setattr(bp, "context_fingerprint", lambda args: _fake_context("new"))
+
+    code = bp.main(
+        ["--axis", "h_hi", "--lo", "1.2", "--hi", "1.4", "--work-dir", str(work)]
+    )
+
+    assert code == 2
+    assert "REFUSING CACHE" in capsys.readouterr().err
