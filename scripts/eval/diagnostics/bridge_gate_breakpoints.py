@@ -23,12 +23,12 @@ Bisection is available here because the underlying measurement is bit-exact
 *equality* a usable predicate.  A bracket whose endpoints differ can then be
 narrowed to any width in O(log(1/tol)) evaluations instead of O(1/tol) grid
 points.  Endpoints are compared on the **per-sequence (idtp, idfp, idfn)
-vector**, not on pooled IDF1: two genuinely different decision sets can collide
-on a rounded (or even exact) pooled scalar.
+vector**, not pooled IDF1: different decision sets can collide on that scalar.
 
 Measurements are cached under ``--work-dir`` and bound to a context fingerprint
-(source tree, native extensions, preset and the model/engine files it names,
-dataset contents, interpreter/torch/GPU): a mismatch fails closed rather than
+(source tree by content, the native extensions the eval itself would import,
+the whole child environment, the preset and every model/engine file it names,
+every dataset byte, interpreter/torch/GPU): a mismatch fails closed rather than
 mixing two measurement regimes, so point ``--work-dir`` somewhere fresh.
 
 Limits (these are properties of the method, not of the implementation)
@@ -42,8 +42,8 @@ Limits (these are properties of the method, not of the implementation)
 3. Breakpoint locations are **data values**, i.e. a property of this dataset's
    ratio distribution rather than of the gate.  Do not expect them to transfer
    to another dataset; see the 2026-08-08 cross-dataset note.
-4. The fingerprint digests ground truth and sequence metadata by content but
-   image frames by (name, size) only: a different dataset, not a repainted pixel.
+4. Bit-exactness is a premise, not a finding: the tool refuses a preset that is
+   not explicitly reid-off, and pins ``--reid-mode off`` on the eval command.
 
 Usage: one axis per invocation
 ------------------------------
@@ -124,11 +124,50 @@ NATIVE_MODULES = (
     "saccade_eval_ext",
     "saccade_media_ext",
 )
+# The child environment is bound in full, minus names nothing on the eval path
+# can read.  An allowlist would have to be right about every knob that reaches
+# the tracker (there are >60 SACCADE_* alone, several of which move boxes and
+# scores); a denylist only has to be right about the handful it names, and each
+# of these is terminal or session decoration.
+ENV_IGNORED_NAMES = frozenset(
+    {
+        "_",
+        "COLORTERM",
+        "COLUMNS",
+        "LINES",
+        "OLDPWD",
+        "PWD",
+        "SHLVL",
+        "TERM",
+        "TERM_PROGRAM",
+        "TERM_PROGRAM_VERSION",
+        "TERM_SESSION_ID",
+        "WINDOWID",
+    }
+)
+ENV_IGNORED_PREFIXES = ("SSH_", "TMUX", "CLAUDE", "VSCODE_", "ITERM")
 
+# The probe must resolve the extensions the *eval* will import, so it repeats
+# scripts/eval/mot17.py's sys.path prologue verbatim -- SACCADE_BUILD_PATH and
+# all.  Resolving them against this process's own sys.path instead reported the
+# .so in build/ while the eval loaded a different one.
 _PROBE_SRC = """
-import importlib.util, json, sys
+import importlib.util, json, os, sys
 
-out = {"executable": sys.executable, "python_version": sys.version.split()[0]}
+root = sys.argv[2]
+sys.path.insert(0, root)
+src = os.path.join(root, "src")
+if os.path.exists(src):
+    sys.path.insert(0, src)
+build = os.environ.get("SACCADE_BUILD_PATH", os.path.join(root, "build"))
+if os.path.exists(build):
+    sys.path.insert(0, build)
+
+out = {
+    "executable": sys.executable,
+    "python_version": sys.version.split()[0],
+    "build_path": build,
+}
 mods = {}
 for name in json.loads(sys.argv[1]):
     try:
@@ -221,7 +260,12 @@ def eval_command(
     ]
     if args.detector:
         cmd += ["--detector", args.detector]
-    cmd += ["--double-buffer", "--no-gpu-decode"]
+    # --reid-mode off is pinned on the command line, where it outranks every
+    # config layer: the bit-exactness the equality predicate rests on is not
+    # something to leave to whatever the preset happened to say.  main() also
+    # refuses a preset that does not already say off, so the pin never silently
+    # re-purposes a run the caller asked for.
+    cmd += ["--double-buffer", "--no-gpu-decode", "--reid-mode", "off"]
     for axis in AXES:
         cmd += [FLAG[axis], f"{params[axis]:.10g}"]
     cmd += list(args.eval_arg)
@@ -229,6 +273,11 @@ def eval_command(
 
 
 def eval_env() -> dict[str, str]:
+    """The one child environment used for every subprocess this tool starts.
+
+    Built once and shared by the runtime probe and the eval runs, so what was
+    fingerprinted is what ran.
+    """
     env = dict(os.environ)
     torch_lib = REPO_ROOT / ".venv/lib/python3.12/site-packages/torch/lib"
     if torch_lib.is_dir():
@@ -236,6 +285,28 @@ def eval_env() -> dict[str, str]:
             ":"
         )
     return env
+
+
+def _env_component(env: dict[str, str]) -> dict:
+    """Bind the whole child environment; several SACCADE_* knobs move boxes.
+
+    Values are digested rather than listed -- an environment carries
+    credentials -- except SACCADE_* overrides, which are what a reader needs to
+    see and are never secrets.
+    """
+    bound = {
+        name: value
+        for name, value in env.items()
+        if name not in ENV_IGNORED_NAMES and not name.startswith(ENV_IGNORED_PREFIXES)
+    }
+    return {
+        "bound_variables": len(bound),
+        "ignored": sorted(set(env) - set(bound)),
+        "saccade_overrides": {
+            k: v for k, v in sorted(bound.items()) if k.startswith("SACCADE_")
+        },
+        "digest": _digest(sorted(bound.items())),
+    }
 
 
 def rejected_eval_args(eval_args: list[str]) -> list[tuple[str, str]]:
@@ -255,6 +326,39 @@ def rejected_eval_args(eval_args: list[str]) -> list[tuple[str, str]]:
                 bad.append((token, owned))
                 break
     return bad
+
+
+def resolve_reid_mode(args: argparse.Namespace) -> tuple[str, str]:
+    """Return (reid_mode, where it was read from) for the preset being measured."""
+    import yaml
+
+    preset_path = REPO_ROOT / "configs" / "presets" / f"{args.preset}.yaml"
+    if not preset_path.is_file():
+        return "", f"no such preset: {preset_path}"
+    loaded = yaml.safe_load(preset_path.read_text(encoding="utf-8")) or {}
+    if "reid_mode" not in loaded:
+        return "", f"{preset_path.relative_to(REPO_ROOT)} does not set reid_mode"
+    return str(loaded["reid_mode"]), str(preset_path.relative_to(REPO_ROOT))
+
+
+def premise_violation(args: argparse.Namespace) -> str | None:
+    """Why this run cannot support bisection, or None.
+
+    Bisection here is licensed by one thing: the measurement is bit-exact, so
+    N=1 suffices and *equality* is a usable predicate. That holds with ReID off;
+    with ReID doing appearance work it does not, and every plateau and jump the
+    tool reported would be an artefact of run-to-run variation. The tool has no
+    way to tell that apart after the fact, so it refuses up front rather than
+    publishing numbers whose premise is false.
+    """
+    mode, origin = resolve_reid_mode(args)
+    if mode != "off":
+        return (
+            f"--preset {args.preset} resolves to reid_mode={mode or '<unset>'} "
+            f"({origin}); this tool requires an explicitly reid-off preset, "
+            f"because bisection on a non-bit-exact metric measures noise"
+        )
+    return None
 
 
 # --------------------------------------------------------------------------
@@ -338,31 +442,37 @@ def _dataset_component(args: argparse.Namespace) -> dict:
     split_dir = root / args.split
     digest = hashlib.sha256()
     sequences = 0
-    frames = 0
+    files = 0
+    payload = 0
     dirs = (
         sorted(p for p in split_dir.iterdir() if p.is_dir())
         if split_dir.is_dir()
         else []
     )
+    # The bound unit is the whole sequence directory -- frames, ground truth,
+    # public detections, labels, seqinfo -- digested by content.  Picking out
+    # "the files that matter" is the judgement call that let a repainted frame
+    # through when frames were bound by (name, size).
     for seq in dirs:
         if args.detector and not seq.name.endswith(args.detector):
             continue
         sequences += 1
         digest.update(seq.name.encode())
-        for meta in (seq / "gt" / "gt.txt", seq / "seqinfo.ini"):
-            digest.update(_sha256_file(meta).encode() if meta.is_file() else b"absent")
-        img_dir = seq / "img1"
-        if img_dir.is_dir():
-            for frame in sorted(img_dir.iterdir()):
-                frames += 1
-                digest.update(f"{frame.name}:{frame.stat().st_size}".encode())
+        for path in sorted(seq.rglob("*")):
+            if not path.is_file():
+                continue
+            files += 1
+            payload += path.stat().st_size
+            digest.update(str(path.relative_to(seq)).encode())
+            digest.update(_sha256_file(path).encode())
     return {
         "split_dir": str(split_dir),
         "detector": args.detector,
         "sequences": sequences,
-        "frames": frames,
+        "files": files,
+        "bytes": payload,
         "digest": digest.hexdigest(),
-        "frame_coverage": "name+size only (contents not digested)",
+        "coverage": "sha256 of every file under each matched sequence directory",
     }
 
 
@@ -381,11 +491,17 @@ def _gpu_identity() -> str:
     return " | ".join(line.strip() for line in proc.stdout.strip().splitlines())
 
 
-def _runtime_component(args: argparse.Namespace) -> dict:
+def _runtime_component(args: argparse.Namespace, env: dict[str, str]) -> dict:
     proc = subprocess.run(
-        [args.python, "-c", _PROBE_SRC, json.dumps(list(NATIVE_MODULES))],
+        [
+            args.python,
+            "-c",
+            _PROBE_SRC,
+            json.dumps(list(NATIVE_MODULES)),
+            str(REPO_ROOT),
+        ],
         cwd=REPO_ROOT,
-        env=eval_env(),
+        env=env,
         capture_output=True,
         text=True,
     )
@@ -406,6 +522,7 @@ def _runtime_component(args: argparse.Namespace) -> dict:
     return {
         "interpreter": info["executable"],
         "python_version": info["python_version"],
+        "build_path": info["build_path"],
         "torch": info["torch"],
         "torch_cuda": info["torch_cuda"],
         "native_extensions": natives,
@@ -413,8 +530,11 @@ def _runtime_component(args: argparse.Namespace) -> dict:
     }
 
 
-def context_fingerprint(args: argparse.Namespace) -> dict:
+def context_fingerprint(args: argparse.Namespace, env: dict[str, str]) -> dict:
     """Everything a cached measurement is only valid under.
+
+    ``env`` must be the same environment the eval runs get, or the fingerprint
+    describes a run that never happened.
 
     ``bound`` is what the cache is checked against; ``informational`` is
     recorded for the reader and deliberately excluded, because a git head moves
@@ -424,7 +544,8 @@ def context_fingerprint(args: argparse.Namespace) -> dict:
         "source": _source_component(),
         "config": _config_component(args),
         "dataset": _dataset_component(args),
-        "runtime": _runtime_component(args),
+        "environment": _env_component(env),
+        "runtime": _runtime_component(args, env),
     }
     return {
         "schema": CACHE_SCHEMA,
@@ -457,7 +578,8 @@ class Runner:
         self.work_dir = Path(args.work_dir)
         self.work_dir.mkdir(parents=True, exist_ok=True)
         self.cache_path = self.work_dir / "cache.json"
-        self.context = context_fingerprint(args)
+        self.env = eval_env()
+        self.context = context_fingerprint(args, self.env)
         self.cache: dict[str, dict] = {}
         if self.cache_path.exists():
             stored = json.loads(self.cache_path.read_text(encoding="utf-8"))
@@ -587,7 +709,7 @@ class Runner:
 
     def _run_eval(self, params: dict[str, float], out_dir: Path) -> None:
         cmd = eval_command(self.args, params, out_dir)
-        env = eval_env()
+        env = self.env
 
         print(f"  run {' '.join(cmd[-8:])}", file=sys.stderr, flush=True)
         for attempt in range(1, self.args.retries + 2):
@@ -650,6 +772,7 @@ class Bracket:
     low: Measurement
     high: Measurement
     refined: bool = False
+    attempted: bool = False
     history: list[float] = field(default_factory=list)
 
     @property
@@ -678,6 +801,7 @@ def brackets_from_scan(samples: list[Measurement]) -> list[Bracket]:
 
 
 def bisect(runner: Runner, bracket: Bracket, tol: float) -> Bracket:
+    bracket.attempted = True
     low, high = bracket.low, bracket.high
     while high.value - low.value > tol:
         mid_value = 0.5 * (low.value + high.value)
@@ -722,12 +846,22 @@ def _refinement_reason(
         return "bisection stopped early: float resolution exhausted before --tol"
     if args.scan_only:
         return "not bisected: --scan-only"
-    inside_unfinished = any(
-        b.low.value <= low.value and high.value <= b.high.value for b in unfinished
+    enclosing = next(
+        (
+            b
+            for b in unfinished
+            if b.low.value <= low.value and high.value <= b.high.value
+        ),
+        None,
     )
-    if inside_unfinished:
+    if enclosing is not None:
+        # A bracket that was being bisected when the run died has measured
+        # points inside it and is not the same story as one nobody reached.
+        if enclosing.attempted:
+            detail = f" ({aborted})" if aborted is not None else ""
+            return f"not narrowed to --tol: bisection of this bracket stopped part-way{detail}"
         if aborted is not None:
-            return f"not bisected: run aborted before this bracket ({aborted})"
+            return f"not bisected: run aborted before reaching this bracket ({aborted})"
         return "not bisected: bisection did not reach this bracket"
     return (
         "residual gap: the enclosing scan bracket held more than one jump and "
@@ -826,8 +960,6 @@ def build_report(
             "each breakpoint carries a 'reason' saying why it was not narrowed",
             "breakpoint locations are data values, so they are a property of "
             "this dataset's feature distribution, not of the gate",
-            "the context fingerprint digests image frames by name and size "
-            "only, so it detects a different dataset, not a repainted frame",
         ],
     }
     if context is not None:
@@ -970,6 +1102,10 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     if args.scan < 2:
         print("--scan must be at least 2", file=sys.stderr)
+        return 2
+    violation = premise_violation(args)
+    if violation is not None:
+        print(f"REFUSING TO MEASURE: {violation}", file=sys.stderr)
         return 2
     if args.dry_run:
         return dry_run(args)

@@ -457,7 +457,9 @@ def test_cache_serves_points_measured_under_the_same_context(
     tmp_path, monkeypatch
 ) -> None:
     work = tmp_path / "bp"
-    monkeypatch.setattr(bp, "context_fingerprint", lambda args: _fake_context("abc"))
+    monkeypatch.setattr(
+        bp, "context_fingerprint", lambda args, env: _fake_context("abc")
+    )
     args = _args(work_dir=str(work))
     _write_cache(work, _fake_context("abc"), {})
 
@@ -473,7 +475,9 @@ def test_cache_from_a_different_context_is_refused(tmp_path, monkeypatch) -> Non
     """
     work = tmp_path / "bp"
     _write_cache(work, _fake_context("old"), {"{}": {}})
-    monkeypatch.setattr(bp, "context_fingerprint", lambda args: _fake_context("new"))
+    monkeypatch.setattr(
+        bp, "context_fingerprint", lambda args, env: _fake_context("new")
+    )
 
     with pytest.raises(bp.CacheContextMismatch) as excinfo:
         bp.Runner(_args(work_dir=str(work)))
@@ -485,7 +489,9 @@ def test_cache_without_a_context_fingerprint_is_refused(tmp_path, monkeypatch) -
     work = tmp_path / "bp"
     work.mkdir(parents=True)
     (work / "cache.json").write_text(json.dumps({"{}": {"idf1": 80.0}}), "utf-8")
-    monkeypatch.setattr(bp, "context_fingerprint", lambda args: _fake_context("new"))
+    monkeypatch.setattr(
+        bp, "context_fingerprint", lambda args, env: _fake_context("new")
+    )
 
     with pytest.raises(bp.CacheContextMismatch):
         bp.Runner(_args(work_dir=str(work)))
@@ -496,7 +502,9 @@ def test_context_mismatch_fails_closed_at_the_command_line(
 ) -> None:
     work = tmp_path / "bp"
     _write_cache(work, _fake_context("old"), {})
-    monkeypatch.setattr(bp, "context_fingerprint", lambda args: _fake_context("new"))
+    monkeypatch.setattr(
+        bp, "context_fingerprint", lambda args, env: _fake_context("new")
+    )
 
     code = bp.main(
         ["--axis", "h_hi", "--lo", "1.2", "--hi", "1.4", "--work-dir", str(work)]
@@ -504,3 +512,158 @@ def test_context_mismatch_fails_closed_at_the_command_line(
 
     assert code == 2
     assert "REFUSING CACHE" in capsys.readouterr().err
+
+
+# --------------------------------------------------------------------------
+# the fingerprint must describe the run that actually happens
+# --------------------------------------------------------------------------
+
+
+def test_environment_is_bound_because_it_changes_the_measurement() -> None:
+    """SACCADE_* knobs reach the tracker; the fingerprint missed them entirely.
+
+    Reproduced before the fix: setting SACCADE_SCORE_JITTER (which perturbs
+    boxes and scores) left the context digest byte-identical, so the cache
+    happily served numbers measured without it.
+    """
+    base = {"PATH": "/usr/bin", "TERM": "xterm-256color"}
+    jittered = dict(base, SACCADE_SCORE_JITTER="7:0.05:1.0")
+
+    assert bp._env_component(base)["digest"] != bp._env_component(jittered)["digest"]
+    assert bp._env_component(jittered)["saccade_overrides"] == {
+        "SACCADE_SCORE_JITTER": "7:0.05:1.0"
+    }
+
+
+def test_terminal_decoration_does_not_invalidate_the_cache() -> None:
+    """Fail-closed is only usable if it closes on things that can matter."""
+    a = {"PATH": "/usr/bin", "TERM": "xterm", "SHLVL": "1", "SSH_TTY": "/dev/pts/0"}
+    b = {"PATH": "/usr/bin", "TERM": "dumb", "SHLVL": "4"}
+
+    assert bp._env_component(a)["digest"] == bp._env_component(b)["digest"]
+
+
+def test_env_values_are_not_stored_in_the_clear() -> None:
+    """The cache file is a work artefact; the environment carries credentials."""
+    component = bp._env_component({"SECRET_TOKEN": "hunter2", "PATH": "/usr/bin"})
+    assert "hunter2" not in json.dumps(component)
+
+
+def test_probe_resolves_extensions_the_way_the_eval_will(tmp_path) -> None:
+    """mot17.py honours SACCADE_BUILD_PATH; the probe used to ignore it.
+
+    Reproduced before the fix: with SACCADE_BUILD_PATH pointing elsewhere, the
+    eval loaded one saccade_tracking_ext and the fingerprint hashed another.
+    """
+    fake_build = tmp_path / "build-alt"
+    fake_build.mkdir()
+    (fake_build / "saccade_tracking_ext.py").write_text("# stand-in\n", "utf-8")
+
+    env = dict(bp.eval_env(), SACCADE_BUILD_PATH=str(fake_build))
+    runtime = bp._runtime_component(_args(), env)
+
+    assert runtime["build_path"] == str(fake_build)
+    origin = runtime["native_extensions"]["saccade_tracking_ext"]["origin"]
+    assert origin == str(fake_build / "saccade_tracking_ext.py")
+    assert runtime["native_extensions"]["saccade_tracking_ext"]["sha256"]
+
+
+def _make_sequence(root: Path, name: str, frame_bytes: bytes) -> None:
+    seq = root / name
+    (seq / "gt").mkdir(parents=True)
+    (seq / "gt" / "gt.txt").write_text("1,1,0,0,10,10,1,1,1\n", "utf-8")
+    (seq / "seqinfo.ini").write_text("[Sequence]\nseqLength=1\n", "utf-8")
+    (seq / "img1").mkdir()
+    (seq / "img1" / "000001.jpg").write_bytes(frame_bytes)
+
+
+def test_frame_contents_are_digested_not_just_their_size(tmp_path) -> None:
+    """Same name, same size, different pixels used to pass as the same dataset."""
+    root = tmp_path / "DS"
+    _make_sequence(root / "train", "SEQ-01-SDP", b"\xff\xd8original")
+    args = _args("--data-root", str(root), "--split", "train")
+    before = bp._dataset_component(args)
+
+    frame = root / "train" / "SEQ-01-SDP" / "img1" / "000001.jpg"
+    frame.write_bytes(b"\xff\xd8repainted"[: len(b"\xff\xd8original")])
+    after = bp._dataset_component(args)
+
+    assert before["files"] == after["files"] == 3
+    assert frame.stat().st_size == len(b"\xff\xd8original")
+    assert before["digest"] != after["digest"]
+
+
+# --------------------------------------------------------------------------
+# bit-exactness is a premise, so it is enforced rather than assumed
+# --------------------------------------------------------------------------
+
+
+def test_eval_command_pins_reid_off() -> None:
+    args = _args()
+    cmd = bp.eval_command(args, {"px": 0.4, "h_lo": 0.6, "h_hi": 1.7}, Path("out"))
+    assert cmd[cmd.index("--reid-mode") + 1] == "off"
+
+
+@pytest.mark.parametrize(
+    "preset", ["fpn_reid_baseline", "mamba_whole_graph_m_extract_ho_live"]
+)
+def test_preset_that_is_not_reid_off_is_refused(preset: str, capsys) -> None:
+    """Bisection on a metric that is not bit-exact measures run-to-run noise."""
+    code = bp.main(
+        [
+            "--axis",
+            "h_hi",
+            "--lo",
+            "1.2",
+            "--hi",
+            "1.4",
+            "--work-dir",
+            "unused",
+            "--preset",
+            preset,
+        ]
+    )
+    err = capsys.readouterr().err
+
+    assert code == 2
+    assert "REFUSING TO MEASURE" in err
+    assert "reid_mode" in err
+
+
+def test_shipping_preset_still_satisfies_the_premise() -> None:
+    mode, origin = bp.resolve_reid_mode(_args())
+    assert mode == "off"
+    assert origin.endswith("mamba_whole_graph_m.yaml")
+    assert bp.premise_violation(_args()) is None
+
+
+# --------------------------------------------------------------------------
+# an aborted bracket is not a bracket nobody reached
+# --------------------------------------------------------------------------
+
+
+def test_abort_inside_a_bracket_is_not_reported_as_never_reached() -> None:
+    """The two states differ: one has measured points inside it, one does not."""
+    runner = _StepRunner([1.35, 1.75])
+    samples = bp.scan(runner, 1.2, 1.8, 7)
+    brackets = bp.brackets_from_scan(samples)
+    assert len(brackets) == 2
+
+    # first bracket: bisection starts and dies after one midpoint
+    brackets[0].attempted = True
+    runner.measure(0.5 * (brackets[0].low.value + brackets[0].high.value))
+
+    args = _args()
+    report = bp.build_report(
+        args,
+        list(runner.seen.values()),
+        runner.runs,
+        brackets=brackets,
+        aborted="eval failed (1); see run.log",
+    )
+
+    reasons = {b["reason"] for b in report["breakpoints"] if not b["refined"]}
+    started = [r for r in reasons if "stopped part-way" in r]
+    never = [r for r in reasons if "before reaching this bracket" in r]
+    assert started, reasons
+    assert never, reasons
