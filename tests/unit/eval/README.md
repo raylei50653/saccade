@@ -5,6 +5,7 @@
 
 | Test | Scope | Function | Lifecycle | Summary |
 |------|-------|----------|-----------|---------|
+| `test_bridge_gate_breakpoints.py` | eval | behavior | active | Unit tests for the bridge-gate breakpoint locator (scripts/eval/diagnostics). |
 | `test_calibrator.py` | perception | behavior | active | Tests for SaccadeInt8Calibrator (perception/calibrator.py). |
 | `test_clean_fifo_bank.py` | eval | behavior | active | Unit tests for CleanFifoBank — the reusable clean-FIFO embedding substrate. |
 | `test_compare_handover_summaries.py` | eval | behavior | active | Tests for the compare-handover-summaries diagnostics CLI (scripts/eval/diagnostics). |
