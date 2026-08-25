@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import math
 import os
 import sys
 from pathlib import Path
@@ -30,8 +31,30 @@ def _load_tool():
 bp = _load_tool()
 
 
-def _measurement(value: float, per_seq: dict[str, dict[str, int]]):
-    return bp.Measurement(value, bp._pooled_idf1(per_seq), per_seq, "fake")
+def _measurement(
+    value: float,
+    per_seq: dict[str, dict[str, int]],
+    *,
+    output_identity: object | None = None,
+):
+    payload = per_seq if output_identity is None else output_identity
+    per_seq_mot_sha256 = {
+        seq: bp._digest({"sequence": seq, "output": payload}) for seq in per_seq
+    }
+    mot_output_sha256 = bp._digest(
+        {
+            "schema": bp.MOT_OUTPUT_SCHEMA,
+            "per_sequence_sha256": per_seq_mot_sha256,
+        }
+    )
+    return bp.Measurement(
+        value,
+        bp._pooled_idf1(per_seq),
+        per_seq,
+        "fake",
+        mot_output_sha256,
+        per_seq_mot_sha256,
+    )
 
 
 class _StepRunner:
@@ -79,12 +102,11 @@ def test_pooled_idf1_pools_counts_instead_of_averaging() -> None:
     assert pooled != pytest.approx(naive_mean)
 
 
-def test_fingerprint_separates_runs_that_share_a_pooled_idf1() -> None:
-    """The equality predicate is the count vector, not the pooled scalar.
+def test_output_fingerprint_separates_runs_that_share_a_pooled_idf1() -> None:
+    """The equality predicate is canonical output, not the pooled scalar.
 
-    Two different decision outcomes can pool to exactly the same IDF1; using the
-    scalar as the bisection predicate would silently merge them into one
-    plateau.
+    Two different outputs can pool to exactly the same IDF1; using the scalar as
+    the bisection predicate would silently merge them into one plateau.
     """
     a = {
         "S1": {"idtp": 100, "idfp": 10, "idfn": 10},
@@ -98,6 +120,56 @@ def test_fingerprint_separates_runs_that_share_a_pooled_idf1() -> None:
     left, right = _measurement(1.0, a), _measurement(2.0, b)
     assert left.idf1 == pytest.approx(right.idf1)
     assert left.fingerprint != right.fingerprint
+
+
+def test_output_fingerprint_separates_identical_per_sequence_id_counts() -> None:
+    """Aggregate ID counts are metrics, not frame-level output identity."""
+    counts = {"S1": {"idtp": 100, "idfp": 10, "idfn": 10}}
+    left = _measurement(
+        1.0,
+        counts,
+        output_identity="1,7,10,10,20,40,0.9,-1,-1,-1",
+    )
+    right = _measurement(
+        2.0,
+        counts,
+        output_identity="1,8,10,10,20,40,0.9,-1,-1,-1",
+    )
+
+    assert left.per_seq == right.per_seq
+    assert left.idf1 == right.idf1
+    assert left.fingerprint != right.fingerprint
+    assert len(bp.brackets_from_scan([left, right])) == 1
+    report = bp.build_report(_args(), [left, right], runs=2)
+    breakpoint = report["breakpoints"][0]
+    assert breakpoint["delta_idf1"] == 0.0
+    assert (
+        breakpoint["left_outcome"]["mot_output_sha256"]
+        != breakpoint["right_outcome"]["mot_output_sha256"]
+    )
+
+
+def test_canonical_mot_output_normalises_only_newline_transport(
+    tmp_path,
+) -> None:
+    left = tmp_path / "left"
+    right = tmp_path / "right"
+    changed = tmp_path / "changed"
+    for directory in (left, right, changed):
+        directory.mkdir()
+
+    row = b"1,7,10,10,20,40,0.9,-1,-1,-1"
+    (left / "S1.txt").write_bytes(row + b"\r\n")
+    (right / "S1.txt").write_bytes(row + b"\n\n")
+    (changed / "S1.txt").write_bytes(row.replace(b",7,", b",8,") + b"\n")
+
+    left_digest, left_per_seq = bp._mot_output_identity(left)
+    right_digest, right_per_seq = bp._mot_output_identity(right)
+    changed_digest, _ = bp._mot_output_identity(changed)
+
+    assert left_digest == right_digest
+    assert left_per_seq == right_per_seq
+    assert changed_digest != left_digest
 
 
 def test_scan_brackets_only_intervals_that_actually_change() -> None:
@@ -323,13 +395,8 @@ def test_documented_gate_contract_matches_the_cuda_kernel() -> None:
     assert "h_lo < ratio < h_hi" not in doc
 
 
-def test_closed_gate_boundary_belongs_to_the_upper_plateau() -> None:
-    """With a closed gate, the jump happens *at* the observed ratio.
-
-    The reported bracket is half-open on the left, ``(lower, upper]``, so the
-    breakpoint value itself must be the upper bound -- not an interior point of
-    a plateau claimed to be flat.
-    """
+def test_h_hi_equality_sample_belongs_to_the_right_plateau() -> None:
+    """Raising h_hi admits the pair at equality, without interval overclaim."""
     jump = 1.5  # sits exactly on a scan grid point of this range
     runner = _StepRunner([jump], inclusive=True)
     samples = bp.scan(runner, 1.2, 1.8, 7)
@@ -348,7 +415,51 @@ def test_closed_gate_boundary_belongs_to_the_upper_plateau() -> None:
     assert at_boundary
     upper = [p for p in report["plateaus"] if p["from"] <= jump <= p["to"]][0]
     assert upper["from"] == pytest.approx(jump), "the boundary opens the plateau"
-    assert report["gate_contract"].startswith("h_lo <= ratio <= h_hi")
+    breakpoint = report["breakpoints"][0]
+    assert breakpoint["right_sample"] == pytest.approx(jump)
+    assert "lower_bound" not in breakpoint
+    assert "upper_bound" not in breakpoint
+    assert "h_hi == ratio is admitted" in breakpoint["boundary_semantics"]
+    assert "no half-open interval is claimed" in breakpoint["boundary_semantics"]
+    assert report["gate_contract"]["height_ratio"].startswith("h_lo <= ratio <= h_hi")
+
+
+def test_h_lo_equality_sample_belongs_to_the_left_plateau() -> None:
+    """Raising h_lo rejects only after equality, the opposite h_hi direction."""
+    jump = 0.5  # binary-exact and sits exactly on the scan grid
+    runner = _StepRunner([jump], inclusive=False)
+    samples = bp.scan(runner, 0.25, 0.75, 5)
+    brackets = bp.brackets_from_scan(samples)
+    assert len(brackets) == 1
+    assert brackets[0].low.value == pytest.approx(jump)
+
+    bp.bisect(runner, brackets[0], 1e-4)
+    assert brackets[0].low.value == pytest.approx(jump)
+    assert brackets[0].high.value > jump
+
+    args = bp.parse_args(
+        [
+            "--axis",
+            "h_lo",
+            "--lo",
+            "0.25",
+            "--hi",
+            "0.75",
+            "--tol",
+            "1e-4",
+            "--work-dir",
+            "unused",
+        ]
+    )
+    report = bp.build_report(
+        args, list(runner.seen.values()), runner.runs, brackets=brackets
+    )
+    breakpoint = report["breakpoints"][0]
+
+    assert breakpoint["left_sample"] == pytest.approx(jump)
+    assert breakpoint["right_sample"] > jump
+    assert "h_lo == ratio is admitted" in breakpoint["boundary_semantics"]
+    assert "no half-open interval is claimed" in breakpoint["boundary_semantics"]
 
 
 # --------------------------------------------------------------------------
@@ -605,6 +716,60 @@ def test_eval_command_pins_reid_off() -> None:
     assert cmd[cmd.index("--reid-mode") + 1] == "off"
 
 
+def test_eval_command_cache_and_output_path_keep_round_trip_coordinates() -> None:
+    """Adjacent floats collapsed to the same command and cache key at .10g."""
+    value = 0.12345678901234566
+    adjacent = math.nextafter(value, math.inf)
+    assert format(value, ".10g") == format(adjacent, ".10g")
+
+    args = _args()
+    params = {"px": 0.4, "h_lo": 0.6, "h_hi": value}
+    adjacent_params = {**params, "h_hi": adjacent}
+    cmd = bp.eval_command(args, params, Path("out"))
+    adjacent_cmd = bp.eval_command(args, adjacent_params, Path("out"))
+    flag = "--relink-bridge-h-hi"
+
+    assert cmd[cmd.index(flag) + 1] == repr(value)
+    assert adjacent_cmd[adjacent_cmd.index(flag) + 1] == repr(adjacent)
+    assert cmd[cmd.index(flag) + 1] != adjacent_cmd[adjacent_cmd.index(flag) + 1]
+    assert bp.out_dir_for(args, params) != bp.out_dir_for(args, adjacent_params)
+
+    runner = bp.Runner.__new__(bp.Runner)
+    runner.args = args
+    assert runner._key(value) != runner._key(adjacent)
+
+
+def test_score_resolves_relative_data_root_from_repo_root(
+    tmp_path, monkeypatch
+) -> None:
+    """Scoring must use the same relative-root semantics as eval and hashing."""
+    repo = tmp_path / "repo"
+    gt_path = repo / "datasets/MOT17/train/S1/gt/gt.txt"
+    gt_path.parent.mkdir(parents=True)
+    gt_path.write_text("gt\n", "utf-8")
+    out_dir = tmp_path / "results"
+    out_dir.mkdir()
+    (out_dir / "S1.txt").write_text("tracker\n", "utf-8")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+
+    metrics = importlib.import_module("saccade.perception.eval.metrics")
+    seen: dict[str, str] = {}
+
+    def fake_score(seq: str, gt: str, tracker: str) -> dict[str, int]:
+        seen.update(seq=seq, gt=gt, tracker=tracker)
+        return {"idtp": 10, "idfp": 1, "idfn": 2}
+
+    monkeypatch.setattr(metrics, "_evaluate_single_sequence", fake_score)
+    monkeypatch.setattr(bp, "REPO_ROOT", repo)
+    monkeypatch.chdir(outside)
+
+    runner = bp.Runner.__new__(bp.Runner)
+    runner.args = _args("--data-root", "datasets/MOT17", "--split", "train")
+    assert runner._score(out_dir) == {"S1": {"idtp": 10, "idfp": 1, "idfn": 2}}
+    assert seen["gt"] == str(gt_path)
+
+
 @pytest.mark.parametrize(
     "preset", ["fpn_reid_baseline", "mamba_whole_graph_m_extract_ho_live"]
 )
@@ -681,6 +846,11 @@ def _watched_runner(tmp_path, monkeypatch, watched: list[Path]):
         bp, "context_fingerprint", lambda args, env: _fake_context("abc")
     )
     monkeypatch.setattr(bp, "_witness_paths", lambda args, context: list(watched))
+    monkeypatch.setattr(
+        bp,
+        "_mot_output_identity",
+        lambda out_dir: ("mot-output", {"S1": "sequence-output"}),
+    )
     runner = bp.Runner(_args(work_dir=str(tmp_path / "bp")))
     monkeypatch.setattr(
         runner, "_score", lambda out_dir: {"S1": {"idtp": 10, "idfp": 1, "idfn": 2}}
@@ -811,6 +981,11 @@ def test_content_change_the_witness_missed_quarantines_the_cache(
 
 def _stub_eval(monkeypatch, on_run) -> None:
     monkeypatch.setattr(bp.Runner, "_run_eval", lambda self, params, out_dir: on_run())
+    monkeypatch.setattr(
+        bp,
+        "_mot_output_identity",
+        lambda out_dir: ("mot-output", {"S1": "sequence-output"}),
+    )
     monkeypatch.setattr(
         bp.Runner,
         "_score",

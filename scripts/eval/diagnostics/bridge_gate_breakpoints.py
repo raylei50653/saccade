@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # status: diagnostic
-"""Locate the exact jump discontinuities of pooled IDF1 along one bridge-gate axis.
+"""Locate tracker-output discontinuities along one bridge-gate axis.
 
 Why this exists instead of another grid sweep
 ---------------------------------------------
@@ -10,21 +10,26 @@ kernel rejects only on ``hr < bridge_h_lo || hr > bridge_h_hi``
 set exactly to an observed ratio still admits that pair.  It is applied to a
 *finite* set of evaluated candidate pairs, so moving a threshold changes nothing
 until it crosses one of the ratio values actually observed in the data, at which
-point decisions flip and the metric jumps.  The metric surface is therefore
-**piecewise constant with jumps**, not a smooth ridge, and a grid sweep reports
-an arbitrary sampling of a step function: the "optimum" is a grid artefact and
+point tracker output may flip.  The output surface is therefore **piecewise
+constant with jumps**, and the accompanying metric is also piecewise constant
+(though an output change need not change IDF1).  A grid sweep reports an
+arbitrary sampling of a step function: the "optimum" is a grid artefact and
 "distance to the nearest bad cell" carries no stability information (this is
 what made the old ``nearest_unsafe_distance=1`` result vacuous).
 
-The right objects are the **plateau** you operate on and the **jump** at its
-edge.  This tool finds them by bisection rather than by sampling.
+The right objects are the **output plateau** you operate on and the **jump** at
+its edge.  This tool finds them by bisection rather than by sampling, and
+reports pooled IDF1 alongside the output identity rather than using the metric
+as the identity.
 
-Bisection is available here because the underlying measurement is bit-exact
+Bisection is available here because repeated tracker output is bit-exact
 (``reid_mode: off`` + ``--no-gpu-decode``, so N=1 suffices), which makes
 *equality* a usable predicate.  A bracket whose endpoints differ can then be
 narrowed to any width in O(log(1/tol)) evaluations instead of O(1/tol) grid
-points.  Endpoints are compared on the **per-sequence (idtp, idfp, idfn)
-vector**, not pooled IDF1: different decision sets can collide on that scalar.
+points.  Endpoints are compared by SHA-256 over the canonical MOT result bytes
+for every sequence.  Per-sequence ``(idtp, idfp, idfn)`` counts remain metric
+evidence, but are not an output identity: distinct frame-level rows or ID
+assignments can produce exactly the same aggregate counts.
 
 Measurements are cached under ``--work-dir`` and bound to a context fingerprint
 (source tree by content, the native extensions the eval itself would import,
@@ -121,7 +126,12 @@ TOOL_OWNED_FLAGS = (
     "--relink-bridge-h-hi",
 )
 
-CACHE_SCHEMA = 2
+CACHE_SCHEMA = 3
+MOT_OUTPUT_SCHEMA = "canonical_mot_output_v1"
+MOT_OUTPUT_NORMALIZATION = (
+    "sequence .txt bytes sorted by sequence name; CRLF/CR converted to LF; "
+    "trailing LF bytes removed"
+)
 # Source that can change what an eval computes.  Digested by content: the git
 # head alone is both too weak (dirty tree) and too strong (a docs commit moves
 # it without touching a measurement).
@@ -215,14 +225,13 @@ class Measurement:
     idf1: float
     per_seq: dict[str, dict[str, int]]
     out_dir: str
+    mot_output_sha256: str
+    per_seq_mot_sha256: dict[str, str]
 
     @property
-    def fingerprint(self) -> tuple:
-        """Bit-exact identity of the decision outcome (see module docstring)."""
-        return tuple(
-            (seq, c["idtp"], c["idfp"], c["idfn"])
-            for seq, c in sorted(self.per_seq.items())
-        )
+    def fingerprint(self) -> str:
+        """SHA-256 identity of the canonical tracker-output bytes."""
+        return self.mot_output_sha256
 
     def per_seq_idf1(self) -> dict[str, float]:
         return {seq: _idf1(c) for seq, c in sorted(self.per_seq.items())}
@@ -242,6 +251,39 @@ def _pooled_idf1(per_seq: dict[str, dict[str, int]]) -> float:
     return _idf1(total)
 
 
+def _coordinate(value: float) -> str:
+    """Round-trip text used by the eval command, cache key and output path."""
+    return repr(value)
+
+
+def _boundary_semantics(axis: str) -> str:
+    shared = (
+        "left_sample and right_sample are adjacent measured thresholds with "
+        "different canonical MOT outputs; neither sample is asserted to equal "
+        "any underlying data-valued boundary"
+    )
+    comparator = {
+        "h_lo": (
+            "h_lo == ratio is admitted and rejection begins only when h_lo > ratio"
+        ),
+        "h_hi": ("h_hi == ratio is admitted and rejection applies when h_hi < ratio"),
+        "px": (
+            "bridge_px == bdist is admitted and rejection applies when "
+            "bridge_px < bdist"
+        ),
+    }[axis]
+    return f"{shared}; {comparator}; no half-open interval is claimed"
+
+
+def _outcome(measurement: Measurement) -> dict:
+    return {
+        "mot_output_sha256": measurement.mot_output_sha256,
+        "per_sequence_mot_sha256": measurement.per_seq_mot_sha256,
+        "pooled_idf1": measurement.idf1,
+        "per_sequence_id_counts": measurement.per_seq,
+    }
+
+
 # --------------------------------------------------------------------------
 # eval command construction (shared by the real runner and --dry-run)
 # --------------------------------------------------------------------------
@@ -254,7 +296,7 @@ def params_for(args: argparse.Namespace, value: float) -> dict[str, float]:
 
 
 def out_dir_for(args: argparse.Namespace, params: dict[str, float]) -> Path:
-    tag = "_".join(f"{k}{params[k]:.10g}" for k in AXES)
+    tag = "_".join(f"{k}{_coordinate(params[k])}" for k in AXES)
     return Path(args.work_dir) / f"run_{tag}"
 
 
@@ -282,7 +324,7 @@ def eval_command(
     # re-purposes a run the caller asked for.
     cmd += ["--double-buffer", "--no-gpu-decode", "--reid-mode", "off"]
     for axis in AXES:
-        cmd += [FLAG[axis], f"{params[axis]:.10g}"]
+        cmd += [FLAG[axis], _coordinate(params[axis])]
     cmd += list(args.eval_arg)
     return cmd
 
@@ -393,6 +435,33 @@ def _digest(payload: object) -> str:
     return hashlib.sha256(
         json.dumps(payload, sort_keys=True, default=str).encode()
     ).hexdigest()
+
+
+def _mot_result_paths(out_dir: Path) -> list[Path]:
+    """Sequence result files, excluding eval sidecars such as _fps_summary."""
+    return [
+        path for path in sorted(out_dir.glob("*.txt")) if not path.stem.startswith("_")
+    ]
+
+
+def _canonical_mot_bytes(path: Path) -> bytes:
+    """Canonicalise transport-only newline differences, not MOT row content."""
+    raw = path.read_bytes().replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+    return raw.rstrip(b"\n")
+
+
+def _mot_output_identity(out_dir: Path) -> tuple[str, dict[str, str]]:
+    """Hash every canonical per-sequence MOT result into one output identity."""
+    per_seq = {
+        path.stem: hashlib.sha256(_canonical_mot_bytes(path)).hexdigest()
+        for path in _mot_result_paths(out_dir)
+    }
+    aggregate = {
+        "schema": MOT_OUTPUT_SCHEMA,
+        "normalization": MOT_OUTPUT_NORMALIZATION,
+        "per_sequence_sha256": per_seq,
+    }
+    return _digest(aggregate), per_seq
 
 
 def _source_files() -> list[Path]:
@@ -765,7 +834,7 @@ class Runner:
                 "split": self.args.split,
                 "detector": self.args.detector,
                 "eval_arg": self.args.eval_arg,
-                **{k: f"{v:.10g}" for k, v in params.items()},
+                **{k: _coordinate(v) for k, v in params.items()},
             },
             sort_keys=True,
         )
@@ -800,14 +869,19 @@ class Runner:
                 )
             )
             fixed_match = all(
-                entry.get(axis) == f"{getattr(self.args, axis):.10g}"
+                entry.get(axis) == _coordinate(getattr(self.args, axis))
                 for axis in AXES
                 if axis != self.args.axis
             )
             if not (same_context and fixed_match):
                 continue
             self.seen[value] = Measurement(
-                value, hit["idf1"], hit["per_seq"], hit["out_dir"]
+                value,
+                hit["idf1"],
+                hit["per_seq"],
+                hit["out_dir"],
+                hit["mot_output_sha256"],
+                hit["per_seq_mot_sha256"],
             )
             adopted += 1
         return adopted
@@ -816,7 +890,14 @@ class Runner:
         key = self._key(value)
         if key in self.cache:
             hit = self.cache[key]
-            cached = Measurement(value, hit["idf1"], hit["per_seq"], hit["out_dir"])
+            cached = Measurement(
+                value,
+                hit["idf1"],
+                hit["per_seq"],
+                hit["out_dir"],
+                hit["mot_output_sha256"],
+                hit["per_seq_mot_sha256"],
+            )
             self.seen[value] = cached
             return cached
 
@@ -825,17 +906,41 @@ class Runner:
         # A fresh evaluation is bracketed by two context checks, so a point only
         # ever enters the cache if nothing it was measured against moved while
         # it was being measured.
-        self._checkpoint(f"before measuring {self.args.axis}={value:.10g}")
+        self._checkpoint(f"before measuring {self.args.axis}={_coordinate(value)}")
         self._run_eval(params, out_dir)
+        mot_output_sha256, per_seq_mot_sha256 = _mot_output_identity(out_dir)
         per_seq = self._score(out_dir)
+        output_after_score, per_seq_output_after_score = _mot_output_identity(out_dir)
+        if (
+            output_after_score != mot_output_sha256
+            or per_seq_output_after_score != per_seq_mot_sha256
+        ):
+            raise RuntimeError(
+                f"MOT output changed while it was being scored: {out_dir}"
+            )
         if not per_seq:
             raise RuntimeError(f"no scored sequences in {out_dir}")
-        self._checkpoint(f"while measuring {self.args.axis}={value:.10g}")
-        measurement = Measurement(value, _pooled_idf1(per_seq), per_seq, str(out_dir))
+        if set(per_seq_mot_sha256) != set(per_seq):
+            raise RuntimeError(
+                "MOT output/scorer sequence mismatch in "
+                f"{out_dir}: output={sorted(per_seq_mot_sha256)}, "
+                f"scored={sorted(per_seq)}"
+            )
+        self._checkpoint(f"while measuring {self.args.axis}={_coordinate(value)}")
+        measurement = Measurement(
+            value,
+            _pooled_idf1(per_seq),
+            per_seq,
+            str(out_dir),
+            mot_output_sha256,
+            per_seq_mot_sha256,
+        )
         self.cache[key] = {
             "idf1": measurement.idf1,
             "per_seq": per_seq,
             "out_dir": str(out_dir),
+            "mot_output_sha256": mot_output_sha256,
+            "per_seq_mot_sha256": per_seq_mot_sha256,
         }
         self._save_cache()
         self.runs += 1
@@ -943,12 +1048,10 @@ class Runner:
             sys.path.insert(0, src)
         from saccade.perception.eval.metrics import _evaluate_single_sequence
 
-        gt_root = Path(self.args.data_root) / self.args.split
+        gt_root = _dataset_split_dir(self.args)
         per_seq: dict[str, dict[str, int]] = {}
-        for ts_path in sorted(out_dir.glob("*.txt")):
+        for ts_path in _mot_result_paths(out_dir):
             seq = ts_path.stem
-            if seq.startswith("_"):
-                continue
             gt_path = gt_root / seq / "gt" / "gt.txt"
             if not gt_path.exists():
                 continue
@@ -1097,6 +1200,7 @@ def build_report(
             "from": g[0].value,
             "to": g[-1].value,
             "width": g[-1].value - g[0].value,
+            "mot_output_sha256": g[0].mot_output_sha256,
             "idf1": g[0].idf1,
             "per_seq_idf1": g[0].per_seq_idf1(),
             "measured_points": len(g),
@@ -1109,11 +1213,12 @@ def build_report(
         low, high = below[-1], above[0]
         breakpoints.append(
             {
-                "lower_bound": low.value,
-                "upper_bound": high.value,
+                "left_sample": low.value,
+                "right_sample": high.value,
+                "left_outcome": _outcome(low),
+                "right_outcome": _outcome(high),
+                "boundary_semantics": _boundary_semantics(args.axis),
                 "width": high.value - low.value,
-                "idf1_below": low.idf1,
-                "idf1_above": high.idf1,
                 "delta_idf1": high.idf1 - low.idf1,
                 "per_seq_delta_idf1": {
                     seq: high.per_seq_idf1()[seq] - value
@@ -1128,7 +1233,7 @@ def build_report(
 
     report = {
         "tool": "bridge_gate_breakpoints",
-        "schema_version": 2,
+        "schema_version": 3,
         "axis": args.axis,
         "fixed_axes": {a: getattr(args, a) for a in AXES if a != args.axis},
         "dataset": {
@@ -1138,11 +1243,27 @@ def build_report(
             "detector": args.detector,
             "extra_eval_args": list(args.eval_arg),
         },
-        "equality_predicate": "per-sequence (idtp, idfp, idfn) vector",
-        "gate_contract": "h_lo <= ratio <= h_hi (both bounds inclusive)",
+        "equality_predicate": {
+            "kind": "sha256 of canonical per-sequence MOT result bytes",
+            "schema": MOT_OUTPUT_SCHEMA,
+            "normalization": MOT_OUTPUT_NORMALIZATION,
+            "metric_only": "per-sequence (idtp, idfp, idfn) counts",
+        },
+        "gate_contract": {
+            "height_ratio": "h_lo <= ratio <= h_hi (both bounds inclusive)",
+            "bridge_distance": "bdist <= bridge_px (inclusive)",
+        },
+        "boundary_semantics": _boundary_semantics(args.axis),
         "scan": {"lo": args.lo, "hi": args.hi, "points": args.scan},
         "measurements": [
-            {"value": m.value, "idf1": m.idf1, "out_dir": m.out_dir} for m in points
+            {
+                "value": m.value,
+                "mot_output_sha256": m.mot_output_sha256,
+                "per_sequence_mot_sha256": m.per_seq_mot_sha256,
+                "idf1": m.idf1,
+                "out_dir": m.out_dir,
+            }
+            for m in points
         ],
         "tolerance": args.tol,
         "eval_runs_executed": runs,
@@ -1155,6 +1276,8 @@ def build_report(
             "each breakpoint carries a 'reason' saying why it was not narrowed",
             "breakpoint locations are data values, so they are a property of "
             "this dataset's feature distribution, not of the gate",
+            "output equality is SHA-256 equality after newline normalization; "
+            "ID counts are reported as metrics and never used as output identity",
         ],
     }
     if context is not None:
@@ -1199,7 +1322,7 @@ def print_table(report: dict) -> None:
     print(f"\naxis={report['axis']}  fixed={report['fixed_axes']}")
     print(f"eval runs executed: {report['eval_runs_executed']}")
 
-    print("\nplateaus (identical outcome across every measured point inside):")
+    print("\nplateaus (identical canonical MOT output at every measured point inside):")
     print(f"  {'from':>12}  {'to':>12}  {'width':>10}  {'IDF1':>9}  {'pts':>4}")
     for p in report["plateaus"]:
         print(
@@ -1207,16 +1330,18 @@ def print_table(report: dict) -> None:
             f"{p['width']:>10.4g}  {p['idf1']:>9.3f}  {p['measured_points']:>4d}"
         )
 
-    print("\nbreakpoints (jump localised to):")
+    print("\nbreakpoints (distinct adjacent output samples):")
     if not report["breakpoints"]:
         print("  none detected at this scan resolution")
     for b in report["breakpoints"]:
         print(
-            f"  ({b['lower_bound']:.8g}, {b['upper_bound']:.8g}]  "
+            f"  left={b['left_sample']:.8g}  right={b['right_sample']:.8g}  "
             f"width={b['width']:.3g}  "
-            f"IDF1 {b['idf1_below']:.3f} -> {b['idf1_above']:.3f}  "
+            f"IDF1 {b['left_outcome']['pooled_idf1']:.3f} -> "
+            f"{b['right_outcome']['pooled_idf1']:.3f}  "
             f"(delta {b['delta_idf1']:+.3f})"
         )
+        print(f"      boundary: {b['boundary_semantics']}")
         print(f"      {'refined' if b['refined'] else 'UNREFINED'}: {b['reason']}")
         worst = sorted(b["per_seq_delta_idf1"].items(), key=lambda kv: kv[1])[:2]
         for seq, delta in worst:

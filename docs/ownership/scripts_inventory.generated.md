@@ -239,7 +239,7 @@ Total tracked scripts: **432**. Source of truth = each script's own docstring + 
 | `analyze_near_miss_offsets.py` | diagnostic | cli | Analyze spatial offsets of near-miss associations. |
 | `analyze_near_miss_stage_attribution.py` | diagnostic | cli | Attribute near-misses to pipeline stages. |
 | `analyze_occ_audit_seq_conditioning.py` | diagnostic | cli | Aggregate occ-exit audit logs into a per-seq / scene-type applicability map. |
-| `bridge_gate_breakpoints.py` | diagnostic | cli | Locate the exact jump discontinuities of pooled IDF1 along one bridge-gate axis. |
+| `bridge_gate_breakpoints.py` | diagnostic | cli | Locate tracker-output discontinuities along one bridge-gate axis. |
 | `cheb_gr_offline_handover_report.py` | diagnostic | cli | Label and analyze Cheb-GR offline handover decisions. |
 | `compare_detector_suffix_runs.py` | diagnostic | cli | Audit whether two MOT17 detector-suffix runs contain distinct evidence. |
 | `compare_handover_summaries.py` | diagnostic | cli | Compare Cheb-GR offline handover parameter summary JSON files. |
