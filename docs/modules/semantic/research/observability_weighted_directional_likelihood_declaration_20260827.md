@@ -5,11 +5,11 @@
 <!-- doc-date: 2026-08-27 -->
 <!-- doc-module: semantic -->
 
-> **One-line:** test whether direction becomes empirically unobservable at low
-> velocity SNR, and whether conditioning a standalone direction score on that
-> observability exposes held-out ranking information hidden by raw cosine
-> direction. This is an offline score-ranking capability map, not a runtime or
-> MOT-efficacy claim.
+> **One-line:** test whether direction becomes empirically less observable at low
+> covariance-normalized velocity evidence, and whether conditioning a standalone
+> direction score on that observability exposes held-out ranking information
+> hidden by raw cosine direction. This is an offline, MOT17-internal
+> score-ranking capability map, not a runtime or MOT-efficacy claim.
 
 - Thread: [observability-weighted directional likelihood task](../../../research/threads/observability_weighted_directional_likelihood_task.md)
 - Machine study spec: [study v1](observability_weighted_directional_likelihood_study_v1.json)
@@ -337,9 +337,14 @@ R3  per-fold Delta_PWA >= 0 in at least 5/7 folds
     and > 0 in at least 4/7 folds
 R4  delete-one-sequence robustness: recomputing pooled Delta_PWA with each
     sequence removed gives Delta_PWA >= 0 in all 7 of 7 deletions
-R5  short gap (1..10) has at least 20 events and Delta_PWA >= 0
+R5a at least 20 short-gap rankable events (§6.3)
+R5b short-gap event-macro Delta_PWA >= 0
 R6  exact pair/event/GT-partition/policy-candidate conservation passes
 ```
+
+R5a is exposure and is a validity item; R5b is an effect and is a ranking-box
+item. A study that cannot observe the protected stratum is invalid, not
+negative.
 
 R4 was a 10,000-replicate sequence-cluster percentile bootstrap whose 95% lower
 endpoint had to be non-negative. It is no longer a gate. Ten thousand replicates
@@ -354,6 +359,57 @@ only**. It resamples sequence clusters, never candidate rows, and it selects no
 terminal. No uncertainty bound assuming pair or event independence is admissible
 in either role.
 
+### 6.3 Protected short-gap stratum
+
+`gap` is a property of a candidate row `(cand_id, lost_id)`, not a single-valued
+property of an event, so "the event's gap" has no natural answer and cannot be
+the selector. What the protected stratum exists to ask is narrower and precise:
+
+> when the correct predecessor is a recently lost track, is OWDL at least not
+> worse than raw direction?
+
+The stratum is therefore selected by the gap of the **GT-positive row**. For a
+rankable event \(e=(seq,cand\_id)\) define
+
+\[
+G_s(e)=\{r:\ \mathit{gt\_match}(r)=1,\ 1\le \mathit{gap}(r)\le 10\},
+\qquad
+F(e)=\{r:\ \mathit{gt\_match}(r)=0\}.
+\]
+
+\(e\) is a **short-gap rankable event** iff \(|G_s(e)|\ge1\) and
+\(|F(e)|\ge1\). Let \(E_s\) be the set of such events. For a policy \(p\),
+
+\[
+\mathrm{PWA}^{short}_p(e)
+=
+\frac{1}{|G_s(e)|\,|F(e)|}
+\sum_{g\in G_s(e)}\sum_{f\in F(e)}
+\operatorname{pairwin}_p(g,f),
+\]
+
+with `pairwin` exactly as in §6.2 — strictly lower score 1, exact tie 0.5, worse
+0 — and
+
+\[
+\Delta\mathrm{PWA}_{short}
+=
+\operatorname*{macro}_{e\in E_s}\mathrm{PWA}^{short}_{OWDL}(e)
+-
+\operatorname*{macro}_{e\in E_s}\mathrm{PWA}^{short}_{raw}(e).
+\]
+
+Two consequences are deliberate:
+
+- **Every FP row is retained**, whatever its gap. Filtering negatives to short
+  gaps too would change the distractor competition set, and R5 would stop asking
+  whether short true relinks are harmed and start asking a narrower, easier
+  ranking question.
+- **An event with both short and long GT-positive rows contributes only its short
+  rows here.** Its long-gap GT comparisons still enter the full-study PWA of
+  §6.2, but admitting the whole event into the protected slice would smuggle
+  long-gap comparisons into short-gap protection.
+
 ## 7. Ordered validity and terminals
 
 Validity is evaluated before phenomenon and ranking effects:
@@ -364,7 +420,7 @@ Validity is evaluated before phenomenon and ranking effects:
 3. all seven folds are disjoint and present;
 4. four-point history, endpoint, height, and finite-value rules reconcile;
 5. every fold covariance is SPD without repair;
-6. P1/P2, R1, R5 exposure, candidate conservation, and partition conservation
+6. P1/P2, R1, R5a exposure, candidate conservation, and partition conservation
    pass.
 
 An execution that produces no packet at all — runner crash, build failure,
@@ -372,14 +428,18 @@ serialization failure — is a validity failure by this list and takes
 `OWDL_INVALID_STUDY`. There is no unmapped outcome and no "describe more and
 continue".
 
-Then select exactly one terminal in this order:
+Then select exactly one terminal in this order. Every effect terminal carries
+`MOT17_INTERNAL` in its own name: the corpus and generalization scope belong in
+the identifier, because a terminal is quoted far more often than the table row
+beside it. `HELDOUT` is deliberately *not* in the names — that is a protocol
+property, and it is stated in the Establishes column instead.
 
 | Terminal | Condition | Establishes | Does not establish / handoff |
 |:--|:--|:--|:--|
 | `OWDL_INVALID_STUDY` | any validity item fails | no effect conclusion | repair needs a new declaration; no automatic rerun |
-| `OWDL_OBSERVABILITY_NOT_SUPPORTED` | valid; P3 fails | this exact effective-covariance phenomenon box did not pass | not proof that direction is always observable or useless |
-| `OWDL_NO_HELDOUT_DIRECTIONAL_RANKING_POWER` | valid; P3 passes; any ranking effect item fails | this exact OWDL score did not clear SR2 ranking boxes | no score integration or runtime handoff |
-| `OWDL_DIRECTION_SIGNAL_PRESENT_SR2` | valid; phenomenon and ranking boxes pass | **MOT17-internal** held-out SR2 directional-channel capability evidence on the frozen universe | only permits proposing a separate **cross-dataset confirmation** declaration; integration design is not yet proposable; no automatic continuation |
+| `OWDL_MOT17_INTERNAL_OBSERVABILITY_NOT_SUPPORTED` | valid; P3 fails | on MOT17, held out by fold, this exact effective-covariance phenomenon box did not pass | not proof that direction is always observable or useless, and says nothing about any other corpus |
+| `OWDL_MOT17_INTERNAL_NO_DIRECTIONAL_RANKING_POWER_SR2` | valid; P3 passes; any ranking effect item fails | on MOT17, held out by fold, this exact OWDL score did not clear SR2 ranking boxes | no score integration or runtime handoff; not a claim that held-out direction ranking is generally powerless |
+| `OWDL_MOT17_INTERNAL_DIRECTION_SIGNAL_SR2` | valid; phenomenon and ranking boxes pass | on MOT17, held out by fold, SR2 directional-channel capability evidence on the frozen universe | only permits proposing a separate **cross-dataset confirmation** declaration; integration design is not yet proposable; no automatic continuation |
 
 Every terminal must report all bins, all folds, policy-identical counts, drop
 reasons, delete-one-sequence deltas, and protected short-gap results. A positive

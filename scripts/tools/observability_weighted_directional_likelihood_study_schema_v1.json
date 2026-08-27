@@ -213,7 +213,6 @@
         "minimum_rankable_events",
         "minimum_gt_pairs_low_q",
         "minimum_gt_pairs_high_q",
-        "minimum_short_gap_events",
         "require_spd_fold_covariance",
         "require_exact_candidate_conservation",
         "require_all_seven_heldout_folds"
@@ -227,9 +226,6 @@
         },
         "minimum_gt_pairs_high_q": {
           "const": 30
-        },
-        "minimum_short_gap_events": {
-          "const": 20
         },
         "require_spd_fold_covariance": {
           "const": true
@@ -331,12 +327,32 @@
           "type": "object",
           "additionalProperties": false,
           "required": [
-            "range",
+            "positive_row_rule",
+            "negative_row_rule",
+            "event_eligibility",
+            "comparison_rule",
+            "reduction",
+            "minimum_events",
             "minimum_delta"
           ],
           "properties": {
-            "range": {
-              "const": "1 <= gap <= 10"
+            "positive_row_rule": {
+              "const": "gt_match == 1 and 1 <= gap <= 10"
+            },
+            "negative_row_rule": {
+              "const": "gt_match == 0"
+            },
+            "event_eligibility": {
+              "const": "at least one selected positive and at least one negative"
+            },
+            "comparison_rule": {
+              "const": "every selected positive versus every negative"
+            },
+            "reduction": {
+              "const": "event_macro_pairwise_accuracy"
+            },
+            "minimum_events": {
+              "const": 20
             },
             "minimum_delta": {
               "const": 0.0
@@ -372,9 +388,9 @@
     "terminal_order": {
       "const": [
         "OWDL_INVALID_STUDY",
-        "OWDL_OBSERVABILITY_NOT_SUPPORTED",
-        "OWDL_NO_HELDOUT_DIRECTIONAL_RANKING_POWER",
-        "OWDL_DIRECTION_SIGNAL_PRESENT_SR2"
+        "OWDL_MOT17_INTERNAL_OBSERVABILITY_NOT_SUPPORTED",
+        "OWDL_MOT17_INTERNAL_NO_DIRECTIONAL_RANKING_POWER_SR2",
+        "OWDL_MOT17_INTERNAL_DIRECTION_SIGNAL_SR2"
       ]
     },
     "source_relation_contract": {

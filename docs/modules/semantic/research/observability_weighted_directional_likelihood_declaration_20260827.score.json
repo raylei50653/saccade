@@ -116,7 +116,7 @@
     "protected_strata": [
       "short_gap"
     ],
-    "short_gap_retention_rule_id": "short_gap_1_10_nonnegative_delta_v1"
+    "short_gap_retention_rule_id": "short_gap_gt_positive_comparison_slice_1_10_nonnegative_delta_v1"
   },
   "rung_obligations": [
     {
@@ -171,21 +171,21 @@
       }
     },
     {
-      "terminal_id": "owdl_observability_not_supported_v1",
+      "terminal_id": "owdl_mot17_internal_observability_not_supported_v1",
       "outcome_class": "valid_negative",
       "state_transition": {
         "kind": "none"
       }
     },
     {
-      "terminal_id": "owdl_no_heldout_directional_ranking_power_v1",
+      "terminal_id": "owdl_mot17_internal_no_directional_ranking_power_sr2_v1",
       "outcome_class": "valid_negative",
       "state_transition": {
         "kind": "none"
       }
     },
     {
-      "terminal_id": "owdl_direction_signal_present_sr2_v1",
+      "terminal_id": "owdl_mot17_internal_direction_signal_sr2_v1",
       "outcome_class": "valid_positive",
       "state_transition": {
         "kind": "transition",
