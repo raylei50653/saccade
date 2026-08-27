@@ -17,10 +17,11 @@ pre-outcome planning and implementation, not formal study execution.
 
 ## Current boundary
 
-Determine whether covariance-normalized direction observability exists in the
-frozen offline B1 universe and whether it exposes held-out event-ranking
-information hidden by raw cosine direction. The target layer is SR2
-score-ranking; assignment, runtime, and system efficacy are outside scope.
+Determine whether the frozen observability index separates angular-concentration
+regimes in the offline B1 universe, and whether conditioning on it exposes
+held-out event-ranking information hidden by raw cosine direction. The target
+layer is SR2 score-ranking, **MOT17-internal**; assignment, runtime, system
+efficacy, and cross-dataset generality are outside scope.
 
 ## Expected state (lease)
 
@@ -68,10 +69,14 @@ outcomes.
 
 ## Acceptance
 
-- declaration separates phenomenon, ranking gap, and non-claims;
-- source hashes and candidate/event semantics fail closed;
+- declaration separates phenomenon, ranking gap, and non-claims, and separates
+  the empirical hypothesis from v1's conservative modeling convention;
+- source hashes and candidate/event semantics fail closed, and relational
+  integrity is frozen now but executed only post-seal;
 - cross-covariance and candidate-specific von Mises normalizer are implemented;
+- concentration is resultant-matched, not the small-angle `1/variance` shortcut;
 - exact-zero direction becomes uniform without a speed threshold;
+- the positive handoff is cross-dataset confirmation, not integration design;
 - formal CLI execution is unavailable before seal;
 - relevant unit, declaration, document, and structure checks pass.
 

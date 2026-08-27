@@ -89,12 +89,11 @@
     "history_window": 4,
     "position": "bbox_bottom_center",
     "velocity_fit": "ols_on_actual_frame_values",
-    "noise_fit": "height_normalized_ols_residual_covariance",
+    "noise_fit": "height_normalized_ols_effective_residual_covariance",
     "noise_fit_dedup_key": [
       "seq",
       "track_id",
-      "side",
-      "anchor_frame"
+      "frame_tuple"
     ],
     "noise_fit_labels_used": false,
     "fold_rule": "leave_one_sequence_out",
@@ -105,11 +104,13 @@
       "[9,inf)"
     ],
     "angular_variance": "gvT_Sv_gv + gdT_Sd_gd - 2_gvT_Svd_gd",
-    "concentration": "1 / angular_variance",
+    "concentration": "resultant_matched_wrapped_normal_to_von_mises",
     "weighted_cost": "log_I0_kappa - kappa_cos_delta",
     "raw_cost": "1 - cos_delta",
-    "exact_zero_vector_rule": "kappa_0_weighted_cost_0_raw_cost_1",
-    "posthoc_covariance_regularization": "forbidden"
+    "exact_zero_vector_rule": "kappa_0_weighted_cost_0_raw_cost_1_as_the_matching_limit",
+    "posthoc_covariance_regularization": "forbidden",
+    "concentration_identity": "exp(-angular_variance / 2) = I1(kappa) / I0(kappa)",
+    "concentration_solver": "double_from_1_then_exactly_100_bisections"
   },
   "validity": {
     "minimum_rankable_events": 100,
@@ -137,11 +138,18 @@
       "replicates": 10000,
       "seed": 20260827,
       "interval": "percentile_95",
-      "minimum_lower_bound": 0.0
+      "role": "descriptive_only",
+      "gates_terminal": false
     },
     "short_gap": {
       "range": "1 <= gap <= 10",
       "minimum_delta": 0.0
+    },
+    "delete_one_sequence": {
+      "rule": "recompute pooled event-macro delta with each sequence removed",
+      "minimum_delta": 0.0,
+      "required_passes": 7,
+      "gates_terminal": true
     }
   },
   "terminal_order": [
@@ -149,5 +157,26 @@
     "OWDL_OBSERVABILITY_NOT_SUPPORTED",
     "OWDL_NO_HELDOUT_DIRECTIONAL_RANKING_POWER",
     "OWDL_DIRECTION_SIGNAL_PRESENT_SR2"
-  ]
+  ],
+  "source_relation_contract": {
+    "executed_pre_seal": false,
+    "executed_by": "post_seal_formal_runner_before_any_metric_or_label_aggregate",
+    "obligations": [
+      "trajectory_frame_id_uniqueness",
+      "lost_endpoint_resolves_to_exactly_one_trajectory_row",
+      "last_four_actual_frame_window_present_for_every_retained_lost_id",
+      "candidate_first_point_resolves_to_exactly_one_trajectory_row",
+      "gap_equals_candidate_first_frame_minus_lost_last_frame",
+      "bbox_bottom_center_and_height_reconstructed_from_trajectory_bytes",
+      "pair_row_joins_trajectory_support_exactly_once",
+      "every_unjoined_pair_row_carries_exactly_one_enumerated_reason",
+      "joined_plus_excluded_reconciles_to_the_included_row_count"
+    ],
+    "emits": [
+      "joined_candidate_count",
+      "exclusion_counts_by_reason",
+      "reconstructed_support_digest"
+    ],
+    "on_failure": "OWDL_INVALID_STUDY"
+  }
 }

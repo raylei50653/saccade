@@ -55,7 +55,7 @@ def test_noise_covariance_requires_positive_definite_residual_support() -> None:
     x_only_noise = np.array([[0.1, 0.0], [-0.1, 0.0], [0.1, 0.0], [-0.1, 0.0]])
 
     with pytest.raises(owdl.ObservabilityError, match="positive definite"):
-        owdl.estimate_normalized_noise_covariance(
+        owdl.estimate_normalized_effective_covariance(
             [(_linear_window(1.0) + x_only_noise, frames, np.ones(4))]
         )
 
@@ -67,7 +67,7 @@ def test_estimated_noise_covariance_is_symmetric_positive_definite() -> None:
         [[-0.03, 0.11], [0.09, -0.02], [-0.08, -0.06], [0.02, 0.04]]
     )
 
-    covariance = owdl.estimate_normalized_noise_covariance(
+    covariance = owdl.estimate_normalized_effective_covariance(
         [
             (_linear_window(0.5) + first_noise, frames, np.ones(4)),
             (_linear_window(1.0) + second_noise, frames, np.ones(4)),
@@ -86,7 +86,7 @@ def test_zero_velocity_degenerates_to_uniform_without_a_speed_threshold() -> Non
         candidate_first_point=np.array([1.0, 0.0]),
         candidate_first_height=1.0,
         gap=1,
-        normalized_noise_covariance=np.eye(2) * 0.01,
+        normalized_effective_covariance=np.eye(2) * 0.01,
     )
 
     assert observation.q_v == pytest.approx(0.0)
@@ -103,7 +103,7 @@ def test_higher_velocity_snr_increases_concentration() -> None:
         "lost_heights": np.ones(4),
         "candidate_first_height": 1.0,
         "gap": 2,
-        "normalized_noise_covariance": np.eye(2) * 0.01,
+        "normalized_effective_covariance": np.eye(2) * 0.01,
     }
     slow = owdl.observe_direction(
         lost_points=_linear_window(0.1),
@@ -129,13 +129,74 @@ def test_near_zero_velocity_is_continuous_not_thresholded() -> None:
         candidate_first_point=np.array([1.0, 0.0]),
         candidate_first_height=1.0,
         gap=1,
-        normalized_noise_covariance=np.eye(2) * 0.01,
+        normalized_effective_covariance=np.eye(2) * 0.01,
     )
 
     assert tiny.delta_angle == pytest.approx(0.0)
     assert tiny.q_v > 0.0
-    assert 0.0 < tiny.kappa < 1e-12
+    assert tiny.kappa < 1e-12
     assert tiny.weighted_direction_cost == pytest.approx(0.0, abs=1e-12)
+
+
+def test_concentration_decays_without_a_step_as_velocity_shrinks() -> None:
+    """No threshold: kappa and the cost fall monotonically toward the uniform limit."""
+
+    common = {
+        "lost_frames": np.arange(4),
+        "lost_heights": np.ones(4),
+        "candidate_first_point": np.array([3.0, 3.0]),
+        "candidate_first_height": 1.0,
+        "gap": 2,
+        "normalized_effective_covariance": np.eye(2) * 0.01,
+    }
+    observations = [
+        owdl.observe_direction(lost_points=_linear_window(speed), **common)
+        for speed in (4.0, 2.0, 1.0, 0.5, 0.25, 0.125)
+    ]
+    kappas = [observation.kappa for observation in observations]
+    costs = [abs(observation.weighted_direction_cost) for observation in observations]
+
+    assert kappas == sorted(kappas, reverse=True)
+    assert costs == sorted(costs, reverse=True)
+    zero = owdl.observe_direction(lost_points=np.zeros((4, 2)), **common)
+    assert zero.kappa == 0.0
+    assert kappas[-1] >= zero.kappa
+
+
+def test_kappa_matches_the_wrapped_normal_resultant() -> None:
+    """The frozen mapping is resultant matching, not the small-angle shortcut."""
+
+    for variance in (0.01, 0.3, 1.0, 3.0, 12.0):
+        kappa = owdl.resultant_matched_concentration(variance)
+        assert owdl.von_mises_mean_resultant(kappa) == pytest.approx(
+            math.exp(-variance / 2.0), rel=1e-12
+        )
+
+
+def test_kappa_recovers_one_over_variance_in_the_small_angle_limit() -> None:
+    for variance in (1e-6, 1e-5, 1e-4):
+        kappa = owdl.resultant_matched_concentration(variance)
+        assert kappa * variance == pytest.approx(1.0, rel=1e-3)
+
+
+def test_kappa_reaches_uniform_for_a_large_or_infinite_angular_variance() -> None:
+    assert owdl.resultant_matched_concentration(math.inf) == 0.0
+    assert owdl.resultant_matched_concentration(5.0e3) == 0.0
+    assert owdl.resultant_matched_concentration(30.0) < 1e-6
+
+
+def test_resultant_matched_concentration_is_strictly_decreasing() -> None:
+    variances = [0.05, 0.2, 0.8, 2.0, 6.0, 15.0]
+    kappas = [owdl.resultant_matched_concentration(v) for v in variances]
+
+    assert kappas == sorted(kappas, reverse=True)
+    assert len(set(kappas)) == len(kappas)
+
+
+def test_a_non_positive_angular_variance_fails_closed() -> None:
+    for bad in (0.0, -1.0, math.nan):
+        with pytest.raises(owdl.ObservabilityError, match="angular variance"):
+            owdl.resultant_matched_concentration(bad)
 
 
 def test_shared_endpoint_cross_covariance_is_propagated() -> None:
@@ -146,7 +207,7 @@ def test_shared_endpoint_cross_covariance_is_propagated() -> None:
         candidate_first_point=np.array([5.0, 1.0]),
         candidate_first_height=1.0,
         gap=2,
-        normalized_noise_covariance=np.eye(2) * 0.04,
+        normalized_effective_covariance=np.eye(2) * 0.04,
     )
     fit = owdl.fit_ols_motion(_linear_window(1.0), np.arange(4))
     expected = -fit.slope_weights[-1] * np.eye(2) * 0.04 / 2.0
@@ -178,7 +239,7 @@ def test_a_numpy_integer_gap_is_accepted_and_a_bool_is_not() -> None:
         "lost_heights": np.ones(4),
         "candidate_first_point": np.array([5.0, 1.0]),
         "candidate_first_height": 1.0,
-        "normalized_noise_covariance": np.eye(2) * 0.04,
+        "normalized_effective_covariance": np.eye(2) * 0.04,
     }
 
     assert owdl.observe_direction(gap=np.int64(2), **common).kappa == pytest.approx(

@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from scipy.special import i0e
+from scipy.special import i0e, i1e
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
@@ -48,6 +48,8 @@ STUDY_SCHEMA_PATH = (
     "observability_weighted_directional_likelihood_study_schema_v1.json"
 )
 STUDY_ID = "owdl_m_b1_v1"
+_CONCENTRATION_BISECTIONS = 100
+_CONCENTRATION_BRACKET_LIMIT = 2.0**60
 EXPECTED_SOURCE_ROLES = {
     "out/signal_study/m_b1_smoke_20260709T092543Z/pairs.csv": "pair_table",
     "out/signal_study/m_b1_smoke_20260709T092543Z/context.json": "source_context",
@@ -161,10 +163,15 @@ def fit_ols_motion(points: object, frames: object) -> OlsMotion:
     )
 
 
-def estimate_normalized_noise_covariance(
+def estimate_normalized_effective_covariance(
     windows: Iterable[tuple[object, object, object]],
 ) -> np.ndarray:
-    """Pool height-normalized 4-point OLS residuals with residual-DoF scaling."""
+    """Pool height-normalized 4-point OLS residuals with residual-DoF scaling.
+
+    The result is an *effective* residual covariance: it absorbs bbox jitter,
+    within-window curvature and model residual together, and is not an
+    identified detector measurement noise.
+    """
 
     scatter = np.zeros((2, 2), dtype=np.float64)
     residual_dof = 0
@@ -185,7 +192,9 @@ def estimate_normalized_noise_covariance(
         window_count += 1
     if window_count == 0 or residual_dof <= 0:
         raise ObservabilityError("at least one valid calibration window is required")
-    return _spd_covariance(scatter / residual_dof, name="normalized noise covariance")
+    return _spd_covariance(
+        scatter / residual_dof, name="normalized effective covariance"
+    )
 
 
 def _angle_gradient(vector: np.ndarray) -> np.ndarray | None:
@@ -201,6 +210,62 @@ def _mahalanobis(vector: np.ndarray, covariance: np.ndarray) -> float:
     if value < -1e-12:
         raise ObservabilityError("Mahalanobis evidence became negative")
     return max(0.0, value)
+
+
+def von_mises_mean_resultant(kappa: float) -> float:
+    """Return I1(kappa)/I0(kappa), the von Mises mean resultant length."""
+
+    if not math.isfinite(kappa) or kappa < 0:
+        raise ObservabilityError("kappa must be finite and non-negative")
+    if kappa == 0.0:
+        return 0.0
+    scaled_i0 = float(i0e(kappa))
+    scaled_i1 = float(i1e(kappa))
+    if not math.isfinite(scaled_i0) or scaled_i0 <= 0:
+        raise ObservabilityError("stable I0 evaluation failed")
+    if not math.isfinite(scaled_i1) or scaled_i1 < 0:
+        raise ObservabilityError("stable I1 evaluation failed")
+    return scaled_i1 / scaled_i0
+
+
+def resultant_matched_concentration(angular_variance: float) -> float:
+    """Match a wrapped-normal resultant to a von Mises one, and return kappa.
+
+    ``kappa = 1 / angular_variance`` is the small-angle limit, and the regime this
+    study is about is precisely where that limit is least trustworthy. Matching
+    resultants instead — ``exp(-variance / 2) = I1(kappa) / I0(kappa)`` — recovers
+    ``1 / variance`` as the variance goes to zero and decays smoothly to a uniform
+    direction as it grows, with no threshold anywhere between.
+
+    The root is found by a declared deterministic search: double from 1.0 until the
+    resultant is reached, then exactly ``_CONCENTRATION_BISECTIONS`` bisections. No
+    library optimizer, seed or tolerance enters the frozen procedure.
+    """
+
+    if math.isnan(angular_variance) or angular_variance <= 0:
+        raise ObservabilityError("angular variance must be positive")
+    if math.isinf(angular_variance):
+        return 0.0
+    target = math.exp(-angular_variance / 2.0)
+    if target <= 0.0:
+        return 0.0
+    if target >= 1.0:
+        raise ObservabilityError(
+            "angular variance underflowed to a unit resultant; kappa is unbounded"
+        )
+
+    low, high = 0.0, 1.0
+    while von_mises_mean_resultant(high) < target:
+        low, high = high, high * 2.0
+        if high > _CONCENTRATION_BRACKET_LIMIT:
+            raise ObservabilityError("resultant matching exceeded its kappa bracket")
+    for _ in range(_CONCENTRATION_BISECTIONS):
+        middle = 0.5 * (low + high)
+        if von_mises_mean_resultant(middle) < target:
+            low = middle
+        else:
+            high = middle
+    return 0.5 * (low + high)
 
 
 def uniform_relative_von_mises_nll(delta_angle: float, kappa: float) -> float:
@@ -227,7 +292,7 @@ def observe_direction(
     candidate_first_point: object,
     candidate_first_height: float,
     gap: int,
-    normalized_noise_covariance: object,
+    normalized_effective_covariance: object,
 ) -> DirectionObservation:
     """Build the declared covariance-aware angular observation for one pair."""
 
@@ -250,7 +315,7 @@ def observe_direction(
         raise ObservabilityError("gap must be a positive integer")
 
     normalized_covariance = _spd_covariance(
-        normalized_noise_covariance, name="normalized_noise_covariance"
+        normalized_effective_covariance, name="normalized_effective_covariance"
     )
     fit = fit_ols_motion(points, lost_frames)
     point_covariances = np.asarray(
@@ -301,7 +366,7 @@ def observe_direction(
         raise ObservabilityError(
             "propagated angular variance must be finite and positive"
         )
-    kappa = 1.0 / angular_variance
+    kappa = resultant_matched_concentration(angular_variance)
     delta_angle = math.atan2(
         math.sin(
             math.atan2(displacement_rate[1], displacement_rate[0])

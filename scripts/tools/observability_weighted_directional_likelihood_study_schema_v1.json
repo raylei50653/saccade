@@ -19,7 +19,8 @@
     "validity",
     "phenomenon_box",
     "ranking_box",
-    "terminal_order"
+    "terminal_order",
+    "source_relation_contract"
   ],
   "properties": {
     "schema": {
@@ -48,7 +49,12 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["role", "path", "sha256", "bytes"],
+        "required": [
+          "role",
+          "path",
+          "sha256",
+          "bytes"
+        ],
         "properties": {
           "role": {
             "type": "string",
@@ -96,10 +102,17 @@
           "const": "gt_valid == 1 and 0.60 <= h_lost_raw / h_cand_raw <= 1.70"
         },
         "event_key": {
-          "const": ["seq", "cand_id"]
+          "const": [
+            "seq",
+            "cand_id"
+          ]
         },
         "candidate_key": {
-          "const": ["seq", "cand_id", "lost_id"]
+          "const": [
+            "seq",
+            "cand_id",
+            "lost_id"
+          ]
         },
         "rankable_event": {
           "const": "at least one gt_match == 1 and at least one gt_match == 0"
@@ -126,6 +139,8 @@
         "q_v_bins",
         "angular_variance",
         "concentration",
+        "concentration_identity",
+        "concentration_solver",
         "weighted_cost",
         "raw_cost",
         "exact_zero_vector_rule",
@@ -142,10 +157,14 @@
           "const": "ols_on_actual_frame_values"
         },
         "noise_fit": {
-          "const": "height_normalized_ols_residual_covariance"
+          "const": "height_normalized_ols_effective_residual_covariance"
         },
         "noise_fit_dedup_key": {
-          "const": ["seq", "track_id", "side", "anchor_frame"]
+          "const": [
+            "seq",
+            "track_id",
+            "frame_tuple"
+          ]
         },
         "noise_fit_labels_used": {
           "const": false
@@ -154,13 +173,18 @@
           "const": "leave_one_sequence_out"
         },
         "q_v_bins": {
-          "const": ["[0,1)", "[1,4)", "[4,9)", "[9,inf)"]
+          "const": [
+            "[0,1)",
+            "[1,4)",
+            "[4,9)",
+            "[9,inf)"
+          ]
         },
         "angular_variance": {
           "const": "gvT_Sv_gv + gdT_Sd_gd - 2_gvT_Svd_gd"
         },
         "concentration": {
-          "const": "1 / angular_variance"
+          "const": "resultant_matched_wrapped_normal_to_von_mises"
         },
         "weighted_cost": {
           "const": "log_I0_kappa - kappa_cos_delta"
@@ -169,10 +193,16 @@
           "const": "1 - cos_delta"
         },
         "exact_zero_vector_rule": {
-          "const": "kappa_0_weighted_cost_0_raw_cost_1"
+          "const": "kappa_0_weighted_cost_0_raw_cost_1_as_the_matching_limit"
         },
         "posthoc_covariance_regularization": {
           "const": "forbidden"
+        },
+        "concentration_identity": {
+          "const": "exp(-angular_variance / 2) = I1(kappa) / I0(kappa)"
+        },
+        "concentration_solver": {
+          "const": "double_from_1_then_exactly_100_bisections"
         }
       }
     },
@@ -215,7 +245,12 @@
     "phenomenon_box": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["metric", "low_q", "high_q", "minimum_high_minus_low"],
+      "required": [
+        "metric",
+        "low_q",
+        "high_q",
+        "minimum_high_minus_low"
+      ],
       "properties": {
         "metric": {
           "const": "gt_pair_mean_resultant_length"
@@ -241,6 +276,7 @@
         "minimum_nonnegative_folds",
         "minimum_positive_folds",
         "cluster_bootstrap",
+        "delete_one_sequence",
         "short_gap"
       ],
       "properties": {
@@ -267,7 +303,8 @@
             "replicates",
             "seed",
             "interval",
-            "minimum_lower_bound"
+            "role",
+            "gates_terminal"
           ],
           "properties": {
             "unit": {
@@ -282,21 +319,51 @@
             "interval": {
               "const": "percentile_95"
             },
-            "minimum_lower_bound": {
-              "const": 0.0
+            "role": {
+              "const": "descriptive_only"
+            },
+            "gates_terminal": {
+              "const": false
             }
           }
         },
         "short_gap": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["range", "minimum_delta"],
+          "required": [
+            "range",
+            "minimum_delta"
+          ],
           "properties": {
             "range": {
               "const": "1 <= gap <= 10"
             },
             "minimum_delta": {
               "const": 0.0
+            }
+          }
+        },
+        "delete_one_sequence": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "rule",
+            "minimum_delta",
+            "required_passes",
+            "gates_terminal"
+          ],
+          "properties": {
+            "rule": {
+              "const": "recompute pooled event-macro delta with each sequence removed"
+            },
+            "minimum_delta": {
+              "const": 0.0
+            },
+            "required_passes": {
+              "const": 7
+            },
+            "gates_terminal": {
+              "const": true
             }
           }
         }
@@ -309,6 +376,48 @@
         "OWDL_NO_HELDOUT_DIRECTIONAL_RANKING_POWER",
         "OWDL_DIRECTION_SIGNAL_PRESENT_SR2"
       ]
+    },
+    "source_relation_contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "executed_pre_seal",
+        "executed_by",
+        "obligations",
+        "emits",
+        "on_failure"
+      ],
+      "properties": {
+        "executed_pre_seal": {
+          "const": false
+        },
+        "executed_by": {
+          "const": "post_seal_formal_runner_before_any_metric_or_label_aggregate"
+        },
+        "obligations": {
+          "const": [
+            "trajectory_frame_id_uniqueness",
+            "lost_endpoint_resolves_to_exactly_one_trajectory_row",
+            "last_four_actual_frame_window_present_for_every_retained_lost_id",
+            "candidate_first_point_resolves_to_exactly_one_trajectory_row",
+            "gap_equals_candidate_first_frame_minus_lost_last_frame",
+            "bbox_bottom_center_and_height_reconstructed_from_trajectory_bytes",
+            "pair_row_joins_trajectory_support_exactly_once",
+            "every_unjoined_pair_row_carries_exactly_one_enumerated_reason",
+            "joined_plus_excluded_reconciles_to_the_included_row_count"
+          ]
+        },
+        "emits": {
+          "const": [
+            "joined_candidate_count",
+            "exclusion_counts_by_reason",
+            "reconstructed_support_digest"
+          ]
+        },
+        "on_failure": {
+          "const": "OWDL_INVALID_STUDY"
+        }
+      }
     }
   }
 }

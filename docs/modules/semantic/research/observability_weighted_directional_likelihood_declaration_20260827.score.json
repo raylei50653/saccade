@@ -10,7 +10,7 @@
     "registry_binding_id": "claim_state_registry_score_ranking_v1"
   },
   "policy": {
-    "policy_id": "owdl_uniform_relative_vm_direction_policy_v1",
+    "policy_id": "owdl_resultant_matched_vm_direction_policy_v2",
     "source_pair_space_id": "m_b1_frozen_relink_pair_space_v1",
     "event_space_id": "m_b1_newborn_choice_event_space_v1",
     "pair_to_event_reduction_id": "m_b1_pair_to_newborn_choice_event_v1",
@@ -46,10 +46,11 @@
       "component_ids": [
         "lost_ols_velocity_v1",
         "candidate_displacement_rate_v1",
-        "fold_normalized_position_noise_covariance_v1",
-        "shared_endpoint_cross_covariance_v1"
+        "fold_effective_position_covariance_v1",
+        "shared_endpoint_cross_covariance_v1",
+        "resultant_matched_concentration_v1"
       ],
-      "transform_id": "uniform_relative_von_mises_nll_v1",
+      "transform_id": "resultant_matched_uniform_relative_von_mises_nll_v1",
       "transform_kind": "pair_local",
       "output_domain_id": "uniform_relative_direction_nll_domain_v1",
       "orientation": "lower_better"
@@ -79,9 +80,9 @@
     "kind": "distributional",
     "reference_id": "uniform_direction_at_zero_observability_v1",
     "calibration_unit_id": "gt_positive_pair_angular_residual_v1",
-    "estimator_id": "fold_heldout_resultant_length_by_qv_bin_v1",
+    "estimator_id": "fold_heldout_resultant_length_by_observability_index_bin_v1",
     "proper_score_id": null,
-    "held_out_rule_id": "leave_one_sequence_out_noise_fit_v1",
+    "held_out_rule_id": "leave_one_sequence_out_effective_covariance_fit_v1",
     "minimum_exposure": 30
   },
   "claim": {
@@ -90,7 +91,7 @@
     "kappa": {
       "quantification_space": "candidate_event",
       "comparison_relation_id": "owdl_vs_raw_cosine_same_candidate_event_v1",
-      "decision_rule_id": "owdl_observability_and_ranking_boxes_v1"
+      "decision_rule_id": "owdl_observability_and_ranking_boxes_v2"
     },
     "primary_ranking_metric": "event_pairwise_accuracy",
     "metric_parameters": {},
@@ -102,9 +103,9 @@
       "unit": "event_macro_pwa_delta"
     },
     "dependence_unit_id": "mot17_sequence_cluster_v1",
-    "uncertainty_method_id": "sequence_cluster_percentile_bootstrap_10000_v1",
+    "uncertainty_method_id": "delete_one_sequence_robustness_gate_with_descriptive_cluster_bootstrap_v1",
     "folds_id": "leave_one_mot17_sequence_out_v1",
-    "blind_reveal_binding_id": "sealed_code_and_input_identity_before_outcomes_v1",
+    "blind_reveal_binding_id": "sealed_head_runner_sha256_and_nine_source_hashes_before_outcomes_v1",
     "no_refit": true,
     "stability_strata": [
       "q_v_bin",
