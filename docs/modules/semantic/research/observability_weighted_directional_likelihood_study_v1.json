@@ -1,0 +1,153 @@
+{
+  "schema": "observability_weighted_directional_likelihood_study_v1",
+  "study_id": "owdl_m_b1_v1",
+  "status": "preseal_implementation",
+  "execution_authorized": false,
+  "declaration": "docs/modules/semantic/research/observability_weighted_directional_likelihood_declaration_20260827.md",
+  "score_declaration": "docs/modules/semantic/research/observability_weighted_directional_likelihood_declaration_20260827.score.json",
+  "source_files": [
+    {
+      "role": "pair_table",
+      "path": "out/signal_study/m_b1_smoke_20260709T092543Z/pairs.csv",
+      "sha256": "0ae3896791ec074fbe951198752c17385c4ee0770a7ec3831225d3ea56a69d17",
+      "bytes": 18753786
+    },
+    {
+      "role": "source_context",
+      "path": "out/signal_study/m_b1_smoke_20260709T092543Z/context.json",
+      "sha256": "3db5a79bae9963b07c9ae10845aeda4b5a96a5c0956de364c89eaa9d105eaafd",
+      "bytes": 2285
+    },
+    {
+      "role": "trajectory_mot17_02_sdp",
+      "path": "results/MOT17_eval_m_b1_substrate_20260709T092543Z/MOT17-02-SDP.txt",
+      "sha256": "42d958b9dc111906170ba6b4b3676e7614194d61562a1a15b3318dc714633e7a",
+      "bytes": 522500
+    },
+    {
+      "role": "trajectory_mot17_04_sdp",
+      "path": "results/MOT17_eval_m_b1_substrate_20260709T092543Z/MOT17-04-SDP.txt",
+      "sha256": "0cf0a0ee2db0b0ece4622f957e2bb76cfd037fc73747b2f6ef08854e5b7be6ad",
+      "bytes": 2221261
+    },
+    {
+      "role": "trajectory_mot17_05_sdp",
+      "path": "results/MOT17_eval_m_b1_substrate_20260709T092543Z/MOT17-05-SDP.txt",
+      "sha256": "8f37383d429e54fbad792c8065b00f5804cdc90b4589976e4c9e0b19c0ec333e",
+      "bytes": 244109
+    },
+    {
+      "role": "trajectory_mot17_09_sdp",
+      "path": "results/MOT17_eval_m_b1_substrate_20260709T092543Z/MOT17-09-SDP.txt",
+      "sha256": "14c82627d0365c604e68045e39dad6c9017d79120b8aba478c1c11e0b4ac6254",
+      "bytes": 196094
+    },
+    {
+      "role": "trajectory_mot17_10_sdp",
+      "path": "results/MOT17_eval_m_b1_substrate_20260709T092543Z/MOT17-10-SDP.txt",
+      "sha256": "905af425a7ae51e698bfb73d812928913055a16eff832c4f0be4daa56194ce6d",
+      "bytes": 531815
+    },
+    {
+      "role": "trajectory_mot17_11_sdp",
+      "path": "results/MOT17_eval_m_b1_substrate_20260709T092543Z/MOT17-11-SDP.txt",
+      "sha256": "8f257f9f325d0b7ac2a2ee7ed518e20ea5466860e56a7c62237cec5781aef22c",
+      "bytes": 410297
+    },
+    {
+      "role": "trajectory_mot17_13_sdp",
+      "path": "results/MOT17_eval_m_b1_substrate_20260709T092543Z/MOT17-13-SDP.txt",
+      "sha256": "8efab3e2c4294c9884946afe9398197e80a20d3c41973138bd16af54a47d7eb0",
+      "bytes": 520359
+    }
+  ],
+  "sequences": [
+    "MOT17-02-SDP",
+    "MOT17-04-SDP",
+    "MOT17-05-SDP",
+    "MOT17-09-SDP",
+    "MOT17-10-SDP",
+    "MOT17-11-SDP",
+    "MOT17-13-SDP"
+  ],
+  "candidate_universe": {
+    "row_inclusion": "gt_valid == 1 and 0.60 <= h_lost_raw / h_cand_raw <= 1.70",
+    "event_key": [
+      "seq",
+      "cand_id"
+    ],
+    "candidate_key": [
+      "seq",
+      "cand_id",
+      "lost_id"
+    ],
+    "rankable_event": "at least one gt_match == 1 and at least one gt_match == 0",
+    "tie_contribution": 0.5,
+    "orientation": "lower_better"
+  },
+  "estimator": {
+    "history_window": 4,
+    "position": "bbox_bottom_center",
+    "velocity_fit": "ols_on_actual_frame_values",
+    "noise_fit": "height_normalized_ols_residual_covariance",
+    "noise_fit_dedup_key": [
+      "seq",
+      "track_id",
+      "side",
+      "anchor_frame"
+    ],
+    "noise_fit_labels_used": false,
+    "fold_rule": "leave_one_sequence_out",
+    "q_v_bins": [
+      "[0,1)",
+      "[1,4)",
+      "[4,9)",
+      "[9,inf)"
+    ],
+    "angular_variance": "gvT_Sv_gv + gdT_Sd_gd - 2_gvT_Svd_gd",
+    "concentration": "1 / angular_variance",
+    "weighted_cost": "log_I0_kappa - kappa_cos_delta",
+    "raw_cost": "1 - cos_delta",
+    "exact_zero_vector_rule": "kappa_0_weighted_cost_0_raw_cost_1",
+    "posthoc_covariance_regularization": "forbidden"
+  },
+  "validity": {
+    "minimum_rankable_events": 100,
+    "minimum_gt_pairs_low_q": 30,
+    "minimum_gt_pairs_high_q": 30,
+    "minimum_short_gap_events": 20,
+    "require_spd_fold_covariance": true,
+    "require_exact_candidate_conservation": true,
+    "require_all_seven_heldout_folds": true
+  },
+  "phenomenon_box": {
+    "metric": "gt_pair_mean_resultant_length",
+    "low_q": "q_v < 1",
+    "high_q": "q_v >= 9",
+    "minimum_high_minus_low": 0.15
+  },
+  "ranking_box": {
+    "primary_metric": "heldout_event_macro_pairwise_accuracy",
+    "comparison": "event_pwa_weighted_minus_event_pwa_raw",
+    "minimum_delta": 0.02,
+    "minimum_nonnegative_folds": 5,
+    "minimum_positive_folds": 4,
+    "cluster_bootstrap": {
+      "unit": "sequence",
+      "replicates": 10000,
+      "seed": 20260827,
+      "interval": "percentile_95",
+      "minimum_lower_bound": 0.0
+    },
+    "short_gap": {
+      "range": "1 <= gap <= 10",
+      "minimum_delta": 0.0
+    }
+  },
+  "terminal_order": [
+    "OWDL_INVALID_STUDY",
+    "OWDL_OBSERVABILITY_NOT_SUPPORTED",
+    "OWDL_NO_HELDOUT_DIRECTIONAL_RANKING_POWER",
+    "OWDL_DIRECTION_SIGNAL_PRESENT_SR2"
+  ]
+}

@@ -416,6 +416,7 @@ deleting.
 | `migrate_legacy_mamba_cache_manifest.py` | diagnostic | cli | Add a validated lineage manifest to a legacy feature-only Mamba cache. |
 | `mine_relink_signals.py` | diagnostic | cli | Batch deep-mine continuous relink signals on a B1 pairs CSV. |
 | `motion_norm_probe.py` | experiment | cli | §8.4 motion normalization — does scale-normalizing displacement improve the true-vs-false association/relink … |
+| `observability_weighted_directional_likelihood.py` | experiment | cli | Preflight and math core for observability-weighted directional likelihood. |
 | `occ_candidate_analyze.py` | diagnostic | cli | Phase B: threshold discriminability + GT-movement from the real-run candidate dump. |
 | `occ_event_values.py` | diagnostic | cli | Per-event ACTUAL-VALUE table for the same-height occlusion gate (one run, no thresholding). |
 | `optimize_relink_weight.py` | diagnostic | cli | Offline optimisation of the speed-weighted relink gate score. |

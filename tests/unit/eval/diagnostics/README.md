@@ -9,6 +9,7 @@
 | `test_analyze_near_miss_offsets.py` | eval | behavior | active | Tests for the near-miss offsets analyzer (scripts.eval.diagnostics.analyze_near_miss_offsets). |
 | `test_analyze_near_miss_stage_attribution.py` | eval | behavior | active | Tests for the near-miss stage-attribution analyzer (scripts.eval.diagnostics.analyze_near_miss_stag… |
 | `test_cheb_gr_offline_handover_report.py` | eval | behavior | active | Tests for the offline Cheb-GR handover report CLI (scripts.eval.diagnostics.cheb_gr_offline_handove… |
+| `test_observability_weighted_directional_likelihood.py` | eval | contract | active | Tests for observability-weighted directional likelihood math and preseal lock. |
 | `test_synthesize_handover_applicability.py` | eval | behavior | active | Tests for the handover-applicability synthesis CLI (scripts.eval.diagnostics.synthesize_handover_ap… |
 
 <!-- END generated test index -->

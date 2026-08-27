@@ -155,6 +155,15 @@ tools:
   recipes: [R-A]
   expected_artifacts: [scripts/tools/out/relink_candidates.csv]
   notes: Requires relink-OFF / interpolate-OFF MOT dump substrate (see fact_owner §1–§2).
+- id: observability_weighted_directional_likelihood
+  path: scripts/tools/observability_weighted_directional_likelihood.py
+  door: A
+  roles: [diagnostic, probe]
+  priority: P1
+  fact_owner: docs/modules/semantic/research/observability_weighted_directional_likelihood_declaration_20260827.md
+  no_go_ids: []
+  recipes: []
+  notes: Pre-seal entry is check-only; formal outcome execution requires a separate exact-head owner seal and authority.
 - id: analyze_preloss_motion
   path: scripts/tools/analyze_preloss_motion.py
   door: A

@@ -134,6 +134,9 @@ NO_POLICY_BINDING = {
     "safe_domain_runtime_transfer_declaration_20260712.md": "safe-domain transfer; freezes no policy table",
     "frozen_packet_exact_key_recoverability_declaration_20260713.md": "key recoverability; freezes no policy table",
     "ambiguous_band_ranking_power_probe_declaration_20260712.md": "read-only probe; explicitly forbids preset change",
+    "observability_weighted_directional_likelihood_declaration_20260827.md": (
+        "offline score-ranking capability map; explicitly freezes no bridge preset"
+    ),
     # R1's *evidence* is captured under `m`, and P0's audit checks that against the
     # policy target. The declaration itself freezes no policy — its only mention of
     # a preset is the row declaring preset changes unauthorized.
