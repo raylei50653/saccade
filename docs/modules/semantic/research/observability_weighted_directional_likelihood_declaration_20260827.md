@@ -25,11 +25,35 @@ evidence packet, or selecting a terminal is forbidden until the research owner
 seals this declaration at one exact merged head.
 
 Seal review freezes this document, the two JSON records, implementation bytes,
-tests, and exact source identities together. A later formal run must be a
-separately authorized execution from that sealed head. Any change to input
-identity, estimator, bins, boxes, tie policy, or terminal order voids the run and
-requires a new pre-outcome declaration. No terminal auto-authorizes production
-code, a preset change, or another experiment.
+tests, and exact source identities together. Any change to input identity,
+estimator, bins, boxes, tie policy, or terminal order voids the run and requires
+a new pre-outcome declaration. No terminal auto-authorizes production code, a
+preset change, or another experiment.
+
+### 1.1 Two heads, not one
+
+A formal run cannot be executed "from the sealed head", because **the sealed head
+contains no runner** — §8 adds it afterwards. Collapsing the two into one head is
+therefore not a shorthand, it is a contradiction, and it would leave the runner's
+identity bound to nothing. The authority names three identities separately, and
+they are carried as `authority_binding` in the machine study spec:
+
+| Identity | What it fixes | When it is filled |
+|:--|:--|:--|
+| `declaration_seal_head` | this document, both JSON records, the math core, the tests, the nine source hashes | at owner seal |
+| `runner_review_head` | the later head that adds the formal runner and evidence schema | at the separate post-seal review |
+| `runner_sha256` | the runner file's own bytes | at that same review |
+
+`runner_review_head` is admissible only if it **reproduces the sealed declaration
+bytes exactly** — the declaration, both records, the math core and the tests must
+be byte-identical to `declaration_seal_head`. That condition is what makes two
+heads sound rather than a way to edit a sealed study; the second head may add the
+runner, and nothing else that this declaration froze.
+
+One formal execution is then authorized against all three identities together
+plus the nine frozen source hashes. All three are `null` in the current record and
+the preflight refuses any spec that has filled them, because filling one pre-seal
+would assert an authority that does not exist yet.
 
 ## 2. Decision question and claim ceiling
 
@@ -248,10 +272,39 @@ Mises:
 
 \(I_1/I_0\) is strictly increasing from \(0\) to \(1\), so \(\kappa\) is unique.
 The map recovers \(\kappa\to1/\sigma^2_{\Delta\theta}\) as the variance goes to
-zero, and decays smoothly to \(\kappa\to0\) as it grows, with no threshold in
-between. \(\kappa\) is obtained by a declared deterministic search — double from
-\(1\) until the resultant is reached, then exactly 100 bisections — so no library
-optimizer, tolerance or seed enters the frozen procedure.
+zero, and decays smoothly to \(\kappa\to0\) as it grows, with **no model
+threshold** in between.
+
+#### Frozen numerical domain
+
+"No threshold" is a statement about the model, and the arithmetic needs its own
+boundary stated rather than implied. All of it is binary64:
+
+```text
+arithmetic                     binary64
+angular variance domain        (2**-53, inf]
+unit-resultant rounding        OWDL_INVALID_STUDY
+bracket search                 double from 1.0, limit 2**60
+bisections                     exactly 100
+result                         midpoint of the final bracket
+```
+
+Below the domain floor — \(\sigma^2_{\Delta\theta}\le2^{-53}\approx1.11\times10^{-16}\)
+— \(\exp(-\sigma^2/2)\) rounds to exactly \(1.0\) in binary64, the matching
+equation has no finite root, and the study is invalid. That is a
+**representability failure of the arithmetic, not a model threshold**: the model
+is defined there and only the number system is not, and v1 refuses rather than
+capping \(\kappa\) at an invented ceiling. Approaching that floor from above,
+\(\kappa\) saturates rather than tracking \(1/\sigma^2\) — at the smallest
+admissible variance it is about \(2.9\times10^{15}\) where \(1/\sigma^2\) would be
+\(9.0\times10^{15}\).
+
+The \(2^{60}\) bracket limit is unreachable given that floor: the largest
+representable target below \(1\) is matched at \(\kappa=2^{52}\), so the search
+always terminates after at most 52 doublings. It is declared because a frozen
+procedure should state its bounds even where they cannot bind.
+
+No library optimizer, tolerance or seed enters the frozen procedure.
 
 Two approximation classes are therefore tested, and both are named: the
 delta-method propagation of \(\sigma^2_{\Delta\theta}\), and the resultant
@@ -295,7 +348,9 @@ Under resultant matching the zero case is the **limit** of the map rather than a
 separate branch: an undefined angle carries an infinite \(\sigma^2_{\Delta\theta}\),
 whose matched resultant is \(0\), whose \(\kappa\) is \(0\). The rule is stated
 explicitly anyway so that the implementation and the declaration agree without
-relying on a limit being taken. As in §3, uniform here is the conservative
+relying on a limit being taken. The opposite end of the domain is the floor
+above: an angular variance too small for binary64 to distinguish its resultant
+from \(1\) is invalid, not clamped. As in §3, uniform here is the conservative
 convention v1 chose for an unidentified angle, not an asserted property of the
 underlying anisotropic direction law.
 
@@ -497,12 +552,14 @@ real on MOT17 did not reproduce on either.
    outcome rows. The study spec and the SR2 record are both validated by tests
    that need no frozen source file, so drift is caught on any machine that holds
    only the repository.
-2. **After owner seal only:** add the formal runner and evidence schema without
-   changing estimator or boxes; re-review exact head. "Byte-bound" is
-   discharged concretely: the runner's own SHA-256, the nine source hashes, and
-   the sealed head are recorded together in the evidence packet's blind→reveal
-   binding before the first outcome row is read, so the reveal names the exact
-   code that produced it rather than a policy id.
+2. **After owner seal only:** add the formal runner and evidence schema at a new
+   `runner_review_head` that reproduces the sealed declaration bytes exactly
+   (§1.1), changing no estimator or box; re-review that exact head.
+   "Byte-bound" is discharged concretely: `declaration_seal_head`,
+   `runner_review_head`, `runner_sha256`, and the nine source hashes are recorded
+   together in the evidence packet's blind→reveal binding before the first
+   outcome row is read, so the reveal names the exact code that produced it
+   rather than a policy id.
 3. **Separate execution authority:** consume the single declared run, verify
    the packet independently, then record one ordered terminal in a follow-up.
 

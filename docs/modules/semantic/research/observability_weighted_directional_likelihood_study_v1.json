@@ -110,7 +110,16 @@
     "exact_zero_vector_rule": "kappa_0_weighted_cost_0_raw_cost_1_as_the_matching_limit",
     "posthoc_covariance_regularization": "forbidden",
     "concentration_identity": "exp(-angular_variance / 2) = I1(kappa) / I0(kappa)",
-    "concentration_solver": "double_from_1_then_exactly_100_bisections"
+    "concentration_solver": "double_from_1_then_exactly_100_bisections",
+    "numeric_domain": {
+      "arithmetic": "binary64",
+      "angular_variance_domain": "(2**-53, inf]",
+      "unit_resultant_rounding_rule": "OWDL_INVALID_STUDY",
+      "concentration_bracket_start": 1.0,
+      "concentration_bracket_limit": "2**60",
+      "concentration_bisections": 100,
+      "concentration_result": "midpoint_of_final_bracket"
+    }
   },
   "validity": {
     "minimum_rankable_events": 100,
@@ -187,5 +196,18 @@
       "reconstructed_support_digest"
     ],
     "on_failure": "OWDL_INVALID_STUDY"
+  },
+  "authority_binding": {
+    "declaration_seal_head": null,
+    "runner_review_head": null,
+    "runner_sha256": null,
+    "requires_sealed_declaration_bytes_unchanged": true,
+    "formal_execution_binds": [
+      "declaration_seal_head",
+      "runner_review_head",
+      "runner_sha256",
+      "nine_frozen_source_sha256"
+    ],
+    "rule": "the sealed head carries no runner; a formal run is authorized at a later runner_review_head that reproduces the sealed declaration bytes exactly"
   }
 }

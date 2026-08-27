@@ -20,7 +20,8 @@
     "phenomenon_box",
     "ranking_box",
     "terminal_order",
-    "source_relation_contract"
+    "source_relation_contract",
+    "authority_binding"
   ],
   "properties": {
     "schema": {
@@ -144,7 +145,8 @@
         "weighted_cost",
         "raw_cost",
         "exact_zero_vector_rule",
-        "posthoc_covariance_regularization"
+        "posthoc_covariance_regularization",
+        "numeric_domain"
       ],
       "properties": {
         "history_window": {
@@ -203,6 +205,42 @@
         },
         "concentration_solver": {
           "const": "double_from_1_then_exactly_100_bisections"
+        },
+        "numeric_domain": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "arithmetic",
+            "angular_variance_domain",
+            "unit_resultant_rounding_rule",
+            "concentration_bracket_start",
+            "concentration_bracket_limit",
+            "concentration_bisections",
+            "concentration_result"
+          ],
+          "properties": {
+            "arithmetic": {
+              "const": "binary64"
+            },
+            "angular_variance_domain": {
+              "const": "(2**-53, inf]"
+            },
+            "unit_resultant_rounding_rule": {
+              "const": "OWDL_INVALID_STUDY"
+            },
+            "concentration_bracket_start": {
+              "const": 1.0
+            },
+            "concentration_bracket_limit": {
+              "const": "2**60"
+            },
+            "concentration_bisections": {
+              "const": 100
+            },
+            "concentration_result": {
+              "const": "midpoint_of_final_bracket"
+            }
+          }
         }
       }
     },
@@ -452,6 +490,43 @@
         },
         "on_failure": {
           "const": "OWDL_INVALID_STUDY"
+        }
+      }
+    },
+    "authority_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "declaration_seal_head",
+        "runner_review_head",
+        "runner_sha256",
+        "requires_sealed_declaration_bytes_unchanged",
+        "formal_execution_binds",
+        "rule"
+      ],
+      "properties": {
+        "declaration_seal_head": {
+          "const": null
+        },
+        "runner_review_head": {
+          "const": null
+        },
+        "runner_sha256": {
+          "const": null
+        },
+        "requires_sealed_declaration_bytes_unchanged": {
+          "const": true
+        },
+        "formal_execution_binds": {
+          "const": [
+            "declaration_seal_head",
+            "runner_review_head",
+            "runner_sha256",
+            "nine_frozen_source_sha256"
+          ]
+        },
+        "rule": {
+          "const": "the sealed head carries no runner; a formal run is authorized at a later runner_review_head that reproduces the sealed declaration bytes exactly"
         }
       }
     }

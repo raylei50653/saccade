@@ -306,6 +306,74 @@ def test_the_stable_cost_equals_the_declared_algebraic_form() -> None:
             )
 
 
+def test_the_declared_numerical_domain_floor_is_where_binary64_actually_fails() -> None:
+    """The floor is a representability failure, not a model threshold."""
+
+    floor = 2.0**-53
+    assert math.exp(-floor / 2.0) == 1.0
+    just_above = math.nextafter(floor, math.inf)
+    assert math.exp(-just_above / 2.0) < 1.0
+
+    with pytest.raises(owdl.ObservabilityError, match="unit resultant"):
+        owdl.resultant_matched_concentration(floor)
+    kappa = owdl.resultant_matched_concentration(just_above)
+    assert 1.0e15 < kappa < 1.0 / just_above
+
+
+def test_the_declared_bracket_limit_cannot_bind_above_that_floor() -> None:
+    """Declared for completeness: the search terminates by 2**52, well under 2**60."""
+
+    largest_target = math.nextafter(1.0, 0.0)
+    high, doublings = 1.0, 0
+    while owdl.von_mises_mean_resultant(high) < largest_target:
+        high *= 2.0
+        doublings += 1
+
+    assert high == 2.0**52
+    assert doublings == 52
+    assert high < owdl._CONCENTRATION_BRACKET_LIMIT
+
+
+def test_the_preseal_authority_binding_names_three_identities_and_fills_none() -> None:
+    """The sealed head carries no runner, so seal head and runner head differ."""
+
+    authority = _frozen_study_spec()["authority_binding"]
+
+    assert authority["declaration_seal_head"] is None
+    assert authority["runner_review_head"] is None
+    assert authority["runner_sha256"] is None
+    assert authority["requires_sealed_declaration_bytes_unchanged"] is True
+    assert authority["formal_execution_binds"] == [
+        "declaration_seal_head",
+        "runner_review_head",
+        "runner_sha256",
+        "nine_frozen_source_sha256",
+    ]
+
+
+@pytest.mark.parametrize(
+    "identity", ["declaration_seal_head", "runner_review_head", "runner_sha256"]
+)
+def test_a_preseal_spec_that_claims_an_authority_it_lacks_is_rejected(
+    tmp_path: Path, identity: str
+) -> None:
+    spec = _frozen_study_spec()
+    spec["authority_binding"][identity] = "0" * 40
+    spec_path = tmp_path / "study.json"
+    spec_path.write_text(json.dumps(spec), encoding="utf-8")
+
+    with pytest.raises(owdl.ObservabilityError, match="study spec rejected"):
+        owdl.verify_study_spec(spec_path)
+
+
+def test_both_calibration_exposures_are_bound_to_the_score_record() -> None:
+    study, score = _frozen_study_spec(), _frozen_score_record()
+    study["validity"]["minimum_gt_pairs_high_q"] = 5
+
+    with pytest.raises(owdl.ObservabilityError, match="high-q calibration exposure"):
+        owdl._validate_study_score_binding(study, score)
+
+
 def _frozen_score_record() -> dict:
     return json.loads(owdl.DEFAULT_SCORE_DECLARATION.read_text(encoding="utf-8"))
 
@@ -417,6 +485,11 @@ def test_dropping_a_frozen_box_from_the_study_spec_is_rejected(
         (("ranking_box", "delete_one_sequence", "refit_effective_covariance"), True),
         (("ranking_box", "delete_one_sequence", "reuse_primary_fold_scores"), False),
         (("validity", "require_defined_per_fold_delta"), False),
+        (("validity", "minimum_gt_pairs_high_q"), 5),
+        (("estimator", "numeric_domain", "arithmetic"), "binary32"),
+        (("estimator", "numeric_domain", "concentration_bisections"), 20),
+        (("estimator", "numeric_domain", "unit_resultant_rounding_rule"), "clamp"),
+        (("authority_binding", "requires_sealed_declaration_bytes_unchanged"), False),
         (("candidate_universe", "tie_contribution"), 1.0),
         (("execution_authorized",), True),
     ],

@@ -558,8 +558,13 @@ def _validate_study_score_binding(
             claim["minimum_exposure"],
         ),
         (
-            "calibration exposure",
+            "low-q calibration exposure",
             validity["minimum_gt_pairs_low_q"],
+            score["calibration_claim"]["minimum_exposure"],
+        ),
+        (
+            "high-q calibration exposure",
+            validity["minimum_gt_pairs_high_q"],
             score["calibration_claim"]["minimum_exposure"],
         ),
         (
@@ -705,6 +710,16 @@ def verify_study_spec(path: Path) -> dict[str, object]:
         raise ObservabilityError("unexpected score declaration identity")
     score_report = validate_declaration_file(score_path)
     _validate_study_score_binding(spec, _load_json(score_path))
+    authority = spec["authority_binding"]
+    filled = [
+        name
+        for name in ("declaration_seal_head", "runner_review_head", "runner_sha256")
+        if authority[name] is not None
+    ]
+    if filled:
+        raise ObservabilityError(
+            f"pre-seal authority binding must stay unfilled, found {sorted(filled)}"
+        )
     return {
         "schema": STUDY_SCHEMA,
         "study_id": STUDY_ID,
