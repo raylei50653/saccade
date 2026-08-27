@@ -500,6 +500,8 @@
         "declaration_seal_head",
         "runner_review_head",
         "runner_sha256",
+        "sealed_spec_slots_remain_null",
+        "values_carried_in",
         "requires_sealed_declaration_bytes_unchanged",
         "formal_execution_binds",
         "rule"
@@ -514,6 +516,12 @@
         "runner_sha256": {
           "const": null
         },
+        "sealed_spec_slots_remain_null": {
+          "const": true
+        },
+        "values_carried_in": {
+          "const": "external_authority_receipt_and_evidence_packet"
+        },
         "requires_sealed_declaration_bytes_unchanged": {
           "const": true
         },
@@ -526,7 +534,7 @@
           ]
         },
         "rule": {
-          "const": "the sealed head carries no runner; a formal run is authorized at a later runner_review_head that reproduces the sealed declaration bytes exactly"
+          "const": "the sealed head carries no runner and cannot name itself; the three identities live in external receipts and the evidence packet binds them to byte-identical sealed declaration bytes"
         }
       }
     }

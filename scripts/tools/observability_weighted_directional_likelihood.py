@@ -273,8 +273,9 @@ def half_angle_cosine_deficit(delta_angle: float) -> float:
 
     Computed directly, ``1 - cos(1e-8)`` rounds to exactly ``0.0``: every
     sufficiently well-aligned candidate collapses onto the same baseline score
-    and ties there, and a tie is worth half a pairwise win. The identity below
-    is exact in double precision over the whole range.
+    and ties there, and a tie is worth half a pairwise win. The form below is
+    algebraically exact and avoids that subtractive cancellation; it carries the
+    ordinary rounding of ``sin`` like any other evaluation.
     """
 
     if not math.isfinite(delta_angle):
@@ -718,7 +719,7 @@ def verify_study_spec(path: Path) -> dict[str, object]:
     ]
     if filled:
         raise ObservabilityError(
-            f"pre-seal authority binding must stay unfilled, found {sorted(filled)}"
+            f"authority binding slots stay null by construction, found {sorted(filled)}"
         )
     return {
         "schema": STUDY_SCHEMA,

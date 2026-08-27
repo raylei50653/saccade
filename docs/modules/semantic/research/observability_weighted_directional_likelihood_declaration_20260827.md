@@ -38,22 +38,47 @@ therefore not a shorthand, it is a contradiction, and it would leave the runner'
 identity bound to nothing. The authority names three identities separately, and
 they are carried as `authority_binding` in the machine study spec:
 
-| Identity | What it fixes | When it is filled |
+| Identity | What it fixes | Where its value lives |
 |:--|:--|:--|
-| `declaration_seal_head` | this document, both JSON records, the math core, the tests, the nine source hashes | at owner seal |
-| `runner_review_head` | the later head that adds the formal runner and evidence schema | at the separate post-seal review |
-| `runner_sha256` | the runner file's own bytes | at that same review |
+| `declaration_seal_head` | this document, both JSON records, the math core, the tests, the nine source hashes | the **seal receipt** |
+| `runner_review_head` | the later head that adds the formal runner and evidence schema | the **runner-review receipt** |
+| `runner_sha256` | the runner file's own bytes | the **runner-review receipt** |
+
+**None of the three is ever written back into the sealed declaration or spec.**
+The slots stay `null` permanently, and the preflight refuses any spec that has
+filled one.
+
+That is not caution, it is the only consistent arrangement. A commit cannot
+contain its own hash: writing `declaration_seal_head` into the sealed spec would
+change the spec's bytes, which changes the commit, which changes the value that
+was just written — a self-reference with no fixed point. And it would break the
+byte-identity condition below in the same motion, because the spec would no
+longer equal what was sealed. The authority values therefore live *outside* the
+bytes they authorize:
+
+```text
+sealed declaration bytes            authority slots null, forever
+        │
+        ▼
+seal receipt                        declaration_seal_head
+        │
+        ▼
+runner-review receipt               runner_review_head, runner_sha256
+        │
+        ▼
+formal evidence packet              binds all of them to the sealed bytes
+```
 
 `runner_review_head` is admissible only if it **reproduces the sealed declaration
 bytes exactly** — the declaration, both records, the math core and the tests must
-be byte-identical to `declaration_seal_head`. That condition is what makes two
-heads sound rather than a way to edit a sealed study; the second head may add the
-runner, and nothing else that this declaration froze.
+be byte-identical to the tree named by `declaration_seal_head`. That condition is
+what makes two heads sound rather than a way to edit a sealed study; the second
+head may add the runner, and nothing else that this declaration froze. It stays
+checkable precisely because the sealed bytes never had to change.
 
 One formal execution is then authorized against all three identities together
-plus the nine frozen source hashes. All three are `null` in the current record and
-the preflight refuses any spec that has filled them, because filling one pre-seal
-would assert an authority that does not exist yet.
+plus the nine frozen source hashes, all read from the receipts rather than from
+the study spec.
 
 ## 2. Decision question and claim ceiling
 
@@ -555,11 +580,13 @@ real on MOT17 did not reproduce on either.
 2. **After owner seal only:** add the formal runner and evidence schema at a new
    `runner_review_head` that reproduces the sealed declaration bytes exactly
    (§1.1), changing no estimator or box; re-review that exact head.
-   "Byte-bound" is discharged concretely: `declaration_seal_head`,
-   `runner_review_head`, `runner_sha256`, and the nine source hashes are recorded
-   together in the evidence packet's blind→reveal binding before the first
-   outcome row is read, so the reveal names the exact code that produced it
-   rather than a policy id.
+   "Byte-bound" is discharged concretely: the formal packet binds the external
+   authority values — `declaration_seal_head` from the seal receipt,
+   `runner_review_head` and `runner_sha256` from the runner-review receipt — to
+   the byte-identical sealed declaration, together with the nine source hashes,
+   before the first outcome row is read. The reveal therefore names the exact
+   code that produced it rather than a policy id, and it does so without any
+   value ever being written back into the sealed bytes.
 3. **Separate execution authority:** consume the single declared run, verify
    the packet independently, then record one ordered terminal in a follow-up.
 

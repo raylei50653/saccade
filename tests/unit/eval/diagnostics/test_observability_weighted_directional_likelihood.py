@@ -97,7 +97,7 @@ def test_zero_velocity_degenerates_to_uniform_without_a_speed_threshold() -> Non
     assert observation.weighted_direction_cost == 0.0
 
 
-def test_higher_velocity_snr_increases_concentration() -> None:
+def test_higher_observability_index_increases_concentration() -> None:
     common = {
         "lost_frames": np.arange(4),
         "lost_heights": np.ones(4),
@@ -342,6 +342,10 @@ def test_the_preseal_authority_binding_names_three_identities_and_fills_none() -
     assert authority["declaration_seal_head"] is None
     assert authority["runner_review_head"] is None
     assert authority["runner_sha256"] is None
+    assert authority["sealed_spec_slots_remain_null"] is True
+    assert authority["values_carried_in"] == (
+        "external_authority_receipt_and_evidence_packet"
+    )
     assert authority["requires_sealed_declaration_bytes_unchanged"] is True
     assert authority["formal_execution_binds"] == [
         "declaration_seal_head",
@@ -354,9 +358,10 @@ def test_the_preseal_authority_binding_names_three_identities_and_fills_none() -
 @pytest.mark.parametrize(
     "identity", ["declaration_seal_head", "runner_review_head", "runner_sha256"]
 )
-def test_a_preseal_spec_that_claims_an_authority_it_lacks_is_rejected(
+def test_a_spec_that_writes_an_authority_value_back_into_itself_is_rejected(
     tmp_path: Path, identity: str
 ) -> None:
+    """Back-filling would change the bytes that the value was supposed to name."""
     spec = _frozen_study_spec()
     spec["authority_binding"][identity] = "0" * 40
     spec_path = tmp_path / "study.json"
@@ -490,6 +495,8 @@ def test_dropping_a_frozen_box_from_the_study_spec_is_rejected(
         (("estimator", "numeric_domain", "concentration_bisections"), 20),
         (("estimator", "numeric_domain", "unit_resultant_rounding_rule"), "clamp"),
         (("authority_binding", "requires_sealed_declaration_bytes_unchanged"), False),
+        (("authority_binding", "sealed_spec_slots_remain_null"), False),
+        (("authority_binding", "values_carried_in"), "sealed_study_spec"),
         (("candidate_universe", "tie_contribution"), 1.0),
         (("execution_authorized",), True),
     ],

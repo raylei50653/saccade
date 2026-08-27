@@ -201,6 +201,8 @@
     "declaration_seal_head": null,
     "runner_review_head": null,
     "runner_sha256": null,
+    "sealed_spec_slots_remain_null": true,
+    "values_carried_in": "external_authority_receipt_and_evidence_packet",
     "requires_sealed_declaration_bytes_unchanged": true,
     "formal_execution_binds": [
       "declaration_seal_head",
@@ -208,6 +210,6 @@
       "runner_sha256",
       "nine_frozen_source_sha256"
     ],
-    "rule": "the sealed head carries no runner; a formal run is authorized at a later runner_review_head that reproduces the sealed declaration bytes exactly"
+    "rule": "the sealed head carries no runner and cannot name itself; the three identities live in external receipts and the evidence packet binds them to byte-identical sealed declaration bytes"
   }
 }
