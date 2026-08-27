@@ -18,6 +18,7 @@ import math
 import sys
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from numbers import Integral
 from pathlib import Path
 from typing import Any
 
@@ -42,6 +43,10 @@ DEFAULT_SCORE_DECLARATION = (
     "observability_weighted_directional_likelihood_declaration_20260827.score.json"
 )
 STUDY_SCHEMA = "observability_weighted_directional_likelihood_study_v1"
+STUDY_SCHEMA_PATH = (
+    ROOT / "scripts/tools/"
+    "observability_weighted_directional_likelihood_study_schema_v1.json"
+)
 STUDY_ID = "owdl_m_b1_v1"
 EXPECTED_SOURCE_ROLES = {
     "out/signal_study/m_b1_smoke_20260709T092543Z/pairs.csv": "pair_table",
@@ -241,7 +246,7 @@ def observe_direction(
         raise ObservabilityError("lost_heights must be finite and positive")
     if not math.isfinite(candidate_first_height) or candidate_first_height <= 0:
         raise ObservabilityError("candidate_first_height must be finite and positive")
-    if isinstance(gap, bool) or not isinstance(gap, int) or gap <= 0:
+    if isinstance(gap, bool) or not isinstance(gap, Integral) or int(gap) <= 0:
         raise ObservabilityError("gap must be a positive integer")
 
     normalized_covariance = _spd_covariance(
@@ -383,10 +388,40 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _schema_validate_study_spec(spec: Mapping[str, Any]) -> None:
+    """Reject any study spec that drifts from the frozen degrees of freedom.
+
+    Identity is pinned twice — once here and once in ``EXPECTED_SOURCE_ROLES`` —
+    but the boxes, bins, estimator rules and terminal order live only in the
+    record. Without this the record is prose in JSON clothing: deleting
+    ``ranking_box`` outright still reported ``valid``.
+    """
+
+    try:
+        import jsonschema
+    except ImportError as exc:  # pragma: no cover - project dependency
+        raise ObservabilityError("jsonschema dependency unavailable") from exc
+
+    schema = _load_json(STUDY_SCHEMA_PATH)
+    try:
+        jsonschema.Draft202012Validator.check_schema(schema)
+        errors = sorted(
+            jsonschema.Draft202012Validator(schema).iter_errors(spec),
+            key=lambda error: [str(part) for part in error.absolute_path],
+        )
+    except jsonschema.SchemaError as exc:  # pragma: no cover - static schema
+        raise ObservabilityError(f"invalid study schema: {exc.message}") from exc
+    if errors:
+        error = errors[0]
+        location = "/".join(str(part) for part in error.absolute_path) or "<root>"
+        raise ObservabilityError(f"study spec rejected at {location}: {error.message}")
+
+
 def verify_study_spec(path: Path) -> dict[str, object]:
     """Check only frozen identities and declaration shape; never load outcome rows."""
 
     spec = _load_json(path)
+    _schema_validate_study_spec(spec)
     if spec.get("schema") != STUDY_SCHEMA or spec.get("study_id") != STUDY_ID:
         raise ObservabilityError("unsupported study schema or study_id")
     if spec.get("status") != "preseal_implementation":

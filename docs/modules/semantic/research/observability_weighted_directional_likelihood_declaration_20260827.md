@@ -82,8 +82,12 @@ noise.
 ## 4. Frozen source universe
 
 The normative file list, byte counts, and SHA-256 values are in the
-[machine study spec](observability_weighted_directional_likelihood_study_v1.json).
-It binds:
+[machine study spec](observability_weighted_directional_likelihood_study_v1.json),
+which is itself checked against
+[`observability_weighted_directional_likelihood_study_schema_v1.json`](../../../../scripts/tools/observability_weighted_directional_likelihood_study_schema_v1.json)
+before any identity is read: every frozen box, bin, estimator rule, and terminal
+in that record is pinned by `const`, so a box can move only by moving the schema
+with it in the same reviewed change. It binds:
 
 - pair table
   `out/signal_study/m_b1_smoke_20260709T092543Z/pairs.csv`, SHA-256
@@ -287,7 +291,9 @@ reasons, and protected short-gap results. A positive terminal must not be called
 
 1. **Current, pre-seal:** declaration, machine identities, pure math core,
    synthetic contract tests, and a check-only preflight that reads zero formal
-   outcome rows.
+   outcome rows. The study spec and the SR2 record are both validated by tests
+   that need no frozen source file, so drift is caught on any machine that holds
+   only the repository.
 2. **After owner seal only:** add the byte-bound formal runner and evidence
    schema without changing estimator or boxes; re-review exact head.
 3. **Separate execution authority:** consume the single declared run, verify

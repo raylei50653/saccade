@@ -55,6 +55,7 @@ revises before any formal row is loaded.
 ## Artifacts
 
 - [machine study spec](../../modules/semantic/research/observability_weighted_directional_likelihood_study_v1.json)
+- [`observability_weighted_directional_likelihood_study_schema_v1.json`](../../../scripts/tools/observability_weighted_directional_likelihood_study_schema_v1.json)
 - [SR2 declaration record](../../modules/semantic/research/observability_weighted_directional_likelihood_declaration_20260827.score.json)
 - [`observability_weighted_directional_likelihood.py`](../../../scripts/tools/observability_weighted_directional_likelihood.py)
 - [`test_observability_weighted_directional_likelihood.py`](../../../tests/unit/eval/diagnostics/test_observability_weighted_directional_likelihood.py)

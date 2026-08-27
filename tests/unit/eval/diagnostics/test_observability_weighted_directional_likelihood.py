@@ -169,23 +169,123 @@ def test_cli_rejects_formal_execution_before_seal() -> None:
         owdl.parse_args([])
 
 
-def test_preflight_rejects_an_incomplete_source_identity_set(tmp_path: Path) -> None:
-    spec_path = tmp_path / "study.json"
-    spec_path.write_text(
-        json.dumps(
-            {
-                "schema": owdl.STUDY_SCHEMA,
-                "study_id": owdl.STUDY_ID,
-                "status": "preseal_implementation",
-                "execution_authorized": False,
-                "source_files": [],
-                "score_declaration": str(
-                    owdl.DEFAULT_SCORE_DECLARATION.relative_to(owdl.ROOT)
-                ),
-            }
-        ),
-        encoding="utf-8",
-    )
+def test_a_numpy_integer_gap_is_accepted_and_a_bool_is_not() -> None:
+    """The formal runner reads gaps from a table, so `np.int64` must not fail closed."""
 
-    with pytest.raises(owdl.ObservabilityError, match="source identity set mismatch"):
+    common = {
+        "lost_points": _linear_window(1.0),
+        "lost_frames": np.arange(4),
+        "lost_heights": np.ones(4),
+        "candidate_first_point": np.array([5.0, 1.0]),
+        "candidate_first_height": 1.0,
+        "normalized_noise_covariance": np.eye(2) * 0.04,
+    }
+
+    assert owdl.observe_direction(gap=np.int64(2), **common).kappa == pytest.approx(
+        owdl.observe_direction(gap=2, **common).kappa
+    )
+    with pytest.raises(owdl.ObservabilityError, match="positive integer"):
+        owdl.observe_direction(gap=True, **common)
+    with pytest.raises(owdl.ObservabilityError, match="positive integer"):
+        owdl.observe_direction(gap=np.int64(0), **common)
+
+
+def _frozen_study_spec() -> dict:
+    return json.loads(owdl.DEFAULT_STUDY_SPEC.read_text(encoding="utf-8"))
+
+
+def test_the_frozen_study_spec_matches_its_schema() -> None:
+    """The record that carries the study's frozen degrees of freedom is checked.
+
+    This runs without the nine frozen source files, so unlike `--check-only` it
+    is reachable on a machine that holds only the repository.
+    """
+
+    owdl._schema_validate_study_spec(_frozen_study_spec())
+
+
+@pytest.mark.parametrize(
+    "frozen_key",
+    [
+        "candidate_universe",
+        "estimator",
+        "phenomenon_box",
+        "ranking_box",
+        "sequences",
+        "terminal_order",
+        "validity",
+    ],
+)
+def test_dropping_a_frozen_box_from_the_study_spec_is_rejected(
+    tmp_path: Path, frozen_key: str
+) -> None:
+    """Deleting any frozen box must fail the preflight, not pass it silently."""
+
+    spec = _frozen_study_spec()
+    del spec[frozen_key]
+    spec_path = tmp_path / "study.json"
+    spec_path.write_text(json.dumps(spec), encoding="utf-8")
+
+    with pytest.raises(owdl.ObservabilityError, match="study spec rejected"):
         owdl.verify_study_spec(spec_path)
+
+
+@pytest.mark.parametrize(
+    ("pointer", "replacement"),
+    [
+        (("phenomenon_box", "minimum_high_minus_low"), 0.05),
+        (("ranking_box", "minimum_delta"), 0.0),
+        (("ranking_box", "minimum_positive_folds"), 1),
+        (("validity", "minimum_rankable_events"), 1),
+        (("estimator", "posthoc_covariance_regularization"), "allowed"),
+        (("estimator", "history_window"), 8),
+        (("candidate_universe", "tie_contribution"), 1.0),
+        (("execution_authorized",), True),
+    ],
+)
+def test_loosening_a_frozen_value_in_the_study_spec_is_rejected(
+    tmp_path: Path, pointer: tuple[str, ...], replacement: object
+) -> None:
+    """A box may move only by moving the schema with it, in the same reviewed diff."""
+
+    spec = _frozen_study_spec()
+    target = spec
+    for part in pointer[:-1]:
+        target = target[part]
+    target[pointer[-1]] = replacement
+    spec_path = tmp_path / "study.json"
+    spec_path.write_text(json.dumps(spec), encoding="utf-8")
+
+    with pytest.raises(owdl.ObservabilityError, match="study spec rejected"):
+        owdl.verify_study_spec(spec_path)
+
+
+def test_an_unexpected_source_role_is_rejected_before_any_file_is_read(
+    tmp_path: Path,
+) -> None:
+    spec = _frozen_study_spec()
+    spec["source_files"][0]["role"] = "trajectory_mot17_02_sdp"
+    spec_path = tmp_path / "study.json"
+    spec_path.write_text(json.dumps(spec), encoding="utf-8")
+
+    with pytest.raises(owdl.ObservabilityError, match="unexpected source path or role"):
+        owdl.verify_study_spec(spec_path)
+
+
+def test_an_empty_source_identity_set_is_rejected(tmp_path: Path) -> None:
+    spec = _frozen_study_spec()
+    spec["source_files"] = []
+    spec_path = tmp_path / "study.json"
+    spec_path.write_text(json.dumps(spec), encoding="utf-8")
+
+    with pytest.raises(owdl.ObservabilityError, match="study spec rejected"):
+        owdl.verify_study_spec(spec_path)
+
+
+def test_the_frozen_score_declaration_validates_against_the_sealed_contract() -> None:
+    """The real SR2 record, not the fixture, is the one the study is bound to."""
+
+    report = owdl.validate_declaration_file(owdl.DEFAULT_SCORE_DECLARATION)
+
+    assert report["valid"] is True
+    assert report["target_rung"] == "SR2"

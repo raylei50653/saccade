@@ -1,0 +1,314 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "observability_weighted_directional_likelihood_study_v1",
+  "title": "Observability-weighted directional likelihood pre-outcome study spec",
+  "description": "Every terminal-affecting choice in the study spec is pinned here by const, so that editing a box, a bin, an estimator rule, or the terminal order fails the preflight instead of passing it silently. Changing one is therefore a two-file move that a reviewer sees, not a one-line edit under a record nothing reads.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "study_id",
+    "status",
+    "execution_authorized",
+    "declaration",
+    "score_declaration",
+    "source_files",
+    "sequences",
+    "candidate_universe",
+    "estimator",
+    "validity",
+    "phenomenon_box",
+    "ranking_box",
+    "terminal_order"
+  ],
+  "properties": {
+    "schema": {
+      "const": "observability_weighted_directional_likelihood_study_v1"
+    },
+    "study_id": {
+      "const": "owdl_m_b1_v1"
+    },
+    "status": {
+      "const": "preseal_implementation"
+    },
+    "execution_authorized": {
+      "const": false
+    },
+    "declaration": {
+      "const": "docs/modules/semantic/research/observability_weighted_directional_likelihood_declaration_20260827.md"
+    },
+    "score_declaration": {
+      "const": "docs/modules/semantic/research/observability_weighted_directional_likelihood_declaration_20260827.score.json"
+    },
+    "source_files": {
+      "type": "array",
+      "minItems": 9,
+      "maxItems": 9,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["role", "path", "sha256", "bytes"],
+        "properties": {
+          "role": {
+            "type": "string",
+            "minLength": 1
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "bytes": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      }
+    },
+    "sequences": {
+      "const": [
+        "MOT17-02-SDP",
+        "MOT17-04-SDP",
+        "MOT17-05-SDP",
+        "MOT17-09-SDP",
+        "MOT17-10-SDP",
+        "MOT17-11-SDP",
+        "MOT17-13-SDP"
+      ]
+    },
+    "candidate_universe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "row_inclusion",
+        "event_key",
+        "candidate_key",
+        "rankable_event",
+        "tie_contribution",
+        "orientation"
+      ],
+      "properties": {
+        "row_inclusion": {
+          "const": "gt_valid == 1 and 0.60 <= h_lost_raw / h_cand_raw <= 1.70"
+        },
+        "event_key": {
+          "const": ["seq", "cand_id"]
+        },
+        "candidate_key": {
+          "const": ["seq", "cand_id", "lost_id"]
+        },
+        "rankable_event": {
+          "const": "at least one gt_match == 1 and at least one gt_match == 0"
+        },
+        "tie_contribution": {
+          "const": 0.5
+        },
+        "orientation": {
+          "const": "lower_better"
+        }
+      }
+    },
+    "estimator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "history_window",
+        "position",
+        "velocity_fit",
+        "noise_fit",
+        "noise_fit_dedup_key",
+        "noise_fit_labels_used",
+        "fold_rule",
+        "q_v_bins",
+        "angular_variance",
+        "concentration",
+        "weighted_cost",
+        "raw_cost",
+        "exact_zero_vector_rule",
+        "posthoc_covariance_regularization"
+      ],
+      "properties": {
+        "history_window": {
+          "const": 4
+        },
+        "position": {
+          "const": "bbox_bottom_center"
+        },
+        "velocity_fit": {
+          "const": "ols_on_actual_frame_values"
+        },
+        "noise_fit": {
+          "const": "height_normalized_ols_residual_covariance"
+        },
+        "noise_fit_dedup_key": {
+          "const": ["seq", "track_id", "side", "anchor_frame"]
+        },
+        "noise_fit_labels_used": {
+          "const": false
+        },
+        "fold_rule": {
+          "const": "leave_one_sequence_out"
+        },
+        "q_v_bins": {
+          "const": ["[0,1)", "[1,4)", "[4,9)", "[9,inf)"]
+        },
+        "angular_variance": {
+          "const": "gvT_Sv_gv + gdT_Sd_gd - 2_gvT_Svd_gd"
+        },
+        "concentration": {
+          "const": "1 / angular_variance"
+        },
+        "weighted_cost": {
+          "const": "log_I0_kappa - kappa_cos_delta"
+        },
+        "raw_cost": {
+          "const": "1 - cos_delta"
+        },
+        "exact_zero_vector_rule": {
+          "const": "kappa_0_weighted_cost_0_raw_cost_1"
+        },
+        "posthoc_covariance_regularization": {
+          "const": "forbidden"
+        }
+      }
+    },
+    "validity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "minimum_rankable_events",
+        "minimum_gt_pairs_low_q",
+        "minimum_gt_pairs_high_q",
+        "minimum_short_gap_events",
+        "require_spd_fold_covariance",
+        "require_exact_candidate_conservation",
+        "require_all_seven_heldout_folds"
+      ],
+      "properties": {
+        "minimum_rankable_events": {
+          "const": 100
+        },
+        "minimum_gt_pairs_low_q": {
+          "const": 30
+        },
+        "minimum_gt_pairs_high_q": {
+          "const": 30
+        },
+        "minimum_short_gap_events": {
+          "const": 20
+        },
+        "require_spd_fold_covariance": {
+          "const": true
+        },
+        "require_exact_candidate_conservation": {
+          "const": true
+        },
+        "require_all_seven_heldout_folds": {
+          "const": true
+        }
+      }
+    },
+    "phenomenon_box": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["metric", "low_q", "high_q", "minimum_high_minus_low"],
+      "properties": {
+        "metric": {
+          "const": "gt_pair_mean_resultant_length"
+        },
+        "low_q": {
+          "const": "q_v < 1"
+        },
+        "high_q": {
+          "const": "q_v >= 9"
+        },
+        "minimum_high_minus_low": {
+          "const": 0.15
+        }
+      }
+    },
+    "ranking_box": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "primary_metric",
+        "comparison",
+        "minimum_delta",
+        "minimum_nonnegative_folds",
+        "minimum_positive_folds",
+        "cluster_bootstrap",
+        "short_gap"
+      ],
+      "properties": {
+        "primary_metric": {
+          "const": "heldout_event_macro_pairwise_accuracy"
+        },
+        "comparison": {
+          "const": "event_pwa_weighted_minus_event_pwa_raw"
+        },
+        "minimum_delta": {
+          "const": 0.02
+        },
+        "minimum_nonnegative_folds": {
+          "const": 5
+        },
+        "minimum_positive_folds": {
+          "const": 4
+        },
+        "cluster_bootstrap": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "unit",
+            "replicates",
+            "seed",
+            "interval",
+            "minimum_lower_bound"
+          ],
+          "properties": {
+            "unit": {
+              "const": "sequence"
+            },
+            "replicates": {
+              "const": 10000
+            },
+            "seed": {
+              "const": 20260827
+            },
+            "interval": {
+              "const": "percentile_95"
+            },
+            "minimum_lower_bound": {
+              "const": 0.0
+            }
+          }
+        },
+        "short_gap": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["range", "minimum_delta"],
+          "properties": {
+            "range": {
+              "const": "1 <= gap <= 10"
+            },
+            "minimum_delta": {
+              "const": 0.0
+            }
+          }
+        }
+      }
+    },
+    "terminal_order": {
+      "const": [
+        "OWDL_INVALID_STUDY",
+        "OWDL_OBSERVABILITY_NOT_SUPPORTED",
+        "OWDL_NO_HELDOUT_DIRECTIONAL_RANKING_POWER",
+        "OWDL_DIRECTION_SIGNAL_PRESENT_SR2"
+      ]
+    }
+  }
+}
