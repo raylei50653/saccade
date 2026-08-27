@@ -251,6 +251,110 @@ def test_a_numpy_integer_gap_is_accepted_and_a_bool_is_not() -> None:
         owdl.observe_direction(gap=np.int64(0), **common)
 
 
+def test_the_von_mises_cost_is_stable_at_extreme_concentration() -> None:
+    """Undoing the i0e scaling would difference two large numbers and lose the tail.
+
+    At `delta == 0` the exact cost is `log(I0(kappa)) - kappa`, which is exactly
+    `log(i0e(kappa))` — no high-precision library needed to know the answer. The
+    naive form restores `+ kappa` and subtracts `kappa * cos(0)`, and what comes
+    back is the ulp of kappa, not the value.
+    """
+
+    for kappa, tolerated in ((1.0e12, 1.0e-8), (1.0e15, 1.0e-8), (9.0e15, 1.0e-8)):
+        exact = math.log(float(owdl.i0e(kappa)))
+        naive = (math.log(float(owdl.i0e(kappa))) + kappa) - kappa * math.cos(0.0)
+
+        assert owdl.uniform_relative_von_mises_nll(0.0, kappa) == exact
+        assert abs(naive - exact) > 1.0e-5
+        assert abs(owdl.uniform_relative_von_mises_nll(0.0, kappa) - exact) < tolerated
+
+
+def test_the_von_mises_cost_matches_arbitrary_precision_where_available() -> None:
+    mp = pytest.importorskip("mpmath")
+    mp.mp.dps = 60
+    for kappa in (1.0e12, 1.0e15, 9.0e15):
+        for delta in (0.0, 1.0e-8):
+            exact = float(
+                mp.log(mp.besseli(0, mp.mpf(kappa)))
+                - mp.mpf(kappa) * mp.cos(mp.mpf(delta))
+            )
+            assert owdl.uniform_relative_von_mises_nll(delta, kappa) == pytest.approx(
+                exact, abs=1e-9
+            )
+
+
+def test_the_raw_baseline_does_not_collapse_well_aligned_candidates_into_a_tie() -> (
+    None
+):
+    """`1 - cos(1e-8)` rounds to exactly 0.0; a tie is worth half a pairwise win."""
+
+    assert 1.0 - math.cos(1e-8) == 0.0
+    assert owdl.half_angle_cosine_deficit(1e-8) == pytest.approx(5.0e-17, rel=1e-9)
+    deficits = [owdl.half_angle_cosine_deficit(d) for d in (1e-7, 1e-8, 1e-9)]
+    assert deficits == sorted(deficits, reverse=True)
+    assert len(set(deficits)) == 3
+
+
+def test_the_stable_cost_equals_the_declared_algebraic_form() -> None:
+    for kappa in (0.5, 2.0, 40.0):
+        for delta in (0.0, 0.3, math.pi / 2, math.pi):
+            declared = (
+                math.log(float(owdl.i0e(kappa))) + kappa - kappa * math.cos(delta)
+            )
+            assert owdl.uniform_relative_von_mises_nll(delta, kappa) == pytest.approx(
+                declared, rel=1e-12, abs=1e-12
+            )
+
+
+def _frozen_score_record() -> dict:
+    return json.loads(owdl.DEFAULT_SCORE_DECLARATION.read_text(encoding="utf-8"))
+
+
+def test_the_two_frozen_records_bind_to_each_other() -> None:
+    owdl._validate_study_score_binding(_frozen_study_spec(), _frozen_score_record())
+
+
+@pytest.mark.parametrize(
+    ("record", "pointer", "replacement"),
+    [
+        ("score", ("claim", "minimum_effect", "value"), 0.01),
+        ("score", ("claim", "minimum_exposure"), 50),
+        ("score", ("claim", "uncertainty_method_id"), "bootstrap_only_v1"),
+        ("score", ("claim", "short_gap_retention_rule_id"), "short_gap_any_row_v1"),
+        ("score", ("claim", "folds_id"), "leave_one_out_v1"),
+        (
+            "score",
+            ("policy", "candidate_universe", "candidate_key_fields"),
+            ["seq", "cand_id"],
+        ),
+        ("study", ("ranking_box", "cluster_bootstrap", "gates_terminal"), True),
+        ("study", ("ranking_box", "delete_one_sequence", "required_passes"), 5),
+        ("study", ("ranking_box", "minimum_delta"), 0.01),
+    ],
+)
+def test_a_record_that_drifts_from_its_partner_is_rejected(
+    record: str, pointer: tuple[str, ...], replacement: object
+) -> None:
+    """Each record can be valid on its own while promising the other something else."""
+
+    study, score = _frozen_study_spec(), _frozen_score_record()
+    target = study if record == "study" else score
+    for part in pointer[:-1]:
+        target = target[part]
+    target[pointer[-1]] = replacement
+
+    with pytest.raises(owdl.ObservabilityError, match="binding disagrees"):
+        owdl._validate_study_score_binding(study, score)
+
+
+def test_a_terminal_that_loses_its_outcome_semantics_is_rejected() -> None:
+    study, score = _frozen_study_spec(), _frozen_score_record()
+    score["terminals"][3]["state_transition"]["kind"] = "none"
+
+    with pytest.raises(owdl.ObservabilityError, match="transitions"):
+        owdl._validate_study_score_binding(study, score)
+
+
 def _frozen_study_spec() -> dict:
     return json.loads(owdl.DEFAULT_STUDY_SPEC.read_text(encoding="utf-8"))
 
@@ -309,6 +413,10 @@ def test_dropping_a_frozen_box_from_the_study_spec_is_rejected(
         (("ranking_box", "cluster_bootstrap", "gates_terminal"), True),
         (("ranking_box", "delete_one_sequence", "required_passes"), 5),
         (("source_relation_contract", "executed_pre_seal"), True),
+        (("ranking_box", "delete_one_sequence", "scope"), "full_corpus_deletion"),
+        (("ranking_box", "delete_one_sequence", "refit_effective_covariance"), True),
+        (("ranking_box", "delete_one_sequence", "reuse_primary_fold_scores"), False),
+        (("validity", "require_defined_per_fold_delta"), False),
         (("candidate_universe", "tie_contribution"), 1.0),
         (("execution_authorized",), True),
     ],

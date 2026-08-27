@@ -268,8 +268,30 @@ def resultant_matched_concentration(angular_variance: float) -> float:
     return 0.5 * (low + high)
 
 
+def half_angle_cosine_deficit(delta_angle: float) -> float:
+    """Return 1 - cos(delta) as 2*sin(delta/2)**2, which does not cancel.
+
+    Computed directly, ``1 - cos(1e-8)`` rounds to exactly ``0.0``: every
+    sufficiently well-aligned candidate collapses onto the same baseline score
+    and ties there, and a tie is worth half a pairwise win. The identity below
+    is exact in double precision over the whole range.
+    """
+
+    if not math.isfinite(delta_angle):
+        raise ObservabilityError("delta_angle must be finite")
+    return 2.0 * math.sin(delta_angle / 2.0) ** 2
+
+
 def uniform_relative_von_mises_nll(delta_angle: float, kappa: float) -> float:
-    """Return log(I0(kappa)) - kappa*cos(delta), zero under uniform direction."""
+    """Return log(I0(kappa)) - kappa*cos(delta), zero under uniform direction.
+
+    Evaluated as ``log(I0e(kappa)) + kappa * (1 - cos(delta))`` with the deficit
+    taken at the half angle. Restoring ``+ kappa`` to undo ``i0e`` and then
+    subtracting ``kappa * cos(delta)`` is algebraically the same and numerically
+    is not: it differs two large numbers, and throws away the very scaling
+    ``i0e`` exists to provide. At kappa 1e12 that costs ~5e-5, at 1e15 ~6e-2,
+    which is enough to reorder candidates within an event.
+    """
 
     if not math.isfinite(delta_angle):
         raise ObservabilityError("delta_angle must be finite")
@@ -280,8 +302,7 @@ def uniform_relative_von_mises_nll(delta_angle: float, kappa: float) -> float:
     scaled_i0 = float(i0e(kappa))
     if not math.isfinite(scaled_i0) or scaled_i0 <= 0:
         raise ObservabilityError("stable I0 evaluation failed")
-    log_i0 = math.log(scaled_i0) + kappa
-    return log_i0 - kappa * math.cos(delta_angle)
+    return math.log(scaled_i0) + kappa * half_angle_cosine_deficit(delta_angle)
 
 
 def observe_direction(
@@ -377,7 +398,7 @@ def observe_direction(
             - math.atan2(fit.velocity[1], fit.velocity[0])
         ),
     )
-    raw_cost = 1.0 - math.cos(delta_angle)
+    raw_cost = half_angle_cosine_deficit(delta_angle)
     weighted_cost = uniform_relative_von_mises_nll(delta_angle, kappa)
     return DirectionObservation(
         velocity=fit.velocity,
@@ -482,6 +503,144 @@ def _schema_validate_study_spec(spec: Mapping[str, Any]) -> None:
         raise ObservabilityError(f"study spec rejected at {location}: {error.message}")
 
 
+def _terminal_record_id(terminal: str) -> str:
+    """Map a study terminal name onto its score-record identifier."""
+
+    return f"{terminal.lower()}_v1"
+
+
+_EXPECTED_TERMINAL_SEMANTICS: tuple[tuple[str, str, str], ...] = (
+    ("OWDL_INVALID_STUDY", "invalid", "none"),
+    ("OWDL_MOT17_INTERNAL_OBSERVABILITY_NOT_SUPPORTED", "valid_negative", "none"),
+    (
+        "OWDL_MOT17_INTERNAL_NO_DIRECTIONAL_RANKING_POWER_SR2",
+        "valid_negative",
+        "none",
+    ),
+    ("OWDL_MOT17_INTERNAL_DIRECTION_SIGNAL_SR2", "valid_positive", "transition"),
+)
+
+
+def _validate_study_score_binding(
+    study: Mapping[str, Any], score: Mapping[str, Any]
+) -> None:
+    """Require the two records to agree wherever they say the same thing twice.
+
+    Each record is checked by its own validator: the study spec against the OWDL
+    schema, the score record against the generic score-ranking contract. Neither
+    validator can see the other, and the generic one has no idea that this study's
+    effect floor is 0.02. So both could pass while the study spec asked for 0.02
+    and the score record promised 0.01. This closes that record-to-record edge; it
+    reads no outcome row and so does not touch the blind boundary.
+    """
+
+    universe = study["candidate_universe"]
+    ranking = study["ranking_box"]
+    validity = study["validity"]
+    policy = score["policy"]
+    claim = score["claim"]
+
+    equalities: tuple[tuple[str, object, object], ...] = (
+        (
+            "candidate key",
+            list(universe["candidate_key"]),
+            list(policy["candidate_universe"]["candidate_key_fields"]),
+        ),
+        (
+            "event key",
+            list(universe["event_key"]),
+            list(policy["candidate_universe"]["event_key_fields"]),
+        ),
+        ("target rung", "SR2", claim["target_rung"]),
+        (
+            "rankable-event exposure",
+            validity["minimum_rankable_events"],
+            claim["minimum_exposure"],
+        ),
+        (
+            "calibration exposure",
+            validity["minimum_gt_pairs_low_q"],
+            score["calibration_claim"]["minimum_exposure"],
+        ),
+        (
+            "primary minimum effect",
+            ranking["minimum_delta"],
+            claim["minimum_effect"]["value"],
+        ),
+        ("minimum-effect operator", "ge", claim["minimum_effect"]["operator"]),
+        ("orientation", universe["orientation"], policy["score"]["orientation"]),
+        (
+            "fold identity",
+            "leave_one_sequence_out",
+            study["estimator"]["fold_rule"],
+        ),
+        (
+            "fold record identity",
+            "leave_one_mot17_sequence_out_v1",
+            claim["folds_id"],
+        ),
+        ("fold count", 7, len(study["sequences"])),
+        (
+            "delete-one-sequence pass count",
+            len(study["sequences"]),
+            ranking["delete_one_sequence"]["required_passes"],
+        ),
+        (
+            "robustness gate is the deterministic one",
+            True,
+            ranking["delete_one_sequence"]["gates_terminal"],
+        ),
+        (
+            "bootstrap is descriptive",
+            False,
+            ranking["cluster_bootstrap"]["gates_terminal"],
+        ),
+        (
+            "uncertainty method identity",
+            "delete_one_sequence_robustness_gate_with_descriptive_cluster_bootstrap_v1",
+            claim["uncertainty_method_id"],
+        ),
+        (
+            "protected stratum",
+            ["short_gap"],
+            list(claim["protected_strata"]),
+        ),
+        (
+            "short-gap rule identity",
+            "short_gap_gt_positive_comparison_slice_1_10_nonnegative_delta_v1",
+            claim["short_gap_retention_rule_id"],
+        ),
+        (
+            "terminal order",
+            [name for name, _, _ in _EXPECTED_TERMINAL_SEMANTICS],
+            list(study["terminal_order"]),
+        ),
+    )
+    for label, expected, actual in equalities:
+        if expected != actual:
+            raise ObservabilityError(
+                f"study/score binding disagrees on {label}: {expected!r} != {actual!r}"
+            )
+
+    terminals = {item["terminal_id"]: item for item in score["terminals"]}
+    if len(terminals) != len(_EXPECTED_TERMINAL_SEMANTICS):
+        raise ObservabilityError("score record does not carry four distinct terminals")
+    for name, outcome_class, transition_kind in _EXPECTED_TERMINAL_SEMANTICS:
+        record = terminals.get(_terminal_record_id(name))
+        if record is None:
+            raise ObservabilityError(f"score record is missing terminal {name}")
+        if record["outcome_class"] != outcome_class:
+            raise ObservabilityError(
+                f"terminal {name} is {record['outcome_class']!r}, "
+                f"expected {outcome_class!r}"
+            )
+        if record["state_transition"]["kind"] != transition_kind:
+            raise ObservabilityError(
+                f"terminal {name} transitions {record['state_transition']['kind']!r}, "
+                f"expected {transition_kind!r}"
+            )
+
+
 def verify_study_spec(path: Path) -> dict[str, object]:
     """Check only frozen identities and declaration shape; never load outcome rows."""
 
@@ -545,6 +704,7 @@ def verify_study_spec(path: Path) -> dict[str, object]:
     if score_path != DEFAULT_SCORE_DECLARATION.resolve():
         raise ObservabilityError("unexpected score declaration identity")
     score_report = validate_declaration_file(score_path)
+    _validate_study_score_binding(spec, _load_json(score_path))
     return {
         "schema": STUDY_SCHEMA,
         "study_id": STUDY_ID,

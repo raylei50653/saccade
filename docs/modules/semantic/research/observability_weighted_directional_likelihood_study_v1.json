@@ -118,7 +118,9 @@
     "minimum_gt_pairs_high_q": 30,
     "require_spd_fold_covariance": true,
     "require_exact_candidate_conservation": true,
-    "require_all_seven_heldout_folds": true
+    "require_all_seven_heldout_folds": true,
+    "undefined_per_fold_delta_rule": "OWDL_INVALID_STUDY",
+    "require_defined_per_fold_delta": true
   },
   "phenomenon_box": {
     "metric": "gt_pair_mean_resultant_length",
@@ -151,6 +153,9 @@
     },
     "delete_one_sequence": {
       "rule": "recompute pooled event-macro delta with each sequence removed",
+      "scope": "heldout_evaluation_contribution_only",
+      "reuse_primary_fold_scores": true,
+      "refit_effective_covariance": false,
       "minimum_delta": 0.0,
       "required_passes": 7,
       "gates_terminal": true

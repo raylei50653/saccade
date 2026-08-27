@@ -278,6 +278,19 @@ better. If either vector is exactly zero, angle is undefined and v1 assigns
 historical cosine convention `dir_cos=0`); the candidate is retained. There is
 no near-zero threshold and no epsilon in the denominator.
 
+Both costs are evaluated in the algebraically identical but numerically stable
+half-angle form \(1-\cos\Delta\theta=2\sin^2(\Delta\theta/2)\), and
+\(C_{owdl}\) as \(\log I_0^e(\kappa)+2\kappa\sin^2(\Delta\theta/2)\) where
+\(I_0^e\) is the exponentially scaled Bessel function. Restoring the scaling and
+then subtracting \(\kappa\cos\Delta\theta\) differences two large numbers and
+discards exactly the conditioning the scaled form provides: at \(\kappa=10^{12}\)
+that costs about \(5\times10^{-5}\) and at \(10^{15}\) about \(6\times10^{-2}\),
+enough to reorder candidates within an event. The baseline has the same defect
+computed naively — `1 - cos(1e-8)` rounds to exactly zero, tying every
+well-aligned candidate at the same score, and a tie is worth half a pairwise win —
+so both policies use the stable form. This fixes evaluation, not the estimator:
+the declared quantities are unchanged.
+
 Under resultant matching the zero case is the **limit** of the map rather than a
 separate branch: an undefined angle carries an infinite \(\sigma^2_{\Delta\theta}\),
 whose matched resultant is \(0\), whose \(\kappa\) is \(0\). The rule is stated
@@ -335,8 +348,9 @@ R1  at least 100 rankable held-out events
 R2  pooled Delta_PWA >= +0.02
 R3  per-fold Delta_PWA >= 0 in at least 5/7 folds
     and > 0 in at least 4/7 folds
-R4  delete-one-sequence robustness: recomputing pooled Delta_PWA with each
-    sequence removed gives Delta_PWA >= 0 in all 7 of 7 deletions
+R4  delete-one-sequence robustness: removing each sequence's held-out
+    evaluation contribution in turn gives pooled Delta_PWA >= 0 in all 7 of 7
+    deletions (evaluation-only; see below)
 R5a at least 20 short-gap rankable events (§6.3)
 R5b short-gap event-macro Delta_PWA >= 0
 R6  exact pair/event/GT-partition/policy-candidate conservation passes
@@ -353,6 +367,24 @@ information is still seven sequences, and reading a percentile interval off it
 as a hard positive gate states more than the evidence carries. The question that
 actually needs answering — *is the effect carried by one sequence?* — is answered
 directly and deterministically by deleting each sequence in turn.
+
+"Deleting a sequence" is **evaluation-only**, and the distinction is not
+cosmetic. Each fold's effective covariance is fitted on the other six sequences,
+so a deletion could also mean removing that sequence from every remaining fold's
+fit, which would refit six five-sequence covariances and score every candidate
+again. That would smuggle a second, weaker estimator into the robustness gate and
+answer a different question. R4 instead reuses the primary fold scores exactly as
+computed and only drops the deleted sequence's held-out events from the pooled
+metric:
+
+```text
+delete_one_sequence.scope          heldout_evaluation_contribution_only
+reuse_primary_fold_scores          true
+refit_effective_covariance         false
+```
+
+So R4 asks precisely: **is the pooled held-out effect dominated by any single
+evaluated sequence?** — not the looser "is the effect carried by one sequence".
 
 The bootstrap is still computed and still reported, as **descriptive uncertainty
 only**. It resamples sequence clusters, never candidate rows, and it selects no
@@ -417,7 +449,10 @@ Validity is evaluated before phenomenon and ranking effects:
 1. exact source hashes/bytes and declaration bindings pass;
 2. the §4.1 `source_relation_contract` passes in full, before any metric or
    label aggregate is computed;
-3. all seven folds are disjoint and present;
+3. all seven folds are disjoint and present, and each holds at least one
+   rankable event, so every per-fold `Delta_PWA` in R3 is defined — an
+   undefined per-fold delta is `OWDL_INVALID_STUDY`, never an implicit zero,
+   a skipped fold, or a silently smaller denominator;
 4. four-point history, endpoint, height, and finite-value rules reconcile;
 5. every fold covariance is SPD without repair;
 6. P1/P2, R1, R5a exposure, candidate conservation, and partition conservation
