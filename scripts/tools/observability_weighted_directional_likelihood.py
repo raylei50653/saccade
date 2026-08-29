@@ -75,6 +75,14 @@ EXPECTED_SOURCE_ROLES = {
         "trajectory_mot17_13_sdp"
     ),
 }
+EXACT_ZERO_VELOCITY_REASON = "exact_zero_velocity"
+EXACT_ZERO_DISPLACEMENT_REASON = "exact_zero_displacement"
+EXACT_ZERO_BOTH_REASON = "exact_zero_velocity_and_displacement"
+UNDEFINED_ANGLE_REASONS = (
+    EXACT_ZERO_VELOCITY_REASON,
+    EXACT_ZERO_DISPLACEMENT_REASON,
+    EXACT_ZERO_BOTH_REASON,
+)
 
 
 class ObservabilityError(ValueError):
@@ -93,7 +101,7 @@ class OlsMotion:
 
 @dataclass(frozen=True)
 class DirectionObservation:
-    """Declared pair-local direction quantities; lower costs are better."""
+    """Declared pair-local quantities, including one reason for no angle."""
 
     velocity: np.ndarray
     displacement_rate: np.ndarray
@@ -102,6 +110,7 @@ class DirectionObservation:
     velocity_displacement_cross_covariance: np.ndarray
     q_v: float
     delta_angle: float | None
+    undefined_angle_reason: str | None
     angular_variance: float
     kappa: float
     raw_direction_cost: float
@@ -365,6 +374,12 @@ def observe_direction(
     velocity_gradient = _angle_gradient(fit.velocity)
     displacement_gradient = _angle_gradient(displacement_rate)
     if velocity_gradient is None or displacement_gradient is None:
+        if velocity_gradient is None and displacement_gradient is None:
+            undefined_angle_reason = EXACT_ZERO_BOTH_REASON
+        elif velocity_gradient is None:
+            undefined_angle_reason = EXACT_ZERO_VELOCITY_REASON
+        else:
+            undefined_angle_reason = EXACT_ZERO_DISPLACEMENT_REASON
         return DirectionObservation(
             velocity=fit.velocity,
             displacement_rate=displacement_rate,
@@ -373,6 +388,7 @@ def observe_direction(
             velocity_displacement_cross_covariance=cross_covariance,
             q_v=q_v,
             delta_angle=None,
+            undefined_angle_reason=undefined_angle_reason,
             angular_variance=math.inf,
             kappa=0.0,
             raw_direction_cost=1.0,
@@ -409,6 +425,7 @@ def observe_direction(
         velocity_displacement_cross_covariance=cross_covariance,
         q_v=q_v,
         delta_angle=delta_angle,
+        undefined_angle_reason=None,
         angular_variance=angular_variance,
         kappa=kappa,
         raw_direction_cost=raw_cost,
@@ -536,9 +553,12 @@ def _validate_study_score_binding(
     """
 
     universe = study["candidate_universe"]
+    phenomenon = study["phenomenon_box"]
     ranking = study["ranking_box"]
     validity = study["validity"]
     policy = score["policy"]
+    spaces = score["spaces"]
+    calibration = score["calibration_claim"]
     claim = score["claim"]
 
     equalities: tuple[tuple[str, object, object], ...] = (
@@ -551,6 +571,26 @@ def _validate_study_score_binding(
             "event key",
             list(universe["event_key"]),
             list(policy["candidate_universe"]["event_key_fields"]),
+        ),
+        (
+            "calibration space",
+            phenomenon["calibration_space_id"],
+            spaces["calibration_space_id"],
+        ),
+        (
+            "calibration reference",
+            phenomenon["reference_id"],
+            calibration["reference_id"],
+        ),
+        (
+            "calibration unit",
+            phenomenon["calibration_unit_id"],
+            calibration["calibration_unit_id"],
+        ),
+        (
+            "calibration estimator",
+            phenomenon["estimator_id"],
+            calibration["estimator_id"],
         ),
         ("target rung", "SR2", claim["target_rung"]),
         (

@@ -356,6 +356,22 @@ better. If either vector is exactly zero, angle is undefined and v1 assigns
 historical cosine convention `dir_cos=0`); the candidate is retained. There is
 no near-zero threshold and no epsilon in the denominator.
 
+Candidate retention is a **ranking-space** rule; it does not manufacture an
+angle for the separate empirical phenomenon. The math core records exactly one
+of `exact_zero_velocity`, `exact_zero_displacement`, or
+`exact_zero_velocity_and_displacement`. Such a row remains in both ranking
+policies with the costs above, but if it is GT-positive it is excluded from the
+§6.1 phenomenon estimator and from P1/P2 exposure because
+\(e^{j\Delta\theta}\) is undefined. This is not the same as contributing a zero
+phasor: doing that would inject v1's chosen uniform convention into the
+empirical phenomenon that §3 keeps separate.
+
+For this declared branch only, the math core carries `delta_angle=None` and
+`angular_variance=+inf` as an internal sentinel for the matching limit. It is
+neither the `non_finite_direction_quantity` drop reason nor a validity failure;
+any other non-finite derived direction quantity still follows the applicable
+finite-value rule.
+
 Both costs are evaluated in the algebraically identical but numerically stable
 half-angle form \(1-\cos\Delta\theta=2\sin^2(\Delta\theta/2)\), and
 \(C_{owdl}\) as \(\log I_0^e(\kappa)+2\kappa\sin^2(\Delta\theta/2)\) where
@@ -391,7 +407,10 @@ bins are descriptive only and cannot force a terminal.
 
 ### 6.1 Phenomenon metric
 
-On held-out `gt_match == 1` pairs, calculate mean resultant length
+For each held-out `gt_match == 1` pair whose velocity and displacement vectors
+are both nonzero, `delta_angle` is defined. Let \(B\) contain only those
+**defined-angle GT-positive pairs** in one \(q_v\) bin, and calculate mean
+resultant length
 
 \[
 R_B=\left|\frac{1}{|B|}\sum_{i\in B}e^{j\Delta\theta_i}\right|
@@ -400,14 +419,20 @@ R_B=\left|\frac{1}{|B|}\sum_{i\in B}e^{j\Delta\theta_i}\right|
 within each \(q_v\) bin. The phenomenon box passes iff:
 
 ```text
-P1  low q_v (<1) has at least 30 GT pairs
-P2  high q_v (>=9) has at least 30 GT pairs
+P1  low q_v (<1) has at least 30 defined-angle GT pairs
+P2  high q_v (>=9) has at least 30 defined-angle GT pairs
 P3  R_high - R_low >= 0.15
 ```
 
-P1/P2 are observation-validity requirements. P3 is the directional
+An exact-zero row is excluded **only** from this phenomenon estimator and its
+P1/P2 exposure denominator. It is not a candidate drop, is not an invalid row,
+and remains in both ranking policies under §5.3. Every packet reports its count
+by held-out fold, \(q_v\) bin, and the three exact-zero reasons from §5.3 before
+reporting defined-angle exposure and \(R_B\). P1/P2 are observation-validity
+requirements over that declared calibration space. P3 is the directional
 observability effect. It supports only that this frozen empirical estimator
-separates a less concentrated from a more concentrated regime.
+separates a less concentrated from a more concentrated regime **among pairs
+whose direction residual is defined**.
 
 ### 6.2 Ranking metric
 
@@ -533,10 +558,14 @@ Validity is evaluated before phenomenon and ranking effects:
    rankable event, so every per-fold `Delta_PWA` in R3 is defined — an
    undefined per-fold delta is `OWDL_INVALID_STUDY`, never an implicit zero,
    a skipped fold, or a silently smaller denominator;
-4. four-point history, endpoint, height, and finite-value rules reconcile;
+4. four-point history, endpoint, height, and finite-value rules reconcile; the
+   declared exact-zero `angular_variance=+inf` sentinel is permitted only beside
+   one of its three exact reasons, while every other non-finite derived direction
+   quantity follows the declared exclusion/failure rule;
 5. every fold covariance is SPD without repair;
-6. P1/P2, R1, R5a exposure, candidate conservation, and partition conservation
-   pass.
+6. exact-zero phenomenon exclusions reconcile by fold, \(q_v\) bin, and reason;
+   P1/P2 defined-angle exposure, R1, R5a exposure, candidate conservation, and
+   partition conservation pass.
 
 An execution that produces no packet at all — runner crash, build failure,
 serialization failure — is a validity failure by this list and takes
@@ -556,10 +585,10 @@ property, and it is stated in the Establishes column instead.
 | `OWDL_MOT17_INTERNAL_NO_DIRECTIONAL_RANKING_POWER_SR2` | valid; P3 passes; any ranking effect item fails | on MOT17, held out by fold, this exact OWDL score did not clear SR2 ranking boxes | no score integration or runtime handoff; not a claim that held-out direction ranking is generally powerless |
 | `OWDL_MOT17_INTERNAL_DIRECTION_SIGNAL_SR2` | valid; phenomenon and ranking boxes pass | on MOT17, held out by fold, SR2 directional-channel capability evidence on the frozen universe | only permits proposing a separate **cross-dataset confirmation** declaration; integration design is not yet proposable; no automatic continuation |
 
-Every terminal must report all bins, all folds, policy-identical counts, drop
-reasons, delete-one-sequence deltas, and protected short-gap results. A positive
-terminal must not be called "MOT improvement," "production-ready," or
-"runtime-faithful."
+Every terminal must report all bins, all folds, policy-identical counts,
+phenomenon-only exact-zero exclusions by fold/bin/reason, candidate drop reasons,
+delete-one-sequence deltas, and protected short-gap results. A positive terminal
+must not be called "MOT improvement," "production-ready," or "runtime-faithful."
 
 It must also not be called external validation. Outcomes are held out by fold,
 but the *design* is not virgin to MOT17: the question, the pair universe, the

@@ -107,7 +107,7 @@
     "concentration": "resultant_matched_wrapped_normal_to_von_mises",
     "weighted_cost": "log_I0_kappa - kappa_cos_delta",
     "raw_cost": "1 - cos_delta",
-    "exact_zero_vector_rule": "kappa_0_weighted_cost_0_raw_cost_1_as_the_matching_limit",
+    "exact_zero_vector_rule": "delta_angle_null_angular_variance_inf_kappa_0_weighted_cost_0_raw_cost_1_retain_for_ranking",
     "posthoc_covariance_regularization": "forbidden",
     "concentration_identity": "exp(-angular_variance / 2) = I1(kappa) / I0(kappa)",
     "concentration_solver": "double_from_1_then_exactly_100_bisections",
@@ -132,7 +132,24 @@
     "require_defined_per_fold_delta": true
   },
   "phenomenon_box": {
-    "metric": "gt_pair_mean_resultant_length",
+    "calibration_space_id": "m_b1_gt_positive_defined_angle_angular_residual_space_v1",
+    "reference_id": "low_vs_high_observability_empirical_resultant_v1",
+    "calibration_unit_id": "gt_positive_defined_angle_pair_angular_residual_v1",
+    "estimator_id": "fold_heldout_defined_angle_resultant_length_by_observability_index_bin_v1",
+    "metric": "defined_angle_gt_pair_mean_resultant_length",
+    "input_space": "heldout_gt_positive_pairs_with_defined_delta_angle",
+    "undefined_angle_rule": "exclude_from_phenomenon_only_retain_in_both_ranking_policies",
+    "undefined_angle_reasons": [
+      "exact_zero_velocity",
+      "exact_zero_displacement",
+      "exact_zero_velocity_and_displacement"
+    ],
+    "exposure_denominator": "defined_delta_angle_gt_pairs_only",
+    "report_undefined_angle_counts_by": [
+      "fold",
+      "q_v_bin",
+      "reason"
+    ],
     "low_q": "q_v < 1",
     "high_q": "q_v >= 9",
     "minimum_high_minus_low": 0.15

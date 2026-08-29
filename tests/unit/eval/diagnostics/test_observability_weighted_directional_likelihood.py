@@ -91,10 +91,49 @@ def test_zero_velocity_degenerates_to_uniform_without_a_speed_threshold() -> Non
 
     assert observation.q_v == pytest.approx(0.0)
     assert observation.delta_angle is None
+    assert observation.undefined_angle_reason == "exact_zero_velocity"
     assert math.isinf(observation.angular_variance)
     assert observation.kappa == 0.0
     assert observation.raw_direction_cost == 1.0
     assert observation.weighted_direction_cost == 0.0
+
+
+@pytest.mark.parametrize(
+    ("lost_points", "candidate_first_point", "reason"),
+    [
+        (_linear_window(1.0), np.array([3.0, 0.0]), "exact_zero_displacement"),
+        (
+            np.zeros((4, 2)),
+            np.array([0.0, 0.0]),
+            "exact_zero_velocity_and_displacement",
+        ),
+    ],
+)
+def test_each_undefined_angle_has_one_frozen_exact_zero_reason(
+    lost_points: np.ndarray,
+    candidate_first_point: np.ndarray,
+    reason: str,
+) -> None:
+    observation = owdl.observe_direction(
+        lost_points=lost_points,
+        lost_frames=np.arange(4),
+        lost_heights=np.ones(4),
+        candidate_first_point=candidate_first_point,
+        candidate_first_height=1.0,
+        gap=1,
+        normalized_effective_covariance=np.eye(2) * 0.01,
+    )
+
+    assert observation.delta_angle is None
+    assert observation.undefined_angle_reason == reason
+    assert observation.raw_direction_cost == 1.0
+    assert observation.weighted_direction_cost == 0.0
+
+
+def test_the_machine_record_pins_the_math_cores_undefined_angle_reasons() -> None:
+    phenomenon = _frozen_study_spec()["phenomenon_box"]
+
+    assert phenomenon["undefined_angle_reasons"] == list(owdl.UNDEFINED_ANGLE_REASONS)
 
 
 def test_higher_observability_index_increases_concentration() -> None:
@@ -119,6 +158,8 @@ def test_higher_observability_index_increases_concentration() -> None:
     assert fast.q_v > slow.q_v
     assert fast.angular_variance < slow.angular_variance
     assert fast.kappa > slow.kappa
+    assert fast.undefined_angle_reason is None
+    assert slow.undefined_angle_reason is None
 
 
 def test_near_zero_velocity_is_continuous_not_thresholded() -> None:
@@ -397,6 +438,16 @@ def test_the_two_frozen_records_bind_to_each_other() -> None:
         ("score", ("claim", "folds_id"), "leave_one_out_v1"),
         (
             "score",
+            ("spaces", "calibration_space_id"),
+            "m_b1_gt_positive_angular_residual_space_v1",
+        ),
+        (
+            "score",
+            ("calibration_claim", "estimator_id"),
+            "fold_heldout_resultant_length_by_observability_index_bin_v1",
+        ),
+        (
+            "score",
             ("policy", "candidate_universe", "candidate_key_fields"),
             ["seq", "cand_id"],
         ),
@@ -472,11 +523,20 @@ def test_dropping_a_frozen_box_from_the_study_spec_is_rejected(
     ("pointer", "replacement"),
     [
         (("phenomenon_box", "minimum_high_minus_low"), 0.05),
+        (
+            ("phenomenon_box", "undefined_angle_rule"),
+            "count_as_zero_resultant",
+        ),
+        (
+            ("phenomenon_box", "exposure_denominator"),
+            "all_gt_pairs",
+        ),
         (("ranking_box", "minimum_delta"), 0.0),
         (("ranking_box", "minimum_positive_folds"), 1),
         (("validity", "minimum_rankable_events"), 1),
         (("estimator", "posthoc_covariance_regularization"), "allowed"),
         (("estimator", "history_window"), 8),
+        (("estimator", "exact_zero_vector_rule"), "drop_candidate"),
         (("ranking_box", "short_gap", "positive_row_rule"), "gt_match == 1"),
         (
             ("ranking_box", "short_gap", "negative_row_rule"),

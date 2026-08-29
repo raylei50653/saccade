@@ -195,7 +195,7 @@
           "const": "1 - cos_delta"
         },
         "exact_zero_vector_rule": {
-          "const": "kappa_0_weighted_cost_0_raw_cost_1_as_the_matching_limit"
+          "const": "delta_angle_null_angular_variance_inf_kappa_0_weighted_cost_0_raw_cost_1_retain_for_ranking"
         },
         "posthoc_covariance_regularization": {
           "const": "forbidden"
@@ -288,14 +288,58 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
+        "calibration_space_id",
+        "reference_id",
+        "calibration_unit_id",
+        "estimator_id",
         "metric",
+        "input_space",
+        "undefined_angle_rule",
+        "undefined_angle_reasons",
+        "exposure_denominator",
+        "report_undefined_angle_counts_by",
         "low_q",
         "high_q",
         "minimum_high_minus_low"
       ],
       "properties": {
+        "calibration_space_id": {
+          "const": "m_b1_gt_positive_defined_angle_angular_residual_space_v1"
+        },
+        "reference_id": {
+          "const": "low_vs_high_observability_empirical_resultant_v1"
+        },
+        "calibration_unit_id": {
+          "const": "gt_positive_defined_angle_pair_angular_residual_v1"
+        },
+        "estimator_id": {
+          "const": "fold_heldout_defined_angle_resultant_length_by_observability_index_bin_v1"
+        },
         "metric": {
-          "const": "gt_pair_mean_resultant_length"
+          "const": "defined_angle_gt_pair_mean_resultant_length"
+        },
+        "input_space": {
+          "const": "heldout_gt_positive_pairs_with_defined_delta_angle"
+        },
+        "undefined_angle_rule": {
+          "const": "exclude_from_phenomenon_only_retain_in_both_ranking_policies"
+        },
+        "undefined_angle_reasons": {
+          "const": [
+            "exact_zero_velocity",
+            "exact_zero_displacement",
+            "exact_zero_velocity_and_displacement"
+          ]
+        },
+        "exposure_denominator": {
+          "const": "defined_delta_angle_gt_pairs_only"
+        },
+        "report_undefined_angle_counts_by": {
+          "const": [
+            "fold",
+            "q_v_bin",
+            "reason"
+          ]
         },
         "low_q": {
           "const": "q_v < 1"

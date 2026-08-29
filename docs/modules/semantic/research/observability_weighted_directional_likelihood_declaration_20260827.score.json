@@ -71,16 +71,16 @@
     "missing_value_rule_id": "exclude_with_exact_reason_and_reconcile_v1"
   },
   "spaces": {
-    "calibration_space_id": "m_b1_gt_positive_angular_residual_space_v1",
+    "calibration_space_id": "m_b1_gt_positive_defined_angle_angular_residual_space_v1",
     "assignment_space_id": null,
     "system_space_id": null,
     "reductions": []
   },
   "calibration_claim": {
     "kind": "distributional",
-    "reference_id": "uniform_direction_at_zero_observability_v1",
-    "calibration_unit_id": "gt_positive_pair_angular_residual_v1",
-    "estimator_id": "fold_heldout_resultant_length_by_observability_index_bin_v1",
+    "reference_id": "low_vs_high_observability_empirical_resultant_v1",
+    "calibration_unit_id": "gt_positive_defined_angle_pair_angular_residual_v1",
+    "estimator_id": "fold_heldout_defined_angle_resultant_length_by_observability_index_bin_v1",
     "proper_score_id": null,
     "held_out_rule_id": "leave_one_sequence_out_effective_covariance_fit_v1",
     "minimum_exposure": 30
