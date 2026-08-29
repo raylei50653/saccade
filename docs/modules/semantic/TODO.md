@@ -5,7 +5,14 @@
 
 ## Sole active
 
-- **無 active**
+- **Observability-weighted directional likelihood（pre-seal implementation）** —
+  [thread](../../research/threads/observability_weighted_directional_likelihood_task.md) ·
+  [declaration](research/observability_weighted_directional_likelihood_declaration_20260827.md).
+  Current authority covers declaration, pure math, synthetic tests, and
+  check-only source preflight. Formal B1 outcome loading/execution remains
+  forbidden until an exact-head owner seal and separate execution authority.
+- GCTM/H0 runtime slots remain **無 active**; OWDL neither activates nor
+  satisfies their runtime-substrate and compatibility gates.
 - H0 R4 repair closed at `H0_R4_REPAIR_QUALIFIED_SEALABLE`
   （`h0_authority_overlay_runtime_binding_split_v1` / Amendment 10）；WIP released.
   Seal PR #277 landed exact S=`a76efffa…`. See

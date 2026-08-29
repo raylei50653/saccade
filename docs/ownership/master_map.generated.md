@@ -120,6 +120,7 @@ Manifest: `docs/ownership/doc_migration_manifest.yaml`
 - `docs/modules/semantic/research/h0_gctm_consumer_compatibility_requirements_20260718.md`
 - `docs/modules/semantic/research/headline_bridge_behavioral_identity_capture_declaration_20260725.md`
 - `docs/modules/semantic/research/headline_bridge_behavioral_identity_capture_declaration_20260725.policy.yaml`
+- `docs/modules/semantic/research/observability_weighted_directional_likelihood_declaration_20260827.md`
 - `docs/modules/storage/README.md`
 - `docs/modules/storage/TODO.md`
 - `docs/modules/storage/api_spec.md`
@@ -220,6 +221,7 @@ Manifest: `docs/ownership/doc_migration_manifest.yaml`
 - `docs/research/threads/gctm_o1_online_intervention_efficacy_task.md`
 - `docs/research/threads/gt_support_morphology_20260711.md`
 - `docs/research/threads/h2_behavioral_identity_capture_task.md`
+- `docs/research/threads/observability_weighted_directional_likelihood_task.md`
 - `docs/research/threads/occ_exit_audit_20260709.md`
 - `docs/research/threads/score_temporal_to_stable_domain_20260712.md`
 - `docs/research/tracker-decision/README.md`
@@ -343,6 +345,6 @@ Excluded from the active index and default search view.
 
 ## Inventory summary
 
-- documents: 293
-- active: 238
+- documents: 295
+- active: 240
 - grayed out: 55

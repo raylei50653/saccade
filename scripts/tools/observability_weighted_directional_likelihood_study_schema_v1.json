@@ -1,0 +1,586 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "observability_weighted_directional_likelihood_study_v1",
+  "title": "Observability-weighted directional likelihood pre-outcome study spec",
+  "description": "Every terminal-affecting choice in the study spec is pinned here by const, so that editing a box, a bin, an estimator rule, or the terminal order fails the preflight instead of passing it silently. Changing one is therefore a two-file move that a reviewer sees, not a one-line edit under a record nothing reads.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "study_id",
+    "status",
+    "execution_authorized",
+    "declaration",
+    "score_declaration",
+    "source_files",
+    "sequences",
+    "candidate_universe",
+    "estimator",
+    "validity",
+    "phenomenon_box",
+    "ranking_box",
+    "terminal_order",
+    "source_relation_contract",
+    "authority_binding"
+  ],
+  "properties": {
+    "schema": {
+      "const": "observability_weighted_directional_likelihood_study_v1"
+    },
+    "study_id": {
+      "const": "owdl_m_b1_v1"
+    },
+    "status": {
+      "const": "preseal_implementation"
+    },
+    "execution_authorized": {
+      "const": false
+    },
+    "declaration": {
+      "const": "docs/modules/semantic/research/observability_weighted_directional_likelihood_declaration_20260827.md"
+    },
+    "score_declaration": {
+      "const": "docs/modules/semantic/research/observability_weighted_directional_likelihood_declaration_20260827.score.json"
+    },
+    "source_files": {
+      "type": "array",
+      "minItems": 9,
+      "maxItems": 9,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "role",
+          "path",
+          "sha256",
+          "bytes"
+        ],
+        "properties": {
+          "role": {
+            "type": "string",
+            "minLength": 1
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "bytes": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      }
+    },
+    "sequences": {
+      "const": [
+        "MOT17-02-SDP",
+        "MOT17-04-SDP",
+        "MOT17-05-SDP",
+        "MOT17-09-SDP",
+        "MOT17-10-SDP",
+        "MOT17-11-SDP",
+        "MOT17-13-SDP"
+      ]
+    },
+    "candidate_universe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "row_inclusion",
+        "event_key",
+        "candidate_key",
+        "rankable_event",
+        "tie_contribution",
+        "orientation"
+      ],
+      "properties": {
+        "row_inclusion": {
+          "const": "gt_valid == 1 and 0.60 <= h_lost_raw / h_cand_raw <= 1.70"
+        },
+        "event_key": {
+          "const": [
+            "seq",
+            "cand_id"
+          ]
+        },
+        "candidate_key": {
+          "const": [
+            "seq",
+            "cand_id",
+            "lost_id"
+          ]
+        },
+        "rankable_event": {
+          "const": "at least one gt_match == 1 and at least one gt_match == 0"
+        },
+        "tie_contribution": {
+          "const": 0.5
+        },
+        "orientation": {
+          "const": "lower_better"
+        }
+      }
+    },
+    "estimator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "history_window",
+        "position",
+        "velocity_fit",
+        "noise_fit",
+        "noise_fit_dedup_key",
+        "noise_fit_labels_used",
+        "fold_rule",
+        "q_v_bins",
+        "angular_variance",
+        "concentration",
+        "concentration_identity",
+        "concentration_solver",
+        "weighted_cost",
+        "raw_cost",
+        "exact_zero_vector_rule",
+        "posthoc_covariance_regularization",
+        "numeric_domain"
+      ],
+      "properties": {
+        "history_window": {
+          "const": 4
+        },
+        "position": {
+          "const": "bbox_bottom_center"
+        },
+        "velocity_fit": {
+          "const": "ols_on_actual_frame_values"
+        },
+        "noise_fit": {
+          "const": "height_normalized_ols_effective_residual_covariance"
+        },
+        "noise_fit_dedup_key": {
+          "const": [
+            "seq",
+            "track_id",
+            "frame_tuple"
+          ]
+        },
+        "noise_fit_labels_used": {
+          "const": false
+        },
+        "fold_rule": {
+          "const": "leave_one_sequence_out"
+        },
+        "q_v_bins": {
+          "const": [
+            "[0,1)",
+            "[1,4)",
+            "[4,9)",
+            "[9,inf)"
+          ]
+        },
+        "angular_variance": {
+          "const": "gvT_Sv_gv + gdT_Sd_gd - 2_gvT_Svd_gd"
+        },
+        "concentration": {
+          "const": "resultant_matched_wrapped_normal_to_von_mises"
+        },
+        "weighted_cost": {
+          "const": "log_I0_kappa - kappa_cos_delta"
+        },
+        "raw_cost": {
+          "const": "1 - cos_delta"
+        },
+        "exact_zero_vector_rule": {
+          "const": "delta_angle_null_angular_variance_inf_kappa_0_weighted_cost_0_raw_cost_1_retain_for_ranking"
+        },
+        "posthoc_covariance_regularization": {
+          "const": "forbidden"
+        },
+        "concentration_identity": {
+          "const": "exp(-angular_variance / 2) = I1(kappa) / I0(kappa)"
+        },
+        "concentration_solver": {
+          "const": "double_from_1_then_exactly_100_bisections"
+        },
+        "numeric_domain": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "arithmetic",
+            "angular_variance_domain",
+            "unit_resultant_rounding_rule",
+            "concentration_bracket_start",
+            "concentration_bracket_limit",
+            "concentration_bisections",
+            "concentration_result"
+          ],
+          "properties": {
+            "arithmetic": {
+              "const": "binary64"
+            },
+            "angular_variance_domain": {
+              "const": "(2**-53, inf]"
+            },
+            "unit_resultant_rounding_rule": {
+              "const": "OWDL_INVALID_STUDY"
+            },
+            "concentration_bracket_start": {
+              "const": 1.0
+            },
+            "concentration_bracket_limit": {
+              "const": "2**60"
+            },
+            "concentration_bisections": {
+              "const": 100
+            },
+            "concentration_result": {
+              "const": "midpoint_of_final_bracket"
+            }
+          }
+        }
+      }
+    },
+    "validity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "minimum_rankable_events",
+        "minimum_gt_pairs_low_q",
+        "minimum_gt_pairs_high_q",
+        "require_spd_fold_covariance",
+        "require_exact_candidate_conservation",
+        "require_all_seven_heldout_folds",
+        "undefined_per_fold_delta_rule",
+        "require_defined_per_fold_delta"
+      ],
+      "properties": {
+        "minimum_rankable_events": {
+          "const": 100
+        },
+        "minimum_gt_pairs_low_q": {
+          "const": 30
+        },
+        "minimum_gt_pairs_high_q": {
+          "const": 30
+        },
+        "require_spd_fold_covariance": {
+          "const": true
+        },
+        "require_exact_candidate_conservation": {
+          "const": true
+        },
+        "require_all_seven_heldout_folds": {
+          "const": true
+        },
+        "undefined_per_fold_delta_rule": {
+          "const": "OWDL_INVALID_STUDY"
+        },
+        "require_defined_per_fold_delta": {
+          "const": true
+        }
+      }
+    },
+    "phenomenon_box": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "calibration_space_id",
+        "reference_id",
+        "calibration_unit_id",
+        "estimator_id",
+        "metric",
+        "input_space",
+        "undefined_angle_rule",
+        "undefined_angle_reasons",
+        "exposure_denominator",
+        "report_undefined_angle_counts_by",
+        "low_q",
+        "high_q",
+        "minimum_high_minus_low"
+      ],
+      "properties": {
+        "calibration_space_id": {
+          "const": "m_b1_gt_positive_defined_angle_angular_residual_space_v1"
+        },
+        "reference_id": {
+          "const": "low_vs_high_observability_empirical_resultant_v1"
+        },
+        "calibration_unit_id": {
+          "const": "gt_positive_defined_angle_pair_angular_residual_v1"
+        },
+        "estimator_id": {
+          "const": "fold_heldout_defined_angle_resultant_length_by_observability_index_bin_v1"
+        },
+        "metric": {
+          "const": "defined_angle_gt_pair_mean_resultant_length"
+        },
+        "input_space": {
+          "const": "heldout_gt_positive_pairs_with_defined_delta_angle"
+        },
+        "undefined_angle_rule": {
+          "const": "exclude_from_phenomenon_only_retain_in_both_ranking_policies"
+        },
+        "undefined_angle_reasons": {
+          "const": [
+            "exact_zero_velocity",
+            "exact_zero_displacement",
+            "exact_zero_velocity_and_displacement"
+          ]
+        },
+        "exposure_denominator": {
+          "const": "defined_delta_angle_gt_pairs_only"
+        },
+        "report_undefined_angle_counts_by": {
+          "const": [
+            "fold",
+            "q_v_bin",
+            "reason"
+          ]
+        },
+        "low_q": {
+          "const": "q_v < 1"
+        },
+        "high_q": {
+          "const": "q_v >= 9"
+        },
+        "minimum_high_minus_low": {
+          "const": 0.15
+        }
+      }
+    },
+    "ranking_box": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "primary_metric",
+        "comparison",
+        "minimum_delta",
+        "minimum_nonnegative_folds",
+        "minimum_positive_folds",
+        "cluster_bootstrap",
+        "delete_one_sequence",
+        "short_gap"
+      ],
+      "properties": {
+        "primary_metric": {
+          "const": "heldout_event_macro_pairwise_accuracy"
+        },
+        "comparison": {
+          "const": "event_pwa_weighted_minus_event_pwa_raw"
+        },
+        "minimum_delta": {
+          "const": 0.02
+        },
+        "minimum_nonnegative_folds": {
+          "const": 5
+        },
+        "minimum_positive_folds": {
+          "const": 4
+        },
+        "cluster_bootstrap": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "unit",
+            "replicates",
+            "seed",
+            "interval",
+            "role",
+            "gates_terminal"
+          ],
+          "properties": {
+            "unit": {
+              "const": "sequence"
+            },
+            "replicates": {
+              "const": 10000
+            },
+            "seed": {
+              "const": 20260827
+            },
+            "interval": {
+              "const": "percentile_95"
+            },
+            "role": {
+              "const": "descriptive_only"
+            },
+            "gates_terminal": {
+              "const": false
+            }
+          }
+        },
+        "short_gap": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "positive_row_rule",
+            "negative_row_rule",
+            "event_eligibility",
+            "comparison_rule",
+            "reduction",
+            "minimum_events",
+            "minimum_delta"
+          ],
+          "properties": {
+            "positive_row_rule": {
+              "const": "gt_match == 1 and 1 <= gap <= 10"
+            },
+            "negative_row_rule": {
+              "const": "gt_match == 0"
+            },
+            "event_eligibility": {
+              "const": "at least one selected positive and at least one negative"
+            },
+            "comparison_rule": {
+              "const": "every selected positive versus every negative"
+            },
+            "reduction": {
+              "const": "event_macro_pairwise_accuracy"
+            },
+            "minimum_events": {
+              "const": 20
+            },
+            "minimum_delta": {
+              "const": 0.0
+            }
+          }
+        },
+        "delete_one_sequence": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "rule",
+            "scope",
+            "reuse_primary_fold_scores",
+            "refit_effective_covariance",
+            "minimum_delta",
+            "required_passes",
+            "gates_terminal"
+          ],
+          "properties": {
+            "rule": {
+              "const": "recompute pooled event-macro delta with each sequence removed"
+            },
+            "scope": {
+              "const": "heldout_evaluation_contribution_only"
+            },
+            "reuse_primary_fold_scores": {
+              "const": true
+            },
+            "refit_effective_covariance": {
+              "const": false
+            },
+            "minimum_delta": {
+              "const": 0.0
+            },
+            "required_passes": {
+              "const": 7
+            },
+            "gates_terminal": {
+              "const": true
+            }
+          }
+        }
+      }
+    },
+    "terminal_order": {
+      "const": [
+        "OWDL_INVALID_STUDY",
+        "OWDL_MOT17_INTERNAL_OBSERVABILITY_NOT_SUPPORTED",
+        "OWDL_MOT17_INTERNAL_NO_DIRECTIONAL_RANKING_POWER_SR2",
+        "OWDL_MOT17_INTERNAL_DIRECTION_SIGNAL_SR2"
+      ]
+    },
+    "source_relation_contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "executed_pre_seal",
+        "executed_by",
+        "obligations",
+        "emits",
+        "on_failure"
+      ],
+      "properties": {
+        "executed_pre_seal": {
+          "const": false
+        },
+        "executed_by": {
+          "const": "post_seal_formal_runner_before_any_metric_or_label_aggregate"
+        },
+        "obligations": {
+          "const": [
+            "trajectory_frame_id_uniqueness",
+            "lost_endpoint_resolves_to_exactly_one_trajectory_row",
+            "last_four_actual_frame_window_present_for_every_retained_lost_id",
+            "candidate_first_point_resolves_to_exactly_one_trajectory_row",
+            "gap_equals_candidate_first_frame_minus_lost_last_frame",
+            "bbox_bottom_center_and_height_reconstructed_from_trajectory_bytes",
+            "pair_row_joins_trajectory_support_exactly_once",
+            "every_unjoined_pair_row_carries_exactly_one_enumerated_reason",
+            "joined_plus_excluded_reconciles_to_the_included_row_count"
+          ]
+        },
+        "emits": {
+          "const": [
+            "joined_candidate_count",
+            "exclusion_counts_by_reason",
+            "reconstructed_support_digest"
+          ]
+        },
+        "on_failure": {
+          "const": "OWDL_INVALID_STUDY"
+        }
+      }
+    },
+    "authority_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "declaration_seal_head",
+        "runner_review_head",
+        "runner_sha256",
+        "sealed_spec_slots_remain_null",
+        "values_carried_in",
+        "requires_sealed_declaration_bytes_unchanged",
+        "formal_execution_binds",
+        "rule"
+      ],
+      "properties": {
+        "declaration_seal_head": {
+          "const": null
+        },
+        "runner_review_head": {
+          "const": null
+        },
+        "runner_sha256": {
+          "const": null
+        },
+        "sealed_spec_slots_remain_null": {
+          "const": true
+        },
+        "values_carried_in": {
+          "const": "external_authority_receipt_and_evidence_packet"
+        },
+        "requires_sealed_declaration_bytes_unchanged": {
+          "const": true
+        },
+        "formal_execution_binds": {
+          "const": [
+            "declaration_seal_head",
+            "runner_review_head",
+            "runner_sha256",
+            "nine_frozen_source_sha256"
+          ]
+        },
+        "rule": {
+          "const": "the sealed head carries no runner and cannot name itself; the three identities live in external receipts and the evidence packet binds them to byte-identical sealed declaration bytes"
+        }
+      }
+    }
+  }
+}

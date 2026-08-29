@@ -105,10 +105,11 @@
 | [research/d0_bridge_estimator_fidelity_20260711.md](research/d0_bridge_estimator_fidelity_20260711.md) | ⚠️ legacy v1 reconstruction packet（已被 v2 取代，保持凍結） |
 | [research/production_substrate_mapping_20260711.md](research/production_substrate_mapping_20260711.md) | production consumer / substrate 對照（binding precondition） |
 
-### score 線（parked：保留域建立前不開）
+### score 線（各研究線狀態以 TODO／thread／registry 為準）
 
 | 文件 | 這是什麼 |
 |------|------|
+| [research/observability_weighted_directional_likelihood_declaration_20260827.md](research/observability_weighted_directional_likelihood_declaration_20260827.md) | OWDL pre-outcome declaration：分開檢驗方向可觀測性現象與 held-out direction-channel ranking 缺口；pre-seal、非 runtime／MOT efficacy |
 | [research/score_temporal_to_stable_domain_20260712.md](research/score_temporal_to_stable_domain_20260712.md) | score 時域→穩定域建模的 charter |
 | [research/discrete_m_capability_declaration_20260712.md](research/discrete_m_capability_declaration_20260712.md) | discrete-\(M\) anchor propagation 宣告（parked、未 seal） |
 | [research/door0_ranking_probe_results_20260712.md](research/door0_ranking_probe_results_20260712.md) | Door 0 ambiguous-band ranking-power probe（結果） |

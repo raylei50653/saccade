@@ -1,0 +1,196 @@
+{
+  "schema": "score_ranking_declaration_v1",
+  "declaration_id": "owdl_m_b1_score_ranking_declaration_v1",
+  "record_scope": "actual",
+  "contract_binding": {
+    "contract_id": "score_ranking_evidence_contract_v1",
+    "contract_status": "active",
+    "contract_sha256": "7dbc2d965079fa3fc13f7802a4a083b1c4cbf49d658ffe3728b6c405364a13b4",
+    "owner_acceptance_id": "score_ranking_contract_owner_acceptance_20260723",
+    "registry_binding_id": "claim_state_registry_score_ranking_v1"
+  },
+  "policy": {
+    "policy_id": "owdl_resultant_matched_vm_direction_policy_v2",
+    "source_pair_space_id": "m_b1_frozen_relink_pair_space_v1",
+    "event_space_id": "m_b1_newborn_choice_event_space_v1",
+    "pair_to_event_reduction_id": "m_b1_pair_to_newborn_choice_event_v1",
+    "candidate_universe": {
+      "universe_id": "m_b1_gt_valid_height_band_candidate_universe_v1",
+      "event_key_fields": [
+        "seq",
+        "cand_id"
+      ],
+      "candidate_key_fields": [
+        "seq",
+        "cand_id",
+        "lost_id"
+      ],
+      "inclusion_source_id": "m_b1_pairs_csv_0ae38967_v1",
+      "retained_band_id": "m_b1_height_ratio_0p6_1p7_analysis_band_v1",
+      "gt_present_rule_id": "m_b1_gt_match_true_partition_v1",
+      "gt_absent_rule_id": "m_b1_gt_match_false_partition_v1",
+      "ambiguous_label_rule_id": "m_b1_gt_valid_false_partition_v1",
+      "duplicate_rule": "reject",
+      "empty_event_rule": "exclude_with_enumerated_reason",
+      "singleton_event_rule": "separate_no_competition",
+      "drop_reason_vocabulary": [
+        "ambiguous_gt_mapping",
+        "duplicate_candidate_key",
+        "history_window_not_four",
+        "height_outside_analysis_band",
+        "missing_track_endpoint",
+        "non_finite_direction_quantity"
+      ]
+    },
+    "score": {
+      "component_ids": [
+        "lost_ols_velocity_v1",
+        "candidate_displacement_rate_v1",
+        "fold_effective_position_covariance_v1",
+        "shared_endpoint_cross_covariance_v1",
+        "resultant_matched_concentration_v1"
+      ],
+      "transform_id": "resultant_matched_uniform_relative_von_mises_nll_v1",
+      "transform_kind": "pair_local",
+      "output_domain_id": "uniform_relative_direction_nll_domain_v1",
+      "orientation": "lower_better"
+    },
+    "tie_rule": {
+      "rule_id": "fractional_pairwise_direction_tie_v1",
+      "kind": "fractional_rank",
+      "key_fields": []
+    },
+    "cutoff": {
+      "cutoff_id": "m_b1_height_ratio_analysis_band_cutoff_v1",
+      "role": "reporting_slice",
+      "value_rule_id": "closed_interval_0p6_1p7_v1",
+      "imported_gate_id": null
+    },
+    "fallback_rule_id": "exact_zero_vector_uniform_direction_v1",
+    "abstention_rule_id": "no_direction_abstention_v1",
+    "missing_value_rule_id": "exclude_with_exact_reason_and_reconcile_v1"
+  },
+  "spaces": {
+    "calibration_space_id": "m_b1_gt_positive_defined_angle_angular_residual_space_v1",
+    "assignment_space_id": null,
+    "system_space_id": null,
+    "reductions": []
+  },
+  "calibration_claim": {
+    "kind": "distributional",
+    "reference_id": "low_vs_high_observability_empirical_resultant_v1",
+    "calibration_unit_id": "gt_positive_defined_angle_pair_angular_residual_v1",
+    "estimator_id": "fold_heldout_defined_angle_resultant_length_by_observability_index_bin_v1",
+    "proper_score_id": null,
+    "held_out_rule_id": "leave_one_sequence_out_effective_covariance_fit_v1",
+    "minimum_exposure": 30
+  },
+  "claim": {
+    "target_rung": "SR2",
+    "claim_space": "ranking",
+    "kappa": {
+      "quantification_space": "candidate_event",
+      "comparison_relation_id": "owdl_vs_raw_cosine_same_candidate_event_v1",
+      "decision_rule_id": "owdl_observability_and_ranking_boxes_v2"
+    },
+    "primary_ranking_metric": "event_pairwise_accuracy",
+    "metric_parameters": {},
+    "target_metric_id": "loo_event_macro_direction_pwa_delta_v1",
+    "minimum_exposure": 100,
+    "minimum_effect": {
+      "operator": "ge",
+      "value": 0.02,
+      "unit": "event_macro_pwa_delta"
+    },
+    "dependence_unit_id": "mot17_sequence_cluster_v1",
+    "uncertainty_method_id": "delete_one_sequence_robustness_gate_with_descriptive_cluster_bootstrap_v1",
+    "folds_id": "leave_one_mot17_sequence_out_v1",
+    "blind_reveal_binding_id": "sealed_head_runner_sha256_and_nine_source_hashes_before_outcomes_v1",
+    "no_refit": true,
+    "stability_strata": [
+      "q_v_bin",
+      "sequence",
+      "gap_bin",
+      "held_out_fold"
+    ],
+    "protected_strata": [
+      "short_gap"
+    ],
+    "short_gap_retention_rule_id": "short_gap_gt_positive_comparison_slice_1_10_nonnegative_delta_v1"
+  },
+  "rung_obligations": [
+    {
+      "rung": "SR0",
+      "obligation_ids": [
+        "denominator_semantics",
+        "orientation_transform_tie",
+        "policy_identity",
+        "space_identity"
+      ],
+      "artifact_bindings": {}
+    },
+    {
+      "rung": "SR1",
+      "obligation_ids": [
+        "candidate_universe_conservation",
+        "exposure",
+        "fit_selection_data",
+        "policy_search_space",
+        "primary_metric_effect"
+      ],
+      "artifact_bindings": {}
+    },
+    {
+      "rung": "SR2",
+      "obligation_ids": [
+        "blind_reveal_binding",
+        "dependence_uncertainty",
+        "disjoint_partitions",
+        "no_refit",
+        "per_fold_result"
+      ],
+      "artifact_bindings": {}
+    }
+  ],
+  "conservation": {
+    "pair_to_event_exactly_once": true,
+    "event_to_sequence_fold_exactly_once": true,
+    "pair_count_reconciliation": true,
+    "gt_partition_reconciliation": true,
+    "partition_disjointness": true,
+    "paired_policy_candidate_identity": true,
+    "exactly_one_drop_reason": true,
+    "non_finite_rule_bound": true
+  },
+  "terminals": [
+    {
+      "terminal_id": "owdl_invalid_study_v1",
+      "outcome_class": "invalid",
+      "state_transition": {
+        "kind": "none"
+      }
+    },
+    {
+      "terminal_id": "owdl_mot17_internal_observability_not_supported_v1",
+      "outcome_class": "valid_negative",
+      "state_transition": {
+        "kind": "none"
+      }
+    },
+    {
+      "terminal_id": "owdl_mot17_internal_no_directional_ranking_power_sr2_v1",
+      "outcome_class": "valid_negative",
+      "state_transition": {
+        "kind": "none"
+      }
+    },
+    {
+      "terminal_id": "owdl_mot17_internal_direction_signal_sr2_v1",
+      "outcome_class": "valid_positive",
+      "state_transition": {
+        "kind": "transition",
+        "target_state": "SR2"
+      }
+    }
+  ]
+}
