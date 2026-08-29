@@ -207,10 +207,23 @@ def estimate_normalized_effective_covariance(
 
 
 def _angle_gradient(vector: np.ndarray) -> np.ndarray | None:
-    norm_squared = float(vector @ vector)
-    if norm_squared == 0.0:
+    vx = float(vector[0])
+    vy = float(vector[1])
+    if vx == 0.0 and vy == 0.0:
         return None
-    return np.array([-vector[1], vector[0]], dtype=np.float64) / norm_squared
+
+    scale = max(abs(vx), abs(vy))
+    scaled = np.array([vx / scale, vy / scale], dtype=np.float64)
+    scaled_norm_squared = float(scaled @ scaled)
+    with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
+        gradient = (
+            np.array([-scaled[1], scaled[0]], dtype=np.float64)
+            / scaled_norm_squared
+            / scale
+        )
+    if not np.all(np.isfinite(gradient)):
+        raise ObservabilityError("angle gradient is not representable in binary64")
+    return gradient
 
 
 def _mahalanobis(vector: np.ndarray, covariance: np.ndarray) -> float:

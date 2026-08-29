@@ -98,6 +98,17 @@ def test_zero_velocity_degenerates_to_uniform_without_a_speed_threshold() -> Non
     assert observation.weighted_direction_cost == 0.0
 
 
+def test_tiny_nonzero_vector_does_not_enter_the_exact_zero_branch() -> None:
+    vector = np.array([1.0e-200, 0.0], dtype=np.float64)
+
+    assert float(vector @ vector) == 0.0
+    gradient = owdl._angle_gradient(vector)
+
+    assert gradient is not None
+    assert np.all(np.isfinite(gradient))
+    assert gradient == pytest.approx(np.array([0.0, 1.0e200]))
+
+
 @pytest.mark.parametrize(
     ("lost_points", "candidate_first_point", "reason"),
     [
