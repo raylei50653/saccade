@@ -23,16 +23,18 @@ Status legend is inherited from
 
 ## Executive summary
 
-| Bucket | Count | Headline |
-|:--|:--|:--|
-| `MATCH` | 7 of 9 checked anchors | 所有被轉寫的 gate 述詞逐條存活,浮點形式相同 |
-| `DRIFT` | **0** | 沒有任何 math_model 的句子變成假的 |
-| `STALE` | **2** | §4.2 compaction 取得新的 ordering 性質未記載;`pipeline.py` 行錨過期 ~153 行 |
+**`0 DRIFT / 2 STALE` across the audited source surface.**
 
-**沒有 `DRIFT`。** 這次的結論是模型的**式子**仍然忠實,過期的是兩處框架性描述。
+沒有任何 math_model 的句子變成假的。兩個 `STALE`:§4.2 的 compaction 取得一個新的 ordering
+性質未記載、`pipeline.py` 的 inject 行錨過期約 153 行。結論是模型的**式子**仍然忠實,過期的
+是兩處框架性描述。
 
-Three of the six anchored sources have **zero diff** across the whole range, so the sections they
-back are not merely re-verified — they are untouched:
+The audited surface is exactly the paths below — no aggregate count is given, because "how many
+anchors" is not yet a defined unit (a kernel file, a header, and a preset YAML are all listed here
+but are not the same kind of thing). The table is the authority; anything that needs a count should
+define its own unit first.
+
+Rows with zero diff are not merely re-verified — the sections they back are untouched:
 
 | Anchor | Diff vs baseline | Sections backed |
 |:--|:--|:--|
