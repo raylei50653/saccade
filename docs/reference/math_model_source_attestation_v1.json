@@ -1,0 +1,55 @@
+{
+  "schema": "saccade_math_model_source_attestation_v1",
+  "scope": {
+    "claim": "source_byte_identity_only",
+    "excludes": [
+      "execution_authority",
+      "runtime_measurement",
+      "semantic_equivalence"
+    ]
+  },
+  "document": {
+    "path": "docs/reference/math_model.md",
+    "sha256": "7183c313a17b5e0782c6937a94f395aa65b4cc402d76dfd5e556437d81715844"
+  },
+  "audit": {
+    "path": "docs/research/tracker-decision/audit/math_model_drift_2026-08-30.md",
+    "sha256": "f6a4c9dba17121262012b7d2d4dba8773598ed66da48f99b675bce402ac19166",
+    "source_ref": "0e869feae627e3da2c6fe03365c6482671aafe2b",
+    "open_findings": []
+  },
+  "sources": [
+    {
+      "path": "configs/presets/mamba_whole_graph.yaml",
+      "sha256": "093b66ed124063f035ae9cf2a76e4f5426743cd819fb66e3e54994c97ea42cd1"
+    },
+    {
+      "path": "configs/presets/mamba_whole_graph_m.yaml",
+      "sha256": "496c4ec22b497c70bc8409227513939b4cd86834bf2210475d0ad655be6937af"
+    },
+    {
+      "path": "include/tracking/kalman_gpu.cuh",
+      "sha256": "39bcd0698a81e44d1fa7a179667b55ce968f2fdfcfc6047e623336f606b96894"
+    },
+    {
+      "path": "src/saccade/perception/eval/evaluator.py",
+      "sha256": "25e13a96372506438e10116ccff7cd31d2ffd8272dbdf31e2b6b17da543bcec7"
+    },
+    {
+      "path": "src/saccade/perception/eval/pipeline.py",
+      "sha256": "6210fbca6ab9c7f4be8af9c8c27c9eda8febef6145d6dccaf3a59a11e6fdc62d"
+    },
+    {
+      "path": "src/tracking/gmc_kernel.cu",
+      "sha256": "144ab367a8b3234f6f3a2a20b19ef4787439ad14ef27f9dc8c8fa311bef009c1"
+    },
+    {
+      "path": "src/tracking/relink_gate.cu",
+      "sha256": "ef35a6bc5444a813f46ab34848d679d6aa65a518f6dccf95ff65e1951d52d334"
+    },
+    {
+      "path": "src/tracking/tracker_gpu.cu",
+      "sha256": "e89934f6a0dabcd1fa8359d4dc033330cdacfb75899f45e5b721bd2d55d92e45"
+    }
+  ]
+}

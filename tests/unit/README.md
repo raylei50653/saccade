@@ -10,6 +10,7 @@
 | `test_eval_script_paths.py` | eval | contract | active | Pin the scripts/eval compat wrappers to their relocated implementations. |
 | `test_headline_decision_contract.py` | eval,tracking,cross-module | contract | active | Unit tests for scripts/tools/check_headline_decision_contract.py. |
 | `test_math_model_doc_consistency.py` | eval,tracking | contract | active | Pin the LaTeX math-model document (``docs/latex``) to the code it describes. |
+| `test_math_model_source_attestation.py` | eval,tracking,cross-module | contract | active | Fail-closed contracts for the math-model source-byte attestation. |
 | `test_pipeline_health.py` | pipeline | behavior | active | Unit tests for saccade.pipeline.health.check_redis (mocked aioredis). |
 | `test_reconnect_rate.py` | eval | behavior | active | Unit tests for B2 reconnect_rate summarization / export. |
 | `test_resolved_bridge_policy_config.py` | system | contract | active | Pin the resolved-config fingerprints the H0 declaration freezes. |

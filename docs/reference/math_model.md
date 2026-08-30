@@ -16,6 +16,12 @@
 > Drift 對照（P3 audit）：
 > [math_model_drift_2026-08-30.md](../research/tracker-decision/audit/math_model_drift_2026-08-30.md)（最新，0 DRIFT / 2 STALE）、
 > [math_model_drift_2026-07-09.md](../research/tracker-decision/audit/math_model_drift_2026-07-09.md)。
+> 8/30 audit 找出的兩項 `STALE` 已修正在本版 §4.2；
+> [source attestation](math_model_source_attestation_v1.json) 與
+> [checker](../../scripts/tools/check_math_model_source_attestation.py) fail-closed 鎖住
+> 本文件、audit record、audited ref 與八個主要 source anchors 的原始 bytes。
+> Checker 通過只代表 byte identity，不是 semantic-equivalence proof、runtime measurement
+> 或 execution authority。
 > Active decision contract：
 > [docs/research/tracker-decision/README.md](../research/tracker-decision/README.md)。
 >

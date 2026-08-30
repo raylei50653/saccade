@@ -359,6 +359,7 @@ deleting.
 | `check_h0_repair_acceptance_matrix.py` | stable | - | Validate the prospective H0 repair/qualification acceptance matrix. |
 | `check_h2_measure_archives.py` | stable | cli | Corpus checker for committed H2 Layer-M evidence roots. |
 | `check_headline_decision_contract.py` | stable | cli | Static guard for the headline tracker-decision contract (no GPU). |
+| `check_math_model_source_attestation.py` | stable | cli | Fail closed when the audited math-model document or source bytes move. |
 | `check_runtime_identity_staleness.py` | stable | cli | Check runtime-coordinate lag without treating probe equality as equivalence. |
 | `check_scan_bwd.py` | diagnostic | - | Validate the CUDA selective-scan backward against the JIT autograd reference. |
 | `check_scripts_structure.py` | stable | cli | Scripts structure contract: every script self-documents, and the index is fresh. |
