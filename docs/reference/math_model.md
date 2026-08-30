@@ -1,14 +1,21 @@
 # Saccade 全局數學模型參考
 
-> 最後 source audit：2026-07-09。
+> 最後 source audit：2026-08-30（涵蓋 `8b2f4e05..0e869fea`；前次 2026-07-09）。
 >
 > 範圍：目前 MOT17 headline presets：
 > `mamba_whole_graph`（s）與 `mamba_whole_graph_m`（m）；主線範例
 > `uv run scripts/eval/mot17.py --preset mamba_whole_graph --detector SDP`。
 > 這份文件描述已落地的實作，不是 proposal。
 >
+> **而且它是 transcription，不是 explanation。** 每條式子的 support 只有一種——
+> 「production code 這樣算」，由上面那次 source audit 背書。它**不背書任何關於系統性質的主張**：
+> 引用 §4–§11 的式子去論證 Markov 性、metric 結構、可達集、safe region 或任何 explanatory
+> claim，都超出本文件的 support 範圍。那類主張各自需要自己的 operational object、observable
+> fidelity 與 falsifier，不繼承本文件的 audit。
+>
 > Drift 對照（P3 audit）：
-> [docs/research/tracker-decision/audit/math_model_drift_2026-07-09.md](../research/tracker-decision/audit/math_model_drift_2026-07-09.md)。
+> [math_model_drift_2026-08-30.md](../research/tracker-decision/audit/math_model_drift_2026-08-30.md)（最新，0 DRIFT / 2 STALE）、
+> [math_model_drift_2026-07-09.md](../research/tracker-decision/audit/math_model_drift_2026-07-09.md)。
 > Active decision contract：
 > [docs/research/tracker-decision/README.md](../research/tracker-decision/README.md)。
 >
@@ -468,6 +475,12 @@ Detector 輸出 raw boxes、scores、classes。Native postprocess 由
   -> fixed or counted output buffers
 ```
 
+`compact/gather` 這一步自 `dc1691b0`（2026-07-10）起是 keep-mask → CUB exclusive scan →
+stable scatter 三段式：述詞仍是 `tracking::detection_keep`，但存活 detection 的輸出順序因此是
+**index-ascending 且穩定的**，不是 atomic 到達順序。§8 的 sparse top-K 與 auction 消費這個順序。
+舊的 atomic-compaction kernel 與單執行緒 serial oracle
+（`SACCADE_DETERMINISTIC_FILTER_COMPACTION=1`）保留為 default-off 對照。
+
 目前 preset 中：
 
 - `track_person_only: false`：tracking 前不把所有 class collapse 成 person。
@@ -487,7 +500,9 @@ new_track_thresh <= unmatched detection may spawn a new track
 
 實際 thresholds 由 [pipeline.py](../../src/saccade/perception/eval/pipeline.py)
 在 tracker setup 時呼叫 `set_params(...)` / `set_occ_params(...)` /
-`set_relink_params(...)` 注入（約 `pipeline.py:951+`），並在
+`set_relink_params(...)` 注入（`set_relink_params` 在 `pipeline.py:648`，
+`set_params` 在 `pipeline.py:1104`，`set_occ_params` 在 `pipeline.py:1132`；
+三者不相鄰），並在
 [tracker_gpu.cu](../../src/tracking/tracker_gpu.cu) 中 clamp/store。
 [evaluator.py](../../src/saccade/perception/eval/evaluator.py) 負責 frame-level
 stage 排程與 CUDA-graph replay，不是這些 setter 的主要 call site。
