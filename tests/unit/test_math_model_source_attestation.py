@@ -43,28 +43,31 @@ def _digest(value: bytes) -> str:
 
 def _synthetic(
     checker: ModuleType,
-) -> tuple[
-    dict[str, Any],
-    dict[str, bytes],
-    Callable[[str], bytes],
-    Callable[[str, str], bytes],
-]:
+) -> tuple[dict[str, Any], dict[str, bytes], Callable[..., list[str]]]:
+    """Build a passing attestation over synthetic bytes, plus a bound validator.
+
+    The validator pins the code-owned digests to the *initial* document and
+    audit bytes, so a test that rewrites a file and re-signs the manifest still
+    has to clear the checker-side authority.
+    """
     current = {
         checker.MODEL_REL: b"model",
         checker.AUDIT_REL: b"audit",
         **{path: f"source:{path}".encode() for path in checker.AUDITED_SOURCE_PATHS},
     }
     ref = checker.AUDITED_SOURCE_REF
+    attested_model_sha256 = _digest(current[checker.MODEL_REL])
+    attested_audit_sha256 = _digest(current[checker.AUDIT_REL])
     payload = {
         "schema": checker.SCHEMA,
         "scope": deepcopy(checker.SCOPE),
         "document": {
             "path": checker.MODEL_REL,
-            "sha256": _digest(current[checker.MODEL_REL]),
+            "sha256": attested_model_sha256,
         },
         "audit": {
             "path": checker.AUDIT_REL,
-            "sha256": _digest(current[checker.AUDIT_REL]),
+            "sha256": attested_audit_sha256,
             "source_ref": ref,
             "open_findings": [],
         },
@@ -81,96 +84,107 @@ def _synthetic(
         assert source_ref == ref
         return current[path]
 
-    return payload, current, read_current, read_at_ref
+    def validate(
+        *, read_at_ref: Callable[[str, str], bytes] = read_at_ref
+    ) -> list[str]:
+        return checker.validate_attestation(
+            payload,
+            read_current=read_current,
+            read_at_ref=read_at_ref,
+            attested_model_sha256=attested_model_sha256,
+            attested_audit_sha256=attested_audit_sha256,
+        )
+
+    return payload, current, validate
 
 
 def test_valid_synthetic_attestation_passes(checker: ModuleType) -> None:
-    payload, _current, read_current, read_at_ref = _synthetic(checker)
-    assert (
-        checker.validate_attestation(
-            payload, read_current=read_current, read_at_ref=read_at_ref
-        )
-        == []
-    )
+    _payload, _current, validate = _synthetic(checker)
+    assert validate() == []
 
 
 def test_unknown_manifest_field_fails_closed(checker: ModuleType) -> None:
-    payload, _current, read_current, read_at_ref = _synthetic(checker)
+    payload, _current, validate = _synthetic(checker)
     payload["semantic_equivalence"] = True
-    failures = checker.validate_attestation(
-        payload, read_current=read_current, read_at_ref=read_at_ref
-    )
-    assert any("unknown fields" in failure for failure in failures)
+    assert any("unknown fields" in failure for failure in validate())
 
 
 def test_source_inventory_cannot_shrink(checker: ModuleType) -> None:
-    payload, _current, read_current, read_at_ref = _synthetic(checker)
+    payload, _current, validate = _synthetic(checker)
     payload["sources"].pop()
-    failures = checker.validate_attestation(
-        payload, read_current=read_current, read_at_ref=read_at_ref
-    )
-    assert any("source inventory/order drift" in failure for failure in failures)
+    assert any("source inventory/order drift" in failure for failure in validate())
 
 
 def test_duplicate_source_path_fails_closed(checker: ModuleType) -> None:
-    payload, _current, read_current, read_at_ref = _synthetic(checker)
+    payload, _current, validate = _synthetic(checker)
     payload["sources"][1] = deepcopy(payload["sources"][0])
-    failures = checker.validate_attestation(
-        payload, read_current=read_current, read_at_ref=read_at_ref
-    )
-    assert any("duplicate source path" in failure for failure in failures)
+    assert any("duplicate source path" in failure for failure in validate())
 
 
 def test_current_source_drift_fails(checker: ModuleType) -> None:
-    payload, current, _read_current, read_at_ref = _synthetic(checker)
+    _payload, current, validate = _synthetic(checker)
     changed_path = checker.AUDITED_SOURCE_PATHS[0]
     current[changed_path] += b"-changed"
-    failures = checker.validate_attestation(
-        payload, read_current=current.__getitem__, read_at_ref=read_at_ref
-    )
+    failures = validate()
     assert any(changed_path in failure and "changed" in failure for failure in failures)
 
 
 def test_model_document_drift_fails(checker: ModuleType) -> None:
-    payload, current, _read_current, read_at_ref = _synthetic(checker)
+    _payload, current, validate = _synthetic(checker)
     current[checker.MODEL_REL] += b"-changed"
-    failures = checker.validate_attestation(
-        payload, read_current=current.__getitem__, read_at_ref=read_at_ref
+    assert any("model document changed" in failure for failure in validate())
+
+
+def test_manifest_cannot_resign_the_model_document(checker: ModuleType) -> None:
+    """Rewriting the document and its own manifest digest must still fail."""
+    payload, current, validate = _synthetic(checker)
+    current[checker.MODEL_REL] += b"-changed"
+    payload["document"]["sha256"] = _digest(current[checker.MODEL_REL])
+    failures = validate()
+    assert any(
+        "document.sha256 is not the code-owned digest" in failure
+        for failure in failures
     )
-    assert any("model document changed" in failure for failure in failures)
+    assert not any("model document changed" in failure for failure in failures)
+
+
+def test_manifest_cannot_resign_the_audit_record(checker: ModuleType) -> None:
+    """Rewriting the audit record and its own manifest digest must still fail."""
+    payload, current, validate = _synthetic(checker)
+    current[checker.AUDIT_REL] += b"-changed"
+    payload["audit"]["sha256"] = _digest(current[checker.AUDIT_REL])
+    failures = validate()
+    assert any(
+        "audit.sha256 is not the code-owned digest" in failure for failure in failures
+    )
+    assert not any("audit record changed" in failure for failure in failures)
 
 
 def test_historical_ref_must_contain_attested_source_bytes(
     checker: ModuleType,
 ) -> None:
-    payload, _current, read_current, _read_at_ref = _synthetic(checker)
+    _payload, current, validate = _synthetic(checker)
     changed_path = checker.AUDITED_SOURCE_PATHS[-1]
 
     def drifted_ref(_source_ref: str, path: str) -> bytes:
-        return b"wrong" if path == changed_path else read_current(path)
+        return b"wrong" if path == changed_path else current[path]
 
-    failures = checker.validate_attestation(
-        payload, read_current=read_current, read_at_ref=drifted_ref
+    assert any(
+        "audited ref mismatch" in failure
+        for failure in validate(read_at_ref=drifted_ref)
     )
-    assert any("audited ref mismatch" in failure for failure in failures)
 
 
 def test_source_ref_cannot_be_substituted(checker: ModuleType) -> None:
-    payload, _current, read_current, read_at_ref = _synthetic(checker)
+    payload, _current, validate = _synthetic(checker)
     payload["audit"]["source_ref"] = "b" * 40
-    failures = checker.validate_attestation(
-        payload, read_current=read_current, read_at_ref=read_at_ref
-    )
-    assert any("reviewed head" in failure for failure in failures)
+    assert any("reviewed head" in failure for failure in validate())
 
 
 def test_open_findings_fail_closed(checker: ModuleType) -> None:
-    payload, _current, read_current, read_at_ref = _synthetic(checker)
+    payload, _current, validate = _synthetic(checker)
     payload["audit"]["open_findings"] = ["STALE"]
-    failures = checker.validate_attestation(
-        payload, read_current=read_current, read_at_ref=read_at_ref
-    )
-    assert any("open_findings" in failure for failure in failures)
+    assert any("open_findings" in failure for failure in validate())
 
 
 def test_duplicate_json_keys_are_rejected(checker: ModuleType, tmp_path: Path) -> None:
@@ -182,3 +196,10 @@ def test_duplicate_json_keys_are_rejected(checker: ModuleType, tmp_path: Path) -
 
 def test_checked_in_attestation_is_current(checker: ModuleType) -> None:
     assert checker.check_repository(_REPO) == []
+
+
+def test_code_owned_digests_match_the_checked_in_manifest(checker: ModuleType) -> None:
+    """The default authority is the real one, not just whatever tests inject."""
+    payload = checker.load_attestation(_REPO / checker.MANIFEST_REL)
+    assert payload["document"]["sha256"] == checker.ATTESTED_MODEL_SHA256
+    assert payload["audit"]["sha256"] == checker.ATTESTED_AUDIT_SHA256

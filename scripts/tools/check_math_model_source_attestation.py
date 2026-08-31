@@ -5,7 +5,9 @@ The math model is a manually reviewed transcription of production code.  This
 checker does not try to re-prove equations with regexes.  It verifies that:
 
 * the attestation has the exact v1 schema and audited source inventory;
-* the document and audit record still have their attested SHA-256 identities;
+* the manifest still carries the code-owned document and audit digests, so it
+  cannot re-sign either file by itself;
+* the document and audit record still have those SHA-256 identities;
 * every current source anchor still has its attested SHA-256 identity; and
 * the audited git ref contains those same source bytes.
 
@@ -40,6 +42,17 @@ SCHEMA = "saccade_math_model_source_attestation_v1"
 AUDITED_SOURCE_REF = "0e869feae627e3da2c6fe03365c6482671aafe2b"
 SHA256_RE = re.compile(r"[0-9a-f]{64}")
 COMMIT_RE = re.compile(r"[0-9a-f]{40}")
+
+# These are deliberately code-owned.  The manifest supplies the digests it is
+# checked against, so without a second authority it could re-sign a rewritten
+# document or audit record on its own.  Pinning both here means a real re-audit
+# has to edit this checker, the same review gate the source inventory uses.
+ATTESTED_MODEL_SHA256 = (
+    "7183c313a17b5e0782c6937a94f395aa65b4cc402d76dfd5e556437d81715844"
+)
+ATTESTED_AUDIT_SHA256 = (
+    "f6a4c9dba17121262012b7d2d4dba8773598ed66da48f99b675bce402ac19166"
+)
 
 # This is deliberately code-owned.  The manifest cannot silently shrink the
 # audit surface by deleting a row or grow it without a checker review.
@@ -146,11 +159,27 @@ def _check_current_binding(
         )
 
 
+def _check_attested_digest(
+    *,
+    manifest_sha256: str,
+    attested_sha256: str,
+    label: str,
+    failures: list[str],
+) -> None:
+    if manifest_sha256 != attested_sha256:
+        failures.append(
+            f"{label} is not the code-owned digest: manifest={manifest_sha256}, "
+            f"attested={attested_sha256}; a re-audit must update this checker too"
+        )
+
+
 def validate_attestation(
     payload: dict[str, Any],
     *,
     read_current: Callable[[str], bytes],
     read_at_ref: Callable[[str, str], bytes],
+    attested_model_sha256: str = ATTESTED_MODEL_SHA256,
+    attested_audit_sha256: str = ATTESTED_AUDIT_SHA256,
 ) -> list[str]:
     """Return every hard failure without granting any semantic authority."""
     failures: list[str] = []
@@ -175,6 +204,12 @@ def validate_attestation(
         if document["path"] != MODEL_REL:
             failures.append(f"document.path must be {MODEL_REL!r}")
         if _valid_sha256(document["sha256"], "document.sha256", failures):
+            _check_attested_digest(
+                manifest_sha256=document["sha256"],
+                attested_sha256=attested_model_sha256,
+                label="document.sha256",
+                failures=failures,
+            )
             if document["path"] == MODEL_REL:
                 _check_current_binding(
                     path=MODEL_REL,
@@ -195,6 +230,12 @@ def validate_attestation(
         if audit["path"] != AUDIT_REL:
             failures.append(f"audit.path must be {AUDIT_REL!r}")
         if _valid_sha256(audit["sha256"], "audit.sha256", failures):
+            _check_attested_digest(
+                manifest_sha256=audit["sha256"],
+                attested_sha256=attested_audit_sha256,
+                label="audit.sha256",
+                failures=failures,
+            )
             if audit["path"] == AUDIT_REL:
                 _check_current_binding(
                     path=AUDIT_REL,
