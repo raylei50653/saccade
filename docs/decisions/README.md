@@ -20,6 +20,8 @@
 - [ADR 017: 2025-2026 高 MOTA 技術整合策略分析](017-high-mota-2026-integration-strategy.md)
 - [ADR 018: 專案主線收斂與雙線開發方向](018-project-main-line-direction.md)
 - [ADR 019: Demote ReID and Adopt Geometry-First Production Tracker](019-demote-reid-geometry-first-production-tracker.md)
+- [ADR 020: Doc-Lifecycle 管理策略 —「新 NO-GO」](020-doc-lifecycle-new-nogo.md)
+- [ADR 021: 資產身分層與生成式進度報告](021-asset-provenance-and-progress-reporting.md)
 
 > ADR 001、002、003 未建立（對應決策已直接合併至後續 ADR 中）。
 

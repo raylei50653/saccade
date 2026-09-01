@@ -50,6 +50,7 @@ Manifest: `docs/ownership/doc_migration_manifest.yaml`
 - `docs/decisions/018-project-main-line-direction.md`
 - `docs/decisions/019-demote-reid-geometry-first-production-tracker.md`
 - `docs/decisions/020-doc-lifecycle-new-nogo.md`
+- `docs/decisions/021-asset-provenance-and-progress-reporting.md`
 - `docs/decisions/README.md`
 - `docs/experiments/README.md`
 - `docs/experiments/occ_exit_audit_p55/README.md`
@@ -346,6 +347,6 @@ Excluded from the active index and default search view.
 
 ## Inventory summary
 
-- documents: 296
-- active: 241
+- documents: 297
+- active: 242
 - grayed out: 55
