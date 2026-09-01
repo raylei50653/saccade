@@ -6,6 +6,7 @@
 | Script | Status | Usage | Function |
 |--------|--------|-------|----------|
 | `__init__.py` | stable | - | Run provenance: machine-readable identity for produced experiment artifacts. |
+| `asset_inventory.py` | stable | cli | Workspace-local projection of which artifact directories are accounted for. |
 | `run_manifest.py` | stable | - | Fail-closed ``run_manifest.json`` writer for produced experiment artifacts. |
 
 <!-- END generated script index -->
