@@ -129,6 +129,15 @@ jobs:
         run: uv run python scripts/tools/check_h2_measure_archives.py
       - name: Scripts Structure Contract
         run: uv run python scripts/tools/check_scripts_structure.py --strict
+      # Validates rather than compares: the asset roots are gitignored, so a
+      # clean clone holds none of them and an empty inventory is the correct
+      # answer here. What must never pass is a manifest that exists and does
+      # not validate. The workspace where that can actually happen is a
+      # developer's, and the local hook is blocked on the ADR 021 §4.3
+      # re-attestation limit (scripts/pre_push.sh is a protected path), so run
+      # it by hand there: scripts/provenance/asset_inventory.py --check
+      - name: Asset Inventory Validation
+        run: uv run python scripts/provenance/asset_inventory.py --check
       - name: Doc Freshness Check (warn-only)
         run: uv run python scripts/tools/check_doc_freshness.py
         continue-on-error: true

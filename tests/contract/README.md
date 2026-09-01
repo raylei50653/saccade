@@ -5,6 +5,7 @@
 
 | Test | Scope | Function | Lifecycle | Summary |
 |------|-------|----------|-----------|---------|
+| `test_asset_inventory.py` | system | contract | active | Contract for the ADR 021 asset inventory: a projection that must not lie. |
 | `test_declaration_policy_binding.py` | system | contract | active | A declaration's policy target is declared in YAML, and checked against the code. |
 | `test_declaration_seal_order.py` | system | contract | active | A sealed declaration must exist before the results it claims to have predicted. |
 | `test_gctm_b1_slot_governance_v1.py` | system | contract | active | Contract tests for B1 slot identity and substrate-agnostic GCTM isolation. |

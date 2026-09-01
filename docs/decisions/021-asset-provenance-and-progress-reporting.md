@@ -126,15 +126,47 @@ claims: []     # 選填；指回 registry object id。只 link，不複寫 verdi
 eval / train 入口在寫結果時自動寫入 manifest；**寫不出 manifest 就不准寫結果**（fail-closed）。
 自此刻起所有新產物都有 provenance —— 這條**單獨**就讓問題停止變大。
 
-**AP-3 · 生成式 inventory**
+**AP-3 · inventory —— workspace-local projection，不是 committed authority**
 
-`scripts/docs/asset_inventory.py` → `docs/ownership/asset_inventory.generated.md`，掃 `runs|results|out|output`，分三類**查詢視圖**（可重疊，不是存起來的欄位）：
+`scripts/provenance/asset_inventory.py`（與 `run_manifest.py` 同家；**不是** `scripts/docs/`），
+掃 `runs|results|out|output`。
 
-- `cited` —— 目錄名被 `docs/` 字面引用
-- `manifested` —— 有合法 manifest 但未被引用
-- `orphan` —— 兩者皆無
+> **修正（2026-09-01）：本項不照 `scripts_inventory` / `tests_inventory` 的 pattern。**
+> 那個 pattern 是「commit 生成檔 → CI 重生 → 比對 freshness」。但這四個 root **全部 gitignored**，
+> clean CI clone 一份資產都沒有，必然重生出另一份 inventory ⇒ 拿 82 GB workspace 和空 clone 比對，
+> 差異會被叫做 drift。**那會讓 generated view 自己變成一個無法重現的第二真相**，正是本 ADR §1.3
+> 要避免的東西。
 
-接 `scripts/pre_push.sh`，pattern 對齊既有的 `scripts_inventory.generated.md` / `tests_inventory.generated.md`，**不發明新機制**。
+因此拆成兩件事：
+
+| | |
+|---|---|
+| `--emit` | 給人看的投影，寫到 **gitignored 且在 `docs/` 之外**的路徑（預設 `.provenance/asset_inventory.generated.md`）。**不提交。** source of truth 永遠是當下 workspace 的 assets + manifests + tracked docs，不是那份 markdown |
+| `--check` | CI 跑的**驗證**，不是比對。clean clone 上的空 inventory 是**正確答案**；唯一 fail-closed 條件是「manifest 存在但不合法」 |
+
+**為什麼輸出不能放 `docs/`：** `scripts/docs/build_master_map.py` 的 `collect_document_inventory`
+是 filesystem `rglob("*")`，只排除它自己的輸出。一份 untracked 的 `.md` 放進 `docs/` 會讓
+`test_checked_in_master_map_is_current` 在**產生它的那台機器上**紅、CI 綠 —— 同一種不可重現真相的另一個形態。
+
+**inventory unit = 四個 root 的 immediate child directory**（`runs/<run>`、`results/<run>`…）。
+**不 recursive**：`_per_seq/`、checkpoints、logs 屬於它們的 run，遞迴下去會把一個已被交代的 run
+變成上千個假 orphan。直接躺在 root 下的**檔案**不是 unit（檔案無法帶 manifest），另行計數以免被靜默丟棄。
+
+三類**查詢視圖**（是查詢，可重疊，不是存起來的欄位）：
+
+- `cited` —— 目錄名被 citation corpus 字面引用
+- `manifested` —— 帶**合法** manifest
+- `orphan` —— **`¬cited ∧ 完全沒有 manifest`**
+
+**第三態必須獨立存在：** manifest 存在但不合法 ≠ orphan。orphan 的語義是「沒有任何東西交代它」，
+而不合法的 manifest 是「有東西試圖交代但讀不出來」= **壞掉的產出端**。把後者折進前者，等於把一個
+壞掉的 producer 藏進一個例行的 backlog 數字裡。**它 fail-closed，不被分類。**
+
+**citation corpus = tracked、且非 `*.generated.md` 的 `docs/` 檔案。** 兩個條件各擋一件事：
+排除 generated view，否則 inventory 生成一次就把所有 unit 名字寫進 `docs/`，第二次掃描會把整個
+workspace 判成 cited —— 工具認證自己的輸出；tracked-only 則讓本工具的投影**無論寫到哪裡**都無法 cite 任何東西。
+
+`orphan` 保持純查詢語義：**不含 age、不含 delete eligibility、不輸出任何「可刪」措辭**。那全部屬於 AP-5。
 
 **AP-4 · 存量 pay-on-use 回填**
 
@@ -204,6 +236,12 @@ compress + dispose 一個動作，讓 9 個 quarantined cluster 有出口。
 
 > **AP-2 rollout crossing `decision_relevant` / runtime-identity protected paths requires controlled
 > re-attestation and cannot be performed as ordinary provenance plumbing.**
+
+本 limit **不只涵蓋 `decision_relevant` 一條軸**。已確認落在保護區的還有
+`scripts/pre_push.sh`（`identity_semantics` 軸）—— 因此 AP-3 的 validator **無法掛上 `pre_push`**，
+改掛 `.github/workflows/ci.yml`（`plumbing_only`，不觸發閘門）。
+**後果：** 真正握有 82 GB 的是開發者的 workspace，而那裡的自動 hook 正是被擋掉的那個；
+本機需**手動**跑 `scripts/provenance/asset_inventory.py --check`，直到同一次合法 republication 一併補上。
 
 `scripts/tools/h2_path_partition.py` 的 `decision_relevant` 分區（含整個 `src/saccade/**` 與
 `_POLICY_SURFACE` 明列的 `scripts/eval/mot17.py`）只要內容變動——**新增檔案也算**——
