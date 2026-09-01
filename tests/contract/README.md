@@ -38,6 +38,7 @@
 | `test_research_lock.py` | system | contract | active | An open research instance holds the online surface shut, and says so before the push. |
 | `test_research_packet_manifest.py` | system | contract | active | Generic manifest/integrity contract for sealed research evidence packets. |
 | `test_research_packet_schema.py` | system | contract | active | Generic schema contract for sealed research evidence packets. |
+| `test_run_manifest_ordering.py` | system | contract | active | Contract for the ADR 021 run-manifest: schema, and the write-ordering rule. |
 | `test_runtime_identity_staleness.py` | tracking,system | contract | active | Coordinate drift never becomes equivalence merely because one probe is equal. |
 | `test_score_ranking_declaration_v1.py` | system | contract | active | Contract for the fail-closed L2 score-ranking declaration v1 validator. |
 | `test_scripts_structure.py` | system | contract | active | Contract tests for the scripts/ self-documentation + generated index. |

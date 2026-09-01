@@ -59,6 +59,7 @@ from saccade.perception.temporal_yolo.training_utils import (  # noqa: E402
     seed_everything,
     sha256_file,
 )
+from scripts.provenance.run_manifest import open_run  # noqa: E402
 
 
 CACHE_SCHEMA = "mamba-teacher-cache-v2"
@@ -734,6 +735,13 @@ def main() -> None:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     run_dir = project_root / args.run_dir
     run_dir.mkdir(parents=True, exist_ok=True)
+
+    # ADR 021 AP-2: claim the run directory before any checkpoint is written.
+    open_run(
+        run_dir,
+        produced_by="train",
+        dataset=str(getattr(args, "data_root", "") or "") or None,
+    )
 
     # ------------------------------------------------------------------
     # Teacher: frozen GatedYOLODetector

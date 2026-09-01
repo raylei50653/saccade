@@ -26,6 +26,7 @@ if build_path.exists():
     sys.path.insert(0, str(build_path))
 
 from saccade.perception.eval.metrics import run_motmetrics_evaluation  # noqa: E402
+from scripts.provenance.run_manifest import open_run  # noqa: E402
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -89,6 +90,16 @@ def _strip_flag(argv: list[str], flag: str, takes_value: bool) -> list[str]:
 def _has_flag(argv: list[str], flag: str) -> bool:
     prefix = f"{flag}="
     return any(token == flag or token.startswith(prefix) for token in argv)
+
+
+def _preset_from_argv(argv: list[str]) -> str | None:
+    """Read --preset out of the passthrough args, which this entry never parses."""
+    for index, item in enumerate(argv):
+        if item == "--preset" and index + 1 < len(argv):
+            return argv[index + 1]
+        if item.startswith("--preset="):
+            return item.split("=", 1)[1]
+    return None
 
 
 def _discover_sequences(data_root: Path, split: str, selected: str) -> list[str]:
@@ -339,7 +350,18 @@ def main() -> int:
 
     output_root = Path(args.output)
     per_seq_root = output_root / "_per_seq"
-    output_root.mkdir(parents=True, exist_ok=True)
+
+    # ADR 021 AP-2: the manifest lands before the first result byte. Everything
+    # below this line writes into output_root, so a failure here must abort the
+    # run rather than leave an anonymous directory behind.
+    open_run(
+        output_root,
+        produced_by="eval",
+        preset=_preset_from_argv(sys.argv[1:]),
+        detector=args.detector,
+        dataset=f"{args.data_root} {args.split}",
+    )
+
     per_seq_root.mkdir(parents=True, exist_ok=True)
 
     passthrough = list(sys.argv[1:])
