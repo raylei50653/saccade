@@ -637,6 +637,36 @@ def test_an_already_manifested_directory_is_not_a_backfill_candidate(repo):
     )
 
 
+def test_a_legacy_v1_manifest_is_read_not_crashed_on(repo):
+    """The transition-window file the v1 read support exists for.
+
+    Schema compatibility is only half of it: a reader that accepts v1 and a
+    consumer that then reaches for payload["provenance_mode"] leaves the same
+    directory failing, one frame later and with a worse error.
+    """
+    run = _run_dir(repo, "results/ablation_20260709")
+    (run / MANIFEST_FILENAME).write_text(
+        json.dumps(_v1(run_id="ablation_20260709"), indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    candidate = _one(repo, "results/ablation_20260709")
+    assert candidate.classification == bf.ALREADY_MANIFESTED
+    assert "production" in candidate.reason
+    assert provenance_mode_of(read_manifest(run)) == "production"
+
+
+def test_a_legacy_v1_manifest_is_never_overwritten_by_a_backfill(repo):
+    run = _run_dir(repo, "results/ablation_20260709")
+    (run / MANIFEST_FILENAME).write_text(
+        json.dumps(_v1(run_id="ablation_20260709"), indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    before = (run / MANIFEST_FILENAME).read_bytes()
+    assert bf.main(["--repo-root", str(repo), "--write"]) == 0
+    assert (run / MANIFEST_FILENAME).read_bytes() == before
+
+
 def test_an_invalid_manifest_is_reported_as_broken_not_backfilled(repo):
     run = _run_dir(repo, "results/ablation_20260709")
     (run / MANIFEST_FILENAME).write_text("{not json", encoding="utf-8")

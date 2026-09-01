@@ -2,7 +2,7 @@
 
 ADR 021 (AP-4).  The ADR originally described this step as "pay-on-use backfill":
 walk the directories the evidence ledger cites and write them a manifest.  That
-description was wrong in three ways, and this module exists as the correction.
+description was wrong in several ways, and this module exists as the correction.
 
 **1. A cited path is not a run.**  ``results/dual_stability_ablation_20260709/``
 is one accounting unit to :mod:`asset_inventory`, but it holds four ablation arms
@@ -63,6 +63,7 @@ from scripts.provenance.run_manifest import (  # noqa: E402
     ManifestError,
     attach_reconstructed_manifest,
     build_reconstructed_manifest,
+    provenance_mode_of,
     read_manifest,
 )
 
@@ -299,6 +300,16 @@ def _covering_seals(directory: Path) -> list[str]:
     An unreadable seal is treated as covering.  Refusing to write is the
     reversible mistake; writing into something whose coverage could not be
     established is not.
+
+    Two known imprecisions, both erring toward refusal and neither able to
+    produce a false identity:
+
+    * an unreadable seal *nested* one level in is attributed to this directory
+      even though a readable one in the same place would not be, so a directory
+      can be refused for a seal that does not actually cover it;
+    * a seal listing files at this level proves those bytes are digested; it
+      does not prove the file *set* is closed, so "adding a file breaks it" is
+      the conservative reading rather than a demonstrated fact.
     """
     hits = []
     for depth in range(SEAL_SEARCH_DEPTH):
@@ -453,9 +464,13 @@ def classify(repo_root: Path, rel: str, cited_by: tuple[str, ...]) -> Candidate:
             payload = read_manifest(target)
         except ManifestError as exc:
             return make(INVALID_MANIFEST, str(exc))
+        # provenance_mode_of, not payload["provenance_mode"]: a v1 manifest is
+        # valid and has no such field. Reading it directly would mean the reader
+        # accepts v1 and the consumer crashes on it — which is precisely the
+        # transition-window file the v1 compatibility exists for.
         return make(
             ALREADY_MANIFESTED,
-            f"already carries a {payload['provenance_mode']} manifest",
+            f"already carries a {provenance_mode_of(payload)} manifest",
         )
 
     declared = _authority_declaring_records(target)
