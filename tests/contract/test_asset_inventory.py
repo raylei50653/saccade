@@ -154,7 +154,7 @@ def test_a_cited_unit_is_not_an_orphan_even_without_a_manifest(tmp_path):
     assert unit.cited and not unit.orphan
 
 
-def test_orphan_is_exactly_not_cited_and_not_manifested(tmp_path):
+def test_orphan_is_exactly_not_cited_and_manifest_absent(tmp_path):
     repo = _repo(tmp_path)
     _manifest(_unit(repo, "results", "both"))
     _manifest(_unit(repo, "results", "manifested_only"))
