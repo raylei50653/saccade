@@ -53,6 +53,7 @@ from saccade.perception.temporal_yolo.yolo_gated_detector import (  # noqa: E402
     GatedYOLODetector,
     build_gated_yolo_detector,
 )
+from scripts.provenance.run_manifest import open_run  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -398,6 +399,13 @@ def main() -> None:
     seed_everything(args.seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     run_dir = project_root / args.run_dir
+
+    # ADR 021 AP-2: claim the run directory before any checkpoint is written.
+    open_run(
+        run_dir,
+        produced_by="train",
+        dataset=str(getattr(args, "data_root", "") or "") or None,
+    )
     data_root = project_root / args.data_root
     seqs, holdout_seqs = resolve_training_sequences(
         data_root, args.seqs, args.holdout_seqs

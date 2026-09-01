@@ -42,6 +42,8 @@ _ROOT = next(
 sys.path.insert(0, str(_ROOT))
 sys.path.insert(0, str(_ROOT / "src"))
 
+from scripts.provenance.run_manifest import open_run  # noqa: E402
+
 from scripts.eval.appearance.reid_id_benchmark import (  # noqa: E402
     GAP_BUCKETS,
     SIZE_BUCKETS,
@@ -538,6 +540,13 @@ def main() -> None:
     device = "cuda"
     run = _ROOT / args.run_dir
     run.mkdir(parents=True, exist_ok=True)
+
+    # ADR 021 AP-2: claim the run directory before any checkpoint is written.
+    open_run(
+        run,
+        produced_by="train",
+        dataset=str(getattr(args, "data_root", "") or "") or None,
+    )
     out_hw = (args.input, args.input)
 
     # ── data ──

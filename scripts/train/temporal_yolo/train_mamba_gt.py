@@ -65,6 +65,7 @@ from saccade.perception.temporal_yolo.mamba_head import (  # noqa: E402
     resolve_mamba_in_channels,
 )
 from saccade.perception.temporal_yolo.ngla_assigner import install_assigner  # noqa: E402
+from scripts.provenance.run_manifest import open_run  # noqa: E402
 from ultralytics.utils.loss import v8DetectionLoss  # noqa: E402
 
 
@@ -561,6 +562,13 @@ def main() -> None:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     run_dir = project_root / args.run_dir
     run_dir.mkdir(parents=True, exist_ok=True)
+
+    # ADR 021 AP-2: claim the run directory before any checkpoint is written.
+    open_run(
+        run_dir,
+        produced_by="train",
+        dataset=str(getattr(args, "data_root", "") or "") or None,
+    )
 
     # ------------------------------------------------------------------
     # Teacher: frozen GatedYOLODetector

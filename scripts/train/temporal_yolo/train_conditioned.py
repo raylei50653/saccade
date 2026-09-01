@@ -46,6 +46,7 @@ import torch
 import torch.nn as nn
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # repo root, for scripts.*
 
 from saccade.perception.temporal_yolo.dataset import build_mot17_dataloader
 from saccade.perception.temporal_yolo.loss import TemporalTrackingLoss
@@ -55,6 +56,7 @@ from saccade.perception.temporal_yolo.yolo_conditioned import (
     TrackerGateInput,
     build_temporal_yolo_conditioned,
 )
+from scripts.provenance.run_manifest import open_run  # noqa: E402
 
 _CONDITIONED_AVAILABLE = True
 
@@ -367,6 +369,13 @@ def main() -> None:
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     run_dir = Path(args.run_dir)
+
+    # ADR 021 AP-2: claim the run directory before any checkpoint is written.
+    open_run(
+        run_dir,
+        produced_by="train",
+        dataset=str(getattr(args, "data_root", "") or "") or None,
+    )
     seqs = args.seqs.split(",") if args.seqs else None
     scales = tuple(s.strip() for s in args.scales.split(","))
 

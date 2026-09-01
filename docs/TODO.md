@@ -61,6 +61,12 @@ legacy `native_960` presets (`speed` / `baseline`) remain useful for comparison,
 
 ---
 
+## Sole active（WIP=1）
+
+- **AP 線 / W-A —— 資產身分層**：[ADR 021](decisions/021-asset-provenance-and-progress-reporting.md) §3 W-A。W-B（ADR 020 後半）與 W-C（生成式 status report）為 parked，未授權併行。
+
+---
+
 ## 模組 TODO 索引
 
 > 模組專屬待辦已物理拆分至各 `docs/modules/<name>/TODO.md`，它們是 sole-active 的唯一 live state。 [DEVELOPMENT.md 模組現狀總覽](../DEVELOPMENT.md#模組現狀總覽)只提供穩定入口。

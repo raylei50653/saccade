@@ -44,6 +44,7 @@ from saccade.perception.temporal_yolo.yolo_gated_detector import (  # noqa: E402
     build_gated_yolo_detector,
 )
 from saccade.perception.tracking.tracker_gpu import GPUByteTracker  # noqa: E402
+from scripts.provenance.run_manifest import open_run  # noqa: E402
 from ultralytics.utils.tal import make_anchors  # noqa: E402
 
 
@@ -444,6 +445,13 @@ def main() -> None:
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     run_dir = Path(args.run_dir)
+
+    # ADR 021 AP-2: claim the run directory before any checkpoint is written.
+    open_run(
+        run_dir,
+        produced_by="train",
+        dataset=str(getattr(args, "data_root", "") or "") or None,
+    )
     seqs = args.seqs.split(",") if args.seqs else None
     scales = tuple(s.strip() for s in args.scales.split(","))
 
