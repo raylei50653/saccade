@@ -87,6 +87,7 @@ status report   = 既有 fact-owner 的生成投影（registry ∪ slots ∪ man
 | inventory / status 皆為 **generated** | C5.1 單一寫入者；手寫必漂 | 手維一頁 status —— 即 §1.3 的第二真相 |
 | manifest 只放**機械事實**，不放 verdict | verdict 的家是 slot / registry；link-don't-relabel | 在 manifest 裡寫結論 —— 第四套 archive |
 | disposal 需**人工核可** | 82 G 內含不可重建的訓練產物；fail-closed 應偏向保留 | 依 mtime 自動刪 —— 不可逆且無 owner |
+| 一個目錄 = 一次 run；**已有內容即拒絕 claim** | 產出端不會先清空目錄，覆寫 manifest 會讓新 run 的身分蓋在它沒覆寫到的舊檔上 ⇒ 產生**看起來可信的錯誤 provenance**，比沒有 provenance 更難發現 | `overwrite=True` / resume —— 那是 run continuation 語義，未設計前不得由預設值代答 |
 | 進度 = **主線狀態轉移** | §20.7；artifact 數 / GB / PR 數都不是進度 | 以檔案數或釋出 GB 當 KPI |
 
 ---
@@ -146,6 +147,10 @@ eval / train 入口在寫結果時自動寫入 manifest；**寫不出 manifest �
 **Exit criteria（W-A）：** 新產出 100% 帶 manifest；orphan 集合有機械定義且可重生；至少完成一輪人工核可的 disposal。
 *釋出的 GB 數是副產品，不是驗收指標。*
 
+> ⚠️ **第一條 exit criterion 目前不成立，且不由 W-A 自己解除**——見 §4.3 的 named limit。
+> `scripts/eval/mot17.py` 與 `_per_seq/` 子目錄仍未覆蓋，因此 **AP-2 的狀態是 partial coverage，不是 complete**。
+> PR #330 merged **不等於** AP-2 完成。
+
 ### W-B —— 關掉 ADR 020 的後半（issue #164）
 
 **AP-6 · S3 seal 觸發（機制的心臟）**
@@ -195,6 +200,30 @@ compress + dispose 一個動作，讓 9 個 quarantined cluster 有出口。
 2. **每新增/刪除 `docs/**.md` 或 `.yaml` 必須重生 `master_map.generated.md`**，否則 `tests/contract/test_migration_manifest_v0.py` fail-closed。
 3. **不新增第四套 archive。** inventory 是生成的查詢視圖；manifest 是 ephemeral 的機械事實。兩者都不承載 verdict。
 
+### 4.3 Named limit —— protected-path remainder（結構性，非一次性失誤）
+
+> **AP-2 rollout crossing `decision_relevant` / runtime-identity protected paths requires controlled
+> re-attestation and cannot be performed as ordinary provenance plumbing.**
+
+`scripts/tools/h2_path_partition.py` 的 `decision_relevant` 分區（含整個 `src/saccade/**` 與
+`_POLICY_SURFACE` 明列的 `scripts/eval/mot17.py`）只要內容變動——**新增檔案也算**——
+`docs/reference/runtime_identity.generated.json` 的 `implementation` digest 就漂，
+`check_runtime_identity_staleness` fail-closed。checker 的語義是 **re-attestation required**，
+**沒有**「behavior probe 沒變所以視為 equivalent」的逃生門。
+
+重新發布需要 controlled-host 的 identity-probe 與 runtime-inputs capture。因此：
+
+- **不為一個 provenance hook 消耗一次 controlled-host republication。** 那會把 AP-2 的工程 hygiene
+  與 H2 的 runtime identity authority 綁進同一個 PR，邊界反而更差。
+- **後果（必須明講）：** standalone `scripts/eval/mot17.py` run 與 `_per_seq/` 子目錄**仍匿名**；
+  diagnostics / sweeps / caches 本就不在 W-A 範圍。已覆蓋的是 batch eval 的 `output_root`
+  （evidence_ledger 實際引用的那層）與已接線的 training run root。
+- **解除條件：** 等某個**真正需要**更新 runtime coordinate 的 decision-relevant 變更出現時，
+  把這個 hook 搭同一次合法 republication；或當 standalone `mot17.py` 的匿名真的成為 W-A 的主要
+  blocker 時，另開一個 attestation PR。**兩者都不是本線可以順手做掉的事。**
+
+**紀錄用途：** 避免日後有人看到 PR #330 merged 就誤認 AP-2 已 complete。
+
 ### 4.2 明確不做
 
 - 不回填 187 份無 `doc-status` 的舊檔（pay-on-use）。
@@ -217,7 +246,7 @@ compress + dispose 一個動作，讓 9 個 quarantined cluster 有出口。
 
 **WIP=1**：AP 線在任一時點只有一個 workstream 為 sole-active charter，於 `docs/TODO.md` 掛一行並回連本 ADR。
 
-**建議的第一個 PR**：`AP-1` + `AP-2` + 一個 contract test。範圍小、可獨立驗證、且自此所有新結果都有 provenance。
+**第一個 PR**：`AP-1` + `AP-2` + contract test = PR #330（batch eval `output_root` + 六個 training entry；protected-path remainder 見 §4.3）。
 
 ---
 

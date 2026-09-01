@@ -1,11 +1,18 @@
-"""Contract for the ADR 021 run-manifest: schema, and the write-ordering rule.
+"""Contract for the ADR 021 run-manifest: schema, ordering, and non-reattribution.
 
-The rule under test is that the manifest lands **before** the first result
-byte. A test that only asserted "the finished directory contains a manifest"
-would pass on a producer that writes results first and the manifest last —
-which is precisely the producer that leaves anonymous directories behind when
-it crashes. So the ordering tests inject a manifest failure and assert that
-*nothing else* was created.
+Two rules are under test, and they fail in opposite directions.
+
+**Ordering** — the manifest lands *before* the first result byte. A test that
+only asserted "the finished directory contains a manifest" would pass on a
+producer that writes results first and the manifest last, which is precisely
+the producer that leaves anonymous directories behind when it crashes. So the
+ordering tests inject a manifest failure and assert *nothing else* was created.
+
+**Non-reattribution** — a run may only claim an empty or new directory. None of
+the wired producers clears its output directory first, so a manifest written
+over an existing one would come to stand over whichever old files the new run
+never overwrote. That is worse than no provenance: absent provenance announces
+itself, while wrong provenance looks exactly like the right answer.
 """
 
 # scope: system
@@ -225,3 +232,112 @@ def test_batch_eval_claims_the_directory_before_dispatching(tmp_path, monkeypatc
 
     assert seen == [True], "dispatch started before the directory was claimed"
     assert read_manifest(out)["produced_by"] == "eval"
+
+
+# ---------------------------------------------------------------------------
+# non-reattribution: a new manifest must never come to stand over old bytes
+# ---------------------------------------------------------------------------
+
+
+def test_an_empty_directory_is_claimable(tmp_path):
+    """The boundary: empty is fine, occupied is not."""
+    out = tmp_path / "prepared"
+    out.mkdir(parents=True)
+    open_run(out, produced_by="eval")
+    assert read_manifest(out)["run_id"] == "prepared"
+
+
+def test_a_directory_holding_artifacts_is_refused_and_left_byte_identical(tmp_path):
+    out = tmp_path / "run_a"
+    open_run(out, produced_by="eval", preset="run_a_preset")
+    (out / "MOT17-02-SDP.txt").write_text(
+        "1,1,10,10,20,40,1,-1,-1,-1\n", encoding="utf-8"
+    )
+    (out / "_fps_summary.txt").write_text("OVERALL\tfps=269.5\n", encoding="utf-8")
+
+    before = {
+        path.name: path.read_bytes() for path in sorted(out.iterdir()) if path.is_file()
+    }
+
+    with pytest.raises(ManifestError, match="is not empty"):
+        open_run(out, produced_by="eval", preset="run_b_preset")
+
+    after = {
+        path.name: path.read_bytes() for path in sorted(out.iterdir()) if path.is_file()
+    }
+    assert after == before, "a refused claim must not touch a single existing byte"
+    assert read_manifest(out)["preset"] == "run_a_preset", (
+        "run A's manifest must still describe run A"
+    )
+
+
+def test_a_directory_holding_only_a_manifest_is_still_refused(tmp_path):
+    """Re-claiming is refused even when the previous run produced nothing else.
+
+    Otherwise the cheap case teaches the habit, and the habit is applied to the
+    expensive one.
+    """
+    out = tmp_path / "claimed"
+    open_run(out, produced_by="train")
+    first = (out / MANIFEST_FILENAME).read_bytes()
+
+    with pytest.raises(ManifestError, match="is not empty"):
+        open_run(out, produced_by="train")
+
+    assert (out / MANIFEST_FILENAME).read_bytes() == first
+
+
+def test_v1_offers_no_overwrite_escape_hatch():
+    """An ``overwrite`` flag would answer a design question nobody has settled.
+
+    Run-continuation semantics — what a resumed run inherits, and what it may
+    claim about bytes it did not produce — is deferred, so v1 must not ship a
+    keyword that quietly decides it.
+    """
+    import inspect
+
+    parameters = inspect.signature(open_run).parameters
+    assert "overwrite" not in parameters
+    assert "resume" not in parameters
+    assert "force" not in parameters
+
+
+def test_batch_eval_refuses_an_output_root_that_already_holds_artifacts(
+    tmp_path, monkeypatch
+):
+    """The same rule on the canonical entry point: no dispatch, no mutation."""
+    entry = _load_entry("mot17_all_sdp_reclaim", "scripts/eval/mot17_all_sdp.py")
+    out = tmp_path / "results_existing"
+    out.mkdir(parents=True)
+    stale = out / "MOT17-02-SDP.txt"
+    stale.write_text("1,7,10,10,20,40,1,-1,-1,-1\n", encoding="utf-8")
+    stale_bytes = stale.read_bytes()
+
+    dispatched: list[str] = []
+    monkeypatch.setattr(
+        entry, "_run_sequence", lambda **kw: dispatched.append(kw["seq"])
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "mot17_all_sdp.py",
+            "--output",
+            str(out),
+            "--sequences",
+            "MOT17-02-SDP",
+            "--dry-run",
+        ],
+    )
+
+    with pytest.raises(ManifestError, match="is not empty"):
+        entry.main()
+
+    assert dispatched == [], "dispatch must not start against an occupied directory"
+    assert not (out / "_per_seq").exists()
+    assert not (out / "_dispatch_plan.json").exists()
+    assert not (out / MANIFEST_FILENAME).exists(), (
+        "the refused run must not leave its manifest over the old artifacts"
+    )
+    assert stale.read_bytes() == stale_bytes
+    assert sorted(item.name for item in out.iterdir()) == ["MOT17-02-SDP.txt"]

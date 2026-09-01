@@ -272,18 +272,47 @@ def open_run(
     cmdline: Iterable[str] | None = None,
     claims: Iterable[str] = (),
 ) -> Path:
-    """Claim an artifact directory by landing its manifest first.
+    """Claim an empty or not-yet-existing artifact directory, manifest first.
 
     Call this as the **first** side effect of a producing entry point, before
     creating sub-directories, opening result files, or dispatching workers.  It
     returns only once the manifest is durably on disk and reads back valid; on
     any failure it raises :class:`ManifestError` and leaves no manifest behind.
 
-    Re-running into an existing directory overwrites the manifest: one
-    directory describes one run, and the newest run is the one whose outputs
-    are there.  Keep separate runs in separate directories.
+    A directory that already holds anything — old sequence outputs, a dispatch
+    plan, a previous ``run_manifest.json`` — is refused.  Overwriting the
+    manifest would be worse than having none: producers here do not clear the
+    directory first, so run B's manifest would come to stand over whichever of
+    run A's files B never happened to overwrite, and the result is confident,
+    plausible, wrong provenance.  Wrong provenance is harder to detect than
+    absent provenance, and everything downstream — citation, disposal — trusts
+    it.
+
+    v1 therefore has no ``overwrite`` and no resume: a re-run goes to a fresh
+    directory.  Run-continuation semantics (what a resumed run inherits, and
+    what it may claim about bytes it did not produce) is a separate design
+    question, and guessing at it here would bake the answer into a hundred
+    directories before anyone chose it.
     """
     directory = Path(output_dir)
+    if directory.exists():
+        if not directory.is_dir():
+            raise ManifestError(
+                f"artifact path {directory} exists and is not a directory"
+            )
+        try:
+            occupied = next(directory.iterdir(), None)
+        except OSError as exc:
+            raise ManifestError(
+                f"cannot inspect artifact directory {directory}: {exc}"
+            ) from exc
+        if occupied is not None:
+            raise ManifestError(
+                f"artifact directory {directory} is not empty (found {occupied.name}); "
+                "a run may only claim an empty or new directory, because a manifest "
+                "written over existing files would misattribute them to this run. "
+                "Point the run at a fresh directory."
+            )
     try:
         directory.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
