@@ -46,6 +46,7 @@ deleting nothing.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import sys
@@ -58,6 +59,7 @@ if str(_HERE.parents[2]) not in sys.path:
 
 from scripts.provenance.run_manifest import (  # noqa: E402
     MANIFEST_FILENAME,
+    PRODUCED_BY,
     ManifestError,
     attach_reconstructed_manifest,
     build_reconstructed_manifest,
@@ -91,19 +93,36 @@ RUN_OUTPUT_MARKERS = (
 )
 RUN_OUTPUT_GLOBS = ("MOT17-*.txt",)
 
-# Directories that already carry an identity of their own.  Adding a second,
-# weaker one is refused for two separate reasons, and either alone is enough:
-# a checksum file means the directory's contents are digested somewhere, so
-# adding a file can invalidate that seal; an H2 identity record already
-# declares its own authority, and a run manifest sitting beside it would be a
-# competing account of the same bytes.
-SEAL_MARKER_GLOBS = ("SHA256SUMS*", "*.sha256", "*.sha256sum", "checksums.sha256")
-IDENTITY_RECORD_MARKERS = (
-    "runtime_inputs.json",
-    "behavior_probe.json",
-    "runtime_identity.json",
-    "layer_p.json",
-)
+# Directories that already carry an identity of their own get no second, weaker
+# one.  Two independent grounds, each established by evidence rather than by
+# where a file happens to sit:
+#
+#  (a) a record in the directory **declares its own authority** — an H2 identity
+#      record does this in so many words — so a run manifest beside it would be
+#      a competing account of the same bytes;
+#  (b) a checksum manifest whose coverage **actually reaches** this directory's
+#      bytes, which is decided by reading it.
+#
+# Depth is not evidence.  ``run/archive/checksums.sha256`` listing four files in
+# ``archive/`` proves the closure of ``archive/`` and says nothing about the run
+# root or its siblings; treating "a seal exists somewhere below" as "this
+# directory is sealed" would refuse ordinary runs for no reason, and would be
+# reasoning about identity semantics from filesystem layout.
+SEAL_FILE_GLOBS = ("SHA256SUMS*", "*.sha256", "*.sha256sum")
+
+# Keys whose presence at the top level of a JSON record mean the record speaks
+# for itself.  ``_latency_profile.json`` and friends carry neither.
+AUTHORITY_DECLARING_KEYS = ("authority", "certificate")
+
+# Scan budget, not a rule: a directory's own seal sits at its root or one level
+# in, and rglob over an 82 GB tree to answer a question about one directory is
+# not affordable.  Whether a seal that *is* found covers this directory is then
+# decided by parsing it, never by where it was found.
+SEAL_SEARCH_DEPTH = 2
+
+# A record that declares its own authority is read to check that it does; the
+# cap keeps that from meaning "parse a 4 MB runtime-inputs dump".
+AUTHORITY_RECORD_MAX_BYTES = 1 << 20
 
 # Classification outcomes.  Exactly one of these is writable.
 ELIGIBLE = "single_run_reconstructable"
@@ -114,6 +133,7 @@ ALREADY_MANIFESTED = "already_manifested"
 INVALID_MANIFEST = "invalid_manifest"
 NOT_A_RUN_DIRECTORY = "not_a_run_directory"
 ABSENT = "absent_from_workspace"
+UNSAFE_PATH = "unsafe_path"
 
 
 class BackfillError(RuntimeError):
@@ -180,6 +200,31 @@ def discover(repo_root: Path) -> dict[str, tuple[str, ...]]:
     return {path: tuple(sorted(docs)) for path, docs in sorted(found.items())}
 
 
+def _is_contained(root: Path, target: Path) -> bool:
+    """Is ``target`` inside ``root`` and under one of the asset roots?"""
+    try:
+        rel = target.relative_to(root)
+    except ValueError:
+        return False
+    parts = rel.parts
+    return len(parts) >= 1 and parts[0] in ASSET_ROOTS
+
+
+def _require_containment(root: Path, target: Path, named: str) -> None:
+    """Re-check containment at the moment of writing, after resolution.
+
+    The authority documents are trusted, so this is not a defence against them.
+    It is a defence against this being a fail-closed *writer*: a token that
+    survives discovery reaches ``--write`` as a path to create a file at, and a
+    writer should never take a caller's word for where it is pointing.
+    """
+    if not _is_contained(root, target):
+        raise BackfillError(
+            f"{named} resolves to {target}, which is outside the asset roots "
+            f"({', '.join(ASSET_ROOTS)}) under {root}; refusing to write there"
+        )
+
+
 def _has_run_output(directory: Path) -> bool:
     for marker in RUN_OUTPUT_MARKERS:
         if (directory / marker).is_file():
@@ -189,26 +234,92 @@ def _has_run_output(directory: Path) -> bool:
     )
 
 
-def _seal_markers(directory: Path) -> list[str]:
-    """Seals belonging to *this* directory, not to something buried under it.
+def _authority_declaring_records(directory: Path) -> list[str]:
+    """JSON records directly here that declare an authority of their own."""
+    hits = []
+    for item in sorted(directory.glob("*.json")):
+        if not item.is_file() or item.stat().st_size > AUTHORITY_RECORD_MAX_BYTES:
+            continue
+        try:
+            payload = json.loads(item.read_text(encoding="utf-8", errors="ignore"))
+        except (OSError, ValueError):
+            continue
+        if isinstance(payload, dict) and any(
+            key in payload for key in AUTHORITY_DECLARING_KEYS
+        ):
+            hits.append(item.name)
+    return hits
 
-    Depth-limited to two levels on purpose.  A seal three levels down belongs to
-    a descendant run, and a manifest written up here would neither touch it nor
-    be covered by it; treating that as a refusal would misdescribe a plain
-    container as a sealed record.  (It would also mean rglob-ing an 82 GB tree
-    to answer a question about one directory.)
+
+def _checksum_entries(path: Path) -> list[str] | None:
+    """The paths a checksum manifest lists, or None if it cannot be read.
+
+    Handles the two shapes on disk: ``sha256sum`` text lines, and a JSON pack
+    with a ``files`` list or a flat ``{path: digest}`` mapping.
+    """
+    try:
+        raw = path.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return None
+    if path.suffix == ".json":
+        try:
+            payload = json.loads(raw)
+        except ValueError:
+            return None
+        if not isinstance(payload, dict):
+            return None
+        if isinstance(payload.get("files"), list):
+            return [
+                str(item["file"])
+                for item in payload["files"]
+                if isinstance(item, dict) and "file" in item
+            ]
+        return [str(key) for key in payload]
+    entries = []
+    for line in raw.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = line.split(None, 1)
+        if len(parts) != 2:
+            return None  # not a checksum listing this understands
+        entries.append(parts[1].lstrip("*").strip())
+    return entries
+
+
+def _covering_seals(directory: Path) -> list[str]:
+    """Checksum manifests that demonstrably cover this directory's own bytes.
+
+    A seal covers ``directory`` when one of the files it lists resolves to a
+    file sitting directly in ``directory`` — the seal at the root listing its
+    siblings — or to anything outside the seal's own directory, which is a seal
+    further in reaching back out.  A seal that lists only its own neighbours
+    covers only them, however deep or shallow it sits.
+
+    An unreadable seal is treated as covering.  Refusing to write is the
+    reversible mistake; writing into something whose coverage could not be
+    established is not.
     """
     hits = []
-    for pattern in SEAL_MARKER_GLOBS:
-        for depth in (pattern, f"*/{pattern}"):
-            hits.extend(
-                item.relative_to(directory).as_posix()
-                for item in sorted(directory.glob(depth))
-                if item.is_file()
-            )
-    hits.extend(
-        marker for marker in IDENTITY_RECORD_MARKERS if (directory / marker).is_file()
-    )
+    for depth in range(SEAL_SEARCH_DEPTH):
+        prefix = "*/" * depth
+        for pattern in SEAL_FILE_GLOBS:
+            for seal in sorted(directory.glob(prefix + pattern)):
+                if not seal.is_file():
+                    continue
+                rel = seal.relative_to(directory).as_posix()
+                entries = _checksum_entries(seal)
+                if entries is None:
+                    hits.append(f"{rel} (unreadable, treated as covering)")
+                    continue
+                home = seal.parent.resolve()
+                here = directory.resolve()
+                for entry in entries:
+                    resolved = (seal.parent / entry).resolve()
+                    reaches_out = home != resolved and home not in resolved.parents
+                    if resolved.parent == here or reaches_out:
+                        hits.append(rel)
+                        break
     return sorted(set(hits))
 
 
@@ -244,6 +355,14 @@ def _source_facts(
 
     Returns ``(facts, sources, reason)``.  ``reason`` is non-empty exactly when
     the facts are insufficient, and says which required fact is missing.
+
+    ``produced_by`` is read only if the record states it.  There is a tempting
+    rule available here — this file has a preset and a detector, therefore it
+    was an eval — and it is exactly the move this module exists to refuse.
+    ``run_meta.txt`` is not a versioned schema and nothing contracts what its
+    fields imply, so that rule would be an inference wearing the clothes of an
+    observed fact.  ``produced_by`` is optional on a reconstruction precisely so
+    that it can be left unsaid.
     """
     meta_path = directory / "run_meta.txt"
     if not meta_path.is_file():
@@ -267,23 +386,14 @@ def _source_facts(
             "manifest without a commit accounts for nothing",
         )
 
-    # produced_by is derived by a stated rule, not guessed: run_meta.txt records
-    # a preset and a detector only for an evaluation invocation.  The rule is
-    # written into backfill_sources so a reviewer can check it rather than
-    # trust it.
-    if "preset" in meta and "detector" in meta:
-        produced_by = "eval"
-        rule = f"{source}: preset= and detector= present => produced_by=eval"
-    else:
-        return (
-            {},
-            [],
-            f"{source} does not identify what kind of run this was; produced_by "
-            "is a closed vocabulary and may not be guessed",
-        )
+    facts: dict[str, object] = {"commit": commit}
+    sources = [f"{source}: git_sha="]
 
-    facts: dict[str, object] = {"commit": commit, "produced_by": produced_by}
-    sources = [f"{source}: git_sha=", rule]
+    stated_kind = meta.get("produced_by")
+    if stated_kind in PRODUCED_BY:
+        facts["produced_by"] = stated_kind
+        sources.append(f"{source}: produced_by=")
+
     for key, manifest_key in (
         ("host", "host"),
         ("gpu", "gpu"),
@@ -312,6 +422,18 @@ def classify(repo_root: Path, rel: str, cited_by: tuple[str, ...]) -> Candidate:
             **extra,  # type: ignore[arg-type]
         )
 
+    if ".." in Path(rel).parts or Path(rel).is_absolute():
+        return make(
+            UNSAFE_PATH,
+            "the token walks out of the path it names; a citation is a name, not "
+            "a traversal, and this tool writes files at the paths it is given",
+        )
+    if not _is_contained(root.resolve(), (root / rel).resolve()):
+        return make(
+            UNSAFE_PATH,
+            f"resolves outside the asset roots ({', '.join(ASSET_ROOTS)})",
+        )
+
     if not target.exists():
         return make(
             ABSENT,
@@ -336,14 +458,22 @@ def classify(repo_root: Path, rel: str, cited_by: tuple[str, ...]) -> Candidate:
             f"already carries a {payload['provenance_mode']} manifest",
         )
 
-    seals = _seal_markers(target)
-    if seals:
+    declared = _authority_declaring_records(target)
+    if declared:
         return make(
             SELF_ATTESTING,
-            "already carries its own identity/attestation record "
-            f"({', '.join(seals[:4])}); adding a run manifest could invalidate a "
-            "self-seal, and would in any case put two competing accounts of the "
-            "same bytes side by side",
+            "already holds a record that declares its own authority "
+            f"({', '.join(declared[:4])}); a run manifest beside it would be a "
+            "second, weaker account of the same bytes",
+        )
+
+    covering = _covering_seals(target)
+    if covering:
+        return make(
+            SELF_ATTESTING,
+            "a checksum manifest covers this directory's own bytes "
+            f"({', '.join(covering[:4])}); adding a file to a sealed set can "
+            "invalidate the seal",
         )
 
     children = [child for child in sorted(target.iterdir()) if child.is_dir()]
@@ -394,10 +524,12 @@ def backfill(repo_root: str | os.PathLike[str], candidate: Candidate) -> Path:
             "only a candidate whose required facts all have a named source may "
             "be given a manifest"
         )
+    target = (Path(repo_root) / candidate.path).resolve()
+    _require_containment(Path(repo_root).resolve(), target, candidate.path)
+
     facts = dict(candidate.facts)
     payload = build_reconstructed_manifest(
         Path(candidate.path).name,
-        produced_by=str(facts.pop("produced_by")),
         commit=str(facts.pop("commit")),
         backfill_sources=[
             *candidate.sources,
@@ -405,7 +537,7 @@ def backfill(repo_root: str | os.PathLike[str], candidate: Candidate) -> Path:
         ],
         **facts,  # type: ignore[arg-type]
     )
-    return attach_reconstructed_manifest(Path(repo_root) / candidate.path, payload)
+    return attach_reconstructed_manifest(target, payload)
 
 
 _ORDER = (
@@ -416,6 +548,7 @@ _ORDER = (
     INSUFFICIENT,
     ALREADY_MANIFESTED,
     NOT_A_RUN_DIRECTORY,
+    UNSAFE_PATH,
     ABSENT,
 )
 

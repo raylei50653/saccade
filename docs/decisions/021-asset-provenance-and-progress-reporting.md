@@ -130,11 +130,21 @@ production manifest 由 run 自己在第一個 result byte 前寫下，帶著 AP
 reconstructed manifest 是事後由具名來源組裝的，**完全沒有那個保證**。
 兩者若長得一樣，下游會把前者掙來的信任直接延伸給後者。
 required 欄位因此依 mode 而異：production 維持原本全套（產出當下全都知道，缺少即 caller bug）；
-reconstructed 縮成 `commit` + `backfill_sources`，其餘**有來源才寫、沒有就缺席**（理由見 AP-4）。
+reconstructed 縮成 `commit` + `backfill_sources`，其餘**有具名來源才寫、沒有就缺席**（理由見 AP-4）。
+**`produced_by` 不在 reconstructed 的 required 集合內**：它是封閉詞彙，而 run 以外沒有東西記錄該用哪個詞；
+把它設成 required 再用規則推回來，等於讓 inference 穿上 observed fact 的衣服。
 
-> 這次 bump **不是 append-only**（v1 檔在 v2 下不合法）。可以這樣做的唯一原因是
-> bump 當下 AP-3 實測 `1045 units, 0 manifested` —— 全 workspace 沒有任何 v1 manifest 會被作廢。
-> **下一次 bump 不會再有這個條件，必須 append-only。**
+> **本次 bump 是 append-only：writer 只產 v2，reader 接受 v1 + v2，v1 一律解讀為 legacy production。**
+> 兩個理由，各自都足夠：
+> 1. **v1 的語義本來就明確。** 建立 v1 manifest 的唯一入口是 `open_run()`（寫在第一個 result byte 之前），
+>    當時 reconstruction writer 還不存在。所以「v1 說不出自己是哪個 mode」在歷史上不成立 ——
+>    **合法的 v1 就是 production**，把它讀成 production 是還原事實，不是替它選預設值。
+> 2. **拒收 v1 會製造 transition race。** `0 manifested` 只是 survey 當下的 snapshot；
+>    AP-2 自 #330 起就活在 `main` 上，survey 到本次 merge 之間 main 完全可以合法產出一個 v1。
+>    一 merge 它立刻從 valid 變 `invalid_manifest`，AP-3 對一個沒做錯任何事的目錄 fail closed。
+>
+> **v1 絕不可被讀成 reconstructed**：v1 檔若帶 `provenance_mode` 或 `backfill_sources`，
+> 就不是那個 writer 寫的，一律拒收。
 
 **AP-2 · 產出端落地（本 workstream 的止血點）**
 
@@ -198,6 +208,12 @@ workspace 判成 cited —— 工具認證自己的輸出；tracked-only 則讓�
 其餘欄位**有具名來源才寫、沒有就缺席**（缺席在本 schema 已定義為 unknown）。
 **這不是降低門檻** —— 每個寫進去的事實仍必須有具名來源；縮的是「必須說話」的範圍，不是「說話要準」的要求。
 
+> **`produced_by` 必須留在 optional，不得用規則推回來。**
+> 「`run_meta.txt` 有 `preset` 和 `detector` ⇒ 這是一次 eval」看起來合理，但 `run_meta.txt`
+> **不是 versioned schema，沒有任何 contract 保證這個蘊含**。寫一條 inference rule
+> 不會把 inference 變成 historical fact —— 而它會被寫進一個讀起來與觀測事實一模一樣的欄位。
+> 只有目錄內的 record **明講** `produced_by=` 才寫。
+
 **(2) ledger 不直接指 artifact path。** ledger 的映射是 `commit/preset/metrics → source doc`，
 literal path 在那份 source doc 裡（例：dual-stability 那組 row 指向的結果文件才寫出
 `results/dual_stability_ablation_20260709/`）。因此 discovery 必須走
@@ -208,9 +224,18 @@ literal path 在那份 source doc 裡（例：dual-stability 那組 row 指向�
 accounting unit，實際上裝了 A/B/C/D 四臂各兩次共 8 個 run。在這個 root 補一份 manifest
 ＝宣告「8 個 run 是 1 個」，與 #330 已鎖的「一目錄一 run」是**同一個 non-reattribution 失敗換一道門進來**。
 
-**(4) 部分 cited asset 已自帶身分（實作時發現）。** `out/h2_execution/<ts>/archive/checksums.sha256`
-自我校驗；`out/h2_layer_p/<ts>/` 是 H2 的 identity record，檔案裡自帶 `authority` 宣告。
-往裡面加檔案可能破壞 self-seal，且會讓同一批 bytes 有兩份互相競爭的身分。**一律拒寫。**
+**(4) 部分 cited asset 已自帶身分（實作時發現）。** `out/h2_layer_p/<ts>/` 是 H2 的 identity record，
+`layer_p.json` 裡自帶 `authority` / `certificate` 宣告。給它第二個較弱的身分，會讓同一批 bytes
+有兩份互相競爭的帳。**一律拒寫。**
+
+> **判定必須靠證據，不能靠深度。** 兩條互相獨立的理由，各自足夠：
+> (a) 目錄裡直接放著一份**自我宣告 authority** 的 record；
+> (b) 一份 checksum manifest 的**覆蓋範圍實際觸及本目錄的 bytes** —— 這是**讀進來解析**判定的。
+>
+> 反例就在 workspace 裡：`out/h2_execution/<ts>/archive/checksums.sha256` 只列了 `archive/` 內的 4 個檔，
+> 它證明的是 `archive/` 的 closure，**推不出它同時 attest parent 的 root 或 sibling bytes**。
+> 用「底下某處有 `*.sha256` ⇒ parent 已封印」會把普通 run 誤判成 sealed record，
+> 那是**拿 filesystem layout 當 identity semantics**。掃描深度只是預算（避免 rglob 82 GB），不是規則。
 
 `scripts/provenance/backfill.py`：candidate 一律來自 authority chain，逐個分類，
 **只有 `single_run_reconstructable` 可寫**；預設 dry-run，`--write` 才動筆。
@@ -223,11 +248,21 @@ accounting unit，實際上裝了 A/B/C/D 四臂各兩次共 8 個 run。在這�
 | `self_attesting_record` | ✕ | 已自帶 seal / identity record，不給第二個較弱的身分 |
 | `already_manifested` / `invalid_manifest` | ✕ | 不覆寫；invalid 沿用 AP-3 的 fail-closed 語義（壞掉的 producer，不是 backlog） |
 | `not_a_run_directory` / `absent_from_workspace` | ✕ | chain 指到的是檔案 / 本 workspace 沒有 |
+| `unsafe_path` | ✕ | token 帶 `..` 或解析後落在 asset root 之外；`--write` 另有一次 resolve 後的 containment 複查 |
 
 **selection 來自 authority chain，fact 來自目錄內部。** 文件在散文裡寫路徑、在表格裡寫 commit，
 這個綁定只存在讀者腦中，機器無法查核；run 自己寫在自己目錄裡的 metadata 才是可查核的綁定。
 
 **首次 survey 實測（2026-09-01, `main` = `ced4f8ed`）：13 個 candidate，`single_run_reconstructable` = 0。**
+
+| 分類 | 數 | 實例 |
+|---|--:|---|
+| `multi_run_container` | 4 | dual-stability ×2、`out/signal_study`、`out/h2_execution/<ts>` |
+| `self_attesting_record` | 1 | `out/h2_layer_p/<ts>`（`layer_p.json` 自宣告 authority） |
+| `insufficient_identity` | 1 | `out/frozen_v2`（目錄內無 run record） |
+| `not_a_run_directory` | 3 | chain 指到 `.json` / `.ckpt` |
+| `absent_from_workspace` | 4 | 本 workspace 沒有 |
+| **`single_run_reconstructable`** | **0** | |
 
 > 這是**結果，不是失敗**。它量到的事實是：現有 cited 資產幾乎沒有 in-directory record，
 > 所以 AP-4 不是「跑一次就補完」的機械步驟。

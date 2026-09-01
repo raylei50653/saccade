@@ -31,6 +31,9 @@ them distinguishable in the file itself (``provenance_mode``):
   reader that could not tell the two apart would extend the first one's trust
   to the second.
 
+A v1 manifest carries no mode field because when it was written there was only
+one writer.  It reads as legacy production; see :func:`provenance_mode_of`.
+
 This module records mechanical facts only.  Verdicts live in the claim-state
 registry and in ADR 020 terminal slots; ``claims`` here holds registry object
 ids and nothing else (link, never restate).
@@ -54,16 +57,23 @@ from typing import Any
 
 MANIFEST_FILENAME = "run_manifest.json"
 
-# v2 adds ``provenance_mode`` and ``backfill_sources`` (ADR 021 AP-4).
-#
-# The bump is *not* append-only: a v1 manifest does not validate under v2,
-# because a v1 manifest cannot say whether it was written by the run or
-# reconstructed afterwards, and defaulting it either way would be an
-# assertion nobody made.  That is affordable exactly once — at the bump the
-# AP-3 inventory reported ``1045 units, 0 manifested``, i.e. no v1 manifest
-# existed anywhere to invalidate.  A later bump will not have that luxury and
-# must be append-only.
+# What this module *writes*.  v2 adds ``provenance_mode`` and
+# ``backfill_sources`` (ADR 021 AP-4).
 SCHEMA_VERSION = 2
+
+# What this module *reads*.  The bump is append-only, and the reason is not
+# caution: v1 has an unambiguous meaning.  The only way to create a v1 manifest
+# was ``open_run``, which writes before the first result byte — no
+# reconstruction writer existed — so a v1 file **is** a production manifest, and
+# reading it as one recovers a fact rather than picking a default.
+#
+# Rejecting v1 instead would also have opened a transition race with no upside:
+# AP-2 has been live on ``main`` since #330, so any run between the survey that
+# observed ``0 manifested`` and this change lands writes a perfectly valid v1
+# manifest, which would turn ``invalid`` the moment this merged and fail the
+# AP-3 check closed on a directory that did nothing wrong.
+SUPPORTED_SCHEMA_VERSIONS = (1, 2)
+LEGACY_SCHEMA_VERSION = 1
 
 PRODUCED_BY = frozenset({"eval", "train", "diagnostic", "ad-hoc"})
 
@@ -80,22 +90,28 @@ PRODUCED_BY = frozenset({"eval", "train", "diagnostic", "ad-hoc"})
 # first to the second.
 PROVENANCE_MODES = frozenset({"production", "reconstructed"})
 
-# Present in both modes.
+# Present in both v2 modes.
 CORE_REQUIRED_FIELDS = (
     "schema_version",
     "run_id",
     "provenance_mode",
-    "produced_by",
 )
 
 # Production: every one of these is knowable at the moment the run starts, so
 # absence is a bug in the caller, not a property of the environment.
 PRODUCTION_REQUIRED_FIELDS = CORE_REQUIRED_FIELDS + (
+    "produced_by",
     "commit",
     "dirty",
     "started_at",
     "host",
     "cmdline",
+)
+
+# v1 had no mode field and exactly one producer, ``open_run``.  Its required set
+# is the production set minus the field that did not exist yet.
+LEGACY_REQUIRED_FIELDS = tuple(
+    field for field in PRODUCTION_REQUIRED_FIELDS if field != "provenance_mode"
 )
 
 # Reconstruction: fewer fields are required, and this is not a lower bar.
@@ -112,6 +128,13 @@ PRODUCTION_REQUIRED_FIELDS = CORE_REQUIRED_FIELDS + (
 #     accounts for nothing; it is not worth writing.
 #   * ``backfill_sources`` — where each stated fact came from, so that the
 #     reconstruction is auditable rather than merely plausible.
+#
+# ``produced_by`` is deliberately *not* in this set.  It is a closed vocabulary,
+# and nothing outside the run itself records which term applies; a rule of the
+# form "this file has a preset and a detector, therefore it was an eval" is an
+# inference, and writing an inference into a field that reads like an observed
+# fact is the exact failure this module exists to prevent.  It is written only
+# when a record inside the directory states it.
 RECONSTRUCTED_REQUIRED_FIELDS = CORE_REQUIRED_FIELDS + (
     "commit",
     "backfill_sources",
@@ -138,10 +161,22 @@ REQUIRED_FIELDS = PRODUCTION_REQUIRED_FIELDS
 
 
 def required_fields(provenance_mode: str) -> tuple[str, ...]:
-    """The fields a manifest of this mode must carry."""
+    """The fields a v2 manifest of this mode must carry."""
     if provenance_mode == "reconstructed":
         return RECONSTRUCTED_REQUIRED_FIELDS
     return PRODUCTION_REQUIRED_FIELDS
+
+
+def provenance_mode_of(payload: Mapping[str, Any]) -> str:
+    """How this manifest came to stand over its bytes, v1 included.
+
+    A v1 file carries no mode because when it was written there was only one:
+    ``open_run`` had no counterpart.  Reading it as production is recovering
+    what it meant, not supplying a default.
+    """
+    if payload.get("schema_version") == LEGACY_SCHEMA_VERSION:
+        return "production"
+    return str(payload["provenance_mode"])
 
 
 class ManifestError(RuntimeError):
@@ -259,37 +294,63 @@ def validate_manifest(payload: Mapping[str, Any]) -> None:
             + f" (allowed: {', '.join(sorted(ALLOWED_FIELDS))})"
         )
 
-    missing_core = [field for field in CORE_REQUIRED_FIELDS if field not in payload]
-    if missing_core:
-        raise ManifestError(
-            "missing required manifest field(s): " + ", ".join(missing_core)
-        )
+    if "schema_version" not in payload:
+        raise ManifestError("missing required manifest field(s): schema_version")
 
     version = payload["schema_version"]
-    if version != SCHEMA_VERSION:
+    if version not in SUPPORTED_SCHEMA_VERSIONS:
         raise ManifestError(
-            f"unsupported manifest schema_version {version!r}; this reader speaks {SCHEMA_VERSION}"
+            f"unsupported manifest schema_version {version!r}; this reader speaks "
+            + ", ".join(str(item) for item in SUPPORTED_SCHEMA_VERSIONS)
         )
 
-    mode = payload["provenance_mode"]
-    if mode not in PROVENANCE_MODES:
-        raise ManifestError(
-            f"provenance_mode must be one of {sorted(PROVENANCE_MODES)}, got {mode!r}"
-        )
+    if version == LEGACY_SCHEMA_VERSION:
+        # A v1 file is legacy production and can be nothing else: the only
+        # writer that ever produced one was open_run.  Both of these fields
+        # postdate it, so a v1 file carrying either was not written by that
+        # writer, and reading it as a v1 manifest would be reading a forgery.
+        for impossible, why in (
+            ("provenance_mode", "postdates v1"),
+            ("backfill_sources", "postdates v1, and v1 is never a reconstruction"),
+        ):
+            if impossible in payload:
+                raise ManifestError(
+                    f"a v1 manifest may not carry {impossible}: the field {why}. "
+                    "Write schema_version 2 instead."
+                )
+        mode = "production"
+        missing = [field for field in LEGACY_REQUIRED_FIELDS if field not in payload]
+        if missing:
+            raise ManifestError(
+                "missing required manifest field(s) for schema_version 1: "
+                + ", ".join(missing)
+            )
+    else:
+        missing_core = [field for field in CORE_REQUIRED_FIELDS if field not in payload]
+        if missing_core:
+            raise ManifestError(
+                "missing required manifest field(s): " + ", ".join(missing_core)
+            )
 
-    missing = [field for field in required_fields(mode) if field not in payload]
-    if missing:
-        raise ManifestError(
-            f"missing required manifest field(s) for provenance_mode {mode!r}: "
-            + ", ".join(missing)
-        )
+        mode = payload["provenance_mode"]
+        if mode not in PROVENANCE_MODES:
+            raise ManifestError(
+                f"provenance_mode must be one of {sorted(PROVENANCE_MODES)}, got {mode!r}"
+            )
 
-    if mode == "production" and "backfill_sources" in payload:
-        raise ManifestError(
-            "backfill_sources is meaningless on a production manifest: the run "
-            "itself is the source. Its presence would suggest the identity was "
-            "assembled afterwards."
-        )
+        missing = [field for field in required_fields(mode) if field not in payload]
+        if missing:
+            raise ManifestError(
+                f"missing required manifest field(s) for provenance_mode {mode!r}: "
+                + ", ".join(missing)
+            )
+
+        if mode == "production" and "backfill_sources" in payload:
+            raise ManifestError(
+                "backfill_sources is meaningless on a production manifest: the run "
+                "itself is the source. Its presence would suggest the identity was "
+                "assembled afterwards."
+            )
 
     if mode == "reconstructed":
         sources = payload["backfill_sources"]
@@ -308,11 +369,12 @@ def validate_manifest(payload: Mapping[str, Any]) -> None:
                 "accounts for nothing, and this manifest should not have been written"
             )
 
-    produced_by = payload["produced_by"]
-    if produced_by not in PRODUCED_BY:
-        raise ManifestError(
-            f"produced_by must be one of {sorted(PRODUCED_BY)}, got {produced_by!r}"
-        )
+    if "produced_by" in payload:
+        produced_by = payload["produced_by"]
+        if produced_by not in PRODUCED_BY:
+            raise ManifestError(
+                f"produced_by must be one of {sorted(PRODUCED_BY)}, got {produced_by!r}"
+            )
 
     run_id = payload["run_id"]
     if not isinstance(run_id, str) or not run_id.strip():
@@ -494,9 +556,9 @@ def require_manifest(output_dir: str | os.PathLike[str]) -> dict[str, Any]:
 def build_reconstructed_manifest(
     run_id: str,
     *,
-    produced_by: str,
     commit: str,
     backfill_sources: Iterable[str],
+    produced_by: str | None = None,
     dirty: bool | None = None,
     started_at: str | None = None,
     host: str | None = None,
@@ -523,11 +585,11 @@ def build_reconstructed_manifest(
         "schema_version": SCHEMA_VERSION,
         "run_id": run_id,
         "provenance_mode": "reconstructed",
-        "produced_by": produced_by,
         "commit": commit,
         "backfill_sources": sources,
     }
     for key, value in (
+        ("produced_by", produced_by),
         ("dirty", dirty),
         ("started_at", started_at),
         ("host", host),
@@ -570,6 +632,12 @@ def attach_reconstructed_manifest(
     if not directory.is_dir():
         raise ManifestError(f"{directory} is not a directory; nothing to account for")
 
+    if payload.get("schema_version") != SCHEMA_VERSION:
+        raise ManifestError(
+            "a reconstruction is written at the current schema version "
+            f"({SCHEMA_VERSION}); v1 exists only to be read"
+        )
+
     if (directory / MANIFEST_FILENAME).exists():
         raise ManifestError(
             f"{directory} already carries a {MANIFEST_FILENAME}; a reconstruction "
@@ -584,11 +652,11 @@ def attach_reconstructed_manifest(
         )
 
     validate_manifest(payload)
-    if payload["provenance_mode"] != "reconstructed":
+    mode = provenance_mode_of(payload)
+    if mode != "reconstructed":
         raise ManifestError(
-            "attach_reconstructed_manifest refuses a "
-            f"{payload['provenance_mode']!r} manifest: only a reconstruction may "
-            "stand over bytes it did not produce"
+            f"attach_reconstructed_manifest refuses a {mode!r} manifest: only a "
+            "reconstruction may stand over bytes it did not produce"
         )
 
     path = directory / MANIFEST_FILENAME

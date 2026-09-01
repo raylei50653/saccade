@@ -28,6 +28,7 @@ which it was, a reader would extend the first one's trust to the second.
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -45,6 +46,7 @@ from scripts.provenance.run_manifest import (  # noqa: E402
     build_manifest,
     build_reconstructed_manifest,
     open_run,
+    provenance_mode_of,
     read_manifest,
     validate_manifest,
 )
@@ -89,17 +91,60 @@ def test_provenance_mode_is_a_closed_vocabulary():
         validate_manifest(payload)
 
 
-def test_a_v1_manifest_is_refused_rather_than_assumed_to_be_either_mode():
-    """The bump is not append-only, and that is the point.
-
-    A v1 file cannot say whether it was written by its run or reconstructed
-    later. Accepting it would mean picking one on its behalf.
-    """
+def _v1(**over):
+    """A manifest in the shape open_run wrote before v2 existed."""
     payload = build_manifest("r", produced_by="eval")
     payload.pop("provenance_mode")
     payload["schema_version"] = 1
-    with pytest.raises(ManifestError):
+    payload.update(over)
+    return payload
+
+
+def test_a_v1_manifest_still_validates_and_reads_as_legacy_production():
+    """v1 has one unambiguous meaning, so reading it recovers a fact.
+
+    The only writer that ever produced a v1 file was ``open_run``, which writes
+    before the first result byte; no reconstruction writer existed. Rejecting v1
+    would also have opened a transition race: AP-2 has been live on main since
+    #330, so a run between the survey and this change writes a valid v1 that
+    would turn invalid the moment this landed.
+    """
+    payload = _v1()
+    validate_manifest(payload)
+    assert provenance_mode_of(payload) == "production"
+
+
+def test_a_v1_manifest_can_never_be_read_as_a_reconstruction():
+    for field, value in (
+        ("provenance_mode", "reconstructed"),
+        ("backfill_sources", ["some doc"]),
+    ):
+        with pytest.raises(ManifestError, match="v1 manifest may not carry"):
+            validate_manifest(_v1(**{field: value}))
+
+
+def test_a_v1_manifest_missing_a_v1_required_field_is_still_fail_closed():
+    payload = _v1()
+    payload.pop("host")
+    with pytest.raises(ManifestError, match="schema_version 1"):
         validate_manifest(payload)
+
+
+def test_the_writer_only_emits_v2(tmp_path):
+    """Compatibility is a read-side concession; nothing new is written at v1."""
+    open_run(tmp_path / "r", produced_by="eval")
+    assert read_manifest(tmp_path / "r")["schema_version"] == 2
+    assert build_reconstructed_manifest("r", **_sources())["schema_version"] == 2
+
+
+def test_a_reconstruction_may_not_be_written_at_the_legacy_version(tmp_path):
+    run = tmp_path / "run"
+    run.mkdir()
+    (run / "MOT17-02-SDP.txt").write_text("x")
+    payload = build_reconstructed_manifest("run", **_sources())
+    payload["schema_version"] = 1
+    with pytest.raises(ManifestError, match="v1 exists only to be read"):
+        attach_reconstructed_manifest(run, payload)
 
 
 def test_a_production_manifest_may_not_carry_backfill_sources():
@@ -162,6 +207,19 @@ def test_sourced_facts_are_kept_with_their_source_named():
     )
     assert payload["host"] == "TESTHOST"
     assert payload["backfill_sources"]
+
+
+def test_produced_by_is_not_required_on_a_reconstruction():
+    payload = _sources()
+    payload.pop("produced_by")
+    validate_manifest(build_reconstructed_manifest("r", **payload))
+
+
+def test_produced_by_is_still_a_closed_vocabulary_when_stated():
+    payload = build_reconstructed_manifest("r", **_sources())
+    payload["produced_by"] = "evaluation"
+    with pytest.raises(ManifestError, match="produced_by must be one of"):
+        validate_manifest(payload)
 
 
 def test_production_still_requires_every_directly_observable_field():
@@ -300,7 +358,38 @@ def test_a_single_run_with_an_in_directory_record_is_eligible(repo):
     candidate = _one(repo, "results/ablation_20260709")
     assert candidate.classification == bf.ELIGIBLE
     assert candidate.facts["commit"].startswith("2bc556f2")
-    assert candidate.facts["produced_by"] == "eval"
+
+
+def test_produced_by_is_never_inferred_from_the_shape_of_the_record(repo):
+    """RUN_META has a preset and a detector. That is not evidence of "eval".
+
+    ``run_meta.txt`` is not a versioned schema and nothing contracts what its
+    fields imply, so a rule of that form would write an inference into a field
+    that reads downstream like an observed fact — the failure this whole module
+    is built to refuse.
+    """
+    run = _run_dir(repo, "results/ablation_20260709")
+    assert "preset=" in RUN_META and "detector=" in RUN_META
+    candidate = _one(repo, "results/ablation_20260709")
+    assert "produced_by" not in candidate.facts
+
+    bf.backfill(repo, candidate)
+    assert "produced_by" not in read_manifest(run)
+
+
+def test_produced_by_is_written_when_the_record_states_it(repo):
+    run = _run_dir(
+        repo, "results/ablation_20260709", meta=RUN_META + "produced_by=eval\n"
+    )
+    bf.backfill(repo, _one(repo, "results/ablation_20260709"))
+    assert read_manifest(run)["produced_by"] == "eval"
+
+
+def test_a_stated_kind_outside_the_vocabulary_is_dropped_not_coerced(repo):
+    _run_dir(
+        repo, "results/ablation_20260709", meta=RUN_META + "produced_by=evaluation\n"
+    )
+    assert "produced_by" not in _one(repo, "results/ablation_20260709").facts
 
 
 def test_backfilling_it_writes_a_manifest_that_says_it_was_reconstructed(repo):
@@ -383,26 +472,87 @@ def test_a_record_without_a_commit_is_insufficient(repo):
     assert _one(repo, "results/ablation_20260709").classification == bf.INSUFFICIENT
 
 
-def test_a_record_that_does_not_identify_the_kind_of_run_is_insufficient(repo):
-    """``produced_by`` is a closed vocabulary; 'probably eval' is not a value."""
-    _run_dir(
+def test_a_record_that_does_not_identify_the_kind_of_run_is_still_eligible(repo):
+    """``produced_by`` is optional on a reconstruction, so it can be left unsaid.
+
+    The alternative — requiring it, then deriving it from a rule — is how an
+    inference gets laundered into a required field.
+    """
+    run = _run_dir(
         repo,
         "results/ablation_20260709",
         meta="git_sha=2bc556f2a2ae19758878fe2b0778634c9a5c2b2b\nhost=TESTHOST\n",
     )
-    assert _one(repo, "results/ablation_20260709").classification == bf.INSUFFICIENT
+    assert _one(repo, "results/ablation_20260709").classification == bf.ELIGIBLE
+    bf.backfill(repo, _one(repo, "results/ablation_20260709"))
+    payload = read_manifest(run)
+    assert "produced_by" not in payload
+    assert payload["commit"].startswith("2bc556f2")
 
 
-def test_a_self_sealed_directory_is_not_given_a_second_identity(repo):
+def test_a_record_declaring_its_own_authority_blocks_a_second_identity(repo):
+    """The H2 shape: a record here already speaks for these bytes."""
+    run = _run_dir(repo, "results/ablation_20260709")
+    (run / "layer_p.json").write_text(
+        json.dumps({"authority": "non_authoritative_pre_seal_engineering"}),
+        encoding="utf-8",
+    )
+    assert _one(repo, "results/ablation_20260709").classification == bf.SELF_ATTESTING
+
+
+def test_an_ordinary_result_json_is_not_mistaken_for_an_authority_record(repo):
+    """Otherwise every run with a _latency_profile.json becomes untouchable."""
+    run = _run_dir(repo, "results/ablation_20260709")
+    (run / "_latency_profile.json").write_text(
+        json.dumps({"mean_ms": 3.1, "frames": 600}), encoding="utf-8"
+    )
+    assert _one(repo, "results/ablation_20260709").classification == bf.ELIGIBLE
+
+
+def test_a_seal_covering_this_directorys_own_files_blocks_a_write(repo):
     run = _run_dir(repo, "results/ablation_20260709")
     (run / "SHA256SUMS").write_text("abc  MOT17-02-SDP.txt\n", encoding="utf-8")
     assert _one(repo, "results/ablation_20260709").classification == bf.SELF_ATTESTING
 
 
-def test_a_seal_one_level_down_still_covers_the_directory(repo):
+def test_a_seal_listing_only_its_own_neighbours_does_not_seal_the_parent(repo):
+    """The h2_execution shape, and the reason depth is not identity semantics.
+
+    ``archive/checksums.sha256`` lists four files in ``archive/``. That proves
+    the closure of ``archive/`` and says nothing about the root or its siblings,
+    so a manifest at the root neither touches it nor is covered by it.
+    """
     run = _run_dir(repo, "results/ablation_20260709")
     (run / "archive").mkdir()
-    (run / "archive/checksums.sha256").write_text("abc  x\n", encoding="utf-8")
+    (run / "archive/checksums.sha256").write_text(
+        "abc  result.json\ndef  run_spec.json\n", encoding="utf-8"
+    )
+    assert _one(repo, "results/ablation_20260709").classification == bf.ELIGIBLE
+
+
+def test_a_seal_that_reaches_back_out_of_its_own_directory_does_seal_the_parent(repo):
+    run = _run_dir(repo, "results/ablation_20260709")
+    (run / "archive").mkdir()
+    (run / "archive/checksums.sha256").write_text(
+        "abc  ../MOT17-02-SDP.txt\n", encoding="utf-8"
+    )
+    assert _one(repo, "results/ablation_20260709").classification == bf.SELF_ATTESTING
+
+
+def test_an_unreadable_seal_is_treated_as_covering(repo):
+    """Refusing to write is reversible; writing into an unproven seal is not."""
+    run = _run_dir(repo, "results/ablation_20260709")
+    (run / "SHA256SUMS").write_text("<binary-or-unknown-format>\n", encoding="utf-8")
+    assert bf._checksum_entries(run / "SHA256SUMS") is None
+    assert _one(repo, "results/ablation_20260709").classification == bf.SELF_ATTESTING
+
+
+def test_a_json_seal_pack_is_read_for_its_coverage(repo):
+    run = _run_dir(repo, "results/ablation_20260709")
+    (run / "SHA256SUMS.json").write_text(
+        json.dumps({"files": [{"file": "MOT17-02-SDP.txt", "sha256": "abc"}]}),
+        encoding="utf-8",
+    )
     assert _one(repo, "results/ablation_20260709").classification == bf.SELF_ATTESTING
 
 
@@ -414,6 +564,66 @@ def test_a_seal_three_levels_down_belongs_to_a_descendant_not_to_this_directory(
         "{}", encoding="utf-8"
     )
     assert _one(repo, "results/ablation_20260709").classification == bf.CONTAINER
+
+
+# --------------------------------------------------------------------------
+# Containment. This is a writer; it never takes a path on trust.
+# --------------------------------------------------------------------------
+
+
+def test_a_traversing_token_is_refused_not_followed(repo):
+    (repo / "docs/research/tracker-decision/ablation.md").write_text(
+        "`results/x/../../../escaped`\n", encoding="utf-8"
+    )
+    candidate = next(c for c in bf.survey(repo) if ".." in c.path)
+    assert candidate.classification == bf.UNSAFE_PATH
+
+
+def test_a_traversal_that_lands_back_inside_is_still_refused(repo):
+    """Containment is not the only reason to refuse a traversal.
+
+    ``results/x/../ablation_20260709`` resolves somewhere legal, so a check that
+    only asked "does it end up inside?" would let it through and then write at a
+    path that is not the one the document named.
+    """
+    (repo / "docs/research/tracker-decision/ablation.md").write_text(
+        "`results/x/../ablation_20260709`\n", encoding="utf-8"
+    )
+    _run_dir(repo, "results/ablation_20260709")
+    candidate = next(c for c in bf.survey(repo) if ".." in c.path)
+    assert candidate.classification == bf.UNSAFE_PATH
+
+
+def test_write_re_checks_containment_after_resolution(repo, tmp_path):
+    """Discovery classified it; the writer still refuses to take that on trust."""
+    _run_dir(repo, "results/ablation_20260709")
+    candidate = _one(repo, "results/ablation_20260709")
+    outside = bf.Candidate(
+        path="../outside_the_repo",
+        classification=bf.ELIGIBLE,
+        reason="forced",
+        facts=dict(candidate.facts),
+        sources=candidate.sources,
+    )
+    with pytest.raises(bf.BackfillError, match="outside the asset roots"):
+        bf.backfill(repo, outside)
+    assert not (tmp_path.parent / "outside_the_repo").exists()
+
+
+def test_a_path_outside_the_asset_roots_is_refused(repo):
+    _run_dir(repo, "results/ablation_20260709")
+    candidate = _one(repo, "results/ablation_20260709")
+    with pytest.raises(bf.BackfillError, match="outside the asset roots"):
+        bf.backfill(
+            repo,
+            bf.Candidate(
+                path="docs/research",
+                classification=bf.ELIGIBLE,
+                reason="forced",
+                facts=dict(candidate.facts),
+                sources=candidate.sources,
+            ),
+        )
 
 
 def test_an_already_manifested_directory_is_not_a_backfill_candidate(repo):
