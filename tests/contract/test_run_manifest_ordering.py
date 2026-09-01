@@ -314,9 +314,14 @@ def test_batch_eval_refuses_an_output_root_that_already_holds_artifacts(
     stale_bytes = stale.read_bytes()
 
     dispatched: list[str] = []
-    monkeypatch.setattr(
-        entry, "_run_sequence", lambda **kw: dispatched.append(kw["seq"])
-    )
+
+    def spy(**kwargs):
+        # A well-formed result, so that a regression fails on the assertion
+        # below rather than on a stub that could not stand in for the real one.
+        dispatched.append(kwargs["seq"])
+        return {"sequence": kwargs["seq"], "returncode": 0, "log_path": ""}
+
+    monkeypatch.setattr(entry, "_run_sequence", spy)
     monkeypatch.setattr(
         sys,
         "argv",
