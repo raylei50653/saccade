@@ -15,12 +15,18 @@ except the machine that wrote it.
 So the split is:
 
 * ``--emit`` renders the view for a human, to a **gitignored** path outside
-  ``docs/``.  ``docs/`` is a committed surface that ``build_master_map`` scans
-  with ``rglob``, so an untracked document there would break the checked-in
-  master map on the very machine that generated it.
-* ``--check`` is what CI and ``pre_push`` run.  It validates rather than
-  compares: an empty inventory on a clean clone is a correct answer, and the
-  only fail-closed condition is a manifest that exists but is not valid.
+  ``docs/``.  Emitting into ``docs/`` is refused outright: it is a committed
+  surface that ``build_master_map`` scans with ``rglob``, so an untracked
+  document there would break the checked-in master map on the very machine
+  that generated it, and leaving that as a convention rather than a check is
+  how it would happen anyway.
+* ``--check`` is what CI runs.  It validates rather than compares: an empty
+  inventory on a clean clone is a correct answer, and the only fail-closed
+  condition is a manifest that exists but is not valid.  ``pre_push`` does
+  **not** run it: ``scripts/pre_push.sh`` is a protected path on the
+  ``identity_semantics`` axis (ADR 021 §4.3), so the workspace that actually
+  holds the artifacts is the one with no automatic hook, and the check must be
+  run by hand there until a lawful re-attestation carries it.
 
 An invalid manifest is never quietly downgraded to ``orphan``.  Orphan means
 "nothing accounts for this"; a corrupt manifest means "something tried to and
@@ -341,6 +347,17 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.emit is not None:
         target = args.emit if args.emit.is_absolute() else root / args.emit
+        target = target.resolve()
+        docs_root = (root / "docs").resolve()
+        if target == docs_root or docs_root in target.parents:
+            print(
+                f"asset inventory: refusing to emit into {docs_root} — build_master_map "
+                "collects documents with rglob rather than git, so an untracked view "
+                "there fails the checked-in master map on this machine while CI stays "
+                f"green (ADR 021 §3 AP-3). Emit outside docs/, e.g. {DEFAULT_OUTPUT}.",
+                file=sys.stderr,
+            )
+            return 2
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(
             render(units, loose_entries(root), repo_root=root), encoding="utf-8"

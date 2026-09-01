@@ -144,6 +144,8 @@ eval / train 入口在寫結果時自動寫入 manifest；**寫不出 manifest �
 | `--emit` | 給人看的投影，寫到 **gitignored 且在 `docs/` 之外**的路徑（預設 `.provenance/asset_inventory.generated.md`）。**不提交。** source of truth 永遠是當下 workspace 的 assets + manifests + tracked docs，不是那份 markdown |
 | `--check` | CI 跑的**驗證**，不是比對。clean clone 上的空 inventory 是**正確答案**；唯一 fail-closed 條件是「manifest 存在但不合法」 |
 
+**這條由 `--emit` 自己 fail-closed 強制（寫進 `docs/` 直接非零退出），不是慣例**——留成慣例就等於留著被違反。
+
 **為什麼輸出不能放 `docs/`：** `scripts/docs/build_master_map.py` 的 `collect_document_inventory`
 是 filesystem `rglob("*")`，只排除它自己的輸出。一份 untracked 的 `.md` 放進 `docs/` 會讓
 `test_checked_in_master_map_is_current` 在**產生它的那台機器上**紅、CI 綠 —— 同一種不可重現真相的另一個形態。

@@ -266,15 +266,51 @@ def test_an_untracked_document_cites_nothing(tmp_path):
     assert not _by_path(scan(repo))["results/run_a"].cited
 
 
-def test_emitting_the_projection_into_docs_would_still_cite_nothing(tmp_path):
-    """Defence in depth for the output path: even mis-targeted, it is untracked."""
+def test_emitting_into_docs_is_refused(tmp_path, capsys):
+    """`docs/` is a committed surface that build_master_map walks with rglob.
+
+    An untracked view there fails the checked-in master map on the machine that
+    generated it while CI stays green, so the output path is a check rather
+    than a convention.
+    """
     repo = _repo(tmp_path)
     _unit(repo, "results", "run_a")
-    assert (
-        main(["--repo-root", str(repo), "--emit", "docs/asset_inventory.generated.md"])
-        == 0
+    target = repo / "docs" / "asset_inventory.generated.md"
+
+    code = main(
+        ["--repo-root", str(repo), "--emit", "docs/asset_inventory.generated.md"]
     )
-    assert not _by_path(scan(repo))["results/run_a"].cited
+
+    assert code == 2
+    assert "refusing to emit" in capsys.readouterr().err
+    assert not target.exists()
+
+
+def test_emitting_deeper_inside_docs_is_also_refused(tmp_path):
+    """The guard is on the tree, not on one filename."""
+    repo = _repo(tmp_path)
+    (repo / "docs" / "ownership").mkdir(parents=True, exist_ok=True)
+
+    code = main(
+        [
+            "--repo-root",
+            str(repo),
+            "--emit",
+            "docs/ownership/asset_inventory.generated.md",
+        ]
+    )
+
+    assert code == 2
+    assert not (repo / "docs" / "ownership" / "asset_inventory.generated.md").exists()
+
+
+def test_emitting_outside_docs_is_allowed(tmp_path):
+    repo = _repo(tmp_path)
+    _unit(repo, "results", "run_a")
+
+    assert main(["--repo-root", str(repo), "--emit"]) == 0
+    rendered = (repo / ".provenance" / "asset_inventory.generated.md").read_text()
+    assert "results/run_a" in rendered
 
 
 def test_a_missing_git_index_is_an_error_not_an_empty_corpus(tmp_path):
