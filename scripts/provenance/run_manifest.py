@@ -21,6 +21,16 @@ Prior art: ``scripts/eval/diagnostics/bridge_gate_breakpoints.py`` binds a
 cheaper — identity, not equivalence — and makes no claim that two runs sharing
 one are bit-identical.
 
+There are two ways a manifest can come to stand over a directory, and v2 makes
+them distinguishable in the file itself (``provenance_mode``):
+
+* ``production`` — :func:`open_run`, before the first result byte.  This is the
+  mode that carries the ordering guarantee above.
+* ``reconstructed`` — :func:`attach_reconstructed_manifest`, afterwards, from
+  named sources (ADR 021 AP-4).  It carries no ordering guarantee at all, and a
+  reader that could not tell the two apart would extend the first one's trust
+  to the second.
+
 This module records mechanical facts only.  Verdicts live in the claim-state
 registry and in ADR 020 terminal slots; ``claims`` here holds registry object
 ids and nothing else (link, never restate).
@@ -44,23 +54,67 @@ from typing import Any
 
 MANIFEST_FILENAME = "run_manifest.json"
 
-# Bumped only by an append-only schema change.  Present from v1 precisely
-# because unknown fields are fail-closed: without a version, adding a field
-# later would make every older reader reject every newer manifest.
-SCHEMA_VERSION = 1
+# v2 adds ``provenance_mode`` and ``backfill_sources`` (ADR 021 AP-4).
+#
+# The bump is *not* append-only: a v1 manifest does not validate under v2,
+# because a v1 manifest cannot say whether it was written by the run or
+# reconstructed afterwards, and defaulting it either way would be an
+# assertion nobody made.  That is affordable exactly once — at the bump the
+# AP-3 inventory reported ``1045 units, 0 manifested``, i.e. no v1 manifest
+# existed anywhere to invalidate.  A later bump will not have that luxury and
+# must be append-only.
+SCHEMA_VERSION = 2
 
 PRODUCED_BY = frozenset({"eval", "train", "diagnostic", "ad-hoc"})
 
-# Required: absence is a bug in the caller, not a property of the environment.
-REQUIRED_FIELDS = (
+# How the manifest came to stand over these bytes.
+#
+# ``production``    — written by the run itself, before its first result byte.
+#                     Carries the ordering guarantee ``open_run`` enforces.
+# ``reconstructed`` — attached afterwards from named sources (ADR 021 AP-4).
+#                     Carries no ordering guarantee whatsoever.
+#
+# These must be distinguishable in the file.  If they were not, a downstream
+# reader could not tell an identity captured at production time from one
+# assembled later by archaeology, and would extend the trust earned by the
+# first to the second.
+PROVENANCE_MODES = frozenset({"production", "reconstructed"})
+
+# Present in both modes.
+CORE_REQUIRED_FIELDS = (
     "schema_version",
     "run_id",
+    "provenance_mode",
+    "produced_by",
+)
+
+# Production: every one of these is knowable at the moment the run starts, so
+# absence is a bug in the caller, not a property of the environment.
+PRODUCTION_REQUIRED_FIELDS = CORE_REQUIRED_FIELDS + (
     "commit",
     "dirty",
-    "produced_by",
     "started_at",
     "host",
     "cmdline",
+)
+
+# Reconstruction: fewer fields are required, and this is not a lower bar.
+#
+# Nothing observed the run, so ``started_at`` / ``host`` / ``cmdline`` /
+# ``dirty`` are establishable only if some record happens to state them.  The
+# alternative to allowing their absence is filling them — with the current
+# clock, an empty string, an empty list — which produces a manifest that is
+# schema-valid and factually false.  Absence already means "unknown" here
+# (see OPTIONAL_FIELDS), so absence is the honest encoding and the required
+# set shrinks to what a reconstruction must nonetheless establish:
+#
+#   * ``commit`` — non-null.  A reconstructed manifest whose commit is unknown
+#     accounts for nothing; it is not worth writing.
+#   * ``backfill_sources`` — where each stated fact came from, so that the
+#     reconstruction is auditable rather than merely plausible.
+RECONSTRUCTED_REQUIRED_FIELDS = CORE_REQUIRED_FIELDS + (
+    "commit",
+    "backfill_sources",
 )
 
 # Optional: legitimately unknown for some producers (a training run has no
@@ -74,7 +128,20 @@ OPTIONAL_FIELDS = (
     "claims",
 )
 
-ALLOWED_FIELDS = frozenset(REQUIRED_FIELDS + OPTIONAL_FIELDS)
+ALLOWED_FIELDS = frozenset(
+    PRODUCTION_REQUIRED_FIELDS + RECONSTRUCTED_REQUIRED_FIELDS + OPTIONAL_FIELDS
+)
+
+# Backwards-compatible alias: the production set is what a producing entry
+# point must supply, and that is what the name meant in v1.
+REQUIRED_FIELDS = PRODUCTION_REQUIRED_FIELDS
+
+
+def required_fields(provenance_mode: str) -> tuple[str, ...]:
+    """The fields a manifest of this mode must carry."""
+    if provenance_mode == "reconstructed":
+        return RECONSTRUCTED_REQUIRED_FIELDS
+    return PRODUCTION_REQUIRED_FIELDS
 
 
 class ManifestError(RuntimeError):
@@ -149,6 +216,7 @@ def build_manifest(
     payload: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
         "run_id": run_id,
+        "provenance_mode": "production",
         "commit": _git_head(),
         "dirty": _git_dirty(),
         "produced_by": produced_by,
@@ -191,15 +259,54 @@ def validate_manifest(payload: Mapping[str, Any]) -> None:
             + f" (allowed: {', '.join(sorted(ALLOWED_FIELDS))})"
         )
 
-    missing = [field for field in REQUIRED_FIELDS if field not in payload]
-    if missing:
-        raise ManifestError("missing required manifest field(s): " + ", ".join(missing))
+    missing_core = [field for field in CORE_REQUIRED_FIELDS if field not in payload]
+    if missing_core:
+        raise ManifestError(
+            "missing required manifest field(s): " + ", ".join(missing_core)
+        )
 
     version = payload["schema_version"]
     if version != SCHEMA_VERSION:
         raise ManifestError(
             f"unsupported manifest schema_version {version!r}; this reader speaks {SCHEMA_VERSION}"
         )
+
+    mode = payload["provenance_mode"]
+    if mode not in PROVENANCE_MODES:
+        raise ManifestError(
+            f"provenance_mode must be one of {sorted(PROVENANCE_MODES)}, got {mode!r}"
+        )
+
+    missing = [field for field in required_fields(mode) if field not in payload]
+    if missing:
+        raise ManifestError(
+            f"missing required manifest field(s) for provenance_mode {mode!r}: "
+            + ", ".join(missing)
+        )
+
+    if mode == "production" and "backfill_sources" in payload:
+        raise ManifestError(
+            "backfill_sources is meaningless on a production manifest: the run "
+            "itself is the source. Its presence would suggest the identity was "
+            "assembled afterwards."
+        )
+
+    if mode == "reconstructed":
+        sources = payload["backfill_sources"]
+        if (
+            not isinstance(sources, list)
+            or not sources
+            or not all(isinstance(item, str) and item.strip() for item in sources)
+        ):
+            raise ManifestError(
+                "backfill_sources must be a non-empty list of non-empty strings "
+                "naming where each reconstructed fact came from"
+            )
+        if not isinstance(payload["commit"], str) or not payload["commit"].strip():
+            raise ManifestError(
+                "a reconstructed manifest must name a commit: an unknown commit "
+                "accounts for nothing, and this manifest should not have been written"
+            )
 
     produced_by = payload["produced_by"]
     if produced_by not in PRODUCED_BY:
@@ -217,15 +324,27 @@ def validate_manifest(payload: Mapping[str, Any]) -> None:
             f"commit must be a string or null, got {type(commit).__name__}"
         )
 
-    dirty = payload["dirty"]
-    if dirty is not None and not isinstance(dirty, bool):
-        raise ManifestError(f"dirty must be a bool or null, got {type(dirty).__name__}")
+    # Absent is only reachable in reconstructed mode, where it means the fact
+    # was never established.  Present still has to be well typed.
+    if "dirty" in payload:
+        dirty = payload["dirty"]
+        if dirty is not None and not isinstance(dirty, bool):
+            raise ManifestError(
+                f"dirty must be a bool or null, got {type(dirty).__name__}"
+            )
 
-    cmdline = payload["cmdline"]
-    if not isinstance(cmdline, list) or not all(
-        isinstance(item, str) for item in cmdline
-    ):
-        raise ManifestError("cmdline must be a list of strings")
+    for text_field in ("started_at", "host"):
+        if text_field in payload and not isinstance(payload[text_field], str):
+            raise ManifestError(
+                f"{text_field} must be a string, got {type(payload[text_field]).__name__}"
+            )
+
+    if "cmdline" in payload:
+        cmdline = payload["cmdline"]
+        if not isinstance(cmdline, list) or not all(
+            isinstance(item, str) for item in cmdline
+        ):
+            raise ManifestError("cmdline must be a list of strings")
 
     claims = payload.get("claims", [])
     if not isinstance(claims, list) or not all(
@@ -370,3 +489,116 @@ def require_manifest(output_dir: str | os.PathLike[str]) -> dict[str, Any]:
             f"{directory} carries no {MANIFEST_FILENAME}; call open_run() before writing results"
         )
     return read_manifest(directory)
+
+
+def build_reconstructed_manifest(
+    run_id: str,
+    *,
+    produced_by: str,
+    commit: str,
+    backfill_sources: Iterable[str],
+    dirty: bool | None = None,
+    started_at: str | None = None,
+    host: str | None = None,
+    preset: str | None = None,
+    detector: str | None = None,
+    dataset: str | None = None,
+    gpu: str | None = None,
+    cmdline: Iterable[str] | None = None,
+    claims: Iterable[str] = (),
+) -> dict[str, Any]:
+    """Assemble a manifest for bytes that were produced before it existed.
+
+    Every optional argument left at ``None`` is **omitted from the payload**
+    rather than written as a null, an empty string, or an empty list.  That is
+    the whole discipline of this function: a reconstruction states what it can
+    source and stays silent about the rest, because a field filled with a
+    placeholder reads downstream exactly like a field filled with a fact.
+
+    ``backfill_sources`` must name where the stated facts came from, one entry
+    per source, concretely enough for someone else to check them.
+    """
+    sources = [str(item) for item in backfill_sources]
+    payload: dict[str, Any] = {
+        "schema_version": SCHEMA_VERSION,
+        "run_id": run_id,
+        "provenance_mode": "reconstructed",
+        "produced_by": produced_by,
+        "commit": commit,
+        "backfill_sources": sources,
+    }
+    for key, value in (
+        ("dirty", dirty),
+        ("started_at", started_at),
+        ("host", host),
+        ("preset", preset),
+        ("detector", detector),
+        ("dataset", dataset),
+        ("gpu", gpu),
+    ):
+        if value is not None:
+            payload[key] = value
+    if cmdline is not None:
+        payload["cmdline"] = list(cmdline)
+    claim_list = list(claims)
+    if claim_list:
+        payload["claims"] = claim_list
+    validate_manifest(payload)
+    return payload
+
+
+def attach_reconstructed_manifest(
+    output_dir: str | os.PathLike[str], payload: Mapping[str, Any]
+) -> Path:
+    """Attach a reconstructed identity to a directory that already holds bytes.
+
+    This is the deliberate mirror image of :func:`open_run`, which refuses any
+    directory that is not empty.  The two rules do not contradict each other:
+    ``open_run`` refuses because a *production* manifest claims to have been
+    written by the run that produced those bytes, and over foreign files that
+    claim is false.  A reconstructed manifest makes no such claim — accounting
+    for pre-existing bytes is its entire purpose — which is exactly why it must
+    be a separate mode and a separate function rather than an ``overwrite=True``
+    flag on the first one.
+
+    The one rule both share is non-reattribution: an existing manifest is never
+    replaced.  A directory that already carries an identity is not a backfill
+    candidate, and overwriting one would let archaeology quietly displace a
+    record made at production time.
+    """
+    directory = Path(output_dir)
+    if not directory.is_dir():
+        raise ManifestError(f"{directory} is not a directory; nothing to account for")
+
+    if (directory / MANIFEST_FILENAME).exists():
+        raise ManifestError(
+            f"{directory} already carries a {MANIFEST_FILENAME}; a reconstruction "
+            "never replaces an existing manifest, because the one already there "
+            "may be the record written when the run happened"
+        )
+
+    if next(directory.iterdir(), None) is None:
+        raise ManifestError(
+            f"{directory} is empty; there are no bytes here for a reconstructed "
+            "manifest to account for. A new run should call open_run() instead."
+        )
+
+    validate_manifest(payload)
+    if payload["provenance_mode"] != "reconstructed":
+        raise ManifestError(
+            "attach_reconstructed_manifest refuses a "
+            f"{payload['provenance_mode']!r} manifest: only a reconstruction may "
+            "stand over bytes it did not produce"
+        )
+
+    path = directory / MANIFEST_FILENAME
+    text = json.dumps(payload, indent=2, sort_keys=True) + "\n"
+    try:
+        _write_atomically(path, text)
+    except OSError as exc:
+        raise ManifestError(f"cannot write manifest {path}: {exc}") from exc
+
+    readback = read_manifest(directory)
+    if readback != dict(payload):
+        raise ManifestError(f"manifest at {path} did not read back as written")
+    return path

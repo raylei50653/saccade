@@ -71,14 +71,16 @@ def test_open_run_writes_a_manifest_that_reads_back_valid(tmp_path):
     assert payload["preset"] == "p"
 
 
-def test_schema_version_is_present_from_v1(tmp_path):
+def test_schema_version_carried_the_v2_evolution(tmp_path):
     """Without a version, adding a field later would break every older reader.
 
     Unknown fields are fail-closed, so schema evolution is only possible if a
-    reader can tell which schema it is looking at.
+    reader can tell which schema it is looking at. v2 (ADR 021 AP-4) is that
+    evolution actually happening: it added ``provenance_mode``, and a reader
+    can refuse a v1 file rather than silently assume which mode it meant.
     """
     open_run(tmp_path / "r", produced_by="eval")
-    assert read_manifest(tmp_path / "r")["schema_version"] == 1
+    assert read_manifest(tmp_path / "r")["schema_version"] == 2
 
 
 def test_unknown_field_is_fail_closed():
@@ -89,7 +91,8 @@ def test_unknown_field_is_fail_closed():
 
 
 @pytest.mark.parametrize(
-    "field", ["schema_version", "run_id", "commit", "dirty", "cmdline"]
+    "field",
+    ["schema_version", "run_id", "provenance_mode", "commit", "dirty", "cmdline"],
 )
 def test_missing_required_field_is_fail_closed(field):
     payload = build_manifest("r", produced_by="eval")

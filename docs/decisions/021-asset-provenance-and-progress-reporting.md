@@ -87,6 +87,7 @@ status report   = 既有 fact-owner 的生成投影（registry ∪ slots ∪ man
 | inventory / status 皆為 **generated** | C5.1 單一寫入者；手寫必漂 | 手維一頁 status —— 即 §1.3 的第二真相 |
 | manifest 只放**機械事實**，不放 verdict | verdict 的家是 slot / registry；link-don't-relabel | 在 manifest 裡寫結論 —— 第四套 archive |
 | disposal 需**人工核可** | 82 G 內含不可重建的訓練產物；fail-closed 應偏向保留 | 依 mtime 自動刪 —— 不可逆且無 owner |
+| production 與 reconstructed **必須在檔案裡可區分** | 前者帶寫入順序保證、後者沒有；長得一樣就會讓事後考古繼承產出當下掙來的信任 | 回填時沿用同一個 schema —— 下游再也分不出哪個是原生 capture |
 | 一個目錄 = 一次 run；**已有內容即拒絕 claim** | 產出端不會先清空目錄，覆寫 manifest 會讓新 run 的身分蓋在它沒覆寫到的舊檔上 ⇒ 產生**看起來可信的錯誤 provenance**，比沒有 provenance 更難發現 | `overwrite=True` / resume —— 那是 run continuation 語義，未設計前不得由預設值代答 |
 | 進度 = **主線狀態轉移** | §20.7；artifact 數 / GB / PR 數都不是進度 | 以檔案數或釋出 GB 當 KPI |
 
@@ -105,21 +106,35 @@ status report   = 既有 fact-owner 的生成投影（registry ∪ slots ∪ man
 定義 `run_manifest.json`（落在每個產物目錄根）：
 
 ```yaml
-run_id:        # 目錄名
-commit:        # 產出當下的 HEAD
-dirty:         # working tree 是否髒（true 即宣告不可重現）
-preset:        #
-detector:      #
-dataset:       # 含 split（如 MOT17 train-half 7seq）
-host:          # hostname + GPU
-cmdline:       #
-started_at:    #
-produced_by:   # eval | train | diagnostic | ad-hoc
-claims: []     # 選填；指回 registry object id。只 link，不複寫 verdict
+schema_version:   # 目前 2
+run_id:           # 目錄名
+provenance_mode:  # production | reconstructed
+commit:           # 產出當下的 HEAD
+dirty:            # working tree 是否髒（true 即宣告不可重現）
+preset:           #
+detector:         #
+dataset:          # 含 split（如 MOT17 train-half 7seq）
+host:             # hostname + GPU
+cmdline:          #
+started_at:       #
+produced_by:      # eval | train | diagnostic | ad-hoc
+backfill_sources: # 僅 reconstructed；每個事實的具名來源
+claims: []        # 選填；指回 registry object id。只 link，不複寫 verdict
 ```
 
 - **unknown-field fail-closed**（同 terminal slot schema 的理由：擋語意欄位漂移）。
 - `claims` 為**選填**且**只放 id**。manifest 不得承載結論、數字或 terminal。
+
+**schema v2（2026-09-01，AP-4 引入）—— `provenance_mode` 必須寫在檔案裡：**
+production manifest 由 run 自己在第一個 result byte 前寫下，帶著 AP-2 的**寫入順序保證**；
+reconstructed manifest 是事後由具名來源組裝的，**完全沒有那個保證**。
+兩者若長得一樣，下游會把前者掙來的信任直接延伸給後者。
+required 欄位因此依 mode 而異：production 維持原本全套（產出當下全都知道，缺少即 caller bug）；
+reconstructed 縮成 `commit` + `backfill_sources`，其餘**有來源才寫、沒有就缺席**（理由見 AP-4）。
+
+> 這次 bump **不是 append-only**（v1 檔在 v2 下不合法）。可以這樣做的唯一原因是
+> bump 當下 AP-3 實測 `1045 units, 0 manifested` —— 全 workspace 沒有任何 v1 manifest 會被作廢。
+> **下一次 bump 不會再有這個條件，必須 append-only。**
 
 **AP-2 · 產出端落地（本 workstream 的止血點）**
 
@@ -170,9 +185,58 @@ workspace 判成 cited —— 工具認證自己的輸出；tracked-only 則讓�
 
 `orphan` 保持純查詢語義：**不含 age、不含 delete eligibility、不輸出任何「可刪」措辭**。那全部屬於 AP-5。
 
-**AP-4 · 存量 pay-on-use 回填**
+**AP-4 · 存量回填 —— 「可回填性判定 + 嚴格回填」，不是一個 backfill writer**
 
-只有當某目錄被 `evidence_ledger.md` 或 registry row 引用時，才補 manifest（且**只補可從 git / 日誌確證的欄位**，不可確證者留空，不得推測）。**不回填 681 個目錄。**
+> **修正（2026-09-01）：原文「只補可從 git / 日誌確證的欄位，不可確證者留空」不可執行。**
+> 修正後的規則是：**required fact 無法確證 ⇒ 不建立 manifest，該目錄維持 cited + unmanifested。**
+> 四個結構問題，逐條如下。
+
+**(1) 「留空」在 v1 沒有合法表示法。** `produced_by / started_at / host / cmdline` 之所以 required，
+是因為**產出當下的 run 全都知道**；事後考古幾乎都不知道。把未知塞成 `""` / `[]` / `datetime.now()`
+會得到**schema-valid 但事實錯誤**的 provenance —— 下游讀起來與真事實完全一樣。
+解法是 schema 演進成 v2（見 AP-1）：reconstructed 模式 required 集合縮成 `commit` + `backfill_sources`，
+其餘欄位**有具名來源才寫、沒有就缺席**（缺席在本 schema 已定義為 unknown）。
+**這不是降低門檻** —— 每個寫進去的事實仍必須有具名來源；縮的是「必須說話」的範圍，不是「說話要準」的要求。
+
+**(2) ledger 不直接指 artifact path。** ledger 的映射是 `commit/preset/metrics → source doc`，
+literal path 在那份 source doc 裡（例：dual-stability 那組 row 指向的結果文件才寫出
+`results/dual_stability_ablation_20260709/`）。因此 discovery 必須走
+**authority → linked source doc → literal path**，而不是 grep ledger／registry 本檔。
+**只走一跳**：被引用文件再引用的文件，沒有任何 authority 背書過。
+
+**(3) inventory unit ≠ 一次 run。** `results/dual_stability_ablation_20260709/` 對 AP-3 是一個
+accounting unit，實際上裝了 A/B/C/D 四臂各兩次共 8 個 run。在這個 root 補一份 manifest
+＝宣告「8 個 run 是 1 個」，與 #330 已鎖的「一目錄一 run」是**同一個 non-reattribution 失敗換一道門進來**。
+
+**(4) 部分 cited asset 已自帶身分（實作時發現）。** `out/h2_execution/<ts>/archive/checksums.sha256`
+自我校驗；`out/h2_layer_p/<ts>/` 是 H2 的 identity record，檔案裡自帶 `authority` 宣告。
+往裡面加檔案可能破壞 self-seal，且會讓同一批 bytes 有兩份互相競爭的身分。**一律拒寫。**
+
+`scripts/provenance/backfill.py`：candidate 一律來自 authority chain，逐個分類，
+**只有 `single_run_reconstructable` 可寫**；預設 dry-run，`--write` 才動筆。
+
+| 分類 | 可寫 | 意義 |
+|---|:--:|---|
+| `single_run_reconstructable` | ✅ | 單 run 形狀，且每個 required fact 有具名的 in-directory 來源 |
+| `multi_run_container` | ✕ | 底下是多個 run；保持 cited + unmanifested |
+| `insufficient_identity` | ✕ | required fact 無法確證（多半是目錄裡沒有任何 run record） |
+| `self_attesting_record` | ✕ | 已自帶 seal / identity record，不給第二個較弱的身分 |
+| `already_manifested` / `invalid_manifest` | ✕ | 不覆寫；invalid 沿用 AP-3 的 fail-closed 語義（壞掉的 producer，不是 backlog） |
+| `not_a_run_directory` / `absent_from_workspace` | ✕ | chain 指到的是檔案 / 本 workspace 沒有 |
+
+**selection 來自 authority chain，fact 來自目錄內部。** 文件在散文裡寫路徑、在表格裡寫 commit，
+這個綁定只存在讀者腦中，機器無法查核；run 自己寫在自己目錄裡的 metadata 才是可查核的綁定。
+
+**首次 survey 實測（2026-09-01, `main` = `ced4f8ed`）：13 個 candidate，`single_run_reconstructable` = 0。**
+
+> 這是**結果，不是失敗**。它量到的事實是：現有 cited 資產幾乎沒有 in-directory record，
+> 所以 AP-4 不是「跑一次就補完」的機械步驟。
+> 也因此 `manifested` 不會因為 AP-4 上線而變大 —— 這是正確的：那個數字是
+> **AP-2 是否真的在跑的 smoke signal，不是要去優化的 coverage 指標**。
+
+**明確不做：** 不下探 container 去找底下真正的 run（那超出 authority chain 的授權範圍，需另行核可）；
+不把 chain 指到的檔案升格成它的父目錄（那是本工具替文件發明了一個它沒做的引用）；
+不刪除、不建議刪除任何東西（AP-5）。**不回填 681 個目錄。**
 
 **AP-5 · disposal policy**
 
