@@ -160,7 +160,7 @@ def test_failed_manifest_write_leaves_no_partial_manifest(tmp_path, monkeypatch)
     def boom(src, dst):
         raise OSError("disk full")
 
-    monkeypatch.setattr("scripts.provenance.run_manifest.os.replace", boom)
+    monkeypatch.setattr("scripts.provenance.run_manifest.os.link", boom)
     with pytest.raises(ManifestError, match="cannot write manifest"):
         open_run(out, produced_by="eval")
 

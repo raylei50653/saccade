@@ -217,8 +217,18 @@ workspace 判成 cited —— 工具認證自己的輸出；tracked-only 則讓�
 **(2) ledger 不直接指 artifact path。** ledger 的映射是 `commit/preset/metrics → source doc`，
 literal path 在那份 source doc 裡（例：dual-stability 那組 row 指向的結果文件才寫出
 `results/dual_stability_ablation_20260709/`）。因此 discovery 必須走
-**authority → linked source doc → literal path**，而不是 grep ledger／registry 本檔。
-**只走一跳**：被引用文件再引用的文件，沒有任何 authority 背書過。
+**authority row 的 source relation → 該 source doc → 以路徑形式寫出的 literal path**，
+而不是 grep ledger／registry 本檔。**只走一跳**：被引用文件再引用的文件，沒有任何 authority 背書過。
+
+> **兩道綁定都是承重的**（review 抓到，兩者各自被放寬過一次）：
+> **(a) chain 成員資格＝source relation，不是「有連結」。** authority 也會連到它**遵守的規則**——
+> registry 那條指向 `doc_structure_contract.md` 的 `C5` 連結，說的是「不得有第二真相」這條規則，跟該 row 的證據無關。
+> 照著連結走會把規則文件拉進 chain，順帶把不相干的 `out/signal_study` 變成 candidate。
+> 只認 ledger 的 `Source` 欄與 registry 的 `supporting_declaration:` / `accepting_review:`
+> （後者寫的是裸相對路徑，不是 Markdown link）。
+> **(b) path 必須被寫成 path**——code fence、inline code span 或 link target；散文不算。
+> registry 的句子「宣告/runner/results/packet 同一 commit 落地」列的是四個專案角色、沒有路徑，
+> 而 grep 把它讀成 `results/packet`，`--write` 於是提議在一個沒有任何文件命名過的路徑建 manifest。
 
 **(3) inventory unit ≠ 一次 run。** `results/dual_stability_ablation_20260709/` 對 AP-3 是一個
 accounting unit，實際上裝了 A/B/C/D 四臂各兩次共 8 個 run。在這個 root 補一份 manifest
@@ -253,16 +263,29 @@ accounting unit，實際上裝了 A/B/C/D 四臂各兩次共 8 個 run。在這�
 **selection 來自 authority chain，fact 來自目錄內部。** 文件在散文裡寫路徑、在表格裡寫 commit，
 這個綁定只存在讀者腦中，機器無法查核；run 自己寫在自己目錄裡的 metadata 才是可查核的綁定。
 
-**首次 survey 實測（2026-09-01, `main` = `ced4f8ed`）：13 個 candidate，`single_run_reconstructable` = 0。**
+**survey 是快照，落筆對象是目錄。** candidate 先被分類、印出、給人讀過才動筆，所以
+`--write` 在 attach 之前把 eligibility／sources／facts **重新確立一次**，任何分歧一律拒寫而不是調和：
+被核可的是當時那個被 survey 過的目錄。其餘視窗（「檢查完到寫入之間才出現一份 manifest」）
+不是靠把視窗縮短來關的——publication 本身改用 `os.link` **獨佔建立**，
+競爭的寫入者是 raise，不是覆蓋。**non-reattribution 不能建立在視窗夠窄上。**
+
+**survey 實測（2026-09-03，收斂 review 的 discovery 修正後）：21 個 candidate，
+`single_run_reconstructable` = 0。**
 
 | 分類 | 數 | 實例 |
 |---|--:|---|
-| `multi_run_container` | 4 | dual-stability ×2、`out/signal_study`、`out/h2_execution/<ts>` |
-| `self_attesting_record` | 1 | `out/h2_layer_p/<ts>`（`layer_p.json` 自宣告 authority） |
-| `insufficient_identity` | 1 | `out/frozen_v2`（目錄內無 run record） |
-| `not_a_run_directory` | 3 | chain 指到 `.json` / `.ckpt` |
-| `absent_from_workspace` | 4 | 本 workspace 沒有 |
+| `multi_run_container` | 3 | dual-stability ×2、`out/h2_execution/<ts>` |
+| `self_attesting_record` | 2 | `out/h2_layer_p/<ts>`、`out/r1_temporal_<ts>`（record 自宣告 authority） |
+| `insufficient_identity` | 4 | `out/frozen_v2`、`out/signal_study/<probe>` ×2、`results/MOT17_eval_d0_shadow_substrate_<ts>` |
+| `not_a_run_directory` | 5 | chain 指到 `.json` / `.ckpt` / `.csv` |
+| `absent_from_workspace` | 7 | 本 workspace 沒有 |
 | **`single_run_reconstructable`** | **0** | |
+
+> 修正前的那次 survey 是 13 個 candidate。數字變大**不是覆蓋率變好**：
+> 修正同時砍掉了散文與非 source-relation 連結生出的假 candidate（`results/packet`、
+> `out/signal_study` 這個 root），也讓 registry 真正的 `supporting_declaration:`
+> 裸路徑第一次被走到——那些 declaration 文件才寫著各研究實際的輸出目錄。
+> **eligible 仍然是 0**，下面那句話沒有變。
 
 > 這是**結果，不是失敗**。它量到的事實是：現有 cited 資產幾乎沒有 in-directory record，
 > 所以 AP-4 不是「跑一次就補完」的機械步驟。

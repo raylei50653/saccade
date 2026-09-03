@@ -13,8 +13,16 @@ production time, arriving by a different door.
 **2. The ledger does not name artifact paths.**  It maps
 ``commit / preset / metrics`` to a *source document*; the literal output path
 appears in that document, if anywhere.  Discovery therefore has to follow the
-chain — authority → linked source doc → literal path — rather than grep the
-ledger and stop.
+chain — authority row → the document that row **cites as its source** → a path
+that document writes **as a path** — rather than grep the ledger and stop.
+
+Both of those bindings are load-bearing, and loosening either one turns
+discovery back into a grep with extra steps.  Following every link instead of
+the cited sources put a rule document in the chain because a row named the rule
+it obeys, and brought an unrelated ``out/signal_study`` in with it.  Reading
+paths out of running prose turned the sentence "宣告/runner/results/packet 同一
+commit 落地" — four project roles, no path — into ``results/packet``, a
+directory this tool then offered to create a manifest in.
 
 **3. "Leave the unknown fields empty" is not available.**  A manifest's required
 fields are required because a *producing* run knows all of them.  Reconstruction
@@ -78,10 +86,42 @@ AUTHORITIES = (
 
 ASSET_ROOTS = ("runs", "results", "out", "output")
 
-_ASSET_TOKEN = re.compile(
-    r"\b(?:" + "|".join(ASSET_ROOTS) + r")/[A-Za-z0-9_][A-Za-z0-9_.\-/]*"
+# A citation is a *relation*, not a link.  An authority row names where its
+# evidence lives — the ledger in its ``Source`` column, the registry in
+# ``supporting_declaration`` / ``accepting_review`` — and only that document is
+# in the chain.  Following every link instead makes the chain mean "mentioned
+# near an authority": the registry links the doc-structure contract to name a
+# **rule it obeys**, and following that link imported an unrelated
+# ``out/signal_study`` as a candidate.  A rule a row obeys is not a source of
+# the row's evidence, and neither is a navigation link to a status snapshot.
+SOURCE_RELATIONS = frozenset({"source", "supporting_declaration", "accepting_review"})
+
+_SEPARATOR_CELL = re.compile(r"^:?-{2,}:?$")
+_RELATION_FIELD = re.compile(r"^\s*([a-z_]+):\s*(\S.*)$")
+_MARKUP = re.compile(r"[*_`]")
+
+# A document reference inside a source-relation value: a Markdown link target,
+# or the bare relative path the registry writes (``supporting_declaration:
+# ../../modules/.../x.md``).
+_DOC_REF = re.compile(
+    r"\]\(([^)\s#]+\.md)(?:#[^)]*)?\)|([A-Za-z0-9_.][A-Za-z0-9_./\-]*\.md)"
 )
-_MD_LINK = re.compile(r"\]\(([^)\s#]+\.md)(?:#[^)]*)?\)")
+
+# An asset path counts only where the document writes it **as a path** — inside
+# a code fence, an inline code span, or a link target.  In running prose the
+# same characters are usually not a path at all: the registry sentence
+# "宣告/runner/results/packet 同一 commit 落地" enumerates four project roles,
+# and grepping it yielded ``results/packet`` as a directory to write a manifest
+# into.  The leading look-behind is the other half of that: without it the
+# token could start in the middle of somebody else's path.
+_ASSET_TOKEN = re.compile(
+    r"(?<![A-Za-z0-9_./\-])(?:"
+    + "|".join(ASSET_ROOTS)
+    + r")/[A-Za-z0-9_][A-Za-z0-9_.\-/]*"
+)
+_CODE_SPAN = re.compile(r"`([^`]+)`")
+_LINK_TARGET = re.compile(r"\]\(([^)\s]+)\)")
+_FENCE = re.compile(r"^\s*(?:```|~~~)")
 
 # Files that mean "a run wrote its output directly here".  Used only to tell a
 # run apart from a directory of runs; never to infer what the run was.
@@ -157,10 +197,54 @@ class Candidate:
         return self.classification == ELIGIBLE
 
 
+def source_relation_values(text: str) -> list[str]:
+    """The values of the source relations in a document, and nothing else.
+
+    Two shapes, because the two authorities are written differently and neither
+    is going to be rewritten for this tool's convenience:
+
+    * the ledger is a Markdown table whose header names a ``Source`` column, so
+      the relation is that column's cell on each body row;
+    * the registry is a YAML-ish record whose ``supporting_declaration:`` and
+      ``accepting_review:`` fields hold the same relation as bare paths.
+
+    A field's continuation lines are deliberately **not** read.  Those lines are
+    where a record explains itself ("charter 收尾見 …"), and prose in a
+    continuation is prose whatever field it hangs under.  The cost is a source
+    that is only reachable from a wrapped line, which is a candidate not found
+    rather than a candidate invented.
+    """
+    values: list[str] = []
+    previous: list[str] | None = None
+    columns: list[int] = []
+    for raw in text.splitlines():
+        line = raw.strip()
+        if line.startswith("|") and line.endswith("|") and len(line) > 1:
+            cells = [cell.strip() for cell in line[1:-1].split("|")]
+            if any(cells) and all(
+                _SEPARATOR_CELL.match(cell) for cell in cells if cell
+            ):
+                columns = [
+                    index
+                    for index, name in enumerate(previous or [])
+                    if _MARKUP.sub("", name).strip().lower() in SOURCE_RELATIONS
+                ]
+            elif columns:
+                values.extend(cells[index] for index in columns if index < len(cells))
+            previous = cells
+            continue
+        previous, columns = None, []
+        field = _RELATION_FIELD.match(raw)
+        if field and field.group(1) in SOURCE_RELATIONS:
+            values.append(field.group(2))
+    return values
+
+
 def authority_chain(repo_root: Path) -> dict[str, str]:
     """The documents a candidate may be discovered in, and why each is in scope.
 
-    Depth one: the two authorities, plus the documents they link to.  Not
+    Depth one: the two authorities, plus the documents their rows **cite as the
+    source of that row's evidence**.  Not every document they link to, and not
     transitive — a document two hops out was cited by something that was itself
     only cited, and treating that as authority would eventually pull in the
     whole corpus and make "cited by an authority" mean nothing.
@@ -176,16 +260,40 @@ def authority_chain(repo_root: Path) -> dict[str, str]:
         chain[name] = "authority"
 
     for name in AUTHORITIES:
-        text = (repo_root / name).read_text(encoding="utf-8", errors="ignore")
-        for match in _MD_LINK.finditer(text):
-            target = ((repo_root / name).parent / match.group(1)).resolve()
-            try:
-                rel = target.relative_to(repo_root).as_posix()
-            except ValueError:
-                continue  # outside the repo; not part of the chain
-            if target.is_file():
-                chain.setdefault(rel, f"linked from {name}")
+        authority = repo_root / name
+        text = authority.read_text(encoding="utf-8", errors="ignore")
+        for value in source_relation_values(text):
+            for match in _DOC_REF.finditer(value):
+                ref = match.group(1) or match.group(2)
+                target = (authority.parent / ref).resolve()
+                try:
+                    rel = target.relative_to(repo_root).as_posix()
+                except ValueError:
+                    continue  # outside the repo; not part of the chain
+                if target.is_file():
+                    chain.setdefault(rel, f"cited as a source by {name}")
     return chain
+
+
+def explicit_path_spans(text: str) -> list[str]:
+    """The regions of a document where a path is written as a path.
+
+    Code fences (a recorded command line: ``--output out/frozen_v2``), inline
+    code spans, and link targets.  Running prose is excluded on purpose — see
+    :data:`_ASSET_TOKEN`.
+    """
+    spans: list[str] = []
+    fenced = False
+    for line in text.splitlines():
+        if _FENCE.match(line):
+            fenced = not fenced
+            continue
+        if fenced:
+            spans.append(line)
+            continue
+        spans.extend(match.group(1) for match in _CODE_SPAN.finditer(line))
+        spans.extend(match.group(1) for match in _LINK_TARGET.finditer(line))
+    return spans
 
 
 def discover(repo_root: Path) -> dict[str, tuple[str, ...]]:
@@ -193,11 +301,12 @@ def discover(repo_root: Path) -> dict[str, tuple[str, ...]]:
     found: dict[str, set[str]] = {}
     for document in authority_chain(repo_root):
         text = (repo_root / document).read_text(encoding="utf-8", errors="ignore")
-        for match in _ASSET_TOKEN.finditer(text):
-            token = match.group(0).rstrip("/.,;:`")
-            if not token or "/" not in token:
-                continue
-            found.setdefault(token, set()).add(document)
+        for span in explicit_path_spans(text):
+            for match in _ASSET_TOKEN.finditer(span):
+                token = match.group(0).rstrip("/.,;:`")
+                if not token or "/" not in token:
+                    continue
+                found.setdefault(token, set()).add(document)
     return {path: tuple(sorted(docs)) for path, docs in sorted(found.items())}
 
 
@@ -358,6 +467,10 @@ def parse_run_meta(path: Path) -> dict[str, str]:
 
 _SHA = re.compile(r"^[0-9a-f]{7,40}$")
 
+# In preference order: the first one a record actually carries is the one
+# read, and the one named as the source.
+COMMIT_KEYS = ("git_sha", "commit")
+
 
 def _source_facts(
     directory: Path, rel: str
@@ -388,17 +501,26 @@ def _source_facts(
     meta = parse_run_meta(meta_path)
     source = f"{rel}/run_meta.txt"
 
-    commit = meta.get("git_sha") or meta.get("commit")
+    # Which key was read is part of the source, not an implementation detail:
+    # backfill_sources is an audit pointer, and naming git_sha= over a record
+    # that wrote commit= sends the next reader to a field that is not there.
+    commit_key, commit = "", ""
+    for key in COMMIT_KEYS:
+        value = meta.get(key, "")
+        if value:
+            commit_key, commit = key, value
+            break
     if not commit or not _SHA.match(commit):
+        keys = "/".join(f"{key}=" for key in COMMIT_KEYS)
         return (
             {},
             [],
-            f"{source} names no usable commit (git_sha=/commit=); a reconstructed "
+            f"{source} names no usable commit ({keys}); a reconstructed "
             "manifest without a commit accounts for nothing",
         )
 
     facts: dict[str, object] = {"commit": commit}
-    sources = [f"{source}: git_sha="]
+    sources = [f"{source}: {commit_key}="]
 
     stated_kind = meta.get("produced_by")
     if stated_kind in PRODUCED_BY:
@@ -532,23 +654,54 @@ def survey(repo_root: str | os.PathLike[str]) -> tuple[Candidate, ...]:
 
 
 def backfill(repo_root: str | os.PathLike[str], candidate: Candidate) -> Path:
-    """Write the reconstructed manifest for one eligible candidate."""
+    """Write the reconstructed manifest for one eligible candidate.
+
+    The candidate handed in is a *snapshot* — it was classified when the survey
+    ran, printed for a human to read, and only then acted on.  Everything it
+    asserts is re-established here against the directory as it is now, and any
+    divergence is refused rather than reconciled: what the operator approved was
+    the surveyed directory, and a directory whose record changed underneath is a
+    different one.  Without this the tool will write a manifest naming commit A
+    over a run whose ``run_meta.txt`` now says B — reconstructed, sourced,
+    plausible, and wrong.
+
+    This narrows the window; it does not abolish it.  The last of it —
+    "the manifest appeared between the check and the write" — is not closed by
+    checking earlier, and is closed instead by
+    :func:`~scripts.provenance.run_manifest.attach_reconstructed_manifest`
+    publishing exclusively, so that a losing writer fails rather than replaces.
+    """
+    root = Path(repo_root).resolve()
+    target = (root / candidate.path).resolve()
+    _require_containment(root, target, candidate.path)
+
     if not candidate.writable:
         raise BackfillError(
             f"{candidate.path} is {candidate.classification}, not {ELIGIBLE}; "
             "only a candidate whose required facts all have a named source may "
             "be given a manifest"
         )
-    target = (Path(repo_root) / candidate.path).resolve()
-    _require_containment(Path(repo_root).resolve(), target, candidate.path)
+    fresh = classify(root, candidate.path, candidate.cited_by)
+    if not fresh.writable:
+        raise BackfillError(
+            f"{candidate.path} is now {fresh.classification}, not {ELIGIBLE}; "
+            f"it stopped being writable after the survey ran ({fresh.reason})"
+        )
+    if fresh.facts != candidate.facts or fresh.sources != candidate.sources:
+        raise BackfillError(
+            f"{candidate.path} changed between the survey and the write: it was "
+            f"{candidate.facts} from {list(candidate.sources)} and is now "
+            f"{fresh.facts} from {list(fresh.sources)}; re-run the survey rather "
+            "than writing a manifest for a directory nobody surveyed"
+        )
 
-    facts = dict(candidate.facts)
+    facts = dict(fresh.facts)
     payload = build_reconstructed_manifest(
         Path(candidate.path).name,
         commit=str(facts.pop("commit")),
         backfill_sources=[
-            *candidate.sources,
-            *(f"cited by {doc}" for doc in candidate.cited_by),
+            *fresh.sources,
+            *(f"cited by {doc}" for doc in fresh.cited_by),
         ],
         **facts,  # type: ignore[arg-type]
     )

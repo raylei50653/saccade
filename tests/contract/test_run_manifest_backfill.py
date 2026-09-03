@@ -39,6 +39,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from scripts.provenance import backfill as bf  # noqa: E402
+from scripts.provenance import run_manifest as rm  # noqa: E402
 from scripts.provenance.run_manifest import (  # noqa: E402
     MANIFEST_FILENAME,
     ManifestError,
@@ -292,6 +293,8 @@ def repo(tmp_path):
     (tmp_path / "docs/research/contracts").mkdir(parents=True)
     (tmp_path / "docs/research/tracker-decision").mkdir(parents=True)
     (tmp_path / "docs/research/evidence_ledger.md").write_text(
+        "| Date | Commit | Preset | Det | IDF1 | Source |\n"
+        "|:--|:--|:--|:--|--:|:--|\n"
         "| 2026-07-09 | `2bc556f2` | preset | SDP | 78.4 | "
         "[source](tracker-decision/ablation.md) |\n",
         encoding="utf-8",
@@ -346,6 +349,70 @@ def test_a_path_named_only_outside_the_chain_is_not_a_candidate(repo):
     (repo / "docs/notes.md").write_text("`results/unblessed/`\n", encoding="utf-8")
     _run_dir(repo, "results/unblessed")
     assert "results/unblessed" not in bf.discover(repo)
+
+
+def test_a_link_that_is_not_a_source_relation_does_not_enter_the_chain(repo):
+    """An authority links to the rules it obeys as well as to its evidence.
+
+    The registry cites the doc-structure contract to name a rule ("no second
+    truth"), and following that link put an unrelated ``out/signal_study`` in
+    the candidate set. A document is in the chain because a row named it as
+    *the source of that row's evidence*, not because it was linked near one.
+    """
+    (repo / "docs/research/contracts/rules.md").write_text(
+        "`results/named_by_a_rule_doc/`\n", encoding="utf-8"
+    )
+    registry = repo / "docs/research/contracts/claim_state_registry.md"
+    registry.write_text(
+        "a row must not restate its reasons ([C5](rules.md)).\n", encoding="utf-8"
+    )
+    _run_dir(repo, "results/named_by_a_rule_doc")
+    assert "docs/research/contracts/rules.md" not in bf.authority_chain(repo)
+    assert "results/named_by_a_rule_doc" not in bf.discover(repo)
+
+
+def test_a_source_relation_written_as_a_bare_path_is_followed(repo):
+    """The registry writes its sources as bare paths, not as Markdown links."""
+    (repo / "docs/research/contracts/declaration.md").write_text(
+        "capture root: `out/registry_sourced_run/`\n", encoding="utf-8"
+    )
+    (repo / "docs/research/contracts/claim_state_registry.md").write_text(
+        "state: L1\nsupporting_declaration: declaration.md\n", encoding="utf-8"
+    )
+    assert bf.discover(repo)["out/registry_sourced_run"] == (
+        "docs/research/contracts/declaration.md",
+    )
+
+
+def test_prose_that_merely_looks_like_a_path_is_not_a_candidate(repo):
+    """``宣告/runner/results/packet`` names four project roles, not a directory.
+
+    Grepping the sentence yielded ``results/packet``, and ``--write`` then
+    offered to create a manifest at a path no document had ever named.
+    """
+    (repo / "docs/research/tracker-decision/ablation.md").write_text(
+        "宣告/runner/results/packet 同一 commit 落地;see also out/notes for context\n",
+        encoding="utf-8",
+    )
+    assert bf.discover(repo) == {}
+
+
+def test_a_path_is_never_sliced_out_of_the_middle_of_another_path(repo):
+    """``.../nested/out/x`` is one path, and its tail is not a second candidate."""
+    (repo / "docs/research/tracker-decision/ablation.md").write_text(
+        "`results/real_run/` and `some/nested/out/not_a_candidate`\n",
+        encoding="utf-8",
+    )
+    assert set(bf.discover(repo)) == {"results/real_run"}
+
+
+def test_a_path_in_a_code_fence_is_a_path(repo):
+    """A recorded command line names its output as plainly as a code span does."""
+    (repo / "docs/research/tracker-decision/ablation.md").write_text(
+        "how it was run:\n\n```bash\npython eval.py --output out/frozen_v2\n```\n",
+        encoding="utf-8",
+    )
+    assert "out/frozen_v2" in bf.discover(repo)
 
 
 # --------------------------------------------------------------------------
@@ -624,6 +691,84 @@ def test_a_path_outside_the_asset_roots_is_refused(repo):
                 sources=candidate.sources,
             ),
         )
+
+
+def test_the_facts_are_re_established_at_the_moment_of_writing(repo):
+    """A survey is a snapshot; the directory is what gets a manifest.
+
+    The candidate is classified, printed, read by a person, and only then acted
+    on. Trusting the snapshot let the tool write commit A over a run whose own
+    record had since been changed to B — reconstructed, sourced, and wrong.
+    """
+    run = _run_dir(repo, "results/ablation_20260709")
+    candidate = _one(repo, "results/ablation_20260709")
+    (run / "run_meta.txt").write_text(
+        RUN_META.replace("2bc556f2a2ae19758878fe2b0778634c9a5c2b2b", "9" * 40).replace(
+            "TESTHOST", "OTHERHOST"
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(bf.BackfillError, match="changed between the survey"):
+        bf.backfill(repo, candidate)
+    assert not (run / "run_manifest.json").exists()
+
+
+def test_eligibility_lost_after_the_survey_stops_the_write(repo):
+    """Not only the facts: the class it was surveyed in has to still hold."""
+    run = _run_dir(repo, "results/ablation_20260709")
+    candidate = _one(repo, "results/ablation_20260709")
+    _run_dir(repo, "results/ablation_20260709/arm_a")
+    _run_dir(repo, "results/ablation_20260709/arm_b")
+    with pytest.raises(bf.BackfillError, match="is now multi_run_container"):
+        bf.backfill(repo, candidate)
+    assert not (run / "run_manifest.json").exists()
+
+
+def test_a_manifest_appearing_after_the_check_is_refused_not_replaced(
+    repo, monkeypatch
+):
+    """Non-reattribution cannot rest on a window being narrow.
+
+    The existence check and the rename were two steps, so a manifest written by
+    a producer in between was silently overwritten by the reconstruction. The
+    write itself now refuses to overwrite, so the loser of that race raises.
+    """
+    run = _run_dir(repo, "results/ablation_20260709")
+    candidate = _one(repo, "results/ablation_20260709")
+
+    real_mode = rm.provenance_mode_of
+
+    def slip_a_production_manifest_in(payload):
+        (run / "run_manifest.json").write_text(
+            json.dumps(rm.build_manifest("ablation_20260709", produced_by="eval")),
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(rm, "provenance_mode_of", real_mode)
+        return real_mode(payload)
+
+    monkeypatch.setattr(rm, "provenance_mode_of", slip_a_production_manifest_in)
+    with pytest.raises(ManifestError, match="never replaced"):
+        bf.backfill(repo, candidate)
+    assert rm.read_manifest(run)["provenance_mode"] == "production"
+
+
+def test_the_commit_key_actually_read_is_the_one_named_as_the_source(repo):
+    """``backfill_sources`` is an audit pointer, so it names the field on disk.
+
+    A record writing ``commit=`` was read correctly and then sourced as
+    ``git_sha=``, sending the next reader to a field that is not in the file.
+    """
+    run = _run_dir(
+        repo,
+        "results/ablation_20260709",
+        meta="commit=2bc556f2a2ae19758878fe2b0778634c9a5c2b2b\nhost=TESTHOST\n",
+    )
+    candidate = _one(repo, "results/ablation_20260709")
+    assert candidate.classification == bf.ELIGIBLE
+    bf.backfill(repo, candidate)
+    sources = rm.read_manifest(run)["backfill_sources"]
+    assert "results/ablation_20260709/run_meta.txt: commit=" in sources
+    assert not any(source.endswith("git_sha=") for source in sources)
 
 
 def test_an_already_manifested_directory_is_not_a_backfill_candidate(repo):

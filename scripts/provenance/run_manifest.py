@@ -415,12 +415,20 @@ def validate_manifest(payload: Mapping[str, Any]) -> None:
         raise ManifestError("claims must be a list of registry object id strings")
 
 
-def _write_atomically(path: Path, text: str) -> None:
-    """Write via temp file + fsync + rename, then fsync the directory.
+def _publish_exclusively(path: Path, text: str) -> None:
+    """Write via temp file + fsync + link, so publication *is* the existence check.
 
-    A half-written manifest is worse than none: it would satisfy a presence
-    check while carrying an unusable identity.  The rename makes the file
-    appear whole or not at all.
+    ``os.replace`` cannot fail on an existing destination, so a manifest written
+    by a producer between the caller's check and the rename is silently
+    displaced — and non-reattribution, the one rule ``open_run`` and
+    ``attach_reconstructed_manifest`` share, is exactly the rule that must not
+    depend on a window being narrow.  ``os.link`` refuses to overwrite, in the
+    same syscall that publishes, so a losing writer raises instead.
+
+    The temp file still carries the atomicity: the destination appears whole or
+    not at all, and a crash mid-write leaves only the dot-file behind.  A
+    filesystem without hard links fails here rather than degrading to a racy
+    write, which is the fail-closed choice for a provenance record.
     """
     directory = path.parent
     handle, tmp_name = tempfile.mkstemp(
@@ -432,10 +440,16 @@ def _write_atomically(path: Path, text: str) -> None:
             stream.write(text)
             stream.flush()
             os.fsync(stream.fileno())
-        os.replace(tmp_path, path)
-    except BaseException:
+        try:
+            os.link(tmp_path, path)
+        except FileExistsError as exc:
+            raise ManifestError(
+                f"{path} already exists; a manifest is never replaced, because "
+                "the one already there may be the record written when the run "
+                "happened"
+            ) from exc
+    finally:
         tmp_path.unlink(missing_ok=True)
-        raise
     dir_fd = os.open(directory, os.O_RDONLY)
     try:
         os.fsync(dir_fd)
@@ -515,7 +529,7 @@ def open_run(
     path = directory / MANIFEST_FILENAME
     text = json.dumps(payload, indent=2, sort_keys=True) + "\n"
     try:
-        _write_atomically(path, text)
+        _publish_exclusively(path, text)
     except OSError as exc:
         raise ManifestError(f"cannot write manifest {path}: {exc}") from exc
 
@@ -626,7 +640,10 @@ def attach_reconstructed_manifest(
     The one rule both share is non-reattribution: an existing manifest is never
     replaced.  A directory that already carries an identity is not a backfill
     candidate, and overwriting one would let archaeology quietly displace a
-    record made at production time.
+    record made at production time.  The check below reports that case in the
+    terms the caller needs; the rule itself is enforced one layer down, by
+    :func:`_publish_exclusively`, so that a manifest appearing *after* the check
+    is refused rather than overwritten.
     """
     directory = Path(output_dir)
     if not directory.is_dir():
@@ -662,7 +679,7 @@ def attach_reconstructed_manifest(
     path = directory / MANIFEST_FILENAME
     text = json.dumps(payload, indent=2, sort_keys=True) + "\n"
     try:
-        _write_atomically(path, text)
+        _publish_exclusively(path, text)
     except OSError as exc:
         raise ManifestError(f"cannot write manifest {path}: {exc}") from exc
 
