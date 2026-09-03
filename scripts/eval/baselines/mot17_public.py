@@ -3,6 +3,7 @@
 # status: stable
 import argparse
 import configparser
+import sys
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, Dict
@@ -11,7 +12,11 @@ import cv2
 import numpy as np
 import torch
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # repo root, for scripts.*
+
 from saccade_tracking_ext import GPUByteTracker
+
+from scripts.provenance.run_manifest import open_run  # noqa: E402
 
 
 def load_seq_info(seq_path: Path) -> Dict[str, Any]:
@@ -58,6 +63,14 @@ def run_eval(
 ) -> None:
     data_path = Path(data_root) / split
     output_root = Path(output_dir)
+
+    # ADR 021 AP-2: claim the output directory before the first result byte.
+    open_run(
+        output_root,
+        produced_by="eval",
+        dataset=f"{data_root} {split}",
+    )
+
     output_root.mkdir(parents=True, exist_ok=True)
 
     sequences = sorted(p for p in data_path.iterdir() if p.name.startswith("MOT17-"))

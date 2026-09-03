@@ -5,6 +5,7 @@
 
 | Test | Scope | Function | Lifecycle | Summary |
 |------|-------|----------|-----------|---------|
+| `test_artifact_producer_coverage.py` | system | contract | active | Contract for the ADR 021 AP-2 producer registry: coverage cannot drift silently. |
 | `test_asset_inventory.py` | system | contract | active | Contract for the ADR 021 asset inventory: a projection that must not lie. |
 | `test_declaration_policy_binding.py` | system | contract | active | A declaration's policy target is declared in YAML, and checked against the code. |
 | `test_declaration_seal_order.py` | system | contract | active | A sealed declaration must exist before the results it claims to have predicted. |

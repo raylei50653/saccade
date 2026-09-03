@@ -38,9 +38,13 @@ from typing import Any, Optional
 
 import torch
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # repo root, for scripts.*
+
 from saccade.perception.detector_trt import BatchingTRTDetector
 from saccade.perception.eval.concurrent_evaluator import SharedExtractorService
 from saccade.perception.eval.metrics import run_motmetrics_evaluation
+
+from scripts.provenance.run_manifest import open_run  # noqa: E402
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
@@ -233,6 +237,16 @@ def main() -> None:
     parser.add_argument("--profile-stages", action="store_true")
 
     args = parser.parse_args()
+
+    # ADR 021 AP-2: claim the output directory before the first result byte.
+    # Every worker below writes into args.output, so this must precede dispatch.
+    open_run(
+        args.output,
+        produced_by="eval",
+        preset=args.preset,
+        detector=args.detector,
+        dataset=f"{args.data_root} {args.split}",
+    )
 
     import yaml
 
