@@ -85,6 +85,7 @@ from saccade.perception.temporal_yolo.mamba_gated_detector import (  # noqa: E40
 from saccade.perception.temporal_yolo.training_utils import (  # noqa: E402
     save_checkpoint,
 )
+from scripts.provenance.run_manifest import open_run  # noqa: E402
 from saccade.perception.temporal_yolo.data_pipeline import (  # noqa: E402
     DataPreloader,
     FeatureCache,
@@ -238,6 +239,14 @@ def main() -> None:
     if not market_root.is_absolute():
         market_root = project_root / market_root
     run_dir = project_root / args.run_dir
+
+    # ADR 021 AP-2: claim the run directory before the embedding cache or the
+    # first checkpoint is written.
+    open_run(
+        run_dir,
+        produced_by="train",
+        dataset=str(args.market_root),
+    )
 
     if args.precompute and args.train_emb_head:
         print("[ERROR] --precompute is incompatible with --train_emb_head")

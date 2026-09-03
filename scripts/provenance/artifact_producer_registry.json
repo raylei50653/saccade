@@ -1,0 +1,681 @@
+{
+  "schema": "artifact_producer_registry_v1",
+  "authority": "docs/decisions/021-asset-provenance-and-progress-reporting.md",
+  "asset_roots": [
+    "runs",
+    "results",
+    "out",
+    "output"
+  ],
+  "domain": {
+    "prefixes": [
+      "scripts/eval/",
+      "scripts/train/"
+    ],
+    "suffix": ".py"
+  },
+  "entries": {
+    "scripts/eval/_oao_feature_diff.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/_perseq_extract.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/_redirect.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/ablation_experiments.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/ablation_mot17.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/analyze_05_cause.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/analyze_assoc_fn.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/analyze_confirm_prev_confirmed.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/analyze_confirm_proximity.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/analyze_crossing_swaps.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/analyze_detection_fp_by_height.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/analyze_external_fp_rows.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/analyze_fn.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/analyze_fpn_dims.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/analyze_fpn_embeddings.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/analyze_front_flag_exposure.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/analyze_near_miss_final_output.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/analyze_near_miss_offsets.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/analyze_near_miss_stage_attribution.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/analyze_oao_attribution.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/analyze_oao_sweep.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/analyze_occ_size.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/analyze_occlusion_events.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/analyze_pca_alt_combination.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/analyze_roi_dim_importance.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/analyze_score_distribution.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/appearance/analyze_external_fp_rows.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/appearance/analyze_roi_dim_importance.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/appearance/cheb_gr_osnet_gate.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/appearance/eval_fpn_reid.py": {
+      "classification": "run_producer_out_of_scope",
+      "reason": "FPN ReID diagnostic; writes output/fpn_reid",
+      "excluded_by": "docs/decisions/021-asset-provenance-and-progress-reporting.md#43-named-limit--protected-path-remainder"
+    },
+    "scripts/eval/appearance/export_external_fp_rows.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/appearance/jde_market1501.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/appearance/mnv4_spatial_dilution_probe.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/appearance/reid_id_benchmark.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/appearance/train_cascade_stage2.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/appearance/train_external_fp_classifier.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/appearance/validate_roi_embeddings.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/baselines/eval_conditioned.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/baselines/eval_gated_bytetrack.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/baselines/mot17_public.py": {
+      "classification": "run_producer_wired",
+      "reason": "public-detection MOT17 baseline eval; claims --output before writing sequence results"
+    },
+    "scripts/eval/baselines/ultralytics_official_mot17.py": {
+      "classification": "run_producer_wired",
+      "reason": "Ultralytics reference MOT17 eval; claims --output before writing sequence results"
+    },
+    "scripts/eval/bayesian_optimizer.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/bench_recall_candidates.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/bench_reduction_bypass.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/bench_yolo_batch.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/bootstrap_mamba_size_recall.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/calculate_mota.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/cheb_gr_osnet_gate.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/compare_framework_ultralytics.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/concurrent_mot17.py": {
+      "classification": "run_producer_wired",
+      "reason": "concurrent MOT17 eval; claims --output before creating per-sequence directories"
+    },
+    "scripts/eval/config/__init__.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/config/_helpers.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/config/core.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares the --output default (results/MOT17_eval) consumed by scripts/eval/mot17.py; creates no directory itself"
+    },
+    "scripts/eval/config/detection.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/config/gen_golden_snapshot.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/config/geometry.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/config/lifecycle.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/config/motion.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/config/pipeline.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/config/reid.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/config/semantic.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/config/trigger.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/convert_mot17.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/coordinate_optimizer.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/dancetrack.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/detection_map.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/detector/analyze_score_distribution.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/detector/mamba_size_binned_recall.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/detector/probe_motion_private_candidate_separability.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/detector/probe_private_candidate_separability.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/diagnostics/analyze_assoc_fn.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/diagnostics/analyze_crossing_swaps.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/diagnostics/analyze_fn.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/diagnostics/analyze_front_flag_exposure.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/diagnostics/analyze_near_miss_final_output.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/diagnostics/analyze_near_miss_offsets.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/diagnostics/analyze_near_miss_stage_attribution.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/diagnostics/analyze_occ_audit_seq_conditioning.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/diagnostics/bridge_gate_breakpoints.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/diagnostics/cheb_gr_offline_handover_report.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/diagnostics/compare_detector_suffix_runs.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/diagnostics/compare_handover_summaries.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/diagnostics/label_boosted_birth_rows.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/diagnostics/probe_forwarded_embedding_assoc_cost.py": {
+      "classification": "run_producer_out_of_scope",
+      "reason": "association-cost probe; writes control/fifo directories under results/",
+      "excluded_by": "docs/decisions/021-asset-provenance-and-progress-reporting.md#43-named-limit--protected-path-remainder"
+    },
+    "scripts/eval/diagnostics/probe_occ_audit_bank_reference.py": {
+      "classification": "run_producer_out_of_scope",
+      "reason": "occlusion audit probe; writes a post-hoc directory under results/",
+      "excluded_by": "docs/decisions/021-asset-provenance-and-progress-reporting.md#43-named-limit--protected-path-remainder"
+    },
+    "scripts/eval/diagnostics/probe_sparse_bank_equivalence.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/diagnostics/probe_track_bank_fifo_replacement.py": {
+      "classification": "run_producer_out_of_scope",
+      "reason": "track-bank FIFO probe; writes a probe directory under results/",
+      "excluded_by": "docs/decisions/021-asset-provenance-and-progress-reporting.md#43-named-limit--protected-path-remainder"
+    },
+    "scripts/eval/diagnostics/reconnect_rate.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/diagnostics/relink_bridge_guard_report.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/diagnostics/run_occ_audit_wp3_promotion.py": {
+      "classification": "run_producer_out_of_scope",
+      "reason": "occlusion audit promotion sweep; writes per-arm directories under results/",
+      "excluded_by": "docs/decisions/021-asset-provenance-and-progress-reporting.md#43-named-limit--protected-path-remainder"
+    },
+    "scripts/eval/diagnostics/synthesize_handover_applicability.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/eval_conditioned.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/eval_fpn_reid.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/eval_gated_bytetrack.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/eval_reid_1x1.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/eval_yolox_bytetrack.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/experiments/oracle_height_birth_ceiling.py": {
+      "classification": "run_producer_out_of_scope",
+      "reason": "oracle sweep; writes per-arm directories under results/",
+      "excluded_by": "docs/decisions/021-asset-provenance-and-progress-reporting.md#43-named-limit--protected-path-remainder"
+    },
+    "scripts/eval/experiments/oracle_occlusion_hold.py": {
+      "classification": "run_producer_out_of_scope",
+      "reason": "oracle sweep; writes per-arm directories under results/",
+      "excluded_by": "docs/decisions/021-asset-provenance-and-progress-reporting.md#43-named-limit--protected-path-remainder"
+    },
+    "scripts/eval/experiments/oracle_small_birth_ceiling.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/export_external_fp_rows.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/fpn_raw_reid_market1501.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/jde_market1501.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/label_boosted_birth_rows.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/latency_report.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/mamba_size_binned_recall.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/measure_cst040_dedup.py": {
+      "classification": "run_producer_out_of_scope",
+      "reason": "dedup diagnostic; materialises baseline/variant directories under results/",
+      "excluded_by": "docs/decisions/021-asset-provenance-and-progress-reporting.md#43-named-limit--protected-path-remainder"
+    },
+    "scripts/eval/mlflow_logger.py": {
+      "classification": "not_a_run_producer",
+      "reason": "MLflow logging helper invoked after results are written; cannot carry the AP-2 ordering guarantee"
+    },
+    "scripts/eval/mot17.py": {
+      "classification": "run_producer_blocked",
+      "reason": "flagship single-sequence MOT17 eval; writes its --output directory (default results/MOT17_eval, declared in scripts/eval/config/core.py) with no manifest",
+      "blocked_by": "docs/decisions/021-asset-provenance-and-progress-reporting.md#43-named-limit--protected-path-remainder",
+      "unblock_requires": "controlled-host re-attestation: build_runtime_identity.py --probe-from <identity-probe.json> --runtime-inputs-from <runtime-inputs.json>"
+    },
+    "scripts/eval/mot17_all_sdp.py": {
+      "classification": "run_producer_wired",
+      "reason": "batch MOT17 SDP eval; claims the output_root before dispatching per-sequence workers"
+    },
+    "scripts/eval/mot17_args.py": {
+      "classification": "not_a_run_producer",
+      "reason": "argument surface for scripts/eval/mot17.py; creates no directory itself"
+    },
+    "scripts/eval/mot17_public.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/occ_rank.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/occ_tune.py": {
+      "classification": "run_producer_out_of_scope",
+      "reason": "occlusion gate sweep; appends to a sweep store under results/occ_tune",
+      "excluded_by": "docs/decisions/021-asset-provenance-and-progress-reporting.md#43-named-limit--protected-path-remainder"
+    },
+    "scripts/eval/oracle_height_birth_ceiling.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/oracle_occlusion_hold.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/oracle_small_birth_ceiling.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/pipeline_contribution.py": {
+      "classification": "run_producer_out_of_scope",
+      "reason": "pipeline contribution diagnostic; writes results/pipeline_contribution/",
+      "excluded_by": "docs/decisions/021-asset-provenance-and-progress-reporting.md#43-named-limit--protected-path-remainder"
+    },
+    "scripts/eval/print_assoc_basis.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/probe_assoc_appearance_veto.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/probe_camera_motion.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/probe_ghost_rate_by_score.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/probe_ghost_source.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/probe_lowiou_occ_gate.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/probe_occ_activation_separability.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/probe_occ_pairwise_confound.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/probe_occ_separability.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/probe_occ_swap_disambiguation.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/probe_private_continuation_assignment.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/probe_redundancy.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/profile_analyze.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/profile_cuda_kernels.py": {
+      "classification": "run_producer_out_of_scope",
+      "reason": "CUDA kernel profiler; writes runs/torch_profiler",
+      "excluded_by": "docs/decisions/021-asset-provenance-and-progress-reporting.md#43-named-limit--protected-path-remainder"
+    },
+    "scripts/eval/reconnect_rate.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/reid_id_benchmark.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/run_occ_audit_offline.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/run_offline_handover_ablation.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/score_keyframe_filtered.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/select_ckpt_by_recall.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/sportsmot.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/summarize_ablation_mot17.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/sweep_a7_quality.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/sweep_density_gating.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/sweep_external_fp_classifier.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/train_cascade_stage2.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/train_external_fp_classifier.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/ultralytics_official_mot17.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/validate_profiles.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/validate_roi_embeddings.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
+    "scripts/eval/verify_cpp_detector.py": {
+      "classification": "run_producer_out_of_scope",
+      "reason": "C++ detector parity diagnostic; writes output/fpn_reid_cpp",
+      "excluded_by": "docs/decisions/021-asset-provenance-and-progress-reporting.md#43-named-limit--protected-path-remainder"
+    },
+    "scripts/train/cache_fpn_embeddings.py": {
+      "classification": "run_producer_out_of_scope",
+      "reason": "feature cache under runs/reid_cache",
+      "excluded_by": "docs/decisions/021-asset-provenance-and-progress-reporting.md#43-named-limit--protected-path-remainder"
+    },
+    "scripts/train/finetune_mobilenetv4_reid.py": {
+      "classification": "run_producer_wired",
+      "reason": "MobileNetV4 ReID finetune; claims --run-dir before checkpointing"
+    },
+    "scripts/train/reid_domain_probe.py": {
+      "classification": "run_producer_out_of_scope",
+      "reason": "ReID domain probe cache under runs/reid_probe",
+      "excluded_by": "docs/decisions/021-asset-provenance-and-progress-reporting.md#43-named-limit--protected-path-remainder"
+    },
+    "scripts/train/temporal_yolo/cache_trt_feats.py": {
+      "classification": "run_producer_out_of_scope",
+      "reason": "TRT feature cache under runs/trt_feat_cache",
+      "excluded_by": "docs/decisions/021-asset-provenance-and-progress-reporting.md#43-named-limit--protected-path-remainder"
+    },
+    "scripts/train/temporal_yolo/personpath22_to_mot.py": {
+      "classification": "not_a_run_producer",
+      "reason": "dataset conversion; writes under datasets/, which is not an asset root"
+    },
+    "scripts/train/temporal_yolo/precompute_gmc.py": {
+      "classification": "run_producer_out_of_scope",
+      "reason": "GMC matrix cache under runs/trt_feat_cache_v2",
+      "excluded_by": "docs/decisions/021-asset-provenance-and-progress-reporting.md#43-named-limit--protected-path-remainder"
+    },
+    "scripts/train/temporal_yolo/train_conditioned.py": {
+      "classification": "run_producer_wired",
+      "reason": "conditioned temporal-YOLO training; claims --run-dir before checkpointing"
+    },
+    "scripts/train/temporal_yolo/train_gated_detector.py": {
+      "classification": "run_producer_wired",
+      "reason": "gated detector training; claims --run-dir before checkpointing"
+    },
+    "scripts/train/temporal_yolo/train_gated_tp.py": {
+      "classification": "run_producer_wired",
+      "reason": "gated TP training; claims --run-dir before checkpointing"
+    },
+    "scripts/train/temporal_yolo/train_jde_market.py": {
+      "classification": "run_producer_wired",
+      "reason": "JDE Market-1501 training; claims --run-dir before the embedding cache and checkpoints"
+    },
+    "scripts/train/temporal_yolo/train_joint.py": {
+      "classification": "run_producer_wired",
+      "reason": "joint training; claims --run-dir before checkpointing"
+    },
+    "scripts/train/temporal_yolo/train_mamba_gt.py": {
+      "classification": "run_producer_wired",
+      "reason": "mamba GT training; claims --run-dir before checkpointing"
+    },
+    "scripts/train/temporal_yolo/train_mamba_head.py": {
+      "classification": "run_producer_wired",
+      "reason": "mamba head distillation; claims --run-dir before checkpointing"
+    }
+  }
+}

@@ -140,6 +140,13 @@ jobs:
       # it by hand there: scripts/provenance/asset_inventory.py --check
       - name: Asset Inventory Validation
         run: uv run python scripts/provenance/asset_inventory.py --check
+      # AP-2 coverage is a registry, not a hand-picked list: every tracked
+      # entry point under scripts/eval|train must carry an explicit
+      # classification, and a new one that carries none fails here rather than
+      # being silently uncovered. Same protected-path reason as above keeps this
+      # off scripts/pre_push.sh.
+      - name: Artifact Producer Coverage
+        run: uv run python scripts/provenance/check_producer_coverage.py
       - name: Doc Freshness Check (warn-only)
         run: uv run python scripts/tools/check_doc_freshness.py
         continue-on-error: true

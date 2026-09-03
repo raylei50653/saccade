@@ -3,9 +3,14 @@
 # status: stable
 # mypy: ignore-errors
 from ultralytics import YOLO
+import sys
 import time
 from pathlib import Path
 import argparse
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # repo root, for scripts.*
+
+from scripts.provenance.run_manifest import open_run  # noqa: E402
 
 
 def run_official_eval() -> None:
@@ -31,8 +36,17 @@ def run_official_eval() -> None:
     )
     args = parser.parse_args()
 
-    model = YOLO(args.model)
     output_root = Path(args.output)
+
+    # ADR 021 AP-2: claim the output directory before the first result byte.
+    open_run(
+        output_root,
+        produced_by="eval",
+        detector=args.detector,
+        dataset=f"{args.data_root} {args.split}",
+    )
+
+    model = YOLO(args.model)
     output_root.mkdir(parents=True, exist_ok=True)
 
     split_root = Path(args.data_root) / args.split

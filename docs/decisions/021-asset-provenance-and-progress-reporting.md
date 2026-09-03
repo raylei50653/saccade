@@ -314,6 +314,11 @@ publication 本身改用 `os.link` **獨佔建立**，競爭的寫入者是 rais
 > ⚠️ **第一條 exit criterion 目前不成立，且不由 W-A 自己解除**——見 §4.3 的 named limit。
 > `scripts/eval/mot17.py` 與 `_per_seq/` 子目錄仍未覆蓋，因此 **AP-2 的狀態是 partial coverage，不是 complete**。
 > PR #330 merged **不等於** AP-2 完成。
+>
+> **更新（2026-09-03）：** repository 側的 AP-2 工作已收斂 —— 所有**可動**的 producer 都已接線，
+> 且 `check_producer_coverage.py` 使「還剩什麼」成為機械可證的事實而非敘述。
+> **但第一條 exit criterion 仍不成立**：`scripts/eval/mot17.py` 需要 controlled-host re-attestation，
+> 那不是本線可以自行完成的動作。**AP-2 repository-side coverage complete ≠ W-A EC1 satisfied。**
 
 ### W-B —— 關掉 ADR 020 的後半（issue #164）
 
@@ -369,6 +374,27 @@ compress + dispose 一個動作，讓 9 個 quarantined cluster 有出口。
 > **AP-2 rollout crossing `decision_relevant` / runtime-identity protected paths requires controlled
 > re-attestation and cannot be performed as ordinary provenance plumbing.**
 
+> **修正（2026-09-03，本節原本把整個 remainder 都歸給保護路徑，與實測不符）。**
+> 當時的措辭讀起來像「AP-2 的缺口 = `scripts/eval/mot17.py`」。機械盤點後的事實是**兩個成因**，
+> 只有第一個受本 limit 管轄：
+>
+> 1. **受阻於保護路徑（1 個）**：`scripts/eval/mot17.py`。真的需要 controlled-host re-attestation。
+> 2. **單純沒被列進去（4 個）**：`scripts/eval/concurrent_mot17.py`、
+>    `scripts/eval/baselines/mot17_public.py`、`scripts/eval/baselines/ultralytics_official_mot17.py`、
+>    `scripts/train/temporal_yolo/train_jde_market.py`。**全部 `unclassified`，從來不在本 limit 之下**，
+>    #330 沒接只是因為覆蓋範圍是**手挑的清單**而不是機械列舉。已於本次補上。
+>
+> 根因不是漏了某個檔案，是**沒有任何機制能區分「沒接」與「刻意不接」**。修法是
+> `scripts/provenance/artifact_producer_registry.json`（authority）+
+> `scripts/provenance/check_producer_coverage.py`（fail-closed checker）:
+> `scripts/eval/` 與 `scripts/train/` 下每個 tracked `.py` 都必須帶明確分類，
+> **未列 = CI 硬失敗**，`run_producer_blocked` 另需 `h2_path_partition` 實際回報保護分區才成立
+> （否則它會變成任何 producer 的免責出口）。
+>
+> **本修正不放寬 exit criterion。** W-A 第一條仍**不成立**，唯一 blocker 仍是
+> `scripts/eval/mot17.py` 的 controlled-host re-attestation。變的是那個 blocker 現在是
+> registry 裡一列可被 checker 證明的紀錄，而不是散文裡的一句話。
+
 本 limit **不只涵蓋 `decision_relevant` 一條軸**。已確認落在保護區的還有
 `scripts/pre_push.sh`（`identity_semantics` 軸）—— 因此 AP-3 的 validator **無法掛上 `pre_push`**，
 改掛 `.github/workflows/ci.yml`（`plumbing_only`，不觸發閘門）。
@@ -386,8 +412,9 @@ compress + dispose 一個動作，讓 9 個 quarantined cluster 有出口。
 - **不為一個 provenance hook 消耗一次 controlled-host republication。** 那會把 AP-2 的工程 hygiene
   與 H2 的 runtime identity authority 綁進同一個 PR，邊界反而更差。
 - **後果（必須明講）：** standalone `scripts/eval/mot17.py` run 與 `_per_seq/` 子目錄**仍匿名**；
-  diagnostics / sweeps / caches 本就不在 W-A 範圍。已覆蓋的是 batch eval 的 `output_root`
-  （evidence_ledger 實際引用的那層）與已接線的 training run root。
+  diagnostics / sweeps / caches 本就不在 W-A 範圍（現由 registry 的 `run_producer_out_of_scope`
+  逐列具名，不再是「沒提到就當沒有」）。已覆蓋的是 batch eval 的 `output_root`
+  （evidence_ledger 實際引用的那層）、已接線的 training run root，以及上述修正補上的 4 個 producer。
 - **解除條件：** 等某個**真正需要**更新 runtime coordinate 的 decision-relevant 變更出現時，
   把這個 hook 搭同一次合法 republication；或當 standalone `mot17.py` 的匿名真的成為 W-A 的主要
   blocker 時，另開一個 attestation PR。**兩者都不是本線可以順手做掉的事。**
