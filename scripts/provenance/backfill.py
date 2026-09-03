@@ -658,12 +658,23 @@ def backfill(repo_root: str | os.PathLike[str], candidate: Candidate) -> Path:
 
     The candidate handed in is a *snapshot* — it was classified when the survey
     ran, printed for a human to read, and only then acted on.  Everything it
-    asserts is re-established here against the directory as it is now, and any
+    asserts is re-established here against the workspace as it is now, and any
     divergence is refused rather than reconciled: what the operator approved was
-    the surveyed directory, and a directory whose record changed underneath is a
+    the surveyed candidate, and one whose evidence changed underneath is a
     different one.  Without this the tool will write a manifest naming commit A
     over a run whose ``run_meta.txt`` now says B — reconstructed, sourced,
     plausible, and wrong.
+
+    Re-establishing means **discovery as well as classification**, and discovery
+    first.  ``cited_by`` is not decoration: being named by the authority chain is
+    the entire reason this directory is eligible to be written at all, and it is
+    also copied into ``backfill_sources`` as the pointer an auditor follows back.
+    Re-classifying while carrying the old citation forward checked the half that
+    lives in the directory and took the half that lives in the documents on
+    trust — so removing the path from its source document between survey and
+    write still produced a manifest, attesting a citation that no longer existed.
+    The whole survey is therefore re-run here, per candidate: the chain is a few
+    dozen documents, and reading them again is cheaper than one false citation.
 
     This narrows the window; it does not abolish it.  The last of it —
     "the manifest appeared between the check and the write" — is not closed by
@@ -681,7 +692,24 @@ def backfill(repo_root: str | os.PathLike[str], candidate: Candidate) -> Path:
             "only a candidate whose required facts all have a named source may "
             "be given a manifest"
         )
-    fresh = classify(root, candidate.path, candidate.cited_by)
+    cited_by = discover(root).get(candidate.path)
+    if cited_by is None:
+        raise BackfillError(
+            f"{candidate.path} is no longer named by the authority chain; it was "
+            f"cited by {list(candidate.cited_by)} when the survey ran. Selection "
+            "comes from the chain, so a path the chain no longer names is not a "
+            "candidate, and a manifest citing it would attest a citation that "
+            "does not exist"
+        )
+    if cited_by != candidate.cited_by:
+        raise BackfillError(
+            f"{candidate.path} is cited by {list(cited_by)} now and by "
+            f"{list(candidate.cited_by)} when the survey ran; backfill_sources "
+            "points an auditor back at the citing documents, so it may only name "
+            "the ones that cite it at the moment of writing"
+        )
+
+    fresh = classify(root, candidate.path, cited_by)
     if not fresh.writable:
         raise BackfillError(
             f"{candidate.path} is now {fresh.classification}, not {ELIGIBLE}; "

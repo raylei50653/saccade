@@ -713,6 +713,44 @@ def test_the_facts_are_re_established_at_the_moment_of_writing(repo):
     assert not (run / "run_manifest.json").exists()
 
 
+def test_a_citation_withdrawn_after_the_survey_stops_the_write(repo):
+    """Being cited is *why* it may be written; that half is re-checked too.
+
+    Re-classifying while carrying the surveyed ``cited_by`` forward re-checked
+    only the evidence inside the directory. Deleting the path from its source
+    document made ``discover()`` return nothing, and the write still succeeded —
+    leaving a manifest that attested a citation no document made any more.
+    """
+    run = _run_dir(repo, "results/ablation_20260709")
+    candidate = _one(repo, "results/ablation_20260709")
+    (repo / "docs/research/tracker-decision/ablation.md").write_text(
+        "the raw outputs have been moved off this host\n", encoding="utf-8"
+    )
+    assert bf.discover(repo) == {}
+    with pytest.raises(bf.BackfillError, match="no longer named by the authority"):
+        bf.backfill(repo, candidate)
+    assert not (run / "run_manifest.json").exists()
+
+
+def test_a_changed_set_of_citing_documents_stops_the_write(repo):
+    """``backfill_sources`` names who cites it, so it names who cites it *now*."""
+    run = _run_dir(repo, "results/ablation_20260709")
+    candidate = _one(repo, "results/ablation_20260709")
+    (repo / "docs/research/tracker-decision/status.md").write_text(
+        "same outputs: `results/ablation_20260709/`\n", encoding="utf-8"
+    )
+    ledger = repo / "docs/research/evidence_ledger.md"
+    ledger.write_text(
+        ledger.read_text(encoding="utf-8")
+        + "| 2026-07-10 | `2bc556f2` | preset | SDP | 78.4 | "
+        "[status](tracker-decision/status.md) |\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(bf.BackfillError, match="is cited by"):
+        bf.backfill(repo, candidate)
+    assert not (run / "run_manifest.json").exists()
+
+
 def test_eligibility_lost_after_the_survey_stops_the_write(repo):
     """Not only the facts: the class it was surveyed in has to still hold."""
     run = _run_dir(repo, "results/ablation_20260709")

@@ -263,11 +263,19 @@ accounting unit，實際上裝了 A/B/C/D 四臂各兩次共 8 個 run。在這�
 **selection 來自 authority chain，fact 來自目錄內部。** 文件在散文裡寫路徑、在表格裡寫 commit，
 這個綁定只存在讀者腦中，機器無法查核；run 自己寫在自己目錄裡的 metadata 才是可查核的綁定。
 
-**survey 是快照，落筆對象是目錄。** candidate 先被分類、印出、給人讀過才動筆，所以
-`--write` 在 attach 之前把 eligibility／sources／facts **重新確立一次**，任何分歧一律拒寫而不是調和：
-被核可的是當時那個被 survey 過的目錄。其餘視窗（「檢查完到寫入之間才出現一份 manifest」）
-不是靠把視窗縮短來關的——publication 本身改用 `os.link` **獨佔建立**，
-競爭的寫入者是 raise，不是覆蓋。**non-reattribution 不能建立在視窗夠窄上。**
+**survey 是快照，落筆對象是當下的 workspace。** candidate 先被分類、印出、給人讀過才動筆，所以
+`--write` 在 attach 之前把 **citation／eligibility／sources／facts 全部重新確立一次**，
+任何分歧一律拒寫而不是調和：被核可的是當時那個被 survey 過的 candidate。
+
+> **重新確立必須包含 discovery，而且要先做。** `cited_by` 不是裝飾：**被 authority chain 指名**
+> 正是這個目錄可以被寫的全部理由，而它也會被抄進 `backfill_sources` 當作稽核者回溯的指標。
+> 只重跑 classification、把舊 citation 帶著走，等於查了住在目錄裡的那一半、
+> 卻**對住在文件裡的那一半照單全收** —— survey 之後把路徑從 source doc 刪掉，
+> manifest 照樣寫成，並且宣稱一個已經不存在的 citation。
+
+其餘視窗（「檢查完到寫入之間才出現一份 manifest」）不是靠把視窗縮短來關的——
+publication 本身改用 `os.link` **獨佔建立**，競爭的寫入者是 raise，不是覆蓋。
+**non-reattribution 不能建立在視窗夠窄上。**
 
 **survey 實測（2026-09-03，收斂 review 的 discovery 修正後）：21 個 candidate，
 `single_run_reconstructable` = 0。**
