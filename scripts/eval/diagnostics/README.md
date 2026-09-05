@@ -26,5 +26,6 @@
 | `relink_bridge_guard_report.py` | diagnostic | cli | Summarize guarded native bridge relink runs. |
 | `run_occ_audit_wp3_promotion.py` | diagnostic | cli | WP3: frozen-substrate occ-exit control/treatment + promotion decision inputs. |
 | `synthesize_handover_applicability.py` | diagnostic | cli | Synthesize Cheb-GR handover applicability evidence across summaries. |
+| `verify_l2_evidence.py` | diagnostic | cli | Re-verify the 2026-09-05 L2 source-attribution evidence pack from its raw CSVs. |
 
 <!-- END generated script index -->

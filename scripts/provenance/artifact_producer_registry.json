@@ -384,6 +384,10 @@
       "classification": "not_a_run_producer",
       "reason": "declares no artifact-root output directory and creates none"
     },
+    "scripts/eval/diagnostics/verify_l2_evidence.py": {
+      "classification": "not_a_run_producer",
+      "reason": "re-verifies a local ncu evidence pack; the only file it writes is summary.json inside the --evidence-dir it is given, which is outside every asset root and outside the repository"
+    },
     "scripts/eval/eval_conditioned.py": {
       "classification": "not_a_run_producer",
       "reason": "declares no artifact-root output directory and creates none"
