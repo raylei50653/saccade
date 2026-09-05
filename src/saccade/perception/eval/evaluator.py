@@ -3260,7 +3260,7 @@ def run_eval(
                 _stage_dir = output_root / f"_postproc_stage{_stage_idx}_{_stage_name}"
                 _stage_dir.mkdir(parents=True, exist_ok=True)
                 (_stage_dir / f"{seq}.txt").write_text(
-                    "".join(_seq_state.results_lines)
+                    "\n".join(_seq_state.results_lines)
                 )
 
         if cfg.post_lifecycle_merge:
