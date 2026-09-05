@@ -86,6 +86,9 @@ class LifecycleConfig:
     cheb_gr_online_bank_mode: str = "spread"
     cheb_gr_online_bank_n: int = 0
     cheb_gr_online_log: bool = False
+    # Explicit post-process stage order. "" = legacy mutually-exclusive
+    # dispatch (handover wins, merge is skipped with a warning).
+    cheb_gr_postproc_order: str = ""
     occ_audit: bool = False
     occ_audit_tau: float = 0.45
     occ_audit_ref_n: int = 5
@@ -932,6 +935,20 @@ def add_lifecycle_args(parser: argparse.ArgumentParser) -> None:
             "filtered strictly; a bank falls back to unfiltered clean crops.",
             range_hint="0-1",
             edge="crowd-pollution proxy; complements the front-occlusion gate",
+        ),
+    )
+    grp.add_argument(
+        "--cheb-gr-postproc-order",
+        dest="cheb_gr_postproc_order",
+        choices=("", "handover_then_merge", "merge_then_handover"),
+        default="",
+        help=_help(
+            "Run BOTH output-layer repairs in an explicit order instead of the "
+            "legacy mutually-exclusive dispatch. Each stage re-extracts its own "
+            "embeddings from the lines the previous stage produced.",
+            edge="order is an experiment variable, not a tuning knob: the two "
+            "stages see different track sets depending on it; '' keeps the "
+            "single-stage behaviour and warns if both are configured",
         ),
     )
     grp.add_argument(

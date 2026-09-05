@@ -1,0 +1,12 @@
+# Cheb-GR tracklet merge alone, mnv4, max_cost 0.45 (the 7/7-non-negative
+# operating point from 2026-07-02). Re-measured here on the current 80.4 base
+# because the original +0.6 was taken on a 79.5 base that no longer exists.
+#
+# Load with:
+#   .venv/bin/python scripts/eval/mot17.py --preset mamba_whole_graph_m \
+#       --detector SDP --double-buffer --no-gpu-decode \
+#       --module-lifecycle configs/modules/cheb_gr_merge_mnv4_only.yaml
+
+cheb_gr_merge_enabled: true
+cheb_gr_model: mobilenetv4_reid
+cheb_gr_merge_max_cost: 0.45

@@ -1,7 +1,7 @@
 {
   "_meta": {
     "description": "Pure argparse defaults (no YAML, no preset)",
-    "field_count": 413,
+    "field_count": 414,
     "generated_by": "scripts/eval/config/gen_golden_snapshot.py"
   },
   "config": {
@@ -70,6 +70,7 @@
     "cheb_gr_online_neighbor_iou_max": 0.0,
     "cheb_gr_online_pollution_veto": 0.0,
     "cheb_gr_pool_frac": 0.3,
+    "cheb_gr_postproc_order": "",
     "conf_threshold": 0.05,
     "confirm_score_thresh": 0.0,
     "confirm_streak": 1,

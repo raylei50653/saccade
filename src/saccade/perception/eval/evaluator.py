@@ -1962,6 +1962,108 @@ def _run_frame(
     return True
 
 
+def _mot_row_keys(lines: list[str]) -> set[tuple[int, float, float, float, float]]:
+    """Detection-identity keys of MOT rows, independent of the track id.
+
+    A post-process stage may relabel a row, add an interpolated one, or drop
+    one; only the box itself survives all three, so it is what stage records
+    are joined on.
+    """
+    keys: set[tuple[int, float, float, float, float]] = set()
+    for line in lines:
+        parts = line.split(",")
+        if len(parts) < 6:
+            continue
+        keys.add(
+            (
+                int(parts[0]),
+                round(float(parts[2]), 1),
+                round(float(parts[3]), 1),
+                round(float(parts[4]), 1),
+                round(float(parts[5]), 1),
+            )
+        )
+    return keys
+
+
+def _postproc_stage_record(
+    before: list[str],
+    after: list[str],
+    origin_keys: set[tuple[int, float, float, float, float]],
+) -> dict[str, Any]:
+    """What one output-layer stage actually did to the lines it was handed.
+
+    Identity links are recovered rather than reported by the stage itself, so
+    the record is comparable across stages that count their own work
+    differently (a merge can span several breakpoints that a handover would
+    count one at a time). Zero links is a legitimate outcome and is recorded
+    as such.
+
+    ``origin_keys`` are the rows that entered the first stage; rows in this
+    stage's input outside that set were synthesised upstream and carry no
+    detection, which is the one way a chained stage sees input a single-stage
+    run never produces.
+    """
+
+    def _by_key(lines: list[str]) -> dict[tuple[int, float, float, float, float], int]:
+        out: dict[tuple[int, float, float, float, float], int] = {}
+        for line in lines:
+            parts = line.split(",")
+            if len(parts) < 6:
+                continue
+            out[
+                (
+                    int(parts[0]),
+                    round(float(parts[2]), 1),
+                    round(float(parts[3]), 1),
+                    round(float(parts[4]), 1),
+                    round(float(parts[5]), 1),
+                )
+            ] = int(parts[1])
+        return out
+
+    src, dst = _by_key(before), _by_key(after)
+    grouped: dict[int, set[int]] = {}
+    for key, src_id in src.items():
+        dst_id = dst.get(key)
+        if dst_id is not None:
+            grouped.setdefault(dst_id, set()).add(src_id)
+
+    parent: dict[int, int] = {}
+
+    def _find(x: int) -> int:
+        parent.setdefault(x, x)
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    for members in grouped.values():
+        ordered = sorted(members)
+        for other in ordered[1:]:
+            ra, rb = _find(ordered[0]), _find(other)
+            if ra != rb:
+                parent[ra] = rb
+
+    comps: dict[int, set[int]] = {}
+    for src_id in {v for v in src.values()}:
+        comps.setdefault(_find(src_id), set()).add(src_id)
+    linked = [m for m in comps.values() if len(m) > 1]
+
+    return {
+        "rows_in": len(before),
+        "rows_out": len(after),
+        "rows_added": len(dst.keys() - src.keys()),
+        "rows_dropped": len(src.keys() - dst.keys()),
+        "rows_in_synthetic": len(src.keys() - origin_keys),
+        "ids_in": len({v for v in src.values()}),
+        "ids_out": len({v for v in dst.values()}),
+        "link_pairs": sum(len(m) * (len(m) - 1) // 2 for m in linked),
+        "link_components": len(linked),
+        "largest_component": max((len(m) for m in linked), default=0),
+    }
+
+
 def run_eval(
     engine: str,
     output: str,
@@ -2983,9 +3085,15 @@ def run_eval(
             )
 
         _live_evfifo = getattr(_seq_state, "live_evfifo", None)
-        if _live_evfifo is not None or (
+        _ho_available = _live_evfifo is not None or (
             cheb_gr_extractor is not None and cheb_gr_online
-        ):
+        )
+        # Legacy dispatch tested only for the extractor, so an occ-audit-only
+        # run also reaches the merge stage; that behaviour is preserved below.
+        _merge_legacy = cheb_gr_extractor is not None
+        _merge_requested = _merge_legacy and cfg.cheb_gr_merge_enabled
+
+        def _stage_handover() -> None:
             if _live_evfifo is not None:
                 # Live evfifo-5-20-w3 bank accumulated during tracking (bounded
                 # VRAM, no end-of-sequence disk re-read) — reproduces the offline
@@ -3072,7 +3180,8 @@ def run_eval(
                 f"reject_pollution={ho_stats['reject_pollution']} "
                 f"reject_min_head={ho_stats['reject_min_head']})"
             )
-        elif cheb_gr_extractor is not None:
+
+        def _stage_merge() -> None:
             seq_img_dir = str(Path(cfg.core.data_root) / cfg.core.split / seq / "img1")
             cheb_embeddings = extract_tracklet_embeddings(
                 _seq_state.results_lines,
@@ -3103,6 +3212,56 @@ def run_eval(
                 f"🧬 Cheb-GR Merge: ids={cheb_stats['ids_before']}->"
                 f"{cheb_stats['ids_after']} ({cheb_stats['merges']} merges)"
             )
+
+        _order = getattr(cfg, "cheb_gr_postproc_order", "")
+        if _order:
+            if not (_ho_available and _merge_requested):
+                raise ValueError(
+                    f"cheb_gr_postproc_order={_order!r} chains both output-layer repairs, "
+                    f"but handover_available={_ho_available} merge_enabled={cfg.cheb_gr_merge_enabled}. "
+                    "Enable both, or leave the order empty to run a single stage."
+                )
+            _stages = [("handover", _stage_handover), ("merge", _stage_merge)]
+            if _order == "merge_then_handover":
+                _stages.reverse()
+        elif _ho_available:
+            if cfg.cheb_gr_merge_enabled:
+                print(
+                    "⚠️  Both offline handover and tracklet merge are configured, but "
+                    "no --cheb-gr-postproc-order was given: running HANDOVER only, "
+                    "merge is SKIPPED. This run is not a stacked result."
+                )
+            _stages = [("handover", _stage_handover)]
+        elif _merge_legacy:
+            _stages = [("merge", _stage_merge)]
+        else:
+            _stages = []
+
+        _origin_keys = _mot_row_keys(_seq_state.results_lines)
+        for _stage_idx, (_stage_name, _stage_fn) in enumerate(_stages, start=1):
+            _before = list(_seq_state.results_lines)
+            _stage_fn()
+            if _order:
+                _record = _postproc_stage_record(
+                    _before, _seq_state.results_lines, _origin_keys
+                )
+                _append_dict_csv(
+                    output_root / "_postproc_stage_log.csv",
+                    [
+                        {
+                            "seq": seq,
+                            "order": _order,
+                            "stage_index": _stage_idx,
+                            "stage": _stage_name,
+                            **_record,
+                        }
+                    ],
+                )
+                _stage_dir = output_root / f"_postproc_stage{_stage_idx}_{_stage_name}"
+                _stage_dir.mkdir(parents=True, exist_ok=True)
+                (_stage_dir / f"{seq}.txt").write_text(
+                    "".join(_seq_state.results_lines)
+                )
 
         if cfg.post_lifecycle_merge:
             print(
