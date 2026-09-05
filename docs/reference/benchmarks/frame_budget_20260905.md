@@ -255,10 +255,21 @@ across the pipeline; attributing all three copies to this one expression is not
 established. The isolated counter experiment and fresh timing comparison are in §6.
 
 ```python
-# src/saccade/perception/eval/evaluator.py:425
+# src/saccade/perception/eval/stages.py:1843
 pool.frame_buffer.copy_(frame_gpu.permute(2, 0, 1).float() / 255.0)
 #                       cast temporary      scaled temporary    final buffer copy
 ```
+
+> **Call site correction (2026-09-05).** This section previously cited
+> `src/saccade/perception/eval/evaluator.py:425`. That copy of the expression sits inside
+> `if getattr(cfg, "workbench", False) and wb is not None:` (`evaluator.py:414`), and
+> `workbench` defaults to `False` (`config.py:1280`); `scripts/eval/mot17.py:125` also
+> rejects `--workbench` together with `--private-continuation`, which this preset enables
+> (`private_continuation_enabled: true`). The profiled headline command therefore never
+> executes that line. The live ingest for this preset is `stages.py:1843`, inside
+> `_run_detect` (`stages.py:1809`). The expression text is identical at both sites, so the
+> measurements, the bit-exactness checks and the §6 probe are unaffected — only the
+> citation was wrong.
 
 Original probe, as supplied: measured on this GPU at 1920×1080, and checked for bit-exactness against the current
 expression over all 256 `uint8` values and on a random 1080p tensor — `torch.equal` is
