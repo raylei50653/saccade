@@ -1483,16 +1483,41 @@ no ID-stability filter
 
 所以 `relink_write` 可使用 fast MOT emit path。
 
-sequence 處理完後可能執行 output-level operations：
+sequence 處理完後，`run_eval` 依序在 `results_lines` 上執行 output-level
+operations。以下是目前 code 中的完整順序；headline presets 兩個 appearance 階段
+都關閉，因此走上面的 fast path。
+
+**(a) Appearance identity repair（default off，兩個階段共用 Cheb-GR extractor）**
+
+| 階段 | 進入條件 | 函式 |
+|:--|:--|:--|
+| Offline handover | `cheb_gr_offline_handover`（別名 `cheb_gr_online`） | `causal_handover_lines` |
+| Tracklet merge | extractor 已建立（見下） | `cheb_gr_merge_output_tracklets` |
+
+兩者都只改寫 `results_lines` 上的 track id，不新增或刪除 row。
+
+排程由 `cheb_gr_postproc_order` 決定：
+
+- **未設定（`""`）**：兩階段互斥。handover 分支先判，tracklet merge 位於其
+  `elif`，因此同時開啟兩者時只有 handover 執行，merge 被跳過。此分支的 `elif`
+  只判 extractor 是否存在，而 extractor 在 `cheb_gr_merge_enabled`、
+  `cheb_gr_online`、`occ_audit` 或 live bank 任一開啟時建立——所以只開
+  `occ_audit` 的組態也會進入 tracklet merge。
+- **`handover_then_merge` / `merge_then_handover`**：兩階段依指名順序執行，
+  第二階段從第一階段產出的 `results_lines` 重新抽取 embedding。順序改變第二
+  階段看到的 track 集合。
+
+**(b) Output cleanup / interpolation**
 
 - `interpolate_tracklets: true`
 - `interpolate_max_gap: 35`
 - `interpolate_min_track_len: 5`
 - `interpolate_min_h: 0`
 
-這些是 output cleanup/interpolation，不是 online association terms。現行 eval
+`interpolate_tracklets` 在 (a) 之後執行，因此它填補的 gap 包含 (a) 合併後才
+出現的那些。這些是 output cleanup，不是 online association terms。現行 eval
 在寫出 sequence result file 前會修改 `results_lines`，因此用這些 result files
-計算的 reported MOT metrics 包含 interpolation 後處理。
+計算的 reported MOT metrics 包含 (a) 與 (b) 的後處理。
 
 ---
 
