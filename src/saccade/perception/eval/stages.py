@@ -1840,7 +1840,7 @@ def _run_detect(
             )
             if nv12_direct_from_hwc
             else (
-                pool.frame_buffer.copy_(frame_gpu.permute(2, 0, 1).float() / 255.0),
+                torch.div(frame_gpu.permute(2, 0, 1), 255.0, out=pool.frame_buffer),
                 apply_frame_preprocess(
                     pool.frame_buffer,
                     cfg.preprocess_modes,
