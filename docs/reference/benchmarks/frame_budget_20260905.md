@@ -161,6 +161,12 @@ size 24300.0 KiB × 3.02 per frame = 75.06 MB/frame   ← 99.2% of all D2D
 24 300 KiB = 1920×1080×3×4 B — `pool.frame_buffer`, the full-resolution fp32 CHW frame
 (`src/saccade/perception/eval/pool.py:69`).
 
+> **Superseded attribution (2026-09-06).** These are three *different* copies with three
+> different owners, not one expression repeated: the ingest expression, the detector
+> CUDA graph's static input, and the GMC CUDA graph's static input. §7 separates them by
+> stream, records which one F3a removed, and measures what removing a second one was
+> worth.
+
 ### D2D copy bandwidth versus working set (measured on this GPU)
 
 | Buffer | read+write | Note |
@@ -248,6 +254,15 @@ into association. A geometry or compaction rewrite must preserve inactive-slot r
 and partner/duration semantics; it still needs correctness and metric A/B checks.
 
 ### F3 — Frame ingest materializes fp32 temporaries · ~147 µs isolated saving in the original probe · bit-exact verified
+
+> **Status (2026-09-06).** F3 was split into F3a (this expression), F3c (the detector
+> CUDA graph's static input) and F3b (the representation change). **F3a is merged**
+> (#339, paired +2.15%). **F3c was implemented and measured but not landed** (#338,
+> closed as not planned): the copy provably disappears and whole-pipeline D2D volume
+> halves, with no detectable throughput change, which did not justify the ownership
+> protocol it required. §7 has the numbers. F3d (#341) is the same defect at the GMC
+> graph's input and is **not** ranked by its byte count — see §7. F3b remains undecided
+> and should be re-profiled rather than assumed.
 
 One expression produces two fp32 temporaries (cast and scaled output), then copies
 into the pool buffer. The original trace reports ~75 MB/frame of large D2D copies
@@ -523,6 +538,99 @@ for skip, filtering, replay and export options.
 The permission gap is closed, launch underutilization is measured, and the isolated
 F3 traffic reduction is supported. **Production L2 hit rates, an exact per-frame DRAM
 ledger and production FPS gains remain unestablished.**
+
+---
+
+## §7 The three 24.9 MB copies, separated — and what removing one was worth (2026-09-06)
+
+> Measured the day after §1–§6 on the same GPU but a **different driver (616.56**, not
+> 610.57), with F3a (#339) already merged. Absolute throughput here is **not** comparable
+> to §1's 349.64 fps; only the paired within-session comparison below is.
+> Evidence: `~/.local/state/saccade/perf/f3c-20260906/` (nsys reports, per-run JSONL,
+> harnesses, analysis) — local retained evidence, not a repository artefact.
+
+§4 recorded `24 300 KiB × 3.02 per frame` as a single size class and attributed it to
+`pool.frame_buffer`; §6 said explicitly that the three copies were **not** independently
+attributed to the ingest expression. An nsys node-granularity trace over 400 frames of
+MOT17-04-SDP separates them by stream. There are three, and they are three *different*
+copies with three different owners:
+
+| The copy | Stream | Status on `main` |
+|:--|:--|:--|
+| ingest `pool.frame_buffer.copy_(…)` | detect side | **removed** by F3a (#339) |
+| detector CUDA-graph static input (`make_graphed_callables` copies the runtime input into the captured surface whenever the pointers differ, `torch/cuda/graphs.py:533`) | detect side `24` | **still present** — investigated as F3c (#338), not landed |
+| GMC CUDA-graph static input, `_gmc_frame_buf.copy_(_frame_gmc)` (`stages.py:260`, `:283`) | post `7` | **still present** — filed as F3d (#341) |
+
+Current `main` therefore runs **two** of these per frame, not three: 802 copies of
+24 300 KiB per 400 frames, 402 on the detect stream and 400 on the post stream. (402
+rather than 400 because a capture also clones the frame twice, once in
+`_whole_graph_warmup` and once as the capture sample.)
+
+### Removing one of them changed nothing measurable
+
+An unmerged experiment — branch `perf/f3c-graph-input-ownership`, issue #338 — made the
+frame pool lease the detector graph's static input surface so the producer writes it in
+place. The copy provably disappears:
+
+| Trace quantity, 400 frames | `main` | experiment |
+|:--|--:|--:|
+| 24.9 MB D2D on the detect side stream | 402 copies · 22.19 ms | 1 copy · 0.04 ms |
+| all D2D operations | 7 626 · 20 201 MB · 60.6 ms | 7 225 · 10 223 MB · 37.4 ms |
+
+That is **−55.4 µs/frame of copy-engine time and half the entire pipeline's
+device-to-device byte volume**. The paired production A/B — `mot17.py --preset
+mamba_whole_graph_m --detector SDP --double-buffer`, all 7 SDP sequences, 48 runs
+interleaved as 12 ABBA blocks, quiet host — found:
+
+| | `main` | experiment |
+|:--|--:|--:|
+| mean fps | 328.63 | 328.26 |
+| median | 329.18 | 335.66 |
+| sd | 10.79 | 18.06 |
+
+Block-paired delta **−0.376 fps (−0.11%)**, 95% bootstrap CI **[−2.59%, +2.07%]**,
+block-restricted permutation **p = 0.91**, sign test p = 0.77, 7/12 blocks positive. All
+48 runs produced a single sha256 over the concatenated MOT output, with
+IDF1/MOTA/HOTA/DetA/AssA/IDs/FP/FN identical in every run (80.3 / 81.8 / 74.3 / 76.1 /
+72.8 / 358 / 2005 / 18053), so the null is not hiding a behaviour change.
+
+### Raw copy cost is not critical-path cost
+
+This is the transferable result, and it is a constraint on how the remaining items in §5
+may be ranked.
+
+Half of the pipeline's device-to-device traffic was removed, verified in the trace, with
+**no detectable effect on the frame period**. That is consistent rather than
+contradictory: the copy sat on the ingest lane, which is 7% of the frame period (§2) and
+overlaps compute, so eliminating it frees bandwidth, not wall clock. F3a's own commit
+recorded the same caveat about stream-overlapped savings; this measures it.
+
+Three of the twelve blocks show *both* arms slowing together (run walls 29 s → 33–35 s),
+a host disturbance that ABBA blocking absorbs imperfectly; it widens the interval rather
+than shifting it. Resolving an effect the size of the plausible one would need roughly an
+order of magnitude more runs, which was not spent.
+
+Do not read the null as "the copy did not exist", or as "removing D2D traffic cannot
+help". It is one negative result about one lane on one host. What it does establish is
+that **a byte count is not an ROI estimate here**: any remaining copy of this shape,
+F3d (#341) included, needs its critical-path exposure measured before it is scheduled,
+not after.
+
+### A capture race the same measurements exposed
+
+CUDA graph capture runs in `cudaStreamCaptureModeGlobal` and races the frame streamer's
+decode thread; each sequence captures four to five graphs at its start.
+`streaming.py:154` documents this and mitigates it only partially — it covers
+`cudaErrorStreamCaptureInvalidated` raised by `TorchvisionGpuStreamer`'s own worker, not
+the `Implicit` variant, and cannot reach DALI's threads. A collision kills the sequence
+and truncates the output; it is never silent.
+
+Over full 7-sequence runs on this host, `main` fails **1 in 35** on `--no-gpu-decode`
+(DALI) and **0 in 24** on the production GPU-decode path. This is tracked as **#340**,
+which carries the failure shapes, the per-arm rates and the direction (capture-mode /
+capture-site semantics). It is a pre-existing defect, not a consequence of anything in
+this section.
+
 
 ---
 
