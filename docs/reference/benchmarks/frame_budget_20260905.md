@@ -261,8 +261,112 @@ and partner/duration semantics; it still needs correctness and metric A/B checks
 > closed as not planned): the copy provably disappears and whole-pipeline D2D volume
 > halves, with no detectable throughput change, which did not justify the ownership
 > protocol it required. §7 has the numbers. F3d (#341) is the same defect at the GMC
-> graph's input and is **not** ranked by its byte count — see §7. F3b remains undecided
-> and should be re-profiled rather than assumed.
+> graph's input and is **not** ranked by its byte count — see §7. **F3b is closed by
+> structural disposition** (2026-09-06) — its premise fails, not its payoff; see §5.1.
+
+#### §5.1 F3b — closed, structural premise failure (2026-09-06)
+
+F3b was "replace the ingest representation so the full-resolution fp32 RGB frame is
+never materialized". The gating question was never its payoff; it was whether the
+materialization can be removed at all. It cannot.
+
+**`pool.frame_buffer` has two consumers on the headline active path** (`reid_mode: off`,
+`tiling: native_640`, `preprocess: none`, `gmc: true`):
+
+| consumer | site | full-res fp32 required? |
+|:--|:--|:--|
+| detector | `detection.py:1043` — `detect_raw(pool.frame_buffer.unsqueeze(0))` | no — only as the resize source |
+| GMC | `stages.py:3317` → `_gmc_frame_buf.copy_(_frame_gmc)` (`stages.py:293`/`:322`/`:323`), buffer `(3, h_orig, w_orig)` fp32 at `pipeline.py:1094` | **yes, unconditionally** |
+
+The four other `as_rgb_chw()` sites (`stages.py:2077`/`:2233`/`:3127`/`:3229`) are ReID
+crop paths, dead with `reid_mode: off`; the `evaluator.py` sites are the workbench
+runner, which this preset never enters (see the call-site correction above).
+
+GMC is unconditional in the preset, so **any detector-side F3b candidate that preserves
+the current GMC input contract** can remove the detector's read of the buffer, never the
+buffer itself. "Premise fails" therefore means the original F3b scope fails — not that the
+full-res buffer is structurally impossible to eliminate; a GMC input redesign (below)
+would change the requirement, and that is a different item. This reduces the opportunity
+to:
+
+| item (1920×1080, per frame) | bytes | removable |
+|:--|--:|:--|
+| ingest write of `pool.frame_buffer` | 24.88 MB W | no — GMC |
+| detector interpolate read (640·640·3 × 4 taps × 4 B) | 19.66 MB R | yes → 4.92 MB uint8 |
+| GMC read of `pool.frame_buffer` | 24.88 MB R | no |
+| GMC write of `_gmc_frame_buf` | 24.88 MB W | no |
+| 640 canvas write | 4.92 MB W | no — unchanged either way |
+
+**≈ −14.7 MB of ≈ 94 MB** — a *logical / raw-cost reduction bound*, not a DRAM saving:
+cache reuse and locality can make the realised gain smaller. The denominator is the
+source-side fp32 representation traffic, i.e. the first four rows; the table sums to
+≈ 99.2 MB and the unchanged 4.92 MB canvas write is excluded because both arms pay it.
+
+The logical difference does **not** shrink at 640×480: the four-tap access pattern is
+driven by the 640×640 output, so the fp32-vs-uint8 tap arithmetic is the same in both
+strata. What approaches zero there is the *off-chip traffic and hence the frame-period
+opportunity*, because the 3.69 MB source buffer is small enough to be largely
+cache-resident. The two must not be collapsed into one number.
+
+Separately, `frame_gpu` is confined to the ingest stage
+(`stages.py:1874`/`:1879`); carrying it to a fused preprocessing site is refcount-safe
+for the torchvision decoder but not guaranteed for DALI, whose iterator returns tensors
+backed by its own output buffers under `prefetch_queue_depth=2` — keeping it safely may
+cost an extra 6.22 MB uint8 clone, a third of the remaining opportunity.
+
+A new fused kernel is not justified on an opportunity of that size and shape.
+
+**Not the reason for closure.** The rejected NV12 candidate's semantic delta was measured
+first, at the tensor `backbone.infer_graph` receives, 28 paired frames across the 7-seq
+(8-bit levels): MAE 3.61, p99 38.1, 20.8% of pixels beyond 4 levels, 5.1% beyond 16.
+Controls separate the mechanism cleanly — constant/low-frequency colour patches give
+MAE ≤ 0.44 (max 2.2), so the NV12 4:2:0 + BT.601 + quantization round-trip is nearly
+inert, while achromatic synthetics at 1080p give checkerboard MAE 51–73. The delta is
+spatial resampling, plus a systematic sampling-phase offset (constant −1.000 source px
+on the 1080p x axis, mean −0.812 px on y). That evidence stands as **rejected-candidate
+evidence**: it shows the orphaned `nv12_to_chw_resize` kernel must not simply be wired
+up as-is, and it is not what closed F3b.
+
+**Closure characterization (not a gate).** A dose ladder was run at the detector's
+in-graph resize site (a temporary probe patch, not landed: k extra copies of the same
+`F.interpolate(frame, (640,640), bilinear, align_corners=False)` inserted immediately
+before the real one inside `_whole_graph_fn`, so the dose is captured into the same graph;
+k ∈ {0,1,2,4} × 3 mirrored reps,
+7-seq, metrics identical across all 12 runs). It **does not resolve**: per-rep signs at
+k=1 are (−,+,+), the k=0 anchor spread across reps is 0.192 ms against a largest mean
+dose effect of 0.054 ms, and the 640×480 stratum is negative at every dose. Per the F3d
+reading protocol this means no breakpoint may be named. What it supports is a
+**resolution limit, not an upper bound**: no single-resize effect is resolved above the
+≈0.05 ms paired-noise scale, and the k=1 point estimate is +0.007 ms (+0.2%), not
+separable from zero. With n=3, inconsistent signs and anchor drift exceeding the mean dose
+effect, this protocol did not resolve the per-resize cost — it does not establish a
+physical or statistical bound on it. Note the contrast with F3d, whose GMC site was 3/3 positive
+at k=1 (S < 1, no slack); under the same pre-registered falsifier this site is
+*suggestive of slack*, but n=3 with inconsistent signs does not establish it.
+
+**Recorded, not opened.** GMC's first operation on the frame is `launch_grayscale_downscale`
+(`gmc.cpp:11`) → a single-channel `W/4 × H/4` buffer, and the NV12 configuration feeds it
+`_luma.repeat(3, 1, 1)` (`stages.py:3314`) — three identical channels, so GMC extracts no
+independent per-channel information. Its information requirement at 1080p is 0.52 MB
+against ~74.6 MB moved to deliver it. This is a **candidate mechanism only**: F3d already
+bounds removing one such copy, and GMC has a measured input-representation sensitivity of
+about 0.5 pp IDF1 (`pool.get_frame_luma()`), so it would be an independent admission
+problem, not a free optimization.
+
+**Defects found while evaluating F3b, tracked separately from it.**
+
+1. `src/perception/letterbox_kernel.cu:6` and the bindings at `tracker_gpu_python.cpp:5627`
+   and `:5646` all describe the kernel as "bilinear resize"; it is nearest-neighbour
+   (`letterbox_kernel.cu:32`).
+2. `_prepare_canvas_960p` and `detect_single_patch_640`'s letterbox branch select nearest
+   vs bilinear on `if cpp_letterbox_gpu is not None` — the same preset yields different
+   detector input depending on build state, with nothing recorded.
+3. `src/perception/nv12_kernel.cu` and `src/perception/rgb_to_nv12_kernel.cu` have been
+   present since the initial commit (`f6d6dd59`), are absent from `CMakeLists.txt`, and are
+   bound by no extension. `_import_nv12_ops()` swallows the `ImportError` and substitutes
+   Python fallbacks with different semantics and no performance meaning, so
+   `SACCADE_NV12_BUFFER=1` has never enabled the fast path its name implies. This is a
+   feature-availability / provenance-correctness bug, not a performance item.
 
 One expression produces two fp32 temporaries (cast and scaled output), then copies
 into the pool buffer. The original trace reports ~75 MB/frame of large D2D copies
