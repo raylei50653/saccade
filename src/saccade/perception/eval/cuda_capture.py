@@ -24,13 +24,29 @@ exempting the other thread does not help either.  It surfaces as
 it.**
 
 Every capture here is issued from the main eval thread onto a torch-owned
-stream, and every torch stream is ``cudaStreamNonBlocking`` — so Rule B should
-be unreachable from our own captures, yet the failure has been observed once in
-production.  The blocking capturing stream responsible is unidentified, which
-is why :func:`describe_capture_state` exists: it is meant to turn the next
-occurrence into a diagnosis instead of a mystery.  Enable it with
-``SACCADE_CAPTURE_DEBUG=1``; the failure-time dump is unconditional because the
-failure is rare and already fatal.
+stream, and every torch stream is ``cudaStreamNonBlocking``.  **That does not
+exclude Rule B.**  A stream can participate in an existing capture without ever
+issuing ``cudaStreamBeginCapture`` itself — it can be joined into an in-progress
+capture through an event dependency — so enumerating the streams that *begin*
+captures does not enumerate the streams that *participate* in them.  A control
+run under the #340 attribution harness showed exactly that: a blocking side
+stream joined a non-blocking origin's capture via an event wait, another
+thread's ``cudaStreamIsCapturing`` on the legacy stream then returned
+``cudaErrorStreamCaptureImplicit``, and the origin's ``capture_end`` still
+succeeded.
+
+So the blocking capturing stream behind the one production failure is
+unidentified, and an enumeration of our own capture origins cannot identify it.
+A bounded production-path trace on 2026-09-06 observed four classified captures
+with no in-capture joins and no blocking participant, but its structure check
+did not pass, which makes it a snapshot rather than an exclusion — see
+``docs/research/pipeline/capture_failure_provenance_20260906.md`` and
+``scripts/tools/capture_attribution/README.md``.  #340 stays open on this.
+
+:func:`describe_capture_state` exists to turn the next occurrence into a
+diagnosis instead of a mystery.  Enable it with ``SACCADE_CAPTURE_DEBUG=1``; the
+failure-time dump is unconditional because the failure is rare and already
+fatal.
 """
 
 from __future__ import annotations
@@ -55,9 +71,11 @@ _CUDA_STREAM_LEGACY = ctypes.c_void_p(1)
 _cudart_lib: Any = None
 _cudart_tried = False
 
-# Which of our captures is open, if any.  A decode-thread failure raised while
-# this is None proves the capturing stream belongs to someone else, which is
-# the open question Rule B leaves.
+# Which of our captures is open, if any.  Set by :func:`graph_capture` only, so
+# it covers the direct ``torch.cuda.graph`` sites and *not* the
+# ``make_graphed_callables`` ones (detector whole-graph, tracker), which take no
+# wrapper.  ``None`` therefore narrows a failure to "no direct site was open";
+# it does not establish that the capture belongs to another component.
 _open_capture: str | None = None
 _open_capture_lock = threading.Lock()
 
@@ -92,9 +110,73 @@ def _cudart() -> Any:
             ]
             lib.cudaGetLastError.restype = ctypes.c_int
             lib.cudaGetLastError.argtypes = []
+            lib.cudaThreadExchangeStreamCaptureMode.restype = ctypes.c_int
+            lib.cudaThreadExchangeStreamCaptureMode.argtypes = [
+                ctypes.POINTER(ctypes.c_int)
+            ]
             _cudart_lib = lib
             break
     return _cudart_lib
+
+
+# ``cudaStreamCaptureMode``.  These are CUDA API constants, mapped here once so
+# no caller re-spells the integers; they are not torch's mode strings, which
+# happen to share the names.
+_CAPTURE_MODE_CODE = {"global": 0, "thread_local": 1, "relaxed": 2}
+_CAPTURE_MODE_NAME = {code: name for name, code in _CAPTURE_MODE_CODE.items()}
+
+
+class CaptureModeExchangeError(RuntimeError):
+    """``cudaThreadExchangeStreamCaptureMode`` returned a non-success code."""
+
+
+def enter_relaxed_capture_mode() -> str | None:
+    """Exempt the calling thread from Rule A, and say what it was exempt from.
+
+    Producer threads allocate through torch, which under a ``"global"`` capture
+    elsewhere in the process invalidates that capture (Rule A).  ``thread_local``
+    on our own captures does not cover it: ``make_graphed_callables`` captures at
+    torch's default ``"global"`` and accepts no ``capture_error_mode``, so the
+    exemption has to come from the producer side.  This is **only** about Rule A;
+    it does nothing for Rule B, which no capture mode addresses.
+
+    Returns the mode the thread was in *before* the exchange, or ``None`` when
+    cudart could not be loaded at all — a host without the library, which is not
+    the same event as a call that failed.  A non-success return code raises
+    :class:`CaptureModeExchangeError`; the previous implementation dropped the
+    code, so a call that did not complete cleanly was indistinguishable from one
+    that did.
+
+    What a non-success code does *not* establish is that the exchange did not
+    happen.  A CUDA runtime call may report an error left by a prior
+    asynchronous launch, so the code need not describe this call at all.  What
+    follows is only that the call did not complete cleanly and the thread's
+    post-call capture mode is therefore **unverified**: Relaxed entry must not be
+    assumed established, and the reported prior mode must not be trusted or
+    recorded.
+    """
+    rt = _cudart()
+    if rt is None:
+        return None
+    requested = _CAPTURE_MODE_CODE["relaxed"]
+    mode = ctypes.c_int(requested)
+    rc = rt.cudaThreadExchangeStreamCaptureMode(ctypes.byref(mode))
+    if rc != 0:
+        # Clear the sticky error so it cannot be mistaken for a later one; the
+        # code itself is carried in the message rather than dropped.  It may have
+        # been left by a prior asynchronous launch rather than by this call,
+        # which is exactly why the message below claims nothing about whether the
+        # exchange took effect.
+        rt.cudaGetLastError()
+        raise CaptureModeExchangeError(
+            f"cudaThreadExchangeStreamCaptureMode did not complete cleanly: "
+            f"rc={rc}, requested mode 'relaxed' ({requested}); the return code "
+            f"may belong to a prior asynchronous launch, so this thread's "
+            f"post-call capture mode is unverified — Relaxed entry must not be "
+            f"assumed established"
+        )
+    previous = int(mode.value)
+    return _CAPTURE_MODE_NAME.get(previous, f"unknown({previous})")
 
 
 def stream_flags(stream_ptr: int) -> int | None:
@@ -144,8 +226,10 @@ def _describe_stream(label: str, stream_ptr: int) -> str:
 def describe_capture_state(where: str) -> str:
     """One-line snapshot of every stream that matters to Rules A and B.
 
-    ``open_capture=None`` together with a capture-related failure is the
-    discriminator: it means the capture in progress is not one of ours.
+    ``open_capture=None`` alongside a capture-related failure narrows the
+    search: no direct ``graph_capture`` site was open.  It is not proof that the
+    capture belongs to someone else — the ``make_graphed_callables`` sites set no
+    label, and a stream can join a capture it never began.
     """
     parts = [f"[capture-state] at={where}", f"open_capture={_open_capture!r}"]
     try:
