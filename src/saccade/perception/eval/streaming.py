@@ -159,6 +159,9 @@ class TorchvisionGpuStreamer:
         self._queue: queue.Queue = queue.Queue()
         self._stop = threading.Event()
         self._worker: threading.Thread | None = None
+        # Mode the worker thread held before its Rule A exemption; ``None`` until
+        # a worker has successfully exchanged (see ``cuda_capture``).
+        self.relaxed_capture_mode_from: str | None = None
 
     def _start_worker(self) -> None:
         self._stop.clear()
@@ -174,33 +177,17 @@ class TorchvisionGpuStreamer:
         )
         self._worker.start()
 
-    @staticmethod
-    def _enter_relaxed_capture_mode() -> None:
-        """Scope this thread out of CUDA stream-capture safety checks.
-
-        The worker issues nvJPEG/allocator calls concurrently with the main
-        thread's per-sequence CUDA-graph captures (GMC/tracker/NMS/detect).
-        Under the default cudaStreamCaptureModeGlobal, any such call
-        invalidates an in-progress capture — intermittent
-        cudaErrorStreamCaptureInvalidated at sequence start. Relaxed mode is
-        the documented remedy for background threads.
-        """
-        import ctypes
-
-        for name in ("libcudart.so.13", "libcudart.so.12", "libcudart.so"):
-            try:
-                rt = ctypes.CDLL(name)
-                break
-            except OSError:
-                continue
-        else:
-            return
-        mode = ctypes.c_int(2)  # cudaStreamCaptureModeRelaxed
-        rt.cudaThreadExchangeStreamCaptureMode(ctypes.byref(mode))
-
     def _decode_worker(self, out_queue: "queue.Queue") -> None:
-        self._enter_relaxed_capture_mode()
+        from .cuda_capture import enter_relaxed_capture_mode
+
         try:
+            # Rule A exemption: this thread allocates through torch while the
+            # main thread may hold a "global"-mode capture open.  Inside the try
+            # deliberately -- the shared helper now raises on a failed exchange,
+            # and that has to reach the consumer through the same failure path a
+            # decode error takes, or a loud failure here would just hang
+            # ``__next__``.  Rule B is untouched by any of this.
+            self.relaxed_capture_mode_from = enter_relaxed_capture_mode()
             for f in self.img_files:
                 if self._stop.is_set():
                     return
@@ -210,10 +197,10 @@ class TorchvisionGpuStreamer:
                 out_queue.put(img_hwc)
         except Exception as exc:
             # Rule B leaves an open question: `cudaErrorStreamCaptureImplicit`
-            # needs a *blocking* capturing stream, and every stream we capture
-            # on is non-blocking, so the capture responsible may not be ours.
-            # `open_capture=None` in this dump proves exactly that. Printed
-            # unconditionally: this path is rare and already fatal.
+            # needs a *blocking* capturing stream, and the stream responsible is
+            # unidentified -- a stream can join a capture it never began, so our
+            # own non-blocking capture origins do not rule one out (see
+            # `.cuda_capture`). Printed unconditionally: rare and already fatal.
             try:
                 from .cuda_capture import describe_capture_state
 
