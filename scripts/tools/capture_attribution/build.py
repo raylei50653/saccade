@@ -1,5 +1,7 @@
 """Build the CUPTI observer and typed decoders from installed CUDA headers."""
 
+# status: diagnostic
+
 import argparse
 import hashlib
 import json

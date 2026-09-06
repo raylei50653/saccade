@@ -1,5 +1,7 @@
 """Validate trace structure and attribute observed errors without exclusion claims."""
 
+# status: diagnostic
+
 import argparse
 from collections import Counter
 import hashlib

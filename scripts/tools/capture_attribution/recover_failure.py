@@ -1,5 +1,7 @@
 """Extract surviving primary tool evidence for #340; never rerun the workload."""
 
+# status: diagnostic
+
 import argparse
 import hashlib
 import json

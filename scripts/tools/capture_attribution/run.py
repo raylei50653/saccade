@@ -4,6 +4,8 @@ This changes observation overhead, never graph arguments or capture modes.
 It is not a failure-rate harness and has no repetition option.
 """
 
+# status: diagnostic
+
 import argparse
 import ctypes
 import functools

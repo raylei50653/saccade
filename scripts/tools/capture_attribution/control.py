@@ -1,5 +1,7 @@
 """One bounded mechanism control. Run each case in its own attributed process."""
 
+# status: diagnostic
+
 import ctypes
 import json
 from pathlib import Path

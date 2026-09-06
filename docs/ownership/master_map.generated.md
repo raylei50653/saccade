@@ -197,6 +197,7 @@ Manifest: `docs/ownership/doc_migration_manifest.yaml`
 - `docs/research/models/gap_conditioned_stochastic_transition_terminal_review_v1.md`
 - `docs/research/paper_outline.md`
 - `docs/research/pipeline/CPU_BOUND_ANALYSIS.md`
+- `docs/research/pipeline/capture_failure_provenance_20260906.md`
 - `docs/research/pipeline/cpu_overhead_analysis_20260707.md`
 - `docs/research/pipeline/gpu_pipeline_m4b_identity_resolver.md`
 - `docs/research/pipeline/mot17_mamba_whole_graph_m_sdp_double_buffer.md`
@@ -351,6 +352,6 @@ Excluded from the active index and default search view.
 
 ## Inventory summary
 
-- documents: 301
-- active: 246
+- documents: 302
+- active: 247
 - grayed out: 55

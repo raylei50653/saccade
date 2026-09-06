@@ -1,5 +1,7 @@
 """Fixed six-case observer qualification. This never invokes production evaluation."""
 
+# status: diagnostic
+
 import argparse
 import json
 from pathlib import Path
