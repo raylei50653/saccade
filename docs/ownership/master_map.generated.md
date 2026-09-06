@@ -167,8 +167,10 @@ Manifest: `docs/ownership/doc_migration_manifest.yaml`
 - `docs/reference/no_go_registry_details.md`
 - `docs/reference/original_head_matched_baseline.md`
 - `docs/reference/pipeline_flow.md`
+- `docs/reference/production_pipeline_code_map.md`
 - `docs/reference/runbooks/README.md`
 - `docs/reference/runbooks/nsys_profiling.md`
+- `docs/reference/saccade_module_reference.md`
 - `docs/research/README.md`
 - `docs/research/contracts/README.md`
 - `docs/research/contracts/boolean_composition_semantics_contract.md`
@@ -200,6 +202,7 @@ Manifest: `docs/ownership/doc_migration_manifest.yaml`
 - `docs/research/pipeline/mot17_mamba_whole_graph_m_sdp_double_buffer.md`
 - `docs/research/pipeline/optimization_redundant_computations_20260620.md`
 - `docs/research/pipeline/perf_attribution_whole_graph_m.md`
+- `docs/research/pipeline/production_pipeline_profiling_todo.md`
 - `docs/research/pipeline/sync_audit_20260706.md`
 - `docs/research/reid/appearance_ceiling_mot17.md`
 - `docs/research/threads/README.md`
@@ -348,6 +351,6 @@ Excluded from the active index and default search view.
 
 ## Inventory summary
 
-- documents: 298
-- active: 243
+- documents: 301
+- active: 246
 - grayed out: 55
