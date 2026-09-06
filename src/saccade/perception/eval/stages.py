@@ -194,6 +194,38 @@ class FrameCtx:
     feature_dim: int
 
 
+_F3D_INJECT_COPIES: int | None = None
+
+
+def _f3d_inject_copies() -> int:
+    """How many *extra* GMC input copies to issue per frame (#341 F3d probe).
+
+    A dose knob, not a feature. #338 showed that removing one 24.9 MB copy from a
+    stream-overlapped lane changed nothing measurable, and that a single-copy
+    delta sits below this host's run-to-run noise — so asking "what is this copy
+    worth" by removing it is underpowered by construction.
+
+    Adding *k* copies of the same operation on the same stream inverts that. If
+    the lane carries slack of at least k copies, adding them is free; the dose at
+    which the frame period starts to move locates the slack, in units of the very
+    copy whose removal is in question. A flat response at k is positive evidence
+    that removing one copy is worth nothing, and it is falsifiable: a lane that
+    is actually limiting shows a slope from k=1.
+
+    ``SACCADE_F3D_INJECT_COPIES``; 0 (default) leaves the pipeline untouched. The
+    injected copies write the same bytes from the same source, so output is
+    unchanged by construction — which the probe checks rather than assumes.
+    """
+    global _F3D_INJECT_COPIES
+    if _F3D_INJECT_COPIES is None:
+        raw = os.getenv("SACCADE_F3D_INJECT_COPIES", "0").strip()
+        try:
+            _F3D_INJECT_COPIES = max(0, int(raw))
+        except ValueError:
+            _F3D_INJECT_COPIES = 0
+    return _F3D_INJECT_COPIES
+
+
 def _run_gmc_estimate(
     state: EvalPipeline,
     *,
@@ -285,6 +317,9 @@ def _run_gmc_estimate(
         else:
             # Steady state: copy new frame into the captured
             # input buffer and replay the recorded graph.
+            for _ in range(_f3d_inject_copies()):
+                # #341 F3d dose injection: same copy, same stream, same bytes.
+                _gmc_frame_buf.copy_(_frame_gmc)
             _gmc_frame_buf.copy_(_frame_gmc)
             _gmc_cuda_graph[0].replay()
         local_gmc_warp = _shared_gmc_warp
