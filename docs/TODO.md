@@ -84,22 +84,8 @@ legacy `native_960` presets (`speed` / `baseline`) remain useful for comparison,
 
 ## 跨模組待辦
 
-| 優先 | 項目 | 行動 | 預期收益 |
-|------|------|------|---------|
-| P2 | **測試覆蓋率提升（66% → 70%+）** | 見下方覆蓋率任務清單；按模組落地（如 lifecycle 切片見 [lifecycle/TODO.md](modules/lifecycle/TODO.md)） | 穩定性、CI 保護、開發信心 |
-
-### 測試覆蓋率任務清單（P2）
-
-> 詳細報告：[TESTING.md](TESTING.md)
-
-| 優先 | 模組 | 覆蓋率 | 未覆蓋行 | 狀態 |
-|------|------|--------|----------|------|
-| P2-1 | `perception/eval/evaluator.py` | 40% | 734 | **部分完成**：lifecycle helper slice 已補；剩餘 `run_eval` branch coverage |
-
-**目標**：
-- 🔄 短期 v4：`perception/eval/evaluator.py` (40%)
-- 📋 中期：`perception/eval/evaluator.py` (40%), `perception/eval/detection.py` (49%)
-- 📋 長期：API 模組、media 模組、native 測試
+- [ ] **模組化前邊界盤點（backlog）**：依 [Saccade 模塊化前參考筆記](reference/saccade_module_reference.md) 盤點 distribution、dependencies、native extension delivery、failure semantics 與 public/runtime surface；筆記為背景資料，具體拆分方案與 API 待後續定義。
+- [ ] **Production Pipeline Profiling（規劃）**：固定 `806c52cf`，依 [P1–P6 清單](research/pipeline/production_pipeline_profiling_todo.md) 建立 production scheduling 下的 measurement／attribution，完成瓶頸歸因後再決定 optimization 工作項。
 
 ---
 
