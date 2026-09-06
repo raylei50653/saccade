@@ -17,6 +17,7 @@ import torch
 
 from typing import Any
 
+from .cuda_capture import graph_capture
 from .quality import (
     compute_detection_quality_batch as _compute_detection_quality_batch,
 )
@@ -267,7 +268,7 @@ def _run_gmc_estimate(
             )
             torch.cuda.synchronize()
             _g = torch.cuda.CUDAGraph()
-            with torch.cuda.graph(_g):
+            with graph_capture(_g, label="gmc.direct"):
                 gmc_estimator.estimate_into_direct(
                     _gmc_frame_buf.data_ptr(),
                     _w,
@@ -873,7 +874,7 @@ def _run_nms(
             print(
                 f"[STREAM] _run_nms graph capture: current={_cs.cuda_stream:#x} stream_post={_cs_stream_post:#x}"
             )
-        with _capture_ctx, torch.cuda.graph(_nms_graph):
+        with _capture_ctx, graph_capture(_nms_graph, label="nms.private_candidate"):
             _capture_stream = torch.cuda.current_stream().cuda_stream
             perception_pipeline.process_detections_graph(
                 _nms_in["boxes"].data_ptr(),
@@ -976,7 +977,7 @@ def _capture_main_nms_graph(
     torch.cuda.synchronize()
 
     _graph = torch.cuda.CUDAGraph()
-    with torch.cuda.graph(_graph):
+    with graph_capture(_graph, label="nms.main"):
         _capture_stream = torch.cuda.current_stream().cuda_stream
         _perception_pipeline.process_detections_main_nms_graph(
             _main_nms_in["boxes"].data_ptr(),
@@ -1068,7 +1069,7 @@ def _capture_main_nms_graph_nocopyback(
         return "eager"
 
     _graph = torch.cuda.CUDAGraph()
-    with torch.cuda.graph(_graph):
+    with graph_capture(_graph, label="nms.main_nocopyback"):
         # Use the CAPTURE stream (current inside context), not stream_ptr
         # from outside.  Global capture mode rejects ops on non-capture
         # streams.
