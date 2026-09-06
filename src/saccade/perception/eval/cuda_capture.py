@@ -26,11 +26,21 @@ it.**
 Every capture here is issued from the main eval thread onto a torch-owned
 stream, and every torch stream is ``cudaStreamNonBlocking`` — so Rule B should
 be unreachable from our own captures, yet the failure has been observed once in
-production.  The blocking capturing stream responsible is unidentified, which
-is why :func:`describe_capture_state` exists: it is meant to turn the next
-occurrence into a diagnosis instead of a mystery.  Enable it with
-``SACCADE_CAPTURE_DEBUG=1``; the failure-time dump is unconditional because the
-failure is rare and already fatal.
+production.  An LD_PRELOAD tally of ``cudaStreamBeginCapture`` over a full
+7-sequence run saw 24 captures, all non-blocking, so the blocking capturing
+stream responsible is still unidentified; :func:`describe_capture_state` exists
+to turn the next occurrence into a diagnosis instead of a mystery.  Enable it
+with ``SACCADE_CAPTURE_DEBUG=1``; the failure-time dump is unconditional because
+the failure is rare and already fatal.
+
+Rule B has two preconditions, and the second one is ours.  Phase 2B removed the
+legacy-stream half rather than continuing to hunt the capturing stream: the JPEG
+decode producer now runs on a dedicated stream, so no producer thread issues
+work on the legacy stream at all and Rule B is unreachable from the decode side
+*whoever* opens the blocking capture.  See
+:class:`saccade.perception.eval.streaming.TorchvisionGpuStreamer` for the stream
+contract that replaced it.  That is a removed precondition, not an explanation
+of the production incident, which stays open.
 """
 
 from __future__ import annotations
@@ -92,9 +102,46 @@ def _cudart() -> Any:
             ]
             lib.cudaGetLastError.restype = ctypes.c_int
             lib.cudaGetLastError.argtypes = []
+            lib.cudaThreadExchangeStreamCaptureMode.restype = ctypes.c_int
+            lib.cudaThreadExchangeStreamCaptureMode.argtypes = [
+                ctypes.POINTER(ctypes.c_int)
+            ]
             _cudart_lib = lib
             break
     return _cudart_lib
+
+
+# cudaStreamCaptureMode.  The enum is an API constant, not a torch string.
+_CAPTURE_MODE_CODE = {"global": 0, "thread_local": 1, "relaxed": 2}
+_CAPTURE_MODE_NAME = {v: k for k, v in _CAPTURE_MODE_CODE.items()}
+
+
+def enter_relaxed_capture_mode() -> str | None:
+    """Exempt the calling thread from Rule A for the rest of its life.
+
+    Producer threads call the allocator (nvJPEG allocates its output through
+    torch), which under a ``"global"`` capture elsewhere in the process
+    invalidates that capture.  ``"thread_local"`` on our own captures does not
+    cover this: :func:`torch.cuda.make_graphed_callables` captures with the torch
+    default ``"global"`` and takes no ``capture_error_mode``, so the exemption has
+    to come from the producer side.  It does **not** address Rule B — see the
+    module docstring; only moving the thread off the legacy stream does that.
+
+    Returns the mode this thread was in *before* the call (the entry point
+    exchanges rather than sets), or ``None`` if cudart is unavailable or the call
+    failed.  A ``None`` return is the caller's signal that the exemption is not in
+    place; it is deliberately not silent, because the previous implementation
+    dropped both the failure and the return code on the floor.
+    """
+    rt = _cudart()
+    if rt is None:
+        return None
+    mode = ctypes.c_int(_CAPTURE_MODE_CODE["relaxed"])
+    rc = rt.cudaThreadExchangeStreamCaptureMode(ctypes.byref(mode))
+    if rc != 0:
+        rt.cudaGetLastError()
+        return None
+    return _CAPTURE_MODE_NAME.get(int(mode.value), f"mode={mode.value}")
 
 
 def stream_flags(stream_ptr: int) -> int | None:

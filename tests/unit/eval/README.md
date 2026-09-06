@@ -16,6 +16,7 @@
 | `test_decimal_chain_routine.py` | eval | behavior | active | Unit tests for the routine continuous-chain determinism sentinel. |
 | `test_decimal_hash.py` | eval | contract | active | Tests for decimal-hash MOT canonicalization + hashing (perception.eval.decimal_hash). |
 | `test_decimal_matrix_2x2.py` | eval | behavior | active | Unit tests for the 2×2 sequence-order determinism matrix coordinator. |
+| `test_decode_stream_ordering.py` | eval | behavior | active | Decode producer stream contract (issue #340 Phase 2B, TorchvisionGpuStreamer). |
 | `test_double_buffer.py` | eval | behavior | active | Tests for the evaluator double-buffer path (perception.eval.evaluator). |
 | `test_eval_utils.py` | eval | behavior | active | Tests for the MOT17 eval arg parser and runtime-env setup (scripts.eval.mot17_args). |
 | `test_evaluator.py` | eval | behavior | active | Tests for the MOT evaluator and stages (perception.eval.evaluator). |
