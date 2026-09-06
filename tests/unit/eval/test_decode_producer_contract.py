@@ -24,7 +24,23 @@ import threading
 
 import pytest
 
+from saccade.perception.eval import cuda_capture
 from saccade.perception.eval.streaming import TorchvisionGpuStreamer
+
+
+@pytest.fixture(autouse=True)
+def stub_capture_mode_exchange(monkeypatch):
+    """Keep these tests on the queue protocol, off the Rule A exemption.
+
+    ``_decode_worker`` enters Relaxed capture mode through ``cuda_capture``, and
+    that is a real cudart call: on a host that has the library but no usable
+    driver it returns a non-success code (CI sees rc=35,
+    ``cudaErrorInsufficientDriver``) and the helper raises.  That contract has its
+    own tests in ``test_capture_mode_binding.py``; coupling it into every
+    producer-protocol assertion here would make them environment-dependent and
+    would mean a failure could not be read as a protocol failure.
+    """
+    monkeypatch.setattr(cuda_capture, "enter_relaxed_capture_mode", lambda: "global")
 
 
 class _Frame:
