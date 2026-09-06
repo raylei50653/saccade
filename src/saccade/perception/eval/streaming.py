@@ -128,6 +128,41 @@ class TorchvisionGpuStreamer:
     main thread.
 
     Yields ``[H, W, C]`` uint8 CUDA tensors to match ``DALIStreamerStream``.
+
+    Stream contract (issue #340 Phase 2B)
+    -------------------------------------
+    Three facts about ``decode_jpeg(device="cuda")``, measured with an LD_PRELOAD
+    tally of the cudart entry points rather than read off the documentation:
+
+    1. nvJPEG runs the decode on a private stream of its own, and torchvision calls
+       ``cudaStreamSynchronize`` on that stream before returning.  The decode is
+       therefore already complete when the tensor reaches the queue.
+    2. torchvision then joins the result to the **caller's current torch stream**
+       with ``cudaStreamWaitEvent``.  In the worker thread that used to be the
+       legacy stream, which is the whole of this thread's legacy-stream
+       footprint — and the second precondition for Rule B (see
+       :mod:`.cuda_capture`).
+    3. Setting the worker's current stream redirects that join, so running the
+       worker under ``self._decode_stream`` takes the thread off the legacy
+       stream entirely.  Verified by the same tally: 24 ``cudaStreamWaitEvent``
+       calls move from stream ``0x0`` to the dedicated stream, and the decode
+       thread's legacy-stream call count goes to zero.
+
+    Point 1 means the handoff below is not what makes the pixels visible today.
+    It is here so that the ordering is *this module's* invariant rather than a
+    private detail of torchvision's decoder, and because points 2 and 3 make the
+    consumer's stream no longer the producer's:
+
+    * **Ordering.**  Each frame is queued with an event recorded on the decode
+      stream, and :meth:`__next__` makes the consuming stream wait on it.  The
+      double-buffer path then records ``input_ready`` on that same consuming
+      stream, so its side stream inherits the dependency transitively.
+    * **Buffer lifetime.**  The block is allocated on the decode stream, so once
+      the consumer drops its reference the allocator may hand it straight back
+      to the next ``decode_jpeg`` — which would overwrite pixels a consumer
+      stream still has reads queued against.  :meth:`__next__` therefore calls
+      ``record_stream`` on every frame with the stream that consumes it.  This is
+      the invariant that same-stream production used to provide for free.
     """
 
     def __init__(self, img_dir: Path, prefetch: int = 2):
@@ -144,60 +179,60 @@ class TorchvisionGpuStreamer:
         self._queue: queue.Queue = queue.Queue()
         self._stop = threading.Event()
         self._worker: threading.Thread | None = None
+        # Created lazily on the first iteration: constructing a streamer must not
+        # force CUDA init (unit tests build one on hosts without a device).
+        self._decode_stream: Any = None
+        # Rule A exemption status of the worker thread, for tests and diagnostics.
+        self.relaxed_capture_mode_from: str | None = None
 
     def _start_worker(self) -> None:
         self._stop.clear()
-        self._queue = queue.Queue(maxsize=self._prefetch + 1)
-        self._worker = threading.Thread(target=self._decode_worker, daemon=True)
+        if self._decode_stream is None:
+            self._decode_stream = self._torch.cuda.Stream()
+        # Bind the queue to the worker instead of reading ``self._queue``: a
+        # previous worker that outlived its join timeout would otherwise start
+        # pushing frames into the fresh queue and interleave two sequences.
+        work_queue: queue.Queue = queue.Queue(maxsize=self._prefetch + 1)
+        self._queue = work_queue
+        self._worker = threading.Thread(
+            target=self._decode_worker, args=(work_queue,), daemon=True
+        )
         self._worker.start()
 
-    @staticmethod
-    def _enter_relaxed_capture_mode() -> None:
-        """Scope this thread out of CUDA stream-capture safety checks.
+    def _decode_worker(self, out_queue: "queue.Queue") -> None:
+        torch = self._torch
+        from .cuda_capture import describe_capture_state, enter_relaxed_capture_mode
 
-        The worker issues nvJPEG/allocator calls concurrently with the main
-        thread's per-sequence CUDA-graph captures (GMC/tracker/NMS/detect).
-        Under the default cudaStreamCaptureModeGlobal, any such call
-        invalidates an in-progress capture — intermittent
-        cudaErrorStreamCaptureInvalidated at sequence start. Relaxed mode is
-        the documented remedy for background threads.
-        """
-        import ctypes
-
-        for name in ("libcudart.so.13", "libcudart.so.12", "libcudart.so"):
-            try:
-                rt = ctypes.CDLL(name)
-                break
-            except OSError:
-                continue
-        else:
-            return
-        mode = ctypes.c_int(2)  # cudaStreamCaptureModeRelaxed
-        rt.cudaThreadExchangeStreamCaptureMode(ctypes.byref(mode))
-
-    def _decode_worker(self) -> None:
-        self._enter_relaxed_capture_mode()
+        # Rule A: this thread allocates through torch while the main thread may
+        # hold a "global"-mode capture open (make_graphed_callables takes no
+        # capture_error_mode), so it exempts itself.  Rule B is handled by the
+        # decode stream below, not by this call.
         try:
-            for f in self.img_files:
-                if self._stop.is_set():
-                    return
-                data = self._read_file(f)
-                img_chw = self._decode(data, device="cuda", mode=self._rgb)
-                img_hwc = img_chw.permute(1, 2, 0)
-                self._queue.put(img_hwc)
-        except Exception:
+            self.relaxed_capture_mode_from = enter_relaxed_capture_mode()
+            with torch.cuda.stream(self._decode_stream):
+                for f in self.img_files:
+                    if self._stop.is_set():
+                        return
+                    data = self._read_file(f)
+                    img_chw = self._decode(data, device="cuda", mode=self._rgb)
+                    img_hwc = img_chw.permute(1, 2, 0)
+                    ready = torch.cuda.Event()
+                    ready.record(self._decode_stream)
+                    out_queue.put((img_hwc, ready))
+        except BaseException as exc:  # noqa: BLE001 - re-raised after handoff
             # Rule B leaves an open question: `cudaErrorStreamCaptureImplicit`
             # needs a *blocking* capturing stream, and every stream we capture
             # on is non-blocking, so the capture responsible may not be ours.
             # `open_capture=None` in this dump proves exactly that. Printed
             # unconditionally: this path is rare and already fatal.
             try:
-                from .cuda_capture import describe_capture_state
-
                 print(describe_capture_state("decode_worker:error"), flush=True)
             except Exception:  # noqa: BLE001 - never mask the decode error
                 pass
-            self._queue.put(None)
+            # Hand the exception to the consumer.  Queueing a bare sentinel used
+            # to make a decode failure indistinguishable from end-of-sequence,
+            # which silently truncated the sequence instead of failing the run.
+            out_queue.put((None, exc))
             raise
 
     def _stop_worker(self) -> None:
@@ -220,8 +255,14 @@ class TorchvisionGpuStreamer:
     def __next__(self) -> Any:
         if self._idx >= len(self.img_files):
             raise StopIteration
-        result = self._queue.get()
-        if result is None:
-            raise StopIteration
+        frame, ready = self._queue.get()
+        if frame is None:
+            raise RuntimeError(
+                f"GPU JPEG decode failed at frame index {self._idx} "
+                f"({self.img_files[self._idx]})"
+            ) from ready
+        consumer = self._torch.cuda.current_stream()
+        consumer.wait_event(ready)
+        frame.record_stream(consumer)
         self._idx += 1
-        return result
+        return frame
