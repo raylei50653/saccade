@@ -1,5 +1,9 @@
 """Diagnostic validity checks; no production inference or incidence sampling."""
 
+# scope: eval
+# function: contract
+# lifecycle: active
+
 import hashlib
 import json
 from types import SimpleNamespace
