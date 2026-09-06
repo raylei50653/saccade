@@ -113,6 +113,21 @@ class DALIStreamerStream:
             raise
 
 
+class _DecodeFailure:
+    """Queue item marking a failed decode, kept distinct from end-of-sequence.
+
+    The producer used to queue a bare ``None`` on failure, which the consumer
+    turned into ``StopIteration`` -- so a decode error and a finished sequence
+    were the same event to the caller.  Carrying the exception instead lets
+    :meth:`TorchvisionGpuStreamer.__next__` re-raise it on the consuming thread.
+    """
+
+    __slots__ = ("error",)
+
+    def __init__(self, error: BaseException):
+        self.error = error
+
+
 class TorchvisionGpuStreamer:
     """Drop-in for DALIStreamerStream that decodes JPEGs on the GPU's dedicated
     NVJPG hardware engine via torchvision/nvJPEG.
@@ -147,8 +162,16 @@ class TorchvisionGpuStreamer:
 
     def _start_worker(self) -> None:
         self._stop.clear()
-        self._queue = queue.Queue(maxsize=self._prefetch + 1)
-        self._worker = threading.Thread(target=self._decode_worker, daemon=True)
+        # Bind the queue to the worker instead of letting it read ``self._queue``.
+        # ``_stop_worker`` joins with a timeout, so a worker that outlives that
+        # timeout would otherwise resume pushing into whichever queue
+        # ``self._queue`` points at by then -- the next sequence's -- interleaving
+        # two sequences' frames.
+        work_queue: queue.Queue = queue.Queue(maxsize=self._prefetch + 1)
+        self._queue = work_queue
+        self._worker = threading.Thread(
+            target=self._decode_worker, args=(work_queue,), daemon=True
+        )
         self._worker.start()
 
     @staticmethod
@@ -175,7 +198,7 @@ class TorchvisionGpuStreamer:
         mode = ctypes.c_int(2)  # cudaStreamCaptureModeRelaxed
         rt.cudaThreadExchangeStreamCaptureMode(ctypes.byref(mode))
 
-    def _decode_worker(self) -> None:
+    def _decode_worker(self, out_queue: "queue.Queue") -> None:
         self._enter_relaxed_capture_mode()
         try:
             for f in self.img_files:
@@ -184,8 +207,8 @@ class TorchvisionGpuStreamer:
                 data = self._read_file(f)
                 img_chw = self._decode(data, device="cuda", mode=self._rgb)
                 img_hwc = img_chw.permute(1, 2, 0)
-                self._queue.put(img_hwc)
-        except Exception:
+                out_queue.put(img_hwc)
+        except Exception as exc:
             # Rule B leaves an open question: `cudaErrorStreamCaptureImplicit`
             # needs a *blocking* capturing stream, and every stream we capture
             # on is non-blocking, so the capture responsible may not be ours.
@@ -197,7 +220,10 @@ class TorchvisionGpuStreamer:
                 print(describe_capture_state("decode_worker:error"), flush=True)
             except Exception:  # noqa: BLE001 - never mask the decode error
                 pass
-            self._queue.put(None)
+            # Hand the failure to the consumer as a failure.  A bare ``None``
+            # sentinel used to be indistinguishable from end-of-sequence, so the
+            # protocol permitted a decode error to truncate the output silently.
+            out_queue.put(_DecodeFailure(exc))
             raise
 
     def _stop_worker(self) -> None:
@@ -221,7 +247,18 @@ class TorchvisionGpuStreamer:
         if self._idx >= len(self.img_files):
             raise StopIteration
         result = self._queue.get()
-        if result is None:
-            raise StopIteration
+        if isinstance(result, _DecodeFailure):
+            raise RuntimeError(
+                f"GPU JPEG decode failed in the decode worker at frame index "
+                f"{self._idx} ({self.img_files[self._idx]})"
+            ) from result.error
+        # The frame is allocated by the producer thread, on the producer thread's
+        # current stream.  Where that differs from the consumer's -- ``multi_stream``
+        # runs ``run_eval`` under a worker stream while the decode thread is a new
+        # thread that never set one -- the caching allocator would be free to hand
+        # the block back to the next ``decode_jpeg`` as soon as the consumer drops
+        # its reference, while the consumer stream still has reads queued against
+        # it.  ``record_stream`` is what tells the allocator otherwise.
+        result.record_stream(self._torch.cuda.current_stream())
         self._idx += 1
         return result
