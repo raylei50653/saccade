@@ -142,10 +142,18 @@ def enter_relaxed_capture_mode() -> str | None:
 
     Returns the mode the thread was in *before* the exchange, or ``None`` when
     cudart could not be loaded at all — a host without the library, which is not
-    the same event as a failed exchange.  A non-success return code raises
-    :class:`CaptureModeExchangeError`: the previous implementation dropped the
-    return code, so a thread that never entered Relaxed was indistinguishable
-    from one that did.
+    the same event as a call that failed.  A non-success return code raises
+    :class:`CaptureModeExchangeError`; the previous implementation dropped the
+    code, so a call that did not complete cleanly was indistinguishable from one
+    that did.
+
+    What a non-success code does *not* establish is that the exchange did not
+    happen.  A CUDA runtime call may report an error left by a prior
+    asynchronous launch, so the code need not describe this call at all.  What
+    follows is only that the call did not complete cleanly and the thread's
+    post-call capture mode is therefore **unverified**: Relaxed entry must not be
+    assumed established, and the reported prior mode must not be trusted or
+    recorded.
     """
     rt = _cudart()
     if rt is None:
@@ -155,12 +163,17 @@ def enter_relaxed_capture_mode() -> str | None:
     rc = rt.cudaThreadExchangeStreamCaptureMode(ctypes.byref(mode))
     if rc != 0:
         # Clear the sticky error so it cannot be mistaken for a later one; the
-        # code itself is carried in the message rather than dropped.
+        # code itself is carried in the message rather than dropped.  It may have
+        # been left by a prior asynchronous launch rather than by this call,
+        # which is exactly why the message below claims nothing about whether the
+        # exchange took effect.
         rt.cudaGetLastError()
         raise CaptureModeExchangeError(
-            f"cudaThreadExchangeStreamCaptureMode failed: rc={rc}, "
-            f"requested mode 'relaxed' ({requested}); the calling thread is NOT "
-            f"exempt from capture-mode checks"
+            f"cudaThreadExchangeStreamCaptureMode did not complete cleanly: "
+            f"rc={rc}, requested mode 'relaxed' ({requested}); the return code "
+            f"may belong to a prior asynchronous launch, so this thread's "
+            f"post-call capture mode is unverified — Relaxed entry must not be "
+            f"assumed established"
         )
     previous = int(mode.value)
     return _CAPTURE_MODE_NAME.get(previous, f"unknown({previous})")

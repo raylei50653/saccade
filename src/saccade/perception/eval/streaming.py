@@ -183,10 +183,12 @@ class TorchvisionGpuStreamer:
         try:
             # Rule A exemption: this thread allocates through torch while the
             # main thread may hold a "global"-mode capture open.  Inside the try
-            # deliberately -- the shared helper now raises on a failed exchange,
-            # and that has to reach the consumer through the same failure path a
-            # decode error takes, or a loud failure here would just hang
-            # ``__next__``.  Rule B is untouched by any of this.
+            # deliberately -- the shared helper raises when the exchange does not
+            # complete cleanly, and that has to reach the consumer through the
+            # same failure path a decode error takes, or a loud failure here
+            # would just hang ``__next__``.  Left unset on that path: the
+            # post-call mode is unverified, so no prior mode is recorded.  Rule B
+            # is untouched by any of this.
             self.relaxed_capture_mode_from = enter_relaxed_capture_mode()
             for f in self.img_files:
                 if self._stop.is_set():

@@ -2,9 +2,15 @@
 
 ctypes defaults to int-sized arguments and no return type, so calling a CUDA
 entry point without declaring its signature is undefined behaviour rather than a
-type error, and a dropped return code makes a thread that never entered Relaxed
+type error, and a dropped return code makes a call that did not complete cleanly
 indistinguishable from one that did. Both were true of the copy that used to
 live in ``streaming.py``.
+
+Note what the failure contract deliberately does *not* say. A CUDA runtime call
+may report an error left by a prior asynchronous launch, so a non-success code
+does not establish that the exchange failed to take effect — only that the
+post-call mode is unverified. The assertions below are written to that weaker
+claim.
 
 These assert the declaration, the success and failure semantics of the shared
 helper, and that the caller uses it rather than keeping a second raw binding.
@@ -101,7 +107,12 @@ def test_successful_exchange_requests_relaxed_and_returns_the_prior_mode(
 
 
 def test_failed_exchange_raises_instead_of_reporting_success(monkeypatch) -> None:
-    """A non-success return code must not read as "the thread is exempt"."""
+    """A non-success code must not read as an established Relaxed entry.
+
+    It also must not read as the opposite. The message is required to say the
+    post-call mode is *unverified*, because the code may have been left by a
+    prior asynchronous launch rather than by this call.
+    """
     lib, _ = _fake_cudart(rc=999)
     monkeypatch.setattr(cuda_capture, "_cudart", lambda: lib)
 
@@ -112,6 +123,9 @@ def test_failed_exchange_raises_instead_of_reporting_success(monkeypatch) -> Non
     assert "cudaThreadExchangeStreamCaptureMode" in message  # API name
     assert "999" in message  # CUDA return code
     assert "relaxed" in message  # requested mode
+    # Calibration: unverified, not "the thread is not exempt".
+    assert "unverified" in message
+    assert "prior asynchronous launch" in message
 
 
 def test_missing_cudart_is_not_a_failed_exchange(monkeypatch) -> None:
@@ -167,8 +181,12 @@ def test_worker_records_the_prior_mode_from_the_shared_helper(monkeypatch) -> No
 
 
 def test_a_failed_exchange_is_not_recorded_as_a_successful_entry(monkeypatch) -> None:
-    """The failure surfaces, and no prior mode is recorded for a thread that
-    never became exempt."""
+    """The failure surfaces and no prior mode is recorded.
+
+    Not because the thread is known not to be exempt — that is unknowable from
+    the return code — but because after a call that did not complete cleanly the
+    reported prior mode cannot be trusted either.
+    """
 
     def boom() -> str:
         raise CaptureModeExchangeError("cudaThreadExchangeStreamCaptureMode failed")
