@@ -100,6 +100,7 @@
 | 文件 | 內容 |
 |------|------|
 | [production_pipeline_profiling_todo.md](pipeline/production_pipeline_profiling_todo.md) | 固定 production source 的 profiling P1–P6 清單與 measurement／attribution 邊界 |
+| [capture_failure_provenance_20260906.md](pipeline/capture_failure_provenance_20260906.md) | #340 原始 failure 證據恢復、缺失欄位與 attribution 邊界 |
 | [mot17_mamba_whole_graph_m_sdp_double_buffer.md](pipeline/mot17_mamba_whole_graph_m_sdp_double_buffer.md) | `mamba_whole_graph_m` + SDP + double-buffer 路徑 runbook |
 | [gpu_pipeline_m4b_identity_resolver.md](pipeline/gpu_pipeline_m4b_identity_resolver.md) | M4b native identity resolver 設計 |
 | [perf_attribution_whole_graph_m.md](pipeline/perf_attribution_whole_graph_m.md) | whole_graph_m 每幀開銷歸因 + backlog |
