@@ -282,8 +282,12 @@ The four other `as_rgb_chw()` sites (`stages.py:2077`/`:2233`/`:3127`/`:3229`) a
 crop paths, dead with `reid_mode: off`; the `evaluator.py` sites are the workbench
 runner, which this preset never enters (see the call-site correction above).
 
-GMC is unconditional in the preset, so any candidate can remove the **detector's read**
-of the buffer, never the buffer. That reduces the opportunity to:
+GMC is unconditional in the preset, so **any detector-side F3b candidate that preserves
+the current GMC input contract** can remove the detector's read of the buffer, never the
+buffer itself. "Premise fails" therefore means the original F3b scope fails — not that the
+full-res buffer is structurally impossible to eliminate; a GMC input redesign (below)
+would change the requirement, and that is a different item. This reduces the opportunity
+to:
 
 | item (1920×1080, per frame) | bytes | removable |
 |:--|--:|:--|
@@ -293,10 +297,18 @@ of the buffer, never the buffer. That reduces the opportunity to:
 | GMC write of `_gmc_frame_buf` | 24.88 MB W | no |
 | 640 canvas write | 4.92 MB W | no — unchanged either way |
 
-**≈ −14.7 MB of ≈ 94 MB**, and that number is a *logical / raw-cost reduction bound*,
-not a DRAM saving: cache reuse and locality can make the realised gain smaller. At
-640×480 the source buffer is 3.69 MB and largely L2-resident, so the stratum-level
-saving there is near zero. Separately, `frame_gpu` is confined to the ingest stage
+**≈ −14.7 MB of ≈ 94 MB** — a *logical / raw-cost reduction bound*, not a DRAM saving:
+cache reuse and locality can make the realised gain smaller. The denominator is the
+source-side fp32 representation traffic, i.e. the first four rows; the table sums to
+≈ 99.2 MB and the unchanged 4.92 MB canvas write is excluded because both arms pay it.
+
+The logical difference does **not** shrink at 640×480: the four-tap access pattern is
+driven by the 640×640 output, so the fp32-vs-uint8 tap arithmetic is the same in both
+strata. What approaches zero there is the *off-chip traffic and hence the frame-period
+opportunity*, because the 3.69 MB source buffer is small enough to be largely
+cache-resident. The two must not be collapsed into one number.
+
+Separately, `frame_gpu` is confined to the ingest stage
 (`stages.py:1874`/`:1879`); carrying it to a fused preprocessing site is refcount-safe
 for the torchvision decoder but not guaranteed for DALI, whose iterator returns tensors
 backed by its own output buffers under `prefetch_queue_depth=2` — keeping it safely may
@@ -323,10 +335,12 @@ k ∈ {0,1,2,4} × 3 mirrored reps,
 7-seq, metrics identical across all 12 runs). It **does not resolve**: per-rep signs at
 k=1 are (−,+,+), the k=0 anchor spread across reps is 0.192 ms against a largest mean
 dose effect of 0.054 ms, and the 640×480 stratum is negative at every dose. Per the F3d
-reading protocol this means no breakpoint may be named. What it supports is an upper
-bound only — one detector-side resize costs less than the ≈0.05 ms paired spread, i.e.
-under ~1.6% of the 3.1 ms frame period, with a point estimate of +0.007 ms (+0.2%) that
-is not separable from zero. Note the contrast with F3d, whose GMC site was 3/3 positive
+reading protocol this means no breakpoint may be named. What it supports is a
+**resolution limit, not an upper bound**: no single-resize effect is resolved above the
+≈0.05 ms paired-noise scale, and the k=1 point estimate is +0.007 ms (+0.2%), not
+separable from zero. With n=3, inconsistent signs and anchor drift exceeding the mean dose
+effect, this protocol did not resolve the per-resize cost — it does not establish a
+physical or statistical bound on it. Note the contrast with F3d, whose GMC site was 3/3 positive
 at k=1 (S < 1, no slack); under the same pre-registered falsifier this site is
 *suggestive of slack*, but n=3 with inconsistent signs does not establish it.
 
