@@ -10,6 +10,7 @@ from saccade.perception.reid.cheb_gr import (
     cheb_gr_kreciprocal,
     cheb_gr_kreciprocal_self_dense_padded,
 )
+from .cuda_capture import graph_capture
 from .motion_model import MotionModel, MotionModelRegistry
 
 
@@ -203,7 +204,7 @@ class _GraphedRelinkGateRunner:
         self._launch()
         torch.cuda.synchronize(self.device)  # saccade-allow-cpu
         graph = torch.cuda.CUDAGraph()
-        with torch.cuda.graph(graph):
+        with graph_capture(graph, label="relink.gate_batch"):
             self._launch()
         self.graph = graph
         print(
@@ -351,7 +352,7 @@ class _GraphedChebGRSelfRunner:
         self._run_dense()
         torch.cuda.synchronize(self.device)  # saccade-allow-cpu
         graph = torch.cuda.CUDAGraph()
-        with torch.cuda.graph(graph):
+        with graph_capture(graph, label="relink.cheb_gr_self_distance"):
             self._run_dense()
         self.graph = graph
         print(

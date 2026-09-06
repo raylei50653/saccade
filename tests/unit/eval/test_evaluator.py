@@ -83,7 +83,8 @@ def test_nms_graph_retains_captured_count_buffer(monkeypatch):
     monkeypatch.setattr(
         evaluator_mod.torch.cuda,
         "graph",
-        lambda _graph: nullcontext(),
+        # graph_capture() forwards pool/stream/capture_error_mode (#340 Rule A).
+        lambda _graph, **_kw: nullcontext(),
     )
 
     state = SimpleNamespace(

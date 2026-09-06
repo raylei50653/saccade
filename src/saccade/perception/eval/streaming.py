@@ -186,6 +186,17 @@ class TorchvisionGpuStreamer:
                 img_hwc = img_chw.permute(1, 2, 0)
                 self._queue.put(img_hwc)
         except Exception:
+            # Rule B leaves an open question: `cudaErrorStreamCaptureImplicit`
+            # needs a *blocking* capturing stream, and every stream we capture
+            # on is non-blocking, so the capture responsible may not be ours.
+            # `open_capture=None` in this dump proves exactly that. Printed
+            # unconditionally: this path is rare and already fatal.
+            try:
+                from .cuda_capture import describe_capture_state
+
+                print(describe_capture_state("decode_worker:error"), flush=True)
+            except Exception:  # noqa: BLE001 - never mask the decode error
+                pass
             self._queue.put(None)
             raise
 
