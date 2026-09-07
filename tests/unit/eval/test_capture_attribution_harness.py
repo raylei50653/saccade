@@ -8,6 +8,7 @@ import hashlib
 import inspect
 import json
 import threading
+import time
 from types import SimpleNamespace
 
 import pytest
@@ -241,6 +242,9 @@ def owned_workers(monkeypatch):
     yield install, worker
     for made in started:
         made.released.set()
+    for thread in threading.enumerate():
+        if thread.name.startswith("quiesce:"):
+            thread.join(5)
 
 
 def test_quiescence_lets_a_worker_stop_before_the_observer_does(owned_workers):
@@ -288,6 +292,39 @@ def test_a_cleanup_error_is_recorded_rather_than_raised_or_dropped(owned_workers
     # allowed to destroy the trace it is serving, or to hide that it failed.
     assert not worker.thread.is_alive()
     assert not quiesced["timed_out"]
+
+
+def test_a_shutdown_that_never_returns_is_bounded_and_still_fails_closed(
+    tmp_path, owned_workers
+):
+    install, spawn = owned_workers
+    blocked = threading.Event()
+    install(blocked.wait)
+    try:
+        started = time.monotonic()
+        quiesced = quiesce(0.5)
+        # The bound has to enclose the shutdown call itself, not just the wait
+        # that follows it, or a shutdown that never returns hangs teardown with
+        # the timeout never reaching it.
+        assert time.monotonic() - started < 5.0
+        assert quiesced["timed_out"]
+        # The thread still executing that shutdown is not exempt from the
+        # accounting: it reaches live_threads and fails the trace closed like
+        # any other survivor, so a stuck shutdown cannot pass structure.
+        live = [
+            {"name": t.name, "native_id": t.native_id}
+            for t in threading.enumerate()
+            if t is not threading.current_thread()
+        ]
+        assert "quiesce:inductor_compile_workers" in [e["name"] for e in live]
+        write_teardown_fixture(
+            tmp_path, stopped_row(quiesce=quiesced, live_threads=live)
+        )
+        result = analyze(tmp_path)
+        assert not result["trace_structure_ok"]
+        assert "observer_shutdown_incomplete_or_workers_alive" in result["problems"]
+    finally:
+        blocked.set()
 
 
 def test_teardown_records_progress_that_outlives_a_missing_manifest(tmp_path):

@@ -161,32 +161,45 @@ def quiesce(timeout: float) -> dict:
     still alive. They are shut down here rather than excused: the shutdown check
     stays "no live thread", and this is what lets a production trace satisfy it
     honestly. Runs before ``attribution_stop`` so that anything these threads do
-    on the way down is still observed. Its own failures are recorded, never
-    raised -- a teardown convenience must not destroy the trace.
+    on the way down is still observed.
+
+    Each shutdown is driven from its own thread, so the deadline covers the
+    shutdown calls themselves and not merely the wait that follows them: a
+    shutdown that never returns would otherwise hang teardown with the bound
+    never reaching it. One driver blocking therefore also cannot skip the
+    other. The drivers are daemons and are named, so a stuck one cannot hold
+    the process open yet still reaches the live-thread accounting that fails
+    the trace closed. Shutdown failures are recorded, never raised -- a
+    teardown convenience must not destroy the trace.
     """
     start = time.monotonic()
+    deadline = start + timeout
     errors = {}
-    for name, action in (
-        ("inductor_compile_workers", _shutdown_compile_workers),
-        ("tqdm_monitor", _shutdown_tqdm_monitor),
-    ):
+
+    def drive(name, action):
         try:
             action()
         except BaseException as exc:
             errors[name] = repr(exc)
-    deadline = start + timeout
+
+    for name, action in (
+        ("inductor_compile_workers", _shutdown_compile_workers),
+        ("tqdm_monitor", _shutdown_tqdm_monitor),
+    ):
+        threading.Thread(
+            target=drive, args=(name, action), name=f"quiesce:{name}", daemon=True
+        ).start()
     while True:
         alive = [
             t for t in threading.enumerate() if t is not threading.current_thread()
         ]
-        remaining = deadline - time.monotonic()
-        if not alive or remaining <= 0:
+        if not alive or time.monotonic() >= deadline:
             break
         for thread in alive:
             thread.join(min(0.2, max(0.0, deadline - time.monotonic())))
     return {
         "seconds": round(time.monotonic() - start, 2),
-        "errors": errors,
+        "errors": dict(errors),
         "timed_out": bool(alive),
     }
 
