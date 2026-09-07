@@ -51,7 +51,7 @@
 | 主線是 real-time-first、無 ReID 依賴的 MOT；新研究只有通過 ablation 與一致性檢查才合併回主線。ADR 018 記錄 B 線停損結案，不以原 appearance 路線重開。 | [ADR 018](decisions/018-project-main-line-direction.md) §0 / §3 |
 | 評測範圍是 MOT17 train / SDP 內部 7-seq；不宣稱 MOTChallenge server 成績。對外數字主張的誠實邊界（in-sample vs tracker-delta）由展示敘事持有。 | [ADR 018](decisions/018-project-main-line-direction.md) §1；[PROJECT_SHOWCASE](PROJECT_SHOWCASE.md) Limitations |
 | accepted owner 所登記的穩定 GO 組合與 appearance 牆的教訓，以負結果登記表為準，不在本檔複述。 | [no_go_registry](reference/no_go_registry.md) Reusable Lessons / Current Stable GO Counterparts；[PIPELINE](PIPELINE.md) 結構性鐵律（結論指針，非數字） |
-| 現行 accepted owner 所定義的系統形狀為 MOT17-centered evaluation path，不是完整產品型多服務拓樸。 | [architecture/README](architecture/README.md) §3 |
+| accepted owner 所定義的系統形狀為 MOT17-centered evaluation path，不是完整產品型多服務拓樸。 | [architecture/README](architecture/README.md) §3 |
 
 ---
 
