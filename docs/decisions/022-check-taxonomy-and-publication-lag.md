@@ -47,7 +47,9 @@
 
 - `.github/workflows/runtime_identity.yml` 是 `workflow_dispatch`、唯讀，且**先要求「Coordinate must already be current」**才能產 probe。能驗證舊出版，**不能**收集更新座標所需的證據。
 - Layer P `preflight()`（`scripts/tools/run_h2_layer_p.py:200-240`）也是驗證、不是 capture；成功還會發 `h2_layer_p_certificate_v2`。它與 workflow 的 "already current" **不是同一組檢查**（一個看 runtime-inputs，一個看 environment）。
-- `build_runtime_identity.py` 已能標 `publication_complete: false`，但**沒有**「禁止用不完整檔覆蓋完整 canonical」的守衛。
+- `build_runtime_identity.py` 已能標 `publication_complete: false`，但**沒有**「禁止用不完整檔覆蓋完整 canonical」的守衛，而且缺口在**兩個獨立位置**：
+  - `check_runtime_identity_staleness.load_published()` 從不讀 `publication_complete`，不完整出版照樣通過。
+  - 既有的 `--require-complete` 旗標**排在 `--emit` 寫檔之後**（`build_runtime_identity.py:469-479`）：檔案已經被覆蓋，才回非零。指向 canonical 路徑時，它會先摧毀一份完整出版再回報失敗。實測見 `tests/contract/test_adr_022_check_taxonomy.py::test_case4_require_complete_reports_after_it_has_already_written`。
 - `research_lock.open` 已經**正確地不走 bindings**（`research_lock.py:314-327` 的 docstring 寫明：過期 closed study 不該擋新 instance）。日常 development 卻把這條 walk 又加了回來。
 - **probe 相等不是 semantic equivalence**；`equivalence.state` 釘死 `unproven`，本 ADR 不動。
 
@@ -96,7 +98,7 @@
 
 - `current` binding ＋ source lag（假 current-attestation）
 - 把列改寫成對一份落後出版為 `current`
-- 用不完整 publication 覆蓋完整 canonical
+- 用不完整 publication 覆蓋完整 canonical —— 須在**寫檔前**拒絕，並由 `load_published` 一併把關（§1.2 的兩個缺口）
 - `research_lock` open（量測＝把出版當 substrate；本 ADR 不改，見 §3 決定 4）
 - math-model **歷史完整性**（文件＋當前 audit 檔案 bytes、code-owned digest、`read_at_ref`）
 - 畸形 publication / bindings / `equivalence` 被改成不是 `unproven`
@@ -110,7 +112,7 @@
 - `plumbing_only`；**不改**現有 `runtime_identity.yml`，因此不動 `identity_semantics`
 - **不**要求座標已經 current
 - 只上傳 artifact；`contents: read`
-- promote 必須另開 review PR ＋ `--promote-complete` ＋ 先 archive 到 §3 決定 5 的路徑
+- promote 必須另開 review PR ＋ `--require-complete`（**既有旗標，須先依 §4 改成寫檔前拒絕**）＋ 先 archive 到 §3 決定 5 的路徑
 - 每次 promote 都要 fresh probe（§3 決定 2）
 
 Layer P **不是** capture 路徑，這一系列不擴它，不改 `run_h2_layer_p.py`。
