@@ -28,7 +28,7 @@ See [../../ownership/doc_structure_contract.md](../../ownership/doc_structure_co
 | [scoring_energy_20260630.md](scoring_energy_20260630.md) | Scoring energy 分析 |
 | [wsl2_d2h_pinned_memory_leak_20260517.md](wsl2_d2h_pinned_memory_leak_20260517.md) | WSL2 D2H pinned memory leak post-mortem |
 | [nogpudecode_reproducibility_20260907.md](nogpudecode_reproducibility_20260907.md) | **`--no-gpu-decode` 的重複執行變異**:重現性不能由旗標單獨保證,必須逐組態驗證(`baseline` 7-seq 14/20 分歧、`mamba_whole_graph_m --double-buffer` 0/20)＋取代「bit-exact ⇒ N=1」的判讀規則與受影響結論分級 |
-| [eval_repeat_identity_boundary_20260907.md](eval_repeat_identity_boundary_20260907.md) | **#363 runtime 邊界 + fail-closed harness**:單序列第一個靜默差異在 MOT box/score 而非 ID 指派;`check_eval_repeat_identity.py` 在症狀出現時 exit 1 |
+| [eval_repeat_identity_boundary_20260907.md](eval_repeat_identity_boundary_20260907.md) | **#363 observability bound + fail-closed harness**:最早可觀測的 divergence 已在 MOT box/score(不是 ID);emit 未被證明是 producer;`check_eval_repeat_identity.py` 在症狀或 eval 非 0 時 exit 1 |
 
 ## Archived related
 

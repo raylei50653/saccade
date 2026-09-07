@@ -16,8 +16,11 @@ Modes:
         --detector SDP --no-gpu-decode --sequences MOT17-02-SDP``).  Forwarded
         flags override those defaults.
 
-Pass/fail is raw MOT identity, including track IDs.  A pass on N runs is not
-a determinism proof; a single distinct hash is a failure.
+Pass/fail is raw MOT identity, including track IDs, **and** every eval
+process exit.  A non-zero ``mot17.py`` status fails the harness even when
+the MOT files are complete and identical.  A pass on N runs is not a
+determinism proof; a single distinct hash or a single eval failure is a
+failure.
 
 Not wired to pre-push: the current ``baseline`` path is known to diverge, so
 a default CI gate would fail on main.  After a fix, ``run`` is the regression
@@ -138,6 +141,7 @@ def cmd_run(
     root.mkdir(parents=True, exist_ok=True)
     eval_script = _ROOT / "scripts" / "eval" / "mot17.py"
     run_dirs: list[Path] = []
+    eval_returncodes: list[int] = []
     print(f"eval-repeat identity: n={n} sleep={sleep}s flags={' '.join(eval_flags)}")
     for index in range(n):
         out_dir = root / f"r{index + 1}"
@@ -149,6 +153,7 @@ def cmd_run(
             eval_flags=eval_flags,
         )
         run_dirs.append(out_dir)
+        eval_returncodes.append(proc.returncode)
         if proc.returncode != 0:
             print(
                 f"  run {index + 1} eval exit {proc.returncode} "
@@ -157,7 +162,27 @@ def cmd_run(
             )
         if index + 1 < n and sleep > 0:
             time.sleep(sleep)
-    return compare_and_emit(run_dirs, summary=root / "summary.json")
+    had_eval_failure = any(code != 0 for code in eval_returncodes)
+    compare_rc = compare_and_emit(run_dirs, summary=root / "summary.json")
+    exits_path = root / "eval_exits.json"
+    exits_path.write_text(
+        json.dumps(
+            {
+                "returncodes": eval_returncodes,
+                "had_eval_failure": had_eval_failure,
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    if had_eval_failure:
+        print(
+            "eval_failures: at least one mot17.py process returned non-zero "
+            f"{eval_returncodes}",
+            file=sys.stderr,
+        )
+    return 1 if had_eval_failure or compare_rc != 0 else 0
 
 
 def main(argv: Sequence[str] | None = None) -> int:

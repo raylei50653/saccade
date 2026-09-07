@@ -179,7 +179,8 @@ production setting because its single-thread CUDA kernel is intentionally slow.
 Silent MOT divergence under a fixed eval configuration: `mot17.py` can exit 0
 and still write different MOT files.  `check_eval_repeat_identity.py` is the
 fail-closed detector of that symptom.  Pass/fail is raw MOT identity,
-including track IDs.
+including track IDs.  A non-zero eval exit also fails, even if the MOT
+bytes match.
 
 ```bash
 # Compare existing run directories (fails on distinct hashes / empty / missing)

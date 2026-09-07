@@ -7,13 +7,14 @@
 
 > **本文回答的問題.** 固定組態下重複執行 eval 會靜默寫出不同的 MOT 檔
 > ([#363](https://github.com/raylei50653/saccade/issues/363)).
-> 分歧從 MOT 的哪一欄開始? 這是不是 tracker ID 指派的第一事件?
+> 在 MOT 檔裡,最早可觀測的 divergence 落在哪一欄? 是不是 ID 指派?
 > 既有的 decimal-hash pre-push sentinel 看不看得到它?
 > 如何讓這個症狀再出現時檢查失敗,而不是 exit 0 通過?
 >
 > **本文不主張什麼.** 不主張根因是 #340、decode race 或 CUDA graph.
 > 不把樣本分歧比例解讀為底層機率. 不判定哪一個 MOT 輸出是正確的.
-> 不把 ingest / detect / NMS / GMC / Kalman 再往下拆 — MOT 檔沒有那些 stage dump.
+> **不主張** `fast_emit_mot_lines` / `emit_tracks_unified` 是 producer —
+> 它們是 MOT 行的寫出口. ingest / detect / NMS / GMC / Kalman 仍拆不開.
 
 量測本體與判讀規則仍以
 [nogpudecode_reproducibility_20260907.md](nogpudecode_reproducibility_20260907.md)
@@ -44,15 +45,16 @@ frame 443, 14/14 records, 11 條相同, 3 條 box+score 都變, track id 仍對�
 
 因此,至少在單序列重複執行上:
 
-**第一個靜默差異發生在 tracker 寫進 MOT 的 box / score,不是 identity assignment.**
-對應程式邊界是 `fast_emit_mot_lines` / `emit_tracks_unified` 寫出的
-`track_results` 記錄 (`src/saccade/perception/eval/helpers.py`,
-`stages.py`). 那一筆分數是 tracker score,箱子是 tracker box,所以還可以
-是 detect / NMS 輸出,或 Kalman / GMC 之後的更新 — MOT 檔分不開.
-S_r30 的「箱子序列化相同、只有 score 變」與「只是 GMC 把幾何 warp 了」不相容,
-但這仍不是對 detect 的機制量測.
+**最早可觀測的 divergence 已在 `track_results` → MOT 這個邊界存在:**
+serialization 時 box 和/或 score 已經不同,不是 identity assignment.
+`fast_emit_mot_lines` / `emit_tracks_unified` (`helpers.py`, `stages.py`)
+是把當時的 `track_results` 寫成 MOT 行的出口,本文**沒有**證明它們製造差異.
+那一筆分數是 tracker score,箱子是 tracker box,所以 producer 仍可以是
+detect / NMS,或 Kalman / GMC 之後的更新 — MOT 檔分不開.
+S_r30 的 score-only 差異(箱子序列化相同)削弱「只是 GMC 把幾何 warp 了」
+這種單因解釋,但還不能定位 producer.
 
-**七序列 (block H) 的第二種形狀不是獨立的第一事件.**
+**七序列 (block H) 的第二種 MOT 第一行形狀不是獨立的可觀測事件.**
 MOT17-02 幾乎都與 reference 相同;某個較晚序列先出現 `geometry_or_score`,
 隨後同一 process 的後面序列常在第一個輸出幀 (frame 4) 變成 `identity_only`.
 例: H_r1 MOT17-05 vs reference, frame 4 是同一個箱子與 score,ID `464` vs `463`.
@@ -86,7 +88,8 @@ MOT17-02 幾乎都與 reference 相同;某個較晚序列先出現 `geometry_or_
 
 - **pass/fail = raw MOT 位元** (含 track ID). 這是 issue 寫的症狀.
 - `geometry_or_score` / `identity_only` 只是 forensic 標籤,不是免責.
-- 空檔、缺序列、eval 非 0,一律失敗. 不能分辨「是否相同」時不得當通過.
+- 空檔、缺序列、eval 非 0(即使寫出完整且相同的 MOT),一律失敗.
+  不能分辨「是否相同」時不得當通過.
 - `compare DIR...` 比既有 run 目錄. 對存檔的 S_r1 vs S_r3 必須失敗,S_r1 vs S_r2 必須通過.
 - `run -n N [mot17 flags...]` 開 N 個獨立 process 再 compare. 預設是 block S 組態.
   N 次全同**不是**確定性證明;出現一次相異 hash 就是失敗.
@@ -110,10 +113,18 @@ uv run python scripts/tools/check_eval_repeat_identity.py run -n 8
 
 ## 4. Closure 對照 (#363)
 
-1. **可重現機制** — 未做. 本文不指認 buffer / stream / capture.
-2. **runtime 邊界** — 單序列第一事件: MOT 序列化的 box/score
-   (`track_results` → MOT 行),不是 ID 指派. 七序列後續的 ID-only 第一行
-   是 `GlobalTrackIdMapper` 對前面序列不同出生數的下游.
-3. **fail-closed harness** — `check_eval_repeat_identity.py`. 症狀出現時 exit 1.
+#363 原文條件不改:(1 可重現機制 **或** 2 指出是哪一段執行路徑**產生** divergence)
+**並且** 3 fail-closed harness.
 
-下一步若要再往下拆 ingest / detect / NMS,需要 per-stage dump,不是更多只看 MOT 的重複跑.
+| 條件 | 本 PR | 說明 |
+|---|---|---|
+| 1 機制 | 未做 | 不指認 buffer / stream / capture |
+| 2 產生路徑 | **尚未滿足** | 本文是 MOT 層的 **observability bound**:最早可觀測的 divergence 已在 `track_results` → MOT 存在 (box/score 已不同). 這不是「哪一段執行路徑產生的」. emit 是寫出口,不是已定位的 producer |
+| 3 harness | 本 PR 交付 | `check_eval_repeat_identity.py`:相異 MOT、空檔、缺序列、eval 非 0(含 MOT 位元相同)都 exit 1 |
+
+因此 #367 是 **(3) + observability bound** 的 milestone,不是 close.
+七序列後續的 ID-only 第一行仍是 `GlobalTrackIdMapper` 對前面序列不同出生數的下游 — 那是 MOT 第一行差異的形狀,同樣不是 producer 指認.
+
+下一步不是更多 MOT-level repetitions. 資訊瓶頸是 observability:opt-in per-stage fingerprint,至少把同一幀切成
+`post-decode/input → detector raw/postprocess → post-NMS detections → tracker pre-update inputs → tracker post-update/track_results → MOT`.
+第一版不必 dump 全 tensor;canonical hash、divergence 時可選擇 dump payload,就夠開始二分產生路徑.

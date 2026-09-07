@@ -2,7 +2,8 @@
 
 The live GPU runner is not exercised here.  These tests pin the comparator
 contract: silent MOT divergence must fail, matching files must pass, and a
-crashed or empty eval must not look like success.
+crashed or empty eval must not look like success — including an eval that
+writes a complete, identical MOT and then returns non-zero.
 """
 
 # scope: eval
@@ -240,6 +241,33 @@ def test_run_fails_when_eval_crashes(
         forwarded=[],
     )
     assert rc == 1
+
+
+def test_run_fails_when_eval_returns_nonzero_with_identical_mot(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A complete matching MOT does not wash out a non-zero eval exit."""
+
+    calls = {"n": 0}
+
+    def fake_run_one_eval(**kwargs: object) -> SimpleNamespace:
+        out_dir = kwargs["out_dir"]
+        assert isinstance(out_dir, Path)
+        _write_mot(out_dir, "MOT17-02-SDP", LINE_A, LINE_B)
+        calls["n"] += 1
+        return SimpleNamespace(returncode=1 if calls["n"] == 2 else 0)
+
+    monkeypatch.setattr(harness, "run_one_eval", fake_run_one_eval)
+    artifact = tmp_path / "art"
+    rc = harness.cmd_run(
+        n=2,
+        sleep=0.0,
+        artifact_dir=artifact,
+        forwarded=[],
+    )
+    assert rc == 1
+    exits = (artifact / "eval_exits.json").read_text(encoding="utf-8")
+    assert '"had_eval_failure": true' in exits
 
 
 def test_run_passes_when_all_mot_files_match(
