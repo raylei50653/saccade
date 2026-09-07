@@ -41,6 +41,12 @@ from ``src/saccade/perception/eval/_decimal_hash_tools.py``.
 
 Do **not** treat the 2×2 matrix as the routine pre-push guard.
 
+The routine chain does **not** cover issue #363 (silent MOT divergence under
+`--preset baseline`).  It runs the empirically stable
+`mamba_whole_graph_m --double-buffer` configuration and hashes ID-free
+decimal records.  Cross-run raw MOT identity, including track IDs, is
+`check_eval_repeat_identity.py` (below).
+
 ### Routine continuous chain (pre-push sentinel)
 
 Fixed chain executed in **one** Python evaluator process / runtime state::
@@ -167,6 +173,27 @@ hashing until sequence completion; `fenced` synchronizes before each snapshot.
 `SACCADE_DETERMINISTIC_FILTER_COMPACTION=1` is a diagnostic-only native control
 that preserves source-index order during filter compaction. It is not a
 production setting because its single-thread CUDA kernel is intentionally slow.
+
+## Eval repeat identity (issue #363)
+
+Silent MOT divergence under a fixed eval configuration: `mot17.py` can exit 0
+and still write different MOT files.  `check_eval_repeat_identity.py` is the
+fail-closed detector of that symptom.  Pass/fail is raw MOT identity,
+including track IDs.
+
+```bash
+# Compare existing run directories (fails on distinct hashes / empty / missing)
+uv run python scripts/tools/check_eval_repeat_identity.py compare DIR DIR [DIR ...]
+
+# N independent eval processes, then compare. Defaults are the #363 block-S
+# flags (`--preset baseline --detector SDP --no-gpu-decode --sequences MOT17-02-SDP`).
+uv run python scripts/tools/check_eval_repeat_identity.py run -n 8
+```
+
+A pass on N runs is not a determinism proof.  This tool is **not** a pre-push
+gate: `baseline` is currently known to diverge.  After a fix, `run` is the
+regression entry.  Boundary write-up:
+[eval_repeat_identity_boundary_20260907.md](../../docs/research/eval/eval_repeat_identity_boundary_20260907.md).
 
 ## Referenced / Path-Sensitive
 
@@ -353,6 +380,7 @@ deleting.
 | `check_doc_links.py` | stable | cli | Check that relative markdown links in docs resolve to existing files. |
 | `check_doc_stale_paths.py` | stable | cli | Fail if any tracked file references a pre-move (stale) doc path. |
 | `check_doc_structure.py` | stable | cli | Warn-only documentation structure / research index coverage checks. |
+| `check_eval_repeat_identity.py` | stable | cli | Fail-closed detector of silent MOT run-to-run divergence (issue #363). |
 | `check_gpu_contract.py` | stable | - | Saccade GPU-First Performance Contract Checker. |
 | `check_h0_bridge_decision_trace_contract.py` | stable | cli | Statically admit H0's complete capture ABI before an owner seal. |
 | `check_h0_phase_a_archives.py` | stable | - | Verify every committed H0 Phase-A evidence root through archive codecs. |

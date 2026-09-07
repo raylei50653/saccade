@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Scratch helper. Does NOT fail on DISTINCT>1 (issue #363). Use
+# scripts/tools/check_eval_repeat_identity.py instead.
 # Determinism regression gate: run the same short eval N times and hash output.
 # Reports distinct non-empty hashes + failure count. Sleeps between runs to
 # avoid rapid-fire teardown contention.
