@@ -252,11 +252,10 @@ uv run python scripts/tools/check_headline_decision_contract.py
 
 ### 實驗追蹤（可選）
 
-MLflow / Optuna 未啟動不阻 eval。啟動與查詢：
+MLflow 未啟動不阻 eval。啟動與查詢：
 
 - `scripts/ops/mlflow_server.sh`
 - `scripts/eval/mlflow_logger.py`
-- `scripts/tools/compare_trials.py`
 
 ---
 

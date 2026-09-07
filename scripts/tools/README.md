@@ -387,7 +387,6 @@ deleting.
 | `audit_frozen_packet_exact_key_recoverability.py` | diagnostic | cli | EK0 frozen-packet exact-key recoverability audit (pure consistency audit). |
 | `audit_relink_safe_reject.py` | diagnostic | cli | Offline B1 safe-reject audit: max FP removal under GT_hurt <= ε. |
 | `audit_runtime_bridge_decision_path.py` | diagnostic | cli | P0: outcome-blind runtime bridge decision-path identifiability audit. |
-| `average_top_trials.py` | diagnostic | cli | Print top Optuna trials and mean of their parameters. |
 | `bench_bank_scatter.py` | diagnostic | cli | Benchmark: P0/P1 bank scatter hot-path gain. |
 | `bench_pipeline_halves.py` | experiment | cli | Measure the GPU-time split between the two per-frame pipeline halves. |
 | `birth_death_consistency.py` | experiment | cli | Birth-vs-death appearance consistency for long-lived tracks. |
@@ -428,7 +427,6 @@ deleting.
 | `cold_start_transfer.py` | experiment | cli | Cold-start transfer test: do the normalized occ-gate landmarks hold on MOT20? |
 | `color_relink_features.py` | diagnostic | cli | Offline AUC test: color-histogram appearance features for relink candidates. |
 | `combo_gate_safe_region.py` | diagnostic | cli | 2D combination-gate surface + safe-region audit. |
-| `compare_trials.py` | diagnostic | cli | Compare a selected set of Optuna trial results. |
 | `convert_mot17_to_mp4.py` | diagnostic | - | Encode MOT17 image sequences to MP4 for visualization. |
 | `convert_safe_region_asset_r1.py` | stable | cli | R1: Deterministic RegionAsset conversion from sealed Q4.5 + T0 evidence. |
 | `convert_video_to_mot.py` | diagnostic | cli | Convert MP4 video into a MOT-compatible sequence folder. |

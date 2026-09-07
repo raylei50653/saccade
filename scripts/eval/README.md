@@ -122,9 +122,6 @@ uv run python scripts/eval/label_boosted_birth_rows.py \
 # 分組 ablation
 uv run python scripts/eval/ablation_mot17.py --category detection,geometry
 
-# Bayesian 最佳化
-uv run python scripts/eval/bayesian_optimizer.py
-
 # 彙整 ablation 結果
 uv run python scripts/eval/summarize_ablation_mot17.py results/ablation/
 ```
@@ -232,7 +229,6 @@ Outputs: `results/module_benchmark/<timestamp>/`（含 `summary.txt`、`commands
 | `analyze_pca_alt_combination.py` | experiment | - | Offline follow-up to probe_private_continuation_assignment.py: the hand-picked additive combination `cost + w… |
 | `analyze_roi_dim_importance.py` | stable | - | Compatibility wrapper for scripts/eval/appearance/analyze_roi_dim_importance.py. |
 | `analyze_score_distribution.py` | stable | - | Compatibility wrapper for scripts/eval/detector/analyze_score_distribution.py. |
-| `bayesian_optimizer.py` | diagnostic | cli | Bayesian hyperparameter optimizer over MOT eval objectives. |
 | `bench_recall_candidates.py` | diagnostic | cli | Head-only latency probes for recall-recovery architecture candidates. |
 | `bench_reduction_bypass.py` | diagnostic | cli | Forward-latency: current head (spatial_reduction down/up) vs "no down/up". |
 | `bench_yolo_batch.py` | diagnostic | cli | Benchmark YOLO TensorRT batch latency across batch sizes. |
