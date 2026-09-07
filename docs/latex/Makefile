@@ -6,7 +6,7 @@
 
 LATEXMK = latexmk
 
-.PHONY: all full paper clean
+.PHONY: all full paper status clean
 .NOTPARALLEL:
 all: full
 
@@ -18,6 +18,10 @@ paper:
 	$(LATEXMK) -xelatex -jobname=main-paper \
 	  -pretex='\def\IMPL{0}' -usepretex main.tex
 
+status:
+	$(LATEXMK) -xelatex -jobname=saccade-project-status-20260907 status-report.tex
+
 clean:
 	$(LATEXMK) -C
+	$(LATEXMK) -C -jobname=saccade-project-status-20260907 status-report.tex
 	rm -rf build

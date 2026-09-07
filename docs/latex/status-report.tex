@@ -1,0 +1,925 @@
+% Saccade project status report. Build with: make status
+\documentclass[10pt,a4paper]{ctexart}
+
+\usepackage[a4paper,left=16mm,right=16mm,top=16mm,bottom=17mm,headheight=14pt]{geometry}
+\usepackage{fontspec}
+\setmainfont{DejaVu Serif}
+\setsansfont{DejaVu Sans}
+\setmonofont{DejaVu Sans Mono}[Scale=0.82]
+\setCJKmainfont{Noto Serif CJK TC}
+\setCJKsansfont{Noto Sans CJK TC}
+\setCJKmonofont{Noto Sans Mono CJK TC}
+
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{enumitem}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,fit,backgrounds}
+\usepackage[most]{tcolorbox}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{microtype}
+\usepackage{hyperref}
+\usepackage{bookmark}
+\usepackage{listings}
+
+\definecolor{Ink}{HTML}{172033}
+\definecolor{Navy}{HTML}{173B66}
+\definecolor{Blue}{HTML}{2474B5}
+\definecolor{Cyan}{HTML}{DDF1F7}
+\definecolor{Green}{HTML}{18794E}
+\definecolor{GreenBg}{HTML}{E8F5EE}
+\definecolor{Amber}{HTML}{A96000}
+\definecolor{AmberBg}{HTML}{FFF3D6}
+\definecolor{Red}{HTML}{B23A48}
+\definecolor{RedBg}{HTML}{FCEAEC}
+\definecolor{GrayText}{HTML}{566273}
+\definecolor{GrayBg}{HTML}{F3F5F7}
+\definecolor{Rule}{HTML}{CAD2DC}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=Blue,
+  urlcolor=Blue,
+  citecolor=Blue,
+  pdfauthor={Ray Lei},
+  pdftitle={Saccade 專題現況報告 — 2026-09-07},
+  pdfsubject={GPU-first real-time multi-object tracking project status}
+}
+\urlstyle{same}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{3.5pt}
+% Keep English technical terms intact. Narrow cells are ragged-right below so
+% TeX can wrap at spaces without inserting distracting word hyphens.
+\hyphenpenalty=10000
+\exhyphenpenalty=10000
+\emergencystretch=2em
+\setlist[itemize]{leftmargin=1.55em,itemsep=1.5pt,topsep=2pt,parsep=0pt}
+\setlist[enumerate]{leftmargin=1.7em,itemsep=1.5pt,topsep=2pt,parsep=0pt}
+\renewcommand{\arraystretch}{1.16}
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+\newcolumntype{R}{>{\raggedleft\arraybackslash}X}
+\newcolumntype{C}{>{\centering\arraybackslash}X}
+\newcolumntype{P}[1]{>{\raggedright\arraybackslash}p{#1}}
+\newcolumntype{B}[1]{>{\sffamily\bfseries\raggedright\arraybackslash}p{#1}}
+
+\titleformat{\section}{\sffamily\bfseries\Large\color{Navy}}{}{0pt}{}
+\titleformat{\subsection}{\sffamily\bfseries\large\color{Navy}}{}{0pt}{}
+\titleformat{\subsubsection}{\sffamily\bfseries\normalsize\color{Ink}}{}{0pt}{}
+\titlespacing*{\section}{0pt}{1pt}{5pt}
+\titlespacing*{\subsection}{0pt}{6pt}{3pt}
+\titlespacing*{\subsubsection}{0pt}{5pt}{2pt}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\sffamily\footnotesize Saccade 專題現況報告}
+\fancyhead[R]{\sffamily\footnotesize 2026-09-07 snapshot}
+\fancyfoot[L]{\sffamily\scriptsize 正文回答現況；Appendix 提供證據與限制}
+\fancyfoot[R]{\sffamily\footnotesize \thepage}
+\renewcommand{\headrulewidth}{0.35pt}
+\renewcommand{\footrulewidth}{0pt}
+
+\newtcolorbox{headline}[1][]{
+  colback=Cyan,colframe=Blue,boxrule=0.55pt,arc=1.4mm,
+  left=3mm,right=3mm,top=2mm,bottom=2mm,#1
+}
+\newtcolorbox{note}[1][]{
+  colback=GrayBg,colframe=Rule,boxrule=0.45pt,arc=1mm,
+  left=2.5mm,right=2.5mm,top=1.5mm,bottom=1.5mm,
+  before upper=\raggedright,#1
+}
+\newtcolorbox{risk}[1][]{
+  colback=AmberBg,colframe=Amber,boxrule=0.5pt,arc=1mm,
+  left=2.5mm,right=2.5mm,top=1.5mm,bottom=1.5mm,
+  before upper=\raggedright,#1
+}
+\newtcolorbox{statusbox}[2][]{
+  enhanced,colback=#2!6,colframe=#2!75!black,boxrule=0.45pt,arc=1mm,
+  left=2.2mm,right=2.2mm,top=1.3mm,bottom=1.3mm,#1
+}
+
+\newcommand{\metric}[2]{%
+  \begin{minipage}[t]{0.225\linewidth}\centering
+    {\sffamily\bfseries\LARGE\color{Navy}#1}\\[-1pt]
+    {\sffamily\scriptsize\color{GrayText}#2}
+  \end{minipage}}
+\newcommand{\applink}[2]{\hyperref[#1]{\textcolor{Blue}{[#2]}}}
+\newcommand{\sourcepath}[1]{%
+  \href{https://github.com/raylei50653/saccade/blob/0fe937b4e7a4cfc8e142d4fdcca5cabf93b3e982/#1}{\path{#1}}}
+\newcommand{\issue}[1]{\href{https://github.com/raylei50653/saccade/issues/#1}{\##1}}
+\newcommand{\pr}[1]{\href{https://github.com/raylei50653/saccade/pull/#1}{PR \##1}}
+\newcommand{\tighttable}{\small\setlength{\tabcolsep}{4pt}}
+
+\lstdefinestyle{shell}{
+  basicstyle=\ttfamily\scriptsize,
+  backgroundcolor=\color{GrayBg},
+  frame=single,
+  rulecolor=\color{Rule},
+  breaklines=true,
+  columns=fullflexible,
+  showstringspaces=false,
+  xleftmargin=2mm,
+  xrightmargin=2mm,
+  aboveskip=3pt,
+  belowskip=3pt
+}
+
+\begin{document}
+
+% ---------------------------------------------------------------------------
+% Cover
+% ---------------------------------------------------------------------------
+\hypersetup{pageanchor=false}
+\begin{titlepage}
+  \thispagestyle{empty}
+  \vspace*{16mm}
+  {\sffamily\bfseries\fontsize{35}{40}\selectfont\color{Navy} Saccade}\par
+  \vspace{3mm}
+  {\sffamily\bfseries\fontsize{24}{30}\selectfont 專題現況報告}\par
+  \vspace{5mm}
+  {\sffamily\large GPU-first 即時多目標追蹤系統}\par
+
+  \vspace{18mm}
+  \begin{headline}
+    {\sffamily\bfseries\large 報告定位}\par
+    正文只回答三件事：\textbf{目前系統能做什麼、做到哪裡、接下來去哪裡}。
+    實驗設定、量測協定、負結果與來源追溯全部放在 Appendix。
+  \end{headline}
+
+  \vspace{14mm}
+  \begin{tabularx}{\linewidth}{@{}B{31mm}Y@{}}
+    報告快照 & 2026-09-07\\
+    對照版本 & \texttt{main 0fe937b4e7a4}（\pr{358} merge head）\\
+    系統主線 & 整圖 CUDA Graph 版本（\texttt{mamba\_whole\_graph}）、SDP 偵測、跨幀重疊執行、關閉外觀重辨識（ReID）\\
+    文件性質 & 一次性專題現況快照；最新狀態與數字仍以專案內對應的來源文件為準\\
+  \end{tabularx}
+
+  \vfill
+  {\color{Rule}\rule{\linewidth}{0.6pt}}\\[3mm]
+  {\sffamily\small Ray Lei}\hfill
+  {\sffamily\small Asia/Taipei · 2026-09-07}
+\end{titlepage}
+
+\hypersetup{pageanchor=true}
+\pagenumbering{arabic}
+\setcounter{page}{1}
+
+% ---------------------------------------------------------------------------
+% Body page 1
+% ---------------------------------------------------------------------------
+\section{1. 專題目標}
+
+\begin{headline}
+  {\sffamily\bfseries\large 一句話定位}\par
+  Saccade 要做的是\textbf{高吞吐量的即時多目標追蹤（MOT, multi-object tracking）}：
+  在單張 GPU 上即時處理連續影格，並在整段影片中持續維持同一人的身份標記，
+  減少身份切換與軌跡中斷。
+\end{headline}
+
+\subsection{兩條主線}
+
+\begin{itemize}
+  \item \textbf{精度：}在固定的測試集上比較各項參數與模組設定，
+  分辨哪些真的改善追蹤品質、哪些只是雜訊或只在單一資料集成立。
+  \item \textbf{速度：}對整條 GPU 執行路徑做系統性的量測與優化，
+  在提升追蹤品質的同時，控制額外運算成本並維持高吞吐量。
+\end{itemize}
+
+\subsection{代表成果}
+
+\begin{center}
+  \metric{81.3}{IDF1 · 七序列}\hfill
+  \metric{74.7}{HOTA · 七序列}\hfill
+  \metric{81.6}{MOTA · 七序列}\hfill
+  \metric{313}{IDs · 越低越好}
+\end{center}
+
+評測範圍為 MOT17 train / SDP 七序列，外觀重辨識（ReID）全程關閉。
+這組數字由\textbf{逐幀線上追蹤}加上\textbf{序列結束後的離線軌跡合併}得到：線上部分逐幀即時執行，
+離線修復要等整段序列結束才回頭改寫身份，不落在每幀預算內。不做離線修復的基準為 IDF1 80.4，
+離線合併的量測來自尚未併入主線的 \pr{335}；同一批比較之間的吞吐量沒有可主張的差異。
+完整設定、其他測試結果與速度數字見第 4 節。\applink{app:A2}{詳細結果 A.2}
+
+\tighttable
+\begin{tabularx}{\linewidth}{@{}P{14mm}P{24mm}Y@{}}
+\toprule
+指標 & 衡量什麼 & 怎麼讀\\
+\midrule
+IDF1 & 身份一致性 & 整段軌跡是否一直對到同一個人；本報告的主指標，0--100 分，越高越好\\
+HOTA & 綜合分數 & 把偵測品質與身份關聯品質合成單一分數，0--100 分，越高越好\\
+MOTA & 偵測面總量 & 主要反映漏檢、誤檢與身份切換的總量，0--100 分，越高越好\\
+IDs & 身份切換次數 & 同一個人中途被換成新身份的次數，越低越好\\
+\bottomrule
+\end{tabularx}
+
+\begin{risk}
+  \textbf{結果邊界：}以上是 MOT17 train / SDP 七序列的內部成績，且訓練資料與測試序列重疊
+  （in-sample），不是 MOTChallenge 官方測試成績，也不是未見資料上的泛化結果。
+  改以 PersonPath22 訓練、MOT17 測試、訓練與測試完全分離時，IDF1 為 50.2；
+  主要缺口落在偵測器的 recall。
+  \applink{app:C1}{實驗設定 C.1}
+\end{risk}
+
+\vfill
+{\footnotesize\color{GrayText}
+定位來源：\sourcepath{docs/PROJECT_DIRECTION.md}；主要成績出處：\sourcepath{docs/TODO.md}。}
+
+\newpage
+
+% ---------------------------------------------------------------------------
+% Body page 2
+% ---------------------------------------------------------------------------
+\section{2. 系統功能與架構}
+
+\subsection{每幀流程，以及第 N 與第 N+1 幀的關係}
+
+\begin{center}
+\begin{tikzpicture}[
+  node distance=6mm and 4.5mm,
+  box/.style={draw=Rule,rounded corners=1.5mm,fill=white,minimum height=9mm,
+              text width=20mm,align=center,font=\sffamily\footnotesize},
+  core/.style={box,draw=Blue,fill=Cyan},
+  opt/.style={box,draw=Amber,fill=AmberBg},
+  arr/.style={-{Latex[length=2.2mm]},thick,draw=Navy}
+]
+  \node[core] (ingest) {影片 / MOT\\GPU 讀入};
+  \node[core,right=of ingest] (detect) {偵測\\YOLO26 + Mamba};
+  \node[core,right=of detect] (post) {後處理\\過濾 / NMS};
+  \node[core,right=of post] (track) {幾何追蹤\\GMC＋Kalman＋配對};
+  \node[core,right=of track] (manage) {軌跡管理\\狀態＋重連};
+  \node[core,right=of manage] (emit) {MOT 輸出\\評測指標};
+  \draw[arr] (ingest) -- (detect);
+  \draw[arr] (detect) -- (post);
+  \draw[arr] (post) -- (track);
+  \draw[arr] (track) -- (manage);
+  \draw[arr] (manage) -- (emit);
+\end{tikzpicture}
+\end{center}
+
+同一時間 GPU 上其實有兩幀在跑：第 N+1 幀的偵測，與第 N 幀的後處理、GMC、追蹤重疊執行。
+
+\begin{center}
+\begin{tikzpicture}[x=17mm,y=8.5mm,font=\sffamily\scriptsize]
+  \definecolor{LaneA}{HTML}{CFE6F7}
+  \definecolor{LaneB}{HTML}{FBE3C3}
+  \node[anchor=east,font=\sffamily\scriptsize\bfseries] at (-0.05,0) {偵測佇列};
+  \node[anchor=east,font=\sffamily\scriptsize\bfseries] at (-0.05,-1) {後處理＋追蹤佇列};
+  \foreach \x/\lab in {0/{偵測 N}, 1/{偵測 N+1}, 2/{偵測 N+2}}{
+    \draw[fill=LaneA,draw=Blue,rounded corners=0.8mm]
+      (\x+0.05,-0.34) rectangle (\x+0.95,0.34);
+    \node at (\x+0.5,0) {\lab};}
+  \foreach \x/\lab in {1/{追蹤 N}, 2/{追蹤 N+1}}{
+    \draw[fill=LaneB,draw=Amber,rounded corners=0.8mm]
+      (\x+0.05,-1.34) rectangle (\x+0.95,-0.66);
+    \node at (\x+0.5,-1) {\lab};}
+  \draw[Rule,dashed] (1,-1.55) -- (1,0.62);
+  \draw[Rule,dashed] (2,-1.55) -- (2,0.62);
+  \draw[{Latex[length=1.6mm]}-{Latex[length=1.6mm]},Navy] (1,0.66) -- (2,0.66)
+    node[midway,above,font=\sffamily\scriptsize\color{Navy}] {每幀週期 3.02 ms（349.64 FPS）};
+  \draw[{Latex[length=1.6mm]}-{Latex[length=1.6mm]},GrayText] (0,-1.7) -- (2,-1.7)
+    node[midway,below,font=\sffamily\scriptsize\color{GrayText}] {第 N 幀從讀入到輸出的延遲 5.71 ms};
+\end{tikzpicture}
+\end{center}
+
+\begin{note}
+  所以在理想的流水線下，\textbf{吞吐量由較長的那一段決定，而不是兩段相加}，而單幀延遲橫跨兩個週期：評測 FPS
+  不能換算成延遲。數字為 2026-09-05 單序列穩態量測。\applink{app:B1}{每幀預算 B.1}
+\end{note}
+
+\subsection{各環節解決什麼問題}
+
+\tighttable
+\begin{tabularx}{\linewidth}{@{}B{19mm}P{33mm}P{41mm}Y@{}}
+\toprule
+環節 & 解決什麼問題 & 採用的方法 & 主要理由\\
+\midrule
+偵測 & 從每張影格找出畫面中的人 &
+YOLO26-m 骨幹，特徵頭改用 Mamba 狀態空間模型；整段偵測一張 CUDA Graph &
+兼顧偵測品質與即時運算需求\\
+相機運動補償 & 去掉鏡頭本身移動造成的整體位移 &
+GPU 相位相關法估全域平移 &
+MOT17 的鏡頭運動以平移為主\\
+運動預測 & 預測既有軌跡在下一幀的位置 &
+Kalman 等速模型 &
+計算成本低，且容易解釋\\
+資料關聯 & 把當幀的偵測結果指派給既有軌跡 &
+五階段配對，Sinkhorn-Auction 混合 &
+分階段處理候選，適合 GPU 平行執行\\
+短斷鏈重連 & 重新接上短暫中斷的軌跡 &
+依運動預測外推後重新配對 &
+每幀之內就能做完\\
+長中斷身份 & 中斷較久之後恢復成同一人 &
+目前不用逐幀外觀 ReID，改由序列結束後的離線修復處理 &
+逐幀 ReID 沒有可量測的品質收益，成本卻明顯\\
+\bottomrule
+\end{tabularx}
+
+{\footnotesize\color{GrayText}
+判斷依據：偵測面看 recall 與 DetA，追蹤與身份看 IDF1、AssA 與 IDs，效能面看吞吐量與每幀時間線。
+選型細節見 \applink{app:A5}{A.5}；重連規則與離線修復的耦合見 \applink{app:A4}{A.4}。}
+
+\subsection{線上與離線的分界}
+
+\tighttable
+\begin{tabularx}{\linewidth}{@{}P{22mm}YY@{}}
+\toprule
+ & 線上（逐幀） & 離線（序列結束後）\\
+\midrule
+做什麼 & 偵測、NMS、GMC、Kalman、五階段配對、軌跡管理、短斷鏈重連 & 軌跡內插、身份交接（handover）、軌跡合併（merge）\\
+何時執行 & 影格進來就執行，計入 FPS & 整段序列跑完之後才執行\\
+可用資訊 & 使用當前與過去影格，不使用未來影格；可用於串流 & 可回頭改寫整段身份，需要整段序列結束\\
+成本怎麼計算 & 落在每幀預算，直接反映吞吐量 & 不落在每幀預算，但也不是零成本\\
+\bottomrule
+\end{tabularx}
+
+即時性的主張只能由左欄支撐；最終 MOT 檔含右欄的內插與可選修復，因此\textbf{不等同逐幀的原始追蹤器輸出}。
+
+{\footnotesize\color{GrayText}
+流程與演算法依據：\sourcepath{docs/PIPELINE.md}、\sourcepath{docs/reference/production_pipeline_code_map.md}。}
+
+\newpage
+
+% ---------------------------------------------------------------------------
+% Body page 3
+% ---------------------------------------------------------------------------
+\section{3. 目前項目狀況}
+
+\tighttable
+\begin{tabularx}{\linewidth}{@{}P{23mm}B{20mm}P{44mm}Y@{}}
+\toprule
+工作項目 & 目前狀態 & 已完成內容 & 剩餘問題\\
+\midrule
+幾何追蹤主線 & \textcolor{Green}{已完成整合} &
+端到端流程可完整跑通（偵測 → GMC → GPU 追蹤 → 重連 → 評測），相對陽春追蹤器 IDF1 +6.8、IDs −53\% &
+跨資料集與未見資料上的驗證\\
+執行路徑 & \textcolor{Green}{已完成整合} &
+資料常駐 GPU、各段各自成圖、跨幀重疊執行；GPU 忙碌率 93.6\% &
+重疊排程之下哪些成本真的能回收，尚未確定\\
+效能分析 & \textcolor{Blue}{進行中} &
+已建立每幀成本分佈，並定位三類結構候選 &
+確認哪些成本影響吞吐量，排出瓶頸順序\\
+執行穩定性 & \textcolor{Blue}{進行中} &
+已建立 CUDA Graph 錄製與跨 stream 同步的觀測工具 &
+定位錄製失敗的觸發條件，確認涉及的模組與同步關係\\
+身份修復 & \textcolor{Blue}{進行中} &
+序列末的離線合併已有正向結果（相對 80.4 基準 +0.9 IDF1、IDs −31） &
+候選品質與長中斷情境的辨識訊號\\
+泛化能力 & \textcolor{Red}{尚未解決} &
+已建立訓練與測試完全分離的量測方式 &
+未見資料上 IDF1 為 50.2，缺口落在偵測器 recall\\
+\bottomrule
+\end{tabularx}
+
+\subsection{已驗證，但不納入主線}
+
+另有數項已完成驗證、但目前不納入主線的方案：逐幀外觀 ReID（IDF1 ±0.0、吞吐量 −34\%）、
+線上身份合併（IDF1 −4.5、IDs +174）、重連門檻收緊（MOT17 正向但 MOT20 與 DanceTrack 不成立）、
+偵測輸入複製移除（GPU 內部搬運量減半，但吞吐量沒有可辨差異）。
+每一項的停止理由與重開條件見 \applink{app:D1}{淘汰方案 D.1}。
+
+\begin{note}
+  這是 2026-09-07 的快照，不取代專案內的即時紀錄。
+  \applink{app:A2}{身份實驗 A.2}、\applink{app:B3}{錄製歸因 B.3}、\applink{app:D1}{淘汰方案 D.1}
+\end{note}
+
+\newpage
+
+% ---------------------------------------------------------------------------
+% Body page 4
+% ---------------------------------------------------------------------------
+\section{4. 目前主要結果}
+
+\subsection{4.1 追蹤品質}
+
+\subsubsection{三組不同用途的成績}
+
+\tighttable
+\begin{tabularx}{\linewidth}{@{}P{33mm}rrrrrY@{}}
+\toprule
+結果 & IDF1 & HOTA & AssA & IDs & FPS & 怎麼讀\\
+\midrule
+凍結展示數字（YOLO26-s） & \textbf{78.2} & 70.2 & 69.7 & 413 & \textbf{269.47} & MOT17 train/SDP 七序列、跨幀重疊；長期凍結不動\\
+對照基準（YOLO26-m） & \textbf{80.4} & 74.4 & 73.5 & 344 & 245.1 & 2026-08-08、關閉 GPU 解碼；第 1 頁的 81.3 是在此基準上做序列末合併\\
+完全分離的泛化測試 & \textbf{50.2} & 42.7 & 46.6 & --- & --- & 以 PersonPath22 訓練、MOT17 測試；不與上列 FPS 比較\\
+\bottomrule
+\end{tabularx}
+
+\begin{risk}
+三列的模型、解碼方式與量測協定都不同，\textbf{不可拿絕對 FPS 橫向排名}。第一列是長期凍結的展示數字，
+第二列是目前做身份實驗的基準（第 1 頁的數字由它而來），第三列回答泛化問題。\applink{app:C1}{量測協定 C.1}
+\end{risk}
+
+\subsubsection{幾何路徑的累積增益}
+
+\tighttable
+\begin{tabularx}{\linewidth}{@{}Yrrrrr@{}}
+\toprule
+累積配置 & IDF1 & HOTA & AssA & IDs & FP\\
+\midrule
+基本追蹤器 & 71.4 & 65.0 & 62.4 & 888 & 3581\\
+＋GMC & 75.9 & 67.9 & 66.4 & 445 & 3616\\
+＋短斷鏈重連 & 76.7 & 68.5 & 67.2 & 406 & 3284\\
+完整幾何設定 & \textbf{78.2} & \textbf{70.2} & \textbf{69.7} & \textbf{413} & \textbf{2589}\\
+\bottomrule
+\end{tabularx}
+
+從基本追蹤器到完整設定為 IDF1 +6.8、AssA +7.3、IDs −53\%。最重要的判讀不是每項增益可以相加，
+而是先由 GMC 建立幀間幾何一致性後，重連、遮擋與軌跡年齡等訊號才變得可用。
+\applink{app:A1}{詳細結果 A.1}
+
+\subsubsection{身份修復方案比較}
+
+\tighttable
+\begin{tabularx}{\linewidth}{@{}P{35mm}rrrY@{}}
+\toprule
+方案 & $\Delta$IDF1 & $\Delta$IDs & 效能影響與計時範圍 & 目前結論\\
+\midrule
+逐幀 ReID & +0.0 & +1 & −34\% FPS & 無可量測收益，維持關閉\\
+離線身份交接（handover） & +0.4 & −6 & 不計入追蹤器 FPS & 正向，但幅度較小\\
+離線軌跡合併（merge） & \textbf{+0.9} & \textbf{−31} & 不計入追蹤器 FPS & 目前效果最好；量測見 \pr{335}，尚未併入主線\\
+兩者串接 & +0.7 / +0.8 & −21 / −27 & 同上 & 兩種順序都比單獨合併差\\
+線上身份合併 & −4.5 & +174 & 完整 FPS 未量 & 有害，且依賴非主線設定\\
+\bottomrule
+\end{tabularx}
+
+序列結束後的離線修復有兩種：\textbf{身份交接（handover）}與\textbf{軌跡合併（merge）}，
+都在輸出層執行。把兩者串接起來會施加更多連結卻得到更差的結果，因此「更多連結」不等於「更好的身份」。
+\applink{app:A2}{詳細結果 A.2}
+
+\begin{note}
+  \textbf{兩點判讀：}目前已測試的配置中，主要改善來自幾何路徑，再加外觀特徵的邊際收益很薄；
+  身份問題因此正從「逐幀特徵」轉向「少量高價值事件＋序列結束後修復」。
+\end{note}
+
+\newpage
+
+% ---------------------------------------------------------------------------
+% Body page 5
+% ---------------------------------------------------------------------------
+\subsection{4.2 執行效能}
+
+在接近主線的設定下，2026-09-05 量到 349.64 FPS、每幀 3.022 ms、GPU 忙碌率 93.6\%。
+每幀的 GPU 成本分佈如下；GPU 上多條工作佇列會彼此重疊，所以這是\textbf{成本}而不是把牆鐘時間切開的互斥分配：
+
+\tighttable
+\begin{tabularx}{\linewidth}{@{}Yrr@{}}
+\toprule
+群組 & 每幀 $\mu$s & 佔每幀比例\\
+\midrule
+模型計算（TensorRT 骨幹＋Mamba 特徵頭） & 2121.6 & 70.2\%\\
+追蹤配對 & 386.5 & 12.8\%\\
+NMS（執行兩次） & 313.6 & 10.4\%\\
+逐點運算／複製／取前 k 名 & 262.6 & 8.7\%\\
+GMC & 62.5 & 2.1\%\\
+\bottomrule
+\end{tabularx}
+
+由此可以報告三件事：
+
+\begin{itemize}
+  \item \textbf{主要運算成本的分佈已經掌握。}模型計算佔約七成，是必要計算，比例高不代表浪費；
+  其餘分散在追蹤配對、NMS 與資料搬運上。量測條件與完整分項見 \applink{app:B1}{每幀預算 B.1}。
+  \item \textbf{局部成本降低不一定轉為整體加速。}GPU 上多條工作佇列彼此重疊，兩種耗時幾乎相同的
+  額外工作，一種幾乎全額反映到每幀時間，另一種大部分被重疊掩蓋。一段工作能不能被藏起來，
+  取決於它使用哪些 GPU 資源、以及是否與其他工作競爭，而不只是它花多久。\applink{app:B2}{注入實驗 B.2}
+  \item \textbf{瓶頸順序仍待驗證。}已定位三類結構候選：NMS 的選取步驟、固定容量的遮擋掃描、
+  整張影格的複製；但這些是結構觀察，原始成本不等於可回收的時間，也不能相加當成預期 FPS 增益。
+  既定的六步量測完成前不下最佳化結論。\applink{app:B4}{候選細節 B.4}
+\end{itemize}
+
+\vfill
+
+\newpage
+
+% ---------------------------------------------------------------------------
+% Body page 6
+% ---------------------------------------------------------------------------
+\section{5. 後續大致規劃}
+
+\subsection{短期：確認問題與改善方向}
+
+\begin{enumerate}
+  \item \textbf{效能分析：}確認主要瓶頸與值得投入的優化項目。\applink{app:B1}{量測步驟 B.1}
+  \item \textbf{穩定性：}定位 CUDA Graph 錄製失敗的觸發條件。\applink{app:B3}{歸因現況 B.3}
+  \item \textbf{身份修復：}提高有效連接比例並降低錯誤合併；不把逐幀 ReID 重新放回關鍵路徑。
+  \item \textbf{泛化驗證：}改善未見資料上的偵測能力，確認追蹤方法的適用範圍。
+  \item \textbf{可追溯性：}讓報告中每一次執行都能回答資料來源、設定、機器與產出身分。
+\end{enumerate}
+
+\subsection{中期：實作改善並擴大驗證}
+
+\begin{itemize}
+  \item 把身份問題改寫為少量、可觀測、可歸因的事件；比較幾何殘差、軌跡歷史與新特徵，
+  而不是無限制地加大模型。
+  \item 改善以 PersonPath22 訓練的偵測器 recall，再重跑 MOT17 泛化測試；把準確率拆成偵測、
+  追蹤與身份修復三個責任面。
+  \item 對保留的候選在 MOT17 / MOT20 / DanceTrack 上做固定條件的跨資料集驗證。
+  量測與比較規則見 \applink{app:C4}{C.4}。
+\end{itemize}
+
+\subsection{最終：固定系統與評測，整理專題成果}
+
+\begin{itemize}
+  \item 凍結主線設定、模型、原生擴充建置、資料切分與評測協定。
+  \item 產出主要成績、泛化、跨資料集與效能四張主表，以及可重新生成的原始紀錄。
+  \item 完成 demo、專題書面與答辯版本；正文只保留系統形狀、現況、結果與下一步。
+\end{itemize}
+
+\section{6. 補充資料索引}
+
+\tighttable
+\begin{tabularx}{\linewidth}{@{}P{18mm}P{52mm}Y@{}}
+\toprule
+Appendix & 內容 & 正文中的使用方式\\
+\midrule
+\hyperref[app:A]{A} & 追蹤與身份實驗 & \applink{app:A1}{累積消融 A.1}、\applink{app:A2}{ReID／合併 A.2}、\applink{app:A3}{跨資料集 A.3}、\applink{app:A4}{重連規則 A.4}、\applink{app:A5}{選型細節 A.5}\\
+\hyperref[app:B]{B} & 效能與量測分析 & \applink{app:B1}{每幀預算 B.1}、\applink{app:B2}{注入實驗 B.2}、\applink{app:B3}{錄製歸因 B.3}、\applink{app:B4}{結構候選 B.4}\\
+\hyperref[app:C]{C} & 評測協定、環境與重現 & \applink{app:C1}{協定 C.1}、\applink{app:C2}{重現 C.2}、\applink{app:C4}{量測規則 C.4}\\
+\hyperref[app:D]{D} & 淘汰方案、變更與來源追溯 & \applink{app:D1}{NO-GO D.1}、\applink{app:D2}{變更索引 D.2}\\
+\bottomrule
+\end{tabularx}
+
+\begin{headline}
+  {\sffamily\bfseries 正文結論}\quad
+  系統主體已完成整合，以幾何為主的追蹤器與 GPU 執行路徑已能完成端到端追蹤與評測；
+  下一階段聚焦效能瓶頸、執行穩定性、身份修復與泛化能力的驗證。
+\end{headline}
+
+\vfill
+{\footnotesize\color{GrayText}
+規劃邊界：效能分析階段只做量測與歸因；是否納入主線各自另有驗證程序，不由本報告自動延伸。}
+\clearpage
+
+% ---------------------------------------------------------------------------
+% Appendix
+% ---------------------------------------------------------------------------
+\appendix
+\renewcommand{\thesection}{\Alph{section}}
+\renewcommand{\thesubsection}{\thesection.\arabic{subsection}}
+
+\section{A. Tracking / Identity 實驗}\label{app:A}
+
+\subsection{A.1 Geometry 累積消融}\label{app:A1}
+
+\begin{longtable}{@{}P{55mm}rrrrrr@{}}
+\toprule
+配置 & IDF1 & MOTA & HOTA & AssA & IDs & FP\\
+\midrule
+\endhead
+bare（GMC / bridge / occ / OAO off） & 71.4 & 75.3 & 65.0 & 62.4 & 888 & 3581\\
++ GMC & 75.9 & 77.7 & 67.9 & 66.4 & 445 & 3616\\
++ GMC + bridge relink & 76.7 & 78.2 & 68.5 & 67.2 & 406 & 3284\\
+full headline & 78.2 & 78.4 & 70.2 & 69.7 & 413 & 2589\\
+\bottomrule
+\end{longtable}
+
+\textbf{限制：}這是累積鏈，不是互相獨立的 additive modules。Occ gate 與 OAO 單獨加到 bare
+會是負向；它們要在 GMC 已建立幀間一致性後才轉為正向。Double-buffer 只改 scheduling，
+品質輸出 bit-exact，不能計入 accuracy 增益。
+
+\textbf{指標補充：}AssA 只看身份關聯品質（0--100，越高越好）；FP 為誤檢數（越低越好）。
+兩者只在附錄與正文表格中出現，不列入第 1 頁的代表指標。
+
+\textbf{來源：} \sourcepath{docs/reference/benchmarks/frozen_v2_ablation.md}；
+headline owner 為 \sourcepath{docs/TODO.md}。
+
+\subsection{A.2 ReID 與 identity handover}\label{app:A2}
+
+\begin{tabularx}{\linewidth}{@{}P{40mm}rrrrY@{}}
+\toprule
+Arm & IDF1 & MOTA & HOTA & IDs & 說明\\
+\midrule
+ReID-off base & 80.4 & 81.6 & 74.4 & 344 & \texttt{mamba\_whole\_graph\_m}、double-buffer、no-GPU-decode\\
+ReID tracker & 80.4 & 81.6 & 74.4 & 345 & FPS 245.1 → 160.9（−34\%）\\
+Offline handover & 80.8 & 81.5 & 74.5 & 338 & 54 handovers；sequence-end pass\\
+Offline merge & 81.3 & 81.6 & 74.7 & 313 & 114 link pairs；\pr{335}（open，未合併）\\
+handover $\rightarrow$ merge & 81.1 & 81.4 & 74.6 & 323 & 127 link pairs\\
+merge $\rightarrow$ handover & 81.2 & 81.4 & 74.7 & 317 & 133 link pairs\\
+Live handover bank & 75.9 & 80.2 & 70.7 & 519 & 159 accepted；無 double-buffer、ReID-on base\\
+\bottomrule
+\end{tabularx}
+
+\textbf{判讀：}
+\begin{itemize}
+  \item Offline merge 是目前最強的單一 offline lever（+0.9 IDF1 / −31 IDs）；handover 的 +0.4 較小，且槓桿已從歷史 +0.7 衰減。
+  \item 兩者串接在兩種順序下都低於單獨 merge，且施加更多 link pairs（127 / 133 對 114）；兩個 order 之間的 0.1 不主張為差異。FPS 265--277 對 270 base，此處不主張成本結論。
+  \item 它沒有「零成本」；只是 sequence-end post-process 不落入 per-frame tracker FPS 計數。
+  \item Live handover 的 −4.5 不可和 ReID 的 −34\% FPS 直接相加，因為兩段 protocol 不同。
+  \item Legacy generic \texttt{PostMerge} 為另一方案：combined AUC 雖高，base rate 太低，precision 不足，已淘汰。
+\end{itemize}
+
+\textbf{來源：} \sourcepath{docs/reference/benchmarks/reid_handover_ablation_20260808.md}、
+\sourcepath{docs/reference/no_go_registry.md}；chaining arms 見 \pr{335}（open）。
+
+\newpage
+
+\subsection{A.3 Bridge gate 的跨資料集驗證}\label{app:A3}
+
+凍結候選 \texttt{h\_lo/h\_hi = 0.76/1.40} 不在外部資料重新選參數：
+
+\begin{center}
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+ & MOT17（7 seq） & MOT20（4 seq） & DanceTrack（40 seq）\\
+\midrule
+candidate − shipped IDF1 & +0.642 & −0.013 & −0.753\\
+描述 & 正向 & near-neutral & materially harmful\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+MOT17 的 cliff / plateau 結構在兩個外部資料集均未重現，因此候選被否決，
+\texttt{mamba\_whole\_graph\_m} 保持 0.6/1.7。這是「先凍結候選、再外部驗證、失敗就不 promotion」
+的代表案例。
+
+\textbf{來源：} \sourcepath{docs/reference/benchmarks/bridge_gate_cross_dataset_20260808.md}。
+
+\subsection{A.4 短斷鏈重連規則與離線修復的耦合}\label{app:A4}
+
+\subsubsection{線上短斷鏈重連的配對規則}
+
+以速度加權對整段 gap 做外推，
+再以兩階段贏者決定連線——候選端先取最小橋接距離（bdist），
+再由每個中斷軌跡依偵測分數原子認領（atomic claim），輸家不重試。
+這放棄全域最佳指派（Hungarian / joint assignment），
+換取「每幀之內就能在 GPU 上做完」；「中點外推」只出現在診斷用的 Path C mirrors，不在主線。
+
+\subsubsection{離線修復與主線流程的耦合}
+
+handover 與 merge 的輸入只有已輸出的軌跡行，
+因此\textbf{可以獨立解耦}；目前仍在同一流程的序列末呼叫，屬架構遺留而非演算法要求。
+即時性的主張因此只由逐幀線上路徑支撐，而最終 MOT 檔（含內插與可選修復）不等同逐幀原始輸出。
+
+\textbf{來源：} \sourcepath{docs/PIPELINE.md}、
+\sourcepath{docs/reference/production_pipeline_code_map.md}。
+
+\subsection{A.5 各環節的選型細節}\label{app:A5}
+
+\begin{itemize}
+  \item \textbf{偵測：}採用單階段偵測器是為了守住即時預算；特徵頭換成 Mamba 狀態空間模型，
+  目的是在\textbf{不加逐幀外觀模型}的前提下改善小目標 recall。整段偵測錄成一張 CUDA Graph。
+  \item \textbf{相機運動補償：}GPU 相位相關法（cuFFT，降取樣 4$\times$）只估全域平移。
+  旋轉／仿射版本量過沒有收益；視差本來就不是 2D 仿射能解的，因此不列為待辦。
+  \item \textbf{運動預測：}Kalman 等速模型，量測噪聲隨骨幹容量調整。更重的預測器要佔用即時路徑，
+  收益尚未證實。
+  \item \textbf{資料關聯：}五階段配對、Sinkhorn-Auction 混合，關聯約 0.67 ms；先配高信心再處理剩餘，
+  auction 可在 GPU 上平行，不需要全域 Hungarian。
+  \item \textbf{長中斷身份：}逐幀 ReID 在現行追蹤器上為 IDF1 $\pm$0.0、吞吐量 −34\%（見 A.2），
+  因此改由序列末的離線修復處理。
+\end{itemize}
+
+\clearpage
+
+\section{B. Runtime / Profiling}\label{app:B}
+
+\subsection{B.1 Frame budget 與 P1--P6}\label{app:B1}
+
+\textbf{量測快照：}2026-09-05、\texttt{mamba\_whole\_graph\_m}、MOT17 train / SDP；\par
+RTX 5070 Ti Laptop、GPU decode、double-buffer、steady-state MOT17-04 frames 100--400。
+Nsight Systems 使用 CUDA graph node granularity；graph granularity 會把 149,204 kernels
+折成看似 94\% idle 的錯誤圖像。
+
+\begin{tabularx}{\linewidth}{@{}P{42mm}P{34mm}Y@{}}
+\toprule
+觀察面 & 結果 & 限制\\
+\midrule
+Throughput / period & 349.64 FPS / 3.022 ms & trace 自身造成 −3.7\% throughput\\
+Latency & 5.71 ms（double-buffer） & 不是 $1000/\mathrm{FPS}$\\
+GPU busy & 93.6\% across 11 streams & lane busy 可重疊，總和為 period 的 1.18×\\
+Host wait & count sync 1.884 ms & 是等 GPU，不是 CPU 算 1.884 ms\\
+Power / clock & 135 W / 140 W；2497 MHz & 不能單憑此歸因為 power cap\\
+\bottomrule
+\end{tabularx}
+
+\textbf{每幀 GPU 成本分項（正文 4.2 為其精簡版）：}多條 lane 會重疊，因此下表是每幀的 GPU
+成本，不是把 wall clock 切開的互斥分配。
+
+\begin{tabularx}{\linewidth}{@{}YrrY@{}}
+\toprule
+群組 & 每幀 $\mu$s & 佔每幀比例 & 怎麼讀\\
+\midrule
+TensorRT 骨幹＋Mamba 特徵頭 & 2121.6 & 70.2\% & 主要的必要計算，不能因為比例高就視為浪費\\
+追蹤配對 & 386.5 & 12.8\% & 值得進一步分辨是實際工作量，還是固定容量掃描\\
+Mamba 掃描核心 & 323.6 & 10.7\% & 已包含在上列模型工作中，單獨列出供對照，不可重複計入\\
+NMS（兩次） & 313.6 & 10.4\% & 選取步驟只用單一執行緒，且第二條路徑讓 NMS 付兩次\\
+逐點運算／複製／取前 k 名 & 262.6 & 8.7\% & 需先分辨歸屬，再量實際暴露在關鍵路徑上的成本\\
+GMC & 62.5 & 2.1\% & 成本小，但整張影格的暫存複製歸屬未清\\
+\bottomrule
+\end{tabularx}
+
+後續 P1--P6：production-faithful baseline → fixed-capacity tracker → sync / overlap →
+GMC compute vs traffic → private 第二路徑 / multi-pass value → bottleneck closure。
+在 P6 前，instrumented FPS 不得代替 production throughput，NCU replay duration 不得代替 Nsys frame cost。
+
+{\footnotesize\textbf{來源：}
+\sourcepath{docs/reference/benchmarks/frame_budget_20260905.md}；\\
+\sourcepath{docs/research/pipeline/production_pipeline_profiling_todo.md}。}
+
+\subsection{B.2 Tracker-lane dose response}\label{app:B2}
+
+兩個 isolated wall-time matched 的 injected work：
+
+\begin{tabularx}{\linewidth}{@{}P{40mm}rrrY@{}}
+\toprule
+Dose & Isolated & $S$ at $k=4$ & $S$ at $k=16$ & 判讀\\
+\midrule
+1024$^3$ fp32 GEMM & 169.0 $\mu$s & 0.96 & 1.00 & high occupancy 幾乎全價曝露\\
+\texttt{<<<1,1>>>} spin & 171.0 $\mu$s & 0.29 & 0.79 & resolved points 對應約 0.5 ms absorbed plateau\\
+\bottomrule
+\end{tabularx}
+
+$S=\Delta\mathrm{period}/(kT_{iso})$。Low-resource dose 的 $k=1,2$ 未超過 anchor spread，
+所以是 unresolved，不得報成 zero cost；$k=16$ 沒有 paired anchor，只能作 control。
+此 envelope 限於單 host / GPU / preset / stream，且 spin 幾乎不碰 bandwidth、L2、atomics 或 registers。
+
+\textbf{來源：} \sourcepath{docs/reference/benchmarks/tracker_lane_dose_response_20260907.md}。
+
+\subsection{B.3 CUDA capture attribution}\label{app:B3}
+
+\begin{tabularx}{\linewidth}{@{}YY@{}}
+\toprule
+已建立 & 尚未建立\\
+\midrule
+六個 synthetic controls；runtime / driver typed callback；Python site；stream flags / generation；event edge；direct native creator；teardown tail。 & 原始 failure 的完整 source / asset bytes；production stream owner 的完整指認；failure-time overlap；error 900/901/906 的 causality；failure rate closure。\\
+Production-02 是 structure-clean、0 capture error；直接觀察到 blocking stream 經 event join 參與 \texttt{detector.whole} topology。 & 0 error snapshot 不是「不會失敗」證據，也不能追溯替 production-01 補齊 structure。\\
+\bottomrule
+\end{tabularx}
+
+當前主張必須停在「topology observed, causality unresolved」。Issue \issue{340} 的 closure 仍需
+逐 capture site 的 semantics decision，以及兩條 decode path 在事先聲明 sample size 下的 failure-rate evidence。
+
+\textbf{來源：} \sourcepath{scripts/tools/capture_attribution/README.md}、
+\sourcepath{docs/research/pipeline/capture_failure_provenance_20260906.md}。
+
+\subsection{B.4 三類結構候選}\label{app:B4}
+
+\begin{tabularx}{\linewidth}{@{}B{14mm}P{44mm}Y@{}}
+\toprule
+候選 & 已確認 & 還不能說\\
+\midrule
+NMS 選取 & 選取步驟以單一 GPU 執行緒執行，且另一條私有路徑使 NMS 被執行兩次。 & 251.9 $\mu$s 的原始成本不等於可回收的時間；移除會改變 overlap topology。\\
+遮擋掃描 & 遮擋處理固定掃過 2048 個欄位，實際使用率很低。 & 使用率低本身不證明刪掉後 FPS 會上升。\\
+整張影格複製 & 每幀 24.9 MB 的整張影格複製分屬三個不同來源；其一已融合，其二把搬運量減半卻量不到吞吐量差異，其三未決。 & 減少搬運量不能取代端到端的成對量測。\\
+\bottomrule
+\end{tabularx}
+
+三者的原始成本不可相加當作預期 FPS 增益；每一項都要在 B.1 的 P1--P6 步驟下取得
+critical-path exposure 才能轉為最佳化結論。
+
+\clearpage
+
+\section{C. Benchmark / 環境 / Reproducibility}\label{app:C}
+
+\subsection{C.1 評測結果的用途與比較範圍}\label{app:C1}
+
+\begin{tabularx}{\linewidth}{@{}P{35mm}P{43mm}Y@{}}
+\toprule
+類型 & 用途 & 必須附帶的邊界\\
+\midrule
+Canonical headline & 長期凍結的展示數字（78.2 / 269.47） & frozen run、preset、dataset、host；揭露 in-sample。正文第 1 頁領的是下一列（81.3，\pr{335} 未合併）\\
+Decision A/B & 回答某模組有沒有收益 & 同批 paired arms、固定 decode、只主張 delta\\
+Profiler snapshot & 回答時間與資源落在哪 & tool、granularity、steady window、trace overhead；不可替代 production FPS\\
+Held-out & 回答泛化 & training / test 完全分離；不得拿弱 detector 結果冒充 tracker 上限\\
+\bottomrule
+\end{tabularx}
+
+\textbf{Canonical headline protocol：}
+\begin{itemize}
+  \item MOT17 train / SDP，七序列；\texttt{mamba\_whole\_graph}；\texttt{--double-buffer}。
+  \item RTX 5070 Ti Laptop 12 GB；IDF1 78.2 / HOTA 70.2 / MOTA 78.4 / AssA 69.7 / 413 IDs / 269.47 Eval FPS。
+  \item Detection head、teacher、cache 用過同一批七序列，故絕對 accuracy 為 in-sample。
+\end{itemize}
+
+\textbf{Held-out protocol：}teacher、cache、distillation 與 head 全部只用 PersonPath22，
+MOT17 完全不進 training；得到 IDF1 50.2 / HOTA 42.7 / AssA 46.6。Full tracker 比 GMC-only
+高 1.2 IDF1，顯示 geometry mechanisms 能 transfer；主要限制是 PP22 detector recall 偏低。
+
+{\footnotesize\textbf{來源：}
+\sourcepath{docs/reference/mot17_default_config.md}；
+\sourcepath{docs/modules/detection/research/holdout_generalization_plan.md}；\\
+\sourcepath{docs/research/evidence_ledger.md}。}
+
+\subsection{C.2 重現入口}\label{app:C2}
+
+\begin{lstlisting}[style=shell,language=bash]
+# Canonical headline
+uv run python scripts/eval/mot17.py \
+  --preset mamba_whole_graph --detector SDP --double-buffer \
+  --output out/frozen_v2_replay
+
+# Deterministic ReID / offline-handover A/B base
+uv run python scripts/eval/mot17.py \
+  --preset mamba_whole_graph_m --detector SDP \
+  --double-buffer --no-gpu-decode --output out/reid_off
+
+\end{lstlisting}
+
+重現前必須固定：git SHA、working-tree cleanliness、preset / CLI、checkpoint / TensorRT engine、
+native 擴充模組、dataset bytes、GPU / driver、decode mode、warm-up / measured window、output digest。
+品質 bit-exact 不代表 timing bit-exact；FPS 必須以 paired block 或明確 protocol 處理系統漂移。
+Profiler 計畫與 runbook 見 \sourcepath{docs/reference/runbooks/nsys_profiling.md}。
+
+\subsection{C.3 目前報告可主張與不可主張}\label{app:C3}
+
+\tighttable
+\begin{tabularx}{\linewidth}{@{}Y Y@{}}
+\toprule
+可以主張 & 不可主張\\
+\midrule
+固定 detector / preset 下 tracker 的累積 delta。 & 78.2 或 81.3 是 held-out、官方 test 或 SOTA。\\
+ReID A/B（2026-08-08）：+0.0 IDF1、−34\% throughput。 & appearance model 永遠無效。\\
+80.4 base 上 merge +0.9、handover +0.4（\pr{335} open）。 & 該 PR 已 landed，或兩順序的 0.1 是差異。\\
+Frame budget 定位出 structural candidates。 & raw $\mu$s 相加即 FPS gain。\\
+349.64 FPS = m preset 單序列 steady window。 & 349.64 可當七序列 eval FPS 或與 269.47 橫比。\\
+Production topology 有 blocking-stream event joins。 & 該 topology 即 \issue{340} 的 root cause。\\
+\bottomrule
+\end{tabularx}
+
+\subsection{C.4 效能與跨資料集的量測規則}\label{app:C4}
+
+\textbf{效能候選：}一律在同一台機器、成對交錯執行（paired / interleaved），
+維持主線的跨幀重疊排程，並確認輸出逐位元相同；同時回報吞吐量與延遲，不可只報其一。
+Instrumented FPS 不得代替 production throughput；NCU replay duration 不得代替 Nsys frame cost。
+
+\textbf{失敗率類問題：}樣本數必須事前宣告，不得在觀察後追加或截斷；
+0 error 的快照不是「不會失敗」的證據。
+
+\textbf{跨資料集驗證：}候選參數先凍結、再拿到外部資料上量，外部資料一律不重新選參數；
+外部資料上不成立即否決，不以「在該資料集重新調參後也可以」作為保留理由。
+
+\textbf{成績分類：}canonical headline、decision A/B、profiler snapshot、held-out
+四類數字各有邊界（見 C.1），任何跨類的橫向比較都不成立。
+
+\clearpage
+
+\section{D. 其他失敗／淘汰方案、PR / commit / provenance}\label{app:D}
+
+\subsection{D.1 代表性 NO-GO 與停止理由}\label{app:D1}
+
+\begin{longtable}{@{}P{35mm}P{43mm}P{73mm}@{}}
+\toprule
+方案 & 結果 & 為何停止／何時可重開\\
+\midrule
+Appearance ReID bank & GMC 下零 IDF1 增益且有明顯 FPS 成本 & 只有新 MOT/crowd-domain feature 先過 direct identity benchmark 才重測\\
+Generic PostMerge & AUC 0.868，但 positive base rate 2.4\%，作用點 precision 約 20\% & 需新的正交訊號提高 precision；不可和 offline handover 混稱\\
+Live Cheb-GR handover & −4.5 IDF1、IDs 增加，且綁 ReID-on & 需先有 reid-off 可用的稀疏 event feature，再作新設計\\
+Bridge gate 0.76/1.40 & MOT17 正向、DanceTrack 有害 & 候選已否決；新候選必須先凍結再外部驗證\\
+F3c graph input lease & D2D volume 約減半，throughput null & 不為 byte reduction 承擔 ownership protocol；除非新證據顯示 critical exposure\\
+旋轉 / affine GMC & translation-dominant MOT17 不受益，parallax 不可由 2D affine 解決 & 只有真 camera roll / wearable / aerial dataset 才重開\\
+\bottomrule
+\end{longtable}
+
+\textbf{來源：} \sourcepath{docs/reference/no_go_registry.md}、
+\sourcepath{report_data/no_go_summary.md}。
+
+\subsection{D.2 近期 PR / issue / provenance 索引}\label{app:D2}
+
+\begin{tabularx}{\linewidth}{@{}P{25mm}P{35mm}Y@{}}
+\toprule
+項目 & 身分 & 對本報告的意義\\
+\midrule
+F3a fused ingest & \pr{339}, merge \texttt{5ca0ded1} & bit-exact rewrite；paired throughput +2.15\%，已進 main\\
+Capture mode binding & \pr{351}, merge \texttt{bab4e154} & capture-mode exchange 介面與回傳檢查\\
+Observer teardown & \pr{352}, merge \texttt{efd3176f} & bounded quiescence、tail 與 final-manifest closure\\
+Stream owner attribution & \pr{355}, merge \texttt{4d89370c} & handle generation 綁 direct native creator\\
+Tracker-lane dose & \pr{358}, merge \texttt{0fe937b4} & added work 的 resource-shape sensitivity\\
+F3c & \issue{338} closed & 減 bytes 無 throughput payoff，未落地\\
+Capture race & \issue{340} open & topology 已觀察；causality / closure 未完成\\
+GMC graph input & \issue{341} open & full-frame copy ROI / critical exposure 未定\\
+\bottomrule
+\end{tabularx}
+
+\begin{note}
+  PR merged、CI green、trace structure clean、pre-seal 完成與正式研究／production promotion 是不同邊界。
+  本報告只鏡射已存在的 owner 與 artifact，不創造新的執行授權或 acceptance。
+\end{note}
+
+\subsection{D.3 文件與證據地圖}\label{app:D3}
+
+\begin{tabularx}{\linewidth}{@{}P{46mm}Y@{}}
+\toprule
+要查什麼 & 權威入口\\
+\midrule
+專題定位與能力邊界 & \sourcepath{docs/PROJECT_DIRECTION.md}\\
+當前 baseline / sole-active & \sourcepath{docs/TODO.md}\\
+主線演算法摘要 & \sourcepath{docs/PIPELINE.md}\\
+Production code map & \sourcepath{docs/reference/production_pipeline_code_map.md}\\
+可引用 baseline / decision rows & \sourcepath{docs/research/evidence_ledger.md}\\
+負結果與 revival rule & \sourcepath{docs/reference/no_go_registry.md}\\
+Benchmark 索引 & \sourcepath{docs/reference/benchmarks/README.md}\\
+Paper / appendix rebuild assets & \sourcepath{report_data/README.md}\\
+\bottomrule
+\end{tabularx}
+
+\vfill
+\begin{headline}
+  \textbf{最終交付判準：}報告中的每個 headline 都能回到一個 frozen protocol 或 owner；
+  每個「未解決」都有明確下一個量測；每個負結果都有停止理由，而不是只留下失敗名稱。
+\end{headline}
+
+\end{document}
