@@ -257,6 +257,18 @@ last_reviewed_at: 2026-07-12
 
 ### `quantity.bridge_capture_provenance`
 
+> **External custody relocated 2026-09-07.** Every H2 custody root named in this record
+> as `/home/ray/<name>` now lives at `/home/ray/h2_custody/<name>`; the leaf names are
+> unchanged, so **prepend `h2_custody/`** to resolve any such path below. The path strings
+> in this record are left as written — they state where a packet was when the statement was
+> made, and three of them are inventoried members of frozen evidence roots that cannot be
+> edited without breaking their closure. Inventories bind member paths relative to the
+> packet root, so the move altered no byte: `sha256sum -c checksums.sha256` on the admitted
+> W6 measurement packet re-verified 519/519 `OK` immediately afterwards, matching its
+> recorded closure. No script, test or checker resolves these paths at runtime. The move is
+> custody hygiene only and changes no state, verdict or admission recorded here. Relocation
+> record: `/home/ray/h2_custody/README.md`.
+
 ```yaml
 layer: quantity                        # 非決策層:它管「證據能否自證」,不管任何 gate/score
 ladder: P0 ordered terminal            transition_semantics: defined（該研究自帶封印判準）
