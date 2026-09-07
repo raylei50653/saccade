@@ -27,6 +27,7 @@ See [../../ownership/doc_structure_contract.md](../../ownership/doc_structure_co
 | [oao_duration_ramp_revival_20260617.md](oao_duration_ramp_revival_20260617.md) | OAO duration-ramp 復活筆記 |
 | [scoring_energy_20260630.md](scoring_energy_20260630.md) | Scoring energy 分析 |
 | [wsl2_d2h_pinned_memory_leak_20260517.md](wsl2_d2h_pinned_memory_leak_20260517.md) | WSL2 D2H pinned memory leak post-mortem |
+| [nogpudecode_reproducibility_20260907.md](nogpudecode_reproducibility_20260907.md) | **`--no-gpu-decode` 的重複執行變異**:重現性不能由旗標單獨保證,必須逐組態驗證(`baseline` 7-seq 14/20 分歧、`mamba_whole_graph_m --double-buffer` 0/20)＋取代「bit-exact ⇒ N=1」的判讀規則與受影響結論分級 |
 
 ## Archived related
 

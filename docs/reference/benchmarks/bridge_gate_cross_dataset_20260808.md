@@ -174,7 +174,7 @@ MOT17 的 cliff-plus-row-plateau 幾何在此二資料集上未重現;MOT20 的 
 
 **未建立**:
 
-- **不是「MOT17 的結構是假象」。** 三個資料集各自 bit-exact,都是真實量測,只是**不共享結構**。
+- **不是「MOT17 的結構是假象」。** 三個資料集各自都是真實量測,只是**不共享結構**。
   正確陳述是**非 domain-general**。
 - **未事先註冊 non-inferiority margin ⇒ 本文不做 non-inferiority 檢定**(§2)。
   MOT20 不稱「通過」、DanceTrack 不稱「失敗」;僅用 near-neutral / materially harmful 描述。
@@ -196,7 +196,7 @@ MOT17 的 cliff-plus-row-plateau 幾何在此二資料集上未重現;MOT20 的 
    (同型陷阱:前作姊妹文件 [reid_handover](reid_handover_ablation_20260808.md) §5 用
    MOT 輸出 byte-diff 判斷 re-query 是否觸發。)
 2. **在單一資料集上做 sweep 找到的 gate 結構,不可假設可轉移** —— 即使該結構在該資料集上
-   bit-exact、通過 LOSO、且有明確的機制隔離。本文即為一個完整的反例。
+   重複執行未見變異、通過 LOSO、且有明確的機制隔離。本文即為一個完整的反例。
 3. **前作的 wording 紀律被資料驗證。** 前作將 robustness 限定為
    「僅在 MOT17-train 這批資料上建立,不是跨資料集或跨 detector 的 robustness」——
    若當時採用更強的說法,本文的結果會直接推翻一份已發布的 claim。

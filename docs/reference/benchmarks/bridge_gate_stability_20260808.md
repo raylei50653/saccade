@@ -15,11 +15,19 @@
 
 ---
 
-## 0. 為什麼現在做得動:`--no-gpu-decode` 下品質指標 bit-exact
+## 0. 為什麼現在做得動:三重複下品質指標未見變異
+
+> ⚠️ **2026-09-07 更正。** 本節原本寫的是「`--no-gpu-decode` 下品質指標 bit-exact」,
+> 並據此宣告 N=1 per cell 成立。**該推論已撤回**:**三重複全同本身不足以排除 run-to-run 分歧,
+> 因此不足以支撐 bit-exact 的普遍宣稱。** 下面的觀測本身不變。
+> 後續量測見 [`--no-gpu-decode` 的重複執行變異](../../research/eval/nogpudecode_reproducibility_20260907.md):
+> 本文這個組態(`mamba_whole_graph_m --double-buffer` 7-seq)在 20 跑下**未見分歧**,
+> 故本文結論**本次未取得推翻證據**;但可寫的句子是「n=20 未見分歧」,不是 bit-exact,
+> 且該重現性**不自動延伸到處置臂**。
 
 三 arm × 三重複,每個品質指標 stdev **±0.00**。先前這條線的研究把
 `no evaluator rerun` 列為 validation gate,正是因為當年重跑不可信;
-確定性成立後 **N=1 per cell 即可**,一個 5×5 sweep 才在成本內。
+本文以 N=1 per cell 執行 5×5 sweep,成本理由成立,**證據強度以上引更正為準**。
 
 座標選擇沿用已接受的 global safe axes `{dist_h, log_h_ratio}`,它們在 production 就是:
 
@@ -119,8 +127,10 @@ LOSO **不能**排除整個 grid、候選 family 與分析方法本身都看過�
 | **POOLED** | **80.447** | **81.161** | **+0.714** |
 
 **未見實質退化**(量測最差 −0.021;兩條 bit-identical)。
-注意 §0 已建立 `--no-gpu-decode` 下 bit-exact ⇒ `−0.021` / `−0.018` **不是 run-to-run noise,
-而是可重現但極小的負 delta**,不以「噪聲」替其開脫。但**增益高度集中**:
+**2026-09-07 更正**:原文據 §0 的 bit-exactness 稱 `−0.021` / `−0.018`「不是 run-to-run
+noise,而是可重現但極小的負 delta」,**該推論隨 §0 一併撤回**。這兩個值是實際觀測,
+但單次 A/B 尚不足以區分這個量級的處置效果與 run-to-run 變異;本文亦不反過來稱它們為噪聲
+(本組態 20 跑未見分歧,見 [更正註記](../../research/eval/nogpudecode_reproducibility_20260907.md))。但**增益高度集中**:
 all-7 **+0.714** → 去掉 11 剩 **+0.200** → 再去掉 05 只剩 **+0.052**。
 
 ⇒ 誠實的賣點不是「+0.714 accuracy」,而是**從懸崖移到平台**這件事。

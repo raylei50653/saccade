@@ -172,7 +172,12 @@ part of the 35.
 **Dose inertness.** All 36 runs returned identical **IDF1 80.3 / MOTA 81.8 / IDs 358**. HOTA
 was captured only on the pre-patch baseline run (74.3); the ladder harness extracted IDF1,
 MOTA and IDs only, so **no HOTA invariant is claimed across the 35**. On the three metrics that
-were recorded every time, the dose is inert and the pipeline is deterministic at this preset.
+were recorded every time, the dose is inert. The original wording here claimed the pipeline
+is *deterministic at this preset*; that generalisation is withdrawn (2026-09-07). What the 35
+runs support is **no divergence observed on the three recorded metrics**, which under an
+assumption of independent, fixed divergence probability puts a one-sided 95% upper bound of
+about 8.2% on the rate (n = 35) -- consecutive same-session runs need not satisfy that assumption. See
+[`--no-gpu-decode` reproducibility](../../research/eval/nogpudecode_reproducibility_20260907.md).
 
 ---
 
