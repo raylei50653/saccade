@@ -77,11 +77,14 @@ capture participation without another BeginCapture call.
 Before `attribution_stop`, teardown shuts down the auxiliary workers this process owns
 (torch's inductor compile pool, tqdm's monitor) and waits for the remaining threads,
 bounded by `--quiesce-timeout` (default 60s, which has to clear torch's own
-`quiesce_async_compile_time / 2` polling interval). This is quiescence, not an excuse:
-the shutdown check still requires no live thread, so a worker that outlasts the bound
-is reported and fails the structure check as before. Shutdown errors are recorded in
-`quiesce.errors` and never raised, since a teardown convenience must not destroy the
-trace it is serving.
+`quiesce_async_compile_time / 2` polling interval). Each shutdown runs on its own named
+daemon thread, so the bound encloses the shutdown calls themselves rather than only the
+wait after them; a shutdown that never returns is therefore bounded like any other
+survivor instead of hanging teardown. This is quiescence, not an excuse: the shutdown
+check still requires no live thread, so anything outlasting the bound — an unstopped
+worker or the thread still executing its shutdown — is reported in `live_threads` and
+fails the structure check as before. Shutdown errors are recorded in `quiesce.errors`
+and never raised, since a teardown convenience must not destroy the trace it is serving.
 
 ## Interpretation and limits
 
