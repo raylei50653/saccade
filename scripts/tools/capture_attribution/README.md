@@ -41,10 +41,12 @@ Across those controls, creation exercises `cudaStreamCreate`,
 `cudaStreamCreateWithFlags`, `cudaStreamCreateWithPriority`, `cuStreamCreate`, and
 `cuStreamCreateWithPriority`; the driver cases also obtain `cuStreamBeginCapture`
 through `cuGetProcAddress_v2`, exercising function-pointer paths that a symbol-only
-LD_PRELOAD shim may miss. `blocking-runtime` destroys and recreates its stream and
-requires the reused handle to resolve to two ordered lifetime generations. Every native
-control requires the direct caller frame to resolve to the named symbol in the attested
-`control_owner.so`. `python` covers
+LD_PRELOAD shim may miss. `blocking-runtime` destroys its first stream, performs one
+bounded replacement create/destroy, and records whether the allocator happened to reuse
+the raw handle. If it did, qualification requires generations 1 and 2; a distinct
+replacement handle is valid and is not treated as an instrumentation failure. Every
+native control requires the direct caller frame to resolve to the named symbol in the
+attested `control_owner.so`. `python` covers
 `make_graphed_callables` and the repo NMS/GMC wrapper with trivial tensor operations.
 This is instrumentation validation, not a sample of production failures.
 `blocking-joined` starts capture on a non-blocking origin and joins a blocking side

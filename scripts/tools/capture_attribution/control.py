@@ -90,7 +90,9 @@ def destroy_stream(helper, driver, stream):
         checked(helper.attribution_control_cuda_destroy(raw))
 
 
-def mechanism(blocking, driver, creation_kind, helper_path, joined=False, reuse=False):
+def mechanism(
+    blocking, driver, creation_kind, helper_path, joined=False, recreate=False
+):
     torch.cuda.init()
     torch.cuda.synchronize()
     helper = load_owner_helper(helper_path)
@@ -187,14 +189,13 @@ def mechanism(blocking, driver, creation_kind, helper_path, joined=False, reuse=
         destroy_stream(helper, False, side)
         checked(destroy_event(event_out))
         checked(destroy_event(event_back))
-    if reuse:
+    if recreate:
         replacement = create_stream(helper, creation_kind, 0)
-        result["reuse"] = {
+        result["recreate"] = {
             "first": first_handle,
             "second": replacement.value,
             "same_handle": first_handle == replacement.value,
         }
-        assert result["reuse"]["same_handle"], result
         destroy_stream(helper, driver, replacement)
     print(json.dumps(result), flush=True)
 
@@ -244,5 +245,5 @@ if __name__ == "__main__":
             creation_kind=creation_kinds[args.case],
             helper_path=args.helper,
             joined=args.case == "blocking-joined",
-            reuse=args.case == "blocking-runtime",
+            recreate=args.case == "blocking-runtime",
         )

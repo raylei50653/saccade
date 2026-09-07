@@ -61,6 +61,17 @@ def qualify(observer: Path, output: Path) -> None:
             json.dumps(report, indent=2) + "\n"
         )
         problems.extend(report["problems"])
+        control_result = None
+        if case == "blocking-runtime":
+            try:
+                parsed = json.loads((root / "stdout.log").read_text())
+            except (OSError, json.JSONDecodeError) as exc:
+                problems.append(f"recreate_control_result_unreadable:{exc}")
+            else:
+                if isinstance(parsed, dict):
+                    control_result = parsed
+                else:
+                    problems.append("recreate_control_result_not_an_object")
         captures = report["captures"]
         lifetimes = report["stream_lifetimes"]
         if case == "python":
@@ -141,19 +152,40 @@ def qualify(observer: Path, output: Path) -> None:
             ):
                 problems.append("driver_control_used_runtime_creation")
             if case == "blocking-runtime":
-                generations = sorted(
-                    (lifetime["generation"], lifetime["stream"], lifetime["destroy"])
-                    for lifetime in owner_lifetimes
+                recreate = (
+                    control_result.get("recreate")
+                    if isinstance(control_result, dict)
+                    else None
                 )
-                if (
-                    len(generations) != 2
-                    or generations[0][0] != 1
-                    or generations[1][0] != 2
-                    or generations[0][1] != generations[1][1]
-                    or generations[0][2] is None
-                    or generations[0][2]["exit_ns"] >= owner_lifetimes[1]["created_ns"]
-                ):
-                    problems.append("destroy_recreate_lifetime_reuse_mismatch")
+                recreate_valid = (
+                    isinstance(recreate, dict)
+                    and type(recreate.get("first")) is int
+                    and recreate["first"] > 0
+                    and type(recreate.get("second")) is int
+                    and recreate["second"] > 0
+                    and type(recreate.get("same_handle")) is bool
+                    and recreate["same_handle"]
+                    == (recreate["first"] == recreate["second"])
+                )
+                if not recreate_valid:
+                    problems.append("recreate_control_result_invalid")
+                else:
+                    ordered = sorted(
+                        owner_lifetimes, key=lambda item: item["created_ns"]
+                    )
+                    lifetimes_valid = (
+                        len(ordered) == 2
+                        and ordered[0]["stream"] == recreate["first"]
+                        and ordered[1]["stream"] == recreate["second"]
+                        and all(item["destroy"] is not None for item in ordered)
+                        and ordered[0]["destroy"]["exit_ns"] < ordered[1]["created_ns"]
+                    )
+                    if not lifetimes_valid:
+                        problems.append("destroy_recreate_lifetime_mismatch")
+                    elif recreate["same_handle"] and [
+                        item["generation"] for item in ordered
+                    ] != [1, 2]:
+                        problems.append("destroy_recreate_generation_mismatch")
             if case == "blocking-joined":
                 if not report["event_edges"] or not any(
                     s["status"] == 1 and s["flags"] == 0
