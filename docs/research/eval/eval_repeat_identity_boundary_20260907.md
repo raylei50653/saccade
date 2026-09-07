@@ -1,4 +1,4 @@
-# eval 靜默 MOT 分歧的 runtime 邊界與 fail-closed harness (#363, 2026-09-07)
+# eval 靜默 MOT 分歧的 observability bound 與 fail-closed harness (#363, 2026-09-07)
 
 <!-- doc-status: active -->
 <!-- doc-promotion: none -->
@@ -22,7 +22,7 @@
 
 ---
 
-## 1. Runtime 邊界
+## 1. Observability bound
 
 對 `~/.local/state/saccade/perf/nogpudecode-reproducibility-20260907/` 與
 `gpu-decode-nondeterminism-recheck-20260907/` 的 tracker 輸出,用既有
@@ -125,6 +125,10 @@ uv run python scripts/tools/check_eval_repeat_identity.py run -n 8
 因此 #367 是 **(3) + observability bound** 的 milestone,不是 close.
 七序列後續的 ID-only 第一行仍是 `GlobalTrackIdMapper` 對前面序列不同出生數的下游 — 那是 MOT 第一行差異的形狀,同樣不是 producer 指認.
 
-下一步不是更多 MOT-level repetitions. 資訊瓶頸是 observability:opt-in per-stage fingerprint,至少把同一幀切成
+下一刀 (condition 2):為 #363 加 **opt-in per-stage fingerprint**,定位兩次
+fixed-config eval 首次在哪個 producer-facing stage 產生不同值;只做
+observability,不先假設根因.第一版 **hash-first、dump-on-divergence**,
+不是常態保存完整 tensor — instrumentation footprint 要小,也比較不容易
+因為觀測本身改變 race/timing.同一幀至少切成
 `post-decode/input → detector raw/postprocess → post-NMS detections → tracker pre-update inputs → tracker post-update/track_results → MOT`.
-第一版不必 dump 全 tensor;canonical hash、divergence 時可選擇 dump payload,就夠開始二分產生路徑.
+等首次差異夾到例如 `post-NMS → tracker update`,條件 2 才真正接近 closure.
