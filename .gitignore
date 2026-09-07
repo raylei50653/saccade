@@ -145,3 +145,30 @@ scratchpad/
 # Committing it would make a view of an 82 GB workspace look like a repo fact,
 # and it must stay out of docs/ because build_master_map rglobs that tree.
 .provenance/
+
+# Local runtime linker path helper, sourced (not executed) before running the
+# CUDA/TensorRT pipeline: `source setup_env.sh`. It is untracked because every
+# entry it exports is a machine-local absolute path — the interpreter version is
+# baked into the `.venv/lib/python3.12/...` segments and the toolkit prefix is
+# `/opt/cuda/lib64` — so committing one developer's copy would hand everyone
+# else a path list that silently resolves to nothing.
+#
+# It is not part of any build- or run-identity attestation. H0/H2 measurement
+# children run under a closed HOME/TMPDIR/XDG_CACHE_HOME and record their own
+# runtime inputs; a tracked shell entry point would add an environment source
+# that no attestation covers, which is worse than no entry point at all.
+#
+# To reproduce it after a fresh clone (this is the whole file):
+#
+#     #!/usr/bin/env bash
+#     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+#     export LD_LIBRARY_PATH="${SCRIPT_DIR}/build:\
+#     ${SCRIPT_DIR}/.venv/lib/python3.12/site-packages/tensorrt_libs:\
+#     ${SCRIPT_DIR}/.venv/lib/python3.12/site-packages/nvidia/cuda_runtime/lib:\
+#     /opt/cuda/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+#
+# Substitute the real `python3.N` of `.venv` and the real CUDA prefix. Symptom
+# when it is missing or stale: an import or a native call dies on a missing
+# `libcublas*`/`libnvinfer*` shared object even though the wheels are installed,
+# because the loader never searches the wheel-private lib directories.
+setup_env.sh
