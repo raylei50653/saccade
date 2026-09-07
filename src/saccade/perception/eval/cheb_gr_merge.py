@@ -166,6 +166,7 @@ def cheb_gr_merge_output_tracklets(
     k2: int = 6,
     max_fwd: int = 50,
     fuse_lambda: float = 0.3,
+    decision_log: list[dict[str, Any]] | None = None,
 ) -> tuple[list[str], dict[str, int]]:
     """Merge temporally-disjoint tracklets by Cheb-GR appearance similarity.
 
@@ -202,6 +203,26 @@ def cheb_gr_merge_output_tracklets(
         for i, t in enumerate(tracklets)
         if t.track_id in embeddings and embeddings[t.track_id].shape[0] > 0
     ]
+    if decision_log is not None:
+        indexed_ids = {t.track_id for _, t in indexed}
+        for t in tracklets:
+            emb = embeddings.get(t.track_id)
+            decision_log.append(
+                {
+                    "kind": "tracklet",
+                    "a_id": t.track_id,
+                    "b_id": -1,
+                    "cost": "",
+                    "gap": "",
+                    "overlap": "",
+                    "n_samples": 0 if emb is None else int(emb.shape[0]),
+                    "start": t.start,
+                    "end": t.end,
+                    "verdict": "has_embedding"
+                    if t.track_id in indexed_ids
+                    else "no_embedding",
+                }
+            )
     if len(indexed) <= 1:
         stats.ids_after = len(tracklets)
         return results_lines, vars(stats)
@@ -238,14 +259,31 @@ def cheb_gr_merge_output_tracklets(
         for bi in range(ai + 1, len(indexed)):
             tb = indexed[bi][1]
             c = float(dmat[ai, bi])
-            if c > max_cost:
-                continue
             earlier, later = (ta, tb) if ta.end <= tb.end else (tb, ta)
             overlap = earlier.end - later.start
             gap = later.start - earlier.end
-            if overlap > min_overlap_frames or gap < 0 or gap > max_gap:
-                continue
-            candidates.append((c, ai, bi))
+            if c > max_cost:
+                verdict = "reject_cost"
+            elif overlap > min_overlap_frames or gap < 0 or gap > max_gap:
+                verdict = "reject_temporal"
+            else:
+                verdict = "pending"
+                candidates.append((c, ai, bi))
+            if decision_log is not None:
+                decision_log.append(
+                    {
+                        "kind": "pair",
+                        "a_id": ta.track_id,
+                        "b_id": tb.track_id,
+                        "cost": c,
+                        "gap": gap,
+                        "overlap": overlap,
+                        "n_samples": "",
+                        "start": "",
+                        "end": "",
+                        "verdict": verdict,
+                    }
+                )
     candidates.sort(key=lambda x: x[0])
 
     # Per-tracklet frame sets; components accumulate the union of their frames.
@@ -257,22 +295,38 @@ def cheb_gr_merge_output_tracklets(
     comp_frames: dict[int, set[int]] = {
         t.track_id: set(frames_by_id.get(t.track_id, set())) for t in tracklets
     }
+    pending_rows: dict[tuple[int, int], dict[str, Any]] = {}
+    if decision_log is not None:
+        pending_rows = {
+            (row["a_id"], row["b_id"]): row
+            for row in decision_log
+            if row["kind"] == "pair" and row["verdict"] == "pending"
+        }
+
+    def _resolve(a: int, b: int, verdict: str) -> None:
+        row = pending_rows.get((a, b))
+        if row is not None:
+            row["verdict"] = verdict
+
     for _, ai, bi in candidates:
         ida = indexed[ai][1].track_id
         idb = indexed[bi][1].track_id
         ra, rb = uf.find(ida), uf.find(idb)
         if ra == rb:
+            _resolve(ida, idb, "reject_same_component")
             continue
         fa, fb = comp_frames[ra], comp_frames[rb]
         # Component frame sets must be STRICTLY disjoint: any shared frame would
         # put the merged id twice in that timestep (invalid MOT output). The
         # pairwise min_overlap_frames leniency above does not survive chaining.
         if fa & fb:
+            _resolve(ida, idb, "reject_component_overlap")
             continue
         # Canonical id = the earlier-ending component's root (stable identity).
         keep, drop = (ra, rb) if max(fa) <= max(fb) else (rb, ra)
         uf.union(keep, drop)
         comp_frames[keep] = fa | fb
+        _resolve(ida, idb, "accepted")
         stats.merges += 1
 
     if stats.merges == 0:

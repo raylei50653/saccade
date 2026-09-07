@@ -336,6 +336,7 @@ class LifecycleView:
     cheb_gr_online_bank_mode: str
     cheb_gr_online_bank_n: int
     cheb_gr_online_log: bool
+    cheb_gr_postproc_order: str
     occ_audit: bool
     occ_audit_tau: float
     occ_audit_ref_n: int
@@ -660,6 +661,7 @@ class EvalConfig:
     cheb_gr_online_bank_mode: str
     cheb_gr_online_bank_n: int
     cheb_gr_online_log: bool
+    cheb_gr_postproc_order: str
 
     # Causal occ-exit identity audit (ABSORB-side twin of the online handover;
     # default off). Shares the cheb_gr extractor + visclean coverage rule.
@@ -1118,6 +1120,7 @@ class EvalConfig:
             cheb_gr_online_bank_mode=self.cheb_gr_online_bank_mode,
             cheb_gr_online_bank_n=self.cheb_gr_online_bank_n,
             cheb_gr_online_log=self.cheb_gr_online_log,
+            cheb_gr_postproc_order=self.cheb_gr_postproc_order,
             occ_audit=self.occ_audit,
             occ_audit_tau=self.occ_audit_tau,
             occ_audit_ref_n=self.occ_audit_ref_n,
@@ -1495,6 +1498,7 @@ _DEFAULTS: dict[str, object] = {
     "cheb_gr_online_bank_mode": "spread",
     "cheb_gr_online_bank_n": 0,
     "cheb_gr_online_log": False,
+    "cheb_gr_postproc_order": "",
     "occ_audit": False,
     "occ_audit_tau": 0.45,
     "occ_audit_ref_n": 5,

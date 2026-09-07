@@ -1,0 +1,22 @@
+# Explicit two-stage output-layer chain: handover_then_merge.
+#
+# Tests whether the offline handover and the tracklet merge are complementary
+# repairs. Order is an experiment variable: each stage re-extracts its own
+# embeddings from the lines the previous stage produced, so the second stage
+# sees a different track set depending on which ran first. Per-stage link
+# records land in _postproc_stage_log.csv; zero links is a valid outcome.
+#
+# Load with:
+#   .venv/bin/python scripts/eval/mot17.py --preset mamba_whole_graph_m \
+#       --detector SDP --double-buffer --no-gpu-decode \
+#       --module-lifecycle configs/modules/cheb_gr_chain_handover_then_merge.yaml
+
+cheb_gr_offline_handover: true
+cheb_gr_model: mobilenetv4_reid
+cheb_gr_offline_min_head: 2
+cheb_gr_offline_margin: 0.05
+
+cheb_gr_merge_enabled: true
+cheb_gr_merge_max_cost: 0.45
+
+cheb_gr_postproc_order: handover_then_merge
