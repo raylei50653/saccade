@@ -18,8 +18,8 @@
 ## 0. 為什麼現在做得動:三重複下品質指標未見變異
 
 > ⚠️ **2026-09-07 更正。** 本節原本寫的是「`--no-gpu-decode` 下品質指標 bit-exact」,
-> 並據此宣告 N=1 per cell 成立。**該推論已撤回**:在有分歧的情況下,三重複全同本來就是
-> 最常見的結果,支撐不起「bit-exact」這種普遍宣稱。下面的觀測本身不變。
+> 並據此宣告 N=1 per cell 成立。**該推論已撤回**:**三重複全同本身不足以排除 run-to-run 分歧,
+> 因此不足以支撐 bit-exact 的普遍宣稱。** 下面的觀測本身不變。
 > 後續量測見 [`--no-gpu-decode` 的重複執行變異](../../research/eval/nogpudecode_reproducibility_20260907.md):
 > 本文這個組態(`mamba_whole_graph_m --double-buffer` 7-seq)在 20 跑下**未見分歧**,
 > 故本文結論**本次未取得推翻證據**;但可寫的句子是「n=20 未見分歧」,不是 bit-exact,
