@@ -47,8 +47,9 @@ _SCRIPT_DIR = Path(__file__).resolve().parent
 _ROOT = _SCRIPT_DIR.parents[1]
 _SRC = _ROOT / "src"
 sys.path.insert(0, str(_SRC))
+sys.path.insert(0, str(_SCRIPT_DIR))
 
-from saccade.perception.eval.repeat_identity import (  # noqa: E402
+from eval_repeat_identity import (  # noqa: E402
     RepeatReport,
     compare_run_dirs,
     format_report,

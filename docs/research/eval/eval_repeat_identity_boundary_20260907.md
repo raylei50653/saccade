@@ -84,7 +84,8 @@ MOT17-02 幾乎都與 reference 相同;某個較晚序列先出現 `geometry_or_
 ## 3. Harness
 
 `scripts/tools/check_eval_repeat_identity.py`,核心在
-`src/saccade/perception/eval/repeat_identity.py`.
+`scripts/tools/eval_repeat_identity.py`(在 ``scripts/tools/``,不在 ``src/``:
+這是檢查器,不是 production eval,不能移動 published implementation digest).
 
 - **pass/fail = raw MOT 位元** (含 track ID). 這是 issue 寫的症狀.
 - `geometry_or_score` / `identity_only` 只是 forensic 標籤,不是免責.

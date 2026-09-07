@@ -408,6 +408,7 @@ deleting.
 | `diagnose_id_switches.py` | experiment | cli | Diagnose ID switches by gap type to determine P3-B (Dormant Bank + HNSW) value. |
 | `energy_transform_separability.py` | diagnostic | cli | Energy transform separability audit (raw / log1p / sqrt / rank). |
 | `eval_golden.py` | diagnostic | cli | Bit-exact golden regression gate for run_eval refactors. |
+| `eval_repeat_identity.py` | stable | - | Compare repeated MOT eval outputs for silent run-to-run divergence. |
 | `export_d0_runtime_capture.py` | stable | cli | Merge per-sequence Issue #112 native captures into D0's CSV contract. |
 | `export_headline_bridge_decision_trace.py` | stable | cli | Canonicalize H0 records plus its independent native-universe sidecar. |
 | `export_r1_temporal_reduction_capture.py` | stable | cli | Seal native shadow observations into the R1 temporal-reduction payload. |

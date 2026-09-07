@@ -4,10 +4,14 @@ Issue #363: under a fixed configuration, ``scripts/eval/mot17.py`` can exit 0
 and still write different MOT files.  This module is the fail-closed detector
 of that symptom.  Pass/fail is raw MOT identity, including track IDs.
 
+Lives under ``scripts/tools/``, not ``src/``: it is a check, not production
+eval, and must not move the published implementation identity axis.
+
 It does not attribute a CUDA-level mechanism.  ``classify_first_diff`` only
 says whether the first differing line is already a box/score change
 (``geometry_or_score``) or an ID-only change (``identity_only``).
 """
+# status: stable
 
 from __future__ import annotations
 
@@ -16,7 +20,7 @@ import hashlib
 from pathlib import Path
 from typing import Any, Sequence
 
-from .decimal_hash import canonicalize_mot_lines, decimal_hash
+from saccade.perception.eval.decimal_hash import canonicalize_mot_lines, decimal_hash
 
 MOT_GLOB = "MOT17-*.txt"
 MISSING = "MISSING"

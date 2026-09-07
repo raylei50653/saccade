@@ -23,7 +23,7 @@ ROOT = Path(__file__).resolve().parents[3]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from saccade.perception.eval.repeat_identity import (  # noqa: E402
+from scripts.tools.eval_repeat_identity import (  # noqa: E402
     KIND_GEOMETRY_OR_SCORE,
     KIND_IDENTITY_ONLY,
     classify_first_diff,

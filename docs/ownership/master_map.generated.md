@@ -183,6 +183,7 @@ Manifest: `docs/ownership/doc_migration_manifest.yaml`
 - `docs/research/contracts/signal_table_schema.md`
 - `docs/research/contracts/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md`
 - `docs/research/eval/README.md`
+- `docs/research/eval/eval_repeat_identity_boundary_20260907.md`
 - `docs/research/eval/fp_classifier_external_only_plan.md`
 - `docs/research/eval/gmc_residual_correction_20260612.md`
 - `docs/research/eval/kalman_h_recalibration_20260612.md`
@@ -355,6 +356,6 @@ Excluded from the active index and default search view.
 
 ## Inventory summary
 
-- documents: 305
-- active: 250
+- documents: 306
+- active: 251
 - grayed out: 55
