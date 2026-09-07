@@ -29,6 +29,13 @@ def digest(path: Path) -> str:
         return hashlib.file_digest(source, "sha256").hexdigest()
 
 
+def proc_maps_path(value: str) -> str:
+    """Decode the octal escapes used for whitespace in /proc/PID/maps paths."""
+    import re
+
+    return re.sub(r"\\([0-7]{3})", lambda match: chr(int(match.group(1), 8)), value)
+
+
 def command_output(*argv: str) -> str:
     result = subprocess.run(argv, capture_output=True, text=True, check=False)
     return result.stdout if result.returncode == 0 else result.stderr
@@ -224,9 +231,43 @@ def teardown_log(output: Path):
 
 def run(args) -> None:
     output = args.output.resolve()
-    output.mkdir(parents=True, exist_ok=False)
     target = Path(args.target[0]).resolve()
     native_path = args.observer.resolve()
+    build_manifest_path = native_path.with_name("build.json")
+    if not build_manifest_path.is_file():
+        raise ValueError("observer requires a sibling build.json coverage record")
+    build_manifest = json.loads(build_manifest_path.read_text())
+    if build_manifest.get("schema") != "capture_attribution_observer_build_v2":
+        raise ValueError("observer build record schema is missing or stale")
+    expected_observer = build_manifest.get("sha256", {}).get(str(native_path))
+    if expected_observer != digest(native_path):
+        raise ValueError("observer bytes do not match the sibling build.json")
+    creation_callbacks = build_manifest.get("stream_creation_callbacks", {})
+    required_creation = {
+        "RUNTIME": {
+            "cudaStreamCreate_v3020",
+            "cudaStreamCreateWithFlags_v5000",
+            "cudaStreamCreateWithPriority_v5050",
+        },
+        "DRIVER": {"cuStreamCreate", "cuStreamCreateWithPriority"},
+    }
+    for domain, required in required_creation.items():
+        observed = set(creation_callbacks.get(domain, []))
+        if not required <= observed:
+            raise ValueError(
+                f"observer build lacks required {domain} stream creation callbacks: "
+                f"{sorted(required - observed)}"
+            )
+    unparsed_creation = [
+        name
+        for name in build_manifest.get("unparsed_callbacks", [])
+        if name.startswith(("cudaStreamCreate", "cuStreamCreate"))
+    ]
+    if unparsed_creation:
+        raise ValueError(
+            f"observer build has unparsed stream creation callbacks: {unparsed_creation}"
+        )
+    output.mkdir(parents=True, exist_ok=False)
     inputs = asset_paths([target, *args.asset], args.asset_tree)
     repo = Path(command_output("git", "rev-parse", "--show-toplevel").strip())
     tracked = command_output("git", "ls-files", "-z").split("\0")
@@ -263,6 +304,9 @@ def run(args) -> None:
             "--format=csv,noheader",
         ),
         "observer_sha256": digest(native_path),
+        "observer_build_manifest": str(build_manifest_path),
+        "observer_build_manifest_sha256": digest(build_manifest_path),
+        "stream_creation_callbacks": creation_callbacks,
         "explicit_input_sha256": {str(p): digest(p) for p in inputs},
         "asset_trees": [str(p.resolve()) for p in args.asset_tree],
         "harness_sha256": {
@@ -272,6 +316,7 @@ def run(args) -> None:
         },
         "asset_coverage": "explicit --asset files and complete --asset-tree inventories; not automatic workload attestation",
     }
+    (output / "observer_build.json").write_bytes(build_manifest_path.read_bytes())
     (output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     (output / "source.patch").write_text(command_output("git", "diff", "HEAD", "--"))
     native = ctypes.CDLL(str(native_path))
@@ -390,7 +435,7 @@ def run(args) -> None:
             os.dup2(saved, fd)
             os.close(saved)
         libraries = {
-            line.split(maxsplit=5)[5]
+            proc_maps_path(line.split(maxsplit=5)[5])
             for line in maps.splitlines()
             if len(line.split(maxsplit=5)) == 6
             and line.split(maxsplit=5)[5].startswith("/")

@@ -14,6 +14,7 @@ def build(cuda: Path, output: Path) -> None:
     output.mkdir(parents=True, exist_ok=False)
     inc = cuda / "include"
     coverage = {}
+    creation_coverage = {}
     unparsed = []
     code = []
     for domain, meta, cbids, prefix, stream_type in (
@@ -43,6 +44,7 @@ def build(cuda: Path, output: Path) -> None:
         ids = re.findall(rf"\b{prefix}(\w+)\s*=", (inc / cbids).read_text())
         code.append(f"if (domain == CUPTI_CB_DOMAIN_{domain}_API) {{ switch (id) {{")
         coverage[domain] = []
+        creation_coverage[domain] = []
         for name in ids:
             if not re.search(
                 r"Stream(?:Begin|End|IsCapturing|GetCaptureInfo|Create|Destroy|GetFlags|WaitEvent|Synchronize)|^(?:cuda|cu)Event(?:Record|Destroy)",
@@ -58,6 +60,8 @@ def build(cuda: Path, output: Path) -> None:
             if not stream and not created and "EventDestroy" not in name:
                 raise ValueError(f"No stream field for {name}")
             coverage[domain].append(name)
+            if name.startswith(("cudaStreamCreate", "cuStreamCreate")):
+                creation_coverage[domain].append(name)
             code.append(
                 f"case {prefix}{name}: {{ const auto *p = static_cast<const {name}_params *>(data->functionParams); e.selected = true;"
             )
@@ -83,6 +87,11 @@ def build(cuda: Path, output: Path) -> None:
                 code.append(
                     f'if (ok) {{ e.flags = {("p->" + flags[1]) if flags else "0"}; e.flag_source = "create"; }}'
                 )
+                priority = re.search(r"\bint\s+(priority)\s*;", body)
+                if priority:
+                    code.append(
+                        f"e.priority = p->{priority[1]}; e.has_priority = true;"
+                    )
             if "GetFlags" in name:
                 flags = re.search(r"unsigned int\s*\*\s*(\w+)\s*;", body)
                 if not flags:
@@ -116,7 +125,8 @@ def build(cuda: Path, output: Path) -> None:
         code.append("default: break; } }")
     (output / "decode.inc").write_text("\n".join(code) + "\n")
     source = Path(__file__).with_name("observer.cpp")
-    command = [
+    control_source = Path(__file__).with_name("control_owner.cpp")
+    observer_command = [
         "g++",
         "-std=c++17",
         "-O2",
@@ -136,8 +146,30 @@ def build(cuda: Path, output: Path) -> None:
         "-o",
         str(output / "observer.so"),
     ]
-    subprocess.run(command, check=True)
-    inputs = [source, Path(__file__), output / "decode.inc"] + [
+    subprocess.run(observer_command, check=True)
+    control_command = [
+        "g++",
+        "-std=c++17",
+        "-O0",
+        "-g",
+        "-shared",
+        "-fPIC",
+        "-fno-omit-frame-pointer",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        f"-I{inc}",
+        str(control_source),
+        f"-L{cuda / 'lib'}",
+        f"-Wl,-rpath,{cuda / 'lib'}",
+        "-lcudart",
+        f"-L{cuda / 'lib' / 'stubs'}",
+        "-lcuda",
+        "-o",
+        str(output / "control_owner.so"),
+    ]
+    subprocess.run(control_command, check=True)
+    inputs = [source, control_source, Path(__file__), output / "decode.inc"] + [
         inc / name
         for name in (
             "generated_cuda_runtime_api_meta.h",
@@ -147,12 +179,15 @@ def build(cuda: Path, output: Path) -> None:
         )
     ]
     manifest = {
-        "command": command,
+        "schema": "capture_attribution_observer_build_v2",
+        "observer_command": observer_command,
+        "control_command": control_command,
         "decoded_callbacks": coverage,
+        "stream_creation_callbacks": creation_coverage,
         "unparsed_callbacks": unparsed,
         "sha256": {
             str(p.resolve()): hashlib.sha256(p.read_bytes()).hexdigest()
-            for p in inputs + [output / "observer.so"]
+            for p in inputs + [output / "observer.so", output / "control_owner.so"]
         },
     }
     (output / "build.json").write_text(json.dumps(manifest, indent=2) + "\n")

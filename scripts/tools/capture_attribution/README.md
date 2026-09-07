@@ -17,7 +17,8 @@ synthetic mechanism controls; they do not evaluate a sequence.
 uv run python scripts/tools/capture_attribution/build.py --output /absolute/new/build
 uv run python scripts/tools/capture_attribution/run.py \
   --observer /absolute/new/build/observer.so --output /absolute/new/trace \
-  -- scripts/tools/capture_attribution/control.py blocking-runtime
+  -- scripts/tools/capture_attribution/control.py blocking-runtime \
+  --helper /absolute/new/build/control_owner.so
 uv run python scripts/tools/capture_attribution/analyze.py /absolute/new/trace
 ```
 
@@ -28,10 +29,22 @@ uv run python scripts/tools/capture_attribution/qualify.py \
   --observer /absolute/new/build/observer.so --output /absolute/new/qualification
 ```
 
-The control cases are `blocking-runtime`, `nonblocking-runtime`, `blocking-driver`,
-`nonblocking-driver`, `blocking-joined`, and `python`. Each belongs in a fresh process and output directory.
-The driver cases obtain `cuStreamBeginCapture` through `cuGetProcAddress_v2`, exercising
-a function-pointer path that a symbol-only LD_PRELOAD shim may miss. `python` covers
+Qualification retains the complete analyzer result for every case under
+`qualification/analysis/`, alongside the pass/fail summary in `qualification.json`.
+
+`build.py` emits `observer.so`, its `build.json` coverage record, and the debug-built
+synthetic caller `control_owner.so`. `run.py` refuses an observer without its matching
+sibling build record. The control cases are `blocking-runtime`, `nonblocking-runtime`,
+`blocking-driver`, `nonblocking-driver`, `blocking-joined`, and `python`. Each belongs
+in a fresh process and output directory.
+Across those controls, creation exercises `cudaStreamCreate`,
+`cudaStreamCreateWithFlags`, `cudaStreamCreateWithPriority`, `cuStreamCreate`, and
+`cuStreamCreateWithPriority`; the driver cases also obtain `cuStreamBeginCapture`
+through `cuGetProcAddress_v2`, exercising function-pointer paths that a symbol-only
+LD_PRELOAD shim may miss. `blocking-runtime` destroys and recreates its stream and
+requires the reused handle to resolve to two ordered lifetime generations. Every native
+control requires the direct caller frame to resolve to the named symbol in the attested
+`control_owner.so`. `python` covers
 `make_graphed_callables` and the repo NMS/GMC wrapper with trivial tensor operations.
 This is instrumentation validation, not a sample of production failures.
 `blocking-joined` starts capture on a non-blocking origin and joins a blocking side
@@ -46,9 +59,13 @@ capture participation without another BeginCapture call.
 - `cuda.jsonl`: monotonic timestamp, PID/native TID, context, callback/correlation IDs,
   enter/exit, stream, flags and their source, capture mode/status/ID (when queried by
   the application), event record/wait with event flags and event destruction, numeric return,
-  Python site ID, native stack addresses on begin/error. Nonzero returns from other APIs
+  Python site ID, priority when present, native stack addresses plus an explicit truncation
+  bit on capture begin, stream creation and errors. Nonzero returns from other APIs
   are retained too. Runtime and driver callbacks may represent the same operation;
   do not add them as independent captures or failures.
+- `observer_build.json`: the matching build/decoder coverage record copied into the run.
+  The launcher requires typed coverage for runtime default/flags/priority and driver
+  flags/priority creation before it will start the target.
 - Stream flags are learned from successful application stream-creation and GetFlags
   calls. No CUDA API is called inside a CUPTI callback. Unknown flags remain `-1` and
   fail the trace structure check for captures. The observer never clears a CUDA error.
@@ -89,13 +106,30 @@ and never raised, since a teardown convenience must not destroy the trace it is 
 ## Interpretation and limits
 
 `analyze.py` checks artifact hashes, event numbering, API pairs, begin/end pairing,
-known capture metadata, source drift and observer shutdown. It reports per-domain
+known capture metadata, creation callback coverage, source drift and observer shutdown.
+It joins each successful creation's enter stack to its exit handle. Nested runtime and
+driver callbacks remain as separate observed API records inside one logical stream
+lifetime. A successful destroy closes that generation; a later creation of the same
+context/handle starts the next generation. Captures, stream-status observations and
+event record/wait sides carry the lifetime record that was active at that timestamp.
+
+Native addresses are mapped only with that run's `maps.txt`; a module is accepted only
+when its current bytes match `mapped_file_sha256_after`. ELF load segments provide the
+address adjustment and `addr2line` supplies symbols where available. The attributed owner
+is mechanically the direct caller frame above the outermost observed create API. A
+module-resolved but stripped caller retains `symbol_gap="symbol_unknown"`; the module
+evidence is still usable. No library-name likelihood or component allowlist participates
+in the choice.
+
+The analyzer reports per-domain
 capture intervals and same-context overlap with errors 900/901/906. An overlap is an
 attribution candidate, not a causal proof. A clean trace structure is not a claim of
 complete site attribution: inspect `unclassified_captures` and resolve native addresses
 against `maps.txt` (and matching binaries). No observed capture is not a passing check.
-Missing metadata, missing exit, a failed observer, live Python workers at shutdown, or
-unparsed capture variants are evidence gaps, never negative evidence.
+Missing/truncated creation stacks, unresolved caller modules, mismatched binaries,
+ambiguous lifetimes, missing metadata or exits, a failed observer, live Python workers at
+shutdown, or unparsed creation variants are evidence gaps that fail the structure check;
+they are never negative evidence or inferred ownership.
 
 The harness adds host callback/stack/logging overhead and may change race timing.
 Its FPS and observed error count cannot estimate production performance or incidence.
@@ -149,7 +183,7 @@ References: [CUPTI callbacks](https://docs.nvidia.com/cupti/main/main.html#cupti
 |--------|--------|-------|----------|
 | `analyze.py` | diagnostic | cli | Validate trace structure and attribute observed errors without exclusion claims. |
 | `build.py` | diagnostic | cli | Build the CUPTI observer and typed decoders from installed CUDA headers. |
-| `control.py` | diagnostic | - | One bounded mechanism control. Run each case in its own attributed process. |
+| `control.py` | diagnostic | cli | One bounded mechanism control. Run each case in its own attributed process. |
 | `qualify.py` | diagnostic | cli | Fixed six-case observer qualification. This never invokes production evaluation. |
 | `recover_failure.py` | diagnostic | cli | Extract surviving primary tool evidence for #340; never rerun the workload. |
 | `run.py` | diagnostic | cli | Run one Python entry point with diagnostic-only CUPTI/Python attribution. |

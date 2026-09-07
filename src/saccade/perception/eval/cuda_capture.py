@@ -35,13 +35,14 @@ thread's ``cudaStreamIsCapturing`` on the legacy stream then returned
 ``cudaErrorStreamCaptureImplicit``, and the origin's ``capture_end`` still
 succeeded.
 
-So the blocking capturing stream behind the one production failure is
-unidentified, and an enumeration of our own capture origins cannot identify it.
-A bounded production-path trace on 2026-09-06 observed four classified captures
-with no in-capture joins and no blocking participant, but its structure check
-did not pass, which makes it a snapshot rather than an exclusion — see
+The production topology has since directly shown four blocking streams joining
+``detector.whole`` through event dependencies.  Their owning component is still
+unidentified: the retained trace did not bind those handles to observed stream
+creation stacks.  It also did not observe failure-time overlap with decode's
+legacy-stream status query or any new 900/901/906.  This establishes topology,
+not causality, so #340 remains open.  See
 ``docs/research/pipeline/capture_failure_provenance_20260906.md`` and
-``scripts/tools/capture_attribution/README.md``.  #340 stays open on this.
+``scripts/tools/capture_attribution/README.md``.
 
 :func:`describe_capture_state` exists to turn the next occurrence into a
 diagnosis instead of a mystery.  Enable it with ``SACCADE_CAPTURE_DEBUG=1``; the

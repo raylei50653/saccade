@@ -496,7 +496,7 @@ Total tracked scripts: **446**. Source of truth = each script's own docstring + 
 |--------|--------|-------|----------|
 | `analyze.py` | diagnostic | cli | Validate trace structure and attribute observed errors without exclusion claims. |
 | `build.py` | diagnostic | cli | Build the CUPTI observer and typed decoders from installed CUDA headers. |
-| `control.py` | diagnostic | - | One bounded mechanism control. Run each case in its own attributed process. |
+| `control.py` | diagnostic | cli | One bounded mechanism control. Run each case in its own attributed process. |
 | `qualify.py` | diagnostic | cli | Fixed six-case observer qualification. This never invokes production evaluation. |
 | `recover_failure.py` | diagnostic | cli | Extract surviving primary tool evidence for #340; never rerun the workload. |
 | `run.py` | diagnostic | cli | Run one Python entry point with diagnostic-only CUPTI/Python attribution. |
