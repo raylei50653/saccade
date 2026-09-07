@@ -118,9 +118,18 @@ stop, and the final manifest was never written because the process ended somewhe
 after `harness_stopped`. Which teardown step it stopped at was not recoverable from
 what that run retained, which is why `tail.log` exists. Under this README's rules
 those are evidence gaps, so the trace must not be cited as a clean structure result.
-It observed four classified single-stream captures with no capture errors, no
-in-capture event joins and no blocking participant; that does not locate the synthetic
-blocking-join mechanism in production, and it is not a failure reconstruction. The
+It observed four classified captures, all begun on a non-blocking origin stream, with
+no capture errors. It was also recorded as having no in-capture event joins and no
+blocking participant; **that statement is withdrawn.** Reanalysis of the same run's
+retained rows on 2026-09-07 found in-capture cross-stream event joins during
+`detector.whole`, including blocking-stream participation, which the original reading
+missed by treating never-queried capture status as negative evidence. production-01
+remains structure-invalid for the reasons above, so the retained rows retract that
+earlier claim without becoming a clean attribution result; the correction, its evidence
+and its limits are in
+[the recovery report](../../../docs/research/pipeline/capture_failure_provenance_20260906.md).
+None of this locates the synthetic blocking-join mechanism in production, and it is not
+a failure reconstruction. The
 user's stop boundary remains: no failure-rate runs or new capture-semantics changes
 until provenance and attribution harness work are complete.
 
