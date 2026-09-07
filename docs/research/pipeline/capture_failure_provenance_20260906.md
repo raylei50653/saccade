@@ -113,8 +113,10 @@ Structure check 未通過(exit 1),依 harness 定義屬 evidence gap,不是負�
 或 throughput 證據、未關閉 root cause。~~它顯示目前 production 的 whole-graph
 capture 為單 stream 自足、capture 內無跨 stream join;~~ **「單 stream 自足／
 capture 內無跨 stream join」同於 2026-09-07 撤回(見下方「更正」);** blocking
-participant 的合成機制(見下節)尚未在 production site 定位。Provenance 與 harness
-coverage 未完成前,failure-rate 與 capture-semantics 修改維持不執行;#340 不因此關閉。
+stream 經 event join 參與 capture 已在 production topology 中被觀察到,但那四條
+stream 的 owning component、以及它與真正 900/901/906 failure 的關係,仍未辨識
+(見下方「更正」)。Provenance 與 harness coverage 未完成前,failure-rate 與
+capture-semantics 修改維持不執行;#340 不因此關閉。
 分析輸出為本機證據:同根目錄下 `production-01-analysis/analysis.json`。
 
 ## 更正:production-01 的 join／participant negative claim 撤回(2026-09-07)
@@ -191,6 +193,20 @@ window 內有 blocking stream 經 event 加入)。這是**另一個 run 的獨�
 與 production-01 各自成立;production-02 的 clean status **不**替 production-01
 背書,production-01 也不因為與它相似而被 qualify。
 
+因此 topology 層面的敘述要更新:**blocking stream 經 event dependency 參與
+capture,已經在 production topology 中被直接觀察到**,不再只是合成控制裡的
+機制。原先「blocking-join 機制尚未在 production site 定位」這種寫法已經太強,
+一併修正。仍然未辨識的是:
+
+- 那四條 blocking stream 的 **owning component**;
+- decode 對 legacy stream 的 status query 與該 blocking-participant window 之間
+  的 **failure-time overlap**;
+- 與實際 900/901/906 的 **co-occurrence**(兩次 production trace 都是 0 capture
+  error);
+- 因而 **#340 的 causal mechanism / root cause** 仍未成立。
+
+換句話說:觀察到的是 topology,不是 causality。
+
 **證據與可重現性**
 
 | 項目 | 值 |
@@ -203,6 +219,11 @@ window 內有 blocking stream 經 event 加入)。這是**另一個 run 的獨�
 | 重新分析時 repo HEAD | `efd3176f81d7a4e3c13a8c91e9369732dfd85158`(#352 merge) |
 | 重新分析輸出 | `capture-attribution-20260906/production-01-reanalysis/` |
 | 原分析輸出(未變更) | `capture-attribution-20260906/production-01-analysis/analysis.json` |
+| production-02 trace(topology 敘述的依據) | `capture-attribution-340r2-20260906/production-02/` |
+| production-02 `cuda.jsonl` sha256 | `9273602ef05ba7e401640010d240dc208334ec76140b2c274ebf56db04ff6e42` |
+| production-02 observer sha256 | `a2fb4262c6b3890bbd1255888f5fd864c3e0054d7febe98543aa60862937090e` |
+| production-02 當時 HEAD | `bab4e154fd33198b465199570c2558bb760dd7af`(#351 merge) |
+| production-02 structure | `trace_structure_ok=true`、`problems=[]`、0 capture error |
 
 重新分析只讀 retained rows,未重跑 workload、未改 analyzer／observer／harness。
 capture window 的 begin/end 配對與 `analyze.py` 相同;window 內外的判定與
@@ -231,7 +252,9 @@ event edges、錯誤與 provenance manifest。未改動 production `src/`。
 stream 透過 event wait 加入，該 side 的 `cudaStreamIsCapturing` 為 active；另一個
 thread 對 legacy 的同一 query 回傳 906，而 origin 的 capture end 成功。
 因此「所有 BeginCapture stream 都 non-blocking」不足以排除 blocking participant。
-這是合成機制控制，未定位 production site，也未重建原始 failure。
+這是合成機制控制，其本身未定位 production site，也未重建原始 failure；同型的
+join 後來在 production topology 中被直接觀察到（見上方「更正」），被觀察到的是
+topology，不是 owning component，也不是 causality。
 跨 stream 加入機制見 [NVIDIA CUDA Graphs 文件](https://docs.nvidia.com/cuda/cuda-programming-guide/04-special-topics/cuda-graphs.html)。
 
 本機 durable artifacts 根目錄：

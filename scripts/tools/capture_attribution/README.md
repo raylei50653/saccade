@@ -128,8 +128,10 @@ remains structure-invalid for the reasons above, so the retained rows retract th
 earlier claim without becoming a clean attribution result; the correction, its evidence
 and its limits are in
 [the recovery report](../../../docs/research/pipeline/capture_failure_provenance_20260906.md).
-None of this locates the synthetic blocking-join mechanism in production, and it is not
-a failure reconstruction. The
+Blocking-stream participation via event joins has since been observed in the production
+topology, so it is no longer only a synthetic mechanism; what remains unidentified is
+the owning component of those streams and their relation to an actual 900/901/906
+failure. Neither trace is a failure reconstruction. The
 user's stop boundary remains: no failure-rate runs or new capture-semantics changes
 until provenance and attribution harness work are complete.
 
