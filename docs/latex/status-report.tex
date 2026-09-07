@@ -110,7 +110,7 @@
   \end{minipage}}
 \newcommand{\applink}[2]{\hyperref[#1]{\textcolor{Blue}{[#2]}}}
 \newcommand{\sourcepath}[1]{%
-  \href{https://github.com/raylei50653/saccade/blob/0fe937b4e7a4cfc8e142d4fdcca5cabf93b3e982/#1}{\path{#1}}}
+  \href{https://github.com/raylei50653/saccade/blob/90b3b62ac2be46d5b6376dd8b3b1a817f7d5cdaf/#1}{\path{#1}}}
 \newcommand{\issue}[1]{\href{https://github.com/raylei50653/saccade/issues/#1}{\##1}}
 \newcommand{\pr}[1]{\href{https://github.com/raylei50653/saccade/pull/#1}{PR \##1}}
 \newcommand{\tighttable}{\small\setlength{\tabcolsep}{4pt}}
@@ -154,7 +154,7 @@
   \vspace{14mm}
   \begin{tabularx}{\linewidth}{@{}B{31mm}Y@{}}
     報告快照 & 2026-09-07\\
-    對照版本 & \texttt{main 0fe937b4e7a4}（\pr{358} merge head）\\
+    對照版本 & \texttt{main 90b3b62ac2be}（\pr{365} merge head）\\
     系統主線 & 整圖 CUDA Graph 版本（\texttt{mamba\_whole\_graph}）、SDP 偵測、跨幀重疊執行、關閉外觀重辨識（ReID）\\
     文件性質 & 一次性專題現況快照；最新狀態與數字仍以專案內對應的來源文件為準\\
   \end{tabularx}
@@ -212,7 +212,7 @@
 \midrule
 IDF1 & 身份一致性 & 整段軌跡是否一直對到同一個人；本報告的主指標，0--100 分，越高越好\\
 HOTA & 綜合分數 & 把偵測品質與身份關聯品質合成單一分數，0--100 分，越高越好\\
-MOTA & 偵測面總量 & 主要反映漏檢、誤檢與身份切換的總量，0--100 分，越高越好\\
+MOTA & 偵測面總量 & 主要反映漏檢、誤檢與身份切換的總量；100 為最佳，越高越好，錯誤很多時可低於 0\\
 IDs & 身份切換次數 & 同一個人中途被換成新身份的次數，越低越好\\
 \bottomrule
 \end{tabularx}
@@ -369,6 +369,9 @@ Kalman 等速模型 &
 身份修復 & \textcolor{Blue}{進行中} &
 序列末的離線合併已有正向結果（相對 80.4 基準 +0.9 IDF1、IDs −31） &
 候選品質與長中斷情境的辨識訊號\\
+量測重現性 & \textcolor{Blue}{進行中} &
+已量出重複執行的分歧比例與指標觀測範圍，撤回「解碼旗標即確定性」的判讀規則 &
+分歧機制與 runtime boundary 未定位，逐組態檢查尚未做成 fail-closed harness\\
 泛化能力 & \textcolor{Red}{尚未解決} &
 已建立訓練與測試完全分離的量測方式 &
 未見資料上 IDF1 為 50.2，缺口落在偵測器 recall\\
@@ -508,6 +511,8 @@ GMC & 62.5 & 2.1\%\\
   \item \textbf{穩定性：}定位 CUDA Graph 錄製失敗的觸發條件。\applink{app:B3}{歸因現況 B.3}
   \item \textbf{身份修復：}提高有效連接比例並降低錯誤合併；不把逐幀 ReID 重新放回關鍵路徑。
   \item \textbf{泛化驗證：}改善未見資料上的偵測能力，確認追蹤方法的適用範圍。
+  \item \textbf{量測重現性：}定位重複執行分歧的機制與 runtime boundary，
+  並把逐組態的重現性檢查做成 fail-closed harness。\applink{app:C2}{重現入口 C.2}
   \item \textbf{可追溯性：}讓報告中每一次執行都能回答資料來源、設定、機器與產出身分。
 \end{enumerate}
 
@@ -580,7 +585,8 @@ full headline & 78.2 & 78.4 & 70.2 & 69.7 & 413 & 2589\\
 
 \textbf{限制：}這是累積鏈，不是互相獨立的 additive modules。Occ gate 與 OAO 單獨加到 bare
 會是負向；它們要在 GMC 已建立幀間一致性後才轉為正向。Double-buffer 只改 scheduling，
-品質輸出 bit-exact，不能計入 accuracy 增益。
+其開／關對照跑出相同的 MOT 輸出 md5——這是單次配對觀測，不是 bit-exact 保證
+（重現性口徑見 \applink{app:C2}{C.2}）——無論如何不計入 accuracy 增益。
 
 \textbf{指標補充：}AssA 只看身份關聯品質（0--100，越高越好）；FP 為誤檢數（越低越好）。
 兩者只在附錄與正文表格中出現，不列入第 1 頁的代表指標。
@@ -651,8 +657,10 @@ MOT17 的 cliff / plateau 結構在兩個外部資料集均未重現，因此候
 
 \subsubsection{離線修復與主線流程的耦合}
 
-handover 與 merge 的輸入只有已輸出的軌跡行，
-因此\textbf{可以獨立解耦}；目前仍在同一流程的序列末呼叫，屬架構遺留而非演算法要求。
+handover 與 merge \textbf{在演算法上與 tracker internal state 及逐幀關鍵路徑解耦}：
+輸入是凍結的 MOT 軌跡行加上序列影像（或事先抽好的 embeddings）。
+兩者都會由 \texttt{img1} 重新裁切 crop 再抽特徵，所以\textbf{不是只吃已輸出的軌跡行}，
+工程上也尚未完全解耦——目前仍在同一流程的序列末呼叫，屬架構遺留而非演算法要求。
 即時性的主張因此只由逐幀線上路徑支撐，而最終 MOT 檔（含內插與可選修復）不等同逐幀原始輸出。
 
 \textbf{來源：} \sourcepath{docs/PIPELINE.md}、
@@ -812,7 +820,8 @@ uv run python scripts/eval/mot17.py \
   --preset mamba_whole_graph --detector SDP --double-buffer \
   --output out/frozen_v2_replay
 
-# Deterministic ReID / offline-handover A/B base
+# ReID / offline-handover A/B base; this configuration observed
+# 0/20 divergence in the registered reproducibility block
 uv run python scripts/eval/mot17.py \
   --preset mamba_whole_graph_m --detector SDP \
   --double-buffer --no-gpu-decode --output out/reid_off
@@ -821,7 +830,13 @@ uv run python scripts/eval/mot17.py \
 
 重現前必須固定：git SHA、working-tree cleanliness、preset / CLI、checkpoint / TensorRT engine、
 native 擴充模組、dataset bytes、GPU / driver、decode mode、warm-up / measured window、output digest。
-品質 bit-exact 不代表 timing bit-exact；FPS 必須以 paired block 或明確 protocol 處理系統漂移。
+\textbf{重現性逐組態成立，不由旗標保證。}\texttt{--no-gpu-decode} 本身不保證重複執行輸出相同：
+同旗標、同 host、同 session 下，上列 A/B base 組態 20 跑未見分歧，
+而 \texttt{--preset baseline} 的 7-seq block 20 跑裡有 14 跑與參考輸出不同。
+因此該組態要寫成「n=20 未見分歧」而不是 bit-exact；小 delta 一律對照該組態的 observed range 判讀，
+不再以「加旗標 $\Rightarrow$ N=1」為理由。已受影響、落在 baseline 觀測範圍內的舊 delta 待重驗，
+重驗條件與分級見 \sourcepath{docs/research/eval/nogpudecode_reproducibility_20260907.md}（\pr{362}、\issue{363}）。
+輸出相同也不代表 timing 相同；FPS 必須以 paired block 或明確 protocol 處理系統漂移。
 Profiler 計畫與 runbook 見 \sourcepath{docs/reference/runbooks/nsys_profiling.md}。
 
 \subsection{C.3 目前報告可主張與不可主張}\label{app:C3}
@@ -837,6 +852,10 @@ ReID A/B（2026-08-08）：+0.0 IDF1、−34\% throughput。 & appearance model 
 Frame budget 定位出 structural candidates。 & raw $\mu$s 相加即 FPS gain。\\
 349.64 FPS = m preset 單序列 steady window。 & 349.64 可當七序列 eval FPS 或與 269.47 橫比。\\
 Production topology 有 blocking-stream event joins。 & 該 topology 即 \issue{340} 的 root cause。\\
+A/B base 組態（\texttt{mamba\_whole\_graph\_m --double-buffer}、7-seq）n=20 未見輸出分歧。 &
+\texttt{--no-gpu-decode} 給出 bit-exact，或小 delta 因此可用 N=1。\\
+\texttt{--preset baseline} 7-seq 同旗標下 20 跑有 14 跑分歧（IDF1 observed range 0.1298）。 &
+把 14/20、4/40 讀成底層分歧機率，或把該 range 轉移到其他 preset / host / dataset。\\
 \bottomrule
 \end{tabularx}
 
@@ -888,9 +907,13 @@ Capture mode binding & \pr{351}, merge \texttt{bab4e154} & capture-mode exchange
 Observer teardown & \pr{352}, merge \texttt{efd3176f} & bounded quiescence、tail 與 final-manifest closure\\
 Stream owner attribution & \pr{355}, merge \texttt{4d89370c} & handle generation 綁 direct native creator\\
 Tracker-lane dose & \pr{358}, merge \texttt{0fe937b4} & added work 的 resource-shape sensitivity\\
+Reproducibility 口徑 & \pr{362}, merge \texttt{ef3bda8e} & 撤回「旗標即確定性」，改為逐組態驗證\\
+Revalidation deferral & \pr{365}, merge \texttt{90b3b62a} & 待重驗 delta 的條件，不另開 tracker\\
 F3c & \issue{338} closed & 減 bytes 無 throughput payoff，未落地\\
 Capture race & \issue{340} open & topology 已觀察；causality / closure 未完成\\
 GMC graph input & \issue{341} open & full-frame copy ROI / critical exposure 未定\\
+Run-to-run 分歧 & \issue{363} open & 本報告重現性口徑的來源；機制與 boundary 未結\\
+Breakpoint 謂詞 & \issue{364} open & 二分法以位元相等為謂詞，但執行期未實測\\
 \bottomrule
 \end{tabularx}
 
