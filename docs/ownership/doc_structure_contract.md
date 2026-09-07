@@ -18,7 +18,7 @@ frontmatter, topic-hub pages (optional later).
 
 ```text
 [治理]           docs/ownership/                    O-series · WIP=1 · this contract
-[專案戰略]       docs/PROJECT_DIRECTION.md          範式邊界・里程碑定義・長期路線語義（數字/狀態禁止）
+[專案戰略]       docs/PROJECT_DIRECTION.md          範式邊界・里程碑定義・長期戰略路徑語義（數字/狀態禁止）
 [研究規範]       docs/research/contracts/           method / evidence semantics / claim ladders（規則）
 [研究狀態]       docs/research/contracts/claim_state_registry.md   每個 object 現在站在哪一格（狀態）
 [主線意圖]       module TODO → linked thread/note   one charter + disposable expected-state lease
@@ -57,7 +57,7 @@ C0.1 的兩個 process surface，以及「決策層**不得**新增 prose 檔」
 
 [`docs/PROJECT_DIRECTION.md`](../PROJECT_DIRECTION.md) 是 **strategic-narrative surface**：
 
-- **是**：專案級方向語義（範式邊界總結、已採用里程碑的定義、長期路線進入/退出語義）的唯一敘事家。
+- **是**：專案級方向語義（範式邊界總結、execution-chartered 里程碑的定義、長期戰略路徑進入/退出語義）的唯一敘事家。
 - **不是**：第三個決策層 process surface；不是 registry / module TODO 的狀態寫入者；不是 evidence、數字或進度家。
 
 本檔可手寫策略意圖與語義定義，並受 C5.1「Link, don't relabel」約束：不得複寫 live status、WIP、verdict 或任何數字。定量進入/退出條件一律寫成契約指針（*satisfied according to* `<owner>`），不在本檔複製門檻。日常實作 PR 不得同步本檔；更新觸發見該檔 Purpose / Scope。

@@ -286,7 +286,7 @@ research acceptance / next-stage auth = chat-side / research-owner gates
 
 | 需求 | 去 |
 |:--|:--|
-| 專案級方向 / 範式邊界 / 長期路線語義 | [docs/PROJECT_DIRECTION.md](docs/PROJECT_DIRECTION.md)（不隨 ordinary PR 更新） |
+| 專案級方向 / 範式邊界 / 長期戰略路徑語義 | [docs/PROJECT_DIRECTION.md](docs/PROJECT_DIRECTION.md)（不隨 ordinary PR 更新） |
 | 寫 docs / research 路由 | [docs/README.md](docs/README.md) · [O1.5 契約](docs/ownership/doc_structure_contract.md) |
 | 格式 · WIP · fact-owner | [DOC_MAINTENANCE.md](docs/DOC_MAINTENANCE.md) |
 | 目標隔離 · PR 檢查矩陣 | [docs/ownership/](docs/ownership/README.md) |
