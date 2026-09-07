@@ -2,21 +2,38 @@
 """Fail closed when the audited math-model document or source bytes move.
 
 The math model is a manually reviewed transcription of production code.  This
-checker does not try to re-prove equations with regexes.  It verifies that:
+checker does not try to re-prove equations with regexes.  It answers two
+different questions, and ADR 022 requires them to be separately named because
+they have different failure policies.
+
+``--mode development`` (the default) asks only about **historical integrity**:
+is the accepted record still the record that was accepted?
 
 * the attestation has the exact v1 schema and audited source inventory;
 * the manifest still carries the code-owned document and audit digests, so it
   cannot re-sign either file by itself;
-* the document and audit record still have those SHA-256 identities;
-* every current source anchor still has its attested SHA-256 identity; and
-* the audited git ref contains those same source bytes.
+* the document and audit record still have those SHA-256 identities; and
+* the audited git ref contains the attested source bytes.
+
+Those can only be broken by rewriting history, so they are always fail-closed.
+Editing a source anchor does not touch any of them.
+
+``--mode attested`` adds the **current-HEAD claim**: every audited source
+anchor in the working tree still has its attested identity, i.e. the document
+describes the code as it stands now.  Editing a source anchor legitimately
+breaks this, which is why it is not the default -- ordinary development must
+not owe a re-audit.  Run it when you intend to assert the claim: during a
+re-audit, or before publishing the document as current.
 
 Any missing, extra, duplicated, malformed, symlinked, unreadable, or changed
-input is a hard failure.  A pass establishes byte identity only; it is not a
-semantic-equivalence proof, runtime measurement, or execution authorization.
+input is a hard failure in whichever arm covers it.  A pass establishes byte
+identity only; it is not a semantic-equivalence proof, runtime measurement, or
+execution authorization.  A ``development`` pass additionally says nothing at
+all about whether the document still describes HEAD.
 
 Usage:
   uv run python scripts/tools/check_math_model_source_attestation.py
+  uv run python scripts/tools/check_math_model_source_attestation.py --mode attested
   uv run python scripts/tools/check_math_model_source_attestation.py --quiet
 """
 
@@ -66,6 +83,10 @@ AUDITED_SOURCE_PATHS: tuple[str, ...] = (
     "src/tracking/relink_gate.cu",
     "src/tracking/tracker_gpu.cu",
 )
+
+DEVELOPMENT_MODE = "development"
+ATTESTED_MODE = "attested"
+MODES = (DEVELOPMENT_MODE, ATTESTED_MODE)
 
 SCOPE = {
     "claim": "source_byte_identity_only",
@@ -178,11 +199,18 @@ def validate_attestation(
     *,
     read_current: Callable[[str], bytes],
     read_at_ref: Callable[[str, str], bytes],
+    mode: str = DEVELOPMENT_MODE,
     attested_model_sha256: str = ATTESTED_MODEL_SHA256,
     attested_audit_sha256: str = ATTESTED_AUDIT_SHA256,
 ) -> list[str]:
-    """Return every hard failure without granting any semantic authority."""
+    """Return every hard failure without granting any semantic authority.
+
+    ``mode`` selects which arm runs; see the module docstring.  An unrecognised
+    mode is a failure rather than a silent fallback to the weaker arm.
+    """
     failures: list[str] = []
+    if mode not in MODES:
+        return [f"unknown mode {mode!r}; want one of {list(MODES)}"]
     top_ok = _exact_keys(
         payload,
         frozenset({"schema", "scope", "document", "audit", "sources"}),
@@ -296,13 +324,17 @@ def validate_attestation(
     for path, digest in valid_rows:
         if path not in expected_path_set:
             continue
-        _check_current_binding(
-            path=path,
-            expected_sha256=digest,
-            label="source anchor",
-            read_current=read_current,
-            failures=failures,
-        )
+        # The current-HEAD arm.  The document/audit bindings above and the
+        # audited-ref comparison below are historical integrity and always run;
+        # only this one asks whether the transcription still describes HEAD.
+        if mode == ATTESTED_MODE:
+            _check_current_binding(
+                path=path,
+                expected_sha256=digest,
+                label="source anchor",
+                read_current=read_current,
+                failures=failures,
+            )
         if source_ref is None:
             continue
         try:
@@ -359,7 +391,9 @@ def _git_reader(root: Path) -> Callable[[str, str], bytes]:
     return read
 
 
-def check_repository(root: Path = REPO_ROOT) -> list[str]:
+def check_repository(
+    root: Path = REPO_ROOT, *, mode: str = DEVELOPMENT_MODE
+) -> list[str]:
     manifest = root / MANIFEST_REL
     try:
         payload = load_attestation(manifest)
@@ -369,24 +403,55 @@ def check_repository(root: Path = REPO_ROOT) -> list[str]:
         payload,
         read_current=_repo_reader(root),
         read_at_ref=_git_reader(root),
+        mode=mode,
     )
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "--mode",
+        choices=MODES,
+        default=DEVELOPMENT_MODE,
+        help=(
+            "development (default): historical integrity only. "
+            "attested: also require the audited source anchors to match HEAD."
+        ),
+    )
     parser.add_argument("--quiet", action="store_true", help="print failures only")
     args = parser.parse_args(argv)
 
-    failures = check_repository()
+    failures = check_repository(mode=args.mode)
     if failures:
         for failure in failures:
             print(f"FAIL: {failure}", file=sys.stderr)
+        if args.mode == ATTESTED_MODE:
+            print(
+                "NOTE: --mode attested asserts the document describes HEAD. If a "
+                "source anchor moved and you are not re-auditing, you want the "
+                "default --mode development instead.",
+                file=sys.stderr,
+            )
         return 1
     if not args.quiet:
-        print(
-            "PASS: math_model document, audit, and 8 source anchors match the "
-            "closed byte attestation"
-        )
+        if args.mode == ATTESTED_MODE:
+            print(
+                "PASS: math_model document, audit, and 8 source anchors match the "
+                "closed byte attestation"
+            )
+        else:
+            print(
+                "PASS: math_model document and audit record still match the closed "
+                f"byte attestation, and {AUDITED_SOURCE_REF[:8]} still carries the "
+                "8 attested source anchors"
+            )
+            print(
+                "NOTE: --mode development makes no claim that the document still "
+                "describes HEAD; run --mode attested to check that"
+            )
         print(
             "NOTE: byte identity only; no semantic-equivalence proof, runtime "
             "measurement, or execution authority"
