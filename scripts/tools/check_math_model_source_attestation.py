@@ -15,8 +15,10 @@ is the accepted record still the record that was accepted?
 * the document and audit record still have those SHA-256 identities; and
 * the audited git ref contains the attested source bytes.
 
-Those can only be broken by rewriting history, so they are always fail-closed.
-Editing a source anchor does not touch any of them.
+These historical-integrity checks are unaffected by ordinary source-anchor
+edits, and every one of them stays fail-closed.  Note this arm still reads the
+working tree: editing the accepted document or the audit record fails here,
+without any history being rewritten.
 
 ``--mode attested`` adds the **current-HEAD claim**: every audited source
 anchor in the working tree still has its attested identity, i.e. the document
