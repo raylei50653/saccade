@@ -119,12 +119,16 @@ Layer P **不是** capture 路徑，這一系列不擴它，不改 `run_h2_layer
 
 ## 6. Math-model
 
-繼續用全檔 SHA，**不做新 hasher**。把 §1.3 的三件事拆成兩個具名臂：
+繼續用全檔 SHA，**不做新 hasher**。把 §1.3 的三件事拆成兩個具名臂 —— `--mode {development,attested}`：
 
-- `--historical-only`：仍鎖 `math_model.md` 與當前 audit 檔案 bytes、code-owned digest、`read_at_ref` 比對
-- 只有**八個 source anchor 的工作樹比對**（§1.3 的第 3 項）變成可關的 current-HEAD 主張
+- `--mode development`（**新預設**）：歷史完整性。仍鎖 `math_model.md` 與當前 audit 檔案 bytes、code-owned digest、以及 `read_at_ref` 對 audited ref 的八份 source bytes 比對。這些只能靠改寫歷史才會壞，永遠 fail-closed。
+- `--mode attested`：再加上 §1.3 第 3 項 —— **八個 source anchor 的工作樹比對**，即「文件描述當前 HEAD」的主張。行為與翻轉前一致，在 re-audit 或要把文件當成 current 出版時跑。
 
-沒有 `--fix`，沒有靜默刷新。依 §3 決定 3，這件事走**獨立 PR**，先於 runtime default 翻轉。
+未知 mode 一律回 failure，不靜默退回較弱的一臂。`development` 的 PASS 訊息不得繼承 `attested` 的措辭，須明寫它對「文件是否仍描述 HEAD」無主張。
+
+> 命名說明：草稿原本寫 `--historical-only`。實作時改為具名 mode 對 —— 一旦預設翻成 development，否定語氣的旗標讀起來是反的（預設就已經 historical-only，旗標會變成永遠開著）。
+
+沒有 `--fix`，沒有靜默刷新。依 §3 決定 3，這件事走**獨立 PR**（從 `main` 開，不疊在本 ADR 上），先於 runtime default 翻轉。
 
 ---
 
