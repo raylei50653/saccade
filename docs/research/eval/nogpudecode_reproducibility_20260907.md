@@ -185,3 +185,7 @@ range 不會縮小;但**獨立重跑一個新 block 不保證**得到同樣或�
 同日的前置量測(GPU decode 側,以及 PR #344 的 A/B)另存
 `~/.local/state/saccade/perf/gpu-decode-nondeterminism-recheck-20260907/` 與
 `~/.local/state/saccade/perf/decode-stream-ab-20260907/`。
+
+對這批 MOT 的第一個分歧幀分類、以及 fail-closed 重複執行檢查,見
+[eval_repeat_identity_boundary_20260907.md](eval_repeat_identity_boundary_20260907.md)
+(#363;不改寫本文的量測或判讀規則)。
