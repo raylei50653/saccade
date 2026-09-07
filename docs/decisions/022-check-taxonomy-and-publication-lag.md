@@ -121,7 +121,7 @@ Layer P **不是** capture 路徑，這一系列不擴它，不改 `run_h2_layer
 
 繼續用全檔 SHA，**不做新 hasher**。把 §1.3 的三件事拆成兩個具名臂 —— `--mode {development,attested}`：
 
-- `--mode development`（**新預設**）：歷史完整性。仍鎖 `math_model.md` 與當前 audit 檔案 bytes、code-owned digest、以及 `read_at_ref` 對 audited ref 的八份 source bytes 比對。這些只能靠改寫歷史才會壞，永遠 fail-closed。
+- `--mode development`（**新預設**）：歷史完整性。仍鎖 `math_model.md` 與當前 audit 檔案 bytes、code-owned digest、以及 `read_at_ref` 對 audited ref 的八份 source bytes 比對。這些**不受一般 source-anchor 編輯影響**，每一條都維持 fail-closed。注意該臂**仍讀工作樹**：直接編輯 `math_model.md` 或 audit record 一樣會失敗，不需要動任何 Git 歷史。
 - `--mode attested`：再加上 §1.3 第 3 項 —— **八個 source anchor 的工作樹比對**，即「文件描述當前 HEAD」的主張。行為與翻轉前一致，在 re-audit 或要把文件當成 current 出版時跑。
 
 未知 mode 一律回 failure，不靜默退回較弱的一臂。`development` 的 PASS 訊息不得繼承 `attested` 的措辭，須明寫它對「文件是否仍描述 HEAD」無主張。
