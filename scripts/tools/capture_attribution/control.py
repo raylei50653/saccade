@@ -5,7 +5,7 @@
 import ctypes
 import json
 from pathlib import Path
-import sys
+import argparse
 import threading
 
 import torch
@@ -33,21 +33,79 @@ def checked(rc):
         raise RuntimeError(f"control CUDA rc={rc}")
 
 
-def mechanism(blocking, driver, joined=False):
+def load_owner_helper(path: Path):
+    helper = ctypes.CDLL(str(path.resolve()))
+    word = ctypes.c_size_t
+    pword = ctypes.POINTER(word)
+    signatures = {
+        "attribution_control_cuda_create_default": [pword],
+        "attribution_control_cuda_create_flags": [pword, ctypes.c_uint],
+        "attribution_control_cuda_create_priority": [
+            pword,
+            ctypes.c_uint,
+            ctypes.c_int,
+        ],
+        "attribution_control_cuda_destroy": [word],
+        "attribution_control_cu_create_flags": [pword, ctypes.c_uint],
+        "attribution_control_cu_create_priority": [
+            pword,
+            ctypes.c_uint,
+            ctypes.c_int,
+        ],
+        "attribution_control_cu_destroy": [word],
+    }
+    for name, args in signatures.items():
+        bind(helper, name, args)
+    return helper
+
+
+def create_stream(helper, kind, flags):
+    raw = ctypes.c_size_t()
+    if kind == "runtime-default":
+        checked(helper.attribution_control_cuda_create_default(ctypes.byref(raw)))
+    elif kind == "runtime-flags":
+        checked(helper.attribution_control_cuda_create_flags(ctypes.byref(raw), flags))
+    elif kind == "runtime-priority":
+        checked(
+            helper.attribution_control_cuda_create_priority(ctypes.byref(raw), flags, 0)
+        )
+    elif kind == "driver-flags":
+        checked(helper.attribution_control_cu_create_flags(ctypes.byref(raw), flags))
+    elif kind == "driver-priority":
+        checked(
+            helper.attribution_control_cu_create_priority(ctypes.byref(raw), flags, 0)
+        )
+    else:
+        raise ValueError(f"unknown creation kind: {kind}")
+    if not raw.value:
+        raise RuntimeError(f"{kind} returned a null stream")
+    return ctypes.c_void_p(raw.value)
+
+
+def destroy_stream(helper, driver, stream):
+    raw = ctypes.c_size_t(stream.value)
+    if driver:
+        checked(helper.attribution_control_cu_destroy(raw))
+    else:
+        checked(helper.attribution_control_cuda_destroy(raw))
+
+
+def mechanism(
+    blocking, driver, creation_kind, helper_path, joined=False, recreate=False
+):
     torch.cuda.init()
     torch.cuda.synchronize()
+    helper = load_owner_helper(helper_path)
     rt = loaded_cudart()
     ptr = ctypes.c_void_p
     stream = ptr()
     graph = ptr()
     pptr = ctypes.POINTER(ptr)
-    create = bind(rt, "cudaStreamCreateWithFlags", [pptr, ctypes.c_uint])
     get_flags = bind(rt, "cudaStreamGetFlags", [ptr, ctypes.POINTER(ctypes.c_uint)])
     query = bind(rt, "cudaStreamIsCapturing", [ptr, ctypes.POINTER(ctypes.c_int)])
     begin = bind(rt, "cudaStreamBeginCapture", [ptr, ctypes.c_int])
     end = bind(rt, "cudaStreamEndCapture", [ptr, pptr])
     destroy_graph = bind(rt, "cudaGraphDestroy", [ptr])
-    destroy_stream = bind(rt, "cudaStreamDestroy", [ptr])
     if driver:
         drv = ctypes.CDLL("libcuda.so.1")
         get_proc = bind(
@@ -75,12 +133,12 @@ def mechanism(blocking, driver, joined=False):
             raise RuntimeError(f"cuGetProcAddress query status={status.value}")
         begin = ctypes.CFUNCTYPE(ctypes.c_int, ptr, ctypes.c_int)(address.value)
         end = bind(drv, "cuStreamEndCapture", [ptr, pptr])
-    checked(create(ctypes.byref(stream), 0 if blocking and not joined else 1))
+    stream = create_stream(helper, creation_kind, 0 if blocking and not joined else 1)
     flags = ctypes.c_uint(99)
     checked(get_flags(stream, ctypes.byref(flags)))
     side, event_out, event_back = ptr(), ptr(), ptr()
     if joined:
-        checked(create(ctypes.byref(side), 0))
+        side = create_stream(helper, "runtime-flags", 0)
         create_event = bind(rt, "cudaEventCreateWithFlags", [pptr, ctypes.c_uint])
         record = bind(rt, "cudaEventRecord", [ptr, ptr])
         wait = bind(rt, "cudaStreamWaitEvent", [ptr, ptr, ctypes.c_uint])
@@ -88,7 +146,12 @@ def mechanism(blocking, driver, joined=False):
         checked(create_event(ctypes.byref(event_out), 2))
         checked(create_event(ctypes.byref(event_back), 2))
     opened, done = threading.Event(), threading.Event()
-    result = {"blocking": blocking, "driver_getproc": driver, "flags": flags.value}
+    result = {
+        "blocking": blocking,
+        "creation_kind": creation_kind,
+        "driver_getproc": driver,
+        "flags": flags.value,
+    }
 
     def worker():
         if not opened.wait(10):
@@ -117,15 +180,24 @@ def mechanism(blocking, driver, joined=False):
         checked(record(event_back, side))
         checked(wait(stream, event_back, 0))
     result["end_rc"] = end(stream, ctypes.byref(graph))
-    print(json.dumps(result), flush=True)
     assert result["query_rc"] == (906 if blocking else 0), result
     assert result["end_rc"] == 0, result
     checked(destroy_graph(graph))
-    checked(destroy_stream(stream))
+    first_handle = stream.value
+    destroy_stream(helper, driver, stream)
     if joined:
-        checked(destroy_stream(side))
+        destroy_stream(helper, False, side)
         checked(destroy_event(event_out))
         checked(destroy_event(event_back))
+    if recreate:
+        replacement = create_stream(helper, creation_kind, 0)
+        result["recreate"] = {
+            "first": first_handle,
+            "second": replacement.value,
+            "same_handle": first_handle == replacement.value,
+        }
+        destroy_stream(helper, driver, replacement)
+    print(json.dumps(result), flush=True)
 
 
 def _whole_graph_capture(sample):
@@ -149,12 +221,29 @@ def python_sites():
 
 
 if __name__ == "__main__":
-    case = sys.argv[1]
-    if case == "python":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("case")
+    parser.add_argument("--helper", type=Path)
+    args = parser.parse_args()
+    if args.case == "python":
         python_sites()
     else:
+        if args.helper is None:
+            parser.error("--helper is required for native creation controls")
+        creation_kinds = {
+            "blocking-runtime": "runtime-default",
+            "nonblocking-runtime": "runtime-priority",
+            "blocking-driver": "driver-flags",
+            "nonblocking-driver": "driver-priority",
+            "blocking-joined": "runtime-flags",
+        }
+        if args.case not in creation_kinds:
+            parser.error(f"unknown control case: {args.case}")
         mechanism(
-            blocking=case.startswith("blocking"),
-            driver=case.endswith("driver"),
-            joined=case == "blocking-joined",
+            blocking=args.case.startswith("blocking"),
+            driver=args.case.endswith("driver"),
+            creation_kind=creation_kinds[args.case],
+            helper_path=args.helper,
+            joined=args.case == "blocking-joined",
+            recreate=args.case == "blocking-runtime",
         )

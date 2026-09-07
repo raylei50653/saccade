@@ -94,26 +94,88 @@ def fixture_rows():
         "site_id": 0,
         "native_stack": [],
     }
-    return [
-        {
+    rows = []
+    for n, domain, cb, corr, api, phase, rc in (
+        (1, 2, 20, 10, "cudaStreamCreateWithFlags", "enter", -1),
+        (2, 1, 21, 10, "cuStreamCreate", "enter", -1),
+        (3, 1, 21, 10, "cuStreamCreate", "exit", 0),
+        (4, 2, 20, 10, "cudaStreamCreateWithFlags", "exit", 0),
+        (5, 1, 10, 1, "cuStreamBeginCapture_v2", "enter", -1),
+        (6, 1, 10, 1, "cuStreamBeginCapture_v2", "exit", 0),
+        (7, 1, 11, 2, "cuStreamIsCapturing", "enter", -1),
+        (8, 1, 11, 2, "cuStreamIsCapturing", "exit", 906),
+        (9, 1, 12, 3, "cuStreamEndCapture", "enter", -1),
+        (10, 1, 12, 3, "cuStreamEndCapture", "exit", 0),
+        (11, 2, 22, 11, "cudaStreamDestroy", "enter", -1),
+        (12, 1, 23, 11, "cuStreamDestroy_v2", "enter", -1),
+        (13, 1, 23, 11, "cuStreamDestroy_v2", "exit", 0),
+        (14, 2, 22, 11, "cudaStreamDestroy", "exit", 0),
+    ):
+        row = {
             **common,
             "seq": n,
             "ns": n * 10,
+            "domain": domain,
             "cbid": cb,
             "correlation": corr,
             "api": api,
             "phase": phase,
             "rc": rc,
         }
-        for n, cb, corr, api, phase, rc in (
-            (1, 10, 1, "cuStreamBeginCapture_v2", "enter", -1),
-            (2, 10, 1, "cuStreamBeginCapture_v2", "exit", 0),
-            (3, 11, 2, "cuStreamIsCapturing", "enter", -1),
-            (4, 11, 2, "cuStreamIsCapturing", "exit", 906),
-            (5, 12, 3, "cuStreamEndCapture", "enter", -1),
-            (6, 12, 3, "cuStreamEndCapture", "exit", 0),
+        if "Create" in api and phase == "enter":
+            row.update(
+                has_stream=False,
+                stream=0,
+                flags=-1,
+                native_stack=[1000 + n],
+                native_stack_truncated=False,
+            )
+        rows.append(row)
+    return rows
+
+
+def resolved_creation_stack(stack, api, truncated):
+    if not stack:
+        return {"status": "gap", "gap": "missing_native_stack", "frames": []}
+    if truncated is not False:
+        return {"status": "gap", "gap": "native_stack_truncated", "frames": []}
+    caller = {
+        "address": stack[-1],
+        "status": "resolved",
+        "symbol": "fixture_creator",
+        "location": "fixture.cpp:1",
+        "module": {"path": "/fixture/owner.so", "sha256": "a" * 64},
+    }
+    return {
+        "status": "resolved",
+        "api_frame_index": 0,
+        "caller_frame_index": 1,
+        "caller": caller,
+        "frames": [caller],
+    }
+
+
+def analyze_fixture(root):
+    return analyze(root, stack_resolver=resolved_creation_stack)
+
+
+def write_observer_build(root):
+    (root / "observer_build.json").write_text(
+        json.dumps(
+            {
+                "schema": "capture_attribution_observer_build_v2",
+                "stream_creation_callbacks": {
+                    "RUNTIME": [
+                        "cudaStreamCreate_v3020",
+                        "cudaStreamCreateWithFlags_v5000",
+                        "cudaStreamCreateWithPriority_v5050",
+                    ],
+                    "DRIVER": ["cuStreamCreate", "cuStreamCreateWithPriority"],
+                },
+                "unparsed_callbacks": [],
+            }
         )
-    ]
+    )
 
 
 def write_fixture(root, rows):
@@ -122,6 +184,7 @@ def write_fixture(root, rows):
         json.dumps({"event": "harness_stopped", "cupti_rc": 0, "live_threads": []})
         + "\n"
     )
+    write_observer_build(root)
     (root / "manifest.json").write_text(
         json.dumps(
             {
@@ -138,10 +201,12 @@ def write_fixture(root, rows):
 
 def test_overlap_is_not_root_cause_or_external_library_proof(tmp_path):
     rows = fixture_rows()
-    for row in rows[2:4]:
+    for row in rows:
+        if "IsCapturing" not in row["api"]:
+            continue
         row.update(tid=2, stream=1)
     write_fixture(tmp_path, rows)
-    result = analyze(tmp_path)
+    result = analyze_fixture(tmp_path)
     assert result["trace_structure_ok"]
     assert len(result["capture_errors"][0]["observed_open_captures"]) == 1
     assert result["unclassified_captures"] == 1
@@ -156,9 +221,19 @@ def test_missing_or_tampered_evidence_cannot_pass(tmp_path, damage):
     if damage == "no_capture":
         rows = []
     elif damage == "missing_end":
-        rows = rows[:-1]
+        rows = [
+            row
+            for row in rows
+            if not (row["api"] == "cuStreamEndCapture" and row["phase"] == "exit")
+        ]
+        for n, row in enumerate(rows, 1):
+            row["seq"] = n
     elif damage == "unknown_flags":
-        rows[1]["flags"] = -1
+        next(
+            row
+            for row in rows
+            if "BeginCapture" in row["api"] and row["phase"] == "exit"
+        )["flags"] = -1
     write_fixture(tmp_path, rows)
     if damage == "hash":
         with (tmp_path / "cuda.jsonl").open("a") as output:
@@ -166,24 +241,110 @@ def test_missing_or_tampered_evidence_cannot_pass(tmp_path, damage):
         # Valid JSONL modification, rather than a parser error.
         text = (tmp_path / "cuda.jsonl").read_text().replace('"flags": 0', '"flags": 1')
         (tmp_path / "cuda.jsonl").write_text(text.rstrip() + "\n")
-    assert not analyze(tmp_path)["trace_structure_ok"]
+    assert not analyze_fixture(tmp_path)["trace_structure_ok"]
 
 
 def test_different_context_is_not_attributed(tmp_path):
     rows = fixture_rows()
-    for row in rows[2:4]:
-        row["context"] = 100
+    for row in rows:
+        if "IsCapturing" in row["api"]:
+            row["context"] = 100
     write_fixture(tmp_path, rows)
-    assert analyze(tmp_path)["capture_errors"][0]["observed_open_captures"] == []
+    assert (
+        analyze_fixture(tmp_path)["capture_errors"][0]["observed_open_captures"] == []
+    )
 
 
 def test_missing_query_enter_cannot_pass(tmp_path):
     rows = fixture_rows()
-    rows.pop(2)
+    rows = [
+        row
+        for row in rows
+        if not ("IsCapturing" in row["api"] and row["phase"] == "enter")
+    ]
     for n, row in enumerate(rows, 1):
         row.update(seq=n, selected=True)
     write_fixture(tmp_path, rows)
-    assert not analyze(tmp_path)["trace_structure_ok"]
+    assert not analyze_fixture(tmp_path)["trace_structure_ok"]
+
+
+def test_destroy_then_same_handle_create_is_a_new_generation(tmp_path):
+    rows = fixture_rows()
+    for original in fixture_rows()[:4]:
+        row = dict(original)
+        row["seq"] += 14
+        row["ns"] += 140
+        row["correlation"] += 20
+        rows.append(row)
+    write_fixture(tmp_path, rows)
+    result = analyze_fixture(tmp_path)
+    assert result["trace_structure_ok"]
+    assert [item["generation"] for item in result["stream_lifetimes"]] == [1, 2]
+    first, second = result["stream_lifetimes"]
+    assert first["stream"] == second["stream"]
+    assert first["destroy"]["exit_ns"] < second["created_ns"]
+    assert first["owner"] == second["owner"]
+
+
+@pytest.mark.parametrize("damage", ["missing", "truncated"])
+def test_creation_stack_gap_fails_closed(tmp_path, damage):
+    rows = fixture_rows()
+    entered = next(
+        row
+        for row in rows
+        if row["api"] == "cudaStreamCreateWithFlags" and row["phase"] == "enter"
+    )
+    if damage == "missing":
+        entered["native_stack"] = []
+    else:
+        entered["native_stack_truncated"] = True
+    write_fixture(tmp_path, rows)
+    result = analyze_fixture(tmp_path)
+    assert not result["trace_structure_ok"]
+    assert not result["ownership_evidence_ok"]
+    assert any(
+        value.startswith("creation_stack_gap:") for value in result["evidence_gaps"]
+    )
+
+
+def test_unresolved_caller_module_is_an_evidence_gap(tmp_path):
+    def unresolved(stack, api, truncated):
+        return {
+            "status": "gap",
+            "gap": "creation_caller_module_unresolved",
+            "frames": [],
+        }
+
+    write_fixture(tmp_path, fixture_rows())
+    result = analyze(tmp_path, stack_resolver=unresolved)
+    assert not result["trace_structure_ok"]
+    assert not result["ownership_evidence_ok"]
+    assert any(
+        value.endswith("creation_caller_module_unresolved")
+        for value in result["evidence_gaps"]
+    )
+
+
+def test_second_create_without_destroy_is_lifetime_ambiguous(tmp_path):
+    rows = fixture_rows()
+    duplicate = []
+    for original in fixture_rows()[:4]:
+        row = dict(original)
+        row["seq"] += 4
+        row["ns"] += 40
+        row["correlation"] += 20
+        duplicate.append(row)
+    for row in rows[4:]:
+        row["seq"] += 4
+        row["ns"] += 40
+    rows = rows[:4] + duplicate + rows[4:]
+    write_fixture(tmp_path, rows)
+    result = analyze_fixture(tmp_path)
+    assert not result["trace_structure_ok"]
+    assert any(
+        value.startswith("create_while_lifetime_active:")
+        for value in result["evidence_gaps"]
+    )
 
 
 def stopped_row(**overrides):
@@ -197,6 +358,7 @@ def write_teardown_fixture(root, stopped, final_manifest=True):
     )
     (root / "python.jsonl").write_text(json.dumps(stopped) + "\n")
     (root / "tail.log").write_text("1 workload_completed:target_returned\n")
+    write_observer_build(root)
     manifest = {"source_drift": []}
     if final_manifest:
         excluded = ("manifest.json", "tail.log")
@@ -272,7 +434,7 @@ def test_a_worker_that_will_not_stop_leaves_the_trace_structure_invalid(
     # shutdown check, which fails closed on it exactly as before.
     live = [{"name": worker.thread.name, "native_id": worker.thread.native_id}]
     write_teardown_fixture(tmp_path, stopped_row(quiesce=quiesced, live_threads=live))
-    result = analyze(tmp_path)
+    result = analyze_fixture(tmp_path)
     assert not result["trace_structure_ok"]
     assert "observer_shutdown_incomplete_or_workers_alive" in result["problems"]
 
@@ -320,7 +482,7 @@ def test_a_shutdown_that_never_returns_is_bounded_and_still_fails_closed(
         write_teardown_fixture(
             tmp_path, stopped_row(quiesce=quiesced, live_threads=live)
         )
-        result = analyze(tmp_path)
+        result = analyze_fixture(tmp_path)
         assert not result["trace_structure_ok"]
         assert "observer_shutdown_incomplete_or_workers_alive" in result["problems"]
     finally:
@@ -361,10 +523,10 @@ def test_run_notes_every_teardown_stage_the_tail_has_to_locate():
 
 def test_final_manifest_is_what_marks_legal_finalization(tmp_path):
     write_teardown_fixture(tmp_path / "died", stopped_row(), final_manifest=False)
-    result = analyze(tmp_path / "died")
+    result = analyze_fixture(tmp_path / "died")
     assert not result["trace_structure_ok"]
     assert "missing_final_manifest" in result["problems"]
     # The two still-open files are excluded by name, not silently: a complete
     # teardown passes with tail.log present and deliberately unhashed.
     write_teardown_fixture(tmp_path / "complete", stopped_row())
-    assert analyze(tmp_path / "complete")["trace_structure_ok"]
+    assert analyze_fixture(tmp_path / "complete")["trace_structure_ok"]

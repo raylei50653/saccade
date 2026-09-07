@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <cstring>
 #include <execinfo.h>
+#include <iterator>
 #include <map>
 #include <mutex>
 #include <sys/syscall.h>
@@ -18,11 +19,20 @@ static thread_local uint64_t site_id = 0;
 static uint64_t sequence = 0;
 static std::map<std::pair<uintptr_t, uintptr_t>, std::pair<int, const char *>> flags;
 
+static bool starts_with(const char *value, const char *prefix) {
+    return strncmp(value, prefix, strlen(prefix)) == 0;
+}
+
+static bool is_stream_creation(const char *name) {
+    return starts_with(name, "cudaStreamCreate") || starts_with(name, "cuStreamCreate");
+}
+
 struct Decoded {
     bool selected = false, has_stream = false, has_capture_id = false;
+    bool has_priority = false;
     uintptr_t stream = 0, event = 0;
     uint64_t capture_id = 0;
-    int mode = -1, flags = -1, status = -1, event_flags = -1;
+    int mode = -1, flags = -1, priority = 0, status = -1, event_flags = -1;
     const char *flag_source = "unknown";
 };
 
@@ -46,6 +56,15 @@ static void CUPTIAPI callback(void *, CUpti_CallbackDomain domain,
 #include "decode.inc"
     // Every nonzero API return is retained, including errors outside stream APIs.
     if (!e.selected && (entering || rc == 0)) return;
+    void *stack[64];
+    int stack_count = 0;
+    bool stack_truncated = false;
+    if ((entering && (strstr(name, "Begin") || is_stream_creation(name) ||
+         (site_id && (strstr(name, "EventRecord") || strstr(name, "StreamWaitEvent"))))) ||
+        (!entering && rc != 0)) {
+        stack_count = backtrace(stack, static_cast<int>(std::size(stack)));
+        stack_truncated = stack_count == static_cast<int>(std::size(stack));
+    }
     timespec now{};
     clock_gettime(CLOCK_MONOTONIC, &now);
     const auto context = reinterpret_cast<uintptr_t>(data->context);
@@ -63,9 +82,11 @@ static void CUPTIAPI callback(void *, CUpti_CallbackDomain domain,
         "{\"seq\":%llu,\"ns\":%llu,\"pid\":%d,\"tid\":%ld,\"domain\":%u,"
         "\"cbid\":%u,\"correlation\":%u,\"phase\":\"%s\",\"api\":\"%s\","
         "\"context\":%llu,\"context_uid\":%u,\"site_id\":%llu,\"selected\":%s,\"has_stream\":%s,"
-        "\"stream\":%llu,\"flags\":%d,\"flags_source\":\"%s\",\"mode\":%d,"
+        "\"stream\":%llu,\"flags\":%d,\"flags_source\":\"%s\","
+        "\"has_priority\":%s,\"priority\":%d,\"mode\":%d,"
         "\"status\":%d,\"event\":%llu,\"event_flags\":%d,"
-        "\"has_capture_id\":%s,\"capture_id\":%llu,\"rc\":%d,\"native_stack\":[",
+        "\"has_capture_id\":%s,\"capture_id\":%llu,\"rc\":%d,"
+        "\"native_stack_truncated\":%s,\"native_stack\":[",
         static_cast<unsigned long long>(++sequence),
         static_cast<unsigned long long>(now.tv_sec) * 1000000000ULL + now.tv_nsec,
         getpid(), syscall(SYS_gettid), domain, id, data->correlationId,
@@ -73,18 +94,14 @@ static void CUPTIAPI callback(void *, CUpti_CallbackDomain domain,
         data->contextUid, static_cast<unsigned long long>(site_id),
         e.selected ? "true" : "false",
         e.has_stream ? "true" : "false", static_cast<unsigned long long>(e.stream),
-        e.flags, e.flag_source, e.mode, e.status,
+        e.flags, e.flag_source, e.has_priority ? "true" : "false", e.priority,
+        e.mode, e.status,
         static_cast<unsigned long long>(e.event), e.event_flags,
-        e.has_capture_id ? "true" : "false", static_cast<unsigned long long>(e.capture_id), rc);
-    if ((entering && (strstr(name, "Begin") || strstr(name, "StreamCreate") ||
-         (site_id && (strstr(name, "EventRecord") || strstr(name, "StreamWaitEvent"))))) ||
-        (!entering && rc != 0)) {
-        void *stack[32];
-        const int count = backtrace(stack, 32);
-        for (int i = 0; i < count; ++i)
-            fprintf(trace_file, "%s%llu", i ? "," : "",
-                    static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(stack[i])));
-    }
+        e.has_capture_id ? "true" : "false", static_cast<unsigned long long>(e.capture_id), rc,
+        stack_truncated ? "true" : "false");
+    for (int i = 0; i < stack_count; ++i)
+        fprintf(trace_file, "%s%llu", i ? "," : "",
+                static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(stack[i])));
     fprintf(trace_file, "]}\n");
     if (fflush(trace_file) != 0 || ferror(trace_file)) _exit(74);
     if (ok && e.has_stream && strstr(name, "StreamDestroy")) flags.erase(key);
