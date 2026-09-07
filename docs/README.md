@@ -8,6 +8,7 @@
 
 Saccade 的文檔庫採用「模組化物理結構」配合「全局共享目錄」的組織形式：
 
+* **[PROJECT_DIRECTION.md](PROJECT_DIRECTION.md)**：**專案級方向語義**。範式邊界、project-level 目標定義、長期戰略路徑進入/退出條件；不承載數字、狀態或進度。
 * 🎓 **[PROJECT_SHOWCASE.md](PROJECT_SHOWCASE.md)**：**專題展示與答辯主敘事**。將研究問題、SSM-FPN、GPU tracker、可驗證結果、展示流程與數字邊界收斂為單一文件。
 * 🧭 **[PIPELINE.md](PIPELINE.md)**：**演算法主線精煉（單檔入口）**。按處理流程 `前處理 → ssm-head → 後處理 → GMC → ID分配 → relink` 走一遍，每階段只留「現行最優 / GO / NO-GO」結論，細節下沉到下列 modules/ 與 registry。**想快速掌握全鏈先讀這份。**
 * 📦 **[modules/](modules)**：**核心模組化文檔庫**。物理上按系統功能與 `mot17.py` 評測模組劃分，包含各自的設計、決策 (ADR) 與實驗分析。
@@ -65,8 +66,10 @@ Saccade 的文檔庫採用「模組化物理結構」配合「全局共享目錄
 8. 重大技術選型                       →  decisions/                     →  下一號 ADR + 模組 README/TODO 連結
 9. 全局效能評測 / 維運                →  reference/                     →  benchmarks/ 或 runbooks/
 10. 任務勾選                          →  TODO.md / modules/<m>/TODO.md  →  WIP=1；長文不塞 TODO
+11. 定義/更動專案級方向語義            →  PROJECT_DIRECTION.md           →  同 PR 附 ADR/decision pointer；日常實作不得觸發
 ──────────────────────────────────────────────────────────────────────────────────────────────
 ※ 日常 Bug fix、純重構 (API 外部行為未變) → 無需新增/更新文檔。
+※ 日常實作、milestone 完成、WIP 切換 → 不更新 PROJECT_DIRECTION.md（見該檔 Purpose / Scope 的 update trigger）。
 ※ 先依 [DEVELOPMENT action cards](../DEVELOPMENT.md#agent-action-cards) 選動作；完整規範以 `ownership/doc_structure_contract.md` 為準。
 ```
 

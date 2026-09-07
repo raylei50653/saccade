@@ -6,6 +6,10 @@
 If a PR touches multiple objectives, satisfy the **union** of rows. If one of those
 objectives is on the same module’s **should-not-own** list, stop and re-scope.
 
+The Matrix rows below are unchanged. Documentation and strategic-narrative PRs that
+do not touch an objective are routed by [Documentation / strategic routing](#documentation--strategic-routing)
+in this same file — a routing-only class, not a ninth objective type.
+
 ---
 
 ## Matrix
@@ -30,6 +34,7 @@ objectives is on the same module’s **should-not-own** list, stop and re-scope.
 | CONFIG + RUNTIME (inject map) | contracts **and** smoke |
 | BRIDGE + RUNTIME | native build + smoke |
 | RESEARCH + any production default flip | **split PR** — research docs first or behavior second, not both |
+| DOC-STRATEGY + any number or state rewrite | **split PR** — land the fact in its owner (ledger / registry / TODO) first; the strategy file only adds a pointer |
 | DEBUG probe left default-on | fail review |
 | Dual-stability default change | **not O-series**; needs named decision line + evidence (status closed) |
 
@@ -59,9 +64,22 @@ uv run scripts/eval/mot17.py \
 ## Review checklist (short)
 
 ```text
-□ Primary objective named in PR description
+□ Primary objective named in PR description (or route=DOC-STRATEGY when no objective is touched)
 □ File cards: no should-not-own expansion without extraction note
 □ Checks from matrix run (or waived with reason)
 □ O0 WIP=1: same module not opening a second decision-changing charter; probe / evidence / close stays non-WIP unless explicitly promoted
 □ No drive-by dual-stability / preset default in “docs” PR
+□ If this PR touches docs/PROJECT_DIRECTION.md: it matches that file's update triggers, copies no numbers/state/progress, and is not an ordinary implementation PR being asked to sync Direction
 ```
+
+---
+
+## Documentation / strategic routing
+
+Routing-only class for documentation and strategic-narrative surfaces that the
+objective Matrix does not cover. **Not** an objective type (`objective_template.md`
+is unchanged). Label the PR `route=DOC-STRATEGY` when this class applies.
+
+| Surface | Required checks | Notes |
+|:--|:--|:--|
+| `docs/PROJECT_DIRECTION.md`, `docs/decisions/*`, `docs/ownership/*` contracts, docs-root narrative files | `check_doc_structure.py --strict` (C6.4) + doc links + stale paths + freshness; Accepted ADRs are immutable; C5.1 single writer (no state/number rewrite) | No baseline numbers; no preset/default flip. Do not mix with RUNTIME/CONFIG behavior change — **split PR**. Direction-only PRs follow that file's update triggers; ordinary implementation PRs must not be asked to sync it. |

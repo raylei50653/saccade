@@ -46,7 +46,7 @@ has **one primary job**, explicit secondaries, and a clear **should-not-own** li
 |:--|:--|
 | [objective_template.md](objective_template.md) | Objective type catalog + card schema |
 | [module_objective_map.md](module_objective_map.md) | Primary / secondary / should-not-own per module & hot file |
-| [change_routing_matrix.md](change_routing_matrix.md) | Objective touched → required checks |
+| [change_routing_matrix.md](change_routing_matrix.md) | Objective touched → required checks; docs-strategy routing-only class in the same file |
 | [extraction_candidates.md](extraction_candidates.md) | What to extract later (reasons only; no moves) |
 | [doc_structure_contract.md](doc_structure_contract.md) | **O1.5** write-where / index / promotion / lifecycle |
 

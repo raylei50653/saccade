@@ -36,6 +36,7 @@ ENTRY_DOCS = [
     "docs/PIPELINE.md",
     "docs/DATAFLOW.md",
     "docs/PROJECT_SHOWCASE.md",
+    "docs/PROJECT_DIRECTION.md",
     "docs/architecture/README.md",
 ]
 

@@ -132,6 +132,7 @@ Cheb-GR / bank / offline identity / occ-exit → 文檔家 **semantic**（非 re
 | **讀** | [docs/architecture/README](docs/architecture/README.md)；決策敘事 [paper_outline](docs/research/paper_outline.md) + ledger；Mamba method [report_data](report_data/README.md)（**兩線互指、不互相覆寫**） |
 | **寫** | ADR（`docs/decisions/`）；paper 素材進 report_data 或 outline；claim 必須能指回 ledger / tables |
 | **驗** | 無「只存在 chat 的數字」；必要時重建 `report_data/build_paper_assets.py` |
+| **禁** | 日常實作、milestone 完成、WIP 切換皆不更新 [PROJECT_DIRECTION](docs/PROJECT_DIRECTION.md)；僅在該檔 Purpose / Scope 所列 trigger 時更新 |
 
 ---
 
@@ -285,6 +286,7 @@ research acceptance / next-stage auth = chat-side / research-owner gates
 
 | 需求 | 去 |
 |:--|:--|
+| 專案級方向 / 範式邊界 / 長期戰略路徑語義 | [docs/PROJECT_DIRECTION.md](docs/PROJECT_DIRECTION.md)（不隨 ordinary PR 更新） |
 | 寫 docs / research 路由 | [docs/README.md](docs/README.md) · [O1.5 契約](docs/ownership/doc_structure_contract.md) |
 | 格式 · WIP · fact-owner | [DOC_MAINTENANCE.md](docs/DOC_MAINTENANCE.md) |
 | 目標隔離 · PR 檢查矩陣 | [docs/ownership/](docs/ownership/README.md) |
