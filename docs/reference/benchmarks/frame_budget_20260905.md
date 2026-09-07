@@ -14,6 +14,9 @@
 > [verify_l2_evidence.py](../../../scripts/eval/diagnostics/verify_l2_evidence.py)。
 >
 > ⚠️ 本文尚未 promote 到 `evidence_ledger` 或 `report_data`,scope 限本機與本 preset。
+>
+> **實驗性補充**:[tracker_lane_dose_response_20260907](tracker_lane_dose_response_20260907.md) 量的是同一條 path 的
+> **邊際**成本(在 tracker lane 加工作有多少變成 frame period),而非本文的現況分佈。
 
 A per-kernel `nsys` profile of the headline single-stream MOT path. The pipeline is no
 longer host-bound — the GPU is busy 93.6% of every frame — and three of the remaining
