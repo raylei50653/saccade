@@ -9,6 +9,7 @@ Manifest: `docs/ownership/doc_migration_manifest.yaml`
 - `docs/DATAFLOW.md`
 - `docs/DOC_MAINTENANCE.md`
 - `docs/PIPELINE.md`
+- `docs/PROJECT_DIRECTION.md`
 - `docs/PROJECT_SHOWCASE.md`
 - `docs/README.md`
 - `docs/TESTING.md`
@@ -352,6 +353,6 @@ Excluded from the active index and default search view.
 
 ## Inventory summary
 
-- documents: 302
-- active: 247
+- documents: 303
+- active: 248
 - grayed out: 55

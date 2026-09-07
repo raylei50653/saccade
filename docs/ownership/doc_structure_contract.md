@@ -18,6 +18,7 @@ frontmatter, topic-hub pages (optional later).
 
 ```text
 [治理]           docs/ownership/                    O-series · WIP=1 · this contract
+[專案戰略]       docs/PROJECT_DIRECTION.md          範式邊界・里程碑定義・長期路線語義（數字/狀態禁止）
 [研究規範]       docs/research/contracts/           method / evidence semantics / claim ladders（規則）
 [研究狀態]       docs/research/contracts/claim_state_registry.md   每個 object 現在站在哪一格（狀態）
 [主線意圖]       module TODO → linked thread/note   one charter + disposable expected-state lease
@@ -50,6 +51,17 @@ Rules of thumb:
 rung / limits / substrate — 那是 registry 的 fact-ownership（C5 的「不得有第二真相」在狀態上的推論）。
 Expected state 是 linked charter 中可替換的 planning lease，不是 registry state；probe 是 execution，不是 decision artifact。
 
+### Strategic narrative surface（非決策層、非狀態層）
+
+C0.1 的兩個 process surface，以及「決策層**不得**新增 prose 檔」，維持不變；該禁令的作用域只覆蓋上表。
+
+[`docs/PROJECT_DIRECTION.md`](../PROJECT_DIRECTION.md) 是 **strategic-narrative surface**：
+
+- **是**：專案級方向語義（範式邊界總結、已採用里程碑的定義、長期路線進入/退出語義）的唯一敘事家。
+- **不是**：第三個決策層 process surface；不是 registry / module TODO 的狀態寫入者；不是 evidence、數字或進度家。
+
+本檔可手寫策略意圖與語義定義，並受 C5.1「Link, don't relabel」約束：不得複寫 live status、WIP、verdict 或任何數字。定量進入/退出條件一律寫成契約指針（*satisfied according to* `<owner>`），不在本檔複製門檻。日常實作 PR 不得同步本檔；更新觸發見該檔 Purpose / Scope。
+
 ---
 
 ## C1 — Writing decision tree
@@ -68,6 +80,7 @@ Expected state 是 linked charter 中可替換的 planning lease，不是 regist
 | Ops steps | `docs/modules/<m>/runbooks/` or `docs/reference/runbooks/` | Link from module / reference README |
 | Cheb-GR / bank / offline identity / occ-exit | **`docs/modules/semantic/`** | Doc home is semantic even if code lives under `perception/reid/` |
 | Feature extract / bank implementation (not association policy) | `docs/modules/reid/` | Keep association / handover policy out |
+| Defined or changed project-level direction semantics | `docs/PROJECT_DIRECTION.md` | Same PR carries the ADR/decision pointer; ordinary implementation PRs must not touch this file |
 
 > **Prototype carve-out — `docs/experiments/`.** This tree is a **non-normative shape prototype**, not a routing authority. It currently houses exactly one sample (`occ_exit_audit_p55/`) as a docs-only, reversible shape demo. **The routing above is unchanged**: occ-exit's canonical home remains `docs/modules/semantic/` (the workspace files are physically relocated there only for the prototype observation). Whether `docs/experiments/` becomes a canonical home — and its workspace↔object cardinality and state-projection rules — is deferred to a future architecture PR; until then no doc may treat `docs/experiments/` as an authoritative home.
 

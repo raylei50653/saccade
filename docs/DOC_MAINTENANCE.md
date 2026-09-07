@@ -135,7 +135,7 @@ WIP = 1 per module owner  (O0 seal)
 
 ### 入口文件新鮮度合約 (entry freshness contract)
 
-- 入口/敘事文件（`README.md`、`docs/PIPELINE.md`、`docs/DATAFLOW.md`、`docs/PROJECT_SHOWCASE.md` 等）可保留數字作為 headline / 展示 / ablation，但**必須**帶 mirror marker 並回連 owner。
+- 入口/敘事文件（`README.md`、`docs/PIPELINE.md`、`docs/DATAFLOW.md`、`docs/PROJECT_SHOWCASE.md`、`docs/PROJECT_DIRECTION.md` 等）可保留數字作為 headline / 展示 / ablation，但**必須**帶 mirror marker 並回連 owner。`PROJECT_DIRECTION.md` 本身不得承載數字或 live status。
 - 不要在入口文件用手寫「最後更新：YYYY-MM-DD」當新鮮度證明——它是死資料。改用 fact-owner marker 指向真正會更新的來源。
 
 ### 相關 checker
