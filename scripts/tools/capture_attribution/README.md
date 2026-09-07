@@ -58,13 +58,33 @@ capture participation without another BeginCapture call.
   Exceptions preserve their original propagation; background uncaught exceptions are
   logged then passed to the existing thread hook. `site_id=0` means unclassified;
   it is not evidence that the capture belongs to an external library.
+- `tail.log`: one flushed line per teardown stage, from how the workload finished
+  through quiescence, `attribution_stop`, mapped-file hashing and the final manifest
+  write. The manifest is only rewritten at the very end, so without this a teardown
+  that dies part-way is indistinguishable from any other missing final manifest. It
+  locates the last completed step; it is a diagnostic aid and neither the manifest nor
+  the structure check defers to it.
 - `stdout.log`, `stderr.log`, final `/proc/self/maps`, git HEAD/status/diff, source
   file hashes, package versions, selected CUDA/runtime environment, current GPU/driver,
   harness/observer/target hashes, and final mapped-file hashes. `--asset PATH` is repeatable
   for checkpoint/engine/config inputs. Unlisted assets and inherited environment outside
   the selected keys are not attested. Never substitute this current manifest for the
   original failure environment. Background native threads and unloaded libraries are
-  not exhaustively inventoried by the final process mapping.
+  not exhaustively inventoried by the final process mapping. `manifest.json` and
+  `tail.log` are still open when artifacts are hashed, so they are excluded by name in
+  `artifacts_sha256_excluded` rather than silently omitted.
+
+Before `attribution_stop`, teardown shuts down the auxiliary workers this process owns
+(torch's inductor compile pool, tqdm's monitor) and waits for the remaining threads,
+bounded by `--quiesce-timeout` (default 60s, which has to clear torch's own
+`quiesce_async_compile_time / 2` polling interval). Each shutdown runs on its own named
+daemon thread, so the bound encloses the shutdown calls themselves rather than only the
+wait after them; a shutdown that never returns is therefore bounded like any other
+survivor instead of hanging teardown. This is quiescence, not an excuse: the shutdown
+check still requires no live thread, so anything outlasting the bound — an unstopped
+worker or the thread still executing its shutdown — is reported in `live_threads` and
+fails the structure check as before. Shutdown errors are recorded in `quiesce.errors`
+and never raised, since a teardown convenience must not destroy the trace it is serving.
 
 ## Interpretation and limits
 
@@ -94,8 +114,9 @@ form. On 2026-09-06 one bounded production-path topology trace was performed wit
 [the recovery report](../../../docs/research/pipeline/capture_failure_provenance_20260906.md)):
 `mamba_whole_graph_m`, MOT17-02-SDP, GPU decode, double-buffer, 64 frames, one process,
 no incidence loop. Its structure check did not pass: three Python workers were live at
-stop and the final manifest was never written because the process ended after
-`harness_stopped` during the mapped-library hashing tail. Under this README's rules
+stop, and the final manifest was never written because the process ended somewhere
+after `harness_stopped`. Which teardown step it stopped at was not recoverable from
+what that run retained, which is why `tail.log` exists. Under this README's rules
 those are evidence gaps, so the trace must not be cited as a clean structure result.
 It observed four classified single-stream captures with no capture errors, no
 in-capture event joins and no blocking participant; that does not locate the synthetic

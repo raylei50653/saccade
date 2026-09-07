@@ -137,6 +137,91 @@ def install(torch, native, emit):
     return restore
 
 
+# Both helpers read ``sys.modules`` instead of importing: teardown runs while the
+# observer is still subscribed, and importing a module the target never loaded
+# would add library loads and API calls to the trace that the workload never made.
+def _shutdown_compile_workers() -> None:
+    module = sys.modules.get("torch._inductor.async_compile")
+    if module is not None:
+        module.shutdown_compile_workers()
+
+
+def _shutdown_tqdm_monitor() -> None:
+    module = sys.modules.get("tqdm")
+    monitor = getattr(getattr(module, "tqdm", None), "monitor", None)
+    if monitor is not None:
+        monitor.exit()
+
+
+def quiesce(timeout: float) -> dict:
+    """Bring library-owned daemon threads down before the observer stops.
+
+    torch's inductor compile-worker pool and tqdm's monitor outlive the target's
+    return, so a production target reaches ``attribution_stop`` with threads
+    still alive. They are shut down here rather than excused: the shutdown check
+    stays "no live thread", and this is what lets a production trace satisfy it
+    honestly. Runs before ``attribution_stop`` so that anything these threads do
+    on the way down is still observed.
+
+    Each shutdown is driven from its own thread, so the deadline covers the
+    shutdown calls themselves and not merely the wait that follows them: a
+    shutdown that never returns would otherwise hang teardown with the bound
+    never reaching it. One driver blocking therefore also cannot skip the
+    other. The drivers are daemons and are named, so a stuck one cannot hold
+    the process open yet still reaches the live-thread accounting that fails
+    the trace closed. Shutdown failures are recorded, never raised -- a
+    teardown convenience must not destroy the trace.
+    """
+    start = time.monotonic()
+    deadline = start + timeout
+    errors = {}
+
+    def drive(name, action):
+        try:
+            action()
+        except BaseException as exc:
+            errors[name] = repr(exc)
+
+    for name, action in (
+        ("inductor_compile_workers", _shutdown_compile_workers),
+        ("tqdm_monitor", _shutdown_tqdm_monitor),
+    ):
+        threading.Thread(
+            target=drive, args=(name, action), name=f"quiesce:{name}", daemon=True
+        ).start()
+    while True:
+        alive = [
+            t for t in threading.enumerate() if t is not threading.current_thread()
+        ]
+        if not alive or time.monotonic() >= deadline:
+            break
+        for thread in alive:
+            thread.join(min(0.2, max(0.0, deadline - time.monotonic())))
+    return {
+        "seconds": round(time.monotonic() - start, 2),
+        "errors": dict(errors),
+        "timed_out": bool(alive),
+    }
+
+
+def teardown_log(output: Path):
+    """Open ``tail.log`` and return it with a step recorder.
+
+    Teardown is the one stretch where a failure erases its own evidence: the
+    manifest is only rewritten at the very end, so a hang before that leaves a
+    directory that says nothing beyond "no final manifest". Each step is flushed
+    as it happens so the last line names where the tail stopped. Exclusive
+    creation, because a second writer would rewrite that record.
+    """
+    tail = (output / "tail.log").open("x")
+
+    def note(step: str) -> None:
+        tail.write(f"{time.monotonic_ns()} {step}\n")
+        tail.flush()
+
+    return tail, note
+
+
 def run(args) -> None:
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
@@ -238,6 +323,7 @@ def run(args) -> None:
         )
         old_hook(details)
 
+    outcome = "unreported"
     try:
         import torch
 
@@ -262,30 +348,41 @@ def run(args) -> None:
             if k.startswith(("SACCADE_", "CUDA_", "TORCH_", "PYTORCH_"))
         }
         emit("target_returned")
+        outcome = "target_returned"
     except BaseException as exc:
         emit(
             "target_exception",
             exception_type=type(exc).__name__,
             traceback=traceback.format_exc(),
         )
+        outcome = f"target_exception:{type(exc).__name__}"
         raise
     finally:
+        tail, note = teardown_log(output)
+        note(f"workload_completed:{outcome}")
         # Passive process mappings; no CUDA status queries at failure time.
         maps = Path("/proc/self/maps").read_text()
         (output / "maps.txt").write_text(maps)
+        note("maps_written")
         restore()
         threading.excepthook = old_hook
         sys.argv, sys.path = old_argv, old_path
+        note(f"quiesce_begin:timeout={args.quiesce_timeout}")
+        quiesced = quiesce(args.quiesce_timeout)
+        note(f"quiesce_end:{json.dumps(quiesced)}")
         rc = native.attribution_stop()
+        note(f"attribution_stopped:{rc}")
         emit(
             "harness_stopped",
             cupti_rc=rc,
+            quiesce=quiesced,
             live_threads=[
                 {"name": t.name, "native_id": t.native_id}
                 for t in threading.enumerate()
                 if t is not threading.current_thread()
             ],
         )
+        note("harness_stopped_emitted")
         python_log.close()
         sys.stdout.flush()
         sys.stderr.flush()
@@ -298,17 +395,20 @@ def run(args) -> None:
             if len(line.split(maxsplit=5)) == 6
             and line.split(maxsplit=5)[5].startswith("/")
         }
+        note(f"hashing_mapped_files:{len(libraries)}")
         manifest["mapped_file_sha256_after"] = {
             name: digest(Path(name))
             for name in sorted(libraries)
             if Path(name).is_file()
         }
+        note("mapped_files_hashed")
         manifest["source_drift"] = [
             name
             for name, sha in source_hashes.items()
             if not (repo / name).is_file() or digest(repo / name) != sha
         ]
         manifest["cupti_stop_rc"] = rc
+        manifest["quiesce"] = quiesced
         inputs_after = asset_paths([target, *args.asset], args.asset_tree)
         manifest["asset_drift"] = [
             str(p)
@@ -318,12 +418,20 @@ def run(args) -> None:
         manifest["asset_inventory_added"] = [
             str(p) for p in set(inputs_after) - set(inputs)
         ]
+        # Both excluded files are still being written at this point, so hashing
+        # them here would only record a value that is wrong by the time anyone
+        # checks it. The exclusion is named in the manifest rather than silent.
+        excluded = ("manifest.json", "tail.log")
         manifest["artifacts_sha256"] = {
-            p.name: digest(p) for p in output.iterdir() if p.name != "manifest.json"
+            p.name: digest(p) for p in output.iterdir() if p.name not in excluded
         }
+        manifest["artifacts_sha256_excluded"] = list(excluded)
+        note("artifacts_hashed")
         (output / "manifest.json").write_text(
             json.dumps(manifest, indent=2, default=str) + "\n"
         )
+        note("manifest_written")
+        tail.close()
 
 
 if __name__ == "__main__":
@@ -332,6 +440,9 @@ if __name__ == "__main__":
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--asset", type=Path, action="append", default=[])
     parser.add_argument("--asset-tree", type=Path, action="append", default=[])
+    # torch's compile-worker quiesce timer only checks its exit flag every
+    # ``quiesce_async_compile_time / 2`` seconds, so the bound has to clear that.
+    parser.add_argument("--quiesce-timeout", type=float, default=60.0)
     parser.add_argument("target", nargs=argparse.REMAINDER)
     args = parser.parse_args()
     if args.target[:1] == ["--"]:
