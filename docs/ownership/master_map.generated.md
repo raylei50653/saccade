@@ -156,6 +156,7 @@ Manifest: `docs/ownership/doc_migration_manifest.yaml`
 - `docs/reference/benchmarks/latency_log.md`
 - `docs/reference/benchmarks/reid_handover_ablation_20260808.md`
 - `docs/reference/benchmarks/throughput.md`
+- `docs/reference/benchmarks/tracker_lane_dose_response_20260907.md`
 - `docs/reference/code_health_audit.md`
 - `docs/reference/concurrent_eval.md`
 - `docs/reference/mamba_head_recall_bottleneck.md`
@@ -353,6 +354,6 @@ Excluded from the active index and default search view.
 
 ## Inventory summary
 
-- documents: 303
-- active: 248
+- documents: 304
+- active: 249
 - grayed out: 55
