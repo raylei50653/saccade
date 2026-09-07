@@ -138,9 +138,11 @@ Isolated cost, measured with CUDA events on an otherwise idle GPU (50 warmup, th
 | n = 1280 | 347.0 | | 400 000 iters | 636.1 |
 | n = 1536 | 569.9 | | 500 000 iters | 793.0 |
 
-The two chosen units differ by **1.2% in isolated wall time** and by roughly four orders of
-magnitude in thread count (1024³ GEMM saturates the device; the spin kernel uses one thread of
-the 70 656 the device can hold resident). Everything downstream is a comparison between them.
+The two chosen units differ by **1.2% in isolated wall time**. The 1024³ GEMM saturates the
+device; the spin kernel occupies **one thread** of the 70 656 the device can hold resident, and
+touches essentially no memory bandwidth, L2, atomics or registers. They therefore differ along
+*several* resource axes simultaneously — which is what makes the pair a control on
+"shape versus duration" and what stops it from isolating any single mechanism (§5).
 
 ### §2.5 Reading protocol
 
@@ -154,8 +156,23 @@ Pre-registered before the ladders were run, following the F3d protocol:
    reported as unresolved and **no breakpoint may be named as a real number** — only an interval.
 5. **Dose inertness check**: IDF1 / MOTA / IDs must be identical across all runs.
 
-33 runs total. **Every run returned IDF1 80.3 / MOTA 81.8 / HOTA 74.3 / IDs 358.** The dose is
-inert; the pipeline is deterministic at this preset.
+**Run accounting.** 35 runs were executed under the probe patch:
+
+| group | runs | anchor |
+|:--|--:|:--|
+| Dose A ladder — 4 levels × 4 reps | 16 | each rep's own `k=0` |
+| Dose A positive control — `k=0` and `k=16` | 2 | its **own paired `k=0`** (2.9558 ms), run immediately before it and distinct from all four ladder anchors |
+| Dose B ladder — 4 levels × 4 reps | 16 | each rep's own `k=0` |
+| Dose B positive control — `k=16` | 1 | **none** — read in §4 against the pooled ladder `k=0` mean |
+| **total under the probe patch** | **35** | |
+
+One further baseline run was executed *before* the patch was applied (334.26 FPS) and is not
+part of the 35.
+
+**Dose inertness.** All 36 runs returned identical **IDF1 80.3 / MOTA 81.8 / IDs 358**. HOTA
+was captured only on the pre-patch baseline run (74.3); the ladder harness extracted IDF1,
+MOTA and IDs only, so **no HOTA invariant is claimed across the 35**. On the three metrics that
+were recorded every time, the dose is inert and the pipeline is deterministic at this preset.
 
 ---
 
@@ -227,16 +244,19 @@ both k=1 and k=2. By §2.5 rule 4 those two levels are **not resolved**: they ar
 with* full absorption but do not establish it, and no per-unit cost may be quoted from them.
 This is the same resolution wall that closed the F3b detector-resize ladder.
 
-What *is* established is the pair of resolved points, and they agree with each other:
+The two readings that yield a numeric absorbed quantity agree with each other — noting that
+only the first of them is a paired, resolved ladder point:
 
 | | injected | absorbed |
 |:--|--:|--:|
 | k=4 (4/4 positive, paired) | 684 µs | **486 µs** |
 | k=16 (control, pooled anchor) | 2 736 µs | **574 µs** |
 
-Absorption **saturates** — it does not scale with dose. Two independent dose levels, an
-order of magnitude apart in injected work, converge on the same absorbed quantity. The
-saturation point falls in the interval **342–684 µs of injected low-occupancy work per frame**
+**The resolved readings are consistent with a saturation plateau of roughly 0.5 ms/frame.**
+Two dose levels fourfold apart in injected work return closely similar absorbed quantities.
+This is an interpretation the two readings support, not an established scaling law: only k=4
+is paired and resolved, while k=16 is a single run against a pooled anchor and is not a ladder
+point (§2.5, §6.2). The implied plateau falls in the interval **342–684 µs of injected low-occupancy work per frame**
 (above the largest unresolved level, at or below the smallest resolved one). Per §2.5 rule 4
 it is reported as that interval and not fitted to a number; "approximately 0.5 ms" in the
 summary is the absorbed plateau, read off the two resolved points.
@@ -253,17 +273,20 @@ Two doses, isolated wall times differing by 1.2%, produce qualitatively differen
 | S at the low end | 0.96 (resolved, 3/3) | not resolved |
 | S at k=4 | 0.96 | 0.29 |
 | S at k=16 | 1.00 | 0.79 |
-| absorbed | ~0 | saturates at ~0.5 ms/frame |
+| absorbed | ~0 | plateau ≈ 0.5 ms/frame (two resolved readings, §4) |
 
-**Duration does not predict the response; resource shape does.** Whether added tracker-lane
-work is hidden is governed by concurrency compatibility with the saturated detect lane, not by
-how many microseconds it takes in isolation.
+**Isolated duration alone does not predict the response; the response is
+workload-shape-sensitive. This matched-cost control does not identify which resource dimension
+or scheduling mechanism causes the difference.** Two points cannot separate occupancy from
+power, scheduler behaviour, register pressure, the memory subsystem, or anything else — and
+the doses differ along all of those axes at once, not only in thread count.
 
-This is consistent with, and sharpens, the two structural facts already in
-`frame_budget_20260905`: the GPU is 93.6% busy (little timeline idle for a dose that needs
-SMs — Dose A's ~4% residual absorption is the same order as that 6.4% idle), and it holds
-135 W against a 140 W cap with SM clock pinned at 2 497 MHz versus a 3 090 MHz boost (a
-power ceiling that a high-occupancy dose runs into and a single-thread dose does not).
+Two facts already in `frame_budget_20260905` are *compatible* with the observed difference and
+are recorded here as candidate mechanisms, **not** as attributions this experiment can support:
+the GPU is 93.6% busy (Dose A's ~4% residual absorption is the same order as that 6.4%
+timeline idle), and it holds 135 W against a 140 W cap with SM clock pinned at 2 497 MHz
+against a 3 090 MHz boost. Discriminating among them needs an experiment that varies one axis
+at a time, which this one does not.
 
 **What this does not say.** The envelope is measured for a dose that touches essentially no
 memory bandwidth, no L2, no atomics, and holds a trivial register footprint. It is an
@@ -275,8 +298,9 @@ envelope for that shape only.
 
 1. **`k=1` and `k=2` on Dose B are unresolved,** not zero. The absorbed plateau rests on two
    points (k=4 paired, k=16 unpaired).
-2. **The k=16 control has no paired anchor.** It is a control for instrument response, not a
-   ladder point.
+2. **Dose B's k=16 control has no paired anchor.** It is a control for instrument response,
+   not a ladder point, and §4 reads it against a pooled mean. (Dose A's control *does* carry
+   its own paired `k=0`; the two controls are not equivalent in strength.)
 3. **The two ladders were run in sequence, not interleaved.** Dose A's anchors were tight
    (0.005 ms across reps 2–4), Dose B's loose (0.065 ms). Order effects *between* the two dose
    types are not controlled; each ladder is internally paired, and the cross-ladder comparison
@@ -344,4 +368,6 @@ scripts/eval/mot17.py --preset mamba_whole_graph_m --detector SDP --double-buffe
 git checkout -- src/saccade/perception/eval/stages.py
 ```
 
-Raw per-run FPS for all 33 runs is in the tables above; nothing else was retained.
+**Retention.** The run logs were written to a session scratch directory and **were not
+retained**. The per-run FPS in the tables above is the surviving record; every derived quantity
+in this document is recomputed from those numbers.
