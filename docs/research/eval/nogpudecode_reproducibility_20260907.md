@@ -148,6 +148,10 @@ range 不會縮小;但**獨立重跑一個新 block 不保證**得到同樣或�
 | `docs/TODO_history.md` 等歷史紀錄中標註「(確定性)」的 ablation | D 類 | −6.2 IDF1 等 | **本次未提供推翻證據**;歷史紀錄不改寫,引用時以本文為準 |
 | 任何在 `--preset baseline` 下、Δ 落在 §2.1 S／H 欄內的 A/B | S／H | 隨案 | **待重驗**(本 PR 不補跑) |
 
+> **Revalidation is deferred until the reproducibility uncertainty tracked in #363 is resolved
+> or bounded; no separate tracker is opened unless a pending delta remains decision-relevant
+> after that closure.**
+
 `80.4471` / IDs `344`:block D 的參考值與 2026-08-08 兩份 benchmark 記載的出貨 base 相符,
 **是組態相符的佐證**;完整的組態身分仍須以版本、輸入與執行設定逐項核對,不以單一指標值認定。
 
