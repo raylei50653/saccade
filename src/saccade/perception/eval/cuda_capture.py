@@ -44,6 +44,15 @@ not causality, so #340 remains open.  See
 ``docs/research/pipeline/capture_failure_provenance_20260906.md`` and
 ``scripts/tools/capture_attribution/README.md``.
 
+Rule B has two preconditions, and the second one is ours.  Phase 2B removed the
+legacy-stream half rather than continuing to hunt the capturing stream: the JPEG
+decode producer now runs on a stream of its own, so no producer thread issues
+work on the legacy stream at all and Rule B is unreachable from the decode side
+*whoever* opens the blocking capture.  See
+:class:`saccade.perception.eval.streaming.TorchvisionGpuStreamer` for the stream
+contract that replaced it.  That is a removed precondition, not an explanation
+of the production incident, which stays open.
+
 :func:`describe_capture_state` exists to turn the next occurrence into a
 diagnosis instead of a mystery.  Enable it with ``SACCADE_CAPTURE_DEBUG=1``; the
 failure-time dump is unconditional because the failure is rare and already

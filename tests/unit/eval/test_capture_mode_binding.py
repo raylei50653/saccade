@@ -21,6 +21,7 @@ They say nothing about Rule B or about who opens a blocking capture.
 # function: contract
 # lifecycle: active
 
+import contextlib
 import ctypes
 import queue as queue_mod
 import threading
@@ -147,6 +148,7 @@ def _stub_streamer(files: list[str]):
     streamer._stop = threading.Event()
     streamer._worker = None
     streamer._queue = None  # type: ignore[assignment]
+    streamer._decode_stream = None
     streamer._rgb = None
     streamer.relaxed_capture_mode_from = None
 
@@ -157,8 +159,19 @@ def _stub_streamer(files: list[str]):
         def record_stream(self, _stream) -> None:  # type: ignore[no-untyped-def]
             return None
 
+    class _Event:
+        def record(self, _stream) -> None:  # type: ignore[no-untyped-def]
+            return None
+
+    class _Stream:
+        def wait_event(self, _event) -> None:  # type: ignore[no-untyped-def]
+            return None
+
     class _Cuda:
-        current_stream = staticmethod(lambda: object())
+        Stream = staticmethod(_Stream)
+        Event = staticmethod(_Event)
+        stream = staticmethod(lambda _s: contextlib.nullcontext())
+        current_stream = staticmethod(_Stream)
 
     class _Torch:
         cuda = _Cuda
@@ -174,7 +187,7 @@ def test_worker_records_the_prior_mode_from_the_shared_helper(monkeypatch) -> No
 
     streamer = _stub_streamer(["a.jpg"])
     out: queue_mod.Queue = queue_mod.Queue()
-    streamer._decode_worker(out)
+    streamer._decode_worker(out, object())
 
     assert streamer.relaxed_capture_mode_from == "global"
     assert out.qsize() == 1
@@ -196,7 +209,7 @@ def test_a_failed_exchange_is_not_recorded_as_a_successful_entry(monkeypatch) ->
     streamer = _stub_streamer(["a.jpg"])
     out: queue_mod.Queue = queue_mod.Queue()
     with pytest.raises(CaptureModeExchangeError):
-        streamer._decode_worker(out)
+        streamer._decode_worker(out, object())
 
     assert streamer.relaxed_capture_mode_from is None
     # It reaches the consumer as a failure rather than as end-of-sequence.
