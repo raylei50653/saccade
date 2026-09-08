@@ -370,6 +370,7 @@ deleting.
 | `build_scripts_index.py` | stable | cli | Generate the scripts/ discovery index from each script's own header. |
 | `build_tests_index.py` | stable | cli | Generate the tests/ discovery index from each test file's own header tags. |
 | `cache_gt_tracks.py` | diagnostic | cli | cache_gt_tracks.py — Phase 1 GT Oracle Cache Generator |
+| `capture_race_incidence.py` | stable | cli | Run the #340 capture-race incidence campaign under a frozen preregistration. |
 | `check_api_layers.py` | stable | cli | Saccade API Layering Audit. |
 | `check_association_tools.py` | diagnostic | cli | Check association recovery tools registry (R) against disk (D) and NO-GO (N). |
 | `check_continuous_decimal_hash.py` | diagnostic | cli | Validate ID-free final-MOT decimal output consistency in one process. |

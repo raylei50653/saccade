@@ -358,6 +358,6 @@ Excluded from the active index and default search view.
 
 ## Inventory summary
 
-- documents: 307
-- active: 252
+- documents: 308
+- active: 253
 - grayed out: 55
