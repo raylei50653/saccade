@@ -203,6 +203,7 @@ Manifest: `docs/ownership/doc_migration_manifest.yaml`
 - `docs/research/paper_outline.md`
 - `docs/research/pipeline/CPU_BOUND_ANALYSIS.md`
 - `docs/research/pipeline/capture_failure_provenance_20260906.md`
+- `docs/research/pipeline/capture_race_incidence_closure_20260908.md`
 - `docs/research/pipeline/capture_race_incidence_preregistration_20260908.md`
 - `docs/research/pipeline/cpu_overhead_analysis_20260707.md`
 - `docs/research/pipeline/gpu_pipeline_m4b_identity_resolver.md`
@@ -358,6 +359,6 @@ Excluded from the active index and default search view.
 
 ## Inventory summary
 
-- documents: 308
-- active: 253
+- documents: 309
+- active: 254
 - grayed out: 55
