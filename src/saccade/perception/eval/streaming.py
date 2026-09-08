@@ -260,12 +260,15 @@ class TorchvisionGpuStreamer:
             # unidentified -- a stream can join a capture it never began, so our
             # own non-blocking capture origins do not rule one out (see
             # `.cuda_capture`). Printed unconditionally: rare and already fatal.
-            try:
-                from .cuda_capture import describe_capture_state
+            #
+            # The shared helper is total by contract -- it reports its own failure
+            # as `diagnostic_failed=` secondary evidence instead of swallowing it,
+            # and never raises, so it cannot mask the decode error. This handler
+            # used to do that print inline behind `except Exception: pass`, which
+            # discarded exactly the evidence it existed to produce (issue #374).
+            from .cuda_capture import emit_capture_failure_state
 
-                print(describe_capture_state("decode_worker:error"), flush=True)
-            except Exception:  # noqa: BLE001 - never mask the decode error
-                pass
+            emit_capture_failure_state("decode_worker", error=type(exc).__name__)
             # Hand the failure to the consumer as a failure.  A bare ``None``
             # sentinel used to be indistinguishable from end-of-sequence, so the
             # protocol permitted a decode error to truncate the output silently.

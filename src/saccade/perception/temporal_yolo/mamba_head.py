@@ -19,6 +19,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 
+from saccade.perception.eval.cuda_capture import graphed_callables
+
 # Escape hatch: force the differentiable training scan back onto the pure-Python
 # JIT loop (e.g. to A/B against the CUDA backward kernel).
 _DISABLE_CUDA_SCAN_BWD = os.environ.get("SACCADE_DISABLE_CUDA_SCAN_BWD", "0") == "1"
@@ -1868,7 +1870,7 @@ class MambaDetectionHead(nn.Module):
                 f"🧠 [MambaHead] Capturing graphed callable for shapes "
                 f"{[list(s) for s in key[0]]} (return_embeddings={return_embeddings})"
             )
-            graphed = torch.cuda.make_graphed_callables(_head_fn, sample)
+            graphed = graphed_callables(_head_fn, sample, label="mamba_head.per_shape")
             self._graphed_callables[key] = graphed
 
         flat_out = graphed(*feats)

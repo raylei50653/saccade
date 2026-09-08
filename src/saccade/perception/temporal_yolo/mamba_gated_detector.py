@@ -25,6 +25,8 @@ from pathlib import Path
 from torch import Tensor
 from typing import Any
 
+from saccade.perception.eval.cuda_capture import graphed_callables
+
 from .yolo_gated_detector import (
     GatedDetConfig,
     build_gated_yolo_detector,
@@ -1115,7 +1117,9 @@ class MambaGatedDetector(nn.Module):
             f"shape {tuple(frame.shape)} img={self._whole_graph_img_shape}"
         )
         sample = frame.clone()
-        graphed = torch.cuda.make_graphed_callables(self._whole_graph_fn, (sample,))
+        graphed = graphed_callables(
+            self._whole_graph_fn, (sample,), label="detector.whole"
+        )
         self._whole_graphed_callables[key] = graphed
 
     def _whole_graph_capture_preprocessed(self, frame: Tensor) -> None:
@@ -1131,8 +1135,10 @@ class MambaGatedDetector(nn.Module):
             f"preprocessed shape {tuple(frame.shape)}"
         )
         sample = frame.clone()
-        graphed = torch.cuda.make_graphed_callables(
-            self._whole_graph_fn_preprocessed, (sample,)
+        graphed = graphed_callables(
+            self._whole_graph_fn_preprocessed,
+            (sample,),
+            label="detector.whole_preprocessed",
         )
         self._whole_graphed_callables[key] = graphed
 

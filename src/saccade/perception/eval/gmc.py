@@ -6,6 +6,8 @@ import cv2
 import numpy as np
 import torch
 
+from .cuda_capture import graphed_callables
+
 
 class SparseOpticalFlowGMC:
     """Estimate a prev->curr 2x3 affine warp from sparse LK optical flow."""
@@ -245,8 +247,8 @@ class PyGraphedGMC:
             fb_clone = self._frame_buf.clone()
             pg_clone = self.prev_gray.clone()
             warp_clone = self.warp_out.clone()
-            self._graphed = torch.cuda.make_graphed_callables(
-                _graph_fn, (fb_clone, pg_clone, warp_clone)
+            self._graphed = graphed_callables(
+                _graph_fn, (fb_clone, pg_clone, warp_clone), label="gmc.pygraphed"
             )
             self.prev_gray.zero_()
 
