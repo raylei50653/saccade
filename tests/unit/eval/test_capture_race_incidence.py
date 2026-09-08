@@ -198,6 +198,75 @@ def test_setup_signature_needs_both_a_context_and_a_failure_term() -> None:
     assert setup_failure_signature("FileNotFoundError: best.ckpt", "/out") == "weights"
 
 
+def test_tensorrt_setup_matches_only_failure_local_context() -> None:
+    """#375: terms on the same line still count; a banner plus a later error does not."""
+    assert (
+        setup_failure_signature("RuntimeError: TensorRT engine build failed\n", "/out")
+        == "tensorrt"
+    )
+    assert (
+        setup_failure_signature("trtexec: failed to deserialize the engine\n", "/out")
+        == "tensorrt"
+    )
+    banner = (
+        "[MambaDetector] TRT MambaHead enabled: "
+        "/home/ray/developer/ai/saccade/models/yolo/mamba_head_26m.engine"
+    )
+    assert setup_failure_signature(banner, "/out") is None
+    split = f"{banner}\nRuntimeError: CUDA error: out of memory\n"
+    assert setup_failure_signature(split, "/out") is None
+
+
+def test_engine_banner_plus_capture_failure_is_not_setup_invalid(
+    tmp_path: Path,
+) -> None:
+    """The required #375 regression.
+
+    The campaign's one real capture failure was recorded
+    ``setup_failure_signature: "tensorrt"`` because every run prints a
+    ``.engine`` banner and the CUDA 901 line contains ``error`` / ``failed``.
+    That must not happen: the banner is not causal context.
+    """
+    log = "\n".join(
+        [
+            "[MambaDetector] TRT MambaHead enabled: "
+            "/home/ray/developer/ai/saccade/models/yolo/mamba_head_26m.engine",
+            "RuntimeError: CUDA Error: operation failed due to a previous error "
+            "during capture at src/tracking/tracker_gpu.cu:3553",
+            "torch.AcceleratorError: CUDA error: operation failed due to a "
+            "previous error during capture",
+            "Search for `cudaErrorStreamCaptureInvalidated' in "
+            "https://docs.nvidia.com/cuda/cuda-runtime-api/",
+        ]
+    )
+    verdict, observations = classify(log, tmp_path, output_dir=str(tmp_path))
+    assert observations["setup_failure_signature"] is None
+    assert observations["sequence_execution_started"] is True
+    assert verdict == "failure"
+
+
+def test_engine_banner_plus_unrelated_crash_is_not_rerunnable_invalid(
+    tmp_path: Path,
+) -> None:
+    """The fail-open #375 names.
+
+    ``setup_failure_signature`` only flips ``started`` to false when there is
+    no progress and no completed sequence — the sole re-runnable invalid
+    class.  An over-broad signature would quietly replace an OOM (or any
+    other non-setup crash) before the first progress marker.  That must abort
+    the campaign instead.
+    """
+    log = (
+        "[MambaDetector] TRT MambaHead enabled: "
+        "/home/ray/developer/ai/saccade/models/yolo/mamba_head_26m.engine\n"
+        "torch.OutOfMemoryError: CUDA out of memory\n"
+    )
+    verdict, observations = classify(log, tmp_path, output_dir=str(tmp_path))
+    assert observations["setup_failure_signature"] is None
+    assert observations["sequence_execution_started"] is True
+    assert verdict == "execution_invalid"
+
+
 def test_unrecognised_crash_with_no_progress_ends_the_campaign(tmp_path: Path) -> None:
     """The case A1 exists for.
 
