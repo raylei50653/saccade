@@ -57,11 +57,25 @@ class _Frame:
         self.recorded_on.append(stream)
 
 
+class _Event:
+    """Stand-in for ``torch.cuda.Event``; remembers where it was recorded."""
+
+    def __init__(self) -> None:
+        self.recorded_on: object | None = None
+
+    def record(self, stream: object) -> None:
+        self.recorded_on = stream
+
+
 class _Stream:
     """Identity-comparable stand-in for a torch CUDA stream."""
 
     def __init__(self, name: str):
         self.name = name
+        self.waited_on: list[object] = []
+
+    def wait_event(self, event: object) -> None:
+        self.waited_on.append(event)
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid only
         return f"<stream {self.name}>"
@@ -78,9 +92,12 @@ def _stub_streamer(files: list[str], consumer: "_Stream | None" = None):
     streamer._stop = threading.Event()
     streamer._worker = None
     streamer._queue = None  # type: ignore[assignment]
+    streamer._decode_stream = None
     streamer._rgb = None
 
     class _Cuda:
+        Stream = staticmethod(lambda: _Stream("decode"))
+        Event = staticmethod(_Event)
         stream = staticmethod(lambda _s: contextlib.nullcontext())
         current_stream = staticmethod(lambda: consumer_stream)
 
@@ -140,7 +157,7 @@ def test_a_stale_worker_cannot_write_into_a_fresh_queue() -> None:
 
     # Run the stale worker inline against the queue it was handed, exactly as a
     # thread that outlived its join would.
-    streamer._decode_worker(stale_queue)
+    streamer._decode_worker(stale_queue, _Stream("stale-decode"))
 
     assert fresh_queue.empty(), "a stale worker reached the next sequence's queue"
     assert stale_queue.qsize() == 1
