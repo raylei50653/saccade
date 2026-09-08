@@ -280,3 +280,64 @@ def test_deferred_timing_counts_only_completed_output(
     )
     assert state.throughput_finished_at == (clock[0] if measured else None)
     assert state.results_lines == ["output"]
+
+
+class _HaltFrame(Exception):
+    """Raised by the fake state once ``_run_frame`` is past the timing boundary."""
+
+
+class _BoundaryState:
+    """Minimal ``_run_frame`` state that halts right after the throughput clock."""
+
+    def __init__(self, warmup_frames: int) -> None:
+        self.warmup_frames = warmup_frames
+        self.current_frame_id = 0
+        self.throughput_started_at = None
+        self.db_emit_frame_id = 0
+        self.db_emit_event = None
+
+    def __getattr__(self, name):
+        raise _HaltFrame(name)
+
+
+@pytest.mark.parametrize("prepared", [True, False])
+def test_throughput_interval_opens_where_the_first_measured_frame_launched(
+    monkeypatch, prepared
+) -> None:
+    from saccade.perception.eval import evaluator
+
+    # The loop runs _schedule(warmup+1) a whole iteration before _run_frame
+    # reaches it, so the two clocks must stay far apart in this fake.
+    scheduled_at = 100.0
+    monkeypatch.setattr(evaluator.time, "perf_counter", lambda: 105.0)
+    state = _BoundaryState(warmup_frames=2)
+    prepared_detection = (
+        SimpleNamespace(frame_id=3, latency_started_at=scheduled_at)
+        if prepared
+        else None
+    )
+
+    with pytest.raises(_HaltFrame):
+        evaluator._run_frame(state, frame_id=3, prepared_detection=prepared_detection)
+
+    assert state.throughput_started_at == (scheduled_at if prepared else 105.0)
+
+
+def test_throughput_interval_opens_only_at_the_first_measured_frame(
+    monkeypatch,
+) -> None:
+    from saccade.perception.eval import evaluator
+
+    monkeypatch.setattr(evaluator.time, "perf_counter", lambda: 105.0)
+    state = _BoundaryState(warmup_frames=2)
+
+    for frame_id in (2, 4):
+        with pytest.raises(_HaltFrame):
+            evaluator._run_frame(
+                state,
+                frame_id=frame_id,
+                prepared_detection=SimpleNamespace(
+                    frame_id=frame_id, latency_started_at=100.0
+                ),
+            )
+        assert state.throughput_started_at is None

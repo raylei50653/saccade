@@ -258,9 +258,16 @@ def _run_frame(
     """Execute one frame. Returns False to stop iteration, True to continue."""
     state.current_frame_id = frame_id
     if frame_id == state.warmup_frames + 1:
-        # This is the start of the measured pipeline interval, independently of
-        # this frame's launch-to-output latency.
-        state.throughput_started_at = time.perf_counter()
+        # Open the measured pipeline interval where this frame's work actually
+        # began. Under double buffering ``_schedule`` launched decode/ingest/
+        # detect one iteration earlier, so clocking from here would count the
+        # frame in the numerator while dropping its first half from the
+        # denominator.
+        state.throughput_started_at = (
+            prepared_detection.latency_started_at
+            if prepared_detection is not None
+            else time.perf_counter()
+        )
     # ── flush deferred tracker output from the previous frame ────────────
     if state.db_emit_frame_id > 0 and state.db_emit_event is not None:
         _flush_db_tracker_out(state)
