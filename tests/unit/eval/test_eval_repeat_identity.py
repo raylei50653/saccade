@@ -163,6 +163,13 @@ def test_merge_eval_flags_fills_block_s_defaults() -> None:
     assert "--sequences" in merged and "MOT17-02-SDP" in merged
 
 
+def test_merge_eval_flags_gpu_decode_does_not_inject_no_gpu_decode() -> None:
+    merged = harness.merge_eval_flags([], inject_no_gpu_decode=False)
+    assert "--no-gpu-decode" not in merged
+    assert "--preset" in merged and "baseline" in merged
+    assert "--sequences" in merged and "MOT17-02-SDP" in merged
+
+
 def test_merge_eval_flags_does_not_override_caller() -> None:
     merged = harness.merge_eval_flags(
         ["--preset", "mamba_whole_graph_m", "--double-buffer"]

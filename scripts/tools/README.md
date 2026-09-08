@@ -189,12 +189,40 @@ uv run python scripts/tools/check_eval_repeat_identity.py compare DIR DIR [DIR .
 # N independent eval processes, then compare. Defaults are the #363 block-S
 # flags (`--preset baseline --detector SDP --no-gpu-decode --sequences MOT17-02-SDP`).
 uv run python scripts/tools/check_eval_repeat_identity.py run -n 8
+
+# Same, with opt-in per-stage fingerprints (default off; does not change
+# production eval). Localizes last-identical / first-divergent stage.
+# Condition 2 reading is frozen in CONDITION2_RULES before the live run:
+# sufficient is a producing-path boundary, not issue-close or mechanism.
+# Missing or incomplete fingerprints fail closed.
+# Instrumented Block S localization budget is 16 runs (LOCALIZATION_BUDGET_RUNS);
+# GPU-decode localization budget is 8 (GPU_DECODE_LOCALIZATION_BUDGET_RUNS).
+# Those caps are per-config session contracts, not a global sample size.
+# `run --stage-fingerprint` refuses n above the selected config's cap and
+# stops at the first MOT pair.
+uv run python scripts/tools/check_eval_repeat_identity.py run -n 16 --stage-fingerprint
+uv run python scripts/tools/check_eval_repeat_identity.py run -n 8 \
+  --stage-fingerprint --localization-config gpu_decode
+uv run python scripts/tools/check_eval_repeat_identity.py compare DIR DIR --stage-fingerprint
 ```
 
 A pass on N runs is not a determinism proof.  This tool is **not** a pre-push
 gate: `baseline` is currently known to diverge.  After a fix, `run` is the
 regression entry.  Boundary write-up:
 [eval_repeat_identity_boundary_20260907.md](../../docs/research/eval/eval_repeat_identity_boundary_20260907.md).
+
+After a budgeted localization session returns `budget_exhausted_identical`,
+do not add Block S repetitions.  The next knife is a 1+1 observer-effect
+check (not a rate, not Condition 2):
+
+```bash
+uv run python scripts/tools/check_eval_observer_effect.py run
+```
+
+`observer_effect_identified` means retune the instrument.
+`observer_effect_bounded` / `no_material_perturbation` means the instrument
+is trusted at the inspected boundaries; switch to another historically
+diverging live configuration.  Neither advances condition 1/2.
 
 ## Referenced / Path-Sensitive
 
@@ -383,6 +411,7 @@ deleting.
 | `check_doc_links.py` | stable | cli | Check that relative markdown links in docs resolve to existing files. |
 | `check_doc_stale_paths.py` | stable | cli | Fail if any tracked file references a pre-move (stale) doc path. |
 | `check_doc_structure.py` | stable | cli | Warn-only documentation structure / research index coverage checks. |
+| `check_eval_observer_effect.py` | diagnostic | cli | Minimal instrumented vs uninstrumented observer-effect check (issue #363). |
 | `check_eval_repeat_identity.py` | stable | cli | Fail-closed detector of silent MOT run-to-run divergence (issue #363). |
 | `check_gpu_contract.py` | stable | - | Saccade GPU-First Performance Contract Checker. |
 | `check_h0_bridge_decision_trace_contract.py` | stable | cli | Statically admit H0's complete capture ABI before an owner seal. |
@@ -411,6 +440,7 @@ deleting.
 | `energy_transform_separability.py` | diagnostic | cli | Energy transform separability audit (raw / log1p / sqrt / rank). |
 | `eval_golden.py` | diagnostic | cli | Bit-exact golden regression gate for run_eval refactors. |
 | `eval_repeat_identity.py` | stable | - | Compare repeated MOT eval outputs for silent run-to-run divergence. |
+| `eval_stage_fingerprint.py` | stable | - | Opt-in per-stage fingerprints for issue #363 (hash-first, dump-on-divergence). |
 | `export_d0_runtime_capture.py` | stable | cli | Merge per-sequence Issue #112 native captures into D0's CSV contract. |
 | `export_headline_bridge_decision_trace.py` | stable | cli | Canonicalize H0 records plus its independent native-universe sidecar. |
 | `export_r1_temporal_reduction_capture.py` | stable | cli | Seal native shadow observations into the R1 temporal-reduction payload. |
@@ -466,6 +496,7 @@ deleting.
 | `resolved_bridge_policy_config.py` | stable | cli | Single authority for `resolved_bridge_policy_config_v1` fingerprints. |
 | `run_d0_runtime_shadow_fidelity.py` | stable | cli | D0 runtime shadow bridge fidelity — terminal verifier (Issue #112, v2). |
 | `run_door0_ranking_probe.py` | experiment | cli | Door 0 — ambiguous-band ranking-power probe runner. |
+| `run_eval_stage_fingerprint.py` | stable | cli | Run one ``mot17.py`` eval with opt-in per-stage fingerprints (issue #363). |
 | `run_gctm_d1_diagnostic.py` | experiment | cli | GCTM D1 substrate-agnostic ranking diagnostic runner. |
 | `run_h0_phase_a.py` | stable | cli | A7/RC1 fail-closed Phase-A parent controller. |
 | `run_h0_phase_a_child.py` | stable | - | RC1 fixed Phase-A runtime child (parent-only entry point). |

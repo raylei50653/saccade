@@ -22,6 +22,11 @@ the MOT files are complete and identical.  A pass on N runs is not a
 determinism proof; a single distinct hash or a single eval failure is a
 failure.
 
+``--stage-fingerprint`` is opt-in per-stage observability for condition 2.
+It does not change default eval.  Missing or incomplete fingerprints fail
+closed.  A first divergent stage is the first observable producer-facing
+boundary, not a causal mechanism.
+
 Not wired to pre-push: the current ``baseline`` path is known to diverge, so
 a default CI gate would fail on main.  After a fix, ``run`` is the regression
 gate.  ``compare`` on stored #363 evidence is the positive control.
@@ -54,6 +59,19 @@ from eval_repeat_identity import (  # noqa: E402
     compare_run_dirs,
     format_report,
 )
+from eval_stage_fingerprint import (  # noqa: E402
+    KIND_FIRST_OBSERVABLE,
+    KIND_INSUFFICIENT,
+    LOCALIZATION_BUDGETS,
+    LOCALIZATION_CONFIG_BLOCK_S,
+    LOCALIZATION_CONFIG_GPU_DECODE,
+    LOCALIZATION_BUDGET_RUNS,
+    compare_stage_fingerprints,
+    format_stage_report,
+    localization_budget,
+    read_localization_session,
+    write_first_divergence,
+)
 
 DEFAULT_N = 8
 DEFAULT_SLEEP = 1.0
@@ -76,16 +94,25 @@ def _flag_present(args: Sequence[str], flag: str) -> bool:
     return flag in args or any(item.startswith(prefix) for item in args)
 
 
-def merge_eval_flags(forwarded: Sequence[str]) -> list[str]:
-    """Fill in #363 block-S defaults unless the caller already set them."""
+def merge_eval_flags(
+    forwarded: Sequence[str],
+    *,
+    inject_no_gpu_decode: bool = True,
+) -> list[str]:
+    """Fill in #363 defaults unless the caller already set them.
+
+    ``inject_no_gpu_decode`` is the Block S switch.  GPU-decode localization
+    must pass False so the historical arm-G configuration is not rewritten.
+    """
 
     merged = list(forwarded)
     for flag, value in DEFAULT_KV.items():
         if not _flag_present(merged, flag):
             merged.extend([flag, value])
-    for flag in DEFAULT_SWITCHES:
-        if not _flag_present(merged, flag):
-            merged.append(flag)
+    if inject_no_gpu_decode:
+        for flag in DEFAULT_SWITCHES:
+            if not _flag_present(merged, flag):
+                merged.append(flag)
     return merged
 
 
@@ -93,13 +120,33 @@ def _write_summary(path: Path, report: RepeatReport) -> None:
     path.write_text(json.dumps(report.to_dict(), indent=2) + "\n", encoding="utf-8")
 
 
-def compare_and_emit(run_dirs: Sequence[Path], *, summary: Path | None) -> int:
+def compare_and_emit(
+    run_dirs: Sequence[Path],
+    *,
+    summary: Path | None,
+    stage_fingerprint: bool = False,
+) -> int:
     report = compare_run_dirs(run_dirs)
     print(format_report(report))
     if summary is not None:
         summary.parent.mkdir(parents=True, exist_ok=True)
         _write_summary(summary, report)
-    return 0 if report.ok else 1
+    stage_rc = 0
+    if stage_fingerprint:
+        stage_report = compare_stage_fingerprints(run_dirs, mot_diverged=not report.ok)
+        print(format_stage_report(stage_report))
+        if summary is not None:
+            stage_path = summary.parent / "stage_fingerprint.json"
+            stage_path.write_text(
+                json.dumps(stage_report.to_dict(), indent=2) + "\n",
+                encoding="utf-8",
+            )
+            if stage_report.first_divergence is not None:
+                write_first_divergence(
+                    summary.parent / "first_divergence.json", stage_report
+                )
+        stage_rc = 0 if stage_report.ok else 1
+    return 1 if (not report.ok) or stage_rc != 0 else 0
 
 
 def run_one_eval(
@@ -108,9 +155,23 @@ def run_one_eval(
     eval_script: Path,
     out_dir: Path,
     eval_flags: Sequence[str],
+    stage_fingerprint: bool = False,
 ) -> subprocess.CompletedProcess[str]:
     out_dir.mkdir(parents=True, exist_ok=True)
-    cmd = [python, str(eval_script), *eval_flags, "--output", str(out_dir)]
+    if stage_fingerprint:
+        wrapper = _SCRIPT_DIR / "run_eval_stage_fingerprint.py"
+        fingerprint_dir = out_dir / "stage_fingerprint"
+        cmd = [
+            python,
+            str(wrapper),
+            "--fingerprint-dir",
+            str(fingerprint_dir),
+            *eval_flags,
+            "--output",
+            str(out_dir),
+        ]
+    else:
+        cmd = [python, str(eval_script), *eval_flags, "--output", str(out_dir)]
     log_path = out_dir / "stdout.log"
     with log_path.open("w", encoding="utf-8") as log:
         return subprocess.run(
@@ -122,8 +183,13 @@ def run_one_eval(
         )
 
 
-def cmd_compare(dirs: Sequence[Path], summary: Path | None) -> int:
-    return compare_and_emit(dirs, summary=summary)
+def cmd_compare(
+    dirs: Sequence[Path],
+    summary: Path | None,
+    *,
+    stage_fingerprint: bool = False,
+) -> int:
+    return compare_and_emit(dirs, summary=summary, stage_fingerprint=stage_fingerprint)
 
 
 def cmd_run(
@@ -132,18 +198,47 @@ def cmd_run(
     sleep: float,
     artifact_dir: Path,
     forwarded: Sequence[str],
+    stage_fingerprint: bool = False,
+    localization_config: str = LOCALIZATION_CONFIG_BLOCK_S,
 ) -> int:
     for flag in MANAGED_FLAGS:
         if _flag_present(forwarded, flag):
             print(f"{flag} is managed by this tool", file=sys.stderr)
             return 2
-    eval_flags = merge_eval_flags(forwarded)
+    if localization_config not in LOCALIZATION_BUDGETS:
+        print(
+            f"unknown localization config {localization_config!r}",
+            file=sys.stderr,
+        )
+        return 2
+    budget = localization_budget(localization_config)
+    gpu_decode = localization_config == LOCALIZATION_CONFIG_GPU_DECODE
+    if gpu_decode and _flag_present(forwarded, "--no-gpu-decode"):
+        print(
+            "gpu_decode localization cannot be combined with --no-gpu-decode",
+            file=sys.stderr,
+        )
+        return 2
+    if stage_fingerprint and n > budget:
+        print(
+            f"n={n} exceeds the preregistered {localization_config} "
+            f"localization budget {budget}; this is a session cap, not a "
+            "rate sample",
+            file=sys.stderr,
+        )
+        return 2
+    eval_flags = merge_eval_flags(forwarded, inject_no_gpu_decode=not gpu_decode)
     root = artifact_dir.resolve()
     root.mkdir(parents=True, exist_ok=True)
     eval_script = _ROOT / "scripts" / "eval" / "mot17.py"
     run_dirs: list[Path] = []
     eval_returncodes: list[int] = []
-    print(f"eval-repeat identity: n={n} sleep={sleep}s flags={' '.join(eval_flags)}")
+    print(
+        f"eval-repeat identity: n={n} sleep={sleep}s "
+        f"stage_fingerprint={stage_fingerprint} "
+        f"localization_config={localization_config} "
+        f"budget={budget} flags={' '.join(eval_flags)}"
+    )
     for index in range(n):
         out_dir = root / f"r{index + 1}"
         print(f"  run {index + 1}/{n} → {out_dir}")
@@ -152,6 +247,7 @@ def cmd_run(
             eval_script=eval_script,
             out_dir=out_dir,
             eval_flags=eval_flags,
+            stage_fingerprint=stage_fingerprint,
         )
         run_dirs.append(out_dir)
         eval_returncodes.append(proc.returncode)
@@ -161,10 +257,23 @@ def cmd_run(
                 f"(still compared; fail-closed)",
                 file=sys.stderr,
             )
-        if index + 1 < n and sleep > 0:
+        mot_pair = False
+        if stage_fingerprint and len(run_dirs) >= 2:
+            mot_pair = not compare_run_dirs(run_dirs).ok
+            if mot_pair:
+                print(
+                    f"  MOT pair found at run {index + 1}/{budget}; "
+                    "stopping within the preregistered localization budget"
+                )
+                break
+        if index + 1 < n and sleep > 0 and not mot_pair:
             time.sleep(sleep)
     had_eval_failure = any(code != 0 for code in eval_returncodes)
-    compare_rc = compare_and_emit(run_dirs, summary=root / "summary.json")
+    compare_rc = compare_and_emit(
+        run_dirs,
+        summary=root / "summary.json",
+        stage_fingerprint=stage_fingerprint,
+    )
     exits_path = root / "eval_exits.json"
     exits_path.write_text(
         json.dumps(
@@ -183,6 +292,30 @@ def cmd_run(
             f"{eval_returncodes}",
             file=sys.stderr,
         )
+    if stage_fingerprint:
+        stage_payload = json.loads(
+            (root / "stage_fingerprint.json").read_text(encoding="utf-8")
+        )
+        first = stage_payload.get("first_divergence") or {}
+        pair = first.get("kind") in {KIND_FIRST_OBSERVABLE, KIND_INSUFFICIENT}
+        session = read_localization_session(
+            n_runs=len(run_dirs),
+            divergent_pair=pair,
+            config=localization_config,
+            producing_path_verdict=first.get("producing_path_verdict"),
+        )
+        (root / "localization_session.json").write_text(
+            json.dumps(session.to_dict(), indent=2) + "\n", encoding="utf-8"
+        )
+        print(
+            f"localization-session: kind={session.kind} "
+            f"config={session.config} "
+            f"n={session.n_runs}/{session.budget_runs} "
+            f"apply_condition2_rules={session.apply_condition2_rules} "
+            f"condition_2_advanced={session.condition_2_advanced}"
+        )
+        if session.allowed_claim:
+            print(f"  allowed_claim: {session.allowed_claim}")
     return 1 if had_eval_failure or compare_rc != 0 else 0
 
 
@@ -194,15 +327,44 @@ def main(argv: Sequence[str] | None = None) -> int:
     compare = sub.add_parser("compare", help="compare existing MOT run directories")
     compare.add_argument("dirs", nargs="+", type=Path)
     compare.add_argument("--summary", type=Path, default=None)
+    compare.add_argument(
+        "--stage-fingerprint",
+        action="store_true",
+        help="require and compare opt-in per-stage fingerprints (fail-closed)",
+    )
 
     run = sub.add_parser("run", help="launch N independent evals, then compare")
-    run.add_argument("-n", "--n", type=int, default=DEFAULT_N)
+    run.add_argument(
+        "-n",
+        "--n",
+        type=int,
+        default=DEFAULT_N,
+        help=(
+            "independent evals; with --stage-fingerprint, n cannot exceed "
+            "the preregistered budget of --localization-config"
+        ),
+    )
     run.add_argument("--sleep", type=float, default=DEFAULT_SLEEP)
     run.add_argument(
         "--artifact-dir",
         type=Path,
         default=None,
         help="default: out/determinism/eval_repeat_<timestamp>/",
+    )
+    run.add_argument(
+        "--stage-fingerprint",
+        action="store_true",
+        help="opt-in per-stage fingerprints in each child eval (default off)",
+    )
+    run.add_argument(
+        "--localization-config",
+        choices=tuple(LOCALIZATION_BUDGETS),
+        default=LOCALIZATION_CONFIG_BLOCK_S,
+        help=(
+            "preregistered localization session contract; block_s budget "
+            f"{LOCALIZATION_BUDGET_RUNS}, gpu_decode budget "
+            f"{LOCALIZATION_BUDGETS[LOCALIZATION_CONFIG_GPU_DECODE]}"
+        ),
     )
 
     if not argv_list:
@@ -213,7 +375,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
     if argv_list[0] == "compare":
         args = parser.parse_args(argv_list)
-        return cmd_compare(args.dirs, args.summary)
+        return cmd_compare(
+            args.dirs, args.summary, stage_fingerprint=args.stage_fingerprint
+        )
     if argv_list[0] == "run":
         args, forwarded = run.parse_known_args(argv_list[1:])
         if args.n < 2:
@@ -227,6 +391,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             sleep=args.sleep,
             artifact_dir=artifact,
             forwarded=forwarded,
+            stage_fingerprint=args.stage_fingerprint,
+            localization_config=args.localization_config,
         )
     parser.print_help()
     return 2
