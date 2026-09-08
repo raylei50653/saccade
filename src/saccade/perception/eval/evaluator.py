@@ -228,6 +228,8 @@ from .stages import (  # noqa: E402,F401
     FrameCtx,
     PreparedDetection,
     _flush_db_tracker_out,
+    _record_frame_timing,
+    _record_db_background_timing,
     _launch_double_buffer_detect,
     _record_profile_scope,
     _run_birth_config,
@@ -245,17 +247,6 @@ from .stages import (  # noqa: E402,F401
     _run_track,
     _stash_crop_ring,
 )
-
-
-def _record_frame_timing(state: EvalPipeline, *, latency_started_at: float) -> None:
-    """Record latency and throughput without deriving one from the other."""
-
-    if state.current_frame_id <= state.warmup_frames:
-        return
-    completed_at = time.perf_counter()
-    state.frame_latencies.append((completed_at - latency_started_at) * 1000.0)
-    state.throughput_frames += 1
-    state.throughput_finished_at = completed_at
 
 
 def _run_frame(
@@ -788,7 +779,9 @@ def _run_frame(
                         scores=raw_dump_scores,
                         classes=raw_dump_classes,
                     )
-                _record_frame_timing(state, latency_started_at=t_frame_start)
+                _record_frame_timing(
+                    state, frame_id=frame_id, latency_started_at=t_frame_start
+                )
                 if profile_stages and frame_id > warmup_frames:
                     seq_stage_totals["frame_total"] += (
                         time.perf_counter() - t_e2e_start
@@ -1152,7 +1145,9 @@ def _run_frame(
                 )
 
             if fused_boxes.numel() == 0:
-                _record_frame_timing(state, latency_started_at=t_frame_start)
+                _record_frame_timing(
+                    state, frame_id=frame_id, latency_started_at=t_frame_start
+                )
                 if profile_stages and frame_id > warmup_frames:
                     seq_stage_totals["frame_total"] += (
                         time.perf_counter() - t_e2e_start
@@ -1628,6 +1623,7 @@ def _run_frame(
                         _det_idx_to_local_id=_bg_det_idx_to_local_id,
                         _output_by_local=_bg_output_by_local,
                     )
+                _record_db_background_timing(state)
                 state.bg_future = None
                 state.bg_birth_events = None
 
@@ -1710,6 +1706,7 @@ def _run_frame(
                 state.db_emit_event = ev
                 state.db_emit_parity = parity
                 state.db_emit_ctx = {
+                    "latency_started_at": t_frame_start,
                     "tracker_result_buffers": db_bufs,
                     "fused_boxes": fused_boxes,
                     "fused_scores": fused_scores,
@@ -1861,7 +1858,10 @@ def _run_frame(
         results_lines.extend(_emit_lines)
 
     _ledger_stage_done("output")
-    _record_frame_timing(state, latency_started_at=t_frame_start)
+    # A deferred frame completes when its output is emitted, including the
+    # final drain; do not count it again at the enqueue boundary.
+    if state.db_emit_frame_id != frame_id:
+        _record_frame_timing(state, frame_id=frame_id, latency_started_at=t_frame_start)
     if state.frame_ledger is not None and frame_id > warmup_frames:
         total_ms = (time.perf_counter() - t_frame_start) * 1000
         det = state._frame_det_counts or {}
@@ -2694,6 +2694,7 @@ def run_eval(
                     _det_idx_to_local_id=_bg_det_idx_to_local_id,
                     _output_by_local=_bg_output_by_local,
                 )
+            _record_db_background_timing(_seq_state)
             _seq_state.bg_future = None
             _seq_state.bg_birth_events = None
 
