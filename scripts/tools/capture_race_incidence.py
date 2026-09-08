@@ -99,8 +99,11 @@ CAPTURE_FAILURE_SIGNATURES: tuple[tuple[str, str], ...] = (
 PROGRESS_MARKER = "\N{CLAPPER BOARD} "  # evaluator.py, every 100th frame
 
 # Each row is (category, context terms, failure terms).  A row matches only if
-# some context term AND some failure term are both present — case-insensitive.
-# An empty context tuple means the failure terms are self-contextualising.
+# some context term AND some failure term co-occur on the **same line** —
+# case-insensitive.  An empty context tuple means the failure terms are
+# self-contextualising.  Whole-log matching is fail-open: every production run
+# prints a `.engine` banner, so any later `error` would classify as `tensorrt`
+# and widen the only re-runnable invalid class (#375).
 SETUP_FAILURE_SIGNATURES: tuple[tuple[str, tuple[str, ...], tuple[str, ...]], ...] = (
     (
         "dataset",
@@ -349,17 +352,23 @@ def capture_failure_hits(log: str) -> list[dict[str, Any]]:
 
 
 def setup_failure_signature(log: str, output_dir: str) -> str | None:
-    """A1 table.  Returns the matching category, or None."""
-    haystack = log.lower()
+    """A1 table.  Returns the matching category, or None.
+
+    Context and failure terms must co-occur on the same line.  Matching them
+    independently anywhere in the log lets a normal TRT/Mamba ``.engine``
+    banner plus any later ``error`` / ``failed`` / ``exception`` satisfy the
+    ``tensorrt`` row — the campaign's capture failure was recorded that way
+    even though the log contained no TensorRT failure (#375).
+    """
+    output_dir_l = output_dir.lower()
     for category, contexts, failures in SETUP_FAILURE_SIGNATURES:
-        if not any(term in haystack for term in failures):
-            continue
-        if category == "output_dir":
-            if output_dir.lower() in haystack:
+        local_contexts = (output_dir_l,) if category == "output_dir" else contexts
+        for line in log.splitlines():
+            haystack = line.lower()
+            if not any(term in haystack for term in failures):
+                continue
+            if not local_contexts or any(term in haystack for term in local_contexts):
                 return category
-            continue
-        if not contexts or any(term in haystack for term in contexts):
-            return category
     return None
 
 
