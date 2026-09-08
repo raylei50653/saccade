@@ -481,23 +481,119 @@ def test_the_mgc_open_time_print_is_gated_too(monkeypatch, capsys, probe) -> Non
 # The enumeration of capture entrances stays closed
 # --------------------------------------------------------------------------
 
-
+# Dotted paths that begin a capture without the diagnostic.
 _RAW_CAPTURE_ENTRANCES = {
     ("torch", "cuda", "make_graphed_callables"),
     ("torch", "cuda", "graph"),
 }
+# A capture can also be begun straight off a graph object, bypassing both of the
+# above.  There is no type inference here, so this matches on method name alone:
+# a false positive is a loud, fixable failure, whereas the silent gap is the
+# thing that cost #340 a reproduction's worth of evidence.
+_RAW_CAPTURE_METHODS = {"capture_begin"}
+
 _ENTRANCE_OWNER = Path("src/saccade/perception/eval/cuda_capture.py")
 
+# The owner file is not exempt, it is *pinned*: exactly these raw calls, each in
+# exactly this function.  A third one, or one of these moved elsewhere in the
+# file, fails.
+_OWNER_RAW_CALLS = {
+    ("graph_capture", ("torch", "cuda", "graph")),
+    ("graphed_callables", ("torch", "cuda", "make_graphed_callables")),
+}
 
-def _dotted(node: ast.AST) -> tuple[str, ...] | None:
+# Native capture entrances.  Nothing under ``src/`` or ``include/`` begins a
+# capture today, and the Python-side diagnostic cannot see one that does, so a
+# new native capture has to be a deliberate decision rather than a silent gap.
+_NATIVE_CAPTURE_ENTRANCES = ("cudaStreamBeginCapture", "cuStreamBeginCapture")
+_NATIVE_SUFFIXES = (
+    ".c",
+    ".cc",
+    ".cpp",
+    ".cxx",
+    ".cu",
+    ".cuh",
+    ".h",
+    ".hh",
+    ".hpp",
+    ".hxx",
+)
+
+
+def _alias_map(tree: ast.Module) -> dict[str, tuple[str, ...]]:
+    """Names in this module that resolve to ``torch`` or below.
+
+    ``import torch as t``, ``from torch import cuda``, ``from torch.cuda import
+    graph`` and friends all reach the same entry points as ``torch.cuda.graph``,
+    so the scan has to follow the binding rather than the spelling.
+    """
+    aliases: dict[str, tuple[str, ...]] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                parts = tuple(alias.name.split("."))
+                if parts[0] != "torch":
+                    continue
+                if alias.asname:
+                    aliases[alias.asname] = parts
+                else:
+                    # ``import torch.cuda`` also binds the root name ``torch``.
+                    aliases[parts[0]] = (parts[0],)
+        elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+            module = tuple(node.module.split("."))
+            if module[0] != "torch":
+                continue
+            for alias in node.names:
+                aliases[alias.asname or alias.name] = module + (alias.name,)
+    return aliases
+
+
+def _dotted(
+    node: ast.AST, aliases: dict[str, tuple[str, ...]]
+) -> tuple[str, ...] | None:
+    """Resolve an attribute chain to its fully-qualified dotted path."""
     parts: list[str] = []
     while isinstance(node, ast.Attribute):
         parts.append(node.attr)
         node = node.value
     if not isinstance(node, ast.Name):
         return None
-    parts.append(node.id)
-    return tuple(reversed(parts))
+    head = aliases.get(node.id)
+    if head is None:
+        return None
+    return head + tuple(reversed(parts))
+
+
+def _function_scopes(tree: ast.Module):
+    """Yield ``(enclosing function name or None, node)`` for every node."""
+
+    def walk(node, scope):
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                yield scope, child
+                yield from walk(child, child.name)
+            else:
+                yield scope, child
+                yield from walk(child, scope)
+
+    yield from walk(tree, None)
+
+
+def _raw_calls(path: Path):
+    """Every raw capture entrance in one file, as ``(scope, dotted, lineno)``."""
+    tree = ast.parse(path.read_text())
+    aliases = _alias_map(tree)
+    for scope, node in _function_scopes(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        dotted = _dotted(node.func, aliases)
+        if dotted in _RAW_CAPTURE_ENTRANCES:
+            yield scope, dotted, node.lineno
+        elif (
+            isinstance(node.func, ast.Attribute)
+            and node.func.attr in _RAW_CAPTURE_METHODS
+        ):
+            yield scope, (node.func.attr,), node.lineno
 
 
 def test_no_production_site_calls_the_raw_torch_capture_api() -> None:
@@ -505,7 +601,9 @@ def test_no_production_site_calls_the_raw_torch_capture_api() -> None:
 
     AST rather than text matching, because ``cuda_capture`` itself reads
     ``torch.cuda.graph``'s ``default_capture_stream`` attribute -- a bare
-    attribute access that a textual scan would report as a capture site.
+    attribute access that a textual scan would report as a capture site -- and
+    because ``import torch as t`` reaches the same entry point under a different
+    spelling.
 
     Scoped to ``src/saccade/``.  ``scripts/tools/capture_attribution/control.py``
     deliberately exercises the raw API as an experimental control, and
@@ -518,25 +616,91 @@ def test_no_production_site_calls_the_raw_torch_capture_api() -> None:
         rel = path.relative_to(_REPO_ROOT)
         if rel == _ENTRANCE_OWNER:
             continue
-        tree = ast.parse(path.read_text())
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Call):
-                dotted = _dotted(node.func)
-                if dotted in _RAW_CAPTURE_ENTRANCES:
-                    offenders.append(f"{rel}:{node.lineno} calls {'.'.join(dotted)}")
-            elif isinstance(node, ast.ImportFrom) and node.module in (
-                "torch.cuda",
-                "cuda",
-            ):
-                for alias in node.names:
-                    if alias.name in ("make_graphed_callables", "graph"):
-                        offenders.append(
-                            f"{rel}:{node.lineno} imports {alias.name} from torch.cuda"
-                        )
+        for _scope, dotted, lineno in _raw_calls(path):
+            offenders.append(f"{rel}:{lineno} calls {'.'.join(dotted)}")
 
     assert offenders == [], (
         "capture entrances must go through saccade.perception.eval.cuda_capture "
         "so a failure there is observable: " + "; ".join(offenders)
+    )
+
+
+def test_the_entrance_owner_holds_exactly_the_expected_raw_calls() -> None:
+    """``cuda_capture.py`` is pinned, not exempt.
+
+    It is the one file allowed to touch the raw API, so exempting it would let a
+    third unwrapped entrance be added in the very module whose job is to make
+    entrances observable.  Each permitted call is pinned to the wrapper that owns
+    it, so moving one out of its wrapper fails too.
+    """
+    found = {
+        (scope, dotted) for scope, dotted, _ in _raw_calls(_REPO_ROOT / _ENTRANCE_OWNER)
+    }
+    assert found == _OWNER_RAW_CALLS, (
+        "the raw capture calls in cuda_capture.py drifted; each must stay inside "
+        f"its own wrapper. expected {sorted(_OWNER_RAW_CALLS)}, found {sorted(found)}"
+    )
+
+
+def test_the_scan_follows_aliased_imports_and_direct_capture_begin() -> None:
+    """The guard has to see the spellings a future site would plausibly use.
+
+    Without this, ``import torch as t; t.cuda.graph(...)`` and a bare
+    ``g.capture_begin()`` would both pass a scan that only knows the literal
+    ``torch.cuda.graph`` chain -- which is how a coverage guard quietly stops
+    guarding anything.
+    """
+    source = (
+        "import torch as t\n"
+        "from torch import cuda\n"
+        "from torch.cuda import make_graphed_callables as mgc\n"
+        "def a():\n"
+        "    return t.cuda.graph(None)\n"
+        "def b():\n"
+        "    return cuda.graph(None)\n"
+        "def c():\n"
+        "    return mgc(None, ())\n"
+        "def d():\n"
+        "    g.capture_begin()\n"
+    )
+    probe = _REPO_ROOT / "src" / "saccade" / "_alias_probe_for_tests.py"
+    probe.write_text(source)
+    try:
+        found = {(scope, dotted) for scope, dotted, _ in _raw_calls(probe)}
+    finally:
+        probe.unlink()
+
+    assert found == {
+        ("a", ("torch", "cuda", "graph")),
+        ("b", ("torch", "cuda", "graph")),
+        ("c", ("torch", "cuda", "make_graphed_callables")),
+        ("d", ("capture_begin",)),
+    }
+
+
+def test_no_native_source_begins_a_capture() -> None:
+    """A native capture would be invisible to the Python-side diagnostic.
+
+    Everything the failure-time dump knows comes from Python wrappers, so a
+    ``cudaStreamBeginCapture`` in ``src/`` or ``include/`` would reopen exactly
+    the coverage gap #374 closed -- silently.  There are none today; if one is
+    added deliberately, this test is the place to record how it is made
+    observable.
+    """
+    offenders: list[str] = []
+    for root in ("src", "include"):
+        for path in sorted((_REPO_ROOT / root).rglob("*")):
+            if not path.is_file() or path.suffix not in _NATIVE_SUFFIXES:
+                continue
+            text = path.read_text(errors="replace")
+            for entrance in _NATIVE_CAPTURE_ENTRANCES:
+                if entrance in text:
+                    rel = path.relative_to(_REPO_ROOT)
+                    offenders.append(f"{rel} references {entrance}")
+
+    assert offenders == [], (
+        "a native capture entrance is not covered by the Python failure-time "
+        "diagnostic: " + "; ".join(offenders)
     )
 
 
