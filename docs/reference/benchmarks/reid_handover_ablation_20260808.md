@@ -14,12 +14,20 @@
 
 ---
 
-## 0. 先決條件:`--no-gpu-decode` 下 eval 完全確定性
+## 0. 先決條件:三重複下品質指標未見變異
+
+> ⚠️ **2026-09-07 更正。** 本節原本宣告「`--no-gpu-decode` 下 eval 完全確定性
+> ⇒ A/B 用 N=1 即可」。**該推論已撤回**:**每臂三跑全同本身不足以排除 run-to-run 分歧,
+> 因此不足以支撐 bit-exact 的普遍宣稱。** 觀測本身不變。後續量測見
+> [`--no-gpu-decode` 的重複執行變異](../../research/eval/nogpudecode_reproducibility_20260907.md):本文組態
+> (`mamba_whole_graph_m --double-buffer` 7-seq)在 20 跑下**未見分歧**,故本文的比較
+> **本次未取得推翻證據**;N=1 可留作探索性比較,但不背書微小 delta 的正式歸因,
+> 且 base 的重現性**不自動由處置臂繼承**。
 
 三個 arm × 三次重複,**每個品質指標的 stdev 都是 `±0.00`**。
 
 這修正了先前「N≥6 才穩」的經驗法則 —— 那是 **GPU decode 開著**時的觀察。
-關掉之後品質指標 run-to-run bit-exact,**A/B 用 N=1 即可**,不必跑多輪取平均。
+關掉之後這三個 arm 的重複之間未見差異;**證據強度以上引更正為準**。
 FPS 仍是 timing 量測,有系統噪聲。
 
 ---
@@ -32,7 +40,7 @@ FPS 仍是 timing 量測,有系統噪聲。
 | `--reid-mode tracker`(mnv4 mainline) | **80.4** | 81.6 | 74.4 | 75.4 | 73.5 | 345 | **160.9** |
 
 **每一個品質指標小數點都相同;差異只有 1 個 ID switch 與 7 個 FN。**
-(§0 已建立 bit-exactness ⇒ 這 1 ID / 7 FN 是**可重現的極小差異,不是 run-to-run noise**。)
+(**2026-09-07 更正**:原文據 §0 的 bit-exactness 稱這 1 ID / 7 FN「不是 run-to-run noise」,該推論已隨 §0 撤回;差異值本身是實際觀測,但單次 A/B 不足以與 run-to-run 變異區分。)
 ReID 買到 **0.0 IDF1**,付掉 **84 FPS(−34%)**。
 
 這比先前的歷史對照(reid-off 79.5 / reid-tracker 79.7)更乾淨 —— 當時還有 0.2 的差,現在是零。
@@ -128,7 +136,7 @@ requery 的判決則從 −0.7 收斂到 −0.2,且 IDs 軸符號翻轉(當時�
   要量必須先實作 crop-ring on-demand 抽取 —— 亦即**必須先付開發成本才知道結果**。
 - 絕對值受 in-sample leakage 影響(見開頭)。
 - §3 的 `bank` arm 有一次 run 因 DALI `cudaErrorStreamCaptureUnsupported`
-  (DALI 於 CUDA graph capture 期間動作)中途失敗,故 n=2;因 §0 的確定性成立,不影響數值。
+  (DALI 於 CUDA graph capture 期間動作)中途失敗,故 n=2;原文以 §0 的確定性主張說明「不影響數值」,**該理由已撤回**,n=2 這件事本身照實記錄。
 
 ---
 

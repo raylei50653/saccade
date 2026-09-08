@@ -141,7 +141,7 @@ A 線「per-seq 表」、B 線「per-seq error budget」、報告「重現 headl
 
 凍結狀態:`configs/presets/mamba_whole_graph.yaml` 已 commit 在 HEAD(`oao_tau 0.50 / oao_ramp_frames 25 / relink_bridge_px 0.25 / fuse_score_weight 0.0`),已可作為基準凍結點。
 
-**✅ canonical(2026-06-21,`frozen_v2`):** headline 同源重現 — IDF1 **78.2** / MOTA **78.4** / HOTA **70.2** / DetA **70.9** / AssA **69.7** / IDs **413** / Rcll **81.0** / Prcn **97.2** / **269.47 Eval FPS(double-buffer throughput)/ 7.42 ms mean latency**。聚合與 per-seq 由 `scratch/ab_runs/frozen_v2_repro` 同一次 run 同源產出(COMBINED 70.2/69.7/78.2,bit-exact 重現)。per-seq 表見 §6。
+**✅ canonical(2026-06-21,`frozen_v2`):** headline 同源重現 — IDF1 **78.2** / MOTA **78.4** / HOTA **70.2** / DetA **70.9** / AssA **69.7** / IDs **413** / Rcll **81.0** / Prcn **97.2** / **269.47 Eval FPS(double-buffer throughput)/ 7.42 ms mean latency**。聚合與 per-seq 由 `scratch/ab_runs/frozen_v2_repro` 同一次 run 同源產出(COMBINED 70.2/69.7/78.2;該次重現的 MOT 輸出與 headline byte-identical——**單次觀測,非 determinism property**,見 [重複執行變異](../research/eval/nogpudecode_reproducibility_20260907.md))。per-seq 表見 §6。
 >
 > _歷史紀錄:_ frozen_v1(2026-06-18, `out/frozen_v1/`)為 IDF1 77.6 / HOTA 69.9 / IDs 430 / 221.59 FPS;已被 frozen_v2 取代為 canonical,僅留作 06-18 執行佐證。注意 FPS 與單幀 latency 是不同量測,不可互推(double-buffer 提升 throughput 但單幀 latency 反而較高);latency 協定見 PROJECT_SHOWCASE 附錄。
 
