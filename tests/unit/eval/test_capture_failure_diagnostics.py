@@ -28,6 +28,7 @@ import ast
 import builtins
 import sys
 import threading
+from collections import Counter
 from pathlib import Path
 
 import pytest
@@ -494,13 +495,20 @@ _RAW_CAPTURE_METHODS = {"capture_begin"}
 
 _ENTRANCE_OWNER = Path("src/saccade/perception/eval/cuda_capture.py")
 
-# The owner file is not exempt, it is *pinned*: exactly these raw calls, each in
-# exactly this function.  A third one, or one of these moved elsewhere in the
-# file, fails.
-_OWNER_RAW_CALLS = {
-    ("graph_capture", ("torch", "cuda", "graph")),
-    ("graphed_callables", ("torch", "cuda", "make_graphed_callables")),
-}
+# The owner file is not exempt, it is *pinned*: exactly these raw calls, at these
+# multiplicities, each in exactly this function.  A third one -- including a
+# second copy inside a wrapper that already has one -- or one of these moved
+# elsewhere in the file, fails.
+#
+# A multiset, not a set: comparing sets would silently collapse a duplicate
+# entrance inside an existing wrapper, which is precisely the shape this pin
+# exists to catch.
+_OWNER_RAW_CALLS = Counter(
+    {
+        ("graph_capture", ("torch", "cuda", "graph")): 1,
+        ("graphed_callables", ("torch", "cuda", "make_graphed_callables")): 1,
+    }
+)
 
 # Native capture entrances.  Nothing under ``src/`` or ``include/`` begins a
 # capture today, and the Python-side diagnostic cannot see one that does, so a
@@ -631,14 +639,18 @@ def test_the_entrance_owner_holds_exactly_the_expected_raw_calls() -> None:
     It is the one file allowed to touch the raw API, so exempting it would let a
     third unwrapped entrance be added in the very module whose job is to make
     entrances observable.  Each permitted call is pinned to the wrapper that owns
-    it, so moving one out of its wrapper fails too.
+    it *and to its multiplicity*, so moving one out of its wrapper fails, and so
+    does adding a second copy inside a wrapper that already has one.
     """
-    found = {
-        (scope, dotted) for scope, dotted, _ in _raw_calls(_REPO_ROOT / _ENTRANCE_OWNER)
-    }
+    calls = list(_raw_calls(_REPO_ROOT / _ENTRANCE_OWNER))
+    found = Counter((scope, dotted) for scope, dotted, _ in calls)
+    sites = ", ".join(
+        f"{scope}:{lineno} {'.'.join(dotted)}" for scope, dotted, lineno in calls
+    )
     assert found == _OWNER_RAW_CALLS, (
         "the raw capture calls in cuda_capture.py drifted; each must stay inside "
-        f"its own wrapper. expected {sorted(_OWNER_RAW_CALLS)}, found {sorted(found)}"
+        f"its own wrapper, exactly once. expected {sorted(_OWNER_RAW_CALLS.items())}, "
+        f"found {sorted(found.items())} at [{sites}]"
     )
 
 
@@ -662,20 +674,27 @@ def test_the_scan_follows_aliased_imports_and_direct_capture_begin() -> None:
         "    return mgc(None, ())\n"
         "def d():\n"
         "    g.capture_begin()\n"
+        "def e():\n"
+        "    return t.cuda.graph(None), t.cuda.graph(None)\n"
     )
     probe = _REPO_ROOT / "src" / "saccade" / "_alias_probe_for_tests.py"
     probe.write_text(source)
     try:
-        found = {(scope, dotted) for scope, dotted, _ in _raw_calls(probe)}
+        found = Counter((scope, dotted) for scope, dotted, _ in _raw_calls(probe))
     finally:
         probe.unlink()
 
-    assert found == {
-        ("a", ("torch", "cuda", "graph")),
-        ("b", ("torch", "cuda", "graph")),
-        ("c", ("torch", "cuda", "make_graphed_callables")),
-        ("d", ("capture_begin",)),
-    }
+    # ``e`` is counted twice: the scan is a multiset, so a duplicated entrance
+    # inside one function cannot hide behind an identical sibling.
+    assert found == Counter(
+        {
+            ("a", ("torch", "cuda", "graph")): 1,
+            ("b", ("torch", "cuda", "graph")): 1,
+            ("c", ("torch", "cuda", "make_graphed_callables")): 1,
+            ("d", ("capture_begin",)): 1,
+            ("e", ("torch", "cuda", "graph")): 2,
+        }
+    )
 
 
 def test_no_native_source_begins_a_capture() -> None:
