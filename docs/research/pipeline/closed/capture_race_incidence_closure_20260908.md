@@ -133,6 +133,11 @@ campaign artifact（非 scratch，timestamped）：
 controller stdout 另存
 `~/.local/state/saccade/perf/capture-race-incidence-controller-20260908T061300Z.log`。
 
+`manifest.json` 的 `preregistration` 欄記的是 campaign 執行當下的路徑
+`docs/research/pipeline/capture_race_incidence_preregistration_20260908.md`。
+本 PR 依 Doc Structure C6 把該文件移入 `closed/`，那個欄位因此是**移動前**的路徑；
+manifest 是已落盤的執行紀錄，不回填。
+
 **⚠️ attribution 證據缺口。** §7 要求命中 `FAILURE_OBSERVED_*` 時保留「完整 log、
 stream flags、capture state dump」。實際保留下來的**只有 log**：失敗 run 的 log
 共 73 行，其中**沒有 `describe_capture_state()` dump，也沒有 stream flags**。
