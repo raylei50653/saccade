@@ -150,7 +150,16 @@ IMPORT_ROOT_PROBE = (
 
 
 class ExecutionInvalid(RuntimeError):
-    """Campaign-ending condition (§7 EXECUTION_INVALID).  Never per-run."""
+    """Campaign-ending condition (§7 EXECUTION_INVALID).  Never per-run.
+
+    Carries the §10 row of the attempt it interrupted when one exists, so the
+    abort keeps whatever was already observed instead of discarding it and
+    writing nulls over verified fields.
+    """
+
+    def __init__(self, message: str, record: dict[str, Any] | None = None) -> None:
+        super().__init__(message)
+        self.record = record
 
 
 @dataclass(frozen=True)
@@ -177,12 +186,16 @@ def _utc() -> str:
 
 
 def _git(target: Path, *args: str) -> str:
-    proc = subprocess.run(
-        ("git", "-C", str(target), *args),
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    try:
+        proc = subprocess.run(
+            ("git", "-C", str(target), *args),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError as exc:
+        # git missing, target path gone: still harness failure, not a crash.
+        raise ExecutionInvalid(f"could not run git in {target}: {exc}") from exc
     if proc.returncode != 0:
         raise ExecutionInvalid(
             f"git {' '.join(args)} failed in {target}: {proc.stderr.strip()}"
@@ -225,19 +238,29 @@ def preflight(target: Path, interpreter: Path) -> Preflight:
                 + " | ".join(porcelain.strip().splitlines()[:5])
             )
 
-    proc = subprocess.run(
-        (str(interpreter), "-c", IMPORT_ROOT_PROBE),
-        capture_output=True,
-        text=True,
-        check=False,
-        cwd=str(target),
-    )
-    if proc.returncode != 0:
+    proc = None
+    try:
+        proc = subprocess.run(
+            (str(interpreter), "-c", IMPORT_ROOT_PROBE),
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=str(target),
+        )
+    except OSError as exc:
+        # A missing or non-executable interpreter is a check-3 failure, not a
+        # stacktrace.  Letting OSError out here would skip the record entirely
+        # and leave the manifest at terminal null — the state A1 and A2.4 exist
+        # to prevent.
+        failures.append(f"check 3: could not start the target interpreter: {exc}")
+
+    if proc is None:
+        pass
+    elif proc.returncode != 0:
+        stderr = proc.stderr.strip()
+        detail = stderr.splitlines()[-1] if stderr else "no stderr"
         failures.append(
-            "check 3: could not resolve saccade in the target interpreter: "
-            + proc.stderr.strip().splitlines()[-1]
-            if proc.stderr.strip()
-            else "check 3: import probe failed with no stderr"
+            f"check 3: could not resolve saccade in the target interpreter: {detail}"
         )
     else:
         import_root = proc.stdout.strip()
@@ -252,6 +275,65 @@ def preflight(target: Path, interpreter: Path) -> Preflight:
     return Preflight(
         head=head, clean=clean, import_root=import_root, failures=tuple(failures)
     )
+
+
+def run_paths(artifact_dir: Path, seq_index: int, path: str) -> tuple[Path, Path]:
+    """Where one attempt's output and log live.  One definition, two callers."""
+    stem = f"{seq_index:04d}-{path}"
+    return artifact_dir / "runs" / stem, artifact_dir / "logs" / f"{stem}.log"
+
+
+def blank_record(
+    *,
+    campaign_id: str,
+    seq_index: int,
+    slot_index: int,
+    path: str,
+    run_dir: Path,
+) -> dict[str, Any]:
+    """The one and only ``capture_race_incidence_run_v1`` row shape.
+
+    Both the normal path and the abort path build from here.  A second,
+    narrower shape for interrupted attempts would be a partial row wearing the
+    frozen schema name, and that is worse than no row at all: a consumer that
+    trusts ``schema`` would read the missing keys as observations that came
+    back empty rather than as observations never made.  Unknowns are explicit
+    nulls and empty collections instead.
+    """
+    return {
+        "schema": SCHEMA,
+        "campaign_id": campaign_id,
+        "seq_index": seq_index,
+        "slot_index": slot_index,
+        "path": path,
+        "run_dir": str(run_dir),
+        "started_utc": _utc(),
+        "finished_utc": None,
+        "argv": None,
+        "exit_code": None,
+        "sequence_execution_started": False,
+        "sequences_completed": [],
+        "capture_error_hits": [],
+        "progress_marker_seen": False,
+        "progress_markers": 0,
+        "setup_failure_signature": None,
+        "verdict": "execution_invalid",
+        "invalid_reason": None,
+        "log_sha256": None,
+        "target_source_sha": TARGET_SOURCE_SHA,
+        "target_head_observed": None,
+        "target_worktree_clean": None,
+        "saccade_import_root": None,
+        "coordinate_implementation": COORDINATE_IMPLEMENTATION,
+    }
+
+
+def _abort(record: dict[str, Any], reason: str) -> dict[str, Any]:
+    """Stamp a row as the attempt a campaign-ending condition interrupted."""
+    record["verdict"] = "execution_invalid"
+    record["invalid_reason"] = reason
+    record["finished_utc"] = _utc()
+    return record
 
 
 def capture_failure_hits(log: str) -> list[dict[str, Any]]:
@@ -371,45 +453,32 @@ def execute_run(
     runner: Any = None,
 ) -> dict[str, Any]:
     """Run one trial and return its §10 record.  Always writes the record."""
-    run_dir = artifact_dir / "runs" / f"{seq_index:04d}-{path}"
-    log_path = artifact_dir / "logs" / f"{seq_index:04d}-{path}.log"
+    run_dir, log_path = run_paths(artifact_dir, seq_index, path)
+    # Built before anything can fail, so every abort below has a full row to
+    # attach rather than a reconstruction.
+    record = blank_record(
+        campaign_id=campaign_id,
+        seq_index=seq_index,
+        slot_index=slot_index,
+        path=path,
+        run_dir=run_dir,
+    )
+
     # A2.4: no filesystem failure may escape as a bare OSError.  Every one of
     # them is harness failure, which §7 names EXECUTION_INVALID.
     try:
         run_dir.mkdir(parents=True, exist_ok=True)
         log_path.parent.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
-        raise ExecutionInvalid(f"could not create run directories: {exc}") from exc
+        reason = f"could not create run directories: {exc}"
+        raise ExecutionInvalid(reason, _abort(record, reason)) from exc
 
     checks = preflight(target, interpreter)
     argv = build_argv(path, target, interpreter, run_dir)
-
-    record: dict[str, Any] = {
-        "schema": SCHEMA,
-        "campaign_id": campaign_id,
-        "seq_index": seq_index,
-        "slot_index": slot_index,
-        "path": path,
-        "run_dir": str(run_dir),
-        "started_utc": _utc(),
-        "finished_utc": None,
-        "argv": argv,
-        "exit_code": None,
-        "sequence_execution_started": False,
-        "sequences_completed": [],
-        "capture_error_hits": [],
-        "progress_marker_seen": False,
-        "progress_markers": 0,
-        "setup_failure_signature": None,
-        "verdict": "execution_invalid",
-        "invalid_reason": None,
-        "log_sha256": None,
-        "target_source_sha": TARGET_SOURCE_SHA,
-        "target_head_observed": checks.head,
-        "target_worktree_clean": checks.clean,
-        "saccade_import_root": checks.import_root,
-        "coordinate_implementation": COORDINATE_IMPLEMENTATION,
-    }
+    record["argv"] = argv
+    record["target_head_observed"] = checks.head
+    record["target_worktree_clean"] = checks.clean
+    record["saccade_import_root"] = checks.import_root
 
     if not checks.ok:
         # A1: preflight failure is execution_invalid regardless of the started
@@ -418,7 +487,11 @@ def execute_run(
         record["finished_utc"] = _utc()
         return record
 
-    env = child_environment()
+    try:
+        env = child_environment()
+    except ExecutionInvalid as exc:
+        raise ExecutionInvalid(str(exc), _abort(record, str(exc))) from exc
+
     run = runner if runner is not None else _spawn
     # A2.4 at the call site, not only inside _spawn: an injected runner must be
     # held to the same rule, or the normalisation is only as good as the
@@ -426,12 +499,14 @@ def execute_run(
     try:
         exit_code, log = run(argv, target, env)
     except OSError as exc:
-        raise ExecutionInvalid(f"could not spawn the workload: {exc}") from exc
+        reason = f"could not spawn the workload: {exc}"
+        raise ExecutionInvalid(reason, _abort(record, reason)) from exc
 
     try:
         log_path.write_text(log, encoding="utf-8")
     except OSError as exc:
-        raise ExecutionInvalid(f"could not write {log_path}: {exc}") from exc
+        reason = f"could not write {log_path}: {exc}"
+        raise ExecutionInvalid(reason, _abort(record, reason)) from exc
 
     verdict, observations = classify(log, run_dir, output_dir=str(run_dir))
     record.update(observations)
@@ -545,29 +620,6 @@ def write_manifest(
         raise ExecutionInvalid(f"could not write {manifest}: {exc}") from exc
 
 
-def _abort_record(
-    *, campaign_id: str, seq_index: int, slot_index: int, path: str, reason: str
-) -> dict[str, Any]:
-    """Minimal §10 row for the attempt a campaign-ending condition interrupted.
-
-    A2.4: the aborted attempt still gets a row.  An artifact set whose last
-    attempt left no trace cannot be told apart from one that was never made.
-    """
-    return {
-        "schema": SCHEMA,
-        "campaign_id": campaign_id,
-        "seq_index": seq_index,
-        "slot_index": slot_index,
-        "path": path,
-        "started_utc": _utc(),
-        "finished_utc": _utc(),
-        "verdict": "execution_invalid",
-        "invalid_reason": reason,
-        "target_source_sha": TARGET_SOURCE_SHA,
-        "coordinate_implementation": COORDINATE_IMPLEMENTATION,
-    }
-
-
 def _best_effort(action: Any) -> None:
     """Run a recording action that must not mask the failure being reported."""
     try:
@@ -621,18 +673,20 @@ def run_campaign(
                 # Bind now: `except ... as exc` unbinds at block exit, and the
                 # recording callable below is evaluated lazily.
                 reason = str(exc)
-                _best_effort(
-                    lambda: _write_record(
-                        runs_jsonl,
-                        _abort_record(
+                row = exc.record
+                if row is None:
+                    # Raised before the attempt had a row of its own.
+                    row = _abort(
+                        blank_record(
                             campaign_id=campaign_id,
                             seq_index=seq_index,
                             slot_index=slot,
                             path=path,
-                            reason=reason,
+                            run_dir=run_paths(artifact_dir, seq_index, path)[0],
                         ),
+                        reason,
                     )
-                )
+                _best_effort(lambda: _write_record(runs_jsonl, row))
                 raise
             _write_record(runs_jsonl, record)
             campaign.absorb(record)

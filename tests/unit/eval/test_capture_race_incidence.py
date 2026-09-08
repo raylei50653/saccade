@@ -679,3 +679,143 @@ def _head(target: Path) -> str:
         text=True,
         check=True,
     ).stdout.strip()
+
+
+# --------------------------------------------------------------------------
+# Fail-closed completeness of the harness itself
+# --------------------------------------------------------------------------
+
+
+def test_a_missing_interpreter_is_a_check_3_failure_not_a_stacktrace(
+    tmp_path: Path,
+) -> None:
+    """P0 regression.
+
+    An interpreter that cannot be started raised OSError straight out of
+    preflight.  main() only catches ExecutionInvalid, so that escaped as a
+    stacktrace with the manifest still at terminal null — the state A1 and
+    A2.4 exist to rule out.
+    """
+    target = _git_target(tmp_path)
+    checks = preflight(target, tmp_path / "no-such-interpreter")
+    assert checks.import_root is None
+    assert any("check 3: could not start" in failure for failure in checks.failures)
+
+
+def test_a_missing_git_is_execution_invalid_not_a_stacktrace(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import scripts.tools.capture_race_incidence as harness
+
+    def no_git(*args, **kwargs):
+        raise OSError(2, "No such file or directory: 'git'")
+
+    monkeypatch.setattr(harness.subprocess, "run", no_git)
+    checks = harness.preflight(tmp_path, tmp_path / "py")
+    assert checks.head is None
+    assert any("could not run git" in failure for failure in checks.failures)
+
+
+def test_the_abort_row_is_a_complete_schema_row(tmp_path: Path) -> None:
+    """P1 regression.
+
+    The interrupted attempt's row must be the same shape as every other row.
+    A narrower row still labelled ``capture_race_incidence_run_v1`` reads, to
+    anything that trusts the schema name, as observations that came back empty
+    rather than observations never made.
+    """
+    import scripts.tools.capture_race_incidence as harness
+
+    target = _git_target(tmp_path)
+    interpreter = _fake_interpreter(tmp_path, str((target / "src").resolve()))
+    artifacts = tmp_path / "artifacts"
+
+    def exploding_runner(argv, cwd, env):
+        raise OSError(13, "Permission denied")
+
+    monkeypatch_sha = _head(target)
+    original = harness.TARGET_SOURCE_SHA
+    harness.TARGET_SOURCE_SHA = monkeypatch_sha
+    try:
+        with pytest.raises(ExecutionInvalid) as caught:
+            execute_run(
+                path="B",
+                seq_index=7,
+                slot_index=3,
+                campaign_id="test",
+                target=target,
+                interpreter=interpreter,
+                artifact_dir=artifacts,
+                runner=exploding_runner,
+            )
+        abort_row = caught.value.record
+
+        healthy = execute_run(
+            path="B",
+            seq_index=8,
+            slot_index=4,
+            campaign_id="test",
+            target=target,
+            interpreter=interpreter,
+            artifact_dir=artifacts,
+            runner=lambda argv, cwd, env: (0, ""),
+        )
+    finally:
+        harness.TARGET_SOURCE_SHA = original
+
+    assert abort_row is not None
+    assert abort_row.keys() == healthy.keys(), "abort rows must not be a second shape"
+    assert abort_row["schema"] == "capture_race_incidence_run_v1"
+    assert abort_row["verdict"] == "execution_invalid"
+    assert "could not spawn the workload" in abort_row["invalid_reason"]
+    assert abort_row["slot_index"] == 3
+    # A1: observations verified before the abort are kept, not nulled out.
+    assert abort_row["saccade_import_root"] == str((target / "src").resolve())
+    assert abort_row["target_worktree_clean"] is True
+    assert abort_row["target_head_observed"] == monkeypatch_sha
+    # Observations never made stay explicitly empty rather than absent.
+    assert abort_row["exit_code"] is None
+    assert abort_row["log_sha256"] is None
+    assert abort_row["sequences_completed"] == []
+
+
+def test_every_abort_row_written_to_the_log_is_complete(tmp_path: Path) -> None:
+    """The rows that actually reach runs.jsonl, not just the ones in hand."""
+    import scripts.tools.capture_race_incidence as harness
+
+    target = _git_target(tmp_path)
+    interpreter = _fake_interpreter(tmp_path, str((target / "src").resolve()))
+    artifacts = tmp_path / "artifacts"
+    artifacts.mkdir()
+
+    original = harness.TARGET_SOURCE_SHA
+    harness.TARGET_SOURCE_SHA = _head(target)
+
+    def exploding_executor(**kwargs):
+        raise ExecutionInvalid("synthetic harness failure")
+
+    try:
+        campaign = Campaign.new()
+        with pytest.raises(ExecutionInvalid):
+            run_campaign(
+                campaign=campaign,
+                campaign_id="test",
+                target=target,
+                interpreter=interpreter,
+                artifact_dir=artifacts,
+                pairs=2,
+                executor=exploding_executor,
+            )
+    finally:
+        harness.TARGET_SOURCE_SHA = original
+
+    rows = [
+        json.loads(line)
+        for line in (artifacts / "runs.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    reference = harness.blank_record(
+        campaign_id="test", seq_index=0, slot_index=0, path="A", run_dir=artifacts
+    )
+    assert len(rows) == 1
+    assert rows[0].keys() == reference.keys()
+    assert rows[0]["invalid_reason"] == "synthetic harness failure"
