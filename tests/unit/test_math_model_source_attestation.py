@@ -232,9 +232,14 @@ def test_duplicate_json_keys_are_rejected(checker: ModuleType, tmp_path: Path) -
         checker.load_attestation(path)
 
 
-def test_checked_in_attestation_is_current(checker: ModuleType, mode: str) -> None:
-    """Today the live tree satisfies both arms; the flip changed no verdict here."""
-    assert checker.check_repository(_REPO, mode=mode) == []
+def test_checked_in_attestation_has_historical_integrity(checker: ModuleType) -> None:
+    """Source edits may make HEAD unattested without changing historical integrity.
+
+    The attested arm's rejection of source drift is covered separately by
+    test_current_source_drift_fails_only_in_the_attested_arm. Requiring it to
+    pass on the live tree would reintroduce the development gate removed by #361.
+    """
+    assert checker.check_repository(_REPO, mode=checker.DEVELOPMENT_MODE) == []
 
 
 def test_the_default_arm_is_development(checker: ModuleType) -> None:
