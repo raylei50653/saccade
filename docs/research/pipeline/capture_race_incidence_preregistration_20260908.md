@@ -330,3 +330,79 @@ N、或 path 組態,已完成的 run 全部作廢。
 
 **harness 尚未寫。** 在 harness 存在且其述詞與 schema 經對照本文件驗證之前,
 不得開始 run 1。
+
+## A1. `sequence_execution_started` 的可觀測面(2026-09-08,已完成 run 數 = 0)
+
+**Defect.** §4 把分母的分界點定義成「第一個 sequence 的第一個 frame 已進
+pipeline」,但**沒有釘住這件事要用什麼觀測。** 寫 harness 時實查 frozen target,
+發現能用的最細觀測是 `evaluator.py` 的進度行
+
+```text
+🎬 <seq> [<frame_id>/<frame_end>]
+```
+
+它無 verbose flag 保護(三條 frame loop 都有,格式相同),但只在
+`frame_id % 100 == 0` 觸發。MOT17 frame 由 1 起算,所以**第一條進度行在 frame 100**,
+7 條 sequence 各 ≥525 frames ⇒ 完成側觀測充分,但**第一條 sequence 的 frame 1–99
+沒有任何觀測**。
+
+這個盲區正好落在 §4 的分界點上。天真讀法會把「frame 40 因 OOM 崩掉」判成
+「execution 尚未開始」⇒ 標 invalid、悄悄補跑 —— 正是 §4 存在要堵的那個洞。
+
+**規則(fail-closed,取代天真讀法).** `sequence_execution_started` 的**預設值是
+`true`**。只有在下列兩條**同時**成立時才能記為 `false`:
+
+1. 該 run 的 log 中無任何 `🎬 ` 進度行,且 run_dir 中無任何 `<seq>.txt`;**且**
+2. 該 run 的 log 正面命中 **表 A1-1** 列舉的 setup-phase failure signature 之一。
+
+兩條缺一 ⇒ `sequence_execution_started = true`,走 §4 第二/三條。因此**一個沒有
+進度行、也不符任何已列舉 setup signature 的崩潰,會讓整個 campaign
+`EXECUTION_INVALID`,而不是被補跑掉。** 不確定性只往「作廢重跑」倒,不往
+「丟掉這個 run」倒。
+
+**表 A1-1:setup-phase failure signatures(事前列舉,大小寫不敏感子字串)**
+
+每一列是 **(context term) ∧ (failure term)** 的合取:兩側各取一個子字串,
+**都**出現在同一份 log 才算命中。單邊詞不構成 signature —— 健康的 run 也會印
+`checkpoint`、`TensorRT` 這類字,單邊比對會讓正常 log 命中 setup signature。
+比對大小寫不敏感。
+
+| 類別 | context term(任一) | ∧ failure term(任一) |
+|---|---|---|
+| `dataset` | `seqinfo.ini`、`data_root`、`MOT17-` | `No such file`、`FileNotFoundError`、`not found`、`does not exist` |
+| `weights` | `checkpoint`、`state_dict`、`.ckpt`、`.pth` | `No such file`、`FileNotFoundError`、`not found` |
+| `tensorrt` | `TensorRT`、`trtexec`、`engine build`、`.engine` | `failed`、`Error`、`Exception` |
+| `cuda_device` | (無 —— 下列自成 signature) | `no CUDA-capable device is detected`、`CUDA driver version is insufficient`、`CUDA unknown error`、`Found no NVIDIA driver` |
+| `output_dir` | 本 run 的 `--output` 路徑字串 | `Permission denied`、`Read-only file system` |
+
+`cuda_device` 一列的 failure term 已經自帶足夠 context,不需要合取。
+
+**表 A1-1 視為 failure 定義的一部分(§11 適用)。** 在觀察到一個它「新涵蓋」的
+failure **之後**才擴充它 ⇒ 已完成的 run 全部作廢。這條是為了讓「事後把某次崩潰
+重新描述成 setup 問題」付出與改 failure 定義相同的代價。事前擴充不受限。
+
+**Preflight 失敗的 verdict 優先權.** §2 三條 pre-run 檢查任一不符 ⇒
+`verdict = "execution_invalid"`,**不論** `sequence_execution_started` 為何。
+preflight 失敗不是可補跑的 §4 第一類 invalid。三個 observed identity 欄位
+(`target_head_observed`、`target_worktree_clean`、`saccade_import_root`)
+即使在 preflight 失敗時**也必須落盤**,否則 fail-closed 這件事本身沒有證據。
+
+**Log fidelity:`PYTHONUNBUFFERED=1`.** harness 必須在 workload 的環境變數中設定它。
+理由:stdout 導向 pipe 時是 block-buffered(8KB),硬崩潰會丟掉尾端 buffer ——
+包含 §3 要比對的那行 error 與最後幾條 `🎬`。沒有它,§3 述詞與 §4 分界**都是讀在
+被截斷的 log 上**。這不是 §8 意義下的 observer:它只改 I/O buffering,不加
+per-frame 工作(進度行每 100 frames 一條),不碰任何 CUDA path。
+
+**§10 schema 的加性欄位.** A1 為 `capture_race_incidence_run_v1` 追加三個
+**純觀測**欄位,不改動任何既有欄位的語義:
+
+```json
+{
+  "progress_marker_seen": true,
+  "progress_markers": 53,
+  "setup_failure_signature": null
+}
+```
+
+`progress_marker_seen` = 是否出現過 `🎬 ` 行;`progress_markers` = 行數;
+`setup_failure_signature` = 命中的表 A1-1 類別名,未命中為 `null`。
