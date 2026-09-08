@@ -2,7 +2,7 @@
 """Run the #340 capture-race incidence campaign under a frozen preregistration.
 
 The preregistration is
-``docs/research/pipeline/capture_race_incidence_preregistration_20260908.md``
+``docs/research/pipeline/closed/capture_race_incidence_preregistration_20260908.md``
 (sealed, amendment A1).  This module executes it and nothing else: every
 threshold, string, count and terminal below is transcribed from that document,
 and the transcription is asserted against the document itself by
@@ -44,7 +44,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator, Sequence
 
-PREREG_REL = "docs/research/pipeline/capture_race_incidence_preregistration_20260908.md"
+PREREG_REL = (
+    "docs/research/pipeline/closed/capture_race_incidence_preregistration_20260908.md"
+)
 SCHEMA = "capture_race_incidence_run_v1"
 
 # --- §2 frozen coordinate --------------------------------------------------
