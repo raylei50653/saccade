@@ -3,7 +3,11 @@
 > **權威來源**：本文件是 [PROJECT_SHOWCASE](../../PROJECT_SHOWCASE.md) 附錄「單機可重現的累積消融」
 > 與 [ADR 018](../../decisions/018-project-main-line-direction.md) headline 的可追溯佐證。
 > 全部數字出自 2026-06-21 同一批 run（`mamba_whole_graph` preset、MOT17 train / SDP 七序列、
-> RTX 5070 Ti Laptop GPU 12 GB）。品質指標 run-to-run bit-exact（`reid_mode: off` + GMC graph path），
+> RTX 5070 Ti Laptop GPU 12 GB）。該批 run 的重複執行**觀察到** MOT output byte-identical
+> （`reid_mode: off` + GMC graph path）；**這是該次觀測，不是 determinism property**——重現性
+> 不能由旗標或 preset 單獨保證，必須逐 configuration 驗證，見
+> [`--no-gpu-decode` 的重複執行變異](../../research/eval/nogpudecode_reproducibility_20260907.md)。
+> 本文各表的 delta 為 0.8–4.5 IDF1，遠大於該文任一 observed range，結論不受影響。
 > FPS / latency 為 timing 量測，有 ±1 FPS 系統噪聲。
 >
 > 原始 eval 輸出（逐幀 MOT result）為可由下列指令重生的中間產物，未入庫；本文件保留摘要。
@@ -87,8 +91,11 @@ bare → full：IDF1 **+6.8** · HOTA **+5.2** · AssA **+7.3** · IDs 888→413
 ⚠️ **FPS 是 throughput、mean_ms 是單幀 latency，兩者不可互推。** double-buffer 把 `detect(N) ‖ tracker(N−1)`
 排到相鄰 frame → throughput 近 2×（143.8 → 270.4 FPS, **+88%**），但單幀 latency 反而較高（6.34 → 7.42 ms，重疊代價）。
 
-**double-buffer 對品質 bit-exact**：full preset 開 / 關 double-buffer，raw MOT result md5 完全相同
-（IDF1 / HOTA / MOTA / IDs 一字不差，皆 78.2 / 70.2 / 78.4 / 413）；它只改排程不改任何追蹤決策。
+**double-buffer 開 / 關的輸出相等（該次觀測）**：full preset 開 / 關 double-buffer，raw MOT result
+md5 相同（IDF1 / HOTA / MOTA / IDs 一字不差，皆 78.2 / 70.2 / 78.4 / 413）；讀成「它只改排程不改
+追蹤決策」的證據。**寫法限制**：可寫「兩臂該次輸出相等」，不可寫成 bit-exact property
+（[重複執行變異](../../research/eval/nogpudecode_reproducibility_20260907.md) §4 已撤回該一般化）。
+run-to-run 分歧只會讓相等**更難**達成，故這個相等觀測本身未被削弱，被撤回的是由它推出的性質宣稱。
 故累積表 `+GMC+bridge`(76.7) → `full`(78.2) 的 +1.5 全部來自 occ-gate + OAO，double-buffer 不貢獻品質。
 
 > `docs/reference/benchmarks/latency_log.md` 另記 40–71 FPS，是不同量測脈絡（stream 數 / warm-up /

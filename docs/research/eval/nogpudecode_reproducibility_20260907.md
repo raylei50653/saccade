@@ -146,11 +146,47 @@ range 不會縮小;但**獨立重跑一個新 block 不保證**得到同樣或�
 | [tracker_lane_dose_response_20260907](../../reference/benchmarks/tracker_lane_dose_response_20260907.md) §2 dose inertness 的 35 跑同值 | 另一 preset,decode 走 preset 預設 | 三個指標相等 | 觀測成立;由其推出的「the pipeline is deterministic at this preset」已改寫為零事件敘述 |
 | [saccade_module_reference](../../reference/saccade_module_reference.md) §5 「多次重複 stdev = 0 / byte-identical / A/B 可用 N=1」 | 未載明 | 未載明 | **未定 — delta 未載明**;措辭已改寫 |
 | `docs/TODO_history.md` 等歷史紀錄中標註「(確定性)」的 ablation | D 類 | −6.2 IDF1 等 | **本次未提供推翻證據**;歷史紀錄不改寫,引用時以本文為準 |
-| 任何在 `--preset baseline` 下、Δ 落在 §2.1 S／H 欄內的 A/B | S／H | 隨案 | **待重驗**(本 PR 不補跑) |
+| 任何在 `--preset baseline` 下、Δ 落在 §2.1 S／H 欄內的 A/B | S／H | 隨案 | **population 為空**(2026-09-08 盤點,見 §5.1) |
 
-> **Revalidation is deferred until the reproducibility uncertainty tracked in #363 is resolved
-> or bounded; no separate tracker is opened unless a pending delta remains decision-relevant
-> after that closure.**
+### 5.1 Revalidation inventory 收束(2026-09-08)
+
+**#363 已依 condition 2 + condition 3 關閉**(producing path 定到 `mot`→`mot_file`;fail-closed
+harness 交付;condition 1 機制未做、非必需)。**該 closure 沒有縮小 §2.1 的任何一欄,也沒有任何
+runtime mechanism fix。** #367 是 observability bound,不是 runtime boundary:`--preset baseline`
+的 run-to-run 分歧仍然存在,規模仍只由 §2.1 的 observed range 描述。
+**不得把「#363 closed」讀成「reproducibility uncertainty 已解決」。**
+
+在此前提下逐列盤點上表:
+
+- **0 項進 revalidation,0 個 tracker 新開。**
+- 上表最後一列(`--preset baseline` 下 Δ 落在 S／H 欄內的 A/B)**population 為空**:所有 live
+  benchmark 都跑在 `mamba_whole_graph_m`([frozen_v2_ablation](../../reference/benchmarks/frozen_v2_ablation.md)
+  為 `mamba_whole_graph`);文件中僅存的 `--preset baseline` 數字是
+  [PIPELINE_REFERENCE](../../reference/PIPELINE_REFERENCE.md) 的 2026-05-10 P3 表,而
+  [mot17_default_config](../../reference/mot17_default_config.md) 已把 `baseline` / `speed`
+  標為 legacy comparison、非 production baseline。`--preset baseline` 目前唯一的活消費者是
+  `scripts/tools/check_eval_repeat_identity.py` 自己的預設組態。
+- 其餘各列維持上表既有分級。**「維持現況」不表示那些 delta 被證實**,只表示重新量一次不會改變
+  任何現行結論:D 類與跨 dataset 各列未因 closure 取得新證據,`saccade_module_reference` 列改寫後
+  已不帶 delta。
+
+因此本輪的收束句是:
+
+> reproducibility uncertainty remains bounded only observationally; revalidation inventory is
+> exhausted because no currently decision-relevant delta falls inside the unresolved range.
+
+**Conditional watch(不是現在的工作)。** `PIPELINE_REFERENCE` 的 P3 sweep 跑在 `--preset speed`
+(yolo26s),相鄰列差 0.1–0.4 pp 卻據以選出「Pareto 最優點 `match=0.66, ntt=0.28`」。該 ranking
+沒有重現性支撐,也**不得繼承** §2.1 任何一欄(不同 preset、不同版本)。它只落在 legacy preset 內,
+出貨的 mamba presets 用 `match_thresh: 0.50`,故本輪不動。**若 `baseline` / `speed` 再度成為
+決策面,該 ranking 必須重推。**
+
+**同輪一併降階的三處措辭**(上表未涵蓋;均為措辭問題,非重驗項,結論不動):
+[frozen_v2_ablation](../../reference/benchmarks/frozen_v2_ablation.md) 前言與 §4、
+[ADR 018](../../decisions/018-project-main-line-direction.md) 的 canonical headline、
+[no_go_registry_details](../../reference/no_go_registry_details.md) #49 / #50 / #51。
+三者的 NO-GO / 累積表都由遠大於任何 observed range 的臂承載;被撤回的只是把單次輸出相等寫成
+determinism property 的措辭。
 
 `80.4471` / IDs `344`:block D 的參考值與 2026-08-08 兩份 benchmark 記載的出貨 base 相符,
 **是組態相符的佐證**;完整的組態身分仍須以版本、輸入與執行設定逐項核對,不以單一指標值認定。
