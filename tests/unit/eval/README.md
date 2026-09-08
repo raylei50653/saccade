@@ -8,6 +8,7 @@
 | `test_bridge_gate_breakpoints.py` | eval | behavior | active | Unit tests for the bridge-gate breakpoint locator (scripts/eval/diagnostics). |
 | `test_calibrator.py` | perception | behavior | active | Tests for SaccadeInt8Calibrator (perception/calibrator.py). |
 | `test_capture_attribution_harness.py` | eval | contract | active | Diagnostic validity checks; no production inference or incidence sampling. |
+| `test_capture_failure_diagnostics.py` | eval | contract | active | Failure-time capture diagnostics on every production capture entrance (#374). |
 | `test_capture_mode_binding.py` | eval | contract | active | Binding contract for cudaThreadExchangeStreamCaptureMode. |
 | `test_capture_race_incidence.py` | eval | contract | active | Harness self-verification for the #340 capture-race incidence campaign. |
 | `test_clean_fifo_bank.py` | eval | behavior | active | Unit tests for CleanFifoBank — the reusable clean-FIFO embedding substrate. |

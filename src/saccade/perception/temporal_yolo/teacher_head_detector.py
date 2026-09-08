@@ -31,6 +31,8 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor
 
+from saccade.perception.eval.cuda_capture import graphed_callables
+
 from saccade.perception.temporal_yolo.yolo_gated_detector import (
     GatedDetConfig,
     build_gated_yolo_detector,
@@ -256,8 +258,8 @@ class TeacherHeadDetector:
                 f"🕯️ [TeacherHead WholeGraph] capturing shape {tuple(frame.shape)} "
                 f"img={self._wg_img_shape}"
             )
-            self._wg_graphed[key] = torch.cuda.make_graphed_callables(
-                self._wg_fn, (frame.clone(),)
+            self._wg_graphed[key] = graphed_callables(
+                self._wg_fn, (frame.clone(),), label="teacher_head.whole"
             )
         return self._wg_graphed[key](frame)
 

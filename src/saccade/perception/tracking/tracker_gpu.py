@@ -7,6 +7,7 @@ import sys
 from typing import List, Any, cast, Optional, TypedDict, Callable
 import uuid
 from saccade.perception.box_ops import box_iou
+from saccade.perception.eval.cuda_capture import graphed_callables
 
 try:
     from saccade_tracking_ext import GPUByteTracker as CppGPUByteTracker, TrackResult
@@ -1886,7 +1887,8 @@ class GraphedTrackerUpdate:
             self.out_count,
         )
         self._graphed_callable = cast(
-            "Callable[..., None]", torch.cuda.make_graphed_callables(_graph_fn, sample)
+            "Callable[..., None]",
+            graphed_callables(_graph_fn, sample, label="tracker.update"),
         )
 
     def copy_inputs(

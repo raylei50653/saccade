@@ -54,9 +54,27 @@ contract that replaced it.  That is a removed precondition, not an explanation
 of the production incident, which stays open.
 
 :func:`describe_capture_state` exists to turn the next occurrence into a
-diagnosis instead of a mystery.  Enable it with ``SACCADE_CAPTURE_DEBUG=1``; the
-failure-time dump is unconditional because the failure is rare and already
-fatal.
+diagnosis instead of a mystery, and #340's first reproduction showed the shape it
+has to have.  That failure came out of ``make_graphed_callables`` on the **main
+eval thread**, while the only unconditional dump in the tree hung off the decode
+worker's exception handler, so the campaign log carried no capture state and no
+stream flags at all.  See issue #374 and
+``docs/research/pipeline/closed/capture_race_incidence_closure_20260908.md``.
+
+Every production capture entrance now goes through :func:`capture_diagnostics` --
+:func:`graph_capture` for ``torch.cuda.graph`` and :func:`graphed_callables` for
+``torch.cuda.make_graphed_callables``.  It emits one line whenever an exception
+escapes a capture entrance, on whatever thread ran it, and re-raises that
+exception untouched.  ``SACCADE_CAPTURE_DEBUG=1`` additionally logs each capture
+site as it opens; the failure-time line is deliberately **not** gated on it,
+because a campaign that does not set the variable would otherwise observe
+nothing -- which is exactly how the 20260908 campaign lost its evidence.
+
+What that line is: a **post-failure snapshot**, taken after the exception has
+unwound out of torch.  It records that an exception escaped a capture entrance
+and what the streams looked like once it had.  It does not classify the error,
+does not establish that a capture was invalidated, and does not describe the
+state at the instant of invalidation.
 """
 
 from __future__ import annotations
@@ -64,6 +82,7 @@ from __future__ import annotations
 import contextlib
 import ctypes
 import os
+import sys
 import threading
 from typing import Any, Iterator
 
@@ -81,13 +100,81 @@ _CUDA_STREAM_LEGACY = ctypes.c_void_p(1)
 _cudart_lib: Any = None
 _cudart_tried = False
 
-# Which of our captures is open, if any.  Set by :func:`graph_capture` only, so
-# it covers the direct ``torch.cuda.graph`` sites and *not* the
-# ``make_graphed_callables`` ones (detector whole-graph, tracker), which take no
-# wrapper.  ``None`` therefore narrows a failure to "no direct site was open";
-# it does not establish that the capture belongs to another component.
-_open_capture: str | None = None
+# Which capture entrances are inside their capture routine, per thread.  Set by
+# :func:`capture_diagnostics`, so it now covers both the direct
+# ``torch.cuda.graph`` sites and the ``make_graphed_callables`` ones.
+#
+# Per-thread, and a stack rather than a single slot, because a single global is
+# not safe to read at failure time: ``multi_stream`` runs several ``StreamWorker``
+# threads that capture concurrently (its ``_graph_capture_lock`` is created and
+# injected but never acquired anywhere in ``src/``), so one worker's exit would
+# otherwise clear a label another worker had set, and the failing thread would
+# report a site it never entered.  A thread pops only its own entry.  This is
+# robustness under a topology change and a fix for that read hazard; it does not
+# serialise anything and no nesting is reachable in the current call graph.
+_open_captures: dict[int, list[tuple[str, str]]] = {}
 _open_capture_lock = threading.Lock()
+
+# Every interpolated value is capped at this many characters.  The dump is one
+# physical line by contract (see :func:`describe_capture_state`), so an
+# unbounded value would be both unparseable and unbounded in the log.
+_FIELD_LIMIT = 200
+
+
+def _one_line(value: object) -> str:
+    """Collapse a value to one bounded line.
+
+    Any run of whitespace -- newlines included -- becomes a single space, so no
+    field can split the dump across physical lines.  Used for the trailing
+    free-form ``diagnostic_failed`` field only; every embedded field goes through
+    :func:`_token`.
+    """
+    text = " ".join(str(value).split())
+    if len(text) > _FIELD_LIMIT:
+        text = text[:_FIELD_LIMIT] + "<truncated>"
+    return text
+
+
+def _token(value: object) -> str:
+    """As :func:`_one_line`, but with no internal spaces either.
+
+    Embedded fields must survive ``line.split()``, and a value is not always
+    ours to trust: a thread name is whatever the code that created the thread
+    chose.  Spaces become underscores rather than being dropped, so the
+    substitution is visible in the log instead of silently joining two words.
+    """
+    return _one_line(value).replace(" ", "_")
+
+
+def _push_open_capture(label: str) -> None:
+    thread = threading.current_thread()
+    entry = (label, f"{thread.name}#{thread.ident}")
+    with _open_capture_lock:
+        _open_captures.setdefault(threading.get_ident(), []).append(entry)
+
+
+def _pop_open_capture() -> None:
+    """Release this thread's innermost label, and only this thread's."""
+    ident = threading.get_ident()
+    with _open_capture_lock:
+        stack = _open_captures.get(ident)
+        if not stack:
+            return
+        stack.pop()
+        if not stack:
+            del _open_captures[ident]
+
+
+def _render_open_captures() -> str:
+    """``none``, or ``label@thread#ident`` for every entrance currently open.
+
+    Rendered without spaces so it stays one whitespace-delimited field.
+    """
+    with _open_capture_lock:
+        snapshot = [entry for stack in _open_captures.values() for entry in stack]
+    if not snapshot:
+        return "none"
+    return ",".join(f"{_token(label)}@{_token(thread)}" for label, thread in snapshot)
 
 
 def _cudart() -> Any:
@@ -233,15 +320,50 @@ def _describe_stream(label: str, stream_ptr: int) -> str:
     return f"{label}=0x{stream_ptr:x}({kind},capture={st})"
 
 
-def describe_capture_state(where: str) -> str:
-    """One-line snapshot of every stream that matters to Rules A and B.
+def describe_capture_state(
+    where: str, *, event: str = "capture_probe", error: str | None = None
+) -> str:
+    """One physical line describing every stream that matters to Rules A and B.
 
-    ``open_capture=None`` alongside a capture-related failure narrows the
-    search: no direct ``graph_capture`` site was open.  It is not proof that the
-    capture belongs to someone else — the ``make_graphed_callables`` sites set no
-    label, and a stream can join a capture it never began.
+    The grammar is fixed-order, whitespace-delimited ``key=value`` with no spaces
+    inside a value, so the line is ``split()``-parseable and can never wrap onto a
+    second physical line.  ``diagnostic_failed=``, added by
+    :func:`emit_capture_failure_state`, is by contract the last field, because its
+    value is the only free-form one.
+
+    The identity fields -- ``event``, ``at``, ``thread``, ``error``,
+    ``open_capture`` -- are built before the stream probe, so a probe that fails
+    degrades to ``probe_failed=<Type>`` without taking the identity half with it.
+
+    ``error`` carries the exception's **type name only**.  The #340 incidence
+    harness counts capture-error hits by substring-matching every log line against
+    its signature table, so echoing a CUDA message here would let this diagnostic
+    inject hits into that count.  The message and traceback reach the log through
+    the interpreter anyway.
+
+    What a label means, and what it does not:
+
+    * a label is present while that site is inside its capture *routine* on that
+      thread.  For ``make_graphed_callables`` that window includes torch's warmup
+      iterations, so it is wider than ``cudaStreamBeginCapture``..``capture_end``;
+    * ``open_capture=none`` means no *wrapped* entrance on any thread was inside
+      its capture routine.  It is still not proof that a capture belongs to
+      someone else — a stream can join a capture it never began;
+    * the labels listed do not identify *which* capture was invalidated;
+    * the line is a post-failure snapshot taken after the exception unwound out of
+      torch, so the stream state it reports may already differ from the state at
+      the moment of invalidation.
     """
-    parts = [f"[capture-state] at={where}", f"open_capture={_open_capture!r}"]
+    thread = threading.current_thread()
+    parts = [
+        "[capture-state]",
+        f"event={_token(event)}",
+        f"at={_token(where)}",
+        f"thread={_token(thread.name)}#{thread.ident}",
+    ]
+    if error is not None:
+        parts.append(f"error={_token(error)}")
+    parts.append(f"open_capture={_render_open_captures()}")
     try:
         cur = torch.cuda.current_stream().cuda_stream
         parts.append(_describe_stream("current", cur))
@@ -263,6 +385,94 @@ def capture_debug_enabled() -> bool:
     return os.environ.get("SACCADE_CAPTURE_DEBUG", "") in ("1", "true", "yes")
 
 
+_UNPRINTABLE = (
+    "[capture-state] event=capture_failure at=? diagnostic_failed=unprintable"
+)
+
+
+def _diagnostic_failure_line(where: str, exc: BaseException) -> str:
+    """Secondary evidence: the diagnostic itself failed, and this is how."""
+    try:
+        detail = _one_line(f"{type(exc).__name__}: {exc}")
+    except BaseException:  # noqa: BLE001 - ``str(exc)`` can raise too
+        detail = "unprintable"
+    try:
+        site = _token(where)
+    except BaseException:  # noqa: BLE001 - same reason
+        site = "?"
+    # ``diagnostic_failed`` is last by contract; nothing may follow it.
+    return f"[capture-state] event=capture_failure at={site} diagnostic_failed={detail}"
+
+
+def emit_capture_failure_state(where: str, *, error: str | None = None) -> None:
+    """Print the failure-time dump.  Total: this must not raise, ever.
+
+    A diagnostic that swallows the error it exists to explain leaves the next
+    failure with *less* evidence than this one, so the contract is layered:
+
+    1. a dump that cannot be built is reported as ``diagnostic_failed=`` rather
+       than dropped — the diagnostic's own failure is secondary evidence;
+    2. a ``print`` that fails is retried once on stderr;
+    3. if both streams are gone the line is lost.  That is the accepted floor:
+       the alternative is raising from here, which would mask the original CUDA
+       error, and no record is strictly better than a replaced one.
+
+    One accepted side effect.  :func:`stream_flags` and :func:`capture_status`
+    call ``cudaGetLastError`` when a query returns non-zero, and that now happens
+    on the main eval thread as well as the decode worker.  The error the log
+    needs is the already-raised Python exception, which the caller re-raises, so
+    it cannot be lost here; what could be cleared is a sticky flag some later
+    torch call would have reported.  That is tolerable only because this runs
+    while an exception is already propagating out of a capture entrance.  Never
+    add this call to a path that continues.
+    """
+    try:
+        line = describe_capture_state(where, event="capture_failure", error=error)
+    except BaseException as exc:  # noqa: BLE001 - a diagnostic must never mask the real error
+        try:
+            line = _diagnostic_failure_line(where, exc)
+        except BaseException:  # noqa: BLE001 - last resort
+            line = _UNPRINTABLE
+    try:
+        print(line, flush=True)
+        return
+    except BaseException:  # noqa: BLE001 - stdout may be closed or replaced
+        pass
+    try:
+        sys.stderr.write(line + "\n")
+        sys.stderr.flush()
+    except BaseException:  # noqa: BLE001 - see the docstring's accepted floor
+        pass
+
+
+@contextlib.contextmanager
+def capture_diagnostics(label: str) -> Iterator[None]:
+    """Report any exception escaping a capture entrance, and re-raise it as-is.
+
+    This does not detect, classify or prove a *capture* failure.  It fires on any
+    exception that escapes the wrapped capture routine and records what the
+    streams looked like once it had.
+
+    ``except Exception``, not ``BaseException``: CUDA errors surface as
+    ``RuntimeError``, while a ``KeyboardInterrupt`` mid-capture is not evidence
+    worth a dump.  The label is released on that path too.
+
+    The dump runs before the ``finally``, so it still sees this site's own label
+    in ``open_capture=``.  The bare ``raise`` keeps the original exception object,
+    its ``__traceback__``, ``__cause__`` and ``__context__``; that holds because
+    :func:`emit_capture_failure_state` is total, so it can never chain a
+    "during handling of the above exception" of its own onto the real error.
+    """
+    _push_open_capture(label)
+    try:
+        yield
+    except Exception as exc:
+        emit_capture_failure_state(label, error=type(exc).__name__)
+        raise
+    finally:
+        _pop_open_capture()
+
+
 @contextlib.contextmanager
 def graph_capture(
     cuda_graph: "torch.cuda.CUDAGraph",
@@ -274,9 +484,15 @@ def graph_capture(
     """``torch.cuda.graph`` with this repo's capture-error-mode policy attached.
 
     ``label`` names the capture site so a failure elsewhere in the process can
-    say which capture was open at the time.
+    say which entrance was open at the time, and so
+    :func:`capture_diagnostics` can name it in the failure-time dump.
+
+    ``with ctx`` must stay lexically inside this generator.  The attribution
+    harness resolves a capture's label by walking ``f_back`` from the patched
+    ``CUDAGraph.capture_begin`` for a frame *named* ``graph_capture`` and reading
+    its ``label`` local (``scripts/tools/capture_attribution/run.py``); hoisting
+    the ``with`` into a helper would silently break that.
     """
-    global _open_capture
     ctx = torch.cuda.graph(
         cuda_graph, pool=pool, stream=stream, capture_error_mode=CAPTURE_ERROR_MODE
     )
@@ -290,13 +506,35 @@ def graph_capture(
             else "stream=?"
         )
         print(f"[capture-site] {label} mode={CAPTURE_ERROR_MODE} {where}", flush=True)
-    with _open_capture_lock:
-        _open_capture = label
-    try:
+    with capture_diagnostics(label):
         with ctx:
             if capture_debug_enabled():
-                print(f"  {describe_capture_state(f'{label}:open')}", flush=True)
+                print(
+                    f"  {describe_capture_state(label, event='capture_open')}",
+                    flush=True,
+                )
             yield
-    finally:
-        with _open_capture_lock:
-            _open_capture = None
+
+
+def graphed_callables(
+    callables: Any, sample_args: Any, *, label: str, **kwargs: Any
+) -> Any:
+    """``torch.cuda.make_graphed_callables`` under the failure-time diagnostic.
+
+    torch hard-codes this capture at ``capture_error_mode="global"`` and exposes
+    no way to change it, so unlike :func:`graph_capture` this attaches no policy
+    -- only observation.  The graphed callable is returned by identity, so replay
+    is the same call it was before.
+
+    The open-time line is gated on ``SACCADE_CAPTURE_DEBUG`` for the same reason
+    it is in :func:`graph_capture`: an unconditional print here would sit on the
+    capture path itself.  Only the failure-time dump is unconditional.
+    """
+    if capture_debug_enabled():
+        print(
+            f"[capture-site] {label} mode=global(torch-fixed) "
+            f"{describe_capture_state(label, event='capture_open')}",
+            flush=True,
+        )
+    with capture_diagnostics(label):
+        return torch.cuda.make_graphed_callables(callables, sample_args, **kwargs)
