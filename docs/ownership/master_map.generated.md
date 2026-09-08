@@ -184,11 +184,13 @@ Manifest: `docs/ownership/doc_migration_manifest.yaml`
 - `docs/research/contracts/signal_table_schema.md`
 - `docs/research/contracts/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md`
 - `docs/research/eval/README.md`
+- `docs/research/eval/eval_repeat_identity_boundary_20260907.md`
 - `docs/research/eval/fp_classifier_external_only_plan.md`
 - `docs/research/eval/gmc_residual_correction_20260612.md`
 - `docs/research/eval/kalman_h_recalibration_20260612.md`
 - `docs/research/eval/m_b1_substrate_smoke_20260709.md`
 - `docs/research/eval/neutral_nogo_signal_attribution_20260612.md`
+- `docs/research/eval/nogpudecode_reproducibility_20260907.md`
 - `docs/research/eval/oao_duration_ramp_revival_20260617.md`
 - `docs/research/eval/procedures/gt_support_morphology_procedure_v1.md`
 - `docs/research/eval/scoring_energy_20260630.md`
@@ -355,6 +357,6 @@ Excluded from the active index and default search view.
 
 ## Inventory summary
 
-- documents: 305
-- active: 250
+- documents: 307
+- active: 252
 - grayed out: 55
