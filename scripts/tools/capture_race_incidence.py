@@ -64,6 +64,10 @@ BASE_ARGS: tuple[str, ...] = (
 PATH_EXTRA_ARGS: dict[str, tuple[str, ...]] = {"A": (), "B": ("--no-gpu-decode",)}
 PATH_ORDER: tuple[str, ...] = ("A", "B")  # §2: interleaving frozen as A first
 N_PAIRS = 100
+# A2.3: consecutive setup-invalid re-attempts allowed on one effective slot.
+# Frozen, because "try once more" is otherwise a knob that can be turned after
+# seeing results, and an unbounded retry is not a terminal.
+MAX_CONSECUTIVE_SETUP_INVALID = 5
 
 SEQUENCES: tuple[str, ...] = (
     "MOT17-02-SDP",
@@ -359,6 +363,7 @@ def execute_run(
     *,
     path: str,
     seq_index: int,
+    slot_index: int,
     campaign_id: str,
     target: Path,
     interpreter: Path,
@@ -368,8 +373,13 @@ def execute_run(
     """Run one trial and return its §10 record.  Always writes the record."""
     run_dir = artifact_dir / "runs" / f"{seq_index:04d}-{path}"
     log_path = artifact_dir / "logs" / f"{seq_index:04d}-{path}.log"
-    run_dir.mkdir(parents=True, exist_ok=True)
-    log_path.parent.mkdir(parents=True, exist_ok=True)
+    # A2.4: no filesystem failure may escape as a bare OSError.  Every one of
+    # them is harness failure, which §7 names EXECUTION_INVALID.
+    try:
+        run_dir.mkdir(parents=True, exist_ok=True)
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise ExecutionInvalid(f"could not create run directories: {exc}") from exc
 
     checks = preflight(target, interpreter)
     argv = build_argv(path, target, interpreter, run_dir)
@@ -378,6 +388,7 @@ def execute_run(
         "schema": SCHEMA,
         "campaign_id": campaign_id,
         "seq_index": seq_index,
+        "slot_index": slot_index,
         "path": path,
         "run_dir": str(run_dir),
         "started_utc": _utc(),
@@ -409,7 +420,13 @@ def execute_run(
 
     env = child_environment()
     run = runner if runner is not None else _spawn
-    exit_code, log = run(argv, target, env)
+    # A2.4 at the call site, not only inside _spawn: an injected runner must be
+    # held to the same rule, or the normalisation is only as good as the
+    # default path it happens to sit on.
+    try:
+        exit_code, log = run(argv, target, env)
+    except OSError as exc:
+        raise ExecutionInvalid(f"could not spawn the workload: {exc}") from exc
 
     try:
         log_path.write_text(log, encoding="utf-8")
@@ -436,24 +453,32 @@ def execute_run(
 
 
 def _spawn(argv: Sequence[str], cwd: Path, env: dict[str, str]) -> tuple[int, str]:
-    proc = subprocess.run(
-        list(argv),
-        cwd=str(cwd),
-        env=env,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    try:
+        proc = subprocess.run(
+            list(argv),
+            cwd=str(cwd),
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError as exc:
+        raise ExecutionInvalid(f"could not spawn the workload: {exc}") from exc
     return proc.returncode, proc.stdout + proc.stderr
 
 
 def schedule(pairs: int = N_PAIRS) -> Iterator[tuple[int, str]]:
-    """§2 interleaving: A,B,A,B,… with A first.  Frozen order."""
-    index = 0
-    for _ in range(pairs):
+    """§2 interleaving as A2.2 **effective slots**, A first.  Frozen order.
+
+    A slot is not an attempt.  It is filled by the first attempt at that path
+    whose verdict is not ``invalid``; a setup-invalid re-attempts the same path
+    in place without advancing the slot.  Reading these as attempts is what
+    made §2's "100 pairs" contradict §4's promised replacement: one legal
+    setup-invalid on A would cap A at 99 valid runs forever.
+    """
+    for slot in range(pairs):
         for path in PATH_ORDER:
-            yield index, path
-            index += 1
+            yield slot, path
 
 
 @dataclass
@@ -520,6 +545,128 @@ def write_manifest(
         raise ExecutionInvalid(f"could not write {manifest}: {exc}") from exc
 
 
+def _abort_record(
+    *, campaign_id: str, seq_index: int, slot_index: int, path: str, reason: str
+) -> dict[str, Any]:
+    """Minimal §10 row for the attempt a campaign-ending condition interrupted.
+
+    A2.4: the aborted attempt still gets a row.  An artifact set whose last
+    attempt left no trace cannot be told apart from one that was never made.
+    """
+    return {
+        "schema": SCHEMA,
+        "campaign_id": campaign_id,
+        "seq_index": seq_index,
+        "slot_index": slot_index,
+        "path": path,
+        "started_utc": _utc(),
+        "finished_utc": _utc(),
+        "verdict": "execution_invalid",
+        "invalid_reason": reason,
+        "target_source_sha": TARGET_SOURCE_SHA,
+        "coordinate_implementation": COORDINATE_IMPLEMENTATION,
+    }
+
+
+def _best_effort(action: Any) -> None:
+    """Run a recording action that must not mask the failure being reported."""
+    try:
+        action()
+    except (OSError, ExecutionInvalid):
+        pass
+
+
+def run_campaign(
+    *,
+    campaign: "Campaign",
+    campaign_id: str,
+    target: Path,
+    interpreter: Path,
+    artifact_dir: Path,
+    pairs: int,
+    executor: Any = None,
+    report: Any = None,
+) -> str:
+    """Fill the effective slots of §2 in order and return the terminal.
+
+    The retry loop is A2.2: a setup-invalid does not consume its slot, so §4's
+    promised replacement actually happens and the valid runs stay strictly
+    A,B,A,B,…  ``seq_index`` keeps counting attempts, including the invalid
+    ones, so the log says what was executed rather than what was kept.
+    """
+    runs_jsonl = artifact_dir / "runs.jsonl"
+    execute = executor if executor is not None else execute_run
+    attempt = 0
+
+    for slot, path in schedule(pairs):
+        if campaign.terminal:
+            break
+        if campaign.path_done(path, pairs):
+            continue
+        consecutive_invalid = 0
+        while True:
+            seq_index = attempt
+            attempt += 1
+            try:
+                record = execute(
+                    path=path,
+                    seq_index=seq_index,
+                    slot_index=slot,
+                    campaign_id=campaign_id,
+                    target=target,
+                    interpreter=interpreter,
+                    artifact_dir=artifact_dir,
+                )
+            except ExecutionInvalid as exc:
+                # Bind now: `except ... as exc` unbinds at block exit, and the
+                # recording callable below is evaluated lazily.
+                reason = str(exc)
+                _best_effort(
+                    lambda: _write_record(
+                        runs_jsonl,
+                        _abort_record(
+                            campaign_id=campaign_id,
+                            seq_index=seq_index,
+                            slot_index=slot,
+                            path=path,
+                            reason=reason,
+                        ),
+                    )
+                )
+                raise
+            _write_record(runs_jsonl, record)
+            campaign.absorb(record)
+            if report is not None:
+                report(slot, seq_index, path, record, campaign)
+            if campaign.terminal:
+                break
+            if record["verdict"] != "invalid":
+                break
+            consecutive_invalid += 1
+            if consecutive_invalid >= MAX_CONSECUTIVE_SETUP_INVALID:
+                # A2.3: five consecutive setup failures is a broken
+                # environment, not a transient one, and retrying forever is
+                # not a terminal.
+                campaign.terminal = "UNRESOLVED_INVALID_STUDY"
+                campaign.detail = (
+                    f"{consecutive_invalid} consecutive setup-invalid attempts on "
+                    f"slot {slot} path {path}; §5 validity failure"
+                )
+                break
+
+    return campaign.finalise(pairs)
+
+
+def _print_progress(
+    slot: int, seq_index: int, path: str, record: dict[str, Any], campaign: "Campaign"
+) -> None:
+    print(
+        f"  slot {slot:04d} attempt {seq_index:04d} {path}  "
+        f"{record['verdict']:16} valid A={campaign.valid['A']} "
+        f"B={campaign.valid['B']} invalid={campaign.invalid}"
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--target", type=Path, required=True)
@@ -563,37 +710,29 @@ def main(argv: list[str] | None = None) -> int:
         / "perf"
         / f"capture-race-incidence-{campaign_id}"
     ).resolve()
-    runs_jsonl = artifact_dir / "runs.jsonl"
 
+    campaign = Campaign.new()
+    manifest_exists = False
     try:
-        artifact_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            artifact_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            raise ExecutionInvalid(f"could not create {artifact_dir}: {exc}") from exc
         write_manifest(
             artifact_dir,
             campaign_id,
             {"started_utc": _utc(), "pairs": args.pairs, "terminal": None},
         )
-        campaign = Campaign.new()
-        for seq_index, path in schedule(args.pairs):
-            if campaign.terminal:
-                break
-            if campaign.path_done(path, args.pairs):
-                continue
-            record = execute_run(
-                path=path,
-                seq_index=seq_index,
-                campaign_id=campaign_id,
-                target=target,
-                interpreter=interpreter,
-                artifact_dir=artifact_dir,
-            )
-            _write_record(runs_jsonl, record)
-            campaign.absorb(record)
-            print(
-                f"  {seq_index:04d} {path}  {record['verdict']:16} "
-                f"valid A={campaign.valid['A']} B={campaign.valid['B']} "
-                f"invalid={campaign.invalid}"
-            )
-        terminal = campaign.finalise(args.pairs)
+        manifest_exists = True
+        terminal = run_campaign(
+            campaign=campaign,
+            campaign_id=campaign_id,
+            target=target,
+            interpreter=interpreter,
+            artifact_dir=artifact_dir,
+            pairs=args.pairs,
+            report=_print_progress,
+        )
         write_manifest(
             artifact_dir,
             campaign_id,
@@ -608,7 +747,27 @@ def main(argv: list[str] | None = None) -> int:
             },
         )
     except ExecutionInvalid as exc:
-        print(f"EXECUTION_INVALID: {exc}", file=sys.stderr)
+        detail = str(exc)
+        print(f"EXECUTION_INVALID: {detail}", file=sys.stderr)
+        # A2.4: a manifest left at terminal null cannot be told apart from a
+        # campaign still running, so stamp it if it exists at all.  Only a
+        # genuinely unwritable manifest falls back to exit code plus stderr.
+        if manifest_exists:
+            _best_effort(
+                lambda: write_manifest(
+                    artifact_dir,
+                    campaign_id,
+                    {
+                        "finished_utc": _utc(),
+                        "pairs": args.pairs,
+                        "terminal": "EXECUTION_INVALID",
+                        "detail": detail,
+                        "valid": campaign.valid,
+                        "failures": campaign.failures,
+                        "invalid": campaign.invalid,
+                    },
+                )
+            )
         return 1
 
     print(f"terminal: {terminal}")

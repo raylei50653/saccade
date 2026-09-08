@@ -17,6 +17,7 @@ runner so the classification and abort paths can be exercised exactly.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import stat
@@ -40,6 +41,7 @@ from scripts.tools.capture_race_incidence import (  # noqa: E402
     PREREG_REL,
     SEQUENCES,
     Campaign,
+    MAX_CONSECUTIVE_SETUP_INVALID,
     build_argv,
     capture_failure_hits,
     child_environment,
@@ -47,6 +49,7 @@ from scripts.tools.capture_race_incidence import (  # noqa: E402
     execute_run,
     main,
     preflight,
+    run_campaign,
     schedule,
     setup_failure_signature,
     TARGET_SOURCE_SHA,
@@ -92,13 +95,14 @@ def test_n_and_interleaving_are_the_frozen_ones() -> None:
     assert N_PAIRS == 100
     assert "100" in PREREG
     assert PATH_ORDER == ("A", "B"), "§2 freezes the interleaving as A first"
+    # A2.2: the first element is the effective slot, not an attempt ordinal.
     assert list(schedule(3)) == [
         (0, "A"),
+        (0, "B"),
+        (1, "A"),
         (1, "B"),
         (2, "A"),
-        (3, "B"),
-        (4, "A"),
-        (5, "B"),
+        (2, "B"),
     ]
 
 
@@ -321,6 +325,7 @@ def test_preflight_rejects_a_wrong_import_root_and_still_records_it(
     record = execute_run(
         path="A",
         seq_index=0,
+        slot_index=0,
         campaign_id="test",
         target=target,
         interpreter=interpreter,
@@ -464,6 +469,7 @@ def _record_via_runner(*, exit_code: int, log: str, complete: bool) -> dict:
             return execute_run(
                 path="A",
                 seq_index=0,
+                slot_index=0,
                 campaign_id="test",
                 target=target,
                 interpreter=interpreter,
@@ -472,3 +478,204 @@ def _record_via_runner(*, exit_code: int, log: str, complete: bool) -> dict:
             )
         finally:
             harness.TARGET_SOURCE_SHA = original
+
+
+# --------------------------------------------------------------------------
+# A2.2/A2.3: a setup-invalid must be replaced, not silently consume its slot
+# --------------------------------------------------------------------------
+
+
+def _scripted_executor(script):
+    """Return an executor yielding the given verdicts, and its attempt log."""
+    log: list[dict] = []
+    verdicts = list(script)
+
+    def executor(
+        *, path, seq_index, slot_index, campaign_id, target, interpreter, artifact_dir
+    ):
+        verdict = verdicts.pop(0) if verdicts else "ok"
+        record = {
+            "schema": "capture_race_incidence_run_v1",
+            "campaign_id": campaign_id,
+            "seq_index": seq_index,
+            "slot_index": slot_index,
+            "path": path,
+            "verdict": verdict,
+            "invalid_reason": None,
+            "capture_error_hits": [],
+        }
+        log.append(record)
+        return record
+
+    return executor, log
+
+
+def test_a_setup_invalid_is_replaced_and_the_path_still_reaches_n(
+    tmp_path: Path,
+) -> None:
+    """The P0 regression.
+
+    §2 promises 100 *valid* runs per path and §4 promises a setup-invalid is
+    replaced.  Reading the interleaving as 100 attempt-pairs breaks both: one
+    legal setup-invalid on A caps A at 99 and the campaign lands on
+    UNRESOLVED_INVALID_STUDY having never made the replacement it promised.
+    """
+    pairs = 4
+    # Slot 0 path A fails setup once, then succeeds; everything else is fine.
+    executor, log = _scripted_executor(["invalid", "ok"])
+    campaign = Campaign.new()
+    terminal = run_campaign(
+        campaign=campaign,
+        campaign_id="test",
+        target=tmp_path,
+        interpreter=tmp_path / "py",
+        artifact_dir=tmp_path,
+        pairs=pairs,
+        executor=executor,
+    )
+
+    assert campaign.invalid == 1
+    assert campaign.valid == {"A": pairs, "B": pairs}, "the invalid run was replaced"
+    assert terminal == "CLOSED_BOUNDED"
+    # The extra attempt is an extra attempt, not an extra slot.
+    assert len(log) == 2 * pairs + 1
+    assert [r["seq_index"] for r in log] == list(range(2 * pairs + 1))
+    # A2.2: valid runs still alternate strictly A,B,A,B,…
+    kept = [r["path"] for r in log if r["verdict"] != "invalid"]
+    assert kept == ["A", "B"] * pairs
+
+
+def test_the_invalid_attempt_does_not_advance_the_slot(tmp_path: Path) -> None:
+    executor, log = _scripted_executor(["invalid", "invalid", "ok"])
+    campaign = Campaign.new()
+    run_campaign(
+        campaign=campaign,
+        campaign_id="test",
+        target=tmp_path,
+        interpreter=tmp_path / "py",
+        artifact_dir=tmp_path,
+        pairs=1,
+        executor=executor,
+    )
+    assert [(r["slot_index"], r["path"]) for r in log[:3]] == [(0, "A")] * 3
+
+
+def test_endless_setup_failure_is_a_validity_failure_not_a_spin(
+    tmp_path: Path,
+) -> None:
+    """A2.3: retrying forever is not a terminal."""
+    executor, log = _scripted_executor(["invalid"] * 50)
+    campaign = Campaign.new()
+    terminal = run_campaign(
+        campaign=campaign,
+        campaign_id="test",
+        target=tmp_path,
+        interpreter=tmp_path / "py",
+        artifact_dir=tmp_path,
+        pairs=100,
+        executor=executor,
+    )
+    assert terminal == "UNRESOLVED_INVALID_STUDY"
+    assert len(log) == MAX_CONSECUTIVE_SETUP_INVALID
+    assert "consecutive setup-invalid" in campaign.detail
+
+
+def test_a_capture_failure_still_stops_immediately(tmp_path: Path) -> None:
+    executor, log = _scripted_executor(["ok", "ok", "failure"])
+    campaign = Campaign.new()
+    terminal = run_campaign(
+        campaign=campaign,
+        campaign_id="test",
+        target=tmp_path,
+        interpreter=tmp_path / "py",
+        artifact_dir=tmp_path,
+        pairs=100,
+        executor=executor,
+    )
+    assert terminal == "FAILURE_OBSERVED_A"
+    assert len(log) == 3, "no further attempts after the first §3 failure"
+
+
+# --------------------------------------------------------------------------
+# A2.4: a campaign-ending condition must leave a stamped terminal behind
+# --------------------------------------------------------------------------
+
+
+def test_a_harness_failure_stamps_the_manifest_and_logs_the_attempt(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The P1 regression.
+
+    A manifest left at ``terminal: null`` is indistinguishable from a campaign
+    still running, so a fail-closed abort that only prints to stderr loses the
+    one durable record that says what happened.
+    """
+    import scripts.tools.capture_race_incidence as harness
+
+    target = _git_target(tmp_path)
+    monkeypatch.setattr(harness, "TARGET_SOURCE_SHA", _head(target))
+    monkeypatch.setattr(harness, "N_PAIRS", 2)
+    interpreter = _fake_interpreter(tmp_path, str((target / "src").resolve()))
+    artifacts = tmp_path / "artifacts"
+
+    def exploding_spawn(argv, cwd, env):
+        raise OSError(13, "Permission denied")
+
+    monkeypatch.setattr(harness, "_spawn", exploding_spawn)
+
+    rc = harness.main(
+        [
+            "--target",
+            str(target),
+            "--interpreter",
+            str(interpreter),
+            "--artifact-dir",
+            str(artifacts),
+            "--pairs",
+            "2",
+        ]
+    )
+
+    assert rc == 1
+    assert "EXECUTION_INVALID" in capsys.readouterr().err
+
+    manifest = json.loads((artifacts / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["terminal"] == "EXECUTION_INVALID"
+    assert "could not spawn the workload" in manifest["detail"]
+
+    rows = [
+        json.loads(line)
+        for line in (artifacts / "runs.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    assert len(rows) == 1, "the interrupted attempt still gets a row"
+    assert rows[0]["verdict"] == "execution_invalid"
+    assert rows[0]["slot_index"] == 0
+    assert rows[0]["path"] == "A"
+
+
+def test_run_directory_creation_failure_is_execution_invalid(tmp_path: Path) -> None:
+    """No filesystem failure may escape as a bare OSError (A2.4)."""
+    blocker = tmp_path / "artifacts"
+    blocker.write_text("not a directory", encoding="utf-8")
+    with pytest.raises(ExecutionInvalid, match="could not create run directories"):
+        execute_run(
+            path="A",
+            seq_index=0,
+            slot_index=0,
+            campaign_id="test",
+            target=tmp_path,
+            interpreter=tmp_path / "py",
+            artifact_dir=blocker,
+            runner=lambda *a: (0, ""),
+        )
+
+
+def _head(target: Path) -> str:
+    import subprocess
+
+    return subprocess.run(
+        ["git", "-C", str(target), "rev-parse", "HEAD"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()

@@ -406,3 +406,62 @@ per-frame 工作(進度行每 100 frames 一條),不碰任何 CUDA path。
 
 `progress_marker_seen` = 是否出現過 `🎬 ` 行;`progress_markers` = 行數;
 `setup_failure_signature` = 命中的表 A1-1 類別名,未命中為 `null`。
+
+## A2. 補跑如何維持 interleaving,與 terminal 的落盤義務(2026-09-08,已完成 run 數 = 0)
+
+### A2.1 Defect:`invalid` 實際上沒有被補跑
+
+§2 宣告「每 path **100 個有效 run**」,§4 宣告 execution 前的 setup-invalid
+「**補跑一個 run 遞補**」。但 §2 同時把交錯寫成「`A,B,A,B,…`,共 100 組」——
+若把它讀成 100 組**嘗試**,兩條宣告就互斥:A 只要出現 **1 個合法的**
+setup-invalid,A 最多拿到 99 個有效 run,campaign 落到
+`UNRESOLVED_INVALID_STUDY`,而 §4 承諾的遞補從未發生。
+
+根因是 §2 只宣告了嘗試的順序,**沒有宣告「補跑的那一次擺在交錯的哪裡」**。
+這是 §11 意義下的 declaration defect。
+
+### A2.2 規則:effective slot
+
+`A,B` × 100 是 **effective slot**,不是 attempt。
+
+- 每個 slot 由「該 path 第一個 verdict **不是** `invalid` 的 attempt」填滿。
+- setup-invalid **不推進 slot**:同一個 path 原地重新 attempt,直到填滿或觸及
+  A2.3 的上限。
+- `seq_index` 維持 **attempt ordinal**(跨所有 attempt 單調遞增,含 invalid),
+  所以 log 忠實記錄「實際執行過什麼」。
+- 新增 `slot_index` 欄位記錄該 attempt 想填的 slot。
+
+於是**有效 run 的序列仍嚴格是 `A,B,A,B,…`**,而 §4 的遞補真的能補到 100。
+兩條原本互斥的宣告在這個讀法下同時成立。
+
+### A2.3 補跑上限
+
+同一個 slot 上**連續** setup-invalid attempt 上限 **5 次**。超過 ⇒ terminal
+`UNRESOLVED_INVALID_STUDY`(§5 validity failure),**不是** `EXECUTION_INVALID`。
+
+理由:連續 5 次 setup 失敗不是暫態,是環境壞了;而「無上限地重試」不是一個
+terminal —— §7 要求窮盡且各自具名,一個會無限迴圈的分支不滿足它。這個數字必須
+事前定死,否則「再試一次」就會變成看到結果後可調的自由度。
+
+### A2.4 Terminal 的落盤義務
+
+§7 把 harness 自身失效列為 `EXECUTION_INVALID`,§10 要求 artifact 目錄含
+manifest。兩者合起來的義務先前沒寫明:
+
+- harness 的**所有** filesystem setup 失敗(run_dir / log 目錄建立、log 寫入、
+  `runs.jsonl` append、workload 無法 spawn)一律 normalize 成 `ExecutionInvalid`
+  ⇒ terminal `EXECUTION_INVALID`。不得有一條路徑以裸 `OSError` 逃出。
+- manifest 一旦建立成功,**任何** campaign-ending 條件都必須 **best-effort 回寫**
+  `terminal` 與 `detail`。停在 `terminal: null` 的 manifest 是 report 缺陷:
+  它與「campaign 還在跑」無法區分。
+- 只有在 manifest 本身真的不可寫時,才允許退回「nonzero exit + stderr」。
+- 中止當下那個 attempt 也要 best-effort 寫出一筆 `runs.jsonl` 記錄,
+  verdict = `execution_invalid`,理由照填。
+
+### A2.5 §11 影響評估
+
+A2 **不改**:§3 failure 述詞、N(每 path 100 個**有效** run)、path 組態。
+它只釘住「遞補擺哪裡」與「terminal 怎麼落盤」。因此 §11 的「已完成的 run 全部
+作廢」條款不觸發。已完成 run 數 = 0。
+
+`slot_index` 為加性純觀測欄位,不改動任何既有欄位語義。
