@@ -528,17 +528,21 @@ def execute_run(
 
 
 def _spawn(argv: Sequence[str], cwd: Path, env: dict[str, str]) -> tuple[int, str]:
-    try:
-        proc = subprocess.run(
-            list(argv),
-            cwd=str(cwd),
-            env=env,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-    except OSError as exc:
-        raise ExecutionInvalid(f"could not spawn the workload: {exc}") from exc
+    """Launch the workload.  Lets OSError through on purpose.
+
+    Normalising it here as well would shadow the call site in ``execute_run``,
+    which is the only place that holds the row to attach — the abort would then
+    lose the identity observations preflight had just made.  One owner for that
+    conversion, and it is not this function.
+    """
+    proc = subprocess.run(
+        list(argv),
+        cwd=str(cwd),
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
     return proc.returncode, proc.stdout + proc.stderr
 
 

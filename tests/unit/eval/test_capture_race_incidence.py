@@ -819,3 +819,61 @@ def test_every_abort_row_written_to_the_log_is_complete(tmp_path: Path) -> None:
     assert len(rows) == 1
     assert rows[0].keys() == reference.keys()
     assert rows[0]["invalid_reason"] == "synthetic harness failure"
+
+
+def test_a_real_spawn_failure_keeps_the_verified_identity_observations(
+    tmp_path: Path,
+) -> None:
+    """The production path, not a double.
+
+    _spawn used to normalise OSError itself, so the default path raised an
+    ExecutionInvalid carrying no row and the fallback wrote nulls over the
+    three identity fields preflight had just measured. The earlier regressions
+    missed it because their double raised OSError where the real _spawn raised
+    ExecutionInvalid, walking straight past the call-site handler under test.
+
+    So this one uses the real _spawn: an interpreter that answers the preflight
+    probe and then drops its own execute bit, making the workload launch fail
+    inside subprocess.run exactly as it would in production.
+    """
+    import scripts.tools.capture_race_incidence as harness
+
+    target = _git_target(tmp_path)
+    root = str((target / "src").resolve())
+    interpreter = tmp_path / "self-disarming-python"
+    interpreter.write_text(
+        f'#!/bin/sh\necho "{root}"\nchmod 444 "$0"\nexit 0\n', encoding="utf-8"
+    )
+    interpreter.chmod(0o755)
+
+    original = harness.TARGET_SOURCE_SHA
+    harness.TARGET_SOURCE_SHA = _head(target)
+    artifacts = tmp_path / "artifacts"
+    artifacts.mkdir()
+    try:
+        campaign = Campaign.new()
+        with pytest.raises(ExecutionInvalid, match="could not spawn the workload"):
+            run_campaign(
+                campaign=campaign,
+                campaign_id="test",
+                target=target,
+                interpreter=interpreter,
+                artifact_dir=artifacts,
+                pairs=1,
+            )
+    finally:
+        harness.TARGET_SOURCE_SHA = original
+
+    rows = [
+        json.loads(line)
+        for line in (artifacts / "runs.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["verdict"] == "execution_invalid"
+    assert "could not spawn the workload" in row["invalid_reason"]
+    # The point: preflight had already established these, so they must survive.
+    assert row["saccade_import_root"] == root
+    assert row["target_worktree_clean"] is True
+    assert row["target_head_observed"] is not None
+    assert row["argv"] is not None
