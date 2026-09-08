@@ -1738,6 +1738,7 @@ class EvalPipeline:
         self.db_emit_event: "torch.cuda.Event | None" = None
         self.db_emit_parity: int = 0
         self.db_emit_ctx: dict[str, Any] = {}
+        self.db_background_timing: tuple[int, float] | None = None
         self.stream_iter = stream_iter
         self.frame_end = frame_end
         self.frame_latencies = frame_latencies

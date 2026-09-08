@@ -417,13 +417,34 @@ def _run_materialize(
     return track_results
 
 
+def _record_frame_timing(
+    state: EvalPipeline, *, frame_id: int, latency_started_at: float
+) -> None:
+    """Record latency and throughput without deriving one from the other."""
+
+    if frame_id <= state.warmup_frames:
+        return
+    completed_at = time.perf_counter()
+    state.frame_latencies.append((completed_at - latency_started_at) * 1000.0)
+    state.throughput_frames += 1
+    state.throughput_finished_at = completed_at
+
+
+def _record_db_background_timing(state: EvalPipeline) -> None:
+    """Finish a double-buffer sample after its background emit was drained."""
+    if state.db_background_timing is not None:
+        frame_id, started_at = state.db_background_timing
+        _record_frame_timing(state, frame_id=frame_id, latency_started_at=started_at)
+        state.db_background_timing = None
+
+
 def _flush_db_tracker_out(state: EvalPipeline) -> None:
     """Flush one deferred double-buffer tracker output.
 
     Syncs the parity D2H event, builds CPU track_results from the pinned
-    buffer, then runs the full emit/relink tail.  Called at the *start* of
-    the next frame so the CPU emit overlaps the GPU postproc+GMC+ReID work
-    while preserving relink→tracker ordering.
+    buffer, then runs the emit/relink tail. Called at the start of the next
+    frame, after its lookahead detection was queued, preserving relink→tracker
+    ordering. Timing completes here, or when background emit is drained.
     """
 
     fid = state.db_emit_frame_id
@@ -467,6 +488,14 @@ def _flush_db_tracker_out(state: EvalPipeline) -> None:
         track_results_on_host=True,
     )
     state.results_lines.extend(_emit_lines)
+    if state.bg_future is not None:
+        # _run_emit can submit CPU relink/write work. Its future is drained
+        # before the next tracker update (or at sequence end).
+        state.db_background_timing = (fid, ctx["latency_started_at"])
+    else:
+        _record_frame_timing(
+            state, frame_id=fid, latency_started_at=ctx["latency_started_at"]
+        )
     state.db_emit_frame_id = 0
     state.db_emit_event = None
     state.db_emit_ctx.clear()
@@ -1768,17 +1797,6 @@ def _launch_double_buffer_detect(
             detector_box_format=state.detector_box_format,
             synchronize=False,
         )
-        # Record detect_done on double_buffer_stream so _run_frame's
-        # stream_post can be fenced after the detection output is ready.
-        if _p_db >= 0:
-            _detect_done_ev = state._pp_detect_done[_p_db]
-            _detect_done_ev.record(stream)
-            _sp = state.stream_post
-            if _sp is not None:
-                _sp.wait_event(_detect_done_ev)
-            # Restore per-parity detect state for _run_frame's parity swap.
-            state.stream_detect = _saved_detect
-            state.stream_detect_event = _saved_detect_event
         # Whole-graph replays return views into reusable static buffers.  Clone
         # every tensor crossing the frame boundary before another replay can
         # overwrite those buffers.
@@ -1789,6 +1807,17 @@ def _launch_double_buffer_detect(
             source_keypoints.clone() if source_keypoints is not None else None
         )
         ready_event.record()
+        # Transfer ownership to post only after all output clones are queued.
+        # A wait on main alone does not order an independent post stream.
+        if _p_db >= 0:
+            _detect_done_ev = state._pp_detect_done[_p_db]
+            _detect_done_ev.record(stream)
+            _sp = state.stream_post
+            if _sp is not None:
+                _sp.wait_event(_detect_done_ev)
+            # Restore per-parity detect state for _run_frame's parity swap.
+            state.stream_detect = _saved_detect
+            state.stream_detect_event = _saved_detect_event
 
     for tensor in (fused_boxes, fused_scores, fused_classes, source_keypoints):
         if tensor is not None:
