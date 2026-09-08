@@ -7,8 +7,14 @@
 ```bash
 make full     # 含 L3 實作補充       -> build/main-full.pdf
 make paper    # 乾淨學術版(剝掉 L3) -> build/main-paper.pdf
+make status   # 專題現況報告         -> build/saccade-project-status-20260907.pdf
 make clean
 ```
+
+`status-report.tex` 是 2026-09-07 的一次性「專題現況」快照，正文固定為六頁，
+回答系統能力、目前進度、主要結果與後續方向；實驗、profiling、環境與 provenance
+集中在 Appendix。它不取代 `docs/TODO.md`、evidence ledger 或 research registry 的
+live fact ownership。
 
 需要 XeLaTeX 與 Noto CJK TC 字型。Arch:
 `sudo pacman -S texlive-xetex texlive-langchinese noto-fonts-cjk`。

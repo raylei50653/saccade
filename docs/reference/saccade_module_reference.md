@@ -100,7 +100,7 @@ ReID 已被降為 experimental / optional 路徑，不再是 production tracker 
 - whole-graph 約 290 FPS 級
 - 近期 full-suite paired A/B 中約 322 → 329 FPS
 - fused ingest 單一改動帶來約 +2.15% throughput
-- 多次測試中品質輸出可以做到 bit-identical / deterministic
+- 在受測組態的有限重複中觀察到高度重現性（見 [重複執行變異量測](../research/eval/nogpudecode_reproducibility_20260907.md)）
 
 因此這個模塊不只是「功能可用」，而是具有很明確的工程定位：
 
@@ -110,16 +110,24 @@ ReID 已被降為 experimental / optional 路徑，不再是 production tracker 
 
 ---
 
-## 5. Determinism 是目前很重要的特徵
+## 5. 受測組態的重複執行變異
 
-在 `--no-gpu-decode` 等受控條件下，部分 eval 已做到：
+在 `--no-gpu-decode` 等受控條件下，**部分組態**的 eval 觀察到：
 
-- 多次重複品質指標 stdev = 0
-- MOT output byte-identical
-- A/B 可用 N=1 做品質比較
+- 在受測組態的有限重複中觀察到高度重現性：`mamba_whole_graph_m --double-buffer` 7-seq，
+  **n=20 未見輸出分歧**，該 20 跑的 MOT output 彼此位元相同
+- 該組態下 A/B 可用 N=1 做**探索性**比較（不背書微小 delta 的正式歸因，且不由處置臂繼承）
 - production optimization 可用 paired ABBA 做 throughput 驗證
 
-這代表目前 tracker / evaluation stack 的可重現性已經高於一般研究原型。
+> ⚠️ **這是 per-configuration observation，不構成 deterministic property 的證明。**
+> 可寫的句子是「n=20 未見分歧」，**不是 bit-exact / deterministic**；n=20 在獨立、固定分歧機率的
+> 假設下只把零事件的單側 95% 上限壓到約 13.9%，而連續同 session 執行未必滿足該假設。
+>
+> ⚠️ **2026-09-07 更正。** 原文寫「多次重複品質指標 stdev = 0 / MOT output byte-identical /
+> A/B 可用 N=1」，未限定組態，且把觀測寫成了性質。實測顯示**重現性不能由 `--no-gpu-decode`
+> 單獨保證，必須逐 configuration 驗證**：同一旗標下 `--preset baseline` 7-seq 有 14/20 跑
+> 與參考輸出不同。各組態的觀測範圍與判讀規則見
+> [`--no-gpu-decode` 的重複執行變異](../research/eval/nogpudecode_reproducibility_20260907.md)。
 
 這是未來封裝時很有價值的既有資產，因為可以用來做：
 
@@ -565,7 +573,7 @@ scripts/provenance/
 5. geometry-first production core 已經相對明確。
 6. ReID 不再是核心依賴。
 7. 已有高吞吐實測。
-8. deterministic evaluation 很成熟。
+8. 受測組態的重複執行變異已量測，且有逐組態的判讀規則（見 §5；**不是** deterministic property）。
 9. regression / contract tests 很完整。
 10. 大量 runtime / provenance 問題已經被實際踩過並留下記錄。
 
