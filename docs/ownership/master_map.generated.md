@@ -173,6 +173,8 @@ Manifest: `docs/ownership/doc_migration_manifest.yaml`
 - `docs/reference/production_pipeline_code_map.md`
 - `docs/reference/runbooks/README.md`
 - `docs/reference/runbooks/nsys_profiling.md`
+- `docs/reference/runbooks/runtime_identity_republication.md`
+- `docs/reference/runtime_identity/archive/README.md`
 - `docs/reference/saccade_module_reference.md`
 - `docs/research/README.md`
 - `docs/research/contracts/README.md`
@@ -362,6 +364,6 @@ Excluded from the active index and default search view.
 
 ## Inventory summary
 
-- documents: 312
-- active: 257
+- documents: 314
+- active: 259
 - grayed out: 55
