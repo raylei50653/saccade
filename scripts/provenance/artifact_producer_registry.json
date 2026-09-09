@@ -180,10 +180,6 @@
       "classification": "run_producer_wired",
       "reason": "Ultralytics reference MOT17 eval; claims --output before writing sequence results"
     },
-    "scripts/eval/bayesian_optimizer.py": {
-      "classification": "not_a_run_producer",
-      "reason": "declares no artifact-root output directory and creates none"
-    },
     "scripts/eval/bench_recall_candidates.py": {
       "classification": "not_a_run_producer",
       "reason": "declares no artifact-root output directory and creates none"

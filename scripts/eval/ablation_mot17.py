@@ -49,7 +49,6 @@ from .ablation_experiments import (  # noqa: E402
     _DISPLAY,
     _PCT,
     _CATEGORY_ORDER,
-    _A2_BEST,
     _CATEGORY_EXPERIMENTS,
 )
 
@@ -203,282 +202,6 @@ def print_table(title: str, results: list[tuple[str, dict | None]]) -> None:
     print(f"{'=' * 88}")
 
 
-def run_optuna_a1(args, base_args):
-    import optuna
-
-    def objective(trial):
-        w_sim = trial.suggest_float("w_sim_base", 0.0, 1.0)
-        w_iou = trial.suggest_float("w_iou_base", 0.0, 1.0)
-        w_maha = trial.suggest_float("w_maha_base", 0.0, 1.0)
-        shift_ambiguity = trial.suggest_float("shift_ambiguity", 0.0, 0.5)
-        shift_lost_age = trial.suggest_float("shift_lost_age", 0.0, 0.5)
-
-        extra_args = [
-            "--semantic-w-sim-base",
-            str(w_sim),
-            "--semantic-w-iou-base",
-            str(w_iou),
-            "--semantic-w-maha-base",
-            str(w_maha),
-            "--semantic-shift-ambiguity",
-            str(shift_ambiguity),
-            "--semantic-shift-lost-age",
-            str(shift_lost_age),
-        ]
-
-        out_dir = f"{args.output_root}/optuna/trial_{trial.number}"
-        run_eval(
-            f"Optuna A1 Trial {trial.number}",
-            out_dir,
-            extra_args,
-            base_args,
-            args.dry_run,
-        )
-
-        metrics = evaluate_dir(out_dir, args.gt_root, args.detector)
-        if not metrics:
-            raise optuna.TrialPruned()
-
-        # Maximize IDF1 primarily
-        return metrics["idf1"]
-
-    study = optuna.create_study(
-        direction="maximize",
-        study_name="A1_Unified_Score",
-        storage=os.getenv(
-            "OPTUNA_STORAGE",
-            "postgresql://saccade:saccade@localhost:5432/optuna",
-        ),
-        load_if_exists=True,
-    )
-    study.optimize(objective, n_trials=args.optuna_trials)
-
-    print(f"{'=' * 88}")
-    print("Optuna A1 Unified Score Sweep Complete")
-    try:
-        best_trial = study.best_trial
-        print(f"Best trial (IDF1: {best_trial.value:.4f}):")
-        for key, value in best_trial.params.items():
-            print(f"  {key}: {value:.4f}")
-    except ValueError:
-        print("No trials completed successfully.")
-    print(f"{'=' * 88}")
-
-
-def run_optuna_a2(args, base_args):
-    import optuna
-
-    # Use A1 best params as fixed base for A2 sweep
-    a1_base = [
-        "--semantic-w-sim-base",
-        "0.8012",
-        "--semantic-w-iou-base",
-        "0.3423",
-        "--semantic-w-maha-base",
-        "0.3117",
-        "--semantic-shift-ambiguity",
-        "0.3425",
-        "--semantic-shift-lost-age",
-        "0.1778",
-    ]
-
-    def objective(trial):
-        clean_score = trial.suggest_float("clean_score_threshold", 0.50, 0.90)
-        strict_sim = trial.suggest_float("strict_sim_threshold", 0.55, 0.95)
-        hq_bank_score = trial.suggest_float("high_quality_min_score", 0.60, 0.95)
-        margin_ratio = trial.suggest_float("clean_margin_ratio", 0.0, 0.10)
-        min_aspect = trial.suggest_float("clean_min_aspect", 0.8, 2.0)
-        max_aspect = trial.suggest_float("clean_max_aspect", 3.0, 7.0)
-
-        extra_args = a1_base + [
-            "--semantic-clean-score-threshold",
-            str(clean_score),
-            "--semantic-strict-sim-threshold",
-            str(strict_sim),
-            "--appearance-bank-high-quality-min-score",
-            str(hq_bank_score),
-            "--semantic-clean-margin-ratio",
-            str(margin_ratio),
-            "--semantic-clean-min-aspect",
-            str(min_aspect),
-            "--semantic-clean-max-aspect",
-            str(max_aspect),
-        ]
-
-        out_dir = f"{args.output_root}/optuna_a2/trial_{trial.number}"
-        run_eval(
-            f"Optuna A2 Trial {trial.number}",
-            out_dir,
-            extra_args,
-            base_args,
-            args.dry_run,
-        )
-
-        metrics = evaluate_dir(out_dir, args.gt_root, args.detector)
-        if not metrics:
-            raise optuna.TrialPruned()
-
-        # Maximize IDF1
-        return metrics["idf1"]
-
-    study = optuna.create_study(
-        direction="maximize",
-        study_name="A2_Reference_Quality",
-        storage=os.getenv(
-            "OPTUNA_STORAGE",
-            "postgresql://saccade:saccade@localhost:5432/optuna",
-        ),
-        load_if_exists=True,
-    )
-    study.optimize(objective, n_trials=args.optuna_trials)
-
-    print(f"{'=' * 88}")
-    print("Optuna A2 Reference Quality Sweep Complete")
-    try:
-        best_trial = study.best_trial
-        print(f"Best trial (IDF1: {best_trial.value:.4f}):")
-        for key, value in best_trial.params.items():
-            print(f"  {key}: {value:.4f}")
-    except ValueError:
-        print("No trials completed successfully.")
-    print(f"{'=' * 88}")
-
-
-def run_optuna_a3(args, base_args):
-    import optuna
-
-    # Use A2 best params as fixed base for A3 sweep
-    a2_base = _A2_BEST
-
-    def objective(trial):
-        budget = trial.suggest_categorical("reid_budget", [1, 2, 4, 8, 12, 16])
-        trigger_mode = trial.suggest_categorical(
-            "reid_trigger_mode", ["score_ema", "event_any"]
-        )
-
-        extra_args = a2_base + [
-            "--need-reid",
-            "--reid-trigger-mode",
-            trigger_mode,
-            "--reid-budget",
-            str(budget),
-        ]
-
-        out_dir = f"{args.output_root}/optuna_a3/trial_{trial.number}"
-        run_eval(
-            f"Optuna A3 Trial {trial.number}",
-            out_dir,
-            extra_args,
-            base_args,
-            args.dry_run,
-        )
-
-        metrics = evaluate_dir(out_dir, args.gt_root, args.detector)
-        if not metrics:
-            raise optuna.TrialPruned()
-
-        # Maximize IDF1
-        return metrics["idf1"]
-
-    study = optuna.create_study(
-        direction="maximize",
-        study_name="A3_Budgeted_ReID",
-        storage=os.getenv(
-            "OPTUNA_STORAGE",
-            "postgresql://saccade:saccade@localhost:5432/optuna",
-        ),
-        load_if_exists=True,
-    )
-    study.optimize(objective, n_trials=args.optuna_trials)
-
-    print(f"{'=' * 88}")
-    print("Optuna A3 Budgeted ReID Sweep Complete")
-    try:
-        best_trial = study.best_trial
-        print(f"Best trial (IDF1: {best_trial.value:.4f}):")
-        for key, value in best_trial.params.items():
-            print(f"  {key}: {value}")
-    except ValueError:
-        print("No trials completed successfully.")
-    print(f"{'=' * 88}")
-
-
-def run_optuna_a6(args, base_args):
-    import optuna
-
-    # Use A2/A3 best params as fixed base for A6 sweep
-    a3_base = _A2_BEST + ["--reid-budget", "0.2", "--reid-trigger-mode", "score_ema"]
-
-    def objective(trial):
-        w_det = trial.suggest_float("w_det", 0.3, 0.7)
-        w_iou = trial.suggest_float("w_iou", 0.1, 0.4)
-        w_aspect = trial.suggest_float("w_aspect", 0.05, 0.25)
-        w_center = trial.suggest_float("w_center", 0.05, 0.20)
-        w_area = trial.suggest_float("w_area", 0.05, 0.20)
-
-        # Normalize weights
-        sum_w = w_det + w_iou + w_aspect + w_center + w_area
-        w_det /= sum_w
-        w_iou /= sum_w
-        w_aspect /= sum_w
-        w_center /= sum_w
-        w_area /= sum_w
-
-        extra_args = a3_base + [
-            "--bank-quality-v2",
-            "--bank-quality-w-det",
-            f"{w_det:.4f}",
-            "--bank-quality-w-iou",
-            f"{w_iou:.4f}",
-            "--bank-quality-w-aspect",
-            f"{w_aspect:.4f}",
-            "--bank-quality-w-center",
-            f"{w_center:.4f}",
-            "--bank-quality-w-area",
-            f"{w_area:.4f}",
-        ]
-
-        out_dir = f"{args.output_root}/optuna_a6/trial_{trial.number}"
-        run_eval(
-            f"Optuna A6 Trial {trial.number}",
-            out_dir,
-            extra_args,
-            base_args,
-            args.dry_run,
-        )
-
-        metrics = evaluate_dir(out_dir, args.gt_root, args.detector)
-        if not metrics:
-            raise optuna.TrialPruned()
-
-        return metrics["idf1"]
-
-    study = optuna.create_study(
-        direction="maximize",
-        study_name="A6_Bank_Quality",
-        storage=os.getenv(
-            "OPTUNA_STORAGE",
-            "postgresql://saccade:saccade@localhost:5432/optuna",
-        ),
-        load_if_exists=True,
-    )
-    study.optimize(objective, n_trials=args.optuna_trials)
-
-    print(f"{'=' * 88}")
-    print("Optuna A6 Bank Quality Sweep Complete")
-    try:
-        best_trial = study.best_trial
-        print(f"Best trial (IDF1: {best_trial.value:.4f}):")
-        # Normalize best params for printing
-        p = best_trial.params
-        s = sum(p.values())
-        for key, value in p.items():
-            print(f"  --bank-quality-{key.replace('_', '-')}: {value / s:.4f}")
-    except ValueError:
-        print("No trials completed successfully.")
-    print(f"{'=' * 88}")
-
-
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -494,13 +217,6 @@ def main() -> None:
     parser.add_argument("--skip-run", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument(
-        "--optuna",
-        choices=["a1", "a2", "a3", "a6"],
-        default=None,
-        help="Run Bayesian optimization for a specific module.",
-    )
-    parser.add_argument("--optuna-trials", type=int, default=20)
-    parser.add_argument(
         "--mlflow-uri",
         default="http://localhost:5000",
         help="MLflow tracking server URI.",
@@ -509,9 +225,6 @@ def main() -> None:
         "--mlflow-experiment",
         default="mot17-ablation",
         help="MLflow experiment name for ablation runs.",
-    )
-    parser.add_argument(
-        "--optuna-trials", type=int, default=20, help="Number of trials for Optuna."
     )
     args = parser.parse_args()
 
@@ -526,19 +239,6 @@ def main() -> None:
         "--mlflow-experiment",
         args.mlflow_experiment,
     ]
-
-    if args.optuna == "a1":
-        run_optuna_a1(args, base_args)
-        return
-    if args.optuna == "a2":
-        run_optuna_a2(args, base_args)
-        return
-    if args.optuna == "a3":
-        run_optuna_a3(args, base_args)
-        return
-    if args.optuna == "a6":
-        run_optuna_a6(args, base_args)
-        return
 
     categories = parse_categories(args.category)
 

@@ -223,7 +223,6 @@ update() 回空結果
 - ChromaDB
 - SQLAlchemy / psycopg2
 - MLflow
-- Optuna
 - MOT metrics
 - pycocotools
 - pytest / ruff / mypy

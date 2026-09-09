@@ -51,8 +51,6 @@ dependencies = [
     "nvidia-cuda-cccl==13.3.3.4.1",
     "pybind11>=3.0.3",
     "pytest-cov>=6.0.0",
-    "optuna>=4.8.0",
-    "optuna-dashboard>=0.20.0",
     "motmetrics>=1.4.0",
     "llama-index>=0.14.21",
     "llama-index-vector-stores-chroma>=0.5.5",
