@@ -112,7 +112,9 @@ def _raise_sentinel(exc):
 def test_a_main_thread_mgc_failure_emits_the_dump(monkeypatch, capsys, probe) -> None:
     """The campaign's failure shape: make_graphed_callables, main thread."""
     exc = _Sentinel("CUDA error: cudaErrorStreamCaptureInvalidated")
-    monkeypatch.setattr(torch.cuda, "make_graphed_callables", _raise_sentinel(exc))
+    monkeypatch.setattr(
+        cuda_capture._torch_graphs, "make_graphed_callables", _raise_sentinel(exc)
+    )
 
     with pytest.raises(_Sentinel):
         graphed_callables(object(), (), label="tracker.update")
@@ -133,7 +135,9 @@ def test_a_main_thread_mgc_failure_emits_the_dump(monkeypatch, capsys, probe) ->
 def test_the_dump_names_the_thread_that_failed(monkeypatch, capsys, probe) -> None:
     """A worker-thread capture reports that worker, not the main thread."""
     monkeypatch.setattr(
-        torch.cuda, "make_graphed_callables", _raise_sentinel(_Sentinel("boom"))
+        cuda_capture._torch_graphs,
+        "make_graphed_callables",
+        _raise_sentinel(_Sentinel("boom")),
     )
 
     def _run():
@@ -166,7 +170,7 @@ def test_the_original_error_is_re_raised_unchanged(monkeypatch, probe) -> None:
     def _boom(*_args, **_kwargs):
         raise sentinel
 
-    monkeypatch.setattr(torch.cuda, "make_graphed_callables", _boom)
+    monkeypatch.setattr(cuda_capture._torch_graphs, "make_graphed_callables", _boom)
 
     with pytest.raises(_Sentinel) as excinfo:
         graphed_callables(object(), (), label="tracker.update")
@@ -186,7 +190,9 @@ def test_the_original_error_is_re_raised_unchanged(monkeypatch, probe) -> None:
 def test_a_broken_stdout_cannot_replace_the_error(monkeypatch, capsys, probe) -> None:
     """print() failing falls back to stderr and still re-raises the original."""
     sentinel = _Sentinel("boom")
-    monkeypatch.setattr(torch.cuda, "make_graphed_callables", _raise_sentinel(sentinel))
+    monkeypatch.setattr(
+        cuda_capture._torch_graphs, "make_graphed_callables", _raise_sentinel(sentinel)
+    )
 
     def _no_print(*_args, **_kwargs):
         raise OSError("stdout is closed")
@@ -209,7 +215,9 @@ def test_an_interrupt_is_not_dumped_but_still_releases_the_label(
 ) -> None:
     """``except Exception`` is deliberate: a Ctrl-C mid-capture is not evidence."""
     monkeypatch.setattr(
-        torch.cuda, "make_graphed_callables", _raise_sentinel(KeyboardInterrupt())
+        cuda_capture._torch_graphs,
+        "make_graphed_callables",
+        _raise_sentinel(KeyboardInterrupt()),
     )
 
     with pytest.raises(KeyboardInterrupt):
@@ -228,7 +236,9 @@ def test_a_failing_diagnostic_is_recorded_not_swallowed(
     monkeypatch, capsys, probe
 ) -> None:
     sentinel = _Sentinel("boom")
-    monkeypatch.setattr(torch.cuda, "make_graphed_callables", _raise_sentinel(sentinel))
+    monkeypatch.setattr(
+        cuda_capture._torch_graphs, "make_graphed_callables", _raise_sentinel(sentinel)
+    )
 
     def _broken(*_args, **_kwargs):
         raise ValueError("the diagnostic is broken")
@@ -249,7 +259,9 @@ def test_the_dump_still_lands_when_the_stream_probe_fails(
 ) -> None:
     """A probe failure degrades one field; the identity half survives."""
     monkeypatch.setattr(
-        torch.cuda, "make_graphed_callables", _raise_sentinel(_Sentinel("boom"))
+        cuda_capture._torch_graphs,
+        "make_graphed_callables",
+        _raise_sentinel(_Sentinel("boom")),
     )
 
     def _no_stream():
@@ -276,7 +288,9 @@ def test_the_dump_is_always_one_physical_line(
     monkeypatch, capsys, probe, label
 ) -> None:
     monkeypatch.setattr(
-        torch.cuda, "make_graphed_callables", _raise_sentinel(_Sentinel("a\nb"))
+        cuda_capture._torch_graphs,
+        "make_graphed_callables",
+        _raise_sentinel(_Sentinel("a\nb")),
     )
 
     with pytest.raises(_Sentinel):
@@ -287,7 +301,9 @@ def test_the_dump_is_always_one_physical_line(
 
 def test_a_failing_diagnostic_line_is_also_one_line(monkeypatch, capsys, probe) -> None:
     monkeypatch.setattr(
-        torch.cuda, "make_graphed_callables", _raise_sentinel(_Sentinel("boom"))
+        cuda_capture._torch_graphs,
+        "make_graphed_callables",
+        _raise_sentinel(_Sentinel("boom")),
     )
 
     def _broken(*_args, **_kwargs):
@@ -312,7 +328,9 @@ def test_error_carries_the_type_only_so_the_harness_count_stays_clean(
     """
     message = "CUDA error: cudaErrorStreamCaptureInvalidated"
     monkeypatch.setattr(
-        torch.cuda, "make_graphed_callables", _raise_sentinel(_Sentinel(message))
+        cuda_capture._torch_graphs,
+        "make_graphed_callables",
+        _raise_sentinel(_Sentinel(message)),
     )
 
     with pytest.raises(_Sentinel):
@@ -337,7 +355,7 @@ def test_the_label_is_open_during_capture_and_released_after(
         seen.append(cuda_capture._render_open_captures())
         return "graphed"
 
-    monkeypatch.setattr(torch.cuda, "make_graphed_callables", _capture)
+    monkeypatch.setattr(cuda_capture._torch_graphs, "make_graphed_callables", _capture)
 
     assert graphed_callables(object(), (), label="mamba_head.per_shape") == "graphed"
     assert seen[0].startswith("mamba_head.per_shape@")
@@ -346,7 +364,9 @@ def test_the_label_is_open_during_capture_and_released_after(
 
 def test_the_label_is_released_on_the_failure_path_too(monkeypatch, probe) -> None:
     monkeypatch.setattr(
-        torch.cuda, "make_graphed_callables", _raise_sentinel(_Sentinel("boom"))
+        cuda_capture._torch_graphs,
+        "make_graphed_callables",
+        _raise_sentinel(_Sentinel("boom")),
     )
 
     with pytest.raises(_Sentinel):
@@ -465,7 +485,9 @@ def test_the_open_time_print_stays_gated_on_the_debug_flag(
 
 def test_the_mgc_open_time_print_is_gated_too(monkeypatch, capsys, probe) -> None:
     """Both entrances behave the same way: only the failure line is free of the flag."""
-    monkeypatch.setattr(torch.cuda, "make_graphed_callables", lambda *a, **k: "graphed")
+    monkeypatch.setattr(
+        cuda_capture._torch_graphs, "make_graphed_callables", lambda *a, **k: "graphed"
+    )
 
     monkeypatch.delenv("SACCADE_CAPTURE_DEBUG", raising=False)
     graphed_callables(object(), (), label="tracker.update")
@@ -474,7 +496,7 @@ def test_the_mgc_open_time_print_is_gated_too(monkeypatch, capsys, probe) -> Non
     monkeypatch.setenv("SACCADE_CAPTURE_DEBUG", "1")
     graphed_callables(object(), (), label="tracker.update")
     out = capsys.readouterr().out
-    assert "[capture-site] tracker.update mode=global(torch-fixed)" in out
+    assert "[capture-site] tracker.update mode=thread_local" in out
     assert "event=capture_open" in out
 
 
@@ -506,7 +528,7 @@ _ENTRANCE_OWNER = Path("src/saccade/perception/eval/cuda_capture.py")
 _OWNER_RAW_CALLS = Counter(
     {
         ("graph_capture", ("torch", "cuda", "graph")): 1,
-        ("graphed_callables", ("torch", "cuda", "make_graphed_callables")): 1,
+        ("capture_context", ("torch", "cuda", "graph")): 1,
     }
 )
 

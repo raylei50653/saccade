@@ -88,6 +88,8 @@ from typing import Any, Iterator
 
 import torch
 
+from . import _torch_graphs
+
 # Rule A only.  Our captures never depend on decoder-thread work, so another
 # thread's allocator activity is not something they need protection from.
 # Deliberately not "relaxed": that would also stop the *capturing* thread's own
@@ -519,12 +521,24 @@ def graph_capture(
 def graphed_callables(
     callables: Any, sample_args: Any, *, label: str, **kwargs: Any
 ) -> Any:
-    """``torch.cuda.make_graphed_callables`` under the failure-time diagnostic.
+    """``make_graphed_callables`` under this module's capture policy.
 
-    torch hard-codes this capture at ``capture_error_mode="global"`` and exposes
-    no way to change it, so unlike :func:`graph_capture` this attaches no policy
-    -- only observation.  The graphed callable is returned by identity, so replay
-    is the same call it was before.
+    Carries the same ``thread_local`` unsafe-API policy as :func:`graph_capture`.
+    torch hard-codes this capture at ``global``, where *any* thread's unsafe CUDA
+    call invalidates it, and exposes no argument to change that -- hence the
+    vendored :mod:`._torch_graphs`, which adds the seam at the forward and
+    backward graph contexts and is otherwise upstream's text.
+
+    What the mode buys, measured in ``test_capture_error_mode_mechanism.py``
+    rather than read off the CUDA docs: under ``global`` a decoder thread's
+    ``cudaMalloc`` during this capture kills it, and under ``thread_local`` it
+    does not.  What it does not buy, from the same controls: another thread's
+    ``cudaDeviceSynchronize`` still kills the capture in either mode.  This
+    narrows the exposure to other threads; it does not close it.  The capturing
+    thread's own unsafe calls still fail, deliberately -- that is a bug detector
+    worth keeping, and the reason this is not ``"relaxed"``.  Legacy-stream
+    implicit dependencies (Rule B) are forbidden by CUDA in every mode and are
+    untouched by this.
 
     The open-time line is gated on ``SACCADE_CAPTURE_DEBUG`` for the same reason
     it is in :func:`graph_capture`: an unconditional print here would sit on the
@@ -532,9 +546,15 @@ def graphed_callables(
     """
     if capture_debug_enabled():
         print(
-            f"[capture-site] {label} mode=global(torch-fixed) "
+            f"[capture-site] {label} mode={CAPTURE_ERROR_MODE} "
             f"{describe_capture_state(label, event='capture_open')}",
             flush=True,
         )
+
+    def capture_context(graph: Any, *, pool: Any) -> Any:
+        return torch.cuda.graph(graph, pool=pool, capture_error_mode=CAPTURE_ERROR_MODE)
+
     with capture_diagnostics(label):
-        return torch.cuda.make_graphed_callables(callables, sample_args, **kwargs)
+        return _torch_graphs.make_graphed_callables(
+            callables, sample_args, graph_context=capture_context, **kwargs
+        )
