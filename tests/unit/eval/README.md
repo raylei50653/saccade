@@ -13,6 +13,7 @@
 | `test_capture_failure_diagnostics.py` | eval | contract | active | Failure-time capture diagnostics on every production capture entrance (#374). |
 | `test_capture_mode_binding.py` | eval | contract | active | Binding contract for cudaThreadExchangeStreamCaptureMode. |
 | `test_capture_race_incidence.py` | eval | contract | active | Harness self-verification for the #340 capture-race incidence campaign. |
+| `test_capture_race_incidence_20260909.py` | eval | contract | active | Harness self-verification for the 2026-09-09 #340 incidence campaign. |
 | `test_clean_fifo_bank.py` | eval | behavior | active | Unit tests for CleanFifoBank — the reusable clean-FIFO embedding substrate. |
 | `test_compare_handover_summaries.py` | eval | behavior | active | Tests for the compare-handover-summaries diagnostics CLI (scripts/eval/diagnostics). |
 | `test_core.py` | media,storage,perception,tracking | behavior | active | Cross-package unit tests for core media/storage/tracking helpers. |
