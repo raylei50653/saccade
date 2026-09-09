@@ -89,10 +89,11 @@ Promote 是**另開一支 review PR**，不是捕捉步驟的延伸。
 
    ```bash
    .venv/bin/python - <<'PY'
-   import json, pathlib, shutil
+   import datetime, json, pathlib, shutil
    src = pathlib.Path("docs/reference/runtime_identity.generated.json")
    digest = json.loads(src.read_text())["coordinate"]["implementation"][:16]
-   dst = pathlib.Path(f"docs/reference/runtime_identity/archive/runtime_identity.<YYYY-MM-DD>.{digest}.json")
+   today = datetime.date.today().isoformat()
+   dst = src.parent / "runtime_identity" / "archive" / f"runtime_identity.{today}.{digest}.json"
    shutil.copy2(src, dst)
    print(dst)
    PY
