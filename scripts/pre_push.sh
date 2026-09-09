@@ -122,16 +122,21 @@ fi
 # the rule that substrate does not inherit — but nothing checked whether the
 # substrate still existed. A preset default or kernel constant could move and
 # every state proven on it would quietly stop meaning what it says.
-# Source-derived coordinates remain fail-closed for historical captured-under
-# bindings. The observed GPU/TensorRT environment is deliberately unresolved
-# here: the controlled-host workflow is manual diagnostic only, while successor
-# executions bind the environment, inputs and native artifacts they consume. A
-# later equal probe never turns drift into equivalence.
-echo "── runtime coordinate staleness (portable axes fail-closed)"
+# This runs ADR 022's development arm: while no binding is `current`, publication
+# lag is reported as a warning rather than blocking a push that claims no
+# inherited evidence. Consuming stale evidence, claiming a lagging publication as
+# current, and an incomplete publication all stay fail-closed. Assert that the
+# publication describes HEAD with `--mode attested`; that is a promotion step,
+# not an ordinary one. The observed GPU/TensorRT environment stays unresolved
+# here (its portable recipe half does not), because the controlled-host workflow
+# is manual diagnostic only while successor executions bind the environment,
+# inputs and native artifacts they consume. A later equal probe never turns
+# drift into equivalence.
+echo "── runtime coordinate staleness (development arm; lag warns, misuse fails)"
 if uv run python3 scripts/tools/check_runtime_identity_staleness.py 2>&1; then
   ok "runtime identity"
 else
-  fail "runtime coordinate — static axis moved, or a binding needs re-attestation; see scripts/tools/check_runtime_identity_staleness.py"
+  fail "runtime coordinate — evidence consumed as current, or an incomplete publication; see scripts/tools/check_runtime_identity_staleness.py"
   ERRORS=$((ERRORS + 1))
 fi
 

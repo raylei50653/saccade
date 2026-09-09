@@ -1,11 +1,16 @@
-"""ADR 022's four representative cases, pinned to the checker's behavior today.
+"""ADR 022's four representative cases, now asserting the taxonomy itself.
 
-These fixtures do not assert the taxonomy ADR 022 proposes; they assert what the
-current checker does for each case, so that the default flip in a later PR shows
-up here as an explicit, reviewable diff rather than as a silent change.
+These were written before the default flip, pinned to what the checker did then,
+so that the flip would show up here as an explicit reviewable diff rather than a
+silent change. This is that diff: cases 1 and 4 moved, cases 2 and 3 did not.
 
-Cases 2 and 4 are invariants: their verdicts must survive the flip. Cases 1 and 3
-are the ones the flip is allowed to move, and only case 1's exit code.
+* case 1 — ordinary source change, nothing consuming the publication as current:
+  was exit 1, is now exit 0 with the lag reported as a warning;
+* case 2 — stale-evidence consumption: invariant, still exit 1;
+* case 3 — complete current publication: invariant, still exit 0, and `--strict`
+  still refuses unresolved checks;
+* case 4 — incomplete publication: both gaps are now closed, at read time and
+  before the builder writes.
 """
 
 # scope: system
@@ -42,6 +47,13 @@ _R = "r" * 64
 _P = "p" * 64
 _MOVED = "9" * 64
 
+# The portable half of the environment axis: tracked git blobs, not host state.
+_RECIPE = [
+    {"blob": "a" * 40, "path": "CMakeLists.txt"},
+    {"blob": "b" * 40, "path": "pyproject.toml"},
+    {"blob": "c" * 40, "path": "uv.lock"},
+]
+
 _COORDINATE = {
     "decision_surface": _D,
     "environment": _E,
@@ -51,8 +63,14 @@ _COORDINATE = {
 }
 
 
-def _publication(*, complete: bool = True, **coordinate: str) -> dict[str, Any]:
+def _publication(
+    *,
+    complete: bool = True,
+    recipe: list[dict[str, str]] | None = None,
+    **coordinate: str,
+) -> dict[str, Any]:
     return {
+        "axes": {"environment": {"recipe": list(recipe if recipe else _RECIPE)}},
         "coordinate": {**_COORDINATE, **coordinate},
         "equivalence": {
             "proof": None,
@@ -92,6 +110,7 @@ def _install(
     bindings: dict[str, Any],
     *,
     recomputes_to: dict[str, str] | None = None,
+    recipe: list[dict[str, str]] | None = None,
 ) -> None:
     """Point the CLI at a synthetic repo and pin what the source axes recompute to."""
     for rel, payload in (
@@ -114,15 +133,20 @@ def _install(
         monkeypatch.setattr(
             identity, f"{axis}_axis", lambda digest=digest: {"digest": digest}
         )
+    monkeypatch.setattr(
+        identity, "environment_recipe", lambda: list(recipe if recipe else _RECIPE)
+    )
 
 
 # ── Case 1: ordinary source change, no evidence promotion ───────────────────
 # A developer edits a decision-relevant source and promotes no evidence. Every
 # binding is `unattested`, so nothing consumes the publication as current; the
 # only lag is that the publication describes an older HEAD.
+#
+# This is the case the flip moved: ADR 022 §3 decision 1.
 
 
-def test_case1_ordinary_source_change_is_blocked_today(
+def test_case1_ordinary_source_change_no_longer_blocks_development(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _install(
@@ -132,8 +156,61 @@ def test_case1_ordinary_source_change_is_blocked_today(
         _bindings(_row("quantity.example", None)),
         recomputes_to={"decision_surface": _MOVED},
     )
+    assert staleness.main([]) == 0
+    captured = capsys.readouterr()
+    assert "publication lag (nothing consumes it as current)" in captured.out
+    assert "decision_surface moved and was not republished" in captured.out
+    assert captured.err == ""
+
+
+def test_case1_is_still_a_failure_when_asserting_the_publication_describes_head(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The lag did not stop existing; only who has to care about it changed."""
+    _install(
+        tmp_path,
+        monkeypatch,
+        _publication(),
+        _bindings(_row("quantity.example", None)),
+        recomputes_to={"decision_surface": _MOVED},
+    )
+    assert staleness.main(["--mode", "attested"]) == 1
+    assert "decision_surface moved and was not republished" in capsys.readouterr().err
+
+
+def test_case1_lag_is_a_failure_again_as_soon_as_something_claims_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A `current` binding plus source lag is a false current-attestation.
+
+    The demotion in the sibling test is licensed by nothing consuming the
+    publication, so it must not survive a row that does. This is ADR 022 §4's
+    first remaining exit-1 case and is what keeps decision 1 from being a
+    blanket exemption.
+    """
+    _install(
+        tmp_path,
+        monkeypatch,
+        _publication(),
+        _bindings(_row("quantity.example", _captured())),
+        recomputes_to={"decision_surface": _MOVED},
+    )
     assert staleness.main([]) == 1
     assert "decision_surface moved and was not republished" in capsys.readouterr().err
+
+
+def test_case1_an_unknown_mode_is_a_failure_not_a_weaker_arm(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _install(
+        tmp_path,
+        monkeypatch,
+        _publication(),
+        _bindings(_row("quantity.example", None)),
+    )
+    with pytest.raises(SystemExit) as excinfo:
+        staleness.main(["--mode", "historical-only"])
+    assert excinfo.value.code != 0
 
 
 def test_case1_nothing_consumes_the_publication_as_current(
@@ -248,12 +325,14 @@ def test_case3_strict_still_refuses_unresolved_checks(
 # canonical. Today nothing enforces it, in two independent places.
 
 
-def test_case4_an_incomplete_publication_is_accepted_by_the_checker(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_case4_an_incomplete_publication_is_refused_at_read_time(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Gap: `load_published` never reads `publication_complete`.
+    """Closed: `load_published` now reads `publication_complete`.
 
-    ADR 022 §4 makes this fail-closed. Pinned here so that change is visible.
+    This is the second of the two independent places ADR 022 §4 names, and it is
+    the one that catches a file which arrived by some route other than the
+    builder. Every consumer goes through this reader.
     """
     _install(
         tmp_path,
@@ -261,30 +340,206 @@ def test_case4_an_incomplete_publication_is_accepted_by_the_checker(
         _publication(complete=False),
         _bindings(_row("quantity.example", None)),
     )
-    published = staleness.load_published(tmp_path / staleness.PUBLISHED_REL)
-    assert published["publication_complete"] is False
-    assert staleness.main([]) == 0
+    with pytest.raises(staleness.StalenessError, match="publication_complete"):
+        staleness.load_published(tmp_path / staleness.PUBLISHED_REL)
+    assert staleness.main([]) == 1
+    assert "publication_complete" in capsys.readouterr().err
 
 
-def test_case4_require_complete_reports_after_it_has_already_written(
+def test_case4_require_complete_refuses_before_it_writes(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Gap: the builder's completeness guard runs after `--emit` writes the file.
+    """Closed: the builder's completeness guard now runs before `--emit`.
 
-    With no probe and no runtime inputs the publication is incomplete, yet the
-    target has already been overwritten by the time the non-zero exit is
-    returned. Pointed at the canonical path this destroys a complete publication
-    and then reports failure. ADR 022 §4 requires refusing before the write.
+    With no probe and no runtime inputs the publication is incomplete. It used
+    to be written first and reported second, so pointing it at the canonical
+    path destroyed a complete publication and only then failed. The target must
+    now survive untouched.
     """
     target = tmp_path / "runtime_identity.generated.json"
     target.write_text('{"canonical": "complete"}', encoding="utf-8")
 
     assert identity.main(["--emit", str(target), "--require-complete"]) == 1
-    assert "publication is incomplete" in capsys.readouterr().err
+    captured = capsys.readouterr()
+    assert "publication is incomplete" in captured.err
+    assert "nothing was written" in captured.err
 
-    replaced = json.loads(target.read_text(encoding="utf-8"))
-    assert replaced["publication_complete"] is False
-    assert "canonical" not in replaced
+    assert json.loads(target.read_text(encoding="utf-8")) == {"canonical": "complete"}
+
+
+def test_case4_a_complete_publication_still_writes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The guard must refuse incompleteness, not refuse to publish."""
+    target = tmp_path / "runtime_identity.generated.json"
+    monkeypatch.setattr(
+        identity,
+        "build_publication",
+        lambda **_: {**_publication(), "publication_complete": True},
+    )
+    assert identity.main(["--emit", str(target), "--require-complete"]) == 0
+    assert (
+        json.loads(target.read_text(encoding="utf-8"))["publication_complete"] is True
+    )
+
+
+# ── Portable vs host-observed environment ───────────────────────────────────
+# The environment axis hashes two things with very different checkability: git
+# blobs any host can recompute, and the Torch/CUDA/TensorRT closure only the
+# controlled host can see. Because the whole axis sat behind `--strict`, a
+# `pyproject.toml`/`uv.lock` change was invisible to every ordinary check — which
+# is how the canonical publication was stale from `89515241` (Optuna removal)
+# without anything noticing.
+
+_MOVED_RECIPE = [
+    {"blob": "a" * 40, "path": "CMakeLists.txt"},
+    {"blob": "d" * 40, "path": "pyproject.toml"},
+    {"blob": "e" * 40, "path": "uv.lock"},
+]
+
+
+def test_recipe_lag_is_caught_without_the_controlled_host(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The coverage fix: portable, so it does not wait for `--strict`."""
+    _install(
+        tmp_path,
+        monkeypatch,
+        _publication(),
+        _bindings(_row("quantity.example", None)),
+        recipe=_MOVED_RECIPE,
+    )
+    assert staleness.main(["--mode", "attested"]) == 1
+    failures = capsys.readouterr().err
+    assert "environment recipe moved and was not republished" in failures
+    # Names what moved and what did not, rather than one opaque digest pair.
+    assert "pyproject.toml" in failures and "uv.lock" in failures
+    assert "CMakeLists.txt" not in failures
+
+
+def test_recipe_lag_is_publication_lag_not_a_development_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """It is lag like any other portable axis, so decision 1 applies to it too."""
+    _install(
+        tmp_path,
+        monkeypatch,
+        _publication(),
+        _bindings(_row("quantity.example", None)),
+        recipe=_MOVED_RECIPE,
+    )
+    assert staleness.main([]) == 0
+    assert "publication lag" in capsys.readouterr().out
+
+
+def test_the_observed_toolchain_still_waits_for_the_controlled_host(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The split must not drag host state into the portable tier.
+
+    `environment_axis` is what reads the installed Torch/CUDA/TensorRT closure.
+    A generic runner must keep reporting it unresolved rather than comparing
+    itself to a GPU publication and manufacturing drift.
+    """
+    _install(
+        tmp_path,
+        monkeypatch,
+        _publication(),
+        _bindings(_row("quantity.example", None)),
+        recomputes_to={"environment": _MOVED},
+    )
+    published = staleness.load_published(tmp_path / staleness.PUBLISHED_REL)
+    assert staleness.ENVIRONMENT_RECIPE not in staleness.static_axis_lag(published)
+
+    failures, warnings = staleness.compare_publication(published, probe=None)
+    assert not failures
+    assert any("host-specific environment" in item for item in warnings)
+
+    failures, _ = staleness.compare_publication(
+        published, probe=None, verify_environment=True
+    )
+    assert any("environment moved" in item for item in failures)
+
+
+def test_a_publication_without_recipe_detail_is_unresolved_not_drift(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Same treatment runtime inputs and the probe already get."""
+    publication = _publication()
+    del publication["axes"]
+    _install(
+        tmp_path, monkeypatch, publication, _bindings(_row("quantity.example", None))
+    )
+    published = staleness.load_published(tmp_path / staleness.PUBLISHED_REL)
+    failures, warnings = staleness.compare_publication(published, probe=None)
+    assert not failures
+    assert any("records no environment recipe" in item for item in warnings)
+
+
+# ── The two consumers of `compare_publication` (ADR 022 §7.1) ───────────────
+# `research_lock.publication_precondition` and `run_h2_layer_p.preflight` both
+# unpack a 2-tuple, and Layer P stores `warnings` verbatim in a certificate
+# field. The mode split had to be built out of shared helpers rather than by
+# rewriting this function, so the contract is asserted rather than assumed.
+
+
+def test_compare_publication_keeps_its_shape_and_wording() -> None:
+    import inspect
+
+    signature = inspect.signature(staleness.compare_publication)
+    assert list(signature.parameters) == [
+        "published",
+        "probe",
+        "runtime_input_manifest",
+        "verify_environment",
+    ]
+    for name in ("probe", "runtime_input_manifest", "verify_environment"):
+        assert signature.parameters[name].kind is inspect.Parameter.KEYWORD_ONLY
+    assert signature.parameters["verify_environment"].default is False
+
+
+def test_the_axis_failure_wording_is_unchanged(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Byte-for-byte, because `main` reclassifies by name but callers read text."""
+    _install(
+        tmp_path,
+        monkeypatch,
+        _publication(),
+        _bindings(_row("quantity.example", None)),
+        recomputes_to={"implementation": _MOVED},
+    )
+    published = staleness.load_published(tmp_path / staleness.PUBLISHED_REL)
+    failures, warnings = staleness.compare_publication(published, probe=None)
+    assert isinstance(failures, list) and isinstance(warnings, list)
+    assert failures[0] == (
+        f"implementation moved and was not republished: published {_I}, "
+        f"recomputed {_MOVED}. {staleness.REGENERATE_HINT}"
+    )
+
+
+def test_static_axis_lag_reports_both_sides_of_every_move(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The helper both readings share; empty when the publication is current."""
+    _install(
+        tmp_path,
+        monkeypatch,
+        _publication(),
+        _bindings(_row("quantity.example", None)),
+        recomputes_to={"identity_semantics": _MOVED},
+    )
+    published = staleness.load_published(tmp_path / staleness.PUBLISHED_REL)
+    assert staleness.static_axis_lag(published) == {"identity_semantics": (_S, _MOVED)}
+
+    _install(
+        tmp_path,
+        monkeypatch,
+        _publication(),
+        _bindings(_row("quantity.example", None)),
+    )
+    current = staleness.load_published(tmp_path / staleness.PUBLISHED_REL)
+    assert staleness.static_axis_lag(current) == {}
 
 
 # ── Candidate capture (ADR 022 §5) ──────────────────────────────────────────

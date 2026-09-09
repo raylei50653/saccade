@@ -163,13 +163,35 @@ Layer P **不是** capture 路徑，這一系列不擴它，不改 `run_h2_layer
 
 前四項不改 default、不繞 hook。
 
-| # | 內容 | 動 `identity_semantics`？ |
-|---|---|---|
-| 1 | 本 ADR —— 文件化四類檢查與 lag 預設 | 否 |
-| 2 | Fixtures —— 四個代表案例的測試（live-tree 斷言暫時維持今天） | 否 |
-| 3 | Candidate workflow —— 新檔，可收集完整 candidate，不 promote | 否 |
-| 4 | Math-model 雙臂命名 ＋ **翻 default**（§3 決定 3：獨立、先行） | 否 |
-| 5 | 改 runtime default ＋ 完整 republication | **是** —— 唯一動的一支；必須帶上由 PR 3 在該 head 跑出的完整出版 |
-| 6 | 可選 —— 把 candidate 折回原 workflow 當 mode | 是 |
+| # | 內容 | 動 `identity_semantics`？ | PR |
+|---|---|---|---|
+| 1 | 本 ADR —— 文件化四類檢查與 lag 預設 | 否 | [#359](https://github.com/raylei50653/saccade/pull/359) MERGED |
+| 2 | Fixtures —— 四個代表案例的測試（live-tree 斷言暫時維持今天） | 否 | [#360](https://github.com/raylei50653/saccade/pull/360) MERGED |
+| 3 | Candidate workflow —— 新檔，可收集完整 candidate，不 promote | 否 | [#382](https://github.com/raylei50653/saccade/pull/382) MERGED |
+| 4 | Math-model 雙臂命名 ＋ **翻 default**（§3 決定 3：獨立、先行） | 否 | [#361](https://github.com/raylei50653/saccade/pull/361) MERGED |
+| 5 | 改 runtime default ＋ 完整 republication | **是** —— 唯一動的一支；必須帶上由 PR 3 在該 head 跑出的完整出版 | 本 PR |
+| 6 | 可選 —— 把 candidate 折回原 workflow 當 mode | 是 | 未開工（runner 目前不存在，見下） |
 
 **卡點**：改 `pre_push.sh` / staleness checker / builder 會動 `identity_semantics` digest，今天的 live-tree pytest 會紅。所以必須**先**有 candidate 路徑，才能在 PR 5 合法 republish。PR 4 因為 math-model 不在該軸上，不受此限。
+
+---
+
+## 9. 執行後的兩項修訂（2026-09-09）
+
+本 ADR 是計畫文檔；下列兩點是執行時實測推翻的前提，記錄於此以免後人照字面重建。
+
+### 9.1 §5 的 candidate workflow 目前跑不動
+
+repo 上註冊的 self-hosted runner 數為 **0**（`gh api repos/raylei50653/saccade/actions/runners` → `total_count: 0`）。`runtime_identity.yml` 最後一次成功是 2026-07-30，之後四次 dispatch 都排隊 24h 後自動取消。
+
+而 §1.2 的 chicken-and-egg 是 **workflow 的性質、不是 builder 的**：`build_runtime_identity.py --run-probe --build-dir` 從來不要求座標 current。因此 PR 3 交付的**受支援路徑是本機 runbook**（`docs/reference/runbooks/runtime_identity_republication.md`），workflow 照 §5 寫好但等 runner 回來才可用。
+
+「Controlled host」真正需要的是那十二份 runtime input、CUDA/TensorRT closure 與 build 資源，**不是某個 GitHub runner 身分**。
+
+### 9.2 environment 軸混了兩種可檢性
+
+`environment_axis()` 把 **recipe 半邊**（`CMakeLists.txt`/`pyproject.toml`/`uv.lock` 的 git blob，任何 host 都能重算）和 **observed toolchain**（Torch/CUDA/TensorRT/device，只有 controlled host 能比）hash 成同一個 digest，而整個 axis 只在 `verify_environment` / `--strict` 下比對。
+
+後果：`89515241`（移除 Optuna，merge=`c5e22bab`）改了 `pyproject.toml` 與 `uv.lock` 之後，canonical 的 environment 軸就落後了，**而 `pre_push.sh` 與 `research_lock` 都沒發現**——observed toolchain 完全沒變，落後的純粹是可攜的 git object。
+
+PR 5 因此把 recipe 半邊移進 portable 層（`static_axis_lag()`），兩條臂都會算；observed toolchain 維持只在 `--strict` 下比對。§2 的四類檢查沒有改變，這是把既有分類正確地套用到一個先前被錯置的量。

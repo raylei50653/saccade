@@ -72,14 +72,14 @@ cmake --build build/runtime_identity --parallel
   manifest，所以不需要另外跑一次 `h2_runtime_inputs.py`。
 - 成功的候選會有 `publication_complete: true`、五軸皆非 null。
 
-> ⚠️ **`--emit` 一律指向 scratch，絕不直接指向
+> **`--emit` 一律指向 scratch，不要直接指向
 > `docs/reference/runtime_identity.generated.json`。**
-> `--require-complete` 目前排在 `--emit` 寫檔**之後**
-> （`scripts/tools/build_runtime_identity.py`，由
-> `tests/contract/test_adr_022_check_taxonomy.py::test_case4_require_complete_reports_after_it_has_already_written`
-> 釘住）。指向 canonical 路徑時，它會**先把那份完整出版覆蓋掉**，然後才回非零——
-> 你會同時失去舊出版與新出版。修這個順序屬於 ADR §8 的 PR 5；在那之前，「emit 到
-> scratch」就是唯一的守衛。
+> `--require-complete` 現在會在**寫檔前**拒絕（PR 5 修好，由
+> `tests/contract/test_adr_022_check_taxonomy.py::test_case4_require_complete_refuses_before_it_writes`
+> 釘住），`load_published` 也會在**讀取端**拒絕不完整出版，兩道各自獨立。
+>
+> 這條規則因此從「唯一守衛」降級成 **defense-in-depth**，但仍然保留：候選本來就
+> 應該先被審過才進 canonical，中間隔一個 scratch 檔就是那道 review 的所在。
 
 ## 3. 審查與 promote
 
@@ -109,11 +109,15 @@ Promote 是**另開一支 review PR**，不是捕捉步驟的延伸。
    從幾變幾、每一項變動的來源是什麼、哪幾軸沒動、probe 是**重跑**而非沿用——並明說
    probe 相等**不**構成 equivalence 主張。摘要欄不得比細節欄寬。
 
-4. 驗證：
+4. 驗證——promote 要用 **attested** 臂，因為 promote 正是在主張「這份出版描述現在
+   的 HEAD」：
 
    ```bash
-   .venv/bin/python scripts/tools/check_runtime_identity_staleness.py   # 應 exit 0
+   .venv/bin/python scripts/tools/check_runtime_identity_staleness.py --mode attested
    ```
+
+   日常 `pre_push.sh` 跑的是預設的 development 臂（見 §6）：那條臂 **exit 0 不代表
+   出版是 current**，只代表沒有人把它當 current 在消費。
 
 ### 什麼仍然必須 exit 1
 
@@ -156,6 +160,27 @@ Promote **不能**用來讓下列任何一項通過（ADR 022 §4）：
 
 > `docs/reference/math_model.md` 的 bytes 本身是 attested 的。**任何 PR 都不要順手
 > 動它**——動了就欠一次完整 re-audit。
+
+## 6. 兩條臂：什麼時候 lag 會擋人
+
+ADR 022 §3 決定 1（PR 5 起生效）：
+
+| Mode | 問什麼 | portable lag |
+|---|---|---|
+| `development`（預設，`pre_push.sh` 用） | 有沒有人把這份出版當成 HEAD 為真 | 沒有 `current` binding ⇒ **warning**，不擋 |
+| `attested` | 這份出版描述現在的 HEAD 嗎 | **failure** |
+
+**「portable lag」＝ 任何機器都能用 git object 重算的東西**：三條 source 軸，加上
+environment 的 **recipe 半邊**（`CMakeLists.txt` / `pyproject.toml` / `uv.lock`）。
+觀測到的 Torch/CUDA/TensorRT closure 是 host state，只在 `--strict` 下於 controlled
+host 比對。
+
+> 這兩半以前綁成一個「只有 `--strict` 才檢查」的原子塊，所以 `89515241`（移除
+> Optuna）改了 `pyproject.toml` / `uv.lock` 之後，canonical 的 environment 軸落後
+> 了，卻沒有任何日常檢查發現。現在 recipe 半邊在兩條臂裡都會被算。
+
+即使在 development 臂，下列仍然 exit 1（ADR §4）：有 `current` binding 卻帶 lag、
+stale / re_attestation_required binding、不完整出版、`equivalence` 不是 `unproven`。
 
 ## 5. 分類提醒
 

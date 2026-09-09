@@ -1,11 +1,31 @@
 #!/usr/bin/env python3
 """Check runtime-coordinate lag without treating probe equality as equivalence.
 
-Static coordinate drift is a hard publication failure. For bound research,
-decision-surface, identity-semantics, or observed-probe drift is ``stale``;
-implementation, environment, or runtime-input drift with the same probe is
-``re_attestation_required``. There is no behavior-preserving shortcut in this
-schema because no equivalence verifier exists.
+For bound research, decision-surface, identity-semantics, or observed-probe
+drift is ``stale``; implementation, environment, or runtime-input drift with the
+same probe is ``re_attestation_required``. There is no behavior-preserving
+shortcut in this schema because no equivalence verifier exists.
+
+ADR 022 separates two questions that used to share one exit code.
+
+``--mode development`` (the default) asks whether anything is **consuming** the
+publication as true of HEAD. When no binding classifies ``current``, portable
+lag means only that the publication describes an older HEAD, and that is
+reported as a warning: ordinary development does not owe a republication for
+evidence nobody is claiming. Every other failure stays fail-closed, including
+lag the moment a binding does classify ``current`` -- that combination is a
+false current-attestation, not lag.
+
+``--mode attested`` adds the claim that the publication describes HEAD now.
+Portable lag is a failure there. Run it when you intend to assert that: before
+promoting a publication, or when a consumer binds evidence to it.
+
+Portable lag is what any host can recompute from git objects: the three source
+axes and the environment *recipe* (``CMakeLists.txt``/``pyproject.toml``/
+``uv.lock``). The observed Torch/CUDA/TensorRT closure is host state and is
+compared only under ``--strict`` on the controlled host. Those two used to be
+one atom behind ``--strict``, which is how a ``pyproject.toml`` change stayed
+invisible to every ordinary check.
 """
 # status: stable
 
@@ -32,6 +52,20 @@ BINDINGS_SCHEMA = "runtime_coordinate_bindings_v1"
 STALE_COORDINATE_AXES = ("decision_surface", "identity_semantics")
 RE_ATTESTATION_AXES = ("environment", "implementation", "runtime_inputs")
 ALL_COORDINATE_AXES = (*STALE_COORDINATE_AXES, *RE_ATTESTATION_AXES)
+
+# The source-derived coordinate axes, recomputable from git on any host.
+PORTABLE_COORDINATE_AXES = (
+    "decision_surface",
+    "implementation",
+    "identity_semantics",
+)
+# Not a coordinate axis: the portable half of the environment axis, reported
+# under its own name so it is never confused with the observed toolchain.
+ENVIRONMENT_RECIPE = "environment.recipe"
+
+DEVELOPMENT_MODE = "development"
+ATTESTED_MODE = "attested"
+MODES = (DEVELOPMENT_MODE, ATTESTED_MODE)
 
 REGENERATE_HINT = (
     "regenerate with: uv run python scripts/tools/build_runtime_identity.py "
@@ -68,6 +102,16 @@ def load_published(path: Path) -> dict[str, Any]:
     if not isinstance(equivalence, Mapping) or equivalence.get("state") != "unproven":
         raise StalenessError(
             f"{path}: equivalence must remain unproven until a verifier is versioned"
+        )
+    # ADR 022 §4: an incomplete publication must never stand in for a complete
+    # one. The builder refuses to write one over the canonical path; this is the
+    # second, independent place, so a file that arrives some other way is still
+    # refused at read time by every consumer.
+    if payload.get("publication_complete") is not True:
+        raise StalenessError(
+            f"{path}: publication_complete is "
+            f"{payload.get('publication_complete')!r}; an incomplete publication "
+            f"cannot stand in for a complete one — {REGENERATE_HINT}"
         )
     return payload
 
@@ -125,6 +169,92 @@ def _published_binding(publication: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def _environment_recipe_lag(
+    published: Mapping[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any]] | None:
+    """Compare the environment axis's git blobs; None when there is nothing to compare.
+
+    Returns ``(published_blobs, recomputed_blobs)`` when they differ. A
+    publication that carries no `axes.environment.recipe` detail predates this
+    check; that is reported as unresolved by the caller rather than invented as
+    drift, which is the same treatment runtime inputs and the probe already get.
+    """
+    axes = published.get("axes")
+    if not isinstance(axes, Mapping):
+        return None
+    environment = axes.get("environment")
+    if not isinstance(environment, Mapping):
+        return None
+    recorded = environment.get("recipe")
+    if not isinstance(recorded, list) or not recorded:
+        return None
+    was = {
+        item.get("path"): item.get("blob")
+        for item in recorded
+        if isinstance(item, Mapping)
+    }
+    now = {item["path"]: item["blob"] for item in identity.environment_recipe()}
+    return None if was == now else (was, now)
+
+
+def _publication_records_its_recipe(published: Mapping[str, Any]) -> bool:
+    axes = published.get("axes")
+    if not isinstance(axes, Mapping):
+        return False
+    environment = axes.get("environment")
+    if not isinstance(environment, Mapping):
+        return False
+    recorded = environment.get("recipe")
+    return isinstance(recorded, list) and bool(recorded)
+
+
+def static_axis_lag(
+    published: Mapping[str, Any],
+) -> dict[str, tuple[Any, Any]]:
+    """Portable lag only: name -> (published, recomputed), empty when current.
+
+    "Portable" means recomputable from git objects on any host, so every entry
+    here is checkable during ordinary development. Callers decide what it means:
+    `compare_publication` treats it as failure, `--mode development` treats it as
+    a warning until something claims the publication as current. Splitting that
+    decision out of the recomputation is what lets both readings share one
+    definition of what moved.
+
+    The observed Torch/CUDA/TensorRT closure is deliberately absent: it is host
+    state, not a git object, and only the controlled host can compare it.
+    """
+    coordinate = published["coordinate"]
+    recomputed = {
+        "decision_surface": identity.decision_surface_axis()["digest"],
+        "implementation": identity.implementation_axis()["digest"],
+        "identity_semantics": identity.identity_semantics_axis()["digest"],
+    }
+    lag: dict[str, tuple[Any, Any]] = {
+        axis: (coordinate.get(axis), measured)
+        for axis, measured in recomputed.items()
+        if coordinate.get(axis) != measured
+    }
+    recipe = _environment_recipe_lag(published)
+    if recipe is not None:
+        lag[ENVIRONMENT_RECIPE] = recipe
+    return lag
+
+
+def _lag_message(name: str, was: Any, measured: Any) -> str:
+    """The wording is load-bearing: two consumers match on these strings."""
+    if name == ENVIRONMENT_RECIPE:
+        moved = sorted(path for path, blob in measured.items() if was.get(path) != blob)
+        return (
+            "environment recipe moved and was not republished: "
+            + ", ".join(f"{path} {was.get(path)} -> {measured[path]}" for path in moved)
+            + f". {REGENERATE_HINT}"
+        )
+    return (
+        f"{name} moved and was not republished: published "
+        f"{was}, recomputed {measured}. {REGENERATE_HINT}"
+    )
+
+
 def compare_publication(
     published: Mapping[str, Any],
     *,
@@ -139,21 +269,33 @@ def compare_publication(
     so it is checked only on the controlled attestation host. A generic CPU CI
     runner must report that check as unresolved instead of comparing itself to
     a GPU publication and manufacturing drift.
+
+    This is the attested reading: portable lag is a failure. `--mode
+    development` composes the same pieces with lag reclassified, so this
+    function's signature, return shape and failure strings stay exactly as its
+    two external consumers (`research_lock.publication_precondition` and
+    `run_h2_layer_p.preflight`, which stores `warnings` in a certificate) read
+    them today.
     """
-    recomputed = {
-        "decision_surface": identity.decision_surface_axis()["digest"],
-        "implementation": identity.implementation_axis()["digest"],
-        "identity_semantics": identity.identity_semantics_axis()["digest"],
-    }
     coordinate = published["coordinate"]
     failures: list[str] = []
     warnings: list[str] = []
-    for axis, measured in recomputed.items():
-        if coordinate.get(axis) != measured:
-            failures.append(
-                f"{axis} moved and was not republished: published "
-                f"{coordinate.get(axis)}, recomputed {measured}. {REGENERATE_HINT}"
-            )
+    lag = static_axis_lag(published)
+    for axis in PORTABLE_COORDINATE_AXES:
+        if axis in lag:
+            failures.append(_lag_message(axis, *lag[axis]))
+
+    # New coverage, deliberately outside `verify_environment`: these are git
+    # blobs, so the check is portable even though the axis they belong to is
+    # not. Bundling them with the observed toolchain is what hid a
+    # `pyproject.toml`/`uv.lock` change from every non-controlled-host check.
+    if ENVIRONMENT_RECIPE in lag:
+        failures.append(_lag_message(ENVIRONMENT_RECIPE, *lag[ENVIRONMENT_RECIPE]))
+    elif not _publication_records_its_recipe(published):
+        warnings.append(
+            "publication records no environment recipe; its portable "
+            "CMakeLists.txt/pyproject.toml/uv.lock identity is unresolved"
+        )
 
     if verify_environment:
         measured_environment = identity.environment_axis()["digest"]
@@ -203,6 +345,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--probe-from", type=Path, default=None)
     parser.add_argument("--runtime-inputs-from", type=Path, default=None)
     parser.add_argument("--strict", action="store_true", help="fail unresolved checks")
+    parser.add_argument(
+        "--mode",
+        choices=MODES,
+        default=DEVELOPMENT_MODE,
+        help=(
+            "development (default): portable lag is a warning while no binding is "
+            "current. attested: portable lag is a failure, i.e. the publication "
+            "claims to describe HEAD."
+        ),
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -218,18 +370,34 @@ def main(argv: list[str] | None = None) -> int:
             manifest = runtime_inputs.load_manifest(
                 args.runtime_inputs_from, verify_files=True
             )
+
+        # Bindings first: whether portable lag is a failure depends on whether
+        # anything claims the publication as current, so the walk cannot run
+        # after the decision it informs.
+        verdicts: dict[str, list[str]] = {}
+        binding_target = _published_binding(published)
+        for binding in bindings["bindings"]:
+            verdict = classify_binding(binding.get("captured_under"), binding_target)
+            verdicts.setdefault(verdict, []).append(str(binding.get("object")))
+        consumed_as_current = bool(verdicts.get("current"))
+
         failures, warnings = compare_publication(
             published,
             probe=probe_digest,
             runtime_input_manifest=manifest,
             verify_environment=args.strict,
         )
-
-        lag: dict[str, list[str]] = {}
-        binding_target = _published_binding(published)
-        for binding in bindings["bindings"]:
-            verdict = classify_binding(binding.get("captured_under"), binding_target)
-            lag.setdefault(verdict, []).append(str(binding.get("object")))
+        if args.mode == DEVELOPMENT_MODE and not consumed_as_current:
+            # Reclassify by name, never by matching the message text: the lag
+            # entries come from the same helper `compare_publication` used.
+            lag = static_axis_lag(published)
+            demoted = {_lag_message(name, *value) for name, value in lag.items()}
+            failures = [message for message in failures if message not in demoted]
+            warnings.extend(
+                f"publication lag (nothing consumes it as current): "
+                f"{_lag_message(name, *lag[name])}"
+                for name in sorted(lag)
+            )
     except (
         StalenessError,
         identity.IdentityError,
@@ -245,13 +413,13 @@ def main(argv: list[str] | None = None) -> int:
         "current",
         "unattested",
     ):
-        for name in sorted(lag.get(verdict, [])):
+        for name in sorted(verdicts.get(verdict, [])):
             print(f"  {verdict:26} {name}")
     for verdict in ("stale", "re_attestation_required"):
-        if lag.get(verdict):
+        if verdicts.get(verdict):
             failures.append(
                 f"{verdict} bindings are inadmissible: "
-                + ", ".join(sorted(lag[verdict]))
+                + ", ".join(sorted(verdicts[verdict]))
             )
     for message in warnings:
         print(f"warning: {message}")
