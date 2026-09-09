@@ -98,6 +98,16 @@ ignore_errors = true
 module = ["saccade.perception.temporal_yolo.*"]
 ignore_errors = true
 
+# A transcription of torch.cuda.make_graphed_callables, kept byte-comparable to
+# upstream by tests/unit/eval/test_torch_graphs_port.py -- which is also what
+# stops anyone editing it to satisfy our stricter settings. Upstream is not
+# written to `strict`, so the three errors it raises here (two untyped torch
+# calls and one list/tuple argument) are upstream's, and silencing them in place
+# would put our text and torch's out of sync for no behavioural gain.
+[[tool.mypy.overrides]]
+module = ["saccade.perception.eval._torch_graphs"]
+ignore_errors = true
+
 [[tool.mypy.overrides]]
 module = [
     "build_fpn_reid",
