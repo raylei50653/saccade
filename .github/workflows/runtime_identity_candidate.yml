@@ -1,0 +1,152 @@
+name: H2 Candidate Runtime Coordinate Capture
+
+# Manual candidate capture only. It content-binds fixtures/assets, rebuilds the
+# native extension, reruns the bounded MOT17-09 behavior probe and emits a
+# *candidate* runtime coordinate as a workflow artifact.
+#
+# It is not a pull-request or main-branch gate. It publishes nothing, seals
+# nothing, commits nothing and grants no execution authority. Probe equality
+# remains diagnostic and never establishes equivalence.
+#
+# The difference from runtime_identity.yml is deliberate and is the whole point
+# of this file: that workflow gates on the coordinate already being current
+# before it will produce a probe, so it can verify an existing publication but
+# cannot collect the evidence needed to update a stale one. This one has no such
+# precondition, so it is a recovery path rather than a verifier. It therefore
+# reports coordinate lag without gating on it.
+#
+# Promotion is a separate human review PR: archive the outgoing canonical, copy
+# the reviewed candidate over it, and account for every moved axis. See
+# docs/reference/runbooks/runtime_identity_republication.md. On a host that
+# holds the twelve runtime inputs the same capture runs locally without any
+# runner at all; that runbook is the supported path and this workflow is the CI
+# equivalent of it.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Ref to capture a candidate coordinate for
+        required: true
+        default: main
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  UV_EXTRA_INDEX_URL: https://pypi.nvidia.com/
+
+jobs:
+  candidate-capture:
+    # Same controlled host as the diagnostic workflow: it supplies the real CUDA
+    # / TensorRT runtime closure. This job enters no research authority.
+    runs-on: [self-hosted, linux, x64, h0-qualification]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 1
+
+      - name: Bind controlled host-local runtime inputs into the checkout
+        run: |
+          # Durable host tree, relative to GITHUB_WORKSPACE (no absolute path in git).
+          # Self-hosted layout: $RUNNER/_work/<repo>/<repo> → host permanent tree.
+          # Override with SACCADE_CONTROLLED_RESOURCE_ROOT only if the host differs.
+          resource_root="${SACCADE_CONTROLLED_RESOURCE_ROOT:-../../../../developer/ai/saccade}"
+          if [ "${resource_root#/}" = "${resource_root}" ]; then
+            resource_root="${GITHUB_WORKSPACE}/${resource_root}"
+          fi
+          resource_root="$(cd "${resource_root}" && pwd)"
+          echo "controlled resource root: ${resource_root}"
+
+          bind_runtime_input() {
+            relative_path="$1"
+            source="${resource_root}/${relative_path}"
+            target="${GITHUB_WORKSPACE}/${relative_path}"
+            test -e "${source}"
+            test ! -e "${target}"
+            test ! -L "${target}"
+            mkdir -p "$(dirname "${target}")"
+            ln -s --relative "${source}" "${target}"
+          }
+
+          # All seven § C3.2 item 10 sequences: the runtime-input manifest binds
+          # the whole measurement member set in both phases, so a two-sequence
+          # bind would fail the manifest step rather than produce a partial one.
+          bind_runtime_input "datasets/MOT17/train/MOT17-02-SDP"
+          bind_runtime_input "datasets/MOT17/train/MOT17-04-SDP"
+          bind_runtime_input "datasets/MOT17/train/MOT17-05-SDP"
+          bind_runtime_input "datasets/MOT17/train/MOT17-09-SDP"
+          bind_runtime_input "datasets/MOT17/train/MOT17-10-SDP"
+          bind_runtime_input "datasets/MOT17/train/MOT17-11-SDP"
+          bind_runtime_input "datasets/MOT17/train/MOT17-13-SDP"
+          bind_runtime_input "runs/mamba_gt_yolo26m_v14replica_t3_t1/best.ckpt"
+          bind_runtime_input "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt"
+          bind_runtime_input "models/yolo/yolo26m.pt"
+          bind_runtime_input "models/yolo/yolo26m_backbone_640_best.engine"
+          bind_runtime_input "models/yolo/mamba_head_26m.engine"
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          # Reuse the controlled host's persistent uv cache without downloading
+          # or uploading a multi-GiB GitHub Actions cache.
+          enable-cache: false
+          cache-local-path: ~/.cache/uv
+          prune-cache: false
+
+      - name: Sync dependencies
+        run: uv sync --frozen --extra dali
+
+      - name: Build the native extension
+        run: |
+          cmake -S . -B build/runtime_identity -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/runtime_identity --parallel
+
+      - name: Bind fixtures, weights, engines, plugin and third-party runtime
+        run: |
+          uv run --frozen python scripts/tools/h2_runtime_inputs.py \
+            --build-dir build/runtime_identity \
+            --emit "${RUNNER_TEMP}/runtime-inputs.json"
+
+      # No currentness gate here, by design: requiring a current coordinate
+      # before capture is exactly what makes a stale coordinate unrecoverable.
+
+      - name: Capture a fresh bounded behavior probe
+        # A candidate never reuses an earlier probe (ADR 022 §3 decision 2).
+        env:
+          SACCADE_BUILD_PATH: ${{ github.workspace }}/build/runtime_identity
+        run: |
+          uv run --frozen python scripts/tools/h2_behavioral_identity.py \
+            --identity-mode --emit "${RUNNER_TEMP}/behavior.json"
+
+      - name: Build the candidate publication
+        # RUNNER_TEMP, never the canonical path: --require-complete is evaluated
+        # after --emit has already written, so pointing it at the canonical
+        # publication would destroy a complete one and only then report failure.
+        run: |
+          uv run --frozen python scripts/tools/build_runtime_identity.py \
+            --probe-from "${RUNNER_TEMP}/behavior.json" \
+            --runtime-inputs-from "${RUNNER_TEMP}/runtime-inputs.json" \
+            --emit "${RUNNER_TEMP}/runtime_identity.candidate.json" \
+            --require-complete
+
+      - name: Report coordinate lag (diagnostic, non-gating)
+        # Reviewers need to see which axes moved. This must not gate: refusing
+        # here would reintroduce the precondition this workflow exists to avoid.
+        run: |
+          uv run --frozen python scripts/tools/check_runtime_identity_staleness.py \
+            --probe-from "${RUNNER_TEMP}/behavior.json" \
+            --runtime-inputs-from "${RUNNER_TEMP}/runtime-inputs.json" || true
+
+      - name: Upload the candidate for review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-coordinate-candidate-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/runtime_identity.candidate.json
+            ${{ runner.temp }}/behavior.json
+            ${{ runner.temp }}/runtime-inputs.json
+          if-no-files-found: warn

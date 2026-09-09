@@ -28,6 +28,11 @@ if _TOOLS.as_posix() not in sys.path:
 
 import build_runtime_identity as identity  # noqa: E402
 import check_runtime_identity_staleness as staleness  # noqa: E402
+import h2_path_partition as partition  # noqa: E402
+
+_CANDIDATE_WORKFLOW_REL = ".github/workflows/runtime_identity_candidate.yml"
+_RUNBOOK_REL = "docs/reference/runbooks/runtime_identity_republication.md"
+_ARCHIVE_REL = "docs/reference/runtime_identity/archive"
 
 _D = "d" * 64
 _E = "e" * 64
@@ -280,6 +285,92 @@ def test_case4_require_complete_reports_after_it_has_already_written(
     replaced = json.loads(target.read_text(encoding="utf-8"))
     assert replaced["publication_complete"] is False
     assert "canonical" not in replaced
+
+
+# ── Candidate capture (ADR 022 §5) ──────────────────────────────────────────
+# The recovery path out of a stale coordinate. `runtime_identity.yml` refuses to
+# produce a probe until the coordinate is already current, so it can verify an
+# existing publication but never collect the evidence that would update one.
+# These pin the two properties that make the candidate path a recovery path at
+# all, plus the one that keeps it from needing a republication of its own.
+
+
+def _candidate_workflow() -> str:
+    return (_REPO / _CANDIDATE_WORKFLOW_REL).read_text(encoding="utf-8")
+
+
+def test_the_candidate_workflow_does_not_require_a_current_coordinate() -> None:
+    """The precondition it exists to avoid, named literally.
+
+    `runtime_identity.yml` gates on this step before capturing anything. If it
+    ever reappears here the file stops being a recovery path and silently
+    becomes a second verifier.
+    """
+    workflow = _candidate_workflow()
+    assert "Coordinate must already be current" not in workflow
+    # The staleness invocation it does carry is a report, not a gate.
+    for line in workflow.splitlines():
+        if "check_runtime_identity_staleness.py" in line:
+            break
+    else:  # pragma: no cover - defensive
+        pytest.fail("the candidate workflow no longer reports coordinate lag")
+    invocation = workflow.split("check_runtime_identity_staleness.py", 1)[1]
+    assert invocation.split("- name:", 1)[0].rstrip().endswith("|| true")
+
+
+def test_the_candidate_workflow_is_manual_and_read_only() -> None:
+    """Same shape as `test_controlled_host_diagnostic_is_manual_only`."""
+    workflow = _candidate_workflow()
+    triggers = workflow.split("\non:\n", 1)[1].split("\npermissions:", 1)[0]
+    assert "workflow_dispatch:" in triggers
+    assert "pull_request:" not in triggers
+    assert "push:" not in triggers
+    assert "paths:" not in triggers
+    assert "permissions:\n  contents: read\n" in workflow
+    assert "ref: ${{ inputs.ref }}" in workflow
+
+
+def test_the_candidate_workflow_captures_a_fresh_probe() -> None:
+    """ADR 022 §3 decision 2: a candidate never reuses an earlier probe."""
+    workflow = _candidate_workflow()
+    assert "h2_behavioral_identity.py \\\n            --identity-mode" in workflow
+    assert "--require-complete" in workflow
+
+
+def test_the_candidate_workflow_never_emits_over_the_canonical_publication() -> None:
+    """`--require-complete` still writes before it refuses (case 4 above).
+
+    Until that ordering is fixed, emitting to the canonical path destroys a
+    complete publication and only then reports failure, so no automated caller
+    may name it as a target.
+    """
+    workflow = _candidate_workflow()
+    assert staleness.PUBLISHED_REL not in workflow
+    assert '--emit "${RUNNER_TEMP}/runtime_identity.candidate.json"' in workflow
+
+
+def test_the_candidate_workflow_does_not_move_a_published_axis() -> None:
+    """Why this PR needs no republication of its own.
+
+    Only the exact path `.github/workflows/runtime_identity.yml` is identity
+    semantics; the `.github/` prefix is plumbing, and plumbing is not one of the
+    published coordinate axes. Adding a sibling workflow therefore moves nothing.
+    """
+    assert partition.classify(_CANDIDATE_WORKFLOW_REL) == "plumbing_only"
+    assert _CANDIDATE_WORKFLOW_REL not in partition.IDENTITY_SEMANTICS_PATHS
+    assert "plumbing_only" not in identity.ALL_COORDINATE_AXES
+
+
+def test_the_runbook_documents_the_archive_and_not_the_destructive_emit() -> None:
+    """The supported path is prose, so the two load-bearing parts are pinned.
+
+    The archive location is ADR 022 §3 decision 5; the forbidden combination is
+    the one that overwrites a complete canonical before reporting failure.
+    """
+    runbook = (_REPO / _RUNBOOK_REL).read_text(encoding="utf-8")
+    assert _ARCHIVE_REL in runbook
+    assert f"--emit {staleness.PUBLISHED_REL}" not in runbook
+    assert (_REPO / _ARCHIVE_REL / "README.md").is_file()
 
 
 # ── Live tree ───────────────────────────────────────────────────────────────
