@@ -27,6 +27,7 @@
 | `test_decode_stream_ordering.py` | eval | behavior | active | Decode producer stream contract (issue #340 Phase 2B, TorchvisionGpuStreamer). |
 | `test_double_buffer.py` | eval | behavior | active | Tests for the evaluator double-buffer path (perception.eval.evaluator). |
 | `test_eval_repeat_identity.py` | eval | contract | active | Fail-closed MOT repeat-identity harness for issue #363. |
+| `test_eval_stage_fingerprint.py` | eval | contract | active | Fail-closed per-stage fingerprints for issue #363. |
 | `test_eval_utils.py` | eval | behavior | active | Tests for the MOT17 eval arg parser and runtime-env setup (scripts.eval.mot17_args). |
 | `test_evaluator.py` | eval | behavior | active | Tests for the MOT evaluator and stages (perception.eval.evaluator). |
 | `test_external_fp_filter_runtime.py` | eval | behavior | active | Tests for the runtime external-FP filter (perception.eval.evaluator._apply_external_fp_filter). |
