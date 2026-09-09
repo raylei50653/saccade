@@ -28,7 +28,9 @@ from typing import Any, Iterable, Mapping, Sequence
 
 import numpy as np
 
-SCHEMA_ID = "eval_stage_fingerprint_v1"
+SCHEMA_ID = "eval_stage_fingerprint_v2"
+LEGACY_SCHEMA_IDS = frozenset(("eval_stage_fingerprint_v1",))
+SUPPORTED_SCHEMA_IDS = LEGACY_SCHEMA_IDS | {SCHEMA_ID}
 
 # Producer-facing order.  Earlier stages bound later ones.  post-decode
 # input is intentionally absent: hashing full frames would add a D2H of
@@ -54,6 +56,7 @@ DIVERGENCE_NAME = "first_divergence.json"
 KIND_FIRST_OBSERVABLE = "first_observable_divergence"
 KIND_INCOMPLETE = "incomplete"
 KIND_INSUFFICIENT = "instrumentation_insufficient"
+KIND_STAGE_ONLY = "stage_divergence_without_mot_divergence"
 
 # Frozen before the live Block S localization.  Do not retune after seeing
 # results.  ``sufficient`` means the producing-path boundary is concrete
@@ -147,6 +150,7 @@ LOCALIZATION_BUDGET_RUNS = 16
 SESSION_PAIR_FOUND = "pair_found"
 SESSION_IN_PROGRESS = "in_progress"
 SESSION_BUDGET_EXHAUSTED_IDENTICAL = "budget_exhausted_identical"
+SESSION_INVALID = "invalid_session"
 LOCALIZATION_CONFIG_BLOCK_S = "block_s"
 LOCALIZATION_CONFIG_GPU_DECODE = "gpu_decode"
 
@@ -222,6 +226,7 @@ def read_localization_session(
     divergent_pair: bool,
     config: str = LOCALIZATION_CONFIG_BLOCK_S,
     producing_path_verdict: str | None = None,
+    session_valid: bool = True,
 ) -> LocalizationSessionReading:
     """Frozen localization-session reading for one preregistered config.
 
@@ -240,6 +245,20 @@ def read_localization_session(
         raise ValueError(
             f"localization session n_runs={n_runs} exceeds preregistered "
             f"{config} budget {budget_runs}"
+        )
+    if not session_valid:
+        return LocalizationSessionReading(
+            kind=SESSION_INVALID,
+            n_runs=n_runs,
+            budget_runs=budget_runs,
+            divergent_pair=False,
+            apply_condition2_rules=False,
+            allowed_claim=(
+                "eval failure, invalid MOT output, or incomplete fingerprints; "
+                "no localization-session reading"
+            ),
+            producing_path_unresolved=True,
+            config=config,
         )
     if divergent_pair:
         sufficient = producing_path_verdict == VERDICT_SUFFICIENT
@@ -475,6 +494,16 @@ def read_condition_2(*, kind: str, stage: str | None) -> Condition2Reading:
             first_divergent_stage=None,
             producing_path_verdict=VERDICT_INSUFFICIENT,
             allowed_claim=INSTRUMENTATION_INSUFFICIENT_CLAIM,
+        )
+    if kind == KIND_STAGE_ONLY:
+        return Condition2Reading(
+            last_identical_stage=None,
+            first_divergent_stage=None,
+            producing_path_verdict=VERDICT_NOT_APPLICABLE,
+            allowed_claim=(
+                "stage fingerprints diverged without a complete divergent MOT "
+                "pair; no condition-2 reading"
+            ),
         )
     if kind != KIND_FIRST_OBSERVABLE:
         raise ValueError(f"unknown divergence kind {kind!r}")
@@ -994,6 +1023,15 @@ class StageFingerprintCollector:
         track_results: Mapping[str, Any],
         lines: Sequence[str],
     ) -> None:
+        self.observe_tracker_output(sequence, frame, track_results)
+        self.observe_mot_lines(sequence, frame, "mot", lines)
+
+    def observe_tracker_output(
+        self,
+        sequence: str,
+        frame: int,
+        track_results: Mapping[str, Any],
+    ) -> None:
         count_raw = track_results.get("count", 0)
         count = int(count_raw.item() if hasattr(count_raw, "item") else count_raw)
         boxes = track_results.get("boxes")
@@ -1027,7 +1065,6 @@ class StageFingerprintCollector:
                 np.empty((0,), dtype=np.int32),
                 ids=np.empty((0,), dtype=np.int32),
             )
-        self.observe_mot_lines(sequence, frame, "mot", lines)
 
     def observe_mot_file(self, sequence: str, lines: Sequence[str]) -> None:
         by_frame: dict[int, list[str]] = {}
@@ -1039,6 +1076,28 @@ class StageFingerprintCollector:
             by_frame.setdefault(frame, []).append(text)
         for frame, frame_lines in by_frame.items():
             self.observe_mot_lines(sequence, frame, "mot_file", frame_lines)
+
+    def _fill_empty_downstream_records(self) -> None:
+        """Represent early-exit frames explicitly instead of as missing data."""
+
+        empty_detection = fingerprint_detections(
+            boxes=np.empty((0, 4), dtype=np.float32),
+            scores=np.empty((0,), dtype=np.float32),
+            classes=np.empty((0,), dtype=np.int32),
+            ids=np.empty((0,), dtype=np.int32),
+        )
+        empty_mot = fingerprint_mot_lines(())
+        detector_frames = sorted(
+            (sequence, frame)
+            for sequence, frame, stage in self._seen
+            if stage == "detector_output"
+        )
+        for sequence, frame in detector_frames:
+            for stage in STAGES[1:]:
+                if record_key(sequence, frame, stage) in self._seen:
+                    continue
+                payload = empty_detection if stage in DETECTION_STAGES else empty_mot
+                self._store(sequence, frame, stage, payload)
 
     def finalize(self) -> dict[str, Any]:
         measured = self.observer_effect_measured()
@@ -1065,6 +1124,7 @@ class StageFingerprintCollector:
             )
         self._gpu.clear()
         self._host.clear()
+        self._fill_empty_downstream_records()
         self.records = [dict(item) for item in sort_records(self.records)]
         manifest = write_fingerprint_log(
             self.output_dir,
@@ -1289,10 +1349,10 @@ def compare_stage_fingerprints(
             complete = False
             reasons.append(f"run {index}: missing {FINGERPRINT_DIRNAME}/")
             continue
-        if manifest.get("schema") != SCHEMA_ID:
+        if manifest.get("schema") not in SUPPORTED_SCHEMA_IDS:
             complete = False
             reasons.append(
-                f"run {index}: schema {manifest.get('schema')!r} != {SCHEMA_ID}"
+                f"run {index}: unsupported schema {manifest.get('schema')!r}"
             )
         if not records:
             complete = False
@@ -1300,6 +1360,13 @@ def compare_stage_fingerprints(
         if not manifest.get("complete", False):
             complete = False
             reasons.append(f"run {index}: fingerprint log marked incomplete")
+
+    schemas = {
+        str(manifest.get("schema")) for manifest in manifests if manifest is not None
+    }
+    if len(schemas) > 1:
+        complete = False
+        reasons.append(f"fingerprint schemas cannot be mixed: {sorted(schemas)}")
 
     if not complete:
         return StageRepeatReport(
@@ -1313,6 +1380,40 @@ def compare_stage_fingerprints(
         )
 
     indexes = [index_records(records) for records in records_per_run]
+    duplicate_runs = [
+        index
+        for index, (records, indexed) in enumerate(zip(records_per_run, indexes))
+        if len(records) != len(indexed)
+    ]
+    if duplicate_runs:
+        return StageRepeatReport(
+            n_runs=len(resolved),
+            ok=False,
+            complete=False,
+            instrumentation_sufficient=True,
+            reasons=(f"duplicate fingerprint keys in runs {duplicate_runs}",),
+            n_records=tuple(len(item) for item in records_per_run),
+            first_divergence=make_first_divergence(kind=KIND_INCOMPLETE),
+        )
+    reference_keys = set(indexes[0])
+    coverage_mismatch = [
+        index
+        for index, indexed in enumerate(indexes[1:], start=1)
+        if set(indexed) != reference_keys
+    ]
+    if coverage_mismatch:
+        return StageRepeatReport(
+            n_runs=len(resolved),
+            ok=False,
+            complete=False,
+            instrumentation_sufficient=True,
+            reasons=(
+                "fingerprint key coverage differs from run 0 in runs "
+                f"{coverage_mismatch}",
+            ),
+            n_records=tuple(len(item) for item in records_per_run),
+            first_divergence=make_first_divergence(kind=KIND_INCOMPLETE),
+        )
     keys = sorted(
         {key for index in indexes for key in index},
         key=lambda item: (
@@ -1364,7 +1465,9 @@ def compare_stage_fingerprints(
                     and ref_hash != other_hash
                 )
             first = make_first_divergence(
-                kind=KIND_FIRST_OBSERVABLE,
+                kind=(
+                    KIND_FIRST_OBSERVABLE if mot_diverged is True else KIND_STAGE_ONLY
+                ),
                 sequence=sequence,
                 frame=frame,
                 stage=stage,
@@ -1466,6 +1569,36 @@ def _track_count(track_results: Mapping[str, Any] | None) -> int:
     return int(raw or 0)
 
 
+class _ObservedEmitFuture:
+    """Forward a background future and fingerprint its completed MOT lines."""
+
+    def __init__(
+        self,
+        future: Any,
+        *,
+        collector: StageFingerprintCollector,
+        sequence: str,
+        frame: int,
+    ) -> None:
+        self._future = future
+        self._collector = collector
+        self._sequence = sequence
+        self._frame = int(frame)
+        self._observed = False
+
+    def result(self, *args: Any, **kwargs: Any) -> Any:
+        value = self._future.result(*args, **kwargs)
+        if not self._observed:
+            self._collector.observe_mot_lines(
+                self._sequence, self._frame, "mot", value[0]
+            )
+            self._observed = True
+        return value
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._future, name)
+
+
 def install_eval_hooks(collector: StageFingerprintCollector) -> Any:
     """Inject collection into the already-imported eval stack.  Returns undo()."""
 
@@ -1487,27 +1620,32 @@ def install_eval_hooks(collector: StageFingerprintCollector) -> Any:
     def _observing_emit(original: Any) -> Any:
         def observing_emit(**kwargs: Any) -> list[str]:
             lines = original(**kwargs)
-            if lines or _track_count(kwargs.get("track_results")) > 0:
-                collector.observe_emit(
-                    str(kwargs["seq"]),
-                    int(kwargs["frame_id"]),
-                    kwargs["track_results"],
-                    lines,
-                )
+            collector.observe_emit(
+                str(kwargs["seq"]),
+                int(kwargs["frame_id"]),
+                kwargs["track_results"],
+                lines,
+            )
             return lines
 
         return observing_emit
 
     def wrapped_run_emit(state: Any, **kwargs: Any) -> Any:
+        prior_future = state.bg_future
         prev, lines = original_run_emit(state, **kwargs)
-        track_results = kwargs.get("track_results")
-        if lines or _track_count(track_results) > 0:
-            collector.observe_emit(
-                str(state.seq),
-                int(kwargs["frame_id"]),
-                track_results or {},
-                lines,
+        sequence = str(state.seq)
+        frame = int(kwargs["frame_id"])
+        track_results = kwargs.get("track_results") or {}
+        collector.observe_tracker_output(sequence, frame, track_results)
+        if state.bg_future is not None and state.bg_future is not prior_future:
+            state.bg_future = _ObservedEmitFuture(
+                state.bg_future,
+                collector=collector,
+                sequence=sequence,
+                frame=frame,
             )
+        else:
+            collector.observe_mot_lines(sequence, frame, "mot", lines)
         return prev, lines
 
     def wrapped_read_deferred(*args: Any, **kwargs: Any) -> Any:
@@ -1518,7 +1656,7 @@ def install_eval_hooks(collector: StageFingerprintCollector) -> Any:
     def wrapped_flush(*args: Any, **kwargs: Any) -> Any:
         lines, track_ids = original_flush(*args, **kwargs)
         track_results = deferred_stash.pop("track_results", None)
-        if track_results is not None and (lines or _track_count(track_results) > 0):
+        if track_results is not None:
             collector.observe_emit(
                 str(kwargs["seq"]),
                 int(kwargs["frame_id"]),

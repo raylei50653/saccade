@@ -174,10 +174,20 @@ D2D clone,hash 延到 eval 結束後一次 `synchronize`,然後 D2H 的是 detec
 `track_results`.即使如此,額外 D2D alloc 仍可能改變 allocator / timing;這不是
 zero-observer 儀器,限制寫在 `manifest.json` 的 `observer_effect`.
 
-**如何讀結果.** 先讀 `last_identical_stage` 與 `first_divergent_stage`,再套 §6
-的凍結表. `kind` 是 `first_observable_divergence`. `mechanism_claim` 與
-`issue_close` 恆為 false.`sufficient` / `candidate_sufficient` 只表示
-producing-path 邊界夠不夠具體,不是 close,也不是機制.
+**如何讀結果.** 只有各 eval exit 0、MOT 檔完整非空且至少有兩種 raw hash 的
+pair,才會產生 `kind=first_observable_divergence` 並套 §6 的凍結表.空檔、缺檔、
+eval failure 不算 pair,也不會讓 session 提早停止.若最終 MOT 相同、只有 stage
+fingerprint 不同,會記成 `stage_divergence_without_mot_divergence`,Condition 2
+不適用. `mechanism_claim` 與 `issue_close` 恆為 false.`sufficient` /
+`candidate_sufficient` 只表示 producing-path 邊界夠不夠具體,不是 close,也不是
+機制.`localization_session.json` 另存有效 flags、return codes 與
+`mot_pair_valid`,避免 configuration / process failure 脫離 artifact.
+
+目前 collector schema 是 `eval_stage_fingerprint_v2`:early-exit frame 的下游空
+stage 會明確記成 empty fingerprint;若 relink/write 在 background future 完成,
+`mot` 取 future drain 後的實際 lines,不取 enqueue 時的空 placeholder.歷史 v1
+artifact 仍可同 schema 互比,但 v1/v2 不混比;key coverage 不同或 duplicate key
+一律判 incomplete,不當作 stage boundary.
 
 裝置無關契約測試:`tests/unit/eval/test_eval_stage_fingerprint.py`
 (identical inputs → identical hashes;單 stage mutation → 該 stage;缺檔 /

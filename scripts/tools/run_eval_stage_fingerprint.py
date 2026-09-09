@@ -51,6 +51,8 @@ def parse_args(
         item.startswith("--cpp-threads=") for item in forwarded
     ):
         parser.error("--cpp-threads cannot expose Python-evaluator stage callbacks")
+    if "--workbench" in forwarded:
+        parser.error("--workbench bypasses the Python evaluator stage boundaries")
     return args, forwarded
 
 

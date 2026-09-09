@@ -35,6 +35,7 @@ from scripts.tools.eval_stage_fingerprint import (  # noqa: E402
     KIND_FIRST_OBSERVABLE,
     KIND_INCOMPLETE,
     KIND_INSUFFICIENT,
+    KIND_STAGE_ONLY,
     GPU_DECODE_BUDGET_EXHAUSTED_CLAIM,
     GPU_DECODE_LOCALIZATION_BUDGET_RUNS,
     LOCALIZATION_CONFIG_GPU_DECODE,
@@ -48,6 +49,7 @@ from scripts.tools.eval_stage_fingerprint import (  # noqa: E402
     OE_NONE,
     SESSION_BUDGET_EXHAUSTED_IDENTICAL,
     SESSION_IN_PROGRESS,
+    SESSION_INVALID,
     SESSION_PAIR_FOUND,
     STAGES,
     VERDICT_CANDIDATE_SUFFICIENT,
@@ -59,6 +61,7 @@ from scripts.tools.eval_stage_fingerprint import (  # noqa: E402
     fingerprint_detections,
     fingerprint_mot_lines,
     format_stage_report,
+    install_eval_hooks,
     measure_allocator_reserved_growth,
     read_condition_2,
     read_localization_session,
@@ -239,6 +242,18 @@ def test_over_budget_session_fails_closed() -> None:
         read_localization_session(
             n_runs=LOCALIZATION_BUDGET_RUNS + 1, divergent_pair=False
         )
+
+
+def test_invalid_session_has_no_localization_reading() -> None:
+    reading = read_localization_session(
+        n_runs=2,
+        divergent_pair=False,
+        session_valid=False,
+    )
+    assert reading.kind == SESSION_INVALID
+    assert reading.apply_condition2_rules is False
+    assert reading.condition_2_advanced is False
+    assert "no localization-session reading" in reading.allowed_claim
 
 
 def test_gpu_decode_budget_is_not_block_s_budget() -> None:
@@ -518,7 +533,7 @@ def test_single_stage_mutation_localizes_that_stage(tmp_path: Path, stage: str) 
     b = tmp_path / "r2"
     _write_fp(a, _records_for_frame())
     _write_fp(b, _records_for_frame(mutate_stage=stage))
-    report = compare_stage_fingerprints([a, b])
+    report = compare_stage_fingerprints([a, b], mot_diverged=True)
     assert not report.ok
     first = report.first_divergence
     assert first is not None
@@ -558,7 +573,7 @@ def test_earlier_stage_wins_over_later_mutation(tmp_path: Path) -> None:
                 item.update(_det(SCORE_MUT, ids=TID))
     _write_fp(a, ref)
     _write_fp(b, other)
-    report = compare_stage_fingerprints([a, b])
+    report = compare_stage_fingerprints([a, b], mot_diverged=True)
     assert report.first_divergence is not None
     assert report.first_divergence.stage == "post_nms"
 
@@ -576,6 +591,50 @@ def test_missing_fingerprint_dir_fails(tmp_path: Path) -> None:
     assert report.first_divergence.producing_path_verdict == VERDICT_NOT_APPLICABLE
     assert report.first_divergence.issue_close is False
     assert any("missing" in reason for reason in report.reasons)
+
+
+def test_mismatched_key_coverage_is_incomplete_not_a_stage_boundary(
+    tmp_path: Path,
+) -> None:
+    a = tmp_path / "r1"
+    b = tmp_path / "r2"
+    _write_fp(a, _records_for_frame())
+    _write_fp(b, _records_for_frame()[:-1], complete=True)
+    report = compare_stage_fingerprints([a, b], mot_diverged=True)
+    assert not report.ok
+    assert not report.complete
+    assert report.first_divergence is not None
+    assert report.first_divergence.kind == KIND_INCOMPLETE
+    assert report.first_divergence.producing_path_verdict == VERDICT_NOT_APPLICABLE
+    assert "coverage differs" in report.reasons[0]
+
+
+def test_mixed_fingerprint_schemas_fail_closed(tmp_path: Path) -> None:
+    a = tmp_path / "r1"
+    b = tmp_path / "r2"
+    _write_fp(a, _records_for_frame())
+    _write_fp(b, _records_for_frame())
+    manifest_path = b / "stage_fingerprint" / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["schema"] = "eval_stage_fingerprint_v1"
+    manifest_path.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
+    report = compare_stage_fingerprints([a, b])
+    assert not report.ok
+    assert not report.complete
+    assert report.first_divergence is not None
+    assert report.first_divergence.kind == KIND_INCOMPLETE
+    assert "cannot be mixed" in report.reasons[0]
+
+
+def test_legacy_v1_artifacts_remain_comparable_with_each_other(tmp_path: Path) -> None:
+    runs = [tmp_path / "r1", tmp_path / "r2"]
+    for run in runs:
+        _write_fp(run, _records_for_frame())
+        manifest_path = run / "stage_fingerprint" / "manifest.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["schema"] = "eval_stage_fingerprint_v1"
+        manifest_path.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
+    assert compare_stage_fingerprints(runs).ok
 
 
 def test_incomplete_manifest_fails(tmp_path: Path) -> None:
@@ -625,7 +684,7 @@ def test_format_report_states_observability_not_mechanism(tmp_path: Path) -> Non
     b = tmp_path / "r2"
     _write_fp(a, _records_for_frame())
     _write_fp(b, _records_for_frame(mutate_stage="tracker_input"))
-    text = format_stage_report(compare_stage_fingerprints([a, b]))
+    text = format_stage_report(compare_stage_fingerprints([a, b], mot_diverged=True))
     assert "FAIL" in text
     assert "last_identical_stage=post_nms" in text
     assert "first_divergent_stage=tracker_input" in text
@@ -655,7 +714,7 @@ def test_compare_with_flag_fails_closed_when_fingerprints_missing(
     assert harness.main(["compare", str(a), str(b), "--stage-fingerprint"]) == 1
 
 
-def test_run_with_stage_fingerprint_localizes_mutated_stage(
+def test_stage_only_divergence_does_not_advance_condition2(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     bodies = [LINE, LINE]
@@ -686,11 +745,54 @@ def test_run_with_stage_fingerprint_localizes_mutated_stage(
     assert summary["first_divergence"]["frame"] == FRAME
     dump = json.loads((artifact / "first_divergence.json").read_text(encoding="utf-8"))
     assert dump["stage"] == "post_nms"
-    assert dump["kind"] == KIND_FIRST_OBSERVABLE
-    assert dump["last_identical_stage"] == "detector_output"
-    assert dump["first_divergent_stage"] == "post_nms"
-    assert dump["producing_path_verdict"] == VERDICT_CANDIDATE_SUFFICIENT
+    assert dump["kind"] == KIND_STAGE_ONLY
+    assert dump["last_identical_stage"] is None
+    assert dump["first_divergent_stage"] is None
+    assert dump["producing_path_verdict"] == VERDICT_NOT_APPLICABLE
     assert dump["issue_close"] is False
+    session = json.loads((artifact / "localization_session.json").read_text())
+    assert session["kind"] == SESSION_IN_PROGRESS
+    assert session["mot_pair_valid"] is False
+    assert session["session_valid"] is True
+    assert session["apply_condition2_rules"] is False
+    assert session["condition_2_advanced"] is False
+    assert session["eval_returncodes"] == [0, 0]
+    assert "--no-gpu-decode" in session["eval_flags"]
+
+
+def test_invalid_mot_output_does_not_stop_localization_as_a_pair(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = {"n": 0}
+
+    def fake_run_one_eval(**kwargs: object) -> SimpleNamespace:
+        out_dir = kwargs["out_dir"]
+        assert isinstance(out_dir, Path)
+        calls["n"] += 1
+        if calls["n"] == 2:
+            out_dir.mkdir(parents=True, exist_ok=True)
+            (out_dir / f"{SEQ}.txt").write_text("", encoding="utf-8")
+        else:
+            _write_mot(out_dir, SEQ, LINE)
+        _write_fp(out_dir, _records_for_frame())
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(harness, "run_one_eval", fake_run_one_eval)
+    artifact = tmp_path / "art"
+    rc = harness.cmd_run(
+        n=3,
+        sleep=0.0,
+        artifact_dir=artifact,
+        forwarded=[],
+        stage_fingerprint=True,
+    )
+    assert rc == 1
+    assert calls["n"] == 3
+    session = json.loads((artifact / "localization_session.json").read_text())
+    assert session["kind"] == SESSION_INVALID
+    assert session["mot_pair_valid"] is False
+    assert session["session_valid"] is False
+    assert session["apply_condition2_rules"] is False
 
 
 def test_run_default_does_not_require_fingerprints(
@@ -814,3 +916,48 @@ def test_finalize_writes_observer_effect_measured(tmp_path: Path) -> None:
     )
     assert measured["n_clone_samples"] == 0
     assert measured["n_reserved_increases_on_clone"] == 0
+    assert {item["stage"] for item in collector.records} == set(STAGES)
+
+
+def test_background_emit_observes_completed_lines_not_enqueue_placeholder(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import saccade.perception.eval.evaluator as evaluator_module
+    import saccade.perception.eval.stages as stages_module
+
+    class CompletedFuture:
+        def result(self) -> tuple[list[str], set[int], dict[int, int], dict[int, Any]]:
+            return [LINE], {7}, {}, {}
+
+    def background_run_emit(state: Any, **kwargs: Any) -> tuple[set[int], list[str]]:
+        state.bg_future = CompletedFuture()
+        return set(), []
+
+    monkeypatch.setattr(stages_module, "_run_emit", background_run_emit)
+    monkeypatch.setattr(evaluator_module, "_run_emit", background_run_emit)
+    collector = StageFingerprintCollector(tmp_path / "fp")
+    undo = install_eval_hooks(collector)
+    state = SimpleNamespace(seq=SEQ, bg_future=None)
+    track_results = {
+        "count": 1,
+        "boxes": BOX,
+        "scores": SCORE,
+        "classes": CLS,
+        "ids": TID,
+    }
+    try:
+        _, enqueue_lines = stages_module._run_emit(
+            state,
+            frame_id=FRAME,
+            track_results=track_results,
+        )
+        assert enqueue_lines == []
+        mot_before = [item for item in collector.records if item["stage"] == "mot"]
+        assert mot_before == []
+        completed = state.bg_future.result()
+        assert completed[0] == [LINE]
+    finally:
+        undo()
+    mot_after = [item for item in collector.records if item["stage"] == "mot"]
+    assert len(mot_after) == 1
+    assert mot_after[0]["count"] == 1

@@ -55,6 +55,8 @@ sys.path.insert(0, str(_SRC))
 sys.path.insert(0, str(_SCRIPT_DIR))
 
 from eval_repeat_identity import (  # noqa: E402
+    EMPTY,
+    MISSING,
     RepeatReport,
     compare_run_dirs,
     format_report,
@@ -120,6 +122,24 @@ def _write_summary(path: Path, report: RepeatReport) -> None:
     path.write_text(json.dumps(report.to_dict(), indent=2) + "\n", encoding="utf-8")
 
 
+def _mot_outputs_complete(report: RepeatReport) -> bool:
+    if report.n_runs < 2 or not report.reports:
+        return False
+    return not any(
+        len(item.hashes) != report.n_runs
+        or any(value in {MISSING, EMPTY} for value in item.hashes)
+        for item in report.reports
+    )
+
+
+def _has_complete_mot_divergence(report: RepeatReport) -> bool:
+    """True only for a non-empty, coverage-complete divergent MOT comparison."""
+
+    return _mot_outputs_complete(report) and any(
+        item.n_distinct > 1 for item in report.reports
+    )
+
+
 def compare_and_emit(
     run_dirs: Sequence[Path],
     *,
@@ -133,7 +153,10 @@ def compare_and_emit(
         _write_summary(summary, report)
     stage_rc = 0
     if stage_fingerprint:
-        stage_report = compare_stage_fingerprints(run_dirs, mot_diverged=not report.ok)
+        stage_report = compare_stage_fingerprints(
+            run_dirs,
+            mot_diverged=_has_complete_mot_divergence(report),
+        )
         print(format_stage_report(stage_report))
         if summary is not None:
             stage_path = summary.parent / "stage_fingerprint.json"
@@ -259,7 +282,9 @@ def cmd_run(
             )
         mot_pair = False
         if stage_fingerprint and len(run_dirs) >= 2:
-            mot_pair = not compare_run_dirs(run_dirs).ok
+            mot_pair = not any(eval_returncodes) and _has_complete_mot_divergence(
+                compare_run_dirs(run_dirs)
+            )
             if mot_pair:
                 print(
                     f"  MOT pair found at run {index + 1}/{budget}; "
@@ -293,19 +318,38 @@ def cmd_run(
             file=sys.stderr,
         )
     if stage_fingerprint:
+        final_mot_report = compare_run_dirs(run_dirs)
+        mot_pair_valid = not had_eval_failure and _has_complete_mot_divergence(
+            final_mot_report
+        )
         stage_payload = json.loads(
             (root / "stage_fingerprint.json").read_text(encoding="utf-8")
         )
         first = stage_payload.get("first_divergence") or {}
-        pair = first.get("kind") in {KIND_FIRST_OBSERVABLE, KIND_INSUFFICIENT}
+        fingerprint_reading_valid = first.get("kind") in {
+            KIND_FIRST_OBSERVABLE,
+            KIND_INSUFFICIENT,
+        }
+        session_valid = (
+            not had_eval_failure
+            and _mot_outputs_complete(final_mot_report)
+            and bool(stage_payload.get("complete", False))
+            and (not mot_pair_valid or fingerprint_reading_valid)
+        )
         session = read_localization_session(
             n_runs=len(run_dirs),
-            divergent_pair=pair,
+            divergent_pair=mot_pair_valid,
             config=localization_config,
             producing_path_verdict=first.get("producing_path_verdict"),
+            session_valid=session_valid,
         )
+        session_payload = session.to_dict()
+        session_payload["mot_pair_valid"] = mot_pair_valid
+        session_payload["session_valid"] = session_valid
+        session_payload["eval_flags"] = eval_flags
+        session_payload["eval_returncodes"] = eval_returncodes
         (root / "localization_session.json").write_text(
-            json.dumps(session.to_dict(), indent=2) + "\n", encoding="utf-8"
+            json.dumps(session_payload, indent=2) + "\n", encoding="utf-8"
         )
         print(
             f"localization-session: kind={session.kind} "
