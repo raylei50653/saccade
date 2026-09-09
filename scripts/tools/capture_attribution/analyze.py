@@ -45,6 +45,31 @@ def _stream_destroy(api: str) -> bool:
     return base.startswith(("cudaStreamDestroy", "cuStreamDestroy"))
 
 
+def _runtime_stream_create(api: str) -> bool:
+    return _base_api_name(api).startswith("cudaStreamCreate")
+
+
+def _driver_stream_create(api: str) -> bool:
+    return _base_api_name(api).startswith("cuStreamCreate")
+
+
+def _create_families_compatible(runtime_api: str, driver_api: str) -> bool:
+    runtime = _base_api_name(runtime_api)
+    driver = _base_api_name(driver_api)
+    if runtime in {"cudaStreamCreate", "cudaStreamCreateWithFlags"}:
+        return driver == "cuStreamCreate"
+    if runtime == "cudaStreamCreateWithPriority":
+        return driver == "cuStreamCreateWithPriority"
+    return False
+
+
+def _temporally_nested(outer: dict, inner: dict) -> bool:
+    return (
+        outer["enter"]["ns"] <= inner["enter"]["ns"]
+        and inner["exit"]["ns"] <= outer["exit"]["ns"]
+    )
+
+
 class NativeStackResolver:
     """Resolve captured process addresses only through attested run binaries."""
 
@@ -300,6 +325,11 @@ class NativeStackResolver:
         return frames
 
     def __call__(self, stack: list[int], api: str, truncated) -> dict:
+        result = self._resolve(stack, api, truncated)
+        result["api_identity"] = "cupti_callback"
+        return result
+
+    def _resolve(self, stack: list[int], api: str, truncated) -> dict:
         if not stack:
             return {"status": "gap", "gap": "missing_native_stack", "frames": []}
         frames = self.resolve_addresses(stack)
@@ -393,6 +423,164 @@ def _primary(group: list[dict]):
     return candidates[0] if len(candidates) == 1 else None
 
 
+def _find_nested_driver_parentage(runtime_call: dict, creates: list[dict]) -> dict:
+    """Unique DRIVER create nested inside one RUNTIME create, or a named gap."""
+    runtime_tid = runtime_call["enter"]["tid"]
+    runtime_context = runtime_call["exit"]["context"]
+    runtime_stream = runtime_call["exit"]["stream"]
+    runtime_api = runtime_call["exit"]["api"]
+    nested = [
+        call
+        for call in creates
+        if _driver_stream_create(call["exit"]["api"])
+        and call["exit"]["rc"] == 0
+        and call["exit"]["context"] == runtime_context
+        and _temporally_nested(runtime_call, call)
+        and _create_families_compatible(runtime_api, call["exit"]["api"])
+    ]
+
+    def _same_stream(call: dict) -> bool:
+        return (
+            bool(call["exit"].get("has_stream"))
+            and call["exit"]["stream"] == runtime_stream
+        )
+
+    same_thread = [call for call in nested if call["enter"]["tid"] == runtime_tid]
+    same_thread_same_stream = [call for call in same_thread if _same_stream(call)]
+    other_thread_same_stream = [
+        call
+        for call in nested
+        if call["enter"]["tid"] != runtime_tid and _same_stream(call)
+    ]
+    if same_thread_same_stream:
+        if len(same_thread) != 1 or len(same_thread_same_stream) != 1:
+            return {"status": "gap", "gap": "nested_driver_create_ambiguous"}
+        return {"status": "resolved", "call": same_thread_same_stream[0]}
+    if other_thread_same_stream:
+        return {"status": "gap", "gap": "nested_driver_thread_mismatch"}
+    if same_thread:
+        return {
+            "status": "gap",
+            "gap": "nested_driver_handle_mismatch"
+            if len(same_thread) == 1
+            else "nested_driver_create_ambiguous",
+        }
+    return {"status": "gap", "gap": "nested_driver_create_absent"}
+
+
+def _direct_owner(resolution: dict, *, kind: str, api: str) -> dict:
+    return {
+        "status": "resolved",
+        "evidence_rule": "direct caller frame above the observed create API symbol in that call's backtrace",
+        "runtime_api_identity": "cupti_callback",
+        "owner_resolution": kind,
+        "nested_driver_api": None,
+        "frame": resolution["caller"],
+        "correlation": {
+            "api": api,
+            "api_frame_index": resolution.get("api_frame_index"),
+            "caller_frame_index": resolution.get("caller_frame_index"),
+        },
+    }
+
+
+def _parentage_owner(
+    runtime_call: dict, driver_call: dict, driver_resolution: dict, generation: int
+) -> dict:
+    return {
+        "status": "resolved",
+        "evidence_rule": (
+            "nested driver create parentage; caller is the DRIVER backtrace "
+            "frame above cuStreamCreate, not a runtime backtrace direct caller"
+        ),
+        "runtime_api_identity": "cupti_callback",
+        "owner_resolution": "nested_driver_parentage",
+        "nested_driver_api": driver_call["exit"]["api"],
+        "frame": driver_resolution["caller"],
+        "correlation": {
+            "runtime_api": runtime_call["exit"]["api"],
+            "runtime_domain": runtime_call["exit"]["domain"],
+            "runtime_correlation": runtime_call["exit"]["correlation"],
+            "runtime_tid": runtime_call["enter"]["tid"],
+            "runtime_enter_ns": runtime_call["enter"]["ns"],
+            "runtime_exit_ns": runtime_call["exit"]["ns"],
+            "nested_driver_api": driver_call["exit"]["api"],
+            "nested_driver_domain": driver_call["exit"]["domain"],
+            "nested_driver_correlation": driver_call["exit"]["correlation"],
+            "nested_driver_tid": driver_call["enter"]["tid"],
+            "nested_driver_enter_ns": driver_call["enter"]["ns"],
+            "nested_driver_exit_ns": driver_call["exit"]["ns"],
+            "context": runtime_call["exit"]["context"],
+            "stream": runtime_call["exit"]["stream"],
+            "generation": generation,
+        },
+    }
+
+
+def _gap_owner(gap: str) -> dict:
+    return {
+        "status": "gap",
+        "evidence_rule": (
+            "direct caller frame above the observed create API symbol, or unique "
+            "nested driver parentage when that symbol is absent from the runtime backtrace"
+        ),
+        "runtime_api_identity": "cupti_callback",
+        "owner_resolution": None,
+        "nested_driver_api": None,
+        "gap": gap,
+    }
+
+
+def _can_attempt_nested_driver_parentage(
+    primary: dict, primary_resolution: dict
+) -> bool:
+    return (
+        primary is not None
+        and _runtime_stream_create(primary["exit"]["api"])
+        and primary_resolution.get("status") == "gap"
+        and primary_resolution.get("gap") == "creation_api_frame_unresolved"
+        and bool(primary["enter"].get("native_stack"))
+        and primary["enter"].get("native_stack_truncated") is False
+    )
+
+
+def _resolve_lifetime_owner(
+    primary: dict | None,
+    primary_resolution: dict,
+    creates: list[dict],
+    generation: int,
+    resolve_stack: Callable,
+) -> dict:
+    if primary is None:
+        return _gap_owner("logical_creator_ambiguous")
+    if primary_resolution.get("status") == "resolved":
+        kind = (
+            "runtime_backtrace_direct_caller"
+            if _runtime_stream_create(primary["exit"]["api"])
+            else "driver_backtrace_direct_caller"
+        )
+        return _direct_owner(primary_resolution, kind=kind, api=primary["exit"]["api"])
+    if not _can_attempt_nested_driver_parentage(primary, primary_resolution):
+        return _gap_owner(primary_resolution.get("gap") or "creation_stack_unresolved")
+    parentage = _find_nested_driver_parentage(primary, creates)
+    if parentage["status"] != "resolved":
+        return _gap_owner(parentage["gap"])
+    driver_call = parentage["call"]
+    driver_resolution = resolve_stack(
+        driver_call["enter"].get("native_stack", []),
+        driver_call["exit"]["api"],
+        driver_call["enter"].get("native_stack_truncated"),
+    )
+    if driver_resolution.get("status") != "resolved":
+        return _gap_owner(
+            driver_resolution.get("gap") or "nested_driver_caller_unresolved"
+        )
+    caller = driver_resolution.get("caller") or {}
+    if caller.get("status") not in {"resolved", "module_only"}:
+        return _gap_owner("nested_driver_caller_module_unresolved")
+    return _parentage_owner(primary, driver_call, driver_resolution, generation)
+
+
 def _build_lifetimes(
     completed_calls: list[dict], resolve_stack: Callable, problems: list, gaps: list
 ):
@@ -464,10 +652,8 @@ def _build_lifetimes(
                 exited["api"],
                 entered.get("native_stack_truncated"),
             )
-            if resolution["status"] != "resolved":
-                evidence_gap(
-                    f"creation_stack_gap:{lifetime_id}:{exited['api']}:{resolution['gap']}"
-                )
+            if "api_identity" not in resolution:
+                resolution = {**resolution, "api_identity": "cupti_callback"}
             observed.append(
                 {
                     "api": exited["api"],
@@ -499,15 +685,25 @@ def _build_lifetimes(
             if primary_index is not None
             else {"status": "gap", "gap": "logical_creator_ambiguous"}
         )
-        owner = {
-            "status": primary_resolution["status"],
-            "evidence_rule": "direct caller frame above the outermost observed create API",
-            **(
-                {"frame": primary_resolution["caller"]}
-                if primary_resolution["status"] == "resolved"
-                else {"gap": primary_resolution["gap"]}
-            ),
-        }
+        owner = _resolve_lifetime_owner(
+            primary, primary_resolution, creates, generation, resolve_stack
+        )
+        if owner["status"] != "resolved":
+            evidence_gap(f"creation_stack_gap:{lifetime_id}:{owner['gap']}")
+        else:
+            for item in observed:
+                resolution = item["stack_resolution"]
+                if resolution.get("status") == "resolved":
+                    continue
+                if (
+                    owner.get("owner_resolution") == "nested_driver_parentage"
+                    and _runtime_stream_create(item["api"])
+                    and resolution.get("gap") == "creation_api_frame_unresolved"
+                ):
+                    continue
+                evidence_gap(
+                    f"creation_stack_gap:{lifetime_id}:{item['api']}:{resolution.get('gap')}"
+                )
         lifetime = {
             "lifetime_id": lifetime_id,
             "context": key[0],

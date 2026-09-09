@@ -8,10 +8,12 @@
 | `test_bridge_gate_breakpoints.py` | eval | behavior | active | Unit tests for the bridge-gate breakpoint locator (scripts/eval/diagnostics). |
 | `test_calibrator.py` | perception | behavior | active | Tests for SaccadeInt8Calibrator (perception/calibrator.py). |
 | `test_capture_attribution_harness.py` | eval | contract | active | Diagnostic validity checks; no production inference or incidence sampling. |
+| `test_capture_attribution_nested_driver.py` | eval | contract | active | Nested-driver parentage for runtime creates whose backtrace lacks the API symbol (#340). |
 | `test_capture_error_mode_mechanism.py` | eval | contract | active | What ``capture_error_mode`` actually buys the graphed-callables entrance (#340). |
 | `test_capture_failure_diagnostics.py` | eval | contract | active | Failure-time capture diagnostics on every production capture entrance (#374). |
 | `test_capture_mode_binding.py` | eval | contract | active | Binding contract for cudaThreadExchangeStreamCaptureMode. |
 | `test_capture_race_incidence.py` | eval | contract | active | Harness self-verification for the #340 capture-race incidence campaign. |
+| `test_capture_race_incidence_20260909.py` | eval | contract | active | Harness self-verification for the 2026-09-09 #340 incidence campaign. |
 | `test_clean_fifo_bank.py` | eval | behavior | active | Unit tests for CleanFifoBank — the reusable clean-FIFO embedding substrate. |
 | `test_compare_handover_summaries.py` | eval | behavior | active | Tests for the compare-handover-summaries diagnostics CLI (scripts/eval/diagnostics). |
 | `test_core.py` | media,storage,perception,tracking | behavior | active | Cross-package unit tests for core media/storage/tracking helpers. |

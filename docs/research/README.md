@@ -101,6 +101,8 @@
 |------|------|
 | [production_pipeline_profiling_todo.md](pipeline/production_pipeline_profiling_todo.md) | 固定 production source 的 profiling P1–P6 清單與 measurement／attribution 邊界 |
 | [capture_failure_provenance_20260906.md](pipeline/capture_failure_provenance_20260906.md) | #340 原始 failure 證據恢復、缺失欄位與 attribution 邊界 |
+| [capture_race_incidence_preregistration_20260909.md](pipeline/capture_race_incidence_preregistration_20260909.md) | **active** — 下一輪 #340 incidence 預註冊:production target `4afb57c3`(#379)、observer overlay、attribution-on-failure、N=100、停在 first rate run 之前 |
+| [capture_race_incidence_preregistration_20260909_seal.md](pipeline/capture_race_incidence_preregistration_20260909_seal.md) | 上述預註冊的 seal / pre-execution gate 記錄;不是 rate 結果 |
 | [closed/capture_race_incidence_preregistration_20260908.md](pipeline/closed/capture_race_incidence_preregistration_20260908.md) | **closed** — #340 incidence closure 預註冊:兩條 path × 100 runs、failure 述詞、0/100 的 95% upper bound 措辭與 terminal 對照 |
 | [closed/capture_race_incidence_closure_20260908.md](pipeline/closed/capture_race_incidence_closure_20260908.md) | **closed** — 上述預註冊的 closure report:terminal `FAILURE_OBSERVED_B`、94 attempts / 93 ok / 1 failure / 0 invalid、不報 incidence rate,以及下一輪的兩項前置 blocker |
 | [mot17_mamba_whole_graph_m_sdp_double_buffer.md](pipeline/mot17_mamba_whole_graph_m_sdp_double_buffer.md) | `mamba_whole_graph_m` + SDP + double-buffer 路徑 runbook |

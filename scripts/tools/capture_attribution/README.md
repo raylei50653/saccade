@@ -117,11 +117,21 @@ event record/wait sides carry the lifetime record that was active at that timest
 
 Native addresses are mapped only with that run's `maps.txt`; a module is accepted only
 when its current bytes match `mapped_file_sha256_after`. ELF load segments provide the
-address adjustment and `addr2line` supplies symbols where available. The attributed owner
-is mechanically the direct caller frame above the outermost observed create API. A
+address adjustment and `addr2line` supplies symbols where available. CUPTI
+`functionName` is the authoritative create-API identity (`runtime_api_identity=
+cupti_callback`); a missing `cudaStreamCreate*` symbol in the glibc backtrace is not
+treated as unknown API. When that symbol is present, the owner is the direct caller
+frame above it (`owner_resolution=runtime_backtrace_direct_caller` or
+`driver_backtrace_direct_caller`). When it is absent on a runtime create, a unique
+nested DRIVER `cuStreamCreate*` on the same native thread, temporally inside the
+runtime call, of a compatible create family, returning the same context/handle, may
+supply the owner from the driver backtrace (`owner_resolution=nested_driver_parentage`).
+That caller is not recorded as a runtime-backtrace direct caller. Missing nested
+driver creates, extra competing nested creates, thread mismatch, handle mismatch, or
+an unresolvable nested caller remain named evidence gaps and stay in `problems`. A
 module-resolved but stripped caller retains `symbol_gap="symbol_unknown"`; the module
 evidence is still usable. No library-name likelihood or component allowlist participates
-in the choice.
+in the choice. Raw runtime and nested-driver stacks stay on the observed API records.
 
 The analyzer reports per-domain
 capture intervals and same-context overlap with errors 900/901/906. An overlap is an
