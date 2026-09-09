@@ -35,10 +35,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator, Sequence
 
-PREREG_REL = "docs/research/pipeline/capture_race_incidence_preregistration_20260909.md"
-SEAL_REL = (
-    "docs/research/pipeline/capture_race_incidence_preregistration_20260909_seal.md"
+PREREG_REL = (
+    "docs/research/pipeline/closed/capture_race_incidence_preregistration_20260909.md"
 )
+SEAL_REL = "docs/research/pipeline/closed/capture_race_incidence_preregistration_20260909_seal.md"
 SCHEMA = "capture_race_incidence_run_v1"
 CAMPAIGN_SCHEMA = "capture_race_incidence_campaign_v1"
 

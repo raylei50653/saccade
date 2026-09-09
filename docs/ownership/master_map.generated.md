@@ -203,10 +203,11 @@ Manifest: `docs/ownership/doc_migration_manifest.yaml`
 - `docs/research/paper_outline.md`
 - `docs/research/pipeline/CPU_BOUND_ANALYSIS.md`
 - `docs/research/pipeline/capture_failure_provenance_20260906.md`
-- `docs/research/pipeline/capture_race_incidence_preregistration_20260909.md`
-- `docs/research/pipeline/capture_race_incidence_preregistration_20260909_seal.md`
 - `docs/research/pipeline/closed/capture_race_incidence_closure_20260908.md`
+- `docs/research/pipeline/closed/capture_race_incidence_closure_20260909.md`
 - `docs/research/pipeline/closed/capture_race_incidence_preregistration_20260908.md`
+- `docs/research/pipeline/closed/capture_race_incidence_preregistration_20260909.md`
+- `docs/research/pipeline/closed/capture_race_incidence_preregistration_20260909_seal.md`
 - `docs/research/pipeline/cpu_overhead_analysis_20260707.md`
 - `docs/research/pipeline/gpu_pipeline_m4b_identity_resolver.md`
 - `docs/research/pipeline/mot17_mamba_whole_graph_m_sdp_double_buffer.md`
@@ -361,6 +362,6 @@ Excluded from the active index and default search view.
 
 ## Inventory summary
 
-- documents: 311
-- active: 256
+- documents: 312
+- active: 257
 - grayed out: 55

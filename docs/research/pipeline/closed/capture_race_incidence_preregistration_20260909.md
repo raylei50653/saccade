@@ -1,4 +1,4 @@
-<!-- doc-status: active -->
+<!-- doc-status: closed -->
 <!-- doc-promotion: ledger -->
 <!-- doc-date: 2026-09-09 -->
 
@@ -6,11 +6,11 @@
 
 本文件在**第一個 rate run 之前**凍結。凍結後只能以 append-only amendment 修訂
 (§11),不得 inline 編輯。權威 seal bar 是
-[experiment contract §20.8](../contracts/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md),
+[experiment contract §20.8](../../contracts/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md),
 declaration 欄位是同一份契約的 §20.2;本文件引用它們,不複述、不分叉。
 
 結構參考
-[closed/capture_race_incidence_preregistration_20260908.md](closed/capture_race_incidence_preregistration_20260908.md)
+[capture_race_incidence_preregistration_20260908.md](capture_race_incidence_preregistration_20260908.md)
 (以下稱「20260908 預註冊」)。**不得修改那份已封閉文件。** 本文件是下一輪
 campaign 的獨立宣告,不是它的 amendment。
 

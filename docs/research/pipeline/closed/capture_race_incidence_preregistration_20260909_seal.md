@@ -1,4 +1,4 @@
-<!-- doc-status: active -->
+<!-- doc-status: closed -->
 <!-- doc-promotion: none -->
 <!-- doc-date: 2026-09-09 -->
 
