@@ -6,6 +6,7 @@
 | Script | Status | Usage | Function |
 |--------|--------|-------|----------|
 | `__init__.py` | stable | - | Run provenance: machine-readable identity for produced experiment artifacts. |
+| `asset_disposal.py` | stable | cli | Workspace-local projection of which accounted-for units are disposal candidates. |
 | `asset_inventory.py` | stable | cli | Workspace-local projection of which artifact directories are accounted for. |
 | `backfill.py` | stable | cli | Which cited artifact directories can honestly be given a manifest, and which cannot. |
 | `check_producer_coverage.py` | stable | cli | Fail-closed coverage checker for ADR 021 AP-2 artifact producers. |

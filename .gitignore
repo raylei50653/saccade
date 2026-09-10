@@ -141,9 +141,10 @@ scratchpad/
 # `*.so` rule above would drop exactly those seven files and break the closure.
 !docs/modules/semantic/research/evidence/**/*.so
 
-# AP-3 asset inventory: a workspace-local projection of gitignored asset roots.
-# Committing it would make a view of an 82 GB workspace look like a repo fact,
-# and it must stay out of docs/ because build_master_map rglobs that tree.
+# AP-3 asset inventory and AP-5 disposal candidates: workspace-local
+# projections of gitignored asset roots. Committing either would make a
+# view of an 82 GB workspace look like a repo fact, and both must stay
+# out of docs/ because build_master_map rglobs that tree.
 .provenance/
 
 # Local runtime linker path helper, sourced (not executed) before running the

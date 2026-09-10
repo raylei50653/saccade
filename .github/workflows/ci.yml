@@ -143,6 +143,13 @@ jobs:
       # it by hand there: scripts/provenance/asset_inventory.py --check
       - name: Asset Inventory Validation
         run: uv run python scripts/provenance/asset_inventory.py --check
+      # AP-5 candidate generation, not deletion. Validates rather than
+      # compares: a clean clone holds no assets, so zero candidates is the
+      # correct answer. The tool has no deletion action; this hook exists
+      # so an invalid manifest still fails closed here the same way it does
+      # for inventory. Same protected-path reason keeps it off pre_push.
+      - name: Asset Disposal Candidate Validation
+        run: uv run python scripts/provenance/asset_disposal.py --check
       # AP-2 coverage is a registry, not a hand-picked list: every tracked
       # entry point under scripts/eval|train must carry an explicit
       # classification, and a new one that carries none fails here rather than
