@@ -58,6 +58,13 @@ has **one primary job**, explicit secondaries, and a clear **should-not-own** li
   is the #168 per-study role inventory for `old-flagship`; its validator derives
   terminal/live/shared coverage without authorizing disposal.
 
+## Asset provenance (ADR 021)
+
+- [asset_disposal_round_wa-ec3-r1-20260910.md](asset_disposal_round_wa-ec3-r1-20260910.md)
+  is the owner-authorized action record for W-A EC3 round
+  `wa-ec3-r1-20260910`. It is not a candidate list and does not authorize
+  further deletion. W-A remains open: EC1 is independently unresolved.
+
 ---
 
 ## O1 completion definition
