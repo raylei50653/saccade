@@ -86,6 +86,7 @@ legacy `native_960` presets (`speed` / `baseline`) remain useful for comparison,
 
 - [ ] **模組化前邊界盤點（backlog）**：依 [Saccade 模塊化前參考筆記](reference/saccade_module_reference.md) 盤點 distribution、dependencies、native extension delivery、failure semantics 與 public/runtime surface；筆記為背景資料，具體拆分方案與 API 待後續定義。
 - [ ] **Production Pipeline Profiling（規劃）**：固定 `806c52cf`，依 [P1–P6 清單](research/pipeline/production_pipeline_profiling_todo.md) 建立 production scheduling 下的 measurement／attribution，完成瓶頸歸因後再決定 optimization 工作項。
+- [ ] **`docs/modules/` 問題導向重整（backlog）**：[#368](https://github.com/raylei50653/saccade/issues/368) — 模組文檔改以「question → current answer → limits → evidence」組織而非 task/report 編年，`semantic/` 為主要 failure case。先行的 Phase 1（只分類、不綜合；scope 凍結、輸出契約與 lifecycle marker 處理見 [Phase 1 comment](https://github.com/raylei50653/saccade/issues/368#issuecomment-5615730650)）；`semantic/research/evidence/` 治理另案，不在此範圍。
 
 ---
 
