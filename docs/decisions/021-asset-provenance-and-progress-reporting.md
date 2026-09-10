@@ -414,6 +414,12 @@ candidate iff
 > 且 `check_producer_coverage.py` 使「還剩什麼」成為機械可證的事實而非敘述。
 > **但第一條 exit criterion 仍不成立**：`scripts/eval/mot17.py` 需要 controlled-host re-attestation，
 > 那不是本線可以自行完成的動作。**AP-2 repository-side coverage complete ≠ W-A EC1 satisfied。**
+>
+> **更新（2026-09-10）：** `scripts/eval/mot17.py` 已接線（`run_producer_wired`），
+> registry 不再含任何 `run_producer_blocked`。`_per_seq/` 不是獨立 run：它是
+> parent-owned run 的 worker slot，由 `mot17_all_sdp.py` 先 claim root，child
+> 以 parent-claim token 加入，不得另發 identity。**EC1 仍未成立**：這次改的是
+> `decision_relevant` 路徑，還欠一次 controlled-host republication（§4.3）。
 
 ### W-B —— 關掉 ADR 020 的後半（issue #164）
 
@@ -489,6 +495,11 @@ compress + dispose 一個動作，讓 9 個 quarantined cluster 有出口。
 > **本修正不放寬 exit criterion。** W-A 第一條仍**不成立**，唯一 blocker 仍是
 > `scripts/eval/mot17.py` 的 controlled-host re-attestation。變的是那個 blocker 現在是
 > registry 裡一列可被 checker 證明的紀錄，而不是散文裡的一句話。
+>
+> **更新（2026-09-10）：** 接線本身已落地，`scripts/eval/mot17.py` 的 registry 列是
+> `run_producer_wired`，`run_producer_blocked` 集合為空。剩餘的 EC1 條件只剩
+> 這次 `decision_relevant` 內容變更的 controlled-host republication：接線 PR
+> 不得把一份落後的 runtime identity 當作 current。
 
 本 limit **不只涵蓋 `decision_relevant` 一條軸**。已確認落在保護區的還有
 `scripts/pre_push.sh`（`identity_semantics` 軸）—— 因此 AP-3 的 validator **無法掛上 `pre_push`**，
@@ -513,6 +524,12 @@ compress + dispose 一個動作，讓 9 個 quarantined cluster 有出口。
 - **解除條件：** 等某個**真正需要**更新 runtime coordinate 的 decision-relevant 變更出現時，
   把這個 hook 搭同一次合法 republication；或當 standalone `mot17.py` 的匿名真的成為 W-A 的主要
   blocker 時，另開一個 attestation PR。**兩者都不是本線可以順手做掉的事。**
+>
+> **更新（2026-09-10）：** 第二條解除條件已發生。standalone `mot17.py` 改為
+> `claim_or_join_run`（top-level claim；`--processes` / `mot17_all_sdp.py` worker
+> 以 parent-claim token 加入，不得只因目錄已有 manifest 就跳過）。`_per_seq/`
+> 仍不是獨立 run。這次改動本身就是一次 `decision_relevant` 變更，所以 EC1
+> 還要同一輪的 controlled-host republication 才成立。
 
 **紀錄用途：** 避免日後有人看到 PR #330 merged 就誤認 AP-2 已 complete。
 

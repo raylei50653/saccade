@@ -26,7 +26,7 @@ if build_path.exists():
     sys.path.insert(0, str(build_path))
 
 from saccade.perception.eval.metrics import run_motmetrics_evaluation  # noqa: E402
-from scripts.provenance.run_manifest import open_run  # noqa: E402
+from scripts.provenance.run_manifest import open_run, parent_claim_environ  # noqa: E402
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -381,6 +381,7 @@ def main() -> int:
 
     mot17_script = project_root / "scripts" / "eval" / "mot17.py"
     env = _base_env()
+    env.update(parent_claim_environ(output_root))
     plan: list[dict[str, object]] = []
     futures = []
 

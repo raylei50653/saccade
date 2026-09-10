@@ -26,6 +26,10 @@ from mlflow_logger import log_eval_run  # noqa: E402
 
 import yaml  # noqa: E402
 from mot17_args import build_parser, configure_runtime_env  # noqa: E402
+from scripts.provenance.run_manifest import (  # noqa: E402
+    claim_or_join_run,
+    parent_claim_environ,
+)
 
 
 def _load_config_defaults(project_root: Path) -> dict:
@@ -159,6 +163,18 @@ if __name__ == "__main__":
                 )
             )
 
+    # ADR 021 AP-2: first artifact side effect. Top-level invocations claim
+    # args.output; --processes workers and mot17_all_sdp.py children join the
+    # parent production claim instead of publishing a second identity.
+    claim_or_join_run(
+        args.output,
+        produced_by="eval",
+        preset=getattr(args, "preset", None) or None,
+        detector=getattr(args, "detector", None) or None,
+        dataset=f"{args.data_root} {args.split}",
+        cmdline=list(sys.argv),
+    )
+
     if getattr(args, "processes", 0) > 0 and args.sequences:
         import subprocess
         import time
@@ -202,10 +218,13 @@ if __name__ == "__main__":
                     cmd_base.append(arg)
                     i += 1
 
+            child_env = os.environ.copy()
+            child_env.update(parent_claim_environ(args.output))
+
             def run_single_seq(seq_name):
                 cmd = cmd_base + ["--sequences", seq_name, "--processes", "0"]
                 print(f" 🚀 Spawning process for {seq_name}...")
-                res = subprocess.run(cmd, capture_output=True, text=True)
+                res = subprocess.run(cmd, capture_output=True, text=True, env=child_env)
                 return seq_name, res.returncode, res.stdout, res.stderr
 
             with ThreadPoolExecutor(max_workers=args.processes) as executor:
