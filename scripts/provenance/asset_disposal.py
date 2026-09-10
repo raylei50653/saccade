@@ -21,9 +21,10 @@ the asset roots are gitignored, so a clean clone holds none of them.
 Committing the rendered view would make one machine's reading of 82 GB look
 like a repository fact.  So:
 
-* ``--emit`` renders for a human, to a **gitignored** path outside ``docs/``.
-  Emitting into ``docs/`` is refused outright (``build_master_map`` rglobs
-  that tree).
+* ``--emit`` renders for a human, and **only** under ``.provenance/``
+  (already gitignored).  Emitting anywhere else — including a tracked
+  path at the repo root, or into ``docs/`` — is refused outright.  The
+  guard is the directory, not a ``.gitignore`` parse.
 * ``--check`` validates rather than compares.  Zero candidates on a clean
   clone is the correct answer.  An invalid manifest still fails closed —
   a broken producer is not a candidate, and this tool must not walk past it.
@@ -67,7 +68,8 @@ from scripts.provenance.backfill import (  # noqa: E402
     self_attesting_evidence,
 )
 
-DEFAULT_OUTPUT = Path(".provenance/asset_disposal_candidates.generated.md")
+PROVENANCE_DIR = Path(".provenance")
+DEFAULT_OUTPUT = PROVENANCE_DIR / "asset_disposal_candidates.generated.md"
 
 # Policy constant.  Changing it is a spec change, not a CLI flag; the tool
 # does not offer a switch that loosens the threshold.
@@ -125,9 +127,9 @@ def utc_now() -> datetime:
 def parse_as_of(value: str) -> datetime:
     """Parse an ISO-8601 timestamp into an aware UTC datetime.
 
-    A naive value is taken as UTC rather than as local time — local time
-    would make the same ``--as-of`` produce different candidate sets on
-    two machines.
+    A naive value is refused, not defaulted to UTC.  Missing timezone is
+    missing semantics; filling it in would be the same class of silent
+    default this line refuses everywhere else.
     """
     text = value.strip()
     if text.endswith("Z"):
@@ -137,7 +139,10 @@ def parse_as_of(value: str) -> datetime:
     except ValueError as exc:
         raise DisposalError(f"invalid --as-of timestamp {value!r}") from exc
     if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
+        raise DisposalError(
+            f"naive --as-of timestamp {value!r}; a timezone is required "
+            "(append Z or an offset). Missing timezone is not UTC by default"
+        )
     return parsed.astimezone(timezone.utc)
 
 
@@ -326,14 +331,22 @@ def render(
     return "\n".join(lines)
 
 
-def _refuse_docs(target: Path, repo_root: Path) -> str | None:
-    docs_root = (repo_root / "docs").resolve()
-    if target == docs_root or docs_root in target.parents:
+def _refuse_emit(target: Path, repo_root: Path) -> str | None:
+    """Emit only under ``.provenance/``.  That directory is already gitignored.
+
+    Refusing ``docs/`` is not enough: ``--emit asset_candidates.md`` at the
+    repo root is outside ``docs/`` and still a path Git will track.  Parsing
+    ``.gitignore`` to discover every safe location would make the guard as
+    wide as the ignore file.  The contract is the directory.
+    """
+    provenance_root = (repo_root / PROVENANCE_DIR).resolve()
+    if target == provenance_root or provenance_root not in target.parents:
         return (
-            f"asset disposal: refusing to emit into {docs_root} — build_master_map "
-            "collects documents with rglob rather than git, so an untracked view "
-            "there fails the checked-in master map on this machine while CI stays "
-            f"green (ADR 021 §3 AP-5). Emit outside docs/, e.g. {DEFAULT_OUTPUT}."
+            f"asset disposal: refusing to emit outside {provenance_root} — "
+            "the candidate view is a workspace-local projection of gitignored "
+            "asset roots, and writing it anywhere Git can track would make one "
+            "machine's reading look like a repository fact (ADR 021 §3 AP-5). "
+            f"Emit under {PROVENANCE_DIR}/, e.g. {DEFAULT_OUTPUT}."
         )
     return None
 
@@ -350,7 +363,8 @@ def _build_parser() -> argparse.ArgumentParser:
         "--as-of",
         type=str,
         default=None,
-        help="UTC ISO-8601 clock for age (default: now). Naive values are UTC.",
+        help="Timezone-aware ISO-8601 clock for age (default: now). "
+        "Naive timestamps are refused.",
     )
     parser.add_argument(
         "--check",
@@ -364,7 +378,7 @@ def _build_parser() -> argparse.ArgumentParser:
         type=Path,
         nargs="?",
         const=DEFAULT_OUTPUT,
-        help=f"Render the view to a gitignored path (default: {DEFAULT_OUTPUT}).",
+        help=f"Render the view under .provenance/ (default: {DEFAULT_OUTPUT}).",
     )
     return parser
 
@@ -380,6 +394,15 @@ def main(argv: list[str] | None = None) -> int:
         print(f"asset disposal: {exc}", file=sys.stderr)
         return 2
 
+    emit_target: Path | None = None
+    if args.emit is not None:
+        emit_target = args.emit if args.emit.is_absolute() else root / args.emit
+        emit_target = emit_target.resolve()
+        refusal = _refuse_emit(emit_target, root)
+        if refusal is not None:
+            print(refusal, file=sys.stderr)
+            return 2
+
     try:
         units = scan(root)
     except InventoryError as exc:
@@ -387,25 +410,6 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     candidates = derive_candidates(units, root, now)
-
-    if args.emit is not None:
-        target = args.emit if args.emit.is_absolute() else root / args.emit
-        target = target.resolve()
-        refusal = _refuse_docs(target, root)
-        if refusal is not None:
-            print(refusal, file=sys.stderr)
-            return 2
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(
-            render(
-                candidates,
-                repo_root=root,
-                now=now,
-                unit_count=len(units),
-            ),
-            encoding="utf-8",
-        )
-        print(f"asset disposal: wrote {target}")
 
     broken = invalid_manifests(units)
     if broken:
@@ -417,6 +421,19 @@ def main(argv: list[str] | None = None) -> int:
         for unit in broken:
             print(f"  {unit.path}: {unit.detail}", file=sys.stderr)
         return 1
+
+    if emit_target is not None:
+        emit_target.parent.mkdir(parents=True, exist_ok=True)
+        emit_target.write_text(
+            render(
+                candidates,
+                repo_root=root,
+                now=now,
+                unit_count=len(units),
+            ),
+            encoding="utf-8",
+        )
+        print(f"asset disposal: wrote {emit_target}")
 
     print(
         f"asset disposal: {len(candidates)} candidate(s) for owner review "

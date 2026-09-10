@@ -486,7 +486,50 @@ def test_emitting_into_docs_is_refused(tmp_path, capsys):
     assert (repo / "results" / "old_run").is_dir()
 
 
-def test_emitting_outside_docs_is_allowed(tmp_path):
+def test_emitting_at_the_repo_root_is_refused(tmp_path, capsys):
+    """Outside docs/ is not enough: a root-level file is still Git-trackable."""
+    repo = _repo(tmp_path)
+    _old_orphan(repo)
+    target = repo / "asset_candidates.md"
+
+    code = main(
+        [
+            "--repo-root",
+            str(repo),
+            "--emit",
+            "asset_candidates.md",
+            "--as-of",
+            NOW.isoformat(),
+        ]
+    )
+
+    assert code == 2
+    assert "refusing to emit" in capsys.readouterr().err
+    assert not target.exists()
+
+
+def test_emitting_through_parent_escape_is_refused(tmp_path, capsys):
+    repo = _repo(tmp_path)
+    _old_orphan(repo)
+    target = repo / "tracked.md"
+
+    code = main(
+        [
+            "--repo-root",
+            str(repo),
+            "--emit",
+            ".provenance/../tracked.md",
+            "--as-of",
+            NOW.isoformat(),
+        ]
+    )
+
+    assert code == 2
+    assert "refusing to emit" in capsys.readouterr().err
+    assert not target.exists()
+
+
+def test_emitting_under_provenance_is_allowed(tmp_path):
     repo = _repo(tmp_path)
     _old_orphan(repo)
     assert main(["--repo-root", str(repo), "--emit", "--as-of", NOW.isoformat()]) == 0
@@ -552,8 +595,28 @@ def test_check_fails_closed_on_an_invalid_manifest(tmp_path):
     assert main(["--repo-root", str(repo), "--check", "--as-of", NOW.isoformat()]) == 1
 
 
-def test_parse_as_of_treats_naive_values_as_utc():
-    parsed = parse_as_of("2026-09-10T12:00:00")
+def test_emit_does_not_write_when_a_manifest_is_invalid(tmp_path):
+    repo = _repo(tmp_path)
+    run = _unit(repo, "results", "broken")
+    (run / MANIFEST_FILENAME).write_text('{"schema_version": 99}', encoding="utf-8")
+    target = repo / ".provenance" / "asset_disposal_candidates.generated.md"
+
+    assert main(["--repo-root", str(repo), "--emit", "--as-of", NOW.isoformat()]) == 1
+    assert not target.exists()
+
+
+def test_parse_as_of_refuses_naive_values():
+    with pytest.raises(DisposalError, match="naive"):
+        parse_as_of("2026-09-10T12:00:00")
+
+    parsed = parse_as_of("2026-09-10T12:00:00Z")
     assert parsed.tzinfo is not None
     assert parsed.utcoffset() == timedelta(0)
-    assert parse_as_of("2026-09-10T12:00:00Z") == parsed
+
+
+def test_cli_as_of_refuses_a_naive_timestamp(tmp_path, capsys):
+    repo = _repo(tmp_path)
+    _old_orphan(repo)
+    code = main(["--repo-root", str(repo), "--check", "--as-of", "2026-09-10T12:00:00"])
+    assert code == 2
+    assert "naive" in capsys.readouterr().err

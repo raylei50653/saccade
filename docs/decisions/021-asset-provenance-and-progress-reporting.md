@@ -323,20 +323,21 @@ age 從哪讀、哪一個 clock、單位粒度、比較是否確定。沒釘下�
 |---|---|
 | **orphan** | AP-3 權威定義：`not cited and manifest_state == absent`。invalid ≠ orphan |
 | **age 來源** | inventory unit **目錄本身**的 POSIX `st_mtime`（目錄 entry 最後一次增刪改名）。**不**遞迴內容 mtime（那會 rglob 82 GB，且深度不是規則）；**不**用 `started_at`（orphan 沒有 manifest，沒有那個欄位） |
-| **clock** | UTC。`now` 由呼叫端注入（CLI `--as-of`，預設 `datetime.now(timezone.utc)`）。naive datetime 拒收 |
+| **clock** | UTC。`now` 由呼叫端注入（CLI `--as-of`，預設 `datetime.now(timezone.utc)`）。naive datetime **一律拒收**——函式參數與 CLI 字串都是，**不把缺時區補成 UTC** |
 | **單位** | 整天：`age_days = (now - mtime).days`。門檻是 **`age_days >= MIN_AGE_DAYS`，`MIN_AGE_DAYS = 90`**。改門檻是 policy 變更，不是 CLI 旗標；工具不提供放寬門檻的開關 |
 | **不可信則保留** | 無法 `stat`、mtime 在未來、`now` 無時區 → **不進候選** |
 | **age 不能代替 provenance / citation** | 被 cite 的 unit、帶合法 manifest 的 unit，無論多老都不是候選。mtime / 目錄名 / size / 「看起來像舊實驗」/ README 沒寫 / grep 沒命中 / 某份 report 已 closed，**單獨任一項都不是候選條件** |
 
-**(3) 輸出路徑會被讀成 `docs/` 裡的 committed 檔。** 與 AP-3 是同一個陷阱：
-`build_master_map` 對 `docs/` 做 filesystem `rglob`；四個 asset root 全部 gitignored，
-clean clone 沒有資產。候選名單若提交，會讓 82 GB workspace 的一次閱讀看起來像
-repo 事實。因此拆成與 AP-3 相同的兩件事：
+**(3) 輸出路徑會被讀成 committed 檔。** 與 AP-3 是同一個陷阱：四個 asset root
+全部 gitignored，clean clone 沒有資產。候選名單若提交，會讓 82 GB workspace
+的一次閱讀看起來像 repo 事實。`--emit` / `--check` 的拆法同 AP-3，但 AP-5 的
+寫入守衛**更窄**：只拒絕 `docs/` 不夠——`--emit asset_candidates.md` 落在 repo
+root 同樣可被 Git 追蹤。**不解析 `.gitignore`。** 契約就是目錄：
 
 | | |
 |---|---|
-| `--emit` | 給人看的投影，寫到 **gitignored 且在 `docs/` 之外**的路徑（預設 `.provenance/asset_disposal_candidates.generated.md`）。**不提交。** 寫進 `docs/` 直接非零退出 |
-| `--check` | CI 跑的**驗證**，不是比對。clean clone 上 0 個候選是**正確答案**；invalid manifest 仍 fail-closed（沿用 AP-3：壞掉的 producer 不是候選，也不該被這條工具默默走過） |
+| `--emit` | 給人看的投影，**只准寫在 `.provenance/` 底下**（該目錄已 gitignored；預設 `.provenance/asset_disposal_candidates.generated.md`）。**不提交。** 寫到別處（含 repo root、`docs/`、經 `..` 逃出）直接非零退出 |
+| `--check` | CI 跑的**驗證**，不是比對。clean clone 上 0 個候選是**正確答案**；invalid manifest 仍 fail-closed，且發生在寫檔之前（沿用 AP-3：壞掉的 producer 不是候選，也不該被這條工具默默走過，更不該留下一份看起來完整的投影） |
 
 生成檔**不是 fact-owner**：不反向影響 inventory 分類、不把自己寫進 citation corpus
 （`*.generated.md` 已排除；本工具的投影 untracked，無論寫到哪都 cite 不了任何東西）、
