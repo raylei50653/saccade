@@ -63,7 +63,7 @@ legacy `native_960` presets (`speed` / `baseline`) remain useful for comparison,
 
 ## Sole active（WIP=1）
 
-- **AP 線 / W-A —— 資產身分層**：[ADR 021](decisions/021-asset-provenance-and-progress-reporting.md) §3 W-A。W-B（ADR 020 後半）與 W-C（生成式 status report）為 parked，未授權併行。
+- **NONE。** ADR 021 W-A 三條 exit criteria 已成立（EC1 = `mot17.py` 接線 + controlled-host republication；EC2 先前成立；EC3 = round `wa-ec3-r1-20260910`）。W-B / W-C / #368 未授權，不自動啟動。
 
 ---
 

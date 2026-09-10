@@ -63,7 +63,8 @@ has **one primary job**, explicit secondaries, and a clear **should-not-own** li
 - [asset_disposal_round_wa-ec3-r1-20260910.md](asset_disposal_round_wa-ec3-r1-20260910.md)
   is the owner-authorized action record for W-A EC3 round
   `wa-ec3-r1-20260910`. It is not a candidate list and does not authorize
-  further deletion. W-A remains open: EC1 is independently unresolved.
+  further deletion. W-A is closed: EC1 was satisfied independently by the
+  `mot17.py` producer wiring and its controlled-host republication.
 
 ---
 

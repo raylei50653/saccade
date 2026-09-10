@@ -21,7 +21,7 @@
 - [ADR 018: 專案主線收斂與雙線開發方向](018-project-main-line-direction.md)
 - [ADR 019: Demote ReID and Adopt Geometry-First Production Tracker](019-demote-reid-geometry-first-production-tracker.md)
 - [ADR 020: Doc-Lifecycle 管理策略 —「新 NO-GO」](020-doc-lifecycle-new-nogo.md)
-- [ADR 021: 資產身分層與生成式進度報告](021-asset-provenance-and-progress-reporting.md) — W-A EC3 round record: [asset_disposal_round_wa-ec3-r1-20260910.md](../ownership/asset_disposal_round_wa-ec3-r1-20260910.md)
+- [ADR 021: 資產身分層與生成式進度報告](021-asset-provenance-and-progress-reporting.md) — W-A closed (EC1–EC3). EC3 round record: [asset_disposal_round_wa-ec3-r1-20260910.md](../ownership/asset_disposal_round_wa-ec3-r1-20260910.md)
 
 > ADR 001、002、003 未建立（對應決策已直接合併至後續 ADR 中）。
 

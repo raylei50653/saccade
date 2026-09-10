@@ -140,7 +140,12 @@ Both `--check` exits were 0.
 This round satisfies **ADR 021 W-A EC3**: at least one owner-approved
 disposal round completed.
 
-It does **not** close W-A. EC1 (new producers 100% manifested) remains
-independently unresolved: `scripts/eval/mot17.py` still requires
-controlled-host re-attestation (ADR 021 §4.3). Completing EC3 is not
-authorization to start W-B, W-C, or #368.
+Completing EC3 did **not** by itself close W-A. EC1 (new producers 100%
+manifested) was independently unresolved at the time of this round:
+`scripts/eval/mot17.py` still required controlled-host re-attestation
+(ADR 021 §4.3). Completing EC3 is not authorization to start W-B, W-C,
+or #368.
+
+> **Later (2026-09-10):** EC1 was satisfied by wiring `scripts/eval/mot17.py`
+> and republishing the runtime coordinate. W-A is closed. That later action
+> is not this round and does not authorize further deletion.
