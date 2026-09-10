@@ -567,6 +567,123 @@ def require_manifest(output_dir: str | os.PathLike[str]) -> dict[str, Any]:
     return read_manifest(directory)
 
 
+# Parent-owned workers (``mot17.py --processes``, ``mot17_all_sdp.py`` children)
+# must prove they are writing into *this* invocation's claimed run. Seeing a
+# manifest on disk is not that proof: it would let a new top-level invocation
+# skip ``open_run`` and mutate an older run while keeping the old identity.
+PARENT_RUN_ROOT_ENV = "SACCADE_PARENT_RUN_ROOT"
+PARENT_RUN_CLAIM_ENV = "SACCADE_PARENT_RUN_CLAIM"
+
+
+def _production_claim_token(payload: Mapping[str, Any]) -> str:
+    """Bind a worker permit to the published identity, not to file presence."""
+    return f"{payload['run_id']}|{payload['started_at']}"
+
+
+def _output_is_inside_claimed_root(output: Path, claimed: Path) -> bool:
+    try:
+        output.relative_to(claimed)
+    except ValueError:
+        return False
+    return True
+
+
+def parent_claim_environ(claimed_root: str | os.PathLike[str]) -> dict[str, str]:
+    """Env fragment a parent adds to worker subprocesses after ``open_run``.
+
+    Call this only after the parent has published a production manifest at
+    ``claimed_root``. Workers receive these two variables together; either one
+    alone is incomplete and must fail closed.
+    """
+    root = Path(claimed_root).resolve()
+    payload = require_manifest(root)
+    if provenance_mode_of(payload) != "production":
+        raise ManifestError(
+            f"{root} is not a production claim; workers may only join a run "
+            "that published its identity before producing bytes"
+        )
+    return {
+        PARENT_RUN_ROOT_ENV: str(root),
+        PARENT_RUN_CLAIM_ENV: _production_claim_token(payload),
+    }
+
+
+def join_parent_run(output_dir: str | os.PathLike[str]) -> Path:
+    """Join a parent-owned run. Does not publish a new identity.
+
+    The parent-claim environment is the permit. An existing ``run_manifest.json``
+    is necessary but not sufficient: without the token bound to *that*
+    production identity, this is just another occupied directory.
+    """
+    claimed_raw = os.environ.get(PARENT_RUN_ROOT_ENV, "")
+    token = os.environ.get(PARENT_RUN_CLAIM_ENV, "")
+    if not claimed_raw.strip() or not token.strip():
+        raise ManifestError(
+            "join_parent_run requires SACCADE_PARENT_RUN_ROOT and "
+            "SACCADE_PARENT_RUN_CLAIM from the parent that claimed this "
+            "output; an existing manifest is not itself a worker permit"
+        )
+    claimed = Path(claimed_raw).resolve()
+    output = Path(output_dir).resolve()
+    if not _output_is_inside_claimed_root(output, claimed):
+        raise ManifestError(
+            f"output {output} is not the claimed run root {claimed} or a "
+            "directory under it; a worker may not write a different run"
+        )
+    payload = require_manifest(claimed)
+    if provenance_mode_of(payload) != "production":
+        raise ManifestError(
+            f"{claimed} is not a production claim; workers may only join a "
+            "run that published its identity before producing bytes"
+        )
+    expected = _production_claim_token(payload)
+    if token != expected:
+        raise ManifestError(
+            f"parent-run claim token does not match the published identity at "
+            f"{claimed}; refusing to join a run this process did not prove "
+            "its parent claimed"
+        )
+    return claimed / MANIFEST_FILENAME
+
+
+def claim_or_join_run(
+    output_dir: str | os.PathLike[str],
+    *,
+    produced_by: str,
+    preset: str | None = None,
+    detector: str | None = None,
+    dataset: str | None = None,
+    cmdline: Iterable[str] | None = None,
+    claims: Iterable[str] = (),
+) -> Path:
+    """Claim a new run, or join the parent named by the worker-permit env.
+
+    A partial parent-claim environment fails closed rather than falling through
+    to ``open_run``: a nested empty worker directory would otherwise become a
+    second identity under a parent that already claimed the root.
+    """
+    has_root = bool(os.environ.get(PARENT_RUN_ROOT_ENV, "").strip())
+    has_token = bool(os.environ.get(PARENT_RUN_CLAIM_ENV, "").strip())
+    if has_root or has_token:
+        if not (has_root and has_token):
+            raise ManifestError(
+                "incomplete parent-run claim environment "
+                f"(root={'set' if has_root else 'missing'}, "
+                f"claim={'set' if has_token else 'missing'}); "
+                "refusing to infer ownership"
+            )
+        return join_parent_run(output_dir)
+    return open_run(
+        output_dir,
+        produced_by=produced_by,
+        preset=preset,
+        detector=detector,
+        dataset=dataset,
+        cmdline=cmdline,
+        claims=claims,
+    )
+
+
 def build_reconstructed_manifest(
     run_id: str,
     *,

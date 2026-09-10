@@ -30,10 +30,15 @@ import pytest
 
 from scripts.provenance.run_manifest import (
     MANIFEST_FILENAME,
+    PARENT_RUN_CLAIM_ENV,
+    PARENT_RUN_ROOT_ENV,
     SCHEMA_VERSION,
     ManifestError,
     build_manifest,
+    claim_or_join_run,
+    join_parent_run,
     open_run,
+    parent_claim_environ,
     read_manifest,
     require_manifest,
     validate_manifest,
@@ -349,3 +354,139 @@ def test_batch_eval_refuses_an_output_root_that_already_holds_artifacts(
     )
     assert stale.read_bytes() == stale_bytes
     assert sorted(item.name for item in out.iterdir()) == ["MOT17-02-SDP.txt"]
+
+
+# ---------------------------------------------------------------------------
+# parent-owned workers: joining is not "the directory already has a manifest"
+# ---------------------------------------------------------------------------
+
+
+def test_an_existing_manifest_is_not_a_worker_permit(tmp_path, monkeypatch):
+    """A leftover identity must not let a new invocation skip open_run."""
+    out = tmp_path / "run"
+    open_run(out, produced_by="eval", preset="run_a")
+    (out / "MOT17-02-SDP.txt").write_text("old\n", encoding="utf-8")
+    before = (out / "MOT17-02-SDP.txt").read_bytes()
+    monkeypatch.delenv(PARENT_RUN_ROOT_ENV, raising=False)
+    monkeypatch.delenv(PARENT_RUN_CLAIM_ENV, raising=False)
+
+    with pytest.raises(ManifestError, match="is not empty"):
+        claim_or_join_run(out, produced_by="eval", preset="run_b")
+    with pytest.raises(ManifestError, match="not itself a worker permit"):
+        join_parent_run(out)
+
+    assert (out / "MOT17-02-SDP.txt").read_bytes() == before
+    assert read_manifest(out)["preset"] == "run_a"
+
+
+def test_a_worker_joins_the_parent_root_without_publishing_a_second_identity(
+    tmp_path, monkeypatch
+):
+    out = tmp_path / "run"
+    open_run(out, produced_by="eval", preset="parent")
+    for key, value in parent_claim_environ(out).items():
+        monkeypatch.setenv(key, value)
+
+    path = claim_or_join_run(out, produced_by="eval", preset="child-must-not-write")
+    assert path == out / MANIFEST_FILENAME
+    assert read_manifest(out)["preset"] == "parent"
+    assert list(out.iterdir()) == [out / MANIFEST_FILENAME]
+
+
+def test_a_nested_worker_does_not_declare_a_new_run(tmp_path, monkeypatch):
+    root = tmp_path / "run"
+    open_run(root, produced_by="eval")
+    nested = root / "_per_seq" / "MOT17-02-SDP"
+    nested.mkdir(parents=True)
+    for key, value in parent_claim_environ(root).items():
+        monkeypatch.setenv(key, value)
+
+    claim_or_join_run(nested, produced_by="eval")
+    assert not (nested / MANIFEST_FILENAME).exists()
+    assert (root / MANIFEST_FILENAME).exists()
+
+
+def test_a_worker_cannot_join_a_different_root(tmp_path, monkeypatch):
+    parent = tmp_path / "parent"
+    other = tmp_path / "other"
+    open_run(parent, produced_by="eval")
+    open_run(other, produced_by="eval")
+    for key, value in parent_claim_environ(parent).items():
+        monkeypatch.setenv(key, value)
+
+    with pytest.raises(ManifestError, match="not the claimed run root"):
+        join_parent_run(other)
+
+
+def test_a_wrong_claim_token_is_refused(tmp_path, monkeypatch):
+    out = tmp_path / "run"
+    open_run(out, produced_by="eval")
+    env = parent_claim_environ(out)
+    monkeypatch.setenv(PARENT_RUN_ROOT_ENV, env[PARENT_RUN_ROOT_ENV])
+    monkeypatch.setenv(PARENT_RUN_CLAIM_ENV, "forged|token")
+
+    with pytest.raises(ManifestError, match="token does not match"):
+        join_parent_run(out)
+
+
+def test_a_partial_parent_claim_env_does_not_fall_through_to_open_run(
+    tmp_path, monkeypatch
+):
+    """A nested empty dir plus a half-set env must not become a second identity."""
+    root = tmp_path / "run"
+    open_run(root, produced_by="eval")
+    nested = root / "_per_seq" / "MOT17-02-SDP"
+    nested.mkdir(parents=True)
+    monkeypatch.setenv(PARENT_RUN_ROOT_ENV, str(root.resolve()))
+    monkeypatch.delenv(PARENT_RUN_CLAIM_ENV, raising=False)
+
+    with pytest.raises(ManifestError, match="incomplete parent-run claim"):
+        claim_or_join_run(nested, produced_by="eval")
+    assert not (nested / MANIFEST_FILENAME).exists()
+
+
+def test_batch_eval_workers_receive_a_parent_claim_and_do_not_get_nested_manifests(
+    tmp_path, monkeypatch
+):
+    """mot17_all_sdp.py owns the run; _per_seq/<seq> is a worker slot, not a run."""
+    entry = _load_entry("mot17_all_sdp_parent_claim", "scripts/eval/mot17_all_sdp.py")
+    out = tmp_path / "results_parent"
+    captured_env: list[dict[str, str]] = []
+
+    def fake_run_sequence(*, seq, cmd, output_dir, env, dry_run):
+        captured_env.append(dict(env))
+        return {
+            "sequence": seq,
+            "returncode": 0,
+            "log_path": str(output_dir / f"{seq}.log"),
+            "cmd": cmd,
+            "dry_run": dry_run,
+            "wall_sec": 0.0,
+        }
+
+    monkeypatch.setattr(entry, "_run_sequence", fake_run_sequence)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "mot17_all_sdp.py",
+            "--output",
+            str(out),
+            "--sequences",
+            "MOT17-02-SDP",
+            "--dry-run",
+        ],
+    )
+
+    entry.main()
+
+    assert captured_env, "dispatch never ran"
+    env = captured_env[0]
+    assert env[PARENT_RUN_ROOT_ENV] == str(out.resolve())
+    assert env[PARENT_RUN_CLAIM_ENV] == (
+        f"{read_manifest(out)['run_id']}|{read_manifest(out)['started_at']}"
+    )
+    nested = out / "_per_seq" / "MOT17-02-SDP"
+    assert nested.is_dir()
+    assert not (nested / MANIFEST_FILENAME).exists()
+    assert (out / MANIFEST_FILENAME).exists()

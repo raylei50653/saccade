@@ -398,6 +398,8 @@ candidate iff
 **Exit criteria（W-A）：** 新產出 100% 帶 manifest；orphan 集合有機械定義且可重生；至少完成一輪人工核可的 disposal。
 *釋出的 GB 數是副產品，不是驗收指標。*
 
+> **更新（2026-09-10）：W-A 三條 exit criteria 均成立。** EC2（orphan 機械定義）先前已成立；EC3 由 round `wa-ec3-r1-20260910` 成立；EC1 由 `scripts/eval/mot17.py` 接線 + 本次 controlled-host republication 成立。**這關閉 W-A。** 不啟動 W-B / W-C / #368。
+
 > **AP-5 落地 ≠ 第三條 exit criterion 成立。** 本項給的是候選機制與核可邊界；
 > 「一輪人工核可的 disposal」仍要 owner 另一次授權動作才算，本項刻意不做那一步。
 >
@@ -414,6 +416,13 @@ candidate iff
 > 且 `check_producer_coverage.py` 使「還剩什麼」成為機械可證的事實而非敘述。
 > **但第一條 exit criterion 仍不成立**：`scripts/eval/mot17.py` 需要 controlled-host re-attestation，
 > 那不是本線可以自行完成的動作。**AP-2 repository-side coverage complete ≠ W-A EC1 satisfied。**
+>
+> **更新（2026-09-10）：** `scripts/eval/mot17.py` 已接線（`run_producer_wired`），
+> registry 不再含任何 `run_producer_blocked`。`_per_seq/` 不是獨立 run：它是
+> parent-owned run 的 worker slot，由 `mot17_all_sdp.py` 先 claim root，child
+> 以 parent-claim token 加入，不得另發 identity。同一輪的 controlled-host
+> republication 已把這次 `decision_relevant` 變更寫進 current coordinate。
+> **EC1 成立。**
 
 ### W-B —— 關掉 ADR 020 的後半（issue #164）
 
@@ -489,6 +498,11 @@ compress + dispose 一個動作，讓 9 個 quarantined cluster 有出口。
 > **本修正不放寬 exit criterion。** W-A 第一條仍**不成立**，唯一 blocker 仍是
 > `scripts/eval/mot17.py` 的 controlled-host re-attestation。變的是那個 blocker 現在是
 > registry 裡一列可被 checker 證明的紀錄，而不是散文裡的一句話。
+>
+> **更新（2026-09-10）：** 接線已落地，`scripts/eval/mot17.py` 為
+> `run_producer_wired`，`run_producer_blocked` 集合為空。同一輪 controlled-host
+> republication（`--run-probe`，不重用舊 probe）已描述這次 HEAD。**EC1 成立，
+> W-A 關閉。** 本 named limit 的「mot17.py 仍匿名」後果不再適用。
 
 本 limit **不只涵蓋 `decision_relevant` 一條軸**。已確認落在保護區的還有
 `scripts/pre_push.sh`（`identity_semantics` 軸）—— 因此 AP-3 的 validator **無法掛上 `pre_push`**，
@@ -513,6 +527,14 @@ compress + dispose 一個動作，讓 9 個 quarantined cluster 有出口。
 - **解除條件：** 等某個**真正需要**更新 runtime coordinate 的 decision-relevant 變更出現時，
   把這個 hook 搭同一次合法 republication；或當 standalone `mot17.py` 的匿名真的成為 W-A 的主要
   blocker 時，另開一個 attestation PR。**兩者都不是本線可以順手做掉的事。**
+>
+> **更新（2026-09-10）：** 第二條解除條件已發生。standalone `mot17.py` 改為
+> `claim_or_join_run`（top-level claim；`--processes` / `mot17_all_sdp.py` worker
+> 以 parent-claim token 加入，不得只因目錄已有 manifest 就跳過）。`_per_seq/`
+> 仍不是獨立 run。同一輪 controlled-host republication 以 `--run-probe` 重跑
+> MOT17-09 identity probe（不重用舊 `behavior.json`），implementation 軸僅
+> `scripts/eval/mot17.py` 移動。probe digest 相同只記為觀察，**不**宣告
+> semantic equivalence（`equivalence.state` 仍為 `unproven`）。
 
 **紀錄用途：** 避免日後有人看到 PR #330 merged 就誤認 AP-2 已 complete。
 

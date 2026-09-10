@@ -452,10 +452,8 @@
       "reason": "MLflow logging helper invoked after results are written; cannot carry the AP-2 ordering guarantee"
     },
     "scripts/eval/mot17.py": {
-      "classification": "run_producer_blocked",
-      "reason": "flagship single-sequence MOT17 eval; writes its --output directory (default results/MOT17_eval, declared in scripts/eval/config/core.py) with no manifest",
-      "blocked_by": "docs/decisions/021-asset-provenance-and-progress-reporting.md#43-named-limit--protected-path-remainder",
-      "unblock_requires": "controlled-host re-attestation: build_runtime_identity.py --probe-from <identity-probe.json> --runtime-inputs-from <runtime-inputs.json>"
+      "classification": "run_producer_wired",
+      "reason": "flagship MOT17 eval; claims --output before writing sequence results, or joins a parent production claim when spawned as a worker"
     },
     "scripts/eval/mot17_all_sdp.py": {
       "classification": "run_producer_wired",

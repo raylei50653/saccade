@@ -123,8 +123,14 @@ def domain_files(payload: dict[str, Any], repo_root: Path) -> set[str]:
     return {p for p in listed if p.endswith(suffix)}
 
 
+# Producer-facing claim calls. ``claim_or_join_run`` is the parent/worker-aware
+# form of ``open_run``; ``join_parent_run`` alone is a worker permit check and
+# does not claim a new directory, so it does not satisfy wiring.
+_CLAIM_CALLS = frozenset({"open_run", "claim_or_join_run"})
+
+
 def calls_open_run(source: str) -> bool:
-    """True when the module contains an actual ``open_run(...)`` call.
+    """True when the module contains an actual claim call.
 
     Parsed, not grepped: a docstring or a comment naming ``open_run`` must not
     satisfy the wiring requirement, or deleting the call while leaving the
@@ -137,9 +143,9 @@ def calls_open_run(source: str) -> bool:
     for node in ast.walk(tree):
         if isinstance(node, ast.Call):
             func = node.func
-            if isinstance(func, ast.Name) and func.id == "open_run":
+            if isinstance(func, ast.Name) and func.id in _CLAIM_CALLS:
                 return True
-            if isinstance(func, ast.Attribute) and func.attr == "open_run":
+            if isinstance(func, ast.Attribute) and func.attr in _CLAIM_CALLS:
                 return True
     return False
 
@@ -197,7 +203,8 @@ def check(repo_root: Path, payload: dict[str, Any] | None = None) -> list[str]:
 
         if classification == "run_producer_wired" and not wired:
             failures.append(
-                f"{path}: classified run_producer_wired but calls no open_run(). "
+                f"{path}: classified run_producer_wired but calls no "
+                "open_run()/claim_or_join_run(). "
                 "Either wire it manifest-first or reclassify it."
             )
         if classification == "not_a_run_producer" and wired:

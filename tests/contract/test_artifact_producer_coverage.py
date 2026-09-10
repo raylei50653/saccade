@@ -44,12 +44,13 @@ from scripts.provenance.check_producer_coverage import (
 
 REPO = Path(__file__).resolve().parents[2]
 
-# The producer whose coverage ADR 021 §4.3 names as blocked. It is asserted by
-# name because "the remainder is empty" and "the remainder is unrecorded" must
-# not be able to look the same to this suite.
-BLOCKED_PRODUCER = "scripts/eval/mot17.py"
+# The producer ADR 021 §4.3 named as the protected-path remainder. It is
+# asserted by name because "the remainder is empty" and "the remainder is
+# unrecorded" must not be able to look the same to this suite.
+FLAGSHIP_EVAL = "scripts/eval/mot17.py"
 
 WIRED_IN_THIS_PR = (
+    "scripts/eval/mot17.py",
     "scripts/eval/concurrent_mot17.py",
     "scripts/eval/baselines/mot17_public.py",
     "scripts/eval/baselines/ultralytics_official_mot17.py",
@@ -109,27 +110,32 @@ def test_the_four_producers_wired_in_this_pr_are_wired(registry):
 # ---------------------------------------------------------------------------
 
 
-def test_mot17_is_recorded_as_blocked_not_silently_excluded(registry):
-    """§4.3's remainder is a registry row, not a gap in one.
+def test_mot17_is_wired_and_no_blocked_producer_remains(registry):
+    """§4.3's remainder is gone only when the flagship eval is actually wired.
 
-    W-A exit criterion 1 is not satisfied while this row exists. The row is what
-    makes that statement checkable instead of a claim in prose.
+    Relabelling the row without a claim call would fail the coverage checker;
+    deleting the row would fail as an unlisted domain file. Either way the
+    remainder cannot become an unrecorded gap.
     """
-    entry = registry["entries"][BLOCKED_PRODUCER]
-    assert entry["classification"] == "run_producer_blocked"
-    assert "021" in entry["blocked_by"]
-    assert entry["unblock_requires"]
-    assert not calls_open_run((REPO / BLOCKED_PRODUCER).read_text(encoding="utf-8"))
+    blocked = [
+        path
+        for path, entry in registry["entries"].items()
+        if entry["classification"] == "run_producer_blocked"
+    ]
+    assert blocked == [], blocked
+    entry = registry["entries"][FLAGSHIP_EVAL]
+    assert entry["classification"] == "run_producer_wired"
+    assert calls_open_run((REPO / FLAGSHIP_EVAL).read_text(encoding="utf-8"))
 
 
-def test_blocked_producer_really_is_in_a_protected_partition():
-    """The block is a property of the repository, not of the registry's say-so."""
+def test_flagship_eval_is_still_a_protected_path():
+    """Wiring does not move mot17.py out of the decision_relevant partition."""
     import sys
 
     sys.path.insert(0, str(REPO / "scripts" / "tools"))
     import h2_path_partition as partition
 
-    assert partition.classify(BLOCKED_PRODUCER) in PROTECTED_PARTITION_CLASSES
+    assert partition.classify(FLAGSHIP_EVAL) in PROTECTED_PARTITION_CLASSES
 
 
 def test_blocked_is_not_an_escape_hatch_for_unprotected_files(tmp_path, registry):
@@ -186,8 +192,24 @@ def test_removing_an_open_run_integration_is_detected(path):
     """
     source = (REPO / path).read_text(encoding="utf-8")
     assert calls_open_run(source)
-    without_call = source.replace("open_run(", "_disabled_open_run(")
+    without_call = source.replace(
+        "claim_or_join_run(", "_disabled_claim_or_join_run("
+    ).replace("open_run(", "_disabled_open_run(")
     assert not calls_open_run(without_call)
+
+
+def test_join_parent_run_alone_does_not_count_as_wiring():
+    """A worker-permit check is not a claim. Top-level invocations still need one."""
+    source = "from scripts.provenance.run_manifest import join_parent_run\njoin_parent_run(out)\n"
+    assert not calls_open_run(source)
+
+
+def test_claim_or_join_run_counts_as_wiring():
+    source = (
+        "from scripts.provenance.run_manifest import claim_or_join_run\n"
+        "claim_or_join_run(out, produced_by='eval')\n"
+    )
+    assert calls_open_run(source)
 
 
 def test_unknown_classification_fails_closed(registry):
@@ -208,7 +230,7 @@ def test_a_wired_classification_without_the_call_fails_closed(registry):
         "reason": "claimed wired",
     }
     failures = check(REPO, payload)
-    assert any("calls no open_run" in f for f in failures)
+    assert any("calls no open_run()/claim_or_join_run()" in f for f in failures)
 
 
 def test_registry_rejects_unknown_fields(tmp_path, registry):
