@@ -400,6 +400,11 @@ candidate iff
 
 > **AP-5 落地 ≠ 第三條 exit criterion 成立。** 本項給的是候選機制與核可邊界；
 > 「一輪人工核可的 disposal」仍要 owner 另一次授權動作才算，本項刻意不做那一步。
+>
+> **更新（2026-09-10）：** 那次授權動作已發生。W-A **EC3 成立**，round
+> `wa-ec3-r1-20260910`，紀錄在
+> [asset_disposal_round_wa-ec3-r1-20260910.md](../ownership/asset_disposal_round_wa-ec3-r1-20260910.md)。
+> **這不關閉 W-A。** EC1 仍獨立未解除（§4.3）。候選投影仍然不是刪除授權。
 
 > ⚠️ **第一條 exit criterion 目前不成立，且不由 W-A 自己解除**——見 §4.3 的 named limit。
 > `scripts/eval/mot17.py` 與 `_per_seq/` 子目錄仍未覆蓋，因此 **AP-2 的狀態是 partial coverage，不是 complete**。

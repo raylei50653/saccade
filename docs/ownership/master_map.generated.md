@@ -137,6 +137,7 @@ Manifest: `docs/ownership/doc_migration_manifest.yaml`
 - `docs/modules/trigger/TODO.md`
 - `docs/modules/trigger/research/dynamic_trigger.md`
 - `docs/ownership/README.md`
+- `docs/ownership/asset_disposal_round_wa-ec3-r1-20260910.md`
 - `docs/ownership/change_routing_matrix.md`
 - `docs/ownership/doc_migration_manifest.yaml`
 - `docs/ownership/doc_structure_contract.md`
@@ -364,6 +365,6 @@ Excluded from the active index and default search view.
 
 ## Inventory summary
 
-- documents: 314
-- active: 259
+- documents: 315
+- active: 260
 - grayed out: 55
