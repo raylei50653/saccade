@@ -344,6 +344,41 @@ def _has_run_output(directory: Path) -> bool:
     )
 
 
+def self_attesting_evidence(directory: Path) -> tuple[str, ...]:
+    """Why this directory already attests to itself, if it does.
+
+    Two independent grounds, each established by evidence rather than by
+    layout — the same pair ``classify`` uses.  The names returned are audit
+    pointers, not a classification: callers decide what the evidence means
+    for *their* action.  AP-5 reads this as a blocking condition; it does
+    not grow a second identity taxonomy.
+    """
+    return tuple(_authority_declaring_records(directory) + _covering_seals(directory))
+
+
+def multi_run_container_evidence(directory: Path) -> str:
+    """Non-empty if this directory holds several runs rather than one.
+
+    Same shape tests ``classify`` uses.  Returned as a reason string so a
+    caller can block without inheriting backfill's writable/not-writable
+    taxonomy — that taxonomy is about reconstruction, not about disposal.
+    """
+    children = [child for child in sorted(directory.iterdir()) if child.is_dir()]
+    run_children = [child for child in children if _has_run_output(child)]
+    if len(run_children) >= 2:
+        return (
+            f"holds {len(run_children)} directories that each contain run output "
+            f"({', '.join(child.name for child in run_children[:4])}...); one "
+            "manifest here would assert that several runs were one"
+        )
+    if len(children) >= 2 and not _has_run_output(directory):
+        return (
+            f"nothing is written at this level; the {len(children)} directories "
+            "below it are where runs live"
+        )
+    return ""
+
+
 def _authority_declaring_records(directory: Path) -> list[str]:
     """JSON records directly here that declare an authority of their own."""
     hits = []
@@ -613,21 +648,9 @@ def classify(repo_root: Path, rel: str, cited_by: tuple[str, ...]) -> Candidate:
             "invalidate the seal",
         )
 
-    children = [child for child in sorted(target.iterdir()) if child.is_dir()]
-    run_children = [child for child in children if _has_run_output(child)]
-    if len(run_children) >= 2:
-        return make(
-            CONTAINER,
-            f"holds {len(run_children)} directories that each contain run output "
-            f"({', '.join(child.name for child in run_children[:4])}...); one "
-            "manifest here would assert that several runs were one",
-        )
-    if len(children) >= 2 and not _has_run_output(target):
-        return make(
-            CONTAINER,
-            f"nothing is written at this level; the {len(children)} directories "
-            "below it are where runs live",
-        )
+    container = multi_run_container_evidence(target)
+    if container:
+        return make(CONTAINER, container)
     if not _has_run_output(target):
         return make(
             INSUFFICIENT,

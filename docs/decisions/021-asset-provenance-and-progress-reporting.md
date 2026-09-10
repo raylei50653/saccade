@@ -304,12 +304,101 @@ publication 本身改用 `os.link` **獨佔建立**，競爭的寫入者是 rais
 不把 chain 指到的檔案升格成它的父目錄（那是本工具替文件發明了一個它沒做的引用）；
 不刪除、不建議刪除任何東西（AP-5）。**不回填 681 個目錄。**
 
-**AP-5 · disposal policy**
+**AP-5 · disposal candidates —— 候選產生，不是刪除判決**
 
-`orphan` ∧ mtime > N 天 ∧ 不在任何 cited 集合 → 進 `asset_disposal_candidates.generated.md`；**由 owner 人工核可才刪**。這是 82 G 的唯一合法出口。
+> **修正（2026-09-10）：原文「`orphan` ∧ mtime > N 天 ∧ 不在任何 cited 集合 → 進 `asset_disposal_candidates.generated.md`；由 owner 人工核可才刪」不可執行。**
+> 六個結構問題，逐條如下。本項落地的是**可審核的候選投影**，不是刪除器，也不是核可紀錄。
+
+**(1) 「不在任何 cited 集合」已被 `orphan` 蘊含。** AP-3 的 orphan 是
+`¬cited ∧ manifest 完全缺席`。第三個合取項是同一個事實寫兩次，會讓人以為 cited
+還有另一個集合、或 orphan 可以含 cited。候選謂詞必須**沿用 AP-3 的 orphan 定義**，
+不得另建一套 asset state taxonomy，也不得把 `invalid_manifest` 折進 orphan
+（AP-3 已鎖：不合法的 manifest 是壞掉的 producer，不是 backlog）。
+
+**(2) `N` 與 age 的 clock 沒有定義。** 「mtime > N 天」少了四件承重的事：
+age 從哪讀、哪一個 clock、單位粒度、比較是否確定。沒釘下來，兩個 workspace
+會對同一目錄得出不同候選，而那個差異會被叫做 policy。本項釘死為：
+
+| | |
+|---|---|
+| **orphan** | AP-3 權威定義：`not cited and manifest_state == absent`。invalid ≠ orphan |
+| **age 來源** | inventory unit **目錄本身**的 POSIX `st_mtime`（目錄 entry 最後一次增刪改名）。**不**遞迴內容 mtime（那會 rglob 82 GB，且深度不是規則）；**不**用 `started_at`（orphan 沒有 manifest，沒有那個欄位） |
+| **clock** | UTC。`now` 由呼叫端注入（CLI `--as-of`，預設 `datetime.now(timezone.utc)`）。naive datetime 拒收 |
+| **單位** | 整天：`age_days = (now - mtime).days`。門檻是 **`age_days >= MIN_AGE_DAYS`，`MIN_AGE_DAYS = 90`**。改門檻是 policy 變更，不是 CLI 旗標；工具不提供放寬門檻的開關 |
+| **不可信則保留** | 無法 `stat`、mtime 在未來、`now` 無時區 → **不進候選** |
+| **age 不能代替 provenance / citation** | 被 cite 的 unit、帶合法 manifest 的 unit，無論多老都不是候選。mtime / 目錄名 / size / 「看起來像舊實驗」/ README 沒寫 / grep 沒命中 / 某份 report 已 closed，**單獨任一項都不是候選條件** |
+
+**(3) 輸出路徑會被讀成 `docs/` 裡的 committed 檔。** 與 AP-3 是同一個陷阱：
+`build_master_map` 對 `docs/` 做 filesystem `rglob`；四個 asset root 全部 gitignored，
+clean clone 沒有資產。候選名單若提交，會讓 82 GB workspace 的一次閱讀看起來像
+repo 事實。因此拆成與 AP-3 相同的兩件事：
+
+| | |
+|---|---|
+| `--emit` | 給人看的投影，寫到 **gitignored 且在 `docs/` 之外**的路徑（預設 `.provenance/asset_disposal_candidates.generated.md`）。**不提交。** 寫進 `docs/` 直接非零退出 |
+| `--check` | CI 跑的**驗證**，不是比對。clean clone 上 0 個候選是**正確答案**；invalid manifest 仍 fail-closed（沿用 AP-3：壞掉的 producer 不是候選，也不該被這條工具默默走過） |
+
+生成檔**不是 fact-owner**：不反向影響 inventory 分類、不把自己寫進 citation corpus
+（`*.generated.md` 已排除；本工具的投影 untracked，無論寫到哪都 cite 不了任何東西）、
+不 self-certify。每次產生都從**當下** workspace 重算；前一次輸出不是輸入。
+stale 檔留在磁碟上也不構成現況權威 —— 它自己的 header 如是宣告。
+
+**(4) 原文沒有 fail-closed 的保留條件。** 以下情況**不得**進候選，不確定時保留資產：
+
+- invalid / unparseable / 未知的 `manifest_state`
+- cited，或 `manifest_state != absent`（含合法 production / reconstructed manifest）
+- 不是 AP-3 orphan
+- 不是單一 accounting unit：沿用 AP-3 粒度（只看四個 root 的 immediate child；
+  nested `_per_seq/` / checkpoints 不是 unit），再加上 AP-4 已有的
+  **multi-run container** 形狀（一個 unit 底下是多個 run 時，刪它等於一次刪好幾次 run，粒度不明）
+- AP-4 已有的 **self-attesting / covering seal** 證據（目錄已自帶身分或封印；
+  給它一張「可審核刪除」的候選名單，會與那份身分競爭）。證據函式由 AP-4 擁有，本項只讀
+- ownership / identity / provenance 無法解析（路徑不安全、目錄不可讀、不是目錄）
+
+這不是新 taxonomy。AP-3 的三個查詢視圖（cited / manifested / orphan）與 invalid
+第三態維持原義；上列是**為什麼一個 unit 不是候選**的 blocking conditions，
+只活在候選謂詞裡，不寫回 inventory。
+
+**(5) 「由 owner 人工核可才刪」把候選與刪除、核可混成一步。**
+本項**只產生候選**。任何輸出都不得表示 safe to delete / approved for deletion /
+disposable by default / auto-delete eligible。候選的意義只有一句：
+
+> 依既有機械條件，值得交給 owner 審查的資產。
+
+**Owner approval 不寫進這份投影。** 寫進去會讓 generated view 變成核可的
+fact-owner —— 第二套 state owner。核可是 owner 在**另一個授權動作**裡寫下的
+verdict；本工具不記錄它、不推斷它、不執行它。**核可缺席不得讀成核可。**
+
+**(6) 本項不刪除任何東西。** 不 `rm`、不 move-to-trash、不依 age / orphan
+自動清 `runs/` `results/` `out/` `output/`、不新增 unattended deletion job。
+真正的 deletion flow 是**另外一個**授權動作，本 PR 只保留那個邊界：
+候選 ≠ 核可 ≠ 刪除。需要刪時，授權來自 owner 的明確 authority，不是這份名單。
+
+**謂詞（確定、可重生）：** 給定同一組 AP-3 units、同一組 filesystem 證據、同一個
+aware UTC `now`、同一條 `MIN_AGE_DAYS` policy，候選集合相同。
+
+```
+candidate iff
+    manifest_state 是已知值 {valid, invalid, absent}
+    AND manifest_state == absent
+    AND not cited
+    AND AP-3 orphan
+    AND unit 路徑安全且目錄可讀
+    AND mtime 不在未來
+    AND age_days >= 90
+    AND 無 AP-4 self-attesting / covering-seal 證據
+    AND 不是 AP-4 multi-run container
+```
+
+`scripts/provenance/asset_disposal.py`（與 inventory / backfill 同家）。
+候選產生器是純函式投影：`asset_inventory.scan` → `evaluate` → 生成視圖。
+它不修改 unit 分類，也不讀自己上次的輸出。
 
 **Exit criteria（W-A）：** 新產出 100% 帶 manifest；orphan 集合有機械定義且可重生；至少完成一輪人工核可的 disposal。
 *釋出的 GB 數是副產品，不是驗收指標。*
+
+> **AP-5 落地 ≠ 第三條 exit criterion 成立。** 本項給的是候選機制與核可邊界；
+> 「一輪人工核可的 disposal」仍要 owner 另一次授權動作才算，本項刻意不做那一步。
 
 > ⚠️ **第一條 exit criterion 目前不成立，且不由 W-A 自己解除**——見 §4.3 的 named limit。
 > `scripts/eval/mot17.py` 與 `_per_seq/` 子目錄仍未覆蓋，因此 **AP-2 的狀態是 partial coverage，不是 complete**。
@@ -367,7 +456,7 @@ compress + dispose 一個動作，讓 9 個 quarantined cluster 有出口。
 
 1. **AP 線自己要有 terminal slot。** 否則它就是第 10 個 quarantined cluster。dogfood 才能證明 S1/S3 可用。
 2. **每新增/刪除 `docs/**.md` 或 `.yaml` 必須重生 `master_map.generated.md`**，否則 `tests/contract/test_migration_manifest_v0.py` fail-closed。
-3. **不新增第四套 archive。** inventory 是生成的查詢視圖；manifest 是 ephemeral 的機械事實。兩者都不承載 verdict。
+3. **不新增第四套 archive。** inventory 與 disposal candidates 都是生成的查詢視圖；manifest 是 ephemeral 的機械事實。三者都不承載 verdict。
 
 ### 4.3 Named limit —— protected-path remainder（結構性，非一次性失誤）
 
