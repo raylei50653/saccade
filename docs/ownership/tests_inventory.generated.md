@@ -63,7 +63,7 @@ Governance state per module. A multi-scope test counts once per scope.
 
 | Test | Scope | Function | Lifecycle | Summary |
 |------|-------|----------|-----------|---------|
-| `test_adr_022_check_taxonomy.py` | system | contract | active | ADR 022's four representative cases, pinned to the checker's behavior today. |
+| `test_adr_022_check_taxonomy.py` | system | contract | active | ADR 022's four representative cases, now asserting the taxonomy itself. |
 | `test_artifact_producer_coverage.py` | system | contract | active | Contract for the ADR 021 AP-2 producer registry: coverage cannot drift silently. |
 | `test_asset_inventory.py` | system | contract | active | Contract for the ADR 021 asset inventory: a projection that must not lie. |
 | `test_declaration_policy_binding.py` | system | contract | active | A declaration's policy target is declared in YAML, and checked against the code. |

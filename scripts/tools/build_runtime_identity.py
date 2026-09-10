@@ -181,13 +181,28 @@ def _torch_environment() -> dict[str, Any]:
     return info
 
 
-def environment_axis() -> dict[str, Any]:
+def environment_recipe() -> list[dict[str, str]]:
+    """The portable half of the environment axis: git blobs, checkable anywhere.
+
+    Separated from the observed toolchain because the two halves have different
+    checkability, not merely different content. These are tracked git objects,
+    so any host can recompute and compare them; `_torch_environment()` reads the
+    Torch/CUDA/TensorRT closure actually installed on this machine and only the
+    controlled host can say anything about it. Hashing them into one digest is
+    what let a `pyproject.toml`/`uv.lock` change go unnoticed by every check
+    that is not on the controlled host.
+    """
     recipe = []
     for name in ENVIRONMENT_FILES:
         path = REPO_ROOT / name
         if not path.is_file():
             raise IdentityError(f"environment input is absent: {name}")
         recipe.append({"blob": _git("hash-object", "--", name), "path": name})
+    return recipe
+
+
+def environment_axis() -> dict[str, Any]:
+    recipe = environment_recipe()
     toolchain = _torch_environment()
     return {
         "digest": behavior.digest({"recipe": recipe, "toolchain": toolchain}),
@@ -464,6 +479,24 @@ def main(argv: list[str] | None = None) -> int:
         print(f"runtime coordinate publication failed: {exc}", file=sys.stderr)
         return 1
 
+    # Before the write, never after: pointed at the canonical path, a check that
+    # runs after --emit destroys a complete publication and only then reports
+    # failure, losing both the old publication and the new one.
+    if args.require_complete and not publication["publication_complete"]:
+        print("coordinate/probe publication is incomplete", file=sys.stderr)
+        for name, value in publication["coordinate"].items():
+            print(f"  coordinate.{name:18} {value}", file=sys.stderr)
+        print(
+            f"  probe.behavior       {publication['probe']['digest']}", file=sys.stderr
+        )
+        print(
+            f"nothing was written to {args.emit}"
+            if args.emit
+            else "nothing was written",
+            file=sys.stderr,
+        )
+        return 1
+
     output = behavior.canonical_json_bytes(publication) + b"\n"
     if args.emit:
         args.emit.parent.mkdir(parents=True, exist_ok=True)
@@ -475,9 +508,6 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  coordinate.{name:18} {value}")
     print(f"  probe.behavior       {publication['probe']['digest']}")
     print("  equivalence          unproven")
-    if args.require_complete and not publication["publication_complete"]:
-        print("coordinate/probe publication is incomplete", file=sys.stderr)
-        return 1
     return 0
 
 
