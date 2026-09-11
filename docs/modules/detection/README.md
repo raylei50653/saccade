@@ -9,6 +9,7 @@
 | 文件 | 內容 | 狀態 |
 |------|------|------|
 | [option-f-mamba-head.md](option-f-mamba-head.md) | Mamba SSM Detection Head lineage（現行 baseline 已升到 `mamba_whole_graph`）| active |
+| [ADR 023](../../decisions/023-ultralytics-runtime-decouple.md) | Ultralytics 相依盤點與 runtime 解耦邊界（#391；不授權換 detector）| proposed |
 | [mamba-head-training.md](mamba-head-training.md) | Mamba head 完整訓練流程（distill→GT-ft、版本譜系、高解析重訓）| reference |
 | [mamba-v14r-training-protocol.md](mamba-v14r-training-protocol.md) | v14-R canonical protocol、split/seed、選模與 provenance 規範 | canonical |
 | [mamba-v14-replication-protocol.md](mamba-v14-replication-protocol.md) | legacy v14 復刻協議（刻意保留 02 洩漏結構，驗證 recipe 可重現性）| reference |

@@ -22,6 +22,8 @@
 - [ADR 019: Demote ReID and Adopt Geometry-First Production Tracker](019-demote-reid-geometry-first-production-tracker.md)
 - [ADR 020: Doc-Lifecycle 管理策略 —「新 NO-GO」](020-doc-lifecycle-new-nogo.md)
 - [ADR 021: 資產身分層與生成式進度報告](021-asset-provenance-and-progress-reporting.md) — W-A closed (EC1–EC3). EC3 round record: [asset_disposal_round_wa-ec3-r1-20260910.md](../ownership/asset_disposal_round_wa-ec3-r1-20260910.md)
+- [ADR 022: 檢查分類法與出版落後預設](022-check-taxonomy-and-publication-lag.md)
+- [ADR 023: 評估 detector 路徑與 Ultralytics 的解耦邊界](023-ultralytics-runtime-decouple.md) — issue #391；分析 only，不授權換 detector
 
 > ADR 001、002、003 未建立（對應決策已直接合併至後續 ADR 中）。
 

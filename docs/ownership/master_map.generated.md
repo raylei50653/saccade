@@ -53,6 +53,7 @@ Manifest: `docs/ownership/doc_migration_manifest.yaml`
 - `docs/decisions/020-doc-lifecycle-new-nogo.md`
 - `docs/decisions/021-asset-provenance-and-progress-reporting.md`
 - `docs/decisions/022-check-taxonomy-and-publication-lag.md`
+- `docs/decisions/023-ultralytics-runtime-decouple.md`
 - `docs/decisions/README.md`
 - `docs/experiments/README.md`
 - `docs/experiments/occ_exit_audit_p55/README.md`
@@ -365,6 +366,6 @@ Excluded from the active index and default search view.
 
 ## Inventory summary
 
-- documents: 315
-- active: 260
+- documents: 316
+- active: 261
 - grayed out: 55
