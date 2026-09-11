@@ -113,7 +113,10 @@ repo 內另有兩份直接收錄的第三方程式碼，各自沿用原授權：
 
 `ultralytics` 是 **AGPL-3.0**，而且被 detector 路徑直接 import
 （`src/saccade/perception/temporal_yolo/`、`scripts/eval/` 共數十個檔案）。
-本 repo 的 Apache-2.0 只涵蓋我們自己寫的部分；一旦把含 `ultralytics` 的
-combined work 散佈出去，或以網路服務形式提供，AGPL-3.0 的義務仍然適用。
-要避開這點只有兩條路：把 detector 換成非 AGPL 的實作，或取得 Ultralytics
-商業授權。
+本 repo 的 Apache-2.0 只涵蓋我們自己寫的部分，不改變任何相依性自身的授權條款。
+
+依 [Ultralytics 官方 licensing guidance](https://www.ultralytics.com/license)，
+把含 `ultralytics` 的 combined work 散佈出去、或以網路服務形式提供，可能被要求
+遵守 AGPL-3.0（包含提供對應原始碼），或改為取得 Ultralytics 商業授權。這裡陳述
+的是 upstream 自己的授權立場，不是本 repo 對 AGPL 邊界的法律判斷；實際要走哪條
+路請自行評估或徵詢法律意見。
