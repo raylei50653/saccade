@@ -210,7 +210,8 @@ Detection 設計索引（非本檔展開）：[docs/modules/detection/README.md]
 | Eval 編排 | `scripts/eval/mot17.py`、`eval/evaluator.py`、`eval/pipeline.py` |
 | Preset / knobs | `scripts/eval/config/`、`configs/presets/` |
 
-系統分層與工業路徑總圖：[docs/architecture/README.md](docs/architecture/README.md)。
+系統分層與工業路徑總圖：[docs/architecture/README.md](docs/architecture/README.md)。  
+從 `src/` 目錄找到實作：[src/README.md](src/README.md)。
 
 ### 推送前（約束）
 
