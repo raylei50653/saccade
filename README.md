@@ -96,3 +96,24 @@ scripts/test_native.sh # native C++ / CUDA
 
 如果這份 README 與程式碼衝突，以 `src/saccade/perception/`、`src/tracking/`、
 `scripts/eval/`、`tests/` 下的主路徑程式碼為準，並同步更新文件。
+
+## License
+
+本專案自身的程式碼與文件以 **Apache License 2.0** 授權，全文見 [LICENSE](LICENSE)，
+歸屬與第三方聲明見 [NOTICE](NOTICE)。
+
+repo 內另有兩份直接收錄的第三方程式碼，各自沿用原授權：
+
+- `third_party/TrackEval/` — MIT（[LICENSE](third_party/TrackEval/LICENSE)）
+- `src/saccade/perception/eval/_torch_graphs.py` — 自 PyTorch 2.11.0 的
+  `torch/cuda/graphs.py` vendored，BSD 3-Clause
+  （[_torch_graphs.LICENSE](src/saccade/perception/eval/_torch_graphs.LICENSE)）
+
+### 散佈時的相依性授權注意事項
+
+`ultralytics` 是 **AGPL-3.0**，而且被 detector 路徑直接 import
+（`src/saccade/perception/temporal_yolo/`、`scripts/eval/` 共數十個檔案）。
+本 repo 的 Apache-2.0 只涵蓋我們自己寫的部分；一旦把含 `ultralytics` 的
+combined work 散佈出去，或以網路服務形式提供，AGPL-3.0 的義務仍然適用。
+要避開這點只有兩條路：把 detector 換成非 AGPL 的實作，或取得 Ultralytics
+商業授權。

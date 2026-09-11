@@ -176,6 +176,7 @@ NON_EXECUTION_PATHS: frozenset[str] = frozenset(
         "DEVELOPMENT.md",
         "REPO_LAYOUT.md",
         "LICENSE",
+        "NOTICE",
         "uv.lock.license",
         ".gitignore",
     )

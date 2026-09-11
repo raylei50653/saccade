@@ -1,0 +1,25 @@
+Saccade
+Copyright 2026 Saccade Developers
+
+This product includes software developed by the Saccade Developers.
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+--------------------------------------------------------------------------------
+Third-party code redistributed in this repository
+--------------------------------------------------------------------------------
+
+third_party/TrackEval/
+    TrackEval, Copyright (c) 2020 Jonathon Luiten.
+    MIT License; full text in third_party/TrackEval/LICENSE.
+
+src/saccade/perception/eval/_torch_graphs.py
+    Vendored from torch/cuda/graphs.py, PyTorch 2.11.0, with the graph-context
+    factory change described in that file's module docstring.
+    BSD 3-Clause License; full text and copyright holders in
+    src/saccade/perception/eval/_torch_graphs.LICENSE.
+
+Dependencies installed from PyPI are not redistributed here and carry their own
+licenses. One of them, ultralytics, is AGPL-3.0 and is imported by the detector
+path; see the licensing section of README.md before distributing a build or
+offering this software as a network service.
