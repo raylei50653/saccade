@@ -62,6 +62,8 @@ CUDA hardware、TensorRT engines 與 local MOT datasets。
 
 ## Repo Orientation
 
+從實體目錄找到實作：[src/README.md](src/README.md)。
+
 - `src/saccade/perception/` — detector、preprocessing、ReID、relink、tracker
   coordination、eval runner
 - `src/`、`include/` — C++ / CUDA tracking 與效能敏感 native components
@@ -73,8 +75,9 @@ CUDA hardware、TensorRT engines 與 local MOT datasets。
 
 1. [DEVELOPMENT.md](DEVELOPMENT.md) — 開發薄入口（需求層級 D0–D4 → action cards → 文檔組合 / 命令）
 2. [docs/architecture/README.md](docs/architecture/README.md) — 穩定架構邊界
-3. [docs/reference/pipeline_flow.md](docs/reference/pipeline_flow.md) — 主路徑 flow
-4. [docs/TODO.md](docs/TODO.md) — 當前工作與 ablation backlog
+3. [src/README.md](src/README.md) — `src/` 目錄地圖與跨語言入口
+4. [docs/reference/pipeline_flow.md](docs/reference/pipeline_flow.md) — 主路徑 flow
+5. [docs/TODO.md](docs/TODO.md) — 當前工作與 ablation backlog
 
 更多文件入口見 [docs/README.md](docs/README.md)。
 

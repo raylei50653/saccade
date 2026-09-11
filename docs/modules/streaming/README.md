@@ -16,12 +16,14 @@
 
 ## 🔗 I/O & Dataflow
 
+本模組是**工業 RTSP** 路徑。MOT17 eval 的 frame ingest 在 [`src/saccade/perception/eval/streaming.py`](../../../src/saccade/perception/eval/streaming.py)，不要從這裡進評測熱路徑。目錄地圖：[src/README.md](../../../src/README.md)。
+
 | | |
 |---|---|
-| **Pipeline stage** | `fetch` + `ingest_preprocess`（見 [pipeline_flow.md](../../reference/pipeline_flow.md)） |
+| **Pipeline stage** | 工業 ingest（dispatcher / workbench）；**不是** MOT eval 的 `fetch` |
 | **輸入** | RTSP H.264 流（NVDEC 硬解） |
-| **輸出** | GPU RGB tensor（zero-copy）→ `AdaptiveFramePool` → detector |
-| **上游 → 下游** | `RTSP → NVDEC(NV12) → _nv12_to_rgb_gpu → GstClient 5-buffer pool → ingest_preprocess → detect` |
+| **輸出** | GPU RGB tensor（zero-copy）→ dispatcher / detector |
+| **上游 → 下游** | `RTSP → NVDEC(NV12) → _nv12_to_rgb_gpu → GstClient 5-buffer pool → dispatcher → detect` |
 
 ## ⚖️ GO / NO-GO 決策
 

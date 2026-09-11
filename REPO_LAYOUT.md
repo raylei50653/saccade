@@ -77,7 +77,7 @@ truth unless a result is explicitly promoted into a tracked report or decision.
 | Path | Reason | Review |
 |---|---|---|
 | `docs/` | User requested no cleanup in this pass. | Out of scope 2026-06-18 |
-| `src/` | User requested no cleanup in this pass. | Out of scope 2026-06-18 |
+| `src/` | Directory map and language bridge: [src/README.md](src/README.md). This layout file still does not inventory `src/`. | Out of scope 2026-06-18; map added 2026-09-11 |
 | `.git/` | Git internal state. | External |
 | `.agents/`, `.codex/`, `.gemini/` | Agent/tool-local metadata. | External |
 

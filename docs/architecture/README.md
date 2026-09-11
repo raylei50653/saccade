@@ -2,6 +2,7 @@
 
 本文件描述 **目前穩定的系統形狀與責任邊界**。它不是實驗日誌，也不是待辦清單。
 
+- 從 `src/` 目錄找到實作與跨語言入口：看 [src/README.md](../../src/README.md)
 - 近期工作方向與 ablation backlog：看 [TODO.md](../TODO.md)
 - 開發入口（需求層級 → 文檔組合）與 source-of-truth：看 [DEVELOPMENT.md](../../DEVELOPMENT.md)
 - 事件 / API / storage schema：看 [api_spec.md](../modules/storage/api_spec.md)
@@ -271,6 +272,7 @@ not the headline architecture.
 
 ## 8. 相關文件
 
+- 目錄地圖（從路徑找到實作）：[src/README.md](../../src/README.md)
 - 開發入口：[DEVELOPMENT.md](../../DEVELOPMENT.md)
 - API / event / storage contract：[api_spec.md](../modules/storage/api_spec.md)
 - 模組 delta ledger：[PIPELINE_REFERENCE.md](../reference/PIPELINE_REFERENCE.md)

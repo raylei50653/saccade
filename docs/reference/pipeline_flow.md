@@ -83,6 +83,7 @@ See [DATAFLOW.md](../DATAFLOW.md) for stage responsibilities and current
 ## 4. Related Contracts
 
 - Stable architecture boundaries: [architecture/README.md](../architecture/README.md)
+- Directory map (`src/` → implementation): [src/README.md](../../src/README.md)
 - MOT17 config and preset defaults: [mot17_default_config.md](mot17_default_config.md)
 - Event / API / storage schema: [api_spec.md](../modules/storage/api_spec.md)
 - Current work ordering: [TODO.md](../TODO.md)
