@@ -8,7 +8,7 @@ Architecture:
         ↓  gated FPN features
     MambaDetectionHead  (replaces YOLO Detect head, layer 23)
         ↓  per-scale cls_preds / reg_preds
-    Postprocess decoder  (dist2bbox + top-k)
+    Postprocess decoder  (LTRB→xyxy + top-k)
         ↓  (B, max_det, 6) xyxy boxes
 """
 
@@ -106,6 +106,58 @@ def _dfl_decode(reg_all: Tensor) -> Tensor:
     return (reg_all.view(b, 4, reg_max, n).softmax(2) * proj).sum(2)
 
 
+def _make_anchor_grid(
+    feats: list[Tensor],
+    strides: Tensor,
+    grid_cell_offset: float = 0.5,
+) -> tuple[Tensor, Tensor]:
+    """Anchor points from feature maps.
+
+    FP32 evaluation order is pinned to ultralytics 8.4.37 ``make_anchors``
+    so the eager decode path stays bit-identical to the previous TAL call.
+    Whole-graph capture does not use this helper; it consumes the
+    precomputed grid from ``_precompute_anchor_grid``.
+    """
+    anchor_points: list[Tensor] = []
+    stride_tensor: list[Tensor] = []
+    dtype, device = feats[0].dtype, feats[0].device
+    for i in range(len(feats)):
+        stride = strides[i]
+        h, w = feats[i].shape[2:]
+        sx = torch.arange(end=w, device=device, dtype=dtype) + grid_cell_offset
+        sy = torch.arange(end=h, device=device, dtype=dtype) + grid_cell_offset
+        sy, sx = torch.meshgrid(sy, sx, indexing="ij")
+        anchor_points.append(torch.stack((sx, sy), -1).view(-1, 2))
+        stride_tensor.append(torch.full((h * w, 1), stride, dtype=dtype, device=device))
+    return torch.cat(anchor_points), torch.cat(stride_tensor)
+
+
+def _dist2bbox_xywh(distance: Tensor, anchor_points: Tensor, dim: int = 1) -> Tensor:
+    """LTRB distances → xywh boxes.
+
+    FP32 evaluation order is pinned to ultralytics 8.4.37 ``dist2bbox``
+    with ``xywh=True``:
+
+        lt, rb = distance.chunk(2, dim)
+        x1y1 = anchor_points - lt
+        x2y2 = anchor_points + rb
+        c_xy = (x1y1 + x2y2) / 2
+        wh = x2y2 - x1y1
+
+    Algebraically this is the C++ decode
+    ``c_xy = anchor + (rb - lt) / 2``, ``wh = lt + rb`` in
+    ``src/perception/mamba_gated_detector.cpp``. The C++ form is the
+    semantic baseline; this Python form keeps the TAL 8.4.37 order so
+    production decode stays bit-identical to the previous TAL call.
+    """
+    lt, rb = distance.chunk(2, dim)
+    x1y1 = anchor_points - lt
+    x2y2 = anchor_points + rb
+    c_xy = (x1y1 + x2y2) / 2
+    wh = x2y2 - x1y1
+    return torch.cat([c_xy, wh], dim)
+
+
 def _postprocess_mamba(
     cls_preds: list[Tensor],
     reg_preds: list[Tensor],
@@ -114,17 +166,15 @@ def _postprocess_mamba(
     max_det: int,
     small_p3_max_threshold: float = 0.0,
 ) -> Tensor:
-    from ultralytics.utils.tal import make_anchors, dist2bbox
-
     cls_all = torch.cat([c.flatten(2) for c in cls_preds], dim=2)
     reg_all = torch.cat([r.flatten(2) for r in reg_preds], dim=2)
     B, _, N = cls_all.shape
 
-    anchors, anchor_strides = make_anchors(cls_preds, strides, 0.5)  # type: ignore[no-untyped-call]
+    anchors, anchor_strides = _make_anchor_grid(cls_preds, strides, 0.5)
     anchors = anchors.to(device=cls_all.device, dtype=cls_all.dtype)
     anchor_strides = anchor_strides.to(device=cls_all.device, dtype=cls_all.dtype)
 
-    bboxes = dist2bbox(_dfl_decode(reg_all), anchors.T.unsqueeze(0), xywh=True, dim=1)  # type: ignore[no-untyped-call]
+    bboxes = _dist2bbox_xywh(_dfl_decode(reg_all), anchors.T.unsqueeze(0), dim=1)
     strides_t = anchor_strides.squeeze(-1).unsqueeze(0)
     bboxes = bboxes * strides_t
 
@@ -253,8 +303,6 @@ def _postprocess_mamba_fixed_eager(
     box_scale_x: Tensor | None = None,
     box_scale_y: Tensor | None = None,
 ) -> Tensor:
-    from ultralytics.utils.tal import dist2bbox
-
     cls_all = torch.cat([c.flatten(2) for c in cls_preds], dim=2)
     reg_all = torch.cat([r.flatten(2) for r in reg_preds], dim=2)
 
@@ -263,7 +311,7 @@ def _postprocess_mamba_fixed_eager(
             strides, [tuple(c.shape) for c in cls_preds]
         )
 
-    bboxes = dist2bbox(_dfl_decode(reg_all), anchors.T.unsqueeze(0), xywh=True, dim=1)
+    bboxes = _dist2bbox_xywh(_dfl_decode(reg_all), anchors.T.unsqueeze(0), dim=1)
     strides_t = anchor_strides.squeeze(-1).unsqueeze(0)
     bboxes = bboxes * strides_t
 

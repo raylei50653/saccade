@@ -12,7 +12,7 @@
 
 - Hybrid Mamba-ViT head — after VGT
 - Detector training-data / annotation reinforcement — after temporal YOLO validation
-- Ultralytics Python-runtime decoupling — analysis in [ADR 023](../../decisions/023-ultralytics-runtime-decouple.md) / #391; no detector replacement
+- Ultralytics Python-runtime decoupling — analysis in [ADR 023](../../decisions/023-ultralytics-runtime-decouple.md) / #391; #393 is follow-up 1 (TAL decode only). Construction skip / packaging extra remain parked. No detector replacement
 
 ## Done / closed
 
