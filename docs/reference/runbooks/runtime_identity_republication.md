@@ -91,13 +91,29 @@ Promote 是**另開一支 review PR**，不是捕捉步驟的延伸。
    .venv/bin/python - <<'PY'
    import datetime, json, pathlib, shutil
    src = pathlib.Path("docs/reference/runtime_identity.generated.json")
-   digest = json.loads(src.read_text())["coordinate"]["implementation"][:16]
+   data = json.loads(src.read_text())
+   digest = data["coordinate"]["implementation"][:16]
+   head = data["witness"]["head"][:12]
    today = datetime.date.today().isoformat()
-   dst = src.parent / "runtime_identity" / "archive" / f"runtime_identity.{today}.{digest}.json"
+
+   archive = src.parent / "runtime_identity" / "archive"
+   stem = f"runtime_identity.{today}.{digest}"
+   dst = archive / f"{stem}.json"
+   if dst.exists():
+       dst = archive / f"{stem}.{head}.json"
+       if dst.exists():
+           raise FileExistsError(f"archive already exists: {dst}")
+
    shutil.copy2(src, dst)
    print(dst)
    PY
    ```
+
+   撞名發生在**同一天 republish 兩次而 `implementation` 沒動**時（例如接連兩支只動
+   `environment` recipe 的 PR）。此時附上 outgoing 出版的 `witness.head` 前 12 碼，
+   規則見 [archive README](../runtime_identity/archive/README.md#命名)。兩層
+   `exists()` 都不可省：archive 是 append-only，**任何**情況都不覆蓋既有檔案，所以
+   第二層直接 raise，而不是再往下找一個沒被佔用的名字。
 
    ADR 022 §3 決定 5：archive 進
    [`docs/reference/runtime_identity/archive/`](../runtime_identity/archive/README.md)，
