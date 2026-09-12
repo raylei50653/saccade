@@ -38,7 +38,7 @@ from .mamba_head import (
     MambaDetectionHead,
     resolve_mamba_in_channels,
 )
-from .yolo_conditioned import TrackerGateInput
+from .yolo_conditioned import TrackerGateInput, TrackSpatialGate
 
 
 def _sha256_file(path: str | Path) -> str:
@@ -625,9 +625,10 @@ class StreamState:
 class MambaGatedDetector(nn.Module):
     """Gated YOLO backbone with Mamba SSM detection head.
 
-    Supports both PyTorch and TRT backbone. When use_trt=True, the YOLO
-    backbone runs via TensorRT (FP16) and the gate is applied in PyTorch
-    after feature extraction.
+    Supports both PyTorch and TRT backbone. A non-empty
+    ``trt_backbone_engine`` skips Ultralytics ``YOLO()`` /
+    ``GatedYOLODetector`` construction; ``TrackSpatialGate`` is built from
+    ``GatedDetConfig`` and applied in PyTorch after TRT features.
     """
 
     def __init__(
@@ -682,17 +683,29 @@ class MambaGatedDetector(nn.Module):
         )
         self._whole_graph_img_shape: tuple[int, int] = (0, 0)
 
-        self.teacher = build_gated_yolo_detector(
-            yolo_pt_path,
-            cfg=cfg,
-            device=device,
-            weights_path=teacher_ckpt,
-        )
-        self.teacher.eval()
-        for p in self.teacher.parameters():
-            p.requires_grad_(False)
-
-        self.gate_module = self.teacher.gate
+        if trt_backbone_engine:
+            # Headline TRT path: lineage-check the .pt as a blob, but do not
+            # unpickle it through Ultralytics YOLO() / GatedYOLODetector.
+            self.teacher = None
+            self.gate_module = TrackSpatialGate(
+                scales=tuple(cfg.scales),
+                sigma_scale=cfg.gate_sigma_scale,
+                min_score=cfg.gate_min_score,
+            ).to(device)
+            self.gate_module.eval()
+            for p in self.gate_module.parameters():
+                p.requires_grad_(False)
+        else:
+            self.teacher = build_gated_yolo_detector(
+                yolo_pt_path,
+                cfg=cfg,
+                device=device,
+                weights_path=teacher_ckpt,
+            )
+            self.teacher.eval()
+            for p in self.teacher.parameters():
+                p.requires_grad_(False)
+            self.gate_module = self.teacher.gate
 
         mamba_state = torch.load(mamba_ckpt, map_location="cpu", weights_only=False)
         mamba_args = mamba_state["mamba_args"]
@@ -882,8 +895,17 @@ class MambaGatedDetector(nn.Module):
             )
         return int(self._cpp_detector.cpp_ptr)
 
-    def _forward_pytorch_backbone(self, frame: Tensor) -> list[Tensor]:
+    def _require_teacher(self) -> Any:
         teacher = self.teacher
+        if teacher is None:
+            raise RuntimeError(
+                "PyTorch YOLO backbone is unavailable: this detector was "
+                "constructed with trt_backbone_engine and did not build a teacher"
+            )
+        return teacher
+
+    def _forward_pytorch_backbone(self, frame: Tensor) -> list[Tensor]:
+        teacher = self._require_teacher()
         layers = teacher.yolo_model.model
         save: set[int] = set(teacher.yolo_model.save)
 
@@ -1006,7 +1028,7 @@ class MambaGatedDetector(nn.Module):
             feats_raw = [p3, p4, p5]
             feats = self._apply_gate(feats_raw, gate_input)
         else:
-            teacher = self.teacher
+            teacher = self._require_teacher()
             gls = teacher._gate_layers
             teacher.cache_feats = True
             for gl in gls.values():
@@ -1436,6 +1458,18 @@ class MambaGatedDetector(nn.Module):
         if set(self._trt_feat_cache.keys()) == {"p3", "p4", "p5"}:
             feats = [self._trt_feat_cache[s] for s in ("p3", "p4", "p5")]
             frame_for_resolution = frame_bchw
+
+        elif self.teacher is None:
+            if frame_bchw is None:
+                raise RuntimeError(
+                    "No cached FPN features and no frame provided. "
+                    "Call forward() before extract_fpn_embeddings(None, boxes)."
+                )
+            raise RuntimeError(
+                "FPN embedding fallback requires a PyTorch YOLO backbone; "
+                "this detector was constructed with trt_backbone_engine "
+                "and did not build a teacher"
+            )
 
         elif hasattr(self.teacher, "_gate_layers"):
             cache = {}
