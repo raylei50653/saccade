@@ -40,6 +40,7 @@
 | `test_occ_audit_chebgr_probe.py` | eval | contract | active | WP1: occ-exit Cheb-GR graph decision probe (diagnostic / default-off). |
 | `test_occ_audit_chebgr_wiring.py` | eval | contract | active | WP1b: config / evaluator wiring for occ-exit Cheb-GR probe (default-off). |
 | `test_occ_audit_seq_conditioning.py` | eval | behavior | active | WP2: occ-exit sequence conditioning classification (analysis only). |
+| `test_output_layer_repair_chaining.py` | eval | contract | active | Stage-order contract for the output-layer repair chaining harness. |
 | `test_pool_lazy_buffers.py` | eval | behavior | active | Lazy acquire / release of AdaptiveFramePool tiling buffers. |
 | `test_reporting.py` | eval | behavior | active | Tests for MOT eval reporting output (perception.eval.reporting). |
 | `test_reporting_extended.py` | eval | behavior | active | Extended tests for perception/eval/reporting.py. |

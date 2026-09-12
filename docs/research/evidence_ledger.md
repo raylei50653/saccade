@@ -58,6 +58,7 @@ jitter (see dual-stability protocol).
 | 2026-07-09 | P0–P8 research line | **Closed** — status + outline + ledger; keep both production | [status](tracker-decision/status_2026-07-09.md) |
 | ongoing | NO-GO knobs (fuse, NSA, OAO spatial, …) | Stay off headline; promotion bar = 7-seq + bipolar | [no_go_guardrails.md](tracker-decision/audit/no_go_guardrails.md) |
 | 2026-09-05 | Output-layer handover + Cheb-GR merge chaining | **Historical observation only** (then-`main` `1d620127`): neither order beat merge-only; more links ≠ better identity; 0.1 order gap is not an order effect. **Not a current-HEAD claim.** Do not restack. | [output_layer_repair_chaining_20260905.md](../modules/semantic/research/output_layer_repair_chaining_20260905.md) · [#335](https://github.com/raylei50653/saccade/pull/335) |
+| 2026-09-12 | Output-layer handover + Cheb-GR merge chaining, current-HEAD revalidation | **Current-HEAD replication** (`85b95ac1`, `mamba_whole_graph_m` SDP 7-seq, `--double-buffer --no-gpu-decode`, frozen substrate): merge-only still best; handover-only still a positive identity gain; neither chaining order beats merge-only; more accepts still ≠ better identity. Does not overwrite the 2026-09-05 table. Do not restack. Do not restore `--cheb-gr-postproc-order`. | [output_layer_repair_chaining_revalidation_20260912.md](../modules/semantic/research/output_layer_repair_chaining_revalidation_20260912.md) |
 
 ---
 

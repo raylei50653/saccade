@@ -1,0 +1,18 @@
+{
+  "schema": "output_layer_repair_chaining_revalidation_table/v1",
+  "display_1dp": [
+    {"arm": "base", "IDF1": 80.4, "MOTA": 81.6, "HOTA": 74.4, "AssA": 73.5, "IDs": 344, "final_tracks": 804, "accepted_links": 0},
+    {"arm": "handover_only", "IDF1": 80.8, "MOTA": 81.5, "HOTA": 74.5, "AssA": 73.7, "IDs": 338, "final_tracks": 750, "accepted_links": 54},
+    {"arm": "merge_only", "IDF1": 81.3, "MOTA": 81.6, "HOTA": 74.7, "AssA": 74.2, "IDs": 313, "final_tracks": 719, "accepted_links": 85},
+    {"arm": "handover_then_merge", "IDF1": 81.1, "MOTA": 81.4, "HOTA": 74.6, "AssA": 73.9, "IDs": 323, "final_tracks": 704, "accepted_links": 100},
+    {"arm": "merge_then_handover", "IDF1": 81.2, "MOTA": 81.4, "HOTA": 74.7, "AssA": 74.1, "IDs": 317, "final_tracks": 700, "accepted_links": 104}
+  ],
+  "full_precision": [
+    {"arm": "base", "IDF1": 80.4471, "MOTA": 81.6104, "HOTA": 74.3771, "AssA": 73.4854, "IDs": 344},
+    {"arm": "handover_only", "IDF1": 80.7671, "MOTA": 81.5293, "HOTA": 74.5122, "AssA": 73.7218, "IDs": 338},
+    {"arm": "merge_only", "IDF1": 81.2767, "MOTA": 81.5552, "HOTA": 74.7374, "AssA": 74.1728, "IDs": 313},
+    {"arm": "handover_then_merge", "IDF1": 81.0846, "MOTA": 81.4225, "HOTA": 74.5767, "AssA": 73.9362, "IDs": 323},
+    {"arm": "merge_then_handover", "IDF1": 81.2365, "MOTA": 81.4465, "HOTA": 74.6806, "AssA": 74.1224, "IDs": 317}
+  ],
+  "accepted_links_definition": "sum of stage accepts (handovers + merges); matches 2026-09-05 event counts, not that note's link-pairs column"
+}
