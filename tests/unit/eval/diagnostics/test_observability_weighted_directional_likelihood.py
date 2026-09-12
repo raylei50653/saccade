@@ -1,4 +1,8 @@
-"""Tests for observability-weighted directional likelihood math and preseal lock."""
+"""Tests for observability-weighted directional likelihood math and preseal lock.
+
+Covers the pre-seal math core, synthetic contracts, and check-only identity
+preflight. Formal B1 outcome rows are not loaded here.
+"""
 
 # scope: eval
 # function: contract
@@ -6,6 +10,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import math
@@ -46,6 +51,7 @@ def test_ols_uses_actual_frame_spacing() -> None:
     fit = owdl.fit_ols_motion(points, frames)
 
     assert fit.velocity == pytest.approx([1.5, 0.25])
+    assert fit.velocity == pytest.approx(fit.slope_weights @ points)
     assert fit.residuals == pytest.approx(np.zeros((4, 2)), abs=1e-12)
     assert sum(fit.slope_weights) == pytest.approx(0.0)
 
@@ -76,6 +82,22 @@ def test_estimated_noise_covariance_is_symmetric_positive_definite() -> None:
 
     assert covariance == pytest.approx(covariance.T)
     assert np.all(np.linalg.eigvalsh(covariance) > 0)
+
+
+def test_pooled_covariance_divides_by_residual_degrees_of_freedom() -> None:
+    """The frozen estimator is scatter / (4-2), not scatter / n."""
+
+    frames = np.arange(4, dtype=np.float64)
+    noise = np.array([[0.08, 0.02], [-0.12, -0.04], [0.04, 0.09], [0.0, -0.07]])
+    points = _linear_window(0.5) + noise
+    covariance = owdl.estimate_normalized_effective_covariance(
+        [(points, frames, np.ones(4))]
+    )
+    fit = owdl.fit_ols_motion(points, frames)
+    scatter = fit.residuals.T @ fit.residuals
+
+    assert covariance == pytest.approx(scatter / 2.0)
+    assert not np.allclose(covariance, scatter / 4.0)
 
 
 def test_zero_velocity_degenerates_to_uniform_without_a_speed_threshold() -> None:
@@ -267,6 +289,81 @@ def test_shared_endpoint_cross_covariance_is_propagated() -> None:
     assert observation.velocity_displacement_cross_covariance == pytest.approx(expected)
 
 
+def test_angular_variance_includes_the_shared_endpoint_cross_term() -> None:
+    observation = owdl.observe_direction(
+        lost_points=_linear_window(1.0),
+        lost_frames=np.arange(4),
+        lost_heights=np.ones(4),
+        candidate_first_point=np.array([5.0, 1.0]),
+        candidate_first_height=1.0,
+        gap=2,
+        normalized_effective_covariance=np.eye(2) * 0.04,
+    )
+    velocity_gradient = owdl._angle_gradient(observation.velocity)
+    displacement_gradient = owdl._angle_gradient(observation.displacement_rate)
+    assert velocity_gradient is not None
+    assert displacement_gradient is not None
+    variance_from_velocity = float(
+        velocity_gradient @ observation.velocity_covariance @ velocity_gradient
+    )
+    variance_from_displacement = float(
+        displacement_gradient
+        @ observation.displacement_covariance
+        @ displacement_gradient
+    )
+    cross_term = float(
+        velocity_gradient
+        @ observation.velocity_displacement_cross_covariance
+        @ displacement_gradient
+    )
+
+    assert abs(cross_term) > 0.0
+    assert observation.angular_variance == pytest.approx(
+        variance_from_velocity + variance_from_displacement - 2.0 * cross_term
+    )
+    assert observation.angular_variance != pytest.approx(
+        variance_from_velocity + variance_from_displacement
+    )
+
+
+def test_position_covariance_scales_with_height_squared() -> None:
+    common = {
+        "lost_points": _linear_window(1.0),
+        "lost_frames": np.arange(4),
+        "candidate_first_point": np.array([5.0, 1.0]),
+        "gap": 2,
+        "normalized_effective_covariance": np.eye(2) * 0.04,
+    }
+    unit = owdl.observe_direction(
+        lost_heights=np.ones(4), candidate_first_height=1.0, **common
+    )
+    doubled = owdl.observe_direction(
+        lost_heights=np.full(4, 2.0), candidate_first_height=2.0, **common
+    )
+
+    assert doubled.velocity_covariance == pytest.approx(4.0 * unit.velocity_covariance)
+    assert doubled.q_v == pytest.approx(unit.q_v / 4.0)
+
+
+def test_observability_index_is_the_velocity_mahalanobis() -> None:
+    observation = owdl.observe_direction(
+        lost_points=_linear_window(1.0),
+        lost_frames=np.arange(4),
+        lost_heights=np.ones(4),
+        candidate_first_point=np.array([5.0, 1.0]),
+        candidate_first_height=1.0,
+        gap=2,
+        normalized_effective_covariance=np.eye(2) * 0.04,
+    )
+    expected = float(
+        observation.velocity
+        @ np.linalg.solve(observation.velocity_covariance, observation.velocity)
+    )
+
+    assert observation.q_v == pytest.approx(expected)
+    assert observation.q_v > 0.0
+
+
 def test_von_mises_cost_keeps_normalizer_and_uniform_limit() -> None:
     assert owdl.uniform_relative_von_mises_nll(1.2, 0.0) == 0.0
     aligned_low = owdl.uniform_relative_von_mises_nll(0.0, 0.5)
@@ -280,6 +377,119 @@ def test_von_mises_cost_keeps_normalizer_and_uniform_limit() -> None:
 def test_cli_rejects_formal_execution_before_seal() -> None:
     with pytest.raises(SystemExit):
         owdl.parse_args([])
+
+
+def test_the_preseal_tool_does_not_parse_outcome_tables() -> None:
+    """Byte identity may hash pairs.csv; it must not load ranking rows."""
+
+    source = TOOL_PATH.read_text(encoding="utf-8")
+    assert "import csv" not in source
+    assert "csv.reader" not in source
+    assert "read_csv" not in source
+    assert "import pandas" not in source
+    assert "from pandas" not in source
+
+
+def _bind_dummy_sources(
+    tmp_path: Path, spec: dict, monkeypatch: pytest.MonkeyPatch, *, payload: bytes
+) -> None:
+    written: dict[str, Path] = {}
+    for item in spec["source_files"]:
+        path = tmp_path / Path(item["path"]).name
+        path.write_bytes(payload)
+        written[item["path"]] = path
+        item["sha256"] = hashlib.sha256(payload).hexdigest()
+        item["bytes"] = len(payload)
+
+    real_repo_path = owdl._repo_path
+
+    def fake_repo_path(relative_path: str, *, name: str) -> Path:
+        if relative_path in written:
+            return written[relative_path]
+        return real_repo_path(relative_path, name=name)
+
+    monkeypatch.setattr(owdl, "_repo_path", fake_repo_path)
+
+
+def test_check_only_verifies_byte_identity_without_reading_outcome_rows(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    spec = _frozen_study_spec()
+    _bind_dummy_sources(tmp_path, spec, monkeypatch, payload=b"owdl-preseal-dummy\n")
+    spec_path = tmp_path / "study.json"
+    spec_path.write_text(json.dumps(spec), encoding="utf-8")
+
+    report = owdl.verify_study_spec(spec_path)
+
+    assert report["valid"] is True
+    assert report["formal_rows_read"] == 0
+    assert report["execution_authorized"] is False
+    assert report["next_action"] == "owner_seal_review"
+    assert len(report["source_files_verified"]) == 9
+
+
+def test_a_source_hash_mismatch_fails_closed_without_parsing_rows(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    spec = _frozen_study_spec()
+    _bind_dummy_sources(tmp_path, spec, monkeypatch, payload=b"owdl-preseal-dummy\n")
+    spec["source_files"][0]["sha256"] = "0" * 64
+    spec_path = tmp_path / "study.json"
+    spec_path.write_text(json.dumps(spec), encoding="utf-8")
+
+    with pytest.raises(
+        owdl.ObservabilityError, match="frozen source identity mismatch"
+    ):
+        owdl.verify_study_spec(spec_path)
+
+
+def test_a_source_byte_count_mismatch_fails_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    spec = _frozen_study_spec()
+    _bind_dummy_sources(tmp_path, spec, monkeypatch, payload=b"owdl-preseal-dummy\n")
+    spec["source_files"][0]["bytes"] = spec["source_files"][0]["bytes"] + 1
+    spec_path = tmp_path / "study.json"
+    spec_path.write_text(json.dumps(spec), encoding="utf-8")
+
+    with pytest.raises(
+        owdl.ObservabilityError, match="frozen source identity mismatch"
+    ):
+        owdl.verify_study_spec(spec_path)
+
+
+def _frozen_sources_present() -> bool:
+    return all((owdl.ROOT / path).is_file() for path in owdl.EXPECTED_SOURCE_ROLES)
+
+
+def test_cli_check_only_prints_a_zero_row_report(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    spec = _frozen_study_spec()
+    _bind_dummy_sources(tmp_path, spec, monkeypatch, payload=b"owdl-preseal-dummy\n")
+    spec_path = tmp_path / "study.json"
+    spec_path.write_text(json.dumps(spec), encoding="utf-8")
+
+    assert owdl.main(["--check-only", "--study-spec", str(spec_path)]) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["formal_rows_read"] == 0
+    assert report["next_action"] == "owner_seal_review"
+
+
+@pytest.mark.skipif(
+    not _frozen_sources_present(),
+    reason="frozen B1 source files are not present on this machine",
+)
+def test_live_check_only_preflight_reads_zero_formal_rows() -> None:
+    report = owdl.verify_study_spec(owdl.DEFAULT_STUDY_SPEC)
+
+    assert report["valid"] is True
+    assert report["formal_rows_read"] == 0
+    assert report["execution_authorized"] is False
+    assert report["next_action"] == "owner_seal_review"
+    assert len(report["source_files_verified"]) == 9
+    assert report["score_declaration"]["valid"] is True
+    assert report["score_declaration"]["activation_eligible"] is False
 
 
 def test_a_numpy_integer_gap_is_accepted_and_a_bool_is_not() -> None:

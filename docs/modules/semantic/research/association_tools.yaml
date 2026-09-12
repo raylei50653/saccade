@@ -163,7 +163,7 @@ tools:
   fact_owner: docs/modules/semantic/research/observability_weighted_directional_likelihood_declaration_20260827.md
   no_go_ids: []
   recipes: []
-  notes: Pre-seal entry is check-only; formal outcome execution requires a separate exact-head owner seal and authority.
+  notes: WAITING_OWNER_SEAL; check-only only. Formal outcome execution requires an exact-SHA owner seal and a separate runner_review_head whose declaration bytes match the seal exactly.
 - id: analyze_preloss_motion
   path: scripts/tools/analyze_preloss_motion.py
   door: A
