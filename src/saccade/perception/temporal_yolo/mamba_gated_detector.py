@@ -691,7 +691,7 @@ class MambaGatedDetector(nn.Module):
                 scales=tuple(cfg.scales),
                 sigma_scale=cfg.gate_sigma_scale,
                 min_score=cfg.gate_min_score,
-            )
+            ).to(device)
             self.gate_module.eval()
             for p in self.gate_module.parameters():
                 p.requires_grad_(False)

@@ -24,6 +24,7 @@ from saccade.perception.temporal_yolo.mamba_gated_detector import (
 )
 from saccade.perception.temporal_yolo.mamba_head import MambaDetectionHead
 from saccade.perception.temporal_yolo.yolo_conditioned import TrackSpatialGate
+from saccade.perception.temporal_yolo.yolo_gated_detector import GatedDetConfig
 
 ULTRALYTICS = "ultralytics"
 
@@ -100,6 +101,12 @@ def _write_tiny_ckpt(path: Path, *, yolo_sha: str | None = None) -> None:
     torch.save({"student": head.state_dict(), "mamba_args": mamba_args}, path)
 
 
+def _assert_gate_on_device(det: MambaGatedDetector, device_type: str) -> None:
+    assert isinstance(det.gate_module, TrackSpatialGate)
+    for name, param in det.gate_module.named_parameters():
+        assert param.device.type == device_type, name
+
+
 def _build_tiny_trt(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -107,6 +114,8 @@ def _build_tiny_trt(
     trt_backbone_engine: str | None = "stub.engine",
     yolo_payload: bytes = b"not-a-real-yolo-checkpoint",
     yolo_sha: str | None = "auto",
+    device: str = "cpu",
+    direct: bool = False,
 ) -> MambaGatedDetector:
     monkeypatch.setattr(
         "saccade.perception.temporal_yolo.mamba_gated_detector.TRTYoloBackbone",
@@ -123,12 +132,30 @@ def _build_tiny_trt(
         sha = yolo_sha
     _write_tiny_ckpt(ckpt, yolo_sha=sha)
     engine = "" if trt_backbone_engine is None else str(tmp_path / trt_backbone_engine)
+    if direct:
+        # Bypass factory model.to(device) so constructor placement is the pin.
+        return MambaGatedDetector(
+            yolo_pt_path=str(yolo_pt),
+            teacher_ckpt="",
+            mamba_ckpt=str(ckpt),
+            cfg=GatedDetConfig(
+                scales=("p3", "p4", "p5"),
+                freeze_backbone=True,
+                img_size=640,
+            ),
+            device=device,
+            conf_thr=0.0,
+            max_det=16,
+            trt_backbone_engine=engine,
+            use_cuda_graph=False,
+            use_whole_graph=False,
+        )
     return build_mamba_gated_detector(
         yolo_pt_path=str(yolo_pt),
         teacher_ckpt="",
         mamba_ckpt=str(ckpt),
         img_size=640,
-        device="cpu",
+        device=device,
         conf_thr=0.0,
         max_det=16,
         trt_backbone_engine=engine,
@@ -150,7 +177,7 @@ def test_trt_construction_does_not_import_ultralytics(
     det = _build_tiny_trt(tmp_path, monkeypatch)
 
     assert det.teacher is None
-    assert isinstance(det.gate_module, TrackSpatialGate)
+    _assert_gate_on_device(det, "cpu")
     _assert_no_ultralytics()
 
     out = det.detect_raw(torch.zeros(1, 3, 640, 640))
@@ -268,6 +295,16 @@ def test_no_trt_path_still_builds_teacher(
 
 @pytest.mark.gpu
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA GPU required")
+def test_trt_gate_parameters_follow_constructor_device(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    det = _build_tiny_trt(tmp_path, monkeypatch, device="cuda", direct=True)
+    assert det.teacher is None
+    _assert_gate_on_device(det, "cuda")
+
+
+@pytest.mark.gpu
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA GPU required")
 @pytest.mark.skipif(
     not (
         HEADLINE_YOLO_PT.exists()
@@ -291,6 +328,7 @@ def test_headline_trt_build_does_not_import_ultralytics() -> None:
         use_whole_graph=False,
     )
     assert det.teacher is None
+    _assert_gate_on_device(det, "cuda")
     _assert_no_ultralytics()
     out = det.detect_raw(torch.zeros(1, 3, 640, 640, device="cuda"))
     assert out.shape[0] == 1 and out.shape[-1] == 6
