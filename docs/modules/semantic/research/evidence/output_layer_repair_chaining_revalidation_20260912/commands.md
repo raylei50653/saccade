@@ -28,6 +28,8 @@ uv run python scripts/eval/experiments/run_output_layer_repair_chaining.py \
   --substrate results/olr_reval_20260912/substrate \
   --out results/olr_reval_20260912 \
   --artifact-dir docs/modules/semantic/research/evidence/output_layer_repair_chaining_revalidation_20260912 \
+  --substrate-commit 85b95ac151bc7dd399ffc25fc83ac103c0e7321a \
+  --expected-substrate-sha256 docs/modules/semantic/research/evidence/output_layer_repair_chaining_revalidation_20260912/substrate_sha256.json \
   --repeats 3 \
   --repeat-arms merge_only,handover_then_merge,merge_then_handover
 ```

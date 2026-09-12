@@ -159,3 +159,42 @@ def test_summarize_merge_log_counts_are_diagnostics_not_metrics(harness):
     assert diag["reject_cost"] == 1
     assert diag["reject_same_component"] == 1
     assert diag["component_count"] == 1  # 1-4-5 is one component; 6-7 was rejected
+
+
+def test_aggregate_and_markdown_use_accepted_links_not_link_pairs(harness):
+    seq_records = {
+        "MOT17-02-SDP": [
+            {
+                "stage": "handover",
+                "accepted_links": 7,
+                "diagnostics": {"handovers": 7},
+                "stats": {},
+            },
+            {
+                "stage": "merge",
+                "accepted_links": 4,
+                "diagnostics": {"accepted": 4},
+                "stats": {"merges": 4},
+            },
+        ]
+    }
+    agg = harness.aggregate_stage_records(seq_records)
+    assert agg["accepted_links"] == 11
+    assert "link_pairs" not in agg
+    row = {
+        "arm": "handover_then_merge",
+        "metrics": {
+            "raw": {
+                "IDF1": 81.0846,
+                "MOTA": 81.4225,
+                "HOTA": 74.5767,
+                "AssA": 73.9362,
+                "IDs": 323,
+                "final_tracks": 704,
+            }
+        },
+        "stages": agg,
+    }
+    table = harness.markdown_table([row])
+    assert "accepted links" in table.splitlines()[0]
+    assert "link pairs" not in table

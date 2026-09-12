@@ -28,6 +28,8 @@ Usage
       --substrate results/olr_reval_YYYYMMDD/substrate \\
       --out results/olr_reval_YYYYMMDD \\
       --artifact-dir docs/modules/semantic/research/evidence/output_layer_repair_chaining_revalidation_YYYYMMDD \\
+      --substrate-commit <substrate SHA> \\
+      --expected-substrate-sha256 docs/modules/semantic/research/evidence/.../substrate_sha256.json \\
       --repeats 3 --repeat-arms merge_only,handover_then_merge,merge_then_handover
 """
 # status: experiment
@@ -134,6 +136,23 @@ def git_dirty() -> bool:
     except subprocess.CalledProcessError:
         return False
     return bool(out.strip())
+
+
+def verify_substrate_hashes(
+    substrate: Path, sequences: list[str], expected_path: Path
+) -> None:
+    expected = json.loads(expected_path.read_text())
+    mismatches: list[str] = []
+    for seq in sequences:
+        name = f"{seq}.txt"
+        got = sha256_file(substrate / name)
+        want = expected.get(name, {}).get("sha256") or expected.get(seq)
+        if want is None:
+            mismatches.append(f"{name}: missing from {expected_path}")
+        elif got != want:
+            mismatches.append(f"{name}: got {got}, expected {want}")
+    if mismatches:
+        raise SystemExit("substrate SHA-256 mismatch:\n  " + "\n  ".join(mismatches))
 
 
 def sha256_file(path: Path) -> str:
@@ -514,7 +533,7 @@ def aggregate_stage_records(
                 slot["merges"] += int(stats["merges"])
     return {
         "stage_order": ordered,
-        "link_pairs": total_links,
+        "accepted_links": total_links,
         "per_stage": by_stage,
     }
 
@@ -593,7 +612,7 @@ def run_arm(
         print(
             f"  [{tag}] {seq}: stages={stage_bits or 'base'} "
             f"ids={len(unique_track_ids(raw))}→{len(unique_track_ids(final))} "
-            f"links={links} interp_frames={interp_stats.get('frames_added', 0)}"
+            f"accepted={links} interp_frames={interp_stats.get('frames_added', 0)}"
         )
     metrics = score_output_dir(
         arm_dir, data_root=str(data_root), split=split, sequences=sequences
@@ -635,8 +654,8 @@ def round1(value: float | None) -> str:
 
 def markdown_table(arm_rows: list[dict[str, Any]]) -> str:
     lines = [
-        "| arm | IDF1 | MOTA | HOTA | AssA | IDs | final tracks | link pairs |",
-        "| --- | ---: | ---: | ---: | ---: | --: | -----------: | ---------: |",
+        "| arm | IDF1 | MOTA | HOTA | AssA | IDs | final tracks | accepted links |",
+        "| --- | ---: | ---: | ---: | ---: | --: | -----------: | -------------: |",
     ]
     for row in arm_rows:
         raw = row["metrics"]["raw"]
@@ -649,7 +668,7 @@ def markdown_table(arm_rows: list[dict[str, Any]]) -> str:
                 assa=round1(raw.get("AssA")),
                 ids=int(raw.get("IDs", 0)),
                 tracks=int(raw.get("final_tracks", 0)),
-                links=int(row["stages"]["link_pairs"]),
+                links=int(row["stages"]["accepted_links"]),
             )
         )
     return "\n".join(lines)
@@ -685,12 +704,32 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--repeat-arms",
         default="merge_only,handover_then_merge,merge_then_handover",
-        help="Comma-separated arms to repeat for run-to-run variation (beyond the first pass).",
+        help="Comma-separated arms to repeat as within-process replays "
+        "(same TRTFeatureExtractor, beyond the first pass).",
     )
     p.add_argument(
         "--arms",
         default=",".join(ARM_STAGES),
         help="Comma-separated arms to run.",
+    )
+    p.add_argument(
+        "--substrate-commit",
+        required=True,
+        help="Git commit that produced the frozen tracker substrate. Recorded "
+        "separately from the replay harness commit.",
+    )
+    p.add_argument(
+        "--expected-substrate-sha256",
+        type=Path,
+        default=None,
+        help="Optional JSON map of MOT filename → {sha256} to fail-closed "
+        "if the substrate files have moved.",
+    )
+    p.add_argument(
+        "--require-clean",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Refuse to start if the git worktree is dirty (default: true).",
     )
     return p
 
@@ -720,6 +759,17 @@ def main(argv: list[str] | None = None) -> int:
     handover_params["max_cost"] = float(args.handover_max_cost)
     interp_params = dict(DEFAULT_INTERP)
 
+    dirty = git_dirty()
+    if args.require_clean and dirty:
+        raise SystemExit(
+            "git worktree is dirty; refuse to record replay provenance. "
+            "Commit (or pass --no-require-clean)."
+        )
+    if args.expected_substrate_sha256 is not None:
+        verify_substrate_hashes(
+            substrate, sequences, args.expected_substrate_sha256.resolve()
+        )
+
     from saccade.perception.feature_extractor import TRTFeatureExtractor
 
     extractor = TRTFeatureExtractor(
@@ -732,10 +782,12 @@ def main(argv: list[str] | None = None) -> int:
     artifact_dir.mkdir(parents=True, exist_ok=True)
 
     identity = {
-        "commit": git_sha(),
-        "dirty": git_dirty(),
+        "substrate_commit": args.substrate_commit,
+        "replay_harness_commit": git_sha(),
+        "dirty": dirty,
         "measured_at": datetime.now(timezone.utc).isoformat(),
         "harness": "scripts/eval/experiments/run_output_layer_repair_chaining.py",
+        "repeat_kind": "within_process",
         "substrate": str(substrate),
         "substrate_sha256": {
             seq: sha256_file(substrate / f"{seq}.txt") for seq in sequences
@@ -824,6 +876,7 @@ def main(argv: list[str] | None = None) -> int:
             }
         mot_equal = all(r["mot_sha256"] == rows[0]["mot_sha256"] for r in rows[1:])
         stats["mot_files_identical"] = mot_equal
+        stats["repeat_kind"] = "within_process"
         variation[arm] = stats
 
     payload = {

@@ -169,8 +169,10 @@ the candidate units, and interpolation still runs afterwards.
 Tracker substrate: one capture under the block-D contract above (n=20, 0/20
 divergences for this preset + `--double-buffer` + `--no-gpu-decode`).
 
-Treatment arms: n=3 independent replays from the same frozen MOT files for
-`merge_only`, `handover_then_merge`, and `merge_then_handover`.
+Treatment arms: n=3 **within-process** replays from the same frozen MOT files
+for `merge_only`, `handover_then_merge`, and `merge_then_handover`. One
+`TRTFeatureExtractor` is built once and reused; this is not three fresh
+processes.
 
 | arm | n | MOT files identical | IDF1 range | HOTA range | IDs range |
 | --- | --: | --- | ---: | ---: | ---: |
@@ -178,14 +180,14 @@ Treatment arms: n=3 independent replays from the same frozen MOT files for
 | handover → merge | 3 | yes | 0 | 0 | 0 |
 | merge → handover | 3 | yes | 0 | 0 | 0 |
 
-Observed post-process run-to-run range on this substrate is **0** (bit-identical
-MOT outputs). That is a per-arm observation for this frozen input + TRT extract
-path, not a general determinism proof.
+Observed within-process replay range on this substrate is **0** (bit-identical
+MOT outputs). That is a per-arm observation for this frozen input + one shared
+extractor, not a general determinism proof and not three independent processes.
 
 The 0.1-level 1-decimal gap between the two orders is 0.152 IDF1 in full
 precision (`81.2365 − 81.0846`). That gap is larger than the observed
-run-to-run range. It is still **not** used as a production order effect: neither
-order beats merge-only.
+within-process replay range. It is still **not** used as a production order
+effect: neither order beats merge-only.
 
 ---
 
@@ -229,8 +231,8 @@ On this current-head measurement contract:
    chained arms applied more accepts (100 / 104 vs 85) and finished below
    merge-only.
 5. **The two orders differ by 0.15 IDF1**, which is larger than the observed
-   post-process range of 0, and still irrelevant to the restack question
-   because both lose to merge-only.
+   within-process replay range of 0, and still irrelevant to the restack
+   question because both lose to merge-only.
 6. **The 2026-09-05 directional conclusion replicates** on current HEAD.
 
 ---
