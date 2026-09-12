@@ -135,6 +135,35 @@ Runtime 仍用扁平名讀已經投影進 view 的欄，主要是：
 |---|---|
 | `finish_bounded_migration` | 真正未完成的是 ReID / Semantic / Lifecycle 整組，不是單一可獨立驗證的 consumer group。Core/Detection/Geometry/Motion 在 runtime 已完成。再遷一組只是 rename，不改變 §4 的結論。 |
 | `rollback_existing_views` | 熱路徑與 headline contract 已讀 `cfg.detection` / `cfg.geometry` / `cfg.core` / `cfg.motion`。Rollback 必須另開 focused removal，不是本 issue 的授權；也不值得為了清掉未使用的四個 view 去動 300+ 處已遷移存取。 |
+| `prune_unconsumed_views`（只移除沒有 runtime consumer 的 view） | 可行，且**不必**動 hot path，因此不能靠上一列的「300+ 處」順帶排除；但仍不採用，理由見 §5.1。 |
+
+### 5.1 被考慮並拒絕的第四方案：只移除沒有 runtime consumer 的 view
+
+§2.3 的事實容許一個上表前兩列都沒涵蓋的做法：`ReIDView`(16) / `SemanticView`(51) /
+`LifecycleView`(129) / `TriggerView`(0) 在 `src/` 是 **零** nested 讀取 —— 361 次 nested
+存取（350 行，同一行可能多個）全部落在 core(82) / detection(158) / geometry(101) /
+motion(20) —— 所以「保留四個熱路徑 view、移除其餘四個」**不需要**把任何已遷移的 consumer
+改回扁平。它與 `rollback_existing_views` 不是同一件事，成本也不同級。（計數對照
+`000d98c3`：`grep -roh "cfg\.\(reid\|semantic\|lifecycle\|trigger\)\." src/ --include=*.py | wc -l`
+為 0；同法對 `core\|detection\|geometry\|motion` 為 361。）仍不採用：
+
+1. **它讓 disposition 取決於 §3.2 那個本 ADR 拒絕當成完成條件的狀態。** 分界線是「該模組的
+   runtime 是否已遷移」。§3.2 已宣告那次遷移未完成且不再繼續，所以「有沒有 runtime
+   consumer」是未完成遷移的副產品，不是責任面的性質。用它當處置標準，等於讓同一個
+   Phase-4 投影形狀同時受兩套政策管轄，而分界線是一份本 ADR 明說不再推進的工作進度。
+2. **它把 totality invariant 從「意圖聲明」降級成「第二份盤點」。** Parity 測試的不變式是
+   `EvalConfig`(366) = 已投影(341) ⊎ 未投影(25)，而未投影的 25 欄是一份可讀的意圖聲明
+   （I/O、衍生旗標、`kwargs` 相容欄，見 §2.2）。移除三個 view 會把 196 欄由左搬到右
+   （25 → 221，佔 366 的 60%）：檢查仍會對新欄位 fail，但那張 allowlist 不再是能一眼讀完的
+   intent，而是複製了 §2.1 已有的 inventory。
+3. **它不改變 §4 的結論，卻是 196 欄的建構契約變更。** view 是 construction-time value
+   copy；兩種做法在 runtime 的 nested 讀取都是零，責任面完全一樣。要移除的是
+   `__post_init__` 的建構契約、parity 測試的投影地圖與 §2.1 的 inventory —— 這需要自己的
+   範圍與自己的驗證，與 rollback 同級，不是附掛在 `retain_current_views` 上的免費清理。
+4. **`TriggerView` 不構成先例。** 它是 0 欄的空型別，移除只是改名；移除其餘三個是 196 欄的
+   投影契約變更。兩者處置成本不同級，不能合成一個「移除未使用 view」的動作。
+
+因此本 ADR 保留全部現有 view；任何選擇性移除（selective pruning）都需要新的 issue。
 
 ---
 
@@ -150,12 +179,13 @@ Runtime 仍用扁平名讀已經投影進 view 的欄，主要是：
 4. 不再進行 ReID / Semantic / Lifecycle / Trigger 的 consumer 遷移計畫。
 5. 不 rollback、不 cherry-pick `132752f2` / `e8aa9612`。
 6. 新欄位要進 view，必須是該欄已經是 `EvalConfig` 欄，且有對應模組的責任理由。預設不加。未投影根欄的集合由投影 parity 測試釘住。
+7. 不做 selective pruning：即使某個 view 在 `src/` 沒有 runtime consumer（目前是 ReID / Semantic / Lifecycle / Trigger），也不因此移除它（§5.1）。
 
 ### 6.1 本判決授權的唯一後續
 
 補上缺失的 **flat ↔ view 全欄投影 parity**（既有測試只抽樣約 15 欄）。Golden snapshot 必須零語意 diff。不改 argparse / 模組 dataclass / `EvalConfig` 預設。
 
-任何 rollback 或後續遷移都要新的 issue；本 ADR 不預授權。
+任何 rollback、選擇性移除或後續遷移都要新的 issue；本 ADR 不預授權。
 
 ---
 
