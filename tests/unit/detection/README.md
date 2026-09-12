@@ -23,6 +23,7 @@
 | `test_mamba_strip_routing.py` | detection | behavior | active | Unit tests for mamba-head strip routing (perception.temporal_yolo.mamba_head). |
 | `test_mamba_tal_decode.py` | detection | contract | active | TAL-free headline decode: import gate, TAL bit-compare, C++ numeric contract. |
 | `test_mamba_teacher_cache.py` | detection | contract | active | Unit tests for the mamba-head teacher-cache training logic (scripts.train.temporal_yolo.train_mamba… |
+| `test_mamba_trt_construction.py` | detection | contract | active | TRT construction skips Ultralytics YOLO(); import-gate and fail-closed fallbacks. |
 | `test_teacher_head_detector.py` | detection | behavior | active | Unit tests for the teacher-head detector (perception.temporal_yolo.teacher_head_detector). |
 | `test_temporal_dataset_detail.py` | detection | behavior | active | Unit tests for the temporal-YOLO dataset detail-view loader (perception.temporal_yolo.dataset). |
 | `test_training_utils.py` | detection | behavior | active | Unit tests for temporal-YOLO training utilities (perception.temporal_yolo.training_utils). |
