@@ -109,7 +109,7 @@
 
 | 文件 | 這是什麼 |
 |------|------|
-| [research/observability_weighted_directional_likelihood_declaration_20260827.md](research/observability_weighted_directional_likelihood_declaration_20260827.md) | OWDL pre-outcome declaration：分開檢驗方向可觀測性現象與 held-out direction-channel ranking 缺口；pre-seal、非 runtime／MOT efficacy |
+| [research/observability_weighted_directional_likelihood_declaration_20260827.md](research/observability_weighted_directional_likelihood_declaration_20260827.md) | OWDL pre-outcome declaration：分開檢驗方向可觀測性現象與 held-out direction-channel ranking 缺口；WAITING_OWNER_SEAL、非 runtime／MOT efficacy |
 | [research/score_temporal_to_stable_domain_20260712.md](research/score_temporal_to_stable_domain_20260712.md) | score 時域→穩定域建模的 charter |
 | [research/discrete_m_capability_declaration_20260712.md](research/discrete_m_capability_declaration_20260712.md) | discrete-\(M\) anchor propagation 宣告（parked、未 seal） |
 | [research/door0_ranking_probe_results_20260712.md](research/door0_ranking_probe_results_20260712.md) | Door 0 ambiguous-band ranking-power probe（結果） |

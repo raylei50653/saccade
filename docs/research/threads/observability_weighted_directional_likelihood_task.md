@@ -11,9 +11,10 @@ created: 2026-08-27
 
 ## Status
 
-**ACTIVE · mainline-study · sole-active.** The authority pointer is
-[semantic TODO](../../modules/semantic/TODO.md). This activation authorizes
-pre-outcome planning and implementation, not formal study execution.
+**ACTIVE · mainline-study · sole-active · WAITING_OWNER_SEAL.**
+Implementation complete; no formal outcome access authorized. The authority
+pointer is [semantic TODO](../../modules/semantic/TODO.md). This activation
+does not authorize formal study execution.
 
 ## Current boundary
 
@@ -37,7 +38,10 @@ This is expected state, not accepted evidence.
 
 Owner reviews the exact pre-outcome declaration, machine records, source
 identities, math core, and tests and either seals them together or rejects/
-revises before any formal row is loaded.
+revises before any formal row is loaded. A seal, if issued, is a **seal
+receipt** that records the **exact merged commit SHA** as
+`declaration_seal_head`. A branch name, tag, or other movable ref is not
+an identity.
 
 ## Discard when
 
@@ -63,9 +67,23 @@ revises before any formal row is loaded.
 
 ## Current step
 
-Complete pre-seal math/core review, synthetic tests, input-identity preflight,
-and documentation checks. Stop at owner seal review; do not execute formal B1
-outcomes.
+**WAITING_OWNER_SEAL.** Pre-seal implementation is complete. There is no
+remaining legal implementation work. Do not load or summarize formal B1
+outcome rows, compute metrics, or add the runner.
+
+Owner seal, when issued, records the exact merged commit SHA in the seal
+receipt (`declaration_seal_head`), not a branch name.
+
+Any later `runner_review_head` has this **first gate**, before runner
+authority is even considered:
+
+```text
+sealed declaration bytes == runner declaration bytes
+```
+
+Failure is a terminal. "Looks the same", pretty-print, JSON key reordering,
+and any other re-normalization are not admissible substitutes for raw byte
+identity.
 
 ## Acceptance
 
@@ -86,9 +104,18 @@ outcomes.
 - do not tune bins, covariance repair, effects, or protected strata from results;
 - do not claim runtime fidelity, assignment impact, or MOT improvement;
 - do not change a production preset or tracker hook;
-- do not auto-continue from any terminal.
+- do not auto-continue from any terminal;
+- do not name a seal by branch or other movable ref instead of exact commit SHA;
+- do not pass runner-review identity by semantic equivalence or re-normalization.
 
 ## History
 
 - 2026-08-27 — owner requested a research plan and implementation start;
   charter activated at pre-seal implementation only.
+- 2026-09-12 — pre-seal implementation closed for owner seal review: math
+  core, synthetic tests, check-only identity preflight (`formal_rows_read=0`),
+  and document checks. Formal execution remains unauthorized.
+- 2026-09-12 — owner confirmed pre-seal complete and pinned two receipt/gate
+  rules without changing frozen bytes: the seal artifact records the exact
+  merged commit SHA; the first runner-review gate is raw byte identity of
+  the sealed declaration. Status = `WAITING_OWNER_SEAL`.
