@@ -535,7 +535,8 @@ def test_dry_run_writes_nothing_to_the_cache(tmp_path, capsys) -> None:
     # and no report either: every number in one would have been invented
     assert "IDF1" not in out
     assert "plateaus" not in out
-    assert out.count("scripts/eval/mot17.py") == 2
+    assert out.count("scripts/eval/mot17.py") == 4  # 2 identity + 2 scan
+    assert "identity_check" in out
     assert "--relink-bridge-h-hi 1.2" in out
 
 
@@ -706,7 +707,7 @@ def test_frame_contents_are_digested_not_just_their_size(tmp_path) -> None:
 
 
 # --------------------------------------------------------------------------
-# bit-exactness is a premise, so it is enforced rather than assumed
+# equality is a premise, so it is enforced rather than assumed
 # --------------------------------------------------------------------------
 
 
@@ -1056,9 +1057,16 @@ def test_a_stable_run_records_what_was_verified(tmp_path, monkeypatch) -> None:
     )
 
     assert code == 0
-    verification = json.loads(report_path.read_text("utf-8"))["context_verification"]
-    assert verification["checks"] == 6  # baseline, two per evaluation, one final
+    report = json.loads(report_path.read_text("utf-8"))
+    verification = report["context_verification"]
+    # baseline, two identity evals, one uncached scan point, one final
+    assert verification["checks"] == 8
     assert any("ctime" in limit for limit in verification["limits"])
+    identity = report["equality_predicate"]["session_identity"]
+    assert identity["repeats"] == 2
+    assert identity["status"] == "matched"
+    assert "determinism proof" in identity["limit"]
+    assert identity["limit"] in report["limits"]
 
 
 def test_a_report_cannot_claim_a_verification_that_failed() -> None:
@@ -1076,3 +1084,175 @@ def test_a_report_cannot_claim_a_verification_that_failed() -> None:
             },
         )
     assert "tracker_gpu.cu" in str(excinfo.value)
+
+
+# --------------------------------------------------------------------------
+# session identity is measured, not assumed from the flags
+# --------------------------------------------------------------------------
+
+
+def _identity_runner(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        bp, "context_fingerprint", lambda args, env: _fake_context("abc")
+    )
+    monkeypatch.setattr(bp, "_witness_paths", lambda args, context: [])
+    return bp.Runner(_args(work_dir=str(tmp_path / "bp")))
+
+
+def _hashed_measurement(value: float, digest: str, out_dir: str = "fake"):
+    return bp.Measurement(
+        value,
+        80.0,
+        {"S1": {"idtp": 10, "idfp": 1, "idfn": 2}},
+        out_dir,
+        digest,
+        {"S1": digest},
+    )
+
+
+def test_identity_repeats_below_two_is_refused(capsys) -> None:
+    code = bp.main(
+        [
+            "--axis",
+            "h_hi",
+            "--lo",
+            "1.2",
+            "--hi",
+            "1.4",
+            "--work-dir",
+            "unused",
+            "--identity-repeats",
+            "1",
+            "--dry-run",
+        ]
+    )
+    assert code == 2
+    assert "--identity-repeats must be at least 2" in capsys.readouterr().err
+
+
+def test_identity_check_matching_repeats_store_the_probe(tmp_path, monkeypatch) -> None:
+    runner = _identity_runner(tmp_path, monkeypatch)
+    calls: list[Path] = []
+
+    def fresh(value, out_dir):
+        calls.append(out_dir)
+        return _hashed_measurement(value, "same-hash", str(out_dir))
+
+    monkeypatch.setattr(runner, "measure_fresh", fresh)
+    record = bp.session_identity_check(runner, 1.2, 2)
+
+    assert record["status"] == "matched"
+    assert record["adopted"] == "fresh"
+    assert record["repeats"] == 2
+    assert record["mot_output_sha256"] == "same-hash"
+    assert "determinism proof" in record["limit"]
+    assert 1.2 in runner.seen
+    assert runner._key(1.2) in runner.cache
+    assert len(calls) == 2
+    assert all("identity_check" in str(path) for path in calls)
+
+
+def test_identity_check_does_not_treat_a_cache_hit_as_a_repeat(
+    tmp_path, monkeypatch
+) -> None:
+    """A cached lo would make the check a statement about a previous session."""
+    runner = _identity_runner(tmp_path, monkeypatch)
+    cached = _hashed_measurement(1.2, "same-hash", "cached")
+    runner._store(1.2, cached)
+    calls = {"n": 0}
+
+    def fresh(value, out_dir):
+        calls["n"] += 1
+        return _hashed_measurement(value, "same-hash", str(out_dir))
+
+    monkeypatch.setattr(runner, "measure_fresh", fresh)
+    record = bp.session_identity_check(runner, 1.2, 2)
+
+    assert calls["n"] == 2
+    assert record["adopted"] == "cache"
+    assert record["cached_mot_output_sha256"] == "same-hash"
+    assert runner.seen[1.2].out_dir == "cached"
+
+
+def test_identity_check_diverged_repeats_fail_closed_without_caching(
+    tmp_path, monkeypatch
+) -> None:
+    runner = _identity_runner(tmp_path, monkeypatch)
+    hashes = iter(["aaa", "bbb"])
+
+    def fresh(value, out_dir):
+        return _hashed_measurement(value, next(hashes), str(out_dir))
+
+    monkeypatch.setattr(runner, "measure_fresh", fresh)
+
+    with pytest.raises(bp.SessionIdentityMismatch) as excinfo:
+        bp.session_identity_check(runner, 1.2, 2)
+
+    assert "diverged" in str(excinfo.value)
+    assert runner.cache == {}
+    assert runner.seen == {}
+
+
+def test_identity_check_refuses_when_fresh_repeats_disagree_with_the_cache(
+    tmp_path, monkeypatch
+) -> None:
+    runner = _identity_runner(tmp_path, monkeypatch)
+    runner._store(1.2, _hashed_measurement(1.2, "cached-hash", "cached"))
+
+    def fresh(value, out_dir):
+        return _hashed_measurement(value, "fresh-hash", str(out_dir))
+
+    monkeypatch.setattr(runner, "measure_fresh", fresh)
+
+    with pytest.raises(bp.SessionIdentityMismatch) as excinfo:
+        bp.session_identity_check(runner, 1.2, 2)
+
+    assert "cache" in str(excinfo.value)
+    assert runner.cache[runner._key(1.2)]["mot_output_sha256"] == "cached-hash"
+
+
+def test_diverged_identity_writes_no_report(tmp_path, monkeypatch, capsys) -> None:
+    """The whole point of the check: do not bisect on a broken equality predicate."""
+
+    def fake_identity(out_dir):
+        digest = f"hash-{Path(out_dir).name}"
+        return digest, {"S1": digest}
+
+    monkeypatch.setattr(
+        bp, "context_fingerprint", lambda args, env: _fake_context("abc")
+    )
+    monkeypatch.setattr(bp, "_witness_paths", lambda args, context: [])
+    monkeypatch.setattr(bp, "_mot_output_identity", fake_identity)
+    monkeypatch.setattr(bp.Runner, "_run_eval", lambda self, params, out_dir: None)
+    monkeypatch.setattr(
+        bp.Runner,
+        "_score",
+        lambda self, out_dir: {"S1": {"idtp": 10, "idfp": 1, "idfn": 2}},
+    )
+    report_path = tmp_path / "report.json"
+
+    code = bp.main(
+        [
+            "--axis",
+            "h_hi",
+            "--lo",
+            "1.2",
+            "--hi",
+            "1.4",
+            "--scan",
+            "2",
+            "--work-dir",
+            str(tmp_path / "bp"),
+            "--json",
+            str(report_path),
+        ]
+    )
+
+    assert code == 2
+    assert "REFUSING TO MEASURE" in capsys.readouterr().err
+    assert not report_path.exists()
+    # a mismatch must not be filed as a measurement the next run could adopt
+    cache_path = tmp_path / "bp" / "cache.json"
+    if cache_path.exists():
+        stored = json.loads(cache_path.read_text("utf-8"))
+        assert stored.get("entries") in ({}, None)
