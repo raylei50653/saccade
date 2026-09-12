@@ -57,6 +57,7 @@ jitter (see dual-stability protocol).
 | 2026-07-09 | Guardrails P0–P6 | Contract C1–C9 + CI checker + NO-GO process | [status](tracker-decision/status_2026-07-09.md) |
 | 2026-07-09 | P0–P8 research line | **Closed** — status + outline + ledger; keep both production | [status](tracker-decision/status_2026-07-09.md) |
 | ongoing | NO-GO knobs (fuse, NSA, OAO spatial, …) | Stay off headline; promotion bar = 7-seq + bipolar | [no_go_guardrails.md](tracker-decision/audit/no_go_guardrails.md) |
+| 2026-09-05 | Output-layer handover + Cheb-GR merge chaining | **Historical observation only** (then-`main` `1d620127`): neither order beat merge-only; more links ≠ better identity; 0.1 order gap is not an order effect. **Not a current-HEAD claim.** Do not restack. | [output_layer_repair_chaining_20260905.md](../modules/semantic/research/output_layer_repair_chaining_20260905.md) · [#335](https://github.com/raylei50653/saccade/pull/335) |
 
 ---
 

@@ -158,6 +158,7 @@
 | [research/sparse_key_embedding_bank_20260704.md](research/sparse_key_embedding_bank_20260704.md) | 稀疏 key-embedding bank |
 | [research/clean_fifo_bank_substrate_20260704.md](research/clean_fifo_bank_substrate_20260704.md) | CleanFIFO bank substrate |
 | [research/chebgr_handover_signal_map_20260704.md](research/chebgr_handover_signal_map_20260704.md) | Cheb-GR handover 訊號圖（Door D fact-owner） |
+| [research/output_layer_repair_chaining_20260905.md](research/output_layer_repair_chaining_20260905.md) | 2026-09-05 offline handover × Cheb-GR merge chaining 的歷史互補性探針（#335） |
 | [research/online_sparse_reid_handoff_20260704.md](research/online_sparse_reid_handoff_20260704.md) | 線上 sparse ReID handoff |
 | 🗺️ [research/association_recovery_crosswalk_20260709.md](research/association_recovery_crosswalk_20260709.md) | 關聯回復研究的 crosswalk |
 | 📇 [research/association_recovery_scripts_index_20260709.md](research/association_recovery_scripts_index_20260709.md) | 關聯回復腳本索引 |
