@@ -141,7 +141,7 @@ range 不會縮小;但**獨立重跑一個新 block 不保證**得到同樣或�
 | 同上的 `+0.714` / `+0.200` / `+0.052` 集中度敘述 | D 類 | 0.052↑ | **本次未提供推翻證據** |
 | [reid_handover_ablation_20260808](../../reference/benchmarks/reid_handover_ablation_20260808.md) §1「ReID 買到 0.0 IDF1,差異只有 1 ID / 7 FN」 | D 類 | 1 ID、7 FN | **本次未提供推翻證據**;其原始理由已改寫 |
 | [bridge_gate_cross_dataset_20260808](../../reference/benchmarks/bridge_gate_cross_dataset_20260808.md) 的 pooled `−0.753` 與否決 | 跨 dataset | 0.753 | **本次未提供推翻證據**;跨 dataset 組態未量,不繼承 D |
-| `scripts/eval/diagnostics/bridge_gate_breakpoints.py` 以「輸出相等」為謂詞的二分法 | D 類 | 相等 | **本次未提供推翻證據**;該工具以「拒絕非 reid-off preset」擔保前提,**不在執行期實測重現性**(自檢為另案) |
+| `scripts/eval/diagnostics/bridge_gate_breakpoints.py` 以「輸出相等」為謂詞的二分法 | D 類 | 相等 | **本次未提供推翻證據**;#364 已在掃描前加 session identity 自檢(預設 2 次 fresh eval,分歧 fail-closed)。匹配的自檢不是確定性證明,只是本 session 未觀察到矛盾 |
 | [d0_runtime_shadow_fidelity_declaration_20260712](../../modules/semantic/research/d0_runtime_shadow_fidelity_declaration_20260712.md) §2 「The pipeline is deterministic under these flags」(跑兩次 byte-identical) | D 類 + 兩個額外旗標 | byte 相等 | **兩次 byte-identical 的歷史觀測本身仍成立**;由該觀測推出的「確定性」一般化**撤回**。該句位於 §2 `(frozen)`,**故不改動原文**,更正記於本表 |
 | [tracker_lane_dose_response_20260907](../../reference/benchmarks/tracker_lane_dose_response_20260907.md) §2 dose inertness 的 35 跑同值 | 另一 preset,decode 走 preset 預設 | 三個指標相等 | 觀測成立;由其推出的「the pipeline is deterministic at this preset」已改寫為零事件敘述 |
 | [saccade_module_reference](../../reference/saccade_module_reference.md) §5 「多次重複 stdev = 0 / byte-identical / A/B 可用 N=1」 | 未載明 | 未載明 | **未定 — delta 未載明**;措辭已改寫 |

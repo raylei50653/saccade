@@ -22,14 +22,14 @@ its edge.  This tool finds them by bisection rather than by sampling, and
 reports pooled IDF1 alongside the output identity rather than using the metric
 as the identity.
 
-Bisection is available here because repeated tracker output is bit-exact
-(``reid_mode: off`` + ``--no-gpu-decode``, so N=1 suffices), which makes
-*equality* a usable predicate.  A bracket whose endpoints differ can then be
-narrowed to any width in O(log(1/tol)) evaluations instead of O(1/tol) grid
-points.  Endpoints are compared by SHA-256 over the canonical MOT result bytes
-for every sequence.  Per-sequence ``(idtp, idfp, idfn)`` counts remain metric
-evidence, but are not an output identity: distinct frame-level rows or ID
-assignments can produce exactly the same aggregate counts.
+Bisection here uses *equality of canonical MOT bytes* as the predicate, so a
+bracket whose endpoints differ can be narrowed to any width in O(log(1/tol))
+evaluations instead of O(1/tol) grid points.  Endpoints are compared by SHA-256
+over the canonical MOT result bytes for every sequence.  Per-sequence
+``(idtp, idfp, idfn)`` counts remain metric evidence, but are not an output
+identity: distinct frame-level rows or ID assignments can produce exactly the
+same aggregate counts.  Equality is licensed per session, not by the flags:
+see limit 4.
 
 Measurements are cached under ``--work-dir`` and bound to a context fingerprint
 (source tree by content, the native extensions the eval itself would import,
@@ -59,8 +59,14 @@ Limits (these are properties of the method, not of the implementation)
 3. Breakpoint locations are **data values**, i.e. a property of this dataset's
    ratio distribution rather than of the gate.  Do not expect them to transfer
    to another dataset; see the 2026-08-08 cross-dataset note.
-4. Bit-exactness is a premise, not a finding: the tool refuses a preset that is
-   not explicitly reid-off, and pins ``--reid-mode off`` on the eval command.
+4. Equality is a premise, not a finding.  The tool refuses a preset that is
+   not explicitly reid-off, pins ``--reid-mode off`` and ``--no-gpu-decode``,
+   and before the scan runs ``--identity-repeats`` (default 2) *fresh* evals
+   at ``--lo``.  Distinct canonical MOT hashes -- including a mismatch against
+   a cached point at the same coordinates -- fail closed.  Matching repeats
+   are not a determinism proof (#362): they only failed to contradict the
+   predicate in this session.  Cached measurements are never counted as
+   identity-check repeats.
 
 Usage: one axis per invocation
 ------------------------------
@@ -109,8 +115,8 @@ FLAG = {
 # appended after ours would silently decide the run while the report kept
 # labelling the point with the value *we* asked for -- a measurement filed under
 # the wrong coordinates.  --reid-mode and the decode flags are owned at one
-# remove: they are what makes the measurement bit-exact, so moving them
-# invalidates the equality predicate the whole bisection rests on.
+# remove: they are part of the equality-predicate license, so moving them
+# invalidates the comparison the whole bisection rests on.
 TOOL_OWNED_FLAGS = (
     "--preset",
     "--data-root",
@@ -127,6 +133,7 @@ TOOL_OWNED_FLAGS = (
 )
 
 CACHE_SCHEMA = 3
+DEFAULT_IDENTITY_REPEATS = 2
 MOT_OUTPUT_SCHEMA = "canonical_mot_output_v1"
 MOT_OUTPUT_NORMALIZATION = (
     "sequence .txt bytes sorted by sequence name; CRLF/CR converted to LF; "
@@ -215,6 +222,14 @@ class CacheContextMismatch(RuntimeError):
 
 class ContextDrift(RuntimeError):
     """Something the fingerprint binds changed while this run was measuring."""
+
+
+class SessionIdentityMismatch(RuntimeError):
+    """Fresh repeats at one coordinate produced distinct canonical MOT hashes."""
+
+    def __init__(self, record: dict) -> None:
+        self.record = record
+        super().__init__(_identity_mismatch_message(record))
 
 
 @dataclass
@@ -318,10 +333,10 @@ def eval_command(
     if args.detector:
         cmd += ["--detector", args.detector]
     # --reid-mode off is pinned on the command line, where it outranks every
-    # config layer: the bit-exactness the equality predicate rests on is not
-    # something to leave to whatever the preset happened to say.  main() also
-    # refuses a preset that does not already say off, so the pin never silently
-    # re-purposes a run the caller asked for.
+    # config layer: the equality predicate is not something to leave to
+    # whatever the preset happened to say.  main() also refuses a preset that
+    # does not already say off, so the pin never silently re-purposes a run
+    # the caller asked for.
     cmd += ["--double-buffer", "--no-gpu-decode", "--reid-mode", "off"]
     for axis in AXES:
         cmd += [FLAG[axis], _coordinate(params[axis])]
@@ -401,12 +416,11 @@ def resolve_reid_mode(args: argparse.Namespace) -> tuple[str, str]:
 def premise_violation(args: argparse.Namespace) -> str | None:
     """Why this run cannot support bisection, or None.
 
-    Bisection here is licensed by one thing: the measurement is bit-exact, so
-    N=1 suffices and *equality* is a usable predicate. That holds with ReID off;
-    with ReID doing appearance work it does not, and every plateau and jump the
-    tool reported would be an artefact of run-to-run variation. The tool has no
-    way to tell that apart after the fact, so it refuses up front rather than
-    publishing numbers whose premise is false.
+    ReID doing appearance work makes run-to-run variation indistinguishable
+    from a gate jump after the fact, so the tool refuses a non-reid-off preset
+    up front. That refusal is necessary and not sufficient: ``--no-gpu-decode``
+    does not make a configuration bit-exact (#362). The session identity check
+    in main() is the runtime half of the same premise.
     """
     mode, origin = resolve_reid_mode(args)
     if mode != "off":
@@ -875,34 +889,53 @@ class Runner:
             )
             if not (same_context and fixed_match):
                 continue
-            self.seen[value] = Measurement(
-                value,
-                hit["idf1"],
-                hit["per_seq"],
-                hit["out_dir"],
-                hit["mot_output_sha256"],
-                hit["per_seq_mot_sha256"],
-            )
+            self.seen[value] = self._measurement_from_cache(value, hit)
             adopted += 1
         return adopted
 
     def measure(self, value: float) -> Measurement:
         key = self._key(value)
         if key in self.cache:
-            hit = self.cache[key]
-            cached = Measurement(
-                value,
-                hit["idf1"],
-                hit["per_seq"],
-                hit["out_dir"],
-                hit["mot_output_sha256"],
-                hit["per_seq_mot_sha256"],
-            )
+            cached = self._measurement_from_cache(value, self.cache[key])
             self.seen[value] = cached
             return cached
 
         params = params_for(self.args, value)
-        out_dir = out_dir_for(self.args, params)
+        measurement = self._evaluate(value, out_dir_for(self.args, params))
+        self._store(value, measurement)
+        return measurement
+
+    def measure_fresh(self, value: float, out_dir: Path) -> Measurement:
+        """Evaluate ``value`` without reading or writing the measurement cache.
+
+        Identity-check repeats must not be satisfied by a hash from a previous
+        session: that would make the predicate a statement about then, not now.
+        """
+        return self._evaluate(value, out_dir)
+
+    def _measurement_from_cache(self, value: float, hit: dict) -> Measurement:
+        return Measurement(
+            value,
+            hit["idf1"],
+            hit["per_seq"],
+            hit["out_dir"],
+            hit["mot_output_sha256"],
+            hit["per_seq_mot_sha256"],
+        )
+
+    def _store(self, value: float, measurement: Measurement) -> None:
+        self.cache[self._key(value)] = {
+            "idf1": measurement.idf1,
+            "per_seq": measurement.per_seq,
+            "out_dir": measurement.out_dir,
+            "mot_output_sha256": measurement.mot_output_sha256,
+            "per_seq_mot_sha256": measurement.per_seq_mot_sha256,
+        }
+        self._save_cache()
+        self.seen[value] = measurement
+
+    def _evaluate(self, value: float, out_dir: Path) -> Measurement:
+        params = params_for(self.args, value)
         # A fresh evaluation is bracketed by two context checks, so a point only
         # ever enters the cache if nothing it was measured against moved while
         # it was being measured.
@@ -927,7 +960,8 @@ class Runner:
                 f"scored={sorted(per_seq)}"
             )
         self._checkpoint(f"while measuring {self.args.axis}={_coordinate(value)}")
-        measurement = Measurement(
+        self.runs += 1
+        return Measurement(
             value,
             _pooled_idf1(per_seq),
             per_seq,
@@ -935,17 +969,6 @@ class Runner:
             mot_output_sha256,
             per_seq_mot_sha256,
         )
-        self.cache[key] = {
-            "idf1": measurement.idf1,
-            "per_seq": per_seq,
-            "out_dir": str(out_dir),
-            "mot_output_sha256": mot_output_sha256,
-            "per_seq_mot_sha256": per_seq_mot_sha256,
-        }
-        self._save_cache()
-        self.runs += 1
-        self.seen[value] = measurement
-        return measurement
 
     def _checkpoint(self, when: str) -> None:
         """Fail closed if anything the fingerprint binds has moved.
@@ -1064,6 +1087,97 @@ class Runner:
         return per_seq
 
 
+def _identity_mismatch_message(record: dict) -> str:
+    axis = record["probe_axis"]
+    value = _coordinate(record["probe_value"])
+    hashes = record["mot_output_sha256"]
+    if record["status"] == "diverged_from_cache":
+        cached = record["cached_mot_output_sha256"]
+        return (
+            f"session identity check matched across {record['repeats']} fresh "
+            f"repeats at {axis}={value} ({hashes[0][:12]}...) but the cache "
+            f"holds {cached[:12]}... Cached and fresh numbers would not be "
+            f"comparable as the same output. Use a fresh --work-dir."
+        )
+    distinct = sorted(set(hashes))
+    shown = ", ".join(item[:12] + "..." for item in distinct)
+    return (
+        f"session identity check diverged at {axis}={value}: "
+        f"{record['repeats']} fresh repeats produced {len(distinct)} distinct "
+        f"canonical MOT hashes ({shown}). Equality is not a usable bisection "
+        f"predicate for this configuration this session."
+    )
+
+
+def _identity_report_record(record: dict) -> dict:
+    """Collapse matched repeats to what the report needs to state."""
+    out = {
+        "repeats": record["repeats"],
+        "probe_axis": record["probe_axis"],
+        "probe_value": record["probe_value"],
+        "status": record["status"],
+        "mot_output_sha256": record["mot_output_sha256"][0],
+        "out_dirs": record["out_dirs"],
+        "adopted": record["adopted"],
+        "limit": (
+            "matching repeats this session are a contradiction check, not a "
+            "determinism proof; reproducibility is per-configuration and is "
+            "not guaranteed by --no-gpu-decode (#362, #364)"
+        ),
+    }
+    if "cached_mot_output_sha256" in record:
+        out["cached_mot_output_sha256"] = record["cached_mot_output_sha256"]
+    return out
+
+
+def session_identity_check(runner: Runner, value: float, repeats: int) -> dict:
+    """Fail closed if this session cannot treat MOT equality as a predicate.
+
+    ``repeats`` fresh evals at one coordinate; a cache hit is never a repeat.
+    Matching hashes are a contradiction check, not a determinism proof.
+    """
+    if repeats < 2:
+        raise ValueError("--identity-repeats must be at least 2")
+    measurements: list[Measurement] = []
+    for i in range(repeats):
+        out_dir = runner.work_dir / "identity_check" / f"repeat_{i}"
+        print(
+            f"[identity {i + 1}/{repeats}] {runner.args.axis}={_coordinate(value)}",
+            file=sys.stderr,
+            flush=True,
+        )
+        measurements.append(runner.measure_fresh(value, out_dir))
+    hashes = [item.mot_output_sha256 for item in measurements]
+    record: dict = {
+        "repeats": repeats,
+        "probe_axis": runner.args.axis,
+        "probe_value": value,
+        "mot_output_sha256": hashes,
+        "per_sequence_mot_sha256": [item.per_seq_mot_sha256 for item in measurements],
+        "out_dirs": [item.out_dir for item in measurements],
+    }
+    if len(set(hashes)) != 1:
+        record["status"] = "diverged"
+        raise SessionIdentityMismatch(record)
+
+    key = runner._key(value)
+    if key in runner.cache:
+        cached_hash = runner.cache[key]["mot_output_sha256"]
+        record["cached_mot_output_sha256"] = cached_hash
+        if cached_hash != hashes[0]:
+            record["status"] = "diverged_from_cache"
+            raise SessionIdentityMismatch(record)
+        runner.seen[value] = runner._measurement_from_cache(value, runner.cache[key])
+        record["status"] = "matched"
+        record["adopted"] = "cache"
+        return _identity_report_record(record)
+
+    runner._store(value, measurements[-1])
+    record["status"] = "matched"
+    record["adopted"] = "fresh"
+    return _identity_report_record(record)
+
+
 @dataclass
 class Bracket:
     low: Measurement
@@ -1174,6 +1288,7 @@ def build_report(
     aborted: str | None = None,
     context: dict | None = None,
     verification: dict | None = None,
+    identity: dict | None = None,
 ) -> dict:
     """Derive plateaus and jumps from *every* measured point.
 
@@ -1248,6 +1363,7 @@ def build_report(
             "schema": MOT_OUTPUT_SCHEMA,
             "normalization": MOT_OUTPUT_NORMALIZATION,
             "metric_only": "per-sequence (idtp, idfp, idfn) counts",
+            **({"session_identity": identity} if identity is not None else {}),
         },
         "gate_contract": {
             "height_ratio": "h_lo <= ratio <= h_hi (both bounds inclusive)",
@@ -1280,6 +1396,8 @@ def build_report(
             "ID counts are reported as metrics and never used as output identity",
         ],
     }
+    if identity is not None:
+        report["limits"].append(identity["limit"])
     if context is not None:
         report["context"] = context
     if verification is not None:
@@ -1321,6 +1439,12 @@ def build_report(
 def print_table(report: dict) -> None:
     print(f"\naxis={report['axis']}  fixed={report['fixed_axes']}")
     print(f"eval runs executed: {report['eval_runs_executed']}")
+    identity = report.get("equality_predicate", {}).get("session_identity")
+    if identity is not None:
+        print(
+            f"session identity: {identity['repeats']} matching fresh repeats "
+            f"at {identity['probe_axis']}={_coordinate(identity['probe_value'])}"
+        )
 
     print("\nplateaus (identical canonical MOT output at every measured point inside):")
     print(f"  {'from':>12}  {'to':>12}  {'width':>10}  {'IDF1':>9}  {'pts':>4}")
@@ -1404,6 +1528,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
     p.add_argument(
+        "--identity-repeats",
+        type=int,
+        default=DEFAULT_IDENTITY_REPEATS,
+        help=(
+            "Fresh evals at --lo before the scan, compared by canonical MOT "
+            "hash. Default 2. Distinct hashes fail closed. Matching hashes "
+            "are not a determinism proof. Cached measurements do not count."
+        ),
+    )
+    p.add_argument(
         "--scan-only",
         action="store_true",
         help="Find brackets but skip bisection.",
@@ -1427,12 +1561,22 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def dry_run(args: argparse.Namespace) -> int:
-    """Print the scan-grid commands. No eval, no cache, no report.
+    """Print the identity-check and scan-grid commands. No eval, no cache, no report.
 
     A report would have to invent measurements, and the bisection's own
     evaluations cannot be planned at all: which midpoints get measured is
     decided by what the earlier measurements say.
     """
+    probe = args.lo
+    print(
+        f"# {args.identity_repeats} identity-check eval(s) at "
+        f"--axis {args.axis}={_coordinate(probe)}; nothing is executed"
+    )
+    for i in range(args.identity_repeats):
+        out_dir = Path(args.work_dir) / "identity_check" / f"repeat_{i}"
+        cmd = eval_command(args, params_for(args, probe), out_dir)
+        print(f"[identity {i + 1}/{args.identity_repeats}] {_coordinate(probe)}")
+        print("  " + " ".join(cmd))
     step = (args.hi - args.lo) / (args.scan - 1)
     print(f"# {args.scan} scan point(s) on --axis {args.axis}; nothing is executed")
     for i in range(args.scan):
@@ -1456,6 +1600,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.scan < 2:
         print("--scan must be at least 2", file=sys.stderr)
         return 2
+    if args.identity_repeats < 2:
+        print("--identity-repeats must be at least 2", file=sys.stderr)
+        return 2
     violation = premise_violation(args)
     if violation is not None:
         print(f"REFUSING TO MEASURE: {violation}", file=sys.stderr)
@@ -1471,7 +1618,9 @@ def main(argv: list[str] | None = None) -> int:
 
     failure: str | None = None
     brackets: list[Bracket] = []
+    identity_record: dict | None = None
     try:
+        identity_record = session_identity_check(runner, args.lo, args.identity_repeats)
         samples = scan(runner, args.lo, args.hi, args.scan)
         brackets = brackets_from_scan(samples)
         print(
@@ -1491,6 +1640,9 @@ def main(argv: list[str] | None = None) -> int:
                     failure = str(exc)
                     print(f"  ABORTED: {exc}", file=sys.stderr, flush=True)
                     break
+    except SessionIdentityMismatch as exc:
+        print(f"REFUSING TO MEASURE: {exc}", file=sys.stderr)
+        return 2
     except ContextDrift as exc:
         # Every point already stored was bracketed by two passing checks, so the
         # cache stays; what cannot be done is report from a run whose inputs
@@ -1540,6 +1692,7 @@ def main(argv: list[str] | None = None) -> int:
         aborted=failure,
         context=runner.context,
         verification=verification,
+        identity=identity_record,
     )
     if failure is not None:
         report["incomplete"] = failure
