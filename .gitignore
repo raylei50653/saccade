@@ -52,8 +52,9 @@ assets/videos/*.mp4
 *.diff
 debug_*.py
 .codex
-scratch/*.nohup
-scratch/*_sweep.txt
+
+# Local one-off experiments, smokes, nsys dumps, A/B outputs. Not source.
+scratch/
 
 # LLM Quantization temporary files
 *.gguf.tmp
@@ -92,19 +93,13 @@ build-native-coverage/
 *.prof
 *.nsys-rep
 *.sqlite
-scratch/nsys_profiles/
 storage/mlflow_artifacts/
 storage/postgres_data/
 output/
 out/
-scratch/root_artifacts_*/
-scratch/ab_runs/
-scratch/ab_smoke/
 
 # Analysis script outputs (generated plots, candidate CSVs, sweep data)
 scripts/tools/out/
-scratch/pipeline_math_validation/data/
-scratch/pipeline_math_validation/output/
 
 # Curated report docs (README, algorithms.md, figures/, etc.) live under
 # report_data/ and stay tracked. Machine-generated ablation outputs go to
