@@ -6,12 +6,15 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import numpy as np
 import torch
 import torch.nn.functional as F
 
 import saccade.perception.eval.cheb_gr_merge as cheb_gr_merge
 from saccade.perception.eval.cheb_gr_merge import (
+    MERGE_DECISION_VERDICTS,
     cheb_gr_merge_output_tracklets,
     extract_tracklet_embeddings,
     temporal_sample_indices,
@@ -221,3 +224,220 @@ def test_extract_tracklet_embeddings_prefers_native_for_mnv4(monkeypatch):
         1: torch.Size([2, 4]),
         2: torch.Size([1, 4]),
     }
+
+
+def _verdicts(log: list[dict[str, Any]], kind: str) -> list[tuple[int, int, str]]:
+    return [
+        (int(row["a_id"]), int(row["b_id"]), str(row["verdict"]))
+        for row in log
+        if row["kind"] == kind
+    ]
+
+
+def test_merge_decision_log_default_none_is_a_noop():
+    rng = np.random.default_rng(3)
+    d = 32
+    c0 = rng.standard_normal(d).astype(np.float32)
+    lines = [
+        *[f"{fr},1,10,10,20,40,0.9,-1,-1,-1" for fr in range(1, 6)],
+        *[f"{fr},2,10,10,20,40,0.9,-1,-1,-1" for fr in range(20, 26)],
+    ]
+    embeddings = {1: _normed(rng, 6, d, c0), 2: _normed(rng, 6, d, c0)}
+
+    out_default, stats_default = cheb_gr_merge_output_tracklets(
+        lines, embeddings, enabled=True, max_cost=0.9, max_gap=30, max_fwd=0
+    )
+    log: list[dict[str, Any]] = []
+    out_logged, stats_logged = cheb_gr_merge_output_tracklets(
+        lines,
+        embeddings,
+        enabled=True,
+        max_cost=0.9,
+        max_gap=30,
+        max_fwd=0,
+        decision_log=log,
+    )
+
+    assert out_logged == out_default
+    assert stats_logged == stats_default
+    assert log  # logging is observational; default path did not require a list
+
+
+def test_merge_decision_log_records_embedding_presence():
+    rng = np.random.default_rng(4)
+    d = 32
+    c0 = rng.standard_normal(d).astype(np.float32)
+    lines = [
+        "1,1,10,10,20,40,0.9,-1,-1,-1",
+        "2,2,10,10,20,40,0.9,-1,-1,-1",
+        "3,3,10,10,20,40,0.9,-1,-1,-1",
+    ]
+    embeddings = {
+        1: _normed(rng, 4, d, c0),
+        3: torch.zeros((0, d), dtype=torch.float32),
+    }
+    log: list[dict[str, Any]] = []
+    cheb_gr_merge_output_tracklets(
+        lines, embeddings, enabled=True, max_fwd=0, decision_log=log
+    )
+
+    assert _verdicts(log, "tracklet") == [
+        (1, -1, "has_embedding"),
+        (2, -1, "no_embedding"),
+        (3, -1, "no_embedding"),
+    ]
+    assert not _verdicts(log, "pair")
+
+
+def test_merge_decision_log_reject_cost():
+    rng = np.random.default_rng(5)
+    d = 32
+    c0 = rng.standard_normal(d).astype(np.float32)
+    c1 = rng.standard_normal(d).astype(np.float32)
+    lines = [
+        *[f"{fr},1,10,10,20,40,0.9,-1,-1,-1" for fr in range(1, 6)],
+        *[f"{fr},2,10,10,20,40,0.9,-1,-1,-1" for fr in range(20, 26)],
+    ]
+    embeddings = {1: _normed(rng, 6, d, c0), 2: _normed(rng, 6, d, c1)}
+    log: list[dict[str, Any]] = []
+    out, stats = cheb_gr_merge_output_tracklets(
+        lines,
+        embeddings,
+        enabled=True,
+        max_cost=0.05,
+        max_gap=30,
+        max_fwd=0,
+        decision_log=log,
+    )
+
+    assert _verdicts(log, "pair") == [(1, 2, "reject_cost")]
+    assert stats["merges"] == 0
+    assert out == lines
+
+
+def test_merge_decision_log_accepted():
+    rng = np.random.default_rng(8)
+    d = 32
+    c0 = rng.standard_normal(d).astype(np.float32)
+    lines = [
+        *[f"{fr},1,10,10,20,40,0.9,-1,-1,-1" for fr in range(1, 6)],
+        *[f"{fr},2,10,10,20,40,0.9,-1,-1,-1" for fr in range(20, 26)],
+    ]
+    embeddings = {1: _normed(rng, 6, d, c0), 2: _normed(rng, 6, d, c0)}
+    log: list[dict[str, Any]] = []
+    out, stats = cheb_gr_merge_output_tracklets(
+        lines,
+        embeddings,
+        enabled=True,
+        max_cost=0.9,
+        max_gap=30,
+        max_fwd=0,
+        decision_log=log,
+    )
+
+    assert _verdicts(log, "pair") == [(1, 2, "accepted")]
+    assert stats["merges"] == 1
+    assert {int(line.split(",")[1]) for line in out} == {1}
+    assert "pending" not in {row["verdict"] for row in log}
+    assert {row["verdict"] for row in log} <= set(MERGE_DECISION_VERDICTS)
+
+
+def test_merge_decision_log_reject_temporal():
+    rng = np.random.default_rng(9)
+    d = 32
+    c0 = rng.standard_normal(d).astype(np.float32)
+    lines = [
+        *[f"{fr},1,10,10,20,40,0.9,-1,-1,-1" for fr in range(1, 11)],
+        *[f"{fr},2,50,50,20,40,0.9,-1,-1,-1" for fr in range(1, 11)],
+    ]
+    embeddings = {1: _normed(rng, 6, d, c0), 2: _normed(rng, 6, d, c0)}
+    log: list[dict[str, Any]] = []
+    out, stats = cheb_gr_merge_output_tracklets(
+        lines,
+        embeddings,
+        enabled=True,
+        max_cost=0.99,
+        max_gap=30,
+        max_fwd=0,
+        decision_log=log,
+    )
+
+    assert _verdicts(log, "pair") == [(1, 2, "reject_temporal")]
+    assert stats["merges"] == 0
+    assert out == lines
+
+
+def test_merge_decision_log_reject_same_component():
+    rng = np.random.default_rng(6)
+    d = 32
+    c0 = rng.standard_normal(d).astype(np.float32)
+    lines = [
+        *[f"{fr},1,10,10,20,40,0.9,-1,-1,-1" for fr in range(1, 6)],
+        *[f"{fr},2,10,10,20,40,0.9,-1,-1,-1" for fr in range(20, 26)],
+        *[f"{fr},3,10,10,20,40,0.9,-1,-1,-1" for fr in range(40, 46)],
+    ]
+    embeddings = {
+        1: _normed(rng, 6, d, c0),
+        2: _normed(rng, 6, d, c0),
+        3: _normed(rng, 6, d, c0),
+    }
+    log: list[dict[str, Any]] = []
+    out, stats = cheb_gr_merge_output_tracklets(
+        lines,
+        embeddings,
+        enabled=True,
+        max_cost=0.9,
+        max_gap=60,
+        max_fwd=0,
+        decision_log=log,
+    )
+
+    pair_verdicts = [v for _, _, v in _verdicts(log, "pair")]
+    assert pair_verdicts.count("accepted") == 2
+    assert pair_verdicts.count("reject_same_component") == 1
+    assert stats["merges"] == 2
+    assert len({int(line.split(",")[1]) for line in out}) == 1
+
+
+def test_merge_decision_log_reject_component_overlap():
+    rng = np.random.default_rng(7)
+    d = 32
+    c0 = rng.standard_normal(d).astype(np.float32)
+    lines = [
+        *[f"{fr},1,10,10,20,40,0.9,-1,-1,-1" for fr in range(1, 11)],
+        *[f"{fr},2,10,10,20,40,0.9,-1,-1,-1" for fr in range(20, 26)],
+        *[f"{fr},3,200,200,20,40,0.9,-1,-1,-1" for fr in range(1, 11)],
+    ]
+    embeddings = {
+        1: _normed(rng, 6, d, c0),
+        2: _normed(rng, 6, d, c0),
+        3: _normed(rng, 6, d, c0),
+    }
+    log: list[dict[str, Any]] = []
+    _, stats = cheb_gr_merge_output_tracklets(
+        lines,
+        embeddings,
+        enabled=True,
+        max_cost=0.9,
+        max_gap=30,
+        max_fwd=0,
+        decision_log=log,
+    )
+
+    pair_verdicts = {(a, b): v for a, b, v in _verdicts(log, "pair")}
+    assert pair_verdicts[(1, 3)] == "reject_temporal"
+    greedy = {pair_verdicts[(1, 2)], pair_verdicts[(2, 3)]}
+    assert "accepted" in greedy
+    assert "reject_component_overlap" in greedy
+    assert stats["merges"] == 1
+
+
+def test_merge_disabled_does_not_write_decision_log():
+    log: list[dict[str, Any]] = []
+    lines = ["1,1,10,10,20,40,0.9,-1,-1,-1"]
+    out, stats = cheb_gr_merge_output_tracklets(
+        lines, {}, enabled=False, decision_log=log
+    )
+    assert out == lines
+    assert stats["merges"] == 0
+    assert log == []
