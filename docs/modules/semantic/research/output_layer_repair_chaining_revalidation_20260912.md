@@ -44,8 +44,9 @@ Compare ranking, sign of effect, and qualitative conclusion.
 | Item | Value |
 |---|---|
 | Measurement date | 2026-09-12 |
-| Tracker / substrate commit | `85b95ac1` (clean `main`; merge of #401) |
-| Harness | `scripts/eval/experiments/run_output_layer_repair_chaining.py` (measurement-only; dirty working tree at replay time because this script was not yet committed) |
+| Substrate commit | `85b95ac1` (clean `main`; merge of #401; tracker capture `dirty=0`) |
+| Replay harness commit | `7f7edcbe` (measurement-only harness; worktree `dirty=false` at replay start) |
+| Harness | `scripts/eval/experiments/run_output_layer_repair_chaining.py` |
 | Host | `DESKTOP-0FLA6SQ` (Linux WSL2) |
 | GPU | NVIDIA GeForce RTX 5070 Ti Laptop GPU, sm_120 |
 | Torch / CUDA | 2.11.0+cu130 / 13.0 |

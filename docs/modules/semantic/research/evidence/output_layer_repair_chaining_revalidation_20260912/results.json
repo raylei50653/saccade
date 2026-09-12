@@ -8,15 +8,18 @@
       "results/olr_reval_20260912",
       "--artifact-dir",
       "docs/modules/semantic/research/evidence/output_layer_repair_chaining_revalidation_20260912",
+      "--substrate-commit",
+      "85b95ac151bc7dd399ffc25fc83ac103c0e7321a",
+      "--expected-substrate-sha256",
+      "docs/modules/semantic/research/evidence/output_layer_repair_chaining_revalidation_20260912/substrate_sha256.json",
       "--repeats",
       "3",
       "--repeat-arms",
       "merge_only,handover_then_merge,merge_then_handover"
     ],
-    "commit": "85b95ac151bc7dd399ffc25fc83ac103c0e7321a",
-    "dirty": true,
+    "dirty": false,
     "harness": "scripts/eval/experiments/run_output_layer_repair_chaining.py",
-    "measured_at": "2026-09-12T08:04:51.329565+00:00",
+    "measured_at": "2026-09-12T08:51:10.716314+00:00",
     "preset_contract": {
       "cheb_gr_engine": "models/embedding/mobilenetv4_reid_visclean_224.engine",
       "cheb_gr_model": "mobilenetv4_reid",
@@ -69,6 +72,8 @@
         "MOT17-13-SDP"
       ]
     },
+    "repeat_kind": "within_process",
+    "replay_harness_commit": "7f7edcbeb3b78a3432a679011869b48e54471c57",
     "runtime": {
       "env": {
         "SACCADE_DETECT_BARRIER": null,
@@ -91,6 +96,7 @@
       "python": "3.12.13"
     },
     "substrate": "/home/ray/developer/ai/saccade/results/olr_reval_20260912/substrate",
+    "substrate_commit": "85b95ac151bc7dd399ffc25fc83ac103c0e7321a",
     "substrate_sha256": {
       "MOT17-02-SDP": "312029468bcad19f639a3a10ab092234d6bf076edf78038ed1028930db32196c",
       "MOT17-04-SDP": "b1a3d60bdcfd177902e692a0bd464e51519c6ee879ed9ba587d7007c550a2ae6",
@@ -193,7 +199,7 @@
       },
       "stage_order": [],
       "stages": {
-        "link_pairs": 0,
+        "accepted_links": 0,
         "per_stage": {},
         "stage_order": []
       },
@@ -544,7 +550,7 @@
         "handover"
       ],
       "stages": {
-        "link_pairs": 54,
+        "accepted_links": 54,
         "per_stage": {
           "handover": {
             "accepted_links": 54,
@@ -819,7 +825,7 @@
         "merge"
       ],
       "stages": {
-        "link_pairs": 85,
+        "accepted_links": 85,
         "per_stage": {
           "merge": {
             "accepted_links": 85,
@@ -1340,7 +1346,7 @@
         "merge"
       ],
       "stages": {
-        "link_pairs": 100,
+        "accepted_links": 100,
         "per_stage": {
           "handover": {
             "accepted_links": 54,
@@ -1874,7 +1880,7 @@
         "handover"
       ],
       "stages": {
-        "link_pairs": 104,
+        "accepted_links": 104,
         "per_stage": {
           "handover": {
             "accepted_links": 19,
@@ -2164,7 +2170,7 @@
         "merge"
       ],
       "stages": {
-        "link_pairs": 85,
+        "accepted_links": 85,
         "per_stage": {
           "merge": {
             "accepted_links": 85,
@@ -2439,7 +2445,7 @@
         "merge"
       ],
       "stages": {
-        "link_pairs": 85,
+        "accepted_links": 85,
         "per_stage": {
           "merge": {
             "accepted_links": 85,
@@ -2960,7 +2966,7 @@
         "merge"
       ],
       "stages": {
-        "link_pairs": 100,
+        "accepted_links": 100,
         "per_stage": {
           "handover": {
             "accepted_links": 54,
@@ -3494,7 +3500,7 @@
         "merge"
       ],
       "stages": {
-        "link_pairs": 100,
+        "accepted_links": 100,
         "per_stage": {
           "handover": {
             "accepted_links": 54,
@@ -4028,7 +4034,7 @@
         "handover"
       ],
       "stages": {
-        "link_pairs": 104,
+        "accepted_links": 104,
         "per_stage": {
           "handover": {
             "accepted_links": 19,
@@ -4562,7 +4568,7 @@
         "handover"
       ],
       "stages": {
-        "link_pairs": 104,
+        "accepted_links": 104,
         "per_stage": {
           "handover": {
             "accepted_links": 19,
@@ -4598,7 +4604,7 @@
     }
   ],
   "schema": "output_layer_repair_chaining_revalidation/v1",
-  "table_markdown": "| arm | IDF1 | MOTA | HOTA | AssA | IDs | final tracks | link pairs |\n| --- | ---: | ---: | ---: | ---: | --: | -----------: | ---------: |\n| base | 80.4 | 81.6 | 74.4 | 73.5 | 344 | 804 | 0 |\n| handover_only | 80.8 | 81.5 | 74.5 | 73.7 | 338 | 750 | 54 |\n| merge_only | 81.3 | 81.6 | 74.7 | 74.2 | 313 | 719 | 85 |\n| handover_then_merge | 81.1 | 81.4 | 74.6 | 73.9 | 323 | 704 | 100 |\n| merge_then_handover | 81.2 | 81.4 | 74.7 | 74.1 | 317 | 700 | 104 |",
+  "table_markdown": "| arm | IDF1 | MOTA | HOTA | AssA | IDs | final tracks | accepted links |\n| --- | ---: | ---: | ---: | ---: | --: | -----------: | -------------: |\n| base | 80.4 | 81.6 | 74.4 | 73.5 | 344 | 804 | 0 |\n| handover_only | 80.8 | 81.5 | 74.5 | 73.7 | 338 | 750 | 54 |\n| merge_only | 81.3 | 81.6 | 74.7 | 74.2 | 313 | 719 | 85 |\n| handover_then_merge | 81.1 | 81.4 | 74.6 | 73.9 | 323 | 704 | 100 |\n| merge_then_handover | 81.2 | 81.4 | 74.7 | 74.1 | 317 | 700 | 104 |",
   "variation": {
     "handover_then_merge": {
       "AssA": {
@@ -4652,7 +4658,8 @@
         ]
       },
       "mot_files_identical": true,
-      "n": 3
+      "n": 3,
+      "repeat_kind": "within_process"
     },
     "merge_only": {
       "AssA": {
@@ -4706,7 +4713,8 @@
         ]
       },
       "mot_files_identical": true,
-      "n": 3
+      "n": 3,
+      "repeat_kind": "within_process"
     },
     "merge_then_handover": {
       "AssA": {
@@ -4760,7 +4768,8 @@
         ]
       },
       "mot_files_identical": true,
-      "n": 3
+      "n": 3,
+      "repeat_kind": "within_process"
     }
   }
 }
