@@ -47,7 +47,19 @@ from config import (  # noqa: E402
     TriggerConfig,
 )
 from mot17_args import build_parser  # noqa: E402
-from saccade.perception.eval.config import EvalConfig  # noqa: E402
+from saccade.perception.eval.config import (  # noqa: E402
+    CoreView,
+    DetectionView,
+    EvalConfig,
+    GeometryView,
+    LifecycleView,
+    MotionView,
+    ReIDView,
+    SemanticView,
+    TriggerView,
+    parse_eval_config,
+    _DEFAULTS as _EVAL_DEFAULTS,
+)
 
 _MODULES = (
     CoreConfig,
@@ -889,92 +901,139 @@ def test_parse_ec_no_dead_fallback_defaults() -> None:
 
 # ---------------------------------------------------------------------------
 # Phase 4B: Module view projection tests
+#
+# ADR 024 (issue #139) retains the current views as construction-time copies
+# of EvalConfig flat fields. These tests pin the full flat↔view projection,
+# not a sampled subset.
 # ---------------------------------------------------------------------------
+
+_MODULE_VIEWS = (
+    ("core", CoreView),
+    ("detection", DetectionView),
+    ("geometry", GeometryView),
+    ("motion", MotionView),
+    ("reid", ReIDView),
+    ("semantic", SemanticView),
+    ("lifecycle", LifecycleView),
+)
+
+# EvalConfig fields that ADR 024 keeps as root fields (not projected into a view).
+_UNPROJECTED_EVALCONFIG_FIELDS = frozenset(
+    {
+        "appearance_bank_enabled",
+        "crop_hw",
+        "duplicate_suppression",
+        "geometry_suspect_support_score",
+        "gmc_enabled",
+        "id_stability_filter_enabled",
+        "kwargs",
+        "lifecycle_merge_enabled",
+        "need_reid_enabled",
+        "occ_audit_bank_n",
+        "occ_audit_bank_reference",
+        "occ_vel_weight",
+        "output_root",
+        "pose_box_expand",
+        "pose_expand_ankle_conf",
+        "pose_expand_flat_aspect",
+        "pose_expand_margin",
+        "preprocess_modes",
+        "reid_budget_raw",
+        "reid_enabled",
+        "reid_engine",
+        "reid_work_enabled",
+        "seqs",
+        "use_semantic_mode",
+        "use_tracker_reid",
+    }
+)
+
+
+def _eval_config_from_defaults(**overrides: object) -> EvalConfig:
+    fields = dict(_EVAL_DEFAULTS)
+    fields.update(overrides)
+    return EvalConfig(**fields)
+
+
+def _assert_view_projection_parity(cfg: EvalConfig) -> None:
+    eval_names = {f.name for f in dataclasses.fields(EvalConfig)}
+    projected: dict[str, str] = {}
+    for attr, cls in _MODULE_VIEWS:
+        view = getattr(cfg, attr)
+        assert isinstance(view, cls), (
+            f"{attr} is {type(view).__name__}, expected {cls.__name__}"
+        )
+        for field in dataclasses.fields(cls):
+            name = field.name
+            assert name in eval_names, (
+                f"{cls.__name__}.{name} is not an EvalConfig field"
+            )
+            assert name not in projected, (
+                f"{name} projected by both {projected[name]} and {attr}"
+            )
+            projected[name] = attr
+            assert getattr(view, name) == getattr(cfg, name), (
+                f"{attr}.{name}={getattr(view, name)!r} != cfg.{name}={getattr(cfg, name)!r}"
+            )
+    unprojected = eval_names - set(projected)
+    assert unprojected == _UNPROJECTED_EVALCONFIG_FIELDS, (
+        "EvalConfig unprojected field set drifted from ADR 024.\n"
+        f"  extra: {sorted(unprojected - _UNPROJECTED_EVALCONFIG_FIELDS)}\n"
+        f"  missing: {sorted(_UNPROJECTED_EVALCONFIG_FIELDS - unprojected)}"
+    )
 
 
 def test_module_views_are_projections_not_second_source() -> None:
-    """cfg.motion.vel_alpha must be identical to cfg.vel_alpha (same object)."""
-    from saccade.perception.eval.config import (
-        EvalConfig,
-        _DEFAULTS,
+    """Every view field equals the corresponding EvalConfig flat field."""
+    cfg = _eval_config_from_defaults()
+    _assert_view_projection_parity(cfg)
+
+
+def test_module_views_project_through_parse_eval_config() -> None:
+    """parse_eval_config overrides must land on both the flat field and the view."""
+    cfg = parse_eval_config(
+        output="/tmp/eval-config-parity",
+        data_root="datasets/MOT17",
+        split="train",
+        sequences="MOT17-04-SDP",
+        conf_threshold=0.11,
+        reid_mode="extract",
+        reid_model="siglip2",
+        profile_stages=True,
+        kwargs={
+            "tiling": "native_640",
+            "nms_iou_threshold": 0.35,
+            "vel_alpha": 0.42,
+            "kalman_r_scale": 2.8,
+            "track_buffer": 40,
+            "semantic_buffer_size": 7,
+            "async_reid": True,
+        },
     )
-
-    # Build a minimal EvalConfig from defaults
-    fields = dict(_DEFAULTS)
-    fields["data_root"] = "/tmp"
-    fields["split"] = "train"
-    fields["output_root"] = None
-    fields["seqs"] = []
-    fields["kwargs"] = {}
-    fields["use_semantic_mode"] = False
-    fields["use_tracker_reid"] = False
-    fields["crop_hw"] = (224, 224)
-    fields["preprocess_modes"] = []
-    fields["geometry_suspect_score"] = 0.05
-    fields["geometry_suspect_support_score"] = 0.05
-    fields["nms_iou_threshold"] = 0.5
-    fields["tiling"] = "native_960"
-
-    cfg = EvalConfig(**fields)
-
-    # Motion: all fields match
-    assert cfg.motion.vel_alpha == cfg.vel_alpha
-    assert cfg.motion.acc_alpha == cfg.acc_alpha
-    assert cfg.motion.enable_motion_only == cfg.enable_motion_only
-
-    # Geometry: sample
-    assert cfg.geometry.kalman_r_scale == cfg.kalman_r_scale
-    assert cfg.geometry.oao_tau == cfg.oao_tau
-    assert cfg.geometry.occ_iou_thresh == cfg.occ_iou_thresh
-
-    # Lifecycle: sample
-    assert cfg.lifecycle.track_buffer == cfg.track_buffer
-    assert cfg.lifecycle.interpolate_max_gap == cfg.interpolate_max_gap
-
-    # Core: sample
-    assert cfg.core.conf_threshold == cfg.conf_threshold
-    assert cfg.core.confirm_streak == cfg.confirm_streak
-
-    # Detection: sample
-    assert cfg.detection.tiling == cfg.tiling
-    assert cfg.detection.nms_iou_threshold == cfg.nms_iou_threshold
-
-    # ReID: sample
-    assert cfg.reid.reid_mode == cfg.reid_mode
-    assert cfg.reid.async_reid == cfg.async_reid
-
-    # Semantic: sample
-    assert cfg.semantic.semantic_buffer_size == cfg.semantic_buffer_size
+    _assert_view_projection_parity(cfg)
+    assert cfg.core.conf_threshold == cfg.conf_threshold == 0.11
+    assert cfg.core.profile_stages is cfg.profile_stages is True
+    assert cfg.detection.tiling == cfg.tiling == "native_640"
+    assert cfg.detection.nms_iou_threshold == cfg.nms_iou_threshold == 0.35
+    assert cfg.motion.vel_alpha == cfg.vel_alpha == 0.42
+    assert cfg.geometry.kalman_r_scale == cfg.kalman_r_scale == 2.8
+    assert cfg.lifecycle.track_buffer == cfg.track_buffer == 40
+    assert cfg.semantic.semantic_buffer_size == cfg.semantic_buffer_size == 7
+    assert cfg.reid.reid_mode == cfg.reid_mode == "extract"
+    assert cfg.reid.async_reid is cfg.async_reid is True
 
 
 def test_module_views_are_frozen() -> None:
     """Module views must be frozen — writing should raise."""
-    from saccade.perception.eval.config import _DEFAULTS, EvalConfig
-
-    fields = dict(_DEFAULTS)
-    fields["data_root"] = ""
-    fields["split"] = ""
-    fields["output_root"] = None
-    fields["seqs"] = []
-    fields["kwargs"] = {}
-    fields["use_semantic_mode"] = False
-    fields["use_tracker_reid"] = False
-    fields["crop_hw"] = (0, 0)
-    fields["preprocess_modes"] = []
-    fields["geometry_suspect_score"] = 0.0
-    fields["geometry_suspect_support_score"] = 0.0
-    fields["nms_iou_threshold"] = 0.5
-    fields["tiling"] = "native_960"
-    cfg = EvalConfig(**fields)
     import pytest
 
+    cfg = _eval_config_from_defaults()
     with pytest.raises(Exception):
         cfg.motion.vel_alpha = 999.0
 
 
 def test_trigger_view_has_no_fields() -> None:
-    """TriggerView is a frozen dataclass with no fields (all trigger params are KWARGS_DIRECT)."""
-    import dataclasses
-    from saccade.perception.eval.config import TriggerView
-
+    """TriggerView is empty and is not attached to EvalConfig."""
     assert len(dataclasses.fields(TriggerView)) == 0
+    cfg = _eval_config_from_defaults()
+    assert not hasattr(cfg, "trigger")

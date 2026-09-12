@@ -24,6 +24,7 @@
 - [ADR 021: 資產身分層與生成式進度報告](021-asset-provenance-and-progress-reporting.md) — W-A closed (EC1–EC3). EC3 round record: [asset_disposal_round_wa-ec3-r1-20260910.md](../ownership/asset_disposal_round_wa-ec3-r1-20260910.md)
 - [ADR 022: 檢查分類法與出版落後預設](022-check-taxonomy-and-publication-lag.md)
 - [ADR 023: 評估 detector 路徑與 Ultralytics 的解耦邊界](023-ultralytics-runtime-decouple.md) — issue #391；分析 only，不授權換 detector
+- [ADR 024: EvalConfig Phase 4 module-view disposition](024-eval-config-module-views.md) — issue #139；terminal verdict `retain_current_views`
 
 > ADR 001、002、003 未建立（對應決策已直接合併至後續 ADR 中）。
 
