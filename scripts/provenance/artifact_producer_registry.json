@@ -418,6 +418,11 @@
       "classification": "not_a_run_producer",
       "reason": "declares no artifact-root output directory and creates none"
     },
+    "scripts/eval/experiments/run_output_layer_repair_chaining.py": {
+      "classification": "run_producer_out_of_scope",
+      "reason": "measurement-only chaining replay; writes per-arm MOT directories under results/ and a research evidence packet under docs/",
+      "excluded_by": "docs/decisions/021-asset-provenance-and-progress-reporting.md#43-named-limit--protected-path-remainder"
+    },
     "scripts/eval/export_external_fp_rows.py": {
       "classification": "not_a_run_producer",
       "reason": "declares no artifact-root output directory and creates none"

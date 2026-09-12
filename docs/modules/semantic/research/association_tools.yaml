@@ -408,6 +408,17 @@ tools:
   no_go_ids: ['#58']
   recipes: [R-D]
   notes: 'Cold-supported closed line; retain for replay/diagnostics. Reopening requires a new action point or substrate. Historical/diagnostic replay of handover variants on a frozen MOT substrate.'
+- id: run_output_layer_repair_chaining
+  path: scripts/eval/experiments/run_output_layer_repair_chaining.py
+  door: D
+  roles: [one-shot, diagnostic]
+  priority: P2
+  fact_owner: docs/modules/semantic/research/output_layer_repair_chaining_revalidation_20260912.md
+  recipes: []
+  expected_artifacts:
+    - docs/modules/semantic/research/evidence/output_layer_repair_chaining_revalidation_20260912/results.json
+    - docs/modules/semantic/research/evidence/output_layer_repair_chaining_revalidation_20260912/manifest.json
+  notes: 'Measurement-only chaining replay on a frozen pre-interpolation MOT substrate. Does not add a production postproc-order flag. Stage order is recorded; each stage re-extracts embeddings from the previous stage output.'
 - id: cheb_gr_offline_handover_report
   path: scripts/eval/diagnostics/cheb_gr_offline_handover_report.py
   door: D

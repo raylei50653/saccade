@@ -1,0 +1,4775 @@
+{
+  "identity": {
+    "argv": [
+      "scripts/eval/experiments/run_output_layer_repair_chaining.py",
+      "--substrate",
+      "results/olr_reval_20260912/substrate",
+      "--out",
+      "results/olr_reval_20260912",
+      "--artifact-dir",
+      "docs/modules/semantic/research/evidence/output_layer_repair_chaining_revalidation_20260912",
+      "--substrate-commit",
+      "85b95ac151bc7dd399ffc25fc83ac103c0e7321a",
+      "--expected-substrate-sha256",
+      "docs/modules/semantic/research/evidence/output_layer_repair_chaining_revalidation_20260912/substrate_sha256.json",
+      "--repeats",
+      "3",
+      "--repeat-arms",
+      "merge_only,handover_then_merge,merge_then_handover"
+    ],
+    "dirty": false,
+    "harness": "scripts/eval/experiments/run_output_layer_repair_chaining.py",
+    "measured_at": "2026-09-12T08:51:10.716314+00:00",
+    "preset_contract": {
+      "cheb_gr_engine": "models/embedding/mobilenetv4_reid_visclean_224.engine",
+      "cheb_gr_model": "mobilenetv4_reid",
+      "decode": "cpu JPEG via --no-gpu-decode (substrate capture)",
+      "detector": "SDP",
+      "double_buffer": true,
+      "handover": {
+        "appearance_occlusion_cov": 0.4,
+        "bank_mode": "spread",
+        "bank_n": 0,
+        "cheb_lambda": 2.0,
+        "decide_n": 5,
+        "fuse_lambda": 0.3,
+        "k2": 6,
+        "margin": 0.05,
+        "max_cost": 0.45,
+        "max_fwd": 50,
+        "max_gap": 60,
+        "min_head_samples": 2,
+        "n_samples": 50,
+        "neighbor_iou_max": 0.0,
+        "pool_frac": 0.3
+      },
+      "interpolate_after_stages": true,
+      "interpolation": {
+        "max_gap": 35,
+        "min_h": 0.0,
+        "min_track_len": 5
+      },
+      "merge": {
+        "cheb_lambda": 2.0,
+        "fuse_lambda": 0.3,
+        "k2": 6,
+        "max_cost": 0.45,
+        "max_fwd": 50,
+        "max_gap": 60,
+        "min_overlap_frames": 1,
+        "n_samples": 50,
+        "pool_frac": 0.3
+      },
+      "preset": "mamba_whole_graph_m",
+      "reid_mode": "off",
+      "sequences": [
+        "MOT17-02-SDP",
+        "MOT17-04-SDP",
+        "MOT17-05-SDP",
+        "MOT17-09-SDP",
+        "MOT17-10-SDP",
+        "MOT17-11-SDP",
+        "MOT17-13-SDP"
+      ]
+    },
+    "repeat_kind": "within_process",
+    "replay_harness_commit": "7f7edcbeb3b78a3432a679011869b48e54471c57",
+    "runtime": {
+      "env": {
+        "SACCADE_DETECT_BARRIER": null,
+        "SACCADE_DOUBLE_BUFFER": null,
+        "SACCADE_GPU_DECODE": null,
+        "SACCADE_MAIN_NMS_GRAPHED": null,
+        "SACCADE_STREAM_MODE": null
+      },
+      "gpu": {
+        "capability": [
+          12,
+          0
+        ],
+        "cuda": "13.0",
+        "name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+        "torch": "2.11.0+cu130"
+      },
+      "host": "DESKTOP-0FLA6SQ",
+      "platform": "Linux-6.18.33.1-microsoft-standard-WSL2-x86_64-with-glibc2.44",
+      "python": "3.12.13"
+    },
+    "substrate": "/home/ray/developer/ai/saccade/results/olr_reval_20260912/substrate",
+    "substrate_commit": "85b95ac151bc7dd399ffc25fc83ac103c0e7321a",
+    "substrate_sha256": {
+      "MOT17-02-SDP": "312029468bcad19f639a3a10ab092234d6bf076edf78038ed1028930db32196c",
+      "MOT17-04-SDP": "b1a3d60bdcfd177902e692a0bd464e51519c6ee879ed9ba587d7007c550a2ae6",
+      "MOT17-05-SDP": "29f1aa0c10fb24c9e6c4259e0dd5fda41f332b1fa5131b30717731eb79bc1825",
+      "MOT17-09-SDP": "3a860f9dde52337efb228422b38798d42f25d341594f20b5b591349e2496fc33",
+      "MOT17-10-SDP": "30c96efe5f9b7d70f3868db7a0130238564966ba533eedb9bac061ec8fed32a7",
+      "MOT17-11-SDP": "40aa2383b026019e60eb23ca76ccd4a6043b4b0944dfcd216dab85ec94f6b45f",
+      "MOT17-13-SDP": "a918e4531ccaa8f7d3bd9cebb62aebd67986b66fb1076e217ca0733b1c077470"
+    }
+  },
+  "primary": [
+    {
+      "arm": "base",
+      "interpolation": {
+        "frames_added": 5566,
+        "gaps_filled": 1233,
+        "tracks_interpolated": 348
+      },
+      "metrics": {
+        "per_sequence": {
+          "MOT17-02-SDP": {
+            "IDF1": 59.35155501206333,
+            "IDs": 70,
+            "MOTA": 61.396049728216994
+          },
+          "MOT17-04-SDP": {
+            "IDF1": 93.1270013005038,
+            "IDs": 15,
+            "MOTA": 92.00538301406733
+          },
+          "MOT17-05-SDP": {
+            "IDF1": 71.34786117836966,
+            "IDs": 55,
+            "MOTA": 72.1411016336562
+          },
+          "MOT17-09-SDP": {
+            "IDF1": 67.73504273504274,
+            "IDs": 19,
+            "MOTA": 73.42723004694835
+          },
+          "MOT17-10-SDP": {
+            "IDF1": 71.24902771523315,
+            "IDs": 100,
+            "MOTA": 78.61983020484462
+          },
+          "MOT17-11-SDP": {
+            "IDF1": 79.75162291843071,
+            "IDs": 25,
+            "MOTA": 85.52352691818568
+          },
+          "MOT17-13-SDP": {
+            "IDF1": 78.09363809186966,
+            "IDs": 60,
+            "MOTA": 80.90534272461775
+          }
+        },
+        "printed": {
+          "AssA": "73.5%",
+          "DetA": "75.4%",
+          "FN": 18315,
+          "FP": 1992,
+          "HOTA": "74.4%",
+          "IDF1": "80.4%",
+          "IDs": 344,
+          "MOTA": "81.6%",
+          "Prcn": "97.9%",
+          "Rcll": "83.7%"
+        },
+        "raw": {
+          "AssA": 73.48542261999741,
+          "DetA": 75.44838491453736,
+          "FN": 18315,
+          "FP": 1992,
+          "HOTA": 74.3770694248394,
+          "IDF1": 80.44710977524475,
+          "IDs": 344,
+          "MOTA": 81.61037249436761,
+          "final_tracks": 804
+        }
+      },
+      "mot_sha256": {
+        "MOT17-02-SDP": "296a7c517aeb6241cc7f2af1cc106456a87141799022761c970ba1c180ad6e19",
+        "MOT17-04-SDP": "b1361662e94948b4b32b24417fe29a6b0895562287d8f5d55ad6e82c2a7424c8",
+        "MOT17-05-SDP": "ad4ed0f0f6fb41c7cd246f564580861bbcbe184255ba783bc7a2e8f6c00c5e4f",
+        "MOT17-09-SDP": "4ee3e5271409e19ec23828cc971e0c0bfd59776a65ef7f0c72c5f344c6c304d3",
+        "MOT17-10-SDP": "5c3f71d8d873cf4afad55b97406403ff3e05b8416b85c83bd8d9110671208a49",
+        "MOT17-11-SDP": "24e79cef399719a4556386905b9c8332b23dbb0e164c3fed1ee112287b33eb83",
+        "MOT17-13-SDP": "021c17ac2629259a68ca581976c48b742b6e417fa0357be2109331820554b5b2"
+      },
+      "output_dir": "/home/ray/developer/ai/saccade/results/olr_reval_20260912/arms/base",
+      "repeat_index": 0,
+      "seq_stage_records": {
+        "MOT17-02-SDP": [],
+        "MOT17-04-SDP": [],
+        "MOT17-05-SDP": [],
+        "MOT17-09-SDP": [],
+        "MOT17-10-SDP": [],
+        "MOT17-11-SDP": [],
+        "MOT17-13-SDP": []
+      },
+      "stage_order": [],
+      "stages": {
+        "accepted_links": 0,
+        "per_stage": {},
+        "stage_order": []
+      },
+      "tag": "base"
+    },
+    {
+      "arm": "handover_only",
+      "interpolation": {
+        "frames_added": 6239,
+        "gaps_filled": 1280,
+        "tracks_interpolated": 351
+      },
+      "metrics": {
+        "per_sequence": {
+          "MOT17-02-SDP": {
+            "IDF1": 59.43635108027229,
+            "IDs": 68,
+            "MOTA": 61.85888811151177
+          },
+          "MOT17-04-SDP": {
+            "IDF1": 93.04287025302627,
+            "IDs": 16,
+            "MOTA": 91.97594465588662
+          },
+          "MOT17-05-SDP": {
+            "IDF1": 71.67344335485927,
+            "IDs": 51,
+            "MOTA": 71.11464507734567
+          },
+          "MOT17-09-SDP": {
+            "IDF1": 67.99616081902528,
+            "IDs": 19,
+            "MOTA": 73.55868544600939
+          },
+          "MOT17-10-SDP": {
+            "IDF1": 74.6086602968083,
+            "IDs": 97,
+            "MOTA": 78.51857621310072
+          },
+          "MOT17-11-SDP": {
+            "IDF1": 79.08574002139278,
+            "IDs": 26,
+            "MOTA": 85.2585841458245
+          },
+          "MOT17-13-SDP": {
+            "IDF1": 78.13421342134214,
+            "IDs": 61,
+            "MOTA": 80.38137777014258
+          }
+        },
+        "printed": {
+          "AssA": "73.7%",
+          "DetA": "75.5%",
+          "FN": 18027,
+          "FP": 2377,
+          "HOTA": "74.5%",
+          "IDF1": "80.8%",
+          "IDs": 338,
+          "MOTA": "81.5%",
+          "Prcn": "97.5%",
+          "Rcll": "83.9%"
+        },
+        "raw": {
+          "AssA": 73.72176539844257,
+          "DetA": 75.47920832897545,
+          "FN": 18027,
+          "FP": 2377,
+          "HOTA": 74.51219102194705,
+          "IDF1": 80.7670954897006,
+          "IDs": 338,
+          "MOTA": 81.52933738212063,
+          "final_tracks": 750
+        }
+      },
+      "mot_sha256": {
+        "MOT17-02-SDP": "a0b959c08a2cd383be51720c12db7b58d0c07fa23dc99c417fee1d2b341bc3f3",
+        "MOT17-04-SDP": "587534843290137fe76003faec43a267f19f2b1e919a86a13be9f459776c493d",
+        "MOT17-05-SDP": "29e0e4f5b0ed65cd3cad5a79c2533f49e6a59e69c372c30bec8158601ca51907",
+        "MOT17-09-SDP": "d7be70ac0bbce3e25ad56c8889beb7f0fb23465335ccc324fdad3c0467e3d3a8",
+        "MOT17-10-SDP": "71c4997fb16c7b1049d9eb6690abe29d20eb197562a30b2dc8eac85d7eaee811",
+        "MOT17-11-SDP": "eac770742323724ebbc9de62d0bfbaa1cc0883f6b20d42d8143d6cb581a0d36f",
+        "MOT17-13-SDP": "0b1631ec6de55c5f806e3d38cad1afaae3bef78ad8e503e14a9cbaad48e3ce3d"
+      },
+      "output_dir": "/home/ray/developer/ai/saccade/results/olr_reval_20260912/arms/handover_only",
+      "repeat_index": 0,
+      "seq_stage_records": {
+        "MOT17-02-SDP": [
+          {
+            "accepted_links": 7,
+            "diagnostics": {
+              "events": 120,
+              "events_with_candidates": 41,
+              "handovers": 7,
+              "ids_after": 113,
+              "ids_before": 120,
+              "reject_cost": 34,
+              "reject_margin": 0,
+              "reject_min_head": 16,
+              "reject_no_head": 50
+            },
+            "n_input_ids": 120,
+            "n_output_ids": 113,
+            "stage": "handover",
+            "stage_index": 0,
+            "stats": {
+              "decisions_logged": 0,
+              "events": 120,
+              "events_with_candidates": 41,
+              "handovers": 7,
+              "ids_after": 113,
+              "ids_before": 120,
+              "reject_center_dist": 0,
+              "reject_cost": 34,
+              "reject_key_margin": 0,
+              "reject_key_sim": 0,
+              "reject_margin": 0,
+              "reject_min_head": 16,
+              "reject_no_head": 50,
+              "reject_pollution": 0,
+              "requeries": 0
+            }
+          }
+        ],
+        "MOT17-04-SDP": [
+          {
+            "accepted_links": 4,
+            "diagnostics": {
+              "events": 97,
+              "events_with_candidates": 28,
+              "handovers": 4,
+              "ids_after": 93,
+              "ids_before": 97,
+              "reject_cost": 24,
+              "reject_margin": 0,
+              "reject_min_head": 5,
+              "reject_no_head": 21
+            },
+            "n_input_ids": 97,
+            "n_output_ids": 93,
+            "stage": "handover",
+            "stage_index": 0,
+            "stats": {
+              "decisions_logged": 0,
+              "events": 97,
+              "events_with_candidates": 28,
+              "handovers": 4,
+              "ids_after": 93,
+              "ids_before": 97,
+              "reject_center_dist": 0,
+              "reject_cost": 24,
+              "reject_key_margin": 0,
+              "reject_key_sim": 0,
+              "reject_margin": 0,
+              "reject_min_head": 5,
+              "reject_no_head": 21,
+              "reject_pollution": 0,
+              "requeries": 0
+            }
+          }
+        ],
+        "MOT17-05-SDP": [
+          {
+            "accepted_links": 12,
+            "diagnostics": {
+              "events": 169,
+              "events_with_candidates": 75,
+              "handovers": 12,
+              "ids_after": 157,
+              "ids_before": 169,
+              "reject_cost": 57,
+              "reject_margin": 6,
+              "reject_min_head": 35,
+              "reject_no_head": 50
+            },
+            "n_input_ids": 169,
+            "n_output_ids": 157,
+            "stage": "handover",
+            "stage_index": 0,
+            "stats": {
+              "decisions_logged": 0,
+              "events": 169,
+              "events_with_candidates": 75,
+              "handovers": 12,
+              "ids_after": 157,
+              "ids_before": 169,
+              "reject_center_dist": 0,
+              "reject_cost": 57,
+              "reject_key_margin": 0,
+              "reject_key_sim": 0,
+              "reject_margin": 6,
+              "reject_min_head": 35,
+              "reject_no_head": 50,
+              "reject_pollution": 0,
+              "requeries": 0
+            }
+          }
+        ],
+        "MOT17-09-SDP": [
+          {
+            "accepted_links": 1,
+            "diagnostics": {
+              "events": 42,
+              "events_with_candidates": 18,
+              "handovers": 1,
+              "ids_after": 41,
+              "ids_before": 42,
+              "reject_cost": 17,
+              "reject_margin": 0,
+              "reject_min_head": 9,
+              "reject_no_head": 11
+            },
+            "n_input_ids": 42,
+            "n_output_ids": 41,
+            "stage": "handover",
+            "stage_index": 0,
+            "stats": {
+              "decisions_logged": 0,
+              "events": 42,
+              "events_with_candidates": 18,
+              "handovers": 1,
+              "ids_after": 41,
+              "ids_before": 42,
+              "reject_center_dist": 0,
+              "reject_cost": 17,
+              "reject_key_margin": 0,
+              "reject_key_sim": 0,
+              "reject_margin": 0,
+              "reject_min_head": 9,
+              "reject_no_head": 11,
+              "reject_pollution": 0,
+              "requeries": 0
+            }
+          }
+        ],
+        "MOT17-10-SDP": [
+          {
+            "accepted_links": 14,
+            "diagnostics": {
+              "events": 149,
+              "events_with_candidates": 57,
+              "handovers": 14,
+              "ids_after": 135,
+              "ids_before": 149,
+              "reject_cost": 39,
+              "reject_margin": 4,
+              "reject_min_head": 38,
+              "reject_no_head": 38
+            },
+            "n_input_ids": 149,
+            "n_output_ids": 135,
+            "stage": "handover",
+            "stage_index": 0,
+            "stats": {
+              "decisions_logged": 0,
+              "events": 149,
+              "events_with_candidates": 57,
+              "handovers": 14,
+              "ids_after": 135,
+              "ids_before": 149,
+              "reject_center_dist": 0,
+              "reject_cost": 39,
+              "reject_key_margin": 0,
+              "reject_key_sim": 0,
+              "reject_margin": 4,
+              "reject_min_head": 38,
+              "reject_no_head": 38,
+              "reject_pollution": 0,
+              "requeries": 0
+            }
+          }
+        ],
+        "MOT17-11-SDP": [
+          {
+            "accepted_links": 4,
+            "diagnostics": {
+              "events": 92,
+              "events_with_candidates": 28,
+              "handovers": 4,
+              "ids_after": 88,
+              "ids_before": 92,
+              "reject_cost": 24,
+              "reject_margin": 0,
+              "reject_min_head": 10,
+              "reject_no_head": 38
+            },
+            "n_input_ids": 92,
+            "n_output_ids": 88,
+            "stage": "handover",
+            "stage_index": 0,
+            "stats": {
+              "decisions_logged": 0,
+              "events": 92,
+              "events_with_candidates": 28,
+              "handovers": 4,
+              "ids_after": 88,
+              "ids_before": 92,
+              "reject_center_dist": 0,
+              "reject_cost": 24,
+              "reject_key_margin": 0,
+              "reject_key_sim": 0,
+              "reject_margin": 0,
+              "reject_min_head": 10,
+              "reject_no_head": 38,
+              "reject_pollution": 0,
+              "requeries": 0
+            }
+          }
+        ],
+        "MOT17-13-SDP": [
+          {
+            "accepted_links": 12,
+            "diagnostics": {
+              "events": 135,
+              "events_with_candidates": 72,
+              "handovers": 12,
+              "ids_after": 123,
+              "ids_before": 135,
+              "reject_cost": 58,
+              "reject_margin": 2,
+              "reject_min_head": 19,
+              "reject_no_head": 24
+            },
+            "n_input_ids": 135,
+            "n_output_ids": 123,
+            "stage": "handover",
+            "stage_index": 0,
+            "stats": {
+              "decisions_logged": 0,
+              "events": 135,
+              "events_with_candidates": 72,
+              "handovers": 12,
+              "ids_after": 123,
+              "ids_before": 135,
+              "reject_center_dist": 0,
+              "reject_cost": 58,
+              "reject_key_margin": 0,
+              "reject_key_sim": 0,
+              "reject_margin": 2,
+              "reject_min_head": 19,
+              "reject_no_head": 24,
+              "reject_pollution": 0,
+              "requeries": 0
+            }
+          }
+        ]
+      },
+      "stage_order": [
+        "handover"
+      ],
+      "stages": {
+        "accepted_links": 54,
+        "per_stage": {
+          "handover": {
+            "accepted_links": 54,
+            "component_count": 0,
+            "events": 804,
+            "handovers": 54,
+            "merges": 0,
+            "no_embedding": 0,
+            "reject_component_overlap": 0,
+            "reject_cost": 253,
+            "reject_same_component": 0,
+            "reject_temporal": 0
+          }
+        },
+        "stage_order": [
+          "handover"
+        ]
+      },
+      "tag": "handover_only"
+    },
+    {
+      "arm": "merge_only",
+      "interpolation": {
+        "frames_added": 6553,
+        "gaps_filled": 1293,
+        "tracks_interpolated": 339
+      },
+      "metrics": {
+        "per_sequence": {
+          "MOT17-02-SDP": {
+            "IDF1": 61.908670102754336,
+            "IDs": 64,
+            "MOTA": 62.31096281147408
+          },
+          "MOT17-04-SDP": {
+            "IDF1": 93.12089521249275,
+            "IDs": 15,
+            "MOTA": 91.99276657484702
+          },
+          "MOT17-05-SDP": {
+            "IDF1": 70.74840639017864,
+            "IDs": 42,
+            "MOTA": 70.29058840537805
+          },
+          "MOT17-09-SDP": {
+            "IDF1": 67.99616081902528,
+            "IDs": 19,
+            "MOTA": 73.55868544600939
+          },
+          "MOT17-10-SDP": {
+            "IDF1": 76.41475138344711,
+            "IDs": 90,
+            "MOTA": 77.94999610561571
+          },
+          "MOT17-11-SDP": {
+            "IDF1": 79.0642615558061,
+            "IDs": 26,
+            "MOTA": 85.26918185671894
+          },
+          "MOT17-13-SDP": {
+            "IDF1": 77.93191526841943,
+            "IDs": 57,
+            "MOTA": 80.94829067170589
+          }
+        },
+        "printed": {
+          "AssA": "74.2%",
+          "DetA": "75.5%",
+          "FN": 17868,
+          "FP": 2532,
+          "HOTA": "74.7%",
+          "IDF1": "81.3%",
+          "IDs": 313,
+          "MOTA": "81.6%",
+          "Prcn": "97.4%",
+          "Rcll": "84.1%"
+        },
+        "raw": {
+          "AssA": 74.17277404203861,
+          "DetA": 75.4739234924276,
+          "FN": 17868,
+          "FP": 2532,
+          "HOTA": 74.73741441653425,
+          "IDF1": 81.27670148811515,
+          "IDs": 313,
+          "MOTA": 81.55516175855098,
+          "final_tracks": 719
+        }
+      },
+      "mot_sha256": {
+        "MOT17-02-SDP": "ad36ec6ea0ec0cdf2fdcf5861b5a651e83d34de14fc7b1a61d16f17976cd010b",
+        "MOT17-04-SDP": "dd8ffc9faa44ea67d28423705562f49e4dde1cc2ada69b753e46d55e79f7e174",
+        "MOT17-05-SDP": "3df97303361d468a32d7262249a14247d0b073d230e5c73898d75876668ffe46",
+        "MOT17-09-SDP": "ebbb20f557e1d494e4ce820827ff6d16b0a5845072e18a2d87ad644e31ae4242",
+        "MOT17-10-SDP": "372d46264dcc9b59a5decd011c4d2938d2265b9c58477e7fd9bb815f3679baf0",
+        "MOT17-11-SDP": "007deae2eda31f7f117b38638bb9d7d932406378ee43b0fe3b8c6312086e23c0",
+        "MOT17-13-SDP": "0903468b812a4e393cfc1af34d1e8d183b71db524d51112c4162b41495482f7f"
+      },
+      "output_dir": "/home/ray/developer/ai/saccade/results/olr_reval_20260912/arms/merge_only",
+      "repeat_index": 0,
+      "seq_stage_records": {
+        "MOT17-02-SDP": [
+          {
+            "accepted_links": 11,
+            "diagnostics": {
+              "accepted": 11,
+              "component_count": 10,
+              "has_embedding": 93,
+              "no_embedding": 27,
+              "reject_component_overlap": 1,
+              "reject_cost": 4244,
+              "reject_same_component": 0,
+              "reject_temporal": 22
+            },
+            "n_input_ids": 120,
+            "n_output_ids": 109,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 109,
+              "ids_before": 120,
+              "merges": 11
+            }
+          }
+        ],
+        "MOT17-04-SDP": [
+          {
+            "accepted_links": 1,
+            "diagnostics": {
+              "accepted": 1,
+              "component_count": 1,
+              "has_embedding": 88,
+              "no_embedding": 9,
+              "reject_component_overlap": 0,
+              "reject_cost": 3809,
+              "reject_same_component": 0,
+              "reject_temporal": 18
+            },
+            "n_input_ids": 97,
+            "n_output_ids": 96,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 96,
+              "ids_before": 97,
+              "merges": 1
+            }
+          }
+        ],
+        "MOT17-05-SDP": [
+          {
+            "accepted_links": 30,
+            "diagnostics": {
+              "accepted": 30,
+              "component_count": 20,
+              "has_embedding": 137,
+              "no_embedding": 32,
+              "reject_component_overlap": 12,
+              "reject_cost": 9209,
+              "reject_same_component": 2,
+              "reject_temporal": 63
+            },
+            "n_input_ids": 169,
+            "n_output_ids": 139,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 139,
+              "ids_before": 169,
+              "merges": 30
+            }
+          }
+        ],
+        "MOT17-09-SDP": [
+          {
+            "accepted_links": 2,
+            "diagnostics": {
+              "accepted": 2,
+              "component_count": 2,
+              "has_embedding": 37,
+              "no_embedding": 5,
+              "reject_component_overlap": 0,
+              "reject_cost": 661,
+              "reject_same_component": 0,
+              "reject_temporal": 3
+            },
+            "n_input_ids": 42,
+            "n_output_ids": 40,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 40,
+              "ids_before": 42,
+              "merges": 2
+            }
+          }
+        ],
+        "MOT17-10-SDP": [
+          {
+            "accepted_links": 28,
+            "diagnostics": {
+              "accepted": 28,
+              "component_count": 18,
+              "has_embedding": 126,
+              "no_embedding": 23,
+              "reject_component_overlap": 17,
+              "reject_cost": 7748,
+              "reject_same_component": 4,
+              "reject_temporal": 78
+            },
+            "n_input_ids": 149,
+            "n_output_ids": 121,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 121,
+              "ids_before": 149,
+              "merges": 28
+            }
+          }
+        ],
+        "MOT17-11-SDP": [
+          {
+            "accepted_links": 3,
+            "diagnostics": {
+              "accepted": 3,
+              "component_count": 3,
+              "has_embedding": 75,
+              "no_embedding": 17,
+              "reject_component_overlap": 1,
+              "reject_cost": 2756,
+              "reject_same_component": 0,
+              "reject_temporal": 15
+            },
+            "n_input_ids": 92,
+            "n_output_ids": 89,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 89,
+              "ids_before": 92,
+              "merges": 3
+            }
+          }
+        ],
+        "MOT17-13-SDP": [
+          {
+            "accepted_links": 10,
+            "diagnostics": {
+              "accepted": 10,
+              "component_count": 8,
+              "has_embedding": 124,
+              "no_embedding": 11,
+              "reject_component_overlap": 2,
+              "reject_cost": 7578,
+              "reject_same_component": 0,
+              "reject_temporal": 36
+            },
+            "n_input_ids": 135,
+            "n_output_ids": 125,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 125,
+              "ids_before": 135,
+              "merges": 10
+            }
+          }
+        ]
+      },
+      "stage_order": [
+        "merge"
+      ],
+      "stages": {
+        "accepted_links": 85,
+        "per_stage": {
+          "merge": {
+            "accepted_links": 85,
+            "component_count": 62,
+            "events": 0,
+            "handovers": 0,
+            "merges": 85,
+            "no_embedding": 124,
+            "reject_component_overlap": 33,
+            "reject_cost": 36005,
+            "reject_same_component": 6,
+            "reject_temporal": 235
+          }
+        },
+        "stage_order": [
+          "merge"
+        ]
+      },
+      "tag": "merge_only"
+    },
+    {
+      "arm": "handover_then_merge",
+      "interpolation": {
+        "frames_added": 6696,
+        "gaps_filled": 1310,
+        "tracks_interpolated": 347
+      },
+      "metrics": {
+        "per_sequence": {
+          "MOT17-02-SDP": {
+            "IDF1": 60.62019578214309,
+            "IDs": 65,
+            "MOTA": 62.052634411495625
+          },
+          "MOT17-04-SDP": {
+            "IDF1": 93.03677161397452,
+            "IDs": 16,
+            "MOTA": 91.96332821666631
+          },
+          "MOT17-05-SDP": {
+            "IDF1": 70.90595069869681,
+            "IDs": 45,
+            "MOTA": 69.71230302154113
+          },
+          "MOT17-09-SDP": {
+            "IDF1": 67.99616081902528,
+            "IDs": 19,
+            "MOTA": 73.55868544600939
+          },
+          "MOT17-10-SDP": {
+            "IDF1": 76.61498708010336,
+            "IDs": 92,
+            "MOTA": 78.0512500973596
+          },
+          "MOT17-11-SDP": {
+            "IDF1": 79.08574002139278,
+            "IDs": 26,
+            "MOTA": 85.2585841458245
+          },
+          "MOT17-13-SDP": {
+            "IDF1": 77.90120746432491,
+            "IDs": 60,
+            "MOTA": 80.44150489606596
+          }
+        },
+        "printed": {
+          "AssA": "73.9%",
+          "DetA": "75.4%",
+          "FN": 17866,
+          "FP": 2673,
+          "HOTA": "74.6%",
+          "IDF1": "81.1%",
+          "IDs": 323,
+          "MOTA": "81.4%",
+          "Prcn": "97.2%",
+          "Rcll": "84.1%"
+        },
+        "raw": {
+          "AssA": 73.93617584460891,
+          "DetA": 75.39009220214889,
+          "FN": 17866,
+          "FP": 2673,
+          "HOTA": 74.57673625343129,
+          "IDF1": 81.08461755196966,
+          "IDs": 323,
+          "MOTA": 81.42247789344327,
+          "final_tracks": 704
+        }
+      },
+      "mot_sha256": {
+        "MOT17-02-SDP": "607298bd7e0b10a90834b66d6ec1356c5b40428ec3bd296231621237dcfea1f6",
+        "MOT17-04-SDP": "b9c01afe2a52664bbed65d13d57066bc142c41dcad05e465393f6f4551957014",
+        "MOT17-05-SDP": "46534743dbba9453e3dcbe857bb59452a7fc2f79c3d5aa6f4a392ec9b8fb4174",
+        "MOT17-09-SDP": "ebbb20f557e1d494e4ce820827ff6d16b0a5845072e18a2d87ad644e31ae4242",
+        "MOT17-10-SDP": "354af581b693673bb10f27fdc634e0035787b2dec2ff2c4dd57abc1713ae3fd4",
+        "MOT17-11-SDP": "eac770742323724ebbc9de62d0bfbaa1cc0883f6b20d42d8143d6cb581a0d36f",
+        "MOT17-13-SDP": "9fc1641d0fa6feb1dacd45bbc478cf7372ae7c95a3ffb6874555479d1c1baba0"
+      },
+      "output_dir": "/home/ray/developer/ai/saccade/results/olr_reval_20260912/arms/handover_then_merge",
+      "repeat_index": 0,
+      "seq_stage_records": {
+        "MOT17-02-SDP": [
+          {
+            "accepted_links": 7,
+            "diagnostics": {
+              "events": 120,
+              "events_with_candidates": 41,
+              "handovers": 7,
+              "ids_after": 113,
+              "ids_before": 120,
+              "reject_cost": 34,
+              "reject_margin": 0,
+              "reject_min_head": 16,
+              "reject_no_head": 50
+            },
+            "n_input_ids": 120,
+            "n_output_ids": 113,
+            "stage": "handover",
+            "stage_index": 0,
+            "stats": {
+              "decisions_logged": 0,
+              "events": 120,
+              "events_with_candidates": 41,
+              "handovers": 7,
+              "ids_after": 113,
+              "ids_before": 120,
+              "reject_center_dist": 0,
+              "reject_cost": 34,
+              "reject_key_margin": 0,
+              "reject_key_sim": 0,
+              "reject_margin": 0,
+              "reject_min_head": 16,
+              "reject_no_head": 50,
+              "reject_pollution": 0,
+              "requeries": 0
+            }
+          },
+          {
+            "accepted_links": 4,
+            "diagnostics": {
+              "accepted": 4,
+              "component_count": 4,
+              "has_embedding": 86,
+              "no_embedding": 27,
+              "reject_component_overlap": 0,
+              "reject_cost": 3637,
+              "reject_same_component": 0,
+              "reject_temporal": 14
+            },
+            "n_input_ids": 113,
+            "n_output_ids": 109,
+            "stage": "merge",
+            "stage_index": 1,
+            "stats": {
+              "ids_after": 109,
+              "ids_before": 113,
+              "merges": 4
+            }
+          }
+        ],
+        "MOT17-04-SDP": [
+          {
+            "accepted_links": 4,
+            "diagnostics": {
+              "events": 97,
+              "events_with_candidates": 28,
+              "handovers": 4,
+              "ids_after": 93,
+              "ids_before": 97,
+              "reject_cost": 24,
+              "reject_margin": 0,
+              "reject_min_head": 5,
+              "reject_no_head": 21
+            },
+            "n_input_ids": 97,
+            "n_output_ids": 93,
+            "stage": "handover",
+            "stage_index": 0,
+            "stats": {
+              "decisions_logged": 0,
+              "events": 97,
+              "events_with_candidates": 28,
+              "handovers": 4,
+              "ids_after": 93,
+              "ids_before": 97,
+              "reject_center_dist": 0,
+              "reject_cost": 24,
+              "reject_key_margin": 0,
+              "reject_key_sim": 0,
+              "reject_margin": 0,
+              "reject_min_head": 5,
+              "reject_no_head": 21,
+              "reject_pollution": 0,
+              "requeries": 0
+            }
+          },
+          {
+            "accepted_links": 1,
+            "diagnostics": {
+              "accepted": 1,
+              "component_count": 1,
+              "has_embedding": 84,
+              "no_embedding": 9,
+              "reject_component_overlap": 0,
+              "reject_cost": 3472,
+              "reject_same_component": 0,
+              "reject_temporal": 13
+            },
+            "n_input_ids": 93,
+            "n_output_ids": 92,
+            "stage": "merge",
+            "stage_index": 1,
+            "stats": {
+              "ids_after": 92,
+              "ids_before": 93,
+              "merges": 1
+            }
+          }
+        ],
+        "MOT17-05-SDP": [
+          {
+            "accepted_links": 12,
+            "diagnostics": {
+              "events": 169,
+              "events_with_candidates": 75,
+              "handovers": 12,
+              "ids_after": 157,
+              "ids_before": 169,
+              "reject_cost": 57,
+              "reject_margin": 6,
+              "reject_min_head": 35,
+              "reject_no_head": 50
+            },
+            "n_input_ids": 169,
+            "n_output_ids": 157,
+            "stage": "handover",
+            "stage_index": 0,
+            "stats": {
+              "decisions_logged": 0,
+              "events": 169,
+              "events_with_candidates": 75,
+              "handovers": 12,
+              "ids_after": 157,
+              "ids_before": 169,
+              "reject_center_dist": 0,
+              "reject_cost": 57,
+              "reject_key_margin": 0,
+              "reject_key_sim": 0,
+              "reject_margin": 6,
+              "reject_min_head": 35,
+              "reject_no_head": 50,
+              "reject_pollution": 0,
+              "requeries": 0
+            }
+          },
+          {
+            "accepted_links": 21,
+            "diagnostics": {
+              "accepted": 21,
+              "component_count": 12,
+              "has_embedding": 125,
+              "no_embedding": 32,
+              "reject_component_overlap": 2,
+              "reject_cost": 7669,
+              "reject_same_component": 1,
+              "reject_temporal": 57
+            },
+            "n_input_ids": 157,
+            "n_output_ids": 136,
+            "stage": "merge",
+            "stage_index": 1,
+            "stats": {
+              "ids_after": 136,
+              "ids_before": 157,
+              "merges": 21
+            }
+          }
+        ],
+        "MOT17-09-SDP": [
+          {
+            "accepted_links": 1,
+            "diagnostics": {
+              "events": 42,
+              "events_with_candidates": 18,
+              "handovers": 1,
+              "ids_after": 41,
+              "ids_before": 42,
+              "reject_cost": 17,
+              "reject_margin": 0,
+              "reject_min_head": 9,
+              "reject_no_head": 11
+            },
+            "n_input_ids": 42,
+            "n_output_ids": 41,
+            "stage": "handover",
+            "stage_index": 0,
+            "stats": {
+              "decisions_logged": 0,
+              "events": 42,
+              "events_with_candidates": 18,
+              "handovers": 1,
+              "ids_after": 41,
+              "ids_before": 42,
+              "reject_center_dist": 0,
+              "reject_cost": 17,
+              "reject_key_margin": 0,
+              "reject_key_sim": 0,
+              "reject_margin": 0,
+              "reject_min_head": 9,
+              "reject_no_head": 11,
+              "reject_pollution": 0,
+              "requeries": 0
+            }
+          },
+          {
+            "accepted_links": 1,
+            "diagnostics": {
+              "accepted": 1,
+              "component_count": 1,
+              "has_embedding": 36,
+              "no_embedding": 5,
+              "reject_component_overlap": 0,
+              "reject_cost": 626,
+              "reject_same_component": 0,
+              "reject_temporal": 3
+            },
+            "n_input_ids": 41,
+            "n_output_ids": 40,
+            "stage": "merge",
+            "stage_index": 1,
+            "stats": {
+              "ids_after": 40,
+              "ids_before": 41,
+              "merges": 1
+            }
+          }
+        ],
+        "MOT17-10-SDP": [
+          {
+            "accepted_links": 14,
+            "diagnostics": {
+              "events": 149,
+              "events_with_candidates": 57,
+              "handovers": 14,
+              "ids_after": 135,
+              "ids_before": 149,
+              "reject_cost": 39,
+              "reject_margin": 4,
+              "reject_min_head": 38,
+              "reject_no_head": 38
+            },
+            "n_input_ids": 149,
+            "n_output_ids": 135,
+            "stage": "handover",
+            "stage_index": 0,
+            "stats": {
+              "decisions_logged": 0,
+              "events": 149,
+              "events_with_candidates": 57,
+              "handovers": 14,
+              "ids_after": 135,
+              "ids_before": 149,
+              "reject_center_dist": 0,
+              "reject_cost": 39,
+              "reject_key_margin": 0,
+              "reject_key_sim": 0,
+              "reject_margin": 4,
+              "reject_min_head": 38,
+              "reject_no_head": 38,
+              "reject_pollution": 0,
+              "requeries": 0
+            }
+          },
+          {
+            "accepted_links": 15,
+            "diagnostics": {
+              "accepted": 15,
+              "component_count": 11,
+              "has_embedding": 112,
+              "no_embedding": 23,
+              "reject_component_overlap": 7,
+              "reject_cost": 6124,
+              "reject_same_component": 1,
+              "reject_temporal": 69
+            },
+            "n_input_ids": 135,
+            "n_output_ids": 120,
+            "stage": "merge",
+            "stage_index": 1,
+            "stats": {
+              "ids_after": 120,
+              "ids_before": 135,
+              "merges": 15
+            }
+          }
+        ],
+        "MOT17-11-SDP": [
+          {
+            "accepted_links": 4,
+            "diagnostics": {
+              "events": 92,
+              "events_with_candidates": 28,
+              "handovers": 4,
+              "ids_after": 88,
+              "ids_before": 92,
+              "reject_cost": 24,
+              "reject_margin": 0,
+              "reject_min_head": 10,
+              "reject_no_head": 38
+            },
+            "n_input_ids": 92,
+            "n_output_ids": 88,
+            "stage": "handover",
+            "stage_index": 0,
+            "stats": {
+              "decisions_logged": 0,
+              "events": 92,
+              "events_with_candidates": 28,
+              "handovers": 4,
+              "ids_after": 88,
+              "ids_before": 92,
+              "reject_center_dist": 0,
+              "reject_cost": 24,
+              "reject_key_margin": 0,
+              "reject_key_sim": 0,
+              "reject_margin": 0,
+              "reject_min_head": 10,
+              "reject_no_head": 38,
+              "reject_pollution": 0,
+              "requeries": 0
+            }
+          },
+          {
+            "accepted_links": 0,
+            "diagnostics": {
+              "accepted": 0,
+              "component_count": 0,
+              "has_embedding": 71,
+              "no_embedding": 17,
+              "reject_component_overlap": 0,
+              "reject_cost": 2472,
+              "reject_same_component": 0,
+              "reject_temporal": 13
+            },
+            "n_input_ids": 88,
+            "n_output_ids": 88,
+            "stage": "merge",
+            "stage_index": 1,
+            "stats": {
+              "ids_after": 88,
+              "ids_before": 88,
+              "merges": 0
+            }
+          }
+        ],
+        "MOT17-13-SDP": [
+          {
+            "accepted_links": 12,
+            "diagnostics": {
+              "events": 135,
+              "events_with_candidates": 72,
+              "handovers": 12,
+              "ids_after": 123,
+              "ids_before": 135,
+              "reject_cost": 58,
+              "reject_margin": 2,
+              "reject_min_head": 19,
+              "reject_no_head": 24
+            },
+            "n_input_ids": 135,
+            "n_output_ids": 123,
+            "stage": "handover",
+            "stage_index": 0,
+            "stats": {
+              "decisions_logged": 0,
+              "events": 135,
+              "events_with_candidates": 72,
+              "handovers": 12,
+              "ids_after": 123,
+              "ids_before": 135,
+              "reject_center_dist": 0,
+              "reject_cost": 58,
+              "reject_key_margin": 0,
+              "reject_key_sim": 0,
+              "reject_margin": 2,
+              "reject_min_head": 19,
+              "reject_no_head": 24,
+              "reject_pollution": 0,
+              "requeries": 0
+            }
+          },
+          {
+            "accepted_links": 4,
+            "diagnostics": {
+              "accepted": 4,
+              "component_count": 3,
+              "has_embedding": 112,
+              "no_embedding": 11,
+              "reject_component_overlap": 1,
+              "reject_cost": 6183,
+              "reject_same_component": 0,
+              "reject_temporal": 28
+            },
+            "n_input_ids": 123,
+            "n_output_ids": 119,
+            "stage": "merge",
+            "stage_index": 1,
+            "stats": {
+              "ids_after": 119,
+              "ids_before": 123,
+              "merges": 4
+            }
+          }
+        ]
+      },
+      "stage_order": [
+        "handover",
+        "merge"
+      ],
+      "stages": {
+        "accepted_links": 100,
+        "per_stage": {
+          "handover": {
+            "accepted_links": 54,
+            "component_count": 0,
+            "events": 804,
+            "handovers": 54,
+            "merges": 0,
+            "no_embedding": 0,
+            "reject_component_overlap": 0,
+            "reject_cost": 253,
+            "reject_same_component": 0,
+            "reject_temporal": 0
+          },
+          "merge": {
+            "accepted_links": 46,
+            "component_count": 32,
+            "events": 0,
+            "handovers": 0,
+            "merges": 46,
+            "no_embedding": 124,
+            "reject_component_overlap": 10,
+            "reject_cost": 30183,
+            "reject_same_component": 2,
+            "reject_temporal": 197
+          }
+        },
+        "stage_order": [
+          "handover",
+          "merge"
+        ]
+      },
+      "tag": "handover_then_merge"
+    },
+    {
+      "arm": "merge_then_handover",
+      "interpolation": {
+        "frames_added": 6765,
+        "gaps_filled": 1308,
+        "tracks_interpolated": 344
+      },
+      "metrics": {
+        "per_sequence": {
+          "MOT17-02-SDP": {
+            "IDF1": 61.908670102754336,
+            "IDs": 64,
+            "MOTA": 62.31096281147408
+          },
+          "MOT17-04-SDP": {
+            "IDF1": 93.03677161397452,
+            "IDs": 16,
+            "MOTA": 91.96332821666631
+          },
+          "MOT17-05-SDP": {
+            "IDF1": 70.3602406814097,
+            "IDs": 44,
+            "MOTA": 69.24967471447158
+          },
+          "MOT17-09-SDP": {
+            "IDF1": 67.99616081902528,
+            "IDs": 19,
+            "MOTA": 73.55868544600939
+          },
+          "MOT17-10-SDP": {
+            "IDF1": 76.99636657246668,
+            "IDs": 88,
+            "MOTA": 78.03567256016824
+          },
+          "MOT17-11-SDP": {
+            "IDF1": 79.08574002139278,
+            "IDs": 26,
+            "MOTA": 85.2585841458245
+          },
+          "MOT17-13-SDP": {
+            "IDF1": 77.50834651203655,
+            "IDs": 60,
+            "MOTA": 80.55316955849511
+          }
+        },
+        "printed": {
+          "AssA": "74.1%",
+          "DetA": "75.4%",
+          "FN": 17821,
+          "FP": 2697,
+          "HOTA": "74.7%",
+          "IDF1": "81.2%",
+          "IDs": 317,
+          "MOTA": "81.4%",
+          "Prcn": "97.2%",
+          "Rcll": "84.1%"
+        },
+        "raw": {
+          "AssA": 74.12238206208809,
+          "DetA": 75.41059375003877,
+          "FN": 17821,
+          "FP": 2697,
+          "HOTA": 74.68057891770655,
+          "IDF1": 81.2364539074808,
+          "IDs": 317,
+          "MOTA": 81.44652127839569,
+          "final_tracks": 700
+        }
+      },
+      "mot_sha256": {
+        "MOT17-02-SDP": "cd4c78621ac5ebcc12185d03904f0712b854a4f3d9e6599fdc862840009135f5",
+        "MOT17-04-SDP": "b9c01afe2a52664bbed65d13d57066bc142c41dcad05e465393f6f4551957014",
+        "MOT17-05-SDP": "f0fad6a8182dd39aa3d82b534896eb175e041e3ab8b4001b0b4be736397e4c42",
+        "MOT17-09-SDP": "ebbb20f557e1d494e4ce820827ff6d16b0a5845072e18a2d87ad644e31ae4242",
+        "MOT17-10-SDP": "a43b947c44a1d212951535941ee27a2362edeb6b42a1d5c807bc7b2f1482100e",
+        "MOT17-11-SDP": "eac770742323724ebbc9de62d0bfbaa1cc0883f6b20d42d8143d6cb581a0d36f",
+        "MOT17-13-SDP": "1aecc74101e173810aa798c0b870263bc69171bdda96041176e016aa753c1678"
+      },
+      "output_dir": "/home/ray/developer/ai/saccade/results/olr_reval_20260912/arms/merge_then_handover",
+      "repeat_index": 0,
+      "seq_stage_records": {
+        "MOT17-02-SDP": [
+          {
+            "accepted_links": 11,
+            "diagnostics": {
+              "accepted": 11,
+              "component_count": 10,
+              "has_embedding": 93,
+              "no_embedding": 27,
+              "reject_component_overlap": 1,
+              "reject_cost": 4244,
+              "reject_same_component": 0,
+              "reject_temporal": 22
+            },
+            "n_input_ids": 120,
+            "n_output_ids": 109,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 109,
+              "ids_before": 120,
+              "merges": 11
+            }
+          },
+          {
+            "accepted_links": 1,
+            "diagnostics": {
+              "events": 109,
+              "events_with_candidates": 34,
+              "handovers": 1,
+              "ids_after": 108,
+              "ids_before": 109,
+              "reject_cost": 33,
+              "reject_margin": 0,
+              "reject_min_head": 14,
+              "reject_no_head": 47
+            },
+            "n_input_ids": 109,
+            "n_output_ids": 108,
+            "stage": "handover",
+            "stage_index": 1,
+            "stats": {
+              "decisions_logged": 0,
+              "events": 109,
+              "events_with_candidates": 34,
+              "handovers": 1,
+              "ids_after": 108,
+              "ids_before": 109,
+              "reject_center_dist": 0,
+              "reject_cost": 33,
+              "reject_key_margin": 0,
+              "reject_key_sim": 0,
+              "reject_margin": 0,
+              "reject_min_head": 14,
+              "reject_no_head": 47,
+              "reject_pollution": 0,
+              "requeries": 0
+            }
+          }
+        ],
+        "MOT17-04-SDP": [
+          {
+            "accepted_links": 1,
+            "diagnostics": {
+              "accepted": 1,
+              "component_count": 1,
+              "has_embedding": 88,
+              "no_embedding": 9,
+              "reject_component_overlap": 0,
+              "reject_cost": 3809,
+              "reject_same_component": 0,
+              "reject_temporal": 18
+            },
+            "n_input_ids": 97,
+            "n_output_ids": 96,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 96,
+              "ids_before": 97,
+              "merges": 1
+            }
+          },
+          {
+            "accepted_links": 4,
+            "diagnostics": {
+              "events": 96,
+              "events_with_candidates": 28,
+              "handovers": 4,
+              "ids_after": 92,
+              "ids_before": 96,
+              "reject_cost": 24,
+              "reject_margin": 0,
+              "reject_min_head": 5,
+              "reject_no_head": 20
+            },
+            "n_input_ids": 96,
+            "n_output_ids": 92,
+            "stage": "handover",
+            "stage_index": 1,
+            "stats": {
+              "decisions_logged": 0,
+              "events": 96,
+              "events_with_candidates": 28,
+              "handovers": 4,
+              "ids_after": 92,
+              "ids_before": 96,
+              "reject_center_dist": 0,
+              "reject_cost": 24,
+              "reject_key_margin": 0,
+              "reject_key_sim": 0,
+              "reject_margin": 0,
+              "reject_min_head": 5,
+              "reject_no_head": 20,
+              "reject_pollution": 0,
+              "requeries": 0
+            }
+          }
+        ],
+        "MOT17-05-SDP": [
+          {
+            "accepted_links": 30,
+            "diagnostics": {
+              "accepted": 30,
+              "component_count": 20,
+              "has_embedding": 137,
+              "no_embedding": 32,
+              "reject_component_overlap": 12,
+              "reject_cost": 9209,
+              "reject_same_component": 2,
+              "reject_temporal": 63
+            },
+            "n_input_ids": 169,
+            "n_output_ids": 139,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 139,
+              "ids_before": 169,
+              "merges": 30
+            }
+          },
+          {
+            "accepted_links": 5,
+            "diagnostics": {
+              "events": 139,
+              "events_with_candidates": 58,
+              "handovers": 5,
+              "ids_after": 134,
+              "ids_before": 139,
+              "reject_cost": 53,
+              "reject_margin": 0,
+              "reject_min_head": 25,
+              "reject_no_head": 47
+            },
+            "n_input_ids": 139,
+            "n_output_ids": 134,
+            "stage": "handover",
+            "stage_index": 1,
+            "stats": {
+              "decisions_logged": 0,
+              "events": 139,
+              "events_with_candidates": 58,
+              "handovers": 5,
+              "ids_after": 134,
+              "ids_before": 139,
+              "reject_center_dist": 0,
+              "reject_cost": 53,
+              "reject_key_margin": 0,
+              "reject_key_sim": 0,
+              "reject_margin": 0,
+              "reject_min_head": 25,
+              "reject_no_head": 47,
+              "reject_pollution": 0,
+              "requeries": 0
+            }
+          }
+        ],
+        "MOT17-09-SDP": [
+          {
+            "accepted_links": 2,
+            "diagnostics": {
+              "accepted": 2,
+              "component_count": 2,
+              "has_embedding": 37,
+              "no_embedding": 5,
+              "reject_component_overlap": 0,
+              "reject_cost": 661,
+              "reject_same_component": 0,
+              "reject_temporal": 3
+            },
+            "n_input_ids": 42,
+            "n_output_ids": 40,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 40,
+              "ids_before": 42,
+              "merges": 2
+            }
+          },
+          {
+            "accepted_links": 0,
+            "diagnostics": {
+              "events": 40,
+              "events_with_candidates": 17,
+              "handovers": 0,
+              "ids_after": 40,
+              "ids_before": 40,
+              "reject_cost": 17,
+              "reject_margin": 0,
+              "reject_min_head": 8,
+              "reject_no_head": 11
+            },
+            "n_input_ids": 40,
+            "n_output_ids": 40,
+            "stage": "handover",
+            "stage_index": 1,
+            "stats": {
+              "decisions_logged": 0,
+              "events": 40,
+              "events_with_candidates": 17,
+              "handovers": 0,
+              "ids_after": 40,
+              "ids_before": 40,
+              "reject_center_dist": 0,
+              "reject_cost": 17,
+              "reject_key_margin": 0,
+              "reject_key_sim": 0,
+              "reject_margin": 0,
+              "reject_min_head": 8,
+              "reject_no_head": 11,
+              "reject_pollution": 0,
+              "requeries": 0
+            }
+          }
+        ],
+        "MOT17-10-SDP": [
+          {
+            "accepted_links": 28,
+            "diagnostics": {
+              "accepted": 28,
+              "component_count": 18,
+              "has_embedding": 126,
+              "no_embedding": 23,
+              "reject_component_overlap": 17,
+              "reject_cost": 7748,
+              "reject_same_component": 4,
+              "reject_temporal": 78
+            },
+            "n_input_ids": 149,
+            "n_output_ids": 121,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 121,
+              "ids_before": 149,
+              "merges": 28
+            }
+          },
+          {
+            "accepted_links": 2,
+            "diagnostics": {
+              "events": 121,
+              "events_with_candidates": 38,
+              "handovers": 2,
+              "ids_after": 119,
+              "ids_before": 121,
+              "reject_cost": 36,
+              "reject_margin": 0,
+              "reject_min_head": 28,
+              "reject_no_head": 35
+            },
+            "n_input_ids": 121,
+            "n_output_ids": 119,
+            "stage": "handover",
+            "stage_index": 1,
+            "stats": {
+              "decisions_logged": 0,
+              "events": 121,
+              "events_with_candidates": 38,
+              "handovers": 2,
+              "ids_after": 119,
+              "ids_before": 121,
+              "reject_center_dist": 0,
+              "reject_cost": 36,
+              "reject_key_margin": 0,
+              "reject_key_sim": 0,
+              "reject_margin": 0,
+              "reject_min_head": 28,
+              "reject_no_head": 35,
+              "reject_pollution": 0,
+              "requeries": 0
+            }
+          }
+        ],
+        "MOT17-11-SDP": [
+          {
+            "accepted_links": 3,
+            "diagnostics": {
+              "accepted": 3,
+              "component_count": 3,
+              "has_embedding": 75,
+              "no_embedding": 17,
+              "reject_component_overlap": 1,
+              "reject_cost": 2756,
+              "reject_same_component": 0,
+              "reject_temporal": 15
+            },
+            "n_input_ids": 92,
+            "n_output_ids": 89,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 89,
+              "ids_before": 92,
+              "merges": 3
+            }
+          },
+          {
+            "accepted_links": 1,
+            "diagnostics": {
+              "events": 89,
+              "events_with_candidates": 25,
+              "handovers": 1,
+              "ids_after": 88,
+              "ids_before": 89,
+              "reject_cost": 24,
+              "reject_margin": 0,
+              "reject_min_head": 10,
+              "reject_no_head": 38
+            },
+            "n_input_ids": 89,
+            "n_output_ids": 88,
+            "stage": "handover",
+            "stage_index": 1,
+            "stats": {
+              "decisions_logged": 0,
+              "events": 89,
+              "events_with_candidates": 25,
+              "handovers": 1,
+              "ids_after": 88,
+              "ids_before": 89,
+              "reject_center_dist": 0,
+              "reject_cost": 24,
+              "reject_key_margin": 0,
+              "reject_key_sim": 0,
+              "reject_margin": 0,
+              "reject_min_head": 10,
+              "reject_no_head": 38,
+              "reject_pollution": 0,
+              "requeries": 0
+            }
+          }
+        ],
+        "MOT17-13-SDP": [
+          {
+            "accepted_links": 10,
+            "diagnostics": {
+              "accepted": 10,
+              "component_count": 8,
+              "has_embedding": 124,
+              "no_embedding": 11,
+              "reject_component_overlap": 2,
+              "reject_cost": 7578,
+              "reject_same_component": 0,
+              "reject_temporal": 36
+            },
+            "n_input_ids": 135,
+            "n_output_ids": 125,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 125,
+              "ids_before": 135,
+              "merges": 10
+            }
+          },
+          {
+            "accepted_links": 6,
+            "diagnostics": {
+              "events": 125,
+              "events_with_candidates": 67,
+              "handovers": 6,
+              "ids_after": 119,
+              "ids_before": 125,
+              "reject_cost": 59,
+              "reject_margin": 2,
+              "reject_min_head": 13,
+              "reject_no_head": 24
+            },
+            "n_input_ids": 125,
+            "n_output_ids": 119,
+            "stage": "handover",
+            "stage_index": 1,
+            "stats": {
+              "decisions_logged": 0,
+              "events": 125,
+              "events_with_candidates": 67,
+              "handovers": 6,
+              "ids_after": 119,
+              "ids_before": 125,
+              "reject_center_dist": 0,
+              "reject_cost": 59,
+              "reject_key_margin": 0,
+              "reject_key_sim": 0,
+              "reject_margin": 2,
+              "reject_min_head": 13,
+              "reject_no_head": 24,
+              "reject_pollution": 0,
+              "requeries": 0
+            }
+          }
+        ]
+      },
+      "stage_order": [
+        "merge",
+        "handover"
+      ],
+      "stages": {
+        "accepted_links": 104,
+        "per_stage": {
+          "handover": {
+            "accepted_links": 19,
+            "component_count": 0,
+            "events": 719,
+            "handovers": 19,
+            "merges": 0,
+            "no_embedding": 0,
+            "reject_component_overlap": 0,
+            "reject_cost": 246,
+            "reject_same_component": 0,
+            "reject_temporal": 0
+          },
+          "merge": {
+            "accepted_links": 85,
+            "component_count": 62,
+            "events": 0,
+            "handovers": 0,
+            "merges": 85,
+            "no_embedding": 124,
+            "reject_component_overlap": 33,
+            "reject_cost": 36005,
+            "reject_same_component": 6,
+            "reject_temporal": 235
+          }
+        },
+        "stage_order": [
+          "merge",
+          "handover"
+        ]
+      },
+      "tag": "merge_then_handover"
+    }
+  ],
+  "repeats": [
+    {
+      "arm": "merge_only",
+      "interpolation": {
+        "frames_added": 6553,
+        "gaps_filled": 1293,
+        "tracks_interpolated": 339
+      },
+      "metrics": {
+        "per_sequence": {
+          "MOT17-02-SDP": {
+            "IDF1": 61.908670102754336,
+            "IDs": 64,
+            "MOTA": 62.31096281147408
+          },
+          "MOT17-04-SDP": {
+            "IDF1": 93.12089521249275,
+            "IDs": 15,
+            "MOTA": 91.99276657484702
+          },
+          "MOT17-05-SDP": {
+            "IDF1": 70.74840639017864,
+            "IDs": 42,
+            "MOTA": 70.29058840537805
+          },
+          "MOT17-09-SDP": {
+            "IDF1": 67.99616081902528,
+            "IDs": 19,
+            "MOTA": 73.55868544600939
+          },
+          "MOT17-10-SDP": {
+            "IDF1": 76.41475138344711,
+            "IDs": 90,
+            "MOTA": 77.94999610561571
+          },
+          "MOT17-11-SDP": {
+            "IDF1": 79.0642615558061,
+            "IDs": 26,
+            "MOTA": 85.26918185671894
+          },
+          "MOT17-13-SDP": {
+            "IDF1": 77.93191526841943,
+            "IDs": 57,
+            "MOTA": 80.94829067170589
+          }
+        },
+        "printed": {
+          "AssA": "74.2%",
+          "DetA": "75.5%",
+          "FN": 17868,
+          "FP": 2532,
+          "HOTA": "74.7%",
+          "IDF1": "81.3%",
+          "IDs": 313,
+          "MOTA": "81.6%",
+          "Prcn": "97.4%",
+          "Rcll": "84.1%"
+        },
+        "raw": {
+          "AssA": 74.17277404203861,
+          "DetA": 75.4739234924276,
+          "FN": 17868,
+          "FP": 2532,
+          "HOTA": 74.73741441653425,
+          "IDF1": 81.27670148811515,
+          "IDs": 313,
+          "MOTA": 81.55516175855098,
+          "final_tracks": 719
+        }
+      },
+      "mot_sha256": {
+        "MOT17-02-SDP": "ad36ec6ea0ec0cdf2fdcf5861b5a651e83d34de14fc7b1a61d16f17976cd010b",
+        "MOT17-04-SDP": "dd8ffc9faa44ea67d28423705562f49e4dde1cc2ada69b753e46d55e79f7e174",
+        "MOT17-05-SDP": "3df97303361d468a32d7262249a14247d0b073d230e5c73898d75876668ffe46",
+        "MOT17-09-SDP": "ebbb20f557e1d494e4ce820827ff6d16b0a5845072e18a2d87ad644e31ae4242",
+        "MOT17-10-SDP": "372d46264dcc9b59a5decd011c4d2938d2265b9c58477e7fd9bb815f3679baf0",
+        "MOT17-11-SDP": "007deae2eda31f7f117b38638bb9d7d932406378ee43b0fe3b8c6312086e23c0",
+        "MOT17-13-SDP": "0903468b812a4e393cfc1af34d1e8d183b71db524d51112c4162b41495482f7f"
+      },
+      "output_dir": "/home/ray/developer/ai/saccade/results/olr_reval_20260912/arms/merge_only_r1",
+      "repeat_index": 1,
+      "seq_stage_records": {
+        "MOT17-02-SDP": [
+          {
+            "accepted_links": 11,
+            "diagnostics": {
+              "accepted": 11,
+              "component_count": 10,
+              "has_embedding": 93,
+              "no_embedding": 27,
+              "reject_component_overlap": 1,
+              "reject_cost": 4244,
+              "reject_same_component": 0,
+              "reject_temporal": 22
+            },
+            "n_input_ids": 120,
+            "n_output_ids": 109,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 109,
+              "ids_before": 120,
+              "merges": 11
+            }
+          }
+        ],
+        "MOT17-04-SDP": [
+          {
+            "accepted_links": 1,
+            "diagnostics": {
+              "accepted": 1,
+              "component_count": 1,
+              "has_embedding": 88,
+              "no_embedding": 9,
+              "reject_component_overlap": 0,
+              "reject_cost": 3809,
+              "reject_same_component": 0,
+              "reject_temporal": 18
+            },
+            "n_input_ids": 97,
+            "n_output_ids": 96,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 96,
+              "ids_before": 97,
+              "merges": 1
+            }
+          }
+        ],
+        "MOT17-05-SDP": [
+          {
+            "accepted_links": 30,
+            "diagnostics": {
+              "accepted": 30,
+              "component_count": 20,
+              "has_embedding": 137,
+              "no_embedding": 32,
+              "reject_component_overlap": 12,
+              "reject_cost": 9209,
+              "reject_same_component": 2,
+              "reject_temporal": 63
+            },
+            "n_input_ids": 169,
+            "n_output_ids": 139,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 139,
+              "ids_before": 169,
+              "merges": 30
+            }
+          }
+        ],
+        "MOT17-09-SDP": [
+          {
+            "accepted_links": 2,
+            "diagnostics": {
+              "accepted": 2,
+              "component_count": 2,
+              "has_embedding": 37,
+              "no_embedding": 5,
+              "reject_component_overlap": 0,
+              "reject_cost": 661,
+              "reject_same_component": 0,
+              "reject_temporal": 3
+            },
+            "n_input_ids": 42,
+            "n_output_ids": 40,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 40,
+              "ids_before": 42,
+              "merges": 2
+            }
+          }
+        ],
+        "MOT17-10-SDP": [
+          {
+            "accepted_links": 28,
+            "diagnostics": {
+              "accepted": 28,
+              "component_count": 18,
+              "has_embedding": 126,
+              "no_embedding": 23,
+              "reject_component_overlap": 17,
+              "reject_cost": 7748,
+              "reject_same_component": 4,
+              "reject_temporal": 78
+            },
+            "n_input_ids": 149,
+            "n_output_ids": 121,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 121,
+              "ids_before": 149,
+              "merges": 28
+            }
+          }
+        ],
+        "MOT17-11-SDP": [
+          {
+            "accepted_links": 3,
+            "diagnostics": {
+              "accepted": 3,
+              "component_count": 3,
+              "has_embedding": 75,
+              "no_embedding": 17,
+              "reject_component_overlap": 1,
+              "reject_cost": 2756,
+              "reject_same_component": 0,
+              "reject_temporal": 15
+            },
+            "n_input_ids": 92,
+            "n_output_ids": 89,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 89,
+              "ids_before": 92,
+              "merges": 3
+            }
+          }
+        ],
+        "MOT17-13-SDP": [
+          {
+            "accepted_links": 10,
+            "diagnostics": {
+              "accepted": 10,
+              "component_count": 8,
+              "has_embedding": 124,
+              "no_embedding": 11,
+              "reject_component_overlap": 2,
+              "reject_cost": 7578,
+              "reject_same_component": 0,
+              "reject_temporal": 36
+            },
+            "n_input_ids": 135,
+            "n_output_ids": 125,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 125,
+              "ids_before": 135,
+              "merges": 10
+            }
+          }
+        ]
+      },
+      "stage_order": [
+        "merge"
+      ],
+      "stages": {
+        "accepted_links": 85,
+        "per_stage": {
+          "merge": {
+            "accepted_links": 85,
+            "component_count": 62,
+            "events": 0,
+            "handovers": 0,
+            "merges": 85,
+            "no_embedding": 124,
+            "reject_component_overlap": 33,
+            "reject_cost": 36005,
+            "reject_same_component": 6,
+            "reject_temporal": 235
+          }
+        },
+        "stage_order": [
+          "merge"
+        ]
+      },
+      "tag": "merge_only_r1"
+    },
+    {
+      "arm": "merge_only",
+      "interpolation": {
+        "frames_added": 6553,
+        "gaps_filled": 1293,
+        "tracks_interpolated": 339
+      },
+      "metrics": {
+        "per_sequence": {
+          "MOT17-02-SDP": {
+            "IDF1": 61.908670102754336,
+            "IDs": 64,
+            "MOTA": 62.31096281147408
+          },
+          "MOT17-04-SDP": {
+            "IDF1": 93.12089521249275,
+            "IDs": 15,
+            "MOTA": 91.99276657484702
+          },
+          "MOT17-05-SDP": {
+            "IDF1": 70.74840639017864,
+            "IDs": 42,
+            "MOTA": 70.29058840537805
+          },
+          "MOT17-09-SDP": {
+            "IDF1": 67.99616081902528,
+            "IDs": 19,
+            "MOTA": 73.55868544600939
+          },
+          "MOT17-10-SDP": {
+            "IDF1": 76.41475138344711,
+            "IDs": 90,
+            "MOTA": 77.94999610561571
+          },
+          "MOT17-11-SDP": {
+            "IDF1": 79.0642615558061,
+            "IDs": 26,
+            "MOTA": 85.26918185671894
+          },
+          "MOT17-13-SDP": {
+            "IDF1": 77.93191526841943,
+            "IDs": 57,
+            "MOTA": 80.94829067170589
+          }
+        },
+        "printed": {
+          "AssA": "74.2%",
+          "DetA": "75.5%",
+          "FN": 17868,
+          "FP": 2532,
+          "HOTA": "74.7%",
+          "IDF1": "81.3%",
+          "IDs": 313,
+          "MOTA": "81.6%",
+          "Prcn": "97.4%",
+          "Rcll": "84.1%"
+        },
+        "raw": {
+          "AssA": 74.17277404203861,
+          "DetA": 75.4739234924276,
+          "FN": 17868,
+          "FP": 2532,
+          "HOTA": 74.73741441653425,
+          "IDF1": 81.27670148811515,
+          "IDs": 313,
+          "MOTA": 81.55516175855098,
+          "final_tracks": 719
+        }
+      },
+      "mot_sha256": {
+        "MOT17-02-SDP": "ad36ec6ea0ec0cdf2fdcf5861b5a651e83d34de14fc7b1a61d16f17976cd010b",
+        "MOT17-04-SDP": "dd8ffc9faa44ea67d28423705562f49e4dde1cc2ada69b753e46d55e79f7e174",
+        "MOT17-05-SDP": "3df97303361d468a32d7262249a14247d0b073d230e5c73898d75876668ffe46",
+        "MOT17-09-SDP": "ebbb20f557e1d494e4ce820827ff6d16b0a5845072e18a2d87ad644e31ae4242",
+        "MOT17-10-SDP": "372d46264dcc9b59a5decd011c4d2938d2265b9c58477e7fd9bb815f3679baf0",
+        "MOT17-11-SDP": "007deae2eda31f7f117b38638bb9d7d932406378ee43b0fe3b8c6312086e23c0",
+        "MOT17-13-SDP": "0903468b812a4e393cfc1af34d1e8d183b71db524d51112c4162b41495482f7f"
+      },
+      "output_dir": "/home/ray/developer/ai/saccade/results/olr_reval_20260912/arms/merge_only_r2",
+      "repeat_index": 2,
+      "seq_stage_records": {
+        "MOT17-02-SDP": [
+          {
+            "accepted_links": 11,
+            "diagnostics": {
+              "accepted": 11,
+              "component_count": 10,
+              "has_embedding": 93,
+              "no_embedding": 27,
+              "reject_component_overlap": 1,
+              "reject_cost": 4244,
+              "reject_same_component": 0,
+              "reject_temporal": 22
+            },
+            "n_input_ids": 120,
+            "n_output_ids": 109,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 109,
+              "ids_before": 120,
+              "merges": 11
+            }
+          }
+        ],
+        "MOT17-04-SDP": [
+          {
+            "accepted_links": 1,
+            "diagnostics": {
+              "accepted": 1,
+              "component_count": 1,
+              "has_embedding": 88,
+              "no_embedding": 9,
+              "reject_component_overlap": 0,
+              "reject_cost": 3809,
+              "reject_same_component": 0,
+              "reject_temporal": 18
+            },
+            "n_input_ids": 97,
+            "n_output_ids": 96,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 96,
+              "ids_before": 97,
+              "merges": 1
+            }
+          }
+        ],
+        "MOT17-05-SDP": [
+          {
+            "accepted_links": 30,
+            "diagnostics": {
+              "accepted": 30,
+              "component_count": 20,
+              "has_embedding": 137,
+              "no_embedding": 32,
+              "reject_component_overlap": 12,
+              "reject_cost": 9209,
+              "reject_same_component": 2,
+              "reject_temporal": 63
+            },
+            "n_input_ids": 169,
+            "n_output_ids": 139,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 139,
+              "ids_before": 169,
+              "merges": 30
+            }
+          }
+        ],
+        "MOT17-09-SDP": [
+          {
+            "accepted_links": 2,
+            "diagnostics": {
+              "accepted": 2,
+              "component_count": 2,
+              "has_embedding": 37,
+              "no_embedding": 5,
+              "reject_component_overlap": 0,
+              "reject_cost": 661,
+              "reject_same_component": 0,
+              "reject_temporal": 3
+            },
+            "n_input_ids": 42,
+            "n_output_ids": 40,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 40,
+              "ids_before": 42,
+              "merges": 2
+            }
+          }
+        ],
+        "MOT17-10-SDP": [
+          {
+            "accepted_links": 28,
+            "diagnostics": {
+              "accepted": 28,
+              "component_count": 18,
+              "has_embedding": 126,
+              "no_embedding": 23,
+              "reject_component_overlap": 17,
+              "reject_cost": 7748,
+              "reject_same_component": 4,
+              "reject_temporal": 78
+            },
+            "n_input_ids": 149,
+            "n_output_ids": 121,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 121,
+              "ids_before": 149,
+              "merges": 28
+            }
+          }
+        ],
+        "MOT17-11-SDP": [
+          {
+            "accepted_links": 3,
+            "diagnostics": {
+              "accepted": 3,
+              "component_count": 3,
+              "has_embedding": 75,
+              "no_embedding": 17,
+              "reject_component_overlap": 1,
+              "reject_cost": 2756,
+              "reject_same_component": 0,
+              "reject_temporal": 15
+            },
+            "n_input_ids": 92,
+            "n_output_ids": 89,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 89,
+              "ids_before": 92,
+              "merges": 3
+            }
+          }
+        ],
+        "MOT17-13-SDP": [
+          {
+            "accepted_links": 10,
+            "diagnostics": {
+              "accepted": 10,
+              "component_count": 8,
+              "has_embedding": 124,
+              "no_embedding": 11,
+              "reject_component_overlap": 2,
+              "reject_cost": 7578,
+              "reject_same_component": 0,
+              "reject_temporal": 36
+            },
+            "n_input_ids": 135,
+            "n_output_ids": 125,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 125,
+              "ids_before": 135,
+              "merges": 10
+            }
+          }
+        ]
+      },
+      "stage_order": [
+        "merge"
+      ],
+      "stages": {
+        "accepted_links": 85,
+        "per_stage": {
+          "merge": {
+            "accepted_links": 85,
+            "component_count": 62,
+            "events": 0,
+            "handovers": 0,
+            "merges": 85,
+            "no_embedding": 124,
+            "reject_component_overlap": 33,
+            "reject_cost": 36005,
+            "reject_same_component": 6,
+            "reject_temporal": 235
+          }
+        },
+        "stage_order": [
+          "merge"
+        ]
+      },
+      "tag": "merge_only_r2"
+    },
+    {
+      "arm": "handover_then_merge",
+      "interpolation": {
+        "frames_added": 6696,
+        "gaps_filled": 1310,
+        "tracks_interpolated": 347
+      },
+      "metrics": {
+        "per_sequence": {
+          "MOT17-02-SDP": {
+            "IDF1": 60.62019578214309,
+            "IDs": 65,
+            "MOTA": 62.052634411495625
+          },
+          "MOT17-04-SDP": {
+            "IDF1": 93.03677161397452,
+            "IDs": 16,
+            "MOTA": 91.96332821666631
+          },
+          "MOT17-05-SDP": {
+            "IDF1": 70.90595069869681,
+            "IDs": 45,
+            "MOTA": 69.71230302154113
+          },
+          "MOT17-09-SDP": {
+            "IDF1": 67.99616081902528,
+            "IDs": 19,
+            "MOTA": 73.55868544600939
+          },
+          "MOT17-10-SDP": {
+            "IDF1": 76.61498708010336,
+            "IDs": 92,
+            "MOTA": 78.0512500973596
+          },
+          "MOT17-11-SDP": {
+            "IDF1": 79.08574002139278,
+            "IDs": 26,
+            "MOTA": 85.2585841458245
+          },
+          "MOT17-13-SDP": {
+            "IDF1": 77.90120746432491,
+            "IDs": 60,
+            "MOTA": 80.44150489606596
+          }
+        },
+        "printed": {
+          "AssA": "73.9%",
+          "DetA": "75.4%",
+          "FN": 17866,
+          "FP": 2673,
+          "HOTA": "74.6%",
+          "IDF1": "81.1%",
+          "IDs": 323,
+          "MOTA": "81.4%",
+          "Prcn": "97.2%",
+          "Rcll": "84.1%"
+        },
+        "raw": {
+          "AssA": 73.93617584460891,
+          "DetA": 75.39009220214889,
+          "FN": 17866,
+          "FP": 2673,
+          "HOTA": 74.57673625343129,
+          "IDF1": 81.08461755196966,
+          "IDs": 323,
+          "MOTA": 81.42247789344327,
+          "final_tracks": 704
+        }
+      },
+      "mot_sha256": {
+        "MOT17-02-SDP": "607298bd7e0b10a90834b66d6ec1356c5b40428ec3bd296231621237dcfea1f6",
+        "MOT17-04-SDP": "b9c01afe2a52664bbed65d13d57066bc142c41dcad05e465393f6f4551957014",
+        "MOT17-05-SDP": "46534743dbba9453e3dcbe857bb59452a7fc2f79c3d5aa6f4a392ec9b8fb4174",
+        "MOT17-09-SDP": "ebbb20f557e1d494e4ce820827ff6d16b0a5845072e18a2d87ad644e31ae4242",
+        "MOT17-10-SDP": "354af581b693673bb10f27fdc634e0035787b2dec2ff2c4dd57abc1713ae3fd4",
+        "MOT17-11-SDP": "eac770742323724ebbc9de62d0bfbaa1cc0883f6b20d42d8143d6cb581a0d36f",
+        "MOT17-13-SDP": "9fc1641d0fa6feb1dacd45bbc478cf7372ae7c95a3ffb6874555479d1c1baba0"
+      },
+      "output_dir": "/home/ray/developer/ai/saccade/results/olr_reval_20260912/arms/handover_then_merge_r1",
+      "repeat_index": 1,
+      "seq_stage_records": {
+        "MOT17-02-SDP": [
+          {
+            "accepted_links": 7,
+            "diagnostics": {
+              "events": 120,
+              "events_with_candidates": 41,
+              "handovers": 7,
+              "ids_after": 113,
+              "ids_before": 120,
+              "reject_cost": 34,
+              "reject_margin": 0,
+              "reject_min_head": 16,
+              "reject_no_head": 50
+            },
+            "n_input_ids": 120,
+            "n_output_ids": 113,
+            "stage": "handover",
+            "stage_index": 0,
+            "stats": {
+              "decisions_logged": 0,
+              "events": 120,
+              "events_with_candidates": 41,
+              "handovers": 7,
+              "ids_after": 113,
+              "ids_before": 120,
+              "reject_center_dist": 0,
+              "reject_cost": 34,
+              "reject_key_margin": 0,
+              "reject_key_sim": 0,
+              "reject_margin": 0,
+              "reject_min_head": 16,
+              "reject_no_head": 50,
+              "reject_pollution": 0,
+              "requeries": 0
+            }
+          },
+          {
+            "accepted_links": 4,
+            "diagnostics": {
+              "accepted": 4,
+              "component_count": 4,
+              "has_embedding": 86,
+              "no_embedding": 27,
+              "reject_component_overlap": 0,
+              "reject_cost": 3637,
+              "reject_same_component": 0,
+              "reject_temporal": 14
+            },
+            "n_input_ids": 113,
+            "n_output_ids": 109,
+            "stage": "merge",
+            "stage_index": 1,
+            "stats": {
+              "ids_after": 109,
+              "ids_before": 113,
+              "merges": 4
+            }
+          }
+        ],
+        "MOT17-04-SDP": [
+          {
+            "accepted_links": 4,
+            "diagnostics": {
+              "events": 97,
+              "events_with_candidates": 28,
+              "handovers": 4,
+              "ids_after": 93,
+              "ids_before": 97,
+              "reject_cost": 24,
+              "reject_margin": 0,
+              "reject_min_head": 5,
+              "reject_no_head": 21
+            },
+            "n_input_ids": 97,
+            "n_output_ids": 93,
+            "stage": "handover",
+            "stage_index": 0,
+            "stats": {
+              "decisions_logged": 0,
+              "events": 97,
+              "events_with_candidates": 28,
+              "handovers": 4,
+              "ids_after": 93,
+              "ids_before": 97,
+              "reject_center_dist": 0,
+              "reject_cost": 24,
+              "reject_key_margin": 0,
+              "reject_key_sim": 0,
+              "reject_margin": 0,
+              "reject_min_head": 5,
+              "reject_no_head": 21,
+              "reject_pollution": 0,
+              "requeries": 0
+            }
+          },
+          {
+            "accepted_links": 1,
+            "diagnostics": {
+              "accepted": 1,
+              "component_count": 1,
+              "has_embedding": 84,
+              "no_embedding": 9,
+              "reject_component_overlap": 0,
+              "reject_cost": 3472,
+              "reject_same_component": 0,
+              "reject_temporal": 13
+            },
+            "n_input_ids": 93,
+            "n_output_ids": 92,
+            "stage": "merge",
+            "stage_index": 1,
+            "stats": {
+              "ids_after": 92,
+              "ids_before": 93,
+              "merges": 1
+            }
+          }
+        ],
+        "MOT17-05-SDP": [
+          {
+            "accepted_links": 12,
+            "diagnostics": {
+              "events": 169,
+              "events_with_candidates": 75,
+              "handovers": 12,
+              "ids_after": 157,
+              "ids_before": 169,
+              "reject_cost": 57,
+              "reject_margin": 6,
+              "reject_min_head": 35,
+              "reject_no_head": 50
+            },
+            "n_input_ids": 169,
+            "n_output_ids": 157,
+            "stage": "handover",
+            "stage_index": 0,
+            "stats": {
+              "decisions_logged": 0,
+              "events": 169,
+              "events_with_candidates": 75,
+              "handovers": 12,
+              "ids_after": 157,
+              "ids_before": 169,
+              "reject_center_dist": 0,
+              "reject_cost": 57,
+              "reject_key_margin": 0,
+              "reject_key_sim": 0,
+              "reject_margin": 6,
+              "reject_min_head": 35,
+              "reject_no_head": 50,
+              "reject_pollution": 0,
+              "requeries": 0
+            }
+          },
+          {
+            "accepted_links": 21,
+            "diagnostics": {
+              "accepted": 21,
+              "component_count": 12,
+              "has_embedding": 125,
+              "no_embedding": 32,
+              "reject_component_overlap": 2,
+              "reject_cost": 7669,
+              "reject_same_component": 1,
+              "reject_temporal": 57
+            },
+            "n_input_ids": 157,
+            "n_output_ids": 136,
+            "stage": "merge",
+            "stage_index": 1,
+            "stats": {
+              "ids_after": 136,
+              "ids_before": 157,
+              "merges": 21
+            }
+          }
+        ],
+        "MOT17-09-SDP": [
+          {
+            "accepted_links": 1,
+            "diagnostics": {
+              "events": 42,
+              "events_with_candidates": 18,
+              "handovers": 1,
+              "ids_after": 41,
+              "ids_before": 42,
+              "reject_cost": 17,
+              "reject_margin": 0,
+              "reject_min_head": 9,
+              "reject_no_head": 11
+            },
+            "n_input_ids": 42,
+            "n_output_ids": 41,
+            "stage": "handover",
+            "stage_index": 0,
+            "stats": {
+              "decisions_logged": 0,
+              "events": 42,
+              "events_with_candidates": 18,
+              "handovers": 1,
+              "ids_after": 41,
+              "ids_before": 42,
+              "reject_center_dist": 0,
+              "reject_cost": 17,
+              "reject_key_margin": 0,
+              "reject_key_sim": 0,
+              "reject_margin": 0,
+              "reject_min_head": 9,
+              "reject_no_head": 11,
+              "reject_pollution": 0,
+              "requeries": 0
+            }
+          },
+          {
+            "accepted_links": 1,
+            "diagnostics": {
+              "accepted": 1,
+              "component_count": 1,
+              "has_embedding": 36,
+              "no_embedding": 5,
+              "reject_component_overlap": 0,
+              "reject_cost": 626,
+              "reject_same_component": 0,
+              "reject_temporal": 3
+            },
+            "n_input_ids": 41,
+            "n_output_ids": 40,
+            "stage": "merge",
+            "stage_index": 1,
+            "stats": {
+              "ids_after": 40,
+              "ids_before": 41,
+              "merges": 1
+            }
+          }
+        ],
+        "MOT17-10-SDP": [
+          {
+            "accepted_links": 14,
+            "diagnostics": {
+              "events": 149,
+              "events_with_candidates": 57,
+              "handovers": 14,
+              "ids_after": 135,
+              "ids_before": 149,
+              "reject_cost": 39,
+              "reject_margin": 4,
+              "reject_min_head": 38,
+              "reject_no_head": 38
+            },
+            "n_input_ids": 149,
+            "n_output_ids": 135,
+            "stage": "handover",
+            "stage_index": 0,
+            "stats": {
+              "decisions_logged": 0,
+              "events": 149,
+              "events_with_candidates": 57,
+              "handovers": 14,
+              "ids_after": 135,
+              "ids_before": 149,
+              "reject_center_dist": 0,
+              "reject_cost": 39,
+              "reject_key_margin": 0,
+              "reject_key_sim": 0,
+              "reject_margin": 4,
+              "reject_min_head": 38,
+              "reject_no_head": 38,
+              "reject_pollution": 0,
+              "requeries": 0
+            }
+          },
+          {
+            "accepted_links": 15,
+            "diagnostics": {
+              "accepted": 15,
+              "component_count": 11,
+              "has_embedding": 112,
+              "no_embedding": 23,
+              "reject_component_overlap": 7,
+              "reject_cost": 6124,
+              "reject_same_component": 1,
+              "reject_temporal": 69
+            },
+            "n_input_ids": 135,
+            "n_output_ids": 120,
+            "stage": "merge",
+            "stage_index": 1,
+            "stats": {
+              "ids_after": 120,
+              "ids_before": 135,
+              "merges": 15
+            }
+          }
+        ],
+        "MOT17-11-SDP": [
+          {
+            "accepted_links": 4,
+            "diagnostics": {
+              "events": 92,
+              "events_with_candidates": 28,
+              "handovers": 4,
+              "ids_after": 88,
+              "ids_before": 92,
+              "reject_cost": 24,
+              "reject_margin": 0,
+              "reject_min_head": 10,
+              "reject_no_head": 38
+            },
+            "n_input_ids": 92,
+            "n_output_ids": 88,
+            "stage": "handover",
+            "stage_index": 0,
+            "stats": {
+              "decisions_logged": 0,
+              "events": 92,
+              "events_with_candidates": 28,
+              "handovers": 4,
+              "ids_after": 88,
+              "ids_before": 92,
+              "reject_center_dist": 0,
+              "reject_cost": 24,
+              "reject_key_margin": 0,
+              "reject_key_sim": 0,
+              "reject_margin": 0,
+              "reject_min_head": 10,
+              "reject_no_head": 38,
+              "reject_pollution": 0,
+              "requeries": 0
+            }
+          },
+          {
+            "accepted_links": 0,
+            "diagnostics": {
+              "accepted": 0,
+              "component_count": 0,
+              "has_embedding": 71,
+              "no_embedding": 17,
+              "reject_component_overlap": 0,
+              "reject_cost": 2472,
+              "reject_same_component": 0,
+              "reject_temporal": 13
+            },
+            "n_input_ids": 88,
+            "n_output_ids": 88,
+            "stage": "merge",
+            "stage_index": 1,
+            "stats": {
+              "ids_after": 88,
+              "ids_before": 88,
+              "merges": 0
+            }
+          }
+        ],
+        "MOT17-13-SDP": [
+          {
+            "accepted_links": 12,
+            "diagnostics": {
+              "events": 135,
+              "events_with_candidates": 72,
+              "handovers": 12,
+              "ids_after": 123,
+              "ids_before": 135,
+              "reject_cost": 58,
+              "reject_margin": 2,
+              "reject_min_head": 19,
+              "reject_no_head": 24
+            },
+            "n_input_ids": 135,
+            "n_output_ids": 123,
+            "stage": "handover",
+            "stage_index": 0,
+            "stats": {
+              "decisions_logged": 0,
+              "events": 135,
+              "events_with_candidates": 72,
+              "handovers": 12,
+              "ids_after": 123,
+              "ids_before": 135,
+              "reject_center_dist": 0,
+              "reject_cost": 58,
+              "reject_key_margin": 0,
+              "reject_key_sim": 0,
+              "reject_margin": 2,
+              "reject_min_head": 19,
+              "reject_no_head": 24,
+              "reject_pollution": 0,
+              "requeries": 0
+            }
+          },
+          {
+            "accepted_links": 4,
+            "diagnostics": {
+              "accepted": 4,
+              "component_count": 3,
+              "has_embedding": 112,
+              "no_embedding": 11,
+              "reject_component_overlap": 1,
+              "reject_cost": 6183,
+              "reject_same_component": 0,
+              "reject_temporal": 28
+            },
+            "n_input_ids": 123,
+            "n_output_ids": 119,
+            "stage": "merge",
+            "stage_index": 1,
+            "stats": {
+              "ids_after": 119,
+              "ids_before": 123,
+              "merges": 4
+            }
+          }
+        ]
+      },
+      "stage_order": [
+        "handover",
+        "merge"
+      ],
+      "stages": {
+        "accepted_links": 100,
+        "per_stage": {
+          "handover": {
+            "accepted_links": 54,
+            "component_count": 0,
+            "events": 804,
+            "handovers": 54,
+            "merges": 0,
+            "no_embedding": 0,
+            "reject_component_overlap": 0,
+            "reject_cost": 253,
+            "reject_same_component": 0,
+            "reject_temporal": 0
+          },
+          "merge": {
+            "accepted_links": 46,
+            "component_count": 32,
+            "events": 0,
+            "handovers": 0,
+            "merges": 46,
+            "no_embedding": 124,
+            "reject_component_overlap": 10,
+            "reject_cost": 30183,
+            "reject_same_component": 2,
+            "reject_temporal": 197
+          }
+        },
+        "stage_order": [
+          "handover",
+          "merge"
+        ]
+      },
+      "tag": "handover_then_merge_r1"
+    },
+    {
+      "arm": "handover_then_merge",
+      "interpolation": {
+        "frames_added": 6696,
+        "gaps_filled": 1310,
+        "tracks_interpolated": 347
+      },
+      "metrics": {
+        "per_sequence": {
+          "MOT17-02-SDP": {
+            "IDF1": 60.62019578214309,
+            "IDs": 65,
+            "MOTA": 62.052634411495625
+          },
+          "MOT17-04-SDP": {
+            "IDF1": 93.03677161397452,
+            "IDs": 16,
+            "MOTA": 91.96332821666631
+          },
+          "MOT17-05-SDP": {
+            "IDF1": 70.90595069869681,
+            "IDs": 45,
+            "MOTA": 69.71230302154113
+          },
+          "MOT17-09-SDP": {
+            "IDF1": 67.99616081902528,
+            "IDs": 19,
+            "MOTA": 73.55868544600939
+          },
+          "MOT17-10-SDP": {
+            "IDF1": 76.61498708010336,
+            "IDs": 92,
+            "MOTA": 78.0512500973596
+          },
+          "MOT17-11-SDP": {
+            "IDF1": 79.08574002139278,
+            "IDs": 26,
+            "MOTA": 85.2585841458245
+          },
+          "MOT17-13-SDP": {
+            "IDF1": 77.90120746432491,
+            "IDs": 60,
+            "MOTA": 80.44150489606596
+          }
+        },
+        "printed": {
+          "AssA": "73.9%",
+          "DetA": "75.4%",
+          "FN": 17866,
+          "FP": 2673,
+          "HOTA": "74.6%",
+          "IDF1": "81.1%",
+          "IDs": 323,
+          "MOTA": "81.4%",
+          "Prcn": "97.2%",
+          "Rcll": "84.1%"
+        },
+        "raw": {
+          "AssA": 73.93617584460891,
+          "DetA": 75.39009220214889,
+          "FN": 17866,
+          "FP": 2673,
+          "HOTA": 74.57673625343129,
+          "IDF1": 81.08461755196966,
+          "IDs": 323,
+          "MOTA": 81.42247789344327,
+          "final_tracks": 704
+        }
+      },
+      "mot_sha256": {
+        "MOT17-02-SDP": "607298bd7e0b10a90834b66d6ec1356c5b40428ec3bd296231621237dcfea1f6",
+        "MOT17-04-SDP": "b9c01afe2a52664bbed65d13d57066bc142c41dcad05e465393f6f4551957014",
+        "MOT17-05-SDP": "46534743dbba9453e3dcbe857bb59452a7fc2f79c3d5aa6f4a392ec9b8fb4174",
+        "MOT17-09-SDP": "ebbb20f557e1d494e4ce820827ff6d16b0a5845072e18a2d87ad644e31ae4242",
+        "MOT17-10-SDP": "354af581b693673bb10f27fdc634e0035787b2dec2ff2c4dd57abc1713ae3fd4",
+        "MOT17-11-SDP": "eac770742323724ebbc9de62d0bfbaa1cc0883f6b20d42d8143d6cb581a0d36f",
+        "MOT17-13-SDP": "9fc1641d0fa6feb1dacd45bbc478cf7372ae7c95a3ffb6874555479d1c1baba0"
+      },
+      "output_dir": "/home/ray/developer/ai/saccade/results/olr_reval_20260912/arms/handover_then_merge_r2",
+      "repeat_index": 2,
+      "seq_stage_records": {
+        "MOT17-02-SDP": [
+          {
+            "accepted_links": 7,
+            "diagnostics": {
+              "events": 120,
+              "events_with_candidates": 41,
+              "handovers": 7,
+              "ids_after": 113,
+              "ids_before": 120,
+              "reject_cost": 34,
+              "reject_margin": 0,
+              "reject_min_head": 16,
+              "reject_no_head": 50
+            },
+            "n_input_ids": 120,
+            "n_output_ids": 113,
+            "stage": "handover",
+            "stage_index": 0,
+            "stats": {
+              "decisions_logged": 0,
+              "events": 120,
+              "events_with_candidates": 41,
+              "handovers": 7,
+              "ids_after": 113,
+              "ids_before": 120,
+              "reject_center_dist": 0,
+              "reject_cost": 34,
+              "reject_key_margin": 0,
+              "reject_key_sim": 0,
+              "reject_margin": 0,
+              "reject_min_head": 16,
+              "reject_no_head": 50,
+              "reject_pollution": 0,
+              "requeries": 0
+            }
+          },
+          {
+            "accepted_links": 4,
+            "diagnostics": {
+              "accepted": 4,
+              "component_count": 4,
+              "has_embedding": 86,
+              "no_embedding": 27,
+              "reject_component_overlap": 0,
+              "reject_cost": 3637,
+              "reject_same_component": 0,
+              "reject_temporal": 14
+            },
+            "n_input_ids": 113,
+            "n_output_ids": 109,
+            "stage": "merge",
+            "stage_index": 1,
+            "stats": {
+              "ids_after": 109,
+              "ids_before": 113,
+              "merges": 4
+            }
+          }
+        ],
+        "MOT17-04-SDP": [
+          {
+            "accepted_links": 4,
+            "diagnostics": {
+              "events": 97,
+              "events_with_candidates": 28,
+              "handovers": 4,
+              "ids_after": 93,
+              "ids_before": 97,
+              "reject_cost": 24,
+              "reject_margin": 0,
+              "reject_min_head": 5,
+              "reject_no_head": 21
+            },
+            "n_input_ids": 97,
+            "n_output_ids": 93,
+            "stage": "handover",
+            "stage_index": 0,
+            "stats": {
+              "decisions_logged": 0,
+              "events": 97,
+              "events_with_candidates": 28,
+              "handovers": 4,
+              "ids_after": 93,
+              "ids_before": 97,
+              "reject_center_dist": 0,
+              "reject_cost": 24,
+              "reject_key_margin": 0,
+              "reject_key_sim": 0,
+              "reject_margin": 0,
+              "reject_min_head": 5,
+              "reject_no_head": 21,
+              "reject_pollution": 0,
+              "requeries": 0
+            }
+          },
+          {
+            "accepted_links": 1,
+            "diagnostics": {
+              "accepted": 1,
+              "component_count": 1,
+              "has_embedding": 84,
+              "no_embedding": 9,
+              "reject_component_overlap": 0,
+              "reject_cost": 3472,
+              "reject_same_component": 0,
+              "reject_temporal": 13
+            },
+            "n_input_ids": 93,
+            "n_output_ids": 92,
+            "stage": "merge",
+            "stage_index": 1,
+            "stats": {
+              "ids_after": 92,
+              "ids_before": 93,
+              "merges": 1
+            }
+          }
+        ],
+        "MOT17-05-SDP": [
+          {
+            "accepted_links": 12,
+            "diagnostics": {
+              "events": 169,
+              "events_with_candidates": 75,
+              "handovers": 12,
+              "ids_after": 157,
+              "ids_before": 169,
+              "reject_cost": 57,
+              "reject_margin": 6,
+              "reject_min_head": 35,
+              "reject_no_head": 50
+            },
+            "n_input_ids": 169,
+            "n_output_ids": 157,
+            "stage": "handover",
+            "stage_index": 0,
+            "stats": {
+              "decisions_logged": 0,
+              "events": 169,
+              "events_with_candidates": 75,
+              "handovers": 12,
+              "ids_after": 157,
+              "ids_before": 169,
+              "reject_center_dist": 0,
+              "reject_cost": 57,
+              "reject_key_margin": 0,
+              "reject_key_sim": 0,
+              "reject_margin": 6,
+              "reject_min_head": 35,
+              "reject_no_head": 50,
+              "reject_pollution": 0,
+              "requeries": 0
+            }
+          },
+          {
+            "accepted_links": 21,
+            "diagnostics": {
+              "accepted": 21,
+              "component_count": 12,
+              "has_embedding": 125,
+              "no_embedding": 32,
+              "reject_component_overlap": 2,
+              "reject_cost": 7669,
+              "reject_same_component": 1,
+              "reject_temporal": 57
+            },
+            "n_input_ids": 157,
+            "n_output_ids": 136,
+            "stage": "merge",
+            "stage_index": 1,
+            "stats": {
+              "ids_after": 136,
+              "ids_before": 157,
+              "merges": 21
+            }
+          }
+        ],
+        "MOT17-09-SDP": [
+          {
+            "accepted_links": 1,
+            "diagnostics": {
+              "events": 42,
+              "events_with_candidates": 18,
+              "handovers": 1,
+              "ids_after": 41,
+              "ids_before": 42,
+              "reject_cost": 17,
+              "reject_margin": 0,
+              "reject_min_head": 9,
+              "reject_no_head": 11
+            },
+            "n_input_ids": 42,
+            "n_output_ids": 41,
+            "stage": "handover",
+            "stage_index": 0,
+            "stats": {
+              "decisions_logged": 0,
+              "events": 42,
+              "events_with_candidates": 18,
+              "handovers": 1,
+              "ids_after": 41,
+              "ids_before": 42,
+              "reject_center_dist": 0,
+              "reject_cost": 17,
+              "reject_key_margin": 0,
+              "reject_key_sim": 0,
+              "reject_margin": 0,
+              "reject_min_head": 9,
+              "reject_no_head": 11,
+              "reject_pollution": 0,
+              "requeries": 0
+            }
+          },
+          {
+            "accepted_links": 1,
+            "diagnostics": {
+              "accepted": 1,
+              "component_count": 1,
+              "has_embedding": 36,
+              "no_embedding": 5,
+              "reject_component_overlap": 0,
+              "reject_cost": 626,
+              "reject_same_component": 0,
+              "reject_temporal": 3
+            },
+            "n_input_ids": 41,
+            "n_output_ids": 40,
+            "stage": "merge",
+            "stage_index": 1,
+            "stats": {
+              "ids_after": 40,
+              "ids_before": 41,
+              "merges": 1
+            }
+          }
+        ],
+        "MOT17-10-SDP": [
+          {
+            "accepted_links": 14,
+            "diagnostics": {
+              "events": 149,
+              "events_with_candidates": 57,
+              "handovers": 14,
+              "ids_after": 135,
+              "ids_before": 149,
+              "reject_cost": 39,
+              "reject_margin": 4,
+              "reject_min_head": 38,
+              "reject_no_head": 38
+            },
+            "n_input_ids": 149,
+            "n_output_ids": 135,
+            "stage": "handover",
+            "stage_index": 0,
+            "stats": {
+              "decisions_logged": 0,
+              "events": 149,
+              "events_with_candidates": 57,
+              "handovers": 14,
+              "ids_after": 135,
+              "ids_before": 149,
+              "reject_center_dist": 0,
+              "reject_cost": 39,
+              "reject_key_margin": 0,
+              "reject_key_sim": 0,
+              "reject_margin": 4,
+              "reject_min_head": 38,
+              "reject_no_head": 38,
+              "reject_pollution": 0,
+              "requeries": 0
+            }
+          },
+          {
+            "accepted_links": 15,
+            "diagnostics": {
+              "accepted": 15,
+              "component_count": 11,
+              "has_embedding": 112,
+              "no_embedding": 23,
+              "reject_component_overlap": 7,
+              "reject_cost": 6124,
+              "reject_same_component": 1,
+              "reject_temporal": 69
+            },
+            "n_input_ids": 135,
+            "n_output_ids": 120,
+            "stage": "merge",
+            "stage_index": 1,
+            "stats": {
+              "ids_after": 120,
+              "ids_before": 135,
+              "merges": 15
+            }
+          }
+        ],
+        "MOT17-11-SDP": [
+          {
+            "accepted_links": 4,
+            "diagnostics": {
+              "events": 92,
+              "events_with_candidates": 28,
+              "handovers": 4,
+              "ids_after": 88,
+              "ids_before": 92,
+              "reject_cost": 24,
+              "reject_margin": 0,
+              "reject_min_head": 10,
+              "reject_no_head": 38
+            },
+            "n_input_ids": 92,
+            "n_output_ids": 88,
+            "stage": "handover",
+            "stage_index": 0,
+            "stats": {
+              "decisions_logged": 0,
+              "events": 92,
+              "events_with_candidates": 28,
+              "handovers": 4,
+              "ids_after": 88,
+              "ids_before": 92,
+              "reject_center_dist": 0,
+              "reject_cost": 24,
+              "reject_key_margin": 0,
+              "reject_key_sim": 0,
+              "reject_margin": 0,
+              "reject_min_head": 10,
+              "reject_no_head": 38,
+              "reject_pollution": 0,
+              "requeries": 0
+            }
+          },
+          {
+            "accepted_links": 0,
+            "diagnostics": {
+              "accepted": 0,
+              "component_count": 0,
+              "has_embedding": 71,
+              "no_embedding": 17,
+              "reject_component_overlap": 0,
+              "reject_cost": 2472,
+              "reject_same_component": 0,
+              "reject_temporal": 13
+            },
+            "n_input_ids": 88,
+            "n_output_ids": 88,
+            "stage": "merge",
+            "stage_index": 1,
+            "stats": {
+              "ids_after": 88,
+              "ids_before": 88,
+              "merges": 0
+            }
+          }
+        ],
+        "MOT17-13-SDP": [
+          {
+            "accepted_links": 12,
+            "diagnostics": {
+              "events": 135,
+              "events_with_candidates": 72,
+              "handovers": 12,
+              "ids_after": 123,
+              "ids_before": 135,
+              "reject_cost": 58,
+              "reject_margin": 2,
+              "reject_min_head": 19,
+              "reject_no_head": 24
+            },
+            "n_input_ids": 135,
+            "n_output_ids": 123,
+            "stage": "handover",
+            "stage_index": 0,
+            "stats": {
+              "decisions_logged": 0,
+              "events": 135,
+              "events_with_candidates": 72,
+              "handovers": 12,
+              "ids_after": 123,
+              "ids_before": 135,
+              "reject_center_dist": 0,
+              "reject_cost": 58,
+              "reject_key_margin": 0,
+              "reject_key_sim": 0,
+              "reject_margin": 2,
+              "reject_min_head": 19,
+              "reject_no_head": 24,
+              "reject_pollution": 0,
+              "requeries": 0
+            }
+          },
+          {
+            "accepted_links": 4,
+            "diagnostics": {
+              "accepted": 4,
+              "component_count": 3,
+              "has_embedding": 112,
+              "no_embedding": 11,
+              "reject_component_overlap": 1,
+              "reject_cost": 6183,
+              "reject_same_component": 0,
+              "reject_temporal": 28
+            },
+            "n_input_ids": 123,
+            "n_output_ids": 119,
+            "stage": "merge",
+            "stage_index": 1,
+            "stats": {
+              "ids_after": 119,
+              "ids_before": 123,
+              "merges": 4
+            }
+          }
+        ]
+      },
+      "stage_order": [
+        "handover",
+        "merge"
+      ],
+      "stages": {
+        "accepted_links": 100,
+        "per_stage": {
+          "handover": {
+            "accepted_links": 54,
+            "component_count": 0,
+            "events": 804,
+            "handovers": 54,
+            "merges": 0,
+            "no_embedding": 0,
+            "reject_component_overlap": 0,
+            "reject_cost": 253,
+            "reject_same_component": 0,
+            "reject_temporal": 0
+          },
+          "merge": {
+            "accepted_links": 46,
+            "component_count": 32,
+            "events": 0,
+            "handovers": 0,
+            "merges": 46,
+            "no_embedding": 124,
+            "reject_component_overlap": 10,
+            "reject_cost": 30183,
+            "reject_same_component": 2,
+            "reject_temporal": 197
+          }
+        },
+        "stage_order": [
+          "handover",
+          "merge"
+        ]
+      },
+      "tag": "handover_then_merge_r2"
+    },
+    {
+      "arm": "merge_then_handover",
+      "interpolation": {
+        "frames_added": 6765,
+        "gaps_filled": 1308,
+        "tracks_interpolated": 344
+      },
+      "metrics": {
+        "per_sequence": {
+          "MOT17-02-SDP": {
+            "IDF1": 61.908670102754336,
+            "IDs": 64,
+            "MOTA": 62.31096281147408
+          },
+          "MOT17-04-SDP": {
+            "IDF1": 93.03677161397452,
+            "IDs": 16,
+            "MOTA": 91.96332821666631
+          },
+          "MOT17-05-SDP": {
+            "IDF1": 70.3602406814097,
+            "IDs": 44,
+            "MOTA": 69.24967471447158
+          },
+          "MOT17-09-SDP": {
+            "IDF1": 67.99616081902528,
+            "IDs": 19,
+            "MOTA": 73.55868544600939
+          },
+          "MOT17-10-SDP": {
+            "IDF1": 76.99636657246668,
+            "IDs": 88,
+            "MOTA": 78.03567256016824
+          },
+          "MOT17-11-SDP": {
+            "IDF1": 79.08574002139278,
+            "IDs": 26,
+            "MOTA": 85.2585841458245
+          },
+          "MOT17-13-SDP": {
+            "IDF1": 77.50834651203655,
+            "IDs": 60,
+            "MOTA": 80.55316955849511
+          }
+        },
+        "printed": {
+          "AssA": "74.1%",
+          "DetA": "75.4%",
+          "FN": 17821,
+          "FP": 2697,
+          "HOTA": "74.7%",
+          "IDF1": "81.2%",
+          "IDs": 317,
+          "MOTA": "81.4%",
+          "Prcn": "97.2%",
+          "Rcll": "84.1%"
+        },
+        "raw": {
+          "AssA": 74.12238206208809,
+          "DetA": 75.41059375003877,
+          "FN": 17821,
+          "FP": 2697,
+          "HOTA": 74.68057891770655,
+          "IDF1": 81.2364539074808,
+          "IDs": 317,
+          "MOTA": 81.44652127839569,
+          "final_tracks": 700
+        }
+      },
+      "mot_sha256": {
+        "MOT17-02-SDP": "cd4c78621ac5ebcc12185d03904f0712b854a4f3d9e6599fdc862840009135f5",
+        "MOT17-04-SDP": "b9c01afe2a52664bbed65d13d57066bc142c41dcad05e465393f6f4551957014",
+        "MOT17-05-SDP": "f0fad6a8182dd39aa3d82b534896eb175e041e3ab8b4001b0b4be736397e4c42",
+        "MOT17-09-SDP": "ebbb20f557e1d494e4ce820827ff6d16b0a5845072e18a2d87ad644e31ae4242",
+        "MOT17-10-SDP": "a43b947c44a1d212951535941ee27a2362edeb6b42a1d5c807bc7b2f1482100e",
+        "MOT17-11-SDP": "eac770742323724ebbc9de62d0bfbaa1cc0883f6b20d42d8143d6cb581a0d36f",
+        "MOT17-13-SDP": "1aecc74101e173810aa798c0b870263bc69171bdda96041176e016aa753c1678"
+      },
+      "output_dir": "/home/ray/developer/ai/saccade/results/olr_reval_20260912/arms/merge_then_handover_r1",
+      "repeat_index": 1,
+      "seq_stage_records": {
+        "MOT17-02-SDP": [
+          {
+            "accepted_links": 11,
+            "diagnostics": {
+              "accepted": 11,
+              "component_count": 10,
+              "has_embedding": 93,
+              "no_embedding": 27,
+              "reject_component_overlap": 1,
+              "reject_cost": 4244,
+              "reject_same_component": 0,
+              "reject_temporal": 22
+            },
+            "n_input_ids": 120,
+            "n_output_ids": 109,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 109,
+              "ids_before": 120,
+              "merges": 11
+            }
+          },
+          {
+            "accepted_links": 1,
+            "diagnostics": {
+              "events": 109,
+              "events_with_candidates": 34,
+              "handovers": 1,
+              "ids_after": 108,
+              "ids_before": 109,
+              "reject_cost": 33,
+              "reject_margin": 0,
+              "reject_min_head": 14,
+              "reject_no_head": 47
+            },
+            "n_input_ids": 109,
+            "n_output_ids": 108,
+            "stage": "handover",
+            "stage_index": 1,
+            "stats": {
+              "decisions_logged": 0,
+              "events": 109,
+              "events_with_candidates": 34,
+              "handovers": 1,
+              "ids_after": 108,
+              "ids_before": 109,
+              "reject_center_dist": 0,
+              "reject_cost": 33,
+              "reject_key_margin": 0,
+              "reject_key_sim": 0,
+              "reject_margin": 0,
+              "reject_min_head": 14,
+              "reject_no_head": 47,
+              "reject_pollution": 0,
+              "requeries": 0
+            }
+          }
+        ],
+        "MOT17-04-SDP": [
+          {
+            "accepted_links": 1,
+            "diagnostics": {
+              "accepted": 1,
+              "component_count": 1,
+              "has_embedding": 88,
+              "no_embedding": 9,
+              "reject_component_overlap": 0,
+              "reject_cost": 3809,
+              "reject_same_component": 0,
+              "reject_temporal": 18
+            },
+            "n_input_ids": 97,
+            "n_output_ids": 96,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 96,
+              "ids_before": 97,
+              "merges": 1
+            }
+          },
+          {
+            "accepted_links": 4,
+            "diagnostics": {
+              "events": 96,
+              "events_with_candidates": 28,
+              "handovers": 4,
+              "ids_after": 92,
+              "ids_before": 96,
+              "reject_cost": 24,
+              "reject_margin": 0,
+              "reject_min_head": 5,
+              "reject_no_head": 20
+            },
+            "n_input_ids": 96,
+            "n_output_ids": 92,
+            "stage": "handover",
+            "stage_index": 1,
+            "stats": {
+              "decisions_logged": 0,
+              "events": 96,
+              "events_with_candidates": 28,
+              "handovers": 4,
+              "ids_after": 92,
+              "ids_before": 96,
+              "reject_center_dist": 0,
+              "reject_cost": 24,
+              "reject_key_margin": 0,
+              "reject_key_sim": 0,
+              "reject_margin": 0,
+              "reject_min_head": 5,
+              "reject_no_head": 20,
+              "reject_pollution": 0,
+              "requeries": 0
+            }
+          }
+        ],
+        "MOT17-05-SDP": [
+          {
+            "accepted_links": 30,
+            "diagnostics": {
+              "accepted": 30,
+              "component_count": 20,
+              "has_embedding": 137,
+              "no_embedding": 32,
+              "reject_component_overlap": 12,
+              "reject_cost": 9209,
+              "reject_same_component": 2,
+              "reject_temporal": 63
+            },
+            "n_input_ids": 169,
+            "n_output_ids": 139,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 139,
+              "ids_before": 169,
+              "merges": 30
+            }
+          },
+          {
+            "accepted_links": 5,
+            "diagnostics": {
+              "events": 139,
+              "events_with_candidates": 58,
+              "handovers": 5,
+              "ids_after": 134,
+              "ids_before": 139,
+              "reject_cost": 53,
+              "reject_margin": 0,
+              "reject_min_head": 25,
+              "reject_no_head": 47
+            },
+            "n_input_ids": 139,
+            "n_output_ids": 134,
+            "stage": "handover",
+            "stage_index": 1,
+            "stats": {
+              "decisions_logged": 0,
+              "events": 139,
+              "events_with_candidates": 58,
+              "handovers": 5,
+              "ids_after": 134,
+              "ids_before": 139,
+              "reject_center_dist": 0,
+              "reject_cost": 53,
+              "reject_key_margin": 0,
+              "reject_key_sim": 0,
+              "reject_margin": 0,
+              "reject_min_head": 25,
+              "reject_no_head": 47,
+              "reject_pollution": 0,
+              "requeries": 0
+            }
+          }
+        ],
+        "MOT17-09-SDP": [
+          {
+            "accepted_links": 2,
+            "diagnostics": {
+              "accepted": 2,
+              "component_count": 2,
+              "has_embedding": 37,
+              "no_embedding": 5,
+              "reject_component_overlap": 0,
+              "reject_cost": 661,
+              "reject_same_component": 0,
+              "reject_temporal": 3
+            },
+            "n_input_ids": 42,
+            "n_output_ids": 40,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 40,
+              "ids_before": 42,
+              "merges": 2
+            }
+          },
+          {
+            "accepted_links": 0,
+            "diagnostics": {
+              "events": 40,
+              "events_with_candidates": 17,
+              "handovers": 0,
+              "ids_after": 40,
+              "ids_before": 40,
+              "reject_cost": 17,
+              "reject_margin": 0,
+              "reject_min_head": 8,
+              "reject_no_head": 11
+            },
+            "n_input_ids": 40,
+            "n_output_ids": 40,
+            "stage": "handover",
+            "stage_index": 1,
+            "stats": {
+              "decisions_logged": 0,
+              "events": 40,
+              "events_with_candidates": 17,
+              "handovers": 0,
+              "ids_after": 40,
+              "ids_before": 40,
+              "reject_center_dist": 0,
+              "reject_cost": 17,
+              "reject_key_margin": 0,
+              "reject_key_sim": 0,
+              "reject_margin": 0,
+              "reject_min_head": 8,
+              "reject_no_head": 11,
+              "reject_pollution": 0,
+              "requeries": 0
+            }
+          }
+        ],
+        "MOT17-10-SDP": [
+          {
+            "accepted_links": 28,
+            "diagnostics": {
+              "accepted": 28,
+              "component_count": 18,
+              "has_embedding": 126,
+              "no_embedding": 23,
+              "reject_component_overlap": 17,
+              "reject_cost": 7748,
+              "reject_same_component": 4,
+              "reject_temporal": 78
+            },
+            "n_input_ids": 149,
+            "n_output_ids": 121,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 121,
+              "ids_before": 149,
+              "merges": 28
+            }
+          },
+          {
+            "accepted_links": 2,
+            "diagnostics": {
+              "events": 121,
+              "events_with_candidates": 38,
+              "handovers": 2,
+              "ids_after": 119,
+              "ids_before": 121,
+              "reject_cost": 36,
+              "reject_margin": 0,
+              "reject_min_head": 28,
+              "reject_no_head": 35
+            },
+            "n_input_ids": 121,
+            "n_output_ids": 119,
+            "stage": "handover",
+            "stage_index": 1,
+            "stats": {
+              "decisions_logged": 0,
+              "events": 121,
+              "events_with_candidates": 38,
+              "handovers": 2,
+              "ids_after": 119,
+              "ids_before": 121,
+              "reject_center_dist": 0,
+              "reject_cost": 36,
+              "reject_key_margin": 0,
+              "reject_key_sim": 0,
+              "reject_margin": 0,
+              "reject_min_head": 28,
+              "reject_no_head": 35,
+              "reject_pollution": 0,
+              "requeries": 0
+            }
+          }
+        ],
+        "MOT17-11-SDP": [
+          {
+            "accepted_links": 3,
+            "diagnostics": {
+              "accepted": 3,
+              "component_count": 3,
+              "has_embedding": 75,
+              "no_embedding": 17,
+              "reject_component_overlap": 1,
+              "reject_cost": 2756,
+              "reject_same_component": 0,
+              "reject_temporal": 15
+            },
+            "n_input_ids": 92,
+            "n_output_ids": 89,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 89,
+              "ids_before": 92,
+              "merges": 3
+            }
+          },
+          {
+            "accepted_links": 1,
+            "diagnostics": {
+              "events": 89,
+              "events_with_candidates": 25,
+              "handovers": 1,
+              "ids_after": 88,
+              "ids_before": 89,
+              "reject_cost": 24,
+              "reject_margin": 0,
+              "reject_min_head": 10,
+              "reject_no_head": 38
+            },
+            "n_input_ids": 89,
+            "n_output_ids": 88,
+            "stage": "handover",
+            "stage_index": 1,
+            "stats": {
+              "decisions_logged": 0,
+              "events": 89,
+              "events_with_candidates": 25,
+              "handovers": 1,
+              "ids_after": 88,
+              "ids_before": 89,
+              "reject_center_dist": 0,
+              "reject_cost": 24,
+              "reject_key_margin": 0,
+              "reject_key_sim": 0,
+              "reject_margin": 0,
+              "reject_min_head": 10,
+              "reject_no_head": 38,
+              "reject_pollution": 0,
+              "requeries": 0
+            }
+          }
+        ],
+        "MOT17-13-SDP": [
+          {
+            "accepted_links": 10,
+            "diagnostics": {
+              "accepted": 10,
+              "component_count": 8,
+              "has_embedding": 124,
+              "no_embedding": 11,
+              "reject_component_overlap": 2,
+              "reject_cost": 7578,
+              "reject_same_component": 0,
+              "reject_temporal": 36
+            },
+            "n_input_ids": 135,
+            "n_output_ids": 125,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 125,
+              "ids_before": 135,
+              "merges": 10
+            }
+          },
+          {
+            "accepted_links": 6,
+            "diagnostics": {
+              "events": 125,
+              "events_with_candidates": 67,
+              "handovers": 6,
+              "ids_after": 119,
+              "ids_before": 125,
+              "reject_cost": 59,
+              "reject_margin": 2,
+              "reject_min_head": 13,
+              "reject_no_head": 24
+            },
+            "n_input_ids": 125,
+            "n_output_ids": 119,
+            "stage": "handover",
+            "stage_index": 1,
+            "stats": {
+              "decisions_logged": 0,
+              "events": 125,
+              "events_with_candidates": 67,
+              "handovers": 6,
+              "ids_after": 119,
+              "ids_before": 125,
+              "reject_center_dist": 0,
+              "reject_cost": 59,
+              "reject_key_margin": 0,
+              "reject_key_sim": 0,
+              "reject_margin": 2,
+              "reject_min_head": 13,
+              "reject_no_head": 24,
+              "reject_pollution": 0,
+              "requeries": 0
+            }
+          }
+        ]
+      },
+      "stage_order": [
+        "merge",
+        "handover"
+      ],
+      "stages": {
+        "accepted_links": 104,
+        "per_stage": {
+          "handover": {
+            "accepted_links": 19,
+            "component_count": 0,
+            "events": 719,
+            "handovers": 19,
+            "merges": 0,
+            "no_embedding": 0,
+            "reject_component_overlap": 0,
+            "reject_cost": 246,
+            "reject_same_component": 0,
+            "reject_temporal": 0
+          },
+          "merge": {
+            "accepted_links": 85,
+            "component_count": 62,
+            "events": 0,
+            "handovers": 0,
+            "merges": 85,
+            "no_embedding": 124,
+            "reject_component_overlap": 33,
+            "reject_cost": 36005,
+            "reject_same_component": 6,
+            "reject_temporal": 235
+          }
+        },
+        "stage_order": [
+          "merge",
+          "handover"
+        ]
+      },
+      "tag": "merge_then_handover_r1"
+    },
+    {
+      "arm": "merge_then_handover",
+      "interpolation": {
+        "frames_added": 6765,
+        "gaps_filled": 1308,
+        "tracks_interpolated": 344
+      },
+      "metrics": {
+        "per_sequence": {
+          "MOT17-02-SDP": {
+            "IDF1": 61.908670102754336,
+            "IDs": 64,
+            "MOTA": 62.31096281147408
+          },
+          "MOT17-04-SDP": {
+            "IDF1": 93.03677161397452,
+            "IDs": 16,
+            "MOTA": 91.96332821666631
+          },
+          "MOT17-05-SDP": {
+            "IDF1": 70.3602406814097,
+            "IDs": 44,
+            "MOTA": 69.24967471447158
+          },
+          "MOT17-09-SDP": {
+            "IDF1": 67.99616081902528,
+            "IDs": 19,
+            "MOTA": 73.55868544600939
+          },
+          "MOT17-10-SDP": {
+            "IDF1": 76.99636657246668,
+            "IDs": 88,
+            "MOTA": 78.03567256016824
+          },
+          "MOT17-11-SDP": {
+            "IDF1": 79.08574002139278,
+            "IDs": 26,
+            "MOTA": 85.2585841458245
+          },
+          "MOT17-13-SDP": {
+            "IDF1": 77.50834651203655,
+            "IDs": 60,
+            "MOTA": 80.55316955849511
+          }
+        },
+        "printed": {
+          "AssA": "74.1%",
+          "DetA": "75.4%",
+          "FN": 17821,
+          "FP": 2697,
+          "HOTA": "74.7%",
+          "IDF1": "81.2%",
+          "IDs": 317,
+          "MOTA": "81.4%",
+          "Prcn": "97.2%",
+          "Rcll": "84.1%"
+        },
+        "raw": {
+          "AssA": 74.12238206208809,
+          "DetA": 75.41059375003877,
+          "FN": 17821,
+          "FP": 2697,
+          "HOTA": 74.68057891770655,
+          "IDF1": 81.2364539074808,
+          "IDs": 317,
+          "MOTA": 81.44652127839569,
+          "final_tracks": 700
+        }
+      },
+      "mot_sha256": {
+        "MOT17-02-SDP": "cd4c78621ac5ebcc12185d03904f0712b854a4f3d9e6599fdc862840009135f5",
+        "MOT17-04-SDP": "b9c01afe2a52664bbed65d13d57066bc142c41dcad05e465393f6f4551957014",
+        "MOT17-05-SDP": "f0fad6a8182dd39aa3d82b534896eb175e041e3ab8b4001b0b4be736397e4c42",
+        "MOT17-09-SDP": "ebbb20f557e1d494e4ce820827ff6d16b0a5845072e18a2d87ad644e31ae4242",
+        "MOT17-10-SDP": "a43b947c44a1d212951535941ee27a2362edeb6b42a1d5c807bc7b2f1482100e",
+        "MOT17-11-SDP": "eac770742323724ebbc9de62d0bfbaa1cc0883f6b20d42d8143d6cb581a0d36f",
+        "MOT17-13-SDP": "1aecc74101e173810aa798c0b870263bc69171bdda96041176e016aa753c1678"
+      },
+      "output_dir": "/home/ray/developer/ai/saccade/results/olr_reval_20260912/arms/merge_then_handover_r2",
+      "repeat_index": 2,
+      "seq_stage_records": {
+        "MOT17-02-SDP": [
+          {
+            "accepted_links": 11,
+            "diagnostics": {
+              "accepted": 11,
+              "component_count": 10,
+              "has_embedding": 93,
+              "no_embedding": 27,
+              "reject_component_overlap": 1,
+              "reject_cost": 4244,
+              "reject_same_component": 0,
+              "reject_temporal": 22
+            },
+            "n_input_ids": 120,
+            "n_output_ids": 109,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 109,
+              "ids_before": 120,
+              "merges": 11
+            }
+          },
+          {
+            "accepted_links": 1,
+            "diagnostics": {
+              "events": 109,
+              "events_with_candidates": 34,
+              "handovers": 1,
+              "ids_after": 108,
+              "ids_before": 109,
+              "reject_cost": 33,
+              "reject_margin": 0,
+              "reject_min_head": 14,
+              "reject_no_head": 47
+            },
+            "n_input_ids": 109,
+            "n_output_ids": 108,
+            "stage": "handover",
+            "stage_index": 1,
+            "stats": {
+              "decisions_logged": 0,
+              "events": 109,
+              "events_with_candidates": 34,
+              "handovers": 1,
+              "ids_after": 108,
+              "ids_before": 109,
+              "reject_center_dist": 0,
+              "reject_cost": 33,
+              "reject_key_margin": 0,
+              "reject_key_sim": 0,
+              "reject_margin": 0,
+              "reject_min_head": 14,
+              "reject_no_head": 47,
+              "reject_pollution": 0,
+              "requeries": 0
+            }
+          }
+        ],
+        "MOT17-04-SDP": [
+          {
+            "accepted_links": 1,
+            "diagnostics": {
+              "accepted": 1,
+              "component_count": 1,
+              "has_embedding": 88,
+              "no_embedding": 9,
+              "reject_component_overlap": 0,
+              "reject_cost": 3809,
+              "reject_same_component": 0,
+              "reject_temporal": 18
+            },
+            "n_input_ids": 97,
+            "n_output_ids": 96,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 96,
+              "ids_before": 97,
+              "merges": 1
+            }
+          },
+          {
+            "accepted_links": 4,
+            "diagnostics": {
+              "events": 96,
+              "events_with_candidates": 28,
+              "handovers": 4,
+              "ids_after": 92,
+              "ids_before": 96,
+              "reject_cost": 24,
+              "reject_margin": 0,
+              "reject_min_head": 5,
+              "reject_no_head": 20
+            },
+            "n_input_ids": 96,
+            "n_output_ids": 92,
+            "stage": "handover",
+            "stage_index": 1,
+            "stats": {
+              "decisions_logged": 0,
+              "events": 96,
+              "events_with_candidates": 28,
+              "handovers": 4,
+              "ids_after": 92,
+              "ids_before": 96,
+              "reject_center_dist": 0,
+              "reject_cost": 24,
+              "reject_key_margin": 0,
+              "reject_key_sim": 0,
+              "reject_margin": 0,
+              "reject_min_head": 5,
+              "reject_no_head": 20,
+              "reject_pollution": 0,
+              "requeries": 0
+            }
+          }
+        ],
+        "MOT17-05-SDP": [
+          {
+            "accepted_links": 30,
+            "diagnostics": {
+              "accepted": 30,
+              "component_count": 20,
+              "has_embedding": 137,
+              "no_embedding": 32,
+              "reject_component_overlap": 12,
+              "reject_cost": 9209,
+              "reject_same_component": 2,
+              "reject_temporal": 63
+            },
+            "n_input_ids": 169,
+            "n_output_ids": 139,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 139,
+              "ids_before": 169,
+              "merges": 30
+            }
+          },
+          {
+            "accepted_links": 5,
+            "diagnostics": {
+              "events": 139,
+              "events_with_candidates": 58,
+              "handovers": 5,
+              "ids_after": 134,
+              "ids_before": 139,
+              "reject_cost": 53,
+              "reject_margin": 0,
+              "reject_min_head": 25,
+              "reject_no_head": 47
+            },
+            "n_input_ids": 139,
+            "n_output_ids": 134,
+            "stage": "handover",
+            "stage_index": 1,
+            "stats": {
+              "decisions_logged": 0,
+              "events": 139,
+              "events_with_candidates": 58,
+              "handovers": 5,
+              "ids_after": 134,
+              "ids_before": 139,
+              "reject_center_dist": 0,
+              "reject_cost": 53,
+              "reject_key_margin": 0,
+              "reject_key_sim": 0,
+              "reject_margin": 0,
+              "reject_min_head": 25,
+              "reject_no_head": 47,
+              "reject_pollution": 0,
+              "requeries": 0
+            }
+          }
+        ],
+        "MOT17-09-SDP": [
+          {
+            "accepted_links": 2,
+            "diagnostics": {
+              "accepted": 2,
+              "component_count": 2,
+              "has_embedding": 37,
+              "no_embedding": 5,
+              "reject_component_overlap": 0,
+              "reject_cost": 661,
+              "reject_same_component": 0,
+              "reject_temporal": 3
+            },
+            "n_input_ids": 42,
+            "n_output_ids": 40,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 40,
+              "ids_before": 42,
+              "merges": 2
+            }
+          },
+          {
+            "accepted_links": 0,
+            "diagnostics": {
+              "events": 40,
+              "events_with_candidates": 17,
+              "handovers": 0,
+              "ids_after": 40,
+              "ids_before": 40,
+              "reject_cost": 17,
+              "reject_margin": 0,
+              "reject_min_head": 8,
+              "reject_no_head": 11
+            },
+            "n_input_ids": 40,
+            "n_output_ids": 40,
+            "stage": "handover",
+            "stage_index": 1,
+            "stats": {
+              "decisions_logged": 0,
+              "events": 40,
+              "events_with_candidates": 17,
+              "handovers": 0,
+              "ids_after": 40,
+              "ids_before": 40,
+              "reject_center_dist": 0,
+              "reject_cost": 17,
+              "reject_key_margin": 0,
+              "reject_key_sim": 0,
+              "reject_margin": 0,
+              "reject_min_head": 8,
+              "reject_no_head": 11,
+              "reject_pollution": 0,
+              "requeries": 0
+            }
+          }
+        ],
+        "MOT17-10-SDP": [
+          {
+            "accepted_links": 28,
+            "diagnostics": {
+              "accepted": 28,
+              "component_count": 18,
+              "has_embedding": 126,
+              "no_embedding": 23,
+              "reject_component_overlap": 17,
+              "reject_cost": 7748,
+              "reject_same_component": 4,
+              "reject_temporal": 78
+            },
+            "n_input_ids": 149,
+            "n_output_ids": 121,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 121,
+              "ids_before": 149,
+              "merges": 28
+            }
+          },
+          {
+            "accepted_links": 2,
+            "diagnostics": {
+              "events": 121,
+              "events_with_candidates": 38,
+              "handovers": 2,
+              "ids_after": 119,
+              "ids_before": 121,
+              "reject_cost": 36,
+              "reject_margin": 0,
+              "reject_min_head": 28,
+              "reject_no_head": 35
+            },
+            "n_input_ids": 121,
+            "n_output_ids": 119,
+            "stage": "handover",
+            "stage_index": 1,
+            "stats": {
+              "decisions_logged": 0,
+              "events": 121,
+              "events_with_candidates": 38,
+              "handovers": 2,
+              "ids_after": 119,
+              "ids_before": 121,
+              "reject_center_dist": 0,
+              "reject_cost": 36,
+              "reject_key_margin": 0,
+              "reject_key_sim": 0,
+              "reject_margin": 0,
+              "reject_min_head": 28,
+              "reject_no_head": 35,
+              "reject_pollution": 0,
+              "requeries": 0
+            }
+          }
+        ],
+        "MOT17-11-SDP": [
+          {
+            "accepted_links": 3,
+            "diagnostics": {
+              "accepted": 3,
+              "component_count": 3,
+              "has_embedding": 75,
+              "no_embedding": 17,
+              "reject_component_overlap": 1,
+              "reject_cost": 2756,
+              "reject_same_component": 0,
+              "reject_temporal": 15
+            },
+            "n_input_ids": 92,
+            "n_output_ids": 89,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 89,
+              "ids_before": 92,
+              "merges": 3
+            }
+          },
+          {
+            "accepted_links": 1,
+            "diagnostics": {
+              "events": 89,
+              "events_with_candidates": 25,
+              "handovers": 1,
+              "ids_after": 88,
+              "ids_before": 89,
+              "reject_cost": 24,
+              "reject_margin": 0,
+              "reject_min_head": 10,
+              "reject_no_head": 38
+            },
+            "n_input_ids": 89,
+            "n_output_ids": 88,
+            "stage": "handover",
+            "stage_index": 1,
+            "stats": {
+              "decisions_logged": 0,
+              "events": 89,
+              "events_with_candidates": 25,
+              "handovers": 1,
+              "ids_after": 88,
+              "ids_before": 89,
+              "reject_center_dist": 0,
+              "reject_cost": 24,
+              "reject_key_margin": 0,
+              "reject_key_sim": 0,
+              "reject_margin": 0,
+              "reject_min_head": 10,
+              "reject_no_head": 38,
+              "reject_pollution": 0,
+              "requeries": 0
+            }
+          }
+        ],
+        "MOT17-13-SDP": [
+          {
+            "accepted_links": 10,
+            "diagnostics": {
+              "accepted": 10,
+              "component_count": 8,
+              "has_embedding": 124,
+              "no_embedding": 11,
+              "reject_component_overlap": 2,
+              "reject_cost": 7578,
+              "reject_same_component": 0,
+              "reject_temporal": 36
+            },
+            "n_input_ids": 135,
+            "n_output_ids": 125,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 125,
+              "ids_before": 135,
+              "merges": 10
+            }
+          },
+          {
+            "accepted_links": 6,
+            "diagnostics": {
+              "events": 125,
+              "events_with_candidates": 67,
+              "handovers": 6,
+              "ids_after": 119,
+              "ids_before": 125,
+              "reject_cost": 59,
+              "reject_margin": 2,
+              "reject_min_head": 13,
+              "reject_no_head": 24
+            },
+            "n_input_ids": 125,
+            "n_output_ids": 119,
+            "stage": "handover",
+            "stage_index": 1,
+            "stats": {
+              "decisions_logged": 0,
+              "events": 125,
+              "events_with_candidates": 67,
+              "handovers": 6,
+              "ids_after": 119,
+              "ids_before": 125,
+              "reject_center_dist": 0,
+              "reject_cost": 59,
+              "reject_key_margin": 0,
+              "reject_key_sim": 0,
+              "reject_margin": 2,
+              "reject_min_head": 13,
+              "reject_no_head": 24,
+              "reject_pollution": 0,
+              "requeries": 0
+            }
+          }
+        ]
+      },
+      "stage_order": [
+        "merge",
+        "handover"
+      ],
+      "stages": {
+        "accepted_links": 104,
+        "per_stage": {
+          "handover": {
+            "accepted_links": 19,
+            "component_count": 0,
+            "events": 719,
+            "handovers": 19,
+            "merges": 0,
+            "no_embedding": 0,
+            "reject_component_overlap": 0,
+            "reject_cost": 246,
+            "reject_same_component": 0,
+            "reject_temporal": 0
+          },
+          "merge": {
+            "accepted_links": 85,
+            "component_count": 62,
+            "events": 0,
+            "handovers": 0,
+            "merges": 85,
+            "no_embedding": 124,
+            "reject_component_overlap": 33,
+            "reject_cost": 36005,
+            "reject_same_component": 6,
+            "reject_temporal": 235
+          }
+        },
+        "stage_order": [
+          "merge",
+          "handover"
+        ]
+      },
+      "tag": "merge_then_handover_r2"
+    }
+  ],
+  "schema": "output_layer_repair_chaining_revalidation/v1",
+  "table_markdown": "| arm | IDF1 | MOTA | HOTA | AssA | IDs | final tracks | accepted links |\n| --- | ---: | ---: | ---: | ---: | --: | -----------: | -------------: |\n| base | 80.4 | 81.6 | 74.4 | 73.5 | 344 | 804 | 0 |\n| handover_only | 80.8 | 81.5 | 74.5 | 73.7 | 338 | 750 | 54 |\n| merge_only | 81.3 | 81.6 | 74.7 | 74.2 | 313 | 719 | 85 |\n| handover_then_merge | 81.1 | 81.4 | 74.6 | 73.9 | 323 | 704 | 100 |\n| merge_then_handover | 81.2 | 81.4 | 74.7 | 74.1 | 317 | 700 | 104 |",
+  "variation": {
+    "handover_then_merge": {
+      "AssA": {
+        "max": 73.93617584460891,
+        "min": 73.93617584460891,
+        "range": 0.0,
+        "values": [
+          73.93617584460891,
+          73.93617584460891,
+          73.93617584460891
+        ]
+      },
+      "HOTA": {
+        "max": 74.57673625343129,
+        "min": 74.57673625343129,
+        "range": 0.0,
+        "values": [
+          74.57673625343129,
+          74.57673625343129,
+          74.57673625343129
+        ]
+      },
+      "IDF1": {
+        "max": 81.08461755196966,
+        "min": 81.08461755196966,
+        "range": 0.0,
+        "values": [
+          81.08461755196966,
+          81.08461755196966,
+          81.08461755196966
+        ]
+      },
+      "IDs": {
+        "max": 323.0,
+        "min": 323.0,
+        "range": 0.0,
+        "values": [
+          323.0,
+          323.0,
+          323.0
+        ]
+      },
+      "MOTA": {
+        "max": 81.42247789344327,
+        "min": 81.42247789344327,
+        "range": 0.0,
+        "values": [
+          81.42247789344327,
+          81.42247789344327,
+          81.42247789344327
+        ]
+      },
+      "mot_files_identical": true,
+      "n": 3,
+      "repeat_kind": "within_process"
+    },
+    "merge_only": {
+      "AssA": {
+        "max": 74.17277404203861,
+        "min": 74.17277404203861,
+        "range": 0.0,
+        "values": [
+          74.17277404203861,
+          74.17277404203861,
+          74.17277404203861
+        ]
+      },
+      "HOTA": {
+        "max": 74.73741441653425,
+        "min": 74.73741441653425,
+        "range": 0.0,
+        "values": [
+          74.73741441653425,
+          74.73741441653425,
+          74.73741441653425
+        ]
+      },
+      "IDF1": {
+        "max": 81.27670148811515,
+        "min": 81.27670148811515,
+        "range": 0.0,
+        "values": [
+          81.27670148811515,
+          81.27670148811515,
+          81.27670148811515
+        ]
+      },
+      "IDs": {
+        "max": 313.0,
+        "min": 313.0,
+        "range": 0.0,
+        "values": [
+          313.0,
+          313.0,
+          313.0
+        ]
+      },
+      "MOTA": {
+        "max": 81.55516175855098,
+        "min": 81.55516175855098,
+        "range": 0.0,
+        "values": [
+          81.55516175855098,
+          81.55516175855098,
+          81.55516175855098
+        ]
+      },
+      "mot_files_identical": true,
+      "n": 3,
+      "repeat_kind": "within_process"
+    },
+    "merge_then_handover": {
+      "AssA": {
+        "max": 74.12238206208809,
+        "min": 74.12238206208809,
+        "range": 0.0,
+        "values": [
+          74.12238206208809,
+          74.12238206208809,
+          74.12238206208809
+        ]
+      },
+      "HOTA": {
+        "max": 74.68057891770655,
+        "min": 74.68057891770655,
+        "range": 0.0,
+        "values": [
+          74.68057891770655,
+          74.68057891770655,
+          74.68057891770655
+        ]
+      },
+      "IDF1": {
+        "max": 81.2364539074808,
+        "min": 81.2364539074808,
+        "range": 0.0,
+        "values": [
+          81.2364539074808,
+          81.2364539074808,
+          81.2364539074808
+        ]
+      },
+      "IDs": {
+        "max": 317.0,
+        "min": 317.0,
+        "range": 0.0,
+        "values": [
+          317.0,
+          317.0,
+          317.0
+        ]
+      },
+      "MOTA": {
+        "max": 81.44652127839569,
+        "min": 81.44652127839569,
+        "range": 0.0,
+        "values": [
+          81.44652127839569,
+          81.44652127839569,
+          81.44652127839569
+        ]
+      },
+      "mot_files_identical": true,
+      "n": 3,
+      "repeat_kind": "within_process"
+    }
+  }
+}

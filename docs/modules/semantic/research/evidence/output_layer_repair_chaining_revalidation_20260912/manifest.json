@@ -1,0 +1,153 @@
+{
+  "arm_output_dirs": {
+    "base": "/home/ray/developer/ai/saccade/results/olr_reval_20260912/arms/base",
+    "handover_only": "/home/ray/developer/ai/saccade/results/olr_reval_20260912/arms/handover_only",
+    "handover_then_merge": "/home/ray/developer/ai/saccade/results/olr_reval_20260912/arms/handover_then_merge",
+    "handover_then_merge_r1": "/home/ray/developer/ai/saccade/results/olr_reval_20260912/arms/handover_then_merge_r1",
+    "handover_then_merge_r2": "/home/ray/developer/ai/saccade/results/olr_reval_20260912/arms/handover_then_merge_r2",
+    "merge_only": "/home/ray/developer/ai/saccade/results/olr_reval_20260912/arms/merge_only",
+    "merge_only_r1": "/home/ray/developer/ai/saccade/results/olr_reval_20260912/arms/merge_only_r1",
+    "merge_only_r2": "/home/ray/developer/ai/saccade/results/olr_reval_20260912/arms/merge_only_r2",
+    "merge_then_handover": "/home/ray/developer/ai/saccade/results/olr_reval_20260912/arms/merge_then_handover",
+    "merge_then_handover_r1": "/home/ray/developer/ai/saccade/results/olr_reval_20260912/arms/merge_then_handover_r1",
+    "merge_then_handover_r2": "/home/ray/developer/ai/saccade/results/olr_reval_20260912/arms/merge_then_handover_r2"
+  },
+  "commands": {
+    "replay": [
+      "scripts/eval/experiments/run_output_layer_repair_chaining.py",
+      "--substrate",
+      "results/olr_reval_20260912/substrate",
+      "--out",
+      "results/olr_reval_20260912",
+      "--artifact-dir",
+      "docs/modules/semantic/research/evidence/output_layer_repair_chaining_revalidation_20260912",
+      "--substrate-commit",
+      "85b95ac151bc7dd399ffc25fc83ac103c0e7321a",
+      "--expected-substrate-sha256",
+      "docs/modules/semantic/research/evidence/output_layer_repair_chaining_revalidation_20260912/substrate_sha256.json",
+      "--repeats",
+      "3",
+      "--repeat-arms",
+      "merge_only,handover_then_merge,merge_then_handover"
+    ],
+    "substrate_capture": [
+      "uv run python scripts/eval/mot17.py",
+      "--preset mamba_whole_graph_m",
+      "--detector SDP",
+      "--double-buffer",
+      "--no-gpu-decode",
+      "--no-interpolate-tracklets",
+      "--output /home/ray/developer/ai/saccade/results/olr_reval_20260912/substrate"
+    ]
+  },
+  "identity": {
+    "argv": [
+      "scripts/eval/experiments/run_output_layer_repair_chaining.py",
+      "--substrate",
+      "results/olr_reval_20260912/substrate",
+      "--out",
+      "results/olr_reval_20260912",
+      "--artifact-dir",
+      "docs/modules/semantic/research/evidence/output_layer_repair_chaining_revalidation_20260912",
+      "--substrate-commit",
+      "85b95ac151bc7dd399ffc25fc83ac103c0e7321a",
+      "--expected-substrate-sha256",
+      "docs/modules/semantic/research/evidence/output_layer_repair_chaining_revalidation_20260912/substrate_sha256.json",
+      "--repeats",
+      "3",
+      "--repeat-arms",
+      "merge_only,handover_then_merge,merge_then_handover"
+    ],
+    "dirty": false,
+    "harness": "scripts/eval/experiments/run_output_layer_repair_chaining.py",
+    "measured_at": "2026-09-12T08:51:10.716314+00:00",
+    "preset_contract": {
+      "cheb_gr_engine": "models/embedding/mobilenetv4_reid_visclean_224.engine",
+      "cheb_gr_model": "mobilenetv4_reid",
+      "decode": "cpu JPEG via --no-gpu-decode (substrate capture)",
+      "detector": "SDP",
+      "double_buffer": true,
+      "handover": {
+        "appearance_occlusion_cov": 0.4,
+        "bank_mode": "spread",
+        "bank_n": 0,
+        "cheb_lambda": 2.0,
+        "decide_n": 5,
+        "fuse_lambda": 0.3,
+        "k2": 6,
+        "margin": 0.05,
+        "max_cost": 0.45,
+        "max_fwd": 50,
+        "max_gap": 60,
+        "min_head_samples": 2,
+        "n_samples": 50,
+        "neighbor_iou_max": 0.0,
+        "pool_frac": 0.3
+      },
+      "interpolate_after_stages": true,
+      "interpolation": {
+        "max_gap": 35,
+        "min_h": 0.0,
+        "min_track_len": 5
+      },
+      "merge": {
+        "cheb_lambda": 2.0,
+        "fuse_lambda": 0.3,
+        "k2": 6,
+        "max_cost": 0.45,
+        "max_fwd": 50,
+        "max_gap": 60,
+        "min_overlap_frames": 1,
+        "n_samples": 50,
+        "pool_frac": 0.3
+      },
+      "preset": "mamba_whole_graph_m",
+      "reid_mode": "off",
+      "sequences": [
+        "MOT17-02-SDP",
+        "MOT17-04-SDP",
+        "MOT17-05-SDP",
+        "MOT17-09-SDP",
+        "MOT17-10-SDP",
+        "MOT17-11-SDP",
+        "MOT17-13-SDP"
+      ]
+    },
+    "repeat_kind": "within_process",
+    "replay_harness_commit": "7f7edcbeb3b78a3432a679011869b48e54471c57",
+    "runtime": {
+      "env": {
+        "SACCADE_DETECT_BARRIER": null,
+        "SACCADE_DOUBLE_BUFFER": null,
+        "SACCADE_GPU_DECODE": null,
+        "SACCADE_MAIN_NMS_GRAPHED": null,
+        "SACCADE_STREAM_MODE": null
+      },
+      "gpu": {
+        "capability": [
+          12,
+          0
+        ],
+        "cuda": "13.0",
+        "name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+        "torch": "2.11.0+cu130"
+      },
+      "host": "DESKTOP-0FLA6SQ",
+      "platform": "Linux-6.18.33.1-microsoft-standard-WSL2-x86_64-with-glibc2.44",
+      "python": "3.12.13"
+    },
+    "substrate": "/home/ray/developer/ai/saccade/results/olr_reval_20260912/substrate",
+    "substrate_commit": "85b95ac151bc7dd399ffc25fc83ac103c0e7321a",
+    "substrate_sha256": {
+      "MOT17-02-SDP": "312029468bcad19f639a3a10ab092234d6bf076edf78038ed1028930db32196c",
+      "MOT17-04-SDP": "b1a3d60bdcfd177902e692a0bd464e51519c6ee879ed9ba587d7007c550a2ae6",
+      "MOT17-05-SDP": "29f1aa0c10fb24c9e6c4259e0dd5fda41f332b1fa5131b30717731eb79bc1825",
+      "MOT17-09-SDP": "3a860f9dde52337efb228422b38798d42f25d341594f20b5b591349e2496fc33",
+      "MOT17-10-SDP": "30c96efe5f9b7d70f3868db7a0130238564966ba533eedb9bac061ec8fed32a7",
+      "MOT17-11-SDP": "40aa2383b026019e60eb23ca76ccd4a6043b4b0944dfcd216dab85ec94f6b45f",
+      "MOT17-13-SDP": "a918e4531ccaa8f7d3bd9cebb62aebd67986b66fb1076e217ca0733b1c077470"
+    }
+  },
+  "results": "/home/ray/developer/ai/saccade/docs/modules/semantic/research/evidence/output_layer_repair_chaining_revalidation_20260912/results.json",
+  "schema": "output_layer_repair_chaining_revalidation_manifest/v1"
+}
