@@ -19,14 +19,14 @@ import subprocess
 import sys
 from typing import Any, Sequence
 
+from saccade.paths import require_source_checkout, source_checkout_root
+
 from .decimal_hash import (
     CanonicalRecord,
     canonicalize_mot_lines,
     decimal_hash,
     record_as_dict,
 )
-
-ROOT = Path(__file__).resolve().parents[4]
 
 
 @dataclasses.dataclass(frozen=True)
@@ -51,10 +51,13 @@ class CellResult:
 
 
 def _git_commit() -> str | None:
+    root = source_checkout_root()
+    if root is None:
+        return None
     try:
         return subprocess.check_output(
             ["git", "rev-parse", "HEAD"],
-            cwd=ROOT,
+            cwd=root,
             text=True,
             stderr=subprocess.DEVNULL,
         ).strip()
@@ -63,11 +66,14 @@ def _git_commit() -> str | None:
 
 
 def _git_dirty() -> bool:
+    root = source_checkout_root()
+    if root is None:
+        return False
     try:
         return (
             subprocess.call(
                 ["git", "diff", "--quiet"],
-                cwd=ROOT,
+                cwd=root,
                 stderr=subprocess.DEVNULL,
             )
             != 0
@@ -246,8 +252,10 @@ def run_sequences(
     """
     import runpy
 
-    evaluator_script = str(ROOT / "scripts" / "eval" / "mot17.py")
-    eval_script_dir = str(ROOT / "scripts" / "eval")
+    # The evaluator entry point is a repository script, not a package module.
+    root = require_source_checkout("decimal-hash capture (runs scripts/eval/mot17.py)")
+    evaluator_script = str(root / "scripts" / "eval" / "mot17.py")
+    eval_script_dir = str(root / "scripts" / "eval")
 
     captured: list[tuple[str, tuple[str, ...]]] = []
 

@@ -29,6 +29,7 @@ from typing import Any, Mapping, Sequence, cast
 
 import numpy as np
 
+from saccade.paths import source_checkout_root
 from saccade.perception.eval.d_online_stage2 import (
     CANDIDATE_UNIVERSE_ID,
     SUBSTRATE_ID,
@@ -2071,7 +2072,12 @@ def run_stage2_q45_atlas(
         source = q1q3_study_dir / "d_online_events.csv"
     source_hash = _sha256_file(source) if source.is_file() else ""
     evaluator_src = Path(__file__).resolve()
-    runner_src = Path("scripts/tools/run_m_b1_5_stage2_q45_atlas.py").resolve()
+    # The runner is a repository script, so it is hashed from the checkout;
+    # outside one the manifest keeps the relative name and "" for the digest.
+    runner_src = Path("scripts/tools/run_m_b1_5_stage2_q45_atlas.py")
+    checkout = source_checkout_root()
+    if checkout is not None:
+        runner_src = checkout / runner_src
     evaluator_sha = _file_sha256_if_exists(evaluator_src)
     runner_sha = _file_sha256_if_exists(runner_src)
 

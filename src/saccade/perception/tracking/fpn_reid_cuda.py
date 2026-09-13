@@ -7,18 +7,20 @@ DimReduceHead.forward_boxes().
 
 from __future__ import annotations
 
-from pathlib import Path
 import sys
 
 import torch
 
-_project_root = Path(__file__).resolve().parents[4]
-_build_dir = _project_root / "build/cuda_reid"
+from saccade.paths import build_dir as _build_dir_contract
 
 _mod = None
 
-_so_path = _build_dir / "libfpn_reid_cuda.so"
-if _so_path.exists():
+# The sub-project (src/tracking/CMakeLists.txt) writes into <build>/cuda_reid.
+_build_dir = _build_dir_contract()
+_so_path = (
+    _build_dir / "cuda_reid" / "libfpn_reid_cuda.so" if _build_dir is not None else None
+)
+if _so_path is not None and _so_path.exists():
     try:
         import importlib.util
 

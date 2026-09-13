@@ -48,7 +48,7 @@ include/{perception,tracking,media,saccade,utils}/   對應 public headers
 
 | 路徑 | 實際職責 | 主要入口 | 命名例外 |
 |:--|:--|:--|:--|
-| [`perception/`](perception/) | TRT YOLO、Mamba gated detector、letterbox、ReID `FeatureExtractor` | [`perception_python.cpp`](perception/perception_python.cpp) → `saccade_perception_ext`；header [`../include/perception/`](../include/perception/) | `batched_mamba_detector.cpp` 的類名是 `BatchedBackbone`。`nv12_kernel.cu` / `rgb_to_nv12_kernel.cu` 有源碼，見 [§5](#5-易走錯的位置) |
+| [`perception/`](perception/) | TRT YOLO、Mamba gated detector、letterbox、ReID `FeatureExtractor` | [`perception_python.cpp`](perception/perception_python.cpp) → `saccade_perception_ext`；header [`../include/perception/`](../include/perception/) | `batched_mamba_detector.cpp` 的類名是 `BatchedBackbone`。`nv12_kernel.cu` / `rgb_to_nv12_kernel.cu` 有源碼，見 [§6](#6-易走錯的位置) |
 | [`tracking/`](tracking/) | `GPUByteTracker`、GMC、`PerceptionPipeline`（filter/NMS/crop）、C++ eval pool、relink gate、Mamba scan、ReID crop 環 | [`tracker_gpu.cu`](tracking/tracker_gpu.cu)、[`tracker_gpu_python.cpp`](tracking/tracker_gpu_python.cpp) → `saccade_tracking_ext`；[`eval_python.cpp`](tracking/eval_python.cpp) → `saccade_eval_ext`；header [`../include/tracking/`](../include/tracking/) | 目錄比「tracker」寬。子目錄 [`CMakeLists.txt`](tracking/CMakeLists.txt) 只編 FPN ReID，**不是** GPUByteTracker（那在根 [`CMakeLists.txt`](../CMakeLists.txt)） |
 | [`media/`](media/) | `GstClient`、GPU `BufferPool` | [`gst_client_python.cpp`](media/gst_client_python.cpp) → `saccade_media_ext`；header [`../include/media/`](../include/media/) | Python 預設 `SACCADE_MEDIA_USE_CPP=0`，C++ 路徑是 opt-in |
 | [`main.cpp`](main.cpp) | Gst + `TRTEngine` + `Preprocessor` 的 demo node | CMake `saccade_node` | 未接 tracker；不是 MOT 或工業主入口 |
@@ -157,7 +157,21 @@ saccade_node   ← src/main.cpp（感知節點，未接 tracker）
 
 ---
 
-## 5. 易走錯的位置
+## 5. 執行期路徑契約（`saccade/paths.py`）
+
+套件在執行期讀到的路徑只有三類，每類只有一種找法；**除了 `saccade/paths.py`，套件內不得從模組位置反推 repository root**（`Path(__file__).parents[4]`、`.parent.parent…`、`Path.cwd()`、`third_party` 字串都由 `tests/contract/test_package_runtime_paths.py` 擋下）。
+
+| 類別 | 例子 | 找法 |
+|:--|:--|:--|
+| 套件自有 | `perception/eval/_cuda/` 的 replay helper | 該模組自己的 `Path(__file__).resolve().parent`；不經 resolver |
+| 外部執行期輸入 | engine / checkpoint / dataset / output dir、`MambaGatedDetector(cpp_backbone_engine=, cpp_mamba_head_script=)` | 明確參數；相對路徑以 **cwd** 為準（同 CLI flag），`paths.runtime_input()` 只是把這個慣例寫成一處。`models/...`、`datasets/...` 這類預設值屬此類 |
+| repository 提供 | native build 產物、`third_party/TrackEval`、research provenance 要 hash 的 `src/tracking/tracker_gpu.cu`、`scripts/eval/mot17.py` | `paths.build_dir()`：`SACCADE_BUILD_PATH` → checkout `build/` → `None`；`paths.trackeval_root()`：`SACCADE_TRACKEVAL_ROOT` → checkout `third_party/TrackEval` → `None`（再由 `import trackeval` 決定）；`paths.source_checkout_root()`：只有 `<root>/src/saccade` 且 `<root>/pyproject.toml` 存在才算 checkout，否則 `None`；需要 checkout 的操作用 `require_source_checkout()` 直接報 `SourceCheckoutRequired` |
+
+`build/` 的註冊方式不變：`scripts/native/rebuild.sh` 寫 `saccade_build.pth`，extension 走一般 `import`；`paths.build_dir()` 只在 import 失敗、載 TRT scan plugin、載 `cuda_reid/libfpn_reid_cuda.so` 時才被問。明確給的 `SACCADE_BUILD_PATH` 就算不存在也照用——指錯的地方要看得到，不會退回猜測。
+
+---
+
+## 6. 易走錯的位置
 
 - **`temporal_yolo/`** — 現行檢測是 `mamba_gated_detector.py`。套件表面仍是舊 Hybrid。
 - **`saccade/pipeline/`** — 只有 `health.py`。幀循環在 `eval/evaluator.py`；C++ 後處理是 `include/tracking/pipeline.hpp` 的 `PerceptionPipeline`；`eval/pipeline.py` 是序列狀態袋。
@@ -171,7 +185,7 @@ saccade_node   ← src/main.cpp（感知節點，未接 tracker）
 
 ---
 
-## 6. 深入文件
+## 7. 深入文件
 
 | 問題 | 文件 |
 |:--|:--|

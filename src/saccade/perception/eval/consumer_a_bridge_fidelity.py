@@ -43,6 +43,8 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Final, Sequence
 
+from saccade.paths import source_checkout_root
+
 # ── Float32 / FMA host helpers ───────────────────────────────────────────────
 
 
@@ -89,9 +91,14 @@ _DEVICE_SRC_PATH: Final[Path] = _EVAL_DIR / "_cuda" / "r1_bridge_replay.cu"
 _DEVICE_BUILD_META_PATH: Final[Path] = (
     _EVAL_DIR / "_cuda" / "libr1_bridge_replay.build.json"
 )
-_PRODUCTION_TRACKER_PATH: Final[Path] = (
-    _EVAL_DIR.parents[2] / "tracking" / "tracker_gpu.cu"
-)  # src/tracking/tracker_gpu.cu
+_PRODUCTION_TRACKER_REL: Final[str] = "src/tracking/tracker_gpu.cu"
+
+
+def _production_tracker_path() -> Path | None:
+    """The CUDA source this module transcribes; a checkout-only provenance input."""
+    root = source_checkout_root()
+    return None if root is None else root / _PRODUCTION_TRACKER_REL
+
 
 # Programmatic override for tests / authority verifier. None → read env.
 _REQUIRE_DEVICE_OVERRIDE: bool | None = None
@@ -115,8 +122,8 @@ def require_device_replay() -> bool:
     }
 
 
-def _sha256_file(path: Path) -> str | None:
-    if not path.is_file():
+def _sha256_file(path: Path | None) -> str | None:
+    if path is None or not path.is_file():
         return None
     digest = hashlib.sha256()
     with path.open("rb") as stream:
@@ -249,8 +256,8 @@ def replay_backend_provenance() -> dict[str, Any]:
         "gpu_name": gpu["gpu_name"],
         "gpu_compute_capability": gpu["gpu_compute_capability"],
         "cuda_runtime_available": gpu["cuda_runtime_available"],
-        "production_tracker_source_path": "src/tracking/tracker_gpu.cu",
-        "production_tracker_source_sha256": _sha256_file(_PRODUCTION_TRACKER_PATH),
+        "production_tracker_source_path": _PRODUCTION_TRACKER_REL,
+        "production_tracker_source_sha256": _sha256_file(_production_tracker_path()),
     }
 
 

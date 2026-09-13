@@ -13,6 +13,9 @@ import torch
 
 from typing import Any
 
+from saccade.paths import runtime_input as _runtime_input
+from saccade.paths import source_checkout_root as _source_checkout_root
+
 from .quality import (
     compute_detection_quality_batch as _compute_detection_quality_batch,
 )
@@ -2147,9 +2150,7 @@ def run_eval(
         fpn_reid_ckpt = kwargs.get("fpn_reid_ckpt", "")
         if reid_model == "fpn_trained" and fpn_reid_ckpt:
             _fpn_reid_dim = 128
-            ckpt_path = Path(fpn_reid_ckpt)
-            if not ckpt_path.is_absolute():
-                ckpt_path = Path.cwd() / ckpt_path
+            ckpt_path = _runtime_input(fpn_reid_ckpt)
             _ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
             in_channels = _ckpt.get("in_channels", [128, 256, 512])
             _fpn_reid_conv_weights = [
@@ -2804,14 +2805,18 @@ def run_eval(
                     "bridge-fidelity capture was enabled but the tracker cannot drain it"
                 )
             _d0_capture = _d0_drain(seq=seq)
-            try:
-                _d0_commit = subprocess.check_output(
-                    ["git", "rev-parse", "HEAD"],
-                    cwd=Path(__file__).resolve().parents[4],
-                    text=True,
-                ).strip()
-            except (OSError, subprocess.CalledProcessError):
-                _d0_commit = "unknown"
+            # Provenance of the source that ran: only a checkout has a commit.
+            _d0_commit = "unknown"
+            _d0_checkout = _source_checkout_root()
+            if _d0_checkout is not None:
+                try:
+                    _d0_commit = subprocess.check_output(
+                        ["git", "rev-parse", "HEAD"],
+                        cwd=_d0_checkout,
+                        text=True,
+                    ).strip()
+                except (OSError, subprocess.CalledProcessError):
+                    pass
             _d0_capture["provenance"] = {
                 # D0's sealed packet remains on its frozen contract. R1 uses
                 # the same observation buffer but emits a separate versioned
