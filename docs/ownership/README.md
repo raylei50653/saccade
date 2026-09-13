@@ -68,7 +68,7 @@ has **one primary job**, explicit secondaries, and a clear **should-not-own** li
 
 ---
 
-## Module doc question map (#368, Phase 1)
+## Module doc question map (#368)
 
 - [module_doc_question_protocol.md](module_doc_question_protocol.md) is the pinned
   execution authority for the Phase 1 classification of `docs/modules/`: map each
@@ -79,6 +79,10 @@ has **one primary job**, explicit secondaries, and a clear **should-not-own** li
   lifecycle marker, knowledge-domain classification, anchored confidence, unresolved
   questions). It is drained and deleted once Phase 2 promotes it; it is not a reading
   surface and not a fourth archive.
+- [module_doc_question_phase2_activation_boundary.md](module_doc_question_phase2_activation_boundary.md)
+  is the **gate**, not an authorization: the seven preconditions a Phase 2 activation
+  must satisfy, what activation then permits, and what it still does not. Whether any
+  unit is active is owned by [`docs/TODO.md`](../TODO.md), not by that file.
 
 ---
 
