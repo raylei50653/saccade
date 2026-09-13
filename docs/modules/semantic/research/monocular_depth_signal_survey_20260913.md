@@ -15,13 +15,15 @@
   depth (single-frame or trend-fit) is far weaker than the existing pixel-geometry
   features it would compete with, and naive fusion measurably *hurts* both tested
   baselines. Not attributed to a fixed cause; see §4.
-- **ReID/appearance embedding — architecturally rejected, not tested end-to-end.**
-  Concatenating depth into the identity feature vector contradicts what an
-  identity embedding is for; see §5.
+- **Direct depth concatenation into the ReID/appearance embedding —
+  architecturally rejected, not tested end-to-end.** Concatenating depth into
+  the normalized identity feature vector contradicts what that embedding is
+  trained to represent; see §5. Other multimodal interactions remain untested.
 - **Static per-camera neural calibration for relink — NO-GO for the tested
-  design.** The depth surfaces are stable, but a cheap position-to-scale surface
-  duplicates every runtime-identifiable tie-break decision; see §6. Other
-  non-relink uses of a calibrated scene map remain untested.
+  design.** The depth surfaces are stable, but for the exploratory top-two rule
+  at margins 0.10/0.20/0.30, the cheap position-to-scale surface duplicates
+  every candidate decision in the activated groups; see §6. Other non-relink
+  uses of a calibrated scene map remain untested.
 
 Full scripts, CSVs, MANIFEST (env/provenance) and heatmap renders:
 [`results/analysis/depth_signal_probe_20260913/`](../../../../results/analysis/depth_signal_probe_20260913/)
@@ -39,10 +41,11 @@ is **not** available on that path; every measurement here used the stock
 `yolo26n-depth.pt` checkpoint in an isolated venv (`ultralytics==8.4.150`,
 `torch==2.14.0`), never the project's pinned `.venv` or its CUDA graph.
 
-Domain-transfer sanity check passed before any signal claim: on MOT17-02-SDP f100,
-five GT boxes' patch-median depth ordered **exactly** by box height (356px→7.07m
-… 110px→17.54m) — the model transfers to this outdoor CCTV domain well enough to
-probe further.
+A basic monotonic sanity check passed before any signal claim: on
+MOT17-02-SDP f100, five GT boxes' patch-median depth ordered **exactly** by box
+height (356px→7.07m … 110px→17.54m). This single-frame, five-box check only
+supported proceeding with the broader probe; it did not establish domain
+transfer by itself.
 
 ## 1. Method
 
@@ -130,7 +133,7 @@ attempts, two measured regressions — treat additive fusion of this signal as a
 closed door pending a non-additive design (e.g. gated only inside the
 `dist_h`/`bridge_dist` ambiguous band), not attempt a third fusion this way.
 
-## 5. Why depth does not belong in the ReID/appearance vector
+## 5. Why direct depth concatenation does not belong in the ReID/appearance vector
 
 Considered and rejected without a production run: `cheb_gr.py` states all
 input features are assumed L2-normalized, and the whole re-ranking machinery
@@ -160,8 +163,8 @@ sidestepping the real-time-budget objection to §2/§4 entirely, since it is not
 a live per-frame inference cost.
 
 Tested whether the neural depth is doing real geometric work here, or is
-redundant with a naive `box height ↔ image position` regression a static
-calibration could get for free. 4 sequences (different camera geometries), 40
+redundant with a cheap `box height ↔ image position` control using the same
+GT-assisted calibration data. 4 sequences (different camera geometries), 40
 sampled frames each, clean GT boxes only (`class==1`, `conf==1`, `vis≥0.8`),
 regressed `log(neural_depth)` on `log(h)` alone, then `+foot_y`, then `+foot_x`
 (`scripts/scene_geometry.py`):

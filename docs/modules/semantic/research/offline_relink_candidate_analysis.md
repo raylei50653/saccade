@@ -64,7 +64,7 @@ first, then follow out.
 | **Cheb-GR offline handover signal map** | [`chebgr_handover_signal_map_20260704.md`](chebgr_handover_signal_map_20260704.md) | post-hoc ID cleanup frontier (`best_cost`) | GO offline; live claims #56 NO-GO |
 | **CleanFifoBank substrate** | [`clean_fifo_bank_substrate_20260704.md`](clean_fifo_bank_substrate_20260704.md) | shared bank API + hard constraints | reusable substrate; async C++ parked |
 | **#55 occ-exit audit** | [`occ_exit_audit_p55/`](../../../experiments/occ_exit_audit_p55/README.md) (WP1–WP3) | post-exit identity cut / seq conditioning | WP3 net harm; promotion `split_feat_pr` only |
-| **Monocular depth (YOLO26-depth) signal survey** | [`monocular_depth_signal_survey_20260913.md`](monocular_depth_signal_survey_20260913.md) | neural per-box depth plus foreground-masked static-camera calibration vs cheap geometry; single-frame + trend-fit; ReID-vector fit | NO-GO for all tested relink uses; static neural map decisions duplicated by cheap camera-scale surface |
+| **Monocular depth (YOLO26-depth) signal survey** | [`monocular_depth_signal_survey_20260913.md`](monocular_depth_signal_survey_20260913.md) | neural per-box depth plus foreground-masked static-camera calibration vs cheap geometry; single-frame + trend-fit; direct ReID-vector concatenation | NO-GO for tested relink fusions and calibration rule; top-two decisions at margins 0.10/0.20/0.30 duplicated by the same-data cheap control |
 
 > The §3–§6 base-rate ceiling is specific to **bridge-relink / velocity-direction**, *not* a
 > universal wall on the crossing-swap door — the depth-ordering channel cracks it (§8 + its
