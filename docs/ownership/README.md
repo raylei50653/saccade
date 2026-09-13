@@ -68,6 +68,15 @@ has **one primary job**, explicit secondaries, and a clear **should-not-own** li
 
 ---
 
+## Module doc question map (#368, Phase 1)
+
+- [module_doc_question_protocol.md](module_doc_question_protocol.md) is the pinned
+  execution authority for the Phase 1 classification of `docs/modules/`: map each
+  in-scope document to the durable question it answers, without synthesizing the
+  subsystem's current answer.
+
+---
+
 ## O1 completion definition
 
 - [x] Objective types defined  
