@@ -87,7 +87,16 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
-packages = {find = {where = ["src"]}}
+
+# src/ also holds the C++/CUDA sources (src/{media,perception,tracking}) and,
+# under the package, path-loaded research artefacts (perception/eval/_cuda) and
+# runtime data (storage/chroma_db). With pyproject-style discovery setuptools
+# defaults to namespaces = true and would ship all of those as packages, so
+# discovery is pinned to regular packages rooted at `saccade`.
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["saccade", "saccade.*"]
+namespaces = false
 
 [tool.uv]
 override-dependencies = [
