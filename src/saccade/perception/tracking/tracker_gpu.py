@@ -2,18 +2,19 @@ import torch
 import torch.nn.functional as F
 import numpy as np
 from dataclasses import dataclass
-from pathlib import Path
 import sys
 from typing import List, Any, cast, Optional, TypedDict, Callable
 import uuid
+from saccade.paths import build_dir as _build_dir_contract
 from saccade.perception.box_ops import box_iou
 from saccade.perception.eval.cuda_capture import graphed_callables
 
 try:
     from saccade_tracking_ext import GPUByteTracker as CppGPUByteTracker, TrackResult
 except ImportError:
-    _build_dir = Path(__file__).resolve().parents[4] / "build"
-    if _build_dir.exists():
+    # Not on sys.path (no saccade_build.pth): try the declared build directory.
+    _build_dir = _build_dir_contract()
+    if _build_dir is not None and _build_dir.exists():
         sys.path.insert(0, str(_build_dir))
     try:
         from saccade_tracking_ext import (

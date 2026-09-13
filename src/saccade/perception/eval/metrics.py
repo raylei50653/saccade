@@ -6,6 +6,8 @@ from pathlib import Path
 from collections import OrderedDict
 from typing import Any, Iterable, Sequence, TypedDict
 import numpy as np
+from saccade.paths import TRACKEVAL_ROOT_ENV
+from saccade.paths import trackeval_root as _trackeval_root
 from saccade.perception.box_ops import box_iou
 
 
@@ -240,15 +242,6 @@ def _ensure_numpy_legacy_aliases() -> None:
             setattr(np, name, target)
 
 
-def _find_trackeval_root() -> Path | None:
-    """Locate the vendored third_party/TrackEval by walking up from this file."""
-    for parent in Path(__file__).resolve().parents:
-        candidate = parent / "third_party" / "TrackEval"
-        if (candidate / "trackeval").is_dir():
-            return candidate
-    return None
-
-
 def _calculate_hota(
     data_root: str,
     split: str,
@@ -269,23 +262,19 @@ def _calculate_hota(
     """
     import sys
 
-    trackeval_root = _find_trackeval_root()
-    if trackeval_root is None:
-        print(
-            "[metrics] TrackEval not found; skipping HOTA/DetA/AssA.",
-            file=sys.stderr,
-        )
-        return None
-
+    # SACCADE_TRACKEVAL_ROOT, else the checkout's third_party/TrackEval; None
+    # leaves an installed trackeval (if any) to the plain import below.
+    trackeval_root = _trackeval_root()
     _ensure_numpy_legacy_aliases()
-    if str(trackeval_root) not in sys.path:
+    if trackeval_root is not None and str(trackeval_root) not in sys.path:
         sys.path.insert(0, str(trackeval_root))
 
     try:
         import trackeval
     except Exception as exc:
         print(
-            f"[metrics] TrackEval import failed; skipping HOTA/DetA/AssA: {exc}",
+            "[metrics] TrackEval not importable; skipping HOTA/DetA/AssA "
+            f"(set {TRACKEVAL_ROOT_ENV} outside a checkout): {exc}",
             file=sys.stderr,
         )
         return None

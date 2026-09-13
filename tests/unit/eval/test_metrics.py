@@ -7,11 +7,11 @@
 import importlib
 import sys
 
-from saccade.perception.eval.metrics import _find_trackeval_root
+from saccade.paths import trackeval_root as _trackeval_root
 
 
 def test_vendored_trackeval_mot_dataset_is_importable():
-    trackeval_root = _find_trackeval_root()
+    trackeval_root = _trackeval_root()
     assert trackeval_root is not None
 
     root_str = str(trackeval_root)

@@ -16,7 +16,6 @@ from __future__ import annotations
 
 from collections import deque
 import hashlib
-import os
 
 import torch
 import torch.nn as nn
@@ -25,6 +24,8 @@ from pathlib import Path
 from torch import Tensor
 from typing import Any
 
+from saccade.paths import build_dir as _build_dir_contract
+from saccade.paths import runtime_input as _runtime_input
 from saccade.perception.eval.cuda_capture import graphed_callables
 
 from .yolo_gated_detector import (
@@ -39,6 +40,13 @@ from .mamba_head import (
     resolve_mamba_in_channels,
 )
 from .yolo_conditioned import TrackerGateInput, TrackSpatialGate
+
+# Conventional locations of the C++ counterpart's inputs, relative to the
+# working directory (see saccade.paths). ``MambaGatedDetector(cpp_backbone_engine=,
+# cpp_mamba_head_script=)`` overrides them; the C++ detector is pinned to the
+# yolo26s FPN layout, so the backbone engine is not the Python one.
+DEFAULT_CPP_BACKBONE_ENGINE = "models/yolo/yolo26s_backbone_640_best.engine"
+DEFAULT_CPP_MAMBA_HEAD_SCRIPT = "models/yolo/mamba_head_best.pt"
 
 
 def _sha256_file(path: str | Path) -> str:
@@ -477,17 +485,15 @@ class TRTMambaHead(nn.Module):
             nonlocal _plugins_loaded
             if _plugins_loaded:
                 return
-            from pathlib import Path as _Path
-
-            _root = _Path(__file__).resolve().parent.parent.parent.parent.parent
-            _build = _Path(os.environ.get("SACCADE_BUILD_PATH", _root / "build"))
-            _so = _build / "libsaccade_scan_plugin.so"
-            if _so.exists():
+            _build = _build_dir_contract()
+            _so = _build / "libsaccade_scan_plugin.so" if _build is not None else None
+            if _so is not None and _so.exists():
                 trt.get_plugin_registry().load_library(str(_so))
                 print(f"[TRTHead] Loaded SelectiveScan plugin: {_so}")
             else:
                 print(
-                    f"[TRTHead] WARNING: SelectiveScan plugin not found at {_so}; "
+                    "[TRTHead] WARNING: SelectiveScan plugin not found "
+                    f"({_so if _so is not None else 'no build directory declared'}); "
                     "engine may fail to deserialize"
                 )
             _plugins_loaded = True
@@ -648,6 +654,8 @@ class MambaGatedDetector(nn.Module):
         use_cuda_graph: bool = False,
         use_whole_graph: bool = False,
         small_p3_max_threshold: float = 0.0,
+        cpp_backbone_engine: str = "",
+        cpp_mamba_head_script: str = "",
     ):
         super().__init__()
         if cfg is None:
@@ -656,6 +664,14 @@ class MambaGatedDetector(nn.Module):
         self.conf_thr = conf_thr
         self.max_det = max_det
         self._device = device
+        # Inputs of the C++ counterpart behind ``cpp_ptr``: a yolo26s backbone
+        # engine and the TorchScript Mamba head export. Neither is derivable
+        # from the Python model, so they are explicit; empty means the
+        # conventional models/yolo/ files relative to the working directory.
+        self.cpp_backbone_engine = cpp_backbone_engine or DEFAULT_CPP_BACKBONE_ENGINE
+        self.cpp_mamba_head_script = (
+            cpp_mamba_head_script or DEFAULT_CPP_MAMBA_HEAD_SCRIPT
+        )
         self.img_size = cfg.img_size
         self._trt_backbone: TRTYoloBackbone | None = None
         self._trt_head: TRTMambaHead | None = None
@@ -869,27 +885,17 @@ class MambaGatedDetector(nn.Module):
             from saccade_perception_ext import (
                 MambaGatedDetector as CppMambaGatedDetector,
             )
-            from pathlib import Path
 
-            project_root = Path(__file__).resolve().parent.parent.parent.parent.parent
-
-            # Resolve TRT backbone path
-            trt_path = project_root / "models/yolo/yolo26s_backbone_640_best.engine"
-            if not trt_path.exists():
-                trt_path = Path("models/yolo/yolo26s_backbone_640_best.engine")
-
-            # Resolve Mamba head TorchScript path
-            mamba_head_path = project_root / "models/yolo/mamba_head_best.pt"
-            if not mamba_head_path.exists():
-                mamba_head_path = Path("models/yolo/mamba_head_best.pt")
+            trt_path = _runtime_input(self.cpp_backbone_engine)
+            mamba_head_path = _runtime_input(self.cpp_mamba_head_script)
 
             print("[Python MambaGatedDetector] Initializing C++ counterpart with:")
             print(f"  Backbone: {trt_path}")
             print(f"  Mamba Head JIT: {mamba_head_path}")
 
             self._cpp_detector = CppMambaGatedDetector(
-                str(trt_path.resolve()),
-                str(mamba_head_path.resolve()),
+                str(trt_path),
+                str(mamba_head_path),
                 self.img_size,
                 self.conf_thr,
             )
@@ -1655,6 +1661,8 @@ def build_mamba_gated_detector(
     use_cuda_graph: bool = False,
     use_whole_graph: bool = False,
     small_p3_max_threshold: float = 0.0,
+    cpp_backbone_engine: str = "",
+    cpp_mamba_head_script: str = "",
 ) -> MambaGatedDetector:
     if teacher_ckpt and Path(teacher_ckpt).exists():
         teacher_raw = torch.load(teacher_ckpt, map_location="cpu", weights_only=False)
@@ -1722,5 +1730,7 @@ def build_mamba_gated_detector(
         use_cuda_graph=use_cuda_graph,
         use_whole_graph=use_whole_graph,
         small_p3_max_threshold=small_p3_max_threshold,
+        cpp_backbone_engine=cpp_backbone_engine,
+        cpp_mamba_head_script=cpp_mamba_head_script,
     )
     return model.to(device)
