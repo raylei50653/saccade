@@ -83,7 +83,50 @@ cmake --build build/runtime_identity --parallel
 
 ## 3. 審查與 promote
 
-Promote 是**另開一支 review PR**，不是捕捉步驟的延伸。
+Promote 是**另開一支 review PR**，不是捕捉步驟的延伸。這句話說的是 **review
+boundary**，不是 landing 順序——見 §3.1。
+
+### 3.1 出版綁的是 content coordinate，不是 commit
+
+`docs/reference/runtime_identity.generated.json` 的 authority 全在 `coordinate`
+五軸：每軸是對應路徑集合的 **git blob 內容 digest**（`h2_path_partition` 分類
+＋ `build_runtime_identity.py` 各 `*_axis()`）。`witness.head` / `witness.tree`
+是 navigation witness：
+
+- `check_runtime_identity_staleness.py` 的 `compare_publication` 只重算五軸並與
+  `coordinate` 比對，**從不讀 `witness.head`**；
+- `build_runtime_identity.py` 的 `witness()` 自帶 note「HEAD/tree are navigation
+  witness. The coordinate digests working-tree content」，由
+  `tests/contract/test_h2_runtime_identity.py::test_witness_fields_are_marked_as_carrying_no_authority`
+  釘住；
+- 需要 commit 的消費者（Layer-P）自己帶 `--selected-base`，並要求 tree clean；它拿
+  出版來比的仍是 `coordinate`，不是 `witness.head`；
+- 本 runbook 唯一用到 `witness.head` 的地方是 archive 撞名時的檔名後綴。
+
+結論：**merge commit、rebase、squash 只要沒動到任何已出版軸的 blob，就不需要
+重新 capture**——attested 臂會直接通過，因為它比的是內容。反過來，只要任一
+已出版軸的 blob 動了，不管 commit 圖長什麼樣，attested 臂都會 exit 1，這就是
+「要不要重 capture」的唯一判準，不需要另外對 HEAD 做規則。
+
+### 3.2 Review boundary 與 landing 的關係
+
+`main` 的 ruleset `Production Safety` 把 `pytest` 設成 required status check、
+無 bypass actor，而 `tests/contract/test_runtime_identity_staleness.py` 等
+coordinate-bound tests 在出版落後時 fail-closed。所以：
+
+- 一支只含 implementation（動到 `decision_relevant` / `identity_semantics`）的
+  PR **永遠 land 不進 `main`**——lagging intermediate state 被 GitHub 擋住，不只
+  是紅燈；
+- promotion PR 因此**不能**「等 implementation 進 main 再 land」。可行的形式是
+  **stacked review PR**：promotion PR 的 base 指向 implementation branch，diff 只
+  有 canonical 出版＋archive 兩檔，獨立審完後 merge 進 implementation branch，
+  再由 implementation PR 一次 **atomic co-land**。兩者的 review surface 仍是分開
+  的，landing 是同一次。
+
+先例：`#408`（同 PR 第二 commit，未經獨立 review surface）→ `#409` + `#410`
+（stacked，本節形式）。從 #409 起以本節為準。
+
+### 3.3 Promote 步驟
 
 1. **Archive 現行 canonical**，再覆蓋：
 
@@ -126,7 +169,7 @@ Promote 是**另開一支 review PR**，不是捕捉步驟的延伸。
    probe 相等**不**構成 equivalence 主張。摘要欄不得比細節欄寬。
 
 4. 驗證——promote 要用 **attested** 臂，因為 promote 正是在主張「這份出版描述現在
-   的 HEAD」：
+   的工作樹內容」（HEAD 只是 navigation，見 §3.1）：
 
    ```bash
    .venv/bin/python scripts/tools/check_runtime_identity_staleness.py --mode attested
