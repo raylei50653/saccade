@@ -68,6 +68,20 @@ has **one primary job**, explicit secondaries, and a clear **should-not-own** li
 
 ---
 
+## Module doc question map (#368, Phase 1)
+
+- [module_doc_question_protocol.md](module_doc_question_protocol.md) is the pinned
+  execution authority for the Phase 1 classification of `docs/modules/`: map each
+  in-scope document to the durable question it answers, without synthesizing the
+  subsystem's current answer.
+- [module_doc_question_map.yaml](module_doc_question_map.yaml) is that run's output —
+  **EPHEMERAL** and **MACHINE-CONSUMED** (one record per in-scope document: verbatim
+  lifecycle marker, knowledge-domain classification, anchored confidence, unresolved
+  questions). It is drained and deleted once Phase 2 promotes it; it is not a reading
+  surface and not a fourth archive.
+
+---
+
 ## O1 completion definition
 
 - [x] Objective types defined  
