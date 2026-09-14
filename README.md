@@ -54,6 +54,9 @@ uv run python scripts/eval/mot17.py --detector SDP --output results/MOT17_eval
 常見執行期相依：`torch`、`torchvision`、`tensorrt-cu12`、`motmetrics`。  
 **DALI**（`nvidia-dali-cuda120`）是 **optional extra** — 無 GPU 雲端 / CI / C++ core
 build 不裝；本機 GPU 解碼路徑再 `uv sync --extra dali`。  
+⚠️ `uv sync` 是 exact sync：之後任何一次**不帶** `--extra dali` 的 `uv sync`（含
+`--frozen`）都會把 DALI 及其傳遞相依（`nvtx`、`wheel`…）從 venv 卸掉。裝過 DALI 的
+GPU 主機每次 sync 都要帶 `--extra dali`。  
 native C++ / CUDA extension 需另為你的機器 build；部分 benchmark／eval flow 需要
 CUDA hardware、TensorRT engines 與 local MOT datasets。
 

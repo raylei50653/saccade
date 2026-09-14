@@ -53,6 +53,10 @@ self-hosted runner 數為 0（`runtime_identity.yml` 最後一次成功是 2026-
    capability，所以 `environment` 這一軸只在本機（`--strict`）比對；一般 CPU runner
    會把它報成 unresolved warning，而不是製造假 drift。
 3. build 目錄，透過 `--build-dir`（或 `SACCADE_BUILD_PATH`）指給 probe。
+4. venv 與 lockfile 同步，**且保留 `dali` extra**：`uv sync --frozen --extra dali`。
+   `uv sync` 是 exact sync，少了 `--extra dali` 會把 DALI 連同其傳遞相依卸掉，
+   之後任何走 GPU decode 的路徑都會壞；CI 的 `runtime_identity.yml` 用的也是這個
+   flag。
 
 ## 2. 捕捉一份候選（不需要座標 current）
 
