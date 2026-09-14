@@ -52,9 +52,8 @@ uv run python scripts/eval/mot17.py --detector SDP --output results/MOT17_eval
 ```
 
 `uv sync` 裝的是 **repo 開發環境**（`dev` group = 全部 extras + 檢查工具）。
-套件本身的預設相依只有 tracker core（`numpy`、`torch`，加上 native extension 的
-build / link substrate：`tensorrt-cu12`、`nvidia-cuda-nvcc` 一組）；其餘功能各是
-一個 extra，以 import 邊界切分，可組合：
+套件本身的預設相依只有 tracker core（`numpy`、`torch`，加上 native extension 載入
+時需要的 `tensorrt-cu12`）；其餘功能各是一個 extra，以 import 邊界切分，可組合：
 
 | extra | 內容 |
 |---|---|
@@ -66,6 +65,7 @@ build / link substrate：`tensorrt-cu12`、`nvidia-cuda-nvcc` 一組）；其餘
 | `eval` | benchmark / 評估（`motmetrics`、`mlflow`、`sahi`…，含 `yolo`） |
 | `train` | 訓練與 export（`timm`、`transformers`、ONNX 工具鏈，含 `yolo`） |
 | `dali` | GPU / NVDEC 解碼路徑 |
+| `native-build` | C++ / CUDA extension 的 build toolchain（`nvidia-cuda-nvcc` 一組、`pybind11`）；只在你要自己 build extension 時裝 |
 
 第三方 `pip install saccade` 只拿 core；`pip install 'saccade[yolo,eval]'` 依需要加。
 邊界由 `tests/contract/test_package_dependency_surface.py` 從原始碼 import
@@ -75,8 +75,13 @@ CI / C++ core build 不裝；本機 GPU 解碼路徑再 `uv sync --extra dali`�
 ⚠️ `uv sync` 是 exact sync：之後任何一次**不帶** `--extra dali` 的 `uv sync`（含
 `--frozen`）都會把 DALI 及其傳遞相依（`nvtx`、`wheel`…）從 venv 卸掉。裝過 DALI 的
 GPU 主機每次 sync 都要帶 `--extra dali`。  
-native C++ / CUDA extension 需另為你的機器 build；部分 benchmark／eval flow 需要
-CUDA hardware、TensorRT engines 與 local MOT datasets。
+native C++ / CUDA extension（`saccade_tracking_ext`）**不隨 pip 交付**：`pip install
+saccade` 單獨得到的 `GPUByteTracker` 是純 Python stub（`is_cuda == False`）。第三方
+要 native tracker 需 `pip install 'saccade[native-build]'` 後從 source checkout 用
+CMake 對準自己的 venv build，步驟、支援矩陣與驗證腳本見
+[docs/reference/runbooks/native_extension_install.md](docs/reference/runbooks/native_extension_install.md)
+（決策：[ADR 025](docs/decisions/025-native-extension-delivery.md)）。部分
+benchmark／eval flow 需要 CUDA hardware、TensorRT engines 與 local MOT datasets。
 
 所有 evaluation / ablation / metrics / mAP / baseline 比較指令見
 **[scripts/eval/README.md](scripts/eval/README.md)**。

@@ -25,33 +25,17 @@ dependencies = [
     # from the sources and holds this list to it.
     "numpy",
     "torch==2.11.0",
-    # Native substrate. Classified here, not decided here: where these end up
-    # depends on how the C++/CUDA extension is delivered (source build at
-    # install, user-run cmake, or a prebuilt wheel), which is still open.
-    # Until then they stay in the default set so a source checkout keeps
-    # building and loading the extension exactly as before.
-    #
     # tensorrt-cu12 is a load-time dependency of the tracker extension, not
-    # only of the detector: saccade_tracking_ext links libnvinfer through the
-    # saccade_perception static library, and the Python detector path
-    # (detector_trt, feature_extractor, calibrator, mamba_gated_detector)
-    # imports the bindings directly.
+    # only of the detector: saccade_tracking_ext has libnvinfer.so.10 as a
+    # direct NEEDED (through the saccade_perception static library) and
+    # resolves it via RUNPATH into this venv's tensorrt_libs, so `import
+    # saccade_tracking_ext` fails without it even though nothing under
+    # src/saccade imports the Python bindings on the tracker path. The
+    # detector path (detector_trt, feature_extractor, calibrator,
+    # mamba_gated_detector) imports the bindings directly. ADR 025 keeps it
+    # here for that reason; the C++/CUDA build toolchain is the `native-build`
+    # extra below.
     "tensorrt-cu12==10.16.1.11",
-    # H0 substrate: frozen build-CUDA toolchain (issue #214). The extension must
-    # compile against the same venv cu13 tree the uv.lock runtime resolves to,
-    # not the rolling system /opt/cuda. nvcc/nvvm/crt move as one matched line;
-    # 13.3 (not the 13.0.x line of the torch-pinned runtime libs) because the
-    # 13.0 crt headers reject glibc >= 2.42 (C23 rsqrt collision). Compiling
-    # with a newer nvcc against the older pinned cudart/cublas is the supported
-    # direction and is verified by the extension_load qualification step.
-    # Build-only: nothing under src/saccade imports them.
-    "nvidia-cuda-nvcc==13.3.73",
-    "nvidia-nvvm==13.3.73",
-    "nvidia-cuda-crt==13.3.73",
-    # cccl pairs with nvcc (13.3); its exact nvcc==CUDART gate is disabled in
-    # CMakeLists because the runtime line is deliberately older (torch-pinned).
-    "nvidia-cuda-cccl==13.3.3.4.1",
-    "pybind11>=3.0.3",
 ]
 
 # Each extra is a dependency boundary drawn around a part of the package, named
@@ -60,6 +44,29 @@ dependencies = [
 # (`saccade[storage]`), so `pip install saccade[serve]` is complete on its own.
 # The `dev` group below unions all of them for the repository workflow.
 [project.optional-dependencies]
+# Build toolchain for the C++/CUDA extension (ADR 025: the extension is built
+# by the consumer, from a source checkout, against the venv it will be loaded
+# in -- `cmake -S <checkout> -B <build> -DPYTHON_EXECUTABLE=<venv>/bin/python`;
+# see docs/reference/runbooks/native_extension_install.md). Nothing under
+# src/saccade imports any of these; they are consumed by CMakeLists.txt, which
+# fails closed unless nvcc comes from this venv's nvidia/cu13 tree.
+#
+# H0 substrate: frozen build-CUDA toolchain (issue #214). The extension must
+# compile against the same venv cu13 tree the uv.lock runtime resolves to, not
+# the rolling system /opt/cuda. nvcc/nvvm/crt move as one matched line; 13.3
+# (not the 13.0.x line of the torch-pinned runtime libs) because the 13.0 crt
+# headers reject glibc >= 2.42 (C23 rsqrt collision). Compiling with a newer
+# nvcc against the older pinned cudart/cublas is the supported direction and
+# is verified by the extension_load qualification step. cccl pairs with nvcc
+# (13.3); its exact nvcc==CUDART gate is disabled in CMakeLists because the
+# runtime line is deliberately older (torch-pinned).
+native-build = [
+    "nvidia-cuda-nvcc==13.3.73",
+    "nvidia-nvvm==13.3.73",
+    "nvidia-cuda-crt==13.3.73",
+    "nvidia-cuda-cccl==13.3.3.4.1",
+    "pybind11>=3.0.3",
+]
 # GPU media/NVDEC path only (media/dali_pipeline, media/rtsp_dali_pipeline,
 # perception/eval/streaming). Cloud runners / C++ core / default uv sync skip
 # this (large CUDA wheel; useless without GPU). Local GPU hosts:
@@ -161,7 +168,7 @@ train = [
 # TestClient), which is why this list removes only the direct requirement.
 [dependency-groups]
 dev = [
-    "saccade[yolo,media,storage,serve,cognition,eval,train]",
+    "saccade[native-build,yolo,media,storage,serve,cognition,eval,train]",
     "ruff",
     "pytest",
     "httpx",

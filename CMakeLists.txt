@@ -37,7 +37,7 @@ if(NOT _saccade_purelib_rc EQUAL 0)
 endif()
 set(SACCADE_CUDA_VENV_ROOT "${_saccade_purelib}/nvidia/cu13")
 if(NOT EXISTS "${SACCADE_CUDA_VENV_ROOT}/bin/nvcc")
-    message(FATAL_ERROR "Frozen venv CUDA compiler is absent: ${SACCADE_CUDA_VENV_ROOT}/bin/nvcc — run `uv sync --frozen` (builds must not fall back to the rolling system CUDA, issue #214)")
+    message(FATAL_ERROR "Frozen venv CUDA compiler is absent: ${SACCADE_CUDA_VENV_ROOT}/bin/nvcc — run `uv sync --frozen` in the checkout, or `pip install 'saccade[native-build]'` into the target venv (builds must not fall back to the rolling system CUDA, issue #214)")
 endif()
 if(NOT DEFINED CMAKE_CUDA_COMPILER AND NOT DEFINED ENV{CUDACXX})
     set(CMAKE_CUDA_COMPILER "${SACCADE_CUDA_VENV_ROOT}/bin/nvcc")
@@ -360,7 +360,21 @@ execute_process(
 )
 find_package(Python3 REQUIRED COMPONENTS Interpreter Development.Module)
 set(Python_EXECUTABLE "${Python3_EXECUTABLE}")
-set(Python_ROOT_DIR "${PROJECT_SOURCE_DIR}/.venv")
+# FindPython's root hint follows the interpreter the build targets, which is
+# not necessarily <checkout>/.venv: a consumer builds the extension for their
+# own environment (-DPYTHON_EXECUTABLE=<venv>/bin/python, ADR 025), and the
+# hint must point there so both FindPython3 and FindPython resolve the same
+# interpreter.
+execute_process(
+    COMMAND ${Python3_EXECUTABLE} -c "import sys; print(sys.prefix)"
+    OUTPUT_VARIABLE _saccade_python_prefix
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    RESULT_VARIABLE _saccade_python_prefix_rc
+)
+if(NOT _saccade_python_prefix_rc EQUAL 0)
+    message(FATAL_ERROR "Could not query sys.prefix from ${Python3_EXECUTABLE}")
+endif()
+set(Python_ROOT_DIR "${_saccade_python_prefix}")
 find_package(Python REQUIRED COMPONENTS Interpreter Development)
 find_package(pybind11 REQUIRED PATHS ${pybind11_DIR})
 

@@ -7,8 +7,8 @@ derives those boundaries from the sources instead of trusting the lists:
 
   * **the default set is the tracker-core closure** -- walking module-level
     imports from the core names of the public surface reaches exactly the
-    default distributions, minus a named native-substrate allowlist whose
-    placement waits on the native-delivery decision;
+    default distributions, minus the one named load-time substrate the native
+    extension needs (ADR 025);
   * **every module is covered by core or its extra** -- each subpackage is
     owned by one extra, and the module-level closure of that subpackage must
     be satisfied by the default set plus that extra (self-references
@@ -19,6 +19,10 @@ derives those boundaries from the sources instead of trusting the lists:
   * **the dev group is the repository's boundary, not the consumer's** -- it
     unions every extra except ``dali`` so ``uv sync`` still yields the whole
     repository environment;
+  * **a build-only extra owns no module** -- ``native-build`` is consumed by
+    CMakeLists.txt, not imported, so it has no smoke module and no owned
+    subpackage; tests/contract/test_package_native_delivery.py holds its
+    contents to the delivery model instead;
   * **a core-only interpreter can use the tracker surface** -- with every
     extras-only distribution made unimportable, ``import saccade`` and the
     core public names still resolve, and the lazily-imported names that need
@@ -50,21 +54,17 @@ PACKAGE_ROOT = REPO_ROOT / "src" / "saccade"
 PYPROJECT = REPO_ROOT / "pyproject.toml"
 DISTRIBUTION = "saccade"
 
-# Declared in the default set although nothing under src/saccade needs them to
-# import: the build toolchain for the C++/CUDA extension, and the TensorRT line
-# the tracker extension links against. Their final home is the native-delivery
-# decision's to make; until then this is the whole list, so growth here is a
-# review item, not a drive-by.
-NATIVE_SUBSTRATE = frozenset(
-    {
-        "tensorrt-cu12",
-        "nvidia-cuda-nvcc",
-        "nvidia-nvvm",
-        "nvidia-cuda-crt",
-        "nvidia-cuda-cccl",
-        "pybind11",
-    }
-)
+# Declared in the default set although nothing under src/saccade imports it on
+# the tracker path: saccade_tracking_ext has libnvinfer.so.10 as a direct
+# NEEDED and resolves it into this venv's tensorrt_libs, so the tracker
+# surface cannot load without the distribution (ADR 025, "runtime loader
+# dependency"). The build toolchain used to sit here too; it is the
+# `native-build` extra now. Growth here is a review item, not a drive-by.
+NATIVE_SUBSTRATE = frozenset({"tensorrt-cu12"})
+
+# Extras nothing imports: their distributions are consumed by the native build
+# (CMakeLists.txt), so module ownership and smoke imports do not apply.
+BUILD_ONLY_EXTRAS = frozenset({"native-build"})
 
 # Which extra owns which part of the package. Longest prefix wins. A module
 # outside every prefix is core and may import only the default set.
@@ -399,6 +399,15 @@ def test_native_substrate_is_exactly_what_the_allowlist_says() -> None:
     assert NATIVE_SUBSTRATE <= default, sorted(NATIVE_SUBSTRATE - default)
 
 
+def test_build_only_extras_own_no_module_and_are_not_default() -> None:
+    extras = _extras_expanded()
+    default = _default_set()
+    assert BUILD_ONLY_EXTRAS <= set(extras), sorted(BUILD_ONLY_EXTRAS - set(extras))
+    assert not set(MODULE_EXTRA.values()) & BUILD_ONLY_EXTRAS
+    for extra in BUILD_ONLY_EXTRAS:
+        assert not extras[extra] & default, sorted(extras[extra] & default)
+
+
 # ── Every module is covered by core or its extra ─────────────────────────────
 
 
@@ -607,7 +616,7 @@ def test_extra_smoke_import(extra: str) -> None:
 
 
 def test_every_extra_has_a_smoke_module() -> None:
-    assert set(EXTRA_SMOKE_MODULES) == set(_extras_expanded())
+    assert set(EXTRA_SMOKE_MODULES) == set(_extras_expanded()) - BUILD_ONLY_EXTRAS
     modules = _package_modules()
     for extra, mods in EXTRA_SMOKE_MODULES.items():
         for m in mods:
