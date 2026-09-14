@@ -15,14 +15,29 @@ except metadata.PackageNotFoundError:  # source tree without an install
 # Each entry points at the leaf module, not a subpackage __init__:
 # saccade.perception.tracking.__init__ imports tracker_gpu eagerly, which is
 # exactly the torch + native-extension load this indirection defers.
-_LAZY: dict[str, tuple[str, str]] = {
-    "GPUByteTracker": ("saccade.perception.tracking.tracker_gpu", "GPUByteTracker"),
-    "ReorderingBuffer": ("saccade.perception.tracking.reorder", "ReorderingBuffer"),
-    "run_eval": ("saccade.perception.eval.evaluator", "run_eval"),
-    "EvalConfig": ("saccade.perception.eval.config", "EvalConfig"),
+#
+# The third field names the extra whose absence is the expected reason for an
+# ImportError, so a core-only install gets told which extra to add rather than
+# a traceback ending in an arbitrary transitive module. None means the name
+# imports on the default dependency set (tracker core), and an ImportError
+# there is a real fault.
+_LAZY: dict[str, tuple[str, str, str | None]] = {
+    "GPUByteTracker": (
+        "saccade.perception.tracking.tracker_gpu",
+        "GPUByteTracker",
+        None,
+    ),
+    "ReorderingBuffer": (
+        "saccade.perception.tracking.reorder",
+        "ReorderingBuffer",
+        None,
+    ),
+    "run_eval": ("saccade.perception.eval.evaluator", "run_eval", "eval"),
+    "EvalConfig": ("saccade.perception.eval.config", "EvalConfig", None),
     "MambaGatedDetector": (
         "saccade.perception.temporal_yolo.mamba_gated_detector",
         "MambaGatedDetector",
+        None,
     ),
 }
 __all__ = ["__version__", *_LAZY]
@@ -30,10 +45,19 @@ __all__ = ["__version__", *_LAZY]
 
 def __getattr__(name: str) -> Any:
     try:
-        module_name, attr = _LAZY[name]
+        module_name, attr, extra = _LAZY[name]
     except KeyError:
         raise AttributeError(f"module 'saccade' has no attribute {name!r}") from None
-    value = getattr(import_module(module_name), attr)
+    try:
+        module = import_module(module_name)
+    except ImportError as exc:
+        if extra is None:
+            raise
+        raise ImportError(
+            f"saccade.{name} needs the {extra!r} extra "
+            f"(pip install 'saccade[{extra}]'): {exc}"
+        ) from exc
+    value = getattr(module, attr)
     globals()[name] = value  # cache: __getattr__ runs once per name
     return value
 

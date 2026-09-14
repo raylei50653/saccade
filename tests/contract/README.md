@@ -40,6 +40,7 @@
 | `test_migration_manifest_v0.py` | system | contract | active | Contract for the doc migration manifest parser and master-map generator. |
 | `test_mot17_producer_wiring.py` | system | contract | active | Contract for wiring ``scripts/eval/mot17.py`` as an AP-2 producer. |
 | `test_old_flagship_inventory.py` | system | contract | active | Contract for the old-flagship per-study inventory parser. |
+| `test_package_dependency_surface.py` | system | contract | active | The default dependency set is the tracker core's import closure, nothing more. |
 | `test_package_runtime_paths.py` | system | contract | active | The package's runtime paths are a contract, not a guess about repository layout. |
 | `test_research_lock.py` | system | contract | active | An open research instance holds the online surface shut, and says so before the push. |
 | `test_research_packet_manifest.py` | system | contract | active | Generic manifest/integrity contract for sealed research evidence packets. |

@@ -17,28 +17,25 @@ license-files = [
     "src/saccade/perception/eval/_torch_graphs.LICENSE",
 ]
 dependencies = [
-    "ultralytics",
+    # Tracker core: the module-level import closure of the public tracker
+    # surface (saccade.GPUByteTracker / saccade.ReorderingBuffer, i.e.
+    # perception/tracking, perception/box_ops, perception/eval/cuda_capture,
+    # paths). Everything else the package can do lives in an extra below;
+    # tests/contract/test_package_dependency_surface.py derives that closure
+    # from the sources and holds this list to it.
     "numpy",
-    "scipy",
-    "opencv-python",
-    "chromadb",
-    "redis",
     "torch==2.11.0",
-    "torchvision==0.26.0",
-    "fastapi",
-    "uvicorn",
-    "python-dotenv",
-    "nvidia-ml-py",
-    "lap>=0.5.13",
-    "pyyaml>=6.0.3",
-    "pygobject==3.48.2",
-    "timm>=1.0.26",
-    "onnxscript>=0.6.2",
-    "transformers>=4.48.0",
-    "accelerate>=1.13.0",
-    "optimum[onnxruntime-gpu]>=2.1.0",
-    "einops>=0.8.2",
-    "onnxruntime-gpu>=1.24.4",
+    # Native substrate. Classified here, not decided here: where these end up
+    # depends on how the C++/CUDA extension is delivered (source build at
+    # install, user-run cmake, or a prebuilt wheel), which is still open.
+    # Until then they stay in the default set so a source checkout keeps
+    # building and loading the extension exactly as before.
+    #
+    # tensorrt-cu12 is a load-time dependency of the tracker extension, not
+    # only of the detector: saccade_tracking_ext links libnvinfer through the
+    # saccade_perception static library, and the Python detector path
+    # (detector_trt, feature_extractor, calibrator, mamba_gated_detector)
+    # imports the bindings directly.
     "tensorrt-cu12==10.16.1.11",
     # H0 substrate: frozen build-CUDA toolchain (issue #214). The extension must
     # compile against the same venv cu13 tree the uv.lock runtime resolves to,
@@ -47,6 +44,7 @@ dependencies = [
     # 13.0 crt headers reject glibc >= 2.42 (C23 rsqrt collision). Compiling
     # with a newer nvcc against the older pinned cudart/cublas is the supported
     # direction and is verified by the extension_load qualification step.
+    # Build-only: nothing under src/saccade imports them.
     "nvidia-cuda-nvcc==13.3.73",
     "nvidia-nvvm==13.3.73",
     "nvidia-cuda-crt==13.3.73",
@@ -54,32 +52,116 @@ dependencies = [
     # CMakeLists because the runtime line is deliberately older (torch-pinned).
     "nvidia-cuda-cccl==13.3.3.4.1",
     "pybind11>=3.0.3",
-    "motmetrics>=1.4.0",
-    "llama-index>=0.14.21",
-    "llama-index-vector-stores-chroma>=0.5.5",
+]
+
+# Each extra is a dependency boundary drawn around a part of the package, named
+# by what that part does; the contract test maps every module to the extra
+# that must cover its imports. Extras compose through self-references
+# (`saccade[storage]`), so `pip install saccade[serve]` is complete on its own.
+# The `dev` group below unions all of them for the repository workflow.
+[project.optional-dependencies]
+# GPU media/NVDEC path only (media/dali_pipeline, media/rtsp_dali_pipeline,
+# perception/eval/streaming). Cloud runners / C++ core / default uv sync skip
+# this (large CUDA wheel; useless without GPU). Local GPU hosts:
+# `uv sync --extra dali`.
+dali = [
+    "nvidia-dali-cuda120>=2.0.0",
+]
+# Detection backend (perception/temporal_yolo, detector_trt, feature_extractor,
+# cropper, calibrator). ultralytics is AGPL-3.0 and, per ADR 023 follow-up 3,
+# no longer part of the default install: the TRT-backbone headline path does
+# not import it, but the .pt loader, the training loss/assigner and the
+# official-baseline scripts do. lap is ultralytics' tracker solver, which it
+# otherwise auto-installs at first use.
+yolo = [
+    "ultralytics",
+    "torchvision==0.26.0",
+    "lap>=0.5.13",
+    "opencv-python",
+]
+# Media ingest (media/*, perception/zero_copy): GStreamer via PyGObject, which
+# needs the system girepository/cairo headers to build.
+media = [
+    "pygobject==3.48.2",
+    "opencv-python",
+]
+# Persistence (storage/*). sqlalchemy/psycopg2 have no in-tree importer since
+# AblationStore was removed (c5137317); docker-compose still provisions the
+# postgres they were added for, so they stay declared here rather than dropped.
+storage = [
+    "chromadb",
+    "redis",
     "sqlalchemy>=2.0.38",
     "psycopg2-binary>=2.9.10",
+]
+# The running service (api/*, pipeline/*, resource/*, perception/dispatcher,
+# perception/entropy, main.py): HTTP surface, GPU health, ingest + persistence.
+serve = [
+    "saccade[media,storage]",
+    "fastapi",
+    "uvicorn",
+    "pydantic",
+    "nvidia-ml-py",
+    "python-dotenv",
+]
+# LLM-side reasoning (cognition/*) over the same persistence layer; the
+# orchestrator also reads GPU health (pipeline/health, resource/*), hence
+# nvidia-ml-py without the rest of `serve`.
+cognition = [
+    "saccade[storage]",
+    "llama-index>=0.14.21",
+    "llama-index-vector-stores-chroma>=0.5.5",
+    "python-dotenv",
+    "nvidia-ml-py",
+]
+# Benchmark / evaluation (perception/eval/*, scripts/eval/*): metrics, the
+# offline analysis stack, and sliced-inference / logging tooling. pandas,
+# scikit-learn, pyarrow and pillow are imported directly and were previously
+# only present transitively (mlflow, motmetrics, torchvision); pycocotools and
+# tabulate have no in-tree importer (added with c3b4384b) and are kept here
+# pending a decision to drop them.
+eval = [
+    "saccade[yolo]",
+    "motmetrics>=1.4.0",
+    "scipy",
+    "pandas",
+    "scikit-learn",
+    "pyarrow",
+    "pillow",
     "sahi>=0.11.36",
     "mlflow>=3.2.0",
+    "pyyaml>=6.0.3",
     "pycocotools>=2.0.11",
     "tabulate>=0.10.0",
 ]
-
-# GPU media/NVDEC path only. Cloud runners / C++ core / default uv sync skip this
-# (large CUDA wheel; useless without GPU). Local GPU hosts: `uv sync --extra dali`.
-[project.optional-dependencies]
-dali = [
-    "nvidia-dali-cuda120>=2.0.0",
+# Training and model export (scripts/train/*, scripts/model/*,
+# perception/text_encoder): backbones, ReID fine-tuning, ONNX export and
+# quantisation. accelerate, einops and onnxscript have no in-tree importer
+# (added with 9f448381 / 027c76fc) and are kept here pending a decision to
+# drop them.
+train = [
+    "saccade[yolo]",
+    "timm>=1.0.26",
+    "transformers>=4.48.0",
+    "accelerate>=1.13.0",
+    "optimum[onnxruntime-gpu]>=2.1.0",
+    "onnxruntime-gpu>=1.24.4",
+    "onnxscript>=0.6.2",
+    "einops>=0.8.2",
 ]
 
 # Development-only tooling (PEP 735). `uv sync` installs this group by default,
 # so pre_push.sh / CI keep working unchanged; `uv sync --no-dev` and a plain
-# `pip install saccade` get the runtime set only. Nothing under src/saccade
-# imports any of these directly; httpx/anyio may still appear transitively
-# through runtime or test dependencies (fastapi, pytest plugins, TestClient),
-# which is why this list removes only the direct requirement.
+# `pip install saccade` get the runtime set only. The group is the union of
+# every extra except `dali` (GPU-only, stays an explicit `--extra dali`) plus
+# the checkers: the extras are the consumer's dependency boundaries, the dev
+# group is the repository's, and the two are different axes. Nothing under
+# src/saccade imports the tooling directly; httpx/anyio may still appear
+# transitively through runtime or test dependencies (fastapi, pytest plugins,
+# TestClient), which is why this list removes only the direct requirement.
 [dependency-groups]
 dev = [
+    "saccade[yolo,media,storage,serve,cognition,eval,train]",
     "ruff",
     "pytest",
     "httpx",
