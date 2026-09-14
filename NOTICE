@@ -26,5 +26,7 @@ pyproject license expression covers the distribution, not the whole repository.
 
 Dependencies installed from PyPI are not redistributed here and carry their own
 licenses. One of them, ultralytics, is AGPL-3.0 and is imported by the detector
-path; see the licensing section of README.md before distributing a build or
-offering this software as a network service.
+path. It is not a default dependency of the distribution: only the `yolo` extra
+(and the `eval` / `train` extras that include it) pulls it in. See the licensing
+section of README.md before distributing a build or offering this software as a
+network service.

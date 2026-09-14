@@ -51,9 +51,27 @@ uv sync --extra dali                                                   # GPU + N
 uv run python scripts/eval/mot17.py --detector SDP --output results/MOT17_eval
 ```
 
-常見執行期相依：`torch`、`torchvision`、`tensorrt-cu12`、`motmetrics`。  
-**DALI**（`nvidia-dali-cuda120`）是 **optional extra** — 無 GPU 雲端 / CI / C++ core
-build 不裝；本機 GPU 解碼路徑再 `uv sync --extra dali`。  
+`uv sync` 裝的是 **repo 開發環境**（`dev` group = 全部 extras + 檢查工具）。
+套件本身的預設相依只有 tracker core（`numpy`、`torch`，加上 native extension 的
+build / link substrate：`tensorrt-cu12`、`nvidia-cuda-nvcc` 一組）；其餘功能各是
+一個 extra，以 import 邊界切分，可組合：
+
+| extra | 內容 |
+|---|---|
+| `yolo` | detection backend（`ultralytics`、`torchvision`、`opencv-python`、`lap`） |
+| `media` | GStreamer / OpenCV ingest（`pygobject`） |
+| `storage` | ChromaDB / Redis 持久層 |
+| `serve` | API 與服務 runtime（含 `media`、`storage`） |
+| `cognition` | LLM 推理層（llama-index，含 `storage`） |
+| `eval` | benchmark / 評估（`motmetrics`、`mlflow`、`sahi`…，含 `yolo`） |
+| `train` | 訓練與 export（`timm`、`transformers`、ONNX 工具鏈，含 `yolo`） |
+| `dali` | GPU / NVDEC 解碼路徑 |
+
+第三方 `pip install saccade` 只拿 core；`pip install 'saccade[yolo,eval]'` 依需要加。
+邊界由 `tests/contract/test_package_dependency_surface.py` 從原始碼 import
+closure 推導並鎖定。  
+**DALI**（`nvidia-dali-cuda120`）是唯一 **不進 `dev` group** 的 extra — 無 GPU 雲端 /
+CI / C++ core build 不裝；本機 GPU 解碼路徑再 `uv sync --extra dali`。  
 ⚠️ `uv sync` 是 exact sync：之後任何一次**不帶** `--extra dali` 的 `uv sync`（含
 `--frozen`）都會把 DALI 及其傳遞相依（`nvtx`、`wheel`…）從 venv 卸掉。裝過 DALI 的
 GPU 主機每次 sync 都要帶 `--extra dali`。  
@@ -116,7 +134,10 @@ repo 內另有兩份直接收錄的第三方程式碼，各自沿用原授權：
 
 `ultralytics` 是 **AGPL-3.0**，而且被 detector 路徑直接 import
 （`src/saccade/perception/temporal_yolo/`、`scripts/eval/` 共數十個檔案）。
-本 repo 的 Apache-2.0 只涵蓋我們自己寫的部分，不改變任何相依性自身的授權條款。
+它**不在**套件的預設相依裡：`pip install saccade` 不會裝它，headline 的 TRT
+backbone 路徑也不 import 它（ADR 023）；裝 `saccade[yolo]`（以及包含它的 `eval` /
+`train`）或 repo 的 `uv sync` 才會。本 repo 的 Apache-2.0 只涵蓋我們自己寫的部分，
+不改變任何相依性自身的授權條款。
 
 依 [Ultralytics 官方 licensing guidance](https://www.ultralytics.com/license)，
 把含 `ultralytics` 的 combined work 散佈出去、或以網路服務形式提供，可能被要求
