@@ -185,5 +185,110 @@ See [the follow-up record](../../../docs/reference/benchmarks/resource_admission
 | `admission_report.py` | diagnostic | cli | Replay raw CUDA admission evidence and summarize timing observations. |
 | `probe.py` | diagnostic | cli | Measure synthetic co-load on shared versus disjoint Green Context SM pools. |
 | `report.py` | diagnostic | cli | Replay synthetic probe summaries and render per-repetition ranges. |
+| `time_budget_audit.py` | diagnostic | cli | Independent vectorized ledger/timing audit; does not import producer code. |
+| `time_budget_plot.py` | diagnostic | cli | Plot descriptive response/drain/throughput frontiers from a replayed record. |
+| `time_budget_probe.py` | diagnostic | cli | Measure calibrated time-budget admission under repeated stable arrivals. |
+| `time_budget_report.py` | diagnostic | cli | Replay time-budget ledgers, calibration, repeated arrivals and measured frontiers. |
 
 <!-- END generated script index -->
+
+## Time-budget admission with repeated arrivals
+
+`time_budget_probe.py` augments the fixed-window study with a conservative
+remaining-work ledger. Run the GPU experiment sequentially, then replay:
+
+```bash
+.venv/bin/python scripts/benchmarks/resource_elastic/time_budget_probe.py \
+  --output /absolute/new/time-budget --samples 20 --repeats 3 --warmups 3 \
+  --calibration-samples 30 --period-us 12000 --budgets-ms 3 6 12
+.venv/bin/python scripts/benchmarks/resource_elastic/time_budget_report.py \
+  /absolute/new/time-budget --json-output /absolute/new/time-budget.json \
+  --markdown-output /absolute/new/time-budget.md
+.venv/bin/python scripts/benchmarks/resource_elastic/time_budget_audit.py \
+  /absolute/new/time-budget /absolute/new/time-budget-audit.json
+.venv/bin/python scripts/benchmarks/resource_elastic/time_budget_plot.py \
+  /absolute/new/time-budget.json /absolute/new/time-budget.svg
+```
+
+### Frozen controller and workload
+
+- The same three routes and physical pool-role swaps as `admission_probe.py`;
+  only the disjoint 16+16 route supplies a spatial reservation. The shared
+  32-SM route is the matched-total-SM priority control. Full-device priority
+  uses all device SMs. Pool ownership is static; no SM borrowing occurs.
+- 256 independent elastic kernels per trial, each with 1024 blocks × 256
+  threads. The ordered workload is a seeded shuffle of 64 repetitions of
+  `[512, 2048, 4096, 2048]` FMA iterations. This is 272 equivalent 2048-iteration
+  units, identical across policy, route and role for each repetition/sample.
+  The mix includes an eightfold iteration-count range; shorter work is not selected
+  ahead of a longer FIFO head to make a budget fit.
+- Before evaluation, measure 30 isolated samples of each size on each
+  route/role, with three warmups. Freeze each estimate at **1.2 × training
+  p95 GPU envelope duration**, rounded up to integer ns. Retain calibration
+  arrays and exclude them from evaluation. Shared-route role labels use separate
+  calibration batches on the same physical pool; their variation includes
+  training variation as well as execution drift. Only disjoint roles physically
+  swap the pools. This is a calibrated empirical
+  distribution, with no online learning or deterministic coverage claim.
+- Window baselines admit at most 1/4/16 submitted-but-not-retired kernels.
+  Budget policies admit only when the sum of frozen estimates of all
+  submitted-but-not-retired work, including the candidate, is at most
+  **B = 3/6/12 ms**. A completion event releases its charge. The running unit
+  retains its full estimate until retirement; queued time is never subtracted
+  as execution progress. This conservatively approximates remaining service
+  demand but does not upper-bound actual duration when estimates are wrong.
+- A unit larger than B fails before evaluation; there is no singleton bypass,
+  splitting or dropping. The initial pilot rejected a 2-ms budget for this
+  reason. The separate qualifying pilot used the final 3/6/12-ms matrix.
+- Submit one elastic unit, observe its actual block-zero start publication,
+  then define four targets at +12/+24/+36/+48 ms in the host clock. Dispatch at
+  most one unit per polling iteration. At each due target, freeze admission,
+  submit stable work, independently observe stable completion and admitted
+  prefix drain, and resume only after both. Targets do not shift when an
+  earlier pause runs late: overdue stable requests are serviced serially and
+  their overshoot is retained. This is a finite four-arrival schedule, not an
+  independent arrival thread or a general open-loop load generator.
+- Three shuffled repetitions × 36 conditions × 20 retained trials = 2,160
+  trials and 8,640 stable arrivals, plus 324 warmup trials. No tail filtering,
+  retry, or removal of idle/exhausted arrivals. Fixed seed 421.
+
+### Measurements and replay
+
+Stable response is submission-to-completion observation. Scheduled response
+adds target-to-submission overshoot. Drain is freeze/submission-to-observed
+empty elastic lane, including polling delay and stable dispatch cost; this is
+an **empty-lane proxy**, not ownership transfer or actual resource reclamation.
+No host timestamp is subtracted from a GPU timestamp.
+
+Throughput is 272 equivalent elastic units divided by whole-trial host seconds,
+including all stable pauses, dispatch and polling. This is synthetic compute
+throughput, not application throughput. Dispatch ms sums elastic launch/event
+host calls for the entire trial; pause ms is per arrival. Trial-level metrics
+are repeated across that trial's four rows, so percentiles must not be treated
+as four independent throughput samples. Arrival p99 uses 80 correlated
+observations per repetition/role; it is descriptive, not a rare-tail guarantee.
+
+Raw arrays retain every block's start/end/SM ID, block-leader outputs, every
+elastic dispatch and retirement, the estimate/ledger at dispatch and freeze,
+all four arrival targets and pause boundaries, and trial/start-observation
+times. Replay recomputes training estimates, matched workload sequences,
+ledger and count bounds, freeze ordering, output identity, physical membership,
+all metrics and quantiles. `rolling_dispatches` counts launches following an
+observed retirement in that same active interval, excluding the initial refill
+following a pause. Later-arrival counts demonstrate actual pre-arrival rolling
+replenishment. Miss counts and per-unit estimate exceedance remain evidence;
+a valid ledger is not sufficient to validate an observed latency bound.
+
+The supplementary audit uses a separate vectorized implementation for ledger
+and timing calculations, maximum drain, budget misses and later replenishment.
+Run it after the full reporter: it does not replace checksum, calibration,
+coverage or routing validation. The SVG shows medians and min–max ranges of
+repetition/role quantiles, not confidence intervals.
+
+Source snapshots, toolchain/device identity, 100-ms device telemetry and complete
+SHA-256 manifests follow the previous harness. Failed runs are retained and
+rejected by replay. The interactive WSL host has no locked clocks or isolated
+host core. Memory-sensitive stable work, ownership/routing changes, production
+scheduling and full-pipeline guarantees remain outside this experiment.
+
+See [the time-budget results](../../../docs/reference/benchmarks/resource_time_budget_20260915.md).

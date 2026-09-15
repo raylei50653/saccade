@@ -179,3 +179,11 @@ full-pipeline safe units and memory-sensitive service remain subsequent work.
   a temporary Git index; the real staging area stayed unchanged.
 - Production sources/presets are unchanged. The measurements and checks above
   describe the local research handoff; PR publication is tracked separately.
+
+## Time-budget continuation
+
+The [time-budget study](resource_time_budget_20260915.md) now evaluates 2,160
+mixed-duration trials with four scheduled stable arrivals each, calibrated
+remaining-work ledgers, fixed-window controls and pre-arrival replenishment.
+It records a useful drain/throughput frontier and empirical budget exceedances;
+no ownership transfer or deterministic latency is established.
