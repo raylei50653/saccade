@@ -167,6 +167,7 @@ Manifest: `docs/ownership/doc_migration_manifest.yaml`
 - `docs/reference/benchmarks/frozen_v2_ablation.md`
 - `docs/reference/benchmarks/latency_log.md`
 - `docs/reference/benchmarks/reid_handover_ablation_20260808.md`
+- `docs/reference/benchmarks/resource_sensitivity_20260915.md`
 - `docs/reference/benchmarks/throughput.md`
 - `docs/reference/benchmarks/tracker_lane_dose_response_20260907.md`
 - `docs/reference/code_health_audit.md`
@@ -376,6 +377,6 @@ Excluded from the active index and default search view.
 
 ## Inventory summary
 
-- documents: 326
-- active: 271
+- documents: 327
+- active: 272
 - grayed out: 55

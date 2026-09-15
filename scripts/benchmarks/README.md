@@ -15,6 +15,9 @@
 - `latency_e2e_report.py`
   - 以 MOT17 eval path 量測端到端延遲。
 
+- [`resource_sensitivity/`](resource_sensitivity/README.md)
+  - #419 的 full-pipeline serial/DB 資源壓力 sweep、telemetry 與 Green Context capability probe。
+
 ## 原則
 
 - 這些腳本不是主 workflow 入口。
