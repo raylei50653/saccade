@@ -4,6 +4,7 @@
 
 ## 文件索引
 
+- [native_extension_install.md](native_extension_install.md): 第三方安裝 `saccade_tracking_ext`（ADR 025）：支援矩陣、`pip install 'saccade[native-build]'` → `cmake -DPYTHON_EXECUTABLE=<venv>` → `saccade_build.pth` / `SACCADE_BUILD_PATH`、驗證腳本、故障排除。
 - [runtime_identity_republication.md](runtime_identity_republication.md): runtime coordinate 候選捕捉（座標落後也能跑）、archive 與 promote 流程、math-model scoped re-audit。
 - [nsys_profiling.md](nsys_profiling.md): nsys profiling 工作流（compile+CUDA graph 全開）、injection 死鎖禁忌 flag、hang 簽名、開銷校準。
 - [stream_recovery.md](../../modules/streaming/runbooks/stream_recovery.md): 串流斷線恢復流程。

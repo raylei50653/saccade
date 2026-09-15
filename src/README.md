@@ -167,7 +167,7 @@ saccade_node   ← src/main.cpp（感知節點，未接 tracker）
 | 外部執行期輸入 | engine / checkpoint / dataset / output dir、`MambaGatedDetector(cpp_backbone_engine=, cpp_mamba_head_script=)` | 明確參數；相對路徑以 **cwd** 為準（同 CLI flag），`paths.runtime_input()` 只是把這個慣例寫成一處。`models/...`、`datasets/...` 這類預設值屬此類 |
 | repository 提供 | native build 產物、`third_party/TrackEval`、research provenance 要 hash 的 `src/tracking/tracker_gpu.cu`、`scripts/eval/mot17.py` | `paths.build_dir()`：`SACCADE_BUILD_PATH` → checkout `build/` → `None`；`paths.trackeval_root()`：`SACCADE_TRACKEVAL_ROOT` → checkout `third_party/TrackEval` → `None`（再由 `import trackeval` 決定）；`paths.source_checkout_root()`：只有 `<root>/src/saccade` 且 `<root>/pyproject.toml` 存在才算 checkout，否則 `None`；需要 checkout 的操作用 `require_source_checkout()` 直接報 `SourceCheckoutRequired` |
 
-`build/` 的註冊方式不變：`scripts/native/rebuild.sh` 寫 `saccade_build.pth`，extension 走一般 `import`；`paths.build_dir()` 只在 import 失敗、載 TRT scan plugin、載 `cuda_reid/libfpn_reid_cuda.so` 時才被問。明確給的 `SACCADE_BUILD_PATH` 就算不存在也照用——指錯的地方要看得到，不會退回猜測。
+`build/` 的註冊方式不變：`scripts/native/rebuild.sh` 寫 `saccade_build.pth`，extension 走一般 `import`（第三方對自己的 venv 做同一件事：[native_extension_install.md](../docs/reference/runbooks/native_extension_install.md)，ADR 025）；`paths.build_dir()` 只在 import 失敗、載 TRT scan plugin、載 `cuda_reid/libfpn_reid_cuda.so` 時才被問。明確給的 `SACCADE_BUILD_PATH` 就算不存在也照用——指錯的地方要看得到，不會退回猜測。
 
 ---
 

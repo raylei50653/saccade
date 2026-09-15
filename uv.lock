@@ -3007,11 +3007,6 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "numpy" },
-    { name = "nvidia-cuda-cccl" },
-    { name = "nvidia-cuda-crt" },
-    { name = "nvidia-cuda-nvcc" },
-    { name = "nvidia-nvvm" },
-    { name = "pybind11" },
     { name = "tensorrt-cu12" },
     { name = "torch" },
 ]
@@ -3050,6 +3045,13 @@ eval = [
 media = [
     { name = "opencv-python" },
     { name = "pygobject" },
+]
+native-build = [
+    { name = "nvidia-cuda-cccl" },
+    { name = "nvidia-cuda-crt" },
+    { name = "nvidia-cuda-nvcc" },
+    { name = "nvidia-nvvm" },
+    { name = "pybind11" },
 ]
 serve = [
     { name = "chromadb" },
@@ -3100,7 +3102,7 @@ dev = [
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
     { name = "ruff" },
-    { name = "saccade", extra = ["cognition", "eval", "media", "serve", "storage", "train", "yolo"] },
+    { name = "saccade", extra = ["cognition", "eval", "media", "native-build", "serve", "storage", "train", "yolo"] },
     { name = "types-pyyaml" },
 ]
 
@@ -3116,13 +3118,13 @@ requires-dist = [
     { name = "mlflow", marker = "extra == 'eval'", specifier = ">=3.2.0" },
     { name = "motmetrics", marker = "extra == 'eval'", specifier = ">=1.4.0" },
     { name = "numpy" },
-    { name = "nvidia-cuda-cccl", specifier = "==13.3.3.4.1" },
-    { name = "nvidia-cuda-crt", specifier = "==13.3.73" },
-    { name = "nvidia-cuda-nvcc", specifier = "==13.3.73" },
+    { name = "nvidia-cuda-cccl", marker = "extra == 'native-build'", specifier = "==13.3.3.4.1" },
+    { name = "nvidia-cuda-crt", marker = "extra == 'native-build'", specifier = "==13.3.73" },
+    { name = "nvidia-cuda-nvcc", marker = "extra == 'native-build'", specifier = "==13.3.73" },
     { name = "nvidia-dali-cuda120", marker = "extra == 'dali'", specifier = ">=2.0.0" },
     { name = "nvidia-ml-py", marker = "extra == 'cognition'" },
     { name = "nvidia-ml-py", marker = "extra == 'serve'" },
-    { name = "nvidia-nvvm", specifier = "==13.3.73" },
+    { name = "nvidia-nvvm", marker = "extra == 'native-build'", specifier = "==13.3.73" },
     { name = "onnxruntime-gpu", marker = "extra == 'train'", specifier = ">=1.24.4" },
     { name = "onnxscript", marker = "extra == 'train'", specifier = ">=0.6.2" },
     { name = "opencv-python", marker = "extra == 'media'" },
@@ -3132,7 +3134,7 @@ requires-dist = [
     { name = "pillow", marker = "extra == 'eval'" },
     { name = "psycopg2-binary", marker = "extra == 'storage'", specifier = ">=2.9.10" },
     { name = "pyarrow", marker = "extra == 'eval'" },
-    { name = "pybind11", specifier = ">=3.0.3" },
+    { name = "pybind11", marker = "extra == 'native-build'", specifier = ">=3.0.3" },
     { name = "pycocotools", marker = "extra == 'eval'", specifier = ">=2.0.11" },
     { name = "pydantic", marker = "extra == 'serve'" },
     { name = "pygobject", marker = "extra == 'media'", specifier = "==3.48.2" },
@@ -3157,7 +3159,7 @@ requires-dist = [
     { name = "ultralytics", marker = "extra == 'yolo'" },
     { name = "uvicorn", marker = "extra == 'serve'" },
 ]
-provides-extras = ["dali", "yolo", "media", "storage", "serve", "cognition", "eval", "train"]
+provides-extras = ["native-build", "dali", "yolo", "media", "storage", "serve", "cognition", "eval", "train"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -3169,7 +3171,7 @@ dev = [
     { name = "pytest-asyncio", specifier = ">=1.3.0" },
     { name = "pytest-cov", specifier = ">=6.0.0" },
     { name = "ruff" },
-    { name = "saccade", extras = ["yolo", "media", "storage", "serve", "cognition", "eval", "train"] },
+    { name = "saccade", extras = ["native-build", "yolo", "media", "storage", "serve", "cognition", "eval", "train"] },
     { name = "types-pyyaml", specifier = ">=6.0.12.20260408" },
 ]
 

@@ -55,6 +55,7 @@ Manifest: `docs/ownership/doc_migration_manifest.yaml`
 - `docs/decisions/022-check-taxonomy-and-publication-lag.md`
 - `docs/decisions/023-ultralytics-runtime-decouple.md`
 - `docs/decisions/024-eval-config-module-views.md`
+- `docs/decisions/025-native-extension-delivery.md`
 - `docs/decisions/README.md`
 - `docs/experiments/README.md`
 - `docs/experiments/occ_exit_audit_p55/README.md`
@@ -182,6 +183,7 @@ Manifest: `docs/ownership/doc_migration_manifest.yaml`
 - `docs/reference/pipeline_flow.md`
 - `docs/reference/production_pipeline_code_map.md`
 - `docs/reference/runbooks/README.md`
+- `docs/reference/runbooks/native_extension_install.md`
 - `docs/reference/runbooks/nsys_profiling.md`
 - `docs/reference/runbooks/runtime_identity_republication.md`
 - `docs/reference/runtime_identity/archive/README.md`
@@ -374,6 +376,6 @@ Excluded from the active index and default search view.
 
 ## Inventory summary
 
-- documents: 324
-- active: 269
+- documents: 326
+- active: 271
 - grayed out: 55

@@ -8,6 +8,8 @@
   - 重建 native extension 與相關 `.so` 連結。
 - `coverage_native.sh`
   - 建立 coverage build、執行 native tests、輸出 gcov 摘要。
+- `verify_consumer_install.sh`
+  - 在 checkout 之外重做第三方安裝路徑（新 venv → `pip install 'saccade[native-build]'` → `cmake -DPYTHON_EXECUTABLE=<venv>` → `.pth` / `SACCADE_BUILD_PATH` smoke），ADR 025 的 fresh-consumer test。
 
 ## 說明
 
@@ -23,5 +25,6 @@
 | `build_fpn_reid.py` | stable | - | Build the legacy FPN ReID CUDA extension with setuptools. |
 | `coverage_native.sh` | stable | - | Configure/build native targets with coverage instrumentation. |
 | `rebuild.sh` | stable | - | Saccade C++/CUDA Extension Rebuild Script |
+| `verify_consumer_install.sh` | stable | cli | Fresh-consumer install test for the native extension (ADR 025). |
 
 <!-- END generated script index -->
