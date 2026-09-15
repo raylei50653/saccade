@@ -1,0 +1,2367 @@
+{
+  "schema": "saccade-resource-study-v1",
+  "main": {
+    "summarizer_sha256": "da34b240ffc7addf889f8d63ba4e795c2a9caebc0e4f675100e434f37c569227",
+    "schema": "saccade-resource-summary-v1",
+    "kind": "bounded_residency_pressure_proxy",
+    "rows": [
+      {
+        "name": "r0_k16_serial",
+        "rep": 0,
+        "blocks": 16,
+        "mode": "serial",
+        "measurement_intervals_monotonic": [
+          [
+            8375.465188562,
+            8422.01558998
+          ]
+        ],
+        "clock_anchor": {
+          "epoch": 1789472353.7475789,
+          "monotonic": 8360.150157639
+        },
+        "output_sha256": {
+          "MOT17-04-SDP.txt": "10a1537ef165cd909b1503720b9a9a0278922982cba16a2317f68131bc5fddd5"
+        },
+        "fps": 5.353331094213381,
+        "frames": 250,
+        "latency": {
+          "n": 250,
+          "mean_ms": 176.41595624000004,
+          "std_ms": 19.053357398952752,
+          "p50_ms": 175.400461,
+          "p95_ms": 200.8027039,
+          "p99_ms": 206.30519653
+        },
+        "period": {
+          "n": 249,
+          "mean_ms": 186.94940328513545,
+          "std_ms": 18.991874154525593,
+          "p50_ms": 185.9370879992639,
+          "p95_ms": 211.2249667996366,
+          "p99_ms": 216.78231947968018
+        },
+        "tracker_latency": null,
+        "pressure": {
+          "selected_pulse_span_fraction_of_measured_time": 0.9998832723277478,
+          "verified_pulses": 8765,
+          "k_simultaneous_fraction_within_selected_pulses": 0.9554302916427996,
+          "mean_resident_blocks_within_selected_pulses": 15.287674739024897,
+          "restart_gap": {
+            "n": 8764,
+            "mean_ms": 0.23615676494751256,
+            "std_ms": 1.6808627656643598,
+            "p50_ms": 0.189616,
+            "p95_ms": 0.40273760000000003,
+            "p99_ms": 0.5924438400000038
+          },
+          "info": {
+            "sm_count": 46,
+            "shared_bytes": 52224,
+            "max_blocks_per_sm": 1
+          }
+        },
+        "telemetry": {
+          "samples": 456,
+          "values": {
+            "temperature.gpu": {
+              "mean": 59.328947368421055,
+              "min": 57.0,
+              "max": 64.0
+            },
+            "power.draw [W]": {
+              "mean": 59.408355263157894,
+              "min": 42.36,
+              "max": 93.62
+            },
+            "clocks.current.sm [MHz]": {
+              "mean": 2767.2105263157896,
+              "min": 1590.0,
+              "max": 2782.0
+            },
+            "clocks.current.memory [MHz]": {
+              "mean": 13946.17543859649,
+              "min": 9001.0,
+              "max": 14001.0
+            },
+            "utilization.gpu [%]": {
+              "mean": 96.66666666666667,
+              "min": 40.0,
+              "max": 98.0
+            },
+            "utilization.memory [%]": {
+              "mean": 2.0,
+              "min": 2.0,
+              "max": 2.0
+            }
+          }
+        },
+        "output_byte_equal_to_same_mode_baseline": true
+      },
+      {
+        "name": "r0_k16_double",
+        "rep": 0,
+        "blocks": 16,
+        "mode": "double",
+        "measurement_intervals_monotonic": [
+          [
+            8440.633651489,
+            8483.834670111
+          ]
+        ],
+        "clock_anchor": {
+          "epoch": 1789472422.4496205,
+          "monotonic": 8428.852198816
+        },
+        "output_sha256": {
+          "MOT17-04-SDP.txt": "10a1537ef165cd909b1503720b9a9a0278922982cba16a2317f68131bc5fddd5"
+        },
+        "fps": 5.7845567744182285,
+        "frames": 250,
+        "latency": {
+          "n": 250,
+          "mean_ms": 353.51936280399997,
+          "std_ms": 55.62364160477968,
+          "p50_ms": 359.6342005,
+          "p95_ms": 412.48068405,
+          "p99_ms": 427.36309716999995
+        },
+        "period": {
+          "n": 249,
+          "mean_ms": 173.49806675501821,
+          "std_ms": 29.382173957205808,
+          "p50_ms": 175.20239999976184,
+          "p95_ms": 205.93584140005987,
+          "p99_ms": 214.25092672041504
+        },
+        "tracker_latency": null,
+        "pressure": {
+          "selected_pulse_span_fraction_of_measured_time": 0.9998228391078708,
+          "verified_pulses": 8126,
+          "k_simultaneous_fraction_within_selected_pulses": 0.9545141892664454,
+          "mean_resident_blocks_within_selected_pulses": 15.272969575246528,
+          "restart_gap": {
+            "n": 8125,
+            "mean_ms": 0.24129929846153847,
+            "std_ms": 1.7497359042536835,
+            "p50_ms": 0.190976,
+            "p95_ms": 0.423296,
+            "p99_ms": 0.6243532800000001
+          },
+          "info": {
+            "sm_count": 46,
+            "shared_bytes": 52224,
+            "max_blocks_per_sm": 1
+          }
+        },
+        "telemetry": {
+          "samples": 424,
+          "values": {
+            "temperature.gpu": {
+              "mean": 60.93396226415094,
+              "min": 58.0,
+              "max": 64.0
+            },
+            "power.draw [W]": {
+              "mean": 64.52745283018868,
+              "min": 42.33,
+              "max": 85.31
+            },
+            "clocks.current.sm [MHz]": {
+              "mean": 2765.186320754717,
+              "min": 1605.0,
+              "max": 2782.0
+            },
+            "clocks.current.memory [MHz]": {
+              "mean": 12102.415094339623,
+              "min": 9001.0,
+              "max": 14001.0
+            },
+            "utilization.gpu [%]": {
+              "mean": 96.58018867924528,
+              "min": 52.0,
+              "max": 97.0
+            },
+            "utilization.memory [%]": {
+              "mean": 2.4245283018867925,
+              "min": 1.0,
+              "max": 5.0
+            }
+          }
+        },
+        "output_byte_equal_to_same_mode_baseline": true
+      },
+      {
+        "name": "r0_k24_double",
+        "rep": 0,
+        "blocks": 24,
+        "mode": "double",
+        "measurement_intervals_monotonic": [
+          [
+            8501.836875711,
+            8548.774679329
+          ]
+        ],
+        "clock_anchor": {
+          "epoch": 1789472482.8693419,
+          "monotonic": 8489.271920506
+        },
+        "output_sha256": {
+          "MOT17-04-SDP.txt": "10a1537ef165cd909b1503720b9a9a0278922982cba16a2317f68131bc5fddd5"
+        },
+        "fps": 5.289167011626139,
+        "frames": 250,
+        "latency": {
+          "n": 250,
+          "mean_ms": 386.05238335999996,
+          "std_ms": 37.60444753614994,
+          "p50_ms": 382.3791565,
+          "p95_ms": 441.9731107,
+          "p99_ms": 534.5896696499998
+        },
+        "period": {
+          "n": 249,
+          "mean_ms": 188.5052354136568,
+          "std_ms": 25.267914512748767,
+          "p50_ms": 188.2114919990272,
+          "p95_ms": 218.3819649992074,
+          "p99_ms": 243.9117254400481
+        },
+        "tracker_latency": null,
+        "pressure": {
+          "selected_pulse_span_fraction_of_measured_time": 0.9998938441167688,
+          "verified_pulses": 8845,
+          "k_simultaneous_fraction_within_selected_pulses": 0.9550253728283234,
+          "mean_resident_blocks_within_selected_pulses": 22.922318011595657,
+          "restart_gap": {
+            "n": 8844,
+            "mean_ms": 0.23793558751696062,
+            "std_ms": 2.5995349502935614,
+            "p50_ms": 0.179216,
+            "p95_ms": 0.40619360000000004,
+            "p99_ms": 0.60819648
+          },
+          "info": {
+            "sm_count": 46,
+            "shared_bytes": 52224,
+            "max_blocks_per_sm": 1
+          }
+        },
+        "telemetry": {
+          "samples": 459,
+          "values": {
+            "temperature.gpu": {
+              "mean": 59.92374727668845,
+              "min": 55.0,
+              "max": 65.0
+            },
+            "power.draw [W]": {
+              "mean": 60.7642265795207,
+              "min": 29.35,
+              "max": 100.92
+            },
+            "clocks.current.sm [MHz]": {
+              "mean": 2759.9607843137255,
+              "min": 1612.0,
+              "max": 2782.0
+            },
+            "clocks.current.memory [MHz]": {
+              "mean": 9001.0,
+              "min": 9001.0,
+              "max": 9001.0
+            },
+            "utilization.gpu [%]": {
+              "mean": 96.43355119825708,
+              "min": 39.0,
+              "max": 98.0
+            },
+            "utilization.memory [%]": {
+              "mean": 2.934640522875817,
+              "min": 2.0,
+              "max": 6.0
+            }
+          }
+        },
+        "output_byte_equal_to_same_mode_baseline": true
+      },
+      {
+        "name": "r0_k24_serial",
+        "rep": 0,
+        "blocks": 24,
+        "mode": "serial",
+        "measurement_intervals_monotonic": [
+          [
+            8566.395982185,
+            8612.863862489
+          ]
+        ],
+        "clock_anchor": {
+          "epoch": 1789472547.563427,
+          "monotonic": 8553.966005557
+        },
+        "output_sha256": {
+          "MOT17-04-SDP.txt": "10a1537ef165cd909b1503720b9a9a0278922982cba16a2317f68131bc5fddd5"
+        },
+        "fps": 5.357167155722457,
+        "frames": 250,
+        "latency": {
+          "n": 250,
+          "mean_ms": 176.35588455199996,
+          "std_ms": 18.776793284066052,
+          "p50_ms": 177.666229,
+          "p95_ms": 194.4308773,
+          "p99_ms": 207.40221241999996
+        },
+        "period": {
+          "n": 249,
+          "mean_ms": 186.6179931887573,
+          "std_ms": 18.78083735811546,
+          "p50_ms": 187.96006299999135,
+          "p95_ms": 204.94899579971388,
+          "p99_ms": 218.00669108044536
+        },
+        "tracker_latency": null,
+        "pressure": {
+          "selected_pulse_span_fraction_of_measured_time": 0.9998876810182361,
+          "verified_pulses": 8802,
+          "k_simultaneous_fraction_within_selected_pulses": 0.958757166620939,
+          "mean_resident_blocks_within_selected_pulses": 23.011220207627368,
+          "restart_gap": {
+            "n": 8801,
+            "mean_ms": 0.21731401431655495,
+            "std_ms": 2.3898666522007503,
+            "p50_ms": 0.175008,
+            "p95_ms": 0.33904,
+            "p99_ms": 0.52048
+          },
+          "info": {
+            "sm_count": 46,
+            "shared_bytes": 52224,
+            "max_blocks_per_sm": 1
+          }
+        },
+        "telemetry": {
+          "samples": 455,
+          "values": {
+            "temperature.gpu": {
+              "mean": 58.66153846153846,
+              "min": 55.0,
+              "max": 64.0
+            },
+            "power.draw [W]": {
+              "mean": 59.87417582417582,
+              "min": 46.33,
+              "max": 74.75
+            },
+            "clocks.current.sm [MHz]": {
+              "mean": 2773.5208791208793,
+              "min": 2107.0,
+              "max": 2782.0
+            },
+            "clocks.current.memory [MHz]": {
+              "mean": 10968.032967032967,
+              "min": 9001.0,
+              "max": 14001.0
+            },
+            "utilization.gpu [%]": {
+              "mean": 96.47252747252747,
+              "min": 29.0,
+              "max": 98.0
+            },
+            "utilization.memory [%]": {
+              "mean": 2.4703296703296704,
+              "min": 1.0,
+              "max": 3.0
+            }
+          }
+        },
+        "output_byte_equal_to_same_mode_baseline": true
+      },
+      {
+        "name": "r0_k0_serial",
+        "rep": 0,
+        "blocks": 0,
+        "mode": "serial",
+        "measurement_intervals_monotonic": [
+          [
+            8621.598936886,
+            8622.761424715
+          ]
+        ],
+        "clock_anchor": {
+          "epoch": 1789472611.678766,
+          "monotonic": 8618.081344697
+        },
+        "output_sha256": {
+          "MOT17-04-SDP.txt": "10a1537ef165cd909b1503720b9a9a0278922982cba16a2317f68131bc5fddd5"
+        },
+        "fps": 214.17110215019218,
+        "frames": 250,
+        "latency": {
+          "n": 250,
+          "mean_ms": 4.262551524,
+          "std_ms": 0.3879636367620159,
+          "p50_ms": 4.146936999999999,
+          "p95_ms": 4.887911899999999,
+          "p99_ms": 5.917573559999998
+        },
+        "period": {
+          "n": 249,
+          "mean_ms": 4.668625819278649,
+          "std_ms": 0.401242251756518,
+          "p50_ms": 4.5638199990207795,
+          "p95_ms": 5.290681199767278,
+          "p99_ms": 6.311308680888034
+        },
+        "tracker_latency": null,
+        "telemetry": {
+          "samples": 11,
+          "values": {
+            "temperature.gpu": {
+              "mean": 61.90909090909091,
+              "min": 60.0,
+              "max": 63.0
+            },
+            "power.draw [W]": {
+              "mean": 112.73272727272729,
+              "min": 107.38,
+              "max": 115.51
+            },
+            "clocks.current.sm [MHz]": {
+              "mean": 2371.2727272727275,
+              "min": 1950.0,
+              "max": 2617.0
+            },
+            "clocks.current.memory [MHz]": {
+              "mean": 14001.0,
+              "min": 14001.0,
+              "max": 14001.0
+            },
+            "utilization.gpu [%]": {
+              "mean": 71.18181818181819,
+              "min": 53.0,
+              "max": 75.0
+            },
+            "utilization.memory [%]": {
+              "mean": 20.09090909090909,
+              "min": 15.0,
+              "max": 21.0
+            }
+          }
+        },
+        "output_byte_equal_to_same_mode_baseline": true
+      },
+      {
+        "name": "r0_k0_double",
+        "rep": 0,
+        "blocks": 0,
+        "mode": "double",
+        "measurement_intervals_monotonic": [
+          [
+            8631.319381651,
+            8632.080951164
+          ]
+        ],
+        "clock_anchor": {
+          "epoch": 1789472621.3311796,
+          "monotonic": 8627.733757814
+        },
+        "output_sha256": {
+          "MOT17-04-SDP.txt": "10a1537ef165cd909b1503720b9a9a0278922982cba16a2317f68131bc5fddd5"
+        },
+        "fps": 325.5377884264806,
+        "frames": 250,
+        "latency": {
+          "n": 250,
+          "mean_ms": 6.940844052,
+          "std_ms": 1.1037602742998651,
+          "p50_ms": 6.651426,
+          "p95_ms": 9.435862199999997,
+          "p99_ms": 11.338616029999999
+        },
+        "period": {
+          "n": 249,
+          "mean_ms": 3.058512100404508,
+          "std_ms": 0.8454286537979752,
+          "p50_ms": 2.8998730012972374,
+          "p95_ms": 4.480315800537937,
+          "p99_ms": 6.968530559897773
+        },
+        "tracker_latency": null,
+        "telemetry": {
+          "samples": 8,
+          "values": {
+            "temperature.gpu": {
+              "mean": 57.5,
+              "min": 52.0,
+              "max": 63.0
+            },
+            "power.draw [W]": {
+              "mean": 118.14625000000001,
+              "min": 68.01,
+              "max": 135.32
+            },
+            "clocks.current.sm [MHz]": {
+              "mean": 2355.875,
+              "min": 1875.0,
+              "max": 2520.0
+            },
+            "clocks.current.memory [MHz]": {
+              "mean": 14001.0,
+              "min": 14001.0,
+              "max": 14001.0
+            },
+            "utilization.gpu [%]": {
+              "mean": 89.25,
+              "min": 67.0,
+              "max": 99.0
+            },
+            "utilization.memory [%]": {
+              "mean": 30.5,
+              "min": 23.0,
+              "max": 34.0
+            }
+          }
+        },
+        "output_byte_equal_to_same_mode_baseline": true
+      },
+      {
+        "name": "r0_k8_double",
+        "rep": 0,
+        "blocks": 8,
+        "mode": "double",
+        "measurement_intervals_monotonic": [
+          [
+            8649.854746975,
+            8692.767046007
+          ]
+        ],
+        "clock_anchor": {
+          "epoch": 1789472630.9405134,
+          "monotonic": 8637.343091828
+        },
+        "output_sha256": {
+          "MOT17-04-SDP.txt": "10a1537ef165cd909b1503720b9a9a0278922982cba16a2317f68131bc5fddd5"
+        },
+        "fps": 5.772851457258212,
+        "frames": 250,
+        "latency": {
+          "n": 250,
+          "mean_ms": 353.85493137599997,
+          "std_ms": 58.3117134475629,
+          "p50_ms": 365.471173,
+          "p95_ms": 402.0586676,
+          "p99_ms": 416.68714215
+        },
+        "period": {
+          "n": 249,
+          "mean_ms": 172.3385503293217,
+          "std_ms": 32.116069141314945,
+          "p50_ms": 175.98582800019358,
+          "p95_ms": 204.1217851994588,
+          "p99_ms": 210.73767255940766
+        },
+        "tracker_latency": null,
+        "pressure": {
+          "selected_pulse_span_fraction_of_measured_time": 0.9998883396809575,
+          "verified_pulses": 8086,
+          "k_simultaneous_fraction_within_selected_pulses": 0.9556472261780614,
+          "mean_resident_blocks_within_selected_pulses": 7.645557291249754,
+          "restart_gap": {
+            "n": 8085,
+            "mean_ms": 0.23494420185528755,
+            "std_ms": 0.33053851730740424,
+            "p50_ms": 0.197568,
+            "p95_ms": 0.4323839999999993,
+            "p99_ms": 0.6565580799999997
+          },
+          "info": {
+            "sm_count": 46,
+            "shared_bytes": 52224,
+            "max_blocks_per_sm": 1
+          }
+        },
+        "telemetry": {
+          "samples": 420,
+          "values": {
+            "temperature.gpu": {
+              "mean": 60.03809523809524,
+              "min": 57.0,
+              "max": 64.0
+            },
+            "power.draw [W]": {
+              "mean": 64.45407142857144,
+              "min": 37.35,
+              "max": 112.93
+            },
+            "clocks.current.sm [MHz]": {
+              "mean": 2777.7023809523807,
+              "min": 2610.0,
+              "max": 2782.0
+            },
+            "clocks.current.memory [MHz]": {
+              "mean": 9001.0,
+              "min": 9001.0,
+              "max": 9001.0
+            },
+            "utilization.gpu [%]": {
+              "mean": 96.82857142857142,
+              "min": 78.0,
+              "max": 97.0
+            },
+            "utilization.memory [%]": {
+              "mean": 3.0547619047619046,
+              "min": 2.0,
+              "max": 7.0
+            }
+          }
+        },
+        "output_byte_equal_to_same_mode_baseline": true
+      },
+      {
+        "name": "r0_k8_serial",
+        "rep": 0,
+        "blocks": 8,
+        "mode": "serial",
+        "measurement_intervals_monotonic": [
+          [
+            8710.789215896,
+            8754.908515914
+          ]
+        ],
+        "clock_anchor": {
+          "epoch": 1789472692.0468066,
+          "monotonic": 8698.449385186
+        },
+        "output_sha256": {
+          "MOT17-04-SDP.txt": "10a1537ef165cd909b1503720b9a9a0278922982cba16a2317f68131bc5fddd5"
+        },
+        "fps": 5.641505140031748,
+        "frames": 250,
+        "latency": {
+          "n": 250,
+          "mean_ms": 166.867097568,
+          "std_ms": 17.072503274701432,
+          "p50_ms": 169.39281649999998,
+          "p95_ms": 190.9432779,
+          "p99_ms": 203.30255671999996
+        },
+        "period": {
+          "n": 249,
+          "mean_ms": 177.1859438473863,
+          "std_ms": 17.06325354661172,
+          "p50_ms": 179.78327000128047,
+          "p95_ms": 201.332242600256,
+          "p99_ms": 213.77397335971187
+        },
+        "tracker_latency": null,
+        "pressure": {
+          "selected_pulse_span_fraction_of_measured_time": 0.9998785867863542,
+          "verified_pulses": 8324,
+          "k_simultaneous_fraction_within_selected_pulses": 0.9573398733917715,
+          "mean_resident_blocks_within_selected_pulses": 7.659092795346019,
+          "restart_gap": {
+            "n": 8323,
+            "mean_ms": 0.22559901189474948,
+            "std_ms": 0.11294975470745852,
+            "p50_ms": 0.19824,
+            "p95_ms": 0.4092351999999998,
+            "p99_ms": 0.5930566400000001
+          },
+          "info": {
+            "sm_count": 46,
+            "shared_bytes": 52224,
+            "max_blocks_per_sm": 1
+          }
+        },
+        "telemetry": {
+          "samples": 432,
+          "values": {
+            "temperature.gpu": {
+              "mean": 60.99768518518518,
+              "min": 58.0,
+              "max": 65.0
+            },
+            "power.draw [W]": {
+              "mean": 66.09851851851852,
+              "min": 38.13,
+              "max": 97.38
+            },
+            "clocks.current.sm [MHz]": {
+              "mean": 2778.6064814814813,
+              "min": 2760.0,
+              "max": 2782.0
+            },
+            "clocks.current.memory [MHz]": {
+              "mean": 9001.0,
+              "min": 9001.0,
+              "max": 9001.0
+            },
+            "utilization.gpu [%]": {
+              "mean": 96.97916666666667,
+              "min": 96.0,
+              "max": 98.0
+            },
+            "utilization.memory [%]": {
+              "mean": 3.087962962962963,
+              "min": 3.0,
+              "max": 4.0
+            }
+          }
+        },
+        "output_byte_equal_to_same_mode_baseline": true
+      },
+      {
+        "name": "r0_k32_serial",
+        "rep": 0,
+        "blocks": 32,
+        "mode": "serial",
+        "measurement_intervals_monotonic": [
+          [
+            8773.73089542,
+            8821.95776994
+          ]
+        ],
+        "clock_anchor": {
+          "epoch": 1789472754.192127,
+          "monotonic": 8760.594705681
+        },
+        "output_sha256": {
+          "MOT17-04-SDP.txt": "10a1537ef165cd909b1503720b9a9a0278922982cba16a2317f68131bc5fddd5"
+        },
+        "fps": 5.164034203835956,
+        "frames": 250,
+        "latency": {
+          "n": 250,
+          "mean_ms": 183.467859116,
+          "std_ms": 33.707476780517084,
+          "p50_ms": 185.588621,
+          "p95_ms": 211.1174547,
+          "p99_ms": 222.48610384
+        },
+        "period": {
+          "n": 249,
+          "mean_ms": 193.68222698795145,
+          "std_ms": 34.763412494682434,
+          "p50_ms": 196.1522600013268,
+          "p95_ms": 221.54550600025686,
+          "p99_ms": 232.91097832021478
+        },
+        "tracker_latency": null,
+        "pressure": {
+          "selected_pulse_span_fraction_of_measured_time": 0.9998893595935131,
+          "verified_pulses": 9046,
+          "k_simultaneous_fraction_within_selected_pulses": 0.9514722378792466,
+          "mean_resident_blocks_within_selected_pulses": 30.45015090004752,
+          "restart_gap": {
+            "n": 9045,
+            "mean_ms": 0.2577243807628524,
+            "std_ms": 2.4432180895102427,
+            "p50_ms": 0.188032,
+            "p95_ms": 0.41127679999999994,
+            "p99_ms": 0.6179379199999988
+          },
+          "info": {
+            "sm_count": 46,
+            "shared_bytes": 52224,
+            "max_blocks_per_sm": 1
+          }
+        },
+        "telemetry": {
+          "samples": 472,
+          "values": {
+            "temperature.gpu": {
+              "mean": 62.186440677966104,
+              "min": 58.0,
+              "max": 66.0
+            },
+            "power.draw [W]": {
+              "mean": 70.19533898305085,
+              "min": 43.5,
+              "max": 113.75
+            },
+            "clocks.current.sm [MHz]": {
+              "mean": 2759.2457627118642,
+              "min": 1875.0,
+              "max": 2782.0
+            },
+            "clocks.current.memory [MHz]": {
+              "mean": 9001.0,
+              "min": 9001.0,
+              "max": 9001.0
+            },
+            "utilization.gpu [%]": {
+              "mean": 96.46186440677967,
+              "min": 15.0,
+              "max": 98.0
+            },
+            "utilization.memory [%]": {
+              "mean": 3.031779661016949,
+              "min": 2.0,
+              "max": 6.0
+            }
+          }
+        },
+        "output_byte_equal_to_same_mode_baseline": true
+      },
+      {
+        "name": "r0_k32_double",
+        "rep": 0,
+        "blocks": 32,
+        "mode": "double",
+        "measurement_intervals_monotonic": [
+          [
+            8841.112141784,
+            8891.500037045
+          ]
+        ],
+        "clock_anchor": {
+          "epoch": 1789472821.3595228,
+          "monotonic": 8827.762101281
+        },
+        "output_sha256": {
+          "MOT17-04-SDP.txt": "10a1537ef165cd909b1503720b9a9a0278922982cba16a2317f68131bc5fddd5"
+        },
+        "fps": 4.918760666701413,
+        "frames": 250,
+        "latency": {
+          "n": 250,
+          "mean_ms": 414.7307375159999,
+          "std_ms": 40.377511848198765,
+          "p50_ms": 408.7136295,
+          "p95_ms": 471.1782936,
+          "p99_ms": 567.6398039099998
+        },
+        "period": {
+          "n": 249,
+          "mean_ms": 202.36102514457573,
+          "std_ms": 27.678503960366932,
+          "p50_ms": 201.1349380009051,
+          "p95_ms": 233.7572251988604,
+          "p99_ms": 250.74299355947014
+        },
+        "tracker_latency": null,
+        "pressure": {
+          "selected_pulse_span_fraction_of_measured_time": 0.9999072906900182,
+          "verified_pulses": 9448,
+          "k_simultaneous_fraction_within_selected_pulses": 0.9513085098801349,
+          "mean_resident_blocks_within_selected_pulses": 30.444466183413947,
+          "restart_gap": {
+            "n": 9447,
+            "mean_ms": 0.258836930242405,
+            "std_ms": 2.561144181894047,
+            "p50_ms": 0.193376,
+            "p95_ms": 0.4299903999999998,
+            "p99_ms": 0.6244985599999977
+          },
+          "info": {
+            "sm_count": 46,
+            "shared_bytes": 52224,
+            "max_blocks_per_sm": 1
+          }
+        },
+        "telemetry": {
+          "samples": 491,
+          "values": {
+            "temperature.gpu": {
+              "mean": 63.13645621181263,
+              "min": 60.0,
+              "max": 68.0
+            },
+            "power.draw [W]": {
+              "mean": 70.18040733197556,
+              "min": 15.76,
+              "max": 116.49
+            },
+            "clocks.current.sm [MHz]": {
+              "mean": 2752.6496945010185,
+              "min": 1477.0,
+              "max": 2782.0
+            },
+            "clocks.current.memory [MHz]": {
+              "mean": 9001.0,
+              "min": 9001.0,
+              "max": 9001.0
+            },
+            "utilization.gpu [%]": {
+              "mean": 96.26272912423626,
+              "min": 13.0,
+              "max": 98.0
+            },
+            "utilization.memory [%]": {
+              "mean": 2.9694501018329937,
+              "min": 2.0,
+              "max": 4.0
+            }
+          }
+        },
+        "output_byte_equal_to_same_mode_baseline": true
+      },
+      {
+        "name": "r1_k8_serial",
+        "rep": 1,
+        "blocks": 8,
+        "mode": "serial",
+        "measurement_intervals_monotonic": [
+          [
+            9444.188654296,
+            9487.019875011
+          ]
+        ],
+        "clock_anchor": {
+          "epoch": 1789473426.1451557,
+          "monotonic": 9432.547734125
+        },
+        "output_sha256": {
+          "MOT17-04-SDP.txt": "10a1537ef165cd909b1503720b9a9a0278922982cba16a2317f68131bc5fddd5"
+        },
+        "fps": 5.815416674255785,
+        "frames": 250,
+        "latency": {
+          "n": 250,
+          "mean_ms": 161.63842961999998,
+          "std_ms": 14.38758625533374,
+          "p50_ms": 162.6794895,
+          "p95_ms": 180.61311394999998,
+          "p99_ms": 199.76460257
+        },
+        "period": {
+          "n": 249,
+          "mean_ms": 172.01293459839073,
+          "std_ms": 14.411816741950062,
+          "p50_ms": 173.03238199929183,
+          "p95_ms": 191.0716551996302,
+          "p99_ms": 210.1715347593563
+        },
+        "tracker_latency": null,
+        "pressure": {
+          "selected_pulse_span_fraction_of_measured_time": 0.9998809130603002,
+          "verified_pulses": 8142,
+          "k_simultaneous_fraction_within_selected_pulses": 0.9631350776791702,
+          "mean_resident_blocks_within_selected_pulses": 7.705350397765657,
+          "restart_gap": {
+            "n": 8141,
+            "mean_ms": 0.19361593907382385,
+            "std_ms": 0.10175623781955823,
+            "p50_ms": 0.17952,
+            "p95_ms": 0.361984,
+            "p99_ms": 0.5260736000000001
+          },
+          "info": {
+            "sm_count": 46,
+            "shared_bytes": 52224,
+            "max_blocks_per_sm": 1
+          }
+        },
+        "telemetry": {
+          "samples": 419,
+          "values": {
+            "temperature.gpu": {
+              "mean": 59.13842482100239,
+              "min": 56.0,
+              "max": 64.0
+            },
+            "power.draw [W]": {
+              "mean": 58.12813842482101,
+              "min": 40.08,
+              "max": 85.32
+            },
+            "clocks.current.sm [MHz]": {
+              "mean": 2780.9355608591886,
+              "min": 2767.0,
+              "max": 2782.0
+            },
+            "clocks.current.memory [MHz]": {
+              "mean": 9001.0,
+              "min": 9001.0,
+              "max": 9001.0
+            },
+            "utilization.gpu [%]": {
+              "mean": 96.95942720763723,
+              "min": 95.0,
+              "max": 97.0
+            },
+            "utilization.memory [%]": {
+              "mean": 3.4892601431980905,
+              "min": 3.0,
+              "max": 4.0
+            }
+          }
+        },
+        "output_byte_equal_to_same_mode_baseline": true
+      },
+      {
+        "name": "r1_k8_double",
+        "rep": 1,
+        "blocks": 8,
+        "mode": "double",
+        "measurement_intervals_monotonic": [
+          [
+            9504.108145481,
+            9545.518358721
+          ]
+        ],
+        "clock_anchor": {
+          "epoch": 1789473486.1340406,
+          "monotonic": 9492.536619209
+        },
+        "output_sha256": {
+          "MOT17-04-SDP.txt": "10a1537ef165cd909b1503720b9a9a0278922982cba16a2317f68131bc5fddd5"
+        },
+        "fps": 5.992017147139757,
+        "frames": 250,
+        "latency": {
+          "n": 250,
+          "mean_ms": 341.12404404399996,
+          "std_ms": 20.342115129649727,
+          "p50_ms": 342.69753949999995,
+          "p95_ms": 372.6765048,
+          "p99_ms": 387.04972868
+        },
+        "period": {
+          "n": 249,
+          "mean_ms": 166.30607726907752,
+          "std_ms": 14.052504648820042,
+          "p50_ms": 167.75868100012303,
+          "p95_ms": 189.33401799986314,
+          "p99_ms": 194.74764807906467
+        },
+        "tracker_latency": null,
+        "pressure": {
+          "selected_pulse_span_fraction_of_measured_time": 0.9998805980067947,
+          "verified_pulses": 7858,
+          "k_simultaneous_fraction_within_selected_pulses": 0.9614287680101576,
+          "mean_resident_blocks_within_selected_pulses": 7.691872261033771,
+          "restart_gap": {
+            "n": 7857,
+            "mean_ms": 0.20275883823342242,
+            "std_ms": 0.10550513117973372,
+            "p50_ms": 0.18416,
+            "p95_ms": 0.3956864,
+            "p99_ms": 0.5865087999999995
+          },
+          "info": {
+            "sm_count": 46,
+            "shared_bytes": 52224,
+            "max_blocks_per_sm": 1
+          }
+        },
+        "telemetry": {
+          "samples": 405,
+          "values": {
+            "temperature.gpu": {
+              "mean": 59.291358024691355,
+              "min": 57.0,
+              "max": 65.0
+            },
+            "power.draw [W]": {
+              "mean": 59.14032098765433,
+              "min": 48.31,
+              "max": 73.37
+            },
+            "clocks.current.sm [MHz]": {
+              "mean": 2779.614814814815,
+              "min": 2775.0,
+              "max": 2782.0
+            },
+            "clocks.current.memory [MHz]": {
+              "mean": 9001.0,
+              "min": 9001.0,
+              "max": 9001.0
+            },
+            "utilization.gpu [%]": {
+              "mean": 96.84938271604938,
+              "min": 96.0,
+              "max": 97.0
+            },
+            "utilization.memory [%]": {
+              "mean": 3.293827160493827,
+              "min": 3.0,
+              "max": 4.0
+            }
+          }
+        },
+        "output_byte_equal_to_same_mode_baseline": true
+      },
+      {
+        "name": "r1_k24_serial",
+        "rep": 1,
+        "blocks": 24,
+        "mode": "serial",
+        "measurement_intervals_monotonic": [
+          [
+            9033.929017983,
+            9082.454281758
+          ]
+        ],
+        "clock_anchor": {
+          "epoch": 1789473014.7101662,
+          "monotonic": 9021.112744485
+        },
+        "output_sha256": {
+          "MOT17-04-SDP.txt": "10a1537ef165cd909b1503720b9a9a0278922982cba16a2317f68131bc5fddd5"
+        },
+        "fps": 5.133443030219675,
+        "frames": 250,
+        "latency": {
+          "n": 250,
+          "mean_ms": 184.364322544,
+          "std_ms": 24.57512319659617,
+          "p50_ms": 184.99235149999998,
+          "p95_ms": 211.54093655,
+          "p99_ms": 222.33211293
+        },
+        "period": {
+          "n": 249,
+          "mean_ms": 194.8805774096385,
+          "std_ms": 24.601252874080018,
+          "p50_ms": 195.41973600098572,
+          "p95_ms": 222.04618620053225,
+          "p99_ms": 232.71029152121628
+        },
+        "tracker_latency": null,
+        "pressure": {
+          "selected_pulse_span_fraction_of_measured_time": 0.9998915858958699,
+          "verified_pulses": 9098,
+          "k_simultaneous_fraction_within_selected_pulses": 0.9513049334435782,
+          "mean_resident_blocks_within_selected_pulses": 22.833221742594265,
+          "restart_gap": {
+            "n": 9097,
+            "mean_ms": 0.2589047782785534,
+            "std_ms": 2.5175507083837756,
+            "p50_ms": 0.19344,
+            "p95_ms": 0.4108159999999991,
+            "p99_ms": 0.5905190399999987
+          },
+          "info": {
+            "sm_count": 46,
+            "shared_bytes": 52224,
+            "max_blocks_per_sm": 1
+          }
+        },
+        "telemetry": {
+          "samples": 476,
+          "values": {
+            "temperature.gpu": {
+              "mean": 62.82773109243698,
+              "min": 59.0,
+              "max": 67.0
+            },
+            "power.draw [W]": {
+              "mean": 68.5710924369748,
+              "min": 39.81,
+              "max": 99.46
+            },
+            "clocks.current.sm [MHz]": {
+              "mean": 2758.796218487395,
+              "min": 1417.0,
+              "max": 2782.0
+            },
+            "clocks.current.memory [MHz]": {
+              "mean": 9001.0,
+              "min": 9001.0,
+              "max": 9001.0
+            },
+            "utilization.gpu [%]": {
+              "mean": 96.33193277310924,
+              "min": 21.0,
+              "max": 98.0
+            },
+            "utilization.memory [%]": {
+              "mean": 3.008403361344538,
+              "min": 2.0,
+              "max": 4.0
+            }
+          }
+        },
+        "output_byte_equal_to_same_mode_baseline": true
+      },
+      {
+        "name": "r1_k24_double",
+        "rep": 1,
+        "blocks": 24,
+        "mode": "double",
+        "measurement_intervals_monotonic": [
+          [
+            9100.789327889,
+            9149.236281986
+          ]
+        ],
+        "clock_anchor": {
+          "epoch": 1789473081.5388927,
+          "monotonic": 9087.941471223
+        },
+        "output_sha256": {
+          "MOT17-04-SDP.txt": "10a1537ef165cd909b1503720b9a9a0278922982cba16a2317f68131bc5fddd5"
+        },
+        "fps": 5.122130439108359,
+        "frames": 250,
+        "latency": {
+          "n": 250,
+          "mean_ms": 398.35774372400004,
+          "std_ms": 30.033122200473926,
+          "p50_ms": 396.34405949999996,
+          "p95_ms": 434.5143441,
+          "p99_ms": 535.7384286799997
+        },
+        "period": {
+          "n": 249,
+          "mean_ms": 194.56608071084474,
+          "std_ms": 22.288750085702667,
+          "p50_ms": 194.67310899926815,
+          "p95_ms": 217.6918607998232,
+          "p99_ms": 229.90565324020287
+        },
+        "tracker_latency": null,
+        "pressure": {
+          "selected_pulse_span_fraction_of_measured_time": 0.9998978726507728,
+          "verified_pulses": 9090,
+          "k_simultaneous_fraction_within_selected_pulses": 0.9518133404875759,
+          "mean_resident_blocks_within_selected_pulses": 22.8453619288578,
+          "restart_gap": {
+            "n": 9089,
+            "mean_ms": 0.25598863857410054,
+            "std_ms": 2.4982408463788617,
+            "p50_ms": 0.190144,
+            "p95_ms": 0.41643520000000006,
+            "p99_ms": 0.6149184000000002
+          },
+          "info": {
+            "sm_count": 46,
+            "shared_bytes": 52224,
+            "max_blocks_per_sm": 1
+          }
+        },
+        "telemetry": {
+          "samples": 474,
+          "values": {
+            "temperature.gpu": {
+              "mean": 62.73628691983122,
+              "min": 59.0,
+              "max": 67.0
+            },
+            "power.draw [W]": {
+              "mean": 68.03021097046414,
+              "min": 40.62,
+              "max": 105.57
+            },
+            "clocks.current.sm [MHz]": {
+              "mean": 2757.0675105485234,
+              "min": 1657.0,
+              "max": 2782.0
+            },
+            "clocks.current.memory [MHz]": {
+              "mean": 9001.0,
+              "min": 9001.0,
+              "max": 9001.0
+            },
+            "utilization.gpu [%]": {
+              "mean": 96.31856540084388,
+              "min": 25.0,
+              "max": 98.0
+            },
+            "utilization.memory [%]": {
+              "mean": 2.9957805907172994,
+              "min": 2.0,
+              "max": 4.0
+            }
+          }
+        },
+        "output_byte_equal_to_same_mode_baseline": true
+      },
+      {
+        "name": "r1_k32_double",
+        "rep": 1,
+        "blocks": 32,
+        "mode": "double",
+        "measurement_intervals_monotonic": [
+          [
+            9167.781383749,
+            9216.202986446
+          ]
+        ],
+        "clock_anchor": {
+          "epoch": 1789473148.3996723,
+          "monotonic": 9154.802250618
+        },
+        "output_sha256": {
+          "MOT17-04-SDP.txt": "10a1537ef165cd909b1503720b9a9a0278922982cba16a2317f68131bc5fddd5"
+        },
+        "fps": 5.128273820775487,
+        "frames": 250,
+        "latency": {
+          "n": 250,
+          "mean_ms": 398.064108324,
+          "std_ms": 70.52930311423214,
+          "p50_ms": 410.2833265,
+          "p95_ms": 455.62883845,
+          "p99_ms": 524.0415316699998
+        },
+        "period": {
+          "n": 249,
+          "mean_ms": 194.46426785944058,
+          "std_ms": 39.5355797837776,
+          "p50_ms": 199.49900599931425,
+          "p95_ms": 227.11614219952025,
+          "p99_ms": 238.4746166397963
+        },
+        "tracker_latency": null,
+        "pressure": {
+          "selected_pulse_span_fraction_of_measured_time": 0.9998927243892984,
+          "verified_pulses": 9095,
+          "k_simultaneous_fraction_within_selected_pulses": 0.95257500433444,
+          "mean_resident_blocks_within_selected_pulses": 30.48551859702357,
+          "restart_gap": {
+            "n": 9094,
+            "mean_ms": 0.2514760923685947,
+            "std_ms": 2.5608569254178515,
+            "p50_ms": 0.183728,
+            "p95_ms": 0.4135168000000001,
+            "p99_ms": 0.6353961599999995
+          },
+          "info": {
+            "sm_count": 46,
+            "shared_bytes": 52224,
+            "max_blocks_per_sm": 1
+          }
+        },
+        "telemetry": {
+          "samples": 472,
+          "values": {
+            "temperature.gpu": {
+              "mean": 62.019067796610166,
+              "min": 59.0,
+              "max": 67.0
+            },
+            "power.draw [W]": {
+              "mean": 65.63802966101696,
+              "min": 23.68,
+              "max": 118.88
+            },
+            "clocks.current.sm [MHz]": {
+              "mean": 2756.531779661017,
+              "min": 1605.0,
+              "max": 2782.0
+            },
+            "clocks.current.memory [MHz]": {
+              "mean": 9001.0,
+              "min": 9001.0,
+              "max": 9001.0
+            },
+            "utilization.gpu [%]": {
+              "mean": 96.30296610169492,
+              "min": 20.0,
+              "max": 98.0
+            },
+            "utilization.memory [%]": {
+              "mean": 3.065677966101695,
+              "min": 2.0,
+              "max": 8.0
+            }
+          }
+        },
+        "output_byte_equal_to_same_mode_baseline": true
+      },
+      {
+        "name": "r1_k32_serial",
+        "rep": 1,
+        "blocks": 32,
+        "mode": "serial",
+        "measurement_intervals_monotonic": [
+          [
+            9235.033505814,
+            9282.851766371
+          ]
+        ],
+        "clock_anchor": {
+          "epoch": 1789473215.4375784,
+          "monotonic": 9221.840157103
+        },
+        "output_sha256": {
+          "MOT17-04-SDP.txt": "10a1537ef165cd909b1503720b9a9a0278922982cba16a2317f68131bc5fddd5"
+        },
+        "fps": 5.208093435529459,
+        "frames": 250,
+        "latency": {
+          "n": 250,
+          "mean_ms": 181.700304308,
+          "std_ms": 18.905979426775858,
+          "p50_ms": 182.9691775,
+          "p95_ms": 200.0033804,
+          "p99_ms": 210.08632079999998
+        },
+        "period": {
+          "n": 249,
+          "mean_ms": 192.04120705622503,
+          "std_ms": 18.946670803956927,
+          "p50_ms": 193.33600500067405,
+          "p95_ms": 210.21875120022742,
+          "p99_ms": 220.5004289997305
+        },
+        "tracker_latency": null,
+        "pressure": {
+          "selected_pulse_span_fraction_of_measured_time": 0.9998897819172481,
+          "verified_pulses": 9047,
+          "k_simultaneous_fraction_within_selected_pulses": 0.9582626538328834,
+          "mean_resident_blocks_within_selected_pulses": 30.66624863202554,
+          "restart_gap": {
+            "n": 9046,
+            "mean_ms": 0.22003029847446384,
+            "std_ms": 2.367924780467471,
+            "p50_ms": 0.17376,
+            "p95_ms": 0.358632,
+            "p99_ms": 0.5348239999999987
+          },
+          "info": {
+            "sm_count": 46,
+            "shared_bytes": 52224,
+            "max_blocks_per_sm": 1
+          }
+        },
+        "telemetry": {
+          "samples": 469,
+          "values": {
+            "temperature.gpu": {
+              "mean": 59.172707889125796,
+              "min": 57.0,
+              "max": 64.0
+            },
+            "power.draw [W]": {
+              "mean": 59.602707889125796,
+              "min": 49.15,
+              "max": 71.11
+            },
+            "clocks.current.sm [MHz]": {
+              "mean": 2777.5671641791046,
+              "min": 2670.0,
+              "max": 2782.0
+            },
+            "clocks.current.memory [MHz]": {
+              "mean": 9086.287846481877,
+              "min": 9001.0,
+              "max": 11001.0
+            },
+            "utilization.gpu [%]": {
+              "mean": 96.35607675906184,
+              "min": 24.0,
+              "max": 98.0
+            },
+            "utilization.memory [%]": {
+              "mean": 3.5437100213219614,
+              "min": 3.0,
+              "max": 4.0
+            }
+          }
+        },
+        "output_byte_equal_to_same_mode_baseline": true
+      },
+      {
+        "name": "r1_k0_double",
+        "rep": 1,
+        "blocks": 0,
+        "mode": "double",
+        "measurement_intervals_monotonic": [
+          [
+            9291.867988754,
+            9292.583115382
+          ]
+        ],
+        "clock_anchor": {
+          "epoch": 1789473282.0156388,
+          "monotonic": 9288.418217405
+        },
+        "output_sha256": {
+          "MOT17-04-SDP.txt": "10a1537ef165cd909b1503720b9a9a0278922982cba16a2317f68131bc5fddd5"
+        },
+        "fps": 346.5416529205144,
+        "frames": 250,
+        "latency": {
+          "n": 250,
+          "mean_ms": 6.53524684,
+          "std_ms": 0.9206114757036554,
+          "p50_ms": 6.299955000000001,
+          "p95_ms": 9.021434399999993,
+          "p99_ms": 9.821875449999999
+        },
+        "period": {
+          "n": 249,
+          "mean_ms": 2.8719944899589556,
+          "std_ms": 0.6662899100876702,
+          "p50_ms": 2.7419830003054813,
+          "p95_ms": 3.638406200479949,
+          "p99_ms": 6.319912720064168
+        },
+        "tracker_latency": null,
+        "telemetry": {
+          "samples": 7,
+          "values": {
+            "temperature.gpu": {
+              "mean": 61.285714285714285,
+              "min": 52.0,
+              "max": 65.0
+            },
+            "power.draw [W]": {
+              "mean": 115.98714285714287,
+              "min": 85.39,
+              "max": 142.97
+            },
+            "clocks.current.sm [MHz]": {
+              "mean": 2211.285714285714,
+              "min": 1702.0,
+              "max": 2415.0
+            },
+            "clocks.current.memory [MHz]": {
+              "mean": 14001.0,
+              "min": 14001.0,
+              "max": 14001.0
+            },
+            "utilization.gpu [%]": {
+              "mean": 97.0,
+              "min": 96.0,
+              "max": 99.0
+            },
+            "utilization.memory [%]": {
+              "mean": 34.285714285714285,
+              "min": 34.0,
+              "max": 35.0
+            }
+          }
+        },
+        "output_byte_equal_to_same_mode_baseline": true
+      },
+      {
+        "name": "r1_k0_serial",
+        "rep": 1,
+        "blocks": 0,
+        "mode": "serial",
+        "measurement_intervals_monotonic": [
+          [
+            9301.527668148,
+            9302.695466736
+          ]
+        ],
+        "clock_anchor": {
+          "epoch": 1789473291.3352852,
+          "monotonic": 9297.737863695
+        },
+        "output_sha256": {
+          "MOT17-04-SDP.txt": "10a1537ef165cd909b1503720b9a9a0278922982cba16a2317f68131bc5fddd5"
+        },
+        "fps": 213.28728603019465,
+        "frames": 250,
+        "latency": {
+          "n": 250,
+          "mean_ms": 4.271990771999999,
+          "std_ms": 0.38258194647295113,
+          "p50_ms": 4.154075000000001,
+          "p95_ms": 5.034394649999999,
+          "p99_ms": 5.61660645
+        },
+        "period": {
+          "n": 249,
+          "mean_ms": 4.689954168673259,
+          "std_ms": 0.38536990360507095,
+          "p50_ms": 4.564281000057235,
+          "p95_ms": 5.463849399529863,
+          "p99_ms": 6.0342292405403
+        },
+        "tracker_latency": null,
+        "telemetry": {
+          "samples": 12,
+          "values": {
+            "temperature.gpu": {
+              "mean": 59.0,
+              "min": 52.0,
+              "max": 63.0
+            },
+            "power.draw [W]": {
+              "mean": 103.71750000000002,
+              "min": 68.16,
+              "max": 116.79
+            },
+            "clocks.current.sm [MHz]": {
+              "mean": 2399.75,
+              "min": 1695.0,
+              "max": 2617.0
+            },
+            "clocks.current.memory [MHz]": {
+              "mean": 14001.0,
+              "min": 14001.0,
+              "max": 14001.0
+            },
+            "utilization.gpu [%]": {
+              "mean": 73.66666666666667,
+              "min": 73.0,
+              "max": 74.0
+            },
+            "utilization.memory [%]": {
+              "mean": 21.833333333333332,
+              "min": 21.0,
+              "max": 22.0
+            }
+          }
+        },
+        "output_byte_equal_to_same_mode_baseline": true
+      },
+      {
+        "name": "r1_k16_double",
+        "rep": 1,
+        "blocks": 16,
+        "mode": "double",
+        "measurement_intervals_monotonic": [
+          [
+            9320.445726579,
+            9364.324612493
+          ]
+        ],
+        "clock_anchor": {
+          "epoch": 1789473301.4876666,
+          "monotonic": 9307.890245161
+        },
+        "output_sha256": {
+          "MOT17-04-SDP.txt": "10a1537ef165cd909b1503720b9a9a0278922982cba16a2317f68131bc5fddd5"
+        },
+        "fps": 5.6514797540711115,
+        "frames": 250,
+        "latency": {
+          "n": 250,
+          "mean_ms": 360.875585508,
+          "std_ms": 23.81521300997138,
+          "p50_ms": 361.88626750000003,
+          "p95_ms": 395.37096735,
+          "p99_ms": 412.82586234999997
+        },
+        "period": {
+          "n": 249,
+          "mean_ms": 176.2204253574241,
+          "std_ms": 16.88554161334482,
+          "p50_ms": 177.35349900067376,
+          "p95_ms": 199.9098011994647,
+          "p99_ms": 209.39057087991387
+        },
+        "tracker_latency": null,
+        "pressure": {
+          "selected_pulse_span_fraction_of_measured_time": 0.9998900401662871,
+          "verified_pulses": 8313,
+          "k_simultaneous_fraction_within_selected_pulses": 0.959537646094832,
+          "mean_resident_blocks_within_selected_pulses": 15.353424424587445,
+          "restart_gap": {
+            "n": 8312,
+            "mean_ms": 0.2131047353224254,
+            "std_ms": 1.7441509057701048,
+            "p50_ms": 0.17968,
+            "p95_ms": 0.38805279999999986,
+            "p99_ms": 0.5575011199999996
+          },
+          "info": {
+            "sm_count": 46,
+            "shared_bytes": 52224,
+            "max_blocks_per_sm": 1
+          }
+        },
+        "telemetry": {
+          "samples": 430,
+          "values": {
+            "temperature.gpu": {
+              "mean": 58.193023255813955,
+              "min": 56.0,
+              "max": 63.0
+            },
+            "power.draw [W]": {
+              "mean": 59.93816279069768,
+              "min": 39.27,
+              "max": 81.89
+            },
+            "clocks.current.sm [MHz]": {
+              "mean": 2765.8837209302324,
+              "min": 1402.0,
+              "max": 2790.0
+            },
+            "clocks.current.memory [MHz]": {
+              "mean": 9001.0,
+              "min": 9001.0,
+              "max": 9001.0
+            },
+            "utilization.gpu [%]": {
+              "mean": 96.72325581395349,
+              "min": 22.0,
+              "max": 97.0
+            },
+            "utilization.memory [%]": {
+              "mean": 3.2511627906976743,
+              "min": 3.0,
+              "max": 4.0
+            }
+          }
+        },
+        "output_byte_equal_to_same_mode_baseline": true
+      },
+      {
+        "name": "r1_k16_serial",
+        "rep": 1,
+        "blocks": 16,
+        "mode": "serial",
+        "measurement_intervals_monotonic": [
+          [
+            9381.484650393,
+            9425.252554384
+          ]
+        ],
+        "clock_anchor": {
+          "epoch": 1789473363.2972434,
+          "monotonic": 9369.699822012
+        },
+        "output_sha256": {
+          "MOT17-04-SDP.txt": "10a1537ef165cd909b1503720b9a9a0278922982cba16a2317f68131bc5fddd5"
+        },
+        "fps": 5.70982774180561,
+        "frames": 250,
+        "latency": {
+          "n": 250,
+          "mean_ms": 165.02783055599997,
+          "std_ms": 27.386749432587372,
+          "p50_ms": 168.1923785,
+          "p95_ms": 189.1399932,
+          "p99_ms": 202.68418831999995
+        },
+        "period": {
+          "n": 249,
+          "mean_ms": 175.7747148232928,
+          "std_ms": 26.596158937552303,
+          "p50_ms": 178.60735399881378,
+          "p95_ms": 199.4733419993281,
+          "p99_ms": 210.70417647955776
+        },
+        "tracker_latency": null,
+        "pressure": {
+          "selected_pulse_span_fraction_of_measured_time": 0.9998764149637865,
+          "verified_pulses": 8282,
+          "k_simultaneous_fraction_within_selected_pulses": 0.9587356756875131,
+          "mean_resident_blocks_within_selected_pulses": 15.34079542753376,
+          "restart_gap": {
+            "n": 8281,
+            "mean_ms": 0.21749060644849655,
+            "std_ms": 1.7729278433370614,
+            "p50_ms": 0.180096,
+            "p95_ms": 0.381536,
+            "p99_ms": 0.5971008000000019
+          },
+          "info": {
+            "sm_count": 46,
+            "shared_bytes": 52224,
+            "max_blocks_per_sm": 1
+          }
+        },
+        "telemetry": {
+          "samples": 429,
+          "values": {
+            "temperature.gpu": {
+              "mean": 58.794871794871796,
+              "min": 56.0,
+              "max": 63.0
+            },
+            "power.draw [W]": {
+              "mean": 59.76237762237763,
+              "min": 45.5,
+              "max": 82.96
+            },
+            "clocks.current.sm [MHz]": {
+              "mean": 2765.2027972027972,
+              "min": 1402.0,
+              "max": 2782.0
+            },
+            "clocks.current.memory [MHz]": {
+              "mean": 9001.0,
+              "min": 9001.0,
+              "max": 9001.0
+            },
+            "utilization.gpu [%]": {
+              "mean": 96.52447552447552,
+              "min": 20.0,
+              "max": 98.0
+            },
+            "utilization.memory [%]": {
+              "mean": 3.414918414918415,
+              "min": 3.0,
+              "max": 7.0
+            }
+          }
+        },
+        "output_byte_equal_to_same_mode_baseline": true
+      }
+    ],
+    "pairs": [
+      {
+        "rep": 0,
+        "blocks": 0,
+        "serial_fps": 214.17110215019218,
+        "double_fps": 325.5377884264806,
+        "db_gain": 1.5199893223605399
+      },
+      {
+        "rep": 0,
+        "blocks": 8,
+        "serial_fps": 5.641505140031748,
+        "double_fps": 5.772851457258212,
+        "db_gain": 1.0232821408411805
+      },
+      {
+        "rep": 0,
+        "blocks": 16,
+        "serial_fps": 5.353331094213381,
+        "double_fps": 5.7845567744182285,
+        "db_gain": 1.0805527759474798
+      },
+      {
+        "rep": 0,
+        "blocks": 24,
+        "serial_fps": 5.357167155722457,
+        "double_fps": 5.289167011626139,
+        "db_gain": 0.9873066973421427
+      },
+      {
+        "rep": 0,
+        "blocks": 32,
+        "serial_fps": 5.164034203835956,
+        "double_fps": 4.918760666701413,
+        "db_gain": 0.9525035026002832
+      },
+      {
+        "rep": 1,
+        "blocks": 0,
+        "serial_fps": 213.28728603019465,
+        "double_fps": 346.5416529205144,
+        "db_gain": 1.624764698217667
+      },
+      {
+        "rep": 1,
+        "blocks": 8,
+        "serial_fps": 5.815416674255785,
+        "double_fps": 5.992017147139757,
+        "db_gain": 1.0303676387739786
+      },
+      {
+        "rep": 1,
+        "blocks": 16,
+        "serial_fps": 5.70982774180561,
+        "double_fps": 5.6514797540711115,
+        "db_gain": 0.9897811299442026
+      },
+      {
+        "rep": 1,
+        "blocks": 24,
+        "serial_fps": 5.133443030219675,
+        "double_fps": 5.122130439108359,
+        "db_gain": 0.9977962955769215
+      },
+      {
+        "rep": 1,
+        "blocks": 32,
+        "serial_fps": 5.208093435529459,
+        "double_fps": 5.128273820775487,
+        "db_gain": 0.9846739280425645
+      }
+    ],
+    "available_sm_count": null,
+    "true_partition_validated": false
+  },
+  "pulse_control_500us": {
+    "summarizer_sha256": "da34b240ffc7addf889f8d63ba4e795c2a9caebc0e4f675100e434f37c569227",
+    "schema": "saccade-resource-summary-v1",
+    "kind": "bounded_residency_pressure_proxy",
+    "rows": [
+      {
+        "name": "r0_k16_double",
+        "rep": 0,
+        "blocks": 16,
+        "mode": "double",
+        "measurement_intervals_monotonic": [
+          [
+            9565.17028535,
+            9571.209563255
+          ]
+        ],
+        "clock_anchor": {
+          "epoch": 1789473554.1497884,
+          "monotonic": 9560.552366915
+        },
+        "output_sha256": {
+          "MOT17-04-SDP.txt": "10a1537ef165cd909b1503720b9a9a0278922982cba16a2317f68131bc5fddd5"
+        },
+        "fps": 41.06529957546693,
+        "frames": 250,
+        "latency": {
+          "n": 250,
+          "mean_ms": 50.176624536000006,
+          "std_ms": 14.522238925756,
+          "p50_ms": 48.8349185,
+          "p95_ms": 54.02654655,
+          "p99_ms": 55.92014338
+        },
+        "period": {
+          "n": 249,
+          "mean_ms": 24.254128132536763,
+          "std_ms": 10.288147984039693,
+          "p50_ms": 23.74866500031203,
+          "p95_ms": 26.821357600783813,
+          "p99_ms": 28.29719012042915
+        },
+        "tracker_latency": null,
+        "pressure": {
+          "selected_pulse_span_fraction_of_measured_time": 0.9999116497021697,
+          "verified_pulses": 8185,
+          "k_simultaneous_fraction_within_selected_pulses": 0.7663205304723775,
+          "mean_resident_blocks_within_selected_pulses": 12.263244346549238,
+          "restart_gap": {
+            "n": 8184,
+            "mean_ms": 0.17222184555229716,
+            "std_ms": 1.7538883500843128,
+            "p50_ms": 0.125392,
+            "p95_ms": 0.33116479999999904,
+            "p99_ms": 0.5450784
+          },
+          "info": {
+            "sm_count": 46,
+            "shared_bytes": 52224,
+            "max_blocks_per_sm": 1
+          }
+        },
+        "telemetry": {
+          "samples": 59,
+          "values": {
+            "temperature.gpu": {
+              "mean": 58.3728813559322,
+              "min": 57.0,
+              "max": 60.0
+            },
+            "power.draw [W]": {
+              "mean": 67.16898305084747,
+              "min": 44.96,
+              "max": 84.45
+            },
+            "clocks.current.sm [MHz]": {
+              "mean": 2680.3898305084745,
+              "min": 1875.0,
+              "max": 2760.0
+            },
+            "clocks.current.memory [MHz]": {
+              "mean": 14001.0,
+              "min": 14001.0,
+              "max": 14001.0
+            },
+            "utilization.gpu [%]": {
+              "mean": 83.9322033898305,
+              "min": 19.0,
+              "max": 87.0
+            },
+            "utilization.memory [%]": {
+              "mean": 5.9491525423728815,
+              "min": 3.0,
+              "max": 9.0
+            }
+          }
+        },
+        "output_byte_equal_to_same_mode_baseline": true
+      },
+      {
+        "name": "r0_k16_serial",
+        "rep": 0,
+        "blocks": 16,
+        "mode": "serial",
+        "measurement_intervals_monotonic": [
+          [
+            9581.060831789,
+            9587.289264524
+          ]
+        ],
+        "clock_anchor": {
+          "epoch": 1789473570.32458,
+          "monotonic": 9576.727158281
+        },
+        "output_sha256": {
+          "MOT17-04-SDP.txt": "10a1537ef165cd909b1503720b9a9a0278922982cba16a2317f68131bc5fddd5"
+        },
+        "fps": 39.969923432015875,
+        "frames": 250,
+        "latency": {
+          "n": 250,
+          "mean_ms": 23.733713027999997,
+          "std_ms": 10.292453961852987,
+          "p50_ms": 23.226831,
+          "p95_ms": 26.004942749999998,
+          "p99_ms": 27.346611879999998
+        },
+        "period": {
+          "n": 249,
+          "mean_ms": 25.013786084340367,
+          "std_ms": 10.315228610932035,
+          "p50_ms": 24.503767999703996,
+          "p95_ms": 27.42030520021217,
+          "p99_ms": 28.645919719638187
+        },
+        "tracker_latency": null,
+        "pressure": {
+          "selected_pulse_span_fraction_of_measured_time": 0.9998471535229163,
+          "verified_pulses": 8525,
+          "k_simultaneous_fraction_within_selected_pulses": 0.7727228541436313,
+          "mean_resident_blocks_within_selected_pulses": 12.36715373466811,
+          "restart_gap": {
+            "n": 8524,
+            "mean_ms": 0.16573927733458474,
+            "std_ms": 1.7145245935284394,
+            "p50_ms": 0.123104,
+            "p95_ms": 0.29769279999999976,
+            "p99_ms": 0.4822800000000004
+          },
+          "info": {
+            "sm_count": 46,
+            "shared_bytes": 52224,
+            "max_blocks_per_sm": 1
+          }
+        },
+        "telemetry": {
+          "samples": 61,
+          "values": {
+            "temperature.gpu": {
+              "mean": 58.377049180327866,
+              "min": 55.0,
+              "max": 60.0
+            },
+            "power.draw [W]": {
+              "mean": 66.0372131147541,
+              "min": 55.57,
+              "max": 111.94
+            },
+            "clocks.current.sm [MHz]": {
+              "mean": 2649.5409836065573,
+              "min": 1485.0,
+              "max": 2760.0
+            },
+            "clocks.current.memory [MHz]": {
+              "mean": 13755.098360655738,
+              "min": 11001.0,
+              "max": 14001.0
+            },
+            "utilization.gpu [%]": {
+              "mean": 84.29508196721312,
+              "min": 50.0,
+              "max": 87.0
+            },
+            "utilization.memory [%]": {
+              "mean": 6.016393442622951,
+              "min": 4.0,
+              "max": 8.0
+            }
+          }
+        },
+        "output_byte_equal_to_same_mode_baseline": true
+      },
+      {
+        "name": "r0_k0_serial",
+        "rep": 0,
+        "blocks": 0,
+        "mode": "serial",
+        "measurement_intervals_monotonic": [
+          [
+            9596.283707318,
+            9597.434434104
+          ]
+        ],
+        "clock_anchor": {
+          "epoch": 1789473586.5239317,
+          "monotonic": 9592.926509914
+        },
+        "output_sha256": {
+          "MOT17-04-SDP.txt": "10a1537ef165cd909b1503720b9a9a0278922982cba16a2317f68131bc5fddd5"
+        },
+        "fps": 216.346445081753,
+        "frames": 250,
+        "latency": {
+          "n": 250,
+          "mean_ms": 4.194096116,
+          "std_ms": 0.4180590710600292,
+          "p50_ms": 4.0769665,
+          "p95_ms": 4.983288099999999,
+          "p99_ms": 5.752546959999998
+        },
+        "period": {
+          "n": 249,
+          "mean_ms": 4.621392714858325,
+          "std_ms": 0.4256931813122499,
+          "p50_ms": 4.496832001677831,
+          "p95_ms": 5.403932799526956,
+          "p99_ms": 6.2177216809504925
+        },
+        "tracker_latency": null,
+        "telemetry": {
+          "samples": 11,
+          "values": {
+            "temperature.gpu": {
+              "mean": 57.90909090909091,
+              "min": 52.0,
+              "max": 62.0
+            },
+            "power.draw [W]": {
+              "mean": 96.79636363636364,
+              "min": 75.45,
+              "max": 114.1
+            },
+            "clocks.current.sm [MHz]": {
+              "mean": 2475.5454545454545,
+              "min": 2235.0,
+              "max": 2617.0
+            },
+            "clocks.current.memory [MHz]": {
+              "mean": 14001.0,
+              "min": 14001.0,
+              "max": 14001.0
+            },
+            "utilization.gpu [%]": {
+              "mean": 74.63636363636364,
+              "min": 73.0,
+              "max": 76.0
+            },
+            "utilization.memory [%]": {
+              "mean": 22.09090909090909,
+              "min": 21.0,
+              "max": 23.0
+            }
+          }
+        },
+        "output_byte_equal_to_same_mode_baseline": true
+      },
+      {
+        "name": "r0_k0_double",
+        "rep": 0,
+        "blocks": 0,
+        "mode": "double",
+        "measurement_intervals_monotonic": [
+          [
+            9606.001743627,
+            9606.724062159
+          ]
+        ],
+        "clock_anchor": {
+          "epoch": 1789473596.1728437,
+          "monotonic": 9602.575422338
+        },
+        "output_sha256": {
+          "MOT17-04-SDP.txt": "10a1537ef165cd909b1503720b9a9a0278922982cba16a2317f68131bc5fddd5"
+        },
+        "fps": 343.0089292084451,
+        "frames": 250,
+        "latency": {
+          "n": 250,
+          "mean_ms": 6.666562328,
+          "std_ms": 1.069503717110689,
+          "p50_ms": 6.3672675000000005,
+          "p95_ms": 9.5670165,
+          "p99_ms": 10.1719581
+        },
+        "period": {
+          "n": 249,
+          "mean_ms": 2.9008776385538853,
+          "std_ms": 0.7660273429682611,
+          "p50_ms": 2.7691590003087185,
+          "p95_ms": 3.6613079995731823,
+          "p99_ms": 6.653912520996528
+        },
+        "tracker_latency": null,
+        "telemetry": {
+          "samples": 7,
+          "values": {
+            "temperature.gpu": {
+              "mean": 58.857142857142854,
+              "min": 52.0,
+              "max": 64.0
+            },
+            "power.draw [W]": {
+              "mean": 126.47857142857143,
+              "min": 70.49,
+              "max": 151.1
+            },
+            "clocks.current.sm [MHz]": {
+              "mean": 2282.8571428571427,
+              "min": 1785.0,
+              "max": 2482.0
+            },
+            "clocks.current.memory [MHz]": {
+              "mean": 14001.0,
+              "min": 14001.0,
+              "max": 14001.0
+            },
+            "utilization.gpu [%]": {
+              "mean": 89.0,
+              "min": 37.0,
+              "max": 100.0
+            },
+            "utilization.memory [%]": {
+              "mean": 31.571428571428573,
+              "min": 13.0,
+              "max": 36.0
+            }
+          }
+        },
+        "output_byte_equal_to_same_mode_baseline": true
+      }
+    ],
+    "pairs": [
+      {
+        "rep": 0,
+        "blocks": 0,
+        "serial_fps": 216.346445081753,
+        "double_fps": 343.0089292084451,
+        "db_gain": 1.5854613607301424
+      },
+      {
+        "rep": 0,
+        "blocks": 16,
+        "serial_fps": 39.969923432015875,
+        "double_fps": 41.06529957546693,
+        "db_gain": 1.0274050098022869
+      }
+    ],
+    "available_sm_count": null,
+    "true_partition_validated": false
+  },
+  "green_context_probe": {
+    "sm_count": 46,
+    "min_partition": 8,
+    "alignment": 8,
+    "points": [
+      {
+        "requested": 8,
+        "actual_sm_count": 8,
+        "green_stream_context_verified": true,
+        "new_torch_stream_in_green_context": false,
+        "existing_torch_stream_in_green_context": false,
+        "external_stream_torch_kernel_ok": true
+      },
+      {
+        "requested": 16,
+        "actual_sm_count": 16,
+        "green_stream_context_verified": true,
+        "new_torch_stream_in_green_context": false,
+        "existing_torch_stream_in_green_context": false,
+        "external_stream_torch_kernel_ok": true
+      },
+      {
+        "requested": 24,
+        "actual_sm_count": 24,
+        "green_stream_context_verified": true,
+        "new_torch_stream_in_green_context": false,
+        "existing_torch_stream_in_green_context": false,
+        "external_stream_torch_kernel_ok": true
+      },
+      {
+        "requested": 32,
+        "actual_sm_count": 32,
+        "green_stream_context_verified": true,
+        "new_torch_stream_in_green_context": false,
+        "existing_torch_stream_in_green_context": false,
+        "external_stream_torch_kernel_ok": true
+      }
+    ],
+    "full_pipeline_partition_verified": false
+  },
+  "synchronization_dependency_control": {
+    "blocks": 16,
+    "pulse_us": 100000,
+    "own_stream_work_and_event_wait_ms": 0.18612299936648924,
+    "subsequent_device_synchronize_ms": 89.84474800126918,
+    "pulse_blocks": [
+      [
+        0,
+        1789473546795424672,
+        1789473546895491072
+      ],
+      [
+        1,
+        1789473546795424672,
+        1789473546895491072
+      ],
+      [
+        10,
+        1789473546795424672,
+        1789473546895491072
+      ],
+      [
+        11,
+        1789473546795424672,
+        1789473546895491072
+      ],
+      [
+        2,
+        1789473546795424672,
+        1789473546895491072
+      ],
+      [
+        3,
+        1789473546795424672,
+        1789473546895491072
+      ],
+      [
+        12,
+        1789473546795424672,
+        1789473546895491072
+      ],
+      [
+        13,
+        1789473546795424672,
+        1789473546895491072
+      ],
+      [
+        4,
+        1789473546795424672,
+        1789473546895491072
+      ],
+      [
+        5,
+        1789473546795424672,
+        1789473546895491072
+      ],
+      [
+        14,
+        1789473546795424672,
+        1789473546895491072
+      ],
+      [
+        15,
+        1789473546795424672,
+        1789473546895491072
+      ],
+      [
+        6,
+        1789473546795424672,
+        1789473546895491072
+      ],
+      [
+        7,
+        1789473546795424672,
+        1789473546895491072
+      ],
+      [
+        8,
+        1789473546795424672,
+        1789473546895491072
+      ],
+      [
+        9,
+        1789473546795424672,
+        1789473546895491072
+      ]
+    ],
+    "kind": "synchronization_dependency_control_not_full_pipeline"
+  },
+  "raw_artifact_roots": [
+    "/home/ray/.local/state/saccade/perf/resource-419-20260915",
+    "/home/ray/.local/state/saccade/perf/resource-419-pulse-control-20260915"
+  ],
+  "raw_sha256_manifest": {
+    "path": "/home/ray/.local/state/saccade/perf/resource-419-20260915/SHA256SUMS",
+    "sha256": "0ada67b265746e420c91dc7d29ccf7675d8f391726957e693ea3ff9927e3cf5c"
+  },
+  "accepted_points": 24,
+  "excluded_pair": "r1_k8 serial/double replaced after a GPU-test overlap; originals in excluded_gpu_test_overlap/",
+  "input_identity_during_equals_after": true
+}
