@@ -13,6 +13,7 @@
 | [frame_budget_20260905.md](frame_budget_20260905.md) | **每幀 3.02 ms 的 per-kernel 去向**＋**量測邊界**:production 小 kernel 的 exact L2 hit rate 與 per-frame DRAM ledger 在本卡 counter interface 下**不可識別**(非尚未量);ncu 干擾源已歸因為 display scanout |
 | [tracker_lane_dose_response_20260907.md](tracker_lane_dose_response_20260907.md) | **tracker lane 加工作的邊際成本是 shape-sensitive 而非 duration-sensitive**(上列的實驗性補充):wall-clock 對齊的 high-occupancy GEMM dose S≈0.95–1.00 全額曝露,`<<<1,1>>>` latency-shaped dose 則有約 0.5 ms/frame 的 absorption 才開始曝露;**是 low-resource overlap envelope,不是通用 compute budget** |
 | [resource_sensitivity_20260915.md](resource_sensitivity_20260915.md) | #419：full-pipeline serial/DB residency-pressure proxy、同跑延遲／jitter／telemetry，以及 Green Context stream-routing 可行性；尚非實際 SM frontier |
+| [resource_partition_20260915.md](resource_partition_20260915.md) | #419 phase B：full pipeline 封裝進經 CUPTI 逐 kernel 驗證的 Green Context（8/16/24/32/40/46 SM），serial/DB FPS、frame p99、period jitter 對 actual SM count 的真實 scaling；DB gain 平滑下降無 knee；proxy 與 true partition 分開呈現 |
 | [latency_log.md](latency_log.md) | 端到端延遲、分段延遲紀錄 |
 | [throughput.md](throughput.md) | 單路與多路吞吐量 |
 

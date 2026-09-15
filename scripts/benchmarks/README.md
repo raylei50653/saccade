@@ -17,6 +17,8 @@
 
 - [`resource_sensitivity/`](resource_sensitivity/README.md)
   - #419 的 full-pipeline serial/DB 資源壓力 sweep、telemetry 與 Green Context capability probe。
+- [`resource_partition/`](resource_partition/README.md)
+  - #419 phase B：Green Context execution owner（顯式 stream/context/graph/thread 路由）、CUPTI 逐 kernel 稽核、真實 SM budget 的 serial/DB sweep。
 
 ## 原則
 
