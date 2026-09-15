@@ -44,6 +44,7 @@
 | `test_pool_lazy_buffers.py` | eval | behavior | active | Lazy acquire / release of AdaptiveFramePool tiling buffers. |
 | `test_reporting.py` | eval | behavior | active | Tests for MOT eval reporting output (perception.eval.reporting). |
 | `test_reporting_extended.py` | eval | behavior | active | Extended tests for perception/eval/reporting.py. |
+| `test_resource_partition.py` | eval | contract | active | The true-partition reporter must fail closed on any routing escape. |
 | `test_resource_sensitivity.py` | eval | contract | active | The resource report must fail closed on routing and residency failures. |
 | `test_runner_batch_helpers.py` | eval | behavior | active | Tests for eval runner batch helpers (perception.eval relink/lifecycle/output_bank/helpers). |
 | `test_runner_budgeting.py` | eval | behavior | active | Tests for eval runner ReID candidate budgeting (perception.eval.helpers). |
