@@ -1,0 +1,4393 @@
+[
+  {
+    "archive": "/home/ray/.local/state/saccade/perf/resource-419-elastic-20260915",
+    "manifest": {
+      "command": [
+        "scripts/benchmarks/resource_elastic/probe.py",
+        "--output",
+        "/home/ray/.local/state/saccade/perf/resource-419-elastic-20260915",
+        "--samples",
+        "100",
+        "--repeats",
+        "3"
+      ],
+      "seed": 419,
+      "samples": 100,
+      "repeats": 3,
+      "head": "b4dd39b257b0d477b59d49cbeddd184f1953156d",
+      "source_sha256": {
+        "probe.cu": "0cc6a52ea672eca601a55bab173ef570afdf3b5a139269437e7dbdd37f39598a",
+        "smid_probe.cu": "371c29fe6a2c8b806b7113d262a36583f3dbfcac332a5b81a43c1b111d6a8b80",
+        "probe.py": "9368f9fd2345c8e38d3dad9c8fd90509b43be67fc4aefd52f9dc7257fa0b5149"
+      },
+      "nvcc": "nvcc: NVIDIA (R) Cuda compiler driver\nCopyright (c) 2005-2026 NVIDIA Corporation\nBuilt on Mon_Aug_03_13:24:11_PDT_2026\nCuda compilation tools, release 13.4, V13.4.59\nBuild cuda_13.4.r13.4/compiler.38657139_0\n",
+      "nvidia_smi": "Tue Sep 15 21:47:22 2026       \n+-----------------------------------------------------------------------------------------+\n| NVIDIA-SMI 615.71.09              KMD Version: 616.56        CUDA UMD Version: 13.4     |\n+-----------------------------------------+------------------------+----------------------+\n| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |\n| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |\n|                                         |                        |               MIG M. |\n|=========================================+========================+======================|\n|   0  NVIDIA GeForce RTX 5070 ...    On  |   00000000:01:00.0  On |                  N/A |\n| N/A   49C    P4             13W /  137W |    1372MiB /  12227MiB |      5%      Default |\n|                                         |                        |                  N/A |\n+-----------------------------------------+------------------------+----------------------+\n\n+-----------------------------------------------------------------------------------------+\n| Processes:                                                                              |\n|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |\n|        ID   ID                                                               Usage      |\n|=========================================================================================|\n|  No running processes found                                                             |\n+-----------------------------------------------------------------------------------------+\n"
+    },
+    "result": {
+      "status": "validated_synthetic_probe",
+      "device_sms": 46,
+      "remainder_sms_unused": 14,
+      "pools": [
+        {
+          "context": 342248176,
+          "actual_sms": 16,
+          "streams": [
+            362823616,
+            362823648,
+            363007888
+          ],
+          "sm_ids_before": [
+            0,
+            1,
+            4,
+            5,
+            10,
+            11,
+            14,
+            15,
+            20,
+            21,
+            24,
+            25,
+            30,
+            31,
+            34,
+            35
+          ],
+          "sm_ids_after": [
+            0,
+            1,
+            4,
+            5,
+            10,
+            11,
+            14,
+            15,
+            20,
+            21,
+            24,
+            25,
+            30,
+            31,
+            34,
+            35
+          ]
+        },
+        {
+          "context": 342166112,
+          "actual_sms": 16,
+          "streams": [
+            363055184,
+            363055296,
+            363055408
+          ],
+          "sm_ids_before": [
+            2,
+            3,
+            6,
+            7,
+            12,
+            13,
+            16,
+            17,
+            22,
+            23,
+            26,
+            27,
+            32,
+            33,
+            36,
+            37
+          ],
+          "sm_ids_after": [
+            2,
+            3,
+            6,
+            7,
+            12,
+            13,
+            16,
+            17,
+            22,
+            23,
+            26,
+            27,
+            32,
+            33,
+            36,
+            37
+          ]
+        }
+      ],
+      "highest_priority": -5,
+      "stable_value": 0.5200423002243042,
+      "summary": [
+        {
+          "repeat": 0,
+          "route": "same_pool",
+          "kind": 1,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 13.735323999999999,
+            "p95": 15.6309402,
+            "p99": 16.235165650000003
+          },
+          "stable_gpu_ms": {
+            "p50": 0.691552,
+            "p95": 1.3377999999999999,
+            "p99": 1.5672771200000006
+          },
+          "burst_gpu_ms": {
+            "p50": 13.696544,
+            "p95": 15.456432000000001,
+            "p99": 15.907555200000001
+          },
+          "stable_start_offset_ms": {
+            "p50": 12.709888,
+            "p95": 14.4706688,
+            "p99": 14.749857280000002
+          },
+          "stable_finish_offset_ms": {
+            "p50": 13.576832,
+            "p95": 15.367807999999998,
+            "p99": 15.76973824
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 0,
+          "route": "same_pool_priority",
+          "kind": 1,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 1.3992305,
+            "p95": 1.9628691999999999,
+            "p99": 2.6627744100000017
+          },
+          "stable_gpu_ms": {
+            "p50": 0.358544,
+            "p95": 0.38496639999999926,
+            "p99": 0.9305958400000035
+          },
+          "burst_gpu_ms": {
+            "p50": 13.502336,
+            "p95": 15.656361599999999,
+            "p99": 17.632620480000064
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.9216,
+            "p95": 1.295488,
+            "p99": 1.3749708800000002
+          },
+          "stable_finish_offset_ms": {
+            "p50": 1.280256,
+            "p95": 1.6672895999999997,
+            "p99": 1.8522598400000037
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 0,
+          "route": "disjoint",
+          "kind": 2,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.276068,
+            "p95": 0.37088155,
+            "p99": 0.55727899
+          },
+          "stable_gpu_ms": {
+            "p50": 0.243968,
+            "p95": 0.2480336,
+            "p99": 0.5164025600000001
+          },
+          "burst_gpu_ms": {
+            "p50": 2.11528,
+            "p95": 2.7575056,
+            "p99": 2.84412512
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.00512,
+            "p95": 0.009484799999999998,
+            "p99": 0.016396800000000007
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.249344,
+            "p95": 0.25630719999999996,
+            "p99": 0.5281408000000001
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 0,
+          "route": "reserved_solo",
+          "kind": 0,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.26695199999999997,
+            "p95": 0.53132825,
+            "p99": 0.7239238200000006
+          },
+          "stable_gpu_ms": {
+            "p50": 0.241296,
+            "p95": 0.2442976,
+            "p99": 0.5171830400000006
+          },
+          "burst_gpu_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "overlap_fraction": 0.0
+        },
+        {
+          "repeat": 0,
+          "route": "full_shared",
+          "kind": 1,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 4.01837,
+            "p95": 4.98091745,
+            "p99": 5.087813580000001
+          },
+          "stable_gpu_ms": {
+            "p50": 0.43443200000000004,
+            "p95": 0.8005903999999998,
+            "p99": 0.8619318400000011
+          },
+          "burst_gpu_ms": {
+            "p50": 4.661536,
+            "p95": 5.3975552,
+            "p99": 5.45761152
+          },
+          "stable_start_offset_ms": {
+            "p50": 3.53664,
+            "p95": 4.2671871999999995,
+            "p99": 4.373998080000002
+          },
+          "stable_finish_offset_ms": {
+            "p50": 3.9941120000000003,
+            "p95": 4.9584256,
+            "p99": 5.0644736
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 0,
+          "route": "disjoint",
+          "kind": 1,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.266631,
+            "p95": 0.52689825,
+            "p99": 0.5696483900000003
+          },
+          "stable_gpu_ms": {
+            "p50": 0.21864,
+            "p95": 0.24127200000000001,
+            "p99": 0.5171177600000001
+          },
+          "burst_gpu_ms": {
+            "p50": 11.850752,
+            "p95": 13.4824928,
+            "p99": 13.791208320000003
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.004864,
+            "p95": 0.009228799999999999,
+            "p99": 0.011804160000000015
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.22361599999999998,
+            "p95": 0.2453504,
+            "p99": 0.5250048000000002
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 0,
+          "route": "full_shared",
+          "kind": 2,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 1.5214020000000001,
+            "p95": 1.90157115,
+            "p99": 2.1597951700000144
+          },
+          "stable_gpu_ms": {
+            "p50": 0.16768,
+            "p95": 0.18212799999999998,
+            "p99": 0.5091385600000014
+          },
+          "burst_gpu_ms": {
+            "p50": 1.5108160000000002,
+            "p95": 1.8886064,
+            "p99": 2.1127312000000003
+          },
+          "stable_start_offset_ms": {
+            "p50": 1.32672,
+            "p95": 1.6186112,
+            "p99": 1.719856640000001
+          },
+          "stable_finish_offset_ms": {
+            "p50": 1.4967039999999998,
+            "p95": 1.8477439999999998,
+            "p99": 2.09140736
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 0,
+          "route": "same_pool_priority",
+          "kind": 2,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.441793,
+            "p95": 0.7580133999999998,
+            "p99": 0.8984692200000001
+          },
+          "stable_gpu_ms": {
+            "p50": 0.22939199999999998,
+            "p95": 0.2412576,
+            "p99": 0.2456364800000018
+          },
+          "burst_gpu_ms": {
+            "p50": 2.00384,
+            "p95": 2.7437072,
+            "p99": 2.81947456
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.179456,
+            "p95": 0.185856,
+            "p99": 0.4927462400000004
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.40844800000000003,
+            "p95": 0.42727679999999996,
+            "p99": 0.7766144000000001
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 0,
+          "route": "full_priority",
+          "kind": 2,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.5837275,
+            "p95": 0.6624779499999993,
+            "p99": 1.0047717800000002
+          },
+          "stable_gpu_ms": {
+            "p50": 0.183776,
+            "p95": 0.20703519999999997,
+            "p99": 0.5703603200000001
+          },
+          "burst_gpu_ms": {
+            "p50": 1.578784,
+            "p95": 2.0828032,
+            "p99": 2.258378880000001
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.367488,
+            "p95": 0.3840256,
+            "p99": 0.6904473600000006
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.554368,
+            "p95": 0.5974399999999992,
+            "p99": 0.9709593600000003
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 0,
+          "route": "same_pool",
+          "kind": 2,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 2.511666,
+            "p95": 3.1232446499999997,
+            "p99": 3.259358290000003
+          },
+          "stable_gpu_ms": {
+            "p50": 0.333648,
+            "p95": 0.6053039999999997,
+            "p99": 0.72452928
+          },
+          "burst_gpu_ms": {
+            "p50": 2.223872,
+            "p95": 2.9416368,
+            "p99": 3.083688320000001
+          },
+          "stable_start_offset_ms": {
+            "p50": 2.0395519999999996,
+            "p95": 2.7628671999999996,
+            "p99": 2.9013708800000013
+          },
+          "stable_finish_offset_ms": {
+            "p50": 2.384128,
+            "p95": 3.0912895999999996,
+            "p99": 3.2374195200000013
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 0.9765625,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 0,
+          "route": "full_priority",
+          "kind": 1,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 1.194136,
+            "p95": 1.59078145,
+            "p99": 1.6361801200000003
+          },
+          "stable_gpu_ms": {
+            "p50": 0.203936,
+            "p95": 0.2165984,
+            "p99": 0.4759590400000011
+          },
+          "burst_gpu_ms": {
+            "p50": 4.974928,
+            "p95": 5.622844799999999,
+            "p99": 5.827411840000001
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.9639679999999999,
+            "p95": 1.3031167999999997,
+            "p99": 1.38016768
+          },
+          "stable_finish_offset_ms": {
+            "p50": 1.166464,
+            "p95": 1.5658239999999999,
+            "p99": 1.6044928000000003
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 0,
+          "route": "full_solo",
+          "kind": 0,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.12822850000000002,
+            "p95": 0.2977989,
+            "p99": 0.4068680100000019
+          },
+          "stable_gpu_ms": {
+            "p50": 0.098144,
+            "p95": 0.1022896,
+            "p99": 0.11001856000000326
+          },
+          "burst_gpu_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "overlap_fraction": 0.0
+        },
+        {
+          "repeat": 1,
+          "route": "reserved_solo",
+          "kind": 0,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.285697,
+            "p95": 0.5828115999999999,
+            "p99": 0.6927622400000005
+          },
+          "stable_gpu_ms": {
+            "p50": 0.254912,
+            "p95": 0.25938239999999996,
+            "p99": 0.5559836800000006
+          },
+          "burst_gpu_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "overlap_fraction": 0.0
+        },
+        {
+          "repeat": 1,
+          "route": "full_solo",
+          "kind": 0,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.1257235,
+            "p95": 0.3856976,
+            "p99": 0.5187225700000028
+          },
+          "stable_gpu_ms": {
+            "p50": 0.09824,
+            "p95": 0.1025792,
+            "p99": 0.4108675200000031
+          },
+          "burst_gpu_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "overlap_fraction": 0.0
+        },
+        {
+          "repeat": 1,
+          "route": "full_shared",
+          "kind": 1,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 4.2824515000000005,
+            "p95": 5.314162850000001,
+            "p99": 5.565107970000001
+          },
+          "stable_gpu_ms": {
+            "p50": 0.47321599999999997,
+            "p95": 0.9095872,
+            "p99": 0.972880320000002
+          },
+          "burst_gpu_ms": {
+            "p50": 4.993855999999999,
+            "p95": 5.7760815999999995,
+            "p99": 5.95569728
+          },
+          "stable_start_offset_ms": {
+            "p50": 3.7242879999999996,
+            "p95": 4.5333120000000005,
+            "p99": 4.92861696
+          },
+          "stable_finish_offset_ms": {
+            "p50": 4.22272,
+            "p95": 5.28832,
+            "p99": 5.4808166400000005
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 1,
+          "route": "full_shared",
+          "kind": 2,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 1.7038280000000001,
+            "p95": 2.18748425,
+            "p99": 2.4158466700000005
+          },
+          "stable_gpu_ms": {
+            "p50": 0.201552,
+            "p95": 0.2639183999999993,
+            "p99": 0.5762080000000016
+          },
+          "burst_gpu_ms": {
+            "p50": 1.686096,
+            "p95": 2.1327296000000002,
+            "p99": 2.3658985599999998
+          },
+          "stable_start_offset_ms": {
+            "p50": 1.47328,
+            "p95": 1.909824,
+            "p99": 1.92536576
+          },
+          "stable_finish_offset_ms": {
+            "p50": 1.677824,
+            "p95": 2.1412608,
+            "p99": 2.3898240000000004
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 1,
+          "route": "disjoint",
+          "kind": 1,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.332997,
+            "p95": 0.7841049499999999,
+            "p99": 0.9325173400000002
+          },
+          "stable_gpu_ms": {
+            "p50": 0.229872,
+            "p95": 0.255336,
+            "p99": 0.592352960000001
+          },
+          "burst_gpu_ms": {
+            "p50": 12.721536,
+            "p95": 13.971288000000001,
+            "p99": 14.532537280000001
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.004608,
+            "p95": 0.012569599999999998,
+            "p99": 0.01723392000000004
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.233856,
+            "p95": 0.2635392,
+            "p99": 0.5969356800000011
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 1,
+          "route": "same_pool",
+          "kind": 1,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 10.705154,
+            "p95": 12.35144445,
+            "p99": 12.39281061
+          },
+          "stable_gpu_ms": {
+            "p50": 0.578816,
+            "p95": 0.9190415999999999,
+            "p99": 1.1179414400000007
+          },
+          "burst_gpu_ms": {
+            "p50": 10.732384,
+            "p95": 12.232526400000001,
+            "p99": 12.468739200000002
+          },
+          "stable_start_offset_ms": {
+            "p50": 9.997952000000002,
+            "p95": 11.4109824,
+            "p99": 11.6631424
+          },
+          "stable_finish_offset_ms": {
+            "p50": 10.648832,
+            "p95": 12.1326848,
+            "p99": 12.36609792
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 1,
+          "route": "same_pool",
+          "kind": 2,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 1.9258039999999998,
+            "p95": 2.5211098,
+            "p99": 2.6335694500000004
+          },
+          "stable_gpu_ms": {
+            "p50": 0.25662399999999996,
+            "p95": 0.543176,
+            "p99": 0.5836214400000012
+          },
+          "burst_gpu_ms": {
+            "p50": 1.7680799999999999,
+            "p95": 2.0847759999999997,
+            "p99": 2.3890067200000003
+          },
+          "stable_start_offset_ms": {
+            "p50": 1.62304,
+            "p95": 1.9265663999999998,
+            "p99": 2.0402816
+          },
+          "stable_finish_offset_ms": {
+            "p50": 1.88288,
+            "p95": 2.4186112,
+            "p99": 2.52636416
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 1,
+          "route": "same_pool_priority",
+          "kind": 2,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.41940049999999995,
+            "p95": 0.6562064499999999,
+            "p99": 0.8168122000000011
+          },
+          "stable_gpu_ms": {
+            "p50": 0.216864,
+            "p95": 0.2203888,
+            "p99": 0.47508192
+          },
+          "burst_gpu_ms": {
+            "p50": 1.87888,
+            "p95": 2.4796032,
+            "p99": 2.592852160000001
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.17152,
+            "p95": 0.1728,
+            "p99": 0.19176448000000107
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.388224,
+            "p95": 0.3936511999999999,
+            "p99": 0.64590848
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 1,
+          "route": "same_pool_priority",
+          "kind": 1,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 1.1975875,
+            "p95": 1.54187455,
+            "p99": 1.670795370000002
+          },
+          "stable_gpu_ms": {
+            "p50": 0.309328,
+            "p95": 0.3502559999999995,
+            "p99": 0.5815964800000002
+          },
+          "burst_gpu_ms": {
+            "p50": 11.335695999999999,
+            "p95": 12.6863712,
+            "p99": 12.91437952
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.793088,
+            "p95": 1.0616576,
+            "p99": 1.12465408
+          },
+          "stable_finish_offset_ms": {
+            "p50": 1.105792,
+            "p95": 1.3986944,
+            "p99": 1.44490752
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 1,
+          "route": "disjoint",
+          "kind": 2,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.2898155,
+            "p95": 0.6999420999999999,
+            "p99": 0.7923728700000001
+          },
+          "stable_gpu_ms": {
+            "p50": 0.195888,
+            "p95": 0.20999199999999948,
+            "p99": 0.45939168
+          },
+          "burst_gpu_ms": {
+            "p50": 1.771856,
+            "p95": 2.170888,
+            "p99": 2.3669616
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.002304,
+            "p95": 0.008704,
+            "p99": 0.015723520000000185
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.199296,
+            "p95": 0.2527999999999996,
+            "p99": 0.46134272000000004
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 1,
+          "route": "full_priority",
+          "kind": 2,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.555659,
+            "p95": 0.5829189499999999,
+            "p99": 0.93235238
+          },
+          "stable_gpu_ms": {
+            "p50": 0.170192,
+            "p95": 0.1883104,
+            "p99": 0.20070272000000167
+          },
+          "burst_gpu_ms": {
+            "p50": 1.4882719999999998,
+            "p95": 1.8714944,
+            "p99": 1.89607328
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.34854399999999996,
+            "p95": 0.3660288,
+            "p99": 0.7302016
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.526976,
+            "p95": 0.5426304,
+            "p99": 0.9012454400000001
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 1,
+          "route": "full_priority",
+          "kind": 1,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 1.1141234999999998,
+            "p95": 1.6320217,
+            "p99": 1.9756104000000003
+          },
+          "stable_gpu_ms": {
+            "p50": 0.190416,
+            "p95": 0.22242239999999913,
+            "p99": 0.7071107200000017
+          },
+          "burst_gpu_ms": {
+            "p50": 4.677744,
+            "p95": 5.3812624,
+            "p99": 5.519595200000001
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.89472,
+            "p95": 1.2258943999999998,
+            "p99": 1.5123737600000016
+          },
+          "stable_finish_offset_ms": {
+            "p50": 1.0845440000000002,
+            "p95": 1.5873279999999999,
+            "p99": 1.9500544000000004
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 2,
+          "route": "full_shared",
+          "kind": 2,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 1.6947554999999999,
+            "p95": 2.09090585,
+            "p99": 2.4004711500000004
+          },
+          "stable_gpu_ms": {
+            "p50": 0.195712,
+            "p95": 0.23677120000000001,
+            "p99": 0.5785856000000003
+          },
+          "burst_gpu_ms": {
+            "p50": 1.6864,
+            "p95": 2.0752543999999995,
+            "p99": 2.3954662400000006
+          },
+          "stable_start_offset_ms": {
+            "p50": 1.465472,
+            "p95": 1.8541312,
+            "p99": 1.8990003200000016
+          },
+          "stable_finish_offset_ms": {
+            "p50": 1.669632,
+            "p95": 2.0601088,
+            "p99": 2.3777331200000007
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 2,
+          "route": "full_priority",
+          "kind": 1,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 1.1944465,
+            "p95": 1.5247757999999998,
+            "p99": 1.6873241100000012
+          },
+          "stable_gpu_ms": {
+            "p50": 0.203984,
+            "p95": 0.21869439999999998,
+            "p99": 0.4206742400000013
+          },
+          "burst_gpu_ms": {
+            "p50": 5.050032,
+            "p95": 5.913294400000001,
+            "p99": 6.031688640000002
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.960512,
+            "p95": 1.24224,
+            "p99": 1.402055680000001
+          },
+          "stable_finish_offset_ms": {
+            "p50": 1.166592,
+            "p95": 1.4915968,
+            "p99": 1.632801280000001
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 2,
+          "route": "reserved_solo",
+          "kind": 0,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.28523600000000005,
+            "p95": 0.47876899999999983,
+            "p99": 0.7099664400000022
+          },
+          "stable_gpu_ms": {
+            "p50": 0.25425600000000004,
+            "p95": 0.25902400000000003,
+            "p99": 0.26094976000000003
+          },
+          "burst_gpu_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "overlap_fraction": 0.0
+        },
+        {
+          "repeat": 2,
+          "route": "same_pool_priority",
+          "kind": 1,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 1.3102114999999999,
+            "p95": 1.82741175,
+            "p99": 2.2190834600000042
+          },
+          "stable_gpu_ms": {
+            "p50": 0.343968,
+            "p95": 0.39559039999999995,
+            "p99": 1.0467539200000007
+          },
+          "burst_gpu_ms": {
+            "p50": 12.476431999999999,
+            "p95": 15.949417599999999,
+            "p99": 16.4456736
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.886272,
+            "p95": 1.3002368,
+            "p99": 1.4695628800000002
+          },
+          "stable_finish_offset_ms": {
+            "p50": 1.230336,
+            "p95": 1.7883648,
+            "p99": 2.0142976000000004
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 2,
+          "route": "full_priority",
+          "kind": 2,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.359006,
+            "p95": 0.9669066,
+            "p99": 1.0417033600000012
+          },
+          "stable_gpu_ms": {
+            "p50": 0.087328,
+            "p95": 0.1828208,
+            "p99": 0.7699241600000005
+          },
+          "burst_gpu_ms": {
+            "p50": 1.477712,
+            "p95": 1.9359232,
+            "p99": 2.19710592
+          },
+          "stable_start_offset_ms": {
+            "p50": -0.001792,
+            "p95": 0.6487935999999997,
+            "p99": 0.8149683200000001
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.085504,
+            "p95": 0.922816,
+            "p99": 1.0007296000000012
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 2,
+          "route": "same_pool",
+          "kind": 1,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 11.2157325,
+            "p95": 12.276124900000001,
+            "p99": 12.76150469
+          },
+          "stable_gpu_ms": {
+            "p50": 0.61952,
+            "p95": 0.9354816,
+            "p99": 1.0265760000000006
+          },
+          "burst_gpu_ms": {
+            "p50": 11.17232,
+            "p95": 12.4111008,
+            "p99": 12.875243840000001
+          },
+          "stable_start_offset_ms": {
+            "p50": 10.396928,
+            "p95": 11.4015232,
+            "p99": 11.9655552
+          },
+          "stable_finish_offset_ms": {
+            "p50": 11.070976,
+            "p95": 12.0413696,
+            "p99": 12.741601280000001
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 2,
+          "route": "full_shared",
+          "kind": 1,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 3.3111379999999997,
+            "p95": 3.93111815,
+            "p99": 4.023745030000001
+          },
+          "stable_gpu_ms": {
+            "p50": 0.271328,
+            "p95": 0.3822336,
+            "p99": 0.6247161600000003
+          },
+          "burst_gpu_ms": {
+            "p50": 3.920016,
+            "p95": 4.2974944,
+            "p99": 4.3225964800000005
+          },
+          "stable_start_offset_ms": {
+            "p50": 2.915072,
+            "p95": 3.6058496,
+            "p99": 3.7033856
+          },
+          "stable_finish_offset_ms": {
+            "p50": 3.288704,
+            "p95": 3.8800128,
+            "p99": 3.9861196800000003
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 2,
+          "route": "full_solo",
+          "kind": 0,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.10991400000000001,
+            "p95": 0.17282599999999995,
+            "p99": 0.2524914600000012
+          },
+          "stable_gpu_ms": {
+            "p50": 0.076704,
+            "p95": 0.07740960000000001,
+            "p99": 0.08031872000000138
+          },
+          "burst_gpu_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "overlap_fraction": 0.0
+        },
+        {
+          "repeat": 2,
+          "route": "same_pool_priority",
+          "kind": 2,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.496197,
+            "p95": 0.75341135,
+            "p99": 0.98778441
+          },
+          "stable_gpu_ms": {
+            "p50": 0.2636,
+            "p95": 0.27364,
+            "p99": 0.5323014400000006
+          },
+          "burst_gpu_ms": {
+            "p50": 2.273936,
+            "p95": 2.9173552,
+            "p99": 3.0835507200000003
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.203008,
+            "p95": 0.20901119999999998,
+            "p99": 0.21681664000000195
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.466944,
+            "p95": 0.4824448,
+            "p99": 0.8629888
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 2,
+          "route": "same_pool",
+          "kind": 2,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 2.4913875,
+            "p95": 3.08603445,
+            "p99": 3.384429970000007
+          },
+          "stable_gpu_ms": {
+            "p50": 0.337472,
+            "p95": 0.6153168,
+            "p99": 0.73547296
+          },
+          "burst_gpu_ms": {
+            "p50": 2.228128,
+            "p95": 2.8948736,
+            "p99": 3.0330425600000006
+          },
+          "stable_start_offset_ms": {
+            "p50": 2.043904,
+            "p95": 2.7040384,
+            "p99": 2.846374400000001
+          },
+          "stable_finish_offset_ms": {
+            "p50": 2.38208,
+            "p95": 3.0446592,
+            "p99": 3.1850291200000007
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 0.96875,
+            "p95": 0.9921875,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 2,
+          "route": "disjoint",
+          "kind": 2,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.3046485,
+            "p95": 0.5272437499999999,
+            "p99": 0.6026167300000006
+          },
+          "stable_gpu_ms": {
+            "p50": 0.268368,
+            "p95": 0.2767184,
+            "p99": 0.53884736
+          },
+          "burst_gpu_ms": {
+            "p50": 2.2303680000000004,
+            "p95": 2.8865232,
+            "p99": 2.92511264
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.004608,
+            "p95": 0.009472,
+            "p99": 0.015395840000000018
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.272768,
+            "p95": 0.2858624,
+            "p99": 0.5482547200000001
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 2,
+          "route": "disjoint",
+          "kind": 1,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.2667255,
+            "p95": 0.48245589999999994,
+            "p99": 0.5629641000000006
+          },
+          "stable_gpu_ms": {
+            "p50": 0.228832,
+            "p95": 0.2568016,
+            "p99": 0.43449984000000025
+          },
+          "burst_gpu_ms": {
+            "p50": 11.999712,
+            "p95": 13.6310144,
+            "p99": 14.056218560000001
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.005632,
+            "p95": 0.012569599999999998,
+            "p99": 0.015900160000000014
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.235776,
+            "p95": 0.2648192,
+            "p99": 0.4401920000000003
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        }
+      ],
+      "full_pipeline_validated": false,
+      "dynamic_routing_validated": false
+    },
+    "samples_sha256": "f42f7aa081dc3a5a027b77b3ad733a2117508f0066563b0ec01fea8a424acc3f"
+  },
+  {
+    "archive": "/home/ray/.local/state/saccade/perf/resource-419-elastic-chunks16-20260915",
+    "manifest": {
+      "command": [
+        "scripts/benchmarks/resource_elastic/probe.py",
+        "--output",
+        "/home/ray/.local/state/saccade/perf/resource-419-elastic-chunks16-20260915",
+        "--samples",
+        "100",
+        "--repeats",
+        "3",
+        "--compute-chunks",
+        "16"
+      ],
+      "seed": 419,
+      "samples": 100,
+      "repeats": 3,
+      "compute_chunks": 16,
+      "head": "b4dd39b257b0d477b59d49cbeddd184f1953156d",
+      "source_sha256": {
+        "probe.cu": "543a6ccab9e17f84b33e9a65fb74eb0086f6ec9aacf6fe65d9b0c5fb95167dee",
+        "smid_probe.cu": "371c29fe6a2c8b806b7113d262a36583f3dbfcac332a5b81a43c1b111d6a8b80",
+        "probe.py": "932c0c5ff63d96749029c292b8a812d3447d57aed1d28756a85152cafd778eec"
+      },
+      "nvcc": "nvcc: NVIDIA (R) Cuda compiler driver\nCopyright (c) 2005-2026 NVIDIA Corporation\nBuilt on Mon_Aug_03_13:24:11_PDT_2026\nCuda compilation tools, release 13.4, V13.4.59\nBuild cuda_13.4.r13.4/compiler.38657139_0\n",
+      "nvidia_smi": "Tue Sep 15 21:48:39 2026       \n+-----------------------------------------------------------------------------------------+\n| NVIDIA-SMI 615.71.09              KMD Version: 616.56        CUDA UMD Version: 13.4     |\n+-----------------------------------------+------------------------+----------------------+\n| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |\n| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |\n|                                         |                        |               MIG M. |\n|=========================================+========================+======================|\n|   0  NVIDIA GeForce RTX 5070 ...    On  |   00000000:01:00.0  On |                  N/A |\n| N/A   50C    P4             12W /  140W |    1649MiB /  12227MiB |      3%      Default |\n|                                         |                        |                  N/A |\n+-----------------------------------------+------------------------+----------------------+\n\n+-----------------------------------------------------------------------------------------+\n| Processes:                                                                              |\n|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |\n|        ID   ID                                                               Usage      |\n|=========================================================================================|\n|  No running processes found                                                             |\n+-----------------------------------------------------------------------------------------+\n"
+    },
+    "result": {
+      "status": "validated_synthetic_probe",
+      "device_sms": 46,
+      "remainder_sms_unused": 14,
+      "pools": [
+        {
+          "context": 666745296,
+          "actual_sms": 16,
+          "streams": [
+            666762112,
+            666945504,
+            666945616
+          ],
+          "sm_ids_before": [
+            0,
+            1,
+            4,
+            5,
+            10,
+            11,
+            14,
+            15,
+            20,
+            21,
+            24,
+            25,
+            30,
+            31,
+            34,
+            35
+          ],
+          "sm_ids_after": [
+            0,
+            1,
+            4,
+            5,
+            10,
+            11,
+            14,
+            15,
+            20,
+            21,
+            24,
+            25,
+            30,
+            31,
+            34,
+            35
+          ]
+        },
+        {
+          "context": 666946320,
+          "actual_sms": 16,
+          "streams": [
+            666993232,
+            666993344,
+            666993456
+          ],
+          "sm_ids_before": [
+            2,
+            3,
+            6,
+            7,
+            12,
+            13,
+            16,
+            17,
+            22,
+            23,
+            26,
+            27,
+            32,
+            33,
+            36,
+            37
+          ],
+          "sm_ids_after": [
+            2,
+            3,
+            6,
+            7,
+            12,
+            13,
+            16,
+            17,
+            22,
+            23,
+            26,
+            27,
+            32,
+            33,
+            36,
+            37
+          ]
+        }
+      ],
+      "highest_priority": -5,
+      "compute_chunks": 16,
+      "stable_value": 0.5200423002243042,
+      "summary": [
+        {
+          "repeat": 0,
+          "route": "same_pool",
+          "kind": 1,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.9023574999999999,
+            "p95": 1.17850655,
+            "p99": 1.3876158200000002
+          },
+          "stable_gpu_ms": {
+            "p50": 0.25940799999999997,
+            "p95": 0.2645152,
+            "p99": 0.5210128000000006
+          },
+          "burst_gpu_ms": {
+            "p50": 12.533695999999999,
+            "p95": 13.5616304,
+            "p99": 13.814499200000002
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.682496,
+            "p95": 0.692736,
+            "p99": 0.9649331200000004
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.94208,
+            "p95": 1.2034176,
+            "p99": 1.31170048
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 0,
+          "route": "same_pool_priority",
+          "kind": 1,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.304107,
+            "p95": 0.36353230000000003,
+            "p99": 0.37833959000000084
+          },
+          "stable_gpu_ms": {
+            "p50": 0.24881599999999998,
+            "p95": 0.276872,
+            "p99": 0.2822528
+          },
+          "burst_gpu_ms": {
+            "p50": 12.709152,
+            "p95": 13.5275152,
+            "p99": 13.743590080000002
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.115712,
+            "p95": 0.15509759999999997,
+            "p99": 0.37657856
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.364544,
+            "p95": 0.42533119999999996,
+            "p99": 0.63899648
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 0,
+          "route": "disjoint",
+          "kind": 2,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.2731535,
+            "p95": 0.4891285999999999,
+            "p99": 0.64621151
+          },
+          "stable_gpu_ms": {
+            "p50": 0.245216,
+            "p95": 0.2627055999999993,
+            "p99": 0.5933395200000001
+          },
+          "burst_gpu_ms": {
+            "p50": 2.107648,
+            "p95": 2.4941216,
+            "p99": 2.7357116800000005
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.003328,
+            "p95": 0.008729599999999999,
+            "p99": 0.013578240000000005
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.249472,
+            "p95": 0.2703231999999993,
+            "p99": 0.6020761600000001
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 0,
+          "route": "reserved_solo",
+          "kind": 0,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.2755025,
+            "p95": 0.31235464999999984,
+            "p99": 0.38980769000000126
+          },
+          "stable_gpu_ms": {
+            "p50": 0.24110399999999998,
+            "p95": 0.243944,
+            "p99": 0.2484387200000018
+          },
+          "burst_gpu_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "overlap_fraction": 0.0
+        },
+        {
+          "repeat": 0,
+          "route": "full_shared",
+          "kind": 1,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.3284135,
+            "p95": 0.37742999999999977,
+            "p99": 0.7321518600000001
+          },
+          "stable_gpu_ms": {
+            "p50": 0.149616,
+            "p95": 0.1509168,
+            "p99": 0.15299968
+          },
+          "burst_gpu_ms": {
+            "p50": 4.468304,
+            "p95": 5.135745600000001,
+            "p99": 5.16568672
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.222208,
+            "p95": 0.22272,
+            "p99": 0.4776294400000008
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.37184,
+            "p95": 0.37377279999999996,
+            "p99": 0.6255564800000007
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 0,
+          "route": "disjoint",
+          "kind": 1,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.274731,
+            "p95": 0.326026,
+            "p99": 0.5024935400000013
+          },
+          "stable_gpu_ms": {
+            "p50": 0.230288,
+            "p95": 0.243744,
+            "p99": 0.4846115200000005
+          },
+          "burst_gpu_ms": {
+            "p50": 11.828448,
+            "p95": 12.842636800000001,
+            "p99": 13.097667840000003
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.07488,
+            "p95": 0.105728,
+            "p99": 0.11627520000000002
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.30809600000000004,
+            "p95": 0.34368000000000004,
+            "p99": 0.5540761600000002
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 0,
+          "route": "full_shared",
+          "kind": 2,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 1.5434585,
+            "p95": 1.9429425499999997,
+            "p99": 2.1504740400000015
+          },
+          "stable_gpu_ms": {
+            "p50": 0.171008,
+            "p95": 0.20888800000000002,
+            "p99": 0.4390560000000009
+          },
+          "burst_gpu_ms": {
+            "p50": 1.5246879999999998,
+            "p95": 1.9296287999999997,
+            "p99": 2.1111427200000015
+          },
+          "stable_start_offset_ms": {
+            "p50": 1.338624,
+            "p95": 1.715264,
+            "p99": 1.9020185600000017
+          },
+          "stable_finish_offset_ms": {
+            "p50": 1.515776,
+            "p95": 1.9174015999999996,
+            "p99": 2.099271680000002
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 0,
+          "route": "same_pool_priority",
+          "kind": 2,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.4672265,
+            "p95": 0.58779545,
+            "p99": 0.8434336800000004
+          },
+          "stable_gpu_ms": {
+            "p50": 0.248,
+            "p95": 0.2532352,
+            "p99": 0.6149993600000001
+          },
+          "burst_gpu_ms": {
+            "p50": 2.125344,
+            "p95": 2.6715776,
+            "p99": 2.811288000000001
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.192768,
+            "p95": 0.193792,
+            "p99": 0.19430912
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.44096,
+            "p95": 0.4462208,
+            "p99": 0.80777216
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 0,
+          "route": "full_priority",
+          "kind": 2,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.5928100000000001,
+            "p95": 0.61232535,
+            "p99": 0.9845652500000001
+          },
+          "stable_gpu_ms": {
+            "p50": 0.191696,
+            "p95": 0.20366399999999998,
+            "p99": 0.20516704
+          },
+          "burst_gpu_ms": {
+            "p50": 1.5951840000000002,
+            "p95": 1.9877152,
+            "p99": 2.37716768
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.373248,
+            "p95": 0.3858944,
+            "p99": 0.76623104
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.56704,
+            "p95": 0.5766144,
+            "p99": 0.9590297600000001
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 0,
+          "route": "same_pool",
+          "kind": 2,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 2.293317,
+            "p95": 2.95319185,
+            "p99": 3.0555697700000004
+          },
+          "stable_gpu_ms": {
+            "p50": 0.31886400000000004,
+            "p95": 0.6029599999999998,
+            "p99": 1.04648224
+          },
+          "burst_gpu_ms": {
+            "p50": 2.1214560000000002,
+            "p95": 2.7332959999999997,
+            "p99": 2.86089376
+          },
+          "stable_start_offset_ms": {
+            "p50": 1.945472,
+            "p95": 2.3513471999999993,
+            "p99": 2.6906368
+          },
+          "stable_finish_offset_ms": {
+            "p50": 2.265088,
+            "p95": 2.9252864,
+            "p99": 3.0052735999999998
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 0.97265625,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 0,
+          "route": "full_priority",
+          "kind": 1,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.2027245,
+            "p95": 0.38905234999999977,
+            "p99": 0.6458555700000008
+          },
+          "stable_gpu_ms": {
+            "p50": 0.156304,
+            "p95": 0.1622784,
+            "p99": 0.4586992000000017
+          },
+          "burst_gpu_ms": {
+            "p50": 4.509664,
+            "p95": 5.5110304,
+            "p99": 5.6397369600000005
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.084096,
+            "p95": 0.1161344,
+            "p99": 0.13069056000000032
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.246016,
+            "p95": 0.260864,
+            "p99": 0.5401164800000017
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 0,
+          "route": "full_solo",
+          "kind": 0,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.12990649999999998,
+            "p95": 0.2774305999999993,
+            "p99": 0.6242192400000002
+          },
+          "stable_gpu_ms": {
+            "p50": 0.09816,
+            "p95": 0.0999776,
+            "p99": 0.1405856000000024
+          },
+          "burst_gpu_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "overlap_fraction": 0.0
+        },
+        {
+          "repeat": 1,
+          "route": "reserved_solo",
+          "kind": 0,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.288327,
+            "p95": 0.5733879,
+            "p99": 0.69296705
+          },
+          "stable_gpu_ms": {
+            "p50": 0.25488,
+            "p95": 0.2587696,
+            "p99": 0.6255110400000001
+          },
+          "burst_gpu_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "overlap_fraction": 0.0
+        },
+        {
+          "repeat": 1,
+          "route": "full_solo",
+          "kind": 0,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.133213,
+            "p95": 0.2311132,
+            "p99": 0.34050595000000083
+          },
+          "stable_gpu_ms": {
+            "p50": 0.09872,
+            "p95": 0.0998416,
+            "p99": 0.10620960000000185
+          },
+          "burst_gpu_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "overlap_fraction": 0.0
+        },
+        {
+          "repeat": 1,
+          "route": "full_shared",
+          "kind": 1,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.34783,
+            "p95": 0.5068201999999999,
+            "p99": 0.9629427900000003
+          },
+          "stable_gpu_ms": {
+            "p50": 0.156816,
+            "p95": 0.1585024,
+            "p99": 0.16937376000000343
+          },
+          "burst_gpu_ms": {
+            "p50": 4.699168,
+            "p95": 5.7773216,
+            "p99": 5.993849600000001
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.23436800000000002,
+            "p95": 0.2376576,
+            "p99": 0.6408473600000001
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.391936,
+            "p95": 0.3958528,
+            "p99": 0.8044544000000013
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 1,
+          "route": "full_shared",
+          "kind": 2,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 1.7011335,
+            "p95": 2.1295367,
+            "p99": 2.51720573
+          },
+          "stable_gpu_ms": {
+            "p50": 0.203088,
+            "p95": 0.239328,
+            "p99": 0.6346646400000001
+          },
+          "burst_gpu_ms": {
+            "p50": 1.670912,
+            "p95": 2.1201280000000002,
+            "p99": 2.3684492800000005
+          },
+          "stable_start_offset_ms": {
+            "p50": 1.462784,
+            "p95": 1.8911232,
+            "p99": 2.1570636800000007
+          },
+          "stable_finish_offset_ms": {
+            "p50": 1.672832,
+            "p95": 2.0970624,
+            "p99": 2.49529344
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 1,
+          "route": "disjoint",
+          "kind": 1,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.272217,
+            "p95": 0.31984869999999993,
+            "p99": 0.7569011500000004
+          },
+          "stable_gpu_ms": {
+            "p50": 0.238288,
+            "p95": 0.2556624,
+            "p99": 0.6067721600000001
+          },
+          "burst_gpu_ms": {
+            "p50": 12.299792,
+            "p95": 13.9228384,
+            "p99": 14.061125760000001
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.089728,
+            "p95": 0.11247359999999999,
+            "p99": 0.13503232000000137
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.32985600000000004,
+            "p95": 0.3625344,
+            "p99": 0.6535193600000005
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 1,
+          "route": "same_pool",
+          "kind": 1,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.8282465,
+            "p95": 1.14297565,
+            "p99": 1.3028859600000013
+          },
+          "stable_gpu_ms": {
+            "p50": 0.238608,
+            "p95": 0.2491632,
+            "p99": 0.5525628800000001
+          },
+          "burst_gpu_ms": {
+            "p50": 11.406816,
+            "p95": 12.4503792,
+            "p99": 12.8365136
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.627456,
+            "p95": 0.9384832,
+            "p99": 0.9838617600000013
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.873728,
+            "p95": 1.1788672,
+            "p99": 1.2281651200000012
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 1,
+          "route": "same_pool",
+          "kind": 2,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 2.319356,
+            "p95": 2.926978,
+            "p99": 3.02762731
+          },
+          "stable_gpu_ms": {
+            "p50": 0.32035199999999997,
+            "p95": 0.6113183999999999,
+            "p99": 0.6927260800000006
+          },
+          "burst_gpu_ms": {
+            "p50": 2.14152,
+            "p95": 2.7004288,
+            "p99": 2.7869254400000005
+          },
+          "stable_start_offset_ms": {
+            "p50": 1.96608,
+            "p95": 2.5224447999999997,
+            "p99": 2.6161996800000002
+          },
+          "stable_finish_offset_ms": {
+            "p50": 2.290944,
+            "p95": 2.850496,
+            "p99": 2.9363328000000006
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 0.9765625,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 1,
+          "route": "same_pool_priority",
+          "kind": 2,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.499738,
+            "p95": 0.8733231499999999,
+            "p99": 0.9652026800000003
+          },
+          "stable_gpu_ms": {
+            "p50": 0.263488,
+            "p95": 0.2699472,
+            "p99": 0.281975040000002
+          },
+          "burst_gpu_ms": {
+            "p50": 2.252848,
+            "p95": 2.8934144,
+            "p99": 2.96717504
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.204416,
+            "p95": 0.4813055999999997,
+            "p99": 0.5935206400000002
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.468224,
+            "p95": 0.835008,
+            "p99": 0.8720460800000001
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 1,
+          "route": "same_pool_priority",
+          "kind": 1,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.3088115,
+            "p95": 0.38795089999999993,
+            "p99": 0.5588828600000014
+          },
+          "stable_gpu_ms": {
+            "p50": 0.25448,
+            "p95": 0.2823568,
+            "p99": 0.2972396800000013
+          },
+          "burst_gpu_ms": {
+            "p50": 12.509376,
+            "p95": 13.6565936,
+            "p99": 14.626010240000001
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.084224,
+            "p95": 0.1187968,
+            "p99": 0.21583872000000184
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.347136,
+            "p95": 0.3974528,
+            "p99": 0.6241126400000012
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 1,
+          "route": "disjoint",
+          "kind": 2,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.26881,
+            "p95": 0.4025074499999998,
+            "p99": 0.5771617900000006
+          },
+          "stable_gpu_ms": {
+            "p50": 0.22592,
+            "p95": 0.2751776,
+            "p99": 0.5552284800000005
+          },
+          "burst_gpu_ms": {
+            "p50": 2.001712,
+            "p95": 2.6412752,
+            "p99": 2.85844544
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.003072,
+            "p95": 0.009241599999999999,
+            "p99": 0.011783680000000005
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.230528,
+            "p95": 0.2826496,
+            "p99": 0.5609907200000004
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 1,
+          "route": "full_priority",
+          "kind": 2,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.604938,
+            "p95": 0.62447325,
+            "p99": 0.6446582200000021
+          },
+          "stable_gpu_ms": {
+            "p50": 0.201984,
+            "p95": 0.21943680000000002,
+            "p99": 0.229964160000002
+          },
+          "burst_gpu_ms": {
+            "p50": 1.5947520000000002,
+            "p95": 2.0333424,
+            "p99": 2.05420096
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.374784,
+            "p95": 0.38581760000000004,
+            "p99": 0.39121920000000004
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.57984,
+            "p95": 0.593152,
+            "p99": 0.601676800000002
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 1,
+          "route": "full_priority",
+          "kind": 1,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.198407,
+            "p95": 0.25957474999999997,
+            "p99": 0.4537151400000011
+          },
+          "stable_gpu_ms": {
+            "p50": 0.16449599999999998,
+            "p95": 0.1682272,
+            "p99": 0.1753401600000002
+          },
+          "burst_gpu_ms": {
+            "p50": 5.085888,
+            "p95": 5.5470416,
+            "p99": 5.575743680000001
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.097408,
+            "p95": 0.12135679999999999,
+            "p99": 0.14368000000000186
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.264704,
+            "p95": 0.2703488,
+            "p99": 0.3184179200000021
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 2,
+          "route": "full_shared",
+          "kind": 2,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 1.6958575,
+            "p95": 2.1309353,
+            "p99": 2.17794411
+          },
+          "stable_gpu_ms": {
+            "p50": 0.20272,
+            "p95": 0.23588,
+            "p99": 0.23959072
+          },
+          "burst_gpu_ms": {
+            "p50": 1.667616,
+            "p95": 2.1051488,
+            "p99": 2.1244544
+          },
+          "stable_start_offset_ms": {
+            "p50": 1.462656,
+            "p95": 1.8921472,
+            "p99": 1.92051968
+          },
+          "stable_finish_offset_ms": {
+            "p50": 1.673856,
+            "p95": 2.0932096,
+            "p99": 2.14489088
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 2,
+          "route": "full_priority",
+          "kind": 1,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.1967585,
+            "p95": 0.2629854,
+            "p99": 0.394414870000001
+          },
+          "stable_gpu_ms": {
+            "p50": 0.16448000000000002,
+            "p95": 0.17244320000000002,
+            "p99": 0.17623936000000007
+          },
+          "burst_gpu_ms": {
+            "p50": 5.004303999999999,
+            "p95": 5.4907408,
+            "p99": 5.572207360000001
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.087936,
+            "p95": 0.121344,
+            "p99": 0.12322816000000004
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.25459200000000004,
+            "p95": 0.270592,
+            "p99": 0.2711500800000001
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 2,
+          "route": "reserved_solo",
+          "kind": 0,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.290557,
+            "p95": 0.3886513,
+            "p99": 0.5211841700000014
+          },
+          "stable_gpu_ms": {
+            "p50": 0.254832,
+            "p95": 0.258696,
+            "p99": 0.2619859200000012
+          },
+          "burst_gpu_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "overlap_fraction": 0.0
+        },
+        {
+          "repeat": 2,
+          "route": "same_pool_priority",
+          "kind": 1,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.3037165,
+            "p95": 0.36671255,
+            "p99": 0.5128845000000005
+          },
+          "stable_gpu_ms": {
+            "p50": 0.249824,
+            "p95": 0.2852352,
+            "p99": 0.3058659200000015
+          },
+          "burst_gpu_ms": {
+            "p50": 12.458431999999998,
+            "p95": 13.7602368,
+            "p99": 14.066621760000004
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.098048,
+            "p95": 0.11891199999999999,
+            "p99": 0.12453120000000097
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.352,
+            "p95": 0.39168,
+            "p99": 0.5595289600000006
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 2,
+          "route": "full_priority",
+          "kind": 2,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.5516719999999999,
+            "p95": 0.6179984999999999,
+            "p99": 0.827414240000001
+          },
+          "stable_gpu_ms": {
+            "p50": 0.18081599999999998,
+            "p95": 0.2104944,
+            "p99": 0.2291328000000011
+          },
+          "burst_gpu_ms": {
+            "p50": 1.4873120000000002,
+            "p95": 1.8833199999999999,
+            "p99": 2.0334483200000015
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.34316800000000003,
+            "p95": 0.380928,
+            "p99": 0.39211520000000205
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.525568,
+            "p95": 0.587264,
+            "p99": 0.788195840000001
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 2,
+          "route": "same_pool",
+          "kind": 1,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.9070155,
+            "p95": 1.0915747499999997,
+            "p99": 1.2402529400000006
+          },
+          "stable_gpu_ms": {
+            "p50": 0.262864,
+            "p95": 0.2864288,
+            "p99": 0.60762144
+          },
+          "burst_gpu_ms": {
+            "p50": 12.637296,
+            "p95": 14.1921536,
+            "p99": 14.48262848
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.689536,
+            "p95": 0.733696,
+            "p99": 0.9536486400000008
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.95232,
+            "p95": 1.0399231999999996,
+            "p99": 1.3092633600000005
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 2,
+          "route": "full_shared",
+          "kind": 1,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.321986,
+            "p95": 0.44494074999999994,
+            "p99": 0.7171564100000002
+          },
+          "stable_gpu_ms": {
+            "p50": 0.15121600000000002,
+            "p95": 0.1585088,
+            "p99": 0.5415843200000002
+          },
+          "burst_gpu_ms": {
+            "p50": 4.6924,
+            "p95": 5.3866816,
+            "p99": 5.630251840000001
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.222464,
+            "p95": 0.236544,
+            "p99": 0.23961856
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.373504,
+            "p95": 0.3958272,
+            "p99": 0.7636147200000003
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 2,
+          "route": "full_solo",
+          "kind": 0,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.1334885,
+            "p95": 0.22862514999999997,
+            "p99": 0.5863727400000003
+          },
+          "stable_gpu_ms": {
+            "p50": 0.098368,
+            "p95": 0.0999072,
+            "p99": 0.11006144000000186
+          },
+          "burst_gpu_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "overlap_fraction": 0.0
+        },
+        {
+          "repeat": 2,
+          "route": "same_pool_priority",
+          "kind": 2,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.494017,
+            "p95": 0.591618,
+            "p99": 0.8114370600000174
+          },
+          "stable_gpu_ms": {
+            "p50": 0.26350399999999996,
+            "p95": 0.2701616,
+            "p99": 0.27930976
+          },
+          "burst_gpu_ms": {
+            "p50": 2.262096,
+            "p95": 2.9611424,
+            "p99": 3.057215680000001
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.204544,
+            "p95": 0.2122368,
+            "p99": 0.22011136000000142
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.468736,
+            "p95": 0.47873279999999996,
+            "p99": 0.49924864000000135
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 2,
+          "route": "same_pool",
+          "kind": 2,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 2.399363,
+            "p95": 3.1574066,
+            "p99": 3.3112201900000007
+          },
+          "stable_gpu_ms": {
+            "p50": 0.331088,
+            "p95": 0.3507568,
+            "p99": 0.6960444800000003
+          },
+          "burst_gpu_ms": {
+            "p50": 2.21104,
+            "p95": 2.8478064,
+            "p99": 3.0070016
+          },
+          "stable_start_offset_ms": {
+            "p50": 2.033792,
+            "p95": 2.6574720000000003,
+            "p99": 2.8207411200000005
+          },
+          "stable_finish_offset_ms": {
+            "p50": 2.3655679999999997,
+            "p95": 3.0278272,
+            "p99": 3.1610828800000004
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 0.9609375,
+            "p95": 0.9921875,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 2,
+          "route": "disjoint",
+          "kind": 2,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.29946300000000003,
+            "p95": 0.39804565,
+            "p99": 0.7025375800000005
+          },
+          "stable_gpu_ms": {
+            "p50": 0.26979200000000003,
+            "p95": 0.2782416,
+            "p99": 0.288710400000002
+          },
+          "burst_gpu_ms": {
+            "p50": 2.2092,
+            "p95": 2.8538368000000003,
+            "p99": 3.11465792
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.003328,
+            "p95": 0.008704,
+            "p99": 0.010547200000000026
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.274176,
+            "p95": 0.2831488,
+            "p99": 0.291658240000002
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 2,
+          "route": "disjoint",
+          "kind": 1,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.28061250000000004,
+            "p95": 0.32713255,
+            "p99": 0.5854786500000005
+          },
+          "stable_gpu_ms": {
+            "p50": 0.239088,
+            "p95": 0.25549279999999996,
+            "p99": 0.26517568000000125
+          },
+          "burst_gpu_ms": {
+            "p50": 12.489152,
+            "p95": 13.7909184,
+            "p99": 14.465601920000001
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.087424,
+            "p95": 0.10992639999999998,
+            "p99": 0.15225600000000664
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.331648,
+            "p95": 0.3610112,
+            "p99": 0.515991040000006
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        }
+      ],
+      "full_pipeline_validated": false,
+      "dynamic_routing_validated": false
+    },
+    "samples_sha256": "855aad07096964f49d499b892f61ad5fe60ba560df6d29089678e253576d507c"
+  },
+  {
+    "archive": "/home/ray/.local/state/saccade/perf/resource-419-elastic-return1-20260915",
+    "manifest": {
+      "command": [
+        "scripts/benchmarks/resource_elastic/probe.py",
+        "--output",
+        "/home/ray/.local/state/saccade/perf/resource-419-elastic-return1-20260915",
+        "--samples",
+        "100",
+        "--repeats",
+        "3",
+        "--compute-chunks",
+        "1"
+      ],
+      "seed": 419,
+      "samples": 100,
+      "repeats": 3,
+      "compute_chunks": 1,
+      "head": "b4dd39b257b0d477b59d49cbeddd184f1953156d",
+      "source_sha256": {
+        "probe.cu": "543a6ccab9e17f84b33e9a65fb74eb0086f6ec9aacf6fe65d9b0c5fb95167dee",
+        "smid_probe.cu": "371c29fe6a2c8b806b7113d262a36583f3dbfcac332a5b81a43c1b111d6a8b80",
+        "probe.py": "932c0c5ff63d96749029c292b8a812d3447d57aed1d28756a85152cafd778eec"
+      },
+      "nvcc": "nvcc: NVIDIA (R) Cuda compiler driver\nCopyright (c) 2005-2026 NVIDIA Corporation\nBuilt on Mon_Aug_03_13:24:11_PDT_2026\nCuda compilation tools, release 13.4, V13.4.59\nBuild cuda_13.4.r13.4/compiler.38657139_0\n",
+      "nvidia_smi": "Tue Sep 15 21:50:44 2026       \n+-----------------------------------------------------------------------------------------+\n| NVIDIA-SMI 615.71.09              KMD Version: 616.56        CUDA UMD Version: 13.4     |\n+-----------------------------------------+------------------------+----------------------+\n| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |\n| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |\n|                                         |                        |               MIG M. |\n|=========================================+========================+======================|\n|   0  NVIDIA GeForce RTX 5070 ...    On  |   00000000:01:00.0  On |                  N/A |\n| N/A   49C    P8              9W /  140W |    1313MiB /  12227MiB |     27%      Default |\n|                                         |                        |                  N/A |\n+-----------------------------------------+------------------------+----------------------+\n\n+-----------------------------------------------------------------------------------------+\n| Processes:                                                                              |\n|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |\n|        ID   ID                                                               Usage      |\n|=========================================================================================|\n|  No running processes found                                                             |\n+-----------------------------------------------------------------------------------------+\n"
+    },
+    "result": {
+      "status": "validated_synthetic_probe",
+      "device_sms": 46,
+      "remainder_sms_unused": 14,
+      "pools": [
+        {
+          "context": 606072800,
+          "actual_sms": 16,
+          "streams": [
+            606272912,
+            606273024,
+            606273136
+          ],
+          "sm_ids_before": [
+            0,
+            1,
+            4,
+            5,
+            10,
+            11,
+            14,
+            15,
+            20,
+            21,
+            24,
+            25,
+            30,
+            31,
+            34,
+            35
+          ],
+          "sm_ids_after": [
+            0,
+            1,
+            4,
+            5,
+            10,
+            11,
+            14,
+            15,
+            20,
+            21,
+            24,
+            25,
+            30,
+            31,
+            34,
+            35
+          ]
+        },
+        {
+          "context": 606273840,
+          "actual_sms": 16,
+          "streams": [
+            606320752,
+            606320864,
+            606320976
+          ],
+          "sm_ids_before": [
+            2,
+            3,
+            6,
+            7,
+            12,
+            13,
+            16,
+            17,
+            22,
+            23,
+            26,
+            27,
+            32,
+            33,
+            36,
+            37
+          ],
+          "sm_ids_after": [
+            2,
+            3,
+            6,
+            7,
+            12,
+            13,
+            16,
+            17,
+            22,
+            23,
+            26,
+            27,
+            32,
+            33,
+            36,
+            37
+          ]
+        }
+      ],
+      "highest_priority": -5,
+      "compute_chunks": 1,
+      "stable_value": 0.5200423002243042,
+      "summary": [
+        {
+          "repeat": 0,
+          "route": "same_pool",
+          "kind": 1,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 12.200652,
+            "p95": 13.4047105,
+            "p99": 13.70517519
+          },
+          "stable_gpu_ms": {
+            "p50": 0.6890719999999999,
+            "p95": 1.0173248,
+            "p99": 1.2233574400000005
+          },
+          "burst_gpu_ms": {
+            "p50": 12.227504,
+            "p95": 13.468707199999999,
+            "p99": 13.79673056
+          },
+          "stable_start_offset_ms": {
+            "p50": 11.400448,
+            "p95": 12.607513599999999,
+            "p99": 12.740172800000002
+          },
+          "stable_finish_offset_ms": {
+            "p50": 12.106624,
+            "p95": 13.3526272,
+            "p99": 13.67880704
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 0,
+          "route": "same_pool_priority",
+          "kind": 1,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 1.3098655,
+            "p95": 1.6629574999999999,
+            "p99": 1.6903078599999999
+          },
+          "stable_gpu_ms": {
+            "p50": 0.358368,
+            "p95": 0.709584,
+            "p99": 0.7221776000000001
+          },
+          "burst_gpu_ms": {
+            "p50": 12.663248,
+            "p95": 13.504503999999999,
+            "p99": 13.62889728
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.9216,
+            "p95": 0.9355263999999993,
+            "p99": 1.29178624
+          },
+          "stable_finish_offset_ms": {
+            "p50": 1.28,
+            "p95": 1.638016,
+            "p99": 1.65189888
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 0,
+          "route": "disjoint",
+          "kind": 2,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.27577300000000005,
+            "p95": 0.3765017499999999,
+            "p99": 0.5293091600000001
+          },
+          "stable_gpu_ms": {
+            "p50": 0.244592,
+            "p95": 0.248352,
+            "p99": 0.2496672
+          },
+          "burst_gpu_ms": {
+            "p50": 2.121904,
+            "p95": 2.7372128,
+            "p99": 2.8576739200000003
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.003712,
+            "p95": 0.009472,
+            "p99": 0.020992
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.249344,
+            "p95": 0.25626879999999996,
+            "p99": 0.26577152000000004
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 0,
+          "route": "reserved_solo",
+          "kind": 0,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.270929,
+            "p95": 0.28741705,
+            "p99": 0.6215102200000001
+          },
+          "stable_gpu_ms": {
+            "p50": 0.24048,
+            "p95": 0.24377759999999998,
+            "p99": 0.24809504000000182
+          },
+          "burst_gpu_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "overlap_fraction": 0.0
+        },
+        {
+          "repeat": 0,
+          "route": "full_shared",
+          "kind": 1,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 4.016166,
+            "p95": 4.96557015,
+            "p99": 5.119768919999999
+          },
+          "stable_gpu_ms": {
+            "p50": 0.43711999999999995,
+            "p95": 0.7408303999999999,
+            "p99": 0.8090537600000003
+          },
+          "burst_gpu_ms": {
+            "p50": 4.366352,
+            "p95": 5.3574896,
+            "p99": 5.45415232
+          },
+          "stable_start_offset_ms": {
+            "p50": 3.536128,
+            "p95": 4.3018112,
+            "p99": 4.417047040000001
+          },
+          "stable_finish_offset_ms": {
+            "p50": 3.99232,
+            "p95": 4.9347968,
+            "p99": 5.07817728
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 0,
+          "route": "disjoint",
+          "kind": 1,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.27056800000000003,
+            "p95": 0.5664655,
+            "p99": 0.7246817700000002
+          },
+          "stable_gpu_ms": {
+            "p50": 0.218464,
+            "p95": 0.2401904,
+            "p99": 0.2443200000000013
+          },
+          "burst_gpu_ms": {
+            "p50": 11.869728,
+            "p95": 12.890912,
+            "p99": 13.091353920000001
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.002816,
+            "p95": 0.008972799999999998,
+            "p99": 0.012316160000000015
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.22272,
+            "p95": 0.24655359999999998,
+            "p99": 0.25179136000000124
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 0,
+          "route": "full_shared",
+          "kind": 2,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 1.5232155,
+            "p95": 1.8987815,
+            "p99": 1.9364695
+          },
+          "stable_gpu_ms": {
+            "p50": 0.169936,
+            "p95": 0.1842656,
+            "p99": 0.19666496000000122
+          },
+          "burst_gpu_ms": {
+            "p50": 1.51368,
+            "p95": 1.8863056,
+            "p99": 1.9108588800000001
+          },
+          "stable_start_offset_ms": {
+            "p50": 1.327872,
+            "p95": 1.6967168,
+            "p99": 1.72268288
+          },
+          "stable_finish_offset_ms": {
+            "p50": 1.500544,
+            "p95": 1.8715135999999999,
+            "p99": 1.8958387200000002
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 0,
+          "route": "same_pool_priority",
+          "kind": 2,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.4338635,
+            "p95": 0.5917884999999999,
+            "p99": 0.8061260400000002
+          },
+          "stable_gpu_ms": {
+            "p50": 0.2284,
+            "p95": 0.23329439999999999,
+            "p99": 0.5308924800000002
+          },
+          "burst_gpu_ms": {
+            "p50": 1.96624,
+            "p95": 2.4452975999999995,
+            "p99": 2.5242787200000003
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.178688,
+            "p95": 0.179968,
+            "p99": 0.18273024000000126
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.407296,
+            "p95": 0.411968,
+            "p99": 0.7018880000000002
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 0,
+          "route": "full_priority",
+          "kind": 2,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.588542,
+            "p95": 0.8951413999999998,
+            "p99": 1.01161257
+          },
+          "stable_gpu_ms": {
+            "p50": 0.186192,
+            "p95": 0.207552,
+            "p99": 0.5804124800000001
+          },
+          "burst_gpu_ms": {
+            "p50": 1.5613920000000001,
+            "p95": 1.9780384,
+            "p99": 2.01070144
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.37081600000000003,
+            "p95": 0.3978368,
+            "p99": 0.8016000000000001
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.56064,
+            "p95": 0.8671871999999997,
+            "p99": 0.9841305600000001
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 0,
+          "route": "same_pool",
+          "kind": 2,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 2.3047684999999998,
+            "p95": 2.9122027499999996,
+            "p99": 3.0459283
+          },
+          "stable_gpu_ms": {
+            "p50": 0.32356799999999997,
+            "p95": 0.5847871999999997,
+            "p99": 0.70698112
+          },
+          "burst_gpu_ms": {
+            "p50": 2.131776,
+            "p95": 2.6476192,
+            "p99": 2.8827552
+          },
+          "stable_start_offset_ms": {
+            "p50": 1.952768,
+            "p95": 2.4654208,
+            "p99": 2.6990464000000003
+          },
+          "stable_finish_offset_ms": {
+            "p50": 2.276224,
+            "p95": 2.7899647999999995,
+            "p99": 3.02440704
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 0.984375,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 0,
+          "route": "full_priority",
+          "kind": 1,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 1.1431185,
+            "p95": 1.42879595,
+            "p99": 1.5506243899999999
+          },
+          "stable_gpu_ms": {
+            "p50": 0.19491199999999997,
+            "p95": 0.2055456,
+            "p99": 0.4897772800000005
+          },
+          "burst_gpu_ms": {
+            "p50": 4.639696,
+            "p95": 5.0710863999999995,
+            "p99": 5.312358400000001
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.918272,
+            "p95": 1.1724416,
+            "p99": 1.30954752
+          },
+          "stable_finish_offset_ms": {
+            "p50": 1.1147520000000002,
+            "p95": 1.4103168,
+            "p99": 1.51096064
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 0,
+          "route": "full_solo",
+          "kind": 0,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.1204035,
+            "p95": 0.1574690999999998,
+            "p99": 0.3255364900000012
+          },
+          "stable_gpu_ms": {
+            "p50": 0.091552,
+            "p95": 0.092128,
+            "p99": 0.09222624
+          },
+          "burst_gpu_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "overlap_fraction": 0.0
+        },
+        {
+          "repeat": 1,
+          "route": "reserved_solo",
+          "kind": 0,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.270438,
+            "p95": 0.35626864999999996,
+            "p99": 0.62610727
+          },
+          "stable_gpu_ms": {
+            "p50": 0.238672,
+            "p95": 0.24160320000000002,
+            "p99": 0.5919942400000001
+          },
+          "burst_gpu_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "overlap_fraction": 0.0
+        },
+        {
+          "repeat": 1,
+          "route": "full_solo",
+          "kind": 0,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.120724,
+            "p95": 0.12931545,
+            "p99": 0.13746717000000003
+          },
+          "stable_gpu_ms": {
+            "p50": 0.09152,
+            "p95": 0.0920976,
+            "p99": 0.09306400000000001
+          },
+          "burst_gpu_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "overlap_fraction": 0.0
+        },
+        {
+          "repeat": 1,
+          "route": "full_shared",
+          "kind": 1,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 4.2361640000000005,
+            "p95": 4.9782018,
+            "p99": 5.35372449
+          },
+          "stable_gpu_ms": {
+            "p50": 0.473888,
+            "p95": 0.8663184,
+            "p99": 0.90436928
+          },
+          "burst_gpu_ms": {
+            "p50": 4.88784,
+            "p95": 5.3615216,
+            "p99": 5.710398720000001
+          },
+          "stable_start_offset_ms": {
+            "p50": 3.723648,
+            "p95": 4.4402048,
+            "p99": 4.591631360000002
+          },
+          "stable_finish_offset_ms": {
+            "p50": 4.207744,
+            "p95": 4.9555967999999995,
+            "p99": 5.3109248000000004
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 1,
+          "route": "full_shared",
+          "kind": 2,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 1.724983,
+            "p95": 2.18299145,
+            "p99": 2.575816080000001
+          },
+          "stable_gpu_ms": {
+            "p50": 0.20755200000000001,
+            "p95": 0.2419472,
+            "p99": 0.5878761600000001
+          },
+          "burst_gpu_ms": {
+            "p50": 1.699856,
+            "p95": 2.1510368,
+            "p99": 2.584182400000001
+          },
+          "stable_start_offset_ms": {
+            "p50": 1.483264,
+            "p95": 1.9284864,
+            "p99": 1.9684915200000028
+          },
+          "stable_finish_offset_ms": {
+            "p50": 1.701248,
+            "p95": 2.1403776000000003,
+            "p99": 2.5562956800000007
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 1,
+          "route": "disjoint",
+          "kind": 1,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.26625,
+            "p95": 0.40936859999999986,
+            "p99": 0.6394901300000002
+          },
+          "stable_gpu_ms": {
+            "p50": 0.22799999999999998,
+            "p95": 0.2683215999999995,
+            "p99": 0.6003260800000002
+          },
+          "burst_gpu_ms": {
+            "p50": 11.749984000000001,
+            "p95": 13.220782400000001,
+            "p99": 13.7125008
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.004352,
+            "p95": 0.009984,
+            "p99": 0.017221120000000038
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.234112,
+            "p95": 0.28016639999999954,
+            "p99": 0.6154905600000002
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 1,
+          "route": "same_pool",
+          "kind": 1,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 10.440100999999999,
+            "p95": 11.4429598,
+            "p99": 11.616756100000002
+          },
+          "stable_gpu_ms": {
+            "p50": 0.583136,
+            "p95": 0.8529136,
+            "p99": 1.01815872
+          },
+          "burst_gpu_ms": {
+            "p50": 10.537504,
+            "p95": 11.486032,
+            "p99": 11.698438080000003
+          },
+          "stable_start_offset_ms": {
+            "p50": 9.724160000000001,
+            "p95": 10.8505856,
+            "p99": 10.983516160000002
+          },
+          "stable_finish_offset_ms": {
+            "p50": 10.417408,
+            "p95": 11.4087296,
+            "p99": 11.590231040000003
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 1,
+          "route": "same_pool",
+          "kind": 2,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 1.524798,
+            "p95": 2.1855658499999993,
+            "p99": 2.37525706
+          },
+          "stable_gpu_ms": {
+            "p50": 0.17912,
+            "p95": 0.27482879999999943,
+            "p99": 0.51448928
+          },
+          "burst_gpu_ms": {
+            "p50": 1.343296,
+            "p95": 1.9432175999999999,
+            "p99": 2.03388032
+          },
+          "stable_start_offset_ms": {
+            "p50": 1.238016,
+            "p95": 1.8009983999999999,
+            "p99": 1.8939084800000001
+          },
+          "stable_finish_offset_ms": {
+            "p50": 1.415808,
+            "p95": 2.1365632000000003,
+            "p99": 2.3013068800000003
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 1,
+          "route": "same_pool_priority",
+          "kind": 2,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.29795550000000004,
+            "p95": 0.38828499999999994,
+            "p99": 0.46991540000000065
+          },
+          "stable_gpu_ms": {
+            "p50": 0.13707200000000003,
+            "p95": 0.150336,
+            "p99": 0.1529516800000009
+          },
+          "burst_gpu_ms": {
+            "p50": 1.369888,
+            "p95": 1.5437984,
+            "p99": 1.6554012800000002
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.12672,
+            "p95": 0.13056,
+            "p99": 0.29779712
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.267648,
+            "p95": 0.280576,
+            "p99": 0.45261056
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 1,
+          "route": "same_pool_priority",
+          "kind": 1,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.8150565,
+            "p95": 0.9880762,
+            "p99": 1.0314930300000005
+          },
+          "stable_gpu_ms": {
+            "p50": 0.216976,
+            "p95": 0.224248,
+            "p99": 0.3825593600000003
+          },
+          "burst_gpu_ms": {
+            "p50": 7.273695999999999,
+            "p95": 8.105420800000001,
+            "p99": 8.295895360000001
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.559104,
+            "p95": 0.5755008,
+            "p99": 0.6938419200000003
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.776192,
+            "p95": 0.8944639999999999,
+            "p99": 0.9718579200000003
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 1,
+          "route": "disjoint",
+          "kind": 2,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.17740650000000002,
+            "p95": 0.25207239999999986,
+            "p99": 0.35751346000000045
+          },
+          "stable_gpu_ms": {
+            "p50": 0.148064,
+            "p95": 0.1505632,
+            "p99": 0.1529161600000008
+          },
+          "burst_gpu_ms": {
+            "p50": 1.416,
+            "p95": 1.4324607999999996,
+            "p99": 1.5964624
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.002432,
+            "p95": 0.007180799999999999,
+            "p99": 0.01104640000000002
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.15116800000000002,
+            "p95": 0.1566848,
+            "p99": 0.16528896000000076
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 1,
+          "route": "full_priority",
+          "kind": 2,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.496357,
+            "p95": 0.5263008499999999,
+            "p99": 0.5537349100000014
+          },
+          "stable_gpu_ms": {
+            "p50": 0.13,
+            "p95": 0.143432,
+            "p99": 0.15530048000000007
+          },
+          "burst_gpu_ms": {
+            "p50": 1.4190399999999999,
+            "p95": 1.6514288000000001,
+            "p99": 1.75158688
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.336896,
+            "p95": 0.3750272,
+            "p99": 0.38927616000000126
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.468736,
+            "p95": 0.4976768,
+            "p99": 0.5235404800000014
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 1,
+          "route": "full_priority",
+          "kind": 1,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.8164895,
+            "p95": 0.8662031499999993,
+            "p99": 1.1380227200000002
+          },
+          "stable_gpu_ms": {
+            "p50": 0.138016,
+            "p95": 0.1445776,
+            "p99": 0.4867100800000001
+          },
+          "burst_gpu_ms": {
+            "p50": 3.10928,
+            "p95": 3.465,
+            "p99": 3.6778281600000007
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.653824,
+            "p95": 0.6597759999999999,
+            "p99": 0.95670784
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.792192,
+            "p95": 0.8190207999999992,
+            "p99": 1.1055052800000005
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 2,
+          "route": "full_shared",
+          "kind": 2,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 1.462495,
+            "p95": 1.5740505499999997,
+            "p99": 1.7263092100000001
+          },
+          "stable_gpu_ms": {
+            "p50": 0.13934400000000002,
+            "p95": 0.1592096,
+            "p99": 0.16675232000000123
+          },
+          "burst_gpu_ms": {
+            "p50": 1.45832,
+            "p95": 1.5549951999999996,
+            "p99": 1.7307375999999999
+          },
+          "stable_start_offset_ms": {
+            "p50": 1.295872,
+            "p95": 1.3769984,
+            "p99": 1.5559116800000001
+          },
+          "stable_finish_offset_ms": {
+            "p50": 1.441536,
+            "p95": 1.5367039999999996,
+            "p99": 1.7024256000000002
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 2,
+          "route": "full_priority",
+          "kind": 1,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.6802010000000001,
+            "p95": 0.8673804499999999,
+            "p99": 0.9636697300000009
+          },
+          "stable_gpu_ms": {
+            "p50": 0.114848,
+            "p95": 0.1216864,
+            "p99": 0.31633728000000033
+          },
+          "burst_gpu_ms": {
+            "p50": 2.5717280000000002,
+            "p95": 2.8807967999999997,
+            "p99": 2.9981251199999996
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.54208,
+            "p95": 0.6767999999999998,
+            "p99": 0.8039296000000008
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.6568959999999999,
+            "p95": 0.8362624,
+            "p99": 0.9266560000000008
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 2,
+          "route": "reserved_solo",
+          "kind": 0,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.17572300000000002,
+            "p95": 0.18461195,
+            "p99": 0.26061438000000114
+          },
+          "stable_gpu_ms": {
+            "p50": 0.150672,
+            "p95": 0.15345599999999998,
+            "p99": 0.15628160000000116
+          },
+          "burst_gpu_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "overlap_fraction": 0.0
+        },
+        {
+          "repeat": 2,
+          "route": "same_pool_priority",
+          "kind": 1,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.87495,
+            "p95": 0.9663596,
+            "p99": 1.0959132
+          },
+          "stable_gpu_ms": {
+            "p50": 0.233232,
+            "p95": 0.24582559999999998,
+            "p99": 0.24630368000000002
+          },
+          "burst_gpu_ms": {
+            "p50": 7.98168,
+            "p95": 8.8459472,
+            "p99": 9.103587840000001
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.600576,
+            "p95": 0.633088,
+            "p99": 0.7409356800000004
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.833792,
+            "p95": 0.8788608,
+            "p99": 0.9679283200000005
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 2,
+          "route": "full_priority",
+          "kind": 2,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.5008155000000001,
+            "p95": 0.55045355,
+            "p99": 0.7848688800000002
+          },
+          "stable_gpu_ms": {
+            "p50": 0.135184,
+            "p95": 0.1533328,
+            "p99": 0.16029152000000138
+          },
+          "burst_gpu_ms": {
+            "p50": 1.419904,
+            "p95": 1.7088864,
+            "p99": 1.7718896000000002
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.337024,
+            "p95": 0.38184959999999996,
+            "p99": 0.5632896000000005
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.4736,
+            "p95": 0.5224704,
+            "p99": 0.7606323200000001
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 2,
+          "route": "same_pool",
+          "kind": 1,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 8.357705,
+            "p95": 9.08392785,
+            "p99": 9.2581272
+          },
+          "stable_gpu_ms": {
+            "p50": 0.47838400000000003,
+            "p95": 0.7173039999999999,
+            "p99": 0.7702291200000009
+          },
+          "burst_gpu_ms": {
+            "p50": 8.410143999999999,
+            "p95": 9.1371104,
+            "p99": 9.32558112
+          },
+          "stable_start_offset_ms": {
+            "p50": 7.8307839999999995,
+            "p95": 8.543808,
+            "p99": 8.7188992
+          },
+          "stable_finish_offset_ms": {
+            "p50": 8.324224000000001,
+            "p95": 9.0553344,
+            "p99": 9.21731072
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 2,
+          "route": "full_shared",
+          "kind": 1,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 2.832735,
+            "p95": 3.3775926000000003,
+            "p99": 3.3926959
+          },
+          "stable_gpu_ms": {
+            "p50": 0.310064,
+            "p95": 0.3315184,
+            "p99": 0.5136896000000002
+          },
+          "burst_gpu_ms": {
+            "p50": 3.077616,
+            "p95": 3.6108287999999997,
+            "p99": 3.6331363199999998
+          },
+          "stable_start_offset_ms": {
+            "p50": 2.482304,
+            "p95": 3.0208255999999998,
+            "p99": 3.07512064
+          },
+          "stable_finish_offset_ms": {
+            "p50": 2.8043519999999997,
+            "p95": 3.3434368,
+            "p99": 3.36769024
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 2,
+          "route": "full_solo",
+          "kind": 0,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.0960925,
+            "p95": 0.11597375,
+            "p99": 0.19507025000000036
+          },
+          "stable_gpu_ms": {
+            "p50": 0.067008,
+            "p95": 0.0683568,
+            "p99": 0.07071520000000085
+          },
+          "burst_gpu_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0
+          },
+          "overlap_fraction": 0.0
+        },
+        {
+          "repeat": 2,
+          "route": "same_pool_priority",
+          "kind": 2,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.312578,
+            "p95": 0.4118232,
+            "p99": 0.4195723800000006
+          },
+          "stable_gpu_ms": {
+            "p50": 0.153888,
+            "p95": 0.179624,
+            "p99": 0.18292832000000092
+          },
+          "burst_gpu_ms": {
+            "p50": 1.41352,
+            "p95": 1.5942112,
+            "p99": 1.7641875200000001
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.132864,
+            "p95": 0.148992,
+            "p99": 0.149504
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.286464,
+            "p95": 0.32719360000000003,
+            "p99": 0.3312512000000009
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 2,
+          "route": "same_pool",
+          "kind": 2,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 1.713206,
+            "p95": 1.89957855,
+            "p99": 1.9975983300000013
+          },
+          "stable_gpu_ms": {
+            "p50": 0.223712,
+            "p95": 0.2364304,
+            "p99": 0.4018278400000001
+          },
+          "burst_gpu_ms": {
+            "p50": 1.5917599999999998,
+            "p95": 1.7698208,
+            "p99": 1.85945248
+          },
+          "stable_start_offset_ms": {
+            "p50": 1.462528,
+            "p95": 1.637952,
+            "p99": 1.7291161600000002
+          },
+          "stable_finish_offset_ms": {
+            "p50": 1.687808,
+            "p95": 1.8716544,
+            "p99": 1.95758592
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 2,
+          "route": "disjoint",
+          "kind": 2,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.22110449999999998,
+            "p95": 0.31075875,
+            "p99": 0.42933712000000007
+          },
+          "stable_gpu_ms": {
+            "p50": 0.19403199999999998,
+            "p95": 0.19725120000000002,
+            "p99": 0.200130560000001
+          },
+          "burst_gpu_ms": {
+            "p50": 1.7503039999999999,
+            "p95": 2.0125504,
+            "p99": 2.072939840000001
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.002816,
+            "p95": 0.008230399999999997,
+            "p99": 0.012577280000000017
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.196864,
+            "p95": 0.20352,
+            "p99": 0.21156352000000095
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        },
+        {
+          "repeat": 2,
+          "route": "disjoint",
+          "kind": 1,
+          "samples": 100,
+          "host_response_ms": {
+            "p50": 0.2412825,
+            "p95": 0.4096471999999999,
+            "p99": 0.5377207000000004
+          },
+          "stable_gpu_ms": {
+            "p50": 0.196576,
+            "p95": 0.2108944,
+            "p99": 0.41020320000000005
+          },
+          "burst_gpu_ms": {
+            "p50": 10.275984000000001,
+            "p95": 11.537803199999999,
+            "p99": 11.958098560000002
+          },
+          "stable_start_offset_ms": {
+            "p50": 0.00512,
+            "p95": 0.010022399999999997,
+            "p99": 0.015918080000000025
+          },
+          "stable_finish_offset_ms": {
+            "p50": 0.203264,
+            "p95": 0.216192,
+            "p99": 0.41203456000000005
+          },
+          "stable_blocks_overlapping_burst_fraction": {
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0
+          },
+          "overlap_fraction": 1.0
+        }
+      ],
+      "full_pipeline_validated": false,
+      "dynamic_routing_validated": false
+    },
+    "samples_sha256": "ab62a26962f97c2b53295662e692fac3684f9023bb993eb6e9a77433f91ef712"
+  }
+]

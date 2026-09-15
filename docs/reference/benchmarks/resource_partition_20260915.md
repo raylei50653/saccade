@@ -362,3 +362,11 @@ dependence) stands as recorded in phase A.
 - Ruff lint/format, generated script/test indexes and master map, and
   `git diff --check` pass locally; see the PR for the `pre_push` record.
 - These are local checks on a controlled host, not remote CI.
+
+## Research continuation
+
+The subsequent [elastic scheduling exploration](resource_elastic_20260915.md)
+broadens the next question to minimum reservation, borrowable headroom and
+dynamic routing, with fixed D/T splitting retained as a comparison case. Its
+synthetic two-pool, priority and burst-granularity measurements are separate
+evidence; they do not extend the full-pipeline validation claimed above.
