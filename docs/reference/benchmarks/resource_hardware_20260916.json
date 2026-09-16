@@ -1,0 +1,383 @@
+{
+  "schema": "saccade-resource-hardware-v1",
+  "frontier_source_head": "c2756d415c681686be4474c82bf5fa24231804ad",
+  "original_archive": "/home/ray/.local/state/saccade/perf/resource-419-mixed-final-20260916",
+  "elastic_kernel_limits": {
+    "threads_per_block": 256,
+    "registers_per_thread": 14,
+    "static_shared_memory_bytes": 2048,
+    "device_max_threads_per_sm": 1536,
+    "device_max_blocks_per_sm": 24,
+    "device_registers_per_sm": 65536,
+    "device_shared_memory_per_sm_bytes": 102400,
+    "theoretical_blocks_per_sm": 6,
+    "limiter": "threads"
+  },
+  "cupti_timelines": [
+    {
+      "policy": "fixed",
+      "iterations": 2048,
+      "window": 4,
+      "horizon_s": 5.007786161,
+      "stable_kernel_present_ms": 1609.638368,
+      "stable_kernel_present_fraction": 0.3214271369124461,
+      "elastic_kernel_present_ms": 386.126846,
+      "elastic_kernel_present_fraction": 0.07710529834662402,
+      "stable_elastic_overlap_ms": 49.536346,
+      "stable_fraction_with_elastic_kernel": 0.03077482929383055,
+      "any_kernel_present_fraction": 0.3886405699901849,
+      "elastic_kernel_duration_ms": {
+        "p50": 0.035008,
+        "p95": 0.036193,
+        "p99": 0.03763201,
+        "max": 0.353735
+      },
+      "stable_sms": 16,
+      "elastic_sms": 16,
+      "elastic_lane_coverage": {
+        "0": {
+          "units": 6460,
+          "observed_sm_count": 16,
+          "expected_sm_count": 16,
+          "exact_expected_set": true
+        },
+        "1": {
+          "units": 6340,
+          "observed_sm_count": 16,
+          "expected_sm_count": 16,
+          "exact_expected_set": true
+        }
+      },
+      "elastic_block_residency": {
+        "shared_elastic_pool": {
+          "lanes": [
+            0,
+            1
+          ],
+          "blocks": 3276800,
+          "observed_sms": 16,
+          "peak_blocks_per_sm": 6,
+          "active_sm_cycle_weighted_mean_blocks": 3.1415990630683552,
+          "active_sm_cycle_weighted_residency_fraction": 0.5235998438447259,
+          "full_residency_fraction_of_active_sm_cycles": 0.00043629529412818715
+        }
+      }
+    },
+    {
+      "policy": "shared",
+      "iterations": 2048,
+      "window": 4,
+      "horizon_s": 5.005852561,
+      "stable_kernel_present_ms": 1085.438812,
+      "stable_kernel_present_fraction": 0.2168339556095847,
+      "elastic_kernel_present_ms": 217.304424,
+      "elastic_kernel_present_fraction": 0.04341007278020788,
+      "stable_elastic_overlap_ms": 30.91191,
+      "stable_fraction_with_elastic_kernel": 0.028478721838813333,
+      "any_kernel_present_fraction": 0.25406887448277765,
+      "elastic_kernel_duration_ms": {
+        "p50": 0.019712,
+        "p95": 0.024544,
+        "p99": 0.06384359000000003,
+        "max": 0.284069
+      },
+      "stable_sms": 32,
+      "elastic_sms": 32,
+      "elastic_lane_coverage": {
+        "0": {
+          "units": 6480,
+          "observed_sm_count": 32,
+          "expected_sm_count": 32,
+          "exact_expected_set": true
+        },
+        "1": {
+          "units": 6320,
+          "observed_sm_count": 32,
+          "expected_sm_count": 32,
+          "exact_expected_set": true
+        }
+      },
+      "elastic_block_residency": {
+        "shared_elastic_pool": {
+          "lanes": [
+            0,
+            1
+          ],
+          "blocks": 3276800,
+          "observed_sms": 32,
+          "peak_blocks_per_sm": 6,
+          "active_sm_cycle_weighted_mean_blocks": 3.0483241024451577,
+          "active_sm_cycle_weighted_residency_fraction": 0.508054017074193,
+          "full_residency_fraction_of_active_sm_cycles": 0.0006604709025899541
+        }
+      }
+    },
+    {
+      "policy": "dynamic",
+      "iterations": 2048,
+      "window": 4,
+      "horizon_s": 5.007465876,
+      "stable_kernel_present_ms": 1611.892261,
+      "stable_kernel_present_fraction": 0.3218978023845449,
+      "elastic_kernel_present_ms": 289.695378,
+      "elastic_kernel_present_fraction": 0.05785269139595431,
+      "stable_elastic_overlap_ms": 36.901854,
+      "stable_fraction_with_elastic_kernel": 0.022893499083559407,
+      "any_kernel_present_fraction": 0.37238112673660884,
+      "elastic_kernel_duration_ms": {
+        "p50": 0.031681,
+        "p95": 0.033088,
+        "p99": 0.033889,
+        "max": 0.056577
+      },
+      "stable_sms": 16,
+      "elastic_sms": 16,
+      "elastic_lane_coverage": {
+        "0": {
+          "units": 7813,
+          "observed_sm_count": 16,
+          "expected_sm_count": 16,
+          "exact_expected_set": true
+        },
+        "1": {
+          "units": 4987,
+          "observed_sm_count": 16,
+          "expected_sm_count": 16,
+          "exact_expected_set": true
+        }
+      },
+      "elastic_block_residency": {
+        "permanent_elastic_pool": {
+          "lanes": [
+            0
+          ],
+          "blocks": 2000128,
+          "observed_sms": 16,
+          "peak_blocks_per_sm": 6,
+          "active_sm_cycle_weighted_mean_blocks": 3.0575100071864285,
+          "active_sm_cycle_weighted_residency_fraction": 0.5095850011977381,
+          "full_residency_fraction_of_active_sm_cycles": 0.0003491553182583302
+        },
+        "borrowed_stable_pool": {
+          "lanes": [
+            1
+          ],
+          "blocks": 1276672,
+          "observed_sms": 16,
+          "peak_blocks_per_sm": 5,
+          "active_sm_cycle_weighted_mean_blocks": 3.0682664409570792,
+          "active_sm_cycle_weighted_residency_fraction": 0.5113777401595132,
+          "full_residency_fraction_of_active_sm_cycles": 0.0
+        }
+      },
+      "borrowed_units": 4987,
+      "borrowed_unit_fraction": 0.389609375,
+      "borrowed_kernel_present_ms": 158.733892,
+      "borrowed_stable_overlap_ns": 0,
+      "stable_pool_kernel_present_fraction": 0.35359724795856,
+      "borrowed_fraction_of_stable_kernel_free_time": 0.04674729809973506
+    },
+    {
+      "policy": "fixed",
+      "iterations": 8192,
+      "window": 4,
+      "horizon_s": 5.007517535,
+      "stable_kernel_present_ms": 1608.200949,
+      "stable_kernel_present_fraction": 0.32115732750998743,
+      "elastic_kernel_present_ms": 1491.930538,
+      "elastic_kernel_present_fraction": 0.2979381554976422,
+      "stable_elastic_overlap_ms": 327.155018,
+      "stable_fraction_with_elastic_kernel": 0.20342919098725143,
+      "any_kernel_present_fraction": 0.5537627076926451,
+      "elastic_kernel_duration_ms": {
+        "p50": 0.142147,
+        "p95": 0.154883,
+        "p99": 0.35761308000000014,
+        "max": 0.540235
+      },
+      "stable_sms": 16,
+      "elastic_sms": 16,
+      "elastic_lane_coverage": {
+        "0": {
+          "units": 6436,
+          "observed_sm_count": 16,
+          "expected_sm_count": 16,
+          "exact_expected_set": true
+        },
+        "1": {
+          "units": 6364,
+          "observed_sm_count": 16,
+          "expected_sm_count": 16,
+          "exact_expected_set": true
+        }
+      },
+      "elastic_block_residency": {
+        "shared_elastic_pool": {
+          "lanes": [
+            0,
+            1
+          ],
+          "blocks": 3276800,
+          "observed_sms": 16,
+          "peak_blocks_per_sm": 6,
+          "active_sm_cycle_weighted_mean_blocks": 3.4670183666415273,
+          "active_sm_cycle_weighted_residency_fraction": 0.5778363944402546,
+          "full_residency_fraction_of_active_sm_cycles": 0.0005058832399575898
+        }
+      }
+    },
+    {
+      "policy": "shared",
+      "iterations": 8192,
+      "window": 4,
+      "horizon_s": 5.005824821,
+      "stable_kernel_present_ms": 1147.437178,
+      "stable_kernel_present_fraction": 0.22922040203771646,
+      "elastic_kernel_present_ms": 783.957783,
+      "elastic_kernel_present_fraction": 0.15660911259043836,
+      "stable_elastic_overlap_ms": 146.98259,
+      "stable_fraction_with_elastic_kernel": 0.12809641592421891,
+      "any_kernel_present_fraction": 0.3564672026704148,
+      "elastic_kernel_duration_ms": {
+        "p50": 0.089186,
+        "p95": 0.10986214999999995,
+        "p99": 0.16493132,
+        "max": 0.413321
+      },
+      "stable_sms": 32,
+      "elastic_sms": 32,
+      "elastic_lane_coverage": {
+        "0": {
+          "units": 6450,
+          "observed_sm_count": 32,
+          "expected_sm_count": 32,
+          "exact_expected_set": true
+        },
+        "1": {
+          "units": 6350,
+          "observed_sm_count": 32,
+          "expected_sm_count": 32,
+          "exact_expected_set": true
+        }
+      },
+      "elastic_block_residency": {
+        "shared_elastic_pool": {
+          "lanes": [
+            0,
+            1
+          ],
+          "blocks": 3276800,
+          "observed_sms": 32,
+          "peak_blocks_per_sm": 6,
+          "active_sm_cycle_weighted_mean_blocks": 3.4150548022235045,
+          "active_sm_cycle_weighted_residency_fraction": 0.5691758003705841,
+          "full_residency_fraction_of_active_sm_cycles": 0.0014828467644463943
+        }
+      }
+    },
+    {
+      "policy": "dynamic",
+      "iterations": 8192,
+      "window": 4,
+      "horizon_s": 5.007806699,
+      "stable_kernel_present_ms": 1618.305737,
+      "stable_kernel_present_fraction": 0.32315659015416004,
+      "elastic_kernel_present_ms": 979.594712,
+      "elastic_kernel_present_fraction": 0.19561352322077719,
+      "stable_elastic_overlap_ms": 172.908946,
+      "stable_fraction_with_elastic_kernel": 0.10684566089504013,
+      "any_kernel_present_fraction": 0.48424223392732835,
+      "elastic_kernel_duration_ms": {
+        "p50": 0.118178,
+        "p95": 0.12589,
+        "p99": 0.3301292400000016,
+        "max": 0.745488
+      },
+      "stable_sms": 16,
+      "elastic_sms": 16,
+      "elastic_lane_coverage": {
+        "0": {
+          "units": 7892,
+          "observed_sm_count": 16,
+          "expected_sm_count": 16,
+          "exact_expected_set": true
+        },
+        "1": {
+          "units": 4908,
+          "observed_sm_count": 16,
+          "expected_sm_count": 16,
+          "exact_expected_set": true
+        }
+      },
+      "elastic_block_residency": {
+        "permanent_elastic_pool": {
+          "lanes": [
+            0
+          ],
+          "blocks": 2020352,
+          "observed_sms": 16,
+          "peak_blocks_per_sm": 6,
+          "active_sm_cycle_weighted_mean_blocks": 3.303193108069289,
+          "active_sm_cycle_weighted_residency_fraction": 0.5505321846782149,
+          "full_residency_fraction_of_active_sm_cycles": 0.001420540664677075
+        },
+        "borrowed_stable_pool": {
+          "lanes": [
+            1
+          ],
+          "blocks": 1256448,
+          "observed_sms": 16,
+          "peak_blocks_per_sm": 6,
+          "active_sm_cycle_weighted_mean_blocks": 3.304538508611414,
+          "active_sm_cycle_weighted_residency_fraction": 0.5507564181019023,
+          "full_residency_fraction_of_active_sm_cycles": 0.0006018437576503578
+        }
+      },
+      "borrowed_units": 4908,
+      "borrowed_unit_fraction": 0.3834375,
+      "borrowed_kernel_present_ms": 601.35811,
+      "borrowed_stable_overlap_ns": 0,
+      "stable_pool_kernel_present_fraction": 0.44324072002284765,
+      "borrowed_fraction_of_stable_kernel_free_time": 0.17741789034488553
+    }
+  ],
+  "dynamic_launch_windows": [
+    {
+      "iterations": 2048,
+      "window": 1,
+      "within_burst_successor_pairs": 12700,
+      "successor_enqueued_before_prior_completion_fraction": 0.0,
+      "audit_transition_p99_ms": 0.26914085000498733,
+      "audit_burst_completion_p95_ms": 30.7932985,
+      "borrowed_units": 5421
+    },
+    {
+      "iterations": 2048,
+      "window": 4,
+      "within_burst_successor_pairs": 12700,
+      "successor_enqueued_before_prior_completion_fraction": 0.9963779527559055,
+      "audit_transition_p99_ms": 0.34129039978324716,
+      "audit_burst_completion_p95_ms": 14.053822,
+      "borrowed_units": 4987
+    },
+    {
+      "iterations": 8192,
+      "window": 1,
+      "within_burst_successor_pairs": 12700,
+      "successor_enqueued_before_prior_completion_fraction": 0.0,
+      "audit_transition_p99_ms": 0.32000555026570504,
+      "audit_burst_completion_p95_ms": 49.45037985,
+      "borrowed_units": 5399
+    },
+    {
+      "iterations": 8192,
+      "window": 4,
+      "within_burst_successor_pairs": 12700,
+      "successor_enqueued_before_prior_completion_fraction": 0.9922834645669292,
+      "audit_transition_p99_ms": 0.6776404204174468,
+      "audit_burst_completion_p95_ms": 29.497559300000002,
+      "borrowed_units": 4908
+    }
+  ],
+  "verified": true
+}

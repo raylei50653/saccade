@@ -8,6 +8,12 @@ import json
 import numpy as np
 import pytest
 
+from scripts.benchmarks.resource_mixed.hardware_report import (
+    intersect_intervals,
+    interval_ns,
+    merge_intervals,
+    sm_residency,
+)
 from scripts.benchmarks.resource_mixed.report import STAMP, derive, digest, reference
 
 
@@ -88,6 +94,24 @@ def test_valid_pair_and_deadline_includes_admission(tmp_path):
     assert result["valid"]
     assert not result["service_pass"]
     assert result["miss_count"] == 1
+
+
+def test_hardware_timeline_interval_replay():
+    stable = merge_intervals([(10, 20), (15, 30), (40, 50)])
+    elastic = merge_intervals([(5, 12), (18, 25), (45, 55)])
+    assert stable == [[10, 30], [40, 50]]
+    assert elastic == [[5, 12], [18, 25], [45, 55]]
+    overlap = intersect_intervals(stable, elastic)
+    assert overlap == [[10, 12], [18, 25], [45, 50]]
+    assert interval_ns(overlap) == 14
+
+    blocks = np.zeros(3, dtype=STAMP)
+    blocks["begin"] = [0, 0, 10]
+    blocks["end"] = [10, 20, 20]
+    residency = sm_residency(blocks)
+    assert residency["peak_blocks"] == 2
+    assert residency["active_cycles"] == 20
+    assert residency["resident_block_cycles"] == 40
 
 
 @pytest.mark.parametrize(

@@ -16,6 +16,7 @@
 | [resource_partition_20260915.md](resource_partition_20260915.md) | #419 phase B：full pipeline 封裝進經 CUPTI 逐 kernel 驗證的 Green Context（8/16/24/32/40/46 SM），serial/DB FPS、frame p99、period jitter 對 actual SM count 的真實 scaling；DB gain 平滑下降無 knee；proxy 與 true partition 分開呈現 |
 | [resource_routing_20260916.md](resource_routing_20260916.md) | #419: dynamic lane ownership and future-work routing; reserved floor, borrowing, headroom, matched sharing, and measured reclaim/service/throughput tradeoffs |
 | [resource_mixed_20260916.md](resource_mixed_20260916.md) | #419: real serial pipeline with matched elastic bursts; fixed reservation, sharing, static headroom and temporal borrowing under a frozen service target |
+| [resource_hardware_20260916.md](resource_hardware_20260916.md) | #419: CUPTI timeline and per-SM block-residency explanation of why fixed reservation, sharing and borrowing occupy execution capacity differently; direct GPU counter comparison rejected for asymmetric profiler interference |
 | [latency_log.md](latency_log.md) | 端到端延遲、分段延遲紀錄 |
 | [throughput.md](throughput.md) | 單路與多路吞吐量 |
 

@@ -83,6 +83,10 @@ a separately justified tighter target or a held-out interference workload makes
 the observed tradeoff useful. Compare dynamic W4 with **both shared W1 and W4**
 and fixed W4; preserve the original target result instead of relabelling it.
 
+The follow-up [hardware replay](resource_hardware_20260916.md) uses the sealed
+CUPTI twins and block stamps to explain pool use, execution overlap, borrowed
+SM coverage and elastic block residency. It does not change this timing verdict.
+
 ## Complete timing tables
 
 Each mixed row aggregates three 300-frame repetitions; misses are summed over
