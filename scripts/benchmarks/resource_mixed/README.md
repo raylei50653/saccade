@@ -88,6 +88,22 @@ uv run python scripts/benchmarks/resource_mixed/audit.py /absolute/new/archive
 uv run python scripts/benchmarks/resource_mixed/audit_copies.py /absolute/new/archive
 ```
 
+Hardware-side replay of the sealed audited twins:
+
+```bash
+uv run python scripts/benchmarks/resource_mixed/hardware_report.py \
+  /absolute/existing/archive \
+  --json-output /absolute/new/resource_hardware.json
+```
+
+This derives stable/elastic kernel-presence intervals, execution overlap,
+borrowed-lane use, exact SM-set coverage and per-SM elastic block residency.
+It uses only clocks within their own domains and does not promote kernel
+presence into a chip-wide SM-active counter. The measured
+[hardware report](../../../docs/reference/benchmarks/resource_hardware_20260916.md)
+records why direct GPU-counter profiling was excluded after it perturbed
+multi-context routes asymmetrically.
+
 The [measured report](../../../docs/reference/benchmarks/resource_mixed_20260916.md)
 retains all repetitions, target passes, misses, paired comparisons and the
 frontier figure. Execution snapshots in the archive remain authoritative when
@@ -105,6 +121,7 @@ streams retain their library behavior. CUPTI verifies their execution context.
 |--------|--------|-------|----------|
 | `audit.py` | diagnostic | cli | Independently audit the frozen service target, arrivals and borrowing intervals. |
 | `audit_copies.py` | diagnostic | cli | Reject diagnostic GPU stamp transfers inside the stable-service horizon. |
+| `hardware_report.py` | diagnostic | cli | Relate the sealed mixed frontier to CUPTI timelines and block residency. |
 | `plot.py` | diagnostic | cli | Plot the measured full-pipeline latency versus elastic burst frontier. |
 | `report.py` | diagnostic | cli | Replay mixed-workload timestamps, conservation, placement and CUPTI evidence. |
 | `run_point.py` | diagnostic | cli | Run scheduled real pipeline frames against bounded native elastic bursts. |
