@@ -193,3 +193,10 @@ conservative calibrated estimate with an estimator updated only from retired
 units, retaining the same FIFO and oversize-unit rules. Any more aggressive
 elapsed-time deduction must distinguish running time from queue age and account
 for estimator overrun. This is a proposed continuation, not an executed result.
+
+## Dynamic routing continuation
+
+The [dynamic-routing study](resource_routing_20260916.md) follows the updated
+research direction with actual stable launches on a reclaimed execution lane.
+Its bounded-count controller and explicit ownership transitions are a separate
+experiment; the calibration-robustness proposal above remains unexecuted.
