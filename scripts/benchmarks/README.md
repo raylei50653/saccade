@@ -23,6 +23,9 @@
 - [`resource_routing/`](resource_routing/README.md)
   - #419: reserved stable floor, elastic lane borrowing, explicit headroom, and measured future-work routing.
 
+- [`resource_mixed/`](resource_mixed/README.md)
+  - #419: scheduled real-pipeline service, finite elastic bursts, matched sharing and measured temporal borrowing.
+
 ## 原則
 
 - 這些腳本不是主 workflow 入口。

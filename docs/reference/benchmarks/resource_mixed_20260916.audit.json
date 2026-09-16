@@ -1,0 +1,496 @@
+{
+  "host_and_contract": {
+    "verified": true,
+    "scope": "frozen main contract and raw host admission intervals; CUPTI replay is in report.py",
+    "totals": {
+      "timing_runs": 51,
+      "audited_runs": 17,
+      "stable_frames": 15300,
+      "deadline_misses": 4,
+      "elastic_units": 614400,
+      "borrowed_units": 62700
+    },
+    "max_host_clock_bracket_us": 17.18299972708337,
+    "per_run": [
+      {
+        "name": "r0_shared_i2048_w1_audit",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 0,
+        "borrowed_units": 0
+      },
+      {
+        "name": "r0_shared_i2048_w1",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 0,
+        "borrowed_units": 0
+      },
+      {
+        "name": "r0_shared_i8192_w1_audit",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 0,
+        "borrowed_units": 0
+      },
+      {
+        "name": "r0_shared_i8192_w1",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 0,
+        "borrowed_units": 0
+      },
+      {
+        "name": "r0_control_i2048_w1_audit",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 0,
+        "borrowed_units": 0
+      },
+      {
+        "name": "r0_control_i2048_w1",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 0,
+        "borrowed_units": 0
+      },
+      {
+        "name": "r0_headroom_i2048_w4_audit",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 0,
+        "borrowed_units": 0
+      },
+      {
+        "name": "r0_headroom_i2048_w4",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 0,
+        "borrowed_units": 0
+      },
+      {
+        "name": "r0_headroom_i8192_w4_audit",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 0,
+        "borrowed_units": 0
+      },
+      {
+        "name": "r0_headroom_i8192_w4",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 0,
+        "borrowed_units": 0
+      },
+      {
+        "name": "r0_fixed_i2048_w4_audit",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 0,
+        "borrowed_units": 0
+      },
+      {
+        "name": "r0_fixed_i2048_w4",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 0,
+        "borrowed_units": 0
+      },
+      {
+        "name": "r0_headroom_i2048_w1_audit",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 0,
+        "borrowed_units": 0
+      },
+      {
+        "name": "r0_headroom_i2048_w1",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 0,
+        "borrowed_units": 0
+      },
+      {
+        "name": "r0_fixed_i8192_w4_audit",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 0,
+        "borrowed_units": 0
+      },
+      {
+        "name": "r0_fixed_i8192_w4",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 0,
+        "borrowed_units": 0
+      },
+      {
+        "name": "r0_fixed_i8192_w1_audit",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 0,
+        "borrowed_units": 0
+      },
+      {
+        "name": "r0_fixed_i8192_w1",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 0,
+        "borrowed_units": 0
+      },
+      {
+        "name": "r0_headroom_i8192_w1_audit",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 0,
+        "borrowed_units": 0
+      },
+      {
+        "name": "r0_headroom_i8192_w1",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 0,
+        "borrowed_units": 0
+      },
+      {
+        "name": "r0_dynamic_i2048_w4_audit",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 12,
+        "borrowed_units": 4987
+      },
+      {
+        "name": "r0_dynamic_i2048_w4",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 21,
+        "borrowed_units": 4919
+      },
+      {
+        "name": "r0_dynamic_i8192_w4_audit",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 63,
+        "borrowed_units": 4908
+      },
+      {
+        "name": "r0_dynamic_i8192_w4",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 72,
+        "borrowed_units": 5068
+      },
+      {
+        "name": "r0_dynamic_i2048_w1_audit",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 80,
+        "borrowed_units": 5421
+      },
+      {
+        "name": "r0_dynamic_i2048_w1",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 77,
+        "borrowed_units": 5449
+      },
+      {
+        "name": "r0_shared_i8192_w4_audit",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 0,
+        "borrowed_units": 0
+      },
+      {
+        "name": "r0_shared_i8192_w4",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 0,
+        "borrowed_units": 0
+      },
+      {
+        "name": "r0_dynamic_i8192_w1_audit",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 128,
+        "borrowed_units": 5399
+      },
+      {
+        "name": "r0_dynamic_i8192_w1",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 119,
+        "borrowed_units": 5473
+      },
+      {
+        "name": "r0_fixed_i2048_w1_audit",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 0,
+        "borrowed_units": 0
+      },
+      {
+        "name": "r0_fixed_i2048_w1",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 0,
+        "borrowed_units": 0
+      },
+      {
+        "name": "r0_shared_i2048_w4_audit",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 0,
+        "borrowed_units": 0
+      },
+      {
+        "name": "r0_shared_i2048_w4",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 0,
+        "borrowed_units": 0
+      },
+      {
+        "name": "r1_headroom_i8192_w4",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 0,
+        "borrowed_units": 0
+      },
+      {
+        "name": "r1_fixed_i2048_w1",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 0,
+        "borrowed_units": 0
+      },
+      {
+        "name": "r1_control_i2048_w1",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 0,
+        "borrowed_units": 0
+      },
+      {
+        "name": "r1_fixed_i8192_w4",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 0,
+        "borrowed_units": 0
+      },
+      {
+        "name": "r1_shared_i2048_w1",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 0,
+        "borrowed_units": 0
+      },
+      {
+        "name": "r1_headroom_i2048_w4",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 0,
+        "borrowed_units": 0
+      },
+      {
+        "name": "r1_headroom_i2048_w1",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 0,
+        "borrowed_units": 0
+      },
+      {
+        "name": "r1_shared_i8192_w4",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 0,
+        "borrowed_units": 0
+      },
+      {
+        "name": "r1_dynamic_i2048_w4",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 14,
+        "borrowed_units": 4929
+      },
+      {
+        "name": "r1_headroom_i8192_w1",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 0,
+        "borrowed_units": 0
+      },
+      {
+        "name": "r1_fixed_i8192_w1",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 0,
+        "borrowed_units": 0
+      },
+      {
+        "name": "r1_shared_i8192_w1",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 0,
+        "borrowed_units": 0
+      },
+      {
+        "name": "r1_dynamic_i8192_w1",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 119,
+        "borrowed_units": 5482
+      },
+      {
+        "name": "r1_dynamic_i8192_w4",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 61,
+        "borrowed_units": 5054
+      },
+      {
+        "name": "r1_fixed_i2048_w4",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 0,
+        "borrowed_units": 0
+      },
+      {
+        "name": "r1_dynamic_i2048_w1",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 76,
+        "borrowed_units": 5439
+      },
+      {
+        "name": "r1_shared_i2048_w4",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 0,
+        "borrowed_units": 0
+      },
+      {
+        "name": "r2_headroom_i8192_w1",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 0,
+        "borrowed_units": 0
+      },
+      {
+        "name": "r2_shared_i2048_w4",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 0,
+        "borrowed_units": 0
+      },
+      {
+        "name": "r2_control_i2048_w1",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 0,
+        "borrowed_units": 0
+      },
+      {
+        "name": "r2_headroom_i8192_w4",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 0,
+        "borrowed_units": 0
+      },
+      {
+        "name": "r2_shared_i8192_w4",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 0,
+        "borrowed_units": 0
+      },
+      {
+        "name": "r2_fixed_i2048_w4",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 0,
+        "borrowed_units": 0
+      },
+      {
+        "name": "r2_fixed_i8192_w4",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 0,
+        "borrowed_units": 0
+      },
+      {
+        "name": "r2_fixed_i2048_w1",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 0,
+        "borrowed_units": 0
+      },
+      {
+        "name": "r2_dynamic_i8192_w1",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 120,
+        "borrowed_units": 5482
+      },
+      {
+        "name": "r2_shared_i8192_w1",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 0,
+        "borrowed_units": 0
+      },
+      {
+        "name": "r2_headroom_i2048_w4",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 0,
+        "borrowed_units": 0
+      },
+      {
+        "name": "r2_dynamic_i2048_w1",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 66,
+        "borrowed_units": 5402
+      },
+      {
+        "name": "r2_shared_i2048_w1",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 0,
+        "borrowed_units": 0
+      },
+      {
+        "name": "r2_dynamic_i2048_w4",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 18,
+        "borrowed_units": 4921
+      },
+      {
+        "name": "r2_dynamic_i8192_w4",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 64,
+        "borrowed_units": 5082
+      },
+      {
+        "name": "r2_headroom_i2048_w1",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 0,
+        "borrowed_units": 0
+      },
+      {
+        "name": "r2_fixed_i8192_w1",
+        "service_pass": true,
+        "requests_with_observed_pending_borrow": 0,
+        "borrowed_units": 0
+      }
+    ],
+    "audit_source_sha256": "c23db2ef6a77144655dfb53ad95815ad9de4dfd3e2f44de4bc96f2f918abc102"
+  },
+  "evidence_copy": {
+    "verified": true,
+    "rows": [
+      {
+        "name": "r0_shared_i2048_w1_audit",
+        "copy_after_stable_ms": 2132.006873
+      },
+      {
+        "name": "r0_shared_i8192_w1_audit",
+        "copy_after_stable_ms": 2151.564482
+      },
+      {
+        "name": "r0_headroom_i2048_w4_audit",
+        "copy_after_stable_ms": 2167.178458
+      },
+      {
+        "name": "r0_headroom_i8192_w4_audit",
+        "copy_after_stable_ms": 2209.241373
+      },
+      {
+        "name": "r0_fixed_i2048_w4_audit",
+        "copy_after_stable_ms": 2164.583546
+      },
+      {
+        "name": "r0_headroom_i2048_w1_audit",
+        "copy_after_stable_ms": 2128.172953
+      },
+      {
+        "name": "r0_fixed_i8192_w4_audit",
+        "copy_after_stable_ms": 2155.090174
+      },
+      {
+        "name": "r0_fixed_i8192_w1_audit",
+        "copy_after_stable_ms": 2151.348768
+      },
+      {
+        "name": "r0_headroom_i8192_w1_audit",
+        "copy_after_stable_ms": 2142.613004
+      },
+      {
+        "name": "r0_dynamic_i2048_w4_audit",
+        "copy_after_stable_ms": 2209.340072
+      },
+      {
+        "name": "r0_dynamic_i8192_w4_audit",
+        "copy_after_stable_ms": 2146.631919
+      },
+      {
+        "name": "r0_dynamic_i2048_w1_audit",
+        "copy_after_stable_ms": 2152.940355
+      },
+      {
+        "name": "r0_shared_i8192_w4_audit",
+        "copy_after_stable_ms": 2190.088495
+      },
+      {
+        "name": "r0_dynamic_i8192_w1_audit",
+        "copy_after_stable_ms": 2169.663824
+      },
+      {
+        "name": "r0_fixed_i2048_w1_audit",
+        "copy_after_stable_ms": 2152.0074989990235
+      },
+      {
+        "name": "r0_shared_i2048_w4_audit",
+        "copy_after_stable_ms": 2152.947325
+      }
+    ],
+    "source_sha256": "8e4449240ffc43d8a650f0bc350ece0570b6de89573ca88f02ff639bc92a71a0"
+  }
+}

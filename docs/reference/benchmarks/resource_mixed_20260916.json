@@ -1,0 +1,6594 @@
+{
+  "schema": "saccade-mixed-summary-v1",
+  "archive": "/home/ray/.local/state/saccade/perf/resource-419-mixed-final-20260916",
+  "sweep_sha256": "59644d4b5c78a2c3e1e4156b083c5e0c85c76b933b9e71535bbc09150f6bc22c",
+  "source_head": "c2756d415c681686be4474c82bf5fa24231804ad",
+  "target": {
+    "fps": 60,
+    "p99_ms": 16.666666666666668,
+    "miss_fraction": 0.01
+  },
+  "verified": true,
+  "rows": [
+    {
+      "policy": "shared",
+      "iterations": 2048,
+      "window": 1,
+      "audit": true,
+      "frames": 300,
+      "response_ms": {
+        "p50": 6.115217666774697,
+        "p95": 7.1646463998149565,
+        "p99": 10.617026866120792,
+        "max": 11.949355665819894
+      },
+      "output_response_ms": {
+        "p50": 5.862628166141803,
+        "p95": 6.9199942161048975,
+        "p99": 10.314450056557684,
+        "max": 11.782248666349915
+      },
+      "drain_ms": {
+        "p50": 0.004523499683273258,
+        "p95": 0.06228819975149238,
+        "p99": 0.08333563968335503,
+        "max": 0.1603840000825585
+      },
+      "transition_ms": {
+        "p50": 0.014557499980583088,
+        "p95": 0.07690069978707471,
+        "p99": 0.12588213961862488,
+        "max": 0.18365799951425288
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.08768466659603291,
+        "p95": 0.12306173325669081,
+        "p99": 0.15290607969291153,
+        "max": 0.28136499986430863
+      },
+      "stable_fps": 59.919252862776524,
+      "horizon_s": 5.0067379960000835,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2556.5547888117985,
+      "elastic_all_done_s": 4.92514073,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 0,
+      "burst_completion_ms": {
+        "p50": 24.328378,
+        "p95": 25.45292895,
+        "p99": 25.54882564,
+        "max": 25.557726
+      },
+      "kernel_source_coverage": {
+        "torch": 13109,
+        "tensorrt": 79800,
+        "native": 15300,
+        "cufft": 1800,
+        "nvjpeg": 300
+      },
+      "graph_kernels": 99900,
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "audit_no_drops": true,
+        "audit_stable_context": true,
+        "audit_graphs": true,
+        "audit_elastic_count": true,
+        "audit_memsets": true,
+        "audit_elastic_contexts": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 0,
+      "name": "r0_shared_i2048_w1_audit"
+    },
+    {
+      "policy": "shared",
+      "iterations": 2048,
+      "window": 1,
+      "audit": false,
+      "frames": 300,
+      "response_ms": {
+        "p50": 5.459119166516757,
+        "p95": 6.313461466334048,
+        "p99": 6.749675169430702,
+        "max": 7.111920999705035
+      },
+      "output_response_ms": {
+        "p50": 5.123840166561422,
+        "p95": 5.995277516512942,
+        "p99": 6.411538029487927,
+        "max": 6.820698999945307
+      },
+      "drain_ms": {
+        "p50": 0.004985000032320386,
+        "p95": 0.03180919998158063,
+        "p99": 0.08493477993397357,
+        "max": 0.14102100067248102
+      },
+      "transition_ms": {
+        "p50": 0.017669000044406857,
+        "p95": 0.06255995012907084,
+        "p99": 0.10006265983065503,
+        "max": 0.1591850004842854
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.08866716643751715,
+        "p95": 0.11471056614027478,
+        "p99": 0.13117151966980597,
+        "max": 0.1535406663606409
+      },
+      "stable_fps": 59.935636294923576,
+      "horizon_s": 5.005369401999815,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2557.2538152500724,
+      "elastic_all_done_s": 4.922328531,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 0,
+      "burst_completion_ms": {
+        "p50": 22.0160815,
+        "p95": 22.932260799999998,
+        "p99": 24.07318891,
+        "max": 24.209037
+      },
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 0,
+      "name": "r0_shared_i2048_w1"
+    },
+    {
+      "policy": "shared",
+      "iterations": 8192,
+      "window": 1,
+      "audit": true,
+      "frames": 300,
+      "response_ms": {
+        "p50": 6.233457000234921,
+        "p95": 7.230644150104127,
+        "p99": 8.198501676606597,
+        "max": 10.674047333850467
+      },
+      "output_response_ms": {
+        "p50": 5.902072500248323,
+        "p95": 6.834352200803551,
+        "p99": 7.700131447236328,
+        "max": 10.54123533413076
+      },
+      "drain_ms": {
+        "p50": 0.004734000413009198,
+        "p95": 0.0699270002769481,
+        "p99": 0.11556614008441084,
+        "max": 0.17630099955567857
+      },
+      "transition_ms": {
+        "p50": 0.017568499970366247,
+        "p95": 0.08515504996466916,
+        "p99": 0.1454434998322539,
+        "max": 0.1842559995566262
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.08744466640564497,
+        "p95": 0.12180291660115472,
+        "p99": 0.13048776732830447,
+        "max": 0.1360120004392229
+      },
+      "stable_fps": 59.92930701787438,
+      "horizon_s": 5.00589803100047,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2556.9837660959734,
+      "elastic_all_done_s": 4.928061611,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 0,
+      "burst_completion_ms": {
+        "p50": 28.791241999999997,
+        "p95": 30.05257025,
+        "p99": 30.17066794,
+        "max": 30.220694
+      },
+      "kernel_source_coverage": {
+        "torch": 13109,
+        "tensorrt": 79800,
+        "native": 15300,
+        "cufft": 1800,
+        "nvjpeg": 300
+      },
+      "graph_kernels": 99900,
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "audit_no_drops": true,
+        "audit_stable_context": true,
+        "audit_graphs": true,
+        "audit_elastic_count": true,
+        "audit_memsets": true,
+        "audit_elastic_contexts": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 0,
+      "name": "r0_shared_i8192_w1_audit"
+    },
+    {
+      "policy": "shared",
+      "iterations": 8192,
+      "window": 1,
+      "audit": false,
+      "frames": 300,
+      "response_ms": {
+        "p50": 5.603390166925237,
+        "p95": 6.6731643998991785,
+        "p99": 14.36495584406657,
+        "max": 19.4929149993186
+      },
+      "output_response_ms": {
+        "p50": 5.2522823334584245,
+        "p95": 6.15284041614359,
+        "p99": 13.721902873830906,
+        "max": 19.259994000094594
+      },
+      "drain_ms": {
+        "p50": 0.004608500148606254,
+        "p95": 0.06016365027790018,
+        "p99": 0.09297643946410959,
+        "max": 0.11560900020413101
+      },
+      "transition_ms": {
+        "p50": 0.014967999959480949,
+        "p95": 0.0777413998548582,
+        "p99": 0.1172555096582073,
+        "max": 0.12292199971852824
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.08660533330839826,
+        "p95": 0.11527273263709503,
+        "p99": 0.20892007666588913,
+        "max": 2.851396333426237
+      },
+      "stable_fps": 59.93390287812153,
+      "horizon_s": 5.005514168000445,
+      "miss_count": 2,
+      "miss_fraction": 0.006666666666666667,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2557.1798561331852,
+      "elastic_all_done_s": 4.927192329,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 0,
+      "burst_completion_ms": {
+        "p50": 27.5790835,
+        "p95": 28.5353164,
+        "p99": 49.839860509999916,
+        "max": 70.101508
+      },
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 0,
+      "name": "r0_shared_i8192_w1"
+    },
+    {
+      "policy": "control",
+      "iterations": 2048,
+      "window": 1,
+      "audit": true,
+      "frames": 300,
+      "response_ms": {
+        "p50": 7.5651453335012775,
+        "p95": 8.532235850316283,
+        "p99": 9.05376740970496,
+        "max": 11.747129334253259
+      },
+      "output_response_ms": {
+        "p50": 7.163539000430319,
+        "p95": 8.180292650013143,
+        "p99": 8.746104069814464,
+        "max": 11.369955333975668
+      },
+      "drain_ms": {
+        "p50": 0.00665199968352681,
+        "p95": 0.009626549353924933,
+        "p99": 0.018258810205225014,
+        "max": 0.02074900021398207
+      },
+      "transition_ms": {
+        "p50": 0.020408499494806165,
+        "p95": 0.027998500081594106,
+        "p99": 0.040972969545691705,
+        "max": 0.05261000023892848
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.09723616676637903,
+        "p95": 0.1225883997449273,
+        "p99": 0.13017262362154722,
+        "max": 0.13501466673915274
+      },
+      "stable_fps": 59.90599663630492,
+      "horizon_s": 5.007845906000512,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "kernel_source_coverage": {
+        "torch": 13109,
+        "tensorrt": 79800,
+        "native": 15300,
+        "cufft": 1800,
+        "nvjpeg": 300
+      },
+      "graph_kernels": 99900,
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "audit_no_drops": true,
+        "audit_stable_context": true,
+        "audit_graphs": true,
+        "audit_elastic_count": true,
+        "audit_memsets": true,
+        "audit_elastic_contexts": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 0,
+      "name": "r0_control_i2048_w1_audit"
+    },
+    {
+      "policy": "control",
+      "iterations": 2048,
+      "window": 1,
+      "audit": false,
+      "frames": 300,
+      "response_ms": {
+        "p50": 7.175222499881784,
+        "p95": 7.9150171165110805,
+        "p99": 8.340948945715354,
+        "max": 8.488095999382494
+      },
+      "output_response_ms": {
+        "p50": 6.720894500176655,
+        "p95": 7.414576082919666,
+        "p99": 7.868138179528613,
+        "max": 8.120599999529077
+      },
+      "drain_ms": {
+        "p50": 0.007403999916277826,
+        "p95": 0.009792050286705493,
+        "p99": 0.014792710044275733,
+        "max": 0.02451699947414454
+      },
+      "transition_ms": {
+        "p50": 0.022968500161368866,
+        "p95": 0.03180450021318393,
+        "p99": 0.046802830402157256,
+        "max": 0.08721599988348316
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.10263299964208272,
+        "p95": 0.11871713345499303,
+        "p99": 0.1313773061065148,
+        "max": 0.14964099955250276
+      },
+      "stable_fps": 59.91222972178836,
+      "horizon_s": 5.007324905000132,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 0,
+      "name": "r0_control_i2048_w1"
+    },
+    {
+      "policy": "headroom",
+      "iterations": 2048,
+      "window": 4,
+      "audit": true,
+      "frames": 300,
+      "response_ms": {
+        "p50": 6.897237999965,
+        "p95": 7.945445083078087,
+        "p99": 8.773241039662025,
+        "max": 13.084266333862615
+      },
+      "output_response_ms": {
+        "p50": 6.630537332966924,
+        "p95": 7.716138333262281,
+        "p99": 8.624674389393476,
+        "max": 12.879898333267192
+      },
+      "drain_ms": {
+        "p50": 0.004618500042852247,
+        "p95": 0.1761248497587076,
+        "p99": 0.32559791005951405,
+        "max": 0.5608730007224949
+      },
+      "transition_ms": {
+        "p50": 0.017307500002061715,
+        "p95": 0.19707360052052536,
+        "p99": 0.3381341798285575,
+        "max": 0.5694090004908503
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.0859249998939049,
+        "p95": 0.11152306683470671,
+        "p99": 0.1299197037678823,
+        "max": 0.22608166636928217
+      },
+      "stable_fps": 59.91973079760339,
+      "horizon_s": 5.006698060999952,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2556.5751806977446,
+      "elastic_all_done_s": 4.922620356,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 0,
+      "burst_completion_ms": {
+        "p50": 22.566831999999998,
+        "p95": 23.75985255,
+        "p99": 24.52668998,
+        "max": 24.570201
+      },
+      "kernel_source_coverage": {
+        "torch": 13109,
+        "tensorrt": 79800,
+        "native": 15300,
+        "cufft": 1800,
+        "nvjpeg": 300
+      },
+      "graph_kernels": 99900,
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "audit_no_drops": true,
+        "audit_stable_context": true,
+        "audit_graphs": true,
+        "audit_elastic_count": true,
+        "audit_memsets": true,
+        "audit_elastic_contexts": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 0,
+      "name": "r0_headroom_i2048_w4_audit"
+    },
+    {
+      "policy": "headroom",
+      "iterations": 2048,
+      "window": 4,
+      "audit": false,
+      "frames": 300,
+      "response_ms": {
+        "p50": 6.127277166342537,
+        "p95": 6.988414283023304,
+        "p99": 7.667129689161811,
+        "max": 7.922225999209331
+      },
+      "output_response_ms": {
+        "p50": 5.83545649988082,
+        "p95": 6.715044883367227,
+        "p99": 7.3979941794004835,
+        "max": 7.836325999960536
+      },
+      "drain_ms": {
+        "p50": 0.003746999936993234,
+        "p95": 0.049707649941410685,
+        "p99": 0.10189337025622029,
+        "max": 0.27885300005436875
+      },
+      "transition_ms": {
+        "p50": 0.01299499990636832,
+        "p95": 0.07337099982578371,
+        "p99": 0.16140869993250806,
+        "max": 0.2860770000552293
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.08799733313935576,
+        "p95": 0.11489668281683409,
+        "p99": 0.13486936986737413,
+        "max": 0.1582483328093076
+      },
+      "stable_fps": 59.93314810933967,
+      "horizon_s": 5.005577205000009,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2557.147652665159,
+      "elastic_all_done_s": 4.922047478,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 0,
+      "burst_completion_ms": {
+        "p50": 21.853474,
+        "p95": 22.63474285,
+        "p99": 23.46108229,
+        "max": 23.639677
+      },
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 0,
+      "name": "r0_headroom_i2048_w4"
+    },
+    {
+      "policy": "headroom",
+      "iterations": 8192,
+      "window": 4,
+      "audit": true,
+      "frames": 300,
+      "response_ms": {
+        "p50": 6.850934833892097,
+        "p95": 7.8198473172506064,
+        "p99": 9.342562527117469,
+        "max": 12.158254667156143
+      },
+      "output_response_ms": {
+        "p50": 6.660686500254087,
+        "p95": 7.629022317087221,
+        "p99": 9.224387087187997,
+        "max": 12.048466666783497
+      },
+      "drain_ms": {
+        "p50": 0.004718999662145507,
+        "p95": 0.18084820044350647,
+        "p99": 0.2875861498705489,
+        "max": 0.5770890002168017
+      },
+      "transition_ms": {
+        "p50": 0.014712999472976662,
+        "p95": 0.20078194925190482,
+        "p99": 0.2988687003926315,
+        "max": 0.6044210003892658
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.08537083385817823,
+        "p95": 0.11317243447592773,
+        "p99": 0.13663605689544053,
+        "max": 0.1746306670611375
+      },
+      "stable_fps": 59.92022474140353,
+      "horizon_s": 5.006656789000772,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2556.5962556332174,
+      "elastic_all_done_s": 4.966283763,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 0,
+      "burst_completion_ms": {
+        "p50": 66.23804849999999,
+        "p95": 71.00676999999999,
+        "p99": 72.41346717,
+        "max": 72.543546
+      },
+      "kernel_source_coverage": {
+        "torch": 13109,
+        "tensorrt": 79800,
+        "native": 15300,
+        "cufft": 1800,
+        "nvjpeg": 300
+      },
+      "graph_kernels": 99900,
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "audit_no_drops": true,
+        "audit_stable_context": true,
+        "audit_graphs": true,
+        "audit_elastic_count": true,
+        "audit_memsets": true,
+        "audit_elastic_contexts": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 0,
+      "name": "r0_headroom_i8192_w4_audit"
+    },
+    {
+      "policy": "headroom",
+      "iterations": 8192,
+      "window": 4,
+      "audit": false,
+      "frames": 300,
+      "response_ms": {
+        "p50": 6.225857166555215,
+        "p95": 6.996042666287394,
+        "p99": 8.151993320016116,
+        "max": 8.927023999603989
+      },
+      "output_response_ms": {
+        "p50": 5.93036949976522,
+        "p95": 6.788643516438242,
+        "p99": 7.900930669993612,
+        "max": 8.566860999962955
+      },
+      "drain_ms": {
+        "p50": 0.004738999905384844,
+        "p95": 0.060795800345658804,
+        "p99": 0.16964906931207213,
+        "max": 0.3700460001709871
+      },
+      "transition_ms": {
+        "p50": 0.017498499801149592,
+        "p95": 0.09417534956810415,
+        "p99": 0.20239875982952055,
+        "max": 0.44215700017957715
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.08812816622594255,
+        "p95": 0.11884821592502706,
+        "p99": 0.13522204024411608,
+        "max": 0.16249399959633593
+      },
+      "stable_fps": 59.92575040122921,
+      "horizon_s": 5.006195132999892,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2556.832017119113,
+      "elastic_all_done_s": 4.967803791,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 0,
+      "burst_completion_ms": {
+        "p50": 65.9562325,
+        "p95": 71.2335149,
+        "p99": 71.68920644,
+        "max": 71.785513
+      },
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 0,
+      "name": "r0_headroom_i8192_w4"
+    },
+    {
+      "policy": "fixed",
+      "iterations": 2048,
+      "window": 4,
+      "audit": true,
+      "frames": 300,
+      "response_ms": {
+        "p50": 7.868277833495085,
+        "p95": 8.91588564891208,
+        "p99": 10.03509375658723,
+        "max": 12.702811666713387
+      },
+      "output_response_ms": {
+        "p50": 7.574596499580366,
+        "p95": 8.568323682629853,
+        "p99": 9.565245706553467,
+        "max": 12.665681666476303
+      },
+      "drain_ms": {
+        "p50": 0.004448499566933606,
+        "p95": 0.1121953502206452,
+        "p99": 0.47630444059905064,
+        "max": 0.6998960006967536
+      },
+      "transition_ms": {
+        "p50": 0.016600999970250996,
+        "p95": 0.12666789966715442,
+        "p99": 0.4924485404353611,
+        "max": 0.7163870004660566
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.08860266598276212,
+        "p95": 0.11760383354157966,
+        "p99": 0.13513695314031793,
+        "max": 0.1585623331266106
+      },
+      "stable_fps": 59.90671134010765,
+      "horizon_s": 5.007786160999785,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2556.019683844593,
+      "elastic_all_done_s": 4.91392986,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 0,
+      "burst_completion_ms": {
+        "p50": 13.7328735,
+        "p95": 14.52180125,
+        "p99": 15.178519289999999,
+        "max": 15.478095
+      },
+      "kernel_source_coverage": {
+        "torch": 13109,
+        "tensorrt": 79800,
+        "native": 15300,
+        "cufft": 1800,
+        "nvjpeg": 300
+      },
+      "graph_kernels": 99900,
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "audit_no_drops": true,
+        "audit_stable_context": true,
+        "audit_graphs": true,
+        "audit_elastic_count": true,
+        "audit_memsets": true,
+        "audit_elastic_contexts": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 0,
+      "name": "r0_fixed_i2048_w4_audit"
+    },
+    {
+      "policy": "fixed",
+      "iterations": 2048,
+      "window": 4,
+      "audit": false,
+      "frames": 300,
+      "response_ms": {
+        "p50": 7.208057833395287,
+        "p95": 8.180460333142037,
+        "p99": 8.824641859446272,
+        "max": 9.435738666070392
+      },
+      "output_response_ms": {
+        "p50": 6.798326999160054,
+        "p95": 7.7917913830788175,
+        "p99": 8.511172909202285,
+        "max": 9.238905666279607
+      },
+      "drain_ms": {
+        "p50": 0.005255000360193662,
+        "p95": 0.11379030020179925,
+        "p99": 0.198310850355483,
+        "max": 0.45746199975837953
+      },
+      "transition_ms": {
+        "p50": 0.019116000203212025,
+        "p95": 0.13174475002415428,
+        "p99": 0.22156552006890654,
+        "max": 0.47362300028908066
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.08923566656449111,
+        "p95": 0.1229613327268453,
+        "p99": 0.13179761294850323,
+        "max": 0.15463633280887734
+      },
+      "stable_fps": 59.91849262282818,
+      "horizon_s": 5.006801520999943,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2556.5223519073356,
+      "elastic_all_done_s": 4.912865277,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 0,
+      "burst_completion_ms": {
+        "p50": 12.806866,
+        "p95": 13.56276305,
+        "p99": 14.479932049999999,
+        "max": 14.780721
+      },
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 0,
+      "name": "r0_fixed_i2048_w4"
+    },
+    {
+      "policy": "headroom",
+      "iterations": 2048,
+      "window": 1,
+      "audit": true,
+      "frames": 300,
+      "response_ms": {
+        "p50": 6.813134999902104,
+        "p95": 7.780094266763628,
+        "p99": 8.931059696733422,
+        "max": 12.24258833372005
+      },
+      "output_response_ms": {
+        "p50": 6.555385999490682,
+        "p95": 7.715029582732313,
+        "p99": 8.725725206531928,
+        "max": 12.08189333374321
+      },
+      "drain_ms": {
+        "p50": 0.0042729998313006945,
+        "p95": 0.07223054922178564,
+        "p99": 0.09498959063421332,
+        "max": 0.14900199948897352
+      },
+      "transition_ms": {
+        "p50": 0.014055999599804636,
+        "p95": 0.08482224993713319,
+        "p99": 0.13426689024527147,
+        "max": 0.17142500018962892
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.08765499978835578,
+        "p95": 0.11972679990321922,
+        "p99": 0.13182017234612428,
+        "max": 0.21336933332349872
+      },
+      "stable_fps": 59.92188582964168,
+      "horizon_s": 5.006517999999232,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2556.6671287313784,
+      "elastic_all_done_s": 4.929076939,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 0,
+      "burst_completion_ms": {
+        "p50": 29.0838295,
+        "p95": 30.36648135,
+        "p99": 30.82894862,
+        "max": 30.867787
+      },
+      "kernel_source_coverage": {
+        "torch": 13109,
+        "tensorrt": 79800,
+        "native": 15300,
+        "cufft": 1800,
+        "nvjpeg": 300
+      },
+      "graph_kernels": 99900,
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "audit_no_drops": true,
+        "audit_stable_context": true,
+        "audit_graphs": true,
+        "audit_elastic_count": true,
+        "audit_memsets": true,
+        "audit_elastic_contexts": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 0,
+      "name": "r0_headroom_i2048_w1_audit"
+    },
+    {
+      "policy": "headroom",
+      "iterations": 2048,
+      "window": 1,
+      "audit": false,
+      "frames": 300,
+      "response_ms": {
+        "p50": 6.1686994999945455,
+        "p95": 6.866069300258459,
+        "p99": 7.49256167306157,
+        "max": 8.13075966652832
+      },
+      "output_response_ms": {
+        "p50": 5.867429667432589,
+        "p95": 6.58975855008066,
+        "p99": 7.1673255097175534,
+        "max": 7.751691667181149
+      },
+      "drain_ms": {
+        "p50": 0.004929499937134096,
+        "p95": 0.03514669961077754,
+        "p99": 0.07086007021825934,
+        "max": 0.12587799938046373
+      },
+      "transition_ms": {
+        "p50": 0.015664500097045675,
+        "p95": 0.06213729957380565,
+        "p99": 0.08795700961854888,
+        "max": 0.15755899948999286
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.08871066665960825,
+        "p95": 0.11962400049014832,
+        "p99": 0.14278894646849938,
+        "max": 0.161199666763423
+      },
+      "stable_fps": 59.92911846357254,
+      "horizon_s": 5.005913781000345,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2556.9757211124283,
+      "elastic_all_done_s": 4.927949971,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 0,
+      "burst_completion_ms": {
+        "p50": 27.530672000000003,
+        "p95": 28.721075499999998,
+        "p99": 29.57468239,
+        "max": 30.153465
+      },
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 0,
+      "name": "r0_headroom_i2048_w1"
+    },
+    {
+      "policy": "fixed",
+      "iterations": 8192,
+      "window": 4,
+      "audit": true,
+      "frames": 300,
+      "response_ms": {
+        "p50": 7.81092550005269,
+        "p95": 8.956960099885693,
+        "p99": 10.39767285914422,
+        "max": 12.730465333333996
+      },
+      "output_response_ms": {
+        "p50": 7.54497816615185,
+        "p95": 8.796703766392966,
+        "p99": 9.932617369531723,
+        "max": 12.490711333157378
+      },
+      "drain_ms": {
+        "p50": 0.004773999989993172,
+        "p95": 0.11749414979931318,
+        "p99": 0.25879300013912077,
+        "max": 0.5510640003194567
+      },
+      "transition_ms": {
+        "p50": 0.020288499399612192,
+        "p95": 0.1385918501910056,
+        "p99": 0.27971960053946465,
+        "max": 0.567504999708035
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.08724049985175952,
+        "p95": 0.12091886637790594,
+        "p99": 0.14761740610083496,
+        "max": 0.24255833250208525
+      },
+      "stable_fps": 59.909925008388186,
+      "horizon_s": 5.0075175349993515,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2556.156800357896,
+      "elastic_all_done_s": 4.940409212,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 0,
+      "burst_completion_ms": {
+        "p50": 40.0998535,
+        "p95": 41.42373655,
+        "p99": 43.14201393,
+        "max": 43.5725
+      },
+      "kernel_source_coverage": {
+        "torch": 13109,
+        "tensorrt": 79800,
+        "native": 15300,
+        "cufft": 1800,
+        "nvjpeg": 300
+      },
+      "graph_kernels": 99900,
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "audit_no_drops": true,
+        "audit_stable_context": true,
+        "audit_graphs": true,
+        "audit_elastic_count": true,
+        "audit_memsets": true,
+        "audit_elastic_contexts": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 0,
+      "name": "r0_fixed_i8192_w4_audit"
+    },
+    {
+      "policy": "fixed",
+      "iterations": 8192,
+      "window": 4,
+      "audit": false,
+      "frames": 300,
+      "response_ms": {
+        "p50": 7.172204832841089,
+        "p95": 7.957707933019265,
+        "p99": 8.476440835956964,
+        "max": 9.19110599988926
+      },
+      "output_response_ms": {
+        "p50": 6.790423999973427,
+        "p95": 7.668859048862942,
+        "p99": 8.083652566565434,
+        "max": 8.963604999735253
+      },
+      "drain_ms": {
+        "p50": 0.005140000212122686,
+        "p95": 0.09810549945541445,
+        "p99": 0.1924557494930913,
+        "max": 0.446871000349347
+      },
+      "transition_ms": {
+        "p50": 0.020122999558225274,
+        "p95": 0.13340360014808542,
+        "p99": 0.2197504197101794,
+        "max": 0.454525999884936
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.08942816612034221,
+        "p95": 0.1176483502604242,
+        "p99": 0.13072969296445078,
+        "max": 0.18799233384925174
+      },
+      "stable_fps": 59.92034028177909,
+      "horizon_s": 5.006647135000094,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2556.601185355908,
+      "elastic_all_done_s": 4.939781515,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 0,
+      "burst_completion_ms": {
+        "p50": 39.8395675,
+        "p95": 40.71384525,
+        "p99": 41.33234589,
+        "max": 41.523514
+      },
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 0,
+      "name": "r0_fixed_i8192_w4"
+    },
+    {
+      "policy": "fixed",
+      "iterations": 8192,
+      "window": 1,
+      "audit": true,
+      "frames": 300,
+      "response_ms": {
+        "p50": 7.768224332721729,
+        "p95": 8.805231300448213,
+        "p99": 9.529165559888494,
+        "max": 11.97468733334972
+      },
+      "output_response_ms": {
+        "p50": 7.431481833009457,
+        "p95": 8.504586750132148,
+        "p99": 9.274283129452668,
+        "max": 11.66280633333372
+      },
+      "drain_ms": {
+        "p50": 0.003943000137951458,
+        "p95": 0.05441519979285661,
+        "p99": 0.077805740011172,
+        "max": 0.1463469998270739
+      },
+      "transition_ms": {
+        "p50": 0.012648999927478144,
+        "p95": 0.07235399993987812,
+        "p99": 0.10588989011012007,
+        "max": 0.16368999968108255
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.08664016650072881,
+        "p95": 0.10994093263434479,
+        "p99": 0.12864224027907767,
+        "max": 0.23958533347467892
+      },
+      "stable_fps": 59.91136389304079,
+      "horizon_s": 5.007397270000183,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2556.21819276974,
+      "elastic_all_done_s": 4.944721815,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 0,
+      "burst_completion_ms": {
+        "p50": 45.016861000000006,
+        "p95": 46.47317765,
+        "p99": 46.58435718,
+        "max": 46.590099
+      },
+      "kernel_source_coverage": {
+        "torch": 13109,
+        "tensorrt": 79800,
+        "native": 15300,
+        "cufft": 1800,
+        "nvjpeg": 300
+      },
+      "graph_kernels": 99900,
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "audit_no_drops": true,
+        "audit_stable_context": true,
+        "audit_graphs": true,
+        "audit_elastic_count": true,
+        "audit_memsets": true,
+        "audit_elastic_contexts": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 0,
+      "name": "r0_fixed_i8192_w1_audit"
+    },
+    {
+      "policy": "fixed",
+      "iterations": 8192,
+      "window": 1,
+      "audit": false,
+      "frames": 300,
+      "response_ms": {
+        "p50": 7.103887333414605,
+        "p95": 7.958022232651275,
+        "p99": 8.430420086524462,
+        "max": 8.708568999281852
+      },
+      "output_response_ms": {
+        "p50": 6.709754166422499,
+        "p95": 7.484850366017782,
+        "p99": 8.148365019596893,
+        "max": 8.447663666629524
+      },
+      "drain_ms": {
+        "p50": 0.0041074999899137765,
+        "p95": 0.04910760007987848,
+        "p99": 0.10996397940289147,
+        "max": 0.14729899976373417
+      },
+      "transition_ms": {
+        "p50": 0.013921999652666273,
+        "p95": 0.06785154996578059,
+        "p99": 0.1518033096454018,
+        "max": 0.1725960000840132
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.08749116614126251,
+        "p95": 0.12305926697990799,
+        "p99": 0.14285969037700852,
+        "max": 0.23935733315738617
+      },
+      "stable_fps": 59.91381229144836,
+      "horizon_s": 5.007192641000074,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2556.322657768463,
+      "elastic_all_done_s": 4.944256983,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 0,
+      "burst_completion_ms": {
+        "p50": 43.636306,
+        "p95": 44.4561329,
+        "p99": 44.99630148,
+        "max": 45.460992
+      },
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 0,
+      "name": "r0_fixed_i8192_w1"
+    },
+    {
+      "policy": "headroom",
+      "iterations": 8192,
+      "window": 1,
+      "audit": true,
+      "frames": 300,
+      "response_ms": {
+        "p50": 6.807507166740834,
+        "p95": 7.8023151336765295,
+        "p99": 8.99510543727046,
+        "max": 10.85297466670454
+      },
+      "output_response_ms": {
+        "p50": 6.56678033328717,
+        "p95": 7.606231832869526,
+        "p99": 8.747353186736285,
+        "max": 10.79040666718356
+      },
+      "drain_ms": {
+        "p50": 0.004553499366011238,
+        "p95": 0.06170119963826441,
+        "p99": 0.11123683976620659,
+        "max": 0.12867399982496863
+      },
+      "transition_ms": {
+        "p50": 0.015605000044160988,
+        "p95": 0.09020039956340047,
+        "p99": 0.12377170032777936,
+        "max": 0.17076299991458654
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.08592083349867607,
+        "p95": 0.11763325069296117,
+        "p99": 0.16102087693070644,
+        "max": 0.16751166640460724
+      },
+      "stable_fps": 59.917527908795634,
+      "horizon_s": 5.0068821340000795,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2556.4811907752805,
+      "elastic_all_done_s": 4.976271117,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 0,
+      "burst_completion_ms": {
+        "p50": 76.8186345,
+        "p95": 79.1802448,
+        "p99": 80.28070534999999,
+        "max": 80.827783
+      },
+      "kernel_source_coverage": {
+        "torch": 13109,
+        "tensorrt": 79800,
+        "native": 15300,
+        "cufft": 1800,
+        "nvjpeg": 300
+      },
+      "graph_kernels": 99900,
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "audit_no_drops": true,
+        "audit_stable_context": true,
+        "audit_graphs": true,
+        "audit_elastic_count": true,
+        "audit_memsets": true,
+        "audit_elastic_contexts": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 0,
+      "name": "r0_headroom_i8192_w1_audit"
+    },
+    {
+      "policy": "headroom",
+      "iterations": 8192,
+      "window": 1,
+      "audit": false,
+      "frames": 300,
+      "response_ms": {
+        "p50": 6.104942333422514,
+        "p95": 6.909036099568767,
+        "p99": 7.635142505841938,
+        "max": 8.783115998994617
+      },
+      "output_response_ms": {
+        "p50": 5.818564999572118,
+        "p95": 6.594837899319828,
+        "p99": 7.32198674589199,
+        "max": 8.509527999194688
+      },
+      "drain_ms": {
+        "p50": 0.004002499736088794,
+        "p95": 0.04244580013619271,
+        "p99": 0.13021703940466975,
+        "max": 0.16531900018890155
+      },
+      "transition_ms": {
+        "p50": 0.012814000001526438,
+        "p95": 0.058944299462382346,
+        "p99": 0.14456555938522786,
+        "max": 0.18237099993712036
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.08428799992543645,
+        "p95": 0.11286539947832352,
+        "p99": 0.1242192863173841,
+        "max": 0.1477223322581267
+      },
+      "stable_fps": 59.92586604670156,
+      "horizon_s": 5.006185471999743,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2556.836951325933,
+      "elastic_all_done_s": 4.97415186,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 0,
+      "burst_completion_ms": {
+        "p50": 75.009895,
+        "p95": 77.03309125,
+        "p99": 77.25020349,
+        "max": 77.26603
+      },
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 0,
+      "name": "r0_headroom_i8192_w1"
+    },
+    {
+      "policy": "dynamic",
+      "iterations": 2048,
+      "window": 4,
+      "audit": true,
+      "frames": 300,
+      "response_ms": {
+        "p50": 7.856001333038876,
+        "p95": 9.115448433431084,
+        "p99": 9.811698989815339,
+        "max": 10.966573333462293
+      },
+      "output_response_ms": {
+        "p50": 7.594248166242323,
+        "p95": 8.78872918256093,
+        "p99": 9.397726040124322,
+        "max": 10.688015666346473
+      },
+      "drain_ms": {
+        "p50": 0.00990899980024551,
+        "p95": 0.28679494998868904,
+        "p99": 0.3271072700772492,
+        "max": 0.45373000011750264
+      },
+      "transition_ms": {
+        "p50": 0.02343949972782866,
+        "p95": 0.30466705043181724,
+        "p99": 0.34129039978324716,
+        "max": 0.46407999980146997
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.0888158328962163,
+        "p95": 0.12023439981021514,
+        "p99": 0.13633574968480386,
+        "max": 0.15151833304116735
+      },
+      "stable_fps": 59.910543062885786,
+      "horizon_s": 5.0074658759995145,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2556.1831706831267,
+      "elastic_all_done_s": 4.912679523,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 4987,
+      "burst_completion_ms": {
+        "p50": 12.890221499999999,
+        "p95": 14.053822,
+        "p99": 14.16438228,
+        "max": 14.175225
+      },
+      "borrowed_stable_kernel_overlaps": 0,
+      "kernel_source_coverage": {
+        "torch": 13109,
+        "tensorrt": 79800,
+        "native": 15300,
+        "cufft": 1800,
+        "nvjpeg": 300
+      },
+      "graph_kernels": 99900,
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "audit_no_drops": true,
+        "audit_stable_context": true,
+        "audit_graphs": true,
+        "audit_elastic_count": true,
+        "audit_memsets": true,
+        "audit_elastic_contexts": true,
+        "audit_borrow_no_stable_overlap": true,
+        "audit_borrow_count": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 0,
+      "name": "r0_dynamic_i2048_w4_audit"
+    },
+    {
+      "policy": "dynamic",
+      "iterations": 2048,
+      "window": 4,
+      "audit": false,
+      "frames": 300,
+      "response_ms": {
+        "p50": 7.230296499528777,
+        "p95": 8.026175016630077,
+        "p99": 8.855301109997525,
+        "max": 9.40108099985082
+      },
+      "output_response_ms": {
+        "p50": 6.872433666558209,
+        "p95": 7.67254079983104,
+        "p99": 8.491594000015537,
+        "max": 9.004960999845935
+      },
+      "drain_ms": {
+        "p50": 0.008681000053911703,
+        "p95": 0.27628120010376733,
+        "p99": 0.3438119196925981,
+        "max": 0.5474569998114021
+      },
+      "transition_ms": {
+        "p50": 0.016125999991345452,
+        "p95": 0.2953602497200337,
+        "p99": 0.36102898985518533,
+        "max": 0.6214469995029503
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.087633666680631,
+        "p95": 0.11065804897043563,
+        "p99": 0.12513980298535896,
+        "max": 0.12914633316540858
+      },
+      "stable_fps": 59.91631704894807,
+      "horizon_s": 5.006983319000028,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2556.4295274217843,
+      "elastic_all_done_s": 4.911727005,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 4919,
+      "burst_completion_ms": {
+        "p50": 11.920468,
+        "p95": 12.53322025,
+        "p99": 12.871139359999999,
+        "max": 13.111943
+      },
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 0,
+      "name": "r0_dynamic_i2048_w4"
+    },
+    {
+      "policy": "dynamic",
+      "iterations": 8192,
+      "window": 4,
+      "audit": true,
+      "frames": 300,
+      "response_ms": {
+        "p50": 8.016622833565634,
+        "p95": 9.082183700274983,
+        "p99": 9.702597330160637,
+        "max": 13.031260334173567
+      },
+      "output_response_ms": {
+        "p50": 7.725186666903028,
+        "p95": 8.798269249973602,
+        "p99": 9.401665150744513,
+        "max": 12.960632667272876
+      },
+      "drain_ms": {
+        "p50": 0.014797999938309658,
+        "p95": 0.5969685497348111,
+        "p99": 0.6641117104572913,
+        "max": 0.8089729999483097
+      },
+      "transition_ms": {
+        "p50": 0.025803999960771762,
+        "p95": 0.6370968002102018,
+        "p99": 0.6776404204174468,
+        "max": 1.7549490003148094
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.08694533380548819,
+        "p95": 0.11649240009319331,
+        "p99": 0.12983768692720324,
+        "max": 0.14753966752323322
+      },
+      "stable_fps": 59.906465650902426,
+      "horizon_s": 5.007806698999957,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2556.00920110517,
+      "elastic_all_done_s": 4.929277567,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 4908,
+      "burst_completion_ms": {
+        "p50": 28.4023375,
+        "p95": 29.497559300000002,
+        "p99": 29.685307520000002,
+        "max": 29.715615
+      },
+      "borrowed_stable_kernel_overlaps": 0,
+      "kernel_source_coverage": {
+        "torch": 13109,
+        "tensorrt": 79800,
+        "native": 15300,
+        "cufft": 1800,
+        "nvjpeg": 300
+      },
+      "graph_kernels": 99900,
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "audit_no_drops": true,
+        "audit_stable_context": true,
+        "audit_graphs": true,
+        "audit_elastic_count": true,
+        "audit_memsets": true,
+        "audit_elastic_contexts": true,
+        "audit_borrow_no_stable_overlap": true,
+        "audit_borrow_count": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 0,
+      "name": "r0_dynamic_i8192_w4_audit"
+    },
+    {
+      "policy": "dynamic",
+      "iterations": 8192,
+      "window": 4,
+      "audit": false,
+      "frames": 300,
+      "response_ms": {
+        "p50": 7.3498196670698235,
+        "p95": 8.38279340059671,
+        "p99": 9.25455110992516,
+        "max": 9.782611999980872
+      },
+      "output_response_ms": {
+        "p50": 6.997672834131663,
+        "p95": 7.966137049743339,
+        "p99": 8.952708009801427,
+        "max": 9.730657333420822
+      },
+      "drain_ms": {
+        "p50": 0.014276999536377843,
+        "p95": 0.5634555002870911,
+        "p99": 0.6160217096567066,
+        "max": 0.6577359999937471
+      },
+      "transition_ms": {
+        "p50": 0.02492199973858078,
+        "p95": 0.5757886495302955,
+        "p99": 0.6426901494705815,
+        "max": 0.7073910001054173
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.08780700045463163,
+        "p95": 0.11259436705586269,
+        "p99": 0.12987330043870315,
+        "max": 0.14588500016543549
+      },
+      "stable_fps": 59.914383460441236,
+      "horizon_s": 5.007144907000111,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2556.3470276454927,
+      "elastic_all_done_s": 4.926943997,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 5068,
+      "burst_completion_ms": {
+        "p50": 27.020504000000003,
+        "p95": 27.81589365,
+        "p99": 28.55179773,
+        "max": 28.643635
+      },
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 0,
+      "name": "r0_dynamic_i8192_w4"
+    },
+    {
+      "policy": "dynamic",
+      "iterations": 2048,
+      "window": 1,
+      "audit": true,
+      "frames": 300,
+      "response_ms": {
+        "p50": 7.821889500064572,
+        "p95": 8.958520550731919,
+        "p99": 10.047866120066828,
+        "max": 11.119760333713202
+      },
+      "output_response_ms": {
+        "p50": 7.496862666812376,
+        "p95": 8.519396717429117,
+        "p99": 9.82572005964357,
+        "max": 10.84003033429326
+      },
+      "drain_ms": {
+        "p50": 0.014116999864199897,
+        "p95": 0.1319365494964586,
+        "p99": 0.22757225084205832,
+        "max": 0.31197199950838694
+      },
+      "transition_ms": {
+        "p50": 0.02457150003465358,
+        "p95": 0.1410465506978653,
+        "p99": 0.26914085000498733,
+        "max": 0.32266199923469685
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.0888328336259292,
+        "p95": 0.11655824982881316,
+        "p99": 0.13191354688387946,
+        "max": 0.19412233359616948
+      },
+      "stable_fps": 59.90879986344814,
+      "horizon_s": 5.0076115809997646,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2556.108794173787,
+      "elastic_all_done_s": 4.929623694,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 5421,
+      "burst_completion_ms": {
+        "p50": 29.548004,
+        "p95": 30.7932985,
+        "p99": 31.167668929999998,
+        "max": 31.467913
+      },
+      "borrowed_stable_kernel_overlaps": 0,
+      "kernel_source_coverage": {
+        "torch": 13109,
+        "tensorrt": 79800,
+        "native": 15300,
+        "cufft": 1800,
+        "nvjpeg": 300
+      },
+      "graph_kernels": 99900,
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "audit_no_drops": true,
+        "audit_stable_context": true,
+        "audit_graphs": true,
+        "audit_elastic_count": true,
+        "audit_memsets": true,
+        "audit_elastic_contexts": true,
+        "audit_borrow_no_stable_overlap": true,
+        "audit_borrow_count": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 0,
+      "name": "r0_dynamic_i2048_w1_audit"
+    },
+    {
+      "policy": "dynamic",
+      "iterations": 2048,
+      "window": 1,
+      "audit": false,
+      "frames": 300,
+      "response_ms": {
+        "p50": 7.160695333368494,
+        "p95": 7.892784483374271,
+        "p99": 8.482757489300635,
+        "max": 9.46307699996396
+      },
+      "output_response_ms": {
+        "p50": 6.741371333646384,
+        "p95": 7.516227500036621,
+        "p99": 8.219049529898253,
+        "max": 9.049212999343581
+      },
+      "drain_ms": {
+        "p50": 0.014622999970015371,
+        "p95": 0.1642934496430826,
+        "p99": 0.20632663952710567,
+        "max": 0.2344290005567018
+      },
+      "transition_ms": {
+        "p50": 0.0247765001404332,
+        "p95": 0.17868039972199773,
+        "p99": 0.23190043019894788,
+        "max": 0.30795800012128893
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.08718749995750841,
+        "p95": 0.11935600055039687,
+        "p99": 0.1296773897138337,
+        "max": 0.16031399991334183
+      },
+      "stable_fps": 59.920966929086156,
+      "horizon_s": 5.006594775999474,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2556.627922307676,
+      "elastic_all_done_s": 4.926421338,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 5449,
+      "burst_completion_ms": {
+        "p50": 26.794241,
+        "p95": 27.7126861,
+        "p99": 28.11371147,
+        "max": 28.228125
+      },
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 0,
+      "name": "r0_dynamic_i2048_w1"
+    },
+    {
+      "policy": "shared",
+      "iterations": 8192,
+      "window": 4,
+      "audit": true,
+      "frames": 300,
+      "response_ms": {
+        "p50": 6.311138499768276,
+        "p95": 9.632838700008506,
+        "p99": 10.246800019931468,
+        "max": 11.726821333468251
+      },
+      "output_response_ms": {
+        "p50": 6.1080458331161935,
+        "p95": 7.526316100120312,
+        "p99": 8.230551119886512,
+        "max": 11.549385333637474
+      },
+      "drain_ms": {
+        "p50": 0.004974000148649793,
+        "p95": 0.1988522995361565,
+        "p99": 0.2988171800734558,
+        "max": 0.5577470001298934
+      },
+      "transition_ms": {
+        "p50": 0.01688700012891786,
+        "p95": 0.22439000044869353,
+        "p99": 0.358410919343441,
+        "max": 1.081508999959624
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.08574750017942279,
+        "p95": 0.1218743165736669,
+        "p99": 0.1387369365511404,
+        "max": 0.15837133287277538
+      },
+      "stable_fps": 59.93018348174667,
+      "horizon_s": 5.0058248209998055,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2557.0211618878575,
+      "elastic_all_done_s": 4.922317578,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 0,
+      "burst_completion_ms": {
+        "p50": 22.3073145,
+        "p95": 23.4513891,
+        "p99": 24.232585909999997,
+        "max": 24.744656
+      },
+      "kernel_source_coverage": {
+        "torch": 13109,
+        "tensorrt": 79800,
+        "native": 15300,
+        "cufft": 1800,
+        "nvjpeg": 300
+      },
+      "graph_kernels": 99900,
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "audit_no_drops": true,
+        "audit_stable_context": true,
+        "audit_graphs": true,
+        "audit_elastic_count": true,
+        "audit_memsets": true,
+        "audit_elastic_contexts": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 0,
+      "name": "r0_shared_i8192_w4_audit"
+    },
+    {
+      "policy": "shared",
+      "iterations": 8192,
+      "window": 4,
+      "audit": false,
+      "frames": 300,
+      "response_ms": {
+        "p50": 5.571204999796464,
+        "p95": 9.168477950697707,
+        "p99": 9.89238170003773,
+        "max": 10.459656000421091
+      },
+      "output_response_ms": {
+        "p50": 5.318758833254833,
+        "p95": 6.7480991498996445,
+        "p99": 7.283776740005123,
+        "max": 7.853038000575907
+      },
+      "drain_ms": {
+        "p50": 0.004203499884170014,
+        "p95": 0.06098944991208557,
+        "p99": 0.1841785401848027,
+        "max": 0.4140249993724865
+      },
+      "transition_ms": {
+        "p50": 0.014441999610426137,
+        "p95": 0.088808449845601,
+        "p99": 0.21465873022862056,
+        "max": 0.4382600000099046
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.08892516643754789,
+        "p95": 0.13591138399533523,
+        "p99": 0.14920779019121255,
+        "max": 0.1634700001886813
+      },
+      "stable_fps": 59.93041044947685,
+      "horizon_s": 5.005805863000205,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2557.030845844346,
+      "elastic_all_done_s": 4.922535169,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 0,
+      "burst_completion_ms": {
+        "p50": 22.164182500000003,
+        "p95": 22.95363785,
+        "p99": 23.299870679999998,
+        "max": 23.555047
+      },
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 0,
+      "name": "r0_shared_i8192_w4"
+    },
+    {
+      "policy": "dynamic",
+      "iterations": 8192,
+      "window": 1,
+      "audit": true,
+      "frames": 300,
+      "response_ms": {
+        "p50": 7.816693833319732,
+        "p95": 8.934981516540574,
+        "p99": 9.532019369489717,
+        "max": 14.149227333291492
+      },
+      "output_response_ms": {
+        "p50": 7.474947500213602,
+        "p95": 8.620180616389916,
+        "p99": 9.298323992770747,
+        "max": 13.852425333425344
+      },
+      "drain_ms": {
+        "p50": 0.015067999811435584,
+        "p95": 0.20161254992672184,
+        "p99": 0.2730481996150047,
+        "max": 0.9330680004495662
+      },
+      "transition_ms": {
+        "p50": 0.026139000055991346,
+        "p95": 0.24276174990518487,
+        "p99": 0.32000555026570504,
+        "max": 0.9471250004935428
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.08815399951345171,
+        "p95": 0.11523798325470126,
+        "p99": 0.151967413312377,
+        "max": 0.17478633344580885
+      },
+      "stable_fps": 59.910312381184056,
+      "horizon_s": 5.007485156999792,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2556.173328263853,
+      "elastic_all_done_s": 4.946887016,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 5399,
+      "burst_completion_ms": {
+        "p50": 47.372870500000005,
+        "p95": 49.45037985,
+        "p99": 50.18376338,
+        "max": 50.559857
+      },
+      "borrowed_stable_kernel_overlaps": 0,
+      "kernel_source_coverage": {
+        "torch": 13109,
+        "tensorrt": 79800,
+        "native": 15300,
+        "cufft": 1800,
+        "nvjpeg": 300
+      },
+      "graph_kernels": 99900,
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "audit_no_drops": true,
+        "audit_stable_context": true,
+        "audit_graphs": true,
+        "audit_elastic_count": true,
+        "audit_memsets": true,
+        "audit_elastic_contexts": true,
+        "audit_borrow_no_stable_overlap": true,
+        "audit_borrow_count": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 0,
+      "name": "r0_dynamic_i8192_w1_audit"
+    },
+    {
+      "policy": "dynamic",
+      "iterations": 8192,
+      "window": 1,
+      "audit": false,
+      "frames": 300,
+      "response_ms": {
+        "p50": 7.229953167097847,
+        "p95": 8.101641416487837,
+        "p99": 8.64815925021503,
+        "max": 8.947187000558188
+      },
+      "output_response_ms": {
+        "p50": 6.801497166634363,
+        "p95": 7.725835366500179,
+        "p99": 8.350816024058076,
+        "max": 8.590350999838847
+      },
+      "drain_ms": {
+        "p50": 0.015755000276840292,
+        "p95": 0.25588454973330954,
+        "p99": 0.29670413980056753,
+        "max": 0.3597310005716281
+      },
+      "transition_ms": {
+        "p50": 0.026851000257011037,
+        "p95": 0.2629098497891391,
+        "p99": 0.320071230335088,
+        "max": 0.3975729996454902
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.08620566723038792,
+        "p95": 0.11383516725800291,
+        "p99": 0.12728754708405177,
+        "max": 0.13268866678117774
+      },
+      "stable_fps": 59.91849508811233,
+      "horizon_s": 5.006801315000303,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2556.522457092793,
+      "elastic_all_done_s": 4.944129566,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 5473,
+      "burst_completion_ms": {
+        "p50": 44.7349275,
+        "p95": 46.0078065,
+        "p99": 46.53078902,
+        "max": 46.543775
+      },
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 0,
+      "name": "r0_dynamic_i8192_w1"
+    },
+    {
+      "policy": "fixed",
+      "iterations": 2048,
+      "window": 1,
+      "audit": true,
+      "frames": 300,
+      "response_ms": {
+        "p50": 7.829158833828842,
+        "p95": 8.778208766761963,
+        "p99": 9.595394319940167,
+        "max": 12.878947333774704
+      },
+      "output_response_ms": {
+        "p50": 7.503991500470875,
+        "p95": 8.422319467172201,
+        "p99": 9.269251750429245,
+        "max": 12.504367334258859
+      },
+      "drain_ms": {
+        "p50": 0.004438999894773588,
+        "p95": 0.06252780053728202,
+        "p99": 0.10011509019932381,
+        "max": 0.15923199953249423
+      },
+      "transition_ms": {
+        "p50": 0.01565450020279968,
+        "p95": 0.07378509999398376,
+        "p99": 0.14915448054125569,
+        "max": 0.2816030000758474
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.08719266679690918,
+        "p95": 0.11692606653923578,
+        "p99": 0.13295975685650768,
+        "max": 0.1541023339086678
+      },
+      "stable_fps": 59.906660761788366,
+      "horizon_s": 5.007790389000547,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2556.017525836304,
+      "elastic_all_done_s": 4.927307062,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 0,
+      "burst_completion_ms": {
+        "p50": 27.2911325,
+        "p95": 28.50254285,
+        "p99": 28.69796322,
+        "max": 28.788722
+      },
+      "kernel_source_coverage": {
+        "torch": 13109,
+        "tensorrt": 79800,
+        "native": 15300,
+        "cufft": 1800,
+        "nvjpeg": 300
+      },
+      "graph_kernels": 99900,
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "audit_no_drops": true,
+        "audit_stable_context": true,
+        "audit_graphs": true,
+        "audit_elastic_count": true,
+        "audit_memsets": true,
+        "audit_elastic_contexts": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 0,
+      "name": "r0_fixed_i2048_w1_audit"
+    },
+    {
+      "policy": "fixed",
+      "iterations": 2048,
+      "window": 1,
+      "audit": false,
+      "frames": 300,
+      "response_ms": {
+        "p50": 7.131239666705369,
+        "p95": 7.753169916850311,
+        "p99": 8.6797858400314,
+        "max": 8.8628579997021
+      },
+      "output_response_ms": {
+        "p50": 6.709573000080127,
+        "p95": 7.4165422006444714,
+        "p99": 8.291979128698586,
+        "max": 8.511051999448682
+      },
+      "drain_ms": {
+        "p50": 0.0037320005503715947,
+        "p95": 0.031755849431647235,
+        "p99": 0.07186652943346412,
+        "max": 0.1072430004569469
+      },
+      "transition_ms": {
+        "p50": 0.013189500350563321,
+        "p95": 0.05586925135503416,
+        "p99": 0.08422451002843438,
+        "max": 0.11511800039443187
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.08697116663825,
+        "p95": 0.11594868292377214,
+        "p99": 0.12605687539689822,
+        "max": 0.14465533240581863
+      },
+      "stable_fps": 59.9164084615607,
+      "horizon_s": 5.006975680000323,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2556.4334276932564,
+      "elastic_all_done_s": 4.924894729,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 0,
+      "burst_completion_ms": {
+        "p50": 24.879619,
+        "p95": 26.01958405,
+        "p99": 26.59539908,
+        "max": 26.942813
+      },
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 0,
+      "name": "r0_fixed_i2048_w1"
+    },
+    {
+      "policy": "shared",
+      "iterations": 2048,
+      "window": 4,
+      "audit": true,
+      "frames": 300,
+      "response_ms": {
+        "p50": 6.1448273336282,
+        "p95": 7.5641808007276286,
+        "p99": 8.65368276738081,
+        "max": 11.1829243342072
+      },
+      "output_response_ms": {
+        "p50": 5.933521334554825,
+        "p95": 7.468132065878309,
+        "p99": 8.49324523835093,
+        "max": 10.962276333884802
+      },
+      "drain_ms": {
+        "p50": 0.0044185007936903276,
+        "p95": 0.13876525017622054,
+        "p99": 0.22133177009891367,
+        "max": 0.2884660007111961
+      },
+      "transition_ms": {
+        "p50": 0.014672998986497987,
+        "p95": 0.16353770024579722,
+        "p99": 0.23414754063196558,
+        "max": 0.29910600096627604
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.08782766690274002,
+        "p95": 0.11430061867940826,
+        "p99": 0.13348380729439638,
+        "max": 0.1994473332160851
+      },
+      "stable_fps": 59.92985137781555,
+      "horizon_s": 5.005852561000211,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2557.0069921201302,
+      "elastic_all_done_s": 4.910236467,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 0,
+      "burst_completion_ms": {
+        "p50": 10.534607999999999,
+        "p95": 11.800761549999999,
+        "p99": 12.23804445,
+        "max": 12.349125
+      },
+      "kernel_source_coverage": {
+        "torch": 13109,
+        "tensorrt": 79800,
+        "native": 15300,
+        "cufft": 1800,
+        "nvjpeg": 300
+      },
+      "graph_kernels": 99900,
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "audit_no_drops": true,
+        "audit_stable_context": true,
+        "audit_graphs": true,
+        "audit_elastic_count": true,
+        "audit_memsets": true,
+        "audit_elastic_contexts": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 0,
+      "name": "r0_shared_i2048_w4_audit"
+    },
+    {
+      "policy": "shared",
+      "iterations": 2048,
+      "window": 4,
+      "audit": false,
+      "frames": 300,
+      "response_ms": {
+        "p50": 5.477350333421782,
+        "p95": 7.108042300205852,
+        "p99": 7.882971277558681,
+        "max": 10.498039666344994
+      },
+      "output_response_ms": {
+        "p50": 5.241789001047437,
+        "p95": 6.960052051181265,
+        "p99": 7.499966908562782,
+        "max": 10.43797666716273
+      },
+      "drain_ms": {
+        "p50": 0.004994000846636482,
+        "p95": 0.12864115105912796,
+        "p99": 0.325184810790233,
+        "max": 0.41041800068342127
+      },
+      "transition_ms": {
+        "p50": 0.019041500308958348,
+        "p95": 0.16218855089391587,
+        "p99": 0.395177129103103,
+        "max": 0.5222889994911384
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.08747833453526255,
+        "p95": 0.11835390168926097,
+        "p99": 0.1306682306494622,
+        "max": 0.16777766722952947
+      },
+      "stable_fps": 59.933167625783376,
+      "horizon_s": 5.005575574999966,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2557.1484853667575,
+      "elastic_all_done_s": 4.909862532,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 0,
+      "burst_completion_ms": {
+        "p50": 9.449824499999998,
+        "p95": 10.21514785,
+        "p99": 10.623957289999998,
+        "max": 10.97268
+      },
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 0,
+      "name": "r0_shared_i2048_w4"
+    },
+    {
+      "policy": "headroom",
+      "iterations": 8192,
+      "window": 4,
+      "audit": false,
+      "frames": 300,
+      "response_ms": {
+        "p50": 6.1748188327328535,
+        "p95": 6.886585349457165,
+        "p99": 7.517774773241398,
+        "max": 8.620926000730833
+      },
+      "output_response_ms": {
+        "p50": 5.887869833713921,
+        "p95": 6.692588467467431,
+        "p99": 7.356861780572217,
+        "max": 8.310647999678622
+      },
+      "drain_ms": {
+        "p50": 0.004047499714943115,
+        "p95": 0.08382480027648859,
+        "p99": 0.2098027705324057,
+        "max": 0.22268199973041192
+      },
+      "transition_ms": {
+        "p50": 0.012864999916928355,
+        "p95": 0.10696304925659206,
+        "p99": 0.22095067039117566,
+        "max": 0.23034600053506438
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.08493950008414686,
+        "p95": 0.11361475044395776,
+        "p99": 0.13046668531387695,
+        "max": 0.13520100037567317
+      },
+      "stable_fps": 59.92640022899633,
+      "horizon_s": 5.0061408469991875,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2556.8597431038434,
+      "elastic_all_done_s": 4.966690463,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 0,
+      "burst_completion_ms": {
+        "p50": 65.7026535,
+        "p95": 67.6009847,
+        "p99": 69.92214725999999,
+        "max": 71.888432
+      },
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 1,
+      "name": "r1_headroom_i8192_w4"
+    },
+    {
+      "policy": "fixed",
+      "iterations": 2048,
+      "window": 1,
+      "audit": false,
+      "frames": 300,
+      "response_ms": {
+        "p50": 7.144181666262739,
+        "p95": 7.888154468309949,
+        "p99": 8.56787659904512,
+        "max": 9.319709999545012
+      },
+      "output_response_ms": {
+        "p50": 6.743798499883269,
+        "p95": 7.475860850536265,
+        "p99": 8.200174474368394,
+        "max": 8.875989999069134
+      },
+      "drain_ms": {
+        "p50": 0.004338000508141704,
+        "p95": 0.03736900052899734,
+        "p99": 0.06658249943939154,
+        "max": 0.11496300066937692
+      },
+      "transition_ms": {
+        "p50": 0.015999999959603883,
+        "p95": 0.061258050936885446,
+        "p99": 0.09467361980568954,
+        "max": 0.20420700093382038
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.08733816684980411,
+        "p95": 0.11681866672006437,
+        "p99": 0.12431445067704766,
+        "max": 0.13226500050222967
+      },
+      "stable_fps": 59.91446572527189,
+      "horizon_s": 5.007138032000512,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2556.3505376116004,
+      "elastic_all_done_s": 4.9253209,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 0,
+      "burst_completion_ms": {
+        "p50": 25.1936445,
+        "p95": 26.28171075,
+        "p99": 26.5901941,
+        "max": 26.662082
+      },
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 1,
+      "name": "r1_fixed_i2048_w1"
+    },
+    {
+      "policy": "control",
+      "iterations": 2048,
+      "window": 1,
+      "audit": false,
+      "frames": 300,
+      "response_ms": {
+        "p50": 7.062711998514715,
+        "p95": 7.7961036817214335,
+        "p99": 8.116340309479709,
+        "max": 8.557481000025291
+      },
+      "output_response_ms": {
+        "p50": 6.614311499106407,
+        "p95": 7.384854849624389,
+        "p99": 7.85374651371967,
+        "max": 8.154397999533103
+      },
+      "drain_ms": {
+        "p50": 0.00674800048727775,
+        "p95": 0.0093259998720896,
+        "p99": 0.014140500115900064,
+        "max": 0.020658999346778728
+      },
+      "transition_ms": {
+        "p50": 0.020989999939047266,
+        "p95": 0.02858804982679431,
+        "p99": 0.04130396831897084,
+        "max": 0.04534599975158926
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.0989761665550759,
+        "p95": 0.11470088311398285,
+        "p99": 0.13047549609837006,
+        "max": 0.17650100016908254
+      },
+      "stable_fps": 59.918081939724324,
+      "horizon_s": 5.006835837999461,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 1,
+      "name": "r1_control_i2048_w1"
+    },
+    {
+      "policy": "fixed",
+      "iterations": 8192,
+      "window": 4,
+      "audit": false,
+      "frames": 300,
+      "response_ms": {
+        "p50": 7.227995168250345,
+        "p95": 8.01697018341656,
+        "p99": 8.481639650563011,
+        "max": 9.060681000846671
+      },
+      "output_response_ms": {
+        "p50": 6.873753500258317,
+        "p95": 7.680436468126572,
+        "p99": 7.905032381513592,
+        "max": 8.82325100064918
+      },
+      "drain_ms": {
+        "p50": 0.004268000338925049,
+        "p95": 0.08229310096794512,
+        "p99": 0.21904088018345633,
+        "max": 0.325988001350197
+      },
+      "transition_ms": {
+        "p50": 0.014627999917138368,
+        "p95": 0.12092125061826672,
+        "p99": 0.2266049090576415,
+        "max": 0.3372090013726847
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.08629616695543518,
+        "p95": 0.11312083370285109,
+        "p99": 0.1448033180349739,
+        "max": 0.2671163329068804
+      },
+      "stable_fps": 59.91695143837858,
+      "horizon_s": 5.006930306000868,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2556.456594704153,
+      "elastic_all_done_s": 4.941044239,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 0,
+      "burst_completion_ms": {
+        "p50": 40.406991000000005,
+        "p95": 41.47745095,
+        "p99": 42.15945424,
+        "max": 42.45768
+      },
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 1,
+      "name": "r1_fixed_i8192_w4"
+    },
+    {
+      "policy": "shared",
+      "iterations": 2048,
+      "window": 1,
+      "audit": false,
+      "frames": 300,
+      "response_ms": {
+        "p50": 5.420246166977449,
+        "p95": 6.372578668015194,
+        "p99": 7.013359830216356,
+        "max": 7.8305463339347625
+      },
+      "output_response_ms": {
+        "p50": 5.1167725014238385,
+        "p95": 5.9992999515998235,
+        "p99": 6.745888051009383,
+        "max": 7.447360332662356
+      },
+      "drain_ms": {
+        "p50": 0.004488500053412281,
+        "p95": 0.049924098857445816,
+        "p99": 0.08588384003814988,
+        "max": 0.13902799946663436
+      },
+      "transition_ms": {
+        "p50": 0.014852999811409973,
+        "p95": 0.08144454841385596,
+        "p99": 0.13049042061538782,
+        "max": 0.15405599879159126
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.0883960010469309,
+        "p95": 0.11583860023165474,
+        "p99": 0.13355136676182155,
+        "max": 0.14294866741693113
+      },
+      "stable_fps": 59.93467642899955,
+      "horizon_s": 5.0054495639997185,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2557.2128609706474,
+      "elastic_all_done_s": 4.922775342,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 0,
+      "burst_completion_ms": {
+        "p50": 22.1937295,
+        "p95": 23.202942099999998,
+        "p99": 23.52520371,
+        "max": 23.538395
+      },
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 1,
+      "name": "r1_shared_i2048_w1"
+    },
+    {
+      "policy": "headroom",
+      "iterations": 2048,
+      "window": 4,
+      "audit": false,
+      "frames": 300,
+      "response_ms": {
+        "p50": 6.242813667086011,
+        "p95": 7.081871600348677,
+        "p99": 7.791621310589107,
+        "max": 8.18488500044623
+      },
+      "output_response_ms": {
+        "p50": 5.956565500127908,
+        "p95": 6.820240416800516,
+        "p99": 7.574784139833354,
+        "max": 7.813530000930768
+      },
+      "drain_ms": {
+        "p50": 0.00477900084661087,
+        "p95": 0.06902519953655431,
+        "p99": 0.20595154941474897,
+        "max": 0.22043799981474876
+      },
+      "transition_ms": {
+        "p50": 0.019392000467632897,
+        "p95": 0.10404734966869009,
+        "p99": 0.2214004006054892,
+        "max": 0.254743001278257
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.08810983308649156,
+        "p95": 0.1179632514322293,
+        "p99": 0.12442112883945809,
+        "max": 0.14596333312510978
+      },
+      "stable_fps": 59.922962619797985,
+      "horizon_s": 5.006428034999772,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2556.7130717780474,
+      "elastic_all_done_s": 4.918631205,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 0,
+      "burst_completion_ms": {
+        "p50": 21.691115,
+        "p95": 22.3920405,
+        "p99": 23.049850890000002,
+        "max": 23.243714
+      },
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 1,
+      "name": "r1_headroom_i2048_w4"
+    },
+    {
+      "policy": "headroom",
+      "iterations": 2048,
+      "window": 1,
+      "audit": false,
+      "frames": 300,
+      "response_ms": {
+        "p50": 6.138654999631399,
+        "p95": 6.781274415789085,
+        "p99": 7.1527263095958915,
+        "max": 7.470568667486077
+      },
+      "output_response_ms": {
+        "p50": 5.789614667264686,
+        "p95": 6.510956149213598,
+        "p99": 6.859772912866901,
+        "max": 7.11819066782482
+      },
+      "drain_ms": {
+        "p50": 0.004518499736150261,
+        "p95": 0.05795259894512132,
+        "p99": 0.12961203017766815,
+        "max": 0.15922599959594663
+      },
+      "transition_ms": {
+        "p50": 0.015218999578792136,
+        "p95": 0.07806020048519716,
+        "p99": 0.14444407061091621,
+        "max": 0.1668699987931177
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.08485666603519348,
+        "p95": 0.11521605010784698,
+        "p99": 0.13188135671953205,
+        "max": 0.15528466610703617
+      },
+      "stable_fps": 59.929594640307876,
+      "horizon_s": 5.005874005999431,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2556.996037986469,
+      "elastic_all_done_s": 4.927546435,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 0,
+      "burst_completion_ms": {
+        "p50": 27.233862000000002,
+        "p95": 28.3847543,
+        "p99": 28.86806923,
+        "max": 29.051414
+      },
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 1,
+      "name": "r1_headroom_i2048_w1"
+    },
+    {
+      "policy": "shared",
+      "iterations": 8192,
+      "window": 4,
+      "audit": false,
+      "frames": 300,
+      "response_ms": {
+        "p50": 5.608325000139303,
+        "p95": 9.235532950879133,
+        "p99": 9.7755710209276,
+        "max": 10.210141999777989
+      },
+      "output_response_ms": {
+        "p50": 5.326402666469221,
+        "p95": 6.718956999247894,
+        "p99": 7.243620210174412,
+        "max": 7.894223999755923
+      },
+      "drain_ms": {
+        "p50": 0.004528998942987528,
+        "p95": 0.09064909972948955,
+        "p99": 0.18775870938043207,
+        "max": 0.22935400011192542
+      },
+      "transition_ms": {
+        "p50": 0.017468500118411612,
+        "p95": 0.10786065067804888,
+        "p99": 0.1972109793132402,
+        "max": 0.23687799875915516
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.08814983357297024,
+        "p95": 0.11902685046152328,
+        "p99": 0.1313901993125909,
+        "max": 0.29990133407409303
+      },
+      "stable_fps": 59.929402995477325,
+      "horizon_s": 5.005890013999306,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2556.9878611403656,
+      "elastic_all_done_s": 4.921808192,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 0,
+      "burst_completion_ms": {
+        "p50": 22.237655,
+        "p95": 22.89985295,
+        "p99": 23.2249916,
+        "max": 23.438367
+      },
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 1,
+      "name": "r1_shared_i8192_w4"
+    },
+    {
+      "policy": "dynamic",
+      "iterations": 2048,
+      "window": 4,
+      "audit": false,
+      "frames": 300,
+      "response_ms": {
+        "p50": 7.260638332809322,
+        "p95": 8.032356365583837,
+        "p99": 9.010242620097415,
+        "max": 10.497374998521991
+      },
+      "output_response_ms": {
+        "p50": 6.888312832415977,
+        "p95": 7.771396049429314,
+        "p99": 8.539913188669743,
+        "max": 10.06859299923235
+      },
+      "drain_ms": {
+        "p50": 0.010915499842667487,
+        "p95": 0.25027754991242546,
+        "p99": 0.369019971021771,
+        "max": 0.41264200081059244
+      },
+      "transition_ms": {
+        "p50": 0.02374500036239624,
+        "p95": 0.28648525021708343,
+        "p99": 0.3808059406946992,
+        "max": 0.8584059996792348
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.09058433352038264,
+        "p95": 0.12162003258708866,
+        "p99": 0.13507278583347207,
+        "max": 0.1623653315618867
+      },
+      "stable_fps": 59.918192804584166,
+      "horizon_s": 5.006826573999206,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2556.5095596622577,
+      "elastic_all_done_s": 4.911383357,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 4929,
+      "burst_completion_ms": {
+        "p50": 11.7697365,
+        "p95": 12.4646715,
+        "p99": 12.803665439999998,
+        "max": 13.054077
+      },
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 1,
+      "name": "r1_dynamic_i2048_w4"
+    },
+    {
+      "policy": "headroom",
+      "iterations": 8192,
+      "window": 1,
+      "audit": false,
+      "frames": 300,
+      "response_ms": {
+        "p50": 6.123068499618967,
+        "p95": 7.030017999477423,
+        "p99": 7.373443750093429,
+        "max": 7.529827666076017
+      },
+      "output_response_ms": {
+        "p50": 5.812279167912493,
+        "p95": 6.771358433343266,
+        "p99": 7.036331000690552,
+        "max": 7.188149666035315
+      },
+      "drain_ms": {
+        "p50": 0.004714000169769861,
+        "p95": 0.044480499491328374,
+        "p99": 0.0703031911871218,
+        "max": 0.1353169991489267
+      },
+      "transition_ms": {
+        "p50": 0.016851498912728857,
+        "p95": 0.07765430082145032,
+        "p99": 0.1276462201349204,
+        "max": 0.15048499881231692
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.08714150044397684,
+        "p95": 0.11697371701302474,
+        "p99": 0.12562147792777978,
+        "max": 0.1335126671619946
+      },
+      "stable_fps": 59.925503777761215,
+      "horizon_s": 5.00621573600074,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2556.8214945178115,
+      "elastic_all_done_s": 4.974418032,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 0,
+      "burst_completion_ms": {
+        "p50": 74.7785135,
+        "p95": 76.56799840000001,
+        "p99": 77.04731481,
+        "max": 77.211774
+      },
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 1,
+      "name": "r1_headroom_i8192_w1"
+    },
+    {
+      "policy": "fixed",
+      "iterations": 8192,
+      "window": 1,
+      "audit": false,
+      "frames": 300,
+      "response_ms": {
+        "p50": 7.167409833527927,
+        "p95": 7.900089518079767,
+        "p99": 8.25473089080333,
+        "max": 9.072659000594285
+      },
+      "output_response_ms": {
+        "p50": 6.7662283345271135,
+        "p95": 7.567998284048373,
+        "p99": 7.817055457162496,
+        "max": 8.830701000988483
+      },
+      "drain_ms": {
+        "p50": 0.004141999852436129,
+        "p95": 0.04407024844113045,
+        "p99": 0.07574394068797119,
+        "max": 0.11744200128305238
+      },
+      "transition_ms": {
+        "p50": 0.014276999536377843,
+        "p95": 0.07387859950540589,
+        "p99": 0.11805438864030292,
+        "max": 0.1364880008623004
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.08682500083523337,
+        "p95": 0.11490746719573511,
+        "p99": 0.12570947435960986,
+        "max": 0.13523566667572595
+      },
+      "stable_fps": 59.92117371992545,
+      "horizon_s": 5.0065774980012065,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2556.636745383486,
+      "elastic_all_done_s": 4.945466246,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 0,
+      "burst_completion_ms": {
+        "p50": 44.250947999999994,
+        "p95": 45.005341900000005,
+        "p99": 45.61247218,
+        "max": 45.752964
+      },
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 1,
+      "name": "r1_fixed_i8192_w1"
+    },
+    {
+      "policy": "shared",
+      "iterations": 8192,
+      "window": 1,
+      "audit": false,
+      "frames": 300,
+      "response_ms": {
+        "p50": 5.555050666771422,
+        "p95": 6.405468718003249,
+        "p99": 6.772066820994951,
+        "max": 7.244106000143802
+      },
+      "output_response_ms": {
+        "p50": 5.1798145004795515,
+        "p95": 5.883271018228697,
+        "p99": 6.393166544894482,
+        "max": 6.748917001459631
+      },
+      "drain_ms": {
+        "p50": 0.004683999577537179,
+        "p95": 0.04021210033897667,
+        "p99": 0.08699362095285322,
+        "max": 0.12947600043844432
+      },
+      "transition_ms": {
+        "p50": 0.019101499674434308,
+        "p95": 0.07105364948074572,
+        "p99": 0.10742656000729765,
+        "max": 0.1467380006943131
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.08994816744234413,
+        "p95": 0.12433876618160869,
+        "p99": 0.1397366870151017,
+        "max": 0.18172300042351708
+      },
+      "stable_fps": 59.93895834463827,
+      "horizon_s": 5.0050919850000355,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2557.3955560378995,
+      "elastic_all_done_s": 4.927096083,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 0,
+      "burst_completion_ms": {
+        "p50": 26.88774,
+        "p95": 27.8800926,
+        "p99": 27.97113349,
+        "max": 27.991909
+      },
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 1,
+      "name": "r1_shared_i8192_w1"
+    },
+    {
+      "policy": "dynamic",
+      "iterations": 8192,
+      "window": 1,
+      "audit": false,
+      "frames": 300,
+      "response_ms": {
+        "p50": 7.105552834218543,
+        "p95": 7.899179650939914,
+        "p99": 8.427022530449902,
+        "max": 8.82266000007803
+      },
+      "output_response_ms": {
+        "p50": 6.7137076666767825,
+        "p95": 7.562819834583934,
+        "p99": 8.032468550227348,
+        "max": 8.365604000573512
+      },
+      "drain_ms": {
+        "p50": 0.014362999536388088,
+        "p95": 0.19083150045844377,
+        "p99": 0.25356382031532115,
+        "max": 0.29906599957030267
+      },
+      "transition_ms": {
+        "p50": 0.02467700051056454,
+        "p95": 0.20233155009918846,
+        "p99": 0.2790550013742177,
+        "max": 0.3730160005943617
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.08519583298038924,
+        "p95": 0.11093983212049353,
+        "p99": 0.1250618001540715,
+        "max": 0.14663866750197485
+      },
+      "stable_fps": 59.91792646153879,
+      "horizon_s": 5.006848830000308,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2556.4981956923216,
+      "elastic_all_done_s": 4.945159863,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 5482,
+      "burst_completion_ms": {
+        "p50": 44.2894305,
+        "p95": 45.68173605,
+        "p99": 46.49860359,
+        "max": 46.807063
+      },
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 1,
+      "name": "r1_dynamic_i8192_w1"
+    },
+    {
+      "policy": "dynamic",
+      "iterations": 8192,
+      "window": 4,
+      "audit": false,
+      "frames": 300,
+      "response_ms": {
+        "p50": 7.300553499590023,
+        "p95": 8.1898132839342,
+        "p99": 8.933349559556516,
+        "max": 9.515773999737576
+      },
+      "output_response_ms": {
+        "p50": 6.935806332876382,
+        "p95": 7.823349917725864,
+        "p99": 8.677071520469326,
+        "max": 9.11814100072661
+      },
+      "drain_ms": {
+        "p50": 0.012167999557277653,
+        "p95": 0.6289635990469833,
+        "p99": 0.6750959098826569,
+        "max": 0.8862489994498901
+      },
+      "transition_ms": {
+        "p50": 0.02436599970678799,
+        "p95": 0.6406294510270527,
+        "p99": 0.6877512211758583,
+        "max": 0.8927119997679256
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.08606516712461598,
+        "p95": 0.11568793370315689,
+        "p99": 0.1301383531972533,
+        "max": 0.219850333451177
+      },
+      "stable_fps": 59.91521718760488,
+      "horizon_s": 5.007075232000716,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2556.382600004475,
+      "elastic_all_done_s": 4.927808451,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 5054,
+      "burst_completion_ms": {
+        "p50": 27.126986000000002,
+        "p95": 28.10765705,
+        "p99": 28.5981955,
+        "max": 28.708617
+      },
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 1,
+      "name": "r1_dynamic_i8192_w4"
+    },
+    {
+      "policy": "fixed",
+      "iterations": 2048,
+      "window": 4,
+      "audit": false,
+      "frames": 300,
+      "response_ms": {
+        "p50": 7.292394332580443,
+        "p95": 8.252329066181119,
+        "p99": 9.166019029798917,
+        "max": 9.594094999556546
+      },
+      "output_response_ms": {
+        "p50": 6.895988999531255,
+        "p95": 7.927119515261438,
+        "p99": 8.681067509551212,
+        "max": 9.189918999254587
+      },
+      "drain_ms": {
+        "p50": 0.0054109987104311585,
+        "p95": 0.10885115098062671,
+        "p99": 0.2023503702548623,
+        "max": 0.2845800008799415
+      },
+      "transition_ms": {
+        "p50": 0.02040899926214479,
+        "p95": 0.12375880087347473,
+        "p99": 0.22338549923006176,
+        "max": 0.3289829983259551
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.09160199897451093,
+        "p95": 0.12305533155085868,
+        "p99": 0.1370964858870138,
+        "max": 0.18313566579308826
+      },
+      "stable_fps": 59.915911960037555,
+      "horizon_s": 5.007017170999461,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2556.4122436282687,
+      "elastic_all_done_s": 4.912992308,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 0,
+      "burst_completion_ms": {
+        "p50": 12.680186500000001,
+        "p95": 13.351757749999999,
+        "p99": 14.100064289999999,
+        "max": 14.272877
+      },
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 1,
+      "name": "r1_fixed_i2048_w4"
+    },
+    {
+      "policy": "dynamic",
+      "iterations": 2048,
+      "window": 1,
+      "audit": false,
+      "frames": 300,
+      "response_ms": {
+        "p50": 7.105774833689793,
+        "p95": 7.805771634048142,
+        "p99": 8.516379161028453,
+        "max": 8.773550667683594
+      },
+      "output_response_ms": {
+        "p50": 6.729918000019097,
+        "p95": 7.376271350949539,
+        "p99": 8.163360360686056,
+        "max": 8.512856666129665
+      },
+      "drain_ms": {
+        "p50": 0.00966849984251894,
+        "p95": 0.13481749992934056,
+        "p99": 0.16945408946412496,
+        "max": 0.3289239994046511
+      },
+      "transition_ms": {
+        "p50": 0.02395550018263748,
+        "p95": 0.1521707987194532,
+        "p99": 0.1831926913291681,
+        "max": 0.3350949991727248
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.0867756671141251,
+        "p95": 0.11465406751085543,
+        "p99": 0.13030372265347975,
+        "max": 0.20165600108157378
+      },
+      "stable_fps": 59.90841867135416,
+      "horizon_s": 5.007643443999768,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2556.0925299777778,
+      "elastic_all_done_s": 4.927293493,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 5439,
+      "burst_completion_ms": {
+        "p50": 26.962254,
+        "p95": 27.64143485,
+        "p99": 28.06696078,
+        "max": 28.282599
+      },
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 1,
+      "name": "r1_dynamic_i2048_w1"
+    },
+    {
+      "policy": "shared",
+      "iterations": 2048,
+      "window": 4,
+      "audit": false,
+      "frames": 300,
+      "response_ms": {
+        "p50": 5.566016499869875,
+        "p95": 6.8396005020986195,
+        "p99": 7.723002657476169,
+        "max": 8.217967668315396
+      },
+      "output_response_ms": {
+        "p50": 5.279253834487463,
+        "p95": 6.453463350590028,
+        "p99": 7.385758838136096,
+        "max": 8.028422667848645
+      },
+      "drain_ms": {
+        "p50": 0.004452999746717978,
+        "p95": 0.11343434898662964,
+        "p99": 0.22647478026556198,
+        "max": 0.238902999626589
+      },
+      "transition_ms": {
+        "p50": 0.015503999748034403,
+        "p95": 0.12472685139073296,
+        "p99": 0.23349908055024568,
+        "max": 0.2529799985495629
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.0879058343343786,
+        "p95": 0.12104096776965889,
+        "p99": 0.1321445782195951,
+        "max": 0.1533953345642658
+      },
+      "stable_fps": 59.9381664807937,
+      "horizon_s": 5.005158109001059,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2557.3617698471976,
+      "elastic_all_done_s": 4.909549901,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 0,
+      "burst_completion_ms": {
+        "p50": 9.6650605,
+        "p95": 10.6225803,
+        "p99": 10.868297309999999,
+        "max": 11.007007
+      },
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 1,
+      "name": "r1_shared_i2048_w4"
+    },
+    {
+      "policy": "headroom",
+      "iterations": 8192,
+      "window": 1,
+      "audit": false,
+      "frames": 300,
+      "response_ms": {
+        "p50": 6.153237834951142,
+        "p95": 6.795213900113595,
+        "p99": 7.1206346501458,
+        "max": 7.888956000897451
+      },
+      "output_response_ms": {
+        "p50": 5.856408167346672,
+        "p95": 6.430395250299625,
+        "p99": 6.941178715587739,
+        "max": 7.8117890006979
+      },
+      "drain_ms": {
+        "p50": 0.003977500455221161,
+        "p95": 0.044575699939741774,
+        "p99": 0.07321353976294614,
+        "max": 0.13138400026946329
+      },
+      "transition_ms": {
+        "p50": 0.01536899981147144,
+        "p95": 0.07385589979094222,
+        "p99": 0.11189528053364474,
+        "max": 0.1840229997469578
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.0860465006553568,
+        "p95": 0.11519893359945856,
+        "p99": 0.12832363167035507,
+        "max": 0.13884333384339698
+      },
+      "stable_fps": 59.928989385371914,
+      "horizon_s": 5.005924563000008,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2556.970213775868,
+      "elastic_all_done_s": 4.975428315,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 0,
+      "burst_completion_ms": {
+        "p50": 75.017138,
+        "p95": 76.3963565,
+        "p99": 76.81967193,
+        "max": 76.912352
+      },
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 2,
+      "name": "r2_headroom_i8192_w1"
+    },
+    {
+      "policy": "shared",
+      "iterations": 2048,
+      "window": 4,
+      "audit": false,
+      "frames": 300,
+      "response_ms": {
+        "p50": 5.546623999180156,
+        "p95": 6.40783145063324,
+        "p99": 7.140047569391754,
+        "max": 8.766790999288787
+      },
+      "output_response_ms": {
+        "p50": 5.265409832645673,
+        "p95": 6.1154922500463735,
+        "p99": 6.7452395897453234,
+        "max": 8.741261999603012
+      },
+      "drain_ms": {
+        "p50": 0.004268000338925049,
+        "p95": 0.1576421009303886,
+        "p99": 0.34587278021717777,
+        "max": 0.5182119984965539
+      },
+      "transition_ms": {
+        "p50": 0.013695999768970069,
+        "p95": 0.16960154989646992,
+        "p99": 0.37960651994580963,
+        "max": 0.53555399972538
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.08707150027476018,
+        "p95": 0.11886969814440818,
+        "p99": 0.1308566697662172,
+        "max": 0.14419599938264582
+      },
+      "stable_fps": 59.9383957723537,
+      "horizon_s": 5.005138962000274,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2557.371552953758,
+      "elastic_all_done_s": 4.91033741,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 0,
+      "burst_completion_ms": {
+        "p50": 9.75509,
+        "p95": 10.827405999999998,
+        "p99": 11.24266535,
+        "max": 11.391961
+      },
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 2,
+      "name": "r2_shared_i2048_w4"
+    },
+    {
+      "policy": "control",
+      "iterations": 2048,
+      "window": 1,
+      "audit": false,
+      "frames": 300,
+      "response_ms": {
+        "p50": 7.093234333297005,
+        "p95": 7.859988017662545,
+        "p99": 8.259983330826795,
+        "max": 8.69394000073953
+      },
+      "output_response_ms": {
+        "p50": 6.626383333241392,
+        "p95": 7.423755383297248,
+        "p99": 7.901877970252824,
+        "max": 8.176909999747295
+      },
+      "drain_ms": {
+        "p50": 0.0069929992605466396,
+        "p95": 0.009605051218386508,
+        "p99": 0.013056819298071785,
+        "max": 0.014556999303749762
+      },
+      "transition_ms": {
+        "p50": 0.02160099938919302,
+        "p95": 0.028604050658032072,
+        "p99": 0.04176603093583252,
+        "max": 0.04624800021701958
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.10101950101670809,
+        "p95": 0.12152713306932128,
+        "p99": 0.12938367004608153,
+        "max": 0.13505033348337747
+      },
+      "stable_fps": 59.917925683674035,
+      "horizon_s": 5.006848895000076,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 2,
+      "name": "r2_control_i2048_w1"
+    },
+    {
+      "policy": "headroom",
+      "iterations": 8192,
+      "window": 4,
+      "audit": false,
+      "frames": 300,
+      "response_ms": {
+        "p50": 6.150514832370391,
+        "p95": 7.046305282710819,
+        "p99": 7.612693429200589,
+        "max": 7.991528998900321
+      },
+      "output_response_ms": {
+        "p50": 5.868453832590603,
+        "p95": 6.776296833322704,
+        "p99": 7.3817292696912755,
+        "max": 7.681197999772849
+      },
+      "drain_ms": {
+        "p50": 0.0038075013435445726,
+        "p95": 0.09985890092139033,
+        "p99": 0.2246891703543951,
+        "max": 0.44798400085710455
+      },
+      "transition_ms": {
+        "p50": 0.0121375005619484,
+        "p95": 0.12763484992319718,
+        "p99": 0.24994179864734148,
+        "max": 0.559820000489708
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.08518066533724777,
+        "p95": 0.11314805014990272,
+        "p99": 0.14341434716698132,
+        "max": 0.21087033201183658
+      },
+      "stable_fps": 59.929926885066756,
+      "horizon_s": 5.005846253998243,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2557.0102137628483,
+      "elastic_all_done_s": 4.966127895,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 0,
+      "burst_completion_ms": {
+        "p50": 65.781251,
+        "p95": 67.46236755,
+        "p99": 71.49663292999999,
+        "max": 71.516499
+      },
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 2,
+      "name": "r2_headroom_i8192_w4"
+    },
+    {
+      "policy": "shared",
+      "iterations": 8192,
+      "window": 4,
+      "audit": false,
+      "frames": 300,
+      "response_ms": {
+        "p50": 5.607357334156404,
+        "p95": 9.145546400941384,
+        "p99": 9.959061581012064,
+        "max": 18.353488001594087
+      },
+      "output_response_ms": {
+        "p50": 5.361035667192482,
+        "p95": 6.943242550278228,
+        "p99": 7.620611350830585,
+        "max": 18.08761400207004
+      },
+      "drain_ms": {
+        "p50": 0.004543500836007297,
+        "p95": 0.12259064869795117,
+        "p99": 0.17804355826228854,
+        "max": 0.23405799947795458
+      },
+      "transition_ms": {
+        "p50": 0.014878000911267009,
+        "p95": 0.14380570073626586,
+        "p99": 0.22020588958184806,
+        "max": 0.24770900017756503
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.08654716748424107,
+        "p95": 0.1121094014706614,
+        "p99": 0.1279645481918123,
+        "max": 1.7053763331205118
+      },
+      "stable_fps": 59.93511916665558,
+      "horizon_s": 5.005412589000116,
+      "miss_count": 1,
+      "miss_fraction": 0.0033333333333333335,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2557.2317511106385,
+      "elastic_all_done_s": 4.922101447,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 0,
+      "burst_completion_ms": {
+        "p50": 21.981603999999997,
+        "p95": 23.1333508,
+        "p99": 23.914429379999998,
+        "max": 24.312867
+      },
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 2,
+      "name": "r2_shared_i8192_w4"
+    },
+    {
+      "policy": "fixed",
+      "iterations": 2048,
+      "window": 4,
+      "audit": false,
+      "frames": 300,
+      "response_ms": {
+        "p50": 7.145423833208042,
+        "p95": 8.210207449337759,
+        "p99": 8.955033639558678,
+        "max": 9.897205000015674
+      },
+      "output_response_ms": {
+        "p50": 6.779493332942366,
+        "p95": 7.876820166347898,
+        "p99": 8.729482680428191,
+        "max": 9.841219000009005
+      },
+      "drain_ms": {
+        "p50": 0.004462999640963972,
+        "p95": 0.06440870047299552,
+        "p99": 0.14518874058921907,
+        "max": 0.3985389994340949
+      },
+      "transition_ms": {
+        "p50": 0.01490299928263994,
+        "p95": 0.10172499851250905,
+        "p99": 0.20604380015356552,
+        "max": 0.41572199916117825
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.09004749790619826,
+        "p95": 0.12299783211346949,
+        "p99": 0.14319542580778943,
+        "max": 0.16748433336033486
+      },
+      "stable_fps": 59.919413565810615,
+      "horizon_s": 5.00672456799839,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2556.561645474586,
+      "elastic_all_done_s": 4.912730546,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 0,
+      "burst_completion_ms": {
+        "p50": 12.9511485,
+        "p95": 13.963656499999999,
+        "p99": 14.736905409999999,
+        "max": 14.939859
+      },
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 2,
+      "name": "r2_fixed_i2048_w4"
+    },
+    {
+      "policy": "fixed",
+      "iterations": 8192,
+      "window": 4,
+      "audit": false,
+      "frames": 300,
+      "response_ms": {
+        "p50": 7.241833666739694,
+        "p95": 8.119502017234481,
+        "p99": 8.600842121686583,
+        "max": 9.398812000654289
+      },
+      "output_response_ms": {
+        "p50": 6.861719834887481,
+        "p95": 7.617565517011826,
+        "p99": 8.199839571061602,
+        "max": 8.809435999864945
+      },
+      "drain_ms": {
+        "p50": 0.004092499693797436,
+        "p95": 0.10614470074870044,
+        "p99": 0.20986500869184962,
+        "max": 0.3668999997898936
+      },
+      "transition_ms": {
+        "p50": 0.01998799962166231,
+        "p95": 0.1393422006003676,
+        "p99": 0.2217474097597004,
+        "max": 0.37593700108118355
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.08532349966117181,
+        "p95": 0.12818899958801921,
+        "p99": 0.13736098646404568,
+        "max": 0.1499793343100464
+      },
+      "stable_fps": 59.91937304289326,
+      "horizon_s": 5.006727953999871,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2556.5599164967794,
+      "elastic_all_done_s": 4.939113142,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 0,
+      "burst_completion_ms": {
+        "p50": 40.1348695,
+        "p95": 41.10251055,
+        "p99": 41.86950141,
+        "max": 42.298541
+      },
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 2,
+      "name": "r2_fixed_i8192_w4"
+    },
+    {
+      "policy": "fixed",
+      "iterations": 2048,
+      "window": 1,
+      "audit": false,
+      "frames": 300,
+      "response_ms": {
+        "p50": 7.162860832977458,
+        "p95": 7.886792082990723,
+        "p99": 8.648319779003941,
+        "max": 9.460109999054112
+      },
+      "output_response_ms": {
+        "p50": 6.778782499168301,
+        "p95": 7.5304819659322675,
+        "p99": 8.243236249763866,
+        "max": 8.88803599991661
+      },
+      "drain_ms": {
+        "p50": 0.004318500941735692,
+        "p95": 0.018984798498422648,
+        "p99": 0.06538577910760031,
+        "max": 0.1266390008822782
+      },
+      "transition_ms": {
+        "p50": 0.014633000319008715,
+        "p95": 0.04027510103696842,
+        "p99": 0.07709665036600165,
+        "max": 0.13426400073512923
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.08763850019022357,
+        "p95": 0.11432216524553951,
+        "p99": 0.12833480326662536,
+        "max": 0.16025099830585532
+      },
+      "stable_fps": 59.90940528490786,
+      "horizon_s": 5.007560975998786,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2556.134625489402,
+      "elastic_all_done_s": 4.925550829,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 0,
+      "burst_completion_ms": {
+        "p50": 25.2173065,
+        "p95": 26.34478925,
+        "p99": 26.90293178,
+        "max": 26.926882
+      },
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 2,
+      "name": "r2_fixed_i2048_w1"
+    },
+    {
+      "policy": "dynamic",
+      "iterations": 8192,
+      "window": 1,
+      "audit": false,
+      "frames": 300,
+      "response_ms": {
+        "p50": 7.114850166544784,
+        "p95": 7.8923638821834174,
+        "p99": 8.341244338698743,
+        "max": 8.87055366729328
+      },
+      "output_response_ms": {
+        "p50": 6.731319832397276,
+        "p95": 7.530524349385814,
+        "p99": 7.967173860361071,
+        "max": 8.444631666861824
+      },
+      "drain_ms": {
+        "p50": 0.01639099991734838,
+        "p95": 0.218803050756833,
+        "p99": 0.29246174020954635,
+        "max": 0.43183200068597216
+      },
+      "transition_ms": {
+        "p50": 0.027386500732973218,
+        "p95": 0.2395545992840198,
+        "p99": 0.2997219389726523,
+        "max": 0.4951720002281945
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.08634999903733842,
+        "p95": 0.11511139919093694,
+        "p99": 0.12812709372155948,
+        "max": 0.15248833369696513
+      },
+      "stable_fps": 59.9207295247008,
+      "horizon_s": 5.006614611998884,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2556.617793053901,
+      "elastic_all_done_s": 4.9443953,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 5482,
+      "burst_completion_ms": {
+        "p50": 44.936782,
+        "p95": 46.03113565,
+        "p99": 46.48730887,
+        "max": 46.561415
+      },
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 2,
+      "name": "r2_dynamic_i8192_w1"
+    },
+    {
+      "policy": "shared",
+      "iterations": 8192,
+      "window": 1,
+      "audit": false,
+      "frames": 300,
+      "response_ms": {
+        "p50": 5.5969978329812875,
+        "p95": 6.735234349889652,
+        "p99": 6.98454206021779,
+        "max": 7.1111029992607655
+      },
+      "output_response_ms": {
+        "p50": 5.265946500003338,
+        "p95": 6.163540499892406,
+        "p99": 6.482866521655524,
+        "max": 6.564233999597491
+      },
+      "drain_ms": {
+        "p50": 0.003978000677307136,
+        "p95": 0.037409650485642536,
+        "p99": 0.08459694168777783,
+        "max": 0.11321499914629385
+      },
+      "transition_ms": {
+        "p50": 0.0152790007632575,
+        "p95": 0.07401809971270272,
+        "p99": 0.12142764018790322,
+        "max": 0.14635600018664263
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.08791599975666031,
+        "p95": 0.12652436698772362,
+        "p99": 0.13636790750751965,
+        "max": 0.15867933325353079
+      },
+      "stable_fps": 59.93275261075912,
+      "horizon_s": 5.005610236999928,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2557.1307780590555,
+      "elastic_all_done_s": 4.927576272,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 0,
+      "burst_completion_ms": {
+        "p50": 27.420623,
+        "p95": 28.4942956,
+        "p99": 28.62280708,
+        "max": 28.671076
+      },
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 2,
+      "name": "r2_shared_i8192_w1"
+    },
+    {
+      "policy": "headroom",
+      "iterations": 2048,
+      "window": 4,
+      "audit": false,
+      "frames": 300,
+      "response_ms": {
+        "p50": 6.1845779991926975,
+        "p95": 6.947302300250158,
+        "p99": 7.76974766065905,
+        "max": 8.572712999011856
+      },
+      "output_response_ms": {
+        "p50": 5.884908832740621,
+        "p95": 6.703426549847791,
+        "p99": 7.466612650805472,
+        "max": 8.446202999039087
+      },
+      "drain_ms": {
+        "p50": 0.004843999704462476,
+        "p95": 0.0895465997928114,
+        "p99": 0.21332393942429914,
+        "max": 0.22592800087295473
+      },
+      "transition_ms": {
+        "p50": 0.015444499695149716,
+        "p95": 0.11815865000244231,
+        "p99": 0.22091834005550479,
+        "max": 0.3185780005878769
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.08728066586627392,
+        "p95": 0.11919066637346987,
+        "p99": 0.1409090673405444,
+        "max": 0.16443933418486267
+      },
+      "stable_fps": 59.93414916362691,
+      "horizon_s": 5.005493598999237,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2557.1903643147484,
+      "elastic_all_done_s": 4.921154938,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 0,
+      "burst_completion_ms": {
+        "p50": 21.630819000000002,
+        "p95": 22.61438595,
+        "p99": 23.552525539999998,
+        "max": 24.133692
+      },
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 2,
+      "name": "r2_headroom_i2048_w4"
+    },
+    {
+      "policy": "dynamic",
+      "iterations": 2048,
+      "window": 1,
+      "audit": false,
+      "frames": 300,
+      "response_ms": {
+        "p50": 7.064840998282307,
+        "p95": 7.794259000547754,
+        "p99": 8.440910338958929,
+        "max": 8.80121299996972
+      },
+      "output_response_ms": {
+        "p50": 6.6425371669538436,
+        "p95": 7.486270867411804,
+        "p99": 8.041886809805874,
+        "max": 8.434387998931925
+      },
+      "drain_ms": {
+        "p50": 0.01153699940914521,
+        "p95": 0.15785994892212335,
+        "p99": 0.20154368052317295,
+        "max": 0.5030680003983434
+      },
+      "transition_ms": {
+        "p50": 0.02411599962215405,
+        "p95": 0.17709815010675814,
+        "p99": 0.22086964963818898,
+        "max": 0.5110630008857697
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.08644733316032216,
+        "p95": 0.11863573317896227,
+        "p99": 0.13003647321966125,
+        "max": 0.1513740007794695
+      },
+      "stable_fps": 59.91866654583087,
+      "horizon_s": 5.0067869880003855,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2556.529772622117,
+      "elastic_all_done_s": 4.926756931,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 5402,
+      "burst_completion_ms": {
+        "p50": 26.8938295,
+        "p95": 27.88821365,
+        "p99": 28.28365741,
+        "max": 28.326724
+      },
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 2,
+      "name": "r2_dynamic_i2048_w1"
+    },
+    {
+      "policy": "shared",
+      "iterations": 2048,
+      "window": 1,
+      "audit": false,
+      "frames": 300,
+      "response_ms": {
+        "p50": 5.392209834099049,
+        "p95": 6.015625417694537,
+        "p99": 6.908532860179548,
+        "max": 8.216582000386552
+      },
+      "output_response_ms": {
+        "p50": 5.070146668003872,
+        "p95": 5.720661533177918,
+        "p99": 6.531284790416975,
+        "max": 8.008697999684955
+      },
+      "drain_ms": {
+        "p50": 0.00421799995820038,
+        "p95": 0.049620499976299505,
+        "p99": 0.09398121155754752,
+        "max": 0.13799199950881302
+      },
+      "transition_ms": {
+        "p50": 0.014668000403617043,
+        "p95": 0.0648115006697481,
+        "p99": 0.11825487987152865,
+        "max": 0.14770000052521937
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.08861700007400941,
+        "p95": 0.11641478504316183,
+        "p99": 0.13076290812023217,
+        "max": 0.13543300156015903
+      },
+      "stable_fps": 59.9306455361283,
+      "horizon_s": 5.005786227000499,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2557.040876208141,
+      "elastic_all_done_s": 4.92291678,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 0,
+      "burst_completion_ms": {
+        "p50": 22.1606445,
+        "p95": 22.86159605,
+        "p99": 23.184805009999998,
+        "max": 23.199922
+      },
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 2,
+      "name": "r2_shared_i2048_w1"
+    },
+    {
+      "policy": "dynamic",
+      "iterations": 2048,
+      "window": 4,
+      "audit": false,
+      "frames": 300,
+      "response_ms": {
+        "p50": 7.301904000087234,
+        "p95": 8.142687900181045,
+        "p99": 8.858753969525422,
+        "max": 23.38819299984607
+      },
+      "output_response_ms": {
+        "p50": 6.9313631665863795,
+        "p95": 7.7642944833314695,
+        "p99": 8.624347108816437,
+        "max": 22.76398000140034
+      },
+      "drain_ms": {
+        "p50": 0.010484999620530289,
+        "p95": 0.2386265504355834,
+        "p99": 0.3419552805462444,
+        "max": 0.4472780001378851
+      },
+      "transition_ms": {
+        "p50": 0.021085000298626255,
+        "p95": 0.2578076511781547,
+        "p99": 0.34776078970025986,
+        "max": 0.7723140006419271
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.08819866616249783,
+        "p95": 0.12058166757924482,
+        "p99": 0.13411711921435185,
+        "max": 6.735462331562303
+      },
+      "stable_fps": 59.912520542490505,
+      "horizon_s": 5.007300598999791,
+      "miss_count": 1,
+      "miss_fraction": 0.0033333333333333335,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2556.2675431462617,
+      "elastic_all_done_s": 4.912389219,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 4921,
+      "burst_completion_ms": {
+        "p50": 12.204913,
+        "p95": 13.270841149999999,
+        "p99": 13.71643471,
+        "max": 13.806164
+      },
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 2,
+      "name": "r2_dynamic_i2048_w4"
+    },
+    {
+      "policy": "dynamic",
+      "iterations": 8192,
+      "window": 4,
+      "audit": false,
+      "frames": 300,
+      "response_ms": {
+        "p50": 7.3349833337488235,
+        "p95": 8.151725433617687,
+        "p99": 8.990289889497944,
+        "max": 10.21061000028567
+      },
+      "output_response_ms": {
+        "p50": 6.937506166650564,
+        "p95": 7.895334049226222,
+        "p99": 8.732196169821691,
+        "max": 9.792607999770553
+      },
+      "drain_ms": {
+        "p50": 0.014031000318937004,
+        "p95": 0.6348095011162513,
+        "p99": 0.7198372008861043,
+        "max": 0.7806239991623443
+      },
+      "transition_ms": {
+        "p50": 0.024776499230938498,
+        "p95": 0.6525977513774706,
+        "p99": 0.7273297903884668,
+        "max": 0.7951309999043588
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.08594733299105428,
+        "p95": 0.11936496557609644,
+        "p99": 0.13277732645292414,
+        "max": 0.14632933380198665
+      },
+      "stable_fps": 59.915952633818925,
+      "horizon_s": 5.007013771999482,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2556.413979042941,
+      "elastic_all_done_s": 4.927277141,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 5082,
+      "burst_completion_ms": {
+        "p50": 27.018313,
+        "p95": 28.466789650000003,
+        "p99": 28.900511469999998,
+        "max": 28.988171
+      },
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 2,
+      "name": "r2_dynamic_i8192_w4"
+    },
+    {
+      "policy": "headroom",
+      "iterations": 2048,
+      "window": 1,
+      "audit": false,
+      "frames": 300,
+      "response_ms": {
+        "p50": 6.095684832871484,
+        "p95": 6.833540965362772,
+        "p99": 7.1889332288446885,
+        "max": 7.34010799897078
+      },
+      "output_response_ms": {
+        "p50": 5.760784833000798,
+        "p95": 6.566430648763344,
+        "p99": 7.007751819728583,
+        "max": 7.044848332952824
+      },
+      "drain_ms": {
+        "p50": 0.0042634992496459745,
+        "p95": 0.04918580007142741,
+        "p99": 0.07568202117909086,
+        "max": 0.14838600145594683
+      },
+      "transition_ms": {
+        "p50": 0.014321999515232164,
+        "p95": 0.06374280119416655,
+        "p99": 0.08353571076440841,
+        "max": 0.1629230009712046
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.0880806655914057,
+        "p95": 0.11358981537341607,
+        "p99": 0.12495602974013308,
+        "max": 0.13404833225649782
+      },
+      "stable_fps": 59.92881686296067,
+      "horizon_s": 5.005938973999946,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2556.9628528196554,
+      "elastic_all_done_s": 4.927305343,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 0,
+      "burst_completion_ms": {
+        "p50": 27.449237,
+        "p95": 28.57664705,
+        "p99": 29.11016225,
+        "max": 29.218342
+      },
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 2,
+      "name": "r2_headroom_i2048_w1"
+    },
+    {
+      "policy": "fixed",
+      "iterations": 8192,
+      "window": 1,
+      "audit": false,
+      "frames": 300,
+      "response_ms": {
+        "p50": 7.1626073331572115,
+        "p95": 8.002978115200676,
+        "p99": 8.520529559737042,
+        "max": 9.10046366516326
+      },
+      "output_response_ms": {
+        "p50": 6.784144833545724,
+        "p95": 7.64883371639371,
+        "p99": 8.173962276159727,
+        "max": 8.705028665644932
+      },
+      "drain_ms": {
+        "p50": 0.004207999154459685,
+        "p95": 0.04102884995518254,
+        "p99": 0.06641217036303713,
+        "max": 0.1411280009051552
+      },
+      "transition_ms": {
+        "p50": 0.01943199913512217,
+        "p95": 0.06894400012242843,
+        "p99": 0.0953805397512039,
+        "max": 0.15607600107614417
+      },
+      "dispatch_lateness_ms": {
+        "p50": 0.08808316579234088,
+        "p95": 0.12003516567347106,
+        "p99": 0.13983055003336628,
+        "max": 0.17553566613059957
+      },
+      "stable_fps": 59.91492430651431,
+      "horizon_s": 5.007099708000169,
+      "miss_count": 0,
+      "miss_fraction": 0.0,
+      "output_sha256": {
+        "eval/MOT17-04-SDP.txt": "1f9a7c47f42de003e7f4ca5d89dbee4f6e0b2cbde417550bc253c0dc31746324"
+      },
+      "service_pass": true,
+      "elastic_completed": 12800,
+      "elastic_total": 12800,
+      "elastic_units_s": 2556.3701037446103,
+      "elastic_all_done_s": 4.944762243,
+      "elastic_drain_after_stable_s": 0,
+      "borrowed_units": 0,
+      "burst_completion_ms": {
+        "p50": 44.1417295,
+        "p95": 45.13494355,
+        "p99": 45.24008624,
+        "max": 45.30713
+      },
+      "checks": {
+        "host_clock_pair": true,
+        "no_error": true,
+        "complete_frames": true,
+        "owned_frames": true,
+        "owned_streams": true,
+        "owned_finalize": true,
+        "thread_hooks": true,
+        "stable_size": true,
+        "stable_probes": true,
+        "elastic_probe": true,
+        "envelope": true,
+        "timestamps": true,
+        "arrivals": true,
+        "elastic_count": true,
+        "elastic_bursts": true,
+        "elastic_lanes": true,
+        "reference_matches_cpu": true,
+        "elastic_output": true,
+        "elastic_times": true,
+        "elastic_releases": true,
+        "elastic_sm_membership": true,
+        "window_0": true,
+        "window_1": true,
+        "output_present": true,
+        "output_hashes": true
+      },
+      "failed_checks": [],
+      "valid": true,
+      "rep": 2,
+      "name": "r2_fixed_i8192_w1"
+    }
+  ],
+  "comparisons": [
+    {
+      "rep": 0,
+      "iterations": 2048,
+      "window": 4,
+      "comparison": "fixed",
+      "dynamic_service_pass": true,
+      "other_service_pass": true,
+      "elastic_throughput_ratio": 0.9999636911112935,
+      "burst_p95_completion_ratio": 0.9240904824330762,
+      "all_done_ratio": 0.9997683079148683,
+      "stable_p99_delta_ms": 0.030659250551252626
+    },
+    {
+      "rep": 0,
+      "iterations": 2048,
+      "window": 4,
+      "comparison": "shared",
+      "dynamic_service_pass": true,
+      "other_service_pass": true,
+      "elastic_throughput_ratio": 0.9997188438805618,
+      "burst_p95_completion_ratio": 1.2269249974683432,
+      "all_done_ratio": 1.0003797403670365,
+      "stable_p99_delta_ms": 0.9723298324388434
+    },
+    {
+      "rep": 0,
+      "iterations": 2048,
+      "window": 4,
+      "comparison": "headroom",
+      "dynamic_service_pass": true,
+      "other_service_pass": true,
+      "elastic_throughput_ratio": 0.9997191694258928,
+      "burst_p95_completion_ratio": 0.5537160432109791,
+      "all_done_ratio": 0.997903215471584,
+      "stable_p99_delta_ms": 1.1881714208357135
+    },
+    {
+      "rep": 0,
+      "iterations": 8192,
+      "window": 4,
+      "comparison": "fixed",
+      "dynamic_service_pass": true,
+      "other_service_pass": true,
+      "elastic_throughput_ratio": 0.9999005876583837,
+      "burst_p95_completion_ratio": 0.6832047790917022,
+      "all_done_ratio": 0.9974011972065936,
+      "stable_p99_delta_ms": 0.7781102739681955
+    },
+    {
+      "rep": 0,
+      "iterations": 8192,
+      "window": 4,
+      "comparison": "shared",
+      "dynamic_service_pass": true,
+      "other_service_pass": true,
+      "elastic_throughput_ratio": 0.9997325733477308,
+      "burst_p95_completion_ratio": 1.211829420319969,
+      "all_done_ratio": 1.0008956417473187,
+      "stable_p99_delta_ms": -0.6378305901125696
+    },
+    {
+      "rep": 0,
+      "iterations": 8192,
+      "window": 4,
+      "comparison": "headroom",
+      "dynamic_service_pass": true,
+      "other_service_pass": true,
+      "elastic_throughput_ratio": 0.9998103162545005,
+      "burst_p95_completion_ratio": 0.3904888547062276,
+      "all_done_ratio": 0.9917750789445381,
+      "stable_p99_delta_ms": 1.102557789909044
+    },
+    {
+      "rep": 0,
+      "iterations": 2048,
+      "window": 1,
+      "comparison": "fixed",
+      "dynamic_service_pass": true,
+      "other_service_pass": true,
+      "elastic_throughput_ratio": 1.00007608045346,
+      "burst_p95_completion_ratio": 1.065070296540732,
+      "all_done_ratio": 1.000309977996283,
+      "stable_p99_delta_ms": -0.19702835073076486
+    },
+    {
+      "rep": 0,
+      "iterations": 2048,
+      "window": 1,
+      "comparison": "shared",
+      "dynamic_service_pass": true,
+      "other_service_pass": true,
+      "elastic_throughput_ratio": 0.9997552480169688,
+      "burst_p95_completion_ratio": 1.2084585266883063,
+      "all_done_ratio": 1.0008314778207559,
+      "stable_p99_delta_ms": 1.7330823198699328
+    },
+    {
+      "rep": 0,
+      "iterations": 2048,
+      "window": 1,
+      "comparison": "headroom",
+      "dynamic_service_pass": true,
+      "other_service_pass": true,
+      "elastic_throughput_ratio": 0.9998639804039277,
+      "burst_p95_completion_ratio": 0.964890263249369,
+      "all_done_ratio": 0.999689803466148,
+      "stable_p99_delta_ms": 0.9901958162390647
+    },
+    {
+      "rep": 0,
+      "iterations": 8192,
+      "window": 1,
+      "comparison": "fixed",
+      "dynamic_service_pass": true,
+      "other_service_pass": true,
+      "elastic_throughput_ratio": 1.0000781588833172,
+      "burst_p95_completion_ratio": 1.03490347672593,
+      "all_done_ratio": 0.9999742292926039,
+      "stable_p99_delta_ms": 0.21773916369056856
+    },
+    {
+      "rep": 0,
+      "iterations": 8192,
+      "window": 1,
+      "comparison": "shared",
+      "dynamic_service_pass": true,
+      "other_service_pass": true,
+      "elastic_throughput_ratio": 0.9997429202960381,
+      "burst_p95_completion_ratio": 1.6123110693806781,
+      "all_done_ratio": 1.0034375027133227,
+      "stable_p99_delta_ms": -5.716796593851539
+    },
+    {
+      "rep": 0,
+      "iterations": 8192,
+      "window": 1,
+      "comparison": "headroom",
+      "dynamic_service_pass": true,
+      "other_service_pass": true,
+      "elastic_throughput_ratio": 0.9998769987139865,
+      "burst_p95_completion_ratio": 0.5972473096099464,
+      "all_done_ratio": 0.9939643390783006,
+      "stable_p99_delta_ms": 1.0130167443730924
+    },
+    {
+      "rep": 1,
+      "iterations": 2048,
+      "window": 4,
+      "comparison": "fixed",
+      "dynamic_service_pass": true,
+      "other_service_pass": true,
+      "elastic_throughput_ratio": 1.000038067426031,
+      "burst_p95_completion_ratio": 0.9335603396489126,
+      "all_done_ratio": 0.9996725109873712,
+      "stable_p99_delta_ms": -0.15577640970150242
+    },
+    {
+      "rep": 1,
+      "iterations": 2048,
+      "window": 4,
+      "comparison": "shared",
+      "dynamic_service_pass": true,
+      "other_service_pass": true,
+      "elastic_throughput_ratio": 0.9996667619751778,
+      "burst_p95_completion_ratio": 1.1734127818266529,
+      "all_done_ratio": 1.0003734468611118,
+      "stable_p99_delta_ms": 1.2872399626212463
+    },
+    {
+      "rep": 1,
+      "iterations": 2048,
+      "window": 4,
+      "comparison": "headroom",
+      "dynamic_service_pass": true,
+      "other_service_pass": true,
+      "elastic_throughput_ratio": 0.9999204008779725,
+      "burst_p95_completion_ratio": 0.556656348491331,
+      "all_done_ratio": 0.9985264502057744,
+      "stable_p99_delta_ms": 1.2186213095083085
+    },
+    {
+      "rep": 1,
+      "iterations": 8192,
+      "window": 1,
+      "comparison": "fixed",
+      "dynamic_service_pass": true,
+      "other_service_pass": true,
+      "elastic_throughput_ratio": 0.9999458078307705,
+      "burst_p95_completion_ratio": 1.0150291970118328,
+      "all_done_ratio": 0.9999380477017212,
+      "stable_p99_delta_ms": 0.17229163964657168
+    },
+    {
+      "rep": 1,
+      "iterations": 8192,
+      "window": 1,
+      "comparison": "shared",
+      "dynamic_service_pass": true,
+      "other_service_pass": true,
+      "elastic_throughput_ratio": 0.9996491116348978,
+      "burst_p95_completion_ratio": 1.6385073287023442,
+      "all_done_ratio": 1.0036662122466669,
+      "stable_p99_delta_ms": 1.654955709454951
+    },
+    {
+      "rep": 1,
+      "iterations": 8192,
+      "window": 1,
+      "comparison": "headroom",
+      "dynamic_service_pass": true,
+      "other_service_pass": true,
+      "elastic_throughput_ratio": 0.9998735544009689,
+      "burst_p95_completion_ratio": 0.5966165631149631,
+      "all_done_ratio": 0.994118272969464,
+      "stable_p99_delta_ms": 1.0535787803564727
+    },
+    {
+      "rep": 1,
+      "iterations": 8192,
+      "window": 4,
+      "comparison": "fixed",
+      "dynamic_service_pass": true,
+      "other_service_pass": true,
+      "elastic_throughput_ratio": 0.9999710557574766,
+      "burst_p95_completion_ratio": 0.6776611485571536,
+      "all_done_ratio": 0.9973212569327898,
+      "stable_p99_delta_ms": 0.4517099089935055
+    },
+    {
+      "rep": 1,
+      "iterations": 8192,
+      "window": 4,
+      "comparison": "shared",
+      "dynamic_service_pass": true,
+      "other_service_pass": true,
+      "elastic_throughput_ratio": 0.9997632913534362,
+      "burst_p95_completion_ratio": 1.2274164865325041,
+      "all_done_ratio": 1.0012191167891817,
+      "stable_p99_delta_ms": -0.8422214613710839
+    },
+    {
+      "rep": 1,
+      "iterations": 8192,
+      "window": 4,
+      "comparison": "headroom",
+      "dynamic_service_pass": true,
+      "other_service_pass": true,
+      "elastic_throughput_ratio": 0.9998133870656554,
+      "burst_p95_completion_ratio": 0.4157876867435631,
+      "all_done_ratio": 0.9921714444881039,
+      "stable_p99_delta_ms": 1.4155747863151182
+    },
+    {
+      "rep": 1,
+      "iterations": 2048,
+      "window": 1,
+      "comparison": "fixed",
+      "dynamic_service_pass": true,
+      "other_service_pass": true,
+      "elastic_throughput_ratio": 0.9998990718878235,
+      "burst_p95_completion_ratio": 1.0517365141460588,
+      "all_done_ratio": 1.0004005004019128,
+      "stable_p99_delta_ms": -0.05149743801666595
+    },
+    {
+      "rep": 1,
+      "iterations": 2048,
+      "window": 1,
+      "comparison": "shared",
+      "dynamic_service_pass": true,
+      "other_service_pass": true,
+      "elastic_throughput_ratio": 0.9995618937281411,
+      "burst_p95_completion_ratio": 1.1912900842863372,
+      "all_done_ratio": 1.0009178056454153,
+      "stable_p99_delta_ms": 1.5030193308120978
+    },
+    {
+      "rep": 1,
+      "iterations": 2048,
+      "window": 1,
+      "comparison": "headroom",
+      "dynamic_service_pass": true,
+      "other_service_pass": true,
+      "elastic_throughput_ratio": 0.9996466525582093,
+      "burst_p95_completion_ratio": 0.9738127220639707,
+      "all_done_ratio": 0.9999486677592313,
+      "stable_p99_delta_ms": 1.3636528514325619
+    },
+    {
+      "rep": 2,
+      "iterations": 8192,
+      "window": 1,
+      "comparison": "fixed",
+      "dynamic_service_pass": true,
+      "other_service_pass": true,
+      "elastic_throughput_ratio": 1.0000968910209551,
+      "burst_p95_completion_ratio": 1.0198558373958573,
+      "all_done_ratio": 0.9999257915786509,
+      "stable_p99_delta_ms": -0.17928522103829891
+    },
+    {
+      "rep": 2,
+      "iterations": 8192,
+      "window": 1,
+      "comparison": "shared",
+      "dynamic_service_pass": true,
+      "other_service_pass": true,
+      "elastic_throughput_ratio": 0.9997993903911541,
+      "burst_p95_completion_ratio": 1.6154509062508637,
+      "all_done_ratio": 1.003413245594101,
+      "stable_p99_delta_ms": 1.3567022784809533
+    },
+    {
+      "rep": 2,
+      "iterations": 8192,
+      "window": 1,
+      "comparison": "headroom",
+      "dynamic_service_pass": true,
+      "other_service_pass": true,
+      "elastic_throughput_ratio": 0.9998621725352652,
+      "burst_p95_completion_ratio": 0.6025305100774014,
+      "all_done_ratio": 0.9937627450271083,
+      "stable_p99_delta_ms": 1.2206096885529432
+    },
+    {
+      "rep": 2,
+      "iterations": 2048,
+      "window": 1,
+      "comparison": "fixed",
+      "dynamic_service_pass": true,
+      "other_service_pass": true,
+      "elastic_throughput_ratio": 1.000154587762622,
+      "burst_p95_completion_ratio": 1.0585855664038002,
+      "all_done_ratio": 1.000244866420401,
+      "stable_p99_delta_ms": -0.20740944004501216
+    },
+    {
+      "rep": 2,
+      "iterations": 2048,
+      "window": 1,
+      "comparison": "shared",
+      "dynamic_service_pass": true,
+      "other_service_pass": true,
+      "elastic_throughput_ratio": 0.9998001191178524,
+      "burst_p95_completion_ratio": 1.2198716830183867,
+      "all_done_ratio": 1.0007800560463669,
+      "stable_p99_delta_ms": 1.532377478779381
+    },
+    {
+      "rep": 2,
+      "iterations": 2048,
+      "window": 1,
+      "comparison": "headroom",
+      "dynamic_service_pass": true,
+      "other_service_pass": true,
+      "elastic_throughput_ratio": 0.9998306271062715,
+      "burst_p95_completion_ratio": 0.9759092311006445,
+      "all_done_ratio": 0.999888699408333,
+      "stable_p99_delta_ms": 1.2519771101142405
+    },
+    {
+      "rep": 2,
+      "iterations": 2048,
+      "window": 4,
+      "comparison": "fixed",
+      "dynamic_service_pass": true,
+      "other_service_pass": true,
+      "elastic_throughput_ratio": 0.9998849617693183,
+      "burst_p95_completion_ratio": 0.9503843889313662,
+      "all_done_ratio": 0.9999305219374838,
+      "stable_p99_delta_ms": -0.09627967003325644
+    },
+    {
+      "rep": 2,
+      "iterations": 2048,
+      "window": 4,
+      "comparison": "shared",
+      "dynamic_service_pass": true,
+      "other_service_pass": true,
+      "elastic_throughput_ratio": 0.9995683029295367,
+      "burst_p95_completion_ratio": 1.2256713334662062,
+      "all_done_ratio": 1.0004178549921683,
+      "stable_p99_delta_ms": 1.7187064001336676
+    },
+    {
+      "rep": 2,
+      "iterations": 2048,
+      "window": 4,
+      "comparison": "headroom",
+      "dynamic_service_pass": true,
+      "other_service_pass": true,
+      "elastic_throughput_ratio": 0.9996391269178218,
+      "burst_p95_completion_ratio": 0.586831814904972,
+      "all_done_ratio": 0.9982187679293912,
+      "stable_p99_delta_ms": 1.089006308866372
+    },
+    {
+      "rep": 2,
+      "iterations": 8192,
+      "window": 4,
+      "comparison": "fixed",
+      "dynamic_service_pass": true,
+      "other_service_pass": true,
+      "elastic_throughput_ratio": 0.9999429164742446,
+      "burst_p95_completion_ratio": 0.6925803136859727,
+      "all_done_ratio": 0.9976036181679355,
+      "stable_p99_delta_ms": 0.3894477678113617
+    },
+    {
+      "rep": 2,
+      "iterations": 8192,
+      "window": 4,
+      "comparison": "shared",
+      "dynamic_service_pass": true,
+      "other_service_pass": true,
+      "elastic_throughput_ratio": 0.9996802119841729,
+      "burst_p95_completion_ratio": 1.2305519375947909,
+      "all_done_ratio": 1.0010515211959223,
+      "stable_p99_delta_ms": -0.9687716915141191
+    },
+    {
+      "rep": 2,
+      "iterations": 8192,
+      "window": 4,
+      "comparison": "headroom",
+      "dynamic_service_pass": true,
+      "other_service_pass": true,
+      "elastic_throughput_ratio": 0.9997668234891287,
+      "burst_p95_completion_ratio": 0.4219654702883312,
+      "all_done_ratio": 0.9921768519012337,
+      "stable_p99_delta_ms": 1.3775964602973554
+    }
+  ]
+}

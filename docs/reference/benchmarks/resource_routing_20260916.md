@@ -222,3 +222,10 @@ then vary floor/borrowable capacity counts. Keep hardware SM-active attribution
 as a distinct measurement obligation; do not relabel block coverage. A real
 pipeline trial additionally needs independent jobs or validated graph segments
 and per-destination captures before interpreting routing as production service.
+
+The [full-pipeline mixed-workload continuation](resource_mixed_20260916.md)
+tests the real serial Saccade service with fixed reservation, matched sharing,
+static headroom and temporal borrowing. It keeps pipeline graphs in one context
+and routes elastic kernels into idle stable capacity; it does not claim live
+migration of the stateful pipeline or preservation of this synthetic study's
+permanently unborrowed floor.

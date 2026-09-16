@@ -169,6 +169,7 @@ Manifest: `docs/ownership/doc_migration_manifest.yaml`
 - `docs/reference/benchmarks/reid_handover_ablation_20260808.md`
 - `docs/reference/benchmarks/resource_admission_20260915.md`
 - `docs/reference/benchmarks/resource_elastic_20260915.md`
+- `docs/reference/benchmarks/resource_mixed_20260916.md`
 - `docs/reference/benchmarks/resource_partition_20260915.md`
 - `docs/reference/benchmarks/resource_routing_20260916.md`
 - `docs/reference/benchmarks/resource_sensitivity_20260915.md`
@@ -382,6 +383,6 @@ Excluded from the active index and default search view.
 
 ## Inventory summary
 
-- documents: 332
-- active: 277
+- documents: 333
+- active: 278
 - grayed out: 55
