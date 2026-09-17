@@ -1,0 +1,330 @@
+{
+  "verified": true,
+  "scope": "frozen DB contract, production completion periods and raw host/native borrow intervals; CUPTI placement/overlap replay is in report.py",
+  "totals": {
+    "timing_runs": 39,
+    "audited_runs": 13,
+    "stable_frames": 11700,
+    "stable_periods": 11661,
+    "deadline_misses": 220,
+    "elastic_units": 460800,
+    "borrowed_units": 50390,
+    "borrowed_completed_before_cutoff": 492
+  },
+  "max_host_clock_bracket_us": 8.135000825859606,
+  "per_run": [
+    {
+      "name": "r0_dynamic_i2048_w4_audit",
+      "service_pass": false,
+      "borrowed_units": 3939,
+      "borrowed_completed_before_cutoff": 54
+    },
+    {
+      "name": "r0_dynamic_i2048_w4",
+      "service_pass": false,
+      "borrowed_units": 4184,
+      "borrowed_completed_before_cutoff": 20
+    },
+    {
+      "name": "r0_control_i2048_w1_audit",
+      "service_pass": false,
+      "borrowed_units": 0,
+      "borrowed_completed_before_cutoff": 0
+    },
+    {
+      "name": "r0_control_i2048_w1",
+      "service_pass": false,
+      "borrowed_units": 0,
+      "borrowed_completed_before_cutoff": 0
+    },
+    {
+      "name": "r0_shared_i8192_w1_audit",
+      "service_pass": false,
+      "borrowed_units": 0,
+      "borrowed_completed_before_cutoff": 0
+    },
+    {
+      "name": "r0_shared_i8192_w1",
+      "service_pass": true,
+      "borrowed_units": 0,
+      "borrowed_completed_before_cutoff": 0
+    },
+    {
+      "name": "r0_dynamic_i2048_w1_audit",
+      "service_pass": false,
+      "borrowed_units": 4016,
+      "borrowed_completed_before_cutoff": 39
+    },
+    {
+      "name": "r0_dynamic_i2048_w1",
+      "service_pass": false,
+      "borrowed_units": 4244,
+      "borrowed_completed_before_cutoff": 22
+    },
+    {
+      "name": "r0_shared_i2048_w4_audit",
+      "service_pass": false,
+      "borrowed_units": 0,
+      "borrowed_completed_before_cutoff": 0
+    },
+    {
+      "name": "r0_shared_i2048_w4",
+      "service_pass": true,
+      "borrowed_units": 0,
+      "borrowed_completed_before_cutoff": 0
+    },
+    {
+      "name": "r0_fixed_i8192_w1_audit",
+      "service_pass": false,
+      "borrowed_units": 0,
+      "borrowed_completed_before_cutoff": 0
+    },
+    {
+      "name": "r0_fixed_i8192_w1",
+      "service_pass": true,
+      "borrowed_units": 0,
+      "borrowed_completed_before_cutoff": 0
+    },
+    {
+      "name": "r0_shared_i2048_w1_audit",
+      "service_pass": true,
+      "borrowed_units": 0,
+      "borrowed_completed_before_cutoff": 0
+    },
+    {
+      "name": "r0_shared_i2048_w1",
+      "service_pass": true,
+      "borrowed_units": 0,
+      "borrowed_completed_before_cutoff": 0
+    },
+    {
+      "name": "r0_dynamic_i8192_w4_audit",
+      "service_pass": false,
+      "borrowed_units": 4028,
+      "borrowed_completed_before_cutoff": 62
+    },
+    {
+      "name": "r0_dynamic_i8192_w4",
+      "service_pass": true,
+      "borrowed_units": 4288,
+      "borrowed_completed_before_cutoff": 64
+    },
+    {
+      "name": "r0_fixed_i2048_w1_audit",
+      "service_pass": false,
+      "borrowed_units": 0,
+      "borrowed_completed_before_cutoff": 0
+    },
+    {
+      "name": "r0_fixed_i2048_w1",
+      "service_pass": false,
+      "borrowed_units": 0,
+      "borrowed_completed_before_cutoff": 0
+    },
+    {
+      "name": "r0_fixed_i2048_w4_audit",
+      "service_pass": false,
+      "borrowed_units": 0,
+      "borrowed_completed_before_cutoff": 0
+    },
+    {
+      "name": "r0_fixed_i2048_w4",
+      "service_pass": true,
+      "borrowed_units": 0,
+      "borrowed_completed_before_cutoff": 0
+    },
+    {
+      "name": "r0_shared_i8192_w4_audit",
+      "service_pass": false,
+      "borrowed_units": 0,
+      "borrowed_completed_before_cutoff": 0
+    },
+    {
+      "name": "r0_shared_i8192_w4",
+      "service_pass": false,
+      "borrowed_units": 0,
+      "borrowed_completed_before_cutoff": 0
+    },
+    {
+      "name": "r0_dynamic_i8192_w1_audit",
+      "service_pass": false,
+      "borrowed_units": 3959,
+      "borrowed_completed_before_cutoff": 49
+    },
+    {
+      "name": "r0_dynamic_i8192_w1",
+      "service_pass": true,
+      "borrowed_units": 4275,
+      "borrowed_completed_before_cutoff": 35
+    },
+    {
+      "name": "r0_fixed_i8192_w4_audit",
+      "service_pass": false,
+      "borrowed_units": 0,
+      "borrowed_completed_before_cutoff": 0
+    },
+    {
+      "name": "r0_fixed_i8192_w4",
+      "service_pass": false,
+      "borrowed_units": 0,
+      "borrowed_completed_before_cutoff": 0
+    },
+    {
+      "name": "r1_fixed_i2048_w4",
+      "service_pass": false,
+      "borrowed_units": 0,
+      "borrowed_completed_before_cutoff": 0
+    },
+    {
+      "name": "r1_control_i2048_w1",
+      "service_pass": false,
+      "borrowed_units": 0,
+      "borrowed_completed_before_cutoff": 0
+    },
+    {
+      "name": "r1_dynamic_i8192_w4",
+      "service_pass": true,
+      "borrowed_units": 4291,
+      "borrowed_completed_before_cutoff": 67
+    },
+    {
+      "name": "r1_shared_i2048_w1",
+      "service_pass": true,
+      "borrowed_units": 0,
+      "borrowed_completed_before_cutoff": 0
+    },
+    {
+      "name": "r1_shared_i8192_w4",
+      "service_pass": false,
+      "borrowed_units": 0,
+      "borrowed_completed_before_cutoff": 0
+    },
+    {
+      "name": "r1_dynamic_i2048_w1",
+      "service_pass": false,
+      "borrowed_units": 4114,
+      "borrowed_completed_before_cutoff": 21
+    },
+    {
+      "name": "r1_dynamic_i8192_w1",
+      "service_pass": false,
+      "borrowed_units": 4260,
+      "borrowed_completed_before_cutoff": 42
+    },
+    {
+      "name": "r1_fixed_i2048_w1",
+      "service_pass": false,
+      "borrowed_units": 0,
+      "borrowed_completed_before_cutoff": 0
+    },
+    {
+      "name": "r1_shared_i2048_w4",
+      "service_pass": true,
+      "borrowed_units": 0,
+      "borrowed_completed_before_cutoff": 0
+    },
+    {
+      "name": "r1_fixed_i8192_w1",
+      "service_pass": true,
+      "borrowed_units": 0,
+      "borrowed_completed_before_cutoff": 0
+    },
+    {
+      "name": "r1_shared_i8192_w1",
+      "service_pass": true,
+      "borrowed_units": 0,
+      "borrowed_completed_before_cutoff": 0
+    },
+    {
+      "name": "r1_fixed_i8192_w4",
+      "service_pass": false,
+      "borrowed_units": 0,
+      "borrowed_completed_before_cutoff": 0
+    },
+    {
+      "name": "r1_dynamic_i2048_w4",
+      "service_pass": false,
+      "borrowed_units": 4058,
+      "borrowed_completed_before_cutoff": 23
+    },
+    {
+      "name": "r2_fixed_i8192_w4",
+      "service_pass": true,
+      "borrowed_units": 0,
+      "borrowed_completed_before_cutoff": 0
+    },
+    {
+      "name": "r2_shared_i2048_w1",
+      "service_pass": true,
+      "borrowed_units": 0,
+      "borrowed_completed_before_cutoff": 0
+    },
+    {
+      "name": "r2_fixed_i8192_w1",
+      "service_pass": false,
+      "borrowed_units": 0,
+      "borrowed_completed_before_cutoff": 0
+    },
+    {
+      "name": "r2_dynamic_i8192_w4",
+      "service_pass": false,
+      "borrowed_units": 4188,
+      "borrowed_completed_before_cutoff": 93
+    },
+    {
+      "name": "r2_shared_i8192_w4",
+      "service_pass": false,
+      "borrowed_units": 0,
+      "borrowed_completed_before_cutoff": 0
+    },
+    {
+      "name": "r2_control_i2048_w1",
+      "service_pass": true,
+      "borrowed_units": 0,
+      "borrowed_completed_before_cutoff": 0
+    },
+    {
+      "name": "r2_shared_i2048_w4",
+      "service_pass": true,
+      "borrowed_units": 0,
+      "borrowed_completed_before_cutoff": 0
+    },
+    {
+      "name": "r2_fixed_i2048_w4",
+      "service_pass": false,
+      "borrowed_units": 0,
+      "borrowed_completed_before_cutoff": 0
+    },
+    {
+      "name": "r2_dynamic_i8192_w1",
+      "service_pass": false,
+      "borrowed_units": 4185,
+      "borrowed_completed_before_cutoff": 45
+    },
+    {
+      "name": "r2_dynamic_i2048_w1",
+      "service_pass": true,
+      "borrowed_units": 4245,
+      "borrowed_completed_before_cutoff": 25
+    },
+    {
+      "name": "r2_dynamic_i2048_w4",
+      "service_pass": true,
+      "borrowed_units": 4058,
+      "borrowed_completed_before_cutoff": 35
+    },
+    {
+      "name": "r2_fixed_i2048_w1",
+      "service_pass": false,
+      "borrowed_units": 0,
+      "borrowed_completed_before_cutoff": 0
+    },
+    {
+      "name": "r2_shared_i8192_w1",
+      "service_pass": true,
+      "borrowed_units": 0,
+      "borrowed_completed_before_cutoff": 0
+    }
+  ],
+  "audit_source_sha256": "d39cb42d7a822b2f0b3fdd34ef693ae90619cbbfb6d365f50598947a071bbc49"
+}

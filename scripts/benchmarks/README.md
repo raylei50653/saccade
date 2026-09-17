@@ -26,6 +26,9 @@
 - [`resource_mixed/`](resource_mixed/README.md)
   - #419: scheduled real-pipeline service, finite elastic bursts, matched sharing and measured temporal borrowing.
 
+- [`resource_mixed_db/`](resource_mixed_db/README.md)
+  - #419: double-buffer pipeline in one verified Green Context, matched elastic bursts, and borrowing only at verified DB boundaries.
+
 ## 原則
 
 - 這些腳本不是主 workflow 入口。

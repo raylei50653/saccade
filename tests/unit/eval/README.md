@@ -47,6 +47,7 @@
 | `test_resource_admission.py` | eval | contract | active | Reject invalid arrival evidence, queue bounds, timing and block routing. |
 | `test_resource_elastic.py` | eval | contract | active | Synthetic elastic summaries reject missing samples, SM escapes and altered metrics. |
 | `test_resource_mixed.py` | eval | contract | active | Fail closed on corrupt full-pipeline mixed-workload evidence. |
+| `test_resource_mixed_db.py` | eval | contract | active | Fail closed on corrupt double-buffer mixed-workload evidence. |
 | `test_resource_partition.py` | eval | contract | active | The true-partition reporter must fail closed on any routing escape. |
 | `test_resource_routing.py` | eval | contract | active | Reject invalid routing ownership, work and timing evidence. |
 | `test_resource_sensitivity.py` | eval | contract | active | The resource report must fail closed on routing and residency failures. |
