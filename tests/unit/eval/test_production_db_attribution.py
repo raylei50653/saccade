@@ -250,7 +250,7 @@ def test_derive_does_not_treat_detector_container_as_removable() -> None:
     tertiary = payload["bottlenecks"][2]
     assert tertiary["rank"] == "Tertiary"
     assert "association" in tertiary["name"]
-    assert tertiary["exposed_cost_ms"] == 0.171
+    assert tertiary["exposed_cost_ms"] == 0.147
 
 
 def test_committed_json_matches_corrected_derivation() -> None:

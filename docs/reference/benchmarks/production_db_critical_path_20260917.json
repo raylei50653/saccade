@@ -2448,14 +2448,14 @@
       "rank": "Tertiary",
       "name": "fixed-capacity tracker association (occlusion + sinkhorn + auction)",
       "class_label": "A. fixed-capacity computation",
-      "observed_cost_ms": 0.3155,
-      "exposed_cost_ms": 0.171,
+      "observed_cost_ms": 0.2815,
+      "exposed_cost_ms": 0.147,
       "trigger_frequency": "every frame, Tcap=2048 Dcap=1024 launches",
       "workload_scaling": "auction/sinkhorn/occlusion nearly occupancy-insensitive",
       "overlap": "partially exposed",
       "removal_applicable": true,
-      "removal_upper_bound_ms": 0.171,
-      "removal_upper_bound_fps": 369.8
+      "removal_upper_bound_ms": 0.147,
+      "removal_upper_bound_fps": 366.6
     }
   ],
   "machine": {
@@ -2553,14 +2553,14 @@
       "rank": "Tertiary",
       "name": "fixed-capacity tracker association (occlusion + sinkhorn + auction)",
       "class_label": "A. fixed-capacity computation",
-      "observed_cost_ms": 0.3155,
-      "exposed_cost_ms": 0.171,
+      "observed_cost_ms": 0.2815,
+      "exposed_cost_ms": 0.147,
       "trigger_frequency": "every frame, Tcap=2048 Dcap=1024 launches",
       "workload_scaling": "auction/sinkhorn/occlusion nearly occupancy-insensitive",
       "overlap": "partially exposed",
       "removal_applicable": true,
-      "removal_upper_bound_ms": 0.171,
-      "removal_upper_bound_fps": 369.8
+      "removal_upper_bound_ms": 0.147,
+      "removal_upper_bound_fps": 366.6
     },
     "next_optimization_class": "D. detector compute (selective_scan attackable_slice) is the largest single lever; secondary is outside_detect_remainder. Do not start with GMC FFT or S2 removal.",
     "s2_status": "\u5e38\u8dd1 + \u5e7e\u4e4e\u6c92\u5de5\u4f5c by activity frequency (<5% of frames)."

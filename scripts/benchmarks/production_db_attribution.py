@@ -109,7 +109,6 @@ ASSOC_EXPOSED_STAGES = (
     "tracker_occlusion",
     "tracker_sinkhorn",
     "tracker_auction",
-    "tracker_cost",
 )
 
 
