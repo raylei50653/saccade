@@ -61,6 +61,7 @@
 | `mamba_train_prof.py` | diagnostic | cli | Mamba head training latency profiler. |
 | `multistream_mamba.py` | diagnostic | cli | Multi-stream Mamba benchmark. |
 | `nsys_frame_attribution.py` | diagnostic | cli | Per-frame overhead attribution from an nsys trace (node-mode CUDA graph trace). |
+| `production_db_attribution.py` | diagnostic | cli | Derive production double-buffer exposed-cost attribution. |
 | `train_bottleneck_prof.py` | diagnostic | cli | Profile training-step bottlenecks via conditioned-train proxy path. |
 | `workbench_synthetic.py` | diagnostic | cli | Synthetic workbench load generator for pipeline microbenches. |
 
