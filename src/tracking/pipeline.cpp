@@ -1,4 +1,5 @@
 #include "tracking/pipeline.hpp"
+#include "saccade/env_flag.hpp"
 #include "tracking/tracker_gpu.hpp"
 #include "tracking/copy_pad.cuh"
 #include "utils/nvtx_range.hpp"
@@ -36,11 +37,7 @@ PerceptionPipeline::PerceptionPipeline(FeatureExtractor* reid, Cropper* cropper,
     : reid_(reid), cropper_(cropper), cfg_(cfg) {
     if (cfg_.max_detections > 0)
         ensure_scratch(cfg_.max_detections, nullptr);
-    const char* assoc_stats = std::getenv("SACCADE_ASSOC_STATS");
-    if (assoc_stats && *assoc_stats && std::strcmp(assoc_stats, "0") != 0
-        && std::strcmp(assoc_stats, "false") != 0
-        && std::strcmp(assoc_stats, "False") != 0
-        && std::strcmp(assoc_stats, "FALSE") != 0) {
+    if (env_diagnostic_on("SACCADE_ASSOC_STATS")) {
         set_private_workload_stats_enabled(true);
     }
 }

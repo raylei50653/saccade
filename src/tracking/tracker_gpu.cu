@@ -1,4 +1,5 @@
 #include "tracking/tracker_gpu.hpp"
+#include "saccade/env_flag.hpp"
 #include "tracking/box_ops.hpp"
 #include <cuda_runtime.h>
 #include <cub/cub.cuh>
@@ -3317,7 +3318,7 @@ public:
         checkCuda(cudaHostRegister(h_res_classes_.data(),           max_objs_ *     sizeof(int),   cudaHostRegisterDefault));
 
         enable_dda_ = env_flag_enabled("SACCADE_ENABLE_DDA", true);
-        assoc_stats_enabled_ = env_flag_enabled("SACCADE_ASSOC_STATS", false);
+        assoc_stats_enabled_ = env_diagnostic_on("SACCADE_ASSOC_STATS");
         if (assoc_stats_enabled_) {
             checkCuda(cudaMalloc(&d_assoc_stats_, ASSOC_STAT_COUNT * sizeof(unsigned long long)));
             checkCuda(cudaMemset(d_assoc_stats_, 0, ASSOC_STAT_COUNT * sizeof(unsigned long long)));

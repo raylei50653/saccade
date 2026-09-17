@@ -2791,8 +2791,9 @@ def run_eval(
                 f"app_veto={_rd_named.get('app_veto')}"
             )
 
-        _assoc_stats_env = os.environ.get("SACCADE_ASSOC_STATS", "").strip().lower()
-        if _assoc_stats_env in {"1", "true", "yes", "on"}:
+        from .assoc_stats_env import assoc_stats_env_enabled
+
+        if assoc_stats_env_enabled():
             _assoc_payload: dict[str, Any] = {
                 "schema": "saccade-assoc-workload-v1",
                 "seq": seq,

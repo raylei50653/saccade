@@ -104,6 +104,15 @@ def union_ms(ivals: list[tuple[float, float]]) -> float:
     return total + ce - cs
 
 
+ASSOC_LOW_WORK_FRAME_FRACTION = 0.05
+ASSOC_EXPOSED_STAGES = (
+    "tracker_occlusion",
+    "tracker_sinkhorn",
+    "tracker_auction",
+    "tracker_cost",
+)
+
+
 def classify_exposure(duration_ms: float, exposed_ms: float) -> str:
     if duration_ms <= 1e-9:
         return "fully hidden"
@@ -113,6 +122,71 @@ def classify_exposure(duration_ms: float, exposed_ms: float) -> str:
     if frac < 0.95:
         return "partially exposed"
     return "critical-path"
+
+
+def classify_assoc_stage(
+    *,
+    frames: float | None,
+    frames_with_assignment: float | None,
+    frames_with_valid_topk: float | None,
+    assignments: float | None,
+) -> str:
+    """Classify a pass by activity frequency, not by assignments == 0.
+
+    A pass that assigns on <5% of frames is low-work even if the assignment
+    count is nonzero.
+    """
+    n = float(frames or 0)
+    if n <= 0:
+        return "固定 shape / fixed launch overhead"
+    activity = (
+        max(
+            float(frames_with_assignment or 0),
+            float(frames_with_valid_topk or 0),
+        )
+        / n
+    )
+    if activity < ASSOC_LOW_WORK_FRAME_FRACTION:
+        return "常跑 + 幾乎沒工作"
+    if float(assignments or 0) > 0:
+        return "常跑 + 有效工作"
+    return "固定 shape / fixed launch overhead"
+
+
+def removal_ceiling(
+    period_ms: float | None, removable_ms: float | None
+) -> tuple[float | None, float | None]:
+    """Upper-bound FPS if ``removable_ms`` left the production period.
+
+    Returns (None, None) when the slice is not a valid remainder of the
+    period — including the detector container, whose span *is* the period.
+    """
+    if period_ms is None or removable_ms is None:
+        return None, None
+    period = float(period_ms)
+    removable = float(removable_ms)
+    if removable <= 0 or period <= removable:
+        return None, None
+    leftover = period - removable
+    # A container that *is* the period leaves a sub-ms leftover and a
+    # fantasy FPS ceiling (e.g. 2.65 ms of 2.875 ms → 4435 FPS).
+    if leftover < 1.0:
+        return None, None
+    return round(removable, 4), round(1000.0 / leftover, 1)
+
+
+def lookup_stage_ms(
+    nsys: dict[str, Any], name: str, field: str = "duration_ms"
+) -> float | None:
+    cats = nsys.get("category_ms_per_frame") or {}
+    if name in cats and cats[name] is not None:
+        return float(cats[name])
+    for row in nsys.get("exposed_stages") or []:
+        if row.get("stage") == name:
+            val = row.get(field)
+            if val is not None:
+                return float(val)
+    return None
 
 
 def mean_or_none(vals: list[float]) -> float | None:
@@ -254,15 +328,11 @@ def load_assoc_dir(path: Path) -> dict[str, Any]:
                     "frames_with_assignment": stg.get("frames_with_assignment"),
                     "frames_with_valid_topk": stg.get("frames_with_valid_topk"),
                     "assignment_rate_among_topk": (assigned / topk if topk else 0.0),
-                    "class": (
-                        "常跑 + 幾乎沒工作"
-                        if frames
-                        and float(stg.get("frames_with_valid_topk") or 0) / frames
-                        < 0.05
-                        and assigned == 0
-                        else "常跑 + 有效工作"
-                        if assigned > 0
-                        else "固定 shape / fixed launch overhead"
+                    "class": classify_assoc_stage(
+                        frames=frames,
+                        frames_with_assignment=stg.get("frames_with_assignment"),
+                        frames_with_valid_topk=stg.get("frames_with_valid_topk"),
+                        assignments=assigned,
                     ),
                 }
             )
@@ -401,13 +471,14 @@ def decompose_period(
         }:
             exposed_tracker += float(row.get("exposed_ms") or 0)
             hidden_tracker += float(row.get("hidden_ms") or 0)
-    bubble = None
-    if production_period_ms is not None and gpu_busy is not None:
-        bubble = production_period_ms - float(gpu_busy)
+    remainder = None
+    if production_period_ms is not None and detect is not None:
+        remainder = round(float(production_period_ms) - float(detect), 4)
     return {
         "production_frame_period_ms": production_period_ms,
+        "diagnostic_detect_span_ms": detect,
         "diagnostic_gpu_union_busy_ms": gpu_busy,
-        "production_bubble_ms": None if bubble is None else round(bubble, 4),
+        "outside_detect_remainder_ms": remainder,
         "exposed_detector_ms": detect,
         "exposed_tracker_like_ms": round(exposed_tracker, 4),
         "hidden_tracker_like_ms": round(hidden_tracker, 4),
@@ -415,13 +486,12 @@ def decompose_period(
         if tail is None or tail_busy is None
         else round(float(tail) - float(tail_busy), 4),
         "identity": (
-            "production_frame_period ≈ exposed detector + exposed tracker "
-            "+ synchronization loss + serial overhead"
+            "production_frame_period ≈ detect_span + outside_detect_remainder"
         ),
         "note": (
-            "detect_span is GPU work duration, not the period. Under DB the period "
-            "is detect-to-detect. Exposed tracker-like work is the portion that "
-            "sits in the detect-end → next-detect-start tail."
+            "outside_detect_remainder_ms is P-layer period minus D-layer detect "
+            "span. It is a cross-run calibrated residual, not GPU idle. Do not "
+            "subtract diagnostic GPU-union busy from the production period."
         ),
     }
 
@@ -431,75 +501,90 @@ def rank_bottlenecks(
     nsys: dict[str, Any] | None,
     assoc: dict[str, Any] | None,
 ) -> list[dict[str, Any]]:
+    del assoc  # ranking uses nsys exposed cost; assoc is classification-only
     period = production.get("mean_frame_period_ms")
-    items: list[dict[str, Any]] = []
-    if nsys:
-        detect = nsys.get("detect_span_mean_ms")
-        if detect is not None:
-            items.append(
-                {
-                    "name": "detector whole-graph (TRT + scan + postprocess)",
-                    "class_label": "D. detector compute",
-                    "observed_cost_ms": detect,
-                    "exposed_cost_ms": detect,
-                    "trigger_frequency": "every frame",
-                    "workload_scaling": "resolution-sensitive (05 vs 1080p); occupancy-insensitive",
-                    "overlap": "defines the period under saturated DB",
-                    "rank_key": float(detect),
-                }
-            )
-        bubble = None
-        if period is not None and nsys.get("gpu_union_busy_ms_per_frame") is not None:
-            bubble = period - float(nsys["gpu_union_busy_ms_per_frame"])
-            items.append(
-                {
-                    "name": "production GPU-idle bubble (host + decode gating + sync opportunity loss)",
-                    "class_label": "B. synchronization / scheduling",
-                    "observed_cost_ms": bubble,
-                    "exposed_cost_ms": bubble,
-                    "trigger_frequency": "every frame",
-                    "workload_scaling": "host-side; weakly occupancy-sensitive",
-                    "overlap": "by definition not overlapped with GPU work",
-                    "rank_key": float(bubble),
-                }
-            )
-        for row in nsys.get("exposed_stages") or []:
-            exp = float(row.get("exposed_ms") or 0)
-            if exp < 0.02:
-                continue
-            if row.get("stage") in {"trt", "scan", "gemm_conv"}:
-                continue
-            items.append(
-                {
-                    "name": row["stage"],
-                    "class_label": (
-                        "C. memory staging / traffic"
-                        if "gmc" in row["stage"] or row["stage"] == "memcpy"
-                        else "E. tracker compute"
-                        if row["stage"].startswith("tracker")
-                        else "F. launch / fixed scheduling overhead"
+    nsys = nsys or {}
+    detect = nsys.get("detect_span_mean_ms")
+    scan = lookup_stage_ms(nsys, "scan")
+    remainder = None
+    if period is not None and detect is not None:
+        remainder = float(period) - float(detect)
+
+    assoc_duration = 0.0
+    assoc_exposed = 0.0
+    for row in nsys.get("exposed_stages") or []:
+        if row.get("stage") in ASSOC_EXPOSED_STAGES:
+            assoc_duration += float(row.get("duration_ms") or 0)
+            assoc_exposed += float(row.get("exposed_ms") or 0)
+
+    out: list[dict[str, Any]] = []
+    if detect is not None:
+        slice_ms, slice_fps = removal_ceiling(period, scan)
+        out.append(
+            {
+                "rank": "Primary",
+                "name": "detector whole-graph (TRT + scan + postprocess)",
+                "class_label": "D. detector compute",
+                "observed_cost_ms": detect,
+                "exposed_cost_ms": detect,
+                "trigger_frequency": "every frame",
+                "workload_scaling": "resolution-sensitive (05 vs 1080p); occupancy-insensitive",
+                "overlap": "defines the period under saturated DB",
+                "removal_applicable": False,
+                "removal_upper_bound_ms": None,
+                "removal_upper_bound_fps": None,
+                "attackable_slice": {
+                    "name": "selective_scan",
+                    "observed_cost_ms": scan,
+                    "exposed_cost_ms": scan,
+                    "removal_applicable": True,
+                    "removal_upper_bound_ms": slice_ms,
+                    "removal_upper_bound_fps": slice_fps,
+                    "note": (
+                        "Largest attackable slice inside the detector container. "
+                        "The container itself is not removable."
                     ),
-                    "observed_cost_ms": row.get("duration_ms"),
-                    "exposed_cost_ms": exp,
-                    "trigger_frequency": "every frame",
-                    "workload_scaling": "see occupancy sweep",
-                    "overlap": row.get("class"),
-                    "rank_key": exp,
-                }
-            )
-    items.sort(key=lambda x: -float(x.get("rank_key") or 0))
-    ranks = ("Primary", "Secondary", "Tertiary")
-    out = []
-    for i, item in enumerate(items[:3]):
-        item = dict(item)
-        item["rank"] = ranks[i]
-        if period and item.get("exposed_cost_ms"):
-            item["removal_upper_bound_ms"] = item["exposed_cost_ms"]
-            item["removal_upper_bound_fps"] = round(
-                1000.0 / max(period - float(item["exposed_cost_ms"]), 1e-3), 1
-            )
-        item.pop("rank_key", None)
-        out.append(item)
+                },
+            }
+        )
+    if remainder is not None:
+        rem_ms, rem_fps = removal_ceiling(period, remainder)
+        out.append(
+            {
+                "rank": "Secondary",
+                "name": "outside-detect remainder (P period minus D detect span)",
+                "class_label": "B. synchronization / scheduling plus C. memory staging / traffic",
+                "observed_cost_ms": round(remainder, 4),
+                "exposed_cost_ms": round(remainder, 4),
+                "trigger_frequency": "every frame",
+                "workload_scaling": "1080p DtoD staging vs 640x480; host sync opportunity",
+                "overlap": "cross-run residual after the detect span",
+                "removal_applicable": True,
+                "removal_upper_bound_ms": rem_ms,
+                "removal_upper_bound_fps": rem_fps,
+                "uncertainty": (
+                    "P-layer period and D-layer detect span come from different "
+                    "runs. This is not GPU idle and not production_period − GPU-union busy."
+                ),
+            }
+        )
+    if assoc_exposed > 0:
+        a_ms, a_fps = removal_ceiling(period, assoc_exposed)
+        out.append(
+            {
+                "rank": "Tertiary",
+                "name": "fixed-capacity tracker association (occlusion + sinkhorn + auction)",
+                "class_label": "A. fixed-capacity computation",
+                "observed_cost_ms": round(assoc_duration, 4),
+                "exposed_cost_ms": round(assoc_exposed, 4),
+                "trigger_frequency": "every frame, Tcap=2048 Dcap=1024 launches",
+                "workload_scaling": "auction/sinkhorn/occlusion nearly occupancy-insensitive",
+                "overlap": "partially exposed",
+                "removal_applicable": True,
+                "removal_upper_bound_ms": a_ms,
+                "removal_upper_bound_fps": a_fps,
+            }
+        )
     if not out:
         out.append(
             {
@@ -522,7 +607,7 @@ def derive(
 ) -> dict[str, Any]:
     period = production.get("mean_frame_period_ms")
     return {
-        "schema": "saccade-production-db-critical-path-v1",
+        "schema": "saccade-production-db-critical-path-v2",
         "contract": "docs/research/pipeline/production_db_critical_path_contract.md",
         "production": production,
         "host_ledger": ledger,

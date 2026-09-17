@@ -1,5 +1,5 @@
 {
-  "schema": "saccade-production-db-critical-path-v1",
+  "schema": "saccade-production-db-critical-path-v2",
   "contract": "docs/research/pipeline/production_db_critical_path_contract.md",
   "production": {
     "dir": "runs/production_db_critical_path_20260917/p0_warm",
@@ -1381,7 +1381,7 @@
             "frames_with_assignment": 11,
             "frames_with_valid_topk": 11,
             "assignment_rate_among_topk": 1.0,
-            "class": "\u5e38\u8dd1 + \u6709\u6548\u5de5\u4f5c"
+            "class": "\u5e38\u8dd1 + \u5e7e\u4e4e\u6c92\u5de5\u4f5c"
           }
         ]
       },
@@ -1717,7 +1717,7 @@
             "frames_with_assignment": 12,
             "frames_with_valid_topk": 12,
             "assignment_rate_among_topk": 1.0,
-            "class": "\u5e38\u8dd1 + \u6709\u6548\u5de5\u4f5c"
+            "class": "\u5e38\u8dd1 + \u5e7e\u4e4e\u6c92\u5de5\u4f5c"
           }
         ]
       },
@@ -1885,7 +1885,7 @@
             "frames_with_assignment": 3,
             "frames_with_valid_topk": 3,
             "assignment_rate_among_topk": 1.0,
-            "class": "\u5e38\u8dd1 + \u6709\u6548\u5de5\u4f5c"
+            "class": "\u5e38\u8dd1 + \u5e7e\u4e4e\u6c92\u5de5\u4f5c"
           }
         ]
       },
@@ -2053,7 +2053,7 @@
             "frames_with_assignment": 26,
             "frames_with_valid_topk": 26,
             "assignment_rate_among_topk": 1.0,
-            "class": "\u5e38\u8dd1 + \u6709\u6548\u5de5\u4f5c"
+            "class": "\u5e38\u8dd1 + \u5e7e\u4e4e\u6c92\u5de5\u4f5c"
           }
         ]
       },
@@ -2221,7 +2221,7 @@
             "frames_with_assignment": 8,
             "frames_with_valid_topk": 8,
             "assignment_rate_among_topk": 1.0,
-            "class": "\u5e38\u8dd1 + \u6709\u6548\u5de5\u4f5c"
+            "class": "\u5e38\u8dd1 + \u5e7e\u4e4e\u6c92\u5de5\u4f5c"
           }
         ]
       },
@@ -2389,7 +2389,7 @@
             "frames_with_assignment": 26,
             "frames_with_valid_topk": 26,
             "assignment_rate_among_topk": 1.0,
-            "class": "\u5e38\u8dd1 + \u6709\u6548\u5de5\u4f5c"
+            "class": "\u5e38\u8dd1 + \u5e7e\u4e4e\u6c92\u5de5\u4f5c"
           }
         ]
       }
@@ -2397,17 +2397,19 @@
   },
   "period_decomposition": {
     "production_frame_period_ms": 2.874967656613863,
+    "diagnostic_detect_span_ms": 2.649507764767505,
     "diagnostic_gpu_union_busy_ms": 3.082049558172232,
-    "production_bubble_ms": -0.2071,
+    "outside_detect_remainder_ms": 0.2255,
     "exposed_detector_ms": 2.649507764767505,
     "exposed_tracker_like_ms": 0.2343,
     "hidden_tracker_like_ms": 0.5344,
     "sync_or_host_tail_ms": 0.8334,
-    "identity": "production_frame_period \u2248 exposed detector + exposed tracker + synchronization loss + serial overhead",
-    "note": "detect_span is GPU work duration, not the period. Under DB the period is detect-to-detect. Exposed tracker-like work is the portion that sits in the detect-end \u2192 next-detect-start tail."
+    "identity": "production_frame_period \u2248 detect_span + outside_detect_remainder",
+    "note": "outside_detect_remainder_ms is P-layer period minus D-layer detect span. It is a cross-run calibrated residual, not GPU idle. Do not subtract diagnostic GPU-union busy from the production period."
   },
   "bottlenecks": [
     {
+      "rank": "Primary",
       "name": "detector whole-graph (TRT + scan + postprocess)",
       "class_label": "D. detector compute",
       "observed_cost_ms": 2.649507764767505,
@@ -2415,33 +2417,45 @@
       "trigger_frequency": "every frame",
       "workload_scaling": "resolution-sensitive (05 vs 1080p); occupancy-insensitive",
       "overlap": "defines the period under saturated DB",
-      "rank": "Primary",
-      "removal_upper_bound_ms": 2.649507764767505,
-      "removal_upper_bound_fps": 4435.4
+      "removal_applicable": false,
+      "removal_upper_bound_ms": null,
+      "removal_upper_bound_fps": null,
+      "attackable_slice": {
+        "name": "selective_scan",
+        "observed_cost_ms": 0.37742115711774976,
+        "exposed_cost_ms": 0.37742115711774976,
+        "removal_applicable": true,
+        "removal_upper_bound_ms": 0.3774,
+        "removal_upper_bound_fps": 400.4,
+        "note": "Largest attackable slice inside the detector container. The container itself is not removable."
+      }
     },
     {
-      "name": "memcpy",
-      "class_label": "C. memory staging / traffic",
-      "observed_cost_ms": 0.1645,
-      "exposed_cost_ms": 0.1066,
-      "trigger_frequency": "every frame",
-      "workload_scaling": "see occupancy sweep",
-      "overlap": "partially exposed",
       "rank": "Secondary",
-      "removal_upper_bound_ms": 0.1066,
-      "removal_upper_bound_fps": 361.2
+      "name": "outside-detect remainder (P period minus D detect span)",
+      "class_label": "B. synchronization / scheduling plus C. memory staging / traffic",
+      "observed_cost_ms": 0.2255,
+      "exposed_cost_ms": 0.2255,
+      "trigger_frequency": "every frame",
+      "workload_scaling": "1080p DtoD staging vs 640x480; host sync opportunity",
+      "overlap": "cross-run residual after the detect span",
+      "removal_applicable": true,
+      "removal_upper_bound_ms": 0.2255,
+      "removal_upper_bound_fps": 377.4,
+      "uncertainty": "P-layer period and D-layer detect span come from different runs. This is not GPU idle and not production_period \u2212 GPU-union busy."
     },
     {
-      "name": "pointwise",
-      "class_label": "F. launch / fixed scheduling overhead",
-      "observed_cost_ms": 0.1145,
-      "exposed_cost_ms": 0.0707,
-      "trigger_frequency": "every frame",
-      "workload_scaling": "see occupancy sweep",
-      "overlap": "partially exposed",
       "rank": "Tertiary",
-      "removal_upper_bound_ms": 0.0707,
-      "removal_upper_bound_fps": 356.6
+      "name": "fixed-capacity tracker association (occlusion + sinkhorn + auction)",
+      "class_label": "A. fixed-capacity computation",
+      "observed_cost_ms": 0.3155,
+      "exposed_cost_ms": 0.171,
+      "trigger_frequency": "every frame, Tcap=2048 Dcap=1024 launches",
+      "workload_scaling": "auction/sinkhorn/occlusion nearly occupancy-insensitive",
+      "overlap": "partially exposed",
+      "removal_applicable": true,
+      "removal_upper_bound_ms": 0.171,
+      "removal_upper_bound_fps": 369.8
     }
   ],
   "machine": {
@@ -2498,46 +2512,57 @@
     }
   },
   "closure": {
+    "note": "Authoritative ranking is bottlenecks[]; this block restates it.",
     "primary": {
-      "name": "detector whole-graph (TRT gemm/conv + TRT head + selective_scan)",
+      "rank": "Primary",
+      "name": "detector whole-graph (TRT + scan + postprocess)",
       "class_label": "D. detector compute",
-      "observed_cost_ms": 2.65,
-      "exposed_cost_ms": 2.65,
+      "observed_cost_ms": 2.649507764767505,
+      "exposed_cost_ms": 2.649507764767505,
       "trigger_frequency": "every frame",
-      "workload_scaling": "resolution-sensitive (05 detect span 2.54 vs 04 2.65); occupancy-insensitive",
-      "overlap": "defines the double-buffer period",
-      "evidence": "d1_nsys_04.json detect_span_mean_ms; gemm_conv 1.822 + scan 0.377 + trt 0.426 fully hidden in detect graph",
-      "uncertainty": "nsys kernel ns are hardware timestamps; production period is 2.875 ms so ~0.23 ms sits outside detect",
-      "removal_upper_bound_ms": "not removable as a module; scan 0.38 ms is the largest attackable slice inside detect",
-      "removal_upper_bound_fps": "scan-only: 1000/(2.875-0.38) \u2248 400 if scan vanished and nothing else moved (upper bound, not a prediction)"
+      "workload_scaling": "resolution-sensitive (05 vs 1080p); occupancy-insensitive",
+      "overlap": "defines the period under saturated DB",
+      "removal_applicable": false,
+      "removal_upper_bound_ms": null,
+      "removal_upper_bound_fps": null,
+      "attackable_slice": {
+        "name": "selective_scan",
+        "observed_cost_ms": 0.37742115711774976,
+        "exposed_cost_ms": 0.37742115711774976,
+        "removal_applicable": true,
+        "removal_upper_bound_ms": 0.3774,
+        "removal_upper_bound_fps": 400.4,
+        "note": "Largest attackable slice inside the detector container. The container itself is not removable."
+      }
     },
     "secondary": {
-      "name": "detect-to-detect tail (exposed memcpy/staging + leftover tracker + host sync opportunity)",
+      "rank": "Secondary",
+      "name": "outside-detect remainder (P period minus D detect span)",
       "class_label": "B. synchronization / scheduling plus C. memory staging / traffic",
-      "observed_cost_ms": 0.23,
-      "exposed_cost_ms": 0.23,
+      "observed_cost_ms": 0.2255,
+      "exposed_cost_ms": 0.2255,
       "trigger_frequency": "every frame",
-      "workload_scaling": "1080p staging ~47 MB DtoD (exposed memcpy 0.11 ms); 640x480 staging below 8 MB threshold (exposed memcpy 0.016 ms). Host cudaStreamSynchronize API 23 \u00b5s; opportunity loss is the rest of the tail.",
-      "overlap": "partially exposed",
-      "evidence": "p0_warm period 2.875 ms - detect span 2.65 ms; nsys memcpy k8 48 MB/frame; cudaStreamSynchronize 0.023 ms API in tail",
-      "uncertainty": "cannot split the 0.23 ms into memcpy vs host vs tracker leftover with production clocks; nsys period is inflated to 3.62 ms",
-      "removal_upper_bound_ms": 0.23,
-      "removal_upper_bound_fps": "1000/(2.875-0.23) \u2248 378 if the entire tail vanished"
+      "workload_scaling": "1080p DtoD staging vs 640x480; host sync opportunity",
+      "overlap": "cross-run residual after the detect span",
+      "removal_applicable": true,
+      "removal_upper_bound_ms": 0.2255,
+      "removal_upper_bound_fps": 377.4,
+      "uncertainty": "P-layer period and D-layer detect span come from different runs. This is not GPU idle and not production_period \u2212 GPU-union busy."
     },
     "tertiary": {
-      "name": "fixed-capacity tracker association (occlusion + sinkhorn + 5x auction)",
+      "rank": "Tertiary",
+      "name": "fixed-capacity tracker association (occlusion + sinkhorn + auction)",
       "class_label": "A. fixed-capacity computation",
-      "observed_cost_ms": 0.28,
-      "exposed_cost_ms": 0.15,
+      "observed_cost_ms": 0.3155,
+      "exposed_cost_ms": 0.171,
       "trigger_frequency": "every frame, Tcap=2048 Dcap=1024 launches",
-      "workload_scaling": "auction 34\u201335 \u00b5s/frame and sinkhorn 75\u201377 \u00b5s/frame identical on 05 (11 tracks) vs 04 (44 tracks). Occlusion 148\u2013165 \u00b5s almost flat. NMS select 39 vs 243 \u00b5s DOES scale.",
-      "overlap": "partially exposed (occlusion 0.063, sinkhorn 0.063, auction 0.021 on MOT17-04)",
-      "evidence": "d1_nsys_04/05/13.json plus SACCADE_ASSOC_STATS dumps",
-      "uncertainty": "exposed fraction depends on detect overlap geometry; CUPTI may shift it",
-      "removal_upper_bound_ms": 0.15,
-      "removal_upper_bound_fps": "1000/(2.875-0.15) \u2248 367 if all exposed tracker association vanished"
+      "workload_scaling": "auction/sinkhorn/occlusion nearly occupancy-insensitive",
+      "overlap": "partially exposed",
+      "removal_applicable": true,
+      "removal_upper_bound_ms": 0.171,
+      "removal_upper_bound_fps": 369.8
     },
-    "next_optimization_class": "D. detector compute (selective_scan 0.38 ms) is the largest single exposed-equivalent lever; secondary is 1080p DtoD staging if it is shown to cause the 0.11 ms exposed memcpy. Do not start with GMC FFT or S2 removal.",
-    "s2_status": "\u5e38\u8dd1 + \u5e7e\u4e4e\u6c92\u5de5\u4f5c: 0.00\u20130.04 assignments/frame, 0\u201326 frames with valid topk. Auction still launches. Saving S2 would be ~7 \u00b5s launch, not a throughput program."
+    "next_optimization_class": "D. detector compute (selective_scan attackable_slice) is the largest single lever; secondary is outside_detect_remainder. Do not start with GMC FFT or S2 removal.",
+    "s2_status": "\u5e38\u8dd1 + \u5e7e\u4e4e\u6c92\u5de5\u4f5c by activity frequency (<5% of frames)."
   }
 }

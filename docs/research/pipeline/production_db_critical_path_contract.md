@@ -48,15 +48,27 @@ limits throughput / frame period?
 | **P — production** | FPS, frame period, per-seq latency, occupancy (`n_dets`), overlap *existence* via DB being eligible | Stage GPU durations, kernel names, memcpy bytes |
 | **D — diagnostic** | Kernel/graph spans, overlap geometry, GMC/association breakdown, sync API placement, opportunity loss *structure* | Production FPS / frame period |
 
-Calibrate D against P:
+Calibrate D against P **without subtracting GPU-union busy from the
+production period**. Those are different runs and different clocks;
+their difference is not GPU idle and may be negative.
 
 ```text
-production_bubble_ms = production_frame_period_ms − diagnostic_GPU_union_busy_ms
+outside_detect_remainder_ms
+  = production_frame_period_ms − diagnostic_detect_span_ms
 ```
+
+This remainder is a cross-run calibrated residual (P period minus D
+detect span), not a production bubble. Diagnostic GPU-union busy is
+recorded as a D-layer quantity only.
 
 Never read production idle from nsys device-gap histograms. Node-mode
 CUPTI inflates host wall time; kernel/graph hardware timestamps stay
 usable. See [nsys_profiling.md](../../reference/runbooks/nsys_profiling.md).
+
+Removal ceilings apply only to an **attackable slice** that is a proper
+subset of the period (e.g. selective_scan). The detector whole-graph
+span *is* the period; it is not removable and must not be converted into
+an FPS ceiling.
 
 ## Allowed observers (default OFF)
 
@@ -73,7 +85,9 @@ usable. See [nsys_profiling.md](../../reference/runbooks/nsys_profiling.md).
 
 `SACCADE_ASSOC_STATS` must be set **before** tracker / NMS graph capture
 (environment at process start). Enabling it later cannot insert kernels
-into an already-captured graph.
+into an already-captured graph. Parsing is fail-closed and shared:
+`1/true/yes/on` enable; unset, `0/false/no/off`, and unknown tokens stay
+OFF in Python, tracker, and `PerceptionPipeline`.
 
 ## Headline command
 
@@ -227,6 +241,14 @@ Rank by **exposed cost to production frame period**, not by kernel
 duration. Each ranked item must carry: observed cost, exposed cost,
 trigger frequency, occupancy scaling, overlap relationship, evidence
 pointer, uncertainty, and a removal upper bound.
+
+A **container** that *is* the period (the detector whole-graph span)
+gets `removal_applicable=false` and null FPS ceiling. Attach an
+`attackable_slice` (selective_scan) for the only in-container lever
+that may carry a ceiling. Association passes are classified by
+**activity frequency** (`frames_with_assignment` /
+`frames_with_valid_topk` over frames), not by whether the assignment
+count is exactly zero.
 
 Class labels for the next optimization PR:
 

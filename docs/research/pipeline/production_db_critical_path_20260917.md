@@ -108,12 +108,15 @@ Graphs: detect graphId 2 = 2.76 ms; tracker 11 = 0.38; eager 0 = 0.30; main NMS 
 Period decomposition (production clocks):
 
 ```text
-2.875 ms  ≈  2.65 ms exposed detector
-          +  0.23 ms tail (memcpy + leftover tracker + host opportunity)
+2.875 ms  ≈  2.65 ms detect span
+          +  0.23 ms outside_detect_remainder
 ```
 
-nsys `cudaStreamSynchronize` in the tail is **23 µs**. That is cost A.
-The leftover 0.23 ms on production clocks is cost B (opportunity). B dominates A.
+`outside_detect_remainder` is P-layer period minus D-layer detect span,
+not production period minus nsys GPU-union busy (that difference is
+negative and is not idle). nsys `cudaStreamSynchronize` in the tail is
+**23 µs** (cost A). The 0.23 ms remainder is cost B (opportunity, with
+cross-run uncertainty). B dominates A.
 
 ---
 

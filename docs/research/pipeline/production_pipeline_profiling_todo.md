@@ -32,8 +32,9 @@ Closure (2026-09-17):
 
 * [x] **P3 — 調查 host synchronization 與跨幀 overlap 損失**
 
-  `cudaStreamSynchronize` API 23 µs（成本 A）。Production tail leftover
-  **0.23 ms**（成本 B，opportunity）。B 才是 throughput 項。
+  `cudaStreamSynchronize` API 23 µs（成本 A）。`outside_detect_remainder`
+  **0.23 ms**（P period − D detect span；成本 B，opportunity）。B 才是
+  throughput 項。禁止用 production period − nsys GPU-union busy 當 bubble。
   Host ledger 的 `post_graph_count_wait` ~1.8 ms 是 CPU 等 detect，不是額外 GPU 工作。
 
 * [x] **P4 — 拆解 GMC 的 compute 與 memory-traffic 成本**
