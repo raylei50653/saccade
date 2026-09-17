@@ -67,6 +67,13 @@ python scripts/eval/latency_report.py runs/before/ --compare runs/after/
 python scripts/eval/latency_report.py runs/my_profile/ --seq MOT17-04-SDP
 ```
 
+**Production double-buffer critical path**（不改 scheduling；throughput 必須另跑 clean 路徑）：
+
+見 [production_db_critical_path_contract.md](../../docs/research/pipeline/production_db_critical_path_contract.md)。
+`--profile-stages` 會關掉 double-buffer。`--profile-frame-csv` 與 nsys
+`--trace=cuda --cuda-graph-trace=node --sample=none --cpuctxsw=none` 是允許的
+observer。`SACCADE_ASSOC_STATS=1` 是 diagnostic。
+
 **Stage 解讀**：
 
 - `detect` — TRT 推論，通常最大瓶頸（~40-50%）

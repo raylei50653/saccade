@@ -17,6 +17,7 @@
 | [resource_routing_20260916.md](resource_routing_20260916.md) | #419: dynamic lane ownership and future-work routing; reserved floor, borrowing, headroom, matched sharing, and measured reclaim/service/throughput tradeoffs |
 | [resource_mixed_20260916.md](resource_mixed_20260916.md) | #419: real serial pipeline with matched elastic bursts; fixed reservation, sharing, static headroom and temporal borrowing under a frozen service target |
 | [resource_mixed_db_20260917.md](resource_mixed_db_20260917.md) | #419: production double-buffer schedule in one verified Green Context with matched elastic bursts; verified-boundary borrowing admits 0.16–0.73% of offered load during service, 16-SM points straddle the frozen target, shared 32 SM loses the tail only at 8192/W4 |
+| [production_db_critical_path_20260917.json](production_db_critical_path_20260917.json) | Unconstrained `mamba_whole_graph_m` + SDP + `--double-buffer` critical-path attribution (P-layer FPS + nsys exposed cost + assoc stats). Narrative: [production_db_critical_path_20260917.md](../../research/pipeline/production_db_critical_path_20260917.md). Not a routing result and not a new headline FPS claim. |
 | [resource_hardware_20260916.md](resource_hardware_20260916.md) | #419: CUPTI timeline and per-SM block-residency explanation of why fixed reservation, sharing and borrowing occupy execution capacity differently; direct GPU counter comparison rejected for asymmetric profiler interference |
 | [latency_log.md](latency_log.md) | 端到端延遲、分段延遲紀錄 |
 | [throughput.md](throughput.md) | 單路與多路吞吐量 |

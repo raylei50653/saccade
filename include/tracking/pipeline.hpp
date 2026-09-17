@@ -64,6 +64,15 @@ public:
         int private_boxes = 0;
     };
 
+    struct PrivateWorkloadStats {
+        bool enabled = false;
+        unsigned long long invocations = 0;
+        unsigned long long sum_candidate_count = 0;
+        unsigned long long sum_added = 0;
+        unsigned long long frames_with_added = 0;
+        unsigned long long sum_num_private_priors = 0;
+    };
+
     struct Config {
         float score_threshold       = 0.05f;
         int   person_class          = 0;
@@ -609,6 +618,11 @@ public:
     void reset_postprocess_profile_stats();
     PostprocessProfileStats get_postprocess_profile_stats() const;
 
+    // Default-off private-continuation counters (SACCADE_ASSOC_STATS=1).
+    // Extra accumulate kernel only while enabled; production graph unchanged.
+    void set_private_workload_stats_enabled(bool enabled);
+    PrivateWorkloadStats drain_private_workload_stats();
+
 private:
     FeatureExtractor* reid_;
     Cropper*          cropper_;
@@ -676,6 +690,8 @@ private:
     ReIDProfileStats last_reid_profile_stats_{};
     bool postprocess_profiling_enabled_ = false;
     PostprocessProfileStats last_postprocess_profile_stats_{};
+    bool private_workload_stats_enabled_ = false;
+    unsigned long long* d_private_workload_stats_ = nullptr;
 };
 
 } // namespace saccade

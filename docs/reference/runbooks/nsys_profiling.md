@@ -50,4 +50,6 @@ node-mode tracing 會把 wall/frame 膨脹在 **host 側**（實測 seq09 3.37�
 ## 相關
 
 - 歸因結果：[perf_attribution_whole_graph_m.md](../../research/pipeline/perf_attribution_whole_graph_m.md)
+- Production DB critical path (2026-09-17，scan-anchored overlap，不以 nsys FPS 當 production)：[production_db_critical_path_20260917.md](../../research/pipeline/production_db_critical_path_20260917.md)、contract [production_db_critical_path_contract.md](../../research/pipeline/production_db_critical_path_contract.md)
+- JSON 輸出：`scripts/benchmarks/nsys_frame_attribution.py TRACE --json out.json`
 - kernel 層細節（s preset 時代，方法仍有效）：[whole-graph-kernel-fragmentation.md](../../modules/detection/research/whole-graph-kernel-fragmentation.md)

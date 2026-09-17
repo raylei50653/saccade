@@ -2791,6 +2791,43 @@ def run_eval(
                 f"app_veto={_rd_named.get('app_veto')}"
             )
 
+        _assoc_stats_env = os.environ.get("SACCADE_ASSOC_STATS", "").strip().lower()
+        if _assoc_stats_env in {"1", "true", "yes", "on"}:
+            _assoc_payload: dict[str, Any] = {
+                "schema": "saccade-assoc-workload-v1",
+                "seq": seq,
+                "env": "SACCADE_ASSOC_STATS",
+                "diagnostic": True,
+                "not_production_throughput": True,
+            }
+            _trk = getattr(detector, "tracker", None)
+            if _trk is not None and hasattr(
+                _trk, "drain_research_assoc_workload_stats"
+            ):
+                _assoc_payload["association"] = dict(
+                    _trk.drain_research_assoc_workload_stats()
+                )
+            _pipe = getattr(_seq_state, "perception_pipeline", None)
+            if _pipe is not None and hasattr(_pipe, "drain_private_workload_stats"):
+                _assoc_payload["private_continuation"] = dict(
+                    _pipe.drain_private_workload_stats()
+                )
+            if (cfg.relink_enabled or _seq_state._bridge_enabled) and hasattr(
+                detector.tracker, "get_relink_debug"
+            ):
+                from saccade.perception.eval.portable_or_tail import (
+                    RELINK_DEBUG_HOST_INDEX as _RD_IDX2,
+                )
+
+                _rd2 = detector.tracker.get_relink_debug()
+                _assoc_payload["bridge"] = {
+                    name: int(_rd2[idx]) if idx < len(_rd2) else None
+                    for name, idx in _RD_IDX2.items()
+                }
+            _assoc_path = output_root / f"_assoc_workload_{seq}.json"
+            _assoc_path.write_text(json.dumps(_assoc_payload, indent=2) + "\n")
+            print(f"📋 Assoc workload written: {_assoc_path}")
+
         _d0_capture_dir = str(
             (getattr(cfg, "kwargs", {}) or {}).get(
                 "research_bridge_fidelity_capture_dir", ""

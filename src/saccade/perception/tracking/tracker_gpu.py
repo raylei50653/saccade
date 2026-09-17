@@ -745,6 +745,14 @@ class GPUByteTracker:
         getter = getattr(self.tracker, "get_relink_debug", None)
         return list(getter()) if getter is not None else [0, 0, 0, 0, 0]
 
+    def drain_research_assoc_workload_stats(self) -> dict[str, Any]:
+        """Sequence-end association workload counters. Empty if default-off."""
+        drain = getattr(self.tracker, "drain_research_assoc_workload_stats", None)
+        if drain is None:
+            return {"enabled": False}
+        result = drain()
+        return dict(result) if result is not None else {"enabled": False}
+
     def set_research_bridge_shadow(self, enabled: bool) -> None:
         """Propose and capture bridge events without committing them.
 
