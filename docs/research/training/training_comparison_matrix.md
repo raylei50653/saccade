@@ -867,7 +867,7 @@ Remaining confounds:
 - `teacher` [training]: s.legacy_teacher vs s.adapted_teacher
 - `teacher_cache` [training]: compared stages use ['s.legacy_cache'] vs ['s.teacher_cache']
 - `training_seed` [training]: bases: not recorded / args.seed
-- `training_schedule` [training]: non-treatment schedule keys differ: None
+- `training_schedule` [training]: chain incomplete; recipe not fully recorded
 - `training_budget` [training]: chain incomplete; budget not fully recorded
 Blocking:
 - asymmetric backbone/teacher consistency between endpoints
@@ -903,7 +903,7 @@ Remaining confounds:
 - `teacher` [training]: s.legacy_teacher vs s.adapted_teacher
 - `teacher_cache` [training]: compared stages use ['s.legacy_cache'] vs ['s.teacher_cache']
 - `training_seed` [training]: bases: not recorded / args.seed
-- `training_schedule` [training]: non-treatment schedule keys differ: None
+- `training_schedule` [training]: chain incomplete; recipe not fully recorded
 - `training_budget` [training]: chain incomplete; budget not fully recorded
 Blocking:
 - asymmetric backbone/teacher consistency between endpoints
@@ -934,7 +934,7 @@ Blocking:
 
 Remaining confounds:
 - `training_seed` [training]: bases: not recorded / args.seed
-- `training_schedule` [training]: non-treatment schedule keys differ: None
+- `training_schedule` [training]: chain incomplete; recipe not fully recorded
 - `training_budget` [training]: chain incomplete; budget not fully recorded
 - executability: fresh paired eval possible; retrain replay NOT possible (s.controlled_refit needs s.legacy_cache (unavailable); s.controlled_refit: chain reaches unavailable node s.legacy_distill; s.legacy_parent_gt: chain reaches unavailable node s.legacy_distill)
 
@@ -967,7 +967,7 @@ Remaining confounds:
 - `teacher` [training]: s.legacy_teacher vs s.adapted_teacher
 - `teacher_cache` [training]: compared stages use ['s.legacy_cache'] vs ['s.teacher_cache']
 - `training_seed` [training]: bases: not recorded / args.seed
-- `training_schedule` [training]: non-treatment schedule keys differ: None
+- `training_schedule` [training]: chain incomplete; recipe not fully recorded
 - `training_budget` [training]: chain incomplete; budget not fully recorded
 - executability: fresh paired eval possible; retrain replay NOT possible (s.distill needs s.teacher_cache (unavailable); s.legacy_v14 needs s.legacy_cache (unavailable); s.legacy_v14: s.legacy_v14 stores its resume invocation; earlier stages unrecorded; s.t3t1_phase_a needs s.teacher_cache (unavailable); s.t3t1_phase_b needs s.teacher_cache (unavailable))
 - historical results on record: lhs ['legacy_v14'], rhs ['t3t1_seed42'] — not reusable as paired (record carries no preset/engine sha for any run; runtime identity of historical runs is not established (deliverable 4))

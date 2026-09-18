@@ -1,69 +1,48 @@
 """Comparison-identifiability matrix over the #421 training lineage (deliverable 2).
 
 Deliverable 1 (``training_lineage.py``) froze *what exists*: every checkpoint,
-teacher, cache, engine and preset as a node with sha256, derived parent edges and
-byte-level checks.  This tool answers the next question on top of that snapshot:
+teacher, cache, engine and preset as a node with sha256, derived parent edges
+and byte-level checks.  This tool answers the next question on that snapshot:
 **which pairs of nodes can a measurement be attributed to, and which cannot** —
 before any IDF1/HOTA/FPS number is produced.
 
-Inputs, again kept apart on purpose:
+Inputs, kept apart on purpose: ``report_data/training_lineage_inventory.json``
+(the committed inventory; the only source of node facts, nothing is re-read
+from ``runs/``), ``training_comparisons.json`` (the **declared** candidates:
+two nodes, a question, a design, and the axes the treatment may change — a
+claim), the two family presets (tracker-policy diff) and
+``report_data/tables/mamba_tracking_overall.csv`` (which endpoints already have
+historical results on record).
 
-* ``report_data/training_lineage_inventory.json`` — the committed inventory.  It
-  is the only source of node facts; nothing is re-read from ``runs/``.
-* ``training_comparisons.json`` — the **declared candidate comparisons**: which
-  two nodes, which question, which axes the declared treatment is *allowed* to
-  change, and which design the pair claims to follow.  This is a claim.
-* the two family presets (committed) for the tracker-policy diff, and
-  ``report_data/tables/mamba_tracking_overall.csv`` for which endpoints already
-  have historical results on record.
-
-For each declared comparison the tool derives one **profile** per endpoint
+For each declared comparison the tool derives a **profile** per endpoint
 (backbone family, head architecture, warm-start chain, teacher, cache, seed,
 per-stage schedule, budget, resolved sequence split, and — under the declared
-runtime binding — the deployed backbone / head artifact, forward mode and
-tracker policy), compares the two profiles axis by axis, and classifies:
+runtime binding — deployed backbone / head artifact, forward mode and tracker
+policy), compares the profiles axis by axis, and classifies:
 
-* ``controlled`` — every axis matched except those the declaration names as the
-  treatment, no axis unknown, no blocking confound.  A fresh paired eval of the
-  two artifacts attributes its delta to the declared treatment.
-* ``system_comparison`` — a structural axis (family, head, deployment artifact,
-  forward mode, tracker policy, data) differs outside the treatment.  A fresh
-  paired eval under one contract is a whole-system quality/cost comparison,
-  never a post-training attribution.
-* ``historical_not_comparable`` — only *training* axes differ outside the
-  treatment (seed, warm start, warm-up, teacher, cache, budget) or one of them
-  cannot be established from the bytes.  These differences live inside the
-  artifacts, so no fresh eval repairs them; any recorded delta over this pair is
-  historical and must not be merged into controlled rows.
-* ``blocked`` — an endpoint or its declared runtime artifact is unavailable,
-  the declared design's premise is contradicted by the bytes (e.g. a "sibling"
-  pair where one side is a continuation of the other), or a blocking confound
-  applies.  The entry names the blocker.
+* ``controlled`` — every axis matched except the declared treatment axes, no
+  axis unknown, no blocking confound; a fresh paired eval attributes its delta
+  to the treatment.
+* ``system_comparison`` — a structural axis differs outside the treatment; a
+  fresh paired eval is a whole-system quality/cost comparison, never a
+  post-training attribution.
+* ``historical_not_comparable`` — only training axes differ (or are unknown)
+  outside the treatment.  Those differences live inside the artifacts, so no
+  fresh eval repairs them; recorded deltas over the pair are historical.
+* ``blocked`` — an endpoint or runtime artifact is unavailable, the design's
+  premise is contradicted by the bytes, or a blocking confound applies.
 
-The classification is **derived, never declared**: the declaration may say what
-the treatment is and what the design claims, but the tool decides the class
-from the axis statuses, and the contract tests pin the rule that an unmatched
-or unknown non-treatment axis can never be labelled ``controlled``.
-
-Two facts are carried through every row rather than decided per row:
-
-* the s production backbone engine's sibling ONNX matches the *legacy* teacher
-  while every replica-lineage s head was trained against the adapted teacher
-  (inventory: ``DIFFERENT_TEACHER_INDICATED``, engine bytes unattributed).  It
-  is recorded as ``common_mode`` when both endpoints deploy with the same status
-  (it cannot explain a paired delta) and ``blocking`` when the two endpoints
-  differ in that status;
-* no historical result row carries a preset or engine sha (the table has no such
-  column and, in this workspace, no referenced ``results/`` directory has a
-  ``run_manifest.json``), so historical results are never marked reusable as a
-  paired measurement.  Runtime identity for new measurements is deliverable 3.
-
-The tool does not train, evaluate, or infer anything the inventory does not
-state; a node the inventory marks unavailable stays unavailable here.
+The class is **derived, never declared**; contract tests pin the rule that an
+unmatched or unknown non-treatment axis can never be ``controlled``.  Two facts
+ride through every row: the s production engine's sibling ONNX matches the
+*legacy* teacher while every replica-lineage s head was trained against the
+adapted teacher (``common_mode`` when both endpoints share it, ``blocking``
+when they differ), and no historical result carries a preset/engine sha, so
+historical results are never marked reusable as a paired measurement.
 
 Usage:
-    .venv/bin/python scripts/provenance/training_comparison.py             # writes the defaults
-    .venv/bin/python scripts/provenance/training_comparison.py --check     # exit 1 if outputs are stale
+    .venv/bin/python scripts/provenance/training_comparison.py           # writes the defaults
+    .venv/bin/python scripts/provenance/training_comparison.py --check   # exit 1 if outputs are stale
 """
 
 # status: stable
@@ -1294,7 +1273,7 @@ def classify(
                 "lhs": ax["lhs"],
                 "rhs": ax["rhs"],
                 "detail": ax.get("detail", "")
-                if a != "training_schedule"
+                if a != "training_schedule" or ax["status"] == "unknown"
                 else f"non-treatment schedule keys differ: {ax.get('confound_keys')}",
             }
         )

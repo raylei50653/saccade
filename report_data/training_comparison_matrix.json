@@ -17877,7 +17877,7 @@
      "status": "unknown",
      "lhs": null,
      "rhs": null,
-     "detail": "non-treatment schedule keys differ: None"
+     "detail": "chain incomplete; recipe not fully recorded"
     },
     {
      "name": "training_budget",
@@ -18568,7 +18568,7 @@
      "status": "unknown",
      "lhs": null,
      "rhs": null,
-     "detail": "non-treatment schedule keys differ: None"
+     "detail": "chain incomplete; recipe not fully recorded"
     },
     {
      "name": "training_budget",
@@ -19262,7 +19262,7 @@
      "status": "unknown",
      "lhs": null,
      "rhs": null,
-     "detail": "non-treatment schedule keys differ: None"
+     "detail": "chain incomplete; recipe not fully recorded"
     },
     {
      "name": "training_budget",
@@ -19929,7 +19929,7 @@
      "status": "unknown",
      "lhs": null,
      "rhs": null,
-     "detail": "non-treatment schedule keys differ: None"
+     "detail": "chain incomplete; recipe not fully recorded"
     },
     {
      "name": "training_budget",

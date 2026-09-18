@@ -11,7 +11,7 @@
 | `backfill.py` | stable | cli | Which cited artifact directories can honestly be given a manifest, and which cannot. |
 | `check_producer_coverage.py` | stable | cli | Fail-closed coverage checker for ADR 021 AP-2 artifact producers. |
 | `run_manifest.py` | stable | - | Fail-closed ``run_manifest.json`` writer for produced experiment artifacts. |
-| `training_comparison.py` |  | cli | Comparison-identifiability matrix over the #421 training lineage (deliverable 2). |
+| `training_comparison.py` | stable | cli | Comparison-identifiability matrix over the #421 training lineage (deliverable 2). |
 | `training_lineage.py` | stable | cli | Model-lineage inventory for the YOLO + Mamba detector chain (issue #421, deliverable 1). |
 
 <!-- END generated script index -->

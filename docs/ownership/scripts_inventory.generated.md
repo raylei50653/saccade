@@ -9,7 +9,7 @@ Total tracked scripts: **497**. Source of truth = each script's own docstring + 
 
 | Label | Meaning | Count |
 |-------|---------|------:|
-| `stable` | supported workflow entrypoint; keep path stable | 183 |
+| `stable` | supported workflow entrypoint; keep path stable | 184 |
 | `diagnostic` | reusable analysis/debug tool, not a main workflow | 205 |
 | `experiment` | tied to a named experiment or historical sweep | 102 |
 | `archive-candidate` | no longer active; keep only if referenced by docs/results | 6 |
@@ -391,7 +391,7 @@ Total tracked scripts: **497**. Source of truth = each script's own docstring + 
 | `backfill.py` | stable | cli | Which cited artifact directories can honestly be given a manifest, and which cannot. |
 | `check_producer_coverage.py` | stable | cli | Fail-closed coverage checker for ADR 021 AP-2 artifact producers. |
 | `run_manifest.py` | stable | - | Fail-closed ``run_manifest.json`` writer for produced experiment artifacts. |
-| `training_comparison.py` |  | cli | Comparison-identifiability matrix over the #421 training lineage (deliverable 2). |
+| `training_comparison.py` | stable | cli | Comparison-identifiability matrix over the #421 training lineage (deliverable 2). |
 | `training_lineage.py` | stable | cli | Model-lineage inventory for the YOLO + Mamba detector chain (issue #421, deliverable 1). |
 
 ### `scripts/release/`
