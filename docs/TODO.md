@@ -1,24 +1,20 @@
-# Saccade TODO — 具體實作清單
+# Saccade TODO — WIP 指標與當前 baseline
 
-> 主 TODO 只保留目前待辦、近期 ablation 結論與下一步方向。已完成項、設計規範與 C++ 路線圖已移至 [TODO_history.md](TODO_history.md)。
+> **任務不住在這裡。** 待辦、排序與進度全部在 GitHub issue：
+> [`Now`](https://github.com/raylei50653/saccade/milestone/1)（= 各 module owner 的 sole active，WIP=1）·
+> [`Next`](https://github.com/raylei50653/saccade/milestone/2) ·
+> [`Later`](https://github.com/raylei50653/saccade/milestone/3)（blocked / dependent）。
+> 本檔只保留：sole-active 指標、當前 baseline 數字（fact-owner）、模組 TODO 索引。
+> 已完成項與歷史路線圖見 [TODO_history.md](TODO_history.md)。
 
 ---
 
-## 歸檔標準
+## 收錄規則
 
-- 主 TODO 只保留三類內容：
-  - 目前真的還要做的事項
-  - 近期仍會影響決策的 ablation 結論
-  - 下一輪已排定的實驗 / 實作 backlog
-- 內容應移入 [TODO_history.md](TODO_history.md) 的情況：
-  - 已完成，且後續不再需要逐步追蹤
-  - 已收斂並明確放棄，不再作為近期 default 候選
-  - 已被新方向取代，只需保留背景與結論
-  - 屬於長篇實作過程、舊路線圖或階段性 milestone，而不是當前待辦
-- 歸檔時原則：
-  - 主 TODO 保留高訊號摘要與最終結論
-  - 細節、過程、舊參數掃描與已結案子項移入 history
-  - 若某方向之後重新啟動，再從 history 摘回主 TODO，而不是在主 TODO 長期保留已結案脈絡
+- 任務、排序、blocker、進度：GitHub issue + milestone（`gh issue list --milestone Now`）。本檔與各 `docs/modules/<m>/TODO.md` 不放 checkbox 任務項、不放結果表、不放推理流水帳（[DOC_MAINTENANCE § WIP](DOC_MAINTENANCE.md#workstream-wip一模主一目標)；`check_doc_structure` L5 fail-closed）。
+- Sole active（WIP=1）：module TODO 一行 + 指向 issue 的 link；該 issue 必在 `Now`。
+- 研究線的 state / verdict / terminal：[claim-state registry](research/contracts/claim_state_registry.md) 是唯一 fact-owner，issue 只追蹤執行，不複述 state。
+- 歸檔：已完成或放棄的方向移入 [TODO_history.md](TODO_history.md)，只留高訊號結論；之後重啟從 history 摘回，不在本檔長期保留已結案脈絡。
 
 ---
 
@@ -63,7 +59,16 @@ legacy `native_960` presets (`speed` / `baseline`) remain useful for comparison,
 
 ## Sole active（WIP=1）
 
-- **NONE。** #368 Phase 1（module doc question map）已驗收：protocol 與輸出見下方跨模組待辦。Phase 2 啟動需先滿足 [Phase 2 activation boundary](ownership/module_doc_question_phase2_activation_boundary.md)；Phase 2 / W-B / W-C 未授權，皆不自動啟動。
+**= milestone [`Now`](https://github.com/raylei50653/saccade/milestone/1)。** 每個 module owner 至多一個；module TODO 的 sole-active 行指向對應 issue。
+
+| Owner | Issue | Module TODO |
+|---|---|---|
+| resource / perf | [#419](https://github.com/raylei50653/saccade/issues/419) | [resource](modules/resource/TODO.md) |
+| governance（tracker frozen substrate） | [#436](https://github.com/raylei50653/saccade/issues/436) | — |
+| training lineage | [#421](https://github.com/raylei50653/saccade/issues/421) | — |
+| semantic | [#442](https://github.com/raylei50653/saccade/issues/442)（OWDL owner seal decision） | [semantic](modules/semantic/TODO.md) |
+
+#368 Phase 2 **未啟動**：啟動前置條件見 [activation boundary](ownership/module_doc_question_phase2_activation_boundary.md)（第 7 條 = 本表明列該 unit 並移入 `Now`）。
 
 ---
 
@@ -82,11 +87,11 @@ legacy `native_960` presets (`speed` / `baseline`) remain useful for comparison,
 
 ---
 
-## 跨模組待辦
+## 跨模組 issue（指標）
 
-- [ ] **模組化前邊界盤點（backlog）**：依 [Saccade 模塊化前參考筆記](reference/saccade_module_reference.md) 盤點 distribution、dependencies、native extension delivery、failure semantics 與 public/runtime surface；筆記為背景資料，具體拆分方案與 API 待後續定義。
-- [ ] **Production Pipeline Profiling（規劃）**：固定 `806c52cf`，依 [P1–P6 清單](research/pipeline/production_pipeline_profiling_todo.md) 建立 production scheduling 下的 measurement／attribution，完成瓶頸歸因後再決定 optimization 工作項。
-- [ ] **`docs/modules/` 問題導向重整 Phase 2（backlog）**：[#368](https://github.com/raylei50653/saccade/issues/368) — 模組文檔改以「question → current answer → limits → evidence」組織而非 task/report 編年，`semantic/` 為主要 failure case。先行 Phase 1（只分類、不綜合）已驗收：[protocol](ownership/module_doc_question_protocol.md)（pin 於 `ea29f5d`）· [question map](ownership/module_doc_question_map.yaml)（123 份、EPHEMERAL）；Phase 2 待另行授權，且須先滿足 [activation boundary](ownership/module_doc_question_phase2_activation_boundary.md) 的七項前置條件（含 `docs/TODO.md` 明列 Sole active），不自動啟動。`semantic/research/evidence/` 治理由 [#404](https://github.com/raylei50653/saccade/issues/404) 擁有，不在此線解決。
+- 模組化前邊界盤點 → 盤點半已完成（ADR 025、#411/#414、#409），剩餘 public API surface 與 distribution channel = [#441](https://github.com/raylei50653/saccade/issues/441)（`Later`）；背景筆記 [saccade_module_reference.md](reference/saccade_module_reference.md)。
+- Production Pipeline Profiling P1–P6 → 全部完成，見 [profiling todo](research/pipeline/production_pipeline_profiling_todo.md)（結案紀錄）與 history。
+- `docs/modules/` 問題導向重整 → [#368](https://github.com/raylei50653/saccade/issues/368)（`Next`；Phase 1 已驗收，Phase 2 待授權）；evidence 治理 [#404](https://github.com/raylei50653/saccade/issues/404)。
 
 ---
 
