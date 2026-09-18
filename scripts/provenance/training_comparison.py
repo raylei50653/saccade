@@ -687,10 +687,17 @@ def bind_runtime(
                 else None,
                 "head_source": head_source,
                 "recipe": " ".join(recipe),
-                "temporal_blocks": fwd.get("temporal_blocks"),
+                "temporal_blocks": (
+                    "unknown"
+                    if profile.temporal_blocks_present is None
+                    else "absent"
+                    if not profile.temporal_blocks_present
+                    else "present; BYPASSED by whole-graph effective T=1"
+                    if head_source["checkpoint_head_deployed"]
+                    else "present in checkpoint; checkpoint head NOT deployed"
+                ),
                 "effective_T": 1,
                 "gate_teacher_at_runtime": fwd.get("gate_teacher_at_runtime"),
-                "final_stage_gt_ratio": fwd.get("final_stage_gt_ratio"),
                 "embedding": fwd.get("embedding"),
                 "graphs": fwd.get("graphs"),
                 "tracker_policy_source": "preset",
@@ -997,7 +1004,6 @@ def compare_profiles(
             "gate_teacher_at_runtime",
             "embedding",
             "graphs",
-            "final_stage_gt_ratio",
         )
         lf = {k: lr.get(k) for k in fwd_keys}
         rf = {k: rr.get(k) for k in fwd_keys}

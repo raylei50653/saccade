@@ -675,6 +675,53 @@ def _with_fixed_head_engine(inv: dict) -> dict:
     return inv
 
 
+def test_family_preset_temporal_metadata_follows_endpoint() -> None:
+    inv = _with_fixed_head_engine(_inventory())
+    binding = {"binding": "family_preset", "head_override": "checkpoint_pytorch"}
+    for node, expected in (
+        ("s.distill", "absent"),
+        ("s.gt1", "absent"),
+        ("s.phase_b_42", "present; BYPASSED by whole-graph effective T=1"),
+    ):
+        runtime = tc.bind_runtime(tc.build_profile(node, inv), binding, inv)
+        assert runtime["temporal_blocks"] == expected
+        assert runtime["effective_T"] == 1
+        assert "final_stage_gt_ratio" not in runtime
+        assert runtime["graphs"] == {"use_whole_graph": True}
+        assert runtime["embedding"] == "reid_mode='off'"
+
+
+def test_gt_ratio_is_training_metadata_not_forward_mode(tmp_path: Path) -> None:
+    inv = _inventory()
+    spec = _pair(
+        "gt",
+        "s.gt1",
+        "s.plain_warm5",
+        design="stage_increment",
+        treatment=(
+            "warm_start",
+            "teacher_cache",
+            "training_schedule",
+            "training_budget",
+        ),
+        keys=("gt_ratio",),
+    )
+    row = _run(inv, _decl(spec), tmp_path)["gt"]
+    assert "training_schedule" in row["treatment_axes_observed"]
+    assert row["axes"]["inference_forward_mode"]["status"] == "matched"
+    for side in ("lhs", "rhs"):
+        assert "final_stage_gt_ratio" not in row["axes"]["inference_forward_mode"][side]
+        assert "final_stage_gt_ratio" not in row[side]["runtime"]
+    # Even legacy runtime payloads with different training ratios must not
+    # create a structural forward difference.
+    lhs = tc.build_profile("s.gt1", inv)
+    rhs = tc.build_profile("s.plain_warm5", inv)
+    lr = {**row["lhs"]["runtime"], "final_stage_gt_ratio": 0.5}
+    rr = {**row["rhs"]["runtime"], "final_stage_gt_ratio": 0.0}
+    axes = tc.compare_profiles(lhs, rhs, lr, rr, spec, inv, tmp_path)
+    assert axes["inference_forward_mode"]["status"] == "matched"
+
+
 def test_fixed_head_engine_blocks_training_designs_until_overridden(
     tmp_path: Path,
 ) -> None:

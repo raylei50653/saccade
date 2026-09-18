@@ -199,8 +199,7 @@
        "use_whole_graph": false,
        "use_cuda_graph": false,
        "use_tracker_graph": false
-      },
-      "final_stage_gt_ratio": null
+      }
      },
      "rhs": {
       "effective_T": 1,
@@ -210,8 +209,7 @@
        "use_whole_graph": false,
        "use_cuda_graph": false,
        "use_tracker_graph": false
-      },
-      "final_stage_gt_ratio": null
+      }
      },
      "detail": ""
     },
@@ -719,8 +717,7 @@
        "use_whole_graph": false,
        "use_cuda_graph": false,
        "use_tracker_graph": false
-      },
-      "final_stage_gt_ratio": null
+      }
      },
      "rhs": {
       "effective_T": 1,
@@ -730,8 +727,7 @@
        "use_whole_graph": false,
        "use_cuda_graph": false,
        "use_tracker_graph": false
-      },
-      "final_stage_gt_ratio": null
+      }
      },
      "detail": ""
     },
@@ -1243,8 +1239,7 @@
        "use_whole_graph": false,
        "use_cuda_graph": false,
        "use_tracker_graph": false
-      },
-      "final_stage_gt_ratio": null
+      }
      },
      "rhs": {
       "effective_T": 1,
@@ -1254,8 +1249,7 @@
        "use_whole_graph": false,
        "use_cuda_graph": false,
        "use_tracker_graph": false
-      },
-      "final_stage_gt_ratio": null
+      }
      },
      "detail": ""
     },
@@ -1655,10 +1649,9 @@
       "source_attribution": null
      },
      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_distill_v14replica/best.ckpt",
-     "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+     "temporal_blocks": "absent",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-     "final_stage_gt_ratio": 0.0,
      "embedding": "reid_mode='off'",
      "graphs": {
       "use_whole_graph": true,
@@ -1694,10 +1687,9 @@
       "source_attribution": null
      },
      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_stage1/best.ckpt",
-     "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+     "temporal_blocks": "absent",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-     "final_stage_gt_ratio": 0.0,
      "embedding": "reid_mode='off'",
      "graphs": {
       "use_whole_graph": true,
@@ -1802,8 +1794,7 @@
        "use_whole_graph": true,
        "use_cuda_graph": true,
        "use_tracker_graph": true
-      },
-      "final_stage_gt_ratio": 0.0
+      }
      },
      "rhs": {
       "effective_T": 1,
@@ -1813,8 +1804,7 @@
        "use_whole_graph": true,
        "use_cuda_graph": true,
        "use_tracker_graph": true
-      },
-      "final_stage_gt_ratio": 0.0
+      }
      },
      "detail": ""
     },
@@ -1836,13 +1826,13 @@
       "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
       "checkpoint_head_deployed": true,
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
+      "temporal_blocks": "absent"
      },
      "rhs": {
       "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
       "checkpoint_head_deployed": true,
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
+      "temporal_blocks": "absent"
      },
      "detail": ""
     },
@@ -2019,10 +2009,9 @@
        "source_attribution": null
       },
       "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_distill_v14replica/best.ckpt",
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+      "temporal_blocks": "absent",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-      "final_stage_gt_ratio": 0.0,
       "embedding": "reid_mode='off'",
       "graphs": {
        "use_whole_graph": true,
@@ -2139,10 +2128,9 @@
        "source_attribution": null
       },
       "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_stage1/best.ckpt",
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+      "temporal_blocks": "absent",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-      "final_stage_gt_ratio": 0.0,
       "embedding": "reid_mode='off'",
       "graphs": {
        "use_whole_graph": true,
@@ -2260,10 +2248,9 @@
       "source_attribution": null
      },
      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_stage1/best.ckpt",
-     "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+     "temporal_blocks": "absent",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-     "final_stage_gt_ratio": 0.0,
      "embedding": "reid_mode='off'",
      "graphs": {
       "use_whole_graph": true,
@@ -2299,10 +2286,9 @@
       "source_attribution": null
      },
      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_final/best.ckpt",
-     "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+     "temporal_blocks": "absent",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-     "final_stage_gt_ratio": 0.0,
      "embedding": "reid_mode='off'",
      "graphs": {
       "use_whole_graph": true,
@@ -2404,8 +2390,7 @@
        "use_whole_graph": true,
        "use_cuda_graph": true,
        "use_tracker_graph": true
-      },
-      "final_stage_gt_ratio": 0.0
+      }
      },
      "rhs": {
       "effective_T": 1,
@@ -2415,8 +2400,7 @@
        "use_whole_graph": true,
        "use_cuda_graph": true,
        "use_tracker_graph": true
-      },
-      "final_stage_gt_ratio": 0.0
+      }
      },
      "detail": ""
     },
@@ -2438,13 +2422,13 @@
       "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
       "checkpoint_head_deployed": true,
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
+      "temporal_blocks": "absent"
      },
      "rhs": {
       "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
       "checkpoint_head_deployed": true,
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
+      "temporal_blocks": "absent"
      },
      "detail": ""
     },
@@ -2630,10 +2614,9 @@
        "source_attribution": null
       },
       "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_stage1/best.ckpt",
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+      "temporal_blocks": "absent",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-      "final_stage_gt_ratio": 0.0,
       "embedding": "reid_mode='off'",
       "graphs": {
        "use_whole_graph": true,
@@ -2792,10 +2775,9 @@
        "source_attribution": null
       },
       "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_final/best.ckpt",
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+      "temporal_blocks": "absent",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-      "final_stage_gt_ratio": 0.0,
       "embedding": "reid_mode='off'",
       "graphs": {
        "use_whole_graph": true,
@@ -2955,10 +2937,9 @@
       "source_attribution": null
      },
      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph_m --no-mamba-trt --mamba-ckpt runs/mamba_distill_yolo26m_v14replica/best.ckpt",
-     "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+     "temporal_blocks": "absent",
      "effective_T": 1,
      "gate_teacher_at_runtime": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
-     "final_stage_gt_ratio": 0.0,
      "embedding": "reid_mode='off'",
      "graphs": {
       "use_whole_graph": true,
@@ -2994,10 +2975,9 @@
       "source_attribution": null
      },
      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph_m --no-mamba-trt --mamba-ckpt runs/mamba_gt_yolo26m_v14replica_stage1/best.ckpt",
-     "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+     "temporal_blocks": "absent",
      "effective_T": 1,
      "gate_teacher_at_runtime": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
-     "final_stage_gt_ratio": 0.0,
      "embedding": "reid_mode='off'",
      "graphs": {
       "use_whole_graph": true,
@@ -3102,8 +3082,7 @@
        "use_whole_graph": true,
        "use_cuda_graph": true,
        "use_tracker_graph": true
-      },
-      "final_stage_gt_ratio": 0.0
+      }
      },
      "rhs": {
       "effective_T": 1,
@@ -3113,8 +3092,7 @@
        "use_whole_graph": true,
        "use_cuda_graph": true,
        "use_tracker_graph": true
-      },
-      "final_stage_gt_ratio": 0.0
+      }
      },
      "detail": ""
     },
@@ -3136,13 +3114,13 @@
       "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
       "checkpoint_head_deployed": true,
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
+      "temporal_blocks": "absent"
      },
      "rhs": {
       "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
       "checkpoint_head_deployed": true,
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
+      "temporal_blocks": "absent"
      },
      "detail": ""
     },
@@ -3315,10 +3293,9 @@
        "source_attribution": null
       },
       "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph_m --no-mamba-trt --mamba-ckpt runs/mamba_distill_yolo26m_v14replica/best.ckpt",
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+      "temporal_blocks": "absent",
       "effective_T": 1,
       "gate_teacher_at_runtime": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
-      "final_stage_gt_ratio": 0.0,
       "embedding": "reid_mode='off'",
       "graphs": {
        "use_whole_graph": true,
@@ -3436,10 +3413,9 @@
        "source_attribution": null
       },
       "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph_m --no-mamba-trt --mamba-ckpt runs/mamba_gt_yolo26m_v14replica_stage1/best.ckpt",
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+      "temporal_blocks": "absent",
       "effective_T": 1,
       "gate_teacher_at_runtime": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
-      "final_stage_gt_ratio": 0.0,
       "embedding": "reid_mode='off'",
       "graphs": {
        "use_whole_graph": true,
@@ -3570,10 +3546,9 @@
       }
      },
      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph_m --mamba-ckpt runs/mamba_distill_yolo26m_v14replica/best.ckpt",
-     "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+     "temporal_blocks": "absent",
      "effective_T": 1,
      "gate_teacher_at_runtime": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
-     "final_stage_gt_ratio": 0.0,
      "embedding": "reid_mode='off'",
      "graphs": {
       "use_whole_graph": true,
@@ -3620,10 +3595,9 @@
       }
      },
      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph_m --mamba-ckpt runs/mamba_gt_yolo26m_v14replica_stage1/best.ckpt",
-     "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+     "temporal_blocks": "absent",
      "effective_T": 1,
      "gate_teacher_at_runtime": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
-     "final_stage_gt_ratio": 0.0,
      "embedding": "reid_mode='off'",
      "graphs": {
       "use_whole_graph": true,
@@ -3728,8 +3702,7 @@
        "use_whole_graph": true,
        "use_cuda_graph": true,
        "use_tracker_graph": true
-      },
-      "final_stage_gt_ratio": 0.0
+      }
      },
      "rhs": {
       "effective_T": 1,
@@ -3739,8 +3712,7 @@
        "use_whole_graph": true,
        "use_cuda_graph": true,
        "use_tracker_graph": true
-      },
-      "final_stage_gt_ratio": 0.0
+      }
      },
      "detail": ""
     },
@@ -3762,14 +3734,14 @@
       "head_path": "TRT head engine models/yolo/mamba_head_26m.engine (checkpoint head NOT deployed)",
       "head_engine_node": "m.head_engine",
       "checkpoint_head_deployed": false,
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+      "temporal_blocks": "absent",
       "head_engine_source": "sibling ONNX ambiguous: ['m.distill', 'm.gt1', 'm.gt2_plain', 'm.t3t1_phase_a', 'm.t3t1_phase_b', 'm.t3t1_phase_b_gpu_decode']"
      },
      "rhs": {
       "head_path": "TRT head engine models/yolo/mamba_head_26m.engine (checkpoint head NOT deployed)",
       "head_engine_node": "m.head_engine",
       "checkpoint_head_deployed": false,
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+      "temporal_blocks": "absent",
       "head_engine_source": "sibling ONNX ambiguous: ['m.distill', 'm.gt1', 'm.gt2_plain', 'm.t3t1_phase_a', 'm.t3t1_phase_b', 'm.t3t1_phase_b_gpu_decode']"
      },
      "detail": "lhs runs the fixed head engine, not the lhs checkpoint head (sibling ONNX ambiguous: ['m.distill', 'm.gt1', 'm.gt2_plain', 'm.t3t1_phase_a', 'm.t3t1_phase_b', 'm.t3t1_phase_b_gpu_decode']; checkpoint source ambiguous); rhs runs the fixed head engine, not the rhs checkpoint head (sibling ONNX ambiguous: ['m.distill', 'm.gt1', 'm.gt2_plain', 'm.t3t1_phase_a', 'm.t3t1_phase_b', 'm.t3t1_phase_b_gpu_decode']; checkpoint source ambiguous)"
@@ -3955,10 +3927,9 @@
        }
       },
       "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph_m --mamba-ckpt runs/mamba_distill_yolo26m_v14replica/best.ckpt",
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+      "temporal_blocks": "absent",
       "effective_T": 1,
       "gate_teacher_at_runtime": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
-      "final_stage_gt_ratio": 0.0,
       "embedding": "reid_mode='off'",
       "graphs": {
        "use_whole_graph": true,
@@ -4087,10 +4058,9 @@
        }
       },
       "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph_m --mamba-ckpt runs/mamba_gt_yolo26m_v14replica_stage1/best.ckpt",
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+      "temporal_blocks": "absent",
       "effective_T": 1,
       "gate_teacher_at_runtime": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
-      "final_stage_gt_ratio": 0.0,
       "embedding": "reid_mode='off'",
       "graphs": {
        "use_whole_graph": true,
@@ -4210,10 +4180,9 @@
       "source_attribution": null
      },
      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph_m --no-mamba-trt --mamba-ckpt runs/mamba_gt_yolo26m_v14replica_stage1/best.ckpt",
-     "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+     "temporal_blocks": "absent",
      "effective_T": 1,
      "gate_teacher_at_runtime": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
-     "final_stage_gt_ratio": 0.0,
      "embedding": "reid_mode='off'",
      "graphs": {
       "use_whole_graph": true,
@@ -4249,10 +4218,9 @@
       "source_attribution": null
      },
      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph_m --no-mamba-trt --mamba-ckpt runs/mamba_gt_yolo26m_v14replica_final/best.ckpt",
-     "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+     "temporal_blocks": "absent",
      "effective_T": 1,
      "gate_teacher_at_runtime": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
-     "final_stage_gt_ratio": 0.0,
      "embedding": "reid_mode='off'",
      "graphs": {
       "use_whole_graph": true,
@@ -4354,8 +4322,7 @@
        "use_whole_graph": true,
        "use_cuda_graph": true,
        "use_tracker_graph": true
-      },
-      "final_stage_gt_ratio": 0.0
+      }
      },
      "rhs": {
       "effective_T": 1,
@@ -4365,8 +4332,7 @@
        "use_whole_graph": true,
        "use_cuda_graph": true,
        "use_tracker_graph": true
-      },
-      "final_stage_gt_ratio": 0.0
+      }
      },
      "detail": ""
     },
@@ -4388,13 +4354,13 @@
       "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
       "checkpoint_head_deployed": true,
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
+      "temporal_blocks": "absent"
      },
      "rhs": {
       "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
       "checkpoint_head_deployed": true,
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
+      "temporal_blocks": "absent"
      },
      "detail": ""
     },
@@ -4568,10 +4534,9 @@
        "source_attribution": null
       },
       "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph_m --no-mamba-trt --mamba-ckpt runs/mamba_gt_yolo26m_v14replica_stage1/best.ckpt",
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+      "temporal_blocks": "absent",
       "effective_T": 1,
       "gate_teacher_at_runtime": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
-      "final_stage_gt_ratio": 0.0,
       "embedding": "reid_mode='off'",
       "graphs": {
        "use_whole_graph": true,
@@ -4732,10 +4697,9 @@
        "source_attribution": null
       },
       "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph_m --no-mamba-trt --mamba-ckpt runs/mamba_gt_yolo26m_v14replica_final/best.ckpt",
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+      "temporal_blocks": "absent",
       "effective_T": 1,
       "gate_teacher_at_runtime": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
-      "final_stage_gt_ratio": 0.0,
       "embedding": "reid_mode='off'",
       "graphs": {
        "use_whole_graph": true,
@@ -4898,10 +4862,9 @@
       "source_attribution": null
      },
      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_stage1/best.ckpt",
-     "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+     "temporal_blocks": "absent",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-     "final_stage_gt_ratio": 0.0,
      "embedding": "reid_mode='off'",
      "graphs": {
       "use_whole_graph": true,
@@ -4937,10 +4900,9 @@
       "source_attribution": null
      },
      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1/best.ckpt",
-     "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+     "temporal_blocks": "present; BYPASSED by whole-graph effective T=1",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-     "final_stage_gt_ratio": 0.0,
      "embedding": "reid_mode='off'",
      "graphs": {
       "use_whole_graph": true,
@@ -5050,8 +5012,7 @@
        "use_whole_graph": true,
        "use_cuda_graph": true,
        "use_tracker_graph": true
-      },
-      "final_stage_gt_ratio": 0.0
+      }
      },
      "rhs": {
       "effective_T": 1,
@@ -5061,8 +5022,7 @@
        "use_whole_graph": true,
        "use_cuda_graph": true,
        "use_tracker_graph": true
-      },
-      "final_stage_gt_ratio": 0.0
+      }
      },
      "detail": ""
     },
@@ -5079,20 +5039,20 @@
      "detail": "engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence"
     },
     "deployed_head_artifact": {
-     "status": "matched",
+     "status": "matched_effective",
      "lhs": {
       "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
       "checkpoint_head_deployed": true,
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
+      "temporal_blocks": "absent"
      },
      "rhs": {
       "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
       "checkpoint_head_deployed": true,
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
+      "temporal_blocks": "present; BYPASSED by whole-graph effective T=1"
      },
-     "detail": ""
+     "detail": "same head path; temporal-block presence differs but is bypassed at T=1"
     },
     "tracker_runtime_policy": {
      "status": "matched",
@@ -5302,10 +5262,9 @@
        "source_attribution": null
       },
       "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_stage1/best.ckpt",
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+      "temporal_blocks": "absent",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-      "final_stage_gt_ratio": 0.0,
       "embedding": "reid_mode='off'",
       "graphs": {
        "use_whole_graph": true,
@@ -5464,10 +5423,9 @@
        "source_attribution": null
       },
       "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1/best.ckpt",
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+      "temporal_blocks": "present; BYPASSED by whole-graph effective T=1",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-      "final_stage_gt_ratio": 0.0,
       "embedding": "reid_mode='off'",
       "graphs": {
        "use_whole_graph": true,
@@ -5670,10 +5628,9 @@
       "source_attribution": null
      },
      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_implicit_s42/best.ckpt",
-     "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+     "temporal_blocks": "absent",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-     "final_stage_gt_ratio": 0.0,
      "embedding": "reid_mode='off'",
      "graphs": {
       "use_whole_graph": true,
@@ -5709,10 +5666,9 @@
       "source_attribution": null
      },
      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1/best.ckpt",
-     "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+     "temporal_blocks": "present; BYPASSED by whole-graph effective T=1",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-     "final_stage_gt_ratio": 0.0,
      "embedding": "reid_mode='off'",
      "graphs": {
       "use_whole_graph": true,
@@ -5818,8 +5774,7 @@
        "use_whole_graph": true,
        "use_cuda_graph": true,
        "use_tracker_graph": true
-      },
-      "final_stage_gt_ratio": 0.0
+      }
      },
      "rhs": {
       "effective_T": 1,
@@ -5829,8 +5784,7 @@
        "use_whole_graph": true,
        "use_cuda_graph": true,
        "use_tracker_graph": true
-      },
-      "final_stage_gt_ratio": 0.0
+      }
      },
      "detail": ""
     },
@@ -5847,20 +5801,20 @@
      "detail": "engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence"
     },
     "deployed_head_artifact": {
-     "status": "matched",
+     "status": "matched_effective",
      "lhs": {
       "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
       "checkpoint_head_deployed": true,
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
+      "temporal_blocks": "absent"
      },
      "rhs": {
       "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
       "checkpoint_head_deployed": true,
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
+      "temporal_blocks": "present; BYPASSED by whole-graph effective T=1"
      },
-     "detail": ""
+     "detail": "same head path; temporal-block presence differs but is bypassed at T=1"
     },
     "tracker_runtime_policy": {
      "status": "matched",
@@ -6047,10 +6001,9 @@
        "source_attribution": null
       },
       "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_implicit_s42/best.ckpt",
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+      "temporal_blocks": "absent",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-      "final_stage_gt_ratio": 0.0,
       "embedding": "reid_mode='off'",
       "graphs": {
        "use_whole_graph": true,
@@ -6252,10 +6205,9 @@
        "source_attribution": null
       },
       "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1/best.ckpt",
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+      "temporal_blocks": "present; BYPASSED by whole-graph effective T=1",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-      "final_stage_gt_ratio": 0.0,
       "embedding": "reid_mode='off'",
       "graphs": {
        "use_whole_graph": true,
@@ -6458,10 +6410,9 @@
       "source_attribution": null
      },
      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_implicit_s43/best.ckpt",
-     "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+     "temporal_blocks": "absent",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-     "final_stage_gt_ratio": 0.0,
      "embedding": "reid_mode='off'",
      "graphs": {
       "use_whole_graph": true,
@@ -6497,10 +6448,9 @@
       "source_attribution": null
      },
      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1_shared_s43/best.ckpt",
-     "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+     "temporal_blocks": "present; BYPASSED by whole-graph effective T=1",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-     "final_stage_gt_ratio": 0.0,
      "embedding": "reid_mode='off'",
      "graphs": {
       "use_whole_graph": true,
@@ -6606,8 +6556,7 @@
        "use_whole_graph": true,
        "use_cuda_graph": true,
        "use_tracker_graph": true
-      },
-      "final_stage_gt_ratio": 0.0
+      }
      },
      "rhs": {
       "effective_T": 1,
@@ -6617,8 +6566,7 @@
        "use_whole_graph": true,
        "use_cuda_graph": true,
        "use_tracker_graph": true
-      },
-      "final_stage_gt_ratio": 0.0
+      }
      },
      "detail": ""
     },
@@ -6635,20 +6583,20 @@
      "detail": "engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence"
     },
     "deployed_head_artifact": {
-     "status": "matched",
+     "status": "matched_effective",
      "lhs": {
       "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
       "checkpoint_head_deployed": true,
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
+      "temporal_blocks": "absent"
      },
      "rhs": {
       "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
       "checkpoint_head_deployed": true,
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
+      "temporal_blocks": "present; BYPASSED by whole-graph effective T=1"
      },
-     "detail": ""
+     "detail": "same head path; temporal-block presence differs but is bypassed at T=1"
     },
     "tracker_runtime_policy": {
      "status": "matched",
@@ -6827,10 +6775,9 @@
        "source_attribution": null
       },
       "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_implicit_s43/best.ckpt",
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+      "temporal_blocks": "absent",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-      "final_stage_gt_ratio": 0.0,
       "embedding": "reid_mode='off'",
       "graphs": {
        "use_whole_graph": true,
@@ -7032,10 +6979,9 @@
        "source_attribution": null
       },
       "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1_shared_s43/best.ckpt",
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+      "temporal_blocks": "present; BYPASSED by whole-graph effective T=1",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-      "final_stage_gt_ratio": 0.0,
       "embedding": "reid_mode='off'",
       "graphs": {
        "use_whole_graph": true,
@@ -7239,10 +7185,9 @@
       "source_attribution": null
      },
      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_implicit_s44/best.ckpt",
-     "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+     "temporal_blocks": "absent",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-     "final_stage_gt_ratio": 0.0,
      "embedding": "reid_mode='off'",
      "graphs": {
       "use_whole_graph": true,
@@ -7278,10 +7223,9 @@
       "source_attribution": null
      },
      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1_shared_s44/best.ckpt",
-     "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+     "temporal_blocks": "present; BYPASSED by whole-graph effective T=1",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-     "final_stage_gt_ratio": 0.0,
      "embedding": "reid_mode='off'",
      "graphs": {
       "use_whole_graph": true,
@@ -7387,8 +7331,7 @@
        "use_whole_graph": true,
        "use_cuda_graph": true,
        "use_tracker_graph": true
-      },
-      "final_stage_gt_ratio": 0.0
+      }
      },
      "rhs": {
       "effective_T": 1,
@@ -7398,8 +7341,7 @@
        "use_whole_graph": true,
        "use_cuda_graph": true,
        "use_tracker_graph": true
-      },
-      "final_stage_gt_ratio": 0.0
+      }
      },
      "detail": ""
     },
@@ -7416,20 +7358,20 @@
      "detail": "engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence"
     },
     "deployed_head_artifact": {
-     "status": "matched",
+     "status": "matched_effective",
      "lhs": {
       "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
       "checkpoint_head_deployed": true,
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
+      "temporal_blocks": "absent"
      },
      "rhs": {
       "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
       "checkpoint_head_deployed": true,
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
+      "temporal_blocks": "present; BYPASSED by whole-graph effective T=1"
      },
-     "detail": ""
+     "detail": "same head path; temporal-block presence differs but is bypassed at T=1"
     },
     "tracker_runtime_policy": {
      "status": "matched",
@@ -7608,10 +7550,9 @@
        "source_attribution": null
       },
       "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_implicit_s44/best.ckpt",
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+      "temporal_blocks": "absent",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-      "final_stage_gt_ratio": 0.0,
       "embedding": "reid_mode='off'",
       "graphs": {
        "use_whole_graph": true,
@@ -7813,10 +7754,9 @@
        "source_attribution": null
       },
       "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1_shared_s44/best.ckpt",
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+      "temporal_blocks": "present; BYPASSED by whole-graph effective T=1",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-      "final_stage_gt_ratio": 0.0,
       "embedding": "reid_mode='off'",
       "graphs": {
        "use_whole_graph": true,
@@ -8020,10 +7960,9 @@
       "source_attribution": null
      },
      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_s13_final/best.ckpt",
-     "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+     "temporal_blocks": "absent",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-     "final_stage_gt_ratio": 0.0,
      "embedding": "reid_mode='off'",
      "graphs": {
       "use_whole_graph": true,
@@ -8059,10 +7998,9 @@
       "source_attribution": null
      },
      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1_s13/best.ckpt",
-     "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+     "temporal_blocks": "present; BYPASSED by whole-graph effective T=1",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-     "final_stage_gt_ratio": 0.0,
      "embedding": "reid_mode='off'",
      "graphs": {
       "use_whole_graph": true,
@@ -8168,8 +8106,7 @@
        "use_whole_graph": true,
        "use_cuda_graph": true,
        "use_tracker_graph": true
-      },
-      "final_stage_gt_ratio": 0.0
+      }
      },
      "rhs": {
       "effective_T": 1,
@@ -8179,8 +8116,7 @@
        "use_whole_graph": true,
        "use_cuda_graph": true,
        "use_tracker_graph": true
-      },
-      "final_stage_gt_ratio": 0.0
+      }
      },
      "detail": ""
     },
@@ -8197,20 +8133,20 @@
      "detail": "engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence"
     },
     "deployed_head_artifact": {
-     "status": "matched",
+     "status": "matched_effective",
      "lhs": {
       "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
       "checkpoint_head_deployed": true,
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
+      "temporal_blocks": "absent"
      },
      "rhs": {
       "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
       "checkpoint_head_deployed": true,
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
+      "temporal_blocks": "present; BYPASSED by whole-graph effective T=1"
      },
-     "detail": ""
+     "detail": "same head path; temporal-block presence differs but is bypassed at T=1"
     },
     "tracker_runtime_policy": {
      "status": "matched",
@@ -8420,10 +8356,9 @@
        "source_attribution": null
       },
       "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_s13_final/best.ckpt",
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+      "temporal_blocks": "absent",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-      "final_stage_gt_ratio": 0.0,
       "embedding": "reid_mode='off'",
       "graphs": {
        "use_whole_graph": true,
@@ -8624,10 +8559,9 @@
        "source_attribution": null
       },
       "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1_s13/best.ckpt",
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+      "temporal_blocks": "present; BYPASSED by whole-graph effective T=1",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-      "final_stage_gt_ratio": 0.0,
       "embedding": "reid_mode='off'",
       "graphs": {
        "use_whole_graph": true,
@@ -8829,10 +8763,9 @@
       "source_attribution": null
      },
      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_s14_final/best.ckpt",
-     "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+     "temporal_blocks": "absent",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-     "final_stage_gt_ratio": 0.0,
      "embedding": "reid_mode='off'",
      "graphs": {
       "use_whole_graph": true,
@@ -8868,10 +8801,9 @@
       "source_attribution": null
      },
      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1_s14/best.ckpt",
-     "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+     "temporal_blocks": "present; BYPASSED by whole-graph effective T=1",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-     "final_stage_gt_ratio": 0.0,
      "embedding": "reid_mode='off'",
      "graphs": {
       "use_whole_graph": true,
@@ -8977,8 +8909,7 @@
        "use_whole_graph": true,
        "use_cuda_graph": true,
        "use_tracker_graph": true
-      },
-      "final_stage_gt_ratio": 0.0
+      }
      },
      "rhs": {
       "effective_T": 1,
@@ -8988,8 +8919,7 @@
        "use_whole_graph": true,
        "use_cuda_graph": true,
        "use_tracker_graph": true
-      },
-      "final_stage_gt_ratio": 0.0
+      }
      },
      "detail": ""
     },
@@ -9006,20 +8936,20 @@
      "detail": "engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence"
     },
     "deployed_head_artifact": {
-     "status": "matched",
+     "status": "matched_effective",
      "lhs": {
       "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
       "checkpoint_head_deployed": true,
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
+      "temporal_blocks": "absent"
      },
      "rhs": {
       "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
       "checkpoint_head_deployed": true,
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
+      "temporal_blocks": "present; BYPASSED by whole-graph effective T=1"
      },
-     "detail": ""
+     "detail": "same head path; temporal-block presence differs but is bypassed at T=1"
     },
     "tracker_runtime_policy": {
      "status": "matched",
@@ -9229,10 +9159,9 @@
        "source_attribution": null
       },
       "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_s14_final/best.ckpt",
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+      "temporal_blocks": "absent",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-      "final_stage_gt_ratio": 0.0,
       "embedding": "reid_mode='off'",
       "graphs": {
        "use_whole_graph": true,
@@ -9433,10 +9362,9 @@
        "source_attribution": null
       },
       "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1_s14/best.ckpt",
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+      "temporal_blocks": "present; BYPASSED by whole-graph effective T=1",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-      "final_stage_gt_ratio": 0.0,
       "embedding": "reid_mode='off'",
       "graphs": {
        "use_whole_graph": true,
@@ -9638,10 +9566,9 @@
       "source_attribution": null
      },
      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_final/best.ckpt",
-     "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+     "temporal_blocks": "absent",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-     "final_stage_gt_ratio": 0.0,
      "embedding": "reid_mode='off'",
      "graphs": {
       "use_whole_graph": true,
@@ -9677,10 +9604,9 @@
       "source_attribution": null
      },
      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1/best.ckpt",
-     "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+     "temporal_blocks": "present; BYPASSED by whole-graph effective T=1",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-     "final_stage_gt_ratio": 0.0,
      "embedding": "reid_mode='off'",
      "graphs": {
       "use_whole_graph": true,
@@ -9786,8 +9712,7 @@
        "use_whole_graph": true,
        "use_cuda_graph": true,
        "use_tracker_graph": true
-      },
-      "final_stage_gt_ratio": 0.0
+      }
      },
      "rhs": {
       "effective_T": 1,
@@ -9797,8 +9722,7 @@
        "use_whole_graph": true,
        "use_cuda_graph": true,
        "use_tracker_graph": true
-      },
-      "final_stage_gt_ratio": 0.0
+      }
      },
      "detail": ""
     },
@@ -9815,20 +9739,20 @@
      "detail": "engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence"
     },
     "deployed_head_artifact": {
-     "status": "matched",
+     "status": "matched_effective",
      "lhs": {
       "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
       "checkpoint_head_deployed": true,
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
+      "temporal_blocks": "absent"
      },
      "rhs": {
       "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
       "checkpoint_head_deployed": true,
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
+      "temporal_blocks": "present; BYPASSED by whole-graph effective T=1"
      },
-     "detail": ""
+     "detail": "same head path; temporal-block presence differs but is bypassed at T=1"
     },
     "tracker_runtime_policy": {
      "status": "matched",
@@ -10045,10 +9969,9 @@
        "source_attribution": null
       },
       "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_final/best.ckpt",
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+      "temporal_blocks": "absent",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-      "final_stage_gt_ratio": 0.0,
       "embedding": "reid_mode='off'",
       "graphs": {
        "use_whole_graph": true,
@@ -10249,10 +10172,9 @@
        "source_attribution": null
       },
       "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1/best.ckpt",
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+      "temporal_blocks": "present; BYPASSED by whole-graph effective T=1",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-      "final_stage_gt_ratio": 0.0,
       "embedding": "reid_mode='off'",
       "graphs": {
        "use_whole_graph": true,
@@ -10455,10 +10377,9 @@
       "source_attribution": null
      },
      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_implicit_s43/best.ckpt",
-     "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+     "temporal_blocks": "absent",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-     "final_stage_gt_ratio": 0.0,
      "embedding": "reid_mode='off'",
      "graphs": {
       "use_whole_graph": true,
@@ -10494,10 +10415,9 @@
       "source_attribution": null
      },
      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1_s13/best.ckpt",
-     "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+     "temporal_blocks": "present; BYPASSED by whole-graph effective T=1",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-     "final_stage_gt_ratio": 0.0,
      "embedding": "reid_mode='off'",
      "graphs": {
       "use_whole_graph": true,
@@ -10603,8 +10523,7 @@
        "use_whole_graph": true,
        "use_cuda_graph": true,
        "use_tracker_graph": true
-      },
-      "final_stage_gt_ratio": 0.0
+      }
      },
      "rhs": {
       "effective_T": 1,
@@ -10614,8 +10533,7 @@
        "use_whole_graph": true,
        "use_cuda_graph": true,
        "use_tracker_graph": true
-      },
-      "final_stage_gt_ratio": 0.0
+      }
      },
      "detail": ""
     },
@@ -10632,20 +10550,20 @@
      "detail": "engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence"
     },
     "deployed_head_artifact": {
-     "status": "matched",
+     "status": "matched_effective",
      "lhs": {
       "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
       "checkpoint_head_deployed": true,
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
+      "temporal_blocks": "absent"
      },
      "rhs": {
       "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
       "checkpoint_head_deployed": true,
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
+      "temporal_blocks": "present; BYPASSED by whole-graph effective T=1"
      },
-     "detail": ""
+     "detail": "same head path; temporal-block presence differs but is bypassed at T=1"
     },
     "tracker_runtime_policy": {
      "status": "matched",
@@ -10853,10 +10771,9 @@
        "source_attribution": null
       },
       "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_implicit_s43/best.ckpt",
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+      "temporal_blocks": "absent",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-      "final_stage_gt_ratio": 0.0,
       "embedding": "reid_mode='off'",
       "graphs": {
        "use_whole_graph": true,
@@ -11058,10 +10975,9 @@
        "source_attribution": null
       },
       "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1_s13/best.ckpt",
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+      "temporal_blocks": "present; BYPASSED by whole-graph effective T=1",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-      "final_stage_gt_ratio": 0.0,
       "embedding": "reid_mode='off'",
       "graphs": {
        "use_whole_graph": true,
@@ -11263,10 +11179,9 @@
       "source_attribution": null
      },
      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_final/best.ckpt",
-     "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+     "temporal_blocks": "absent",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-     "final_stage_gt_ratio": 0.0,
      "embedding": "reid_mode='off'",
      "graphs": {
       "use_whole_graph": true,
@@ -11302,10 +11217,9 @@
       "source_attribution": null
      },
      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_implicit_s42/best.ckpt",
-     "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+     "temporal_blocks": "absent",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-     "final_stage_gt_ratio": 0.0,
      "embedding": "reid_mode='off'",
      "graphs": {
       "use_whole_graph": true,
@@ -11402,8 +11316,7 @@
        "use_whole_graph": true,
        "use_cuda_graph": true,
        "use_tracker_graph": true
-      },
-      "final_stage_gt_ratio": 0.0
+      }
      },
      "rhs": {
       "effective_T": 1,
@@ -11413,8 +11326,7 @@
        "use_whole_graph": true,
        "use_cuda_graph": true,
        "use_tracker_graph": true
-      },
-      "final_stage_gt_ratio": 0.0
+      }
      },
      "detail": ""
     },
@@ -11436,13 +11348,13 @@
       "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
       "checkpoint_head_deployed": true,
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
+      "temporal_blocks": "absent"
      },
      "rhs": {
       "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
       "checkpoint_head_deployed": true,
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
+      "temporal_blocks": "absent"
      },
      "detail": ""
     },
@@ -11650,10 +11562,9 @@
        "source_attribution": null
       },
       "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_final/best.ckpt",
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+      "temporal_blocks": "absent",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-      "final_stage_gt_ratio": 0.0,
       "embedding": "reid_mode='off'",
       "graphs": {
        "use_whole_graph": true,
@@ -11854,10 +11765,9 @@
        "source_attribution": null
       },
       "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_implicit_s42/best.ckpt",
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+      "temporal_blocks": "absent",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-      "final_stage_gt_ratio": 0.0,
       "embedding": "reid_mode='off'",
       "graphs": {
        "use_whole_graph": true,
@@ -12018,10 +11928,9 @@
       "source_attribution": null
      },
      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph_m --no-mamba-trt --mamba-ckpt runs/mamba_gt_yolo26m_v14replica_final/best.ckpt",
-     "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+     "temporal_blocks": "absent",
      "effective_T": 1,
      "gate_teacher_at_runtime": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
-     "final_stage_gt_ratio": 0.0,
      "embedding": "reid_mode='off'",
      "graphs": {
       "use_whole_graph": true,
@@ -12057,10 +11966,9 @@
       "source_attribution": null
      },
      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph_m --no-mamba-trt --mamba-ckpt runs/mamba_gt_yolo26m_v14replica_t3_t1/best.ckpt",
-     "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+     "temporal_blocks": "present; BYPASSED by whole-graph effective T=1",
      "effective_T": 1,
      "gate_teacher_at_runtime": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
-     "final_stage_gt_ratio": 0.0,
      "embedding": "reid_mode='off'",
      "graphs": {
       "use_whole_graph": true,
@@ -12166,8 +12074,7 @@
        "use_whole_graph": true,
        "use_cuda_graph": true,
        "use_tracker_graph": true
-      },
-      "final_stage_gt_ratio": 0.0
+      }
      },
      "rhs": {
       "effective_T": 1,
@@ -12177,8 +12084,7 @@
        "use_whole_graph": true,
        "use_cuda_graph": true,
        "use_tracker_graph": true
-      },
-      "final_stage_gt_ratio": 0.0
+      }
      },
      "detail": ""
     },
@@ -12195,20 +12101,20 @@
      "detail": "engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence"
     },
     "deployed_head_artifact": {
-     "status": "matched",
+     "status": "matched_effective",
      "lhs": {
       "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
       "checkpoint_head_deployed": true,
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
+      "temporal_blocks": "absent"
      },
      "rhs": {
       "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
       "checkpoint_head_deployed": true,
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
+      "temporal_blocks": "present; BYPASSED by whole-graph effective T=1"
      },
-     "detail": ""
+     "detail": "same head path; temporal-block presence differs but is bypassed at T=1"
     },
     "tracker_runtime_policy": {
      "status": "matched",
@@ -12399,10 +12305,9 @@
        "source_attribution": null
       },
       "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph_m --no-mamba-trt --mamba-ckpt runs/mamba_gt_yolo26m_v14replica_final/best.ckpt",
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+      "temporal_blocks": "absent",
       "effective_T": 1,
       "gate_teacher_at_runtime": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
-      "final_stage_gt_ratio": 0.0,
       "embedding": "reid_mode='off'",
       "graphs": {
        "use_whole_graph": true,
@@ -12606,10 +12511,9 @@
        "source_attribution": null
       },
       "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph_m --no-mamba-trt --mamba-ckpt runs/mamba_gt_yolo26m_v14replica_t3_t1/best.ckpt",
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+      "temporal_blocks": "present; BYPASSED by whole-graph effective T=1",
       "effective_T": 1,
       "gate_teacher_at_runtime": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
-      "final_stage_gt_ratio": 0.0,
       "embedding": "reid_mode='off'",
       "graphs": {
        "use_whole_graph": true,
@@ -12815,10 +12719,9 @@
       "source_attribution": null
      },
      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_implicit_s42/best.ckpt",
-     "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+     "temporal_blocks": "absent",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-     "final_stage_gt_ratio": 0.0,
      "embedding": "reid_mode='off'",
      "graphs": {
       "use_whole_graph": true,
@@ -12854,10 +12757,9 @@
       "source_attribution": null
      },
      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_implicit_s43/best.ckpt",
-     "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+     "temporal_blocks": "absent",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-     "final_stage_gt_ratio": 0.0,
      "embedding": "reid_mode='off'",
      "graphs": {
       "use_whole_graph": true,
@@ -12954,8 +12856,7 @@
        "use_whole_graph": true,
        "use_cuda_graph": true,
        "use_tracker_graph": true
-      },
-      "final_stage_gt_ratio": 0.0
+      }
      },
      "rhs": {
       "effective_T": 1,
@@ -12965,8 +12866,7 @@
        "use_whole_graph": true,
        "use_cuda_graph": true,
        "use_tracker_graph": true
-      },
-      "final_stage_gt_ratio": 0.0
+      }
      },
      "detail": ""
     },
@@ -12988,13 +12888,13 @@
       "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
       "checkpoint_head_deployed": true,
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
+      "temporal_blocks": "absent"
      },
      "rhs": {
       "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
       "checkpoint_head_deployed": true,
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
+      "temporal_blocks": "absent"
      },
      "detail": ""
     },
@@ -13173,10 +13073,9 @@
        "source_attribution": null
       },
       "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_implicit_s42/best.ckpt",
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+      "temporal_blocks": "absent",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-      "final_stage_gt_ratio": 0.0,
       "embedding": "reid_mode='off'",
       "graphs": {
        "use_whole_graph": true,
@@ -13378,10 +13277,9 @@
        "source_attribution": null
       },
       "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_implicit_s43/best.ckpt",
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+      "temporal_blocks": "absent",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-      "final_stage_gt_ratio": 0.0,
       "embedding": "reid_mode='off'",
       "graphs": {
        "use_whole_graph": true,
@@ -13542,10 +13440,9 @@
       "source_attribution": null
      },
      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_implicit_s43/best.ckpt",
-     "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+     "temporal_blocks": "absent",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-     "final_stage_gt_ratio": 0.0,
      "embedding": "reid_mode='off'",
      "graphs": {
       "use_whole_graph": true,
@@ -13581,10 +13478,9 @@
       "source_attribution": null
      },
      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_implicit_s44/best.ckpt",
-     "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+     "temporal_blocks": "absent",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-     "final_stage_gt_ratio": 0.0,
      "embedding": "reid_mode='off'",
      "graphs": {
       "use_whole_graph": true,
@@ -13681,8 +13577,7 @@
        "use_whole_graph": true,
        "use_cuda_graph": true,
        "use_tracker_graph": true
-      },
-      "final_stage_gt_ratio": 0.0
+      }
      },
      "rhs": {
       "effective_T": 1,
@@ -13692,8 +13587,7 @@
        "use_whole_graph": true,
        "use_cuda_graph": true,
        "use_tracker_graph": true
-      },
-      "final_stage_gt_ratio": 0.0
+      }
      },
      "detail": ""
     },
@@ -13715,13 +13609,13 @@
       "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
       "checkpoint_head_deployed": true,
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
+      "temporal_blocks": "absent"
      },
      "rhs": {
       "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
       "checkpoint_head_deployed": true,
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
+      "temporal_blocks": "absent"
      },
      "detail": ""
     },
@@ -13900,10 +13794,9 @@
        "source_attribution": null
       },
       "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_implicit_s43/best.ckpt",
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+      "temporal_blocks": "absent",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-      "final_stage_gt_ratio": 0.0,
       "embedding": "reid_mode='off'",
       "graphs": {
        "use_whole_graph": true,
@@ -14105,10 +13998,9 @@
        "source_attribution": null
       },
       "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_implicit_s44/best.ckpt",
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+      "temporal_blocks": "absent",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-      "final_stage_gt_ratio": 0.0,
       "embedding": "reid_mode='off'",
       "graphs": {
        "use_whole_graph": true,
@@ -14269,10 +14161,9 @@
       "source_attribution": null
      },
      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1/best.ckpt",
-     "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+     "temporal_blocks": "present; BYPASSED by whole-graph effective T=1",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-     "final_stage_gt_ratio": 0.0,
      "embedding": "reid_mode='off'",
      "graphs": {
       "use_whole_graph": true,
@@ -14308,10 +14199,9 @@
       "source_attribution": null
      },
      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1_shared_s43/best.ckpt",
-     "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+     "temporal_blocks": "present; BYPASSED by whole-graph effective T=1",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-     "final_stage_gt_ratio": 0.0,
      "embedding": "reid_mode='off'",
      "graphs": {
       "use_whole_graph": true,
@@ -14408,8 +14298,7 @@
        "use_whole_graph": true,
        "use_cuda_graph": true,
        "use_tracker_graph": true
-      },
-      "final_stage_gt_ratio": 0.0
+      }
      },
      "rhs": {
       "effective_T": 1,
@@ -14419,8 +14308,7 @@
        "use_whole_graph": true,
        "use_cuda_graph": true,
        "use_tracker_graph": true
-      },
-      "final_stage_gt_ratio": 0.0
+      }
      },
      "detail": ""
     },
@@ -14442,13 +14330,13 @@
       "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
       "checkpoint_head_deployed": true,
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
+      "temporal_blocks": "present; BYPASSED by whole-graph effective T=1"
      },
      "rhs": {
       "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
       "checkpoint_head_deployed": true,
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
+      "temporal_blocks": "present; BYPASSED by whole-graph effective T=1"
      },
      "detail": ""
     },
@@ -14639,10 +14527,9 @@
        "source_attribution": null
       },
       "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1/best.ckpt",
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+      "temporal_blocks": "present; BYPASSED by whole-graph effective T=1",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-      "final_stage_gt_ratio": 0.0,
       "embedding": "reid_mode='off'",
       "graphs": {
        "use_whole_graph": true,
@@ -14886,10 +14773,9 @@
        "source_attribution": null
       },
       "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1_shared_s43/best.ckpt",
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+      "temporal_blocks": "present; BYPASSED by whole-graph effective T=1",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-      "final_stage_gt_ratio": 0.0,
       "embedding": "reid_mode='off'",
       "graphs": {
        "use_whole_graph": true,
@@ -15093,10 +14979,9 @@
       "source_attribution": null
      },
      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1_shared_s43/best.ckpt",
-     "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+     "temporal_blocks": "present; BYPASSED by whole-graph effective T=1",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-     "final_stage_gt_ratio": 0.0,
      "embedding": "reid_mode='off'",
      "graphs": {
       "use_whole_graph": true,
@@ -15132,10 +15017,9 @@
       "source_attribution": null
      },
      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1_shared_s44/best.ckpt",
-     "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+     "temporal_blocks": "present; BYPASSED by whole-graph effective T=1",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-     "final_stage_gt_ratio": 0.0,
      "embedding": "reid_mode='off'",
      "graphs": {
       "use_whole_graph": true,
@@ -15232,8 +15116,7 @@
        "use_whole_graph": true,
        "use_cuda_graph": true,
        "use_tracker_graph": true
-      },
-      "final_stage_gt_ratio": 0.0
+      }
      },
      "rhs": {
       "effective_T": 1,
@@ -15243,8 +15126,7 @@
        "use_whole_graph": true,
        "use_cuda_graph": true,
        "use_tracker_graph": true
-      },
-      "final_stage_gt_ratio": 0.0
+      }
      },
      "detail": ""
     },
@@ -15266,13 +15148,13 @@
       "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
       "checkpoint_head_deployed": true,
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
+      "temporal_blocks": "present; BYPASSED by whole-graph effective T=1"
      },
      "rhs": {
       "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
       "checkpoint_head_deployed": true,
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
+      "temporal_blocks": "present; BYPASSED by whole-graph effective T=1"
      },
      "detail": ""
     },
@@ -15455,10 +15337,9 @@
        "source_attribution": null
       },
       "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1_shared_s43/best.ckpt",
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+      "temporal_blocks": "present; BYPASSED by whole-graph effective T=1",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-      "final_stage_gt_ratio": 0.0,
       "embedding": "reid_mode='off'",
       "graphs": {
        "use_whole_graph": true,
@@ -15703,10 +15584,9 @@
        "source_attribution": null
       },
       "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1_shared_s44/best.ckpt",
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+      "temporal_blocks": "present; BYPASSED by whole-graph effective T=1",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-      "final_stage_gt_ratio": 0.0,
       "embedding": "reid_mode='off'",
       "graphs": {
        "use_whole_graph": true,
@@ -15910,10 +15790,9 @@
       "source_attribution": null
      },
      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1/best.ckpt",
-     "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+     "temporal_blocks": "present; BYPASSED by whole-graph effective T=1",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-     "final_stage_gt_ratio": 0.0,
      "embedding": "reid_mode='off'",
      "graphs": {
       "use_whole_graph": true,
@@ -15960,10 +15839,9 @@
       }
      },
      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph_m --mamba-ckpt runs/mamba_gt_yolo26m_v14replica_t3_t1/best.ckpt",
-     "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+     "temporal_blocks": "present in checkpoint; checkpoint head NOT deployed",
      "effective_T": 1,
      "gate_teacher_at_runtime": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
-     "final_stage_gt_ratio": 0.0,
      "embedding": "reid_mode='off'",
      "graphs": {
       "use_whole_graph": true,
@@ -16058,8 +15936,7 @@
        "use_whole_graph": true,
        "use_cuda_graph": true,
        "use_tracker_graph": true
-      },
-      "final_stage_gt_ratio": 0.0
+      }
      },
      "rhs": {
       "effective_T": 1,
@@ -16069,8 +15946,7 @@
        "use_whole_graph": true,
        "use_cuda_graph": true,
        "use_tracker_graph": true
-      },
-      "final_stage_gt_ratio": 0.0
+      }
      },
      "detail": "differs: {\"gate_teacher_at_runtime\": {\"lhs\": \"null (backbone-only; no teacher forward)\", \"rhs\": \"runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt\"}}"
     },
@@ -16092,13 +15968,13 @@
       "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
       "checkpoint_head_deployed": true,
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
+      "temporal_blocks": "present; BYPASSED by whole-graph effective T=1"
      },
      "rhs": {
       "head_path": "TRT head engine models/yolo/mamba_head_26m.engine (checkpoint head NOT deployed)",
       "head_engine_node": "m.head_engine",
       "checkpoint_head_deployed": false,
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+      "temporal_blocks": "present in checkpoint; checkpoint head NOT deployed",
       "head_engine_source": "sibling ONNX ambiguous: ['m.distill', 'm.gt1', 'm.gt2_plain', 'm.t3t1_phase_a', 'm.t3t1_phase_b', 'm.t3t1_phase_b_gpu_decode']"
      },
      "detail": "rhs runs the fixed head engine, not the rhs checkpoint head (sibling ONNX ambiguous: ['m.distill', 'm.gt1', 'm.gt2_plain', 'm.t3t1_phase_a', 'm.t3t1_phase_b', 'm.t3t1_phase_b_gpu_decode']; checkpoint source ambiguous)"
@@ -16196,8 +16072,7 @@
        "use_whole_graph": true,
        "use_cuda_graph": true,
        "use_tracker_graph": true
-      },
-      "final_stage_gt_ratio": 0.0
+      }
      },
      "rhs": {
       "effective_T": 1,
@@ -16207,8 +16082,7 @@
        "use_whole_graph": true,
        "use_cuda_graph": true,
        "use_tracker_graph": true
-      },
-      "final_stage_gt_ratio": 0.0
+      }
      },
      "detail": "differs: {\"gate_teacher_at_runtime\": {\"lhs\": \"null (backbone-only; no teacher forward)\", \"rhs\": \"runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt\"}}"
     },
@@ -16234,13 +16108,13 @@
       "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
       "checkpoint_head_deployed": true,
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
+      "temporal_blocks": "present; BYPASSED by whole-graph effective T=1"
      },
      "rhs": {
       "head_path": "TRT head engine models/yolo/mamba_head_26m.engine (checkpoint head NOT deployed)",
       "head_engine_node": "m.head_engine",
       "checkpoint_head_deployed": false,
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+      "temporal_blocks": "present in checkpoint; checkpoint head NOT deployed",
       "head_engine_source": "sibling ONNX ambiguous: ['m.distill', 'm.gt1', 'm.gt2_plain', 'm.t3t1_phase_a', 'm.t3t1_phase_b', 'm.t3t1_phase_b_gpu_decode']"
      },
      "detail": "rhs runs the fixed head engine, not the rhs checkpoint head (sibling ONNX ambiguous: ['m.distill', 'm.gt1', 'm.gt2_plain', 'm.t3t1_phase_a', 'm.t3t1_phase_b', 'm.t3t1_phase_b_gpu_decode']; checkpoint source ambiguous)"
@@ -16400,10 +16274,9 @@
        "source_attribution": null
       },
       "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1/best.ckpt",
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+      "temporal_blocks": "present; BYPASSED by whole-graph effective T=1",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-      "final_stage_gt_ratio": 0.0,
       "embedding": "reid_mode='off'",
       "graphs": {
        "use_whole_graph": true,
@@ -16658,10 +16531,9 @@
        }
       },
       "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph_m --mamba-ckpt runs/mamba_gt_yolo26m_v14replica_t3_t1/best.ckpt",
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+      "temporal_blocks": "present in checkpoint; checkpoint head NOT deployed",
       "effective_T": 1,
       "gate_teacher_at_runtime": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
-      "final_stage_gt_ratio": 0.0,
       "embedding": "reid_mode='off'",
       "graphs": {
        "use_whole_graph": true,
@@ -16973,8 +16845,7 @@
        "use_whole_graph": false,
        "use_cuda_graph": false,
        "use_tracker_graph": false
-      },
-      "final_stage_gt_ratio": null
+      }
      },
      "rhs": {
       "effective_T": 1,
@@ -16984,8 +16855,7 @@
        "use_whole_graph": false,
        "use_cuda_graph": false,
        "use_tracker_graph": false
-      },
-      "final_stage_gt_ratio": null
+      }
      },
      "detail": ""
     },
@@ -17708,8 +17578,7 @@
        "use_whole_graph": false,
        "use_cuda_graph": false,
        "use_tracker_graph": false
-      },
-      "final_stage_gt_ratio": null
+      }
      },
      "rhs": {
       "effective_T": 1,
@@ -17719,8 +17588,7 @@
        "use_whole_graph": false,
        "use_cuda_graph": false,
        "use_tracker_graph": false
-      },
-      "final_stage_gt_ratio": null
+      }
      },
      "detail": ""
     },
@@ -18325,10 +18193,9 @@
       "source_attribution": null
      },
      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1/best.ckpt",
-     "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+     "temporal_blocks": "present; BYPASSED by whole-graph effective T=1",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-     "final_stage_gt_ratio": 0.0,
      "embedding": "reid_mode='off'",
      "graphs": {
       "use_whole_graph": true,
@@ -18364,10 +18231,9 @@
       "source_attribution": null
      },
      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1/best.ckpt --fpn-backbone-engine models/yolo/yolo26s_backbone_640_v14replica_e12.engine",
-     "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+     "temporal_blocks": "present; BYPASSED by whole-graph effective T=1",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-     "final_stage_gt_ratio": 0.0,
      "embedding": "reid_mode='off'",
      "graphs": {
       "use_whole_graph": true,
@@ -18464,8 +18330,7 @@
        "use_whole_graph": true,
        "use_cuda_graph": true,
        "use_tracker_graph": true
-      },
-      "final_stage_gt_ratio": 0.0
+      }
      },
      "rhs": {
       "effective_T": 1,
@@ -18475,8 +18340,7 @@
        "use_whole_graph": true,
        "use_cuda_graph": true,
        "use_tracker_graph": true
-      },
-      "final_stage_gt_ratio": 0.0
+      }
      },
      "detail": ""
     },
@@ -18498,13 +18362,13 @@
       "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
       "checkpoint_head_deployed": true,
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
+      "temporal_blocks": "present; BYPASSED by whole-graph effective T=1"
      },
      "rhs": {
       "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
       "checkpoint_head_deployed": true,
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
+      "temporal_blocks": "present; BYPASSED by whole-graph effective T=1"
      },
      "detail": ""
     },
@@ -18691,10 +18555,9 @@
        "source_attribution": null
       },
       "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1/best.ckpt",
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+      "temporal_blocks": "present; BYPASSED by whole-graph effective T=1",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-      "final_stage_gt_ratio": 0.0,
       "embedding": "reid_mode='off'",
       "graphs": {
        "use_whole_graph": true,
@@ -18938,10 +18801,9 @@
        "source_attribution": null
       },
       "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1/best.ckpt --fpn-backbone-engine models/yolo/yolo26s_backbone_640_v14replica_e12.engine",
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+      "temporal_blocks": "present; BYPASSED by whole-graph effective T=1",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-      "final_stage_gt_ratio": 0.0,
       "embedding": "reid_mode='off'",
       "graphs": {
        "use_whole_graph": true,
@@ -19144,10 +19006,9 @@
       "source_attribution": null
      },
      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_vgt_mamba_v14/best.ckpt",
-     "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+     "temporal_blocks": "absent",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-     "final_stage_gt_ratio": 0.0,
      "embedding": "reid_mode='off'",
      "graphs": {
       "use_whole_graph": true,
@@ -19183,10 +19044,9 @@
       "source_attribution": null
      },
      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_final/best.ckpt",
-     "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+     "temporal_blocks": "absent",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-     "final_stage_gt_ratio": 0.0,
      "embedding": "reid_mode='off'",
      "graphs": {
       "use_whole_graph": true,
@@ -19281,8 +19141,7 @@
        "use_whole_graph": true,
        "use_cuda_graph": true,
        "use_tracker_graph": true
-      },
-      "final_stage_gt_ratio": 0.0
+      }
      },
      "rhs": {
       "effective_T": 1,
@@ -19292,8 +19151,7 @@
        "use_whole_graph": true,
        "use_cuda_graph": true,
        "use_tracker_graph": true
-      },
-      "final_stage_gt_ratio": 0.0
+      }
      },
      "detail": ""
     },
@@ -19315,13 +19173,13 @@
       "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
       "checkpoint_head_deployed": true,
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
+      "temporal_blocks": "absent"
      },
      "rhs": {
       "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
       "checkpoint_head_deployed": true,
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
+      "temporal_blocks": "absent"
      },
      "detail": ""
     },
@@ -19575,10 +19433,9 @@
        "source_attribution": null
       },
       "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_vgt_mamba_v14/best.ckpt",
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+      "temporal_blocks": "absent",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-      "final_stage_gt_ratio": 0.0,
       "embedding": "reid_mode='off'",
       "graphs": {
        "use_whole_graph": true,
@@ -19702,10 +19559,9 @@
        "source_attribution": null
       },
       "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_final/best.ckpt",
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+      "temporal_blocks": "absent",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-      "final_stage_gt_ratio": 0.0,
       "embedding": "reid_mode='off'",
       "graphs": {
        "use_whole_graph": true,
@@ -19865,10 +19721,9 @@
       "source_attribution": null
      },
      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_vgt_mamba_v14/best.ckpt",
-     "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+     "temporal_blocks": "absent",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-     "final_stage_gt_ratio": 0.0,
      "embedding": "reid_mode='off'",
      "graphs": {
       "use_whole_graph": true,
@@ -19904,10 +19759,9 @@
       "source_attribution": null
      },
      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1/best.ckpt",
-     "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+     "temporal_blocks": "present; BYPASSED by whole-graph effective T=1",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-     "final_stage_gt_ratio": 0.0,
      "embedding": "reid_mode='off'",
      "graphs": {
       "use_whole_graph": true,
@@ -20006,8 +19860,7 @@
        "use_whole_graph": true,
        "use_cuda_graph": true,
        "use_tracker_graph": true
-      },
-      "final_stage_gt_ratio": 0.0
+      }
      },
      "rhs": {
       "effective_T": 1,
@@ -20017,8 +19870,7 @@
        "use_whole_graph": true,
        "use_cuda_graph": true,
        "use_tracker_graph": true
-      },
-      "final_stage_gt_ratio": 0.0
+      }
      },
      "detail": ""
     },
@@ -20035,20 +19887,20 @@
      "detail": "engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence"
     },
     "deployed_head_artifact": {
-     "status": "matched",
+     "status": "matched_effective",
      "lhs": {
       "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
       "checkpoint_head_deployed": true,
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
+      "temporal_blocks": "absent"
      },
      "rhs": {
       "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
       "checkpoint_head_deployed": true,
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
+      "temporal_blocks": "present; BYPASSED by whole-graph effective T=1"
      },
-     "detail": ""
+     "detail": "same head path; temporal-block presence differs but is bypassed at T=1"
     },
     "tracker_runtime_policy": {
      "status": "matched",
@@ -20301,10 +20153,9 @@
        "source_attribution": null
       },
       "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_vgt_mamba_v14/best.ckpt",
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+      "temporal_blocks": "absent",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-      "final_stage_gt_ratio": 0.0,
       "embedding": "reid_mode='off'",
       "graphs": {
        "use_whole_graph": true,
@@ -20428,10 +20279,9 @@
        "source_attribution": null
       },
       "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1/best.ckpt",
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+      "temporal_blocks": "present; BYPASSED by whole-graph effective T=1",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-      "final_stage_gt_ratio": 0.0,
       "embedding": "reid_mode='off'",
       "graphs": {
        "use_whole_graph": true,
@@ -20634,10 +20484,9 @@
       "source_attribution": null
      },
      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_pixelshuffle_crossscan/best.ckpt",
-     "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+     "temporal_blocks": "absent",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-     "final_stage_gt_ratio": 0.0,
      "embedding": "reid_mode='off'",
      "graphs": {
       "use_whole_graph": true,
@@ -20673,10 +20522,9 @@
       "source_attribution": null
      },
      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14_parent_n16_frozen_refit/best.ckpt",
-     "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+     "temporal_blocks": "absent",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-     "final_stage_gt_ratio": 0.0,
      "embedding": "reid_mode='off'",
      "graphs": {
       "use_whole_graph": true,
@@ -20778,8 +20626,7 @@
        "use_whole_graph": true,
        "use_cuda_graph": true,
        "use_tracker_graph": true
-      },
-      "final_stage_gt_ratio": 0.0
+      }
      },
      "rhs": {
       "effective_T": 1,
@@ -20789,8 +20636,7 @@
        "use_whole_graph": true,
        "use_cuda_graph": true,
        "use_tracker_graph": true
-      },
-      "final_stage_gt_ratio": 0.0
+      }
      },
      "detail": ""
     },
@@ -20812,13 +20658,13 @@
       "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
       "checkpoint_head_deployed": true,
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
+      "temporal_blocks": "absent"
      },
      "rhs": {
       "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
       "checkpoint_head_deployed": true,
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
+      "temporal_blocks": "absent"
      },
      "detail": ""
     },
@@ -21007,10 +20853,9 @@
        "source_attribution": null
       },
       "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_pixelshuffle_crossscan/best.ckpt",
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+      "temporal_blocks": "absent",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-      "final_stage_gt_ratio": 0.0,
       "embedding": "reid_mode='off'",
       "graphs": {
        "use_whole_graph": true,
@@ -21152,10 +20997,9 @@
        "source_attribution": null
       },
       "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14_parent_n16_frozen_refit/best.ckpt",
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+      "temporal_blocks": "absent",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-      "final_stage_gt_ratio": 0.0,
       "embedding": "reid_mode='off'",
       "graphs": {
        "use_whole_graph": true,
@@ -21299,10 +21143,9 @@
       "source_attribution": null
      },
      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_vgt_mamba_v14/best.ckpt",
-     "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+     "temporal_blocks": "absent",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-     "final_stage_gt_ratio": 0.0,
      "embedding": "reid_mode='off'",
      "graphs": {
       "use_whole_graph": true,
@@ -21338,10 +21181,9 @@
       "source_attribution": null
      },
      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1/best.ckpt --fpn-backbone-engine models/yolo/yolo26s_backbone_640_v14replica_e12.engine",
-     "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+     "temporal_blocks": "present; BYPASSED by whole-graph effective T=1",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-     "final_stage_gt_ratio": 0.0,
      "embedding": "reid_mode='off'",
      "graphs": {
       "use_whole_graph": true,
@@ -21440,8 +21282,7 @@
        "use_whole_graph": true,
        "use_cuda_graph": true,
        "use_tracker_graph": true
-      },
-      "final_stage_gt_ratio": 0.0
+      }
      },
      "rhs": {
       "effective_T": 1,
@@ -21451,8 +21292,7 @@
        "use_whole_graph": true,
        "use_cuda_graph": true,
        "use_tracker_graph": true
-      },
-      "final_stage_gt_ratio": 0.0
+      }
      },
      "detail": ""
     },
@@ -21469,20 +21309,20 @@
      "detail": "engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence"
     },
     "deployed_head_artifact": {
-     "status": "matched",
+     "status": "matched_effective",
      "lhs": {
       "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
       "checkpoint_head_deployed": true,
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
+      "temporal_blocks": "absent"
      },
      "rhs": {
       "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
       "checkpoint_head_deployed": true,
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
+      "temporal_blocks": "present; BYPASSED by whole-graph effective T=1"
      },
-     "detail": ""
+     "detail": "same head path; temporal-block presence differs but is bypassed at T=1"
     },
     "tracker_runtime_policy": {
      "status": "matched",
@@ -21728,10 +21568,9 @@
        "source_attribution": null
       },
       "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_vgt_mamba_v14/best.ckpt",
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+      "temporal_blocks": "absent",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-      "final_stage_gt_ratio": 0.0,
       "embedding": "reid_mode='off'",
       "graphs": {
        "use_whole_graph": true,
@@ -21855,10 +21694,9 @@
        "source_attribution": null
       },
       "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1/best.ckpt --fpn-backbone-engine models/yolo/yolo26s_backbone_640_v14replica_e12.engine",
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+      "temporal_blocks": "present; BYPASSED by whole-graph effective T=1",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
-      "final_stage_gt_ratio": 0.0,
       "embedding": "reid_mode='off'",
       "graphs": {
        "use_whole_graph": true,
@@ -22061,10 +21899,9 @@
       "source_attribution": null
      },
      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph_m --no-mamba-trt --mamba-ckpt runs/mamba_gt_yolo26m_v14replica_t3_t1/best.ckpt",
-     "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+     "temporal_blocks": "present; BYPASSED by whole-graph effective T=1",
      "effective_T": 1,
      "gate_teacher_at_runtime": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
-     "final_stage_gt_ratio": 0.0,
      "embedding": "reid_mode='off'",
      "graphs": {
       "use_whole_graph": true,
@@ -22100,10 +21937,9 @@
       "source_attribution": null
      },
      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph_m --no-mamba-trt --mamba-ckpt runs/mamba_gt_yolo26m_v14replica_t3_t1_gpu_decode/best.ckpt",
-     "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+     "temporal_blocks": "present; BYPASSED by whole-graph effective T=1",
      "effective_T": 1,
      "gate_teacher_at_runtime": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
-     "final_stage_gt_ratio": 0.0,
      "embedding": "reid_mode='off'",
      "graphs": {
       "use_whole_graph": true,
@@ -22200,8 +22036,7 @@
        "use_whole_graph": true,
        "use_cuda_graph": true,
        "use_tracker_graph": true
-      },
-      "final_stage_gt_ratio": 0.0
+      }
      },
      "rhs": {
       "effective_T": 1,
@@ -22211,8 +22046,7 @@
        "use_whole_graph": true,
        "use_cuda_graph": true,
        "use_tracker_graph": true
-      },
-      "final_stage_gt_ratio": 0.0
+      }
      },
      "detail": ""
     },
@@ -22234,13 +22068,13 @@
       "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
       "checkpoint_head_deployed": true,
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
+      "temporal_blocks": "present; BYPASSED by whole-graph effective T=1"
      },
      "rhs": {
       "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
       "checkpoint_head_deployed": true,
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
+      "temporal_blocks": "present; BYPASSED by whole-graph effective T=1"
      },
      "detail": ""
     },
@@ -22443,10 +22277,9 @@
        "source_attribution": null
       },
       "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph_m --no-mamba-trt --mamba-ckpt runs/mamba_gt_yolo26m_v14replica_t3_t1/best.ckpt",
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+      "temporal_blocks": "present; BYPASSED by whole-graph effective T=1",
       "effective_T": 1,
       "gate_teacher_at_runtime": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
-      "final_stage_gt_ratio": 0.0,
       "embedding": "reid_mode='off'",
       "graphs": {
        "use_whole_graph": true,
@@ -22694,10 +22527,9 @@
        "source_attribution": null
       },
       "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph_m --no-mamba-trt --mamba-ckpt runs/mamba_gt_yolo26m_v14replica_t3_t1_gpu_decode/best.ckpt",
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+      "temporal_blocks": "present; BYPASSED by whole-graph effective T=1",
       "effective_T": 1,
       "gate_teacher_at_runtime": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
-      "final_stage_gt_ratio": 0.0,
       "embedding": "reid_mode='off'",
       "graphs": {
        "use_whole_graph": true,

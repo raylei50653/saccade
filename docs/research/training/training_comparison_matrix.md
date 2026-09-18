@@ -122,7 +122,7 @@ Counts: controlled = 12, system_comparison = 7, historical_not_comparable = 7, b
 | `backbone_family` | matched | yolo26s | yolo26s | — |
 | `head_family` | matched_effective | {"family": "yolo_detect", "gate_module": false} | {"family": "yolo_detect", "gate_module": true} | same native Detect head; the gate module is identity at deployment (gt_ratio 0) |
 | `dataset_split` | unmatched | {"basis": "external", "holdout": [], "train": ["external:COCO"]} | {"basis": "provenance.training_sequences", "holdout": [], "train": ["MOT17-02-SDP", "MO… | — |
-| `inference_forward_mode` | matched | {"effective_T": 1, "embedding": null, "final_stage_gt_ratio": null, "gate_teacher_at_ru… | {"effective_T": 1, "embedding": null, "final_stage_gt_ratio": null, "gate_teacher_at_ru… | — |
+| `inference_forward_mode` | matched | {"effective_T": 1, "embedding": null, "gate_teacher_at_runtime": null, "graphs": {"use_… | {"effective_T": 1, "embedding": null, "gate_teacher_at_runtime": null, "graphs": {"use_… | — |
 | `deployed_backbone_artifact` | unmatched | {"engine_node": "s.pretrained_yolo", "teacher_consistency": "same_teacher_indicated"} | {"engine_node": "s.adapted_teacher", "teacher_consistency": "same_teacher_indicated"} | engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence |
 | `deployed_head_artifact` | unmatched | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "native Detec… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "native Detec… | different head kinds |
 | `tracker_runtime_policy` | unknown | contract_required | contract_required | tracker policy must be fixed by the shared eval contract (deliverable 3); not derivable from the inventory |
@@ -162,7 +162,7 @@ Remaining confounds:
 | `backbone_family` | matched | yolo26m | yolo26m | — |
 | `head_family` | matched_effective | {"family": "yolo_detect", "gate_module": false} | {"family": "yolo_detect", "gate_module": true} | same native Detect head; the gate module is identity at deployment (gt_ratio 0) |
 | `dataset_split` | unmatched | {"basis": "external", "holdout": [], "train": ["external:COCO"]} | {"basis": "provenance.training_sequences", "holdout": [], "train": ["MOT17-02-SDP", "MO… | — |
-| `inference_forward_mode` | matched | {"effective_T": 1, "embedding": null, "final_stage_gt_ratio": null, "gate_teacher_at_ru… | {"effective_T": 1, "embedding": null, "final_stage_gt_ratio": null, "gate_teacher_at_ru… | — |
+| `inference_forward_mode` | matched | {"effective_T": 1, "embedding": null, "gate_teacher_at_runtime": null, "graphs": {"use_… | {"effective_T": 1, "embedding": null, "gate_teacher_at_runtime": null, "graphs": {"use_… | — |
 | `deployed_backbone_artifact` | unmatched | {"engine_node": "m.pretrained_yolo", "teacher_consistency": "same_teacher_indicated"} | {"engine_node": "m.adapted_teacher", "teacher_consistency": "same_teacher_indicated"} | engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence |
 | `deployed_head_artifact` | unmatched | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "native Detec… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "native Detec… | different head kinds |
 | `tracker_runtime_policy` | unknown | contract_required | contract_required | tracker policy must be fixed by the shared eval contract (deliverable 3); not derivable from the inventory |
@@ -200,7 +200,7 @@ Remaining confounds:
 | `backbone_family` | unmatched | yolo26s | yolo26m | — |
 | `head_family` | matched_effective | {"family": "yolo_detect", "gate_module": true} | {"family": "yolo_detect", "gate_module": true} | same native Detect head; the gate module is identity at deployment (gt_ratio 0) |
 | `dataset_split` | matched | {"basis": "provenance.training_sequences", "holdout": [], "train": ["MOT17-02-SDP", "MO… | {"basis": "provenance.training_sequences", "holdout": [], "train": ["MOT17-02-SDP", "MO… | — |
-| `inference_forward_mode` | matched | {"effective_T": 1, "embedding": null, "final_stage_gt_ratio": null, "gate_teacher_at_ru… | {"effective_T": 1, "embedding": null, "final_stage_gt_ratio": null, "gate_teacher_at_ru… | — |
+| `inference_forward_mode` | matched | {"effective_T": 1, "embedding": null, "gate_teacher_at_runtime": null, "graphs": {"use_… | {"effective_T": 1, "embedding": null, "gate_teacher_at_runtime": null, "graphs": {"use_… | — |
 | `deployed_backbone_artifact` | unmatched | {"engine_node": "s.adapted_teacher", "teacher_consistency": "same_teacher_indicated"} | {"engine_node": "m.adapted_teacher", "teacher_consistency": "same_teacher_indicated"} | engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence |
 | `deployed_head_artifact` | matched | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "native Detec… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "native Detec… | — |
 | `tracker_runtime_policy` | unknown | contract_required | contract_required | tracker policy must be fixed by the shared eval contract (deliverable 3); not derivable from the inventory |
@@ -233,7 +233,7 @@ Remaining confounds:
 | `backbone_family` | matched | yolo26s | yolo26s | — |
 | `head_family` | matched | {"d_model": 128, "d_state": 16, "detail_source": "none", "family": "mamba_head", "num_b… | {"d_model": 128, "d_state": 16, "detail_source": "none", "family": "mamba_head", "num_b… | — |
 | `dataset_split` | matched | {"basis": "explicit", "holdout": [], "train": ["MOT17-02-SDP", "MOT17-04-SDP", "MOT17-0… | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | bases differ (explicit vs default:all *-SDP under datasets/MOT17/train) but resolve to the same set |
-| `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | — |
+| `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "gate_teacher_at_runtime": "null (ba… | {"effective_T": 1, "embedding": "reid_mode='off'", "gate_teacher_at_runtime": "null (ba… | — |
 | `deployed_backbone_artifact` | matched | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence |
 | `deployed_head_artifact` | matched | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | — |
 | `tracker_runtime_policy` | matched | s.deployment_preset | s.deployment_preset | same preset configs/presets/mamba_whole_graph.yaml @ 093b66ed1240 |
@@ -261,7 +261,7 @@ Remaining confounds:
 | `backbone_family` | matched | yolo26s | yolo26s | — |
 | `head_family` | matched | {"d_model": 128, "d_state": 16, "detail_source": "none", "family": "mamba_head", "num_b… | {"d_model": 128, "d_state": 16, "detail_source": "none", "family": "mamba_head", "num_b… | — |
 | `dataset_split` | matched | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | — |
-| `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | — |
+| `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "gate_teacher_at_runtime": "null (ba… | {"effective_T": 1, "embedding": "reid_mode='off'", "gate_teacher_at_runtime": "null (ba… | — |
 | `deployed_backbone_artifact` | matched | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence |
 | `deployed_head_artifact` | matched | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | — |
 | `tracker_runtime_policy` | matched | s.deployment_preset | s.deployment_preset | same preset configs/presets/mamba_whole_graph.yaml @ 093b66ed1240 |
@@ -290,7 +290,7 @@ Remaining confounds:
 | `backbone_family` | matched | yolo26m | yolo26m | — |
 | `head_family` | matched | {"d_model": 128, "d_state": 16, "detail_source": "none", "family": "mamba_head", "num_b… | {"d_model": 128, "d_state": 16, "detail_source": "none", "family": "mamba_head", "num_b… | — |
 | `dataset_split` | matched | {"basis": "explicit", "holdout": [], "train": ["MOT17-02-SDP", "MOT17-04-SDP", "MOT17-0… | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | bases differ (explicit vs default:all *-SDP under datasets/MOT17/train) but resolve to the same set |
-| `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | — |
+| `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "gate_teacher_at_runtime": "runs/gat… | {"effective_T": 1, "embedding": "reid_mode='off'", "gate_teacher_at_runtime": "runs/gat… | — |
 | `deployed_backbone_artifact` | matched | {"engine_node": "m.backbone_engine", "teacher_consistency": "same_teacher_indicated"} | {"engine_node": "m.backbone_engine", "teacher_consistency": "same_teacher_indicated"} | engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence |
 | `deployed_head_artifact` | matched | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | — |
 | `tracker_runtime_policy` | matched | m.deployment_preset | m.deployment_preset | same preset configs/presets/mamba_whole_graph_m.yaml @ 496c4ec22b49 |
@@ -318,7 +318,7 @@ Remaining confounds:
 | `backbone_family` | matched | yolo26m | yolo26m | — |
 | `head_family` | matched | {"d_model": 128, "d_state": 16, "detail_source": "none", "family": "mamba_head", "num_b… | {"d_model": 128, "d_state": 16, "detail_source": "none", "family": "mamba_head", "num_b… | — |
 | `dataset_split` | matched | {"basis": "explicit", "holdout": [], "train": ["MOT17-02-SDP", "MOT17-04-SDP", "MOT17-0… | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | bases differ (explicit vs default:all *-SDP under datasets/MOT17/train) but resolve to the same set |
-| `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | — |
+| `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "gate_teacher_at_runtime": "runs/gat… | {"effective_T": 1, "embedding": "reid_mode='off'", "gate_teacher_at_runtime": "runs/gat… | — |
 | `deployed_backbone_artifact` | matched | {"engine_node": "m.backbone_engine", "teacher_consistency": "same_teacher_indicated"} | {"engine_node": "m.backbone_engine", "teacher_consistency": "same_teacher_indicated"} | engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence |
 | `deployed_head_artifact` | matched | {"checkpoint_head_deployed": false, "head_engine_node": "m.head_engine", "head_engine_s… | {"checkpoint_head_deployed": false, "head_engine_node": "m.head_engine", "head_engine_s… | lhs runs the fixed head engine, not the lhs checkpoint head (sibling ONNX ambiguous: ['m.distill', 'm.gt1', 'm.gt2_plain', 'm.t3t1_phase_a', 'm.t3t1_phase_b', 'm.t3t1_phase_b_gpu_decode']; checkpoint source ambiguous); rhs runs the fixed head engine, not the rhs checkpoint head (sibling ONNX ambiguous: ['m.distill', 'm.gt1', 'm.gt2_plain', 'm.t3t1_phase_a', 'm.t3t1_phase_b', 'm.t3t1_phase_b_gpu_decode']; checkpoint source ambiguous) |
 | `tracker_runtime_policy` | matched | m.deployment_preset | m.deployment_preset | same preset configs/presets/mamba_whole_graph_m.yaml @ 496c4ec22b49 |
@@ -347,7 +347,7 @@ Blocking:
 | `backbone_family` | matched | yolo26m | yolo26m | — |
 | `head_family` | matched | {"d_model": 128, "d_state": 16, "detail_source": "none", "family": "mamba_head", "num_b… | {"d_model": 128, "d_state": 16, "detail_source": "none", "family": "mamba_head", "num_b… | — |
 | `dataset_split` | matched | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | — |
-| `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | — |
+| `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "gate_teacher_at_runtime": "runs/gat… | {"effective_T": 1, "embedding": "reid_mode='off'", "gate_teacher_at_runtime": "runs/gat… | — |
 | `deployed_backbone_artifact` | matched | {"engine_node": "m.backbone_engine", "teacher_consistency": "same_teacher_indicated"} | {"engine_node": "m.backbone_engine", "teacher_consistency": "same_teacher_indicated"} | engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence |
 | `deployed_head_artifact` | matched | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | — |
 | `tracker_runtime_policy` | matched | m.deployment_preset | m.deployment_preset | same preset configs/presets/mamba_whole_graph_m.yaml @ 496c4ec22b49 |
@@ -374,9 +374,9 @@ Blocking:
 | `backbone_family` | matched | yolo26s | yolo26s | — |
 | `head_family` | matched_effective | {"d_model": 128, "d_state": 16, "detail_source": "none", "family": "mamba_head", "num_b… | {"d_model": 128, "d_state": 16, "detail_source": "none", "family": "mamba_head", "num_b… | same head architecture; one side carries temporal blocks that the T=1 forward bypasses (artifact differs, effective forward does not) |
 | `dataset_split` | matched | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | — |
-| `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | — |
+| `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "gate_teacher_at_runtime": "null (ba… | {"effective_T": 1, "embedding": "reid_mode='off'", "gate_teacher_at_runtime": "null (ba… | — |
 | `deployed_backbone_artifact` | matched | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence |
-| `deployed_head_artifact` | matched | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | — |
+| `deployed_head_artifact` | matched_effective | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | same head path; temporal-block presence differs but is bypassed at T=1 |
 | `tracker_runtime_policy` | matched | s.deployment_preset | s.deployment_preset | same preset configs/presets/mamba_whole_graph.yaml @ 093b66ed1240 |
 | `warm_start` (treatment) | unmatched | s.distill | s.t3t1_phase_a | rhs descends from lhs through ['s.t3t1_phase_a', 's.t3t1_phase_b'] |
 | `teacher` | matched | s.adapted_teacher | s.adapted_teacher | — |
@@ -407,9 +407,9 @@ Remaining confounds:
 | `backbone_family` | matched | yolo26s | yolo26s | — |
 | `head_family` | matched_effective | {"d_model": 128, "d_state": 16, "detail_source": "none", "family": "mamba_head", "num_b… | {"d_model": 128, "d_state": 16, "detail_source": "none", "family": "mamba_head", "num_b… | same head architecture; one side carries temporal blocks that the T=1 forward bypasses (artifact differs, effective forward does not) |
 | `dataset_split` | matched | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | — |
-| `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | — |
+| `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "gate_teacher_at_runtime": "null (ba… | {"effective_T": 1, "embedding": "reid_mode='off'", "gate_teacher_at_runtime": "null (ba… | — |
 | `deployed_backbone_artifact` | matched | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence |
-| `deployed_head_artifact` | matched | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | — |
+| `deployed_head_artifact` | matched_effective | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | same head path; temporal-block presence differs but is bypassed at T=1 |
 | `tracker_runtime_policy` | matched | s.deployment_preset | s.deployment_preset | same preset configs/presets/mamba_whole_graph.yaml @ 093b66ed1240 |
 | `warm_start` | matched | s.gt1 | s.gt1 | both sides warm-start from the common ancestor s.gt1 |
 | `teacher` | matched | s.adapted_teacher | s.adapted_teacher | — |
@@ -436,9 +436,9 @@ Remaining confounds:
 | `backbone_family` | matched | yolo26s | yolo26s | — |
 | `head_family` | matched_effective | {"d_model": 128, "d_state": 16, "detail_source": "none", "family": "mamba_head", "num_b… | {"d_model": 128, "d_state": 16, "detail_source": "none", "family": "mamba_head", "num_b… | same head architecture; one side carries temporal blocks that the T=1 forward bypasses (artifact differs, effective forward does not) |
 | `dataset_split` | matched | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | — |
-| `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | — |
+| `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "gate_teacher_at_runtime": "null (ba… | {"effective_T": 1, "embedding": "reid_mode='off'", "gate_teacher_at_runtime": "null (ba… | — |
 | `deployed_backbone_artifact` | matched | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence |
-| `deployed_head_artifact` | matched | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | — |
+| `deployed_head_artifact` | matched_effective | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | same head path; temporal-block presence differs but is bypassed at T=1 |
 | `tracker_runtime_policy` | matched | s.deployment_preset | s.deployment_preset | same preset configs/presets/mamba_whole_graph.yaml @ 093b66ed1240 |
 | `warm_start` | matched | s.gt1 | s.gt1 | both sides warm-start from the common ancestor s.gt1 |
 | `teacher` | matched | s.adapted_teacher | s.adapted_teacher | — |
@@ -464,9 +464,9 @@ Remaining confounds:
 | `backbone_family` | matched | yolo26s | yolo26s | — |
 | `head_family` | matched_effective | {"d_model": 128, "d_state": 16, "detail_source": "none", "family": "mamba_head", "num_b… | {"d_model": 128, "d_state": 16, "detail_source": "none", "family": "mamba_head", "num_b… | same head architecture; one side carries temporal blocks that the T=1 forward bypasses (artifact differs, effective forward does not) |
 | `dataset_split` | matched | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | — |
-| `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | — |
+| `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "gate_teacher_at_runtime": "null (ba… | {"effective_T": 1, "embedding": "reid_mode='off'", "gate_teacher_at_runtime": "null (ba… | — |
 | `deployed_backbone_artifact` | matched | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence |
-| `deployed_head_artifact` | matched | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | — |
+| `deployed_head_artifact` | matched_effective | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | same head path; temporal-block presence differs but is bypassed at T=1 |
 | `tracker_runtime_policy` | matched | s.deployment_preset | s.deployment_preset | same preset configs/presets/mamba_whole_graph.yaml @ 093b66ed1240 |
 | `warm_start` | matched | s.gt1 | s.gt1 | both sides warm-start from the common ancestor s.gt1 |
 | `teacher` | matched | s.adapted_teacher | s.adapted_teacher | — |
@@ -493,9 +493,9 @@ Remaining confounds:
 | `backbone_family` | matched | yolo26s | yolo26s | — |
 | `head_family` | matched_effective | {"d_model": 128, "d_state": 16, "detail_source": "none", "family": "mamba_head", "num_b… | {"d_model": 128, "d_state": 16, "detail_source": "none", "family": "mamba_head", "num_b… | same head architecture; one side carries temporal blocks that the T=1 forward bypasses (artifact differs, effective forward does not) |
 | `dataset_split` | matched | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | — |
-| `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | — |
+| `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "gate_teacher_at_runtime": "null (ba… | {"effective_T": 1, "embedding": "reid_mode='off'", "gate_teacher_at_runtime": "null (ba… | — |
 | `deployed_backbone_artifact` | matched | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence |
-| `deployed_head_artifact` | matched | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | — |
+| `deployed_head_artifact` | matched_effective | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | same head path; temporal-block presence differs but is bypassed at T=1 |
 | `tracker_runtime_policy` | matched | s.deployment_preset | s.deployment_preset | same preset configs/presets/mamba_whole_graph.yaml @ 093b66ed1240 |
 | `warm_start` | matched | s.gt1_s13 | s.gt1_s13 | both sides warm-start from the common ancestor s.gt1_s13 |
 | `teacher` | matched | s.adapted_teacher | s.adapted_teacher | — |
@@ -524,9 +524,9 @@ Remaining confounds:
 | `backbone_family` | matched | yolo26s | yolo26s | — |
 | `head_family` | matched_effective | {"d_model": 128, "d_state": 16, "detail_source": "none", "family": "mamba_head", "num_b… | {"d_model": 128, "d_state": 16, "detail_source": "none", "family": "mamba_head", "num_b… | same head architecture; one side carries temporal blocks that the T=1 forward bypasses (artifact differs, effective forward does not) |
 | `dataset_split` | matched | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | — |
-| `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | — |
+| `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "gate_teacher_at_runtime": "null (ba… | {"effective_T": 1, "embedding": "reid_mode='off'", "gate_teacher_at_runtime": "null (ba… | — |
 | `deployed_backbone_artifact` | matched | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence |
-| `deployed_head_artifact` | matched | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | — |
+| `deployed_head_artifact` | matched_effective | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | same head path; temporal-block presence differs but is bypassed at T=1 |
 | `tracker_runtime_policy` | matched | s.deployment_preset | s.deployment_preset | same preset configs/presets/mamba_whole_graph.yaml @ 093b66ed1240 |
 | `warm_start` | matched | s.gt1_s14 | s.gt1_s14 | both sides warm-start from the common ancestor s.gt1_s14 |
 | `teacher` | matched | s.adapted_teacher | s.adapted_teacher | — |
@@ -555,9 +555,9 @@ Remaining confounds:
 | `backbone_family` | matched | yolo26s | yolo26s | — |
 | `head_family` | matched_effective | {"d_model": 128, "d_state": 16, "detail_source": "none", "family": "mamba_head", "num_b… | {"d_model": 128, "d_state": 16, "detail_source": "none", "family": "mamba_head", "num_b… | same head architecture; one side carries temporal blocks that the T=1 forward bypasses (artifact differs, effective forward does not) |
 | `dataset_split` | matched | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | — |
-| `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | — |
+| `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "gate_teacher_at_runtime": "null (ba… | {"effective_T": 1, "embedding": "reid_mode='off'", "gate_teacher_at_runtime": "null (ba… | — |
 | `deployed_backbone_artifact` | matched | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence |
-| `deployed_head_artifact` | matched | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | — |
+| `deployed_head_artifact` | matched_effective | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | same head path; temporal-block presence differs but is bypassed at T=1 |
 | `tracker_runtime_policy` | matched | s.deployment_preset | s.deployment_preset | same preset configs/presets/mamba_whole_graph.yaml @ 093b66ed1240 |
 | `warm_start` | matched | s.gt1 | s.gt1 | both sides warm-start from the common ancestor s.gt1 |
 | `teacher` | matched | s.adapted_teacher | s.adapted_teacher | — |
@@ -587,9 +587,9 @@ Remaining confounds:
 | `backbone_family` | matched | yolo26s | yolo26s | — |
 | `head_family` | matched_effective | {"d_model": 128, "d_state": 16, "detail_source": "none", "family": "mamba_head", "num_b… | {"d_model": 128, "d_state": 16, "detail_source": "none", "family": "mamba_head", "num_b… | same head architecture; one side carries temporal blocks that the T=1 forward bypasses (artifact differs, effective forward does not) |
 | `dataset_split` | matched | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | — |
-| `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | — |
+| `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "gate_teacher_at_runtime": "null (ba… | {"effective_T": 1, "embedding": "reid_mode='off'", "gate_teacher_at_runtime": "null (ba… | — |
 | `deployed_backbone_artifact` | matched | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence |
-| `deployed_head_artifact` | matched | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | — |
+| `deployed_head_artifact` | matched_effective | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | same head path; temporal-block presence differs but is bypassed at T=1 |
 | `tracker_runtime_policy` | matched | s.deployment_preset | s.deployment_preset | same preset configs/presets/mamba_whole_graph.yaml @ 093b66ed1240 |
 | `warm_start` | unmatched | s.gt1 | s.t3t1_phase_a_s13 | no common ancestor in the inventory (chains root at s.distill vs s.distill_s13); GT1-start confound: the compared heads warm-start from different checkpoints of the same stage kind |
 | `teacher` | matched | s.adapted_teacher | s.adapted_teacher | — |
@@ -620,7 +620,7 @@ Blocking:
 | `backbone_family` | matched | yolo26s | yolo26s | — |
 | `head_family` | matched | {"d_model": 128, "d_state": 16, "detail_source": "none", "family": "mamba_head", "num_b… | {"d_model": 128, "d_state": 16, "detail_source": "none", "family": "mamba_head", "num_b… | — |
 | `dataset_split` | matched | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | — |
-| `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | — |
+| `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "gate_teacher_at_runtime": "null (ba… | {"effective_T": 1, "embedding": "reid_mode='off'", "gate_teacher_at_runtime": "null (ba… | — |
 | `deployed_backbone_artifact` | matched | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence |
 | `deployed_head_artifact` | matched | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | — |
 | `tracker_runtime_policy` | matched | s.deployment_preset | s.deployment_preset | same preset configs/presets/mamba_whole_graph.yaml @ 093b66ed1240 |
@@ -652,9 +652,9 @@ Remaining confounds:
 | `backbone_family` | matched | yolo26m | yolo26m | — |
 | `head_family` | matched_effective | {"d_model": 128, "d_state": 16, "detail_source": "none", "family": "mamba_head", "num_b… | {"d_model": 128, "d_state": 16, "detail_source": "none", "family": "mamba_head", "num_b… | same head architecture; one side carries temporal blocks that the T=1 forward bypasses (artifact differs, effective forward does not) |
 | `dataset_split` | matched | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | — |
-| `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | — |
+| `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "gate_teacher_at_runtime": "runs/gat… | {"effective_T": 1, "embedding": "reid_mode='off'", "gate_teacher_at_runtime": "runs/gat… | — |
 | `deployed_backbone_artifact` | matched | {"engine_node": "m.backbone_engine", "teacher_consistency": "same_teacher_indicated"} | {"engine_node": "m.backbone_engine", "teacher_consistency": "same_teacher_indicated"} | engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence |
-| `deployed_head_artifact` | matched | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | — |
+| `deployed_head_artifact` | matched_effective | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | same head path; temporal-block presence differs but is bypassed at T=1 |
 | `tracker_runtime_policy` | matched | m.deployment_preset | m.deployment_preset | same preset configs/presets/mamba_whole_graph_m.yaml @ 496c4ec22b49 |
 | `warm_start` | matched | m.gt1 | m.gt1 | both sides warm-start from the common ancestor m.gt1 |
 | `teacher` | matched | m.adapted_teacher | m.adapted_teacher | — |
@@ -681,7 +681,7 @@ Remaining confounds:
 | `backbone_family` | matched | yolo26s | yolo26s | — |
 | `head_family` | matched | {"d_model": 128, "d_state": 16, "detail_source": "none", "family": "mamba_head", "num_b… | {"d_model": 128, "d_state": 16, "detail_source": "none", "family": "mamba_head", "num_b… | — |
 | `dataset_split` | matched | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | — |
-| `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | — |
+| `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "gate_teacher_at_runtime": "null (ba… | {"effective_T": 1, "embedding": "reid_mode='off'", "gate_teacher_at_runtime": "null (ba… | — |
 | `deployed_backbone_artifact` | matched | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence |
 | `deployed_head_artifact` | matched | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | — |
 | `tracker_runtime_policy` | matched | s.deployment_preset | s.deployment_preset | same preset configs/presets/mamba_whole_graph.yaml @ 093b66ed1240 |
@@ -709,7 +709,7 @@ Remaining confounds:
 | `backbone_family` | matched | yolo26s | yolo26s | — |
 | `head_family` | matched | {"d_model": 128, "d_state": 16, "detail_source": "none", "family": "mamba_head", "num_b… | {"d_model": 128, "d_state": 16, "detail_source": "none", "family": "mamba_head", "num_b… | — |
 | `dataset_split` | matched | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | — |
-| `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | — |
+| `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "gate_teacher_at_runtime": "null (ba… | {"effective_T": 1, "embedding": "reid_mode='off'", "gate_teacher_at_runtime": "null (ba… | — |
 | `deployed_backbone_artifact` | matched | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence |
 | `deployed_head_artifact` | matched | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | — |
 | `tracker_runtime_policy` | matched | s.deployment_preset | s.deployment_preset | same preset configs/presets/mamba_whole_graph.yaml @ 093b66ed1240 |
@@ -737,7 +737,7 @@ Remaining confounds:
 | `backbone_family` | matched | yolo26s | yolo26s | — |
 | `head_family` | matched | {"d_model": 128, "d_state": 16, "detail_source": "none", "family": "mamba_head", "num_b… | {"d_model": 128, "d_state": 16, "detail_source": "none", "family": "mamba_head", "num_b… | — |
 | `dataset_split` | matched | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | — |
-| `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | — |
+| `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "gate_teacher_at_runtime": "null (ba… | {"effective_T": 1, "embedding": "reid_mode='off'", "gate_teacher_at_runtime": "null (ba… | — |
 | `deployed_backbone_artifact` | matched | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence |
 | `deployed_head_artifact` | matched | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | — |
 | `tracker_runtime_policy` | matched | s.deployment_preset | s.deployment_preset | same preset configs/presets/mamba_whole_graph.yaml @ 093b66ed1240 |
@@ -766,7 +766,7 @@ Remaining confounds:
 | `backbone_family` | matched | yolo26s | yolo26s | — |
 | `head_family` | matched | {"d_model": 128, "d_state": 16, "detail_source": "none", "family": "mamba_head", "num_b… | {"d_model": 128, "d_state": 16, "detail_source": "none", "family": "mamba_head", "num_b… | — |
 | `dataset_split` | matched | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | — |
-| `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | — |
+| `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "gate_teacher_at_runtime": "null (ba… | {"effective_T": 1, "embedding": "reid_mode='off'", "gate_teacher_at_runtime": "null (ba… | — |
 | `deployed_backbone_artifact` | matched | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence |
 | `deployed_head_artifact` | matched | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | — |
 | `tracker_runtime_policy` | matched | s.deployment_preset | s.deployment_preset | same preset configs/presets/mamba_whole_graph.yaml @ 093b66ed1240 |
@@ -795,7 +795,7 @@ Remaining confounds:
 | `backbone_family` | unmatched | yolo26s | yolo26m | — |
 | `head_family` | matched | {"d_model": 128, "d_state": 16, "detail_source": "none", "family": "mamba_head", "num_b… | {"d_model": 128, "d_state": 16, "detail_source": "none", "family": "mamba_head", "num_b… | same signature; param_count 11368540 vs 11417692 (input width follows the backbone) |
 | `dataset_split` | matched | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | — |
-| `inference_forward_mode` | unmatched | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | differs: {"gate_teacher_at_runtime": {"lhs": "null (backbone-only; no teacher forward)", "rhs": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt"}} |
+| `inference_forward_mode` | unmatched | {"effective_T": 1, "embedding": "reid_mode='off'", "gate_teacher_at_runtime": "null (ba… | {"effective_T": 1, "embedding": "reid_mode='off'", "gate_teacher_at_runtime": "runs/gat… | differs: {"gate_teacher_at_runtime": {"lhs": "null (backbone-only; no teacher forward)", "rhs": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt"}} |
 | `deployed_backbone_artifact` | unmatched | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | {"engine_node": "m.backbone_engine", "teacher_consistency": "same_teacher_indicated"} | engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence |
 | `deployed_head_artifact` | unmatched | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | {"checkpoint_head_deployed": false, "head_engine_node": "m.head_engine", "head_engine_s… | rhs runs the fixed head engine, not the rhs checkpoint head (sibling ONNX ambiguous: ['m.distill', 'm.gt1', 'm.gt2_plain', 'm.t3t1_phase_a', 'm.t3t1_phase_b', 'm.t3t1_phase_b_gpu_decode']; checkpoint source ambiguous) |
 | `tracker_runtime_policy` | unmatched | s.deployment_preset | m.deployment_preset | tracker/runtime keys differ: {"kalman_r_scale": {"lhs": 2.8, "rhs": 3.5}, "relink_bridge_dir_bonus": {"lhs": 0.8, "rhs": 0.0}, "relink_bridge_h_hi": {"lhs": 1.33, "rhs": 1.7}, "relink_bridge_h_lo": {"lhs": 0.75, "rhs": 0.6}, "relink_bridge_px": {"lhs": 0.25, "rhs": 0.4}} |
@@ -835,7 +835,7 @@ Remaining confounds:
 | `backbone_family` | matched | yolo26s | yolo26s | — |
 | `head_family` | unmatched | {"family": "yolo_detect", "gate_module": true} | {"d_model": 128, "d_state": 16, "detail_source": "none", "family": "mamba_head", "num_b… | architecture signature differs |
 | `dataset_split` | matched | {"basis": "provenance.training_sequences", "holdout": [], "train": ["MOT17-02-SDP", "MO… | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | bases differ (provenance.training_sequences vs default:all *-SDP under datasets/MOT17/train) but resolve to the same set |
-| `inference_forward_mode` | matched | {"effective_T": 1, "embedding": null, "final_stage_gt_ratio": null, "gate_teacher_at_ru… | {"effective_T": 1, "embedding": null, "final_stage_gt_ratio": null, "gate_teacher_at_ru… | — |
+| `inference_forward_mode` | matched | {"effective_T": 1, "embedding": null, "gate_teacher_at_runtime": null, "graphs": {"use_… | {"effective_T": 1, "embedding": null, "gate_teacher_at_runtime": null, "graphs": {"use_… | — |
 | `deployed_backbone_artifact` | matched | {"engine_node": "s.adapted_teacher", "teacher_consistency": "same_teacher_indicated"} | {"engine_node": "s.adapted_teacher", "teacher_consistency": "same_teacher_indicated"} | engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence |
 | `deployed_head_artifact` | unmatched | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "native Detec… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "mamba head, … | different head kinds |
 | `tracker_runtime_policy` | unknown | contract_required | contract_required | tracker policy must be fixed by the shared eval contract (deliverable 3); not derivable from the inventory |
@@ -874,7 +874,7 @@ Remaining confounds:
 | `backbone_family` | matched | yolo26m | yolo26m | — |
 | `head_family` | unmatched | {"family": "yolo_detect", "gate_module": true} | {"d_model": 128, "d_state": 16, "detail_source": "none", "family": "mamba_head", "num_b… | architecture signature differs |
 | `dataset_split` | matched | {"basis": "provenance.training_sequences", "holdout": [], "train": ["MOT17-02-SDP", "MO… | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | bases differ (provenance.training_sequences vs default:all *-SDP under datasets/MOT17/train) but resolve to the same set |
-| `inference_forward_mode` | matched | {"effective_T": 1, "embedding": null, "final_stage_gt_ratio": null, "gate_teacher_at_ru… | {"effective_T": 1, "embedding": null, "final_stage_gt_ratio": null, "gate_teacher_at_ru… | — |
+| `inference_forward_mode` | matched | {"effective_T": 1, "embedding": null, "gate_teacher_at_runtime": null, "graphs": {"use_… | {"effective_T": 1, "embedding": null, "gate_teacher_at_runtime": null, "graphs": {"use_… | — |
 | `deployed_backbone_artifact` | matched | {"engine_node": "m.adapted_teacher", "teacher_consistency": "same_teacher_indicated"} | {"engine_node": "m.adapted_teacher", "teacher_consistency": "same_teacher_indicated"} | engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence |
 | `deployed_head_artifact` | unmatched | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "native Detec… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "mamba head, … | different head kinds |
 | `tracker_runtime_policy` | unknown | contract_required | contract_required | tracker policy must be fixed by the shared eval contract (deliverable 3); not derivable from the inventory |
@@ -911,7 +911,7 @@ Remaining confounds:
 | `backbone_family` | matched | yolo26s | yolo26s | — |
 | `head_family` | matched | {"d_model": 128, "d_state": 16, "detail_source": "none", "family": "mamba_head", "num_b… | {"d_model": 128, "d_state": 16, "detail_source": "none", "family": "mamba_head", "num_b… | — |
 | `dataset_split` | matched | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | — |
-| `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | — |
+| `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "gate_teacher_at_runtime": "null (ba… | {"effective_T": 1, "embedding": "reid_mode='off'", "gate_teacher_at_runtime": "null (ba… | — |
 | `deployed_backbone_artifact` (treatment) | unmatched | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | {"engine_node": "s.backbone_engine_v14replica_e12", "teacher_consistency": "same_teache… | engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence |
 | `deployed_head_artifact` | matched | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | — |
 | `tracker_runtime_policy` | matched | s.deployment_preset | s.deployment_preset | same preset configs/presets/mamba_whole_graph.yaml @ 093b66ed1240 |
@@ -940,7 +940,7 @@ Remaining confounds:
 | `backbone_family` | matched | yolo26s | yolo26s | — |
 | `head_family` | matched | {"d_model": 128, "d_state": 16, "detail_source": "none", "family": "mamba_head", "num_b… | {"d_model": 128, "d_state": 16, "detail_source": "none", "family": "mamba_head", "num_b… | — |
 | `dataset_split` | matched | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | — |
-| `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | — |
+| `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "gate_teacher_at_runtime": "null (ba… | {"effective_T": 1, "embedding": "reid_mode='off'", "gate_teacher_at_runtime": "null (ba… | — |
 | `deployed_backbone_artifact` | unmatched | {"engine_node": "s.backbone_engine", "teacher_consistency": "same_teacher_indicated"} | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence |
 | `deployed_head_artifact` | matched | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | — |
 | `tracker_runtime_policy` | matched | s.deployment_preset | s.deployment_preset | same preset configs/presets/mamba_whole_graph.yaml @ 093b66ed1240 |
@@ -978,9 +978,9 @@ Blocking:
 | `backbone_family` | matched | yolo26s | yolo26s | — |
 | `head_family` | matched_effective | {"d_model": 128, "d_state": 16, "detail_source": "none", "family": "mamba_head", "num_b… | {"d_model": 128, "d_state": 16, "detail_source": "none", "family": "mamba_head", "num_b… | same head architecture; one side carries temporal blocks that the T=1 forward bypasses (artifact differs, effective forward does not) |
 | `dataset_split` | matched | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | — |
-| `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | — |
+| `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "gate_teacher_at_runtime": "null (ba… | {"effective_T": 1, "embedding": "reid_mode='off'", "gate_teacher_at_runtime": "null (ba… | — |
 | `deployed_backbone_artifact` | unmatched | {"engine_node": "s.backbone_engine", "teacher_consistency": "same_teacher_indicated"} | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence |
-| `deployed_head_artifact` | matched | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | — |
+| `deployed_head_artifact` | matched_effective | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | same head path; temporal-block presence differs but is bypassed at T=1 |
 | `tracker_runtime_policy` | matched | s.deployment_preset | s.deployment_preset | same preset configs/presets/mamba_whole_graph.yaml @ 093b66ed1240 |
 | `warm_start` | unmatched | — | s.t3t1_phase_a | no common ancestor in the inventory (chains root at s.legacy_v14 vs s.distill); chain incomplete: s.legacy_v14 stores its resume invocation; earlier stages unrecorded |
 | `teacher` | unmatched | s.legacy_teacher | s.adapted_teacher | — |
@@ -1016,7 +1016,7 @@ Blocking:
 | `backbone_family` | matched | yolo26s | yolo26s | — |
 | `head_family` | matched | {"d_model": 128, "d_state": 16, "detail_source": "none", "family": "mamba_head", "num_b… | {"d_model": 128, "d_state": 16, "detail_source": "none", "family": "mamba_head", "num_b… | — |
 | `dataset_split` | matched | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | {"basis": "explicit", "holdout": [], "train": ["MOT17-02-SDP", "MOT17-04-SDP", "MOT17-0… | bases differ (default:all *-SDP under datasets/MOT17/train vs explicit) but resolve to the same set |
-| `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | — |
+| `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "gate_teacher_at_runtime": "null (ba… | {"effective_T": 1, "embedding": "reid_mode='off'", "gate_teacher_at_runtime": "null (ba… | — |
 | `deployed_backbone_artifact` | matched | {"engine_node": "s.backbone_engine", "teacher_consistency": "same_teacher_indicated"} | {"engine_node": "s.backbone_engine", "teacher_consistency": "same_teacher_indicated"} | engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence |
 | `deployed_head_artifact` | matched | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | — |
 | `tracker_runtime_policy` | matched | s.deployment_preset | s.deployment_preset | same preset configs/presets/mamba_whole_graph.yaml @ 093b66ed1240 |
@@ -1047,9 +1047,9 @@ Remaining confounds:
 | `backbone_family` | matched | yolo26s | yolo26s | — |
 | `head_family` | matched_effective | {"d_model": 128, "d_state": 16, "detail_source": "none", "family": "mamba_head", "num_b… | {"d_model": 128, "d_state": 16, "detail_source": "none", "family": "mamba_head", "num_b… | same head architecture; one side carries temporal blocks that the T=1 forward bypasses (artifact differs, effective forward does not) |
 | `dataset_split` | matched | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | — |
-| `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | — |
+| `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "gate_teacher_at_runtime": "null (ba… | {"effective_T": 1, "embedding": "reid_mode='off'", "gate_teacher_at_runtime": "null (ba… | — |
 | `deployed_backbone_artifact` | unmatched | {"engine_node": "s.backbone_engine", "teacher_consistency": "same_teacher_indicated"} | {"engine_node": "s.backbone_engine_v14replica_e12", "teacher_consistency": "same_teache… | engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence |
-| `deployed_head_artifact` | matched | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | — |
+| `deployed_head_artifact` | matched_effective | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | same head path; temporal-block presence differs but is bypassed at T=1 |
 | `tracker_runtime_policy` | matched | s.deployment_preset | s.deployment_preset | same preset configs/presets/mamba_whole_graph.yaml @ 093b66ed1240 |
 | `warm_start` | unmatched | — | s.t3t1_phase_a | no common ancestor in the inventory (chains root at s.legacy_v14 vs s.distill); chain incomplete: s.legacy_v14 stores its resume invocation; earlier stages unrecorded |
 | `teacher` | unmatched | s.legacy_teacher | s.adapted_teacher | — |
@@ -1083,7 +1083,7 @@ Remaining confounds:
 | `backbone_family` | matched | yolo26m | yolo26m | — |
 | `head_family` | matched | {"d_model": 128, "d_state": 16, "detail_source": "none", "family": "mamba_head", "num_b… | {"d_model": 128, "d_state": 16, "detail_source": "none", "family": "mamba_head", "num_b… | — |
 | `dataset_split` | matched | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | — |
-| `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | — |
+| `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "gate_teacher_at_runtime": "runs/gat… | {"effective_T": 1, "embedding": "reid_mode='off'", "gate_teacher_at_runtime": "runs/gat… | — |
 | `deployed_backbone_artifact` | matched | {"engine_node": "m.backbone_engine", "teacher_consistency": "same_teacher_indicated"} | {"engine_node": "m.backbone_engine", "teacher_consistency": "same_teacher_indicated"} | engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence |
 | `deployed_head_artifact` | matched | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | — |
 | `tracker_runtime_policy` | matched | m.deployment_preset | m.deployment_preset | same preset configs/presets/mamba_whole_graph_m.yaml @ 496c4ec22b49 |
