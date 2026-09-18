@@ -15,6 +15,7 @@ Manifest: `docs/ownership/doc_migration_manifest.yaml`
 - `docs/TESTING.md`
 - `docs/TODO.md`
 - `docs/TODO_history.md`
+- `docs/WORKTREE_RESOURCES.md`
 - `docs/architecture/README.md`
 - `docs/archive/DATAFLOW.md`
 - `docs/archive/README.md`
@@ -387,6 +388,6 @@ Excluded from the active index and default search view.
 
 ## Inventory summary
 
-- documents: 337
-- active: 282
+- documents: 338
+- active: 283
 - grayed out: 55
