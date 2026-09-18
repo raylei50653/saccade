@@ -833,3 +833,26 @@ dynamic@0.45 = 78.1(−1.4)、05 mainline@0.45 = 65.7(−6.1)。
 - `cheb_gr_kreciprocal_self` row-major 修復版（Eigen）
 - `output/ho_sweep/` 保留 per-arm MOT 輸出供覆查
 - registry [#56](reference/no_go_registry.md#56)
+
+## 2026-09-18 — 主 TODO 任務改由 GitHub issue 管理（歸檔）
+
+主 TODO 與各 module TODO 自此只保留 sole-active 指標與 baseline；排序 = milestone `Now` / `Next` / `Later`。當日從 TODO 文字轉出的項目：
+
+### 跨模組待辦
+
+- **模組化前邊界盤點** — 盤點半已完成：core/extras 拆分（#411、#414）、`ultralytics` 移至 `yolo` extra（ADR 023 follow-up 3）、native 交付 ADR 025（#416/#417）、runtime path contract（#409）、重複執行變異依組態記錄（#363）。剩餘「public tracker-core API surface + PyPI vs git」→ issue #441。背景筆記 `docs/reference/saccade_module_reference.md` 保留。
+- **Production Pipeline Profiling（P1–P6）** — 全部完成（`docs/research/pipeline/production_pipeline_profiling_todo.md` 六項皆 ✅）；瓶頸歸因結論已分別落在 F1/F2/F3 與 #340/#341 線，不再作為待辦。
+- **`docs/modules/` 問題導向重整** — 本來就是 #368；只留 link。
+
+### detection
+
+- **VGT-Mamba（訓練中 · Phase 1）** — 07-06 後無任何 run 或 commit；`docs/TODO.md` baseline 表已列為 historical head variant（T=1 72.9 / T=3 buffer 不 work）。resume-or-retire → issue #440；Hybrid Mamba-ViT 與標註強化兩個「after VGT」one-liner 併入該 issue 作 contingent。
+- **Ultralytics packaging extra（ADR 023 follow-up 3）** — 已於 #414 落地（`optional-dependencies.yolo`），TODO 內「remains parked」為過時敘述，移入 Done。
+
+### geometry
+
+- **GMC Warp 精度驗證（依賴 VGT）** — 隨 #440 決定；不獨立佔 WIP。
+
+### semantic
+
+- 212 行 H0/H2 敘事縮為指標：H0 五個 spent S、H2 W1–W7 與 owner verdict 全由 `claim_state_registry.md` 持有；OWDL `WAITING_OWNER_SEAL` 對應 issue #442（`Now`）。

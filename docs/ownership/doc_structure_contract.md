@@ -332,7 +332,7 @@ Not P9; not dual-stability reopen.
 |:--|:--|
 | Human | [DOC_MAINTENANCE PR checklist](../DOC_MAINTENANCE.md) — index row, promotion, no phantom paths |
 | Machine (existing) | `check_doc_links.py` hard · `check_doc_stale_paths.py` hard · `check_doc_freshness.py` warn |
-| Machine (this contract) | `check_doc_structure.py` 預設只 warn 索引覆蓋；`--strict` 對 C6.4 lifecycle L1–L4 非零退出（pre-push 使用 strict） |
+| Machine (this contract) | `check_doc_structure.py` 預設只 warn 索引覆蓋；`--strict` 對 C6.4 lifecycle L1–L4 與 WIP-register L5（TODO 不得含 task checkbox）非零退出（pre-push 使用 strict） |
 
 ```bash
 uv run python3 scripts/tools/check_doc_structure.py

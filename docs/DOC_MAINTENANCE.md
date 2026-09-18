@@ -85,9 +85,11 @@ mainline charter。Expected-state lease、probe、證據補件、工程 follow-u
 ```text
 WIP = 1 per module owner  (O0 seal)
 - 各 docs/modules/<m>/TODO.md = WIP register：
-    sole active mainline charter 一句 + link(s) 到 thread / research
+    sole active mainline charter 一句 + link(s) 到 thread / research 與對應 GitHub issue
     無 active → 明確 ⏸️ / 無 active
-    不寫長文、結果表、推理流水帳
+    不寫長文、結果表、推理流水帳、task checkbox（check_doc_structure L5 fail-closed）
+- 任務與排序住在 GitHub issue：milestone Now = 全部 sole-active issue（每 owner ≤1）、
+  Next = 可開始、Later = blocked / dependent；TODO 只留指標，不複述 issue 內容
 - charter 的 expected state / commit point / discard condition 放 linked thread 或 research note；不是 registry state
 - probe 放 charter Current step 或短期執行面；可替換或丟棄，不消耗 WIP、不觸發 formal close
 - 跨多步 / 跨家任務 → docs/research/threads/ 導航卡（不消耗 WIP 名額以外的敘事空間）

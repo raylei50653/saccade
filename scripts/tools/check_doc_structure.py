@@ -11,10 +11,13 @@ Contract (``docs/ownership/doc_structure_contract.md`` § C4 / C9):
       (except README.md) must be referenced by basename in that directory's
       README if it exists, else in ``docs/research/README.md``.
   S3  Every ``docs/modules/<m>/`` directory must contain README.md and TODO.md.
+  L5  ``docs/TODO.md`` and every ``docs/modules/<m>/TODO.md`` are WIP registers
+      (pointer + link), not task lists: no Markdown task checkboxes. Tasks and
+      their ordering live in GitHub issues / milestones (DOC_MAINTENANCE § WIP).
 
 This checker is **warn-only** by default for index-coverage findings (exit 0
 even with findings). ``--strict`` exits non-zero on C6.4 lifecycle violations
-(L1–L4); ``scripts/pre_push.sh`` uses that mode. Index coverage remains
+(L1–L5); ``scripts/pre_push.sh`` uses that mode. Index coverage remains
 warn-only in either mode.
 
 Index detection currently uses basename substring match against the owning
@@ -173,6 +176,35 @@ CONTRACTS_ALLOWED = frozenset(
 )
 
 HEADER_LINES = 12  # a doc's own status marker lives in its header, not its prose
+
+# L5 — a TODO register that grows checkboxes becomes a second task store that
+# drifts from the issue tracker. Tasks are issues; the register only points.
+
+
+def _todo_registers() -> list[Path]:
+    todos = [REPO_ROOT / "docs" / "TODO.md"]
+    if MODULES_ROOT.is_dir():
+        todos.extend(
+            sorted(p / "TODO.md" for p in MODULES_ROOT.iterdir() if p.is_dir())
+        )
+    return [t for t in todos if t.is_file()]
+
+
+def _check_todo_registers() -> list[str]:
+    """L5 — TODO registers carry no task checkboxes."""
+    import re
+
+    checkbox = re.compile(r"^\s*[-*+]\s+\[[ xX]\]\s")
+    violations: list[str] = []
+    for todo in _todo_registers():
+        rel = todo.relative_to(REPO_ROOT).as_posix()
+        for lineno, line in enumerate(_read(todo).splitlines(), start=1):
+            if checkbox.match(line):
+                violations.append(
+                    f"[L5] {rel}:{lineno}: task checkbox in a WIP register "
+                    "(DOC_MAINTENANCE § WIP — open an issue and leave a link)"
+                )
+    return violations
 
 
 def _declared_status(path: Path) -> str:
@@ -361,6 +393,7 @@ def check_lifecycle() -> list[str]:
             )
 
     violations.extend(_check_thread_status_projection())
+    violations.extend(_check_todo_registers())
 
     contracts_dir = RESEARCH_ROOT / "contracts"
     if contracts_dir.is_dir():
