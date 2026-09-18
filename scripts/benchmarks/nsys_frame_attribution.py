@@ -5,6 +5,7 @@ Usage:
     nsys profile --trace=cuda --cuda-graph-trace=node --sample=none --cpuctxsw=none \
         -o /tmp/wg .venv/bin/python scripts/eval/mot17.py --preset mamba_whole_graph_m ...
     .venv/bin/python scripts/benchmarks/nsys_frame_attribution.py /tmp/wg.nsys-rep
+    .venv/bin/python scripts/benchmarks/nsys_frame_attribution.py /tmp/wg.nsys-rep --json /tmp/wg.json
 
 Frame anchor = selective_scan_fwd_kernel (3 launches/frame inside the detect
 whole-graph). Steady window trims 5% head/tail. Sections:
@@ -22,7 +23,9 @@ never from the trace's own gaps. See docs/reference/runbooks/nsys_profiling.md.
 
 from __future__ import annotations
 
+import argparse
 import bisect
+import json
 import re
 import sqlite3
 import statistics as st
@@ -94,7 +97,13 @@ def group_runs(rows, split_ns=5e5):
 
 
 def main() -> None:
-    path = Path(sys.argv[1])
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("trace", help="nsys-rep or sqlite export")
+    parser.add_argument(
+        "--json", dest="json_out", default=None, help="Write machine-readable JSON"
+    )
+    args = parser.parse_args()
+    path = Path(args.trace)
     if path.suffix == ".nsys-rep":
         sq = path.with_suffix(".sqlite")
         if not sq.exists():
@@ -314,6 +323,118 @@ def main() -> None:
         if acc[b]:
             lbl = f"<= {b} ms" if b < 1e9 else "> 1.0 ms"
             print(f"  {lbl}: {cbin[b] / nf:.1f}/frame, {acc[b] / nf:.3f} ms/frame")
+
+    if args.json_out:
+        _root = Path(__file__).resolve().parents[2]
+        if str(_root) not in sys.path:
+            sys.path.insert(0, str(_root))
+        from scripts.benchmarks.production_db_attribution import (
+            classify_kernel,
+            nsys_overlap_from_spans,
+        )
+
+        scan_in = [s for s in scan_starts if lo <= s <= hi]
+        windows_ms: list[tuple[float, float]] = []
+        detect_ivals_ms: list[tuple[float, float]] = []
+        for i in range(0, len(scan_in) - 3, 3):
+            windows_ms.append((scan_in[i] / 1e6, scan_in[i + 3] / 1e6))
+        for r in kern:
+            if r["graphId"] == det_gid and lo <= r["start"] <= hi:
+                detect_ivals_ms.append((r["start"] / 1e6, r["end"] / 1e6))
+        work: dict[str, list[tuple[float, float]]] = defaultdict(list)
+        work["detect_graph"] = detect_ivals_ms
+        gmc_bytes = 0.0
+        staging_bytes = 0.0
+        for r in kern:
+            if not lo <= r["start"] <= hi:
+                continue
+            cat = classify_kernel(r["name"])
+            work[cat].append((r["start"] / 1e6, r["end"] / 1e6))
+        memcpy_work: list[tuple[float, float]] = []
+        memcpy_kinds: dict[str, dict[str, float]] = {}
+        for r in memcpy_rows:
+            memcpy_work.append((r["start"] / 1e6, r["end"] / 1e6))
+            kind = f"k{r['copyKind']}"
+            slot = memcpy_kinds.setdefault(kind, {"count": 0, "ms": 0.0, "bytes": 0.0})
+            slot["count"] += 1
+            slot["ms"] += (r["end"] - r["start"]) / 1e6
+            slot["bytes"] += r["bytes"]
+            if r["copyKind"] == 8:
+                gmc_bytes += r["bytes"]
+                if r["bytes"] >= 8_000_000:
+                    staging_bytes += r["bytes"]
+        work["memcpy"] = memcpy_work
+        overlap = nsys_overlap_from_spans(windows_ms, dict(work))
+        auction = [
+            r
+            for r in kern
+            if lo <= r["start"] <= hi and "parallel_auction_shmem" in r["name"]
+        ]
+        auction_ms = [(r["end"] - r["start"]) / 1e6 for r in auction]
+        gmc_down = [
+            r
+            for r in kern
+            if lo <= r["start"] <= hi and "chw_to_grayscale_downscale" in r["name"]
+        ]
+        gmc_fft = [
+            r
+            for r in kern
+            if lo <= r["start"] <= hi and classify_kernel(r["name"]) == "gmc_fft"
+        ]
+        payload = {
+            "schema": "saccade-nsys-frame-attribution-v1",
+            "trace": str(path),
+            "layer": "D",
+            "not_production_throughput": True,
+            "steady_window_ms": wall_ms,
+            "frames": frames,
+            "trace_wall_ms_per_frame": wall_ms / frames,
+            "gpu_union_busy_ms_per_frame": dev_union / frames,
+            "sum_of_kernels_ms_per_frame": tot / frames,
+            "detect_graph_id": det_gid,
+            "detect_span_mean_ms": overlap.get("detect_span_mean_ms"),
+            "detect_period_mean_ms": overlap.get("detect_period_mean_ms"),
+            "group_runs_detect_span_mean_ms": st.mean([(e - s) / 1e6 for s, e in det]),
+            "group_runs_detect_period_mean_ms": st.mean(periods),
+            "tail_mean_ms": st.mean(tails),
+            "tail_other_work_busy_ms": st.mean(tail_busy),
+            "tail_idle_ms": st.mean(tails) - st.mean(tail_busy),
+            "category_ms_per_frame": {c: busy[c] / frames for c in busy},
+            "stream_ms_per_frame": {str(s): by_stream[s] / frames for s in by_stream},
+            "graph_ms_per_frame": {str(g): by_graph[g] / frames for g in by_graph},
+            "memcpy_kinds": {
+                k: {
+                    "count_per_frame": v["count"] / frames,
+                    "ms_per_frame": v["ms"] / frames,
+                    "mb_per_frame": v["bytes"] / frames / 1024 / 1024,
+                }
+                for k, v in memcpy_kinds.items()
+            },
+            "gmc": {
+                "downscale_launches_per_frame": len(gmc_down) / frames,
+                "downscale_ms_per_frame": sum(
+                    (r["end"] - r["start"]) / 1e6 for r in gmc_down
+                )
+                / frames,
+                "fft_like_ms_per_frame": sum(
+                    (r["end"] - r["start"]) / 1e6 for r in gmc_fft
+                )
+                / frames,
+                "dto_d_mb_per_frame": gmc_bytes / frames / 1024 / 1024,
+                "full_frame_staging_mb_per_frame": staging_bytes / frames / 1024 / 1024,
+            },
+            "auction": {
+                "launches_per_frame": len(auction) / frames,
+                "ms_per_frame": sum(auction_ms) / frames if auction_ms else 0.0,
+                "mean_launch_ms": st.mean(auction_ms) if auction_ms else 0.0,
+            },
+            "exposed_stages": overlap.get("stages"),
+            "overlap": overlap,
+        }
+        out = Path(args.json_out)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps(payload, indent=2) + "\n")
+        print(f"\nwrote {out}")
 
 
 if __name__ == "__main__":

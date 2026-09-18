@@ -1,5 +1,7 @@
 #include "tracking/pipeline.hpp"
+#include "saccade/env_flag.hpp"
 #include "tracking/tracker_gpu.hpp"
+#include "tracking/private_workload_stats.hpp"
 #include "tracking/copy_pad.cuh"
 #include "utils/nvtx_range.hpp"
 #include <cuda_runtime.h>
@@ -7,6 +9,7 @@
 #include <chrono>
 #include <cstdint>
 #include <cstring>
+#include <cstdlib>
 
 namespace saccade {
 
@@ -35,6 +38,9 @@ PerceptionPipeline::PerceptionPipeline(FeatureExtractor* reid, Cropper* cropper,
     : reid_(reid), cropper_(cropper), cfg_(cfg) {
     if (cfg_.max_detections > 0)
         ensure_scratch(cfg_.max_detections, nullptr);
+    if (env_diagnostic_on("SACCADE_ASSOC_STATS")) {
+        set_private_workload_stats_enabled(true);
+    }
 }
 
 PerceptionPipeline::~PerceptionPipeline() {
@@ -50,6 +56,7 @@ PerceptionPipeline::~PerceptionPipeline() {
     if (d_private_nms_keep_) cudaFree(d_private_nms_keep_);
     if (d_private_nms_count_) cudaFree(d_private_nms_count_);
     if (d_private_added_count_) cudaFree(d_private_added_count_);
+    if (d_private_workload_stats_) cudaFree(d_private_workload_stats_);
     if (d_private_baseline_mask_) cudaFree(d_private_baseline_mask_);
     delete crop_pool_; crop_pool_ = nullptr;
     delete crop_ring_; crop_ring_ = nullptr;
@@ -488,6 +495,11 @@ void PerceptionPipeline::process_detections_into(
                 cfg_.private_max_candidates,
                 d_private_added_count_,
                 stream);
+            if (private_workload_stats_enabled_ && d_private_workload_stats_ != nullptr) {
+                accumulate_private_workload_cuda(
+                    d_private_added_count_, d_private_nms_count_,
+                    num_private_priors, d_private_workload_stats_, stream);
+            }
         };
         auto launch_large_copyback = [&] {
             cudaMemcpyAsync(out_boxes,   d_compact_boxes_,   n_in * 4 * sizeof(float), cudaMemcpyDeviceToDevice, stream);
@@ -811,6 +823,11 @@ void PerceptionPipeline::process_private_continuation_append(
             private_score_floor, private_score_ceiling,
             cfg_.private_max_candidates,
             d_private_added_count_, stream);
+        if (private_workload_stats_enabled_ && d_private_workload_stats_ != nullptr) {
+            accumulate_private_workload_cuda(
+                d_private_added_count_, d_private_nms_count_,
+                num_private_priors, d_private_workload_stats_, stream);
+        }
     };
 
     if (profile_post) {
@@ -1614,6 +1631,40 @@ void PerceptionPipeline::reset_postprocess_profile_stats() {
 
 PerceptionPipeline::PostprocessProfileStats PerceptionPipeline::get_postprocess_profile_stats() const {
     return last_postprocess_profile_stats_;
+}
+
+void PerceptionPipeline::set_private_workload_stats_enabled(bool enabled) {
+    if (enabled == private_workload_stats_enabled_ && (!enabled || d_private_workload_stats_ != nullptr)) {
+        private_workload_stats_enabled_ = enabled;
+        return;
+    }
+    if (!enabled) {
+        if (d_private_workload_stats_) cudaFree(d_private_workload_stats_);
+        d_private_workload_stats_ = nullptr;
+        private_workload_stats_enabled_ = false;
+        return;
+    }
+    if (d_private_workload_stats_ == nullptr) {
+        cudaMalloc(&d_private_workload_stats_, 8 * sizeof(unsigned long long));
+        cudaMemset(d_private_workload_stats_, 0, 8 * sizeof(unsigned long long));
+    }
+    private_workload_stats_enabled_ = true;
+}
+
+PerceptionPipeline::PrivateWorkloadStats PerceptionPipeline::drain_private_workload_stats() {
+    PrivateWorkloadStats out;
+    out.enabled = private_workload_stats_enabled_;
+    if (!private_workload_stats_enabled_ || d_private_workload_stats_ == nullptr) return out;
+    unsigned long long host[8] = {};
+    cudaMemcpy(host, d_private_workload_stats_, 8 * sizeof(unsigned long long),
+               cudaMemcpyDeviceToHost);
+    cudaMemset(d_private_workload_stats_, 0, 8 * sizeof(unsigned long long));
+    out.invocations = host[0];
+    out.sum_candidate_count = host[1];
+    out.sum_added = host[2];
+    out.frames_with_added = host[3];
+    out.sum_num_private_priors = host[4];
+    return out;
 }
 
 } // namespace saccade

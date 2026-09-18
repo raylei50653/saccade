@@ -5557,6 +5557,20 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
                 out["private_boxes"] = stats.private_boxes;
                 return out;
             })
+        .def("set_private_workload_stats_enabled",
+             &PerceptionPipeline::set_private_workload_stats_enabled, py::arg("enabled"))
+        .def("drain_private_workload_stats",
+            [](PerceptionPipeline& self) {
+                const auto stats = self.drain_private_workload_stats();
+                py::dict out;
+                out["enabled"] = stats.enabled;
+                out["invocations"] = stats.invocations;
+                out["sum_candidate_count"] = stats.sum_candidate_count;
+                out["sum_added"] = stats.sum_added;
+                out["frames_with_added"] = stats.frames_with_added;
+                out["sum_num_private_priors"] = stats.sum_num_private_priors;
+                return out;
+            })
         .def_property_readonly("embed_dim", &PerceptionPipeline::get_embed_dim)
         .def_property_readonly("cpp_ptr", [](PerceptionPipeline& self) {
             return reinterpret_cast<uintptr_t>(&self);

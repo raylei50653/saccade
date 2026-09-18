@@ -42,6 +42,7 @@
 | `test_occ_audit_seq_conditioning.py` | eval | behavior | active | WP2: occ-exit sequence conditioning classification (analysis only). |
 | `test_output_layer_repair_chaining.py` | eval | contract | active | Stage-order contract for the output-layer repair chaining harness. |
 | `test_pool_lazy_buffers.py` | eval | behavior | active | Lazy acquire / release of AdaptiveFramePool tiling buffers. |
+| `test_production_db_attribution.py` | eval | contract | active | Contract tests for production double-buffer critical-path attribution. |
 | `test_reporting.py` | eval | behavior | active | Tests for MOT eval reporting output (perception.eval.reporting). |
 | `test_reporting_extended.py` | eval | behavior | active | Extended tests for perception/eval/reporting.py. |
 | `test_resource_admission.py` | eval | contract | active | Reject invalid arrival evidence, queue bounds, timing and block routing. |

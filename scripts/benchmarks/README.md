@@ -14,6 +14,10 @@
   - 拆解 detector / feature extractor 的分段延遲。
 - `latency_e2e_report.py`
   - 以 MOT17 eval path 量測端到端延遲。
+- `nsys_frame_attribution.py`
+  - nsys node-mode CUDA graph attribution; `--json` writes scan-anchored overlap.
+- `production_db_attribution.py`
+  - Combine clean production FPS, `--profile-frame-csv` ledgers, nsys JSON, and `SACCADE_ASSOC_STATS` dumps into exposed-cost / bottleneck JSON. Contract: `docs/research/pipeline/production_db_critical_path_contract.md`.
 
 - [`resource_sensitivity/`](resource_sensitivity/README.md)
   - #419 的 full-pipeline serial/DB 資源壓力 sweep、telemetry 與 Green Context capability probe。
@@ -57,6 +61,7 @@
 | `mamba_train_prof.py` | diagnostic | cli | Mamba head training latency profiler. |
 | `multistream_mamba.py` | diagnostic | cli | Multi-stream Mamba benchmark. |
 | `nsys_frame_attribution.py` | diagnostic | cli | Per-frame overhead attribution from an nsys trace (node-mode CUDA graph trace). |
+| `production_db_attribution.py` | diagnostic | cli | Derive production double-buffer exposed-cost attribution. |
 | `train_bottleneck_prof.py` | diagnostic | cli | Profile training-step bottlenecks via conditioned-train proxy path. |
 | `workbench_synthetic.py` | diagnostic | cli | Synthetic workbench load generator for pipeline microbenches. |
 

@@ -236,6 +236,8 @@ Manifest: `docs/ownership/doc_migration_manifest.yaml`
 - `docs/research/pipeline/mot17_mamba_whole_graph_m_sdp_double_buffer.md`
 - `docs/research/pipeline/optimization_redundant_computations_20260620.md`
 - `docs/research/pipeline/perf_attribution_whole_graph_m.md`
+- `docs/research/pipeline/production_db_critical_path_20260917.md`
+- `docs/research/pipeline/production_db_critical_path_contract.md`
 - `docs/research/pipeline/production_pipeline_profiling_todo.md`
 - `docs/research/pipeline/sync_audit_20260706.md`
 - `docs/research/reid/appearance_ceiling_mot17.md`
@@ -385,6 +387,6 @@ Excluded from the active index and default search view.
 
 ## Inventory summary
 
-- documents: 335
-- active: 280
+- documents: 337
+- active: 282
 - grayed out: 55

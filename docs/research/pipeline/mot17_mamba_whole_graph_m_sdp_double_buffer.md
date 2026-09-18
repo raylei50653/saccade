@@ -162,6 +162,7 @@ datasets/MOT17/train/
 | `_fps_summary.txt` / `_latency_profile*.json` | 吞吐與延遲 |
 | `_global_id_map.txt` | global ID map |
 | （可選）`_frame_ledger_*.csv` | 需 `--profile-frame-csv` |
+| （可選）`_assoc_workload_*.json` | 需 `SACCADE_ASSOC_STATS=1`（diagnostic；會改 captured NMS graph，FPS 不是 production）。main 上只有 private-continuation + bridge 計數；tracker per-stage 計數不在 main（`tracker_gpu.{hpp,cu}` 為 H0/GCTM frozen input） |
 | （可選）`renders/*_visualized.mp4` | 需 `--visualize` |
 | MLflow | `http://localhost:5000` experiment `mot17`（失敗只印 warning） |
 
