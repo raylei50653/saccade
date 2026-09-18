@@ -2801,13 +2801,6 @@ def run_eval(
                 "diagnostic": True,
                 "not_production_throughput": True,
             }
-            _trk = getattr(detector, "tracker", None)
-            if _trk is not None and hasattr(
-                _trk, "drain_research_assoc_workload_stats"
-            ):
-                _assoc_payload["association"] = dict(
-                    _trk.drain_research_assoc_workload_stats()
-                )
             _pipe = getattr(_seq_state, "perception_pipeline", None)
             if _pipe is not None and hasattr(_pipe, "drain_private_workload_stats"):
                 _assoc_payload["private_continuation"] = dict(

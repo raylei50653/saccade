@@ -3792,46 +3792,6 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
         "the scalar at replay time rather than a capture-time host value.")
         .def("clear_research_h0_bridge_trace", &GPUByteTracker::clear_research_h0_bridge_trace,
              "Clear H0 trace cursors and overflow counters without changing bridge policy state.")
-        .def("set_research_assoc_workload_stats",
-             &GPUByteTracker::set_research_assoc_workload_stats, py::arg("enabled"),
-             "Default-off association workload counters. Enable before CUDA graph capture.")
-        .def("drain_research_assoc_workload_stats", [](GPUByteTracker& self) {
-            const AssocWorkloadStats stats = self.drain_research_assoc_workload_stats();
-            py::dict out;
-            out["enabled"] = stats.enabled;
-            out["frames"] = stats.frames;
-            out["sum_active"] = stats.sum_active;
-            out["sum_confirmed"] = stats.sum_confirmed;
-            out["sum_tentative"] = stats.sum_tentative;
-            out["sum_cand_n"] = stats.sum_cand_n;
-            out["sum_matched"] = stats.sum_matched;
-            out["sum_num_dets"] = stats.sum_num_dets;
-            out["sum_dets_hi"] = stats.sum_dets_hi;
-            out["sum_dets_mid"] = stats.sum_dets_mid;
-            out["sum_dets_lo"] = stats.sum_dets_lo;
-            out["sum_dets_below"] = stats.sum_dets_below;
-            out["sum_occ_ttl_pos"] = stats.sum_occ_ttl_pos;
-            out["max_active"] = stats.max_active;
-            out["max_cand_n_sum"] = stats.max_cand_n_sum;
-            out["max_dets"] = stats.max_dets;
-            static const char* stage_names[] = {"S0", "S1", "S1b", "S1c", "S2"};
-            py::list stages;
-            for (int i = 0; i < 5; ++i) {
-                py::dict st;
-                st["name"] = stage_names[i];
-                st["unmatched_tracks_entering"] = stats.stages[i].unmatched_tracks_entering;
-                st["unmatched_confirmed_entering"] = stats.stages[i].unmatched_confirmed_entering;
-                st["unmatched_tentative_entering"] = stats.stages[i].unmatched_tentative_entering;
-                st["unmatched_dets_entering"] = stats.stages[i].unmatched_dets_entering;
-                st["tracks_with_valid_topk"] = stats.stages[i].tracks_with_valid_topk;
-                st["assignments"] = stats.stages[i].assignments;
-                st["frames_with_assignment"] = stats.stages[i].frames_with_assignment;
-                st["frames_with_valid_topk"] = stats.stages[i].frames_with_valid_topk;
-                stages.append(st);
-            }
-            out["stages"] = stages;
-            return out;
-        }, "Sequence-end D2H of association workload counters. Resets device accumulators.")
         .def("drain_research_h0_bridge_trace", [](GPUByteTracker& self) {
             const H0BridgeDecisionTraceCapture capture = self.drain_research_h0_bridge_trace();
             auto scalar = [](const H0Float32& value) {

@@ -1,6 +1,7 @@
 #include "tracking/pipeline.hpp"
 #include "saccade/env_flag.hpp"
 #include "tracking/tracker_gpu.hpp"
+#include "tracking/private_workload_stats.hpp"
 #include "tracking/copy_pad.cuh"
 #include "utils/nvtx_range.hpp"
 #include <cuda_runtime.h>

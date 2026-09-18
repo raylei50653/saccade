@@ -333,47 +333,6 @@ struct UnifiedScoreParams {
     float shift_lost_age = 0.0f;
 };
 
-// Default-off observational counters for production-path association
-// workload (SACCADE_ASSOC_STATS=1). Extra kernels launch only when
-// enabled; the production default does not change the captured graph.
-struct AssocStageWorkload {
-    unsigned long long unmatched_tracks_entering = 0;
-    unsigned long long unmatched_confirmed_entering = 0;
-    unsigned long long unmatched_tentative_entering = 0;
-    unsigned long long unmatched_dets_entering = 0;
-    unsigned long long tracks_with_valid_topk = 0;
-    unsigned long long assignments = 0;
-    unsigned long long frames_with_assignment = 0;
-    unsigned long long frames_with_valid_topk = 0;
-};
-
-struct AssocWorkloadStats {
-    bool enabled = false;
-    unsigned long long frames = 0;
-    unsigned long long sum_active = 0;
-    unsigned long long sum_confirmed = 0;
-    unsigned long long sum_tentative = 0;
-    unsigned long long sum_cand_n = 0;
-    unsigned long long sum_matched = 0;
-    unsigned long long sum_num_dets = 0;
-    unsigned long long sum_dets_hi = 0;
-    unsigned long long sum_dets_mid = 0;
-    unsigned long long sum_dets_lo = 0;
-    unsigned long long sum_dets_below = 0;
-    unsigned long long sum_occ_ttl_pos = 0;
-    unsigned long long max_active = 0;
-    unsigned long long max_cand_n_sum = 0;
-    unsigned long long max_dets = 0;
-    AssocStageWorkload stages[5]{};
-};
-
-void SACCADE_TRACKING_API accumulate_private_workload_cuda(
-    const int* added_count,
-    const int* candidate_count,
-    int num_private_priors,
-    unsigned long long* stats,
-    cudaStream_t stream);
-
 struct TrackerGPUBuffers {
     uintptr_t states;     // float*,  device pointer [max_objs * 8]
     uintptr_t covs;       // float*,  device pointer [max_objs * 64]
@@ -474,12 +433,6 @@ public:
     void bind_research_h0_bridge_trace_frame_device(const int* frame_ptr);
     void clear_research_h0_bridge_trace();
     H0BridgeDecisionTraceCapture drain_research_h0_bridge_trace();
-
-    // Default-off association workload counters. Extra kernels are
-    // launched only while enabled; enable before CUDA graph capture
-    // (SACCADE_ASSOC_STATS=1 at process start). Sequence-end drain.
-    void set_research_assoc_workload_stats(bool enabled);
-    AssocWorkloadStats drain_research_assoc_workload_stats();
 
     /**
      * @brief Issue #112 shadow bridge: propose (and capture) but never commit.

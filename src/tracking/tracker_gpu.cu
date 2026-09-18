@@ -1,5 +1,4 @@
 #include "tracking/tracker_gpu.hpp"
-#include "saccade/env_flag.hpp"
 #include "tracking/box_ops.hpp"
 #include <cuda_runtime.h>
 #include <cub/cub.cuh>
@@ -58,69 +57,6 @@ float env_float_value(const char* name, float default_value) {
     return parsed;
 }
 }
-
-// Device-side association workload accumulator (SACCADE_ASSOC_STATS).
-// File-scope so diagnostic kernels and GPUByteTracker::Impl share the layout.
-constexpr int ASSOC_STAT_COUNT = 64;
-constexpr int ASSOC_STAT_FRAMES = 0;
-constexpr int ASSOC_STAT_SUM_ACTIVE = 1;
-constexpr int ASSOC_STAT_SUM_CONFIRMED = 2;
-constexpr int ASSOC_STAT_SUM_TENTATIVE = 3;
-constexpr int ASSOC_STAT_SUM_CAND_N = 4;
-constexpr int ASSOC_STAT_SUM_MATCHED = 5;
-constexpr int ASSOC_STAT_SUM_NUM_DETS = 6;
-constexpr int ASSOC_STAT_SUM_DETS_HI = 7;
-constexpr int ASSOC_STAT_SUM_DETS_MID = 8;
-constexpr int ASSOC_STAT_SUM_DETS_LO = 9;
-constexpr int ASSOC_STAT_SUM_DETS_BELOW = 10;
-constexpr int ASSOC_STAT_SUM_OCC_TTL_POS = 11;
-constexpr int ASSOC_STAT_MAX_ACTIVE = 12;
-constexpr int ASSOC_STAT_MAX_CAND_N = 13;
-constexpr int ASSOC_STAT_MAX_DETS = 14;
-constexpr int ASSOC_STAGE_BASE = 16;
-constexpr int ASSOC_STAGE_STRIDE = 8;
-constexpr int ASSOC_STAGE_UNMATCHED_TRK = 0;
-constexpr int ASSOC_STAGE_UNMATCHED_CONF = 1;
-constexpr int ASSOC_STAGE_UNMATCHED_TENT = 2;
-constexpr int ASSOC_STAGE_UNMATCHED_DET = 3;
-constexpr int ASSOC_STAGE_VALID_TOPK = 4;
-constexpr int ASSOC_STAGE_ASSIGNMENTS = 5;
-constexpr int ASSOC_STAGE_FRAMES_ASSIGN = 6;
-constexpr int ASSOC_STAGE_FRAMES_TOPK = 7;
-
-__global__ void accumulate_assoc_frame_kernel(
-    const bool* active,
-    const int* state,
-    const int* trk_to_det,
-    const int* cand_n,
-    const int* det_to_trk,
-    const float* scores,
-    const int* occ_ttl,
-    int n_trk,
-    int n_det,
-    float high_thresh,
-    float mid_thresh,
-    float track_thresh,
-    unsigned long long* stats);
-__global__ void accumulate_assoc_stage_enter_kernel(
-    const bool* active,
-    const int* state,
-    const int* trk_to_det,
-    const int* det_to_trk,
-    const int* topk_indices,
-    int K,
-    int n_trk,
-    int n_det,
-    int stage,
-    int* scratch_unmatched,
-    unsigned long long* stats);
-__global__ void accumulate_assoc_stage_exit_kernel(
-    const bool* active,
-    const int* trk_to_det,
-    int n_trk,
-    int stage,
-    const int* scratch_unmatched,
-    unsigned long long* stats);
 
 // --- CUDA Kernels ---
 
@@ -3318,13 +3254,6 @@ public:
         checkCuda(cudaHostRegister(h_res_classes_.data(),           max_objs_ *     sizeof(int),   cudaHostRegisterDefault));
 
         enable_dda_ = env_flag_enabled("SACCADE_ENABLE_DDA", true);
-        assoc_stats_enabled_ = env_diagnostic_on("SACCADE_ASSOC_STATS");
-        if (assoc_stats_enabled_) {
-            checkCuda(cudaMalloc(&d_assoc_stats_, ASSOC_STAT_COUNT * sizeof(unsigned long long)));
-            checkCuda(cudaMemset(d_assoc_stats_, 0, ASSOC_STAT_COUNT * sizeof(unsigned long long)));
-            checkCuda(cudaMalloc(&d_assoc_scratch_, 2 * sizeof(int)));
-            checkCuda(cudaMemset(d_assoc_scratch_, 0, 2 * sizeof(int)));
-        }
         dda_max_cost_ = env_float_value("SACCADE_DDA_MAX_COST", 0.12f);
         gate_adapt_r_mult_ = env_float_value("SACCADE_GATE_ADAPT_R_MULT", 1.0f);
         // Occ-gated velocity damping (default 1.0 = bit-identical no-op).
@@ -3408,8 +3337,6 @@ public:
         if (d_det_revive_uid_) cudaFree(d_det_revive_uid_);
         if (d_det_revive_generation_) cudaFree(d_det_revive_generation_);
         if (d_relink_dbg_) cudaFree(d_relink_dbg_);
-        if (d_assoc_stats_) cudaFree(d_assoc_stats_);
-        if (d_assoc_scratch_) cudaFree(d_assoc_scratch_);
         if (d_bridge_fidelity_events_) cudaFree(d_bridge_fidelity_events_);
         if (d_bridge_fidelity_cursor_) cudaFree(d_bridge_fidelity_cursor_);
         if (d_bridge_fidelity_overflow_) cudaFree(d_bridge_fidelity_overflow_);
@@ -3685,12 +3612,6 @@ public:
             if (stage == 0 && !enable_dda_) return;
             int off = stage * sinkhorn_stage_stride_;
             nvtxRangePushA(label);
-            if (assoc_stats_enabled_ && d_assoc_stats_ != nullptr) {
-                accumulate_assoc_stage_enter_kernel<<<1, 1, 0, stream>>>(
-                    d_active_, d_state_, d_trk_to_det_, d_det_to_trk_,
-                    d_topk_indices_ + off, SINKHORN_NUM_TOPK,
-                    max_objs_, num_dets, stage, d_assoc_scratch_, d_assoc_stats_);
-            }
             checkCuda(cudaMemsetAsync(d_auction_prices_, 0, max_assoc_ * sizeof(uint64_t), stream));
             checkCuda(cudaMemsetAsync(d_pending_det_, -1, max_objs_ * sizeof(int), stream));
             kernel::parallel_auction_shmem_kernel<<<auc_g, auc_b, shmem_auction, stream>>>(
@@ -3702,11 +3623,6 @@ public:
             kernel::commit_auction_results_kernel<<<auc_g, auc_b, 0, stream>>>(
                 d_auction_prices_, d_pending_det_, d_pending_bid_,
                 d_trk_to_det_, d_det_to_trk_, max_objs_);
-            if (assoc_stats_enabled_ && d_assoc_stats_ != nullptr) {
-                accumulate_assoc_stage_exit_kernel<<<1, 1, 0, stream>>>(
-                    d_active_, d_trk_to_det_, max_objs_, stage,
-                    d_assoc_scratch_, d_assoc_stats_);
-            }
             nvtxRangePop();
         };
 
@@ -3715,14 +3631,6 @@ public:
         run_stage(2, "Assoc/S1b_MidConf");
         run_stage(3, "Assoc/S1c_Tentative");
         run_stage(4, "Assoc/S2_LoConf");
-
-        if (assoc_stats_enabled_ && d_assoc_stats_ != nullptr) {
-            accumulate_assoc_frame_kernel<<<1, 1, 0, stream>>>(
-                d_active_, d_state_, d_trk_to_det_, d_cand_n_,
-                d_det_to_trk_, d_scores, occ_state_enabled_ ? d_occ_front_ttl_ : nullptr,
-                max_objs_, num_dets, high_thresh_, effective_mid_thresh, track_thresh_,
-                d_assoc_stats_);
-        }
 
         // --- Debug: association/candidate dump (env SACCADE_ASSOC_DUMP=<csv>) ---
         // Captures, per active track at this frame: predicted box (post predict+GMC,
@@ -4536,60 +4444,6 @@ public:
         if (d_relink_dbg_) checkCuda(cudaMemcpy(out.data() + 1, d_relink_dbg_, 12 * sizeof(int), cudaMemcpyDeviceToHost));
         return out;
     }
-
-    void set_research_assoc_workload_stats(bool enabled) {
-        if (enabled == assoc_stats_enabled_) return;
-        if (!enabled) {
-            if (d_assoc_stats_) cudaFree(d_assoc_stats_);
-            if (d_assoc_scratch_) cudaFree(d_assoc_scratch_);
-            d_assoc_stats_ = nullptr;
-            d_assoc_scratch_ = nullptr;
-            assoc_stats_enabled_ = false;
-            return;
-        }
-        checkCuda(cudaMalloc(&d_assoc_stats_, ASSOC_STAT_COUNT * sizeof(unsigned long long)));
-        checkCuda(cudaMemset(d_assoc_stats_, 0, ASSOC_STAT_COUNT * sizeof(unsigned long long)));
-        checkCuda(cudaMalloc(&d_assoc_scratch_, 2 * sizeof(int)));
-        checkCuda(cudaMemset(d_assoc_scratch_, 0, 2 * sizeof(int)));
-        assoc_stats_enabled_ = true;
-    }
-
-    AssocWorkloadStats drain_research_assoc_workload_stats() {
-        AssocWorkloadStats out;
-        out.enabled = assoc_stats_enabled_;
-        if (!assoc_stats_enabled_ || d_assoc_stats_ == nullptr) return out;
-        unsigned long long host[ASSOC_STAT_COUNT];
-        checkCuda(cudaMemcpy(host, d_assoc_stats_, ASSOC_STAT_COUNT * sizeof(unsigned long long),
-                             cudaMemcpyDeviceToHost));
-        checkCuda(cudaMemset(d_assoc_stats_, 0, ASSOC_STAT_COUNT * sizeof(unsigned long long)));
-        out.frames = host[ASSOC_STAT_FRAMES];
-        out.sum_active = host[ASSOC_STAT_SUM_ACTIVE];
-        out.sum_confirmed = host[ASSOC_STAT_SUM_CONFIRMED];
-        out.sum_tentative = host[ASSOC_STAT_SUM_TENTATIVE];
-        out.sum_cand_n = host[ASSOC_STAT_SUM_CAND_N];
-        out.sum_matched = host[ASSOC_STAT_SUM_MATCHED];
-        out.sum_num_dets = host[ASSOC_STAT_SUM_NUM_DETS];
-        out.sum_dets_hi = host[ASSOC_STAT_SUM_DETS_HI];
-        out.sum_dets_mid = host[ASSOC_STAT_SUM_DETS_MID];
-        out.sum_dets_lo = host[ASSOC_STAT_SUM_DETS_LO];
-        out.sum_dets_below = host[ASSOC_STAT_SUM_DETS_BELOW];
-        out.sum_occ_ttl_pos = host[ASSOC_STAT_SUM_OCC_TTL_POS];
-        out.max_active = host[ASSOC_STAT_MAX_ACTIVE];
-        out.max_cand_n_sum = host[ASSOC_STAT_MAX_CAND_N];
-        out.max_dets = host[ASSOC_STAT_MAX_DETS];
-        for (int s = 0; s < 5; ++s) {
-            const int base = ASSOC_STAGE_BASE + s * ASSOC_STAGE_STRIDE;
-            out.stages[s].unmatched_tracks_entering = host[base + ASSOC_STAGE_UNMATCHED_TRK];
-            out.stages[s].unmatched_confirmed_entering = host[base + ASSOC_STAGE_UNMATCHED_CONF];
-            out.stages[s].unmatched_tentative_entering = host[base + ASSOC_STAGE_UNMATCHED_TENT];
-            out.stages[s].unmatched_dets_entering = host[base + ASSOC_STAGE_UNMATCHED_DET];
-            out.stages[s].tracks_with_valid_topk = host[base + ASSOC_STAGE_VALID_TOPK];
-            out.stages[s].assignments = host[base + ASSOC_STAGE_ASSIGNMENTS];
-            out.stages[s].frames_with_assignment = host[base + ASSOC_STAGE_FRAMES_ASSIGN];
-            out.stages[s].frames_with_valid_topk = host[base + ASSOC_STAGE_FRAMES_TOPK];
-        }
-        return out;
-    }
     void set_oao_params(float tau, float contest_thresh, float score_w, int occ_mode,
                         float crowd_radius, float height_gate, float foot_gate,
                         float ramp_frames) {
@@ -5029,9 +4883,6 @@ private:
     // H0 full bridge decision trace (four independent bounded streams).
     bool research_h0_bridge_trace_ = false;
     int processed_frame_count_ = 0;
-    bool assoc_stats_enabled_ = false;
-    unsigned long long* d_assoc_stats_ = nullptr;
-    int* d_assoc_scratch_ = nullptr;
     int h0_pair_capacity_ = 0;
     int h0_candidate_capacity_ = 0;
     int h0_claim_capacity_ = 0;
@@ -5312,12 +5163,6 @@ void GPUByteTracker::clear_research_h0_bridge_trace() {
 }
 H0BridgeDecisionTraceCapture GPUByteTracker::drain_research_h0_bridge_trace() {
     return pimpl_->drain_research_h0_bridge_trace();
-}
-void GPUByteTracker::set_research_assoc_workload_stats(bool enabled) {
-    pimpl_->set_research_assoc_workload_stats(enabled);
-}
-AssocWorkloadStats GPUByteTracker::drain_research_assoc_workload_stats() {
-    return pimpl_->drain_research_assoc_workload_stats();
 }
 void GPUByteTracker::set_oao_params(float tau, float contest_thresh, float score_w, int occ_mode,
                                     float crowd_radius, float height_gate, float foot_gate,
@@ -6417,135 +6262,6 @@ __global__ void mark_indices_bool_kernel(
     }
 }
 
-// Diagnostic-only serial scan. Launched only when SACCADE_ASSOC_STATS is on.
-__global__ void accumulate_assoc_frame_kernel(
-    const bool* active,
-    const int* state,
-    const int* trk_to_det,
-    const int* cand_n,
-    const int* det_to_trk,
-    const float* scores,
-    const int* occ_ttl,
-    int n_trk,
-    int n_det,
-    float high_thresh,
-    float mid_thresh,
-    float track_thresh,
-    unsigned long long* stats)
-{
-    if (blockIdx.x != 0 || threadIdx.x != 0) return;
-    unsigned long long n_active = 0, n_conf = 0, n_tent = 0, n_cand = 0, n_matched = 0;
-    unsigned long long n_occ = 0;
-    for (int t = 0; t < n_trk; ++t) {
-        if (!active[t]) continue;
-        ++n_active;
-        if (state[t] == TRACK_CONFIRMED) ++n_conf;
-        else if (state[t] == TRACK_TENTATIVE) ++n_tent;
-        if (cand_n) n_cand += (unsigned long long)max(cand_n[t], 0);
-        if (trk_to_det[t] >= 0) ++n_matched;
-        if (occ_ttl && occ_ttl[t] > 0) ++n_occ;
-    }
-    unsigned long long n_hi = 0, n_mid = 0, n_lo = 0, n_below = 0;
-    for (int d = 0; d < n_det; ++d) {
-        const float s = scores[d];
-        if (s >= high_thresh) ++n_hi;
-        else if (s >= mid_thresh) ++n_mid;
-        else if (s >= track_thresh) ++n_lo;
-        else ++n_below;
-        (void)det_to_trk;
-    }
-    atomicAdd(&stats[ASSOC_STAT_FRAMES], 1ull);
-    atomicAdd(&stats[ASSOC_STAT_SUM_ACTIVE], n_active);
-    atomicAdd(&stats[ASSOC_STAT_SUM_CONFIRMED], n_conf);
-    atomicAdd(&stats[ASSOC_STAT_SUM_TENTATIVE], n_tent);
-    atomicAdd(&stats[ASSOC_STAT_SUM_CAND_N], n_cand);
-    atomicAdd(&stats[ASSOC_STAT_SUM_MATCHED], n_matched);
-    atomicAdd(&stats[ASSOC_STAT_SUM_NUM_DETS], (unsigned long long)max(n_det, 0));
-    atomicAdd(&stats[ASSOC_STAT_SUM_DETS_HI], n_hi);
-    atomicAdd(&stats[ASSOC_STAT_SUM_DETS_MID], n_mid);
-    atomicAdd(&stats[ASSOC_STAT_SUM_DETS_LO], n_lo);
-    atomicAdd(&stats[ASSOC_STAT_SUM_DETS_BELOW], n_below);
-    atomicAdd(&stats[ASSOC_STAT_SUM_OCC_TTL_POS], n_occ);
-    atomicMax(&stats[ASSOC_STAT_MAX_ACTIVE], n_active);
-    atomicMax(&stats[ASSOC_STAT_MAX_CAND_N], n_cand);
-    atomicMax(&stats[ASSOC_STAT_MAX_DETS], (unsigned long long)max(n_det, 0));
-}
-
-__global__ void accumulate_assoc_stage_enter_kernel(
-    const bool* active,
-    const int* state,
-    const int* trk_to_det,
-    const int* det_to_trk,
-    const int* topk_indices,
-    int K,
-    int n_trk,
-    int n_det,
-    int stage,
-    int* scratch_unmatched,
-    unsigned long long* stats)
-{
-    if (blockIdx.x != 0 || threadIdx.x != 0) return;
-    unsigned long long n_unmatched = 0, n_conf = 0, n_tent = 0, n_topk = 0;
-    for (int t = 0; t < n_trk; ++t) {
-        if (!active[t] || trk_to_det[t] >= 0) continue;
-        ++n_unmatched;
-        if (state[t] == TRACK_CONFIRMED) ++n_conf;
-        else if (state[t] == TRACK_TENTATIVE) ++n_tent;
-        if (topk_indices && K > 0 && topk_indices[t * K] >= 0) ++n_topk;
-    }
-    unsigned long long n_unmatched_det = 0;
-    for (int d = 0; d < n_det; ++d) {
-        if (det_to_trk[d] < 0) ++n_unmatched_det;
-    }
-    scratch_unmatched[0] = (int)n_unmatched;
-    const int base = ASSOC_STAGE_BASE + stage * ASSOC_STAGE_STRIDE;
-    atomicAdd(&stats[base + ASSOC_STAGE_UNMATCHED_TRK], n_unmatched);
-    atomicAdd(&stats[base + ASSOC_STAGE_UNMATCHED_CONF], n_conf);
-    atomicAdd(&stats[base + ASSOC_STAGE_UNMATCHED_TENT], n_tent);
-    atomicAdd(&stats[base + ASSOC_STAGE_UNMATCHED_DET], n_unmatched_det);
-    atomicAdd(&stats[base + ASSOC_STAGE_VALID_TOPK], n_topk);
-    if (n_topk > 0) atomicAdd(&stats[base + ASSOC_STAGE_FRAMES_TOPK], 1ull);
-}
-
-__global__ void accumulate_assoc_stage_exit_kernel(
-    const bool* active,
-    const int* trk_to_det,
-    int n_trk,
-    int stage,
-    const int* scratch_unmatched,
-    unsigned long long* stats)
-{
-    if (blockIdx.x != 0 || threadIdx.x != 0) return;
-    unsigned long long n_unmatched = 0;
-    for (int t = 0; t < n_trk; ++t) {
-        if (active[t] && trk_to_det[t] < 0) ++n_unmatched;
-    }
-    const int before = scratch_unmatched[0];
-    const long long delta = (long long)before - (long long)n_unmatched;
-    const unsigned long long assigned = delta > 0 ? (unsigned long long)delta : 0ull;
-    const int base = ASSOC_STAGE_BASE + stage * ASSOC_STAGE_STRIDE;
-    atomicAdd(&stats[base + ASSOC_STAGE_ASSIGNMENTS], assigned);
-    if (assigned > 0) atomicAdd(&stats[base + ASSOC_STAGE_FRAMES_ASSIGN], 1ull);
-}
-
-__global__ void accumulate_private_workload_kernel(
-    const int* added_count,
-    const int* candidate_count,
-    int num_private_priors,
-    unsigned long long* stats)
-{
-    if (blockIdx.x != 0 || threadIdx.x != 0) return;
-    int cands = candidate_count ? *candidate_count : 0;
-    int added = added_count ? *added_count : 0;
-    if (cands < 0) cands = 0;
-    if (added < 0) added = 0;
-    atomicAdd(&stats[0], 1ull);
-    atomicAdd(&stats[1], (unsigned long long)cands);
-    atomicAdd(&stats[2], (unsigned long long)added);
-    if (added > 0) atomicAdd(&stats[3], 1ull);
-    atomicAdd(&stats[4], (unsigned long long)max(num_private_priors, 0));
-}
-
 __global__ void append_private_continuation_kernel(
     const float* src_boxes,
     const float* src_scores,
@@ -6711,19 +6427,6 @@ void append_private_continuation_cuda(
         max_private_candidates,
         private_added_count_ptr
     );
-    checkCuda(cudaGetLastError());
-}
-
-void accumulate_private_workload_cuda(
-    const int* added_count,
-    const int* candidate_count,
-    int num_private_priors,
-    unsigned long long* stats,
-    cudaStream_t stream)
-{
-    if (stats == nullptr) return;
-    accumulate_private_workload_kernel<<<1, 1, 0, stream>>>(
-        added_count, candidate_count, num_private_priors, stats);
     checkCuda(cudaGetLastError());
 }
 

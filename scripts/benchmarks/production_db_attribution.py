@@ -303,6 +303,10 @@ def load_ledgers(path: Path) -> dict[str, Any]:
 
 
 def load_assoc_dir(path: Path) -> dict[str, Any]:
+    # ``association`` (tracker per-stage counters) is optional: main only
+    # emits ``private_continuation`` + ``bridge`` because tracker_gpu.{hpp,cu}
+    # are frozen H0/GCTM inputs. Dumps from the branch-only instrumentation
+    # (commit e03f7d81) still parse; missing blocks derive to zeros.
     files = sorted(path.glob("_assoc_workload_*.json"))
     by_seq: dict[str, Any] = {}
     for f in files:

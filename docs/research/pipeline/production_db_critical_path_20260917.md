@@ -34,7 +34,7 @@ does not change the production scheduler.
 | Which small costs cause scheduling loss? | 1080p DtoD memcpy **48 MB/frame, 0.11 ms exposed**. Host `cudaStreamSynchronize` API is 23 µs; the production tail leftover is **~0.23 ms**, i.e. opportunity loss ≫ API duration. |
 | Does the tracker have a fixed-capacity latency floor? | **Yes** for association compute. Auction 34–35 µs/frame and sinkhorn 75–77 µs/frame are identical on 11 vs 44 active tracks. Occlusion 148–165 µs is almost flat. NMS select **does** scale (39 µs @ 7 dets vs 243 µs @ 43 dets). |
 | GMC exposed cost? | **~6 µs** FFT+downscale exposed on MOT17-04. Compute is hidden. Full-frame staging is 24.9 MB × ~2 DtoD on 1080p and shows up in the memcpy line, not in the GMC kernels. |
-| Dead association passes? | **S2 is 常跑 + 幾乎沒工作** (0.00–0.04 assignments/frame). S1b/S1c run every frame with 0.2–1.5 assignments. S0/S1 do the real work. Private continuation always launches; adds 0.17–3.1 boxes/frame. |
+| Dead association passes? | **S2 is 常跑 + 幾乎沒工作** (0.00–0.04 assignments/frame). S1b/S1c run every frame with 0.2–1.5 assignments. S0/S1 do the real work. Per-stage counts are branch-only evidence (one run at `e03f7d81`; not reproducible from `main`, see provenance split below). Private continuation always launches; adds 0.17–3.1 boxes/frame (reproducible from `main`). |
 | Next optimization target? | **Detector compute**, specifically selective_scan (0.38 ms, 3 launches, fully on the detect span). Secondary: 1080p DtoD staging if a later PR proves it *causes* the 0.11 ms exposed memcpy. Not GMC FFT, not S2 removal, not another routing sweep. |
 | Headroom if that target vanished? | Scan-only upper bound ≈ **400 FPS** (`1000/(2.875−0.38)`). Entire 0.23 ms tail vanishing ≈ **378 FPS**. These are ceilings, not predictions. |
 
@@ -130,7 +130,7 @@ cross-run uncertainty). B dominates A.
 
 Association compute is a **Tcap=2048 / Dcap=1024 floor**. NMS select is the occupancy-sensitive GPU piece. Host `track_ms` only moves 0.263 → 0.326.
 
-`SACCADE_ASSOC_STATS` reports `sum_num_dets = 1024` every frame: that is Dcap, not the live count. Live detections are `dets_hi + dets_mid + dets_lo`.
+`SACCADE_ASSOC_STATS` (branch-only tracker counters, commit `e03f7d81`) reports `sum_num_dets = 1024` every frame: that is Dcap, not the live count. Live detections are `dets_hi + dets_mid + dets_lo`.
 
 ---
 
@@ -156,6 +156,23 @@ GMC is a **memory-traffic** issue on 1080p if and only if the staging copies are
 
 Diagnostic (`SACCADE_ASSOC_STATS=1`). Extra kernels captured into the tracker/NMS graphs. FPS is not production.
 
+**Provenance split (read before quoting this section).** The per-stage
+association counters (S0/S1/S1b/S1c/S2 assignments, `dets_hi/mid/lo`,
+active/confirmed/tentative, occ-state) were produced by tracker-side
+instrumentation that is **not on `main`**. `include/tracking/tracker_gpu.hpp`
+and `src/tracking/tracker_gpu.cu` are strict path+sha256 frozen inputs of the
+closed H0 / GCTM packets (`h0_gctm_interface_static_feasibility_20260723`,
+`gctm_runtime_native_candidate_universe_20260724`); the instrumentation was
+therefore kept out of the landed code rather than re-freezing those packets.
+It exists only at commit `e03f7d81` (blobs `tracker_gpu.hpp@a43f7069`,
+`tracker_gpu.cu@e094d4f1`) and the D2 dumps under
+`runs/production_db_critical_path_20260917/d2_assoc_stats/` were written by
+that build on 2026-09-17 22:44. Those columns are **branch-only evidence**:
+one run, not reproducible from `main`, and they do not enter the bottleneck
+ranking below. What `main` carries and can reproduce: the
+`PerceptionPipeline` private-continuation counter (`private added`) and the
+bridge counters (`bridge accept`).
+
 Per-frame means:
 
 | Seq | S0 assign | S1 assign | S1b | S1c | S2 | private added | bridge accept |
@@ -174,7 +191,7 @@ Classification:
 |:--|:--|
 | S0, S1 | 常跑 + 有效工作 |
 | S1b, S1c | 常跑 + little work (0.2–1.5 assigns) |
-| S2 | 常跑 + 幾乎沒工作 (FP filter empties `[0.05, 0.10)`) |
+| S2 | 常跑 + 幾乎沒工作 (FP filter empties `[0.05, 0.10)`) — branch-only evidence, see provenance split |
 | Private NMS + `<<<1,1>>>` append | 常跑; 0.17–3.1 added boxes; 2048-slot prior buffer always passed |
 | Bridge | 少跑 relative to frames (43–169 attempts / sequence), cheap |
 | Occlusion | 常跑 + fixed Tcap scan |
@@ -221,6 +238,7 @@ Ranked by **exposed cost to production period**, not kernel duration.
 - Exact SM clock / power during P0 (not sampled).
 - Which of the two ~24.9 MB DtoD copies is GMC staging vs ingest/DB clone, at the call site, with production clocks. nsys shows 48 MB total k8; attribution to GMC vs ingest is by size, not by CUDA graph id of the copy.
 - Per-pass GPU duration of S0 vs S1 vs S1b vs S1c vs S2 (same kernel name; order is 5 consecutive auctions at 7 µs each, so splitting them does not change the conclusion).
+- Per-stage association workload on `main`: the S0–S2 counters above are a single branch-only run (commit `e03f7d81`). Re-measuring them requires either re-applying that instrumentation on a research branch or a governed supersession of the frozen `tracker_gpu.{hpp,cu}` identities; neither is done here.
 - Whether the 0.11 ms exposed memcpy is *caused* by GMC staging or by detect-side buffer rotation. Needed before a copy-elimination PR.
 
 ---

@@ -315,6 +315,7 @@ add_library(saccade_tracking STATIC
     src/tracking/gmc.cpp
     src/tracking/gmc_kernel.cu
     src/tracking/pipeline.cpp
+    src/tracking/private_workload_stats.cu
     src/tracking/crop_pool.cpp
     src/tracking/crop_ring_store.cpp
     src/tracking/frame_buffer.cpp

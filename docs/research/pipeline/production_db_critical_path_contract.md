@@ -77,17 +77,26 @@ an FPS ceiling.
 | Clean `mot17.py` headline command | **P** | Only source of production FPS |
 | `--profile-frame-csv` | **P-host** | Wall-clock ledger, no extra GPU sync, does not flip `_double_buffer_eligible` |
 | nsys `--trace=cuda --cuda-graph-trace=node --sample=none --cpuctxsw=none` | **D** | Host-inflated wall; GPU spans OK |
-| `SACCADE_ASSOC_STATS=1` | **D** | Extra diagnostic kernels inside tracker/NMS graphs; dump at sequence end |
+| `SACCADE_ASSOC_STATS=1` | **D** | On `main`: `PerceptionPipeline` private-continuation counter + bridge counters, dumped at sequence end. Tracker per-stage counters are **not** on `main` (frozen `tracker_gpu.{hpp,cu}`, see below) |
 | `--profile-stages` | **D-serial** | Disables double-buffer. Stage tables from this flag are not DB production |
 | `SACCADE_ASSOC_DUMP` | **D-serial** | Host I/O + `cudaStreamSynchronize`; incompatible with tracker graph |
 | GMC `set_profiling_enabled` | **D-serial** | Uses `cudaEventSynchronize` per sub-stage |
 | NVTX / OSRT / CPU sampling | forbidden on this path | Deadlocks with whole-graph capture (runbook) |
 
-`SACCADE_ASSOC_STATS` must be set **before** tracker / NMS graph capture
+`SACCADE_ASSOC_STATS` must be set **before** NMS graph capture
 (environment at process start). Enabling it later cannot insert kernels
 into an already-captured graph. Parsing is fail-closed and shared:
 `1/true/yes/on` enable; unset, `0/false/no/off`, and unknown tokens stay
-OFF in Python, tracker, and `PerceptionPipeline`.
+OFF in Python and `PerceptionPipeline`.
+
+Tracker-side per-stage association counters (S0–S2 assignments, det score
+bands, active/confirmed/tentative, occ-state) cannot land: 
+`include/tracking/tracker_gpu.hpp` and `src/tracking/tracker_gpu.cu` are
+strict path+sha256 frozen inputs of the closed H0 / GCTM packets, and the
+per-stage hooks have to sit inside `run_stage` in that `.cu`. The
+`association` block of `_assoc_workload_{seq}.json` is therefore only
+present when a research branch re-applies that instrumentation (reference:
+commit `e03f7d81`). Any such dump is branch-only evidence and must say so.
 
 ## Headline command
 
