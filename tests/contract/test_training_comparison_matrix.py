@@ -192,7 +192,16 @@ def _engine_node(nid: str, onnx_match: str, exists: bool = True) -> dict:
     }
 
 
-def _preset_node(fam: str, engine_path: str) -> dict:
+def _preset_node(
+    fam: str, engine_path: str, head_engine_path: str | None = None
+) -> dict:
+    summary = {
+        "fpn_backbone_engine": engine_path,
+        "use_whole_graph": True,
+        "reid_mode": "off",
+    }
+    if head_engine_path:
+        summary["mamba_head_engine"] = head_engine_path
     return {
         "id": f"{fam}.deployment_preset",
         "family": fam,
@@ -200,11 +209,7 @@ def _preset_node(fam: str, engine_path: str) -> dict:
         "path": f"configs/presets/{fam}.yaml",
         "exists": True,
         "sha256": "00" * 32,
-        "summary": {
-            "fpn_backbone_engine": engine_path,
-            "use_whole_graph": True,
-            "reid_mode": "off",
-        },
+        "summary": summary,
         "edges": [],
         "checks": {
             "deployment_forward": {
@@ -635,6 +640,167 @@ def test_structural_difference_is_a_system_comparison(tmp_path: Path) -> None:
     assert c["axes"]["tracker_runtime_policy"]["status"] == "unknown"
 
 
+def _with_fixed_head_engine(inv: dict) -> dict:
+    inv = json.loads(json.dumps(inv))
+    inv["nodes"]["s.head_engine"] = {
+        "id": "s.head_engine",
+        "family": "s",
+        "kind": "trt_engine",
+        "path": "models/s.head_engine",
+        "exists": True,
+        "sha256": "aa" * 32,
+        "summary": {},
+        "edges": [
+            {
+                "relation": "onnx_matches_checkpoint",
+                "target_path": "runs/s.implicit_42.ckpt",
+                "target_node": "s.implicit_42",
+                "target_exists": True,
+                "detail": {"verdict": "ambiguous"},
+            },
+            {
+                "relation": "onnx_matches_checkpoint",
+                "target_path": "runs/s.implicit_43.ckpt",
+                "target_node": "s.implicit_43",
+                "target_exists": True,
+                "detail": {"verdict": "ambiguous"},
+            },
+        ],
+        "checks": {},
+        "problems": [],
+    }
+    inv["nodes"]["s.deployment_preset"] = _preset_node(
+        "s", "models/s.engine", "models/s.head_engine"
+    )
+    return inv
+
+
+def test_fixed_head_engine_blocks_training_designs_until_overridden(
+    tmp_path: Path,
+) -> None:
+    inv = _with_fixed_head_engine(_inventory())
+    as_is = _pair("c", "s.implicit_42", "s.phase_b_42")
+    c = _run(inv, _decl(as_is), tmp_path)["c"]
+    assert c["classification"] == "blocked"
+    assert any(b.startswith("treatment_not_deployed") for b in c["blocking_confounds"])
+    assert c["lhs"]["runtime"]["head_source"]["checkpoint_head_deployed"] is False
+    assert c["lhs"]["runtime"]["head_source"]["node"] == "s.head_engine"
+    assert c["axes"]["deployed_head_artifact"]["lhs"]["head_engine_source"].startswith(
+        "sibling ONNX ambiguous"
+    )
+
+    override = {"binding": "family_preset", "head_override": "checkpoint_pytorch"}
+    fixed = _pair(
+        "c",
+        "s.implicit_42",
+        "s.phase_b_42",
+        lhs={"node": "s.implicit_42", "runtime": override},
+        rhs={"node": "s.phase_b_42", "runtime": override},
+    )
+    c2 = _run(inv, _decl(fixed), tmp_path)["c"]
+    assert c2["classification"] == "controlled"
+    assert c2["lhs"]["runtime"]["head_source"]["checkpoint_head_deployed"] is True
+    assert "--no-mamba-trt" in c2["lhs"]["runtime"]["recipe"]
+
+
+def test_fixed_head_engine_is_reported_not_blocked_for_system_designs(
+    tmp_path: Path,
+) -> None:
+    inv = _with_fixed_head_engine(_inventory())
+    # keep the backbone/teacher consistency symmetric so only the head engine is at stake
+    inv["nodes"]["s.engine"] = _engine_node("s.engine", "s.teacher")
+    spec = {
+        "comparison_id": "e",
+        "design": "system",
+        "lhs": {
+            "node": "s.teacher",
+            "runtime": {
+                "binding": "shared_backbone_node",
+                "backbone_node": "s.teacher",
+            },
+        },
+        "rhs": {"node": "s.phase_b_42"},
+        "intended_treatment": "system",
+        "treatment_axes": [],
+    }
+    c = _run(inv, _decl(spec), tmp_path)["e"]
+    assert c["classification"] == "system_comparison"
+    assert not any(
+        b.startswith("treatment_not_deployed") for b in c["blocking_confounds"]
+    )
+    assert c["rhs"]["runtime"]["head_source"]["checkpoint_head_deployed"] is False
+    assert (
+        "checkpoint source ambiguous" in c["axes"]["deployed_head_artifact"]["detail"]
+    )
+
+
+def test_head_override_is_validated(tmp_path: Path) -> None:
+    inv = _inventory()
+    p = tmp_path / "d.json"
+    bad = _decl(
+        _pair(
+            "x",
+            "s.implicit_42",
+            "s.phase_b_42",
+            lhs={
+                "node": "s.implicit_42",
+                "runtime": {"binding": "family_preset", "head_override": "trt"},
+            },
+        )
+    )
+    p.write_text(json.dumps(bad), encoding="utf-8")
+    with pytest.raises(tc.ComparisonError, match="head_override"):
+        tc.load_declarations(p, inv)
+    wrong_binding = _decl(
+        _pair(
+            "x",
+            "s.implicit_42",
+            "s.phase_b_42",
+            lhs={
+                "node": "s.implicit_42",
+                "runtime": {
+                    "binding": "shared_backbone_node",
+                    "backbone_node": "s.teacher",
+                    "head_override": "checkpoint_pytorch",
+                },
+            },
+        )
+    )
+    p.write_text(json.dumps(wrong_binding), encoding="utf-8")
+    with pytest.raises(tc.ComparisonError, match="only applies to family_preset"):
+        tc.load_declarations(p, inv)
+
+
+def test_fresh_eval_requires_a_bound_runner(tmp_path: Path) -> None:
+    spec = {
+        "comparison_id": "a",
+        "design": "system",
+        "lhs": {
+            "node": "s.pretrained",
+            "runtime": {
+                "binding": "shared_backbone_node",
+                "backbone_node": "s.pretrained",
+            },
+        },
+        "rhs": {
+            "node": "s.teacher",
+            "runtime": {
+                "binding": "shared_backbone_node",
+                "backbone_node": "s.teacher",
+            },
+        },
+        "intended_treatment": "adaptation",
+        "treatment_axes": [],
+    }
+    c = _run(_inventory(), _decl(spec), tmp_path)["a"]
+    ex = c["executability"]
+    assert ex["artifacts_available"] is True
+    assert ex["runtime_recipe_bound"] is False
+    assert ex["fresh_eval"] is False
+    assert any("no runner in inventory" in m for m in ex["fresh_eval_missing"])
+    assert c["lhs"]["runtime"]["recipe"] is None
+
+
 # --------------------------------------------------------------------------- committed matrix
 
 
@@ -725,6 +891,40 @@ def test_committed_matrix_states_the_known_issues() -> None:
         is False
     )
     assert rows["G1.m.t3t1_vs_gpu_decode_cache"]["classification"] == "blocked"
+    # m preset's fixed head engine: preset-as-is is blocked, override rows run the checkpoint head
+    assert rows["B3x.m.distill_to_gt1_preset_as_is"]["classification"] == "blocked"
+    assert any(
+        b.startswith("treatment_not_deployed")
+        for b in rows["B3x.m.distill_to_gt1_preset_as_is"]["blocking_confounds"]
+    )
+    for cid in (
+        "B3.m.distill_to_gt1",
+        "B4.m.gt1_to_gt2_plain",
+        "C9.m.plain_gt2_vs_t3t1",
+    ):
+        for side in ("lhs", "rhs"):
+            assert (
+                rows[cid][side]["runtime"]["head_source"]["checkpoint_head_deployed"]
+                is True
+            ), cid
+    e1 = rows["E1.s_vs_m.production_system"]
+    assert e1["rhs"]["runtime"]["head_source"]["checkpoint_head_deployed"] is False
+    assert (
+        "ambiguous" in e1["axes"]["deployed_head_artifact"]["rhs"]["head_engine_source"]
+    )
+    # raw-YOLO rows have no runner in inventory
+    assert (
+        rows["A1.s.pretrained_vs_adapted_teacher"]["executability"]["fresh_eval"]
+        is False
+    )
+    # every controlled training row actually deploys both checkpoint heads
+    for c in rows.values():
+        if c["classification"] == "controlled" and c["design"] != "runtime_ab":
+            for side in ("lhs", "rhs"):
+                assert (
+                    c[side]["runtime"]["head_source"]["checkpoint_head_deployed"]
+                    is True
+                ), c["comparison_id"]
     # m family has no controlled curriculum pair
     assert (
         rows["C9.m.plain_gt2_vs_t3t1"]["classification"] == "historical_not_comparable"

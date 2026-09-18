@@ -77,7 +77,7 @@
   "controlled": 12,
   "system_comparison": 7,
   "historical_not_comparable": 7,
-  "blocked": 4
+  "blocked": 5
  },
  "comparisons": [
   {
@@ -92,6 +92,13 @@
      "reason": null,
      "backbone_engine_node": null,
      "backbone_node": "s.pretrained_yolo",
+     "head_source": {
+      "kind": "checkpoint_pytorch",
+      "node": "s.pretrained_yolo",
+      "checkpoint_head_deployed": true,
+      "source_attribution": null
+     },
+     "recipe": null,
      "backbone_teacher_consistency": "same_teacher_indicated",
      "engine_bytes_attributed": null,
      "head_path": "native Detect head, PyTorch eager (runner not in inventory)",
@@ -114,6 +121,13 @@
      "reason": null,
      "backbone_engine_node": null,
      "backbone_node": "s.adapted_teacher",
+     "head_source": {
+      "kind": "checkpoint_pytorch",
+      "node": "s.adapted_teacher",
+      "checkpoint_head_deployed": true,
+      "source_attribution": null
+     },
+     "recipe": "scripts/eval/mot17.py --preset mamba_pyt_backbone --teacher-head-ckpt runs/gated_det_v14replica/epoch_0012.ckpt",
      "backbone_teacher_consistency": "same_teacher_indicated",
      "engine_bytes_attributed": null,
      "head_path": "native Detect head via TeacherHeadDetector, PyTorch eager",
@@ -218,11 +232,13 @@
      "lhs": {
       "head_path": "native Detect head, PyTorch eager (runner not in inventory)",
       "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "absent"
      },
      "rhs": {
       "head_path": "native Detect head via TeacherHeadDetector, PyTorch eager",
       "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "absent"
      },
      "detail": "different head kinds"
@@ -325,11 +341,13 @@
      "lhs": {
       "head_path": "native Detect head, PyTorch eager (runner not in inventory)",
       "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "absent"
      },
      "rhs": {
       "head_path": "native Detect head via TeacherHeadDetector, PyTorch eager",
       "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "absent"
      },
      "detail": "different head kinds"
@@ -396,8 +414,16 @@
     "tracker_runtime_policy"
    ],
    "executability": {
-    "fresh_eval": true,
-    "fresh_eval_missing": [],
+    "artifacts_available": true,
+    "artifacts_missing": [],
+    "runtime_recipe_bound": false,
+    "runtime_recipe_missing": [
+     "lhs: no runner in inventory for native Detect head, PyTorch eager (runner not in inventory); deliverable 3 must bind it"
+    ],
+    "fresh_eval": false,
+    "fresh_eval_missing": [
+     "lhs: no runner in inventory for native Detect head, PyTorch eager (runner not in inventory); deliverable 3 must bind it"
+    ],
     "retrain_replay": true,
     "retrain_replay_missing": []
    },
@@ -449,6 +475,13 @@
       "reason": null,
       "backbone_engine_node": null,
       "backbone_node": "s.pretrained_yolo",
+      "head_source": {
+       "kind": "checkpoint_pytorch",
+       "node": "s.pretrained_yolo",
+       "checkpoint_head_deployed": true,
+       "source_attribution": null
+      },
+      "recipe": null,
       "backbone_teacher_consistency": "same_teacher_indicated",
       "engine_bytes_attributed": null,
       "head_path": "native Detect head, PyTorch eager (runner not in inventory)",
@@ -506,6 +539,13 @@
       "reason": null,
       "backbone_engine_node": null,
       "backbone_node": "s.adapted_teacher",
+      "head_source": {
+       "kind": "checkpoint_pytorch",
+       "node": "s.adapted_teacher",
+       "checkpoint_head_deployed": true,
+       "source_attribution": null
+      },
+      "recipe": "scripts/eval/mot17.py --preset mamba_pyt_backbone --teacher-head-ckpt runs/gated_det_v14replica/epoch_0012.ckpt",
       "backbone_teacher_consistency": "same_teacher_indicated",
       "engine_bytes_attributed": null,
       "head_path": "native Detect head via TeacherHeadDetector, PyTorch eager",
@@ -572,6 +612,13 @@
      "reason": null,
      "backbone_engine_node": null,
      "backbone_node": "m.pretrained_yolo",
+     "head_source": {
+      "kind": "checkpoint_pytorch",
+      "node": "m.pretrained_yolo",
+      "checkpoint_head_deployed": true,
+      "source_attribution": null
+     },
+     "recipe": null,
      "backbone_teacher_consistency": "same_teacher_indicated",
      "engine_bytes_attributed": null,
      "head_path": "native Detect head, PyTorch eager (runner not in inventory)",
@@ -594,6 +641,13 @@
      "reason": null,
      "backbone_engine_node": null,
      "backbone_node": "m.adapted_teacher",
+     "head_source": {
+      "kind": "checkpoint_pytorch",
+      "node": "m.adapted_teacher",
+      "checkpoint_head_deployed": true,
+      "source_attribution": null
+     },
+     "recipe": "scripts/eval/mot17.py --preset mamba_pyt_backbone --teacher-head-ckpt runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
      "backbone_teacher_consistency": "same_teacher_indicated",
      "engine_bytes_attributed": null,
      "head_path": "native Detect head via TeacherHeadDetector, PyTorch eager",
@@ -698,11 +752,13 @@
      "lhs": {
       "head_path": "native Detect head, PyTorch eager (runner not in inventory)",
       "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "absent"
      },
      "rhs": {
       "head_path": "native Detect head via TeacherHeadDetector, PyTorch eager",
       "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "absent"
      },
      "detail": "different head kinds"
@@ -805,11 +861,13 @@
      "lhs": {
       "head_path": "native Detect head, PyTorch eager (runner not in inventory)",
       "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "absent"
      },
      "rhs": {
       "head_path": "native Detect head via TeacherHeadDetector, PyTorch eager",
       "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "absent"
      },
      "detail": "different head kinds"
@@ -876,8 +934,16 @@
     "tracker_runtime_policy"
    ],
    "executability": {
-    "fresh_eval": true,
-    "fresh_eval_missing": [],
+    "artifacts_available": true,
+    "artifacts_missing": [],
+    "runtime_recipe_bound": false,
+    "runtime_recipe_missing": [
+     "lhs: no runner in inventory for native Detect head, PyTorch eager (runner not in inventory); deliverable 3 must bind it"
+    ],
+    "fresh_eval": false,
+    "fresh_eval_missing": [
+     "lhs: no runner in inventory for native Detect head, PyTorch eager (runner not in inventory); deliverable 3 must bind it"
+    ],
     "retrain_replay": true,
     "retrain_replay_missing": []
    },
@@ -927,6 +993,13 @@
       "reason": null,
       "backbone_engine_node": null,
       "backbone_node": "m.pretrained_yolo",
+      "head_source": {
+       "kind": "checkpoint_pytorch",
+       "node": "m.pretrained_yolo",
+       "checkpoint_head_deployed": true,
+       "source_attribution": null
+      },
+      "recipe": null,
       "backbone_teacher_consistency": "same_teacher_indicated",
       "engine_bytes_attributed": null,
       "head_path": "native Detect head, PyTorch eager (runner not in inventory)",
@@ -984,6 +1057,13 @@
       "reason": null,
       "backbone_engine_node": null,
       "backbone_node": "m.adapted_teacher",
+      "head_source": {
+       "kind": "checkpoint_pytorch",
+       "node": "m.adapted_teacher",
+       "checkpoint_head_deployed": true,
+       "source_attribution": null
+      },
+      "recipe": "scripts/eval/mot17.py --preset mamba_pyt_backbone --teacher-head-ckpt runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
       "backbone_teacher_consistency": "same_teacher_indicated",
       "engine_bytes_attributed": null,
       "head_path": "native Detect head via TeacherHeadDetector, PyTorch eager",
@@ -1050,6 +1130,13 @@
      "reason": null,
      "backbone_engine_node": null,
      "backbone_node": "s.adapted_teacher",
+     "head_source": {
+      "kind": "checkpoint_pytorch",
+      "node": "s.adapted_teacher",
+      "checkpoint_head_deployed": true,
+      "source_attribution": null
+     },
+     "recipe": "scripts/eval/mot17.py --preset mamba_pyt_backbone --teacher-head-ckpt runs/gated_det_v14replica/epoch_0012.ckpt",
      "backbone_teacher_consistency": "same_teacher_indicated",
      "engine_bytes_attributed": null,
      "head_path": "native Detect head via TeacherHeadDetector, PyTorch eager",
@@ -1072,6 +1159,13 @@
      "reason": null,
      "backbone_engine_node": null,
      "backbone_node": "m.adapted_teacher",
+     "head_source": {
+      "kind": "checkpoint_pytorch",
+      "node": "m.adapted_teacher",
+      "checkpoint_head_deployed": true,
+      "source_attribution": null
+     },
+     "recipe": "scripts/eval/mot17.py --preset mamba_pyt_backbone --teacher-head-ckpt runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
      "backbone_teacher_consistency": "same_teacher_indicated",
      "engine_bytes_attributed": null,
      "head_path": "native Detect head via TeacherHeadDetector, PyTorch eager",
@@ -1182,11 +1276,13 @@
      "lhs": {
       "head_path": "native Detect head via TeacherHeadDetector, PyTorch eager",
       "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "absent"
      },
      "rhs": {
       "head_path": "native Detect head via TeacherHeadDetector, PyTorch eager",
       "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "absent"
      },
      "detail": ""
@@ -1306,6 +1402,10 @@
     "teacher"
    ],
    "executability": {
+    "artifacts_available": true,
+    "artifacts_missing": [],
+    "runtime_recipe_bound": true,
+    "runtime_recipe_missing": [],
     "fresh_eval": true,
     "fresh_eval_missing": [],
     "retrain_replay": true,
@@ -1363,6 +1463,13 @@
       "reason": null,
       "backbone_engine_node": null,
       "backbone_node": "s.adapted_teacher",
+      "head_source": {
+       "kind": "checkpoint_pytorch",
+       "node": "s.adapted_teacher",
+       "checkpoint_head_deployed": true,
+       "source_attribution": null
+      },
+      "recipe": "scripts/eval/mot17.py --preset mamba_pyt_backbone --teacher-head-ckpt runs/gated_det_v14replica/epoch_0012.ckpt",
       "backbone_teacher_consistency": "same_teacher_indicated",
       "engine_bytes_attributed": null,
       "head_path": "native Detect head via TeacherHeadDetector, PyTorch eager",
@@ -1457,6 +1564,13 @@
       "reason": null,
       "backbone_engine_node": null,
       "backbone_node": "m.adapted_teacher",
+      "head_source": {
+       "kind": "checkpoint_pytorch",
+       "node": "m.adapted_teacher",
+       "checkpoint_head_deployed": true,
+       "source_attribution": null
+      },
+      "recipe": "scripts/eval/mot17.py --preset mamba_pyt_backbone --teacher-head-ckpt runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
       "backbone_teacher_consistency": "same_teacher_indicated",
       "engine_bytes_attributed": null,
       "head_path": "native Detect head via TeacherHeadDetector, PyTorch eager",
@@ -1532,8 +1646,15 @@
      },
      "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
      "engine_bytes_attributed": false,
-     "head_path": "none (PyTorch head inside whole graph)",
+     "head_path": "checkpoint PyTorch head inside whole graph",
      "head_engine_node": null,
+     "head_source": {
+      "kind": "checkpoint_pytorch",
+      "node": "s.distill",
+      "checkpoint_head_deployed": true,
+      "source_attribution": null
+     },
+     "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_distill_v14replica/best.ckpt",
      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -1564,8 +1685,15 @@
      },
      "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
      "engine_bytes_attributed": false,
-     "head_path": "none (PyTorch head inside whole graph)",
+     "head_path": "checkpoint PyTorch head inside whole graph",
      "head_engine_node": null,
+     "head_source": {
+      "kind": "checkpoint_pytorch",
+      "node": "s.gt1",
+      "checkpoint_head_deployed": true,
+      "source_attribution": null
+     },
+     "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_stage1/best.ckpt",
      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -1705,13 +1833,15 @@
     "deployed_head_artifact": {
      "status": "matched",
      "lhs": {
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
      },
      "rhs": {
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
      },
      "detail": ""
@@ -1797,6 +1927,10 @@
    "blocking_confounds": [],
    "unknown_axes": [],
    "executability": {
+    "artifacts_available": true,
+    "artifacts_missing": [],
+    "runtime_recipe_bound": true,
+    "runtime_recipe_missing": [],
     "fresh_eval": true,
     "fresh_eval_missing": [],
     "retrain_replay": false,
@@ -1876,8 +2010,15 @@
       },
       "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
       "engine_bytes_attributed": false,
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "head_source": {
+       "kind": "checkpoint_pytorch",
+       "node": "s.distill",
+       "checkpoint_head_deployed": true,
+       "source_attribution": null
+      },
+      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_distill_v14replica/best.ckpt",
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -1989,8 +2130,15 @@
       },
       "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
       "engine_bytes_attributed": false,
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "head_source": {
+       "kind": "checkpoint_pytorch",
+       "node": "s.gt1",
+       "checkpoint_head_deployed": true,
+       "source_attribution": null
+      },
+      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_stage1/best.ckpt",
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -2103,8 +2251,15 @@
      },
      "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
      "engine_bytes_attributed": false,
-     "head_path": "none (PyTorch head inside whole graph)",
+     "head_path": "checkpoint PyTorch head inside whole graph",
      "head_engine_node": null,
+     "head_source": {
+      "kind": "checkpoint_pytorch",
+      "node": "s.gt1",
+      "checkpoint_head_deployed": true,
+      "source_attribution": null
+     },
+     "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_stage1/best.ckpt",
      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -2135,8 +2290,15 @@
      },
      "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
      "engine_bytes_attributed": false,
-     "head_path": "none (PyTorch head inside whole graph)",
+     "head_path": "checkpoint PyTorch head inside whole graph",
      "head_engine_node": null,
+     "head_source": {
+      "kind": "checkpoint_pytorch",
+      "node": "s.gt2_plain",
+      "checkpoint_head_deployed": true,
+      "source_attribution": null
+     },
+     "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_final/best.ckpt",
      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -2273,13 +2435,15 @@
     "deployed_head_artifact": {
      "status": "matched",
      "lhs": {
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
      },
      "rhs": {
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
      },
      "detail": ""
@@ -2365,6 +2529,10 @@
    "blocking_confounds": [],
    "unknown_axes": [],
    "executability": {
+    "artifacts_available": true,
+    "artifacts_missing": [],
+    "runtime_recipe_bound": true,
+    "runtime_recipe_missing": [],
     "fresh_eval": true,
     "fresh_eval_missing": [],
     "retrain_replay": false,
@@ -2453,8 +2621,15 @@
       },
       "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
       "engine_bytes_attributed": false,
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "head_source": {
+       "kind": "checkpoint_pytorch",
+       "node": "s.gt1",
+       "checkpoint_head_deployed": true,
+       "source_attribution": null
+      },
+      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_stage1/best.ckpt",
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -2608,8 +2783,15 @@
       },
       "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
       "engine_bytes_attributed": false,
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "head_source": {
+       "kind": "checkpoint_pytorch",
+       "node": "s.gt2_plain",
+       "checkpoint_head_deployed": true,
+       "source_attribution": null
+      },
+      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_final/best.ckpt",
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -2764,8 +2946,15 @@
      },
      "backbone_teacher_consistency": "same_teacher_indicated",
      "engine_bytes_attributed": false,
-     "head_path": "models/yolo/mamba_head_26m.engine",
-     "head_engine_node": "m.head_engine",
+     "head_path": "checkpoint PyTorch head inside whole graph",
+     "head_engine_node": null,
+     "head_source": {
+      "kind": "checkpoint_pytorch",
+      "node": "m.distill",
+      "checkpoint_head_deployed": true,
+      "source_attribution": null
+     },
+     "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph_m --no-mamba-trt --mamba-ckpt runs/mamba_distill_yolo26m_v14replica/best.ckpt",
      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
      "effective_T": 1,
      "gate_teacher_at_runtime": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
@@ -2796,8 +2985,15 @@
      },
      "backbone_teacher_consistency": "same_teacher_indicated",
      "engine_bytes_attributed": false,
-     "head_path": "models/yolo/mamba_head_26m.engine",
-     "head_engine_node": "m.head_engine",
+     "head_path": "checkpoint PyTorch head inside whole graph",
+     "head_engine_node": null,
+     "head_source": {
+      "kind": "checkpoint_pytorch",
+      "node": "m.gt1",
+      "checkpoint_head_deployed": true,
+      "source_attribution": null
+     },
+     "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph_m --no-mamba-trt --mamba-ckpt runs/mamba_gt_yolo26m_v14replica_stage1/best.ckpt",
      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
      "effective_T": 1,
      "gate_teacher_at_runtime": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
@@ -2937,13 +3133,15 @@
     "deployed_head_artifact": {
      "status": "matched",
      "lhs": {
-      "head_path": "models/yolo/mamba_head_26m.engine",
-      "head_engine_node": "m.head_engine",
+      "head_path": "checkpoint PyTorch head inside whole graph",
+      "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
      },
      "rhs": {
-      "head_path": "models/yolo/mamba_head_26m.engine",
-      "head_engine_node": "m.head_engine",
+      "head_path": "checkpoint PyTorch head inside whole graph",
+      "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
      },
      "detail": ""
@@ -3023,6 +3221,10 @@
    "blocking_confounds": [],
    "unknown_axes": [],
    "executability": {
+    "artifacts_available": true,
+    "artifacts_missing": [],
+    "runtime_recipe_bound": true,
+    "runtime_recipe_missing": [],
     "fresh_eval": true,
     "fresh_eval_missing": [],
     "retrain_replay": false,
@@ -3036,7 +3238,9 @@
     "reusable_as_paired": false,
     "reason": "record carries no preset/engine sha for any run; runtime identity of historical runs is not established (deliverable 4)"
    },
-   "declared_notes": [],
+   "declared_notes": [
+    "m preset names a fixed head engine (mamba_head_26m.engine); bound with head_override=checkpoint_pytorch (= --no-mamba-trt) so the lhs/rhs checkpoint heads actually run inside the whole graph. Without the override this pair is blocked (treatment_not_deployed)."
+   ],
    "profiles": {
     "lhs": {
      "node": "m.distill",
@@ -3102,8 +3306,15 @@
       },
       "backbone_teacher_consistency": "same_teacher_indicated",
       "engine_bytes_attributed": false,
-      "head_path": "models/yolo/mamba_head_26m.engine",
-      "head_engine_node": "m.head_engine",
+      "head_path": "checkpoint PyTorch head inside whole graph",
+      "head_engine_node": null,
+      "head_source": {
+       "kind": "checkpoint_pytorch",
+       "node": "m.distill",
+       "checkpoint_head_deployed": true,
+       "source_attribution": null
+      },
+      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph_m --no-mamba-trt --mamba-ckpt runs/mamba_distill_yolo26m_v14replica/best.ckpt",
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
       "effective_T": 1,
       "gate_teacher_at_runtime": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
@@ -3216,8 +3427,666 @@
       },
       "backbone_teacher_consistency": "same_teacher_indicated",
       "engine_bytes_attributed": false,
-      "head_path": "models/yolo/mamba_head_26m.engine",
+      "head_path": "checkpoint PyTorch head inside whole graph",
+      "head_engine_node": null,
+      "head_source": {
+       "kind": "checkpoint_pytorch",
+       "node": "m.gt1",
+       "checkpoint_head_deployed": true,
+       "source_attribution": null
+      },
+      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph_m --no-mamba-trt --mamba-ckpt runs/mamba_gt_yolo26m_v14replica_stage1/best.ckpt",
+      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+      "effective_T": 1,
+      "gate_teacher_at_runtime": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
+      "final_stage_gt_ratio": 0.0,
+      "embedding": "reid_mode='off'",
+      "graphs": {
+       "use_whole_graph": true,
+       "use_cuda_graph": true,
+       "use_tracker_graph": true
+      },
+      "tracker_policy_source": "preset"
+     },
+     "chain": [
+      {
+       "node": "m.distill",
+       "epochs": 30,
+       "selected_epoch": 30,
+       "seed": 20260612,
+       "schedule": {
+        "lr": 0.001,
+        "batch_size": 8,
+        "accum_steps": 1,
+        "clip_len": 1,
+        "clip_stride": 0,
+        "scan_stop_grad": true,
+        "warmup_epochs": 5,
+        "img_size": 640,
+        "use_temporal_attention": false
+       },
+       "split": {
+        "train": [
+         "MOT17-02-SDP",
+         "MOT17-04-SDP",
+         "MOT17-05-SDP",
+         "MOT17-09-SDP",
+         "MOT17-10-SDP",
+         "MOT17-11-SDP",
+         "MOT17-13-SDP"
+        ],
+        "holdout": [],
+        "basis": "explicit"
+       },
+       "teacher": "m.adapted_teacher",
+       "cache": "m.teacher_cache",
+       "cache_available": false
+      },
+      {
+       "node": "m.gt1",
+       "epochs": 30,
+       "selected_epoch": 29,
+       "seed": 20260612,
+       "schedule": {
+        "lr": 0.0001,
+        "lr_gate": 0.0,
+        "batch_size": 4,
+        "accum_steps": 1,
+        "clip_len": 4,
+        "clip_stride": 8,
+        "gt_ratio": 0.5,
+        "add_temporal": false,
+        "scan_stop_grad": true,
+        "warmup_epochs": 5,
+        "clip_grad": 1.0,
+        "cls_weight": 0.5,
+        "img_size": 640,
+        "freeze_temporal": false,
+        "freeze_spatial": false,
+        "use_temporal_attention": false,
+        "consistency_weight": 0.0,
+        "t1_weight": 0.0,
+        "best_by": "train-loss"
+       },
+       "split": {
+        "train": [
+         "MOT17-02-SDP",
+         "MOT17-04-SDP",
+         "MOT17-05-SDP",
+         "MOT17-09-SDP",
+         "MOT17-10-SDP",
+         "MOT17-11-SDP",
+         "MOT17-13-SDP"
+        ],
+        "holdout": [],
+        "basis": "default:all *-SDP under datasets/MOT17/train"
+       },
+       "teacher": "m.adapted_teacher",
+       "cache": null,
+       "cache_available": null
+      }
+     ]
+    }
+   }
+  },
+  {
+   "comparison_id": "B3x.m.distill_to_gt1_preset_as_is",
+   "group": "distill / GT1 / GT2",
+   "design": "stage_increment",
+   "lhs": {
+    "node": "m.distill",
+    "runtime": {
+     "binding": "family_preset",
+     "status": "bound",
+     "preset": "m.deployment_preset",
+     "preset_path": "configs/presets/mamba_whole_graph_m.yaml",
+     "preset_sha256": "496c4ec22b497c70bc8409227513939b4cd86834bf2210475d0ad655be6937af",
+     "backbone_engine_node": "m.backbone_engine",
+     "backbone_engine_exists": true,
+     "backbone_engine_sibling_onnx": {
+      "status": "sibling_onnx_unique",
+      "onnx_matches": "m.adapted_teacher",
+      "verdict": "unique_exact"
+     },
+     "backbone_teacher_consistency": "same_teacher_indicated",
+     "engine_bytes_attributed": false,
+     "head_path": "TRT head engine models/yolo/mamba_head_26m.engine (checkpoint head NOT deployed)",
+     "head_engine_node": "m.head_engine",
+     "head_source": {
+      "kind": "trt_engine",
+      "node": "m.head_engine",
+      "checkpoint_head_deployed": false,
+      "source_attribution": {
+       "status": "unattributed",
+       "onnx_matches": [
+        "m.distill",
+        "m.gt1",
+        "m.gt2_plain",
+        "m.t3t1_phase_a",
+        "m.t3t1_phase_b",
+        "m.t3t1_phase_b_gpu_decode"
+       ],
+       "verdict": "ambiguous"
+      }
+     },
+     "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph_m --mamba-ckpt runs/mamba_distill_yolo26m_v14replica/best.ckpt",
+     "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+     "effective_T": 1,
+     "gate_teacher_at_runtime": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
+     "final_stage_gt_ratio": 0.0,
+     "embedding": "reid_mode='off'",
+     "graphs": {
+      "use_whole_graph": true,
+      "use_cuda_graph": true,
+      "use_tracker_graph": true
+     },
+     "tracker_policy_source": "preset"
+    }
+   },
+   "rhs": {
+    "node": "m.gt1",
+    "runtime": {
+     "binding": "family_preset",
+     "status": "bound",
+     "preset": "m.deployment_preset",
+     "preset_path": "configs/presets/mamba_whole_graph_m.yaml",
+     "preset_sha256": "496c4ec22b497c70bc8409227513939b4cd86834bf2210475d0ad655be6937af",
+     "backbone_engine_node": "m.backbone_engine",
+     "backbone_engine_exists": true,
+     "backbone_engine_sibling_onnx": {
+      "status": "sibling_onnx_unique",
+      "onnx_matches": "m.adapted_teacher",
+      "verdict": "unique_exact"
+     },
+     "backbone_teacher_consistency": "same_teacher_indicated",
+     "engine_bytes_attributed": false,
+     "head_path": "TRT head engine models/yolo/mamba_head_26m.engine (checkpoint head NOT deployed)",
+     "head_engine_node": "m.head_engine",
+     "head_source": {
+      "kind": "trt_engine",
+      "node": "m.head_engine",
+      "checkpoint_head_deployed": false,
+      "source_attribution": {
+       "status": "unattributed",
+       "onnx_matches": [
+        "m.distill",
+        "m.gt1",
+        "m.gt2_plain",
+        "m.t3t1_phase_a",
+        "m.t3t1_phase_b",
+        "m.t3t1_phase_b_gpu_decode"
+       ],
+       "verdict": "ambiguous"
+      }
+     },
+     "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph_m --mamba-ckpt runs/mamba_gt_yolo26m_v14replica_stage1/best.ckpt",
+     "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+     "effective_T": 1,
+     "gate_teacher_at_runtime": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
+     "final_stage_gt_ratio": 0.0,
+     "embedding": "reid_mode='off'",
+     "graphs": {
+      "use_whole_graph": true,
+      "use_cuda_graph": true,
+      "use_tracker_graph": true
+     },
+     "tracker_policy_source": "preset"
+    }
+   },
+   "intended_treatment": "GT1 stage as a bundle (m family)",
+   "treatment_axes": [
+    "warm_start",
+    "training_budget",
+    "training_schedule",
+    "teacher_cache"
+   ],
+   "treatment_schedule_keys": [
+    "lr",
+    "batch_size",
+    "clip_len",
+    "clip_stride"
+   ],
+   "question": "the same pair under the unmodified m preset: mot17.py passes mamba_head_engine as trt_head_engine and _whole_graph_fn calls the TRT head, so neither checkpoint head runs \u2014 declared so the tool blocks it explicitly",
+   "axes": {
+    "backbone_family": {
+     "status": "matched",
+     "lhs": "yolo26m",
+     "rhs": "yolo26m",
+     "detail": ""
+    },
+    "head_family": {
+     "status": "matched",
+     "lhs": {
+      "d_model": 128,
+      "d_state": 16,
+      "num_blocks": 1,
+      "spatial_reduction": 4,
+      "num_classes": 80,
+      "use_pixel_shuffle": true,
+      "use_cross_scan": true,
+      "use_hybrid_head": false,
+      "use_temporal_attention": false,
+      "per_channel_a": false,
+      "use_detail_fusion": false,
+      "detail_source": "none",
+      "family": "mamba_head"
+     },
+     "rhs": {
+      "d_model": 128,
+      "d_state": 16,
+      "num_blocks": 1,
+      "spatial_reduction": 4,
+      "num_classes": 80,
+      "use_pixel_shuffle": true,
+      "use_cross_scan": true,
+      "use_hybrid_head": false,
+      "use_temporal_attention": false,
+      "per_channel_a": false,
+      "use_detail_fusion": false,
+      "detail_source": "none",
+      "family": "mamba_head"
+     },
+     "detail": ""
+    },
+    "dataset_split": {
+     "status": "matched",
+     "lhs": {
+      "train": [
+       "MOT17-02-SDP",
+       "MOT17-04-SDP",
+       "MOT17-05-SDP",
+       "MOT17-09-SDP",
+       "MOT17-10-SDP",
+       "MOT17-11-SDP",
+       "MOT17-13-SDP"
+      ],
+      "holdout": [],
+      "basis": "explicit"
+     },
+     "rhs": {
+      "train": [
+       "MOT17-02-SDP",
+       "MOT17-04-SDP",
+       "MOT17-05-SDP",
+       "MOT17-09-SDP",
+       "MOT17-10-SDP",
+       "MOT17-11-SDP",
+       "MOT17-13-SDP"
+      ],
+      "holdout": [],
+      "basis": "default:all *-SDP under datasets/MOT17/train"
+     },
+     "detail": "bases differ (explicit vs default:all *-SDP under datasets/MOT17/train) but resolve to the same set"
+    },
+    "inference_forward_mode": {
+     "status": "matched",
+     "lhs": {
+      "effective_T": 1,
+      "gate_teacher_at_runtime": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
+      "embedding": "reid_mode='off'",
+      "graphs": {
+       "use_whole_graph": true,
+       "use_cuda_graph": true,
+       "use_tracker_graph": true
+      },
+      "final_stage_gt_ratio": 0.0
+     },
+     "rhs": {
+      "effective_T": 1,
+      "gate_teacher_at_runtime": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
+      "embedding": "reid_mode='off'",
+      "graphs": {
+       "use_whole_graph": true,
+       "use_cuda_graph": true,
+       "use_tracker_graph": true
+      },
+      "final_stage_gt_ratio": 0.0
+     },
+     "detail": ""
+    },
+    "deployed_backbone_artifact": {
+     "status": "matched",
+     "lhs": {
+      "engine_node": "m.backbone_engine",
+      "teacher_consistency": "same_teacher_indicated"
+     },
+     "rhs": {
+      "engine_node": "m.backbone_engine",
+      "teacher_consistency": "same_teacher_indicated"
+     },
+     "detail": "engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence"
+    },
+    "deployed_head_artifact": {
+     "status": "matched",
+     "lhs": {
+      "head_path": "TRT head engine models/yolo/mamba_head_26m.engine (checkpoint head NOT deployed)",
       "head_engine_node": "m.head_engine",
+      "checkpoint_head_deployed": false,
+      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+      "head_engine_source": "sibling ONNX ambiguous: ['m.distill', 'm.gt1', 'm.gt2_plain', 'm.t3t1_phase_a', 'm.t3t1_phase_b', 'm.t3t1_phase_b_gpu_decode']"
+     },
+     "rhs": {
+      "head_path": "TRT head engine models/yolo/mamba_head_26m.engine (checkpoint head NOT deployed)",
+      "head_engine_node": "m.head_engine",
+      "checkpoint_head_deployed": false,
+      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+      "head_engine_source": "sibling ONNX ambiguous: ['m.distill', 'm.gt1', 'm.gt2_plain', 'm.t3t1_phase_a', 'm.t3t1_phase_b', 'm.t3t1_phase_b_gpu_decode']"
+     },
+     "detail": "lhs runs the fixed head engine, not the lhs checkpoint head (sibling ONNX ambiguous: ['m.distill', 'm.gt1', 'm.gt2_plain', 'm.t3t1_phase_a', 'm.t3t1_phase_b', 'm.t3t1_phase_b_gpu_decode']; checkpoint source ambiguous); rhs runs the fixed head engine, not the rhs checkpoint head (sibling ONNX ambiguous: ['m.distill', 'm.gt1', 'm.gt2_plain', 'm.t3t1_phase_a', 'm.t3t1_phase_b', 'm.t3t1_phase_b_gpu_decode']; checkpoint source ambiguous)"
+    },
+    "tracker_runtime_policy": {
+     "status": "matched",
+     "lhs": "m.deployment_preset",
+     "rhs": "m.deployment_preset",
+     "detail": "same preset configs/presets/mamba_whole_graph_m.yaml @ 496c4ec22b49"
+    },
+    "warm_start": {
+     "status": "unmatched",
+     "lhs": null,
+     "rhs": "m.distill",
+     "detail": "rhs descends from lhs through ['m.gt1']"
+    },
+    "teacher": {
+     "status": "matched",
+     "lhs": "m.adapted_teacher",
+     "rhs": "m.adapted_teacher",
+     "detail": ""
+    },
+    "teacher_cache": {
+     "status": "unmatched",
+     "lhs": [
+      "m.teacher_cache"
+     ],
+     "rhs": [
+      "m.teacher_cache"
+     ],
+     "detail": "compared stages use ['m.teacher_cache'] vs []"
+    },
+    "training_seed": {
+     "status": "matched",
+     "lhs": 20260612,
+     "rhs": 20260612,
+     "detail": "bases: args.seed / args.seed"
+    },
+    "training_schedule": {
+     "status": "unmatched",
+     "lhs": [
+      "m.distill"
+     ],
+     "rhs": [
+      "m.gt1"
+     ],
+     "detail": "{\"confound_diff\": {}, \"lhs_stages\": [\"m.distill\"], \"one_sided_keys\": [\"add_temporal\", \"best_by\", \"clip_grad\", \"cls_weight\", \"consistency_weight\", \"freeze_spatial\", \"freeze_temporal\", \"gt_ratio\", \"lr_gate\", \"t1_weight\"], \"rhs_stages\": [\"m.gt1\"], \"treatment_diff\": {\"batch_size\": {\"lhs\": [8], \"rhs\": [4]}, \"clip_len\": {\"lhs\": [1], \"rhs\": [4]}, \"clip_stride\": {\"lhs\": [0], \"rhs\": [8]}, \"lr\": {\"lhs\": [0.001], \"rhs\": [0.0001]}}}",
+     "treatment_only": true,
+     "confound_keys": []
+    },
+    "training_budget": {
+     "status": "unmatched",
+     "lhs": 0,
+     "rhs": 30,
+     "detail": "epochs planned after common ancestor m.distill"
+    }
+   },
+   "classification": "blocked",
+   "matched_axes": [
+    "backbone_family",
+    "head_family",
+    "dataset_split",
+    "inference_forward_mode",
+    "deployed_backbone_artifact",
+    "deployed_head_artifact",
+    "tracker_runtime_policy",
+    "teacher",
+    "training_seed"
+   ],
+   "treatment_axes_observed": [
+    "warm_start",
+    "teacher_cache",
+    "training_schedule",
+    "training_budget"
+   ],
+   "remaining_confounds": [],
+   "blocking_confounds": [
+    "treatment_not_deployed: lhs runtime uses fixed head engine m.head_engine instead of the lhs checkpoint head (bind head_override: checkpoint_pytorch = --no-mamba-trt)",
+    "treatment_not_deployed: rhs runtime uses fixed head engine m.head_engine instead of the rhs checkpoint head (bind head_override: checkpoint_pytorch = --no-mamba-trt)"
+   ],
+   "unknown_axes": [],
+   "executability": {
+    "artifacts_available": true,
+    "artifacts_missing": [],
+    "runtime_recipe_bound": true,
+    "runtime_recipe_missing": [],
+    "fresh_eval": true,
+    "fresh_eval_missing": [],
+    "retrain_replay": false,
+    "retrain_replay_missing": [
+     "m.distill needs m.teacher_cache (unavailable)"
+    ]
+   },
+   "historical_results": {
+    "lhs": [],
+    "rhs": [],
+    "reusable_as_paired": false,
+    "reason": "record carries no preset/engine sha for any run; runtime identity of historical runs is not established (deliverable 4)"
+   },
+   "declared_notes": [],
+   "profiles": {
+    "lhs": {
+     "node": "m.distill",
+     "family": "m",
+     "kind": "mamba_ckpt",
+     "exists": true,
+     "backbone_family": "yolo26m",
+     "head_family": {
+      "d_model": 128,
+      "d_state": 16,
+      "num_blocks": 1,
+      "spatial_reduction": 4,
+      "num_classes": 80,
+      "use_pixel_shuffle": true,
+      "use_cross_scan": true,
+      "use_hybrid_head": false,
+      "use_temporal_attention": false,
+      "per_channel_a": false,
+      "use_detail_fusion": false,
+      "detail_source": "none",
+      "family": "mamba_head"
+     },
+     "temporal_blocks_present": false,
+     "param_count": 10175788,
+     "warm_start": null,
+     "warm_start_basis": "no warm start recorded (chain root)",
+     "chain_complete": true,
+     "chain_note": "",
+     "teacher": "m.adapted_teacher",
+     "teacher_basis": "args.teacher_ckpt along the chain",
+     "cache_nodes": [
+      "m.teacher_cache"
+     ],
+     "caches_available": false,
+     "seed": 20260612,
+     "seed_basis": "args.seed",
+     "training_stage_split": {
+      "train": [
+       "MOT17-02-SDP",
+       "MOT17-04-SDP",
+       "MOT17-05-SDP",
+       "MOT17-09-SDP",
+       "MOT17-10-SDP",
+       "MOT17-11-SDP",
+       "MOT17-13-SDP"
+      ],
+      "holdout": [],
+      "basis": "explicit"
+     },
+     "external_pretraining": false,
+     "runtime": {
+      "binding": "family_preset",
+      "status": "bound",
+      "preset": "m.deployment_preset",
+      "preset_path": "configs/presets/mamba_whole_graph_m.yaml",
+      "preset_sha256": "496c4ec22b497c70bc8409227513939b4cd86834bf2210475d0ad655be6937af",
+      "backbone_engine_node": "m.backbone_engine",
+      "backbone_engine_exists": true,
+      "backbone_engine_sibling_onnx": {
+       "status": "sibling_onnx_unique",
+       "onnx_matches": "m.adapted_teacher",
+       "verdict": "unique_exact"
+      },
+      "backbone_teacher_consistency": "same_teacher_indicated",
+      "engine_bytes_attributed": false,
+      "head_path": "TRT head engine models/yolo/mamba_head_26m.engine (checkpoint head NOT deployed)",
+      "head_engine_node": "m.head_engine",
+      "head_source": {
+       "kind": "trt_engine",
+       "node": "m.head_engine",
+       "checkpoint_head_deployed": false,
+       "source_attribution": {
+        "status": "unattributed",
+        "onnx_matches": [
+         "m.distill",
+         "m.gt1",
+         "m.gt2_plain",
+         "m.t3t1_phase_a",
+         "m.t3t1_phase_b",
+         "m.t3t1_phase_b_gpu_decode"
+        ],
+        "verdict": "ambiguous"
+       }
+      },
+      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph_m --mamba-ckpt runs/mamba_distill_yolo26m_v14replica/best.ckpt",
+      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+      "effective_T": 1,
+      "gate_teacher_at_runtime": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
+      "final_stage_gt_ratio": 0.0,
+      "embedding": "reid_mode='off'",
+      "graphs": {
+       "use_whole_graph": true,
+       "use_cuda_graph": true,
+       "use_tracker_graph": true
+      },
+      "tracker_policy_source": "preset"
+     },
+     "chain": [
+      {
+       "node": "m.distill",
+       "epochs": 30,
+       "selected_epoch": 30,
+       "seed": 20260612,
+       "schedule": {
+        "lr": 0.001,
+        "batch_size": 8,
+        "accum_steps": 1,
+        "clip_len": 1,
+        "clip_stride": 0,
+        "scan_stop_grad": true,
+        "warmup_epochs": 5,
+        "img_size": 640,
+        "use_temporal_attention": false
+       },
+       "split": {
+        "train": [
+         "MOT17-02-SDP",
+         "MOT17-04-SDP",
+         "MOT17-05-SDP",
+         "MOT17-09-SDP",
+         "MOT17-10-SDP",
+         "MOT17-11-SDP",
+         "MOT17-13-SDP"
+        ],
+        "holdout": [],
+        "basis": "explicit"
+       },
+       "teacher": "m.adapted_teacher",
+       "cache": "m.teacher_cache",
+       "cache_available": false
+      }
+     ]
+    },
+    "rhs": {
+     "node": "m.gt1",
+     "family": "m",
+     "kind": "mamba_ckpt",
+     "exists": true,
+     "backbone_family": "yolo26m",
+     "head_family": {
+      "d_model": 128,
+      "d_state": 16,
+      "num_blocks": 1,
+      "spatial_reduction": 4,
+      "num_classes": 80,
+      "use_pixel_shuffle": true,
+      "use_cross_scan": true,
+      "use_hybrid_head": false,
+      "use_temporal_attention": false,
+      "per_channel_a": false,
+      "use_detail_fusion": false,
+      "detail_source": "none",
+      "family": "mamba_head"
+     },
+     "temporal_blocks_present": false,
+     "param_count": 10175788,
+     "warm_start": "m.distill",
+     "warm_start_basis": "args.mamba_ckpt",
+     "chain_complete": true,
+     "chain_note": "",
+     "teacher": "m.adapted_teacher",
+     "teacher_basis": "args.teacher_ckpt along the chain",
+     "cache_nodes": [
+      "m.teacher_cache"
+     ],
+     "caches_available": false,
+     "seed": 20260612,
+     "seed_basis": "args.seed",
+     "training_stage_split": {
+      "train": [
+       "MOT17-02-SDP",
+       "MOT17-04-SDP",
+       "MOT17-05-SDP",
+       "MOT17-09-SDP",
+       "MOT17-10-SDP",
+       "MOT17-11-SDP",
+       "MOT17-13-SDP"
+      ],
+      "holdout": [],
+      "basis": "default:all *-SDP under datasets/MOT17/train"
+     },
+     "external_pretraining": false,
+     "runtime": {
+      "binding": "family_preset",
+      "status": "bound",
+      "preset": "m.deployment_preset",
+      "preset_path": "configs/presets/mamba_whole_graph_m.yaml",
+      "preset_sha256": "496c4ec22b497c70bc8409227513939b4cd86834bf2210475d0ad655be6937af",
+      "backbone_engine_node": "m.backbone_engine",
+      "backbone_engine_exists": true,
+      "backbone_engine_sibling_onnx": {
+       "status": "sibling_onnx_unique",
+       "onnx_matches": "m.adapted_teacher",
+       "verdict": "unique_exact"
+      },
+      "backbone_teacher_consistency": "same_teacher_indicated",
+      "engine_bytes_attributed": false,
+      "head_path": "TRT head engine models/yolo/mamba_head_26m.engine (checkpoint head NOT deployed)",
+      "head_engine_node": "m.head_engine",
+      "head_source": {
+       "kind": "trt_engine",
+       "node": "m.head_engine",
+       "checkpoint_head_deployed": false,
+       "source_attribution": {
+        "status": "unattributed",
+        "onnx_matches": [
+         "m.distill",
+         "m.gt1",
+         "m.gt2_plain",
+         "m.t3t1_phase_a",
+         "m.t3t1_phase_b",
+         "m.t3t1_phase_b_gpu_decode"
+        ],
+        "verdict": "ambiguous"
+       }
+      },
+      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph_m --mamba-ckpt runs/mamba_gt_yolo26m_v14replica_stage1/best.ckpt",
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
       "effective_T": 1,
       "gate_teacher_at_runtime": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
@@ -3332,8 +4201,15 @@
      },
      "backbone_teacher_consistency": "same_teacher_indicated",
      "engine_bytes_attributed": false,
-     "head_path": "models/yolo/mamba_head_26m.engine",
-     "head_engine_node": "m.head_engine",
+     "head_path": "checkpoint PyTorch head inside whole graph",
+     "head_engine_node": null,
+     "head_source": {
+      "kind": "checkpoint_pytorch",
+      "node": "m.gt1",
+      "checkpoint_head_deployed": true,
+      "source_attribution": null
+     },
+     "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph_m --no-mamba-trt --mamba-ckpt runs/mamba_gt_yolo26m_v14replica_stage1/best.ckpt",
      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
      "effective_T": 1,
      "gate_teacher_at_runtime": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
@@ -3364,8 +4240,15 @@
      },
      "backbone_teacher_consistency": "same_teacher_indicated",
      "engine_bytes_attributed": false,
-     "head_path": "models/yolo/mamba_head_26m.engine",
-     "head_engine_node": "m.head_engine",
+     "head_path": "checkpoint PyTorch head inside whole graph",
+     "head_engine_node": null,
+     "head_source": {
+      "kind": "checkpoint_pytorch",
+      "node": "m.gt2_plain",
+      "checkpoint_head_deployed": true,
+      "source_attribution": null
+     },
+     "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph_m --no-mamba-trt --mamba-ckpt runs/mamba_gt_yolo26m_v14replica_final/best.ckpt",
      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
      "effective_T": 1,
      "gate_teacher_at_runtime": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
@@ -3502,13 +4385,15 @@
     "deployed_head_artifact": {
      "status": "matched",
      "lhs": {
-      "head_path": "models/yolo/mamba_head_26m.engine",
-      "head_engine_node": "m.head_engine",
+      "head_path": "checkpoint PyTorch head inside whole graph",
+      "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
      },
      "rhs": {
-      "head_path": "models/yolo/mamba_head_26m.engine",
-      "head_engine_node": "m.head_engine",
+      "head_path": "checkpoint PyTorch head inside whole graph",
+      "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
      },
      "detail": ""
@@ -3588,6 +4473,10 @@
    "blocking_confounds": [],
    "unknown_axes": [],
    "executability": {
+    "artifacts_available": true,
+    "artifacts_missing": [],
+    "runtime_recipe_bound": true,
+    "runtime_recipe_missing": [],
     "fresh_eval": true,
     "fresh_eval_missing": [],
     "retrain_replay": false,
@@ -3602,7 +4491,9 @@
     "reusable_as_paired": false,
     "reason": "record carries no preset/engine sha for any run; runtime identity of historical runs is not established (deliverable 4)"
    },
-   "declared_notes": [],
+   "declared_notes": [
+    "m preset names a fixed head engine (mamba_head_26m.engine); bound with head_override=checkpoint_pytorch (= --no-mamba-trt) so the lhs/rhs checkpoint heads actually run inside the whole graph. Without the override this pair is blocked (treatment_not_deployed)."
+   ],
    "profiles": {
     "lhs": {
      "node": "m.gt1",
@@ -3668,8 +4559,15 @@
       },
       "backbone_teacher_consistency": "same_teacher_indicated",
       "engine_bytes_attributed": false,
-      "head_path": "models/yolo/mamba_head_26m.engine",
-      "head_engine_node": "m.head_engine",
+      "head_path": "checkpoint PyTorch head inside whole graph",
+      "head_engine_node": null,
+      "head_source": {
+       "kind": "checkpoint_pytorch",
+       "node": "m.gt1",
+       "checkpoint_head_deployed": true,
+       "source_attribution": null
+      },
+      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph_m --no-mamba-trt --mamba-ckpt runs/mamba_gt_yolo26m_v14replica_stage1/best.ckpt",
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
       "effective_T": 1,
       "gate_teacher_at_runtime": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
@@ -3825,8 +4723,15 @@
       },
       "backbone_teacher_consistency": "same_teacher_indicated",
       "engine_bytes_attributed": false,
-      "head_path": "models/yolo/mamba_head_26m.engine",
-      "head_engine_node": "m.head_engine",
+      "head_path": "checkpoint PyTorch head inside whole graph",
+      "head_engine_node": null,
+      "head_source": {
+       "kind": "checkpoint_pytorch",
+       "node": "m.gt2_plain",
+       "checkpoint_head_deployed": true,
+       "source_attribution": null
+      },
+      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph_m --no-mamba-trt --mamba-ckpt runs/mamba_gt_yolo26m_v14replica_final/best.ckpt",
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
       "effective_T": 1,
       "gate_teacher_at_runtime": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
@@ -3984,8 +4889,15 @@
      },
      "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
      "engine_bytes_attributed": false,
-     "head_path": "none (PyTorch head inside whole graph)",
+     "head_path": "checkpoint PyTorch head inside whole graph",
      "head_engine_node": null,
+     "head_source": {
+      "kind": "checkpoint_pytorch",
+      "node": "s.gt1",
+      "checkpoint_head_deployed": true,
+      "source_attribution": null
+     },
+     "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_stage1/best.ckpt",
      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -4016,8 +4928,15 @@
      },
      "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
      "engine_bytes_attributed": false,
-     "head_path": "none (PyTorch head inside whole graph)",
+     "head_path": "checkpoint PyTorch head inside whole graph",
      "head_engine_node": null,
+     "head_source": {
+      "kind": "checkpoint_pytorch",
+      "node": "s.t3t1_phase_b",
+      "checkpoint_head_deployed": true,
+      "source_attribution": null
+     },
+     "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1/best.ckpt",
      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -4162,13 +5081,15 @@
     "deployed_head_artifact": {
      "status": "matched",
      "lhs": {
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
      },
      "rhs": {
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
      },
      "detail": ""
@@ -4277,6 +5198,10 @@
    "blocking_confounds": [],
    "unknown_axes": [],
    "executability": {
+    "artifacts_available": true,
+    "artifacts_missing": [],
+    "runtime_recipe_bound": true,
+    "runtime_recipe_missing": [],
     "fresh_eval": true,
     "fresh_eval_missing": [],
     "retrain_replay": false,
@@ -4368,8 +5293,15 @@
       },
       "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
       "engine_bytes_attributed": false,
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "head_source": {
+       "kind": "checkpoint_pytorch",
+       "node": "s.gt1",
+       "checkpoint_head_deployed": true,
+       "source_attribution": null
+      },
+      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_stage1/best.ckpt",
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -4523,8 +5455,15 @@
       },
       "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
       "engine_bytes_attributed": false,
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "head_source": {
+       "kind": "checkpoint_pytorch",
+       "node": "s.t3t1_phase_b",
+       "checkpoint_head_deployed": true,
+       "source_attribution": null
+      },
+      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1/best.ckpt",
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -4722,8 +5661,15 @@
      },
      "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
      "engine_bytes_attributed": false,
-     "head_path": "none (PyTorch head inside whole graph)",
+     "head_path": "checkpoint PyTorch head inside whole graph",
      "head_engine_node": null,
+     "head_source": {
+      "kind": "checkpoint_pytorch",
+      "node": "s.implicit_s42",
+      "checkpoint_head_deployed": true,
+      "source_attribution": null
+     },
+     "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_implicit_s42/best.ckpt",
      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -4754,8 +5700,15 @@
      },
      "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
      "engine_bytes_attributed": false,
-     "head_path": "none (PyTorch head inside whole graph)",
+     "head_path": "checkpoint PyTorch head inside whole graph",
      "head_engine_node": null,
+     "head_source": {
+      "kind": "checkpoint_pytorch",
+      "node": "s.t3t1_phase_b",
+      "checkpoint_head_deployed": true,
+      "source_attribution": null
+     },
+     "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1/best.ckpt",
      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -4896,13 +5849,15 @@
     "deployed_head_artifact": {
      "status": "matched",
      "lhs": {
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
      },
      "rhs": {
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
      },
      "detail": ""
@@ -4989,6 +5944,10 @@
    "blocking_confounds": [],
    "unknown_axes": [],
    "executability": {
+    "artifacts_available": true,
+    "artifacts_missing": [],
+    "runtime_recipe_bound": true,
+    "runtime_recipe_missing": [],
     "fresh_eval": true,
     "fresh_eval_missing": [],
     "retrain_replay": false,
@@ -5079,8 +6038,15 @@
       },
       "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
       "engine_bytes_attributed": false,
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "head_source": {
+       "kind": "checkpoint_pytorch",
+       "node": "s.implicit_s42",
+       "checkpoint_head_deployed": true,
+       "source_attribution": null
+      },
+      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_implicit_s42/best.ckpt",
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -5277,8 +6243,15 @@
       },
       "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
       "engine_bytes_attributed": false,
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "head_source": {
+       "kind": "checkpoint_pytorch",
+       "node": "s.t3t1_phase_b",
+       "checkpoint_head_deployed": true,
+       "source_attribution": null
+      },
+      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1/best.ckpt",
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -5476,8 +6449,15 @@
      },
      "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
      "engine_bytes_attributed": false,
-     "head_path": "none (PyTorch head inside whole graph)",
+     "head_path": "checkpoint PyTorch head inside whole graph",
      "head_engine_node": null,
+     "head_source": {
+      "kind": "checkpoint_pytorch",
+      "node": "s.implicit_s43",
+      "checkpoint_head_deployed": true,
+      "source_attribution": null
+     },
+     "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_implicit_s43/best.ckpt",
      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -5508,8 +6488,15 @@
      },
      "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
      "engine_bytes_attributed": false,
-     "head_path": "none (PyTorch head inside whole graph)",
+     "head_path": "checkpoint PyTorch head inside whole graph",
      "head_engine_node": null,
+     "head_source": {
+      "kind": "checkpoint_pytorch",
+      "node": "s.t3t1_shared_s43",
+      "checkpoint_head_deployed": true,
+      "source_attribution": null
+     },
+     "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1_shared_s43/best.ckpt",
      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -5650,13 +6637,15 @@
     "deployed_head_artifact": {
      "status": "matched",
      "lhs": {
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
      },
      "rhs": {
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
      },
      "detail": ""
@@ -5743,6 +6732,10 @@
    "blocking_confounds": [],
    "unknown_axes": [],
    "executability": {
+    "artifacts_available": true,
+    "artifacts_missing": [],
+    "runtime_recipe_bound": true,
+    "runtime_recipe_missing": [],
     "fresh_eval": true,
     "fresh_eval_missing": [],
     "retrain_replay": false,
@@ -5825,8 +6818,15 @@
       },
       "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
       "engine_bytes_attributed": false,
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "head_source": {
+       "kind": "checkpoint_pytorch",
+       "node": "s.implicit_s43",
+       "checkpoint_head_deployed": true,
+       "source_attribution": null
+      },
+      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_implicit_s43/best.ckpt",
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -6023,8 +7023,15 @@
       },
       "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
       "engine_bytes_attributed": false,
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "head_source": {
+       "kind": "checkpoint_pytorch",
+       "node": "s.t3t1_shared_s43",
+       "checkpoint_head_deployed": true,
+       "source_attribution": null
+      },
+      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1_shared_s43/best.ckpt",
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -6223,8 +7230,15 @@
      },
      "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
      "engine_bytes_attributed": false,
-     "head_path": "none (PyTorch head inside whole graph)",
+     "head_path": "checkpoint PyTorch head inside whole graph",
      "head_engine_node": null,
+     "head_source": {
+      "kind": "checkpoint_pytorch",
+      "node": "s.implicit_s44",
+      "checkpoint_head_deployed": true,
+      "source_attribution": null
+     },
+     "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_implicit_s44/best.ckpt",
      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -6255,8 +7269,15 @@
      },
      "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
      "engine_bytes_attributed": false,
-     "head_path": "none (PyTorch head inside whole graph)",
+     "head_path": "checkpoint PyTorch head inside whole graph",
      "head_engine_node": null,
+     "head_source": {
+      "kind": "checkpoint_pytorch",
+      "node": "s.t3t1_shared_s44",
+      "checkpoint_head_deployed": true,
+      "source_attribution": null
+     },
+     "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1_shared_s44/best.ckpt",
      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -6397,13 +7418,15 @@
     "deployed_head_artifact": {
      "status": "matched",
      "lhs": {
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
      },
      "rhs": {
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
      },
      "detail": ""
@@ -6490,6 +7513,10 @@
    "blocking_confounds": [],
    "unknown_axes": [],
    "executability": {
+    "artifacts_available": true,
+    "artifacts_missing": [],
+    "runtime_recipe_bound": true,
+    "runtime_recipe_missing": [],
     "fresh_eval": true,
     "fresh_eval_missing": [],
     "retrain_replay": false,
@@ -6572,8 +7599,15 @@
       },
       "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
       "engine_bytes_attributed": false,
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "head_source": {
+       "kind": "checkpoint_pytorch",
+       "node": "s.implicit_s44",
+       "checkpoint_head_deployed": true,
+       "source_attribution": null
+      },
+      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_implicit_s44/best.ckpt",
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -6770,8 +7804,15 @@
       },
       "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
       "engine_bytes_attributed": false,
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "head_source": {
+       "kind": "checkpoint_pytorch",
+       "node": "s.t3t1_shared_s44",
+       "checkpoint_head_deployed": true,
+       "source_attribution": null
+      },
+      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1_shared_s44/best.ckpt",
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -6970,8 +8011,15 @@
      },
      "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
      "engine_bytes_attributed": false,
-     "head_path": "none (PyTorch head inside whole graph)",
+     "head_path": "checkpoint PyTorch head inside whole graph",
      "head_engine_node": null,
+     "head_source": {
+      "kind": "checkpoint_pytorch",
+      "node": "s.gt2_plain_s13",
+      "checkpoint_head_deployed": true,
+      "source_attribution": null
+     },
+     "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_s13_final/best.ckpt",
      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -7002,8 +8050,15 @@
      },
      "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
      "engine_bytes_attributed": false,
-     "head_path": "none (PyTorch head inside whole graph)",
+     "head_path": "checkpoint PyTorch head inside whole graph",
      "head_engine_node": null,
+     "head_source": {
+      "kind": "checkpoint_pytorch",
+      "node": "s.t3t1_s13",
+      "checkpoint_head_deployed": true,
+      "source_attribution": null
+     },
+     "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1_s13/best.ckpt",
      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -7144,13 +8199,15 @@
     "deployed_head_artifact": {
      "status": "matched",
      "lhs": {
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
      },
      "rhs": {
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
      },
      "detail": ""
@@ -7252,6 +8309,10 @@
    "blocking_confounds": [],
    "unknown_axes": [],
    "executability": {
+    "artifacts_available": true,
+    "artifacts_missing": [],
+    "runtime_recipe_bound": true,
+    "runtime_recipe_missing": [],
     "fresh_eval": true,
     "fresh_eval_missing": [],
     "retrain_replay": false,
@@ -7350,8 +8411,15 @@
       },
       "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
       "engine_bytes_attributed": false,
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "head_source": {
+       "kind": "checkpoint_pytorch",
+       "node": "s.gt2_plain_s13",
+       "checkpoint_head_deployed": true,
+       "source_attribution": null
+      },
+      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_s13_final/best.ckpt",
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -7547,8 +8615,15 @@
       },
       "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
       "engine_bytes_attributed": false,
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "head_source": {
+       "kind": "checkpoint_pytorch",
+       "node": "s.t3t1_s13",
+       "checkpoint_head_deployed": true,
+       "source_attribution": null
+      },
+      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1_s13/best.ckpt",
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -7745,8 +8820,15 @@
      },
      "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
      "engine_bytes_attributed": false,
-     "head_path": "none (PyTorch head inside whole graph)",
+     "head_path": "checkpoint PyTorch head inside whole graph",
      "head_engine_node": null,
+     "head_source": {
+      "kind": "checkpoint_pytorch",
+      "node": "s.gt2_plain_s14",
+      "checkpoint_head_deployed": true,
+      "source_attribution": null
+     },
+     "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_s14_final/best.ckpt",
      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -7777,8 +8859,15 @@
      },
      "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
      "engine_bytes_attributed": false,
-     "head_path": "none (PyTorch head inside whole graph)",
+     "head_path": "checkpoint PyTorch head inside whole graph",
      "head_engine_node": null,
+     "head_source": {
+      "kind": "checkpoint_pytorch",
+      "node": "s.t3t1_s14",
+      "checkpoint_head_deployed": true,
+      "source_attribution": null
+     },
+     "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1_s14/best.ckpt",
      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -7919,13 +9008,15 @@
     "deployed_head_artifact": {
      "status": "matched",
      "lhs": {
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
      },
      "rhs": {
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
      },
      "detail": ""
@@ -8027,6 +9118,10 @@
    "blocking_confounds": [],
    "unknown_axes": [],
    "executability": {
+    "artifacts_available": true,
+    "artifacts_missing": [],
+    "runtime_recipe_bound": true,
+    "runtime_recipe_missing": [],
     "fresh_eval": true,
     "fresh_eval_missing": [],
     "retrain_replay": false,
@@ -8125,8 +9220,15 @@
       },
       "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
       "engine_bytes_attributed": false,
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "head_source": {
+       "kind": "checkpoint_pytorch",
+       "node": "s.gt2_plain_s14",
+       "checkpoint_head_deployed": true,
+       "source_attribution": null
+      },
+      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_s14_final/best.ckpt",
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -8322,8 +9424,15 @@
       },
       "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
       "engine_bytes_attributed": false,
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "head_source": {
+       "kind": "checkpoint_pytorch",
+       "node": "s.t3t1_s14",
+       "checkpoint_head_deployed": true,
+       "source_attribution": null
+      },
+      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1_s14/best.ckpt",
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -8520,8 +9629,15 @@
      },
      "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
      "engine_bytes_attributed": false,
-     "head_path": "none (PyTorch head inside whole graph)",
+     "head_path": "checkpoint PyTorch head inside whole graph",
      "head_engine_node": null,
+     "head_source": {
+      "kind": "checkpoint_pytorch",
+      "node": "s.gt2_plain",
+      "checkpoint_head_deployed": true,
+      "source_attribution": null
+     },
+     "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_final/best.ckpt",
      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -8552,8 +9668,15 @@
      },
      "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
      "engine_bytes_attributed": false,
-     "head_path": "none (PyTorch head inside whole graph)",
+     "head_path": "checkpoint PyTorch head inside whole graph",
      "head_engine_node": null,
+     "head_source": {
+      "kind": "checkpoint_pytorch",
+      "node": "s.t3t1_phase_b",
+      "checkpoint_head_deployed": true,
+      "source_attribution": null
+     },
+     "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1/best.ckpt",
      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -8694,13 +9817,15 @@
     "deployed_head_artifact": {
      "status": "matched",
      "lhs": {
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
      },
      "rhs": {
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
      },
      "detail": ""
@@ -8809,6 +9934,10 @@
    "blocking_confounds": [],
    "unknown_axes": [],
    "executability": {
+    "artifacts_available": true,
+    "artifacts_missing": [],
+    "runtime_recipe_bound": true,
+    "runtime_recipe_missing": [],
     "fresh_eval": true,
     "fresh_eval_missing": [],
     "retrain_replay": false,
@@ -8907,8 +10036,15 @@
       },
       "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
       "engine_bytes_attributed": false,
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "head_source": {
+       "kind": "checkpoint_pytorch",
+       "node": "s.gt2_plain",
+       "checkpoint_head_deployed": true,
+       "source_attribution": null
+      },
+      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_final/best.ckpt",
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -9104,8 +10240,15 @@
       },
       "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
       "engine_bytes_attributed": false,
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "head_source": {
+       "kind": "checkpoint_pytorch",
+       "node": "s.t3t1_phase_b",
+       "checkpoint_head_deployed": true,
+       "source_attribution": null
+      },
+      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1/best.ckpt",
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -9303,8 +10446,15 @@
      },
      "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
      "engine_bytes_attributed": false,
-     "head_path": "none (PyTorch head inside whole graph)",
+     "head_path": "checkpoint PyTorch head inside whole graph",
      "head_engine_node": null,
+     "head_source": {
+      "kind": "checkpoint_pytorch",
+      "node": "s.implicit_s43",
+      "checkpoint_head_deployed": true,
+      "source_attribution": null
+     },
+     "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_implicit_s43/best.ckpt",
      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -9335,8 +10485,15 @@
      },
      "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
      "engine_bytes_attributed": false,
-     "head_path": "none (PyTorch head inside whole graph)",
+     "head_path": "checkpoint PyTorch head inside whole graph",
      "head_engine_node": null,
+     "head_source": {
+      "kind": "checkpoint_pytorch",
+      "node": "s.t3t1_s13",
+      "checkpoint_head_deployed": true,
+      "source_attribution": null
+     },
+     "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1_s13/best.ckpt",
      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -9477,13 +10634,15 @@
     "deployed_head_artifact": {
      "status": "matched",
      "lhs": {
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
      },
      "rhs": {
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
      },
      "detail": ""
@@ -9590,6 +10749,10 @@
    ],
    "unknown_axes": [],
    "executability": {
+    "artifacts_available": true,
+    "artifacts_missing": [],
+    "runtime_recipe_bound": true,
+    "runtime_recipe_missing": [],
     "fresh_eval": true,
     "fresh_eval_missing": [],
     "retrain_replay": false,
@@ -9681,8 +10844,15 @@
       },
       "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
       "engine_bytes_attributed": false,
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "head_source": {
+       "kind": "checkpoint_pytorch",
+       "node": "s.implicit_s43",
+       "checkpoint_head_deployed": true,
+       "source_attribution": null
+      },
+      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_implicit_s43/best.ckpt",
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -9879,8 +11049,15 @@
       },
       "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
       "engine_bytes_attributed": false,
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "head_source": {
+       "kind": "checkpoint_pytorch",
+       "node": "s.t3t1_s13",
+       "checkpoint_head_deployed": true,
+       "source_attribution": null
+      },
+      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1_s13/best.ckpt",
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -10077,8 +11254,15 @@
      },
      "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
      "engine_bytes_attributed": false,
-     "head_path": "none (PyTorch head inside whole graph)",
+     "head_path": "checkpoint PyTorch head inside whole graph",
      "head_engine_node": null,
+     "head_source": {
+      "kind": "checkpoint_pytorch",
+      "node": "s.gt2_plain",
+      "checkpoint_head_deployed": true,
+      "source_attribution": null
+     },
+     "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_final/best.ckpt",
      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -10109,8 +11293,15 @@
      },
      "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
      "engine_bytes_attributed": false,
-     "head_path": "none (PyTorch head inside whole graph)",
+     "head_path": "checkpoint PyTorch head inside whole graph",
      "head_engine_node": null,
+     "head_source": {
+      "kind": "checkpoint_pytorch",
+      "node": "s.implicit_s42",
+      "checkpoint_head_deployed": true,
+      "source_attribution": null
+     },
+     "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_implicit_s42/best.ckpt",
      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -10242,13 +11433,15 @@
     "deployed_head_artifact": {
      "status": "matched",
      "lhs": {
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
      },
      "rhs": {
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
      },
      "detail": ""
@@ -10355,6 +11548,10 @@
    "blocking_confounds": [],
    "unknown_axes": [],
    "executability": {
+    "artifacts_available": true,
+    "artifacts_missing": [],
+    "runtime_recipe_bound": true,
+    "runtime_recipe_missing": [],
     "fresh_eval": true,
     "fresh_eval_missing": [],
     "retrain_replay": false,
@@ -10444,8 +11641,15 @@
       },
       "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
       "engine_bytes_attributed": false,
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "head_source": {
+       "kind": "checkpoint_pytorch",
+       "node": "s.gt2_plain",
+       "checkpoint_head_deployed": true,
+       "source_attribution": null
+      },
+      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_final/best.ckpt",
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -10641,8 +11845,15 @@
       },
       "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
       "engine_bytes_attributed": false,
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "head_source": {
+       "kind": "checkpoint_pytorch",
+       "node": "s.implicit_s42",
+       "checkpoint_head_deployed": true,
+       "source_attribution": null
+      },
+      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_implicit_s42/best.ckpt",
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -10798,8 +12009,15 @@
      },
      "backbone_teacher_consistency": "same_teacher_indicated",
      "engine_bytes_attributed": false,
-     "head_path": "models/yolo/mamba_head_26m.engine",
-     "head_engine_node": "m.head_engine",
+     "head_path": "checkpoint PyTorch head inside whole graph",
+     "head_engine_node": null,
+     "head_source": {
+      "kind": "checkpoint_pytorch",
+      "node": "m.gt2_plain",
+      "checkpoint_head_deployed": true,
+      "source_attribution": null
+     },
+     "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph_m --no-mamba-trt --mamba-ckpt runs/mamba_gt_yolo26m_v14replica_final/best.ckpt",
      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
      "effective_T": 1,
      "gate_teacher_at_runtime": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
@@ -10830,8 +12048,15 @@
      },
      "backbone_teacher_consistency": "same_teacher_indicated",
      "engine_bytes_attributed": false,
-     "head_path": "models/yolo/mamba_head_26m.engine",
-     "head_engine_node": "m.head_engine",
+     "head_path": "checkpoint PyTorch head inside whole graph",
+     "head_engine_node": null,
+     "head_source": {
+      "kind": "checkpoint_pytorch",
+      "node": "m.t3t1_phase_b",
+      "checkpoint_head_deployed": true,
+      "source_attribution": null
+     },
+     "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph_m --no-mamba-trt --mamba-ckpt runs/mamba_gt_yolo26m_v14replica_t3_t1/best.ckpt",
      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
      "effective_T": 1,
      "gate_teacher_at_runtime": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
@@ -10972,13 +12197,15 @@
     "deployed_head_artifact": {
      "status": "matched",
      "lhs": {
-      "head_path": "models/yolo/mamba_head_26m.engine",
-      "head_engine_node": "m.head_engine",
+      "head_path": "checkpoint PyTorch head inside whole graph",
+      "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
      },
      "rhs": {
-      "head_path": "models/yolo/mamba_head_26m.engine",
-      "head_engine_node": "m.head_engine",
+      "head_path": "checkpoint PyTorch head inside whole graph",
+      "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
      },
      "detail": ""
@@ -11075,6 +12302,10 @@
    "blocking_confounds": [],
    "unknown_axes": [],
    "executability": {
+    "artifacts_available": true,
+    "artifacts_missing": [],
+    "runtime_recipe_bound": true,
+    "runtime_recipe_missing": [],
     "fresh_eval": true,
     "fresh_eval_missing": [],
     "retrain_replay": false,
@@ -11091,7 +12322,9 @@
     "reusable_as_paired": false,
     "reason": "record carries no preset/engine sha for any run; runtime identity of historical runs is not established (deliverable 4)"
    },
-   "declared_notes": [],
+   "declared_notes": [
+    "m preset names a fixed head engine (mamba_head_26m.engine); bound with head_override=checkpoint_pytorch (= --no-mamba-trt) so the lhs/rhs checkpoint heads actually run inside the whole graph. Without the override this pair is blocked (treatment_not_deployed)."
+   ],
    "profiles": {
     "lhs": {
      "node": "m.gt2_plain",
@@ -11157,8 +12390,15 @@
       },
       "backbone_teacher_consistency": "same_teacher_indicated",
       "engine_bytes_attributed": false,
-      "head_path": "models/yolo/mamba_head_26m.engine",
-      "head_engine_node": "m.head_engine",
+      "head_path": "checkpoint PyTorch head inside whole graph",
+      "head_engine_node": null,
+      "head_source": {
+       "kind": "checkpoint_pytorch",
+       "node": "m.gt2_plain",
+       "checkpoint_head_deployed": true,
+       "source_attribution": null
+      },
+      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph_m --no-mamba-trt --mamba-ckpt runs/mamba_gt_yolo26m_v14replica_final/best.ckpt",
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
       "effective_T": 1,
       "gate_teacher_at_runtime": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
@@ -11357,8 +12597,15 @@
       },
       "backbone_teacher_consistency": "same_teacher_indicated",
       "engine_bytes_attributed": false,
-      "head_path": "models/yolo/mamba_head_26m.engine",
-      "head_engine_node": "m.head_engine",
+      "head_path": "checkpoint PyTorch head inside whole graph",
+      "head_engine_node": null,
+      "head_source": {
+       "kind": "checkpoint_pytorch",
+       "node": "m.t3t1_phase_b",
+       "checkpoint_head_deployed": true,
+       "source_attribution": null
+      },
+      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph_m --no-mamba-trt --mamba-ckpt runs/mamba_gt_yolo26m_v14replica_t3_t1/best.ckpt",
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
       "effective_T": 1,
       "gate_teacher_at_runtime": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
@@ -11559,8 +12806,15 @@
      },
      "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
      "engine_bytes_attributed": false,
-     "head_path": "none (PyTorch head inside whole graph)",
+     "head_path": "checkpoint PyTorch head inside whole graph",
      "head_engine_node": null,
+     "head_source": {
+      "kind": "checkpoint_pytorch",
+      "node": "s.implicit_s42",
+      "checkpoint_head_deployed": true,
+      "source_attribution": null
+     },
+     "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_implicit_s42/best.ckpt",
      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -11591,8 +12845,15 @@
      },
      "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
      "engine_bytes_attributed": false,
-     "head_path": "none (PyTorch head inside whole graph)",
+     "head_path": "checkpoint PyTorch head inside whole graph",
      "head_engine_node": null,
+     "head_source": {
+      "kind": "checkpoint_pytorch",
+      "node": "s.implicit_s43",
+      "checkpoint_head_deployed": true,
+      "source_attribution": null
+     },
+     "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_implicit_s43/best.ckpt",
      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -11724,13 +12985,15 @@
     "deployed_head_artifact": {
      "status": "matched",
      "lhs": {
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
      },
      "rhs": {
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
      },
      "detail": ""
@@ -11816,6 +13079,10 @@
    "blocking_confounds": [],
    "unknown_axes": [],
    "executability": {
+    "artifacts_available": true,
+    "artifacts_missing": [],
+    "runtime_recipe_bound": true,
+    "runtime_recipe_missing": [],
     "fresh_eval": true,
     "fresh_eval_missing": [],
     "retrain_replay": false,
@@ -11897,8 +13164,15 @@
       },
       "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
       "engine_bytes_attributed": false,
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "head_source": {
+       "kind": "checkpoint_pytorch",
+       "node": "s.implicit_s42",
+       "checkpoint_head_deployed": true,
+       "source_attribution": null
+      },
+      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_implicit_s42/best.ckpt",
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -12095,8 +13369,15 @@
       },
       "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
       "engine_bytes_attributed": false,
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "head_source": {
+       "kind": "checkpoint_pytorch",
+       "node": "s.implicit_s43",
+       "checkpoint_head_deployed": true,
+       "source_attribution": null
+      },
+      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_implicit_s43/best.ckpt",
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -12252,8 +13533,15 @@
      },
      "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
      "engine_bytes_attributed": false,
-     "head_path": "none (PyTorch head inside whole graph)",
+     "head_path": "checkpoint PyTorch head inside whole graph",
      "head_engine_node": null,
+     "head_source": {
+      "kind": "checkpoint_pytorch",
+      "node": "s.implicit_s43",
+      "checkpoint_head_deployed": true,
+      "source_attribution": null
+     },
+     "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_implicit_s43/best.ckpt",
      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -12284,8 +13572,15 @@
      },
      "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
      "engine_bytes_attributed": false,
-     "head_path": "none (PyTorch head inside whole graph)",
+     "head_path": "checkpoint PyTorch head inside whole graph",
      "head_engine_node": null,
+     "head_source": {
+      "kind": "checkpoint_pytorch",
+      "node": "s.implicit_s44",
+      "checkpoint_head_deployed": true,
+      "source_attribution": null
+     },
+     "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_implicit_s44/best.ckpt",
      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -12417,13 +13712,15 @@
     "deployed_head_artifact": {
      "status": "matched",
      "lhs": {
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
      },
      "rhs": {
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
      },
      "detail": ""
@@ -12509,6 +13806,10 @@
    "blocking_confounds": [],
    "unknown_axes": [],
    "executability": {
+    "artifacts_available": true,
+    "artifacts_missing": [],
+    "runtime_recipe_bound": true,
+    "runtime_recipe_missing": [],
     "fresh_eval": true,
     "fresh_eval_missing": [],
     "retrain_replay": false,
@@ -12590,8 +13891,15 @@
       },
       "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
       "engine_bytes_attributed": false,
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "head_source": {
+       "kind": "checkpoint_pytorch",
+       "node": "s.implicit_s43",
+       "checkpoint_head_deployed": true,
+       "source_attribution": null
+      },
+      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_implicit_s43/best.ckpt",
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -12788,8 +14096,15 @@
       },
       "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
       "engine_bytes_attributed": false,
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "head_source": {
+       "kind": "checkpoint_pytorch",
+       "node": "s.implicit_s44",
+       "checkpoint_head_deployed": true,
+       "source_attribution": null
+      },
+      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_implicit_s44/best.ckpt",
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -12945,8 +14260,15 @@
      },
      "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
      "engine_bytes_attributed": false,
-     "head_path": "none (PyTorch head inside whole graph)",
+     "head_path": "checkpoint PyTorch head inside whole graph",
      "head_engine_node": null,
+     "head_source": {
+      "kind": "checkpoint_pytorch",
+      "node": "s.t3t1_phase_b",
+      "checkpoint_head_deployed": true,
+      "source_attribution": null
+     },
+     "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1/best.ckpt",
      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -12977,8 +14299,15 @@
      },
      "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
      "engine_bytes_attributed": false,
-     "head_path": "none (PyTorch head inside whole graph)",
+     "head_path": "checkpoint PyTorch head inside whole graph",
      "head_engine_node": null,
+     "head_source": {
+      "kind": "checkpoint_pytorch",
+      "node": "s.t3t1_shared_s43",
+      "checkpoint_head_deployed": true,
+      "source_attribution": null
+     },
+     "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1_shared_s43/best.ckpt",
      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -13110,13 +14439,15 @@
     "deployed_head_artifact": {
      "status": "matched",
      "lhs": {
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
      },
      "rhs": {
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
      },
      "detail": ""
@@ -13204,6 +14535,10 @@
    "blocking_confounds": [],
    "unknown_axes": [],
    "executability": {
+    "artifacts_available": true,
+    "artifacts_missing": [],
+    "runtime_recipe_bound": true,
+    "runtime_recipe_missing": [],
     "fresh_eval": true,
     "fresh_eval_missing": [],
     "retrain_replay": false,
@@ -13295,8 +14630,15 @@
       },
       "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
       "engine_bytes_attributed": false,
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "head_source": {
+       "kind": "checkpoint_pytorch",
+       "node": "s.t3t1_phase_b",
+       "checkpoint_head_deployed": true,
+       "source_attribution": null
+      },
+      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1/best.ckpt",
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -13535,8 +14877,15 @@
       },
       "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
       "engine_bytes_attributed": false,
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "head_source": {
+       "kind": "checkpoint_pytorch",
+       "node": "s.t3t1_shared_s43",
+       "checkpoint_head_deployed": true,
+       "source_attribution": null
+      },
+      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1_shared_s43/best.ckpt",
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -13735,8 +15084,15 @@
      },
      "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
      "engine_bytes_attributed": false,
-     "head_path": "none (PyTorch head inside whole graph)",
+     "head_path": "checkpoint PyTorch head inside whole graph",
      "head_engine_node": null,
+     "head_source": {
+      "kind": "checkpoint_pytorch",
+      "node": "s.t3t1_shared_s43",
+      "checkpoint_head_deployed": true,
+      "source_attribution": null
+     },
+     "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1_shared_s43/best.ckpt",
      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -13767,8 +15123,15 @@
      },
      "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
      "engine_bytes_attributed": false,
-     "head_path": "none (PyTorch head inside whole graph)",
+     "head_path": "checkpoint PyTorch head inside whole graph",
      "head_engine_node": null,
+     "head_source": {
+      "kind": "checkpoint_pytorch",
+      "node": "s.t3t1_shared_s44",
+      "checkpoint_head_deployed": true,
+      "source_attribution": null
+     },
+     "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1_shared_s44/best.ckpt",
      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -13900,13 +15263,15 @@
     "deployed_head_artifact": {
      "status": "matched",
      "lhs": {
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
      },
      "rhs": {
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
      },
      "detail": ""
@@ -13994,6 +15359,10 @@
    "blocking_confounds": [],
    "unknown_axes": [],
    "executability": {
+    "artifacts_available": true,
+    "artifacts_missing": [],
+    "runtime_recipe_bound": true,
+    "runtime_recipe_missing": [],
     "fresh_eval": true,
     "fresh_eval_missing": [],
     "retrain_replay": false,
@@ -14077,8 +15446,15 @@
       },
       "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
       "engine_bytes_attributed": false,
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "head_source": {
+       "kind": "checkpoint_pytorch",
+       "node": "s.t3t1_shared_s43",
+       "checkpoint_head_deployed": true,
+       "source_attribution": null
+      },
+      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1_shared_s43/best.ckpt",
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -14318,8 +15694,15 @@
       },
       "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
       "engine_bytes_attributed": false,
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "head_source": {
+       "kind": "checkpoint_pytorch",
+       "node": "s.t3t1_shared_s44",
+       "checkpoint_head_deployed": true,
+       "source_attribution": null
+      },
+      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1_shared_s44/best.ckpt",
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -14518,8 +15901,15 @@
      },
      "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
      "engine_bytes_attributed": false,
-     "head_path": "none (PyTorch head inside whole graph)",
+     "head_path": "checkpoint PyTorch head inside whole graph",
      "head_engine_node": null,
+     "head_source": {
+      "kind": "checkpoint_pytorch",
+      "node": "s.t3t1_phase_b",
+      "checkpoint_head_deployed": true,
+      "source_attribution": null
+     },
+     "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1/best.ckpt",
      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -14550,8 +15940,26 @@
      },
      "backbone_teacher_consistency": "same_teacher_indicated",
      "engine_bytes_attributed": false,
-     "head_path": "models/yolo/mamba_head_26m.engine",
+     "head_path": "TRT head engine models/yolo/mamba_head_26m.engine (checkpoint head NOT deployed)",
      "head_engine_node": "m.head_engine",
+     "head_source": {
+      "kind": "trt_engine",
+      "node": "m.head_engine",
+      "checkpoint_head_deployed": false,
+      "source_attribution": {
+       "status": "unattributed",
+       "onnx_matches": [
+        "m.distill",
+        "m.gt1",
+        "m.gt2_plain",
+        "m.t3t1_phase_a",
+        "m.t3t1_phase_b",
+        "m.t3t1_phase_b_gpu_decode"
+       ],
+       "verdict": "ambiguous"
+      }
+     },
+     "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph_m --mamba-ckpt runs/mamba_gt_yolo26m_v14replica_t3_t1/best.ckpt",
      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
      "effective_T": 1,
      "gate_teacher_at_runtime": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
@@ -14681,16 +16089,19 @@
     "deployed_head_artifact": {
      "status": "unmatched",
      "lhs": {
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
      },
      "rhs": {
-      "head_path": "models/yolo/mamba_head_26m.engine",
+      "head_path": "TRT head engine models/yolo/mamba_head_26m.engine (checkpoint head NOT deployed)",
       "head_engine_node": "m.head_engine",
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
+      "checkpoint_head_deployed": false,
+      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+      "head_engine_source": "sibling ONNX ambiguous: ['m.distill', 'm.gt1', 'm.gt2_plain', 'm.t3t1_phase_a', 'm.t3t1_phase_b', 'm.t3t1_phase_b_gpu_decode']"
      },
-     "detail": ""
+     "detail": "rhs runs the fixed head engine, not the rhs checkpoint head (sibling ONNX ambiguous: ['m.distill', 'm.gt1', 'm.gt2_plain', 'm.t3t1_phase_a', 'm.t3t1_phase_b', 'm.t3t1_phase_b_gpu_decode']; checkpoint source ambiguous)"
     },
     "tracker_runtime_policy": {
      "status": "unmatched",
@@ -14820,16 +16231,19 @@
      "severity": "structural",
      "status": "unmatched",
      "lhs": {
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
      },
      "rhs": {
-      "head_path": "models/yolo/mamba_head_26m.engine",
+      "head_path": "TRT head engine models/yolo/mamba_head_26m.engine (checkpoint head NOT deployed)",
       "head_engine_node": "m.head_engine",
-      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
+      "checkpoint_head_deployed": false,
+      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
+      "head_engine_source": "sibling ONNX ambiguous: ['m.distill', 'm.gt1', 'm.gt2_plain', 'm.t3t1_phase_a', 'm.t3t1_phase_b', 'm.t3t1_phase_b_gpu_decode']"
      },
-     "detail": ""
+     "detail": "rhs runs the fixed head engine, not the rhs checkpoint head (sibling ONNX ambiguous: ['m.distill', 'm.gt1', 'm.gt2_plain', 'm.t3t1_phase_a', 'm.t3t1_phase_b', 'm.t3t1_phase_b_gpu_decode']; checkpoint source ambiguous)"
     },
     {
      "name": "tracker_runtime_policy",
@@ -14879,6 +16293,10 @@
    "blocking_confounds": [],
    "unknown_axes": [],
    "executability": {
+    "artifacts_available": true,
+    "artifacts_missing": [],
+    "runtime_recipe_bound": true,
+    "runtime_recipe_missing": [],
     "fresh_eval": true,
     "fresh_eval_missing": [],
     "retrain_replay": false,
@@ -14905,7 +16323,9 @@
     "reusable_as_paired": false,
     "reason": "record carries no preset/engine sha for any run; runtime identity of historical runs is not established (deliverable 4)"
    },
-   "declared_notes": [],
+   "declared_notes": [
+    "m side is measured as the production head engine (mamba_head_26m.engine), whose sibling ONNX is ambiguous across every m checkpoint (#445); the row's rhs node m.t3t1_phase_b is the preset's *named* checkpoint, not an established identity of the deployed head bytes."
+   ],
    "profiles": {
     "lhs": {
      "node": "s.t3t1_phase_b",
@@ -14971,8 +16391,15 @@
       },
       "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
       "engine_bytes_attributed": false,
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "head_source": {
+       "kind": "checkpoint_pytorch",
+       "node": "s.t3t1_phase_b",
+       "checkpoint_head_deployed": true,
+       "source_attribution": null
+      },
+      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1/best.ckpt",
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -15211,8 +16638,26 @@
       },
       "backbone_teacher_consistency": "same_teacher_indicated",
       "engine_bytes_attributed": false,
-      "head_path": "models/yolo/mamba_head_26m.engine",
+      "head_path": "TRT head engine models/yolo/mamba_head_26m.engine (checkpoint head NOT deployed)",
       "head_engine_node": "m.head_engine",
+      "head_source": {
+       "kind": "trt_engine",
+       "node": "m.head_engine",
+       "checkpoint_head_deployed": false,
+       "source_attribution": {
+        "status": "unattributed",
+        "onnx_matches": [
+         "m.distill",
+         "m.gt1",
+         "m.gt2_plain",
+         "m.t3t1_phase_a",
+         "m.t3t1_phase_b",
+         "m.t3t1_phase_b_gpu_decode"
+        ],
+        "verdict": "ambiguous"
+       }
+      },
+      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph_m --mamba-ckpt runs/mamba_gt_yolo26m_v14replica_t3_t1/best.ckpt",
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
       "effective_T": 1,
       "gate_teacher_at_runtime": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
@@ -15404,6 +16849,13 @@
      "reason": null,
      "backbone_engine_node": null,
      "backbone_node": "s.adapted_teacher",
+     "head_source": {
+      "kind": "checkpoint_pytorch",
+      "node": "s.adapted_teacher",
+      "checkpoint_head_deployed": true,
+      "source_attribution": null
+     },
+     "recipe": "scripts/eval/mot17.py --preset mamba_pyt_backbone --teacher-head-ckpt runs/gated_det_v14replica/epoch_0012.ckpt",
      "backbone_teacher_consistency": "same_teacher_indicated",
      "engine_bytes_attributed": null,
      "head_path": "native Detect head via TeacherHeadDetector, PyTorch eager",
@@ -15426,6 +16878,13 @@
      "reason": null,
      "backbone_engine_node": null,
      "backbone_node": "s.adapted_teacher",
+     "head_source": {
+      "kind": "checkpoint_pytorch",
+      "node": "s.t3t1_phase_b",
+      "checkpoint_head_deployed": true,
+      "source_attribution": null
+     },
+     "recipe": "scripts/eval/mot17.py --preset mamba_pyt_backbone --no-mamba-trt --no-temporal --mamba-ckpt runs/mamba_gt_v14replica_t3_t1/best.ckpt --mamba-teacher-ckpt runs/gated_det_v14replica/epoch_0012.ckpt",
      "backbone_teacher_consistency": "same_teacher_indicated",
      "engine_bytes_attributed": null,
      "head_path": "mamba head, PyTorch eager (--no-temporal required: streaming temporal is the non-whole-graph default)",
@@ -15547,11 +17006,13 @@
      "lhs": {
       "head_path": "native Detect head via TeacherHeadDetector, PyTorch eager",
       "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "absent"
      },
      "rhs": {
       "head_path": "mamba head, PyTorch eager (--no-temporal required: streaming temporal is the non-whole-graph default)",
       "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "present; must be bypassed explicitly (--no-temporal)"
      },
      "detail": "different head kinds"
@@ -15656,11 +17117,13 @@
      "lhs": {
       "head_path": "native Detect head via TeacherHeadDetector, PyTorch eager",
       "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "absent"
      },
      "rhs": {
       "head_path": "mamba head, PyTorch eager (--no-temporal required: streaming temporal is the non-whole-graph default)",
       "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "present; must be bypassed explicitly (--no-temporal)"
      },
      "detail": "different head kinds"
@@ -15737,6 +17200,10 @@
     "teacher"
    ],
    "executability": {
+    "artifacts_available": true,
+    "artifacts_missing": [],
+    "runtime_recipe_bound": true,
+    "runtime_recipe_missing": [],
     "fresh_eval": true,
     "fresh_eval_missing": [],
     "retrain_replay": false,
@@ -15807,6 +17274,13 @@
       "reason": null,
       "backbone_engine_node": null,
       "backbone_node": "s.adapted_teacher",
+      "head_source": {
+       "kind": "checkpoint_pytorch",
+       "node": "s.adapted_teacher",
+       "checkpoint_head_deployed": true,
+       "source_attribution": null
+      },
+      "recipe": "scripts/eval/mot17.py --preset mamba_pyt_backbone --teacher-head-ckpt runs/gated_det_v14replica/epoch_0012.ckpt",
       "backbone_teacher_consistency": "same_teacher_indicated",
       "engine_bytes_attributed": null,
       "head_path": "native Detect head via TeacherHeadDetector, PyTorch eager",
@@ -15914,6 +17388,13 @@
       "reason": null,
       "backbone_engine_node": null,
       "backbone_node": "s.adapted_teacher",
+      "head_source": {
+       "kind": "checkpoint_pytorch",
+       "node": "s.t3t1_phase_b",
+       "checkpoint_head_deployed": true,
+       "source_attribution": null
+      },
+      "recipe": "scripts/eval/mot17.py --preset mamba_pyt_backbone --no-mamba-trt --no-temporal --mamba-ckpt runs/mamba_gt_v14replica_t3_t1/best.ckpt --mamba-teacher-ckpt runs/gated_det_v14replica/epoch_0012.ckpt",
       "backbone_teacher_consistency": "same_teacher_indicated",
       "engine_bytes_attributed": null,
       "head_path": "mamba head, PyTorch eager (--no-temporal required: streaming temporal is the non-whole-graph default)",
@@ -16103,6 +17584,13 @@
      "reason": null,
      "backbone_engine_node": null,
      "backbone_node": "m.adapted_teacher",
+     "head_source": {
+      "kind": "checkpoint_pytorch",
+      "node": "m.adapted_teacher",
+      "checkpoint_head_deployed": true,
+      "source_attribution": null
+     },
+     "recipe": "scripts/eval/mot17.py --preset mamba_pyt_backbone --teacher-head-ckpt runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
      "backbone_teacher_consistency": "same_teacher_indicated",
      "engine_bytes_attributed": null,
      "head_path": "native Detect head via TeacherHeadDetector, PyTorch eager",
@@ -16125,6 +17613,13 @@
      "reason": null,
      "backbone_engine_node": null,
      "backbone_node": "m.adapted_teacher",
+     "head_source": {
+      "kind": "checkpoint_pytorch",
+      "node": "m.t3t1_phase_b",
+      "checkpoint_head_deployed": true,
+      "source_attribution": null
+     },
+     "recipe": "scripts/eval/mot17.py --preset mamba_pyt_backbone --no-mamba-trt --no-temporal --mamba-ckpt runs/mamba_gt_yolo26m_v14replica_t3_t1/best.ckpt --mamba-teacher-ckpt runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
      "backbone_teacher_consistency": "same_teacher_indicated",
      "engine_bytes_attributed": null,
      "head_path": "mamba head, PyTorch eager (--no-temporal required: streaming temporal is the non-whole-graph default)",
@@ -16246,11 +17741,13 @@
      "lhs": {
       "head_path": "native Detect head via TeacherHeadDetector, PyTorch eager",
       "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "absent"
      },
      "rhs": {
       "head_path": "mamba head, PyTorch eager (--no-temporal required: streaming temporal is the non-whole-graph default)",
       "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "present; must be bypassed explicitly (--no-temporal)"
      },
      "detail": "different head kinds"
@@ -16357,11 +17854,13 @@
      "lhs": {
       "head_path": "native Detect head via TeacherHeadDetector, PyTorch eager",
       "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "absent"
      },
      "rhs": {
       "head_path": "mamba head, PyTorch eager (--no-temporal required: streaming temporal is the non-whole-graph default)",
       "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "present; must be bypassed explicitly (--no-temporal)"
      },
      "detail": "different head kinds"
@@ -16430,6 +17929,10 @@
     "teacher"
    ],
    "executability": {
+    "artifacts_available": true,
+    "artifacts_missing": [],
+    "runtime_recipe_bound": true,
+    "runtime_recipe_missing": [],
     "fresh_eval": true,
     "fresh_eval_missing": [],
     "retrain_replay": false,
@@ -16491,6 +17994,13 @@
       "reason": null,
       "backbone_engine_node": null,
       "backbone_node": "m.adapted_teacher",
+      "head_source": {
+       "kind": "checkpoint_pytorch",
+       "node": "m.adapted_teacher",
+       "checkpoint_head_deployed": true,
+       "source_attribution": null
+      },
+      "recipe": "scripts/eval/mot17.py --preset mamba_pyt_backbone --teacher-head-ckpt runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
       "backbone_teacher_consistency": "same_teacher_indicated",
       "engine_bytes_attributed": null,
       "head_path": "native Detect head via TeacherHeadDetector, PyTorch eager",
@@ -16598,6 +18108,13 @@
       "reason": null,
       "backbone_engine_node": null,
       "backbone_node": "m.adapted_teacher",
+      "head_source": {
+       "kind": "checkpoint_pytorch",
+       "node": "m.t3t1_phase_b",
+       "checkpoint_head_deployed": true,
+       "source_attribution": null
+      },
+      "recipe": "scripts/eval/mot17.py --preset mamba_pyt_backbone --no-mamba-trt --no-temporal --mamba-ckpt runs/mamba_gt_yolo26m_v14replica_t3_t1/best.ckpt --mamba-teacher-ckpt runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
       "backbone_teacher_consistency": "same_teacher_indicated",
       "engine_bytes_attributed": null,
       "head_path": "mamba head, PyTorch eager (--no-temporal required: streaming temporal is the non-whole-graph default)",
@@ -16799,8 +18316,15 @@
      },
      "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
      "engine_bytes_attributed": false,
-     "head_path": "none (PyTorch head inside whole graph)",
+     "head_path": "checkpoint PyTorch head inside whole graph",
      "head_engine_node": null,
+     "head_source": {
+      "kind": "checkpoint_pytorch",
+      "node": "s.t3t1_phase_b",
+      "checkpoint_head_deployed": true,
+      "source_attribution": null
+     },
+     "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1/best.ckpt",
      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -16831,8 +18355,15 @@
      },
      "backbone_teacher_consistency": "same_teacher_indicated",
      "engine_bytes_attributed": false,
-     "head_path": "none (PyTorch head inside whole graph)",
+     "head_path": "checkpoint PyTorch head inside whole graph",
      "head_engine_node": null,
+     "head_source": {
+      "kind": "checkpoint_pytorch",
+      "node": "s.t3t1_phase_b",
+      "checkpoint_head_deployed": true,
+      "source_attribution": null
+     },
+     "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1/best.ckpt --fpn-backbone-engine models/yolo/yolo26s_backbone_640_v14replica_e12.engine",
      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -16964,13 +18495,15 @@
     "deployed_head_artifact": {
      "status": "matched",
      "lhs": {
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
      },
      "rhs": {
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
      },
      "detail": ""
@@ -17046,6 +18579,10 @@
    "blocking_confounds": [],
    "unknown_axes": [],
    "executability": {
+    "artifacts_available": true,
+    "artifacts_missing": [],
+    "runtime_recipe_bound": true,
+    "runtime_recipe_missing": [],
     "fresh_eval": true,
     "fresh_eval_missing": [],
     "retrain_replay": false,
@@ -17145,8 +18682,15 @@
       },
       "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
       "engine_bytes_attributed": false,
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "head_source": {
+       "kind": "checkpoint_pytorch",
+       "node": "s.t3t1_phase_b",
+       "checkpoint_head_deployed": true,
+       "source_attribution": null
+      },
+      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1/best.ckpt",
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -17385,8 +18929,15 @@
       },
       "backbone_teacher_consistency": "same_teacher_indicated",
       "engine_bytes_attributed": false,
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "head_source": {
+       "kind": "checkpoint_pytorch",
+       "node": "s.t3t1_phase_b",
+       "checkpoint_head_deployed": true,
+       "source_attribution": null
+      },
+      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1/best.ckpt --fpn-backbone-engine models/yolo/yolo26s_backbone_640_v14replica_e12.engine",
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -17584,8 +19135,15 @@
      },
      "backbone_teacher_consistency": "same_teacher_indicated",
      "engine_bytes_attributed": false,
-     "head_path": "none (PyTorch head inside whole graph)",
+     "head_path": "checkpoint PyTorch head inside whole graph",
      "head_engine_node": null,
+     "head_source": {
+      "kind": "checkpoint_pytorch",
+      "node": "s.legacy_v14",
+      "checkpoint_head_deployed": true,
+      "source_attribution": null
+     },
+     "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_vgt_mamba_v14/best.ckpt",
      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -17616,8 +19174,15 @@
      },
      "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
      "engine_bytes_attributed": false,
-     "head_path": "none (PyTorch head inside whole graph)",
+     "head_path": "checkpoint PyTorch head inside whole graph",
      "head_engine_node": null,
+     "head_source": {
+      "kind": "checkpoint_pytorch",
+      "node": "s.gt2_plain",
+      "checkpoint_head_deployed": true,
+      "source_attribution": null
+     },
+     "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_final/best.ckpt",
      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -17747,13 +19312,15 @@
     "deployed_head_artifact": {
      "status": "matched",
      "lhs": {
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
      },
      "rhs": {
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
      },
      "detail": ""
@@ -17897,6 +19464,10 @@
     "training_budget"
    ],
    "executability": {
+    "artifacts_available": true,
+    "artifacts_missing": [],
+    "runtime_recipe_bound": true,
+    "runtime_recipe_missing": [],
     "fresh_eval": true,
     "fresh_eval_missing": [],
     "retrain_replay": false,
@@ -17995,8 +19566,15 @@
       },
       "backbone_teacher_consistency": "same_teacher_indicated",
       "engine_bytes_attributed": false,
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "head_source": {
+       "kind": "checkpoint_pytorch",
+       "node": "s.legacy_v14",
+       "checkpoint_head_deployed": true,
+       "source_attribution": null
+      },
+      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_vgt_mamba_v14/best.ckpt",
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -18115,8 +19693,15 @@
       },
       "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
       "engine_bytes_attributed": false,
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "head_source": {
+       "kind": "checkpoint_pytorch",
+       "node": "s.gt2_plain",
+       "checkpoint_head_deployed": true,
+       "source_attribution": null
+      },
+      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_final/best.ckpt",
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -18271,8 +19856,15 @@
      },
      "backbone_teacher_consistency": "same_teacher_indicated",
      "engine_bytes_attributed": false,
-     "head_path": "none (PyTorch head inside whole graph)",
+     "head_path": "checkpoint PyTorch head inside whole graph",
      "head_engine_node": null,
+     "head_source": {
+      "kind": "checkpoint_pytorch",
+      "node": "s.legacy_v14",
+      "checkpoint_head_deployed": true,
+      "source_attribution": null
+     },
+     "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_vgt_mamba_v14/best.ckpt",
      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -18303,8 +19895,15 @@
      },
      "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
      "engine_bytes_attributed": false,
-     "head_path": "none (PyTorch head inside whole graph)",
+     "head_path": "checkpoint PyTorch head inside whole graph",
      "head_engine_node": null,
+     "head_source": {
+      "kind": "checkpoint_pytorch",
+      "node": "s.t3t1_phase_b",
+      "checkpoint_head_deployed": true,
+      "source_attribution": null
+     },
+     "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1/best.ckpt",
      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -18438,13 +20037,15 @@
     "deployed_head_artifact": {
      "status": "matched",
      "lhs": {
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
      },
      "rhs": {
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
      },
      "detail": ""
@@ -18588,6 +20189,10 @@
     "training_budget"
    ],
    "executability": {
+    "artifacts_available": true,
+    "artifacts_missing": [],
+    "runtime_recipe_bound": true,
+    "runtime_recipe_missing": [],
     "fresh_eval": true,
     "fresh_eval_missing": [],
     "retrain_replay": false,
@@ -18687,8 +20292,15 @@
       },
       "backbone_teacher_consistency": "same_teacher_indicated",
       "engine_bytes_attributed": false,
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "head_source": {
+       "kind": "checkpoint_pytorch",
+       "node": "s.legacy_v14",
+       "checkpoint_head_deployed": true,
+       "source_attribution": null
+      },
+      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_vgt_mamba_v14/best.ckpt",
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -18807,8 +20419,15 @@
       },
       "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
       "engine_bytes_attributed": false,
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "head_source": {
+       "kind": "checkpoint_pytorch",
+       "node": "s.t3t1_phase_b",
+       "checkpoint_head_deployed": true,
+       "source_attribution": null
+      },
+      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1/best.ckpt",
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -19006,8 +20625,15 @@
      },
      "backbone_teacher_consistency": "same_teacher_indicated",
      "engine_bytes_attributed": false,
-     "head_path": "none (PyTorch head inside whole graph)",
+     "head_path": "checkpoint PyTorch head inside whole graph",
      "head_engine_node": null,
+     "head_source": {
+      "kind": "checkpoint_pytorch",
+      "node": "s.legacy_parent_gt",
+      "checkpoint_head_deployed": true,
+      "source_attribution": null
+     },
+     "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_pixelshuffle_crossscan/best.ckpt",
      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -19038,8 +20664,15 @@
      },
      "backbone_teacher_consistency": "same_teacher_indicated",
      "engine_bytes_attributed": false,
-     "head_path": "none (PyTorch head inside whole graph)",
+     "head_path": "checkpoint PyTorch head inside whole graph",
      "head_engine_node": null,
+     "head_source": {
+      "kind": "checkpoint_pytorch",
+      "node": "s.controlled_refit",
+      "checkpoint_head_deployed": true,
+      "source_attribution": null
+     },
+     "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14_parent_n16_frozen_refit/best.ckpt",
      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -19176,13 +20809,15 @@
     "deployed_head_artifact": {
      "status": "matched",
      "lhs": {
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
      },
      "rhs": {
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
      },
      "detail": ""
@@ -19280,6 +20915,10 @@
     "training_budget"
    ],
    "executability": {
+    "artifacts_available": true,
+    "artifacts_missing": [],
+    "runtime_recipe_bound": true,
+    "runtime_recipe_missing": [],
     "fresh_eval": true,
     "fresh_eval_missing": [],
     "retrain_replay": false,
@@ -19359,8 +20998,15 @@
       },
       "backbone_teacher_consistency": "same_teacher_indicated",
       "engine_bytes_attributed": false,
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "head_source": {
+       "kind": "checkpoint_pytorch",
+       "node": "s.legacy_parent_gt",
+       "checkpoint_head_deployed": true,
+       "source_attribution": null
+      },
+      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_pixelshuffle_crossscan/best.ckpt",
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -19497,8 +21143,15 @@
       },
       "backbone_teacher_consistency": "same_teacher_indicated",
       "engine_bytes_attributed": false,
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "head_source": {
+       "kind": "checkpoint_pytorch",
+       "node": "s.controlled_refit",
+       "checkpoint_head_deployed": true,
+       "source_attribution": null
+      },
+      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14_parent_n16_frozen_refit/best.ckpt",
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -19637,8 +21290,15 @@
      },
      "backbone_teacher_consistency": "same_teacher_indicated",
      "engine_bytes_attributed": false,
-     "head_path": "none (PyTorch head inside whole graph)",
+     "head_path": "checkpoint PyTorch head inside whole graph",
      "head_engine_node": null,
+     "head_source": {
+      "kind": "checkpoint_pytorch",
+      "node": "s.legacy_v14",
+      "checkpoint_head_deployed": true,
+      "source_attribution": null
+     },
+     "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_vgt_mamba_v14/best.ckpt",
      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -19669,8 +21329,15 @@
      },
      "backbone_teacher_consistency": "same_teacher_indicated",
      "engine_bytes_attributed": false,
-     "head_path": "none (PyTorch head inside whole graph)",
+     "head_path": "checkpoint PyTorch head inside whole graph",
      "head_engine_node": null,
+     "head_source": {
+      "kind": "checkpoint_pytorch",
+      "node": "s.t3t1_phase_b",
+      "checkpoint_head_deployed": true,
+      "source_attribution": null
+     },
+     "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1/best.ckpt --fpn-backbone-engine models/yolo/yolo26s_backbone_640_v14replica_e12.engine",
      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
      "effective_T": 1,
      "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -19804,13 +21471,15 @@
     "deployed_head_artifact": {
      "status": "matched",
      "lhs": {
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
      },
      "rhs": {
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
      },
      "detail": ""
@@ -19947,6 +21616,10 @@
     "training_budget"
    ],
    "executability": {
+    "artifacts_available": true,
+    "artifacts_missing": [],
+    "runtime_recipe_bound": true,
+    "runtime_recipe_missing": [],
     "fresh_eval": true,
     "fresh_eval_missing": [],
     "retrain_replay": false,
@@ -20046,8 +21719,15 @@
       },
       "backbone_teacher_consistency": "same_teacher_indicated",
       "engine_bytes_attributed": false,
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "head_source": {
+       "kind": "checkpoint_pytorch",
+       "node": "s.legacy_v14",
+       "checkpoint_head_deployed": true,
+       "source_attribution": null
+      },
+      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_vgt_mamba_v14/best.ckpt",
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -20166,8 +21846,15 @@
       },
       "backbone_teacher_consistency": "same_teacher_indicated",
       "engine_bytes_attributed": false,
-      "head_path": "none (PyTorch head inside whole graph)",
+      "head_path": "checkpoint PyTorch head inside whole graph",
       "head_engine_node": null,
+      "head_source": {
+       "kind": "checkpoint_pytorch",
+       "node": "s.t3t1_phase_b",
+       "checkpoint_head_deployed": true,
+       "source_attribution": null
+      },
+      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1/best.ckpt --fpn-backbone-engine models/yolo/yolo26s_backbone_640_v14replica_e12.engine",
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
       "effective_T": 1,
       "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
@@ -20365,8 +22052,15 @@
      },
      "backbone_teacher_consistency": "same_teacher_indicated",
      "engine_bytes_attributed": false,
-     "head_path": "models/yolo/mamba_head_26m.engine",
-     "head_engine_node": "m.head_engine",
+     "head_path": "checkpoint PyTorch head inside whole graph",
+     "head_engine_node": null,
+     "head_source": {
+      "kind": "checkpoint_pytorch",
+      "node": "m.t3t1_phase_b",
+      "checkpoint_head_deployed": true,
+      "source_attribution": null
+     },
+     "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph_m --no-mamba-trt --mamba-ckpt runs/mamba_gt_yolo26m_v14replica_t3_t1/best.ckpt",
      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
      "effective_T": 1,
      "gate_teacher_at_runtime": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
@@ -20397,8 +22091,15 @@
      },
      "backbone_teacher_consistency": "same_teacher_indicated",
      "engine_bytes_attributed": false,
-     "head_path": "models/yolo/mamba_head_26m.engine",
-     "head_engine_node": "m.head_engine",
+     "head_path": "checkpoint PyTorch head inside whole graph",
+     "head_engine_node": null,
+     "head_source": {
+      "kind": "checkpoint_pytorch",
+      "node": "m.t3t1_phase_b_gpu_decode",
+      "checkpoint_head_deployed": true,
+      "source_attribution": null
+     },
+     "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph_m --no-mamba-trt --mamba-ckpt runs/mamba_gt_yolo26m_v14replica_t3_t1_gpu_decode/best.ckpt",
      "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
      "effective_T": 1,
      "gate_teacher_at_runtime": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
@@ -20530,13 +22231,15 @@
     "deployed_head_artifact": {
      "status": "matched",
      "lhs": {
-      "head_path": "models/yolo/mamba_head_26m.engine",
-      "head_engine_node": "m.head_engine",
+      "head_path": "checkpoint PyTorch head inside whole graph",
+      "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
      },
      "rhs": {
-      "head_path": "models/yolo/mamba_head_26m.engine",
-      "head_engine_node": "m.head_engine",
+      "head_path": "checkpoint PyTorch head inside whole graph",
+      "head_engine_node": null,
+      "checkpoint_head_deployed": true,
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)"
      },
      "detail": ""
@@ -20644,6 +22347,10 @@
    ],
    "unknown_axes": [],
    "executability": {
+    "artifacts_available": true,
+    "artifacts_missing": [],
+    "runtime_recipe_bound": true,
+    "runtime_recipe_missing": [],
     "fresh_eval": true,
     "fresh_eval_missing": [],
     "retrain_replay": false,
@@ -20659,7 +22366,9 @@
     "reusable_as_paired": false,
     "reason": "record carries no preset/engine sha for any run; runtime identity of historical runs is not established (deliverable 4)"
    },
-   "declared_notes": [],
+   "declared_notes": [
+    "m preset names a fixed head engine (mamba_head_26m.engine); bound with head_override=checkpoint_pytorch (= --no-mamba-trt) so the lhs/rhs checkpoint heads actually run inside the whole graph. Without the override this pair is blocked (treatment_not_deployed)."
+   ],
    "profiles": {
     "lhs": {
      "node": "m.t3t1_phase_b",
@@ -20725,8 +22434,15 @@
       },
       "backbone_teacher_consistency": "same_teacher_indicated",
       "engine_bytes_attributed": false,
-      "head_path": "models/yolo/mamba_head_26m.engine",
-      "head_engine_node": "m.head_engine",
+      "head_path": "checkpoint PyTorch head inside whole graph",
+      "head_engine_node": null,
+      "head_source": {
+       "kind": "checkpoint_pytorch",
+       "node": "m.t3t1_phase_b",
+       "checkpoint_head_deployed": true,
+       "source_attribution": null
+      },
+      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph_m --no-mamba-trt --mamba-ckpt runs/mamba_gt_yolo26m_v14replica_t3_t1/best.ckpt",
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
       "effective_T": 1,
       "gate_teacher_at_runtime": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
@@ -20969,8 +22685,15 @@
       },
       "backbone_teacher_consistency": "same_teacher_indicated",
       "engine_bytes_attributed": false,
-      "head_path": "models/yolo/mamba_head_26m.engine",
-      "head_engine_node": "m.head_engine",
+      "head_path": "checkpoint PyTorch head inside whole graph",
+      "head_engine_node": null,
+      "head_source": {
+       "kind": "checkpoint_pytorch",
+       "node": "m.t3t1_phase_b_gpu_decode",
+       "checkpoint_head_deployed": true,
+       "source_attribution": null
+      },
+      "recipe": "scripts/eval/mot17.py --preset mamba_whole_graph_m --no-mamba-trt --mamba-ckpt runs/mamba_gt_yolo26m_v14replica_t3_t1_gpu_decode/best.ckpt",
       "temporal_blocks": "present; BYPASSED under whole-graph single-frame forward (effective T=1)",
       "effective_T": 1,
       "gate_teacher_at_runtime": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",

@@ -13,6 +13,8 @@ This matrix answers **which comparisons hold up methodologically**. It produces 
 ## How to read
 
 - Every row compares two lineage **nodes** (ids from the inventory) under a declared **runtime binding** (`family_preset` = the artifacts the family's headline preset names; `shared_backbone_node` = both heads on one PyTorch backbone, eager).
+- Each binding derives the **effective head source**: a preset that names `mamba_head_engine` runs that fixed TRT head and the endpoint's checkpoint head does *not* run (`checkpoint_head_deployed: false`); `head_override: checkpoint_pytorch` (= `mot17.py --no-mamba-trt`) restores the checkpoint head inside the same graph. A training design whose runtime does not deploy the checkpoint head is `blocked` (`treatment_not_deployed`).
+- `recipe` per side is a command sketch derived from the binding; deliverable 3 fixes the exact invocation. `fresh_eval` is true only when every artifact exists **and** both sides have a bound recipe.
 - **Structural axes** (`backbone_family`, `head_family`, `dataset_split`, `inference_forward_mode`, `deployed_backbone_artifact`, `deployed_head_artifact`, `tracker_runtime_policy`) say *what system* is measured; **training axes** (`warm_start`, `teacher`, `teacher_cache`, `training_seed`, `training_schedule`, `training_budget`) say *how the head got its weights*.
 - Axis status: `matched` · `matched_effective` (artifact differs, effective forward does not — e.g. bypassed temporal blocks) · `unmatched` · `unknown` (the bytes do not establish it; fail-closed).
 - **Classification is derived, not declared.** The declaration names the design and the treatment axes; the rule is:
@@ -33,32 +35,33 @@ This matrix answers **which comparisons hold up methodologically**. It produces 
 | 4 | `B1.s.distill_to_gt1` | stage_increment | `s.distill` | `s.gt1` | **controlled** | `warm_start`, `teacher_cache`, `training_schedule`, `training_budget` | none (+shared: `deployed_backbone_teacher_mismatch`) | — |
 | 5 | `B2.s.gt1_to_gt2_plain` | stage_increment | `s.gt1` | `s.gt2_plain` | **controlled** | `warm_start`, `teacher_cache`, `training_schedule`, `training_budget` | none (+shared: `deployed_backbone_teacher_mismatch`) | — |
 | 6 | `B3.m.distill_to_gt1` | stage_increment | `m.distill` | `m.gt1` | **controlled** | `warm_start`, `teacher_cache`, `training_schedule`, `training_budget` | none | — |
-| 7 | `B4.m.gt1_to_gt2_plain` | stage_increment | `m.gt1` | `m.gt2_plain` | **controlled** | `warm_start`, `teacher_cache`, `training_schedule`, `training_budget` | none | — |
-| 8 | `B5.s.gt1_to_t3t1_production` | stage_increment | `s.gt1` | `s.t3t1_phase_b` | **historical_not_comparable** | `warm_start`, `teacher_cache`, `training_schedule`, `training_budget` | training: `training_seed`, `training_schedule` (+shared: `deployed_backbone_teacher_mismatch`) | — |
-| 9 | `C1.s.explicit_vs_implicit_shared_gt1_s42` | paired_siblings | `s.implicit_s42` | `s.t3t1_phase_b` | **controlled** | `training_schedule` | none (+shared: `deployed_backbone_teacher_mismatch`) | — |
-| 10 | `C2.s.explicit_vs_implicit_shared_gt1_s43` | paired_siblings | `s.implicit_s43` | `s.t3t1_shared_s43` | **controlled** | `training_schedule` | none (+shared: `deployed_backbone_teacher_mismatch`) | — |
-| 11 | `C3.s.explicit_vs_implicit_shared_gt1_s44` | paired_siblings | `s.implicit_s44` | `s.t3t1_shared_s44` | **controlled** | `training_schedule` | none (+shared: `deployed_backbone_teacher_mismatch`) | — |
-| 12 | `C4.s.plain_gt2_vs_t3t1_seed_chain_s13` | paired_siblings | `s.gt2_plain_s13` | `s.t3t1_s13` | **historical_not_comparable** | `training_schedule` | training: `training_schedule` (+shared: `deployed_backbone_teacher_mismatch`) | — |
-| 13 | `C5.s.plain_gt2_vs_t3t1_seed_chain_s14` | paired_siblings | `s.gt2_plain_s14` | `s.t3t1_s14` | **historical_not_comparable** | `training_schedule` | training: `training_schedule` (+shared: `deployed_backbone_teacher_mismatch`) | — |
-| 14 | `C6.s.plain_gt2_vs_t3t1_unpaired_original` | paired_siblings | `s.gt2_plain` | `s.t3t1_phase_b` | **historical_not_comparable** | `training_schedule` | training: `training_seed`, `training_schedule` (+shared: `deployed_backbone_teacher_mismatch`) | — |
-| 15 | `C7.s.implicit_shared_s43_vs_t3t1_seed_chain_s13` | paired_siblings | `s.implicit_s43` | `s.t3t1_s13` | **blocked** | `training_schedule` | training: `warm_start`, `training_seed` (+shared: `deployed_backbone_teacher_mismatch`) | paired_siblings premise violated: warm starts differ or are unknown |
-| 16 | `C8.s.plain_gt2_vs_implicit_control_s42` | paired_siblings | `s.gt2_plain` | `s.implicit_s42` | **historical_not_comparable** | `training_schedule` | training: `training_seed`, `training_schedule` (+shared: `deployed_backbone_teacher_mismatch`) | — |
-| 17 | `C9.m.plain_gt2_vs_t3t1` | paired_siblings | `m.gt2_plain` | `m.t3t1_phase_b` | **historical_not_comparable** | `training_schedule` | training: `training_schedule` | — |
-| 18 | `D1.s.implicit_seed_42_vs_43` | seed_replicate | `s.implicit_s42` | `s.implicit_s43` | **controlled** | `training_seed` | none (+shared: `deployed_backbone_teacher_mismatch`) | — |
-| 19 | `D2.s.implicit_seed_43_vs_44` | seed_replicate | `s.implicit_s43` | `s.implicit_s44` | **controlled** | `training_seed` | none (+shared: `deployed_backbone_teacher_mismatch`) | — |
-| 20 | `D3.s.explicit_shared_seed_42_vs_43` | seed_replicate | `s.t3t1_phase_b` | `s.t3t1_shared_s43` | **controlled** | `training_seed` | none (+shared: `deployed_backbone_teacher_mismatch`) | — |
-| 21 | `D4.s.explicit_shared_seed_43_vs_44` | seed_replicate | `s.t3t1_shared_s43` | `s.t3t1_shared_s44` | **controlled** | `training_seed` | none (+shared: `deployed_backbone_teacher_mismatch`) | — |
-| 22 | `E1.s_vs_m.production_system` | system | `s.t3t1_phase_b` | `m.t3t1_phase_b` | **system_comparison** | — | structural: `backbone_family`, `inference_forward_mode`, `deployed_backbone_artifact`, `deployed_head_artifact`, `tracker_runtime_policy`; training: `warm_start`, `teacher`, `teacher_cache`, `training_seed` (+shared: `deployed_backbone_teacher_mismatch`) | — |
-| 23 | `E2.s.native_head_vs_mamba_head_shared_backbone` | system | `s.adapted_teacher` | `s.t3t1_phase_b` | **system_comparison** | — | structural: `head_family`, `deployed_head_artifact`, `tracker_runtime_policy`; training: `warm_start`, `teacher`, `teacher_cache`, `training_seed`, `training_schedule`, `training_budget` | — |
-| 24 | `E3.m.native_head_vs_mamba_head_shared_backbone` | system | `m.adapted_teacher` | `m.t3t1_phase_b` | **system_comparison** | — | structural: `head_family`, `deployed_head_artifact`, `tracker_runtime_policy`; training: `warm_start`, `teacher`, `teacher_cache`, `training_schedule`, `training_budget` | — |
-| 25 | `E4.s.production_backbone_engine_ab` | runtime_ab | `s.t3t1_phase_b` | `s.t3t1_phase_b` | **controlled** | `deployed_backbone_artifact` | none | — |
-| 26 | `F1.s.legacy_v14_vs_replica_gt2_plain` | system | `s.legacy_v14` | `s.gt2_plain` | **blocked** | — | structural: `deployed_backbone_artifact`; training: `warm_start`, `teacher`, `teacher_cache`, `training_seed`, `training_schedule`, `training_budget` | asymmetric backbone/teacher consistency between endpoints |
-| 27 | `F2.s.legacy_v14_vs_t3t1_production` | system | `s.legacy_v14` | `s.t3t1_phase_b` | **blocked** | — | structural: `deployed_backbone_artifact`; training: `warm_start`, `teacher`, `teacher_cache`, `training_seed`, `training_schedule`, `training_budget` | asymmetric backbone/teacher consistency between endpoints |
-| 28 | `F3.s.legacy_parent_gt_to_controlled_refit` | stage_increment | `s.legacy_parent_gt` | `s.controlled_refit` | **historical_not_comparable** | `warm_start`, `teacher_cache` | training: `training_seed`, `training_schedule`, `training_budget` | — |
-| 29 | `F4.s.legacy_v14_vs_t3t1_each_on_own_teacher_engine` | system | `s.legacy_v14` | `s.t3t1_phase_b` | **system_comparison** | — | structural: `deployed_backbone_artifact`; training: `warm_start`, `teacher`, `teacher_cache`, `training_seed`, `training_schedule`, `training_budget` | — |
-| 30 | `G1.m.t3t1_vs_gpu_decode_cache` | paired_siblings | `m.t3t1_phase_b` | `m.t3t1_phase_b_gpu_decode` | **blocked** | `teacher_cache` | training: `warm_start`, `training_schedule`, `training_budget` | paired_siblings premise violated: warm starts differ or are unknown; paired_siblings premise violated: budgets after the common ancestor differ or are unknown |
+| 7 | `B3x.m.distill_to_gt1_preset_as_is` | stage_increment | `m.distill` | `m.gt1` | **blocked** | `warm_start`, `teacher_cache`, `training_schedule`, `training_budget` | none | treatment_not_deployed: lhs runtime uses fixed head engine m.head_engine instead of the lhs checkpoint head (bind head_override: checkpoint_pytorch = --no-mamba-trt); treatment_not_deployed: rhs runtime uses fixed head engine m.head_engine instead of the rhs checkpoint head (bind head_override: checkpoint_pytorch = --no-mamba-trt) |
+| 8 | `B4.m.gt1_to_gt2_plain` | stage_increment | `m.gt1` | `m.gt2_plain` | **controlled** | `warm_start`, `teacher_cache`, `training_schedule`, `training_budget` | none | — |
+| 9 | `B5.s.gt1_to_t3t1_production` | stage_increment | `s.gt1` | `s.t3t1_phase_b` | **historical_not_comparable** | `warm_start`, `teacher_cache`, `training_schedule`, `training_budget` | training: `training_seed`, `training_schedule` (+shared: `deployed_backbone_teacher_mismatch`) | — |
+| 10 | `C1.s.explicit_vs_implicit_shared_gt1_s42` | paired_siblings | `s.implicit_s42` | `s.t3t1_phase_b` | **controlled** | `training_schedule` | none (+shared: `deployed_backbone_teacher_mismatch`) | — |
+| 11 | `C2.s.explicit_vs_implicit_shared_gt1_s43` | paired_siblings | `s.implicit_s43` | `s.t3t1_shared_s43` | **controlled** | `training_schedule` | none (+shared: `deployed_backbone_teacher_mismatch`) | — |
+| 12 | `C3.s.explicit_vs_implicit_shared_gt1_s44` | paired_siblings | `s.implicit_s44` | `s.t3t1_shared_s44` | **controlled** | `training_schedule` | none (+shared: `deployed_backbone_teacher_mismatch`) | — |
+| 13 | `C4.s.plain_gt2_vs_t3t1_seed_chain_s13` | paired_siblings | `s.gt2_plain_s13` | `s.t3t1_s13` | **historical_not_comparable** | `training_schedule` | training: `training_schedule` (+shared: `deployed_backbone_teacher_mismatch`) | — |
+| 14 | `C5.s.plain_gt2_vs_t3t1_seed_chain_s14` | paired_siblings | `s.gt2_plain_s14` | `s.t3t1_s14` | **historical_not_comparable** | `training_schedule` | training: `training_schedule` (+shared: `deployed_backbone_teacher_mismatch`) | — |
+| 15 | `C6.s.plain_gt2_vs_t3t1_unpaired_original` | paired_siblings | `s.gt2_plain` | `s.t3t1_phase_b` | **historical_not_comparable** | `training_schedule` | training: `training_seed`, `training_schedule` (+shared: `deployed_backbone_teacher_mismatch`) | — |
+| 16 | `C7.s.implicit_shared_s43_vs_t3t1_seed_chain_s13` | paired_siblings | `s.implicit_s43` | `s.t3t1_s13` | **blocked** | `training_schedule` | training: `warm_start`, `training_seed` (+shared: `deployed_backbone_teacher_mismatch`) | paired_siblings premise violated: warm starts differ or are unknown |
+| 17 | `C8.s.plain_gt2_vs_implicit_control_s42` | paired_siblings | `s.gt2_plain` | `s.implicit_s42` | **historical_not_comparable** | `training_schedule` | training: `training_seed`, `training_schedule` (+shared: `deployed_backbone_teacher_mismatch`) | — |
+| 18 | `C9.m.plain_gt2_vs_t3t1` | paired_siblings | `m.gt2_plain` | `m.t3t1_phase_b` | **historical_not_comparable** | `training_schedule` | training: `training_schedule` | — |
+| 19 | `D1.s.implicit_seed_42_vs_43` | seed_replicate | `s.implicit_s42` | `s.implicit_s43` | **controlled** | `training_seed` | none (+shared: `deployed_backbone_teacher_mismatch`) | — |
+| 20 | `D2.s.implicit_seed_43_vs_44` | seed_replicate | `s.implicit_s43` | `s.implicit_s44` | **controlled** | `training_seed` | none (+shared: `deployed_backbone_teacher_mismatch`) | — |
+| 21 | `D3.s.explicit_shared_seed_42_vs_43` | seed_replicate | `s.t3t1_phase_b` | `s.t3t1_shared_s43` | **controlled** | `training_seed` | none (+shared: `deployed_backbone_teacher_mismatch`) | — |
+| 22 | `D4.s.explicit_shared_seed_43_vs_44` | seed_replicate | `s.t3t1_shared_s43` | `s.t3t1_shared_s44` | **controlled** | `training_seed` | none (+shared: `deployed_backbone_teacher_mismatch`) | — |
+| 23 | `E1.s_vs_m.production_system` | system | `s.t3t1_phase_b` | `m.t3t1_phase_b` | **system_comparison** | — | structural: `backbone_family`, `inference_forward_mode`, `deployed_backbone_artifact`, `deployed_head_artifact`, `tracker_runtime_policy`; training: `warm_start`, `teacher`, `teacher_cache`, `training_seed` (+shared: `deployed_backbone_teacher_mismatch`) | — |
+| 24 | `E2.s.native_head_vs_mamba_head_shared_backbone` | system | `s.adapted_teacher` | `s.t3t1_phase_b` | **system_comparison** | — | structural: `head_family`, `deployed_head_artifact`, `tracker_runtime_policy`; training: `warm_start`, `teacher`, `teacher_cache`, `training_seed`, `training_schedule`, `training_budget` | — |
+| 25 | `E3.m.native_head_vs_mamba_head_shared_backbone` | system | `m.adapted_teacher` | `m.t3t1_phase_b` | **system_comparison** | — | structural: `head_family`, `deployed_head_artifact`, `tracker_runtime_policy`; training: `warm_start`, `teacher`, `teacher_cache`, `training_schedule`, `training_budget` | — |
+| 26 | `E4.s.production_backbone_engine_ab` | runtime_ab | `s.t3t1_phase_b` | `s.t3t1_phase_b` | **controlled** | `deployed_backbone_artifact` | none | — |
+| 27 | `F1.s.legacy_v14_vs_replica_gt2_plain` | system | `s.legacy_v14` | `s.gt2_plain` | **blocked** | — | structural: `deployed_backbone_artifact`; training: `warm_start`, `teacher`, `teacher_cache`, `training_seed`, `training_schedule`, `training_budget` | asymmetric backbone/teacher consistency between endpoints |
+| 28 | `F2.s.legacy_v14_vs_t3t1_production` | system | `s.legacy_v14` | `s.t3t1_phase_b` | **blocked** | — | structural: `deployed_backbone_artifact`; training: `warm_start`, `teacher`, `teacher_cache`, `training_seed`, `training_schedule`, `training_budget` | asymmetric backbone/teacher consistency between endpoints |
+| 29 | `F3.s.legacy_parent_gt_to_controlled_refit` | stage_increment | `s.legacy_parent_gt` | `s.controlled_refit` | **historical_not_comparable** | `warm_start`, `teacher_cache` | training: `training_seed`, `training_schedule`, `training_budget` | — |
+| 30 | `F4.s.legacy_v14_vs_t3t1_each_on_own_teacher_engine` | system | `s.legacy_v14` | `s.t3t1_phase_b` | **system_comparison** | — | structural: `deployed_backbone_artifact`; training: `warm_start`, `teacher`, `teacher_cache`, `training_seed`, `training_schedule`, `training_budget` | — |
+| 31 | `G1.m.t3t1_vs_gpu_decode_cache` | paired_siblings | `m.t3t1_phase_b` | `m.t3t1_phase_b_gpu_decode` | **blocked** | `teacher_cache` | training: `warm_start`, `training_schedule`, `training_budget` | paired_siblings premise violated: warm starts differ or are unknown; paired_siblings premise violated: budgets after the common ancestor differ or are unknown |
 
-Counts: controlled = 12, system_comparison = 7, historical_not_comparable = 7, blocked = 4.
+Counts: controlled = 12, system_comparison = 7, historical_not_comparable = 7, blocked = 5.
 
 ## What the matrix establishes
 
@@ -71,8 +74,8 @@ Counts: controlled = 12, system_comparison = 7, historical_not_comparable = 7, b
 - **family `m` has no controlled curriculum (paired_siblings) comparison**; its declared pairs carry non-treatment schedule differences ['warmup_epochs'].
 
 **System comparisons (7)** — quality/cost only, never a post-training attribution:
-- `A1.s.pretrained_vs_adapted_teacher` — requires: tracker policy fixed by the eval contract; eager PyTorch runner (not the whole-graph deployment)
-- `A2.m.pretrained_vs_adapted_teacher` — requires: tracker policy fixed by the eval contract; eager PyTorch runner (not the whole-graph deployment)
+- `A1.s.pretrained_vs_adapted_teacher` — requires: tracker policy fixed by the eval contract; missing: lhs: no runner in inventory for native Detect head, PyTorch eager (runner not in inventory); deliverable 3 must bind it; eager PyTorch runner (not the whole-graph deployment)
+- `A2.m.pretrained_vs_adapted_teacher` — requires: tracker policy fixed by the eval contract; missing: lhs: no runner in inventory for native Detect head, PyTorch eager (runner not in inventory); deliverable 3 must bind it; eager PyTorch runner (not the whole-graph deployment)
 - `A3.s_vs_m.adapted_teacher_capacity` — requires: tracker policy fixed by the eval contract; eager PyTorch runner (not the whole-graph deployment)
 - `E1.s_vs_m.production_system` — executable as declared
 - `E2.s.native_head_vs_mamba_head_shared_backbone` — requires: tracker policy fixed by the eval contract; eager PyTorch runner (not the whole-graph deployment)
@@ -88,7 +91,8 @@ Counts: controlled = 12, system_comparison = 7, historical_not_comparable = 7, b
 - `C9.m.plain_gt2_vs_t3t1`: `training_schedule` (schedule keys: warmup_epochs)
 - `F3.s.legacy_parent_gt_to_controlled_refit`: `training_seed`, `training_schedule`, `training_budget`
 
-**Blocked (4)** — the declared question has no valid reading over these artifacts:
+**Blocked (5)** — the declared question has no valid reading over these artifacts:
+- `B3x.m.distill_to_gt1_preset_as_is`: treatment_not_deployed: lhs runtime uses fixed head engine m.head_engine instead of the lhs checkpoint head (bind head_override: checkpoint_pytorch = --no-mamba-trt); treatment_not_deployed: rhs runtime uses fixed head engine m.head_engine instead of the rhs checkpoint head (bind head_override: checkpoint_pytorch = --no-mamba-trt)
 - `C7.s.implicit_shared_s43_vs_t3t1_seed_chain_s13`: paired_siblings premise violated: warm starts differ or are unknown
 - `F1.s.legacy_v14_vs_replica_gt2_plain`: asymmetric backbone/teacher consistency between endpoints
 - `F2.s.legacy_v14_vs_t3t1_production`: asymmetric backbone/teacher consistency between endpoints
@@ -98,14 +102,17 @@ Counts: controlled = 12, system_comparison = 7, historical_not_comparable = 7, b
 
 1. **s production backbone ≠ head's teacher (sibling-ONNX evidence; engine provenance unresolved).** Common-mode in 15 rows (cannot explain their paired delta, but their absolute numbers sit on an unintended backbone); **blocking** in `F1.s.legacy_v14_vs_replica_gt2_plain`, `F2.s.legacy_v14_vs_t3t1_production` (the two heads were trained against different teachers, so no single engine is consistent for both); tolerated as asymmetric in `E1.s_vs_m.production_system` (declared system comparisons). Resolution path: `E4` (same head, two engines) and, for a symmetric legacy-vs-T3→T1 reading, `F4`.
 2. **Old seed-chain T3→T1 pairs are not the shared-GT1 matched pairs.** Mixing them is blocked outright (`C7.s.implicit_shared_s43_vs_t3t1_seed_chain_s13`: different warm-start checkpoints). The old pairs themselves, and every plain-GT2 vs T3→T1 pairing, carry a `warmup_epochs` 5→3 difference outside the curriculum (`B5.s.gt1_to_t3t1_production`, `C4.s.plain_gt2_vs_t3t1_seed_chain_s13`, `C5.s.plain_gt2_vs_t3t1_seed_chain_s14`, `C6.s.plain_gt2_vs_t3t1_unpaired_original`, `C8.s.plain_gt2_vs_implicit_control_s42`, `C9.m.plain_gt2_vs_t3t1`); the paper table's `paired=True` rows are therefore historical here.
-3. **Missing teacher caches / legacy distill artifact.** 27 of 30 rows cannot be re-trained from cache (`m.teacher_cache`, `s.legacy_cache`, `s.teacher_cache` unavailable; legacy chain incomplete). Fresh *evaluation* of the existing checkpoints is unaffected; any comparison that needs a new training arm (e.g. a matched m implicit control, a proper cache-decode A/B) needs a cache rebuild first, and a rebuilt cache is a new node, not the old one.
+3. **Missing teacher caches / legacy distill artifact.** 28 of 31 rows cannot be re-trained from cache (`m.teacher_cache`, `s.legacy_cache`, `s.teacher_cache` unavailable; legacy chain incomplete). Fresh *evaluation* of the existing checkpoints is unaffected; any comparison that needs a new training arm (e.g. a matched m implicit control, a proper cache-decode A/B) needs a cache rebuild first, and a rebuilt cache is a new node, not the old one.
 4. **Historical eval runs carry no preset / engine identity.** 15 rows have endpoints with results on record; none is reusable as a paired measurement. The results table has no preset/engine sha column and the run-manifest schema records a preset *name* only. Runtime identity for new measurements is deliverable 3; whether each historical run used the engine the preset names today is deliverable 4.
+5. **The m preset runs a fixed TRT head, not the checkpoint head.** `mamba_whole_graph_m.yaml` names `mamba_head_engine`; `mot17.py` passes it as `trt_head_engine` and `_whole_graph_fn` calls it, so under the unmodified preset every m checkpoint measures the same head bytes (blocked as `treatment_not_deployed`: `B3x.m.distill_to_gt1_preset_as_is`). m training rows are therefore bound with `head_override: checkpoint_pytorch` (= `--no-mamba-trt`): `B3.m.distill_to_gt1`, `B4.m.gt1_to_gt2_plain`, `C9.m.plain_gt2_vs_t3t1`, `G1.m.t3t1_vs_gpu_decode_cache`. Rows that measure the fixed head engine as such: `B3x.m.distill_to_gt1_preset_as_is`, `E1.s_vs_m.production_system` — there the m head's training identity is *not* `m.t3t1_phase_b`; `mamba_head_26m.onnx` is ambiguous across every m checkpoint (#445).
 
 ## Comparisons
 
 ### `A1.s.pretrained_vs_adapted_teacher` — **system_comparison**
 
 - design `system`; lhs `s.pretrained_yolo` (shared_backbone_node), rhs `s.adapted_teacher` (shared_backbone_node)
+- lhs runtime: head = checkpoint_pytorch (`checkpoint_head_deployed: True`); recipe: **none in inventory**
+- rhs runtime: head = checkpoint_pytorch (`checkpoint_head_deployed: True`); recipe: `scripts/eval/mot17.py --preset mamba_pyt_backbone --teacher-head-ckpt runs/gated_det_v14replica/epoch_0012.ckpt`
 - intended treatment: domain adaptation of the whole detector (gated-teacher training, 12 protocol epochs on MOT17 SDP) on top of external COCO pretraining
 - question: 原始 pretrained YOLO26s vs domain-adapted teacher — the issue's '原始/後訓練系統對照' at the teacher level
 - treatment axes declared: none (system)
@@ -117,7 +124,7 @@ Counts: controlled = 12, system_comparison = 7, historical_not_comparable = 7, b
 | `dataset_split` | unmatched | {"basis": "external", "holdout": [], "train": ["external:COCO"]} | {"basis": "provenance.training_sequences", "holdout": [], "train": ["MOT17-02-SDP", "MO… | — |
 | `inference_forward_mode` | matched | {"effective_T": 1, "embedding": null, "final_stage_gt_ratio": null, "gate_teacher_at_ru… | {"effective_T": 1, "embedding": null, "final_stage_gt_ratio": null, "gate_teacher_at_ru… | — |
 | `deployed_backbone_artifact` | unmatched | {"engine_node": "s.pretrained_yolo", "teacher_consistency": "same_teacher_indicated"} | {"engine_node": "s.adapted_teacher", "teacher_consistency": "same_teacher_indicated"} | engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence |
-| `deployed_head_artifact` | unmatched | {"head_engine_node": null, "head_path": "native Detect head, PyTorch eager (runner not … | {"head_engine_node": null, "head_path": "native Detect head via TeacherHeadDetector, Py… | different head kinds |
+| `deployed_head_artifact` | unmatched | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "native Detec… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "native Detec… | different head kinds |
 | `tracker_runtime_policy` | unknown | contract_required | contract_required | tracker policy must be fixed by the shared eval contract (deliverable 3); not derivable from the inventory |
 | `warm_start` | unmatched | — | s.pretrained_yolo | external pretraining on one side |
 | `teacher` | unmatched | — | — | external pretraining on one side |
@@ -137,7 +144,7 @@ Remaining confounds:
 - `training_seed` [training]: external pretraining on one side
 - `training_schedule` [training]: non-treatment schedule keys differ: None
 - `training_budget` [training]: external pretraining on one side
-- executability: fresh paired eval possible; retrain replay possible
+- executability: fresh paired eval NOT possible (lhs: no runner in inventory for native Detect head, PyTorch eager (runner not in inventory); deliverable 3 must bind it); retrain replay possible
 - note: Both sides keep the native Detect head; the adapted side adds a gate module that is identity at deployment (gt_ratio 0).
 - note: The raw-YOLO runner on the shared tracker is not an inventory node (speed/baseline presets use 960-px e2e engines); deliverable 3 must bind it before this row is executable.
 - note: Per-detector threshold re-tuning is a separate optional variant; fixed-policy results must not be merged with it.
@@ -145,6 +152,8 @@ Remaining confounds:
 ### `A2.m.pretrained_vs_adapted_teacher` — **system_comparison**
 
 - design `system`; lhs `m.pretrained_yolo` (shared_backbone_node), rhs `m.adapted_teacher` (shared_backbone_node)
+- lhs runtime: head = checkpoint_pytorch (`checkpoint_head_deployed: True`); recipe: **none in inventory**
+- rhs runtime: head = checkpoint_pytorch (`checkpoint_head_deployed: True`); recipe: `scripts/eval/mot17.py --preset mamba_pyt_backbone --teacher-head-ckpt runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt`
 - intended treatment: domain adaptation of the whole detector (gated-teacher training) on top of external COCO pretraining
 - treatment axes declared: none (system)
 
@@ -155,7 +164,7 @@ Remaining confounds:
 | `dataset_split` | unmatched | {"basis": "external", "holdout": [], "train": ["external:COCO"]} | {"basis": "provenance.training_sequences", "holdout": [], "train": ["MOT17-02-SDP", "MO… | — |
 | `inference_forward_mode` | matched | {"effective_T": 1, "embedding": null, "final_stage_gt_ratio": null, "gate_teacher_at_ru… | {"effective_T": 1, "embedding": null, "final_stage_gt_ratio": null, "gate_teacher_at_ru… | — |
 | `deployed_backbone_artifact` | unmatched | {"engine_node": "m.pretrained_yolo", "teacher_consistency": "same_teacher_indicated"} | {"engine_node": "m.adapted_teacher", "teacher_consistency": "same_teacher_indicated"} | engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence |
-| `deployed_head_artifact` | unmatched | {"head_engine_node": null, "head_path": "native Detect head, PyTorch eager (runner not … | {"head_engine_node": null, "head_path": "native Detect head via TeacherHeadDetector, Py… | different head kinds |
+| `deployed_head_artifact` | unmatched | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "native Detec… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "native Detec… | different head kinds |
 | `tracker_runtime_policy` | unknown | contract_required | contract_required | tracker policy must be fixed by the shared eval contract (deliverable 3); not derivable from the inventory |
 | `warm_start` | unmatched | — | m.pretrained_yolo | external pretraining on one side |
 | `teacher` | unmatched | — | — | external pretraining on one side |
@@ -175,12 +184,14 @@ Remaining confounds:
 - `training_seed` [training]: external pretraining on one side
 - `training_schedule` [training]: non-treatment schedule keys differ: None
 - `training_budget` [training]: external pretraining on one side
-- executability: fresh paired eval possible; retrain replay possible
+- executability: fresh paired eval NOT possible (lhs: no runner in inventory for native Detect head, PyTorch eager (runner not in inventory); deliverable 3 must bind it); retrain replay possible
 - note: Same caveats as A1.
 
 ### `A3.s_vs_m.adapted_teacher_capacity` — **system_comparison**
 
 - design `system`; lhs `s.adapted_teacher` (shared_backbone_node), rhs `m.adapted_teacher` (shared_backbone_node)
+- lhs runtime: head = checkpoint_pytorch (`checkpoint_head_deployed: True`); recipe: `scripts/eval/mot17.py --preset mamba_pyt_backbone --teacher-head-ckpt runs/gated_det_v14replica/epoch_0012.ckpt`
+- rhs runtime: head = checkpoint_pytorch (`checkpoint_head_deployed: True`); recipe: `scripts/eval/mot17.py --preset mamba_pyt_backbone --teacher-head-ckpt runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt`
 - intended treatment: backbone capacity (yolo26s vs yolo26m) under the same teacher recipe and seed
 - treatment axes declared: none (system)
 
@@ -191,7 +202,7 @@ Remaining confounds:
 | `dataset_split` | matched | {"basis": "provenance.training_sequences", "holdout": [], "train": ["MOT17-02-SDP", "MO… | {"basis": "provenance.training_sequences", "holdout": [], "train": ["MOT17-02-SDP", "MO… | — |
 | `inference_forward_mode` | matched | {"effective_T": 1, "embedding": null, "final_stage_gt_ratio": null, "gate_teacher_at_ru… | {"effective_T": 1, "embedding": null, "final_stage_gt_ratio": null, "gate_teacher_at_ru… | — |
 | `deployed_backbone_artifact` | unmatched | {"engine_node": "s.adapted_teacher", "teacher_consistency": "same_teacher_indicated"} | {"engine_node": "m.adapted_teacher", "teacher_consistency": "same_teacher_indicated"} | engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence |
-| `deployed_head_artifact` | matched | {"head_engine_node": null, "head_path": "native Detect head via TeacherHeadDetector, Py… | {"head_engine_node": null, "head_path": "native Detect head via TeacherHeadDetector, Py… | — |
+| `deployed_head_artifact` | matched | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "native Detec… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "native Detec… | — |
 | `tracker_runtime_policy` | unknown | contract_required | contract_required | tracker policy must be fixed by the shared eval contract (deliverable 3); not derivable from the inventory |
 | `warm_start` | unmatched | s.pretrained_yolo | m.pretrained_yolo | no common ancestor in the inventory (chains root at s.adapted_teacher vs m.adapted_teacher) |
 | `teacher` | unknown | — | — | — |
@@ -212,6 +223,8 @@ Remaining confounds:
 ### `B1.s.distill_to_gt1` — **controlled**
 
 - design `stage_increment`; lhs `s.distill` (family_preset), rhs `s.gt1` (family_preset)
+- lhs runtime: head = checkpoint_pytorch (`checkpoint_head_deployed: True`); recipe: `scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_distill_v14replica/best.ckpt`
+- rhs runtime: head = checkpoint_pytorch (`checkpoint_head_deployed: True`); recipe: `scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_stage1/best.ckpt`
 - intended treatment: GT1 stage as a bundle: live teacher (no cache), gt_ratio 0.5, clip_len 4 / stride 8, lr 1e-4, batch 4, +30 epochs
 - treatment axes declared: `warm_start`, `training_budget`, `training_schedule`, `teacher_cache`; schedule keys: lr, batch_size, clip_len, clip_stride
 
@@ -222,7 +235,7 @@ Remaining confounds:
 | `dataset_split` | matched | {"basis": "explicit", "holdout": [], "train": ["MOT17-02-SDP", "MOT17-04-SDP", "MOT17-0… | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | bases differ (explicit vs default:all *-SDP under datasets/MOT17/train) but resolve to the same set |
 | `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | — |
 | `deployed_backbone_artifact` | matched | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence |
-| `deployed_head_artifact` | matched | {"head_engine_node": null, "head_path": "none (PyTorch head inside whole graph)", "temp… | {"head_engine_node": null, "head_path": "none (PyTorch head inside whole graph)", "temp… | — |
+| `deployed_head_artifact` | matched | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | — |
 | `tracker_runtime_policy` | matched | s.deployment_preset | s.deployment_preset | same preset configs/presets/mamba_whole_graph.yaml @ 093b66ed1240 |
 | `warm_start` (treatment) | unmatched | — | s.distill | rhs descends from lhs through ['s.gt1'] |
 | `teacher` | matched | s.adapted_teacher | s.adapted_teacher | — |
@@ -238,6 +251,8 @@ Remaining confounds:
 ### `B2.s.gt1_to_gt2_plain` — **controlled**
 
 - design `stage_increment`; lhs `s.gt1` (family_preset), rhs `s.gt2_plain` (family_preset)
+- lhs runtime: head = checkpoint_pytorch (`checkpoint_head_deployed: True`); recipe: `scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_stage1/best.ckpt`
+- rhs runtime: head = checkpoint_pytorch (`checkpoint_head_deployed: True`); recipe: `scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_final/best.ckpt`
 - intended treatment: plain GT2 stage: gt_ratio 0.5 -> 0.0 on the cache, +30 epochs, everything else as GT1
 - treatment axes declared: `warm_start`, `training_budget`, `training_schedule`, `teacher_cache`; schedule keys: gt_ratio
 
@@ -248,7 +263,7 @@ Remaining confounds:
 | `dataset_split` | matched | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | — |
 | `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | — |
 | `deployed_backbone_artifact` | matched | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence |
-| `deployed_head_artifact` | matched | {"head_engine_node": null, "head_path": "none (PyTorch head inside whole graph)", "temp… | {"head_engine_node": null, "head_path": "none (PyTorch head inside whole graph)", "temp… | — |
+| `deployed_head_artifact` | matched | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | — |
 | `tracker_runtime_policy` | matched | s.deployment_preset | s.deployment_preset | same preset configs/presets/mamba_whole_graph.yaml @ 093b66ed1240 |
 | `warm_start` (treatment) | unmatched | s.distill | s.gt1 | rhs descends from lhs through ['s.gt2_plain'] |
 | `teacher` | matched | s.adapted_teacher | s.adapted_teacher | — |
@@ -265,6 +280,8 @@ Remaining confounds:
 ### `B3.m.distill_to_gt1` — **controlled**
 
 - design `stage_increment`; lhs `m.distill` (family_preset), rhs `m.gt1` (family_preset)
+- lhs runtime: head = checkpoint_pytorch (`checkpoint_head_deployed: True`); recipe: `scripts/eval/mot17.py --preset mamba_whole_graph_m --no-mamba-trt --mamba-ckpt runs/mamba_distill_yolo26m_v14replica/best.ckpt`
+- rhs runtime: head = checkpoint_pytorch (`checkpoint_head_deployed: True`); recipe: `scripts/eval/mot17.py --preset mamba_whole_graph_m --no-mamba-trt --mamba-ckpt runs/mamba_gt_yolo26m_v14replica_stage1/best.ckpt`
 - intended treatment: GT1 stage as a bundle (m family)
 - treatment axes declared: `warm_start`, `training_budget`, `training_schedule`, `teacher_cache`; schedule keys: lr, batch_size, clip_len, clip_stride
 
@@ -275,7 +292,7 @@ Remaining confounds:
 | `dataset_split` | matched | {"basis": "explicit", "holdout": [], "train": ["MOT17-02-SDP", "MOT17-04-SDP", "MOT17-0… | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | bases differ (explicit vs default:all *-SDP under datasets/MOT17/train) but resolve to the same set |
 | `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | — |
 | `deployed_backbone_artifact` | matched | {"engine_node": "m.backbone_engine", "teacher_consistency": "same_teacher_indicated"} | {"engine_node": "m.backbone_engine", "teacher_consistency": "same_teacher_indicated"} | engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence |
-| `deployed_head_artifact` | matched | {"head_engine_node": "m.head_engine", "head_path": "models/yolo/mamba_head_26m.engine",… | {"head_engine_node": "m.head_engine", "head_path": "models/yolo/mamba_head_26m.engine",… | — |
+| `deployed_head_artifact` | matched | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | — |
 | `tracker_runtime_policy` | matched | m.deployment_preset | m.deployment_preset | same preset configs/presets/mamba_whole_graph_m.yaml @ 496c4ec22b49 |
 | `warm_start` (treatment) | unmatched | — | m.distill | rhs descends from lhs through ['m.gt1'] |
 | `teacher` | matched | m.adapted_teacher | m.adapted_teacher | — |
@@ -285,10 +302,43 @@ Remaining confounds:
 | `training_budget` (treatment) | unmatched | 0 | 30 | epochs planned after common ancestor m.distill |
 
 - executability: fresh paired eval possible; retrain replay NOT possible (m.distill needs m.teacher_cache (unavailable))
+- note: m preset names a fixed head engine (mamba_head_26m.engine); bound with head_override=checkpoint_pytorch (= --no-mamba-trt) so the lhs/rhs checkpoint heads actually run inside the whole graph. Without the override this pair is blocked (treatment_not_deployed).
+
+### `B3x.m.distill_to_gt1_preset_as_is` — **blocked**
+
+- design `stage_increment`; lhs `m.distill` (family_preset), rhs `m.gt1` (family_preset)
+- lhs runtime: head = trt_engine (`checkpoint_head_deployed: False`); recipe: `scripts/eval/mot17.py --preset mamba_whole_graph_m --mamba-ckpt runs/mamba_distill_yolo26m_v14replica/best.ckpt`
+- rhs runtime: head = trt_engine (`checkpoint_head_deployed: False`); recipe: `scripts/eval/mot17.py --preset mamba_whole_graph_m --mamba-ckpt runs/mamba_gt_yolo26m_v14replica_stage1/best.ckpt`
+- intended treatment: GT1 stage as a bundle (m family)
+- question: the same pair under the unmodified m preset: mot17.py passes mamba_head_engine as trt_head_engine and _whole_graph_fn calls the TRT head, so neither checkpoint head runs — declared so the tool blocks it explicitly
+- treatment axes declared: `warm_start`, `training_budget`, `training_schedule`, `teacher_cache`; schedule keys: lr, batch_size, clip_len, clip_stride
+
+| axis | status | lhs | rhs | detail |
+|---|---|---|---|---|
+| `backbone_family` | matched | yolo26m | yolo26m | — |
+| `head_family` | matched | {"d_model": 128, "d_state": 16, "detail_source": "none", "family": "mamba_head", "num_b… | {"d_model": 128, "d_state": 16, "detail_source": "none", "family": "mamba_head", "num_b… | — |
+| `dataset_split` | matched | {"basis": "explicit", "holdout": [], "train": ["MOT17-02-SDP", "MOT17-04-SDP", "MOT17-0… | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | bases differ (explicit vs default:all *-SDP under datasets/MOT17/train) but resolve to the same set |
+| `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | — |
+| `deployed_backbone_artifact` | matched | {"engine_node": "m.backbone_engine", "teacher_consistency": "same_teacher_indicated"} | {"engine_node": "m.backbone_engine", "teacher_consistency": "same_teacher_indicated"} | engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence |
+| `deployed_head_artifact` | matched | {"checkpoint_head_deployed": false, "head_engine_node": "m.head_engine", "head_engine_s… | {"checkpoint_head_deployed": false, "head_engine_node": "m.head_engine", "head_engine_s… | lhs runs the fixed head engine, not the lhs checkpoint head (sibling ONNX ambiguous: ['m.distill', 'm.gt1', 'm.gt2_plain', 'm.t3t1_phase_a', 'm.t3t1_phase_b', 'm.t3t1_phase_b_gpu_decode']; checkpoint source ambiguous); rhs runs the fixed head engine, not the rhs checkpoint head (sibling ONNX ambiguous: ['m.distill', 'm.gt1', 'm.gt2_plain', 'm.t3t1_phase_a', 'm.t3t1_phase_b', 'm.t3t1_phase_b_gpu_decode']; checkpoint source ambiguous) |
+| `tracker_runtime_policy` | matched | m.deployment_preset | m.deployment_preset | same preset configs/presets/mamba_whole_graph_m.yaml @ 496c4ec22b49 |
+| `warm_start` (treatment) | unmatched | — | m.distill | rhs descends from lhs through ['m.gt1'] |
+| `teacher` | matched | m.adapted_teacher | m.adapted_teacher | — |
+| `teacher_cache` (treatment) | unmatched | ["m.teacher_cache"] | ["m.teacher_cache"] | compared stages use ['m.teacher_cache'] vs [] |
+| `training_seed` | matched | 20260612 | 20260612 | bases: args.seed / args.seed |
+| `training_schedule` (treatment) | unmatched | ["m.distill"] | ["m.gt1"] | treatment: {"batch_size": {"lhs": [8], "rhs": [4]}, "clip_len": {"lhs": [1], "rhs": [4]}, "clip_stride": {"lhs": [0], "rhs": [8]}, "lr": {"lhs": [0.001], "rhs": [0.0001]}}; one-sided keys (not counted): add_temporal, best_by, clip_grad, cls_weight, consistency_weight, freeze_spatial, freeze_temporal, gt_ratio, lr_gate, t1_weight |
+| `training_budget` (treatment) | unmatched | 0 | 30 | epochs planned after common ancestor m.distill |
+
+Blocking:
+- treatment_not_deployed: lhs runtime uses fixed head engine m.head_engine instead of the lhs checkpoint head (bind head_override: checkpoint_pytorch = --no-mamba-trt)
+- treatment_not_deployed: rhs runtime uses fixed head engine m.head_engine instead of the rhs checkpoint head (bind head_override: checkpoint_pytorch = --no-mamba-trt)
+- executability: fresh paired eval possible; retrain replay NOT possible (m.distill needs m.teacher_cache (unavailable))
 
 ### `B4.m.gt1_to_gt2_plain` — **controlled**
 
 - design `stage_increment`; lhs `m.gt1` (family_preset), rhs `m.gt2_plain` (family_preset)
+- lhs runtime: head = checkpoint_pytorch (`checkpoint_head_deployed: True`); recipe: `scripts/eval/mot17.py --preset mamba_whole_graph_m --no-mamba-trt --mamba-ckpt runs/mamba_gt_yolo26m_v14replica_stage1/best.ckpt`
+- rhs runtime: head = checkpoint_pytorch (`checkpoint_head_deployed: True`); recipe: `scripts/eval/mot17.py --preset mamba_whole_graph_m --no-mamba-trt --mamba-ckpt runs/mamba_gt_yolo26m_v14replica_final/best.ckpt`
 - intended treatment: plain GT2 stage (m family)
 - treatment axes declared: `warm_start`, `training_budget`, `training_schedule`, `teacher_cache`; schedule keys: gt_ratio
 
@@ -299,7 +349,7 @@ Remaining confounds:
 | `dataset_split` | matched | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | — |
 | `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | — |
 | `deployed_backbone_artifact` | matched | {"engine_node": "m.backbone_engine", "teacher_consistency": "same_teacher_indicated"} | {"engine_node": "m.backbone_engine", "teacher_consistency": "same_teacher_indicated"} | engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence |
-| `deployed_head_artifact` | matched | {"head_engine_node": "m.head_engine", "head_path": "models/yolo/mamba_head_26m.engine",… | {"head_engine_node": "m.head_engine", "head_path": "models/yolo/mamba_head_26m.engine",… | — |
+| `deployed_head_artifact` | matched | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | — |
 | `tracker_runtime_policy` | matched | m.deployment_preset | m.deployment_preset | same preset configs/presets/mamba_whole_graph_m.yaml @ 496c4ec22b49 |
 | `warm_start` (treatment) | unmatched | m.distill | m.gt1 | rhs descends from lhs through ['m.gt2_plain'] |
 | `teacher` | matched | m.adapted_teacher | m.adapted_teacher | — |
@@ -309,10 +359,13 @@ Remaining confounds:
 | `training_budget` (treatment) | unmatched | 0 | 30 | epochs planned after common ancestor m.gt1 |
 
 - executability: fresh paired eval possible; retrain replay NOT possible (m.distill needs m.teacher_cache (unavailable); m.gt2_plain needs m.teacher_cache (unavailable))
+- note: m preset names a fixed head engine (mamba_head_26m.engine); bound with head_override=checkpoint_pytorch (= --no-mamba-trt) so the lhs/rhs checkpoint heads actually run inside the whole graph. Without the override this pair is blocked (treatment_not_deployed).
 
 ### `B5.s.gt1_to_t3t1_production` — **historical_not_comparable**
 
 - design `stage_increment`; lhs `s.gt1` (family_preset), rhs `s.t3t1_phase_b` (family_preset)
+- lhs runtime: head = checkpoint_pytorch (`checkpoint_head_deployed: True`); recipe: `scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_stage1/best.ckpt`
+- rhs runtime: head = checkpoint_pytorch (`checkpoint_head_deployed: True`); recipe: `scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1/best.ckpt`
 - intended treatment: the production T3->T1 curriculum (Phase A + Phase B, 15+15 epochs) on top of GT1
 - treatment axes declared: `warm_start`, `training_budget`, `training_schedule`, `teacher_cache`; schedule keys: clip_len, clip_stride, gt_ratio, add_temporal, staging
 
@@ -323,7 +376,7 @@ Remaining confounds:
 | `dataset_split` | matched | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | — |
 | `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | — |
 | `deployed_backbone_artifact` | matched | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence |
-| `deployed_head_artifact` | matched | {"head_engine_node": null, "head_path": "none (PyTorch head inside whole graph)", "temp… | {"head_engine_node": null, "head_path": "none (PyTorch head inside whole graph)", "temp… | — |
+| `deployed_head_artifact` | matched | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | — |
 | `tracker_runtime_policy` | matched | s.deployment_preset | s.deployment_preset | same preset configs/presets/mamba_whole_graph.yaml @ 093b66ed1240 |
 | `warm_start` (treatment) | unmatched | s.distill | s.t3t1_phase_a | rhs descends from lhs through ['s.t3t1_phase_a', 's.t3t1_phase_b'] |
 | `teacher` | matched | s.adapted_teacher | s.adapted_teacher | — |
@@ -343,6 +396,8 @@ Remaining confounds:
 ### `C1.s.explicit_vs_implicit_shared_gt1_s42` — **controlled**
 
 - design `paired_siblings`; lhs `s.implicit_s42` (family_preset), rhs `s.t3t1_phase_b` (family_preset)
+- lhs runtime: head = checkpoint_pytorch (`checkpoint_head_deployed: True`); recipe: `scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_implicit_s42/best.ckpt`
+- rhs runtime: head = checkpoint_pytorch (`checkpoint_head_deployed: True`); recipe: `scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1/best.ckpt`
 - intended treatment: explicit T3->T1 staging (15 ep T=3 with temporal blocks, then 15 ep T=1) vs implicit all-frames T=4 for 30 ep, from the shared GT1 at seed 42
 - question: curriculum doc §6 matched pair; the production checkpoint is the seed-42 explicit member
 - treatment axes declared: `training_schedule`; schedule keys: clip_len, clip_stride, add_temporal, staging
@@ -354,7 +409,7 @@ Remaining confounds:
 | `dataset_split` | matched | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | — |
 | `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | — |
 | `deployed_backbone_artifact` | matched | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence |
-| `deployed_head_artifact` | matched | {"head_engine_node": null, "head_path": "none (PyTorch head inside whole graph)", "temp… | {"head_engine_node": null, "head_path": "none (PyTorch head inside whole graph)", "temp… | — |
+| `deployed_head_artifact` | matched | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | — |
 | `tracker_runtime_policy` | matched | s.deployment_preset | s.deployment_preset | same preset configs/presets/mamba_whole_graph.yaml @ 093b66ed1240 |
 | `warm_start` | matched | s.gt1 | s.gt1 | both sides warm-start from the common ancestor s.gt1 |
 | `teacher` | matched | s.adapted_teacher | s.adapted_teacher | — |
@@ -371,6 +426,8 @@ Remaining confounds:
 ### `C2.s.explicit_vs_implicit_shared_gt1_s43` — **controlled**
 
 - design `paired_siblings`; lhs `s.implicit_s43` (family_preset), rhs `s.t3t1_shared_s43` (family_preset)
+- lhs runtime: head = checkpoint_pytorch (`checkpoint_head_deployed: True`); recipe: `scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_implicit_s43/best.ckpt`
+- rhs runtime: head = checkpoint_pytorch (`checkpoint_head_deployed: True`); recipe: `scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1_shared_s43/best.ckpt`
 - intended treatment: explicit T3->T1 staging vs implicit all-frames T=4, shared GT1, seed 43
 - treatment axes declared: `training_schedule`; schedule keys: clip_len, clip_stride, add_temporal, staging
 
@@ -381,7 +438,7 @@ Remaining confounds:
 | `dataset_split` | matched | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | — |
 | `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | — |
 | `deployed_backbone_artifact` | matched | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence |
-| `deployed_head_artifact` | matched | {"head_engine_node": null, "head_path": "none (PyTorch head inside whole graph)", "temp… | {"head_engine_node": null, "head_path": "none (PyTorch head inside whole graph)", "temp… | — |
+| `deployed_head_artifact` | matched | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | — |
 | `tracker_runtime_policy` | matched | s.deployment_preset | s.deployment_preset | same preset configs/presets/mamba_whole_graph.yaml @ 093b66ed1240 |
 | `warm_start` | matched | s.gt1 | s.gt1 | both sides warm-start from the common ancestor s.gt1 |
 | `teacher` | matched | s.adapted_teacher | s.adapted_teacher | — |
@@ -397,6 +454,8 @@ Remaining confounds:
 ### `C3.s.explicit_vs_implicit_shared_gt1_s44` — **controlled**
 
 - design `paired_siblings`; lhs `s.implicit_s44` (family_preset), rhs `s.t3t1_shared_s44` (family_preset)
+- lhs runtime: head = checkpoint_pytorch (`checkpoint_head_deployed: True`); recipe: `scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_implicit_s44/best.ckpt`
+- rhs runtime: head = checkpoint_pytorch (`checkpoint_head_deployed: True`); recipe: `scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1_shared_s44/best.ckpt`
 - intended treatment: explicit T3->T1 staging vs implicit all-frames T=4, shared GT1, seed 44
 - treatment axes declared: `training_schedule`; schedule keys: clip_len, clip_stride, add_temporal, staging
 
@@ -407,7 +466,7 @@ Remaining confounds:
 | `dataset_split` | matched | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | — |
 | `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | — |
 | `deployed_backbone_artifact` | matched | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence |
-| `deployed_head_artifact` | matched | {"head_engine_node": null, "head_path": "none (PyTorch head inside whole graph)", "temp… | {"head_engine_node": null, "head_path": "none (PyTorch head inside whole graph)", "temp… | — |
+| `deployed_head_artifact` | matched | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | — |
 | `tracker_runtime_policy` | matched | s.deployment_preset | s.deployment_preset | same preset configs/presets/mamba_whole_graph.yaml @ 093b66ed1240 |
 | `warm_start` | matched | s.gt1 | s.gt1 | both sides warm-start from the common ancestor s.gt1 |
 | `teacher` | matched | s.adapted_teacher | s.adapted_teacher | — |
@@ -423,6 +482,8 @@ Remaining confounds:
 ### `C4.s.plain_gt2_vs_t3t1_seed_chain_s13` — **historical_not_comparable**
 
 - design `paired_siblings`; lhs `s.gt2_plain_s13` (family_preset), rhs `s.t3t1_s13` (family_preset)
+- lhs runtime: head = checkpoint_pytorch (`checkpoint_head_deployed: True`); recipe: `scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_s13_final/best.ckpt`
+- rhs runtime: head = checkpoint_pytorch (`checkpoint_head_deployed: True`); recipe: `scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1_s13/best.ckpt`
 - intended treatment: explicit T3->T1 staging vs plain GT2 T=4, both from the seed-20260613-specific GT1
 - question: paper table mamba_t3t1_pairs.csv row seed_20260613 (marked paired=True there)
 - treatment axes declared: `training_schedule`; schedule keys: clip_len, clip_stride, add_temporal, staging
@@ -434,7 +495,7 @@ Remaining confounds:
 | `dataset_split` | matched | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | — |
 | `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | — |
 | `deployed_backbone_artifact` | matched | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence |
-| `deployed_head_artifact` | matched | {"head_engine_node": null, "head_path": "none (PyTorch head inside whole graph)", "temp… | {"head_engine_node": null, "head_path": "none (PyTorch head inside whole graph)", "temp… | — |
+| `deployed_head_artifact` | matched | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | — |
 | `tracker_runtime_policy` | matched | s.deployment_preset | s.deployment_preset | same preset configs/presets/mamba_whole_graph.yaml @ 093b66ed1240 |
 | `warm_start` | matched | s.gt1_s13 | s.gt1_s13 | both sides warm-start from the common ancestor s.gt1_s13 |
 | `teacher` | matched | s.adapted_teacher | s.adapted_teacher | — |
@@ -452,6 +513,8 @@ Remaining confounds:
 ### `C5.s.plain_gt2_vs_t3t1_seed_chain_s14` — **historical_not_comparable**
 
 - design `paired_siblings`; lhs `s.gt2_plain_s14` (family_preset), rhs `s.t3t1_s14` (family_preset)
+- lhs runtime: head = checkpoint_pytorch (`checkpoint_head_deployed: True`); recipe: `scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_s14_final/best.ckpt`
+- rhs runtime: head = checkpoint_pytorch (`checkpoint_head_deployed: True`); recipe: `scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1_s14/best.ckpt`
 - intended treatment: explicit T3->T1 staging vs plain GT2 T=4, both from the seed-20260614-specific GT1
 - question: paper table mamba_t3t1_pairs.csv row seed_20260614 (marked paired=True there)
 - treatment axes declared: `training_schedule`; schedule keys: clip_len, clip_stride, add_temporal, staging
@@ -463,7 +526,7 @@ Remaining confounds:
 | `dataset_split` | matched | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | — |
 | `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | — |
 | `deployed_backbone_artifact` | matched | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence |
-| `deployed_head_artifact` | matched | {"head_engine_node": null, "head_path": "none (PyTorch head inside whole graph)", "temp… | {"head_engine_node": null, "head_path": "none (PyTorch head inside whole graph)", "temp… | — |
+| `deployed_head_artifact` | matched | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | — |
 | `tracker_runtime_policy` | matched | s.deployment_preset | s.deployment_preset | same preset configs/presets/mamba_whole_graph.yaml @ 093b66ed1240 |
 | `warm_start` | matched | s.gt1_s14 | s.gt1_s14 | both sides warm-start from the common ancestor s.gt1_s14 |
 | `teacher` | matched | s.adapted_teacher | s.adapted_teacher | — |
@@ -481,6 +544,8 @@ Remaining confounds:
 ### `C6.s.plain_gt2_vs_t3t1_unpaired_original` — **historical_not_comparable**
 
 - design `paired_siblings`; lhs `s.gt2_plain` (family_preset), rhs `s.t3t1_phase_b` (family_preset)
+- lhs runtime: head = checkpoint_pytorch (`checkpoint_head_deployed: True`); recipe: `scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_final/best.ckpt`
+- rhs runtime: head = checkpoint_pytorch (`checkpoint_head_deployed: True`); recipe: `scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1/best.ckpt`
 - intended treatment: explicit T3->T1 staging vs plain GT2 T=4 from the shared GT1 (the original +2.1 IDF1 headline)
 - question: paper table row unpaired_original
 - treatment axes declared: `training_schedule`; schedule keys: clip_len, clip_stride, add_temporal, staging
@@ -492,7 +557,7 @@ Remaining confounds:
 | `dataset_split` | matched | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | — |
 | `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | — |
 | `deployed_backbone_artifact` | matched | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence |
-| `deployed_head_artifact` | matched | {"head_engine_node": null, "head_path": "none (PyTorch head inside whole graph)", "temp… | {"head_engine_node": null, "head_path": "none (PyTorch head inside whole graph)", "temp… | — |
+| `deployed_head_artifact` | matched | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | — |
 | `tracker_runtime_policy` | matched | s.deployment_preset | s.deployment_preset | same preset configs/presets/mamba_whole_graph.yaml @ 093b66ed1240 |
 | `warm_start` | matched | s.gt1 | s.gt1 | both sides warm-start from the common ancestor s.gt1 |
 | `teacher` | matched | s.adapted_teacher | s.adapted_teacher | — |
@@ -511,6 +576,8 @@ Remaining confounds:
 ### `C7.s.implicit_shared_s43_vs_t3t1_seed_chain_s13` — **blocked**
 
 - design `paired_siblings`; lhs `s.implicit_s43` (family_preset), rhs `s.t3t1_s13` (family_preset)
+- lhs runtime: head = checkpoint_pytorch (`checkpoint_head_deployed: True`); recipe: `scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_implicit_s43/best.ckpt`
+- rhs runtime: head = checkpoint_pytorch (`checkpoint_head_deployed: True`); recipe: `scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1_s13/best.ckpt`
 - intended treatment: explicit vs implicit — but mixing a shared-GT1 implicit control with a seed-specific-GT1 explicit member
 - question: the mix the curriculum doc §6.1 identified as the GT1-start confound; declared here so the tool blocks it explicitly
 - treatment axes declared: `training_schedule`; schedule keys: clip_len, clip_stride, add_temporal, staging
@@ -522,7 +589,7 @@ Remaining confounds:
 | `dataset_split` | matched | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | — |
 | `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | — |
 | `deployed_backbone_artifact` | matched | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence |
-| `deployed_head_artifact` | matched | {"head_engine_node": null, "head_path": "none (PyTorch head inside whole graph)", "temp… | {"head_engine_node": null, "head_path": "none (PyTorch head inside whole graph)", "temp… | — |
+| `deployed_head_artifact` | matched | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | — |
 | `tracker_runtime_policy` | matched | s.deployment_preset | s.deployment_preset | same preset configs/presets/mamba_whole_graph.yaml @ 093b66ed1240 |
 | `warm_start` | unmatched | s.gt1 | s.t3t1_phase_a_s13 | no common ancestor in the inventory (chains root at s.distill vs s.distill_s13); GT1-start confound: the compared heads warm-start from different checkpoints of the same stage kind |
 | `teacher` | matched | s.adapted_teacher | s.adapted_teacher | — |
@@ -543,6 +610,8 @@ Blocking:
 ### `C8.s.plain_gt2_vs_implicit_control_s42` — **historical_not_comparable**
 
 - design `paired_siblings`; lhs `s.gt2_plain` (family_preset), rhs `s.implicit_s42` (family_preset)
+- lhs runtime: head = checkpoint_pytorch (`checkpoint_head_deployed: True`); recipe: `scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_final/best.ckpt`
+- rhs runtime: head = checkpoint_pytorch (`checkpoint_head_deployed: True`); recipe: `scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_implicit_s42/best.ckpt`
 - intended treatment: none intended — checks whether the implicit control is the plain-GT2 recipe re-seeded
 - treatment axes declared: `training_schedule`
 
@@ -553,7 +622,7 @@ Blocking:
 | `dataset_split` | matched | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | — |
 | `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | — |
 | `deployed_backbone_artifact` | matched | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence |
-| `deployed_head_artifact` | matched | {"head_engine_node": null, "head_path": "none (PyTorch head inside whole graph)", "temp… | {"head_engine_node": null, "head_path": "none (PyTorch head inside whole graph)", "temp… | — |
+| `deployed_head_artifact` | matched | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | — |
 | `tracker_runtime_policy` | matched | s.deployment_preset | s.deployment_preset | same preset configs/presets/mamba_whole_graph.yaml @ 093b66ed1240 |
 | `warm_start` | matched | s.gt1 | s.gt1 | both sides warm-start from the common ancestor s.gt1 |
 | `teacher` | matched | s.adapted_teacher | s.adapted_teacher | — |
@@ -572,6 +641,8 @@ Remaining confounds:
 ### `C9.m.plain_gt2_vs_t3t1` — **historical_not_comparable**
 
 - design `paired_siblings`; lhs `m.gt2_plain` (family_preset), rhs `m.t3t1_phase_b` (family_preset)
+- lhs runtime: head = checkpoint_pytorch (`checkpoint_head_deployed: True`); recipe: `scripts/eval/mot17.py --preset mamba_whole_graph_m --no-mamba-trt --mamba-ckpt runs/mamba_gt_yolo26m_v14replica_final/best.ckpt`
+- rhs runtime: head = checkpoint_pytorch (`checkpoint_head_deployed: True`); recipe: `scripts/eval/mot17.py --preset mamba_whole_graph_m --no-mamba-trt --mamba-ckpt runs/mamba_gt_yolo26m_v14replica_t3_t1/best.ckpt`
 - intended treatment: explicit T3->T1 staging vs plain GT2 T=4 from the m GT1, same seed
 - question: the only m-family T3->T1 pair on record (replication protocol 'yolo26m 容量對照')
 - treatment axes declared: `training_schedule`; schedule keys: clip_len, clip_stride, add_temporal, staging
@@ -583,7 +654,7 @@ Remaining confounds:
 | `dataset_split` | matched | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | — |
 | `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | — |
 | `deployed_backbone_artifact` | matched | {"engine_node": "m.backbone_engine", "teacher_consistency": "same_teacher_indicated"} | {"engine_node": "m.backbone_engine", "teacher_consistency": "same_teacher_indicated"} | engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence |
-| `deployed_head_artifact` | matched | {"head_engine_node": "m.head_engine", "head_path": "models/yolo/mamba_head_26m.engine",… | {"head_engine_node": "m.head_engine", "head_path": "models/yolo/mamba_head_26m.engine",… | — |
+| `deployed_head_artifact` | matched | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | — |
 | `tracker_runtime_policy` | matched | m.deployment_preset | m.deployment_preset | same preset configs/presets/mamba_whole_graph_m.yaml @ 496c4ec22b49 |
 | `warm_start` | matched | m.gt1 | m.gt1 | both sides warm-start from the common ancestor m.gt1 |
 | `teacher` | matched | m.adapted_teacher | m.adapted_teacher | — |
@@ -595,10 +666,13 @@ Remaining confounds:
 Remaining confounds:
 - `training_schedule` [training]: non-treatment schedule keys differ: ['warmup_epochs']
 - executability: fresh paired eval possible; retrain replay NOT possible (m.distill needs m.teacher_cache (unavailable); m.gt2_plain needs m.teacher_cache (unavailable); m.t3t1_phase_a needs m.teacher_cache (unavailable); m.t3t1_phase_b needs m.teacher_cache (unavailable))
+- note: m preset names a fixed head engine (mamba_head_26m.engine); bound with head_override=checkpoint_pytorch (= --no-mamba-trt) so the lhs/rhs checkpoint heads actually run inside the whole graph. Without the override this pair is blocked (treatment_not_deployed).
 
 ### `D1.s.implicit_seed_42_vs_43` — **controlled**
 
 - design `seed_replicate`; lhs `s.implicit_s42` (family_preset), rhs `s.implicit_s43` (family_preset)
+- lhs runtime: head = checkpoint_pytorch (`checkpoint_head_deployed: True`); recipe: `scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_implicit_s42/best.ckpt`
+- rhs runtime: head = checkpoint_pytorch (`checkpoint_head_deployed: True`); recipe: `scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_implicit_s43/best.ckpt`
 - intended treatment: training seed only (implicit all-frames arm)
 - treatment axes declared: `training_seed`
 
@@ -609,7 +683,7 @@ Remaining confounds:
 | `dataset_split` | matched | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | — |
 | `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | — |
 | `deployed_backbone_artifact` | matched | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence |
-| `deployed_head_artifact` | matched | {"head_engine_node": null, "head_path": "none (PyTorch head inside whole graph)", "temp… | {"head_engine_node": null, "head_path": "none (PyTorch head inside whole graph)", "temp… | — |
+| `deployed_head_artifact` | matched | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | — |
 | `tracker_runtime_policy` | matched | s.deployment_preset | s.deployment_preset | same preset configs/presets/mamba_whole_graph.yaml @ 093b66ed1240 |
 | `warm_start` | matched | s.gt1 | s.gt1 | both sides warm-start from the common ancestor s.gt1 |
 | `teacher` | matched | s.adapted_teacher | s.adapted_teacher | — |
@@ -625,6 +699,8 @@ Remaining confounds:
 ### `D2.s.implicit_seed_43_vs_44` — **controlled**
 
 - design `seed_replicate`; lhs `s.implicit_s43` (family_preset), rhs `s.implicit_s44` (family_preset)
+- lhs runtime: head = checkpoint_pytorch (`checkpoint_head_deployed: True`); recipe: `scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_implicit_s43/best.ckpt`
+- rhs runtime: head = checkpoint_pytorch (`checkpoint_head_deployed: True`); recipe: `scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_implicit_s44/best.ckpt`
 - intended treatment: training seed only (implicit all-frames arm)
 - treatment axes declared: `training_seed`
 
@@ -635,7 +711,7 @@ Remaining confounds:
 | `dataset_split` | matched | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | — |
 | `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | — |
 | `deployed_backbone_artifact` | matched | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence |
-| `deployed_head_artifact` | matched | {"head_engine_node": null, "head_path": "none (PyTorch head inside whole graph)", "temp… | {"head_engine_node": null, "head_path": "none (PyTorch head inside whole graph)", "temp… | — |
+| `deployed_head_artifact` | matched | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | — |
 | `tracker_runtime_policy` | matched | s.deployment_preset | s.deployment_preset | same preset configs/presets/mamba_whole_graph.yaml @ 093b66ed1240 |
 | `warm_start` | matched | s.gt1 | s.gt1 | both sides warm-start from the common ancestor s.gt1 |
 | `teacher` | matched | s.adapted_teacher | s.adapted_teacher | — |
@@ -651,6 +727,8 @@ Remaining confounds:
 ### `D3.s.explicit_shared_seed_42_vs_43` — **controlled**
 
 - design `seed_replicate`; lhs `s.t3t1_phase_b` (family_preset), rhs `s.t3t1_shared_s43` (family_preset)
+- lhs runtime: head = checkpoint_pytorch (`checkpoint_head_deployed: True`); recipe: `scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1/best.ckpt`
+- rhs runtime: head = checkpoint_pytorch (`checkpoint_head_deployed: True`); recipe: `scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1_shared_s43/best.ckpt`
 - intended treatment: training seed only (explicit T3->T1 arm from the shared GT1)
 - treatment axes declared: `training_seed`
 
@@ -661,7 +739,7 @@ Remaining confounds:
 | `dataset_split` | matched | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | — |
 | `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | — |
 | `deployed_backbone_artifact` | matched | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence |
-| `deployed_head_artifact` | matched | {"head_engine_node": null, "head_path": "none (PyTorch head inside whole graph)", "temp… | {"head_engine_node": null, "head_path": "none (PyTorch head inside whole graph)", "temp… | — |
+| `deployed_head_artifact` | matched | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | — |
 | `tracker_runtime_policy` | matched | s.deployment_preset | s.deployment_preset | same preset configs/presets/mamba_whole_graph.yaml @ 093b66ed1240 |
 | `warm_start` | matched | s.gt1 | s.gt1 | both sides warm-start from the common ancestor s.gt1 |
 | `teacher` | matched | s.adapted_teacher | s.adapted_teacher | — |
@@ -678,6 +756,8 @@ Remaining confounds:
 ### `D4.s.explicit_shared_seed_43_vs_44` — **controlled**
 
 - design `seed_replicate`; lhs `s.t3t1_shared_s43` (family_preset), rhs `s.t3t1_shared_s44` (family_preset)
+- lhs runtime: head = checkpoint_pytorch (`checkpoint_head_deployed: True`); recipe: `scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1_shared_s43/best.ckpt`
+- rhs runtime: head = checkpoint_pytorch (`checkpoint_head_deployed: True`); recipe: `scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1_shared_s44/best.ckpt`
 - intended treatment: training seed only (explicit T3->T1 arm from the shared GT1)
 - treatment axes declared: `training_seed`
 
@@ -688,7 +768,7 @@ Remaining confounds:
 | `dataset_split` | matched | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | — |
 | `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | — |
 | `deployed_backbone_artifact` | matched | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence |
-| `deployed_head_artifact` | matched | {"head_engine_node": null, "head_path": "none (PyTorch head inside whole graph)", "temp… | {"head_engine_node": null, "head_path": "none (PyTorch head inside whole graph)", "temp… | — |
+| `deployed_head_artifact` | matched | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | — |
 | `tracker_runtime_policy` | matched | s.deployment_preset | s.deployment_preset | same preset configs/presets/mamba_whole_graph.yaml @ 093b66ed1240 |
 | `warm_start` | matched | s.gt1 | s.gt1 | both sides warm-start from the common ancestor s.gt1 |
 | `teacher` | matched | s.adapted_teacher | s.adapted_teacher | — |
@@ -704,6 +784,8 @@ Remaining confounds:
 ### `E1.s_vs_m.production_system` — **system_comparison**
 
 - design `system`; lhs `s.t3t1_phase_b` (family_preset), rhs `m.t3t1_phase_b` (family_preset)
+- lhs runtime: head = checkpoint_pytorch (`checkpoint_head_deployed: True`); recipe: `scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1/best.ckpt`
+- rhs runtime: head = trt_engine (`checkpoint_head_deployed: False`); recipe: `scripts/eval/mot17.py --preset mamba_whole_graph_m --mamba-ckpt runs/mamba_gt_yolo26m_v14replica_t3_t1/best.ckpt`
 - intended treatment: the two shipped systems as their presets name them
 - question: quality/cost comparison of the headline s and m presets; never a training attribution
 - treatment axes declared: none (system)
@@ -715,7 +797,7 @@ Remaining confounds:
 | `dataset_split` | matched | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | — |
 | `inference_forward_mode` | unmatched | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | differs: {"gate_teacher_at_runtime": {"lhs": "null (backbone-only; no teacher forward)", "rhs": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt"}} |
 | `deployed_backbone_artifact` | unmatched | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | {"engine_node": "m.backbone_engine", "teacher_consistency": "same_teacher_indicated"} | engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence |
-| `deployed_head_artifact` | unmatched | {"head_engine_node": null, "head_path": "none (PyTorch head inside whole graph)", "temp… | {"head_engine_node": "m.head_engine", "head_path": "models/yolo/mamba_head_26m.engine",… | — |
+| `deployed_head_artifact` | unmatched | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | {"checkpoint_head_deployed": false, "head_engine_node": "m.head_engine", "head_engine_s… | rhs runs the fixed head engine, not the rhs checkpoint head (sibling ONNX ambiguous: ['m.distill', 'm.gt1', 'm.gt2_plain', 'm.t3t1_phase_a', 'm.t3t1_phase_b', 'm.t3t1_phase_b_gpu_decode']; checkpoint source ambiguous) |
 | `tracker_runtime_policy` | unmatched | s.deployment_preset | m.deployment_preset | tracker/runtime keys differ: {"kalman_r_scale": {"lhs": 2.8, "rhs": 3.5}, "relink_bridge_dir_bonus": {"lhs": 0.8, "rhs": 0.0}, "relink_bridge_h_hi": {"lhs": 1.33, "rhs": 1.7}, "relink_bridge_h_lo": {"lhs": 0.75, "rhs": 0.6}, "relink_bridge_px": {"lhs": 0.25, "rhs": 0.4}} |
 | `warm_start` | unmatched | s.t3t1_phase_a | m.t3t1_phase_a | no common ancestor in the inventory (chains root at s.distill vs m.distill) |
 | `teacher` | unmatched | s.adapted_teacher | m.adapted_teacher | — |
@@ -729,7 +811,7 @@ Remaining confounds:
 - `backbone_family` [structural]: yolo26s vs yolo26m
 - `inference_forward_mode` [structural]: differs: {"gate_teacher_at_runtime": {"lhs": "null (backbone-only; no teacher forward)", "rhs": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt"}}
 - `deployed_backbone_artifact` [structural]: engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence
-- `deployed_head_artifact` [structural]: {"head_engine_node": null, "head_path": "none (PyTorch head inside whole graph)", "temp… vs {"head_engine_node": "m.head_engine", "head_path": "models/yolo/mamba_head_26m.engine",…
+- `deployed_head_artifact` [structural]: rhs runs the fixed head engine, not the rhs checkpoint head (sibling ONNX ambiguous: ['m.distill', 'm.gt1', 'm.gt2_plain', 'm.t3t1_phase_a', 'm.t3t1_phase_b', 'm.t3t1_phase_b_gpu_decode']; checkpoint source ambiguous)
 - `tracker_runtime_policy` [structural]: tracker/runtime keys differ: {"kalman_r_scale": {"lhs": 2.8, "rhs": 3.5}, "relink_bridge_dir_bonus": {"lhs": 0.8, "rhs": 0.0}, "relink_bridge_h_hi": {"lhs": 1.33, "rhs": 1.7}, "relink_bridge_h_lo": {"lhs": 0.75, "rhs": 0.6}, "relink_bridge_px": {"lhs": 0.25, "rhs": 0.4}}
 - `warm_start` [training]: no common ancestor in the inventory (chains root at s.distill vs m.distill)
 - `teacher` [training]: s.adapted_teacher vs m.adapted_teacher
@@ -737,10 +819,13 @@ Remaining confounds:
 - `training_seed` [training]: bases: args.seed / args.seed
 - executability: fresh paired eval possible; retrain replay NOT possible (m.distill needs m.teacher_cache (unavailable); m.t3t1_phase_a needs m.teacher_cache (unavailable); m.t3t1_phase_b needs m.teacher_cache (unavailable); s.distill needs s.teacher_cache (unavailable); s.t3t1_phase_a needs s.teacher_cache (unavailable); s.t3t1_phase_b needs s.teacher_cache (unavailable))
 - historical results on record: lhs ['t3t1_seed42'], rhs none — not reusable as paired (record carries no preset/engine sha for any run; runtime identity of historical runs is not established (deliverable 4))
+- note: m side is measured as the production head engine (mamba_head_26m.engine), whose sibling ONNX is ambiguous across every m checkpoint (#445); the row's rhs node m.t3t1_phase_b is the preset's *named* checkpoint, not an established identity of the deployed head bytes.
 
 ### `E2.s.native_head_vs_mamba_head_shared_backbone` — **system_comparison**
 
 - design `system`; lhs `s.adapted_teacher` (shared_backbone_node), rhs `s.t3t1_phase_b` (shared_backbone_node)
+- lhs runtime: head = checkpoint_pytorch (`checkpoint_head_deployed: True`); recipe: `scripts/eval/mot17.py --preset mamba_pyt_backbone --teacher-head-ckpt runs/gated_det_v14replica/epoch_0012.ckpt`
+- rhs runtime: head = checkpoint_pytorch (`checkpoint_head_deployed: True`); recipe: `scripts/eval/mot17.py --preset mamba_pyt_backbone --no-mamba-trt --no-temporal --mamba-ckpt runs/mamba_gt_v14replica_t3_t1/best.ckpt --mamba-teacher-ckpt runs/gated_det_v14replica/epoch_0012.ckpt`
 - intended treatment: native Detect head vs Mamba head on the same PyTorch backbone (the adapted teacher's), eager
 - question: docs/reference/original_head_matched_baseline.md design; the head is the only structural difference
 - treatment axes declared: none (system)
@@ -752,7 +837,7 @@ Remaining confounds:
 | `dataset_split` | matched | {"basis": "provenance.training_sequences", "holdout": [], "train": ["MOT17-02-SDP", "MO… | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | bases differ (provenance.training_sequences vs default:all *-SDP under datasets/MOT17/train) but resolve to the same set |
 | `inference_forward_mode` | matched | {"effective_T": 1, "embedding": null, "final_stage_gt_ratio": null, "gate_teacher_at_ru… | {"effective_T": 1, "embedding": null, "final_stage_gt_ratio": null, "gate_teacher_at_ru… | — |
 | `deployed_backbone_artifact` | matched | {"engine_node": "s.adapted_teacher", "teacher_consistency": "same_teacher_indicated"} | {"engine_node": "s.adapted_teacher", "teacher_consistency": "same_teacher_indicated"} | engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence |
-| `deployed_head_artifact` | unmatched | {"head_engine_node": null, "head_path": "native Detect head via TeacherHeadDetector, Py… | {"head_engine_node": null, "head_path": "mamba head, PyTorch eager (--no-temporal requi… | different head kinds |
+| `deployed_head_artifact` | unmatched | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "native Detec… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "mamba head, … | different head kinds |
 | `tracker_runtime_policy` | unknown | contract_required | contract_required | tracker policy must be fixed by the shared eval contract (deliverable 3); not derivable from the inventory |
 | `warm_start` | unmatched | s.pretrained_yolo | s.t3t1_phase_a | no common ancestor in the inventory (chains root at s.adapted_teacher vs s.distill) |
 | `teacher` | unknown | — | s.adapted_teacher | — |
@@ -779,6 +864,8 @@ Remaining confounds:
 ### `E3.m.native_head_vs_mamba_head_shared_backbone` — **system_comparison**
 
 - design `system`; lhs `m.adapted_teacher` (shared_backbone_node), rhs `m.t3t1_phase_b` (shared_backbone_node)
+- lhs runtime: head = checkpoint_pytorch (`checkpoint_head_deployed: True`); recipe: `scripts/eval/mot17.py --preset mamba_pyt_backbone --teacher-head-ckpt runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt`
+- rhs runtime: head = checkpoint_pytorch (`checkpoint_head_deployed: True`); recipe: `scripts/eval/mot17.py --preset mamba_pyt_backbone --no-mamba-trt --no-temporal --mamba-ckpt runs/mamba_gt_yolo26m_v14replica_t3_t1/best.ckpt --mamba-teacher-ckpt runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt`
 - intended treatment: native Detect head vs Mamba head on the same PyTorch backbone (m adapted teacher), eager
 - treatment axes declared: none (system)
 
@@ -789,7 +876,7 @@ Remaining confounds:
 | `dataset_split` | matched | {"basis": "provenance.training_sequences", "holdout": [], "train": ["MOT17-02-SDP", "MO… | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | bases differ (provenance.training_sequences vs default:all *-SDP under datasets/MOT17/train) but resolve to the same set |
 | `inference_forward_mode` | matched | {"effective_T": 1, "embedding": null, "final_stage_gt_ratio": null, "gate_teacher_at_ru… | {"effective_T": 1, "embedding": null, "final_stage_gt_ratio": null, "gate_teacher_at_ru… | — |
 | `deployed_backbone_artifact` | matched | {"engine_node": "m.adapted_teacher", "teacher_consistency": "same_teacher_indicated"} | {"engine_node": "m.adapted_teacher", "teacher_consistency": "same_teacher_indicated"} | engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence |
-| `deployed_head_artifact` | unmatched | {"head_engine_node": null, "head_path": "native Detect head via TeacherHeadDetector, Py… | {"head_engine_node": null, "head_path": "mamba head, PyTorch eager (--no-temporal requi… | different head kinds |
+| `deployed_head_artifact` | unmatched | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "native Detec… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "mamba head, … | different head kinds |
 | `tracker_runtime_policy` | unknown | contract_required | contract_required | tracker policy must be fixed by the shared eval contract (deliverable 3); not derivable from the inventory |
 | `warm_start` | unmatched | m.pretrained_yolo | m.t3t1_phase_a | no common ancestor in the inventory (chains root at m.adapted_teacher vs m.distill) |
 | `teacher` | unknown | — | m.adapted_teacher | — |
@@ -813,6 +900,8 @@ Remaining confounds:
 ### `E4.s.production_backbone_engine_ab` — **controlled**
 
 - design `runtime_ab`; lhs `s.t3t1_phase_b` (family_preset), rhs `s.t3t1_phase_b` (family_preset)
+- lhs runtime: head = checkpoint_pytorch (`checkpoint_head_deployed: True`); recipe: `scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1/best.ckpt`
+- rhs runtime: head = checkpoint_pytorch (`checkpoint_head_deployed: True`); recipe: `scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1/best.ckpt --fpn-backbone-engine models/yolo/yolo26s_backbone_640_v14replica_e12.engine`
 - intended treatment: deployed backbone engine: the preset's yolo26s_backbone_640_best.engine (sibling ONNX = legacy teacher) vs yolo26s_backbone_640_v14replica_e12.engine (sibling ONNX = the head's own teacher)
 - question: the resolution path for the s production confound: same head, two engines
 - treatment axes declared: `deployed_backbone_artifact`
@@ -824,7 +913,7 @@ Remaining confounds:
 | `dataset_split` | matched | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | — |
 | `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | — |
 | `deployed_backbone_artifact` (treatment) | unmatched | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | {"engine_node": "s.backbone_engine_v14replica_e12", "teacher_consistency": "same_teache… | engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence |
-| `deployed_head_artifact` | matched | {"head_engine_node": null, "head_path": "none (PyTorch head inside whole graph)", "temp… | {"head_engine_node": null, "head_path": "none (PyTorch head inside whole graph)", "temp… | — |
+| `deployed_head_artifact` | matched | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | — |
 | `tracker_runtime_policy` | matched | s.deployment_preset | s.deployment_preset | same preset configs/presets/mamba_whole_graph.yaml @ 093b66ed1240 |
 | `warm_start` | matched | s.t3t1_phase_a | s.t3t1_phase_a | same checkpoint |
 | `teacher` | matched | s.adapted_teacher | s.adapted_teacher | — |
@@ -840,6 +929,8 @@ Remaining confounds:
 ### `F1.s.legacy_v14_vs_replica_gt2_plain` — **blocked**
 
 - design `system`; lhs `s.legacy_v14` (family_preset), rhs `s.gt2_plain` (family_preset)
+- lhs runtime: head = checkpoint_pytorch (`checkpoint_head_deployed: True`); recipe: `scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_vgt_mamba_v14/best.ckpt`
+- rhs runtime: head = checkpoint_pytorch (`checkpoint_head_deployed: True`); recipe: `scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_final/best.ckpt`
 - intended treatment: replication: legacy production v14 vs the v14-replica plain GT2
 - question: curriculum doc §6.1: legacy 75.1 not reproducible by the replica (73.0–73.7)
 - treatment axes declared: none (system)
@@ -851,7 +942,7 @@ Remaining confounds:
 | `dataset_split` | matched | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | — |
 | `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | — |
 | `deployed_backbone_artifact` | unmatched | {"engine_node": "s.backbone_engine", "teacher_consistency": "same_teacher_indicated"} | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence |
-| `deployed_head_artifact` | matched | {"head_engine_node": null, "head_path": "none (PyTorch head inside whole graph)", "temp… | {"head_engine_node": null, "head_path": "none (PyTorch head inside whole graph)", "temp… | — |
+| `deployed_head_artifact` | matched | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | — |
 | `tracker_runtime_policy` | matched | s.deployment_preset | s.deployment_preset | same preset configs/presets/mamba_whole_graph.yaml @ 093b66ed1240 |
 | `warm_start` | unmatched | — | s.gt1 | no common ancestor in the inventory (chains root at s.legacy_v14 vs s.distill); chain incomplete: s.legacy_v14 stores its resume invocation; earlier stages unrecorded |
 | `teacher` | unmatched | s.legacy_teacher | s.adapted_teacher | — |
@@ -877,6 +968,8 @@ Blocking:
 ### `F2.s.legacy_v14_vs_t3t1_production` — **blocked**
 
 - design `system`; lhs `s.legacy_v14` (family_preset), rhs `s.t3t1_phase_b` (family_preset)
+- lhs runtime: head = checkpoint_pytorch (`checkpoint_head_deployed: True`); recipe: `scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_vgt_mamba_v14/best.ckpt`
+- rhs runtime: head = checkpoint_pytorch (`checkpoint_head_deployed: True`); recipe: `scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1/best.ckpt`
 - intended treatment: the 'T3->T1 first beats legacy v14' headline (75.1 vs 75.4)
 - treatment axes declared: none (system)
 
@@ -887,7 +980,7 @@ Blocking:
 | `dataset_split` | matched | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | — |
 | `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | — |
 | `deployed_backbone_artifact` | unmatched | {"engine_node": "s.backbone_engine", "teacher_consistency": "same_teacher_indicated"} | {"engine_node": "s.backbone_engine", "teacher_consistency": "DIFFERENT_TEACHER_INDICATED"} | engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence |
-| `deployed_head_artifact` | matched | {"head_engine_node": null, "head_path": "none (PyTorch head inside whole graph)", "temp… | {"head_engine_node": null, "head_path": "none (PyTorch head inside whole graph)", "temp… | — |
+| `deployed_head_artifact` | matched | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | — |
 | `tracker_runtime_policy` | matched | s.deployment_preset | s.deployment_preset | same preset configs/presets/mamba_whole_graph.yaml @ 093b66ed1240 |
 | `warm_start` | unmatched | — | s.t3t1_phase_a | no common ancestor in the inventory (chains root at s.legacy_v14 vs s.distill); chain incomplete: s.legacy_v14 stores its resume invocation; earlier stages unrecorded |
 | `teacher` | unmatched | s.legacy_teacher | s.adapted_teacher | — |
@@ -913,6 +1006,8 @@ Blocking:
 ### `F3.s.legacy_parent_gt_to_controlled_refit` — **historical_not_comparable**
 
 - design `stage_increment`; lhs `s.legacy_parent_gt` (family_preset), rhs `s.controlled_refit` (family_preset)
+- lhs runtime: head = checkpoint_pytorch (`checkpoint_head_deployed: True`); recipe: `scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_pixelshuffle_crossscan/best.ckpt`
+- rhs runtime: head = checkpoint_pytorch (`checkpoint_head_deployed: True`); recipe: `scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14_parent_n16_frozen_refit/best.ckpt`
 - intended treatment: frozen-SSM N=16 refit of the legacy parent (single-edge replay, +30 epochs, gt_ratio 0)
 - treatment axes declared: `warm_start`, `training_budget`, `training_schedule`, `teacher_cache`; schedule keys: gt_ratio
 
@@ -923,7 +1018,7 @@ Blocking:
 | `dataset_split` | matched | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | {"basis": "explicit", "holdout": [], "train": ["MOT17-02-SDP", "MOT17-04-SDP", "MOT17-0… | bases differ (default:all *-SDP under datasets/MOT17/train vs explicit) but resolve to the same set |
 | `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | — |
 | `deployed_backbone_artifact` | matched | {"engine_node": "s.backbone_engine", "teacher_consistency": "same_teacher_indicated"} | {"engine_node": "s.backbone_engine", "teacher_consistency": "same_teacher_indicated"} | engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence |
-| `deployed_head_artifact` | matched | {"head_engine_node": null, "head_path": "none (PyTorch head inside whole graph)", "temp… | {"head_engine_node": null, "head_path": "none (PyTorch head inside whole graph)", "temp… | — |
+| `deployed_head_artifact` | matched | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | — |
 | `tracker_runtime_policy` | matched | s.deployment_preset | s.deployment_preset | same preset configs/presets/mamba_whole_graph.yaml @ 093b66ed1240 |
 | `warm_start` (treatment) | unmatched | s.legacy_distill | s.legacy_parent_gt | rhs descends from lhs through ['s.controlled_refit']; chain incomplete: chain reaches unavailable node s.legacy_distill; chain reaches unavailable node s.legacy_distill |
 | `teacher` | matched | s.legacy_teacher | s.legacy_teacher | — |
@@ -941,6 +1036,8 @@ Remaining confounds:
 ### `F4.s.legacy_v14_vs_t3t1_each_on_own_teacher_engine` — **system_comparison**
 
 - design `system`; lhs `s.legacy_v14` (family_preset), rhs `s.t3t1_phase_b` (family_preset)
+- lhs runtime: head = checkpoint_pytorch (`checkpoint_head_deployed: True`); recipe: `scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_vgt_mamba_v14/best.ckpt`
+- rhs runtime: head = checkpoint_pytorch (`checkpoint_head_deployed: True`); recipe: `scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1/best.ckpt --fpn-backbone-engine models/yolo/yolo26s_backbone_640_v14replica_e12.engine`
 - intended treatment: the two production heads each on the engine whose sibling ONNX matches its own teacher (legacy v14 on the preset engine, T3->T1 on the v14replica_e12 engine)
 - question: the only symmetric way to put legacy v14 next to T3->T1: two (head, matching backbone) systems — a system comparison, not a curriculum claim
 - treatment axes declared: none (system)
@@ -952,7 +1049,7 @@ Remaining confounds:
 | `dataset_split` | matched | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | — |
 | `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | — |
 | `deployed_backbone_artifact` | unmatched | {"engine_node": "s.backbone_engine", "teacher_consistency": "same_teacher_indicated"} | {"engine_node": "s.backbone_engine_v14replica_e12", "teacher_consistency": "same_teache… | engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence |
-| `deployed_head_artifact` | matched | {"head_engine_node": null, "head_path": "none (PyTorch head inside whole graph)", "temp… | {"head_engine_node": null, "head_path": "none (PyTorch head inside whole graph)", "temp… | — |
+| `deployed_head_artifact` | matched | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | — |
 | `tracker_runtime_policy` | matched | s.deployment_preset | s.deployment_preset | same preset configs/presets/mamba_whole_graph.yaml @ 093b66ed1240 |
 | `warm_start` | unmatched | — | s.t3t1_phase_a | no common ancestor in the inventory (chains root at s.legacy_v14 vs s.distill); chain incomplete: s.legacy_v14 stores its resume invocation; earlier stages unrecorded |
 | `teacher` | unmatched | s.legacy_teacher | s.adapted_teacher | — |
@@ -975,6 +1072,8 @@ Remaining confounds:
 ### `G1.m.t3t1_vs_gpu_decode_cache` — **blocked**
 
 - design `paired_siblings`; lhs `m.t3t1_phase_b` (family_preset), rhs `m.t3t1_phase_b_gpu_decode` (family_preset)
+- lhs runtime: head = checkpoint_pytorch (`checkpoint_head_deployed: True`); recipe: `scripts/eval/mot17.py --preset mamba_whole_graph_m --no-mamba-trt --mamba-ckpt runs/mamba_gt_yolo26m_v14replica_t3_t1/best.ckpt`
+- rhs runtime: head = checkpoint_pytorch (`checkpoint_head_deployed: True`); recipe: `scripts/eval/mot17.py --preset mamba_whole_graph_m --no-mamba-trt --mamba-ckpt runs/mamba_gt_yolo26m_v14replica_t3_t1_gpu_decode/best.ckpt`
 - intended treatment: teacher-cache decode backend (CPU cache vs torchvision_nvjpeg GPU-decode rebuild)
 - question: does the GPU-decode cache change the trained head? — declared as siblings, which is what the question needs
 - treatment axes declared: `teacher_cache`
@@ -986,7 +1085,7 @@ Remaining confounds:
 | `dataset_split` | matched | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | {"basis": "default:all *-SDP under datasets/MOT17/train", "holdout": [], "train": ["MOT… | — |
 | `inference_forward_mode` | matched | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | {"effective_T": 1, "embedding": "reid_mode='off'", "final_stage_gt_ratio": 0.0, "gate_t… | — |
 | `deployed_backbone_artifact` | matched | {"engine_node": "m.backbone_engine", "teacher_consistency": "same_teacher_indicated"} | {"engine_node": "m.backbone_engine", "teacher_consistency": "same_teacher_indicated"} | engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence |
-| `deployed_head_artifact` | matched | {"head_engine_node": "m.head_engine", "head_path": "models/yolo/mamba_head_26m.engine",… | {"head_engine_node": "m.head_engine", "head_path": "models/yolo/mamba_head_26m.engine",… | — |
+| `deployed_head_artifact` | matched | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | {"checkpoint_head_deployed": true, "head_engine_node": null, "head_path": "checkpoint P… | — |
 | `tracker_runtime_policy` | matched | m.deployment_preset | m.deployment_preset | same preset configs/presets/mamba_whole_graph_m.yaml @ 496c4ec22b49 |
 | `warm_start` | unmatched | m.t3t1_phase_a | m.t3t1_phase_b | rhs descends from lhs through ['m.t3t1_phase_b_gpu_decode'] |
 | `teacher` | matched | m.adapted_teacher | m.adapted_teacher | — |
@@ -1003,6 +1102,7 @@ Blocking:
 - paired_siblings premise violated: warm starts differ or are unknown
 - paired_siblings premise violated: budgets after the common ancestor differ or are unknown
 - executability: fresh paired eval possible; retrain replay NOT possible (m.distill needs m.teacher_cache (unavailable); m.t3t1_phase_a needs m.teacher_cache (unavailable); m.t3t1_phase_b needs m.teacher_cache (unavailable))
+- note: m preset names a fixed head engine (mamba_head_26m.engine); bound with head_override=checkpoint_pytorch (= --no-mamba-trt) so the lhs/rhs checkpoint heads actually run inside the whole graph. Without the override this pair is blocked (treatment_not_deployed).
 
 ## Candidates not representable with the current inventory
 

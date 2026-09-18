@@ -135,12 +135,48 @@
       "group": "distill / GT1 / GT2",
       "design": "stage_increment",
       "lhs": {
+        "node": "m.distill",
+        "runtime": {
+          "binding": "family_preset",
+          "head_override": "checkpoint_pytorch"
+        }
+      },
+      "rhs": {
+        "node": "m.gt1",
+        "runtime": {
+          "binding": "family_preset",
+          "head_override": "checkpoint_pytorch"
+        }
+      },
+      "intended_treatment": "GT1 stage as a bundle (m family)",
+      "treatment_axes": [
+        "warm_start",
+        "training_budget",
+        "training_schedule",
+        "teacher_cache"
+      ],
+      "treatment_schedule_keys": [
+        "lr",
+        "batch_size",
+        "clip_len",
+        "clip_stride"
+      ],
+      "notes": [
+        "m preset names a fixed head engine (mamba_head_26m.engine); bound with head_override=checkpoint_pytorch (= --no-mamba-trt) so the lhs/rhs checkpoint heads actually run inside the whole graph. Without the override this pair is blocked (treatment_not_deployed)."
+      ]
+    },
+    {
+      "comparison_id": "B3x.m.distill_to_gt1_preset_as_is",
+      "group": "distill / GT1 / GT2",
+      "design": "stage_increment",
+      "lhs": {
         "node": "m.distill"
       },
       "rhs": {
         "node": "m.gt1"
       },
       "intended_treatment": "GT1 stage as a bundle (m family)",
+      "question": "the same pair under the unmodified m preset: mot17.py passes mamba_head_engine as trt_head_engine and _whole_graph_fn calls the TRT head, so neither checkpoint head runs — declared so the tool blocks it explicitly",
       "treatment_axes": [
         "warm_start",
         "training_budget",
@@ -159,10 +195,18 @@
       "group": "distill / GT1 / GT2",
       "design": "stage_increment",
       "lhs": {
-        "node": "m.gt1"
+        "node": "m.gt1",
+        "runtime": {
+          "binding": "family_preset",
+          "head_override": "checkpoint_pytorch"
+        }
       },
       "rhs": {
-        "node": "m.gt2_plain"
+        "node": "m.gt2_plain",
+        "runtime": {
+          "binding": "family_preset",
+          "head_override": "checkpoint_pytorch"
+        }
       },
       "intended_treatment": "plain GT2 stage (m family)",
       "treatment_axes": [
@@ -173,6 +217,9 @@
       ],
       "treatment_schedule_keys": [
         "gt_ratio"
+      ],
+      "notes": [
+        "m preset names a fixed head engine (mamba_head_26m.engine); bound with head_override=checkpoint_pytorch (= --no-mamba-trt) so the lhs/rhs checkpoint heads actually run inside the whole graph. Without the override this pair is blocked (treatment_not_deployed)."
       ]
     },
     {
@@ -376,10 +423,18 @@
       "group": "T3->T1 vs implicit control",
       "design": "paired_siblings",
       "lhs": {
-        "node": "m.gt2_plain"
+        "node": "m.gt2_plain",
+        "runtime": {
+          "binding": "family_preset",
+          "head_override": "checkpoint_pytorch"
+        }
       },
       "rhs": {
-        "node": "m.t3t1_phase_b"
+        "node": "m.t3t1_phase_b",
+        "runtime": {
+          "binding": "family_preset",
+          "head_override": "checkpoint_pytorch"
+        }
       },
       "intended_treatment": "explicit T3->T1 staging vs plain GT2 T=4 from the m GT1, same seed",
       "question": "the only m-family T3->T1 pair on record (replication protocol 'yolo26m 容量對照')",
@@ -391,6 +446,9 @@
         "clip_stride",
         "add_temporal",
         "staging"
+      ],
+      "notes": [
+        "m preset names a fixed head engine (mamba_head_26m.engine); bound with head_override=checkpoint_pytorch (= --no-mamba-trt) so the lhs/rhs checkpoint heads actually run inside the whole graph. Without the override this pair is blocked (treatment_not_deployed)."
       ]
     },
     {
@@ -465,7 +523,10 @@
       },
       "intended_treatment": "the two shipped systems as their presets name them",
       "question": "quality/cost comparison of the headline s and m presets; never a training attribution",
-      "treatment_axes": []
+      "treatment_axes": [],
+      "notes": [
+        "m side is measured as the production head engine (mamba_head_26m.engine), whose sibling ONNX is ambiguous across every m checkpoint (#445); the row's rhs node m.t3t1_phase_b is the preset's *named* checkpoint, not an established identity of the deployed head bytes."
+      ]
     },
     {
       "comparison_id": "E2.s.native_head_vs_mamba_head_shared_backbone",
@@ -611,15 +672,26 @@
       "group": "cache decode backend",
       "design": "paired_siblings",
       "lhs": {
-        "node": "m.t3t1_phase_b"
+        "node": "m.t3t1_phase_b",
+        "runtime": {
+          "binding": "family_preset",
+          "head_override": "checkpoint_pytorch"
+        }
       },
       "rhs": {
-        "node": "m.t3t1_phase_b_gpu_decode"
+        "node": "m.t3t1_phase_b_gpu_decode",
+        "runtime": {
+          "binding": "family_preset",
+          "head_override": "checkpoint_pytorch"
+        }
       },
       "intended_treatment": "teacher-cache decode backend (CPU cache vs torchvision_nvjpeg GPU-decode rebuild)",
       "question": "does the GPU-decode cache change the trained head? — declared as siblings, which is what the question needs",
       "treatment_axes": [
         "teacher_cache"
+      ],
+      "notes": [
+        "m preset names a fixed head engine (mamba_head_26m.engine); bound with head_override=checkpoint_pytorch (= --no-mamba-trt) so the lhs/rhs checkpoint heads actually run inside the whole graph. Without the override this pair is blocked (treatment_not_deployed)."
       ]
     }
   ],

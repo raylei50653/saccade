@@ -38,7 +38,12 @@ ride through every row: the s production engine's sibling ONNX matches the
 *legacy* teacher while every replica-lineage s head was trained against the
 adapted teacher (``common_mode`` when both endpoints share it, ``blocking``
 when they differ), and no historical result carries a preset/engine sha, so
-historical results are never marked reusable as a paired measurement.
+historical results are never marked reusable as a paired measurement.  Each
+runtime binding also derives the *effective head source*: a preset that names
+``mamba_head_engine`` runs that fixed TRT head instead of the endpoint's
+checkpoint head, which blocks any training design bound to it
+(``treatment_not_deployed``) unless ``head_override: checkpoint_pytorch``
+(= ``--no-mamba-trt``) is declared.
 
 Usage:
     .venv/bin/python scripts/provenance/training_comparison.py           # writes the defaults
@@ -242,6 +247,14 @@ def load_declarations(path: Path, inventory: dict[str, Any]) -> dict[str, Any]:
                     raise ComparisonError(
                         f"{path}: {cid}: {side} runtime names unknown node {bnode!r}"
                     )
+            if runtime.get("head_override") not in (None, "checkpoint_pytorch"):
+                raise ComparisonError(
+                    f"{path}: {cid}: {side} head_override {runtime.get('head_override')!r} unknown"
+                )
+            if runtime.get("head_override") and binding != "family_preset":
+                raise ComparisonError(
+                    f"{path}: {cid}: {side} head_override only applies to family_preset"
+                )
             if binding == "family_preset" and runtime.get("backbone_engine_node"):
                 enode = runtime["backbone_engine_node"]
                 if enode not in nodes or nodes[enode]["kind"] != "trt_engine":
@@ -623,6 +636,40 @@ def bind_runtime(
                 if evidence["onnx_matches"] == profile.teacher
                 else "DIFFERENT_TEACHER_INDICATED"
             )
+        # Effective head source.  ``mot17.py`` passes a preset's
+        # ``mamba_head_engine`` as ``trt_head_engine`` and the whole-graph
+        # forward then calls the TRT head instead of the checkpoint's PyTorch
+        # head: the endpoint's ``mamba_ckpt`` weights do not run.  The
+        # ``head_override: checkpoint_pytorch`` binding (= ``--no-mamba-trt``)
+        # restores the checkpoint head inside the same graph.
+        preset_head_engine = _node_by_path(inventory, summary.get("mamba_head_engine"))
+        head_override = runtime.get("head_override")
+        recipe = [f"scripts/eval/mot17.py --preset {Path(preset['path']).stem}"]
+        if preset_head_engine and head_override != "checkpoint_pytorch":
+            head_source = {
+                "kind": "trt_engine",
+                "node": preset_head_engine,
+                "checkpoint_head_deployed": False,
+                "source_attribution": _engine_teacher_evidence(
+                    inventory, preset_head_engine
+                ),
+            }
+            head_path = f"TRT head engine {nodes[preset_head_engine]['path']} (checkpoint head NOT deployed)"
+        else:
+            head_source = {
+                "kind": "checkpoint_pytorch",
+                "node": profile.node,
+                "checkpoint_head_deployed": True,
+                "source_attribution": None,
+            }
+            head_path = "checkpoint PyTorch head inside whole graph"
+            if preset_head_engine:
+                recipe.append("--no-mamba-trt")
+        recipe.append(f"--mamba-ckpt {nodes[profile.node]['path']}")
+        if runtime.get("backbone_engine_node"):
+            recipe.append(
+                f"--fpn-backbone-engine {nodes[runtime['backbone_engine_node']]['path']}"
+            )
         out.update(
             {
                 "status": "bound",
@@ -634,10 +681,12 @@ def bind_runtime(
                 "backbone_engine_sibling_onnx": evidence,
                 "backbone_teacher_consistency": consistency,
                 "engine_bytes_attributed": False,
-                "head_path": fwd.get("head_engine"),
-                "head_engine_node": _node_by_path(
-                    inventory, summary.get("mamba_head_engine")
-                ),
+                "head_path": head_path,
+                "head_engine_node": head_source["node"]
+                if head_source["kind"] == "trt_engine"
+                else None,
+                "head_source": head_source,
+                "recipe": " ".join(recipe),
                 "temporal_blocks": fwd.get("temporal_blocks"),
                 "effective_T": 1,
                 "gate_teacher_at_runtime": fwd.get("gate_teacher_at_runtime"),
@@ -658,12 +707,24 @@ def bind_runtime(
         "gated_teacher_ckpt": "native Detect head via TeacherHeadDetector, PyTorch eager",
         "yolo_pt": "native Detect head, PyTorch eager (runner not in inventory)",
     }[profile.kind]
+    recipe = {
+        "mamba_ckpt": f"scripts/eval/mot17.py --preset mamba_pyt_backbone --no-mamba-trt --no-temporal --mamba-ckpt {nodes[profile.node]['path']} --mamba-teacher-ckpt {b['path']}",
+        "gated_teacher_ckpt": f"scripts/eval/mot17.py --preset mamba_pyt_backbone --teacher-head-ckpt {b['path']}",
+        "yolo_pt": None,
+    }[profile.kind]
     out.update(
         {
             "status": "bound" if b.get("exists") else "unknown",
             "reason": None if b.get("exists") else f"{bnode} unavailable",
             "backbone_engine_node": None,
             "backbone_node": bnode,
+            "head_source": {
+                "kind": "checkpoint_pytorch",
+                "node": profile.node,
+                "checkpoint_head_deployed": True,
+                "source_attribution": None,
+            },
+            "recipe": recipe,
             "backbone_teacher_consistency": (
                 "same_teacher_indicated"
                 if profile.teacher == bnode or profile.node == bnode
@@ -975,22 +1036,41 @@ def compare_profiles(
             or "engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence",
         )
 
-        lhp = {
-            "head_path": lr.get("head_path"),
-            "head_engine_node": lr.get("head_engine_node"),
-            "temporal_blocks": lr.get("temporal_blocks"),
-        }
-        rhp = {
-            "head_path": rr.get("head_path"),
-            "head_engine_node": rr.get("head_engine_node"),
-            "temporal_blocks": rr.get("temporal_blocks"),
-        }
+        def _head_cell(rt: dict[str, Any]) -> dict[str, Any]:
+            hs = rt.get("head_source") or {}
+            cell = {
+                "head_path": rt.get("head_path"),
+                "head_engine_node": rt.get("head_engine_node"),
+                "checkpoint_head_deployed": hs.get("checkpoint_head_deployed"),
+                "temporal_blocks": rt.get("temporal_blocks"),
+            }
+            attr = hs.get("source_attribution")
+            if attr:
+                cell["head_engine_source"] = (
+                    f"sibling ONNX {attr.get('verdict')}: {attr.get('onnx_matches')}"
+                )
+            return cell
+
+        lhp, rhp = _head_cell(lr), _head_cell(rr)
+        head_note = "; ".join(
+            f"{side} runs the fixed head engine, not the {side} checkpoint head"
+            + (
+                f" ({cell['head_engine_source']}; checkpoint source ambiguous)"
+                if "ambiguous" in cell.get("head_engine_source", "")
+                else ""
+            )
+            for side, cell in (("lhs", lhp), ("rhs", rhp))
+            if cell["checkpoint_head_deployed"] is False
+        )
         if lp.kind != rp.kind:
             axes["deployed_head_artifact"] = _axis(
-                "unmatched", lhp, rhp, "different head kinds"
+                "unmatched",
+                lhp,
+                rhp,
+                "; ".join(filter(None, ["different head kinds", head_note])),
             )
         elif lhp == rhp:
-            axes["deployed_head_artifact"] = _axis("matched", lhp, rhp)
+            axes["deployed_head_artifact"] = _axis("matched", lhp, rhp, head_note)
         elif (
             lhp["head_path"] == rhp["head_path"]
             and lhp["head_engine_node"] == rhp["head_engine_node"]
@@ -1002,7 +1082,7 @@ def compare_profiles(
                 "same head path; temporal-block presence differs but is bypassed at T=1",
             )
         else:
-            axes["deployed_head_artifact"] = _axis("unmatched", lhp, rhp)
+            axes["deployed_head_artifact"] = _axis("unmatched", lhp, rhp, head_note)
 
         axes["tracker_runtime_policy"] = _tracker_policy(inventory, lr, rr, repo)
 
@@ -1162,6 +1242,21 @@ def classify(
             and "unavailable" in rt["reason"]
         ):
             blockers.append(f"{side} runtime: {rt['reason']}")
+
+    # The treatment of a training design lives in the checkpoint head; if the
+    # runtime replaces that head with a fixed TRT engine, lhs and rhs run the
+    # same head and the declared question is not what gets measured.
+    if design in ("paired_siblings", "stage_increment", "seed_replicate"):
+        for side, rt in (("lhs", lr), ("rhs", rr)):
+            hs = rt.get("head_source") or {}
+            if (
+                rt.get("status") == "bound"
+                and hs.get("checkpoint_head_deployed") is False
+            ):
+                blockers.append(
+                    f"treatment_not_deployed: {side} runtime uses fixed head engine {hs.get('node')} "
+                    f"instead of the {side} checkpoint head (bind head_override: checkpoint_pytorch = --no-mamba-trt)"
+                )
 
     # Design premises the bytes must not contradict.
     if not blockers:
@@ -1397,9 +1492,23 @@ def executability(
         for s in prof.chain:
             if s.cache and s.cache_available is False:
                 retrain_missing.append(f"{s.node} needs {s.cache} (unavailable)")
+    recipe_missing: list[str] = []
+    for side, rt in (("lhs", lr), ("rhs", rr)):
+        if rt.get("status") != "bound":
+            recipe_missing.append(
+                f"{side}: runtime not bound ({rt.get('reason') or rt.get('status')})"
+            )
+        elif not rt.get("recipe"):
+            recipe_missing.append(
+                f"{side}: no runner in inventory for {rt.get('head_path')}; deliverable 3 must bind it"
+            )
     return {
-        "fresh_eval": not fresh_missing,
-        "fresh_eval_missing": sorted(set(fresh_missing)),
+        "artifacts_available": not fresh_missing,
+        "artifacts_missing": sorted(set(fresh_missing)),
+        "runtime_recipe_bound": not recipe_missing,
+        "runtime_recipe_missing": recipe_missing,
+        "fresh_eval": not fresh_missing and not recipe_missing,
+        "fresh_eval_missing": sorted(set(fresh_missing)) + recipe_missing,
         "retrain_replay": not retrain_missing,
         "retrain_replay_missing": sorted(set(retrain_missing)),
     }
@@ -1651,6 +1760,34 @@ def findings_section(payload: dict[str, Any]) -> list[str]:
         f"4. **Historical eval runs carry no preset / engine identity.** {len(with_hist)} rows have endpoints with results on record; none is reusable as a paired measurement. "
         "The results table has no preset/engine sha column and the run-manifest schema records a preset *name* only. Runtime identity for new measurements is deliverable 3; whether each historical run used the engine the preset names today is deliverable 4."
     )
+    tnd = [
+        c["comparison_id"]
+        for c in rows
+        if any(b.startswith("treatment_not_deployed") for b in c["blocking_confounds"])
+    ]
+    ovr = [
+        c["comparison_id"]
+        for c in rows
+        if any(
+            c[s]["runtime"].get("binding") == "family_preset"
+            and "--no-mamba-trt" in (c[s]["runtime"].get("recipe") or "")
+            for s in ("lhs", "rhs")
+        )
+    ]
+    fixed = [
+        c["comparison_id"]
+        for c in rows
+        if any(
+            (c[s]["runtime"].get("head_source") or {}).get("checkpoint_head_deployed")
+            is False
+            for s in ("lhs", "rhs")
+        )
+    ]
+    lines.append(
+        "5. **The m preset runs a fixed TRT head, not the checkpoint head.** `mamba_whole_graph_m.yaml` names `mamba_head_engine`; `mot17.py` passes it as `trt_head_engine` and `_whole_graph_fn` calls it, so under the unmodified preset every m checkpoint measures the same head bytes "
+        f"(blocked as `treatment_not_deployed`: {', '.join(f'`{i}`' for i in tnd) or 'none'}). m training rows are therefore bound with `head_override: checkpoint_pytorch` (= `--no-mamba-trt`): {', '.join(f'`{i}`' for i in ovr) or 'none'}. "
+        f"Rows that measure the fixed head engine as such: {', '.join(f'`{i}`' for i in fixed) or 'none'} — there the m head's training identity is *not* `m.t3t1_phase_b`; `mamba_head_26m.onnx` is ambiguous across every m checkpoint (#445)."
+    )
     lines.append("")
     return lines
 
@@ -1685,6 +1822,8 @@ def render_markdown(payload: dict[str, Any]) -> str:
         "## How to read",
         "",
         "- Every row compares two lineage **nodes** (ids from the inventory) under a declared **runtime binding** (`family_preset` = the artifacts the family's headline preset names; `shared_backbone_node` = both heads on one PyTorch backbone, eager).",
+        "- Each binding derives the **effective head source**: a preset that names `mamba_head_engine` runs that fixed TRT head and the endpoint's checkpoint head does *not* run (`checkpoint_head_deployed: false`); `head_override: checkpoint_pytorch` (= `mot17.py --no-mamba-trt`) restores the checkpoint head inside the same graph. A training design whose runtime does not deploy the checkpoint head is `blocked` (`treatment_not_deployed`).",
+        "- `recipe` per side is a command sketch derived from the binding; deliverable 3 fixes the exact invocation. `fresh_eval` is true only when every artifact exists **and** both sides have a bound recipe.",
         "- **Structural axes** ("
         + ", ".join(f"`{a}`" for a in payload["axes"]["structural"])
         + ") say *what system* is measured; **training axes** ("
@@ -1747,6 +1886,18 @@ def render_markdown(payload: dict[str, Any]) -> str:
         lines.append(
             f"- design `{c['design']}`; lhs `{c['lhs']['node']}` ({c['lhs']['runtime'].get('binding')}), rhs `{c['rhs']['node']}` ({c['rhs']['runtime'].get('binding')})"
         )
+        for side in ("lhs", "rhs"):
+            rt = c[side]["runtime"]
+            hs = rt.get("head_source") or {}
+            if rt.get("status") == "bound":
+                lines.append(
+                    f"- {side} runtime: head = {hs.get('kind')} (`checkpoint_head_deployed: {hs.get('checkpoint_head_deployed')}`); recipe: "
+                    + (
+                        f"`{rt['recipe']}`"
+                        if rt.get("recipe")
+                        else "**none in inventory**"
+                    )
+                )
         lines.append(f"- intended treatment: {c['intended_treatment']}")
         if c.get("question"):
             lines.append(f"- question: {c['question']}")
@@ -1809,7 +1960,7 @@ def render_markdown(payload: dict[str, Any]) -> str:
                 lines.append(f"- {b}")
         ex = c["executability"]
         lines.append(
-            f"- executability: fresh paired eval {'possible' if ex['fresh_eval'] else 'NOT possible (' + ', '.join(ex['fresh_eval_missing']) + ')'}; "
+            f"- executability: fresh paired eval {'possible' if ex['fresh_eval'] else 'NOT possible (' + '; '.join(ex['fresh_eval_missing']) + ')'}; "
             f"retrain replay {'possible' if ex['retrain_replay'] else 'NOT possible (' + '; '.join(ex['retrain_replay_missing']) + ')'}"
         )
         hl, hr = c["historical_results"]["lhs"], c["historical_results"]["rhs"]
