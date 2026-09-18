@@ -63,16 +63,16 @@ def fixture(tmp_path):
         )
     )
     point = dict(
-        schema="saccade-mixed-db-point-v1",
+        schema="saccade-mixed-db-point-v2",
         arguments=dict(
             policy="dynamic",
             window=1,
             iterations=2048,
             frames=53,
-            deadline_ms=1000 / 60,
+            deadline_ms=20.0,
             bursts=1,
-            burst_period_ms=100.0,
-            units=2,
+            burst_period_ms=50.0,
+            units=3,
             audit=False,
         ),
         frames=frames,
@@ -90,7 +90,14 @@ def fixture(tmp_path):
             probe=dict(before=probe, after=probe),
         ),
         elastic_pool=dict(
-            actual_sms=16, probe=dict(direct_sm_ids=elastic, graph_sm_ids=elastic)
+            actual_sms=16,
+            probe=dict(direct_sm_ids=elastic, graph_sm_ids=elastic),
+            lanes=[
+                dict(stream=20, context=2, borrowed=False),
+                dict(stream=21, context=2, borrowed=False),
+                dict(stream=22, context=1, borrowed=True),
+            ],
+            borrowed_lane=2,
         ),
         reference=reference(2048),
         error=None,
@@ -100,14 +107,16 @@ def fixture(tmp_path):
         [
             [0, 0, 1_000_000_000, 1_005_000_000],
             [0, 1, 1_000_000_001, 1_008_000_000],
+            [0, 2, 1_000_000_002, 1_009_000_000],
         ],
         dtype="<u8",
     ).tofile(tmp_path / "elastic.records")
-    stamps = np.zeros((2, 256), dtype=STAMP)
+    stamps = np.zeros((3, 256), dtype=STAMP)
     stamps["begin"] = 100
     stamps["end"] = 200
     stamps["sm"][0] = 16
-    stamps["sm"][1] = 0
+    stamps["sm"][1] = 17
+    stamps["sm"][2] = 0
     stamps["value"] = reference(2048)
     stamps.tofile(tmp_path / "elastic.stamps")
     (tmp_path / "point.json").write_text(json.dumps(point))
@@ -125,6 +134,62 @@ def test_valid_db_point_replays_latency_period_and_windows(tmp_path):
     assert result["frames"] == 3
     assert result["period_ms"]["p99"] == pytest.approx(5.0)
     assert result["borrow_open_ms"]["p50"] > 0
+    assert result["deadline_ms"] == 20.0
+    assert result["borrowed_units"] == 1
+    assert result["elastic_completed_within_service"]
+    assert result["bursts_completed_after_cutoff"] == 0
+
+
+def test_rejects_dynamic_without_two_elastic_lanes_plus_borrow(tmp_path):
+    point = fixture(tmp_path)
+    point["elastic_pool"]["lanes"] = [
+        dict(stream=20, context=2, borrowed=False),
+        dict(stream=22, context=1, borrowed=True),
+    ]
+    point["elastic_pool"]["borrowed_lane"] = 1
+    write(tmp_path, point)
+    result = derive(tmp_path)
+    assert not result["valid"]
+    assert "lane_table" in result["failed_checks"]
+
+
+def test_rejects_borrowed_unit_outside_stable_partition(tmp_path):
+    fixture(tmp_path)
+    stamps = np.fromfile(tmp_path / "elastic.stamps", dtype=STAMP).reshape(-1, 256)
+    stamps["sm"][2] = 16
+    stamps.tofile(tmp_path / "elastic.stamps")
+    result = derive(tmp_path)
+    assert not result["valid"]
+    assert "elastic_sm_membership" in result["failed_checks"]
+
+
+def test_rejects_elastic_load_released_after_stable_service(tmp_path):
+    point = fixture(tmp_path)
+    point["arguments"]["burst_period_ms"] = 5000.0
+    point["arguments"]["bursts"] = 2
+    point["arguments"]["units"] = 1
+    np.array(
+        [[0, 0, 1_000_000_000, 1_005_000_000], [1, 1, 6_000_000_000, 6_001_000_000]],
+        dtype="<u8",
+    ).tofile(tmp_path / "elastic.records")
+    stamps = np.fromfile(tmp_path / "elastic.stamps", dtype=STAMP).reshape(-1, 256)
+    stamps[:2].tofile(tmp_path / "elastic.stamps")
+    write(tmp_path, point)
+    result = derive(tmp_path)
+    assert not result["valid"]
+    assert "elastic_offered_within_service" in result["failed_checks"]
+
+
+def test_late_burst_completion_is_counted_not_rejected(tmp_path):
+    fixture(tmp_path)
+    records = np.fromfile(tmp_path / "elastic.records", dtype="<u8").reshape(-1, 4)
+    records[2, 3] = 1_100_000_000
+    records.tofile(tmp_path / "elastic.records")
+    result = derive(tmp_path)
+    assert result["valid"]
+    assert not result["elastic_completed_within_service"]
+    assert result["bursts_completed_after_cutoff"] == 1
+    assert result["elastic_completed"] == 2
 
 
 def test_rejects_missing_double_buffer_route(tmp_path):

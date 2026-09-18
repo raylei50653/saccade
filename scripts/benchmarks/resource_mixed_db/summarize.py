@@ -14,7 +14,7 @@ from scripts.benchmarks.resource_mixed_db.report import derive  # noqa: E402
 
 def summarize(directory):
     manifest = json.loads((directory / "sweep.json").read_text())
-    if manifest.get("schema") != "saccade-mixed-db-sweep-v1":
+    if manifest.get("schema") != "saccade-mixed-db-sweep-v2":
         raise ValueError("wrong sweep schema")
     if "finished_epoch" not in manifest:
         raise ValueError("incomplete sweep")
@@ -57,8 +57,9 @@ def summarize(directory):
         for field in ("policy", "window", "iterations", "audit"):
             if point["arguments"][field] != entry[field]:
                 raise ValueError("condition identity mismatch")
-        if point["arguments"]["frames"] != manifest["arguments"]["frames"]:
-            raise ValueError("frame count differs from frozen sweep")
+        for field in ("frames", "bursts", "burst_period_ms", "units", "deadline_ms"):
+            if point["arguments"][field] != manifest["arguments"][field]:
+                raise ValueError(f"{field} differs from frozen sweep")
         row.update(rep=entry["rep"], name=entry["name"])
         identity = (entry["policy"], entry["iterations"], entry["window"])
         owner = point["owner"]
@@ -130,6 +131,10 @@ def summarize(directory):
                     / other["elastic_all_done_s"],
                     stable_p99_delta_ms=dynamic["latency_ms"]["p99"]
                     - other["latency_ms"]["p99"],
+                    both_completed_within_service=dynamic[
+                        "elastic_completed_within_service"
+                    ]
+                    and other["elastic_completed_within_service"],
                 )
             )
     return dict(
@@ -137,7 +142,12 @@ def summarize(directory):
         archive=str(directory),
         sweep_sha256=digest(directory / "sweep.json"),
         source_head=manifest["head"],
-        target=dict(p99_ms=1000 / 60, miss_fraction=0.01),
+        target=dict(p99_ms=values["deadline_ms"], miss_fraction=0.01),
+        elastic_load=dict(
+            bursts=values["bursts"],
+            burst_period_ms=values["burst_period_ms"],
+            units=values["units"],
+        ),
         verified=True,
         rows=rows,
         comparisons=comparisons,

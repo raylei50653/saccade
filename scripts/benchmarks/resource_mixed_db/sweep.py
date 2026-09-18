@@ -26,8 +26,10 @@ def main():
     p.add_argument("--policies", nargs="+", default=["fixed", "shared", "dynamic"])
     p.add_argument("--iterations", type=int, nargs="+", default=[2048, 8192])
     p.add_argument("--windows", type=int, nargs="+", default=[1, 4])
-    p.add_argument("--bursts", type=int, default=50)
+    p.add_argument("--bursts", type=int, default=20)
+    p.add_argument("--burst-period-ms", type=float, default=50.0)
     p.add_argument("--units", type=int, default=256)
+    p.add_argument("--deadline-ms", type=float, default=20.0)
     args = p.parse_args()
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
@@ -93,7 +95,7 @@ def main():
                     )
                 )
     manifest = dict(
-        schema="saccade-mixed-db-sweep-v1",
+        schema="saccade-mixed-db-sweep-v2",
         arguments={
             k: str(v) if isinstance(v, Path) else v for k, v in vars(args).items()
         },
@@ -127,8 +129,12 @@ def main():
             str(args.frames),
             "--bursts",
             str(args.bursts),
+            "--burst-period-ms",
+            str(args.burst_period_ms),
             "--units",
             str(args.units),
+            "--deadline-ms",
+            str(args.deadline_ms),
             "--libraries",
             str(output),
             "--output",

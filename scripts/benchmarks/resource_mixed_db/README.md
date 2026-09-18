@@ -7,17 +7,45 @@ one verified Green Context. Dynamic routing lends that context only after the
 two overlapped GPU lanes reach a conservative boundary, and reclaims it before
 the next decode/detect admission. Only future elastic kernels change routes.
 
-## Predeclared contract (before pilot)
+## Predeclared contract (v2, 2026-09-18; before pilot)
+
+This revision replaces the 2026-09-17 contract that produced
+`docs/reference/benchmarks/resource_mixed_db_20260917.md`. That study named
+two construction limits that had to be fixed before any follow-up; the three
+changes below are those fixes plus the target the same study said must be
+re-declared. Everything else is carried over unchanged.
+
+- **Elastic load is scaled to the DB service horizon.** 20 bursts of 256
+  independent units at 50-ms intervals from the measurement origin, so the
+  last release is at 0.95 s and every burst is released while the pipeline is
+  in service (the shortest 2026-09-17 service horizon was 1.10 s). `report.py`
+  fails closed if the last release falls after the stable cutoff. Bursts that
+  still complete after the last frame are counted (`bursts_completed_after_cutoff`)
+  rather than hidden, and elastic throughput is reported as before but is
+  arrival-bound by construction; the discriminating elastic quantity is
+  in-service burst completion. Previously 50 bursts at 100 ms outlasted the
+  service horizon roughly 3x.
+- **Every elastic policy owns the same two admission lanes on the elastic
+  context.** Dynamic adds a third, borrowed lane on the stable 16-SM context
+  that opens only at verified double-buffer boundaries, so dynamic is exactly
+  fixed plus borrowing. Previously dynamic's second lane *was* the borrowed
+  lane, leaving one active admission lane during service against two for
+  fixed and shared. The lane table is recorded per run and checked.
+- **Stable target: frame-latency p99 <= 20 ms (50 Hz output deadline) and
+  observed misses <= 1% per repetition.** The 2026-09-17 unpressured 16-SM DB
+  control had p99 14.674-17.106 ms, so the serial study's 16.667 ms sat on
+  the threshold and could not separate 16-SM policies. 20 ms clears the
+  control's worst repetition by more than its repetition spread (2.4 ms).
+  Misses against 16.667 ms are still recorded as a descriptive column. It is
+  not a hard real-time guarantee.
+
+Carried over unchanged:
 
 - One sequence: MOT17-04-SDP, first 350 frames, 50 warmup and 300 retained.
   The evaluator runs saturated, not at artificial 60 FPS arrivals. Production
   frame latency is decode-to-completed-output; frame period is the difference
   between consecutive completed outputs; throughput uses the production
   interval from retained frame 51's start through frame 350's completion.
-- Stable target: frame-latency p99 <= 16.667 ms and observed misses <= 1% per
-  repetition. This preserves the serial study's absolute deadline while adding
-  the headline-path throughput and frame-period surfaces. It is not a hard
-  real-time guarantee.
 - Fixed reservation: stable 16 SM / elastic 16 SM. Matched sharing: one 32-SM
   context with high-priority stable streams and two normal-priority elastic
   streams. Dynamic borrowing: the fixed split plus one elastic stream on the
@@ -29,11 +57,9 @@ the next decode/detect admission. Only future elastic kernels change routes.
   drains the borrowed stream, and only then allows stable GPU work. The final
   no-lookahead frame is kept protected; a post-frame tail window is recorded
   separately and excluded from in-service window statistics.
-- Identical elastic arrivals: 50 bursts of 256 independent units at 100-ms
-  intervals from the measurement origin. Each unit is 256 blocks x 256 threads
-  with 2048 or 8192 dependent FP32 FMA iterations and a block reduction.
-  Admission windows are 1 or 4 per lane. Every output must match CPU FP32
-  replay. Unit sizes are separate workloads.
+- Each unit is 256 blocks x 256 threads with 2048 or 8192 dependent FP32 FMA
+  iterations and a block reduction. Admission windows are 1 or 4 per lane.
+  Every output must match CPU FP32 replay. Unit sizes are separate workloads.
 - Three shuffled repetitions, seed 433. One CUPTI-audited condition twin is run
   before repetition zero's timing point; timing and audit results are separate.
   No point is removed and no target is adjusted after observing the main sweep.
@@ -42,13 +68,13 @@ the next decode/detect admission. Only future elastic kernels change routes.
   request; the lease includes drain. These are host intervals, not exact GPU
   start/idle intervals. CUPTI independently rejects borrowed/stable kernel
   overlap and verifies pipeline/elastic context placement.
-- Total throughput is the pair (DB frames/s, elastic units/s before the stable
-  cutoff). Burst p95 completion, all-bursts completion and final drain are
-  retained separately. Unlike work units are never added.
+- Burst p95 completion, all-bursts completion and final drain are retained
+  separately. Unlike work units are never added.
 - Every run retains production frame starts/completions, completion periods,
   controller transitions/windows, elastic enqueue/completion observations,
-  output hashes, stream/context ownership, source snapshots and failures.
-  Tail percentiles remain descriptive for one prefix on one interactive host.
+  output hashes, stream/context ownership, lane table, source snapshots and
+  failures. Tail percentiles remain descriptive for one prefix on one
+  interactive host.
 
 The diagnostic barrier is a routing-controller boundary. It preserves the
 detector/tracker overlap already enqueued for each DB cycle, but it may remove
