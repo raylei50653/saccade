@@ -13,6 +13,7 @@
 | `test_math_model_source_attestation.py` | eval,tracking,cross-module | contract | active | Fail-closed contracts for the math-model source-byte attestation. |
 | `test_pipeline_health.py` | pipeline | behavior | active | Unit tests for saccade.pipeline.health.check_redis (mocked aioredis). |
 | `test_reconnect_rate.py` | eval | behavior | active | Unit tests for B2 reconnect_rate summarization / export. |
+| `test_resctl.py` | system | contract | active | Fail-closed contracts for tools/resctl.py, the cross-worktree resource lease CLI. |
 | `test_resolved_bridge_policy_config.py` | system | contract | active | Pin the resolved-config fingerprints the H0 declaration freezes. |
 | `test_safe_reject_audit.py` | eval | behavior | active | Tests for constrained FP pruning / safe-reject metrics. |
 | `test_signal_tables.py` | eval | contract | active | Unit tests for signal_tables schema helpers. |
