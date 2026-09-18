@@ -5,6 +5,11 @@
 <!-- doc-date: 2026-09-17 -->
 <!-- doc-module: cross -->
 
+> Revision 2 (2026-09-18) fixes the two harness limits named in [Limits](#limits)
+> and re-declares the target: [resource_mixed_db_20260918.md](resource_mixed_db_20260918.md).
+> Its finding 2 below (dynamic's in-service elastic completion worse than fixed)
+> did not survive the lane fix; the stable-side findings reproduce.
+
 ## Decision
 
 **Under the production double-buffer schedule, borrowing at verified DB

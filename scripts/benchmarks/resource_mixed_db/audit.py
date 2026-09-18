@@ -11,7 +11,7 @@ import numpy as np
 
 def audit(directory):
     manifest = json.loads((directory / "sweep.json").read_text())
-    if manifest.get("schema") != "saccade-mixed-db-sweep-v1":
+    if manifest.get("schema") != "saccade-mixed-db-sweep-v2":
         raise ValueError("wrong sweep schema")
     if "finished_epoch" not in manifest:
         raise ValueError("unfinished experiment")
@@ -39,11 +39,12 @@ def audit(directory):
         if (
             args["frames"] != 350
             or args["units"] != 256
-            or args["bursts"] != 50
-            or args["burst_period_ms"] != 100.0
-            or args["deadline_ms"] != 1000 / 60
+            or args["bursts"] != 20
+            or args["burst_period_ms"] != 50.0
+            or args["deadline_ms"] != 20.0
         ):
             raise ValueError("frozen main contract differs")
+        deadline = args["deadline_ms"]
         frames = point["frames"]
         if [row["frame"] for row in frames] != list(range(51, 351)):
             raise ValueError("missing stable work")
@@ -60,8 +61,8 @@ def audit(directory):
             or (periods < 0).any()
         ):
             raise ValueError("invalid latency or period")
-        misses = int((latency > 1000 / 60).sum())
-        service = np.percentile(latency, 99) <= 1000 / 60 and misses / 300 <= 0.01
+        misses = int((latency > deadline).sum())
+        service = np.percentile(latency, 99) <= deadline and misses / 300 <= 0.01
         if (
             misses != report["miss_count"]
             or float(np.percentile(latency, 99)) != report["latency_ms"]["p99"]
@@ -86,16 +87,26 @@ def audit(directory):
         borrowed = borrowed_before = 0
         if args["policy"] != "control":
             raw = np.fromfile(root / "elastic.records", dtype="<u8").reshape(-1, 4)
-            if len(raw) != 12800 or not np.array_equal(
-                raw[:, 0], np.repeat(np.arange(50), 256)
+            if len(raw) != 5120 or not np.array_equal(
+                raw[:, 0], np.repeat(np.arange(20), 256)
             ):
                 raise ValueError("burst conservation failed")
             cutoff = (
                 point["native_origin"]
                 + (frames[-1]["output"] - point["native_anchor_after"]) * 1e9
             )
+            if point["native_origin"] + 19 * 50_000_000 > cutoff:
+                raise ValueError("elastic load released after stable service")
+            lanes = point["elastic_pool"]["lanes"]
+            expected_lanes = 3 if args["policy"] == "dynamic" else 2
+            if len(lanes) != expected_lanes or [lane["borrowed"] for lane in lanes] != [
+                False
+            ] * 2 + [True] * (expected_lanes - 2):
+                raise ValueError("lane construction differs")
+            if raw[:, 1].max() >= expected_lanes:
+                raise ValueError("record on an unknown lane")
             if args["policy"] == "dynamic":
-                borrowed_rows = raw[raw[:, 1] == 1]
+                borrowed_rows = raw[raw[:, 1] == 2]
                 borrowed = len(borrowed_rows)
                 borrowed_before = int((borrowed_rows[:, 3] <= cutoff).sum())
                 enqueue_lower = (

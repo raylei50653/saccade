@@ -173,6 +173,7 @@ Manifest: `docs/ownership/doc_migration_manifest.yaml`
 - `docs/reference/benchmarks/resource_hardware_20260916.md`
 - `docs/reference/benchmarks/resource_mixed_20260916.md`
 - `docs/reference/benchmarks/resource_mixed_db_20260917.md`
+- `docs/reference/benchmarks/resource_mixed_db_20260918.md`
 - `docs/reference/benchmarks/resource_partition_20260915.md`
 - `docs/reference/benchmarks/resource_routing_20260916.md`
 - `docs/reference/benchmarks/resource_sensitivity_20260915.md`
@@ -388,6 +389,6 @@ Excluded from the active index and default search view.
 
 ## Inventory summary
 
-- documents: 338
-- active: 283
+- documents: 339
+- active: 284
 - grayed out: 55

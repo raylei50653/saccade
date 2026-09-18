@@ -28,7 +28,7 @@ def derive(directory):
     args, frames, owner = point["arguments"], point["frames"], point["owner"]
     transitions, windows = point["transitions"], point["windows"]
     checks = {}
-    checks["schema"] = point["schema"] == "saccade-mixed-db-point-v1"
+    checks["schema"] = point["schema"] == "saccade-mixed-db-point-v2"
     checks["host_clock_pair"] = (
         0 <= point["native_anchor_after"] - point["origin"] <= 0.001
     )
@@ -115,8 +115,10 @@ def derive(directory):
         ),
         db_fps=len(frames) / horizon,
         horizon_s=horizon,
+        deadline_ms=args["deadline_ms"],
         miss_count=sum(v > args["deadline_ms"] for v in latency),
         miss_fraction=sum(v > args["deadline_ms"] for v in latency) / len(frames),
+        miss_count_60hz=sum(v > 1000 / 60 for v in latency),
         output_sha256=point["output_sha256"],
     )
     result["service_pass"] = (
@@ -131,7 +133,15 @@ def derive(directory):
         checks["elastic_bursts"] = np.array_equal(
             records[:, 0], np.arange(len(records)) // args["units"]
         )
-        checks["elastic_lanes"] = bool(np.isin(records[:, 1], [0, 1]).all())
+        lanes = point["elastic_pool"]["lanes"]
+        borrowed_lane = point["elastic_pool"]["borrowed_lane"]
+        borrowed_flags = [lane["borrowed"] for lane in lanes]
+        checks["lane_table"] = (
+            len(lanes) == (3 if args["policy"] == "dynamic" else 2)
+            and borrowed_flags == [False, False] + [True] * (len(lanes) - 2)
+            and borrowed_lane == (2 if args["policy"] == "dynamic" else -1)
+        )
+        checks["elastic_lanes"] = bool(np.isin(records[:, 1], range(len(lanes))).all())
         checks["reference_matches_cpu"] = point["reference"] == reference(
             args["iterations"]
         )
@@ -149,12 +159,10 @@ def derive(directory):
         )
         checks["elastic_sm_membership"] = all(
             set(stamps["sm"][records[:, 1] == lane].ravel())
-            <= (
-                stable_ids if args["policy"] == "dynamic" and lane == 1 else elastic_ids
-            )
-            for lane in (0, 1)
+            <= (stable_ids if borrowed else elastic_ids)
+            for lane, borrowed in enumerate(borrowed_flags)
         )
-        for lane in (0, 1):
+        for lane in range(len(lanes)):
             events = [(int(r[2]), 1) for r in records if r[1] == lane] + [
                 (int(r[3]), -1) for r in records if r[1] == lane
             ]
@@ -167,38 +175,42 @@ def derive(directory):
             point["native_origin"]
             + (frames[-1]["output"] - point["native_anchor_after"]) * 1e9
         )
+        # The offered load must end inside the stable service horizon, so
+        # every burst is released while the pipeline is in service. Bursts
+        # that still complete after the last frame are counted, not hidden.
+        last_release = point["native_origin"] + (args["bursts"] - 1) * period_ns
+        checks["elastic_offered_within_service"] = last_release <= cutoff
         completed = int((records[:, 3] <= cutoff).sum())
         last = int(records[:, 3].max())
+        borrowed = records[:, 1] == borrowed_lane
+        burst_completion = np.array(
+            [
+                int(records[records[:, 0] == burst, 3].max())
+                for burst in np.unique(records[:, 0])
+            ]
+        )
+        burst_latencies = (
+            (burst_completion - point["native_origin"])
+            - np.arange(len(burst_completion)) * period_ns
+        ) / 1e6
         result.update(
             elastic_completed=completed,
             elastic_total=len(records),
             elastic_units_s=completed / horizon,
             elastic_all_done_s=(last - point["native_origin"]) / 1e9,
+            elastic_last_release_s=(last_release - point["native_origin"]) / 1e9,
             elastic_drain_after_stable_s=max(0, (last - cutoff) / 1e9),
-            borrowed_units=int((records[:, 1] == 1).sum())
-            if args["policy"] == "dynamic"
-            else 0,
+            elastic_completed_within_service=bool(last <= cutoff),
+            bursts_completed_after_cutoff=int((burst_completion > cutoff).sum()),
+            borrowed_units=int(borrowed.sum()),
             borrowed_completed_before_cutoff=int(
-                ((records[:, 1] == 1) & (records[:, 3] <= cutoff)).sum()
-            )
-            if args["policy"] == "dynamic"
-            else 0,
+                (borrowed & (records[:, 3] <= cutoff)).sum()
+            ),
             borrowed_enqueued_before_cutoff=int(
-                ((records[:, 1] == 1) & (records[:, 2] <= cutoff)).sum()
-            )
-            if args["policy"] == "dynamic"
-            else 0,
+                (borrowed & (records[:, 2] <= cutoff)).sum()
+            ),
+            burst_completion_ms=quantiles(burst_latencies.tolist()),
         )
-        burst_latencies = [
-            (
-                int(records[records[:, 0] == burst, 3].max())
-                - point["native_origin"]
-                - int(burst) * period_ns
-            )
-            / 1e6
-            for burst in np.unique(records[:, 0])
-        ]
-        result["burst_completion_ms"] = quantiles(burst_latencies)
     if args["audit"]:
         trace = parse_trace(directory / "cupti.trace")
         begin = next(m["cupti"] for m in trace["labels"] if m["label"] == "mixed_begin")

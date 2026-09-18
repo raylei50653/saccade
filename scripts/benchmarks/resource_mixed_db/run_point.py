@@ -25,9 +25,9 @@ def main():
     p.add_argument("--window", type=int, choices=[1, 4], default=1)
     p.add_argument("--iterations", type=int, choices=[2048, 8192], default=2048)
     p.add_argument("--frames", type=int, default=350)
-    p.add_argument("--deadline-ms", type=float, default=1000 / 60)
-    p.add_argument("--bursts", type=int, default=50)
-    p.add_argument("--burst-period-ms", type=float, default=100.0)
+    p.add_argument("--deadline-ms", type=float, default=20.0)
+    p.add_argument("--bursts", type=int, default=20)
+    p.add_argument("--burst-period-ms", type=float, default=50.0)
     p.add_argument("--units", type=int, default=256)
     p.add_argument("--libraries", type=Path, required=True)
     p.add_argument("--audit", action="store_true")
@@ -92,23 +92,23 @@ def main():
         ).sm.smCount
         if elastic_size != 32 - size:
             raise RuntimeError("elastic actual SM mismatch")
-    elastic_streams = []
-    contexts = [
-        elastic_context,
-        owner.context if args.policy == "dynamic" else elastic_context,
-    ]
-    for green in [
-        elastic_green,
-        owner.green if args.policy == "dynamic" else elastic_green,
-    ]:
-        elastic_streams.append(
-            call(
-                "cuGreenCtxStreamCreate",
-                green,
-                d.CUstream_flags.CU_STREAM_NON_BLOCKING,
-                0,
-            )
+    # Every elastic policy owns the same two admission lanes on the elastic
+    # context. Dynamic adds a third, borrowed lane on the stable context, so
+    # dynamic is exactly fixed plus borrowing rather than a lane swap.
+    lanes = [dict(green=elastic_green, context=elastic_context, borrowed=False)] * 2
+    if args.policy == "dynamic":
+        lanes.append(dict(green=owner.green, context=owner.context, borrowed=True))
+    borrowed_lane = next((i for i, lane in enumerate(lanes) if lane["borrowed"]), -1)
+    contexts = [lane["context"] for lane in lanes]
+    elastic_streams = [
+        call(
+            "cuGreenCtxStreamCreate",
+            lane["green"],
+            d.CUstream_flags.CU_STREAM_NON_BLOCKING,
+            0,
         )
+        for lane in lanes
+    ]
     original_main = owner.main_stream
     owner.main_stream = torch.cuda.ExternalStream(int(elastic_streams[0]))
     call("cuCtxSetCurrent", elastic_context)
@@ -119,10 +119,10 @@ def main():
     torch.cuda.set_stream(original_main)
 
     lib = c.CDLL(str(args.libraries / "elastic.so"))
-    lib.mixed_create.argtypes = (
-        [c.c_void_p] * 4 + [c.c_int] * 4 + [c.c_ulonglong, c.c_int]
+    lib.mixed_create_lanes.argtypes = (
+        [c.POINTER(c.c_void_p)] * 2 + [c.c_int] * 6 + [c.c_ulonglong]
     )
-    lib.mixed_create.restype = c.c_void_p
+    lib.mixed_create_lanes.restype = c.c_void_p
     lib.mixed_error.argtypes = [c.c_void_p]
     lib.mixed_error.restype = c.c_char_p
     lib.mixed_busy.argtypes = [c.c_void_p, c.c_int]
@@ -131,15 +131,16 @@ def main():
     lib.mixed_save.argtypes = [c.c_void_p, c.c_char_p, c.c_char_p]
     lib.mixed_reference.argtypes = [c.c_int]
     lib.mixed_reference.restype = c.c_float
-    native = lib.mixed_create(
-        *[int(s) for s in elastic_streams],
-        *[int(ctx) for ctx in contexts],
+    native = lib.mixed_create_lanes(
+        (c.c_void_p * len(lanes))(*[int(s) for s in elastic_streams]),
+        (c.c_void_p * len(lanes))(*[int(ctx) for ctx in contexts]),
+        len(lanes),
+        borrowed_lane,
         args.window,
         args.iterations,
         args.bursts,
         args.units,
         int(args.burst_period_ms * 1_000_000),
-        args.policy == "dynamic",
     )
     if lib.mixed_error(native):
         raise RuntimeError(lib.mixed_error(native).decode())
@@ -353,7 +354,7 @@ def main():
             for frame_id in sorted(set(starts) & set(completion) & set(cycle_finished))
         ]
         result = dict(
-            schema="saccade-mixed-db-point-v1",
+            schema="saccade-mixed-db-point-v2",
             arguments={
                 k: str(v) if isinstance(v, Path) else v for k, v in vars(args).items()
             },
@@ -374,6 +375,13 @@ def main():
                 probe=elastic_probe,
                 streams=[int(s) for s in elastic_streams],
                 contexts=[int(ctx) for ctx in contexts],
+                lanes=[
+                    dict(stream=int(s), context=int(ctx), borrowed=lane["borrowed"])
+                    for s, ctx, lane in zip(
+                        elastic_streams, contexts, lanes, strict=True
+                    )
+                ],
+                borrowed_lane=borrowed_lane,
             ),
             reference=lib.mixed_reference(args.iterations),
             error=error,
