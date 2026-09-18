@@ -1,0 +1,362 @@
+{
+  "schema": "training_lineage_roles_v1",
+  "issue": "https://github.com/raylei50653/saccade/issues/421",
+  "purpose": "Candidate lineage roles for the YOLO+Mamba detector chain. A row here is a CLAIM to be checked, not a fact: the inventory tool resolves each path, hashes it, reads what the artifact says about itself, and derives parent edges from the artifact's own recorded args. `expected_init_parent` / `expected_teacher` are the protocol's story and are reported as ok / mismatch / unverifiable against what the bytes say. Missing files stay listed and are marked unavailable; nothing is substituted.",
+  "families": {
+    "s": {
+      "backbone": "yolo26s",
+      "reading": [
+        "docs/modules/detection/mamba-v14-replication-protocol.md",
+        "docs/modules/detection/research/mamba-t3t1-curriculum-20260613.md"
+      ]
+    },
+    "m": {
+      "backbone": "yolo26m",
+      "reading": [
+        "docs/modules/detection/mamba-v14-replication-protocol.md#yolo26m-容量對照"
+      ]
+    }
+  },
+  "roles": {
+    "s.pretrained_yolo": {
+      "family": "s",
+      "kind": "yolo_pt",
+      "path": "models/yolo/yolo26s.pt",
+      "note": "External pretrained YOLO26s with the original Detect head (hashed as a blob; not unpickled)."
+    },
+    "s.legacy_teacher": {
+      "family": "s",
+      "kind": "gated_teacher_ckpt",
+      "path": "runs/gated_det_v1/best.ckpt",
+      "note": "Historical gated teacher (trained to epoch 12). Parent of the legacy v14 line and source of the production s backbone engine ONNX."
+    },
+    "s.legacy_cache": {
+      "family": "s",
+      "kind": "teacher_cache",
+      "path": "runs/trt_feat_cache_v2",
+      "note": "Historical TRT feature cache used by the legacy GT runs and the controlled refit."
+    },
+    "s.legacy_distill": {
+      "family": "s",
+      "kind": "mamba_ckpt",
+      "path": "runs/mamba_distill_pixelshuffle_crossscan/best.ckpt",
+      "expected_teacher": "s.legacy_teacher"
+    },
+    "s.legacy_parent_gt": {
+      "family": "s",
+      "kind": "mamba_ckpt",
+      "path": "runs/mamba_gt_pixelshuffle_crossscan/best.ckpt",
+      "expected_init_parent": "s.legacy_distill",
+      "expected_teacher": "s.legacy_teacher",
+      "note": "Legacy GT fine-tune parent of v14 (N=1-era runtime)."
+    },
+    "s.legacy_v14": {
+      "family": "s",
+      "kind": "mamba_ckpt",
+      "path": "runs/mamba_gt_vgt_mamba_v14/best.ckpt",
+      "expected_init_parent": "s.legacy_parent_gt",
+      "expected_teacher": "s.legacy_teacher",
+      "note": "Previous production checkpoint (epochs 1-30 warm-start + 31-60 resume; see report_data/mamba_v14_training_audit.md). The stored args are the RESUME invocation, so the recorded mamba_ckpt points at itself."
+    },
+    "s.controlled_refit": {
+      "family": "s",
+      "kind": "mamba_ckpt",
+      "path": "runs/mamba_gt_v14_parent_n16_frozen_refit/best.ckpt",
+      "expected_init_parent": "s.legacy_parent_gt",
+      "expected_teacher": "s.legacy_teacher",
+      "note": "Controlled frozen-SSM N=16 refit of the legacy parent (single-edge replay)."
+    },
+    "s.adapted_teacher": {
+      "family": "s",
+      "kind": "gated_teacher_ckpt",
+      "path": "runs/gated_det_v14replica/epoch_0012.ckpt",
+      "note": "Domain-adapted gated teacher, protocol-fixed at epoch 12 (run continued to epoch 19; best.ckpt is NOT the protocol teacher)."
+    },
+    "s.teacher_cache": {
+      "family": "s",
+      "kind": "teacher_cache",
+      "path": "runs/mamba_teacher_cache_v14replica",
+      "note": "Immutable 7-sequence teacher feature cache consumed by distill and GT2."
+    },
+    "s.distill": {
+      "family": "s",
+      "kind": "mamba_ckpt",
+      "path": "runs/mamba_distill_v14replica/best.ckpt",
+      "expected_teacher": "s.adapted_teacher",
+      "note": "Mamba head distillation end (frozen SSM, cached teacher features)."
+    },
+    "s.gt1": {
+      "family": "s",
+      "kind": "mamba_ckpt",
+      "path": "runs/mamba_gt_v14replica_stage1/best.ckpt",
+      "expected_init_parent": "s.distill",
+      "expected_teacher": "s.adapted_teacher",
+      "note": "GT1: live teacher, gt_ratio 0.5. Shared warm-start of every matched T3->T1 / implicit pair."
+    },
+    "s.gt2_plain": {
+      "family": "s",
+      "kind": "mamba_ckpt",
+      "path": "runs/mamba_gt_v14replica_final/best.ckpt",
+      "expected_init_parent": "s.gt1",
+      "expected_teacher": "s.adapted_teacher",
+      "note": "Plain GT2 (cache, gt_ratio 0) = v14replica final; superseded as production by T3->T1."
+    },
+    "s.t3t1_phase_a": {
+      "family": "s",
+      "kind": "mamba_ckpt",
+      "path": "runs/mamba_gt_v14replica_t3/best.ckpt",
+      "expected_init_parent": "s.gt1",
+      "expected_teacher": "s.adapted_teacher",
+      "note": "T3->T1 Phase A: --add-temporal clip_len 3 (temporal blocks first appear here)."
+    },
+    "s.t3t1_phase_b": {
+      "family": "s",
+      "kind": "mamba_ckpt",
+      "path": "runs/mamba_gt_v14replica_t3_t1/best.ckpt",
+      "expected_init_parent": "s.t3t1_phase_a",
+      "expected_teacher": "s.adapted_teacher",
+      "note": "T3->T1 Phase B: clip_len 1 spatial re-adaptation. Production s checkpoint per configs/presets/mamba_whole_graph.yaml."
+    },
+    "s.implicit_s42": {
+      "family": "s",
+      "kind": "mamba_ckpt",
+      "path": "runs/mamba_gt_v14replica_implicit_s42/best.ckpt",
+      "expected_init_parent": "s.gt1",
+      "expected_teacher": "s.adapted_teacher",
+      "note": "Matched implicit all-frames T=4 control for T3->T1 (same GT1 warm start, same seed 42)."
+    },
+    "s.implicit_s43": {
+      "family": "s",
+      "kind": "mamba_ckpt",
+      "path": "runs/mamba_gt_v14replica_implicit_s43/best.ckpt",
+      "expected_init_parent": "s.gt1",
+      "expected_teacher": "s.adapted_teacher"
+    },
+    "s.implicit_s44": {
+      "family": "s",
+      "kind": "mamba_ckpt",
+      "path": "runs/mamba_gt_v14replica_implicit_s44/best.ckpt",
+      "expected_init_parent": "s.gt1",
+      "expected_teacher": "s.adapted_teacher"
+    },
+    "s.t3t1_phase_a_shared_s43": {
+      "family": "s",
+      "kind": "mamba_ckpt",
+      "path": "runs/mamba_gt_v14replica_t3_shared_s43/best.ckpt",
+      "expected_init_parent": "s.gt1",
+      "expected_teacher": "s.adapted_teacher",
+      "note": "Phase A of the shared-GT1 seed-43 pair."
+    },
+    "s.t3t1_shared_s43": {
+      "family": "s",
+      "kind": "mamba_ckpt",
+      "path": "runs/mamba_gt_v14replica_t3_t1_shared_s43/best.ckpt",
+      "expected_teacher": "s.adapted_teacher",
+      "note": "Explicit T3->T1 at seed 43 from the shared GT1 (matched to s.implicit_s43).",
+      "expected_init_parent": "s.t3t1_phase_a_shared_s43"
+    },
+    "s.t3t1_phase_a_shared_s44": {
+      "family": "s",
+      "kind": "mamba_ckpt",
+      "path": "runs/mamba_gt_v14replica_t3_shared_s44/best.ckpt",
+      "expected_init_parent": "s.gt1",
+      "expected_teacher": "s.adapted_teacher",
+      "note": "Phase A of the shared-GT1 seed-44 pair."
+    },
+    "s.t3t1_shared_s44": {
+      "family": "s",
+      "kind": "mamba_ckpt",
+      "path": "runs/mamba_gt_v14replica_t3_t1_shared_s44/best.ckpt",
+      "expected_teacher": "s.adapted_teacher",
+      "expected_init_parent": "s.t3t1_phase_a_shared_s44",
+      "note": "Explicit T3->T1 at seed 44 from the shared GT1 (matched to s.implicit_s44)."
+    },
+    "s.distill_s13": {
+      "family": "s",
+      "kind": "mamba_ckpt",
+      "path": "runs/mamba_distill_v14replica_s13/best.ckpt",
+      "expected_teacher": "s.adapted_teacher",
+      "note": "Seed-20260613 reseed of the student chain (teacher/cache fixed)."
+    },
+    "s.gt1_s13": {
+      "family": "s",
+      "kind": "mamba_ckpt",
+      "path": "runs/mamba_gt_v14replica_s13_stage1/best.ckpt",
+      "expected_init_parent": "s.distill_s13",
+      "expected_teacher": "s.adapted_teacher",
+      "note": "Seed-specific GT1 (the GT1-start confound of the old paired T3->T1 comparison)."
+    },
+    "s.gt2_plain_s13": {
+      "family": "s",
+      "kind": "mamba_ckpt",
+      "path": "runs/mamba_gt_v14replica_s13_final/best.ckpt",
+      "expected_init_parent": "s.gt1_s13",
+      "expected_teacher": "s.adapted_teacher"
+    },
+    "s.t3t1_phase_a_s13": {
+      "family": "s",
+      "kind": "mamba_ckpt",
+      "path": "runs/mamba_gt_v14replica_t3_s13/best.ckpt",
+      "expected_init_parent": "s.gt1_s13",
+      "expected_teacher": "s.adapted_teacher"
+    },
+    "s.t3t1_s13": {
+      "family": "s",
+      "kind": "mamba_ckpt",
+      "path": "runs/mamba_gt_v14replica_t3_t1_s13/best.ckpt",
+      "expected_init_parent": "s.t3t1_phase_a_s13",
+      "expected_teacher": "s.adapted_teacher",
+      "note": "Old seed-specific-GT1 T3->T1 pair member; compare with s.gt2_plain_s{seed} only (not with the shared-GT1 implicit controls)."
+    },
+    "s.distill_s14": {
+      "family": "s",
+      "kind": "mamba_ckpt",
+      "path": "runs/mamba_distill_v14replica_s14/best.ckpt",
+      "expected_teacher": "s.adapted_teacher",
+      "note": "Seed-20260614 reseed of the student chain (teacher/cache fixed)."
+    },
+    "s.gt1_s14": {
+      "family": "s",
+      "kind": "mamba_ckpt",
+      "path": "runs/mamba_gt_v14replica_s14_stage1/best.ckpt",
+      "expected_init_parent": "s.distill_s14",
+      "expected_teacher": "s.adapted_teacher",
+      "note": "Seed-specific GT1 (the GT1-start confound of the old paired T3->T1 comparison)."
+    },
+    "s.gt2_plain_s14": {
+      "family": "s",
+      "kind": "mamba_ckpt",
+      "path": "runs/mamba_gt_v14replica_s14_final/best.ckpt",
+      "expected_init_parent": "s.gt1_s14",
+      "expected_teacher": "s.adapted_teacher"
+    },
+    "s.t3t1_phase_a_s14": {
+      "family": "s",
+      "kind": "mamba_ckpt",
+      "path": "runs/mamba_gt_v14replica_t3_s14/best.ckpt",
+      "expected_init_parent": "s.gt1_s14",
+      "expected_teacher": "s.adapted_teacher"
+    },
+    "s.t3t1_s14": {
+      "family": "s",
+      "kind": "mamba_ckpt",
+      "path": "runs/mamba_gt_v14replica_t3_t1_s14/best.ckpt",
+      "expected_init_parent": "s.t3t1_phase_a_s14",
+      "expected_teacher": "s.adapted_teacher",
+      "note": "Old seed-specific-GT1 T3->T1 pair member; compare with s.gt2_plain_s{seed} only (not with the shared-GT1 implicit controls)."
+    },
+    "s.deployment_preset": {
+      "family": "s",
+      "kind": "preset",
+      "path": "configs/presets/mamba_whole_graph.yaml",
+      "note": "Headline s preset. Deployment identity = the artifacts this file names."
+    },
+    "s.backbone_engine": {
+      "family": "s",
+      "kind": "trt_engine",
+      "path": "models/yolo/yolo26s_backbone_640_best.engine",
+      "onnx": "models/yolo/yolo26s_backbone_640_best.onnx",
+      "note": "FPN backbone TRT engine named by the s preset. Engine bytes are not attributable; the sibling ONNX is matched against teacher checkpoints by BN-folded conv weights."
+    },
+    "s.backbone_engine_v14replica_e12": {
+      "family": "s",
+      "kind": "trt_engine",
+      "path": "models/yolo/yolo26s_backbone_640_v14replica_e12.engine",
+      "onnx": "models/yolo/yolo26s_backbone_640_v14replica_e12.onnx",
+      "note": "Backbone engine exported from the v14replica teacher; NOT referenced by any preset."
+    },
+    "s.cpp_head_script": {
+      "family": "s",
+      "kind": "torchscript",
+      "path": "models/yolo/mamba_head_best.pt",
+      "note": "Default C++ Mamba head TorchScript (DEFAULT_CPP_MAMBA_HEAD_SCRIPT). Source checkpoint not recorded anywhere machine-readable."
+    },
+    "m.pretrained_yolo": {
+      "family": "m",
+      "kind": "yolo_pt",
+      "path": "models/yolo/yolo26m.pt"
+    },
+    "m.adapted_teacher": {
+      "family": "m",
+      "kind": "gated_teacher_ckpt",
+      "path": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
+      "note": "m gated teacher, protocol-fixed at epoch 12 (best.ckpt is not the protocol teacher)."
+    },
+    "m.teacher_cache": {
+      "family": "m",
+      "kind": "teacher_cache",
+      "path": "runs/mamba_teacher_cache_yolo26m_v14replica",
+      "note": "Cache the m distill/GT2 checkpoints record as their cache_dir."
+    },
+    "m.teacher_cache_gpu_decode": {
+      "family": "m",
+      "kind": "teacher_cache",
+      "path": "runs/mamba_teacher_cache_yolo26m_v14replica_gpu_decode",
+      "note": "GPU-decode rebuild of the m cache (different decode backend => different bytes; a separate node, not a substitute)."
+    },
+    "m.distill": {
+      "family": "m",
+      "kind": "mamba_ckpt",
+      "path": "runs/mamba_distill_yolo26m_v14replica/best.ckpt",
+      "expected_teacher": "m.adapted_teacher"
+    },
+    "m.gt1": {
+      "family": "m",
+      "kind": "mamba_ckpt",
+      "path": "runs/mamba_gt_yolo26m_v14replica_stage1/best.ckpt",
+      "expected_init_parent": "m.distill",
+      "expected_teacher": "m.adapted_teacher"
+    },
+    "m.gt2_plain": {
+      "family": "m",
+      "kind": "mamba_ckpt",
+      "path": "runs/mamba_gt_yolo26m_v14replica_final/best.ckpt",
+      "expected_init_parent": "m.gt1",
+      "expected_teacher": "m.adapted_teacher"
+    },
+    "m.t3t1_phase_a": {
+      "family": "m",
+      "kind": "mamba_ckpt",
+      "path": "runs/mamba_gt_yolo26m_v14replica_t3/best.ckpt",
+      "expected_init_parent": "m.gt1",
+      "expected_teacher": "m.adapted_teacher"
+    },
+    "m.t3t1_phase_b": {
+      "family": "m",
+      "kind": "mamba_ckpt",
+      "path": "runs/mamba_gt_yolo26m_v14replica_t3_t1/best.ckpt",
+      "expected_init_parent": "m.t3t1_phase_a",
+      "expected_teacher": "m.adapted_teacher",
+      "note": "Production m checkpoint per configs/presets/mamba_whole_graph_m.yaml."
+    },
+    "m.t3t1_phase_b_gpu_decode": {
+      "family": "m",
+      "kind": "mamba_ckpt",
+      "path": "runs/mamba_gt_yolo26m_v14replica_t3_t1_gpu_decode/best.ckpt",
+      "expected_teacher": "m.adapted_teacher",
+      "note": "GPU-decode training-chain variant; not the preset checkpoint."
+    },
+    "m.deployment_preset": {
+      "family": "m",
+      "kind": "preset",
+      "path": "configs/presets/mamba_whole_graph_m.yaml"
+    },
+    "m.backbone_engine": {
+      "family": "m",
+      "kind": "trt_engine",
+      "path": "models/yolo/yolo26m_backbone_640_best.engine",
+      "onnx": "models/yolo/yolo26m_backbone_640.onnx",
+      "note": "Preset comment says exported from the m teacher ckpt; checked against teacher checkpoints via the sibling ONNX."
+    },
+    "m.head_engine": {
+      "family": "m",
+      "kind": "trt_engine",
+      "path": "models/yolo/mamba_head_26m.engine",
+      "onnx": "models/yolo/mamba_head_26m.onnx",
+      "note": "Mamba head TRT engine named by the m preset."
+    }
+  },
+  "cross_reference": {
+    "report_data/tables/mamba_checkpoint_provenance.csv": "paper-facing checkpoint table; the inventory reports whether its sha256 for a shared path agrees"
+  }
+}

@@ -41,3 +41,4 @@
 | [jde-market-1501](jde-market-1501.md) | 2026-05-25 | 進行中 (v4) |
 | [pp22_full_cadence_interp_training_plan](pp22_full_cadence_interp_training_plan.md) | 2026-07 | plan |
 | [pp22_stress_test_findings](pp22_stress_test_findings.md) | 2026-07 | findings |
+| [training_lineage_inventory](training_lineage_inventory.md) | 2026-09-18 | captured snapshot（#421 deliverable 1；由 `scripts/provenance/training_lineage.py` 產生，不手改） |

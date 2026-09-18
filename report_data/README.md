@@ -33,6 +33,10 @@ Doc homes: [docs/ownership/doc_structure_contract.md](../docs/ownership/doc_stru
    proposed manuscript sections and evidence roles.
 11. [mamba_curriculum_progress.md](mamba_curriculum_progress.md): current
     T3-to-T1 result, mechanism evidence, boundary experiments, and next step.
+12. [training_lineage_inventory.json](training_lineage_inventory.json): machine-readable
+    lineage inventory (#421) — every checkpoint / engine / preset node with sha256,
+    derived parent edges, tensor deltas and engine attribution; rendered at
+    `docs/research/training/training_lineage_inventory.md`.
 
 The former full-pipeline formula collection is retained as
 [pipeline_algorithms_reference.md](pipeline_algorithms_reference.md). It is a
