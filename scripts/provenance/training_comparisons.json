@@ -1,0 +1,644 @@
+{
+  "schema": "training_comparisons_v1",
+  "issue": "https://github.com/raylei50653/saccade/issues/421",
+  "purpose": "Declared candidate comparisons over the #421 lineage inventory. Each entry is a CLAIM about which two nodes to compare, under which runtime binding, with which design and which axes the treatment is allowed to change. The classification (controlled / system_comparison / historical_not_comparable / blocked) is DERIVED by scripts/provenance/training_comparison.py from the inventory bytes and is never written here.",
+  "designs": {
+    "paired_siblings": "two heads warm-started from the same node with the same budget after it; treatment = what the schedule (or cache/teacher) changes",
+    "stage_increment": "rhs is a warm-start descendant of lhs; treatment = the added stage as a bundle (its recipe, epochs, cache)",
+    "seed_replicate": "identical recipe and warm start, only the seed differs; measures training-seed variance",
+    "runtime_ab": "same checkpoint under two deployment artifacts; a runtime attribution, not a training one",
+    "system": "two different systems; the tool reports what differs, no training attribution is claimed"
+  },
+  "comparisons": [
+    {
+      "comparison_id": "A1.s.pretrained_vs_adapted_teacher",
+      "group": "pretrained / adapted teacher",
+      "design": "system",
+      "lhs": {
+        "node": "s.pretrained_yolo",
+        "runtime": {
+          "binding": "shared_backbone_node",
+          "backbone_node": "s.pretrained_yolo"
+        }
+      },
+      "rhs": {
+        "node": "s.adapted_teacher",
+        "runtime": {
+          "binding": "shared_backbone_node",
+          "backbone_node": "s.adapted_teacher"
+        }
+      },
+      "intended_treatment": "domain adaptation of the whole detector (gated-teacher training, 12 protocol epochs on MOT17 SDP) on top of external COCO pretraining",
+      "question": "原始 pretrained YOLO26s vs domain-adapted teacher — the issue's '原始/後訓練系統對照' at the teacher level",
+      "treatment_axes": [],
+      "notes": [
+        "Both sides keep the native Detect head; the adapted side adds a gate module that is identity at deployment (gt_ratio 0).",
+        "The raw-YOLO runner on the shared tracker is not an inventory node (speed/baseline presets use 960-px e2e engines); deliverable 3 must bind it before this row is executable.",
+        "Per-detector threshold re-tuning is a separate optional variant; fixed-policy results must not be merged with it."
+      ]
+    },
+    {
+      "comparison_id": "A2.m.pretrained_vs_adapted_teacher",
+      "group": "pretrained / adapted teacher",
+      "design": "system",
+      "lhs": {
+        "node": "m.pretrained_yolo",
+        "runtime": {
+          "binding": "shared_backbone_node",
+          "backbone_node": "m.pretrained_yolo"
+        }
+      },
+      "rhs": {
+        "node": "m.adapted_teacher",
+        "runtime": {
+          "binding": "shared_backbone_node",
+          "backbone_node": "m.adapted_teacher"
+        }
+      },
+      "intended_treatment": "domain adaptation of the whole detector (gated-teacher training) on top of external COCO pretraining",
+      "treatment_axes": [],
+      "notes": [
+        "Same caveats as A1."
+      ]
+    },
+    {
+      "comparison_id": "A3.s_vs_m.adapted_teacher_capacity",
+      "group": "pretrained / adapted teacher",
+      "design": "system",
+      "lhs": {
+        "node": "s.adapted_teacher",
+        "runtime": {
+          "binding": "shared_backbone_node",
+          "backbone_node": "s.adapted_teacher"
+        }
+      },
+      "rhs": {
+        "node": "m.adapted_teacher",
+        "runtime": {
+          "binding": "shared_backbone_node",
+          "backbone_node": "m.adapted_teacher"
+        }
+      },
+      "intended_treatment": "backbone capacity (yolo26s vs yolo26m) under the same teacher recipe and seed",
+      "treatment_axes": [],
+      "notes": [
+        "The two teachers were trained with the same command line and seed (20260612); only the base weights differ. Still a system comparison: the backbone is structural."
+      ]
+    },
+    {
+      "comparison_id": "B1.s.distill_to_gt1",
+      "group": "distill / GT1 / GT2",
+      "design": "stage_increment",
+      "lhs": {
+        "node": "s.distill"
+      },
+      "rhs": {
+        "node": "s.gt1"
+      },
+      "intended_treatment": "GT1 stage as a bundle: live teacher (no cache), gt_ratio 0.5, clip_len 4 / stride 8, lr 1e-4, batch 4, +30 epochs",
+      "treatment_axes": [
+        "warm_start",
+        "training_budget",
+        "training_schedule",
+        "teacher_cache"
+      ],
+      "treatment_schedule_keys": [
+        "lr",
+        "batch_size",
+        "clip_len",
+        "clip_stride"
+      ]
+    },
+    {
+      "comparison_id": "B2.s.gt1_to_gt2_plain",
+      "group": "distill / GT1 / GT2",
+      "design": "stage_increment",
+      "lhs": {
+        "node": "s.gt1"
+      },
+      "rhs": {
+        "node": "s.gt2_plain"
+      },
+      "intended_treatment": "plain GT2 stage: gt_ratio 0.5 -> 0.0 on the cache, +30 epochs, everything else as GT1",
+      "treatment_axes": [
+        "warm_start",
+        "training_budget",
+        "training_schedule",
+        "teacher_cache"
+      ],
+      "treatment_schedule_keys": [
+        "gt_ratio"
+      ]
+    },
+    {
+      "comparison_id": "B3.m.distill_to_gt1",
+      "group": "distill / GT1 / GT2",
+      "design": "stage_increment",
+      "lhs": {
+        "node": "m.distill"
+      },
+      "rhs": {
+        "node": "m.gt1"
+      },
+      "intended_treatment": "GT1 stage as a bundle (m family)",
+      "treatment_axes": [
+        "warm_start",
+        "training_budget",
+        "training_schedule",
+        "teacher_cache"
+      ],
+      "treatment_schedule_keys": [
+        "lr",
+        "batch_size",
+        "clip_len",
+        "clip_stride"
+      ]
+    },
+    {
+      "comparison_id": "B4.m.gt1_to_gt2_plain",
+      "group": "distill / GT1 / GT2",
+      "design": "stage_increment",
+      "lhs": {
+        "node": "m.gt1"
+      },
+      "rhs": {
+        "node": "m.gt2_plain"
+      },
+      "intended_treatment": "plain GT2 stage (m family)",
+      "treatment_axes": [
+        "warm_start",
+        "training_budget",
+        "training_schedule",
+        "teacher_cache"
+      ],
+      "treatment_schedule_keys": [
+        "gt_ratio"
+      ]
+    },
+    {
+      "comparison_id": "B5.s.gt1_to_t3t1_production",
+      "group": "distill / GT1 / GT2",
+      "design": "stage_increment",
+      "lhs": {
+        "node": "s.gt1"
+      },
+      "rhs": {
+        "node": "s.t3t1_phase_b"
+      },
+      "intended_treatment": "the production T3->T1 curriculum (Phase A + Phase B, 15+15 epochs) on top of GT1",
+      "treatment_axes": [
+        "warm_start",
+        "training_budget",
+        "training_schedule",
+        "teacher_cache"
+      ],
+      "treatment_schedule_keys": [
+        "clip_len",
+        "clip_stride",
+        "gt_ratio",
+        "add_temporal",
+        "staging"
+      ],
+      "notes": [
+        "The production chain changed seed (20260612 -> 42) and warm-up (5 -> 3) at the curriculum boundary; those are not part of the curriculum."
+      ]
+    },
+    {
+      "comparison_id": "C1.s.explicit_vs_implicit_shared_gt1_s42",
+      "group": "T3->T1 vs implicit control",
+      "design": "paired_siblings",
+      "lhs": {
+        "node": "s.implicit_s42"
+      },
+      "rhs": {
+        "node": "s.t3t1_phase_b"
+      },
+      "intended_treatment": "explicit T3->T1 staging (15 ep T=3 with temporal blocks, then 15 ep T=1) vs implicit all-frames T=4 for 30 ep, from the shared GT1 at seed 42",
+      "question": "curriculum doc §6 matched pair; the production checkpoint is the seed-42 explicit member",
+      "treatment_axes": [
+        "training_schedule"
+      ],
+      "treatment_schedule_keys": [
+        "clip_len",
+        "clip_stride",
+        "add_temporal",
+        "staging"
+      ]
+    },
+    {
+      "comparison_id": "C2.s.explicit_vs_implicit_shared_gt1_s43",
+      "group": "T3->T1 vs implicit control",
+      "design": "paired_siblings",
+      "lhs": {
+        "node": "s.implicit_s43"
+      },
+      "rhs": {
+        "node": "s.t3t1_shared_s43"
+      },
+      "intended_treatment": "explicit T3->T1 staging vs implicit all-frames T=4, shared GT1, seed 43",
+      "treatment_axes": [
+        "training_schedule"
+      ],
+      "treatment_schedule_keys": [
+        "clip_len",
+        "clip_stride",
+        "add_temporal",
+        "staging"
+      ]
+    },
+    {
+      "comparison_id": "C3.s.explicit_vs_implicit_shared_gt1_s44",
+      "group": "T3->T1 vs implicit control",
+      "design": "paired_siblings",
+      "lhs": {
+        "node": "s.implicit_s44"
+      },
+      "rhs": {
+        "node": "s.t3t1_shared_s44"
+      },
+      "intended_treatment": "explicit T3->T1 staging vs implicit all-frames T=4, shared GT1, seed 44",
+      "treatment_axes": [
+        "training_schedule"
+      ],
+      "treatment_schedule_keys": [
+        "clip_len",
+        "clip_stride",
+        "add_temporal",
+        "staging"
+      ]
+    },
+    {
+      "comparison_id": "C4.s.plain_gt2_vs_t3t1_seed_chain_s13",
+      "group": "T3->T1 vs plain GT2 (old seed-chain pairs)",
+      "design": "paired_siblings",
+      "lhs": {
+        "node": "s.gt2_plain_s13"
+      },
+      "rhs": {
+        "node": "s.t3t1_s13"
+      },
+      "intended_treatment": "explicit T3->T1 staging vs plain GT2 T=4, both from the seed-20260613-specific GT1",
+      "question": "paper table mamba_t3t1_pairs.csv row seed_20260613 (marked paired=True there)",
+      "treatment_axes": [
+        "training_schedule"
+      ],
+      "treatment_schedule_keys": [
+        "clip_len",
+        "clip_stride",
+        "add_temporal",
+        "staging"
+      ]
+    },
+    {
+      "comparison_id": "C5.s.plain_gt2_vs_t3t1_seed_chain_s14",
+      "group": "T3->T1 vs plain GT2 (old seed-chain pairs)",
+      "design": "paired_siblings",
+      "lhs": {
+        "node": "s.gt2_plain_s14"
+      },
+      "rhs": {
+        "node": "s.t3t1_s14"
+      },
+      "intended_treatment": "explicit T3->T1 staging vs plain GT2 T=4, both from the seed-20260614-specific GT1",
+      "question": "paper table mamba_t3t1_pairs.csv row seed_20260614 (marked paired=True there)",
+      "treatment_axes": [
+        "training_schedule"
+      ],
+      "treatment_schedule_keys": [
+        "clip_len",
+        "clip_stride",
+        "add_temporal",
+        "staging"
+      ]
+    },
+    {
+      "comparison_id": "C6.s.plain_gt2_vs_t3t1_unpaired_original",
+      "group": "T3->T1 vs plain GT2 (old seed-chain pairs)",
+      "design": "paired_siblings",
+      "lhs": {
+        "node": "s.gt2_plain"
+      },
+      "rhs": {
+        "node": "s.t3t1_phase_b"
+      },
+      "intended_treatment": "explicit T3->T1 staging vs plain GT2 T=4 from the shared GT1 (the original +2.1 IDF1 headline)",
+      "question": "paper table row unpaired_original",
+      "treatment_axes": [
+        "training_schedule"
+      ],
+      "treatment_schedule_keys": [
+        "clip_len",
+        "clip_stride",
+        "add_temporal",
+        "staging"
+      ]
+    },
+    {
+      "comparison_id": "C7.s.implicit_shared_s43_vs_t3t1_seed_chain_s13",
+      "group": "T3->T1 vs plain GT2 (old seed-chain pairs)",
+      "design": "paired_siblings",
+      "lhs": {
+        "node": "s.implicit_s43"
+      },
+      "rhs": {
+        "node": "s.t3t1_s13"
+      },
+      "intended_treatment": "explicit vs implicit — but mixing a shared-GT1 implicit control with a seed-specific-GT1 explicit member",
+      "question": "the mix the curriculum doc §6.1 identified as the GT1-start confound; declared here so the tool blocks it explicitly",
+      "treatment_axes": [
+        "training_schedule"
+      ],
+      "treatment_schedule_keys": [
+        "clip_len",
+        "clip_stride",
+        "add_temporal",
+        "staging"
+      ]
+    },
+    {
+      "comparison_id": "C8.s.plain_gt2_vs_implicit_control_s42",
+      "group": "T3->T1 vs implicit control",
+      "design": "paired_siblings",
+      "lhs": {
+        "node": "s.gt2_plain"
+      },
+      "rhs": {
+        "node": "s.implicit_s42"
+      },
+      "intended_treatment": "none intended — checks whether the implicit control is the plain-GT2 recipe re-seeded",
+      "treatment_axes": [
+        "training_schedule"
+      ],
+      "treatment_schedule_keys": []
+    },
+    {
+      "comparison_id": "C9.m.plain_gt2_vs_t3t1",
+      "group": "T3->T1 vs implicit control",
+      "design": "paired_siblings",
+      "lhs": {
+        "node": "m.gt2_plain"
+      },
+      "rhs": {
+        "node": "m.t3t1_phase_b"
+      },
+      "intended_treatment": "explicit T3->T1 staging vs plain GT2 T=4 from the m GT1, same seed",
+      "question": "the only m-family T3->T1 pair on record (replication protocol 'yolo26m 容量對照')",
+      "treatment_axes": [
+        "training_schedule"
+      ],
+      "treatment_schedule_keys": [
+        "clip_len",
+        "clip_stride",
+        "add_temporal",
+        "staging"
+      ]
+    },
+    {
+      "comparison_id": "D1.s.implicit_seed_42_vs_43",
+      "group": "training-seed variance",
+      "design": "seed_replicate",
+      "lhs": {
+        "node": "s.implicit_s42"
+      },
+      "rhs": {
+        "node": "s.implicit_s43"
+      },
+      "intended_treatment": "training seed only (implicit all-frames arm)",
+      "treatment_axes": [
+        "training_seed"
+      ]
+    },
+    {
+      "comparison_id": "D2.s.implicit_seed_43_vs_44",
+      "group": "training-seed variance",
+      "design": "seed_replicate",
+      "lhs": {
+        "node": "s.implicit_s43"
+      },
+      "rhs": {
+        "node": "s.implicit_s44"
+      },
+      "intended_treatment": "training seed only (implicit all-frames arm)",
+      "treatment_axes": [
+        "training_seed"
+      ]
+    },
+    {
+      "comparison_id": "D3.s.explicit_shared_seed_42_vs_43",
+      "group": "training-seed variance",
+      "design": "seed_replicate",
+      "lhs": {
+        "node": "s.t3t1_phase_b"
+      },
+      "rhs": {
+        "node": "s.t3t1_shared_s43"
+      },
+      "intended_treatment": "training seed only (explicit T3->T1 arm from the shared GT1)",
+      "treatment_axes": [
+        "training_seed"
+      ]
+    },
+    {
+      "comparison_id": "D4.s.explicit_shared_seed_43_vs_44",
+      "group": "training-seed variance",
+      "design": "seed_replicate",
+      "lhs": {
+        "node": "s.t3t1_shared_s43"
+      },
+      "rhs": {
+        "node": "s.t3t1_shared_s44"
+      },
+      "intended_treatment": "training seed only (explicit T3->T1 arm from the shared GT1)",
+      "treatment_axes": [
+        "training_seed"
+      ]
+    },
+    {
+      "comparison_id": "E1.s_vs_m.production_system",
+      "group": "s / m production system",
+      "design": "system",
+      "lhs": {
+        "node": "s.t3t1_phase_b"
+      },
+      "rhs": {
+        "node": "m.t3t1_phase_b"
+      },
+      "intended_treatment": "the two shipped systems as their presets name them",
+      "question": "quality/cost comparison of the headline s and m presets; never a training attribution",
+      "treatment_axes": []
+    },
+    {
+      "comparison_id": "E2.s.native_head_vs_mamba_head_shared_backbone",
+      "group": "original head vs Mamba head",
+      "design": "system",
+      "lhs": {
+        "node": "s.adapted_teacher",
+        "runtime": {
+          "binding": "shared_backbone_node",
+          "backbone_node": "s.adapted_teacher"
+        }
+      },
+      "rhs": {
+        "node": "s.t3t1_phase_b",
+        "runtime": {
+          "binding": "shared_backbone_node",
+          "backbone_node": "s.adapted_teacher"
+        }
+      },
+      "intended_treatment": "native Detect head vs Mamba head on the same PyTorch backbone (the adapted teacher's), eager",
+      "question": "docs/reference/original_head_matched_baseline.md design; the head is the only structural difference",
+      "treatment_axes": [],
+      "notes": [
+        "Tracker policy is contract_required: each head has its own operating point (confirm-score calibration); a fixed policy penalises the native head, a per-head tuned policy is a separate variant. Deliverable 3 decides and records which.",
+        "The Mamba side must run with --no-temporal outside the whole graph, otherwise streaming temporal blocks activate (train/deploy mismatch)."
+      ]
+    },
+    {
+      "comparison_id": "E3.m.native_head_vs_mamba_head_shared_backbone",
+      "group": "original head vs Mamba head",
+      "design": "system",
+      "lhs": {
+        "node": "m.adapted_teacher",
+        "runtime": {
+          "binding": "shared_backbone_node",
+          "backbone_node": "m.adapted_teacher"
+        }
+      },
+      "rhs": {
+        "node": "m.t3t1_phase_b",
+        "runtime": {
+          "binding": "shared_backbone_node",
+          "backbone_node": "m.adapted_teacher"
+        }
+      },
+      "intended_treatment": "native Detect head vs Mamba head on the same PyTorch backbone (m adapted teacher), eager",
+      "treatment_axes": [],
+      "notes": [
+        "Same caveats as E2."
+      ]
+    },
+    {
+      "comparison_id": "E4.s.production_backbone_engine_ab",
+      "group": "s / m production system",
+      "design": "runtime_ab",
+      "lhs": {
+        "node": "s.t3t1_phase_b"
+      },
+      "rhs": {
+        "node": "s.t3t1_phase_b",
+        "runtime": {
+          "binding": "family_preset",
+          "backbone_engine_node": "s.backbone_engine_v14replica_e12"
+        }
+      },
+      "intended_treatment": "deployed backbone engine: the preset's yolo26s_backbone_640_best.engine (sibling ONNX = legacy teacher) vs yolo26s_backbone_640_v14replica_e12.engine (sibling ONNX = the head's own teacher)",
+      "question": "the resolution path for the s production confound: same head, two engines",
+      "treatment_axes": [
+        "deployed_backbone_artifact"
+      ],
+      "notes": [
+        "Engine bytes are unattributed on both sides; this A/B measures the two engine files as they are, it does not prove either engine's build source."
+      ]
+    },
+    {
+      "comparison_id": "F1.s.legacy_v14_vs_replica_gt2_plain",
+      "group": "legacy line",
+      "design": "system",
+      "lhs": {
+        "node": "s.legacy_v14"
+      },
+      "rhs": {
+        "node": "s.gt2_plain"
+      },
+      "intended_treatment": "replication: legacy production v14 vs the v14-replica plain GT2",
+      "question": "curriculum doc §6.1: legacy 75.1 not reproducible by the replica (73.0–73.7)",
+      "treatment_axes": []
+    },
+    {
+      "comparison_id": "F2.s.legacy_v14_vs_t3t1_production",
+      "group": "legacy line",
+      "design": "system",
+      "lhs": {
+        "node": "s.legacy_v14"
+      },
+      "rhs": {
+        "node": "s.t3t1_phase_b"
+      },
+      "intended_treatment": "the 'T3->T1 first beats legacy v14' headline (75.1 vs 75.4)",
+      "treatment_axes": []
+    },
+    {
+      "comparison_id": "F3.s.legacy_parent_gt_to_controlled_refit",
+      "group": "legacy line",
+      "design": "stage_increment",
+      "lhs": {
+        "node": "s.legacy_parent_gt"
+      },
+      "rhs": {
+        "node": "s.controlled_refit"
+      },
+      "intended_treatment": "frozen-SSM N=16 refit of the legacy parent (single-edge replay, +30 epochs, gt_ratio 0)",
+      "treatment_axes": [
+        "warm_start",
+        "training_budget",
+        "training_schedule",
+        "teacher_cache"
+      ],
+      "treatment_schedule_keys": [
+        "gt_ratio"
+      ]
+    },
+    {
+      "comparison_id": "F4.s.legacy_v14_vs_t3t1_each_on_own_teacher_engine",
+      "group": "legacy line",
+      "design": "system",
+      "lhs": {
+        "node": "s.legacy_v14"
+      },
+      "rhs": {
+        "node": "s.t3t1_phase_b",
+        "runtime": {
+          "binding": "family_preset",
+          "backbone_engine_node": "s.backbone_engine_v14replica_e12"
+        }
+      },
+      "intended_treatment": "the two production heads each on the engine whose sibling ONNX matches its own teacher (legacy v14 on the preset engine, T3->T1 on the v14replica_e12 engine)",
+      "question": "the only symmetric way to put legacy v14 next to T3->T1: two (head, matching backbone) systems — a system comparison, not a curriculum claim",
+      "treatment_axes": []
+    },
+    {
+      "comparison_id": "G1.m.t3t1_vs_gpu_decode_cache",
+      "group": "cache decode backend",
+      "design": "paired_siblings",
+      "lhs": {
+        "node": "m.t3t1_phase_b"
+      },
+      "rhs": {
+        "node": "m.t3t1_phase_b_gpu_decode"
+      },
+      "intended_treatment": "teacher-cache decode backend (CPU cache vs torchvision_nvjpeg GPU-decode rebuild)",
+      "question": "does the GPU-decode cache change the trained head? — declared as siblings, which is what the question needs",
+      "treatment_axes": [
+        "teacher_cache"
+      ]
+    }
+  ],
+  "not_representable": [
+    {
+      "candidate": "native-head full retrains (`runs/gated_det_native_full`, `runs/gated_det_native_full_m`) + `models/yolo/native_s_backbone_640.engine` + preset `native_whole_graph`",
+      "reason": "docs/reference/original_head_matched_baseline.md compares them against the Mamba heads, but they are not lineage nodes (no role in training_lineage_roles.json). Add roles and re-capture the inventory before they can be rows; until then every claim built on them is outside this matrix."
+    },
+    {
+      "candidate": "raw-YOLO deployed systems named by `speed` / `baseline` presets (`yolo26s_960_batch1.engine`, `yolo26m_960_batch1.engine`)",
+      "reason": "not lineage nodes; 960-px e2e engines with their own tracker parameters, so a pretrained-YOLO *deployed* system row needs roles, sibling-ONNX evidence and a fixed tracker policy first (A1/A2 are declared at the PyTorch-eager level for this reason)."
+    },
+    {
+      "candidate": "`s.cpp_head_script` (`models/yolo/mamba_head_best.pt`, default C++ Mamba head TorchScript)",
+      "reason": "in the inventory but its source checkpoint is not recorded anywhere machine-readable; any comparison through the C++ head path is blocked until the script is attributed to a node."
+    },
+    {
+      "candidate": "SSM-unfreeze / order-swap / soup / consistency-weight checkpoints (paper provenance rows `ssm_unfreeze_ft`, `t3t1_then_ssmft`, `ssmft_then_t3t1`, `soup_alpha_*`, `phase_a_*`)",
+      "reason": "not lineage roles; the curriculum doc's boundary experiments cannot be rows until they are."
+    }
+  ]
+}

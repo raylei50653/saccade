@@ -42,3 +42,4 @@
 | [pp22_full_cadence_interp_training_plan](pp22_full_cadence_interp_training_plan.md) | 2026-07 | plan |
 | [pp22_stress_test_findings](pp22_stress_test_findings.md) | 2026-07 | findings |
 | [training_lineage_inventory](training_lineage_inventory.md) | 2026-09-18 | captured snapshot（#421 deliverable 1；由 `scripts/provenance/training_lineage.py` 產生，不手改） |
+| [training_comparison_matrix](training_comparison_matrix.md) | 2026-09-18 | generated view（#421 deliverable 2；由 `scripts/provenance/training_comparison.py` 從 inventory JSON + `training_comparisons.json` 導出，`--check` 驗新鮮度，不手改） |
