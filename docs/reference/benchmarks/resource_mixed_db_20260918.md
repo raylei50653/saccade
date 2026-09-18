@@ -8,8 +8,11 @@
 ## Decision
 
 **With the two construction limits of the [2026-09-17 study](resource_mixed_db_20260917.md)
-removed, dynamic borrowing at verified double-buffer boundaries is
-indistinguishable from fixed reservation on every axis.** Same-repetition
+removed, this sweep resolves no consistent stable or elastic penalty for
+dynamic borrowing at verified double-buffer boundaries relative to fixed
+reservation.** Three repetitions and descriptive ranges cannot establish
+equivalence, and the contract declared no equivalence margin; the claim is
+that no material difference was resolved at this resolution. Same-repetition
 burst p95 ratios (dynamic over fixed) are **0.894–1.151** across the four
 workload points, DB fps ratios **0.992–1.017**, and stable p99 deltas
 **−5.374…+0.619 ms** (the −5.374 ms is one fixed repetition's stall, see
@@ -81,7 +84,7 @@ revision changes exactly those three things and nothing else in the contract.
 
 ## What the revised frontier establishes
 
-1. **Borrowing neither helps nor hurts the stable side at 16 SMs.** Dynamic's
+1. **No stable-side cost of borrowing is resolved at 16 SMs.** Dynamic's
    open window p99 is 0.077–0.210 ms per cycle and the lease (open plus
    drain) p99 0.26–0.82 ms; request-to-admission p99 is 0.229–0.805 ms
    against 0.040–0.170 ms for fixed and shared on the same instrumented path.
@@ -230,8 +233,9 @@ explained.
 
 This revision establishes that, once the load fits the service horizon and
 the policies own matched admission lanes, verified-boundary borrowing under
-the saturated double-buffer schedule at 16 SMs is equivalent to fixed
-reservation on stable and elastic axes, lends 0.4–1.9% of the offered load,
+the saturated double-buffer schedule at 16 SMs tracks fixed reservation
+within the observed sweep on stable and elastic axes (no consistent penalty
+resolved; not an equivalence result), lends 0.4–1.9% of the offered load,
 and that a 32-SM shared context still loses the stable tail only at large-unit
 window-4 load. It cannot select a production policy, prove hard real-time
 behaviour, or speak to lower stable utilization, other sequences, memory-heavy
