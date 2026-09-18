@@ -37,6 +37,11 @@ Doc homes: [docs/ownership/doc_structure_contract.md](../docs/ownership/doc_stru
     lineage inventory (#421) — every checkpoint / engine / preset node with sha256,
     derived parent edges, tensor deltas and engine attribution; rendered at
     `docs/research/training/training_lineage_inventory.md`.
+13. [training_comparison_matrix.json](training_comparison_matrix.json): comparison
+    identifiability matrix (#421 deliverable 2) derived from the inventory — for
+    every declared node pair, matched axes, remaining confounds and a derived
+    class (`controlled` / `system_comparison` / `historical_not_comparable` /
+    `blocked`); rendered at `docs/research/training/training_comparison_matrix.md`.
 
 The former full-pipeline formula collection is retained as
 [pipeline_algorithms_reference.md](pipeline_algorithms_reference.md). It is a
