@@ -256,7 +256,7 @@
       "kind": "trt_engine",
       "path": "models/yolo/yolo26s_backbone_640_best.engine",
       "onnx": "models/yolo/yolo26s_backbone_640_best.onnx",
-      "note": "FPN backbone TRT engine named by the s preset. Engine bytes are not attributable; the sibling ONNX is matched against teacher checkpoints by BN-folded conv weights."
+      "note": "FPN backbone TRT engine named by the s preset. Engine bytes are not attributable; the associated ONNX (same stem, this file's claim) is matched against teacher checkpoints by BN-folded conv weights and biases."
     },
     "s.backbone_engine_v14replica_e12": {
       "family": "s",
@@ -346,7 +346,7 @@
       "kind": "trt_engine",
       "path": "models/yolo/yolo26m_backbone_640_best.engine",
       "onnx": "models/yolo/yolo26m_backbone_640.onnx",
-      "note": "Preset comment says exported from the m teacher ckpt; checked against teacher checkpoints via the sibling ONNX."
+      "note": "Preset comment says exported from the m teacher ckpt. The ONNX associated here has a different stem (`yolo26m_backbone_640` vs `_best`); the association is this file's claim, checked only at the ONNX-initializer level."
     },
     "m.head_engine": {
       "family": "m",

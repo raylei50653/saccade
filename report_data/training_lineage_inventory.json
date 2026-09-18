@@ -2,13 +2,14 @@
   "schema": "training_lineage_inventory_v1",
   "issue": "https://github.com/raylei50653/saccade/issues/421",
   "captured": {
-    "at_utc": "2026-09-18T12:25:31+00:00",
+    "at_utc": "2026-09-18T12:51:53+00:00",
     "host": "DESKTOP-0FLA6SQ",
-    "git_head": "bf3e75fc7de575b1d8708d739305281d217c82a1",
+    "git_head": "3d2b339638e2259bee3ce5c85c1d7352c14209a6",
     "git_dirty": true,
     "roles_file": "scripts/provenance/training_lineage_roles.json",
     "tensor_diff": true,
-    "onnx_match": true
+    "onnx_match": true,
+    "cache_content_hash": true
   },
   "families": {
     "s": {
@@ -6647,18 +6648,26 @@
           "scan_stop_grad_flag": true,
           "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
           "backbone_source": "TRT engine models/yolo/yolo26s_backbone_640_best.engine",
-          "backbone_engine_attributed_to": {
+          "backbone_sibling_onnx_matches": {
             "verdict": "unique_exact",
             "nodes": [
               "s.legacy_teacher"
-            ]
+            ],
+            "onnx": "models/yolo/yolo26s_backbone_640_best.onnx",
+            "engine_link": {
+              "basis": "role-file claim; no build manifest, no cryptographic binding",
+              "stem_equal": true,
+              "engine_bytes_attributed": false
+            }
           },
-          "backbone_matches_training_teacher": {
-            "status": "DIFFERENT",
-            "deployed_backbone_from": "s.legacy_teacher",
+          "sibling_onnx_teacher_evidence": {
+            "status": "DIFFERENT_TEACHER_INDICATED",
+            "onnx_matches": "s.legacy_teacher",
             "head_trained_against": [
               "s.adapted_teacher"
-            ]
+            ],
+            "engine_bytes_attributed": false,
+            "reading": "sibling-ONNX evidence only; the deployed engine's own provenance is unresolved"
           },
           "head_engine": "none (PyTorch head inside whole graph)",
           "embedding": "reid_mode='off'",
@@ -6676,7 +6685,7 @@
       "family": "s",
       "kind": "trt_engine",
       "path": "models/yolo/yolo26s_backbone_640_best.engine",
-      "note": "FPN backbone TRT engine named by the s preset. Engine bytes are not attributable; the sibling ONNX is matched against teacher checkpoints by BN-folded conv weights.",
+      "note": "FPN backbone TRT engine named by the s preset. Engine bytes are not attributable; the associated ONNX (same stem, this file's claim) is matched against teacher checkpoints by BN-folded conv weights and biases.",
       "exists": true,
       "sha256": "2ef3d4d40dfb670982cbbb98e6ed7d07e5b1a590cfa126d5ccf7342ee1579ce4",
       "size_bytes": 20298516,
@@ -6687,23 +6696,27 @@
           "exists": true,
           "sha256": "a643bc2fd2213321964c2773b2796d5e62f82c9d0c330db125d8747d20827d24",
           "mtime_utc": "2026-05-26T17:25:28+00:00",
-          "link": "basename+mtime only; engine bytes are not attributable"
+          "engine_link": {
+            "basis": "role-file claim; no build manifest, no cryptographic binding",
+            "stem_equal": true,
+            "engine_bytes_attributed": false
+          }
         }
       },
       "edges": [
         {
-          "relation": "exported_from",
+          "relation": "onnx_matches_checkpoint",
           "target_path": "runs/gated_det_v1/best.ckpt",
           "target_node": "s.legacy_teacher",
           "target_exists": true,
           "detail": {
             "verdict": "unique_exact",
-            "via": "models/yolo/yolo26s_backbone_640_best.onnx"
+            "onnx": "models/yolo/yolo26s_backbone_640_best.onnx"
           }
         }
       ],
       "checks": {
-        "onnx_source_match": {
+        "onnx_initializer_match": {
           "total_initializers": 146,
           "matches": {
             "s.legacy_teacher": 146,
@@ -6745,7 +6758,8 @@
             "s.legacy_teacher"
           ],
           "verdict": "unique_exact",
-          "method": "bit-exact equality of ONNX initializers (>=64 elements) against candidate tensors; teacher checkpoints BN-folded (eps 1e-3) before comparison"
+          "method": "exact float32 value equality of ONNX initializers (>=64 elements) against candidate tensors; teacher checkpoints BN-folded (eps 1e-3) before comparison",
+          "scope": "the ONNX file only; the .engine bytes are not attributed. The engine<->ONNX association is the role file's claim (see summary.onnx.engine_link)."
         }
       },
       "problems": []
@@ -6766,23 +6780,27 @@
           "exists": true,
           "sha256": "37510123266536700818adaf2853666f60f7a09b67bd3a0eafd0e8108e8e2664",
           "mtime_utc": "2026-06-14T01:51:04+00:00",
-          "link": "basename+mtime only; engine bytes are not attributable"
+          "engine_link": {
+            "basis": "role-file claim; no build manifest, no cryptographic binding",
+            "stem_equal": true,
+            "engine_bytes_attributed": false
+          }
         }
       },
       "edges": [
         {
-          "relation": "exported_from",
+          "relation": "onnx_matches_checkpoint",
           "target_path": "runs/gated_det_v14replica/epoch_0012.ckpt",
           "target_node": "s.adapted_teacher",
           "target_exists": true,
           "detail": {
             "verdict": "unique_exact",
-            "via": "models/yolo/yolo26s_backbone_640_v14replica_e12.onnx"
+            "onnx": "models/yolo/yolo26s_backbone_640_v14replica_e12.onnx"
           }
         }
       ],
       "checks": {
-        "onnx_source_match": {
+        "onnx_initializer_match": {
           "total_initializers": 146,
           "matches": {
             "s.legacy_teacher": 0,
@@ -6824,7 +6842,8 @@
             "s.adapted_teacher"
           ],
           "verdict": "unique_exact",
-          "method": "bit-exact equality of ONNX initializers (>=64 elements) against candidate tensors; teacher checkpoints BN-folded (eps 1e-3) before comparison"
+          "method": "exact float32 value equality of ONNX initializers (>=64 elements) against candidate tensors; teacher checkpoints BN-folded (eps 1e-3) before comparison",
+          "scope": "the ONNX file only; the .engine bytes are not attributed. The engine<->ONNX association is the role file's claim (see summary.onnx.engine_link)."
         }
       },
       "problems": []
@@ -7018,6 +7037,7 @@
       "mtime_utc": "2026-07-06T09:04:54+00:00",
       "summary": {
         "has_manifest": true,
+        "manifest_sha256": "035eb90eb16012db55d7615f18e6d50d8967e3abf9304a5a2e7eabd825137abd",
         "manifest": {
           "schema": "mamba-teacher-cache-v2",
           "status": "complete",
@@ -7048,7 +7068,12 @@
           "MOT17-10-SDP",
           "MOT17-11-SDP",
           "MOT17-13-SDP"
-        ]
+        ],
+        "content": {
+          "sha256": "b5b3d4d8371a7979f44bacb1c6c3fd9c9ec561d2151ef298793728a7900e897a",
+          "file_count": 5317,
+          "total_bytes": 35824876230
+        }
       },
       "edges": [
         {
@@ -8791,18 +8816,26 @@
           "scan_stop_grad_flag": true,
           "gate_teacher_at_runtime": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
           "backbone_source": "TRT engine models/yolo/yolo26m_backbone_640_best.engine",
-          "backbone_engine_attributed_to": {
+          "backbone_sibling_onnx_matches": {
             "verdict": "unique_exact",
             "nodes": [
               "m.adapted_teacher"
-            ]
+            ],
+            "onnx": "models/yolo/yolo26m_backbone_640.onnx",
+            "engine_link": {
+              "basis": "role-file claim; no build manifest, no cryptographic binding",
+              "stem_equal": false,
+              "engine_bytes_attributed": false
+            }
           },
-          "backbone_matches_training_teacher": {
-            "status": "same",
-            "deployed_backbone_from": "m.adapted_teacher",
+          "sibling_onnx_teacher_evidence": {
+            "status": "same_teacher_indicated",
+            "onnx_matches": "m.adapted_teacher",
             "head_trained_against": [
               "m.adapted_teacher"
-            ]
+            ],
+            "engine_bytes_attributed": false,
+            "reading": "sibling-ONNX evidence only; the deployed engine's own provenance is unresolved"
           },
           "head_engine": "models/yolo/mamba_head_26m.engine",
           "embedding": "reid_mode='off'",
@@ -8820,7 +8853,7 @@
       "family": "m",
       "kind": "trt_engine",
       "path": "models/yolo/yolo26m_backbone_640_best.engine",
-      "note": "Preset comment says exported from the m teacher ckpt; checked against teacher checkpoints via the sibling ONNX.",
+      "note": "Preset comment says exported from the m teacher ckpt. The ONNX associated here has a different stem (`yolo26m_backbone_640` vs `_best`); the association is this file's claim, checked only at the ONNX-initializer level.",
       "exists": true,
       "sha256": "fdf0f4550f584e73d5b7ca8393def25b74715f5ab639449dd01873becd66e580",
       "size_bytes": 40186740,
@@ -8831,23 +8864,27 @@
           "exists": true,
           "sha256": "2154f937dec832dcefc4229a66dfc438c8fb99ee0c1547d80c00cc0143e56a6a",
           "mtime_utc": "2026-06-30T09:21:16+00:00",
-          "link": "basename+mtime only; engine bytes are not attributable"
+          "engine_link": {
+            "basis": "role-file claim; no build manifest, no cryptographic binding",
+            "stem_equal": false,
+            "engine_bytes_attributed": false
+          }
         }
       },
       "edges": [
         {
-          "relation": "exported_from",
+          "relation": "onnx_matches_checkpoint",
           "target_path": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
           "target_node": "m.adapted_teacher",
           "target_exists": true,
           "detail": {
             "verdict": "unique_exact",
-            "via": "models/yolo/yolo26m_backbone_640.onnx"
+            "onnx": "models/yolo/yolo26m_backbone_640.onnx"
           }
         }
       ],
       "checks": {
-        "onnx_source_match": {
+        "onnx_initializer_match": {
           "total_initializers": 170,
           "matches": {
             "s.legacy_teacher": 0,
@@ -8889,7 +8926,8 @@
             "m.adapted_teacher"
           ],
           "verdict": "unique_exact",
-          "method": "bit-exact equality of ONNX initializers (>=64 elements) against candidate tensors; teacher checkpoints BN-folded (eps 1e-3) before comparison"
+          "method": "exact float32 value equality of ONNX initializers (>=64 elements) against candidate tensors; teacher checkpoints BN-folded (eps 1e-3) before comparison",
+          "scope": "the ONNX file only; the .engine bytes are not attributed. The engine<->ONNX association is the role file's claim (see summary.onnx.engine_link)."
         }
       },
       "problems": []
@@ -8910,73 +8948,77 @@
           "exists": true,
           "sha256": "7330db0c40a026064d65d1d60a219eb7f019952041bd3c5ade849ba19405b167",
           "mtime_utc": "2026-07-07T06:57:22+00:00",
-          "link": "basename+mtime only; engine bytes are not attributable"
+          "engine_link": {
+            "basis": "role-file claim; no build manifest, no cryptographic binding",
+            "stem_equal": true,
+            "engine_bytes_attributed": false
+          }
         }
       },
       "edges": [
         {
-          "relation": "exported_from",
+          "relation": "onnx_matches_checkpoint",
           "target_path": "runs/mamba_distill_yolo26m_v14replica/best.ckpt",
           "target_node": "m.distill",
           "target_exists": true,
           "detail": {
             "verdict": "ambiguous",
-            "via": "models/yolo/mamba_head_26m.onnx"
+            "onnx": "models/yolo/mamba_head_26m.onnx"
           }
         },
         {
-          "relation": "exported_from",
+          "relation": "onnx_matches_checkpoint",
           "target_path": "runs/mamba_gt_yolo26m_v14replica_stage1/best.ckpt",
           "target_node": "m.gt1",
           "target_exists": true,
           "detail": {
             "verdict": "ambiguous",
-            "via": "models/yolo/mamba_head_26m.onnx"
+            "onnx": "models/yolo/mamba_head_26m.onnx"
           }
         },
         {
-          "relation": "exported_from",
+          "relation": "onnx_matches_checkpoint",
           "target_path": "runs/mamba_gt_yolo26m_v14replica_final/best.ckpt",
           "target_node": "m.gt2_plain",
           "target_exists": true,
           "detail": {
             "verdict": "ambiguous",
-            "via": "models/yolo/mamba_head_26m.onnx"
+            "onnx": "models/yolo/mamba_head_26m.onnx"
           }
         },
         {
-          "relation": "exported_from",
+          "relation": "onnx_matches_checkpoint",
           "target_path": "runs/mamba_gt_yolo26m_v14replica_t3/best.ckpt",
           "target_node": "m.t3t1_phase_a",
           "target_exists": true,
           "detail": {
             "verdict": "ambiguous",
-            "via": "models/yolo/mamba_head_26m.onnx"
+            "onnx": "models/yolo/mamba_head_26m.onnx"
           }
         },
         {
-          "relation": "exported_from",
+          "relation": "onnx_matches_checkpoint",
           "target_path": "runs/mamba_gt_yolo26m_v14replica_t3_t1/best.ckpt",
           "target_node": "m.t3t1_phase_b",
           "target_exists": true,
           "detail": {
             "verdict": "ambiguous",
-            "via": "models/yolo/mamba_head_26m.onnx"
+            "onnx": "models/yolo/mamba_head_26m.onnx"
           }
         },
         {
-          "relation": "exported_from",
+          "relation": "onnx_matches_checkpoint",
           "target_path": "runs/mamba_gt_yolo26m_v14replica_t3_t1_gpu_decode/best.ckpt",
           "target_node": "m.t3t1_phase_b_gpu_decode",
           "target_exists": true,
           "detail": {
             "verdict": "ambiguous",
-            "via": "models/yolo/mamba_head_26m.onnx"
+            "onnx": "models/yolo/mamba_head_26m.onnx"
           }
         }
       ],
       "checks": {
-        "onnx_source_match": {
+        "onnx_initializer_match": {
           "total_initializers": 61,
           "matches": {
             "s.legacy_teacher": 0,
@@ -9023,7 +9065,8 @@
             "m.t3t1_phase_b_gpu_decode"
           ],
           "verdict": "ambiguous",
-          "method": "bit-exact equality of ONNX initializers (>=64 elements) against candidate tensors; teacher checkpoints BN-folded (eps 1e-3) before comparison"
+          "method": "exact float32 value equality of ONNX initializers (>=64 elements) against candidate tensors; teacher checkpoints BN-folded (eps 1e-3) before comparison",
+          "scope": "the ONNX file only; the .engine bytes are not attributed. The engine<->ONNX association is the role file's claim (see summary.onnx.engine_link)."
         }
       },
       "problems": []

@@ -7,9 +7,11 @@ predicates that keep that split honest:
   two roles on one path) is rejected before any artifact is touched;
 * parent edges come from the checkpoint's own ``args``; an ``expected_*`` claim
   the bytes contradict is reported as ``mismatch``, never silently accepted;
-* "frozen SSM" is a bit-comparison of the interior tensors, not a flag read;
-* ONNX attribution names a source only on a unique, complete match — a partial
-  or tied match is a non-answer with its own verdict;
+* "frozen SSM" is a raw-bytes comparison (dtype + shape + bytes) of the interior
+  tensors, not a flag read and not value equality;
+* sibling-ONNX matching names a checkpoint only on a unique, complete match — a
+  partial or tied match is a non-answer with its own verdict — and it is
+  evidence about the ONNX, never an attribution of the engine bytes;
 * a missing artifact is ``unavailable``; nothing else is put in its place.
 """
 
@@ -153,6 +155,28 @@ def test_tensor_delta_counts_and_frozen_predicate() -> None:
 
     removed = tl.tensor_delta(parent, child)
     assert removed["totals"]["removed"] == 1
+
+
+def test_bit_identical_is_raw_bytes_not_value_equality() -> None:
+    f32 = torch.tensor([1.0, 0.0, -2.5])
+    assert tl.tensors_bit_identical(f32, f32.clone())
+    assert not tl.tensors_bit_identical(
+        f32, f32.to(torch.float16)
+    )  # same values, other dtype
+    assert not tl.tensors_bit_identical(
+        f32, f32.reshape(3, 1)
+    )  # same bytes, other shape
+    assert not tl.tensors_bit_identical(
+        torch.tensor([0.0]), torch.tensor([-0.0])
+    )  # +0 vs -0
+    nan_a = torch.tensor([float("nan")])
+    assert tl.tensors_bit_identical(
+        nan_a, nan_a.clone()
+    )  # same NaN payload compares equal
+    assert tl.tensors_bit_identical(torch.empty(0), torch.empty(0))
+
+    delta = tl.tensor_delta({"x": f32.to(torch.float16)}, {"x": f32})
+    assert delta["totals"]["changed"] == 1 and delta["totals"]["identical"] == 0
 
 
 def test_treatment_delta_separates_changed_from_one_sided_keys() -> None:
@@ -422,6 +446,7 @@ def test_inventory_deployment_reads_preset_and_dedups_by_sha(fake_repo: Path) ->
     assert dep["temporal_blocks"].startswith("present; BYPASSED")
     assert dep["final_stage_gt_ratio"] == 0.0
     assert dep["backbone_source"] == "PyTorch backbone from mamba_teacher_ckpt"
+    assert "sibling_onnx_teacher_evidence" not in dep  # no engine in this preset
     assert (
         inv.nodes["s.gt"].checks.get("tensor_delta_vs_init_parent") is None
     )  # tensor diff was off
@@ -445,3 +470,68 @@ def test_payload_and_markdown_carry_capture_identity(fake_repo: Path) -> None:
     assert "<!-- doc-status: active -->" in md
     assert "`s.missing`" in md and "**unavailable**" in md
     assert "mismatch" in md
+
+
+def test_engine_evidence_stays_about_the_onnx(fake_repo: Path) -> None:
+    """The engine node gets an ONNX verdict and an unattributed engine; the preset
+    reports the teacher comparison as *indicated* by the sibling ONNX, not proven."""
+    import onnx
+    from onnx import TensorProto, helper, numpy_helper
+
+    # Build an ONNX whose sole large initializer is the teacher's (BN-less) conv weight.
+    teacher_sd = {
+        "c.conv.weight": torch.arange(4 * 3 * 3 * 3, dtype=torch.float32).reshape(
+            4, 3, 3, 3
+        )
+    }
+    torch.save(
+        {"epoch": 1, "model": teacher_sd, "args": {}},
+        fake_repo / "runs/teacher/best.ckpt",
+    )
+    init = numpy_helper.from_array(teacher_sd["c.conv.weight"].numpy(), name="w")
+    graph = helper.make_graph(
+        [helper.make_node("Identity", ["w"], ["y"])],
+        "g",
+        [],
+        [helper.make_tensor_value_info("y", TensorProto.FLOAT, [4, 3, 3, 3])],
+        initializer=[init],
+    )
+    onnx.save(helper.make_model(graph), fake_repo / "models/yolo/bb.onnx")
+    (fake_repo / "models/yolo/bb_best.engine").write_bytes(b"opaque")
+    (fake_repo / "configs/presets/p.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "mamba_ckpt": "runs/gt/best.ckpt",
+                "use_whole_graph": True,
+                "fpn_backbone_engine": "models/yolo/bb_best.engine",
+            }
+        ),
+        encoding="utf-8",
+    )
+    roles = _fake_roles()
+    roles["roles"]["s.engine"] = {
+        "family": "s",
+        "kind": "trt_engine",
+        "path": "models/yolo/bb_best.engine",
+        "onnx": "models/yolo/bb.onnx",
+    }
+    inv = tl.Inventory(roles, tensor_diff=False, onnx_match=True)
+    inv.build()
+
+    engine = inv.nodes["s.engine"]
+    match = engine.checks["onnx_initializer_match"]
+    assert match["verdict"] == "unique_exact" and match["best"] == ["s.teacher"]
+    assert engine.summary["onnx"]["engine_link"] == {
+        "basis": "role-file claim; no build manifest, no cryptographic binding",
+        "stem_equal": False,
+        "engine_bytes_attributed": False,
+    }
+    assert [e.relation for e in engine.edges] == ["onnx_matches_checkpoint"]
+
+    dep = inv.nodes["s.preset"].checks["deployment_forward"]
+    ev = dep["sibling_onnx_teacher_evidence"]
+    assert ev["status"] == "same_teacher_indicated"  # gt's teacher is s.teacher
+    assert ev["engine_bytes_attributed"] is False
+    md = tl.render_markdown(inv.to_payload(), inv)
+    assert "engine bytes themselves unattributed" in md
+    assert "exported_from" not in md and "attributed **" not in md

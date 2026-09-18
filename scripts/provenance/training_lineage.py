@@ -23,35 +23,36 @@ Three checks go beyond metadata because metadata cannot answer them:
 
 * **Tensor delta along a warm-start edge.**  ``scan_stop_grad`` in ``mamba_args``
   is a flag; whether the SSM interior actually stayed at its parent's values is
-  a bit-comparison.  Every warm-start edge whose parent is in the inventory gets
-  a per-module-group count of identical / changed / added / removed tensors.
-* **Engine → checkpoint attribution.**  A TensorRT ``.engine`` is opaque, but the
-  sibling ``.onnx`` it was built from carries the weights.  Backbone exports are
-  BN-folded, so the tool folds each candidate teacher's conv+BN pairs and looks
-  for exact equality.  The result names the unique matching checkpoint, or says
-  the match is partial / ambiguous.  The ``.engine`` ↔ ``.onnx`` link itself is
-  by basename only and is reported as such.
+  a raw-bytes comparison (same dtype, shape and bytes — not value equality).
+  Every warm-start edge whose parent is in the inventory gets a per-module-group
+  count of identical / changed / added / removed tensors.
+* **Sibling-ONNX → checkpoint match.**  A TensorRT ``.engine`` is opaque and is
+  **never** attributed by this tool.  What can be checked is the ``.onnx`` the
+  role file associates with it: its initializers carry weights, backbone exports
+  are BN-folded, so the tool folds each candidate teacher's conv+BN pairs and
+  looks for exact float32 equality.  The result names the unique matching
+  checkpoint for the *ONNX*, or says the match is partial / ambiguous.  The
+  engine ↔ ONNX association is a role-file claim with no build manifest or
+  cryptographic binding behind it; the tool records whether the two file stems
+  even agree and carries the "engine bytes unattributed" caveat into every
+  deployment statement derived from it.
 * **Deployment forward mode** is read off the preset plus the checkpoint it
   names (temporal blocks present? whole-graph ⇒ bypassed; final-stage
   ``gt_ratio``; ``reid_mode``; backbone source), and the production checkpoint
   is de-duplicated against the lineage node with the same sha256.
 
-What this tool does **not** do: it does not train, evaluate, or infer anything
-a file does not state.  A missing path stays in the table as ``unavailable``
-(the two teacher caches, for instance) and is never replaced by a look-alike.
-Parameter-count and "trainable" claims are limited to what the tensor delta
-shows; no optimizer state is interpreted.
+The tool does not train, evaluate, or infer anything a file does not state.  A
+missing path stays in the table as ``unavailable`` and is never replaced by a
+look-alike; "trainable" claims are limited to what the tensor delta shows.
 
 The rendered inventory is a **captured snapshot** of one workspace (host, HEAD,
-timestamp are recorded in it).  ``runs/`` and ``models/`` are gitignored, so a
-clean clone cannot regenerate it; it is committed as evidence in the same sense
-as ``report_data/*.json``, not as a freshness-checked generated view.
+timestamp recorded).  ``runs/`` and ``models/`` are gitignored, so a clean clone
+cannot regenerate it; it is committed as evidence like ``report_data/*.json``,
+not as a freshness-checked generated view.
 
 Usage:
-    .venv/bin/python scripts/provenance/training_lineage.py \\
-        --json-out report_data/training_lineage_inventory.json \\
-        --md-out docs/research/training/training_lineage_inventory.md
-    .venv/bin/python scripts/provenance/training_lineage.py --no-tensor-diff --no-onnx-match  # fast
+    .venv/bin/python scripts/provenance/training_lineage.py            # writes the defaults
+    .venv/bin/python scripts/provenance/training_lineage.py --no-tensor-diff --no-onnx-match --no-cache-content-hash
 """
 
 # status: stable
@@ -294,9 +295,29 @@ def tensor_group(name: str) -> str:
     return head
 
 
-def tensor_delta(child: dict[str, Any], parent: dict[str, Any]) -> dict[str, Any]:
-    """Per-group identical / changed / added / removed counts between two state dicts."""
+def tensors_bit_identical(a: Any, b: Any) -> bool:
+    """Same dtype, same shape, same raw bytes.
+
+    Not value equality: ``+0.0`` vs ``-0.0`` differ, a float16 copy of a float32
+    tensor differs, and NaN payloads are compared as bytes.  This is the
+    predicate "bit-identical" in the rendered tables refers to.
+    """
     import torch
+
+    if a.dtype != b.dtype or tuple(a.shape) != tuple(b.shape):
+        return False
+    if a.numel() == 0:
+        return True
+    a_bytes = a.detach().to("cpu").contiguous().reshape(-1).view(torch.uint8)
+    b_bytes = b.detach().to("cpu").contiguous().reshape(-1).view(torch.uint8)
+    return bool(torch.equal(a_bytes, b_bytes))
+
+
+def tensor_delta(child: dict[str, Any], parent: dict[str, Any]) -> dict[str, Any]:
+    """Per-group identical / changed / added / removed counts between two state dicts.
+
+    ``identical`` means :func:`tensors_bit_identical` (dtype + shape + raw bytes).
+    """
 
     groups: dict[str, dict[str, int]] = {}
 
@@ -310,11 +331,10 @@ def tensor_delta(child: dict[str, Any], parent: dict[str, Any]) -> dict[str, Any
         if name not in parent:
             bump(group, "added")
             continue
-        other = parent[name]
-        same = tuple(tensor.shape) == tuple(other.shape) and torch.equal(
-            tensor.to(torch.float32), other.to(torch.float32)
+        bump(
+            group,
+            "identical" if tensors_bit_identical(tensor, parent[name]) else "changed",
         )
-        bump(group, "identical" if same else "changed")
     for name in parent:
         if name not in child:
             bump(tensor_group(name), "removed")
@@ -390,7 +410,10 @@ def onnx_initializers(path: Path, min_elements: int = 64) -> list[Any]:
 def match_onnx(
     initializers: list[Any], candidates: dict[str, dict[str, Any]]
 ) -> dict[str, Any]:
-    """Count ONNX initializers found bit-exactly in each candidate tensor set.
+    """Count ONNX initializers found by exact float32 value equality in each candidate.
+
+    ONNX initializers are float32; candidate tensors are cast to float32 before the
+    comparison, so this is exact value equality in float32, not raw-byte identity.
 
     2-D initializers are also tried transposed (Gemm stores ``W^T``).  Anything the
     exporter reshaped or fused beyond that is simply not matched, which is why a
@@ -461,10 +484,34 @@ def read_preset(path: Path) -> dict[str, Any]:
     return {k: data.get(k) for k in keys if k in data}
 
 
-def read_cache_dir(path: Path) -> dict[str, Any]:
+def cache_content_digest(path: Path) -> dict[str, Any]:
+    """Identity of a cache directory's contents: sha256 over the sorted per-file listing.
+
+    Each line is ``<relative path>\t<size>\t<sha256>``; the digest is the sha256 of
+    those lines joined by newlines.  Two caches with the same digest hold the same
+    bytes under the same names; mtimes are deliberately not part of it.
+    """
+    files = sorted(p for p in path.rglob("*") if p.is_file())
+    digest = hashlib.sha256()
+    total = 0
+    for file in files:
+        size = file.stat().st_size
+        total += size
+        digest.update(
+            f"{file.relative_to(path).as_posix()}\t{size}\t{sha256_file(file)}\n".encode()
+        )
+    return {
+        "sha256": digest.hexdigest(),
+        "file_count": len(files),
+        "total_bytes": total,
+    }
+
+
+def read_cache_dir(path: Path, *, hash_contents: bool) -> dict[str, Any]:
     manifest = path / "manifest.json"
     out: dict[str, Any] = {"has_manifest": manifest.exists()}
     if manifest.exists():
+        out["manifest_sha256"] = sha256_file(manifest)
         data = json.loads(manifest.read_text(encoding="utf-8"))
         out["manifest"] = {
             k: data.get(k)
@@ -485,6 +532,11 @@ def read_cache_dir(path: Path) -> dict[str, Any]:
         }
     out["sequence_dirs"] = (
         sorted(p.name for p in path.iterdir() if p.is_dir()) if path.is_dir() else []
+    )
+    out["content"] = (
+        cache_content_digest(path)
+        if hash_contents
+        else "not_hashed (--no-cache-content-hash)"
     )
     return out
 
@@ -533,12 +585,14 @@ class Inventory:
         *,
         tensor_diff: bool,
         onnx_match: bool,
+        cache_content_hash: bool = True,
         roles_path: Path | None = None,
     ) -> None:
         self.roles = roles
         self.roles_path = roles_path
         self.tensor_diff = tensor_diff
         self.onnx_match = onnx_match
+        self.cache_content_hash = cache_content_hash
         self.nodes: dict[str, Node] = {}
         self.by_path: dict[str, str] = {}
         self._ckpt_cache: dict[str, dict[str, Any]] = {}
@@ -638,7 +692,7 @@ class Inventory:
                 node.edges.append(self._edge(relation, str(target)))
             self._verify_self_attested_shas(node)
         elif node.kind == "teacher_cache":
-            node.summary = read_cache_dir(path)
+            node.summary = read_cache_dir(path, hash_contents=self.cache_content_hash)
             manifest = node.summary.get("manifest") or {}
             for key, relation in (
                 ("teacher_checkpoint_path", "teacher"),
@@ -669,7 +723,11 @@ class Inventory:
                     "exists": onnx_path.exists(),
                     "sha256": sha256_file(onnx_path) if onnx_path.exists() else None,
                     "mtime_utc": _mtime_iso(onnx_path) if onnx_path.exists() else None,
-                    "link": "basename+mtime only; engine bytes are not attributable",
+                    "engine_link": {
+                        "basis": "role-file claim; no build manifest, no cryptographic binding",
+                        "stem_equal": Path(onnx_rel).stem == path.stem,
+                        "engine_bytes_attributed": False,
+                    },
                 }
         # yolo_pt / torchscript: blob identity only, by design (no unpickling).
 
@@ -773,12 +831,12 @@ class Inventory:
     def _attribute_engine(self, node: Node, spec: dict[str, Any]) -> None:
         onnx_info = node.summary.get("onnx") or {}
         if not onnx_info.get("exists"):
-            node.checks["onnx_source_match"] = "no_onnx_sibling"
+            node.checks["onnx_initializer_match"] = "no_onnx_sibling"
             return
         try:
             inits = onnx_initializers(REPO_ROOT / onnx_info["path"])
         except Exception as exc:  # onnx load failure is a finding, not a crash
-            node.checks["onnx_source_match"] = f"onnx_unreadable: {exc}"
+            node.checks["onnx_initializer_match"] = f"onnx_unreadable: {exc}"
             return
         candidates: dict[str, dict[str, Any]] = {}
         for other in self.nodes.values():
@@ -793,18 +851,22 @@ class Inventory:
             )
         result = match_onnx(inits, candidates)
         result["method"] = (
-            "bit-exact equality of ONNX initializers (>=64 elements) against candidate "
-            "tensors; teacher checkpoints BN-folded (eps 1e-3) before comparison"
+            "exact float32 value equality of ONNX initializers (>=64 elements) against "
+            "candidate tensors; teacher checkpoints BN-folded (eps 1e-3) before comparison"
         )
-        node.checks["onnx_source_match"] = result
+        result["scope"] = (
+            "the ONNX file only; the .engine bytes are not attributed. The engine<->ONNX "
+            "association is the role file's claim (see summary.onnx.engine_link)."
+        )
+        node.checks["onnx_initializer_match"] = result
         for winner in result["best"]:
             node.edges.append(
                 Edge(
-                    relation="exported_from",
+                    relation="onnx_matches_checkpoint",
                     target_path=self.nodes[winner].path,
                     target_node=winner,
                     target_exists=True,
-                    detail={"verdict": result["verdict"], "via": onnx_info["path"]},
+                    detail={"verdict": result["verdict"], "onnx": onnx_info["path"]},
                 )
             )
 
@@ -853,15 +915,19 @@ class Inventory:
             _norm(str(preset.get("fpn_backbone_engine") or ""))
         )
         if engine_node:
-            match = self.nodes[engine_node].checks.get("onnx_source_match")
+            match = self.nodes[engine_node].checks.get("onnx_initializer_match")
             if isinstance(match, dict):
-                dep["backbone_engine_attributed_to"] = {
+                onnx_info = self.nodes[engine_node].summary.get("onnx") or {}
+                dep["backbone_sibling_onnx_matches"] = {
                     "verdict": match["verdict"],
                     "nodes": match["best"],
+                    "onnx": onnx_info.get("path"),
+                    "engine_link": onnx_info.get("engine_link"),
                 }
-                # The head was trained on features of *its* teacher; the deployed
-                # backbone is whatever the engine was exported from.  Same node or not
-                # is a fact about the deployment, so it is derived here, not narrated.
+                # The head was trained on features of *its* teacher.  The strongest
+                # statement the bytes support about the deployed backbone is: the
+                # ONNX the role file associates with the engine matches teacher X.
+                # Whether the engine was built from that ONNX is not established.
                 if ckpt_node and self.nodes[ckpt_node].exists:
                     training_teachers = [
                         e.target_node
@@ -870,13 +936,22 @@ class Inventory:
                     ]
                     if match["verdict"] == "unique_exact" and training_teachers:
                         same = match["best"][0] in training_teachers
-                        dep["backbone_matches_training_teacher"] = {
-                            "status": "same" if same else "DIFFERENT",
-                            "deployed_backbone_from": match["best"][0],
+                        dep["sibling_onnx_teacher_evidence"] = {
+                            "status": (
+                                "same_teacher_indicated"
+                                if same
+                                else "DIFFERENT_TEACHER_INDICATED"
+                            ),
+                            "onnx_matches": match["best"][0],
                             "head_trained_against": training_teachers,
+                            "engine_bytes_attributed": False,
+                            "reading": (
+                                "sibling-ONNX evidence only; the deployed engine's own "
+                                "provenance is unresolved"
+                            ),
                         }
                     else:
-                        dep["backbone_matches_training_teacher"] = {"status": "unknown"}
+                        dep["sibling_onnx_teacher_evidence"] = {"status": "unknown"}
         dep["head_engine"] = (
             preset.get("mamba_head_engine") or "none (PyTorch head inside whole graph)"
         )
@@ -901,6 +976,7 @@ class Inventory:
                 "roles_file": _display(self.roles_path) if self.roles_path else None,
                 "tensor_diff": self.tensor_diff,
                 "onnx_match": self.onnx_match,
+                "cache_content_hash": self.cache_content_hash,
             },
             "families": self.roles.get("families", {}),
             "nodes": {nid: asdict(n) for nid, n in self.nodes.items()},
@@ -973,11 +1049,14 @@ def render_markdown(payload: dict[str, Any], inv: Inventory) -> str:
         "- **sha attested** = whether `mamba_args.base_yolo_sha256` / `teacher_checkpoint_sha256` "
         "exist and verify against the file on disk (`not_recorded` for pre-2026-06-13 checkpoints).",
         "- **SSM interior frozen** = along the init edge, every `A_log/D/conv1d/x_proj/dt_proj` tensor "
-        "of `mamba_blocks` and `temporal_blocks` is bit-identical to the parent. This is the "
-        "measured counterpart of the `scan_stop_grad` flag.",
-        "- **engine ← ckpt** = the engine's sibling ONNX matched bit-exactly against every checkpoint "
-        "in the inventory (teachers BN-folded). `unique_exact` names the source; `partial` / "
-        "`ambiguous` do not identify one.",
+        "of `mamba_blocks` and `temporal_blocks` is bit-identical to the parent (same dtype, shape "
+        "and raw bytes). This is the measured counterpart of the `scan_stop_grad` flag.",
+        "- **sibling ONNX ↔ ckpt** = the ONNX the role file associates with an engine, matched by "
+        "exact float32 equality of its initializers against every checkpoint (teachers BN-folded). "
+        "`unique_exact` names the checkpoint the *ONNX* matches; `partial` / `ambiguous` do not. "
+        "**Engine bytes are never attributed**: the engine↔ONNX link is a role-file claim without a "
+        "build manifest, so every deployment statement built on it is evidence about the sibling "
+        "ONNX, not proof of the deployed engine's source.",
         "",
     ]
 
@@ -1114,28 +1193,37 @@ def render_markdown(payload: dict[str, Any], inv: Inventory) -> str:
             lines += [
                 "### Teacher caches",
                 "",
-                "| role | status | manifest | teacher (manifest) | decode | frames |",
-                "|---|---|---|---|---|---:|",
+                "| role | status | manifest schema | manifest sha256 | teacher (manifest) | decode | frames | content digest (files / bytes) |",
+                "|---|---|---|---|---|---|---:|---|",
             ]
             for n in caches:
                 m = (n.summary.get("manifest") or {}) if n.exists else {}
+                content = n.summary.get("content") if n.exists else None
+                if isinstance(content, dict):
+                    content_cell = f"`{content['sha256'][:12]}` ({content['file_count']} / {content['total_bytes'] / 1e9:.1f} GB)"
+                else:
+                    content_cell = str(content) if content else "—"
                 lines.append(
                     f"| `{n.id}` | {_status_cell(n)} | {m.get('schema', '—') if n.exists else '—'} | "
-                    f"{_edge_cell(n, 'teacher') if n.exists else '—'} | {m.get('decode_backend', '—')} | {m.get('total_frames', '—')} |"
+                    f"{_short_sha(n.summary.get('manifest_sha256')) if n.exists else '—'} | "
+                    f"{_edge_cell(n, 'teacher') if n.exists else '—'} | {m.get('decode_backend', '—')} | {m.get('total_frames', '—')} | {content_cell} |"
                 )
             lines.append("")
 
         engines = [n for n in nodes if n.kind == "trt_engine" and n.exists]
         if engines:
             lines += [
-                "### Engines — attribution via sibling ONNX",
+                "### Engines — sibling-ONNX initializer match (engine bytes unattributed)",
                 "",
-                "| role | onnx | verdict | matches (hits / initializers) |",
-                "|---|---|---|---|",
+                "| role | sibling onnx (role-file claim) | stem equal | onnx verdict | matches (hits / initializers) |",
+                "|---|---|---|---|---|",
             ]
             for n in engines:
-                m = n.checks.get("onnx_source_match")
-                onnx_path = (n.summary.get("onnx") or {}).get("path", "—")
+                m = n.checks.get("onnx_initializer_match")
+                onnx_info = n.summary.get("onnx") or {}
+                onnx_path = onnx_info.get("path", "—")
+                stem = (onnx_info.get("engine_link") or {}).get("stem_equal")
+                stem_cell = "—" if stem is None else ("yes" if stem else "**no**")
                 if isinstance(m, dict):
                     best_hits = m["matches"][m["best"][0]] if m["best"] else 0
                     others = sum(
@@ -1143,10 +1231,12 @@ def render_markdown(payload: dict[str, Any], inv: Inventory) -> str:
                     )
                     hits = f"{best_hits}/{m['total_initializers']} for each best; {others} other checkpoints with fewer hits"
                     lines.append(
-                        f"| `{n.id}` | `{onnx_path}` | **{m['verdict']}** → {', '.join(f'`{b}`' for b in m['best']) or '—'} | {hits} |"
+                        f"| `{n.id}` | `{onnx_path}` | {stem_cell} | **{m['verdict']}** → {', '.join(f'`{b}`' for b in m['best']) or '—'} | {hits} |"
                     )
                 else:
-                    lines.append(f"| `{n.id}` | `{onnx_path}` | {m} | — |")
+                    lines.append(
+                        f"| `{n.id}` | `{onnx_path}` | {stem_cell} | {m} | — |"
+                    )
             lines.append("")
 
         presets = [n for n in nodes if n.kind == "preset" and n.exists]
@@ -1166,19 +1256,20 @@ def render_markdown(payload: dict[str, Any], inv: Inventory) -> str:
             lines.append(
                 f"- final-stage `gt_ratio`: {dep.get('final_stage_gt_ratio', '—')}; runtime gate teacher: `{dep.get('gate_teacher_at_runtime')}`"
             )
-            lines.append(
-                f"- backbone: {dep.get('backbone_source')}"
-                + (
-                    f" — attributed **{dep['backbone_engine_attributed_to']['verdict']}** to {dep['backbone_engine_attributed_to']['nodes']}"
-                    if dep.get("backbone_engine_attributed_to")
-                    else ""
-                )
-            )
-            bm = dep.get("backbone_matches_training_teacher")
-            if bm and bm.get("status") != "unknown":
+            lines.append(f"- backbone: {dep.get('backbone_source')}")
+            so = dep.get("backbone_sibling_onnx_matches")
+            if so:
                 lines.append(
-                    f"- deployed backbone vs the teacher the head was trained against: **{bm['status']}** "
-                    f"(engine ← `{bm['deployed_backbone_from']}`; head trained against {bm['head_trained_against']})"
+                    f"  - sibling ONNX `{so['onnx']}` (role-file association, stem equal: "
+                    f"{(so.get('engine_link') or {}).get('stem_equal')}) matches **{so['verdict']}** → {so['nodes']}; "
+                    "engine bytes themselves unattributed"
+                )
+            ev = dep.get("sibling_onnx_teacher_evidence")
+            if ev and ev.get("status") != "unknown":
+                lines.append(
+                    f"  - sibling-ONNX evidence vs the teacher the head was trained against: **{ev['status']}** "
+                    f"(ONNX ↔ `{ev['onnx_matches']}`; head trained against {ev['head_trained_against']}). "
+                    "The deployed engine's own provenance is unresolved (no build manifest)."
                 )
             lines.append(
                 f"- head engine: `{dep.get('head_engine')}`; embedding: {dep.get('embedding')}; graphs: {dep.get('graphs')}"
@@ -1231,7 +1322,14 @@ def main(argv: list[str] | None = None) -> int:
         help="skip warm-start tensor comparison",
     )
     parser.add_argument(
-        "--no-onnx-match", action="store_true", help="skip engine ONNX attribution"
+        "--no-onnx-match",
+        action="store_true",
+        help="skip sibling-ONNX initializer matching",
+    )
+    parser.add_argument(
+        "--no-cache-content-hash",
+        action="store_true",
+        help="skip hashing teacher-cache contents (tens of GB); manifest sha256 is still recorded",
     )
     parser.add_argument(
         "--stdout",
@@ -1250,6 +1348,7 @@ def main(argv: list[str] | None = None) -> int:
         roles,
         tensor_diff=not args.no_tensor_diff,
         onnx_match=not args.no_onnx_match,
+        cache_content_hash=not args.no_cache_content_hash,
         roles_path=args.roles.resolve(),
     )
     inv.build()

@@ -6,7 +6,7 @@
 
 # Training lineage inventory (#421 · deliverable 1)
 
-Captured 2026-09-18T12:25:31+00:00 on `DESKTOP-0FLA6SQ` at `bf3e75fc7de5` (dirty tree); tensor diff on, ONNX match on. Machine-readable twin: `report_data/training_lineage_inventory.json`. Role claims: `scripts/provenance/training_lineage_roles.json`.
+Captured 2026-09-18T12:51:53+00:00 on `DESKTOP-0FLA6SQ` at `3d2b339638e2` (dirty tree); tensor diff on, ONNX match on. Machine-readable twin: `report_data/training_lineage_inventory.json`. Role claims: `scripts/provenance/training_lineage_roles.json`.
 
 This is a **captured snapshot of one workspace**, not a regenerable view: `runs/` and `models/` are gitignored. Every column except *role*, *note* and the `expected_*` claims is read from the artifact bytes. `unavailable` means the path does not exist here; no substitute was used. Numbers here are identities and counts, never quality metrics.
 
@@ -15,8 +15,8 @@ This is a **captured snapshot of one workspace**, not a regenerable view: `runs/
 - **init** = warm-start parent recorded in the checkpoint's own `args.mamba_ckpt`; **teacher** / **base_yolo** / **cache** likewise from `args`. `unlisted:` = the artifact names a path that is not a declared role.
 - **expected_*** = the role file's claim checked against the derived edge: `ok` / `mismatch` / `unverifiable` (checkpoint records no such edge).
 - **sha attested** = whether `mamba_args.base_yolo_sha256` / `teacher_checkpoint_sha256` exist and verify against the file on disk (`not_recorded` for pre-2026-06-13 checkpoints).
-- **SSM interior frozen** = along the init edge, every `A_log/D/conv1d/x_proj/dt_proj` tensor of `mamba_blocks` and `temporal_blocks` is bit-identical to the parent. This is the measured counterpart of the `scan_stop_grad` flag.
-- **engine ← ckpt** = the engine's sibling ONNX matched bit-exactly against every checkpoint in the inventory (teachers BN-folded). `unique_exact` names the source; `partial` / `ambiguous` do not identify one.
+- **SSM interior frozen** = along the init edge, every `A_log/D/conv1d/x_proj/dt_proj` tensor of `mamba_blocks` and `temporal_blocks` is bit-identical to the parent (same dtype, shape and raw bytes). This is the measured counterpart of the `scan_stop_grad` flag.
+- **sibling ONNX ↔ ckpt** = the ONNX the role file associates with an engine, matched by exact float32 equality of its initializers against every checkpoint (teachers BN-folded). `unique_exact` names the checkpoint the *ONNX* matches; `partial` / `ambiguous` do not. **Engine bytes are never attributed**: the engine↔ONNX link is a role-file claim without a build manifest, so every deployment statement built on it is evidence about the sibling ONNX, not proof of the deployed engine's source.
 
 ## Family `s` — backbone yolo26s
 
@@ -154,25 +154,26 @@ Keys both checkpoints recorded with different values. Flags that only the child 
 
 ### Teacher caches
 
-| role | status | manifest | teacher (manifest) | decode | frames |
-|---|---|---|---|---|---:|
-| `s.legacy_cache` | **unavailable** | — | — | — | — |
-| `s.teacher_cache` | **unavailable** | — | — | — | — |
+| role | status | manifest schema | manifest sha256 | teacher (manifest) | decode | frames | content digest (files / bytes) |
+|---|---|---|---|---|---|---:|---|
+| `s.legacy_cache` | **unavailable** | — | — | — | — | — | — |
+| `s.teacher_cache` | **unavailable** | — | — | — | — | — | — |
 
-### Engines — attribution via sibling ONNX
+### Engines — sibling-ONNX initializer match (engine bytes unattributed)
 
-| role | onnx | verdict | matches (hits / initializers) |
-|---|---|---|---|
-| `s.backbone_engine` | `models/yolo/yolo26s_backbone_640_best.onnx` | **unique_exact** → `s.legacy_teacher` | 146/146 for each best; 0 other checkpoints with fewer hits |
-| `s.backbone_engine_v14replica_e12` | `models/yolo/yolo26s_backbone_640_v14replica_e12.onnx` | **unique_exact** → `s.adapted_teacher` | 146/146 for each best; 0 other checkpoints with fewer hits |
+| role | sibling onnx (role-file claim) | stem equal | onnx verdict | matches (hits / initializers) |
+|---|---|---|---|---|
+| `s.backbone_engine` | `models/yolo/yolo26s_backbone_640_best.onnx` | yes | **unique_exact** → `s.legacy_teacher` | 146/146 for each best; 0 other checkpoints with fewer hits |
+| `s.backbone_engine_v14replica_e12` | `models/yolo/yolo26s_backbone_640_v14replica_e12.onnx` | yes | **unique_exact** → `s.adapted_teacher` | 146/146 for each best; 0 other checkpoints with fewer hits |
 
 ### Deployment forward — `s.deployment_preset` (`configs/presets/mamba_whole_graph.yaml`)
 
 - checkpoint: `runs/mamba_gt_v14replica_t3_t1/best.ckpt` → node `s.t3t1_phase_b`; same-sha aliases: none
 - temporal blocks: present; BYPASSED under whole-graph single-frame forward (effective T=1)
 - final-stage `gt_ratio`: 0.0; runtime gate teacher: `null (backbone-only; no teacher forward)`
-- backbone: TRT engine models/yolo/yolo26s_backbone_640_best.engine — attributed **unique_exact** to ['s.legacy_teacher']
-- deployed backbone vs the teacher the head was trained against: **DIFFERENT** (engine ← `s.legacy_teacher`; head trained against ['s.adapted_teacher'])
+- backbone: TRT engine models/yolo/yolo26s_backbone_640_best.engine
+  - sibling ONNX `models/yolo/yolo26s_backbone_640_best.onnx` (role-file association, stem equal: True) matches **unique_exact** → ['s.legacy_teacher']; engine bytes themselves unattributed
+  - sibling-ONNX evidence vs the teacher the head was trained against: **DIFFERENT_TEACHER_INDICATED** (ONNX ↔ `s.legacy_teacher`; head trained against ['s.adapted_teacher']). The deployed engine's own provenance is unresolved (no build manifest).
 - head engine: `none (PyTorch head inside whole graph)`; embedding: reid_mode='off'; graphs: {'use_whole_graph': True, 'use_cuda_graph': True, 'use_tracker_graph': True}
 
 ## Family `m` — backbone yolo26m
@@ -235,25 +236,26 @@ Keys both checkpoints recorded with different values. Flags that only the child 
 
 ### Teacher caches
 
-| role | status | manifest | teacher (manifest) | decode | frames |
-|---|---|---|---|---|---:|
-| `m.teacher_cache` | **unavailable** | — | — | — | — |
-| `m.teacher_cache_gpu_decode` | present | mamba-teacher-cache-v2 | m.adapted_teacher | torchvision_nvjpeg | 5316 |
+| role | status | manifest schema | manifest sha256 | teacher (manifest) | decode | frames | content digest (files / bytes) |
+|---|---|---|---|---|---|---:|---|
+| `m.teacher_cache` | **unavailable** | — | — | — | — | — | — |
+| `m.teacher_cache_gpu_decode` | present | mamba-teacher-cache-v2 | `035eb90eb160` | m.adapted_teacher | torchvision_nvjpeg | 5316 | `b5b3d4d8371a` (5317 / 35.8 GB) |
 
-### Engines — attribution via sibling ONNX
+### Engines — sibling-ONNX initializer match (engine bytes unattributed)
 
-| role | onnx | verdict | matches (hits / initializers) |
-|---|---|---|---|
-| `m.backbone_engine` | `models/yolo/yolo26m_backbone_640.onnx` | **unique_exact** → `m.adapted_teacher` | 170/170 for each best; 0 other checkpoints with fewer hits |
-| `m.head_engine` | `models/yolo/mamba_head_26m.onnx` | **ambiguous** → `m.distill`, `m.gt1`, `m.gt2_plain`, `m.t3t1_phase_a`, `m.t3t1_phase_b`, `m.t3t1_phase_b_gpu_decode` | 16/61 for each best; 25 other checkpoints with fewer hits |
+| role | sibling onnx (role-file claim) | stem equal | onnx verdict | matches (hits / initializers) |
+|---|---|---|---|---|
+| `m.backbone_engine` | `models/yolo/yolo26m_backbone_640.onnx` | **no** | **unique_exact** → `m.adapted_teacher` | 170/170 for each best; 0 other checkpoints with fewer hits |
+| `m.head_engine` | `models/yolo/mamba_head_26m.onnx` | yes | **ambiguous** → `m.distill`, `m.gt1`, `m.gt2_plain`, `m.t3t1_phase_a`, `m.t3t1_phase_b`, `m.t3t1_phase_b_gpu_decode` | 16/61 for each best; 25 other checkpoints with fewer hits |
 
 ### Deployment forward — `m.deployment_preset` (`configs/presets/mamba_whole_graph_m.yaml`)
 
 - checkpoint: `runs/mamba_gt_yolo26m_v14replica_t3_t1/best.ckpt` → node `m.t3t1_phase_b`; same-sha aliases: none
 - temporal blocks: present; BYPASSED under whole-graph single-frame forward (effective T=1)
 - final-stage `gt_ratio`: 0.0; runtime gate teacher: `runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt`
-- backbone: TRT engine models/yolo/yolo26m_backbone_640_best.engine — attributed **unique_exact** to ['m.adapted_teacher']
-- deployed backbone vs the teacher the head was trained against: **same** (engine ← `m.adapted_teacher`; head trained against ['m.adapted_teacher'])
+- backbone: TRT engine models/yolo/yolo26m_backbone_640_best.engine
+  - sibling ONNX `models/yolo/yolo26m_backbone_640.onnx` (role-file association, stem equal: False) matches **unique_exact** → ['m.adapted_teacher']; engine bytes themselves unattributed
+  - sibling-ONNX evidence vs the teacher the head was trained against: **same_teacher_indicated** (ONNX ↔ `m.adapted_teacher`; head trained against ['m.adapted_teacher']). The deployed engine's own provenance is unresolved (no build manifest).
 - head engine: `models/yolo/mamba_head_26m.engine`; embedding: reid_mode='off'; graphs: {'use_whole_graph': True, 'use_cuda_graph': True, 'use_tracker_graph': True}
 
 ## Cross-reference — `report_data/tables/mamba_checkpoint_provenance.csv`
