@@ -135,21 +135,28 @@ def _run_dir(
     complete: bool = True,
     record_identity: str | None = None,
     metrics: dict[str, float] | None = None,
+    lease: str | None = None,
+    parent: Path | None = None,
+    mot_line: str = "1,1,0,0,1,1,1,-1,-1,-1\n",
 ) -> Path:
-    run = tmp_path / "runs" / name
+    run = (parent or tmp_path / "runs") / name
     rm.open_run(run, produced_by="eval", runtime_identity=identity)
     for seq in DECLARED["dataset"]["sequences"]:
-        (run / f"{seq}.txt").write_text("1,1,0,0,1,1,1,-1,-1,-1\n")
+        (run / f"{seq}.txt").write_text(mot_line)
     numeric = metrics or {k: 1.0 for k in tec.REQUIRED_METRIC_KEYS}
+    stage = identity["stage"] if identity else "formal"
     record = {
         "schema": tec.RUN_RECORD_SCHEMA,
         "recipe_id": identity["pairing"]["recipe_id"] if identity else None,
-        "stage": identity["stage"] if identity else "formal",
+        "stage": stage,
         "identity_sha256": record_identity
         or (identity["identity_sha256"] if identity else "x"),
+        "lease": lease or ("machine-bench" if stage == "formal" else "gpu0"),
         "complete": complete,
         "incomplete_reasons": [] if complete else ["exit code 1"],
         "metrics": {"raw": {}, "numeric": numeric},
+        "throughput": {"fps": 100.0, "mean_latency_ms": 10.0},
+        "mot_md5": tec._mot_hashes(run),
     }
     (run / tec.RUN_RECORD_FILENAME).write_text(json.dumps(record))
     return run
@@ -519,6 +526,122 @@ def test_dirty_repeat_is_refused_and_cannot_unlock_a_clean_formal(
     assert pre["identity"]["identity_sha256"] == clean_ident["identity_sha256"]
 
 
+def _campaign_root(
+    tmp_path: Path, contract: dict[str, Any], recipes: tuple[str, ...]
+) -> Path:
+    """A run root with n=3 repeat runs + report and 3 formal runs per recipe."""
+    root = tmp_path / "results"
+    for recipe in recipes:
+        recipe_root = root / tec._slug(recipe)
+        recipe_root.mkdir(parents=True)
+        rep = _identity(contract, recipe, stage="repeat")
+        dirs = [
+            _run_dir(tmp_path, f"repeat-0-r0{i}", rep, parent=recipe_root)
+            for i in range(1, 4)
+        ]
+        (recipe_root / "repeat-0-report.json").write_text(
+            json.dumps(tec.repeat_report(dirs, contract))
+        )
+        formal = _identity(contract, recipe)
+        for i in range(1, 4):
+            _run_dir(tmp_path, f"formal-1-r0{i}", formal, parent=recipe_root)
+    return root
+
+
+def test_campaign_inventory_accounts_for_every_run_and_fails_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The closeout inventory is complete only when every recipe's formal runs sit on one
+    clean commit under this contract with the bench lease, backed by a same-identity
+    repeat report, and nothing under the run root is unaccounted for.  It assigns no
+    baseline status and never says deterministic."""
+    contract = _synthetic_contract(tmp_path, monkeypatch)
+    root = _campaign_root(tmp_path, contract, (S_RECIPE, S42_RECIPE))
+    inv = tec.campaign_inventory(contract, root)
+    assert inv["complete"] and inv["n_recipes_complete"] == 2
+    assert inv["commit"] == "deadbeef"
+    assert inv["contract_sha256"] == contract["frozen"]["contract_sha256"]
+    s_entry = inv["recipes"][S_RECIPE]
+    assert s_entry["repeat"]["n_runs"] == 3
+    assert set(s_entry["repeat"]["distinct_outputs_per_sequence"].values()) == {1}
+    assert len(s_entry["formal"]) == 3
+    assert all(f["matches_repeat_output"] for f in s_entry["formal"])
+    assert set(s_entry["formal_distinct_outputs_per_sequence"].values()) == {1}
+    assert inv["pairs"][C1]["both_sides_formal"] is True
+    assert len(inv["pairs"][C1]["lhs_formal_runs"]) == 3
+    text = json.dumps(inv).lower()
+    assert "deterministic" not in text.replace("never 'deterministic'", "")
+    assert (
+        "baseline"
+        not in json.dumps({k: v for k, v in inv.items() if k != "note"}).lower()
+    )
+    md = tec.render_campaign_markdown(inv)
+    assert "<!-- doc-status: active -->" in md and f"`{C1}`" in md
+
+    # a formal run whose MOT output differs from the repeat set is flagged, not absorbed
+    formal = _identity(contract, S_RECIPE)
+    recipe_root = root / tec._slug(S_RECIPE)
+    _run_dir(
+        tmp_path,
+        "formal-2-r01",
+        formal,
+        parent=recipe_root,
+        mot_line="1,2,0,0,1,1,1,-1,-1,-1\n",
+    )
+    inv = tec.campaign_inventory(contract, root)
+    assert inv["complete"]
+    diverged = inv["recipes"][S_RECIPE]
+    assert [f["matches_repeat_output"] for f in diverged["formal"]].count(False) == 1
+    assert max(diverged["formal_distinct_outputs_per_sequence"].values()) == 2
+    assert "| NO |" in tec.render_campaign_markdown(inv)
+
+    # an unaccounted run dir (stray smoke / superseded repeat) fails the recipe closed
+    stray = _run_dir(
+        tmp_path,
+        "smoke-9-r01",
+        tec.runtime_identity(
+            contract,
+            S_RECIPE,
+            stage="smoke",
+            sequences=DECLARED["dataset"]["smoke_sequences"],
+        ),
+        parent=recipe_root,
+    )
+    inv = tec.campaign_inventory(contract, root)
+    assert not inv["complete"]
+    assert any("unaccounted" in r for r in inv["recipes"][S_RECIPE]["reasons"])
+    assert inv["pairs"][C1]["both_sides_formal"] is False
+    import shutil
+
+    shutil.rmtree(stray)
+
+    # wrong lease / dirty tree / foreign contract on a formal run are each a reason
+    _run_dir(tmp_path, "formal-3-r01", formal, parent=recipe_root, lease="gpu0")
+    reasons = tec.campaign_inventory(contract, root)["recipes"][S_RECIPE]["reasons"]
+    assert any("lease 'gpu0'" in r for r in reasons)
+    shutil.rmtree(recipe_root / "formal-3-r01")
+    monkeypatch.setattr(rm, "_git_dirty", lambda: True)
+    dirty = _identity(contract, S_RECIPE)
+    monkeypatch.setattr(rm, "_git_dirty", lambda: False)
+    _run_dir(tmp_path, "formal-4-r01", dirty, parent=recipe_root)
+    reasons = tec.campaign_inventory(contract, root)["recipes"][S_RECIPE]["reasons"]
+    assert any("dirty tree" in r for r in reasons)
+    assert any("identities" in r for r in reasons)
+    shutil.rmtree(recipe_root / "formal-4-r01")
+
+    # a recipe with no runs at all is incomplete, and so is the campaign
+    inv = tec.campaign_inventory(contract, root)
+    assert inv["complete"]
+    contract["recipes"]["wg:mamba_whole_graph:s.gt1"] = CONTRACT["recipes"][
+        "wg:mamba_whole_graph:s.gt1"
+    ]
+    inv = tec.campaign_inventory(contract, root)
+    assert (
+        not inv["complete"]
+        and not inv["recipes"]["wg:mamba_whole_graph:s.gt1"]["complete"]
+    )
+
+
 def test_metrics_parse_keeps_digits_and_flags_missing_hota() -> None:
     stdout = (
         "noise\n=== OVERALL METRICS ===\n  IDF1: 78.3%\n  MOTA: 80.1%\n  HOTA: 66.0%\n  DetA: 70.0%\n"
@@ -575,6 +698,34 @@ def test_committed_contract_is_fresh() -> None:
         tec.DEFAULT_MD_OUT,
     )
     assert reasons == []
+
+
+def test_committed_campaign_inventory_is_complete_and_matches_its_doc() -> None:
+    """The committed closeout inventory covers every contract recipe under this contract,
+    on one clean commit, and the committed doc is exactly its rendering."""
+    inventory = json.loads((REPO / tec.DEFAULT_CAMPAIGN_OUT).read_text())
+    assert inventory["schema"] == tec.CAMPAIGN_SCHEMA
+    assert inventory["contract_sha256"] == CONTRACT["frozen"]["contract_sha256"]
+    assert inventory["complete"] and inventory["reasons"] == []
+    assert set(inventory["recipes"]) == set(CONTRACT["recipes"])
+    assert set(inventory["pairs"]) == set(CONTRACT["pairs"])
+    assert isinstance(inventory["commit"], str)
+    for recipe_id, entry in inventory["recipes"].items():
+        assert entry["complete"] and entry["reasons"] == [], recipe_id
+        assert entry["commit"] == inventory["commit"], recipe_id
+        assert entry["repeat"]["n_runs"] >= DECLARED["procedure"]["repeat"]["min_runs"]
+        assert len(entry["formal"]) >= DECLARED["procedure"]["formal"]["min_runs"]
+        for run in entry["formal"]:
+            assert run["identity_sha256"] == entry["identity_sha256"]
+            assert set(tec.REQUIRED_METRIC_KEYS) <= set(run["metrics"]), recipe_id
+    assert all(p["both_sides_formal"] for p in inventory["pairs"].values())
+    text = json.dumps(inventory).lower().replace("never 'deterministic'", "")
+    assert "deterministic" not in text and "bit-exact" not in text.replace(
+        "or 'bit-exact'", ""
+    )
+    assert (REPO / tec.DEFAULT_CAMPAIGN_MD).read_text() == tec.render_campaign_markdown(
+        inventory
+    )
 
 
 def test_committed_contract_prepares_the_required_rows_consistently() -> None:
