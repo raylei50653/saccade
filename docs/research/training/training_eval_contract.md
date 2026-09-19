@@ -6,7 +6,7 @@
 
 # Training eval contract (#421 · deliverable 3)
 
-Frozen 2026-09-19T06:39:05+00:00 at `1fac71e72f13`; contract sha256 `995b4cddef3a9b99…`. Machine-readable source: `scripts/provenance/training_eval_contract.json` (the `declared` block is hand-written; `recipes`, `pairs`, `dataset_key` and `frozen` are derived by `freeze` from `report_data/training_comparison_matrix.json` (`6fe701ada98a`) and `report_data/training_lineage_inventory.json` (`b722ec9bb0f8`); `check` refuses drift).
+Frozen 2026-09-19T07:40:34+00:00 at `443c94ac74d6`; contract sha256 `dc300ac5fda56103…`. Machine-readable source: `scripts/provenance/training_eval_contract.json` (the `declared` block is hand-written; `recipes`, `pairs`, `dataset_key` and `frozen` are derived by `freeze` from `report_data/training_comparison_matrix.json` (`6fe701ada98a`) and `report_data/training_lineage_inventory.json` (`b722ec9bb0f8`); `check` refuses drift).
 
 This document fixes **how** a paired measurement over the deliverable-2 matrix is taken. It contains no IDF1/HOTA/FPS; deliverable 4 runs the recipes below. A run that was not produced by `training_eval_contract.py run` carries no `runtime_identity` and can never be marked paired.
 
@@ -89,7 +89,7 @@ This document fixes **how** a paired measurement over the deliverable-2 matrix i
 ## 8. Runtime identity (what a run binds before its first byte)
 
 - **bound_where**: run_manifest.json schema v3, field runtime_identity, written by open_run before mot17.py starts (production provenance mode); mot17.py joins that claim via SACCADE_PARENT_RUN_ROOT/CLAIM
-- **pairing_keys**: `contract_sha256`, `recipe_id`, `execution_profile`, `preset_sha256`, `resolved_config_sha256 (every argparse dest after preset merge + argv, minus run_local_keys)`, `artifacts.<key>.sha256 for every non-empty artifact dest (mamba_ckpt, mamba_teacher_ckpt, mamba_yolo_weights, fpn_backbone_engine, mamba_head_engine, teacher_head_ckpt, teacher_head_backbone_engine, engine)`, `dataset.key_sha256 (per-sequence seqinfo/gt/image digests) + subset flag`, `environment (hostname, platform, python, torch/torchvision/tensorrt/numpy/motmetrics versions, GPU name, driver, CUDA_VISIBLE_DEVICES, build dir + native *.so digests, TrackEval git tree + dirty)`, `commit`
+- **pairing_keys**: `contract_sha256`, `recipe_id`, `execution_profile`, `preset_sha256`, `resolved_config_sha256 (every argparse dest after preset merge + argv, minus run_local_keys)`, `artifacts.<key>.sha256 for every non-empty artifact dest (mamba_ckpt, mamba_teacher_ckpt, mamba_yolo_weights, fpn_backbone_engine, mamba_head_engine, teacher_head_ckpt, teacher_head_backbone_engine, engine)`, `dataset.key_sha256 (per-sequence seqinfo/gt/image digests) + subset flag`, `environment (hostname, platform, python, torch/torchvision/tensorrt/numpy/motmetrics versions, GPU name, driver, CUDA_VISIBLE_DEVICES, build dir + native *.so digests, TrackEval git tree + dirty)`, `commit`, `dirty (always false for repeat/formal; bound so a smoke identity never collides with a clean one)`
 - **identity_sha256**: sha256 of the pairing block; repeat reports and formal runs are matched on it
 - **run_local_keys**: `output`, `mlflow_uri`, `mlflow_experiment`, `mlflow_run_name`
 - **fail_closed**: missing manifest, reconstructed provenance, missing/foreign runtime_identity schema, contract sha mismatch, incomplete run record, non-formal stage, or any identity path differing outside the pair's allowed_differences => not_paired
@@ -111,15 +111,16 @@ Treatment axis → identity paths a paired run may differ in:
   - **purpose**: prove the recipe executes end to end (model load, graph capture, every required metric key incl. HOTA) on the smoke sequence set
   - **sequences**: declared.dataset.smoke_sequences
   - **lease**: gpu0
-  - **status**: procedure evidence only; a sequence-subset run; never pairable, never a baseline
+  - **status**: procedure evidence only; a sequence-subset run; may run on a dirty tree; never pairable, never a baseline
 - **repeat**:
   - **purpose**: observe run-to-run variance of one identity on the full sequence set before any formal number exists
   - **min_runs**: `3`
   - **lease**: gpu0
-  - **identity_rule**: all runs of a report share one identity_sha256; byte identity via scripts/tools/eval_repeat_identity.py (raw MOT identity incl. track ids) and the observed metric range per key
+  - **identity_rule**: all runs of a report share one identity_sha256 (which binds commit and dirty; repeat runs require a clean tree, so a report produced on edited sources can never unlock a formal run at the same HEAD); byte identity via scripts/tools/eval_repeat_identity.py (raw MOT identity incl. track ids) and the observed metric range per key; only repeat-stage runs enter a report
   - **claim_rule**: report 'k distinct outputs in n runs' and the observed range; never 'deterministic' / 'bit-exact'; zero divergences in n runs only rule out per-run divergence rates above ~1-0.05^(1/n) (n=3: ~63%, n=6: ~39%) at 95% one-sided, so min_runs is a floor for procedure, not evidence of reproducibility (docs/research/eval/nogpudecode_reproducibility_20260907.md)
   - **reproducibility_is_per_configuration**: no recipe inherits another recipe's repeat evidence; a treatment arm does not inherit its base arm's
   - **recommended_runs**: `6`
+  - **requires_clean_tree**: `true`
 - **formal**:
   - **purpose**: the runs deliverable 4 may cite
   - **lease**: machine-bench

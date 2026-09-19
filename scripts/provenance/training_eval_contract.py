@@ -1005,6 +1005,7 @@ def runtime_identity(
         },
         "environment": environment,
         "commit": rm._git_head(),
+        "dirty": rm._git_dirty(),
     }
     return {
         "schema": IDENTITY_SCHEMA,
@@ -1174,13 +1175,18 @@ def preflight(
         verify_dataset=verify_dataset,
     )
     reasons: list[str] = []
-    if stage == "formal":
-        if rm._git_dirty() is not False:
+    if stage in ("repeat", "formal"):
+        # The identity binds ``commit`` and ``dirty``; a dirty repeat could
+        # otherwise be run on edited sources, cleaned up, and still unlock a
+        # formal run at the same HEAD.  Both stages therefore require the
+        # tree the commit describes.
+        if identity["pairing"]["dirty"] is not False:
             reasons.append(
-                "formal run requires a clean working tree (dirty tree or no git)"
+                f"{stage} run requires a clean working tree (dirty tree or no git)"
             )
         if identity["pairing"]["commit"] is None:
-            reasons.append("formal run requires a resolvable HEAD commit")
+            reasons.append(f"{stage} run requires a resolvable HEAD commit")
+    if stage == "formal":
         if lease != procedure["formal"]["lease"]:
             reasons.append(
                 f"formal run requires the {procedure['formal']['lease']!r} lease, got {lease!r}"
@@ -1370,9 +1376,10 @@ def repeat_report(
             f"runs carry {len(shas)} different identities; a repeat report covers exactly one"
         )
     stages = {i["stage"] for i in identities}
-    if stages - {"repeat", "formal"}:
+    if stages - {"repeat"}:
         reasons.append(
-            f"stages {sorted(stages)} include a non-repeat stage (smoke is a subset run)"
+            f"stages {sorted(stages)} include a non-repeat stage (a repeat report reads "
+            "repeat-stage runs only; smoke is a subset run, formal runs are what it unlocks)"
         )
     if any(i["pairing"]["dataset"]["subset"] for i in identities):
         reasons.append(
@@ -1492,6 +1499,7 @@ def _pair_view(identity: Mapping[str, Any]) -> dict[str, Any]:
         "dataset_key_sha256": pairing["dataset"]["key_sha256"],
         "environment": pairing["environment"],
         "commit": pairing["commit"],
+        "dirty": pairing["dirty"],
         "contract_sha256": pairing["contract_sha256"],
     }
 
@@ -1979,7 +1987,7 @@ def _dispatch(args: argparse.Namespace) -> int:
             )
             if not record["complete"]:
                 print(f"  reasons: {record['incomplete_reasons']}")
-        if args.stage in ("repeat", "formal") and args.runs >= 1:
+        if args.stage == "repeat":
             report = repeat_report(dirs, contract)
             out = recipe_root / f"repeat-{stamp}-report.json"
             _write(out, json.dumps(report, indent=2) + "\n")

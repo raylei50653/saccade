@@ -108,7 +108,8 @@
         "artifacts.<key>.sha256 for every non-empty artifact dest (mamba_ckpt, mamba_teacher_ckpt, mamba_yolo_weights, fpn_backbone_engine, mamba_head_engine, teacher_head_ckpt, teacher_head_backbone_engine, engine)",
         "dataset.key_sha256 (per-sequence seqinfo/gt/image digests) + subset flag",
         "environment (hostname, platform, python, torch/torchvision/tensorrt/numpy/motmetrics versions, GPU name, driver, CUDA_VISIBLE_DEVICES, build dir + native *.so digests, TrackEval git tree + dirty)",
-        "commit"
+        "commit",
+        "dirty (always false for repeat/formal; bound so a smoke identity never collides with a clean one)"
       ],
       "identity_sha256": "sha256 of the pairing block; repeat reports and formal runs are matched on it",
       "run_local_keys": [
@@ -159,16 +160,17 @@
         "purpose": "prove the recipe executes end to end (model load, graph capture, every required metric key incl. HOTA) on the smoke sequence set",
         "sequences": "declared.dataset.smoke_sequences",
         "lease": "gpu0",
-        "status": "procedure evidence only; a sequence-subset run; never pairable, never a baseline"
+        "status": "procedure evidence only; a sequence-subset run; may run on a dirty tree; never pairable, never a baseline"
       },
       "repeat": {
         "purpose": "observe run-to-run variance of one identity on the full sequence set before any formal number exists",
         "min_runs": 3,
         "lease": "gpu0",
-        "identity_rule": "all runs of a report share one identity_sha256; byte identity via scripts/tools/eval_repeat_identity.py (raw MOT identity incl. track ids) and the observed metric range per key",
+        "identity_rule": "all runs of a report share one identity_sha256 (which binds commit and dirty; repeat runs require a clean tree, so a report produced on edited sources can never unlock a formal run at the same HEAD); byte identity via scripts/tools/eval_repeat_identity.py (raw MOT identity incl. track ids) and the observed metric range per key; only repeat-stage runs enter a report",
         "claim_rule": "report 'k distinct outputs in n runs' and the observed range; never 'deterministic' / 'bit-exact'; zero divergences in n runs only rule out per-run divergence rates above ~1-0.05^(1/n) (n=3: ~63%, n=6: ~39%) at 95% one-sided, so min_runs is a floor for procedure, not evidence of reproducibility (docs/research/eval/nogpudecode_reproducibility_20260907.md)",
         "reproducibility_is_per_configuration": "no recipe inherits another recipe's repeat evidence; a treatment arm does not inherit its base arm's",
-        "recommended_runs": 6
+        "recommended_runs": 6,
+        "requires_clean_tree": true
       },
       "formal": {
         "purpose": "the runs deliverable 4 may cite",
@@ -205,8 +207,8 @@
     ]
   },
   "frozen": {
-    "at": "2026-09-19T06:39:05+00:00",
-    "commit": "1fac71e72f1367661edb04063f42f737f7eab41c",
+    "at": "2026-09-19T07:40:34+00:00",
+    "commit": "443c94ac74d6746301c72fc506dacc4e00c9f10c",
     "matrix_path": "report_data/training_comparison_matrix.json",
     "matrix_sha256": "6fe701ada98a0d4f348d7ad534a14168527929bf74aa0c01a5458325f0a8a6ee",
     "inventory_path": "report_data/training_lineage_inventory.json",
@@ -228,7 +230,7 @@
         "private_prior_iou_threshold": 0.3
       }
     },
-    "contract_sha256": "995b4cddef3a9b9946565d8d71941fcaf09b2d629373c8bdaacc765f28216c12"
+    "contract_sha256": "dc300ac5fda5610356efcc9503c3b7140da867f3b70a58106513801925639649"
   },
   "recipes": {
     "wg:mamba_whole_graph:s.distill": {

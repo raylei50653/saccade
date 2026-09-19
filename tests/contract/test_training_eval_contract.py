@@ -112,6 +112,7 @@ def _synthetic_contract(
     contract["frozen"]["contract_sha256"] = tec.contract_sha256(contract)
     monkeypatch.setattr(tec, "environment_identity", _fake_environment)
     monkeypatch.setattr(rm, "_git_head", lambda: "deadbeef")
+    monkeypatch.setattr(rm, "_git_dirty", lambda: False)
     for var in list(os.environ):
         if var.startswith("SACCADE_"):
             monkeypatch.delenv(var)
@@ -421,6 +422,13 @@ def test_repeat_report_requires_one_full_identity_and_min_runs(
         "subset" in r for r in sub_report["reasons"]
     )
 
+    formal = [
+        _run_dir(tmp_path, f"f{i}", _identity(contract, S_RECIPE)) for i in range(3)
+    ]
+    formal_report = tec.repeat_report(formal, contract)
+    assert not formal_report["complete"]
+    assert any("repeat-stage runs only" in r for r in formal_report["reasons"])
+
 
 def test_formal_preflight_needs_clean_tree_lease_and_same_identity_repeat_report(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -461,6 +469,54 @@ def test_formal_preflight_needs_clean_tree_lease_and_same_identity_repeat_report
     monkeypatch.setattr(rm, "_git_dirty", lambda: True)
     smoke = tec.preflight(contract, S_RECIPE, stage="smoke", root=root, lease="gpu0")
     assert smoke["sequences"] == DECLARED["dataset"]["smoke_sequences"]
+
+
+def test_dirty_repeat_is_refused_and_cannot_unlock_a_clean_formal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A repeat on edited sources must not become the same-identity evidence a formal run needs.
+
+    Two guards, either of which suffices: the repeat preflight refuses a dirty
+    tree outright, and ``dirty`` is bound into the pairing identity so a
+    report assembled from dirty runs carries a different identity_sha256
+    from the clean formal run at the same HEAD.
+    """
+    contract = _synthetic_contract(tmp_path, monkeypatch)
+    monkeypatch.setattr(Path, "cwd", classmethod(lambda cls: tec.REPO_ROOT))
+    root = tmp_path / "results"
+
+    monkeypatch.setattr(rm, "_git_dirty", lambda: True)
+    with pytest.raises(
+        tec.ContractError, match="repeat run requires a clean working tree"
+    ):
+        tec.preflight(contract, S_RECIPE, stage="repeat", root=root, lease="gpu0")
+    # smoke may still run dirty
+    tec.preflight(contract, S_RECIPE, stage="smoke", root=root, lease="gpu0")
+
+    dirty_ident = _identity(contract, S_RECIPE, stage="repeat")
+    assert dirty_ident["pairing"]["dirty"] is True
+    dirty_runs = [_run_dir(tmp_path, f"d{i}", dirty_ident) for i in range(3)]
+    dirty_report = tec.repeat_report(dirty_runs, contract)
+    recipe_root = root / tec._slug(S_RECIPE)
+    recipe_root.mkdir(parents=True)
+    (recipe_root / "repeat-dirty-report.json").write_text(json.dumps(dirty_report))
+
+    monkeypatch.setattr(rm, "_git_dirty", lambda: False)
+    clean_ident = _identity(contract, S_RECIPE, stage="repeat")
+    assert clean_ident["identity_sha256"] != dirty_ident["identity_sha256"]
+    with pytest.raises(tec.ContractError, match="repeat report"):
+        tec.preflight(
+            contract, S_RECIPE, stage="formal", root=root, lease="machine-bench"
+        )
+
+    clean_runs = [_run_dir(tmp_path, f"c{i}", clean_ident) for i in range(3)]
+    (recipe_root / "repeat-clean-report.json").write_text(
+        json.dumps(tec.repeat_report(clean_runs, contract))
+    )
+    pre = tec.preflight(
+        contract, S_RECIPE, stage="formal", root=root, lease="machine-bench"
+    )
+    assert pre["identity"]["identity_sha256"] == clean_ident["identity_sha256"]
 
 
 def test_metrics_parse_keeps_digits_and_flags_missing_hota() -> None:
@@ -568,4 +624,6 @@ def test_committed_contract_prepares_the_required_rows_consistently() -> None:
     assert (
         set(ds["smoke_sequences"]) < set(ds["sequences"]) and ds["max_frames"] is None
     )
+    assert DECLARED["procedure"]["repeat"]["requires_clean_tree"] is True
+    assert DECLARED["procedure"]["formal"]["requires_clean_tree"] is True
     assert set(CONTRACT["dataset_key"]["sequences"]) == set(ds["sequences"])
