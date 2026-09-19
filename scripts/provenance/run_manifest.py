@@ -57,9 +57,13 @@ from typing import Any
 
 MANIFEST_FILENAME = "run_manifest.json"
 
-# What this module *writes*.  v2 adds ``provenance_mode`` and
-# ``backfill_sources`` (ADR 021 AP-4).
-SCHEMA_VERSION = 2
+# What this module *writes*.  v2 added ``provenance_mode`` and
+# ``backfill_sources`` (ADR 021 AP-4); v3 adds the optional
+# ``runtime_identity`` block (#421 deliverable 3): the resolved runtime
+# contract a producing entry point binds *before* its first result byte, so a
+# later reader can decide whether two runs are pairable without trusting a
+# sidecar written after the fact.
+SCHEMA_VERSION = 3
 
 # What this module *reads*.  The bump is append-only, and the reason is not
 # caution: v1 has an unambiguous meaning.  The only way to create a v1 manifest
@@ -72,8 +76,12 @@ SCHEMA_VERSION = 2
 # observed ``0 manifested`` and this change lands writes a perfectly valid v1
 # manifest, which would turn ``invalid`` the moment this merged and fail the
 # AP-3 check closed on a directory that did nothing wrong.
-SUPPORTED_SCHEMA_VERSIONS = (1, 2)
+SUPPORTED_SCHEMA_VERSIONS = (1, 2, 3)
 LEGACY_SCHEMA_VERSION = 1
+# The first version that may carry ``runtime_identity``.  A v2 file carrying
+# one was not written by a v2 writer, and is read as a forgery, as v1 files
+# carrying ``provenance_mode`` are.
+RUNTIME_IDENTITY_MIN_SCHEMA_VERSION = 3
 
 PRODUCED_BY = frozenset({"eval", "train", "diagnostic", "ad-hoc"})
 
@@ -149,7 +157,16 @@ OPTIONAL_FIELDS = (
     "dataset",
     "gpu",
     "claims",
+    "runtime_identity",
 )
+
+# ``runtime_identity`` is production-only.  Its value is that it was bound at
+# claim time, before any byte the run produced; a reconstruction cannot make
+# that statement, and letting it carry the field would let archaeology read
+# downstream exactly like a capture.  The block itself is opaque here except
+# for ``schema`` (which contract wrote it); its rules live with that contract
+# (``scripts/provenance/training_eval_contract.py``).
+RUNTIME_IDENTITY_REQUIRED_KEYS = ("schema",)
 
 ALLOWED_FIELDS = frozenset(
     PRODUCTION_REQUIRED_FIELDS + RECONSTRUCTED_REQUIRED_FIELDS + OPTIONAL_FIELDS
@@ -246,6 +263,7 @@ def build_manifest(
     dataset: str | None = None,
     cmdline: Iterable[str] | None = None,
     claims: Iterable[str] = (),
+    runtime_identity: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Assemble the manifest payload for one produced artifact directory."""
     payload: dict[str, Any] = {
@@ -271,6 +289,8 @@ def build_manifest(
     claim_list = list(claims)
     if claim_list:
         payload["claims"] = claim_list
+    if runtime_identity is not None:
+        payload["runtime_identity"] = json.loads(json.dumps(dict(runtime_identity)))
     return payload
 
 
@@ -350,6 +370,38 @@ def validate_manifest(payload: Mapping[str, Any]) -> None:
                 "backfill_sources is meaningless on a production manifest: the run "
                 "itself is the source. Its presence would suggest the identity was "
                 "assembled afterwards."
+            )
+        if (
+            "runtime_identity" in payload
+            and version < RUNTIME_IDENTITY_MIN_SCHEMA_VERSION
+        ):
+            raise ManifestError(
+                f"a schema_version {version} manifest may not carry "
+                "runtime_identity: the field postdates it. Write schema_version "
+                f"{RUNTIME_IDENTITY_MIN_SCHEMA_VERSION} instead."
+            )
+
+    if "runtime_identity" in payload:
+        if mode != "production":
+            raise ManifestError(
+                "runtime_identity is production-only: it states what was bound "
+                "before the first result byte, which a reconstruction cannot know"
+            )
+        identity = payload["runtime_identity"]
+        if not isinstance(identity, Mapping) or not identity:
+            raise ManifestError(
+                "runtime_identity must be a non-empty JSON object, got "
+                f"{type(identity).__name__}"
+            )
+        missing_keys = [
+            key
+            for key in RUNTIME_IDENTITY_REQUIRED_KEYS
+            if not isinstance(identity.get(key), str) or not identity[key].strip()
+        ]
+        if missing_keys:
+            raise ManifestError(
+                "runtime_identity must name its contract: missing or empty "
+                + ", ".join(missing_keys)
             )
 
     if mode == "reconstructed":
@@ -466,6 +518,7 @@ def open_run(
     dataset: str | None = None,
     cmdline: Iterable[str] | None = None,
     claims: Iterable[str] = (),
+    runtime_identity: Mapping[str, Any] | None = None,
 ) -> Path:
     """Claim an empty or not-yet-existing artifact directory, manifest first.
 
@@ -523,6 +576,7 @@ def open_run(
         dataset=dataset,
         cmdline=cmdline,
         claims=claims,
+        runtime_identity=runtime_identity,
     )
     validate_manifest(payload)
 
@@ -655,6 +709,7 @@ def claim_or_join_run(
     dataset: str | None = None,
     cmdline: Iterable[str] | None = None,
     claims: Iterable[str] = (),
+    runtime_identity: Mapping[str, Any] | None = None,
 ) -> Path:
     """Claim a new run, or join the parent named by the worker-permit env.
 
@@ -681,6 +736,7 @@ def claim_or_join_run(
         dataset=dataset,
         cmdline=cmdline,
         claims=claims,
+        runtime_identity=runtime_identity,
     )
 
 

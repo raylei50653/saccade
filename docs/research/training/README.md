@@ -43,3 +43,4 @@
 | [pp22_stress_test_findings](pp22_stress_test_findings.md) | 2026-07 | findings |
 | [training_lineage_inventory](training_lineage_inventory.md) | 2026-09-18 | captured snapshot（#421 deliverable 1；由 `scripts/provenance/training_lineage.py` 產生，不手改） |
 | [training_comparison_matrix](training_comparison_matrix.md) | 2026-09-18 | generated view（#421 deliverable 2；由 `scripts/provenance/training_comparison.py` 從 inventory JSON + `training_comparisons.json` 導出，`--check` 驗新鮮度，不手改） |
+| [training_eval_contract](training_eval_contract.md) | 2026-09-19 | frozen contract（#421 deliverable 3；由 `scripts/provenance/training_eval_contract.py freeze` 從 `training_eval_contract.json` 的 `declared` 區塊 + matrix JSON 導出，`check` 驗新鮮度；runner `run`/`validate-pair` 以 `run_manifest.json` v3 `runtime_identity` fail-closed；不手改 .md，只改 JSON 的 `declared`） |

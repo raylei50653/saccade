@@ -76,16 +76,18 @@ def test_open_run_writes_a_manifest_that_reads_back_valid(tmp_path):
     assert payload["preset"] == "p"
 
 
-def test_schema_version_carried_the_v2_evolution(tmp_path):
+def test_schema_version_carried_the_v2_and_v3_evolutions(tmp_path):
     """Without a version, adding a field later would break every older reader.
 
     Unknown fields are fail-closed, so schema evolution is only possible if a
     reader can tell which schema it is looking at. v2 (ADR 021 AP-4) is that
     evolution actually happening: it added ``provenance_mode``, and a reader
-    can refuse a v1 file rather than silently assume which mode it meant.
+    can refuse a v1 file rather than silently assume which mode it meant. v3
+    (#421 deliverable 3) added the optional ``runtime_identity`` block the same
+    way: a v2 file carrying one is refused rather than read as a capture.
     """
     open_run(tmp_path / "r", produced_by="eval")
-    assert read_manifest(tmp_path / "r")["schema_version"] == 2
+    assert read_manifest(tmp_path / "r")["schema_version"] == SCHEMA_VERSION == 3
 
 
 def test_unknown_field_is_fail_closed():
