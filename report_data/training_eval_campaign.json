@@ -1,0 +1,4629 @@
+{
+  "schema": "training_eval_campaign_v1",
+  "generated_at": "2026-09-19T11:10:44+00:00",
+  "contract_sha256": "dc300ac5fda5610356efcc9503c3b7140da867f3b70a58106513801925639649",
+  "run_root": "results/training_eval_contract",
+  "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+  "complete": true,
+  "reasons": [],
+  "n_recipes": 18,
+  "n_recipes_complete": 18,
+  "recipes": {
+    "wg:mamba_whole_graph:s.distill": {
+      "recipe_id": "wg:mamba_whole_graph:s.distill",
+      "run_root": "results/training_eval_contract/wg_mamba_whole_graph_s.distill",
+      "identity_sha256": "d60ff54a2a4b9cac21d627eaa3fba7ffe89705541a9ac736ff684afd802325c7",
+      "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+      "environment": {
+        "build_dir": "/home/ray/developer/ai/saccade/build",
+        "cuda_visible_devices": null,
+        "driver": "616.92",
+        "gpu": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+        "hostname": "DESKTOP-0FLA6SQ",
+        "native_extensions": {
+          "libsaccade_scan_plugin.so": "8bd0e60e2b78cd01a5697c143498a95b3c514f3b44af4c4f2af30a07cb90af71",
+          "saccade_cheb_gr_online_ext.cpython-312-x86_64-linux-gnu.so": "ef7284891a4900768589ccf437be987564333c20cbb87e063322ea51bea5f553",
+          "saccade_eval_ext.cpython-312-x86_64-linux-gnu.so": "e52d7ea14a336a612f432b35b95c6d914ce5526cf87d03190d892fd7278aefa5",
+          "saccade_media_ext.cpython-312-x86_64-linux-gnu.so": "0adb35e47471bf933e951170f26d8d916f86ff7d5cfad7a2fc55b1e32911d977",
+          "saccade_perception_ext.cpython-312-x86_64-linux-gnu.so": "86a76e872b34001a85d4c3b56d1b2b55d8b8365d9b6a70f5ce9dcef67c02831e",
+          "saccade_tracking_ext.cpython-312-x86_64-linux-gnu.so": "2f29d374432960793d8c6279064ddd68e18adc8a04b1ecf16c459839b71d49f4"
+        },
+        "packages": {
+          "motmetrics": "1.4.0",
+          "numpy": "2.4.4",
+          "nvidia-cuda-runtime": "13.0.96",
+          "nvidia-dali-cuda120": "2.0.0",
+          "nvidia-nvjpeg-cu12": "12.4.0.76",
+          "nvidia-nvjpeg2k-cu12": "0.10.0.49",
+          "tensorrt_cu12": "10.16.1.11",
+          "tensorrt_cu12_bindings": "10.16.1.11",
+          "tensorrt_cu12_libs": "10.16.1.11",
+          "torch": "2.11.0",
+          "torch_build": "2.11.0+cu130",
+          "torchvision": "0.26.0"
+        },
+        "platform": "Linux-6.18.33.1-microsoft-standard-WSL2-x86_64-with-glibc2.44",
+        "python": "3.12.13",
+        "trackeval": {
+          "dirty": false,
+          "git_tree": "b0ba3a0c5b82550156c6afd1ca949fe5ec155161",
+          "root": "third_party/TrackEval"
+        }
+      },
+      "complete": true,
+      "reasons": [],
+      "repeat": {
+        "report": "results/training_eval_contract/wg_mamba_whole_graph_s.distill/repeat-20260919T083134Z-report.json",
+        "n_runs": 6,
+        "distinct_outputs_per_sequence": {
+          "MOT17-02-SDP": 1,
+          "MOT17-04-SDP": 1,
+          "MOT17-05-SDP": 1,
+          "MOT17-09-SDP": 1,
+          "MOT17-10-SDP": 1,
+          "MOT17-11-SDP": 1,
+          "MOT17-13-SDP": 1
+        },
+        "metric_observed_range": {
+          "AssA": {
+            "min": 57.0,
+            "max": 57.0,
+            "observed_range": 0.0
+          },
+          "DetA": {
+            "min": 61.7,
+            "max": 61.7,
+            "observed_range": 0.0
+          },
+          "FN": {
+            "min": 25446.0,
+            "max": 25446.0,
+            "observed_range": 0.0
+          },
+          "FP": {
+            "min": 8157.0,
+            "max": 8157.0,
+            "observed_range": 0.0
+          },
+          "HOTA": {
+            "min": 59.2,
+            "max": 59.2,
+            "observed_range": 0.0
+          },
+          "IDF1": {
+            "min": 68.1,
+            "max": 68.1,
+            "observed_range": 0.0
+          },
+          "IDs": {
+            "min": 622.0,
+            "max": 622.0,
+            "observed_range": 0.0
+          },
+          "MOTA": {
+            "min": 69.5,
+            "max": 69.5,
+            "observed_range": 0.0
+          },
+          "Prcn": {
+            "min": 91.4,
+            "max": 91.4,
+            "observed_range": 0.0
+          },
+          "Rcll": {
+            "min": 77.3,
+            "max": 77.3,
+            "observed_range": 0.0
+          }
+        },
+        "throughput": [
+          {
+            "fps": 192.99,
+            "mean_latency_ms": 4.77
+          },
+          {
+            "fps": 192.39,
+            "mean_latency_ms": 4.79
+          },
+          {
+            "fps": 192.44,
+            "mean_latency_ms": 4.79
+          },
+          {
+            "fps": 193.27,
+            "mean_latency_ms": 4.77
+          },
+          {
+            "fps": 192.9,
+            "mean_latency_ms": 4.78
+          },
+          {
+            "fps": 193.81,
+            "mean_latency_ms": 4.75
+          }
+        ]
+      },
+      "formal": [
+        {
+          "run_dir": "results/training_eval_contract/wg_mamba_whole_graph_s.distill/formal-20260919T083605Z-r01",
+          "identity_sha256": "d60ff54a2a4b9cac21d627eaa3fba7ffe89705541a9ac736ff684afd802325c7",
+          "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+          "metrics": {
+            "AssA": 57.0,
+            "DetA": 61.7,
+            "FN": 25446.0,
+            "FP": 8157.0,
+            "HOTA": 59.2,
+            "IDF1": 68.1,
+            "IDs": 622.0,
+            "MOTA": 69.5,
+            "Prcn": 91.4,
+            "Rcll": 77.3
+          },
+          "throughput": {
+            "fps": 192.79,
+            "mean_latency_ms": 4.78
+          },
+          "mot_md5": {
+            "MOT17-02-SDP": "5ecce6bcedbd29908db2b197e03a690f",
+            "MOT17-04-SDP": "7a0e246316c0bd6fac4687f10b3d7afc",
+            "MOT17-05-SDP": "90573c10653225229da3bc605281ab93",
+            "MOT17-09-SDP": "c3f82148a0c31515b31c34c1ac3dddae",
+            "MOT17-10-SDP": "df0aa947f3a25c7c61f0044d462ace3b",
+            "MOT17-11-SDP": "ac2528b97161bd191b1d246b435c49c8",
+            "MOT17-13-SDP": "a4c2c31496e59a614de6bae613d561c4"
+          },
+          "wall_seconds": 41.353,
+          "matches_repeat_output": true
+        },
+        {
+          "run_dir": "results/training_eval_contract/wg_mamba_whole_graph_s.distill/formal-20260919T083605Z-r02",
+          "identity_sha256": "d60ff54a2a4b9cac21d627eaa3fba7ffe89705541a9ac736ff684afd802325c7",
+          "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+          "metrics": {
+            "AssA": 57.0,
+            "DetA": 61.7,
+            "FN": 25446.0,
+            "FP": 8157.0,
+            "HOTA": 59.2,
+            "IDF1": 68.1,
+            "IDs": 622.0,
+            "MOTA": 69.5,
+            "Prcn": 91.4,
+            "Rcll": 77.3
+          },
+          "throughput": {
+            "fps": 192.91,
+            "mean_latency_ms": 4.78
+          },
+          "mot_md5": {
+            "MOT17-02-SDP": "5ecce6bcedbd29908db2b197e03a690f",
+            "MOT17-04-SDP": "7a0e246316c0bd6fac4687f10b3d7afc",
+            "MOT17-05-SDP": "90573c10653225229da3bc605281ab93",
+            "MOT17-09-SDP": "c3f82148a0c31515b31c34c1ac3dddae",
+            "MOT17-10-SDP": "df0aa947f3a25c7c61f0044d462ace3b",
+            "MOT17-11-SDP": "ac2528b97161bd191b1d246b435c49c8",
+            "MOT17-13-SDP": "a4c2c31496e59a614de6bae613d561c4"
+          },
+          "wall_seconds": 41.536,
+          "matches_repeat_output": true
+        },
+        {
+          "run_dir": "results/training_eval_contract/wg_mamba_whole_graph_s.distill/formal-20260919T083605Z-r03",
+          "identity_sha256": "d60ff54a2a4b9cac21d627eaa3fba7ffe89705541a9ac736ff684afd802325c7",
+          "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+          "metrics": {
+            "AssA": 57.0,
+            "DetA": 61.7,
+            "FN": 25446.0,
+            "FP": 8157.0,
+            "HOTA": 59.2,
+            "IDF1": 68.1,
+            "IDs": 622.0,
+            "MOTA": 69.5,
+            "Prcn": 91.4,
+            "Rcll": 77.3
+          },
+          "throughput": {
+            "fps": 193.07,
+            "mean_latency_ms": 4.77
+          },
+          "mot_md5": {
+            "MOT17-02-SDP": "5ecce6bcedbd29908db2b197e03a690f",
+            "MOT17-04-SDP": "7a0e246316c0bd6fac4687f10b3d7afc",
+            "MOT17-05-SDP": "90573c10653225229da3bc605281ab93",
+            "MOT17-09-SDP": "c3f82148a0c31515b31c34c1ac3dddae",
+            "MOT17-10-SDP": "df0aa947f3a25c7c61f0044d462ace3b",
+            "MOT17-11-SDP": "ac2528b97161bd191b1d246b435c49c8",
+            "MOT17-13-SDP": "a4c2c31496e59a614de6bae613d561c4"
+          },
+          "wall_seconds": 41.523,
+          "matches_repeat_output": true
+        }
+      ],
+      "formal_distinct_outputs_per_sequence": {
+        "MOT17-02-SDP": 1,
+        "MOT17-04-SDP": 1,
+        "MOT17-05-SDP": 1,
+        "MOT17-09-SDP": 1,
+        "MOT17-10-SDP": 1,
+        "MOT17-11-SDP": 1,
+        "MOT17-13-SDP": 1
+      }
+    },
+    "wg:mamba_whole_graph:s.gt1": {
+      "recipe_id": "wg:mamba_whole_graph:s.gt1",
+      "run_root": "results/training_eval_contract/wg_mamba_whole_graph_s.gt1",
+      "identity_sha256": "dc01652b8a89ac0139ef03f8a6b4d85368143dc4783dd40c6860378c71d389d1",
+      "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+      "environment": {
+        "build_dir": "/home/ray/developer/ai/saccade/build",
+        "cuda_visible_devices": null,
+        "driver": "616.92",
+        "gpu": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+        "hostname": "DESKTOP-0FLA6SQ",
+        "native_extensions": {
+          "libsaccade_scan_plugin.so": "8bd0e60e2b78cd01a5697c143498a95b3c514f3b44af4c4f2af30a07cb90af71",
+          "saccade_cheb_gr_online_ext.cpython-312-x86_64-linux-gnu.so": "ef7284891a4900768589ccf437be987564333c20cbb87e063322ea51bea5f553",
+          "saccade_eval_ext.cpython-312-x86_64-linux-gnu.so": "e52d7ea14a336a612f432b35b95c6d914ce5526cf87d03190d892fd7278aefa5",
+          "saccade_media_ext.cpython-312-x86_64-linux-gnu.so": "0adb35e47471bf933e951170f26d8d916f86ff7d5cfad7a2fc55b1e32911d977",
+          "saccade_perception_ext.cpython-312-x86_64-linux-gnu.so": "86a76e872b34001a85d4c3b56d1b2b55d8b8365d9b6a70f5ce9dcef67c02831e",
+          "saccade_tracking_ext.cpython-312-x86_64-linux-gnu.so": "2f29d374432960793d8c6279064ddd68e18adc8a04b1ecf16c459839b71d49f4"
+        },
+        "packages": {
+          "motmetrics": "1.4.0",
+          "numpy": "2.4.4",
+          "nvidia-cuda-runtime": "13.0.96",
+          "nvidia-dali-cuda120": "2.0.0",
+          "nvidia-nvjpeg-cu12": "12.4.0.76",
+          "nvidia-nvjpeg2k-cu12": "0.10.0.49",
+          "tensorrt_cu12": "10.16.1.11",
+          "tensorrt_cu12_bindings": "10.16.1.11",
+          "tensorrt_cu12_libs": "10.16.1.11",
+          "torch": "2.11.0",
+          "torch_build": "2.11.0+cu130",
+          "torchvision": "0.26.0"
+        },
+        "platform": "Linux-6.18.33.1-microsoft-standard-WSL2-x86_64-with-glibc2.44",
+        "python": "3.12.13",
+        "trackeval": {
+          "dirty": false,
+          "git_tree": "b0ba3a0c5b82550156c6afd1ca949fe5ec155161",
+          "root": "third_party/TrackEval"
+        }
+      },
+      "complete": true,
+      "reasons": [],
+      "repeat": {
+        "report": "results/training_eval_contract/wg_mamba_whole_graph_s.gt1/repeat-20260919T083812Z-report.json",
+        "n_runs": 6,
+        "distinct_outputs_per_sequence": {
+          "MOT17-02-SDP": 1,
+          "MOT17-04-SDP": 1,
+          "MOT17-05-SDP": 1,
+          "MOT17-09-SDP": 1,
+          "MOT17-10-SDP": 1,
+          "MOT17-11-SDP": 1,
+          "MOT17-13-SDP": 1
+        },
+        "metric_observed_range": {
+          "AssA": {
+            "min": 67.1,
+            "max": 67.1,
+            "observed_range": 0.0
+          },
+          "DetA": {
+            "min": 68.5,
+            "max": 68.5,
+            "observed_range": 0.0
+          },
+          "FN": {
+            "min": 22423.0,
+            "max": 22423.0,
+            "observed_range": 0.0
+          },
+          "FP": {
+            "min": 4229.0,
+            "max": 4229.0,
+            "observed_range": 0.0
+          },
+          "HOTA": {
+            "min": 67.6,
+            "max": 67.6,
+            "observed_range": 0.0
+          },
+          "IDF1": {
+            "min": 75.6,
+            "max": 75.6,
+            "observed_range": 0.0
+          },
+          "IDs": {
+            "min": 459.0,
+            "max": 459.0,
+            "observed_range": 0.0
+          },
+          "MOTA": {
+            "min": 75.9,
+            "max": 75.9,
+            "observed_range": 0.0
+          },
+          "Prcn": {
+            "min": 95.5,
+            "max": 95.5,
+            "observed_range": 0.0
+          },
+          "Rcll": {
+            "min": 80.0,
+            "max": 80.0,
+            "observed_range": 0.0
+          }
+        },
+        "throughput": [
+          {
+            "fps": 195.01,
+            "mean_latency_ms": 4.74
+          },
+          {
+            "fps": 195.7,
+            "mean_latency_ms": 4.72
+          },
+          {
+            "fps": 194.73,
+            "mean_latency_ms": 4.74
+          },
+          {
+            "fps": 196.32,
+            "mean_latency_ms": 4.71
+          },
+          {
+            "fps": 194.4,
+            "mean_latency_ms": 4.76
+          },
+          {
+            "fps": 195.98,
+            "mean_latency_ms": 4.71
+          }
+        ]
+      },
+      "formal": [
+        {
+          "run_dir": "results/training_eval_contract/wg_mamba_whole_graph_s.gt1/formal-20260919T084225Z-r01",
+          "identity_sha256": "dc01652b8a89ac0139ef03f8a6b4d85368143dc4783dd40c6860378c71d389d1",
+          "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+          "metrics": {
+            "AssA": 67.1,
+            "DetA": 68.5,
+            "FN": 22423.0,
+            "FP": 4229.0,
+            "HOTA": 67.6,
+            "IDF1": 75.6,
+            "IDs": 459.0,
+            "MOTA": 75.9,
+            "Prcn": 95.5,
+            "Rcll": 80.0
+          },
+          "throughput": {
+            "fps": 196.24,
+            "mean_latency_ms": 4.71
+          },
+          "mot_md5": {
+            "MOT17-02-SDP": "aff22021cd1efc438335f16f95c6cd1a",
+            "MOT17-04-SDP": "07541c8963342c80b271876b88c6b89d",
+            "MOT17-05-SDP": "0b3a36fe2678acf2743ef4097696abcc",
+            "MOT17-09-SDP": "ac6443d6db785624deb118db0985af2a",
+            "MOT17-10-SDP": "3ba0d801e4c3505046a08762e117248f",
+            "MOT17-11-SDP": "6be366d0641146beb9a4568e1cb6205f",
+            "MOT17-13-SDP": "56270603926973f240c518f9199348ee"
+          },
+          "wall_seconds": 40.84,
+          "matches_repeat_output": true
+        },
+        {
+          "run_dir": "results/training_eval_contract/wg_mamba_whole_graph_s.gt1/formal-20260919T084225Z-r02",
+          "identity_sha256": "dc01652b8a89ac0139ef03f8a6b4d85368143dc4783dd40c6860378c71d389d1",
+          "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+          "metrics": {
+            "AssA": 67.1,
+            "DetA": 68.5,
+            "FN": 22423.0,
+            "FP": 4229.0,
+            "HOTA": 67.6,
+            "IDF1": 75.6,
+            "IDs": 459.0,
+            "MOTA": 75.9,
+            "Prcn": 95.5,
+            "Rcll": 80.0
+          },
+          "throughput": {
+            "fps": 195.61,
+            "mean_latency_ms": 4.72
+          },
+          "mot_md5": {
+            "MOT17-02-SDP": "aff22021cd1efc438335f16f95c6cd1a",
+            "MOT17-04-SDP": "07541c8963342c80b271876b88c6b89d",
+            "MOT17-05-SDP": "0b3a36fe2678acf2743ef4097696abcc",
+            "MOT17-09-SDP": "ac6443d6db785624deb118db0985af2a",
+            "MOT17-10-SDP": "3ba0d801e4c3505046a08762e117248f",
+            "MOT17-11-SDP": "6be366d0641146beb9a4568e1cb6205f",
+            "MOT17-13-SDP": "56270603926973f240c518f9199348ee"
+          },
+          "wall_seconds": 40.974,
+          "matches_repeat_output": true
+        },
+        {
+          "run_dir": "results/training_eval_contract/wg_mamba_whole_graph_s.gt1/formal-20260919T084225Z-r03",
+          "identity_sha256": "dc01652b8a89ac0139ef03f8a6b4d85368143dc4783dd40c6860378c71d389d1",
+          "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+          "metrics": {
+            "AssA": 67.1,
+            "DetA": 68.5,
+            "FN": 22423.0,
+            "FP": 4229.0,
+            "HOTA": 67.6,
+            "IDF1": 75.6,
+            "IDs": 459.0,
+            "MOTA": 75.9,
+            "Prcn": 95.5,
+            "Rcll": 80.0
+          },
+          "throughput": {
+            "fps": 196.53,
+            "mean_latency_ms": 4.7
+          },
+          "mot_md5": {
+            "MOT17-02-SDP": "aff22021cd1efc438335f16f95c6cd1a",
+            "MOT17-04-SDP": "07541c8963342c80b271876b88c6b89d",
+            "MOT17-05-SDP": "0b3a36fe2678acf2743ef4097696abcc",
+            "MOT17-09-SDP": "ac6443d6db785624deb118db0985af2a",
+            "MOT17-10-SDP": "3ba0d801e4c3505046a08762e117248f",
+            "MOT17-11-SDP": "6be366d0641146beb9a4568e1cb6205f",
+            "MOT17-13-SDP": "56270603926973f240c518f9199348ee"
+          },
+          "wall_seconds": 40.719,
+          "matches_repeat_output": true
+        }
+      ],
+      "formal_distinct_outputs_per_sequence": {
+        "MOT17-02-SDP": 1,
+        "MOT17-04-SDP": 1,
+        "MOT17-05-SDP": 1,
+        "MOT17-09-SDP": 1,
+        "MOT17-10-SDP": 1,
+        "MOT17-11-SDP": 1,
+        "MOT17-13-SDP": 1
+      }
+    },
+    "wg:mamba_whole_graph:s.gt2_plain": {
+      "recipe_id": "wg:mamba_whole_graph:s.gt2_plain",
+      "run_root": "results/training_eval_contract/wg_mamba_whole_graph_s.gt2_plain",
+      "identity_sha256": "dea276e3f4d049bfe0c21c4968e40076b6944c10945049216230fa61a872fd3f",
+      "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+      "environment": {
+        "build_dir": "/home/ray/developer/ai/saccade/build",
+        "cuda_visible_devices": null,
+        "driver": "616.92",
+        "gpu": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+        "hostname": "DESKTOP-0FLA6SQ",
+        "native_extensions": {
+          "libsaccade_scan_plugin.so": "8bd0e60e2b78cd01a5697c143498a95b3c514f3b44af4c4f2af30a07cb90af71",
+          "saccade_cheb_gr_online_ext.cpython-312-x86_64-linux-gnu.so": "ef7284891a4900768589ccf437be987564333c20cbb87e063322ea51bea5f553",
+          "saccade_eval_ext.cpython-312-x86_64-linux-gnu.so": "e52d7ea14a336a612f432b35b95c6d914ce5526cf87d03190d892fd7278aefa5",
+          "saccade_media_ext.cpython-312-x86_64-linux-gnu.so": "0adb35e47471bf933e951170f26d8d916f86ff7d5cfad7a2fc55b1e32911d977",
+          "saccade_perception_ext.cpython-312-x86_64-linux-gnu.so": "86a76e872b34001a85d4c3b56d1b2b55d8b8365d9b6a70f5ce9dcef67c02831e",
+          "saccade_tracking_ext.cpython-312-x86_64-linux-gnu.so": "2f29d374432960793d8c6279064ddd68e18adc8a04b1ecf16c459839b71d49f4"
+        },
+        "packages": {
+          "motmetrics": "1.4.0",
+          "numpy": "2.4.4",
+          "nvidia-cuda-runtime": "13.0.96",
+          "nvidia-dali-cuda120": "2.0.0",
+          "nvidia-nvjpeg-cu12": "12.4.0.76",
+          "nvidia-nvjpeg2k-cu12": "0.10.0.49",
+          "tensorrt_cu12": "10.16.1.11",
+          "tensorrt_cu12_bindings": "10.16.1.11",
+          "tensorrt_cu12_libs": "10.16.1.11",
+          "torch": "2.11.0",
+          "torch_build": "2.11.0+cu130",
+          "torchvision": "0.26.0"
+        },
+        "platform": "Linux-6.18.33.1-microsoft-standard-WSL2-x86_64-with-glibc2.44",
+        "python": "3.12.13",
+        "trackeval": {
+          "dirty": false,
+          "git_tree": "b0ba3a0c5b82550156c6afd1ca949fe5ec155161",
+          "root": "third_party/TrackEval"
+        }
+      },
+      "complete": true,
+      "reasons": [],
+      "repeat": {
+        "report": "results/training_eval_contract/wg_mamba_whole_graph_s.gt2_plain/repeat-20260919T084431Z-report.json",
+        "n_runs": 6,
+        "distinct_outputs_per_sequence": {
+          "MOT17-02-SDP": 1,
+          "MOT17-04-SDP": 1,
+          "MOT17-05-SDP": 1,
+          "MOT17-09-SDP": 1,
+          "MOT17-10-SDP": 1,
+          "MOT17-11-SDP": 1,
+          "MOT17-13-SDP": 1
+        },
+        "metric_observed_range": {
+          "AssA": {
+            "min": 66.5,
+            "max": 66.5,
+            "observed_range": 0.0
+          },
+          "DetA": {
+            "min": 69.7,
+            "max": 69.7,
+            "observed_range": 0.0
+          },
+          "FN": {
+            "min": 20209.0,
+            "max": 20209.0,
+            "observed_range": 0.0
+          },
+          "FP": {
+            "min": 4885.0,
+            "max": 4885.0,
+            "observed_range": 0.0
+          },
+          "HOTA": {
+            "min": 67.9,
+            "max": 67.9,
+            "observed_range": 0.0
+          },
+          "IDF1": {
+            "min": 75.8,
+            "max": 75.8,
+            "observed_range": 0.0
+          },
+          "IDs": {
+            "min": 529.0,
+            "max": 529.0,
+            "observed_range": 0.0
+          },
+          "MOTA": {
+            "min": 77.2,
+            "max": 77.2,
+            "observed_range": 0.0
+          },
+          "Prcn": {
+            "min": 95.0,
+            "max": 95.0,
+            "observed_range": 0.0
+          },
+          "Rcll": {
+            "min": 82.0,
+            "max": 82.0,
+            "observed_range": 0.0
+          }
+        },
+        "throughput": [
+          {
+            "fps": 197.35,
+            "mean_latency_ms": 4.68
+          },
+          {
+            "fps": 196.26,
+            "mean_latency_ms": 4.71
+          },
+          {
+            "fps": 196.74,
+            "mean_latency_ms": 4.69
+          },
+          {
+            "fps": 196.65,
+            "mean_latency_ms": 4.69
+          },
+          {
+            "fps": 196.65,
+            "mean_latency_ms": 4.7
+          },
+          {
+            "fps": 196.59,
+            "mean_latency_ms": 4.7
+          }
+        ]
+      },
+      "formal": [
+        {
+          "run_dir": "results/training_eval_contract/wg_mamba_whole_graph_s.gt2_plain/formal-20260919T084841Z-r01",
+          "identity_sha256": "dea276e3f4d049bfe0c21c4968e40076b6944c10945049216230fa61a872fd3f",
+          "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+          "metrics": {
+            "AssA": 66.5,
+            "DetA": 69.7,
+            "FN": 20209.0,
+            "FP": 4885.0,
+            "HOTA": 67.9,
+            "IDF1": 75.8,
+            "IDs": 529.0,
+            "MOTA": 77.2,
+            "Prcn": 95.0,
+            "Rcll": 82.0
+          },
+          "throughput": {
+            "fps": 197.01,
+            "mean_latency_ms": 4.69
+          },
+          "mot_md5": {
+            "MOT17-02-SDP": "37236351e5aea6e72307db5f8378d800",
+            "MOT17-04-SDP": "52c2a01c34619436f1540a0b93f8a004",
+            "MOT17-05-SDP": "7eb12e13ab7a723296240f959880c8e6",
+            "MOT17-09-SDP": "9bf461a6f6f52a4f18094047ee048103",
+            "MOT17-10-SDP": "0d6a56eded29f84fe2b452b754574ec9",
+            "MOT17-11-SDP": "0570e5007f5a1ca1b52462d9d08b5f9e",
+            "MOT17-13-SDP": "9630946a4f110966dd2e4b94e94c3c6c"
+          },
+          "wall_seconds": 40.677,
+          "matches_repeat_output": true
+        },
+        {
+          "run_dir": "results/training_eval_contract/wg_mamba_whole_graph_s.gt2_plain/formal-20260919T084841Z-r02",
+          "identity_sha256": "dea276e3f4d049bfe0c21c4968e40076b6944c10945049216230fa61a872fd3f",
+          "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+          "metrics": {
+            "AssA": 66.5,
+            "DetA": 69.7,
+            "FN": 20209.0,
+            "FP": 4885.0,
+            "HOTA": 67.9,
+            "IDF1": 75.8,
+            "IDs": 529.0,
+            "MOTA": 77.2,
+            "Prcn": 95.0,
+            "Rcll": 82.0
+          },
+          "throughput": {
+            "fps": 197.29,
+            "mean_latency_ms": 4.68
+          },
+          "mot_md5": {
+            "MOT17-02-SDP": "37236351e5aea6e72307db5f8378d800",
+            "MOT17-04-SDP": "52c2a01c34619436f1540a0b93f8a004",
+            "MOT17-05-SDP": "7eb12e13ab7a723296240f959880c8e6",
+            "MOT17-09-SDP": "9bf461a6f6f52a4f18094047ee048103",
+            "MOT17-10-SDP": "0d6a56eded29f84fe2b452b754574ec9",
+            "MOT17-11-SDP": "0570e5007f5a1ca1b52462d9d08b5f9e",
+            "MOT17-13-SDP": "9630946a4f110966dd2e4b94e94c3c6c"
+          },
+          "wall_seconds": 40.635,
+          "matches_repeat_output": true
+        },
+        {
+          "run_dir": "results/training_eval_contract/wg_mamba_whole_graph_s.gt2_plain/formal-20260919T084841Z-r03",
+          "identity_sha256": "dea276e3f4d049bfe0c21c4968e40076b6944c10945049216230fa61a872fd3f",
+          "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+          "metrics": {
+            "AssA": 66.5,
+            "DetA": 69.7,
+            "FN": 20209.0,
+            "FP": 4885.0,
+            "HOTA": 67.9,
+            "IDF1": 75.8,
+            "IDs": 529.0,
+            "MOTA": 77.2,
+            "Prcn": 95.0,
+            "Rcll": 82.0
+          },
+          "throughput": {
+            "fps": 197.21,
+            "mean_latency_ms": 4.68
+          },
+          "mot_md5": {
+            "MOT17-02-SDP": "37236351e5aea6e72307db5f8378d800",
+            "MOT17-04-SDP": "52c2a01c34619436f1540a0b93f8a004",
+            "MOT17-05-SDP": "7eb12e13ab7a723296240f959880c8e6",
+            "MOT17-09-SDP": "9bf461a6f6f52a4f18094047ee048103",
+            "MOT17-10-SDP": "0d6a56eded29f84fe2b452b754574ec9",
+            "MOT17-11-SDP": "0570e5007f5a1ca1b52462d9d08b5f9e",
+            "MOT17-13-SDP": "9630946a4f110966dd2e4b94e94c3c6c"
+          },
+          "wall_seconds": 40.717,
+          "matches_repeat_output": true
+        }
+      ],
+      "formal_distinct_outputs_per_sequence": {
+        "MOT17-02-SDP": 1,
+        "MOT17-04-SDP": 1,
+        "MOT17-05-SDP": 1,
+        "MOT17-09-SDP": 1,
+        "MOT17-10-SDP": 1,
+        "MOT17-11-SDP": 1,
+        "MOT17-13-SDP": 1
+      }
+    },
+    "wg:mamba_whole_graph_m/ckpt-head:m.distill": {
+      "recipe_id": "wg:mamba_whole_graph_m/ckpt-head:m.distill",
+      "run_root": "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.distill",
+      "identity_sha256": "b6bacb199a4c14f7cd8f02f845a28b1dd1e8a34b46657630889708e4afa9ec49",
+      "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+      "environment": {
+        "build_dir": "/home/ray/developer/ai/saccade/build",
+        "cuda_visible_devices": null,
+        "driver": "616.92",
+        "gpu": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+        "hostname": "DESKTOP-0FLA6SQ",
+        "native_extensions": {
+          "libsaccade_scan_plugin.so": "8bd0e60e2b78cd01a5697c143498a95b3c514f3b44af4c4f2af30a07cb90af71",
+          "saccade_cheb_gr_online_ext.cpython-312-x86_64-linux-gnu.so": "ef7284891a4900768589ccf437be987564333c20cbb87e063322ea51bea5f553",
+          "saccade_eval_ext.cpython-312-x86_64-linux-gnu.so": "e52d7ea14a336a612f432b35b95c6d914ce5526cf87d03190d892fd7278aefa5",
+          "saccade_media_ext.cpython-312-x86_64-linux-gnu.so": "0adb35e47471bf933e951170f26d8d916f86ff7d5cfad7a2fc55b1e32911d977",
+          "saccade_perception_ext.cpython-312-x86_64-linux-gnu.so": "86a76e872b34001a85d4c3b56d1b2b55d8b8365d9b6a70f5ce9dcef67c02831e",
+          "saccade_tracking_ext.cpython-312-x86_64-linux-gnu.so": "2f29d374432960793d8c6279064ddd68e18adc8a04b1ecf16c459839b71d49f4"
+        },
+        "packages": {
+          "motmetrics": "1.4.0",
+          "numpy": "2.4.4",
+          "nvidia-cuda-runtime": "13.0.96",
+          "nvidia-dali-cuda120": "2.0.0",
+          "nvidia-nvjpeg-cu12": "12.4.0.76",
+          "nvidia-nvjpeg2k-cu12": "0.10.0.49",
+          "tensorrt_cu12": "10.16.1.11",
+          "tensorrt_cu12_bindings": "10.16.1.11",
+          "tensorrt_cu12_libs": "10.16.1.11",
+          "torch": "2.11.0",
+          "torch_build": "2.11.0+cu130",
+          "torchvision": "0.26.0"
+        },
+        "platform": "Linux-6.18.33.1-microsoft-standard-WSL2-x86_64-with-glibc2.44",
+        "python": "3.12.13",
+        "trackeval": {
+          "dirty": false,
+          "git_tree": "b0ba3a0c5b82550156c6afd1ca949fe5ec155161",
+          "root": "third_party/TrackEval"
+        }
+      },
+      "complete": true,
+      "reasons": [],
+      "repeat": {
+        "report": "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.distill/repeat-20260919T085046Z-report.json",
+        "n_runs": 6,
+        "distinct_outputs_per_sequence": {
+          "MOT17-02-SDP": 1,
+          "MOT17-04-SDP": 1,
+          "MOT17-05-SDP": 1,
+          "MOT17-09-SDP": 1,
+          "MOT17-10-SDP": 1,
+          "MOT17-11-SDP": 1,
+          "MOT17-13-SDP": 1
+        },
+        "metric_observed_range": {
+          "AssA": {
+            "min": 62.4,
+            "max": 62.4,
+            "observed_range": 0.0
+          },
+          "DetA": {
+            "min": 66.4,
+            "max": 66.4,
+            "observed_range": 0.0
+          },
+          "FN": {
+            "min": 20813.0,
+            "max": 20813.0,
+            "observed_range": 0.0
+          },
+          "FP": {
+            "min": 6836.0,
+            "max": 6836.0,
+            "observed_range": 0.0
+          },
+          "HOTA": {
+            "min": 64.2,
+            "max": 64.2,
+            "observed_range": 0.0
+          },
+          "IDF1": {
+            "min": 72.5,
+            "max": 72.5,
+            "observed_range": 0.0
+          },
+          "IDs": {
+            "min": 645.0,
+            "max": 645.0,
+            "observed_range": 0.0
+          },
+          "MOTA": {
+            "min": 74.8,
+            "max": 74.8,
+            "observed_range": 0.0
+          },
+          "Prcn": {
+            "min": 93.0,
+            "max": 93.0,
+            "observed_range": 0.0
+          },
+          "Rcll": {
+            "min": 81.5,
+            "max": 81.5,
+            "observed_range": 0.0
+          }
+        },
+        "throughput": [
+          {
+            "fps": 169.37,
+            "mean_latency_ms": 5.5
+          },
+          {
+            "fps": 169.06,
+            "mean_latency_ms": 5.51
+          },
+          {
+            "fps": 169.32,
+            "mean_latency_ms": 5.5
+          },
+          {
+            "fps": 169.41,
+            "mean_latency_ms": 5.5
+          },
+          {
+            "fps": 168.66,
+            "mean_latency_ms": 5.52
+          },
+          {
+            "fps": 169.78,
+            "mean_latency_ms": 5.48
+          }
+        ]
+      },
+      "formal": [
+        {
+          "run_dir": "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.distill/formal-20260919T085525Z-r01",
+          "identity_sha256": "b6bacb199a4c14f7cd8f02f845a28b1dd1e8a34b46657630889708e4afa9ec49",
+          "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+          "metrics": {
+            "AssA": 62.4,
+            "DetA": 66.4,
+            "FN": 20813.0,
+            "FP": 6836.0,
+            "HOTA": 64.2,
+            "IDF1": 72.5,
+            "IDs": 645.0,
+            "MOTA": 74.8,
+            "Prcn": 93.0,
+            "Rcll": 81.5
+          },
+          "throughput": {
+            "fps": 168.86,
+            "mean_latency_ms": 5.51
+          },
+          "mot_md5": {
+            "MOT17-02-SDP": "de7d55e4dd8943cbcba0b7e876fc13cf",
+            "MOT17-04-SDP": "eeb4ad7292258e39a0f65b4b640e4db3",
+            "MOT17-05-SDP": "8622a2ec2a948a2062b8143e0281c56f",
+            "MOT17-09-SDP": "4383885c054b7fce83dd05e1eb45701d",
+            "MOT17-10-SDP": "03994d018525a1b79c26dfcab2a413ad",
+            "MOT17-11-SDP": "3f000ddc96ab76ce0be864f6cbfae2c3",
+            "MOT17-13-SDP": "890923f16c4dd327d4adbcbc530d761a"
+          },
+          "wall_seconds": 45.384,
+          "matches_repeat_output": true
+        },
+        {
+          "run_dir": "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.distill/formal-20260919T085525Z-r02",
+          "identity_sha256": "b6bacb199a4c14f7cd8f02f845a28b1dd1e8a34b46657630889708e4afa9ec49",
+          "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+          "metrics": {
+            "AssA": 62.4,
+            "DetA": 66.4,
+            "FN": 20813.0,
+            "FP": 6836.0,
+            "HOTA": 64.2,
+            "IDF1": 72.5,
+            "IDs": 645.0,
+            "MOTA": 74.8,
+            "Prcn": 93.0,
+            "Rcll": 81.5
+          },
+          "throughput": {
+            "fps": 168.88,
+            "mean_latency_ms": 5.52
+          },
+          "mot_md5": {
+            "MOT17-02-SDP": "de7d55e4dd8943cbcba0b7e876fc13cf",
+            "MOT17-04-SDP": "eeb4ad7292258e39a0f65b4b640e4db3",
+            "MOT17-05-SDP": "8622a2ec2a948a2062b8143e0281c56f",
+            "MOT17-09-SDP": "4383885c054b7fce83dd05e1eb45701d",
+            "MOT17-10-SDP": "03994d018525a1b79c26dfcab2a413ad",
+            "MOT17-11-SDP": "3f000ddc96ab76ce0be864f6cbfae2c3",
+            "MOT17-13-SDP": "890923f16c4dd327d4adbcbc530d761a"
+          },
+          "wall_seconds": 45.561,
+          "matches_repeat_output": true
+        },
+        {
+          "run_dir": "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.distill/formal-20260919T085525Z-r03",
+          "identity_sha256": "b6bacb199a4c14f7cd8f02f845a28b1dd1e8a34b46657630889708e4afa9ec49",
+          "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+          "metrics": {
+            "AssA": 62.4,
+            "DetA": 66.4,
+            "FN": 20813.0,
+            "FP": 6836.0,
+            "HOTA": 64.2,
+            "IDF1": 72.5,
+            "IDs": 645.0,
+            "MOTA": 74.8,
+            "Prcn": 93.0,
+            "Rcll": 81.5
+          },
+          "throughput": {
+            "fps": 169.8,
+            "mean_latency_ms": 5.48
+          },
+          "mot_md5": {
+            "MOT17-02-SDP": "de7d55e4dd8943cbcba0b7e876fc13cf",
+            "MOT17-04-SDP": "eeb4ad7292258e39a0f65b4b640e4db3",
+            "MOT17-05-SDP": "8622a2ec2a948a2062b8143e0281c56f",
+            "MOT17-09-SDP": "4383885c054b7fce83dd05e1eb45701d",
+            "MOT17-10-SDP": "03994d018525a1b79c26dfcab2a413ad",
+            "MOT17-11-SDP": "3f000ddc96ab76ce0be864f6cbfae2c3",
+            "MOT17-13-SDP": "890923f16c4dd327d4adbcbc530d761a"
+          },
+          "wall_seconds": 45.281,
+          "matches_repeat_output": true
+        }
+      ],
+      "formal_distinct_outputs_per_sequence": {
+        "MOT17-02-SDP": 1,
+        "MOT17-04-SDP": 1,
+        "MOT17-05-SDP": 1,
+        "MOT17-09-SDP": 1,
+        "MOT17-10-SDP": 1,
+        "MOT17-11-SDP": 1,
+        "MOT17-13-SDP": 1
+      }
+    },
+    "wg:mamba_whole_graph_m/ckpt-head:m.gt1": {
+      "recipe_id": "wg:mamba_whole_graph_m/ckpt-head:m.gt1",
+      "run_root": "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.gt1",
+      "identity_sha256": "2a83e5cc8cbe29d5273ffaa67345a740cc33bd6b5a968a87178367773376816d",
+      "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+      "environment": {
+        "build_dir": "/home/ray/developer/ai/saccade/build",
+        "cuda_visible_devices": null,
+        "driver": "616.92",
+        "gpu": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+        "hostname": "DESKTOP-0FLA6SQ",
+        "native_extensions": {
+          "libsaccade_scan_plugin.so": "8bd0e60e2b78cd01a5697c143498a95b3c514f3b44af4c4f2af30a07cb90af71",
+          "saccade_cheb_gr_online_ext.cpython-312-x86_64-linux-gnu.so": "ef7284891a4900768589ccf437be987564333c20cbb87e063322ea51bea5f553",
+          "saccade_eval_ext.cpython-312-x86_64-linux-gnu.so": "e52d7ea14a336a612f432b35b95c6d914ce5526cf87d03190d892fd7278aefa5",
+          "saccade_media_ext.cpython-312-x86_64-linux-gnu.so": "0adb35e47471bf933e951170f26d8d916f86ff7d5cfad7a2fc55b1e32911d977",
+          "saccade_perception_ext.cpython-312-x86_64-linux-gnu.so": "86a76e872b34001a85d4c3b56d1b2b55d8b8365d9b6a70f5ce9dcef67c02831e",
+          "saccade_tracking_ext.cpython-312-x86_64-linux-gnu.so": "2f29d374432960793d8c6279064ddd68e18adc8a04b1ecf16c459839b71d49f4"
+        },
+        "packages": {
+          "motmetrics": "1.4.0",
+          "numpy": "2.4.4",
+          "nvidia-cuda-runtime": "13.0.96",
+          "nvidia-dali-cuda120": "2.0.0",
+          "nvidia-nvjpeg-cu12": "12.4.0.76",
+          "nvidia-nvjpeg2k-cu12": "0.10.0.49",
+          "tensorrt_cu12": "10.16.1.11",
+          "tensorrt_cu12_bindings": "10.16.1.11",
+          "tensorrt_cu12_libs": "10.16.1.11",
+          "torch": "2.11.0",
+          "torch_build": "2.11.0+cu130",
+          "torchvision": "0.26.0"
+        },
+        "platform": "Linux-6.18.33.1-microsoft-standard-WSL2-x86_64-with-glibc2.44",
+        "python": "3.12.13",
+        "trackeval": {
+          "dirty": false,
+          "git_tree": "b0ba3a0c5b82550156c6afd1ca949fe5ec155161",
+          "root": "third_party/TrackEval"
+        }
+      },
+      "complete": true,
+      "reasons": [],
+      "repeat": {
+        "report": "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.gt1/repeat-20260919T085745Z-report.json",
+        "n_runs": 6,
+        "distinct_outputs_per_sequence": {
+          "MOT17-02-SDP": 1,
+          "MOT17-04-SDP": 1,
+          "MOT17-05-SDP": 1,
+          "MOT17-09-SDP": 1,
+          "MOT17-10-SDP": 1,
+          "MOT17-11-SDP": 1,
+          "MOT17-13-SDP": 1
+        },
+        "metric_observed_range": {
+          "AssA": {
+            "min": 70.8,
+            "max": 70.8,
+            "observed_range": 0.0
+          },
+          "DetA": {
+            "min": 73.5,
+            "max": 73.5,
+            "observed_range": 0.0
+          },
+          "FN": {
+            "min": 19025.0,
+            "max": 19025.0,
+            "observed_range": 0.0
+          },
+          "FP": {
+            "min": 2517.0,
+            "max": 2517.0,
+            "observed_range": 0.0
+          },
+          "HOTA": {
+            "min": 72.0,
+            "max": 72.0,
+            "observed_range": 0.0
+          },
+          "IDF1": {
+            "min": 79.1,
+            "max": 79.1,
+            "observed_range": 0.0
+          },
+          "IDs": {
+            "min": 353.0,
+            "max": 353.0,
+            "observed_range": 0.0
+          },
+          "MOTA": {
+            "min": 80.5,
+            "max": 80.5,
+            "observed_range": 0.0
+          },
+          "Prcn": {
+            "min": 97.4,
+            "max": 97.4,
+            "observed_range": 0.0
+          },
+          "Rcll": {
+            "min": 83.1,
+            "max": 83.1,
+            "observed_range": 0.0
+          }
+        },
+        "throughput": [
+          {
+            "fps": 170.74,
+            "mean_latency_ms": 5.46
+          },
+          {
+            "fps": 170.31,
+            "mean_latency_ms": 5.48
+          },
+          {
+            "fps": 170.57,
+            "mean_latency_ms": 5.47
+          },
+          {
+            "fps": 170.57,
+            "mean_latency_ms": 5.47
+          },
+          {
+            "fps": 169.93,
+            "mean_latency_ms": 5.5
+          },
+          {
+            "fps": 169.79,
+            "mean_latency_ms": 5.49
+          }
+        ]
+      },
+      "formal": [
+        {
+          "run_dir": "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.gt1/formal-20260919T090223Z-r01",
+          "identity_sha256": "2a83e5cc8cbe29d5273ffaa67345a740cc33bd6b5a968a87178367773376816d",
+          "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+          "metrics": {
+            "AssA": 70.8,
+            "DetA": 73.5,
+            "FN": 19025.0,
+            "FP": 2517.0,
+            "HOTA": 72.0,
+            "IDF1": 79.1,
+            "IDs": 353.0,
+            "MOTA": 80.5,
+            "Prcn": 97.4,
+            "Rcll": 83.1
+          },
+          "throughput": {
+            "fps": 169.97,
+            "mean_latency_ms": 5.49
+          },
+          "mot_md5": {
+            "MOT17-02-SDP": "a769e9e9891267bb3b6595fde13ee761",
+            "MOT17-04-SDP": "f6d7674dac20055dc934141843d93d76",
+            "MOT17-05-SDP": "5c49dc8ee41c08313d2cad3c3593c372",
+            "MOT17-09-SDP": "bb6757eed071dedce33a52162782e10c",
+            "MOT17-10-SDP": "8fd35af4536acdb10fad2f31ca37c470",
+            "MOT17-11-SDP": "86b774451d0d14316f36084b39a2e49c",
+            "MOT17-13-SDP": "91ccb9055e1d25f99bbbf6c4f18d0f05"
+          },
+          "wall_seconds": 45.223,
+          "matches_repeat_output": true
+        },
+        {
+          "run_dir": "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.gt1/formal-20260919T090223Z-r02",
+          "identity_sha256": "2a83e5cc8cbe29d5273ffaa67345a740cc33bd6b5a968a87178367773376816d",
+          "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+          "metrics": {
+            "AssA": 70.8,
+            "DetA": 73.5,
+            "FN": 19025.0,
+            "FP": 2517.0,
+            "HOTA": 72.0,
+            "IDF1": 79.1,
+            "IDs": 353.0,
+            "MOTA": 80.5,
+            "Prcn": 97.4,
+            "Rcll": 83.1
+          },
+          "throughput": {
+            "fps": 170.07,
+            "mean_latency_ms": 5.49
+          },
+          "mot_md5": {
+            "MOT17-02-SDP": "a769e9e9891267bb3b6595fde13ee761",
+            "MOT17-04-SDP": "f6d7674dac20055dc934141843d93d76",
+            "MOT17-05-SDP": "5c49dc8ee41c08313d2cad3c3593c372",
+            "MOT17-09-SDP": "bb6757eed071dedce33a52162782e10c",
+            "MOT17-10-SDP": "8fd35af4536acdb10fad2f31ca37c470",
+            "MOT17-11-SDP": "86b774451d0d14316f36084b39a2e49c",
+            "MOT17-13-SDP": "91ccb9055e1d25f99bbbf6c4f18d0f05"
+          },
+          "wall_seconds": 45.239,
+          "matches_repeat_output": true
+        },
+        {
+          "run_dir": "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.gt1/formal-20260919T090223Z-r03",
+          "identity_sha256": "2a83e5cc8cbe29d5273ffaa67345a740cc33bd6b5a968a87178367773376816d",
+          "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+          "metrics": {
+            "AssA": 70.8,
+            "DetA": 73.5,
+            "FN": 19025.0,
+            "FP": 2517.0,
+            "HOTA": 72.0,
+            "IDF1": 79.1,
+            "IDs": 353.0,
+            "MOTA": 80.5,
+            "Prcn": 97.4,
+            "Rcll": 83.1
+          },
+          "throughput": {
+            "fps": 170.08,
+            "mean_latency_ms": 5.48
+          },
+          "mot_md5": {
+            "MOT17-02-SDP": "a769e9e9891267bb3b6595fde13ee761",
+            "MOT17-04-SDP": "f6d7674dac20055dc934141843d93d76",
+            "MOT17-05-SDP": "5c49dc8ee41c08313d2cad3c3593c372",
+            "MOT17-09-SDP": "bb6757eed071dedce33a52162782e10c",
+            "MOT17-10-SDP": "8fd35af4536acdb10fad2f31ca37c470",
+            "MOT17-11-SDP": "86b774451d0d14316f36084b39a2e49c",
+            "MOT17-13-SDP": "91ccb9055e1d25f99bbbf6c4f18d0f05"
+          },
+          "wall_seconds": 45.3,
+          "matches_repeat_output": true
+        }
+      ],
+      "formal_distinct_outputs_per_sequence": {
+        "MOT17-02-SDP": 1,
+        "MOT17-04-SDP": 1,
+        "MOT17-05-SDP": 1,
+        "MOT17-09-SDP": 1,
+        "MOT17-10-SDP": 1,
+        "MOT17-11-SDP": 1,
+        "MOT17-13-SDP": 1
+      }
+    },
+    "wg:mamba_whole_graph_m/ckpt-head:m.gt2_plain": {
+      "recipe_id": "wg:mamba_whole_graph_m/ckpt-head:m.gt2_plain",
+      "run_root": "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.gt2_plain",
+      "identity_sha256": "4bf156faee5c0a5c3b45dd9e86ebc03eec10f9ffef2c9c6fbe0fe15bc2fede88",
+      "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+      "environment": {
+        "build_dir": "/home/ray/developer/ai/saccade/build",
+        "cuda_visible_devices": null,
+        "driver": "616.92",
+        "gpu": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+        "hostname": "DESKTOP-0FLA6SQ",
+        "native_extensions": {
+          "libsaccade_scan_plugin.so": "8bd0e60e2b78cd01a5697c143498a95b3c514f3b44af4c4f2af30a07cb90af71",
+          "saccade_cheb_gr_online_ext.cpython-312-x86_64-linux-gnu.so": "ef7284891a4900768589ccf437be987564333c20cbb87e063322ea51bea5f553",
+          "saccade_eval_ext.cpython-312-x86_64-linux-gnu.so": "e52d7ea14a336a612f432b35b95c6d914ce5526cf87d03190d892fd7278aefa5",
+          "saccade_media_ext.cpython-312-x86_64-linux-gnu.so": "0adb35e47471bf933e951170f26d8d916f86ff7d5cfad7a2fc55b1e32911d977",
+          "saccade_perception_ext.cpython-312-x86_64-linux-gnu.so": "86a76e872b34001a85d4c3b56d1b2b55d8b8365d9b6a70f5ce9dcef67c02831e",
+          "saccade_tracking_ext.cpython-312-x86_64-linux-gnu.so": "2f29d374432960793d8c6279064ddd68e18adc8a04b1ecf16c459839b71d49f4"
+        },
+        "packages": {
+          "motmetrics": "1.4.0",
+          "numpy": "2.4.4",
+          "nvidia-cuda-runtime": "13.0.96",
+          "nvidia-dali-cuda120": "2.0.0",
+          "nvidia-nvjpeg-cu12": "12.4.0.76",
+          "nvidia-nvjpeg2k-cu12": "0.10.0.49",
+          "tensorrt_cu12": "10.16.1.11",
+          "tensorrt_cu12_bindings": "10.16.1.11",
+          "tensorrt_cu12_libs": "10.16.1.11",
+          "torch": "2.11.0",
+          "torch_build": "2.11.0+cu130",
+          "torchvision": "0.26.0"
+        },
+        "platform": "Linux-6.18.33.1-microsoft-standard-WSL2-x86_64-with-glibc2.44",
+        "python": "3.12.13",
+        "trackeval": {
+          "dirty": false,
+          "git_tree": "b0ba3a0c5b82550156c6afd1ca949fe5ec155161",
+          "root": "third_party/TrackEval"
+        }
+      },
+      "complete": true,
+      "reasons": [],
+      "repeat": {
+        "report": "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.gt2_plain/repeat-20260919T090442Z-report.json",
+        "n_runs": 6,
+        "distinct_outputs_per_sequence": {
+          "MOT17-02-SDP": 1,
+          "MOT17-04-SDP": 1,
+          "MOT17-05-SDP": 1,
+          "MOT17-09-SDP": 1,
+          "MOT17-10-SDP": 1,
+          "MOT17-11-SDP": 1,
+          "MOT17-13-SDP": 1
+        },
+        "metric_observed_range": {
+          "AssA": {
+            "min": 71.3,
+            "max": 71.3,
+            "observed_range": 0.0
+          },
+          "DetA": {
+            "min": 74.4,
+            "max": 74.4,
+            "observed_range": 0.0
+          },
+          "FN": {
+            "min": 18087.0,
+            "max": 18087.0,
+            "observed_range": 0.0
+          },
+          "FP": {
+            "min": 2590.0,
+            "max": 2590.0,
+            "observed_range": 0.0
+          },
+          "HOTA": {
+            "min": 72.8,
+            "max": 72.8,
+            "observed_range": 0.0
+          },
+          "IDF1": {
+            "min": 79.8,
+            "max": 79.8,
+            "observed_range": 0.0
+          },
+          "IDs": {
+            "min": 368.0,
+            "max": 368.0,
+            "observed_range": 0.0
+          },
+          "MOTA": {
+            "min": 81.3,
+            "max": 81.3,
+            "observed_range": 0.0
+          },
+          "Prcn": {
+            "min": 97.3,
+            "max": 97.3,
+            "observed_range": 0.0
+          },
+          "Rcll": {
+            "min": 83.9,
+            "max": 83.9,
+            "observed_range": 0.0
+          }
+        },
+        "throughput": [
+          {
+            "fps": 170.75,
+            "mean_latency_ms": 5.47
+          },
+          {
+            "fps": 171.28,
+            "mean_latency_ms": 5.45
+          },
+          {
+            "fps": 171.16,
+            "mean_latency_ms": 5.45
+          },
+          {
+            "fps": 170.63,
+            "mean_latency_ms": 5.47
+          },
+          {
+            "fps": 171.06,
+            "mean_latency_ms": 5.45
+          },
+          {
+            "fps": 170.84,
+            "mean_latency_ms": 5.46
+          }
+        ]
+      },
+      "formal": [
+        {
+          "run_dir": "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.gt2_plain/formal-20260919T090919Z-r01",
+          "identity_sha256": "4bf156faee5c0a5c3b45dd9e86ebc03eec10f9ffef2c9c6fbe0fe15bc2fede88",
+          "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+          "metrics": {
+            "AssA": 71.3,
+            "DetA": 74.4,
+            "FN": 18087.0,
+            "FP": 2590.0,
+            "HOTA": 72.8,
+            "IDF1": 79.8,
+            "IDs": 368.0,
+            "MOTA": 81.3,
+            "Prcn": 97.3,
+            "Rcll": 83.9
+          },
+          "throughput": {
+            "fps": 170.13,
+            "mean_latency_ms": 5.48
+          },
+          "mot_md5": {
+            "MOT17-02-SDP": "8c59cecec01e39a0b15f7085e72600d7",
+            "MOT17-04-SDP": "df7dc9b722665610248e014ac8c65e4e",
+            "MOT17-05-SDP": "34698f7006baaab002745cbe9e0a25e7",
+            "MOT17-09-SDP": "a2256d6c95844cf69c874b8d2c2dc4a9",
+            "MOT17-10-SDP": "74c5e235713e8dec493f6856a34eb657",
+            "MOT17-11-SDP": "4fe64cb8bf36ff560ae25e67b8214033",
+            "MOT17-13-SDP": "0437386119ea458893c7756f54cbc9e1"
+          },
+          "wall_seconds": 45.242,
+          "matches_repeat_output": true
+        },
+        {
+          "run_dir": "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.gt2_plain/formal-20260919T090919Z-r02",
+          "identity_sha256": "4bf156faee5c0a5c3b45dd9e86ebc03eec10f9ffef2c9c6fbe0fe15bc2fede88",
+          "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+          "metrics": {
+            "AssA": 71.3,
+            "DetA": 74.4,
+            "FN": 18087.0,
+            "FP": 2590.0,
+            "HOTA": 72.8,
+            "IDF1": 79.8,
+            "IDs": 368.0,
+            "MOTA": 81.3,
+            "Prcn": 97.3,
+            "Rcll": 83.9
+          },
+          "throughput": {
+            "fps": 170.75,
+            "mean_latency_ms": 5.47
+          },
+          "mot_md5": {
+            "MOT17-02-SDP": "8c59cecec01e39a0b15f7085e72600d7",
+            "MOT17-04-SDP": "df7dc9b722665610248e014ac8c65e4e",
+            "MOT17-05-SDP": "34698f7006baaab002745cbe9e0a25e7",
+            "MOT17-09-SDP": "a2256d6c95844cf69c874b8d2c2dc4a9",
+            "MOT17-10-SDP": "74c5e235713e8dec493f6856a34eb657",
+            "MOT17-11-SDP": "4fe64cb8bf36ff560ae25e67b8214033",
+            "MOT17-13-SDP": "0437386119ea458893c7756f54cbc9e1"
+          },
+          "wall_seconds": 45.147,
+          "matches_repeat_output": true
+        },
+        {
+          "run_dir": "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.gt2_plain/formal-20260919T090919Z-r03",
+          "identity_sha256": "4bf156faee5c0a5c3b45dd9e86ebc03eec10f9ffef2c9c6fbe0fe15bc2fede88",
+          "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+          "metrics": {
+            "AssA": 71.3,
+            "DetA": 74.4,
+            "FN": 18087.0,
+            "FP": 2590.0,
+            "HOTA": 72.8,
+            "IDF1": 79.8,
+            "IDs": 368.0,
+            "MOTA": 81.3,
+            "Prcn": 97.3,
+            "Rcll": 83.9
+          },
+          "throughput": {
+            "fps": 170.9,
+            "mean_latency_ms": 5.46
+          },
+          "mot_md5": {
+            "MOT17-02-SDP": "8c59cecec01e39a0b15f7085e72600d7",
+            "MOT17-04-SDP": "df7dc9b722665610248e014ac8c65e4e",
+            "MOT17-05-SDP": "34698f7006baaab002745cbe9e0a25e7",
+            "MOT17-09-SDP": "a2256d6c95844cf69c874b8d2c2dc4a9",
+            "MOT17-10-SDP": "74c5e235713e8dec493f6856a34eb657",
+            "MOT17-11-SDP": "4fe64cb8bf36ff560ae25e67b8214033",
+            "MOT17-13-SDP": "0437386119ea458893c7756f54cbc9e1"
+          },
+          "wall_seconds": 44.974,
+          "matches_repeat_output": true
+        }
+      ],
+      "formal_distinct_outputs_per_sequence": {
+        "MOT17-02-SDP": 1,
+        "MOT17-04-SDP": 1,
+        "MOT17-05-SDP": 1,
+        "MOT17-09-SDP": 1,
+        "MOT17-10-SDP": 1,
+        "MOT17-11-SDP": 1,
+        "MOT17-13-SDP": 1
+      }
+    },
+    "wg:mamba_whole_graph:s.implicit_s42": {
+      "recipe_id": "wg:mamba_whole_graph:s.implicit_s42",
+      "run_root": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s42",
+      "identity_sha256": "2681e05b082f6b9dcff2939b77a8246583b5a230b00eed6f79d9df539c2f4bd8",
+      "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+      "environment": {
+        "build_dir": "/home/ray/developer/ai/saccade/build",
+        "cuda_visible_devices": null,
+        "driver": "616.92",
+        "gpu": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+        "hostname": "DESKTOP-0FLA6SQ",
+        "native_extensions": {
+          "libsaccade_scan_plugin.so": "8bd0e60e2b78cd01a5697c143498a95b3c514f3b44af4c4f2af30a07cb90af71",
+          "saccade_cheb_gr_online_ext.cpython-312-x86_64-linux-gnu.so": "ef7284891a4900768589ccf437be987564333c20cbb87e063322ea51bea5f553",
+          "saccade_eval_ext.cpython-312-x86_64-linux-gnu.so": "e52d7ea14a336a612f432b35b95c6d914ce5526cf87d03190d892fd7278aefa5",
+          "saccade_media_ext.cpython-312-x86_64-linux-gnu.so": "0adb35e47471bf933e951170f26d8d916f86ff7d5cfad7a2fc55b1e32911d977",
+          "saccade_perception_ext.cpython-312-x86_64-linux-gnu.so": "86a76e872b34001a85d4c3b56d1b2b55d8b8365d9b6a70f5ce9dcef67c02831e",
+          "saccade_tracking_ext.cpython-312-x86_64-linux-gnu.so": "2f29d374432960793d8c6279064ddd68e18adc8a04b1ecf16c459839b71d49f4"
+        },
+        "packages": {
+          "motmetrics": "1.4.0",
+          "numpy": "2.4.4",
+          "nvidia-cuda-runtime": "13.0.96",
+          "nvidia-dali-cuda120": "2.0.0",
+          "nvidia-nvjpeg-cu12": "12.4.0.76",
+          "nvidia-nvjpeg2k-cu12": "0.10.0.49",
+          "tensorrt_cu12": "10.16.1.11",
+          "tensorrt_cu12_bindings": "10.16.1.11",
+          "tensorrt_cu12_libs": "10.16.1.11",
+          "torch": "2.11.0",
+          "torch_build": "2.11.0+cu130",
+          "torchvision": "0.26.0"
+        },
+        "platform": "Linux-6.18.33.1-microsoft-standard-WSL2-x86_64-with-glibc2.44",
+        "python": "3.12.13",
+        "trackeval": {
+          "dirty": false,
+          "git_tree": "b0ba3a0c5b82550156c6afd1ca949fe5ec155161",
+          "root": "third_party/TrackEval"
+        }
+      },
+      "complete": true,
+      "reasons": [],
+      "repeat": {
+        "report": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s42/repeat-20260919T091138Z-report.json",
+        "n_runs": 6,
+        "distinct_outputs_per_sequence": {
+          "MOT17-02-SDP": 1,
+          "MOT17-04-SDP": 1,
+          "MOT17-05-SDP": 1,
+          "MOT17-09-SDP": 1,
+          "MOT17-10-SDP": 1,
+          "MOT17-11-SDP": 1,
+          "MOT17-13-SDP": 1
+        },
+        "metric_observed_range": {
+          "AssA": {
+            "min": 67.7,
+            "max": 67.7,
+            "observed_range": 0.0
+          },
+          "DetA": {
+            "min": 69.9,
+            "max": 69.9,
+            "observed_range": 0.0
+          },
+          "FN": {
+            "min": 20161.0,
+            "max": 20161.0,
+            "observed_range": 0.0
+          },
+          "FP": {
+            "min": 4246.0,
+            "max": 4246.0,
+            "observed_range": 0.0
+          },
+          "HOTA": {
+            "min": 68.7,
+            "max": 68.7,
+            "observed_range": 0.0
+          },
+          "IDF1": {
+            "min": 76.7,
+            "max": 76.7,
+            "observed_range": 0.0
+          },
+          "IDs": {
+            "min": 512.0,
+            "max": 512.0,
+            "observed_range": 0.0
+          },
+          "MOTA": {
+            "min": 77.8,
+            "max": 77.8,
+            "observed_range": 0.0
+          },
+          "Prcn": {
+            "min": 95.6,
+            "max": 95.6,
+            "observed_range": 0.0
+          },
+          "Rcll": {
+            "min": 82.0,
+            "max": 82.0,
+            "observed_range": 0.0
+          }
+        },
+        "throughput": [
+          {
+            "fps": 196.71,
+            "mean_latency_ms": 4.69
+          },
+          {
+            "fps": 197.4,
+            "mean_latency_ms": 4.67
+          },
+          {
+            "fps": 197.04,
+            "mean_latency_ms": 4.69
+          },
+          {
+            "fps": 196.4,
+            "mean_latency_ms": 4.71
+          },
+          {
+            "fps": 198.05,
+            "mean_latency_ms": 4.65
+          },
+          {
+            "fps": 196.0,
+            "mean_latency_ms": 4.72
+          }
+        ]
+      },
+      "formal": [
+        {
+          "run_dir": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s42/formal-20260919T091548Z-r01",
+          "identity_sha256": "2681e05b082f6b9dcff2939b77a8246583b5a230b00eed6f79d9df539c2f4bd8",
+          "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+          "metrics": {
+            "AssA": 67.7,
+            "DetA": 69.9,
+            "FN": 20161.0,
+            "FP": 4246.0,
+            "HOTA": 68.7,
+            "IDF1": 76.7,
+            "IDs": 512.0,
+            "MOTA": 77.8,
+            "Prcn": 95.6,
+            "Rcll": 82.0
+          },
+          "throughput": {
+            "fps": 197.51,
+            "mean_latency_ms": 4.67
+          },
+          "mot_md5": {
+            "MOT17-02-SDP": "75c8fd03d520beacf302222b4bfba58a",
+            "MOT17-04-SDP": "947f1c2336d7e568ab207c7e240835e2",
+            "MOT17-05-SDP": "ffde3d50830cb247d19383eda2fbed9a",
+            "MOT17-09-SDP": "af2c09231931ee5e734bdf82dc1b3656",
+            "MOT17-10-SDP": "79dcb01a53939b04b3788c811b68770a",
+            "MOT17-11-SDP": "7afabcca4ef7e2ec937ed2c0efc18e12",
+            "MOT17-13-SDP": "a61ae4e97f126ab18f229d15e5ede8d8"
+          },
+          "wall_seconds": 40.585,
+          "matches_repeat_output": true
+        },
+        {
+          "run_dir": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s42/formal-20260919T091548Z-r02",
+          "identity_sha256": "2681e05b082f6b9dcff2939b77a8246583b5a230b00eed6f79d9df539c2f4bd8",
+          "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+          "metrics": {
+            "AssA": 67.7,
+            "DetA": 69.9,
+            "FN": 20161.0,
+            "FP": 4246.0,
+            "HOTA": 68.7,
+            "IDF1": 76.7,
+            "IDs": 512.0,
+            "MOTA": 77.8,
+            "Prcn": 95.6,
+            "Rcll": 82.0
+          },
+          "throughput": {
+            "fps": 197.18,
+            "mean_latency_ms": 4.68
+          },
+          "mot_md5": {
+            "MOT17-02-SDP": "75c8fd03d520beacf302222b4bfba58a",
+            "MOT17-04-SDP": "947f1c2336d7e568ab207c7e240835e2",
+            "MOT17-05-SDP": "ffde3d50830cb247d19383eda2fbed9a",
+            "MOT17-09-SDP": "af2c09231931ee5e734bdf82dc1b3656",
+            "MOT17-10-SDP": "79dcb01a53939b04b3788c811b68770a",
+            "MOT17-11-SDP": "7afabcca4ef7e2ec937ed2c0efc18e12",
+            "MOT17-13-SDP": "a61ae4e97f126ab18f229d15e5ede8d8"
+          },
+          "wall_seconds": 40.648,
+          "matches_repeat_output": true
+        },
+        {
+          "run_dir": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s42/formal-20260919T091548Z-r03",
+          "identity_sha256": "2681e05b082f6b9dcff2939b77a8246583b5a230b00eed6f79d9df539c2f4bd8",
+          "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+          "metrics": {
+            "AssA": 67.7,
+            "DetA": 69.9,
+            "FN": 20161.0,
+            "FP": 4246.0,
+            "HOTA": 68.7,
+            "IDF1": 76.7,
+            "IDs": 512.0,
+            "MOTA": 77.8,
+            "Prcn": 95.6,
+            "Rcll": 82.0
+          },
+          "throughput": {
+            "fps": 196.49,
+            "mean_latency_ms": 4.7
+          },
+          "mot_md5": {
+            "MOT17-02-SDP": "75c8fd03d520beacf302222b4bfba58a",
+            "MOT17-04-SDP": "947f1c2336d7e568ab207c7e240835e2",
+            "MOT17-05-SDP": "ffde3d50830cb247d19383eda2fbed9a",
+            "MOT17-09-SDP": "af2c09231931ee5e734bdf82dc1b3656",
+            "MOT17-10-SDP": "79dcb01a53939b04b3788c811b68770a",
+            "MOT17-11-SDP": "7afabcca4ef7e2ec937ed2c0efc18e12",
+            "MOT17-13-SDP": "a61ae4e97f126ab18f229d15e5ede8d8"
+          },
+          "wall_seconds": 40.756,
+          "matches_repeat_output": true
+        }
+      ],
+      "formal_distinct_outputs_per_sequence": {
+        "MOT17-02-SDP": 1,
+        "MOT17-04-SDP": 1,
+        "MOT17-05-SDP": 1,
+        "MOT17-09-SDP": 1,
+        "MOT17-10-SDP": 1,
+        "MOT17-11-SDP": 1,
+        "MOT17-13-SDP": 1
+      }
+    },
+    "wg:mamba_whole_graph:s.t3t1_phase_b": {
+      "recipe_id": "wg:mamba_whole_graph:s.t3t1_phase_b",
+      "run_root": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_phase_b",
+      "identity_sha256": "cf7cd3a241c2f5655f767b77c7d7f8b338b75cd68402103ccb176d3920bb4bad",
+      "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+      "environment": {
+        "build_dir": "/home/ray/developer/ai/saccade/build",
+        "cuda_visible_devices": null,
+        "driver": "616.92",
+        "gpu": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+        "hostname": "DESKTOP-0FLA6SQ",
+        "native_extensions": {
+          "libsaccade_scan_plugin.so": "8bd0e60e2b78cd01a5697c143498a95b3c514f3b44af4c4f2af30a07cb90af71",
+          "saccade_cheb_gr_online_ext.cpython-312-x86_64-linux-gnu.so": "ef7284891a4900768589ccf437be987564333c20cbb87e063322ea51bea5f553",
+          "saccade_eval_ext.cpython-312-x86_64-linux-gnu.so": "e52d7ea14a336a612f432b35b95c6d914ce5526cf87d03190d892fd7278aefa5",
+          "saccade_media_ext.cpython-312-x86_64-linux-gnu.so": "0adb35e47471bf933e951170f26d8d916f86ff7d5cfad7a2fc55b1e32911d977",
+          "saccade_perception_ext.cpython-312-x86_64-linux-gnu.so": "86a76e872b34001a85d4c3b56d1b2b55d8b8365d9b6a70f5ce9dcef67c02831e",
+          "saccade_tracking_ext.cpython-312-x86_64-linux-gnu.so": "2f29d374432960793d8c6279064ddd68e18adc8a04b1ecf16c459839b71d49f4"
+        },
+        "packages": {
+          "motmetrics": "1.4.0",
+          "numpy": "2.4.4",
+          "nvidia-cuda-runtime": "13.0.96",
+          "nvidia-dali-cuda120": "2.0.0",
+          "nvidia-nvjpeg-cu12": "12.4.0.76",
+          "nvidia-nvjpeg2k-cu12": "0.10.0.49",
+          "tensorrt_cu12": "10.16.1.11",
+          "tensorrt_cu12_bindings": "10.16.1.11",
+          "tensorrt_cu12_libs": "10.16.1.11",
+          "torch": "2.11.0",
+          "torch_build": "2.11.0+cu130",
+          "torchvision": "0.26.0"
+        },
+        "platform": "Linux-6.18.33.1-microsoft-standard-WSL2-x86_64-with-glibc2.44",
+        "python": "3.12.13",
+        "trackeval": {
+          "dirty": false,
+          "git_tree": "b0ba3a0c5b82550156c6afd1ca949fe5ec155161",
+          "root": "third_party/TrackEval"
+        }
+      },
+      "complete": true,
+      "reasons": [],
+      "repeat": {
+        "report": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_phase_b/repeat-20260919T091753Z-report.json",
+        "n_runs": 6,
+        "distinct_outputs_per_sequence": {
+          "MOT17-02-SDP": 1,
+          "MOT17-04-SDP": 1,
+          "MOT17-05-SDP": 1,
+          "MOT17-09-SDP": 1,
+          "MOT17-10-SDP": 1,
+          "MOT17-11-SDP": 1,
+          "MOT17-13-SDP": 1
+        },
+        "metric_observed_range": {
+          "AssA": {
+            "min": 69.9,
+            "max": 69.9,
+            "observed_range": 0.0
+          },
+          "DetA": {
+            "min": 70.2,
+            "max": 70.2,
+            "observed_range": 0.0
+          },
+          "FN": {
+            "min": 20940.0,
+            "max": 20940.0,
+            "observed_range": 0.0
+          },
+          "FP": {
+            "min": 3471.0,
+            "max": 3471.0,
+            "observed_range": 0.0
+          },
+          "HOTA": {
+            "min": 70.0,
+            "max": 70.0,
+            "observed_range": 0.0
+          },
+          "IDF1": {
+            "min": 78.3,
+            "max": 78.3,
+            "observed_range": 0.0
+          },
+          "IDs": {
+            "min": 429.0,
+            "max": 429.0,
+            "observed_range": 0.0
+          },
+          "MOTA": {
+            "min": 77.9,
+            "max": 77.9,
+            "observed_range": 0.0
+          },
+          "Prcn": {
+            "min": 96.3,
+            "max": 96.3,
+            "observed_range": 0.0
+          },
+          "Rcll": {
+            "min": 81.4,
+            "max": 81.4,
+            "observed_range": 0.0
+          }
+        },
+        "throughput": [
+          {
+            "fps": 197.74,
+            "mean_latency_ms": 4.67
+          },
+          {
+            "fps": 197.22,
+            "mean_latency_ms": 4.68
+          },
+          {
+            "fps": 197.66,
+            "mean_latency_ms": 4.67
+          },
+          {
+            "fps": 196.96,
+            "mean_latency_ms": 4.69
+          },
+          {
+            "fps": 197.66,
+            "mean_latency_ms": 4.67
+          },
+          {
+            "fps": 197.26,
+            "mean_latency_ms": 4.68
+          }
+        ]
+      },
+      "formal": [
+        {
+          "run_dir": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_phase_b/formal-20260919T092203Z-r01",
+          "identity_sha256": "cf7cd3a241c2f5655f767b77c7d7f8b338b75cd68402103ccb176d3920bb4bad",
+          "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+          "metrics": {
+            "AssA": 69.9,
+            "DetA": 70.2,
+            "FN": 20940.0,
+            "FP": 3471.0,
+            "HOTA": 70.0,
+            "IDF1": 78.3,
+            "IDs": 429.0,
+            "MOTA": 77.9,
+            "Prcn": 96.3,
+            "Rcll": 81.4
+          },
+          "throughput": {
+            "fps": 196.84,
+            "mean_latency_ms": 4.69
+          },
+          "mot_md5": {
+            "MOT17-02-SDP": "c6346a93a0a0b38b5477a4296f861bae",
+            "MOT17-04-SDP": "244283ebcc7d785320cdf1f94f7d4f5e",
+            "MOT17-05-SDP": "8307db47fba264184b65084e8833420a",
+            "MOT17-09-SDP": "3c449e5e7bbc94706b00e71c81f5515d",
+            "MOT17-10-SDP": "3258ecc5eae50a94f36f91acb6e41476",
+            "MOT17-11-SDP": "e00a04725aa2bf7606a2cb467669807f",
+            "MOT17-13-SDP": "b938dfec8f4c792d685ca2fea2f79141"
+          },
+          "wall_seconds": 40.66,
+          "matches_repeat_output": true
+        },
+        {
+          "run_dir": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_phase_b/formal-20260919T092203Z-r02",
+          "identity_sha256": "cf7cd3a241c2f5655f767b77c7d7f8b338b75cd68402103ccb176d3920bb4bad",
+          "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+          "metrics": {
+            "AssA": 69.9,
+            "DetA": 70.2,
+            "FN": 20940.0,
+            "FP": 3471.0,
+            "HOTA": 70.0,
+            "IDF1": 78.3,
+            "IDs": 429.0,
+            "MOTA": 77.9,
+            "Prcn": 96.3,
+            "Rcll": 81.4
+          },
+          "throughput": {
+            "fps": 196.69,
+            "mean_latency_ms": 4.7
+          },
+          "mot_md5": {
+            "MOT17-02-SDP": "c6346a93a0a0b38b5477a4296f861bae",
+            "MOT17-04-SDP": "244283ebcc7d785320cdf1f94f7d4f5e",
+            "MOT17-05-SDP": "8307db47fba264184b65084e8833420a",
+            "MOT17-09-SDP": "3c449e5e7bbc94706b00e71c81f5515d",
+            "MOT17-10-SDP": "3258ecc5eae50a94f36f91acb6e41476",
+            "MOT17-11-SDP": "e00a04725aa2bf7606a2cb467669807f",
+            "MOT17-13-SDP": "b938dfec8f4c792d685ca2fea2f79141"
+          },
+          "wall_seconds": 40.723,
+          "matches_repeat_output": true
+        },
+        {
+          "run_dir": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_phase_b/formal-20260919T092203Z-r03",
+          "identity_sha256": "cf7cd3a241c2f5655f767b77c7d7f8b338b75cd68402103ccb176d3920bb4bad",
+          "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+          "metrics": {
+            "AssA": 69.9,
+            "DetA": 70.2,
+            "FN": 20940.0,
+            "FP": 3471.0,
+            "HOTA": 70.0,
+            "IDF1": 78.3,
+            "IDs": 429.0,
+            "MOTA": 77.9,
+            "Prcn": 96.3,
+            "Rcll": 81.4
+          },
+          "throughput": {
+            "fps": 197.77,
+            "mean_latency_ms": 4.67
+          },
+          "mot_md5": {
+            "MOT17-02-SDP": "c6346a93a0a0b38b5477a4296f861bae",
+            "MOT17-04-SDP": "244283ebcc7d785320cdf1f94f7d4f5e",
+            "MOT17-05-SDP": "8307db47fba264184b65084e8833420a",
+            "MOT17-09-SDP": "3c449e5e7bbc94706b00e71c81f5515d",
+            "MOT17-10-SDP": "3258ecc5eae50a94f36f91acb6e41476",
+            "MOT17-11-SDP": "e00a04725aa2bf7606a2cb467669807f",
+            "MOT17-13-SDP": "b938dfec8f4c792d685ca2fea2f79141"
+          },
+          "wall_seconds": 40.547,
+          "matches_repeat_output": true
+        }
+      ],
+      "formal_distinct_outputs_per_sequence": {
+        "MOT17-02-SDP": 1,
+        "MOT17-04-SDP": 1,
+        "MOT17-05-SDP": 1,
+        "MOT17-09-SDP": 1,
+        "MOT17-10-SDP": 1,
+        "MOT17-11-SDP": 1,
+        "MOT17-13-SDP": 1
+      }
+    },
+    "wg:mamba_whole_graph:s.implicit_s43": {
+      "recipe_id": "wg:mamba_whole_graph:s.implicit_s43",
+      "run_root": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s43",
+      "identity_sha256": "d1c343ec872ef43b733707abbfa2ab040cbd776b78a3bf7f6ce04c3b50746644",
+      "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+      "environment": {
+        "build_dir": "/home/ray/developer/ai/saccade/build",
+        "cuda_visible_devices": null,
+        "driver": "616.92",
+        "gpu": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+        "hostname": "DESKTOP-0FLA6SQ",
+        "native_extensions": {
+          "libsaccade_scan_plugin.so": "8bd0e60e2b78cd01a5697c143498a95b3c514f3b44af4c4f2af30a07cb90af71",
+          "saccade_cheb_gr_online_ext.cpython-312-x86_64-linux-gnu.so": "ef7284891a4900768589ccf437be987564333c20cbb87e063322ea51bea5f553",
+          "saccade_eval_ext.cpython-312-x86_64-linux-gnu.so": "e52d7ea14a336a612f432b35b95c6d914ce5526cf87d03190d892fd7278aefa5",
+          "saccade_media_ext.cpython-312-x86_64-linux-gnu.so": "0adb35e47471bf933e951170f26d8d916f86ff7d5cfad7a2fc55b1e32911d977",
+          "saccade_perception_ext.cpython-312-x86_64-linux-gnu.so": "86a76e872b34001a85d4c3b56d1b2b55d8b8365d9b6a70f5ce9dcef67c02831e",
+          "saccade_tracking_ext.cpython-312-x86_64-linux-gnu.so": "2f29d374432960793d8c6279064ddd68e18adc8a04b1ecf16c459839b71d49f4"
+        },
+        "packages": {
+          "motmetrics": "1.4.0",
+          "numpy": "2.4.4",
+          "nvidia-cuda-runtime": "13.0.96",
+          "nvidia-dali-cuda120": "2.0.0",
+          "nvidia-nvjpeg-cu12": "12.4.0.76",
+          "nvidia-nvjpeg2k-cu12": "0.10.0.49",
+          "tensorrt_cu12": "10.16.1.11",
+          "tensorrt_cu12_bindings": "10.16.1.11",
+          "tensorrt_cu12_libs": "10.16.1.11",
+          "torch": "2.11.0",
+          "torch_build": "2.11.0+cu130",
+          "torchvision": "0.26.0"
+        },
+        "platform": "Linux-6.18.33.1-microsoft-standard-WSL2-x86_64-with-glibc2.44",
+        "python": "3.12.13",
+        "trackeval": {
+          "dirty": false,
+          "git_tree": "b0ba3a0c5b82550156c6afd1ca949fe5ec155161",
+          "root": "third_party/TrackEval"
+        }
+      },
+      "complete": true,
+      "reasons": [],
+      "repeat": {
+        "report": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s43/repeat-20260919T092408Z-report.json",
+        "n_runs": 6,
+        "distinct_outputs_per_sequence": {
+          "MOT17-02-SDP": 1,
+          "MOT17-04-SDP": 1,
+          "MOT17-05-SDP": 1,
+          "MOT17-09-SDP": 1,
+          "MOT17-10-SDP": 1,
+          "MOT17-11-SDP": 1,
+          "MOT17-13-SDP": 1
+        },
+        "metric_observed_range": {
+          "AssA": {
+            "min": 68.5,
+            "max": 68.5,
+            "observed_range": 0.0
+          },
+          "DetA": {
+            "min": 69.7,
+            "max": 69.7,
+            "observed_range": 0.0
+          },
+          "FN": {
+            "min": 19797.0,
+            "max": 19797.0,
+            "observed_range": 0.0
+          },
+          "FP": {
+            "min": 5004.0,
+            "max": 5004.0,
+            "observed_range": 0.0
+          },
+          "HOTA": {
+            "min": 68.9,
+            "max": 68.9,
+            "observed_range": 0.0
+          },
+          "IDF1": {
+            "min": 76.9,
+            "max": 76.9,
+            "observed_range": 0.0
+          },
+          "IDs": {
+            "min": 539.0,
+            "max": 539.0,
+            "observed_range": 0.0
+          },
+          "MOTA": {
+            "min": 77.4,
+            "max": 77.4,
+            "observed_range": 0.0
+          },
+          "Prcn": {
+            "min": 94.9,
+            "max": 94.9,
+            "observed_range": 0.0
+          },
+          "Rcll": {
+            "min": 82.4,
+            "max": 82.4,
+            "observed_range": 0.0
+          }
+        },
+        "throughput": [
+          {
+            "fps": 197.5,
+            "mean_latency_ms": 4.67
+          },
+          {
+            "fps": 196.47,
+            "mean_latency_ms": 4.7
+          },
+          {
+            "fps": 195.23,
+            "mean_latency_ms": 4.74
+          },
+          {
+            "fps": 196.83,
+            "mean_latency_ms": 4.69
+          },
+          {
+            "fps": 196.68,
+            "mean_latency_ms": 4.69
+          },
+          {
+            "fps": 196.3,
+            "mean_latency_ms": 4.7
+          }
+        ]
+      },
+      "formal": [
+        {
+          "run_dir": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s43/formal-20260919T092819Z-r01",
+          "identity_sha256": "d1c343ec872ef43b733707abbfa2ab040cbd776b78a3bf7f6ce04c3b50746644",
+          "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+          "metrics": {
+            "AssA": 68.5,
+            "DetA": 69.7,
+            "FN": 19797.0,
+            "FP": 5004.0,
+            "HOTA": 68.9,
+            "IDF1": 76.9,
+            "IDs": 539.0,
+            "MOTA": 77.4,
+            "Prcn": 94.9,
+            "Rcll": 82.4
+          },
+          "throughput": {
+            "fps": 196.26,
+            "mean_latency_ms": 4.71
+          },
+          "mot_md5": {
+            "MOT17-02-SDP": "86e8e9792a3f1a9405c8a12f340f5d68",
+            "MOT17-04-SDP": "03ab240ccafe8d51eb88484561cfeabe",
+            "MOT17-05-SDP": "cda73895e068bd29dedab2fbdd9a576c",
+            "MOT17-09-SDP": "86f3349db116c6e06f10f9ca52958e3d",
+            "MOT17-10-SDP": "91e7c53b566e304bf32d388048fbd68b",
+            "MOT17-11-SDP": "c6a74806936ddb3eb21251d88b6904c2",
+            "MOT17-13-SDP": "83973414446a0f4c7fd918277ae489d1"
+          },
+          "wall_seconds": 40.773,
+          "matches_repeat_output": true
+        },
+        {
+          "run_dir": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s43/formal-20260919T092819Z-r02",
+          "identity_sha256": "d1c343ec872ef43b733707abbfa2ab040cbd776b78a3bf7f6ce04c3b50746644",
+          "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+          "metrics": {
+            "AssA": 68.5,
+            "DetA": 69.7,
+            "FN": 19797.0,
+            "FP": 5004.0,
+            "HOTA": 68.9,
+            "IDF1": 76.9,
+            "IDs": 539.0,
+            "MOTA": 77.4,
+            "Prcn": 94.9,
+            "Rcll": 82.4
+          },
+          "throughput": {
+            "fps": 195.52,
+            "mean_latency_ms": 4.73
+          },
+          "mot_md5": {
+            "MOT17-02-SDP": "86e8e9792a3f1a9405c8a12f340f5d68",
+            "MOT17-04-SDP": "03ab240ccafe8d51eb88484561cfeabe",
+            "MOT17-05-SDP": "cda73895e068bd29dedab2fbdd9a576c",
+            "MOT17-09-SDP": "86f3349db116c6e06f10f9ca52958e3d",
+            "MOT17-10-SDP": "91e7c53b566e304bf32d388048fbd68b",
+            "MOT17-11-SDP": "c6a74806936ddb3eb21251d88b6904c2",
+            "MOT17-13-SDP": "83973414446a0f4c7fd918277ae489d1"
+          },
+          "wall_seconds": 41.075,
+          "matches_repeat_output": true
+        },
+        {
+          "run_dir": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s43/formal-20260919T092819Z-r03",
+          "identity_sha256": "d1c343ec872ef43b733707abbfa2ab040cbd776b78a3bf7f6ce04c3b50746644",
+          "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+          "metrics": {
+            "AssA": 68.5,
+            "DetA": 69.7,
+            "FN": 19797.0,
+            "FP": 5004.0,
+            "HOTA": 68.9,
+            "IDF1": 76.9,
+            "IDs": 539.0,
+            "MOTA": 77.4,
+            "Prcn": 94.9,
+            "Rcll": 82.4
+          },
+          "throughput": {
+            "fps": 196.91,
+            "mean_latency_ms": 4.69
+          },
+          "mot_md5": {
+            "MOT17-02-SDP": "86e8e9792a3f1a9405c8a12f340f5d68",
+            "MOT17-04-SDP": "03ab240ccafe8d51eb88484561cfeabe",
+            "MOT17-05-SDP": "cda73895e068bd29dedab2fbdd9a576c",
+            "MOT17-09-SDP": "86f3349db116c6e06f10f9ca52958e3d",
+            "MOT17-10-SDP": "91e7c53b566e304bf32d388048fbd68b",
+            "MOT17-11-SDP": "c6a74806936ddb3eb21251d88b6904c2",
+            "MOT17-13-SDP": "83973414446a0f4c7fd918277ae489d1"
+          },
+          "wall_seconds": 40.836,
+          "matches_repeat_output": true
+        }
+      ],
+      "formal_distinct_outputs_per_sequence": {
+        "MOT17-02-SDP": 1,
+        "MOT17-04-SDP": 1,
+        "MOT17-05-SDP": 1,
+        "MOT17-09-SDP": 1,
+        "MOT17-10-SDP": 1,
+        "MOT17-11-SDP": 1,
+        "MOT17-13-SDP": 1
+      }
+    },
+    "wg:mamba_whole_graph:s.t3t1_shared_s43": {
+      "recipe_id": "wg:mamba_whole_graph:s.t3t1_shared_s43",
+      "run_root": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s43",
+      "identity_sha256": "2be797390e12e8efc1bf90e392f47a00f2ce586d11694a077179f7c65ded9d6c",
+      "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+      "environment": {
+        "build_dir": "/home/ray/developer/ai/saccade/build",
+        "cuda_visible_devices": null,
+        "driver": "616.92",
+        "gpu": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+        "hostname": "DESKTOP-0FLA6SQ",
+        "native_extensions": {
+          "libsaccade_scan_plugin.so": "8bd0e60e2b78cd01a5697c143498a95b3c514f3b44af4c4f2af30a07cb90af71",
+          "saccade_cheb_gr_online_ext.cpython-312-x86_64-linux-gnu.so": "ef7284891a4900768589ccf437be987564333c20cbb87e063322ea51bea5f553",
+          "saccade_eval_ext.cpython-312-x86_64-linux-gnu.so": "e52d7ea14a336a612f432b35b95c6d914ce5526cf87d03190d892fd7278aefa5",
+          "saccade_media_ext.cpython-312-x86_64-linux-gnu.so": "0adb35e47471bf933e951170f26d8d916f86ff7d5cfad7a2fc55b1e32911d977",
+          "saccade_perception_ext.cpython-312-x86_64-linux-gnu.so": "86a76e872b34001a85d4c3b56d1b2b55d8b8365d9b6a70f5ce9dcef67c02831e",
+          "saccade_tracking_ext.cpython-312-x86_64-linux-gnu.so": "2f29d374432960793d8c6279064ddd68e18adc8a04b1ecf16c459839b71d49f4"
+        },
+        "packages": {
+          "motmetrics": "1.4.0",
+          "numpy": "2.4.4",
+          "nvidia-cuda-runtime": "13.0.96",
+          "nvidia-dali-cuda120": "2.0.0",
+          "nvidia-nvjpeg-cu12": "12.4.0.76",
+          "nvidia-nvjpeg2k-cu12": "0.10.0.49",
+          "tensorrt_cu12": "10.16.1.11",
+          "tensorrt_cu12_bindings": "10.16.1.11",
+          "tensorrt_cu12_libs": "10.16.1.11",
+          "torch": "2.11.0",
+          "torch_build": "2.11.0+cu130",
+          "torchvision": "0.26.0"
+        },
+        "platform": "Linux-6.18.33.1-microsoft-standard-WSL2-x86_64-with-glibc2.44",
+        "python": "3.12.13",
+        "trackeval": {
+          "dirty": false,
+          "git_tree": "b0ba3a0c5b82550156c6afd1ca949fe5ec155161",
+          "root": "third_party/TrackEval"
+        }
+      },
+      "complete": true,
+      "reasons": [],
+      "repeat": {
+        "report": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s43/repeat-20260919T093025Z-report.json",
+        "n_runs": 6,
+        "distinct_outputs_per_sequence": {
+          "MOT17-02-SDP": 1,
+          "MOT17-04-SDP": 1,
+          "MOT17-05-SDP": 1,
+          "MOT17-09-SDP": 1,
+          "MOT17-10-SDP": 1,
+          "MOT17-11-SDP": 1,
+          "MOT17-13-SDP": 1
+        },
+        "metric_observed_range": {
+          "AssA": {
+            "min": 69.0,
+            "max": 69.0,
+            "observed_range": 0.0
+          },
+          "DetA": {
+            "min": 70.6,
+            "max": 70.6,
+            "observed_range": 0.0
+          },
+          "FN": {
+            "min": 20953.0,
+            "max": 20953.0,
+            "observed_range": 0.0
+          },
+          "FP": {
+            "min": 3035.0,
+            "max": 3035.0,
+            "observed_range": 0.0
+          },
+          "HOTA": {
+            "min": 69.7,
+            "max": 69.7,
+            "observed_range": 0.0
+          },
+          "IDF1": {
+            "min": 78.3,
+            "max": 78.3,
+            "observed_range": 0.0
+          },
+          "IDs": {
+            "min": 420.0,
+            "max": 420.0,
+            "observed_range": 0.0
+          },
+          "MOTA": {
+            "min": 78.3,
+            "max": 78.3,
+            "observed_range": 0.0
+          },
+          "Prcn": {
+            "min": 96.8,
+            "max": 96.8,
+            "observed_range": 0.0
+          },
+          "Rcll": {
+            "min": 81.3,
+            "max": 81.3,
+            "observed_range": 0.0
+          }
+        },
+        "throughput": [
+          {
+            "fps": 197.51,
+            "mean_latency_ms": 4.67
+          },
+          {
+            "fps": 197.19,
+            "mean_latency_ms": 4.68
+          },
+          {
+            "fps": 197.72,
+            "mean_latency_ms": 4.67
+          },
+          {
+            "fps": 197.55,
+            "mean_latency_ms": 4.67
+          },
+          {
+            "fps": 196.82,
+            "mean_latency_ms": 4.69
+          },
+          {
+            "fps": 197.05,
+            "mean_latency_ms": 4.68
+          }
+        ]
+      },
+      "formal": [
+        {
+          "run_dir": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s43/formal-20260919T093436Z-r01",
+          "identity_sha256": "2be797390e12e8efc1bf90e392f47a00f2ce586d11694a077179f7c65ded9d6c",
+          "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+          "metrics": {
+            "AssA": 69.0,
+            "DetA": 70.6,
+            "FN": 20953.0,
+            "FP": 3035.0,
+            "HOTA": 69.7,
+            "IDF1": 78.3,
+            "IDs": 420.0,
+            "MOTA": 78.3,
+            "Prcn": 96.8,
+            "Rcll": 81.3
+          },
+          "throughput": {
+            "fps": 197.29,
+            "mean_latency_ms": 4.68
+          },
+          "mot_md5": {
+            "MOT17-02-SDP": "3126ff3d684a50e449b4656171e617be",
+            "MOT17-04-SDP": "1db4940558b6b45a3eb23bf988b29b9e",
+            "MOT17-05-SDP": "acc999c20d58191fccd60173d6853e7c",
+            "MOT17-09-SDP": "1f0516d569a4073d7bca709f5f62485b",
+            "MOT17-10-SDP": "efdcdfec5fcc2c81c33e45c0a0d19e81",
+            "MOT17-11-SDP": "e85290cdda85d2a0c128df0e8c6e97d0",
+            "MOT17-13-SDP": "e425357caf55aaa1bb252038ac22e115"
+          },
+          "wall_seconds": 40.674,
+          "matches_repeat_output": true
+        },
+        {
+          "run_dir": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s43/formal-20260919T093436Z-r02",
+          "identity_sha256": "2be797390e12e8efc1bf90e392f47a00f2ce586d11694a077179f7c65ded9d6c",
+          "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+          "metrics": {
+            "AssA": 69.0,
+            "DetA": 70.6,
+            "FN": 20953.0,
+            "FP": 3035.0,
+            "HOTA": 69.7,
+            "IDF1": 78.3,
+            "IDs": 420.0,
+            "MOTA": 78.3,
+            "Prcn": 96.8,
+            "Rcll": 81.3
+          },
+          "throughput": {
+            "fps": 196.91,
+            "mean_latency_ms": 4.69
+          },
+          "mot_md5": {
+            "MOT17-02-SDP": "3126ff3d684a50e449b4656171e617be",
+            "MOT17-04-SDP": "1db4940558b6b45a3eb23bf988b29b9e",
+            "MOT17-05-SDP": "acc999c20d58191fccd60173d6853e7c",
+            "MOT17-09-SDP": "1f0516d569a4073d7bca709f5f62485b",
+            "MOT17-10-SDP": "efdcdfec5fcc2c81c33e45c0a0d19e81",
+            "MOT17-11-SDP": "e85290cdda85d2a0c128df0e8c6e97d0",
+            "MOT17-13-SDP": "e425357caf55aaa1bb252038ac22e115"
+          },
+          "wall_seconds": 40.782,
+          "matches_repeat_output": true
+        },
+        {
+          "run_dir": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s43/formal-20260919T093436Z-r03",
+          "identity_sha256": "2be797390e12e8efc1bf90e392f47a00f2ce586d11694a077179f7c65ded9d6c",
+          "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+          "metrics": {
+            "AssA": 69.0,
+            "DetA": 70.6,
+            "FN": 20953.0,
+            "FP": 3035.0,
+            "HOTA": 69.7,
+            "IDF1": 78.3,
+            "IDs": 420.0,
+            "MOTA": 78.3,
+            "Prcn": 96.8,
+            "Rcll": 81.3
+          },
+          "throughput": {
+            "fps": 197.27,
+            "mean_latency_ms": 4.68
+          },
+          "mot_md5": {
+            "MOT17-02-SDP": "3126ff3d684a50e449b4656171e617be",
+            "MOT17-04-SDP": "1db4940558b6b45a3eb23bf988b29b9e",
+            "MOT17-05-SDP": "acc999c20d58191fccd60173d6853e7c",
+            "MOT17-09-SDP": "1f0516d569a4073d7bca709f5f62485b",
+            "MOT17-10-SDP": "efdcdfec5fcc2c81c33e45c0a0d19e81",
+            "MOT17-11-SDP": "e85290cdda85d2a0c128df0e8c6e97d0",
+            "MOT17-13-SDP": "e425357caf55aaa1bb252038ac22e115"
+          },
+          "wall_seconds": 40.678,
+          "matches_repeat_output": true
+        }
+      ],
+      "formal_distinct_outputs_per_sequence": {
+        "MOT17-02-SDP": 1,
+        "MOT17-04-SDP": 1,
+        "MOT17-05-SDP": 1,
+        "MOT17-09-SDP": 1,
+        "MOT17-10-SDP": 1,
+        "MOT17-11-SDP": 1,
+        "MOT17-13-SDP": 1
+      }
+    },
+    "wg:mamba_whole_graph:s.implicit_s44": {
+      "recipe_id": "wg:mamba_whole_graph:s.implicit_s44",
+      "run_root": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s44",
+      "identity_sha256": "cc62fed75cd22a64d3c299af1666cc29c891aa04eb12109045fc1f7b3113c098",
+      "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+      "environment": {
+        "build_dir": "/home/ray/developer/ai/saccade/build",
+        "cuda_visible_devices": null,
+        "driver": "616.92",
+        "gpu": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+        "hostname": "DESKTOP-0FLA6SQ",
+        "native_extensions": {
+          "libsaccade_scan_plugin.so": "8bd0e60e2b78cd01a5697c143498a95b3c514f3b44af4c4f2af30a07cb90af71",
+          "saccade_cheb_gr_online_ext.cpython-312-x86_64-linux-gnu.so": "ef7284891a4900768589ccf437be987564333c20cbb87e063322ea51bea5f553",
+          "saccade_eval_ext.cpython-312-x86_64-linux-gnu.so": "e52d7ea14a336a612f432b35b95c6d914ce5526cf87d03190d892fd7278aefa5",
+          "saccade_media_ext.cpython-312-x86_64-linux-gnu.so": "0adb35e47471bf933e951170f26d8d916f86ff7d5cfad7a2fc55b1e32911d977",
+          "saccade_perception_ext.cpython-312-x86_64-linux-gnu.so": "86a76e872b34001a85d4c3b56d1b2b55d8b8365d9b6a70f5ce9dcef67c02831e",
+          "saccade_tracking_ext.cpython-312-x86_64-linux-gnu.so": "2f29d374432960793d8c6279064ddd68e18adc8a04b1ecf16c459839b71d49f4"
+        },
+        "packages": {
+          "motmetrics": "1.4.0",
+          "numpy": "2.4.4",
+          "nvidia-cuda-runtime": "13.0.96",
+          "nvidia-dali-cuda120": "2.0.0",
+          "nvidia-nvjpeg-cu12": "12.4.0.76",
+          "nvidia-nvjpeg2k-cu12": "0.10.0.49",
+          "tensorrt_cu12": "10.16.1.11",
+          "tensorrt_cu12_bindings": "10.16.1.11",
+          "tensorrt_cu12_libs": "10.16.1.11",
+          "torch": "2.11.0",
+          "torch_build": "2.11.0+cu130",
+          "torchvision": "0.26.0"
+        },
+        "platform": "Linux-6.18.33.1-microsoft-standard-WSL2-x86_64-with-glibc2.44",
+        "python": "3.12.13",
+        "trackeval": {
+          "dirty": false,
+          "git_tree": "b0ba3a0c5b82550156c6afd1ca949fe5ec155161",
+          "root": "third_party/TrackEval"
+        }
+      },
+      "complete": true,
+      "reasons": [],
+      "repeat": {
+        "report": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s44/repeat-20260919T093641Z-report.json",
+        "n_runs": 6,
+        "distinct_outputs_per_sequence": {
+          "MOT17-02-SDP": 1,
+          "MOT17-04-SDP": 1,
+          "MOT17-05-SDP": 1,
+          "MOT17-09-SDP": 1,
+          "MOT17-10-SDP": 1,
+          "MOT17-11-SDP": 1,
+          "MOT17-13-SDP": 1
+        },
+        "metric_observed_range": {
+          "AssA": {
+            "min": 67.6,
+            "max": 67.6,
+            "observed_range": 0.0
+          },
+          "DetA": {
+            "min": 69.9,
+            "max": 69.9,
+            "observed_range": 0.0
+          },
+          "FN": {
+            "min": 20025.0,
+            "max": 20025.0,
+            "observed_range": 0.0
+          },
+          "FP": {
+            "min": 4510.0,
+            "max": 4510.0,
+            "observed_range": 0.0
+          },
+          "HOTA": {
+            "min": 68.6,
+            "max": 68.6,
+            "observed_range": 0.0
+          },
+          "IDF1": {
+            "min": 76.5,
+            "max": 76.5,
+            "observed_range": 0.0
+          },
+          "IDs": {
+            "min": 525.0,
+            "max": 525.0,
+            "observed_range": 0.0
+          },
+          "MOTA": {
+            "min": 77.7,
+            "max": 77.7,
+            "observed_range": 0.0
+          },
+          "Prcn": {
+            "min": 95.3,
+            "max": 95.3,
+            "observed_range": 0.0
+          },
+          "Rcll": {
+            "min": 82.2,
+            "max": 82.2,
+            "observed_range": 0.0
+          }
+        },
+        "throughput": [
+          {
+            "fps": 196.61,
+            "mean_latency_ms": 4.7
+          },
+          {
+            "fps": 197.35,
+            "mean_latency_ms": 4.67
+          },
+          {
+            "fps": 196.57,
+            "mean_latency_ms": 4.7
+          },
+          {
+            "fps": 196.62,
+            "mean_latency_ms": 4.69
+          },
+          {
+            "fps": 196.24,
+            "mean_latency_ms": 4.71
+          },
+          {
+            "fps": 196.69,
+            "mean_latency_ms": 4.69
+          }
+        ]
+      },
+      "formal": [
+        {
+          "run_dir": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s44/formal-20260919T094052Z-r01",
+          "identity_sha256": "cc62fed75cd22a64d3c299af1666cc29c891aa04eb12109045fc1f7b3113c098",
+          "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+          "metrics": {
+            "AssA": 67.6,
+            "DetA": 69.9,
+            "FN": 20025.0,
+            "FP": 4510.0,
+            "HOTA": 68.6,
+            "IDF1": 76.5,
+            "IDs": 525.0,
+            "MOTA": 77.7,
+            "Prcn": 95.3,
+            "Rcll": 82.2
+          },
+          "throughput": {
+            "fps": 196.16,
+            "mean_latency_ms": 4.71
+          },
+          "mot_md5": {
+            "MOT17-02-SDP": "60d7e624addb506696691ad093ad768f",
+            "MOT17-04-SDP": "b468f156d1b059143974dec128b62ba9",
+            "MOT17-05-SDP": "5e05f77322e646c7e987b9f480796e34",
+            "MOT17-09-SDP": "3e1d2be7faa4dae7ada44921a9bfaa79",
+            "MOT17-10-SDP": "de4a2caf3a4a2565d562fcd19f2f23a9",
+            "MOT17-11-SDP": "07d9788e62d52e57dbe36b9ade2f351e",
+            "MOT17-13-SDP": "49a025a6c4f9c71721f8296f399ae2ce"
+          },
+          "wall_seconds": 40.867,
+          "matches_repeat_output": true
+        },
+        {
+          "run_dir": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s44/formal-20260919T094052Z-r02",
+          "identity_sha256": "cc62fed75cd22a64d3c299af1666cc29c891aa04eb12109045fc1f7b3113c098",
+          "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+          "metrics": {
+            "AssA": 67.6,
+            "DetA": 69.9,
+            "FN": 20025.0,
+            "FP": 4510.0,
+            "HOTA": 68.6,
+            "IDF1": 76.5,
+            "IDs": 525.0,
+            "MOTA": 77.7,
+            "Prcn": 95.3,
+            "Rcll": 82.2
+          },
+          "throughput": {
+            "fps": 196.64,
+            "mean_latency_ms": 4.69
+          },
+          "mot_md5": {
+            "MOT17-02-SDP": "60d7e624addb506696691ad093ad768f",
+            "MOT17-04-SDP": "b468f156d1b059143974dec128b62ba9",
+            "MOT17-05-SDP": "5e05f77322e646c7e987b9f480796e34",
+            "MOT17-09-SDP": "3e1d2be7faa4dae7ada44921a9bfaa79",
+            "MOT17-10-SDP": "de4a2caf3a4a2565d562fcd19f2f23a9",
+            "MOT17-11-SDP": "07d9788e62d52e57dbe36b9ade2f351e",
+            "MOT17-13-SDP": "49a025a6c4f9c71721f8296f399ae2ce"
+          },
+          "wall_seconds": 40.718,
+          "matches_repeat_output": true
+        },
+        {
+          "run_dir": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s44/formal-20260919T094052Z-r03",
+          "identity_sha256": "cc62fed75cd22a64d3c299af1666cc29c891aa04eb12109045fc1f7b3113c098",
+          "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+          "metrics": {
+            "AssA": 67.6,
+            "DetA": 69.9,
+            "FN": 20025.0,
+            "FP": 4510.0,
+            "HOTA": 68.6,
+            "IDF1": 76.5,
+            "IDs": 525.0,
+            "MOTA": 77.7,
+            "Prcn": 95.3,
+            "Rcll": 82.2
+          },
+          "throughput": {
+            "fps": 197.54,
+            "mean_latency_ms": 4.67
+          },
+          "mot_md5": {
+            "MOT17-02-SDP": "60d7e624addb506696691ad093ad768f",
+            "MOT17-04-SDP": "b468f156d1b059143974dec128b62ba9",
+            "MOT17-05-SDP": "5e05f77322e646c7e987b9f480796e34",
+            "MOT17-09-SDP": "3e1d2be7faa4dae7ada44921a9bfaa79",
+            "MOT17-10-SDP": "de4a2caf3a4a2565d562fcd19f2f23a9",
+            "MOT17-11-SDP": "07d9788e62d52e57dbe36b9ade2f351e",
+            "MOT17-13-SDP": "49a025a6c4f9c71721f8296f399ae2ce"
+          },
+          "wall_seconds": 40.542,
+          "matches_repeat_output": true
+        }
+      ],
+      "formal_distinct_outputs_per_sequence": {
+        "MOT17-02-SDP": 1,
+        "MOT17-04-SDP": 1,
+        "MOT17-05-SDP": 1,
+        "MOT17-09-SDP": 1,
+        "MOT17-10-SDP": 1,
+        "MOT17-11-SDP": 1,
+        "MOT17-13-SDP": 1
+      }
+    },
+    "wg:mamba_whole_graph:s.t3t1_shared_s44": {
+      "recipe_id": "wg:mamba_whole_graph:s.t3t1_shared_s44",
+      "run_root": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s44",
+      "identity_sha256": "31c1f3e42837904ea3624a4751576200c6dfa87243fb86d9e73fa81565d612f3",
+      "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+      "environment": {
+        "build_dir": "/home/ray/developer/ai/saccade/build",
+        "cuda_visible_devices": null,
+        "driver": "616.92",
+        "gpu": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+        "hostname": "DESKTOP-0FLA6SQ",
+        "native_extensions": {
+          "libsaccade_scan_plugin.so": "8bd0e60e2b78cd01a5697c143498a95b3c514f3b44af4c4f2af30a07cb90af71",
+          "saccade_cheb_gr_online_ext.cpython-312-x86_64-linux-gnu.so": "ef7284891a4900768589ccf437be987564333c20cbb87e063322ea51bea5f553",
+          "saccade_eval_ext.cpython-312-x86_64-linux-gnu.so": "e52d7ea14a336a612f432b35b95c6d914ce5526cf87d03190d892fd7278aefa5",
+          "saccade_media_ext.cpython-312-x86_64-linux-gnu.so": "0adb35e47471bf933e951170f26d8d916f86ff7d5cfad7a2fc55b1e32911d977",
+          "saccade_perception_ext.cpython-312-x86_64-linux-gnu.so": "86a76e872b34001a85d4c3b56d1b2b55d8b8365d9b6a70f5ce9dcef67c02831e",
+          "saccade_tracking_ext.cpython-312-x86_64-linux-gnu.so": "2f29d374432960793d8c6279064ddd68e18adc8a04b1ecf16c459839b71d49f4"
+        },
+        "packages": {
+          "motmetrics": "1.4.0",
+          "numpy": "2.4.4",
+          "nvidia-cuda-runtime": "13.0.96",
+          "nvidia-dali-cuda120": "2.0.0",
+          "nvidia-nvjpeg-cu12": "12.4.0.76",
+          "nvidia-nvjpeg2k-cu12": "0.10.0.49",
+          "tensorrt_cu12": "10.16.1.11",
+          "tensorrt_cu12_bindings": "10.16.1.11",
+          "tensorrt_cu12_libs": "10.16.1.11",
+          "torch": "2.11.0",
+          "torch_build": "2.11.0+cu130",
+          "torchvision": "0.26.0"
+        },
+        "platform": "Linux-6.18.33.1-microsoft-standard-WSL2-x86_64-with-glibc2.44",
+        "python": "3.12.13",
+        "trackeval": {
+          "dirty": false,
+          "git_tree": "b0ba3a0c5b82550156c6afd1ca949fe5ec155161",
+          "root": "third_party/TrackEval"
+        }
+      },
+      "complete": true,
+      "reasons": [],
+      "repeat": {
+        "report": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s44/repeat-20260919T094257Z-report.json",
+        "n_runs": 6,
+        "distinct_outputs_per_sequence": {
+          "MOT17-02-SDP": 1,
+          "MOT17-04-SDP": 1,
+          "MOT17-05-SDP": 1,
+          "MOT17-09-SDP": 1,
+          "MOT17-10-SDP": 1,
+          "MOT17-11-SDP": 1,
+          "MOT17-13-SDP": 1
+        },
+        "metric_observed_range": {
+          "AssA": {
+            "min": 68.7,
+            "max": 68.7,
+            "observed_range": 0.0
+          },
+          "DetA": {
+            "min": 70.7,
+            "max": 70.7,
+            "observed_range": 0.0
+          },
+          "FN": {
+            "min": 20691.0,
+            "max": 20691.0,
+            "observed_range": 0.0
+          },
+          "FP": {
+            "min": 3204.0,
+            "max": 3204.0,
+            "observed_range": 0.0
+          },
+          "HOTA": {
+            "min": 69.6,
+            "max": 69.6,
+            "observed_range": 0.0
+          },
+          "IDF1": {
+            "min": 77.9,
+            "max": 77.9,
+            "observed_range": 0.0
+          },
+          "IDs": {
+            "min": 427.0,
+            "max": 427.0,
+            "observed_range": 0.0
+          },
+          "MOTA": {
+            "min": 78.3,
+            "max": 78.3,
+            "observed_range": 0.0
+          },
+          "Prcn": {
+            "min": 96.6,
+            "max": 96.6,
+            "observed_range": 0.0
+          },
+          "Rcll": {
+            "min": 81.6,
+            "max": 81.6,
+            "observed_range": 0.0
+          }
+        },
+        "throughput": [
+          {
+            "fps": 197.75,
+            "mean_latency_ms": 4.67
+          },
+          {
+            "fps": 197.84,
+            "mean_latency_ms": 4.66
+          },
+          {
+            "fps": 197.24,
+            "mean_latency_ms": 4.68
+          },
+          {
+            "fps": 196.6,
+            "mean_latency_ms": 4.7
+          },
+          {
+            "fps": 197.29,
+            "mean_latency_ms": 4.68
+          },
+          {
+            "fps": 197.1,
+            "mean_latency_ms": 4.68
+          }
+        ]
+      },
+      "formal": [
+        {
+          "run_dir": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s44/formal-20260919T094707Z-r01",
+          "identity_sha256": "31c1f3e42837904ea3624a4751576200c6dfa87243fb86d9e73fa81565d612f3",
+          "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+          "metrics": {
+            "AssA": 68.7,
+            "DetA": 70.7,
+            "FN": 20691.0,
+            "FP": 3204.0,
+            "HOTA": 69.6,
+            "IDF1": 77.9,
+            "IDs": 427.0,
+            "MOTA": 78.3,
+            "Prcn": 96.6,
+            "Rcll": 81.6
+          },
+          "throughput": {
+            "fps": 196.17,
+            "mean_latency_ms": 4.72
+          },
+          "mot_md5": {
+            "MOT17-02-SDP": "59e8508d76cf8e8b9be5a9ce5d86d3a3",
+            "MOT17-04-SDP": "99d330fa748286e144396de3e260b128",
+            "MOT17-05-SDP": "cc32fb9ceafc175473edfdc7d023042d",
+            "MOT17-09-SDP": "32b5cc74344001d7958e64659cd0b029",
+            "MOT17-10-SDP": "cbb624ba33447bb608343a119f00f77e",
+            "MOT17-11-SDP": "a9eb811ec6d733b0018b3480d05a300f",
+            "MOT17-13-SDP": "07c01d4558fd235b6dd93b80574fa1c0"
+          },
+          "wall_seconds": 40.723,
+          "matches_repeat_output": true
+        },
+        {
+          "run_dir": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s44/formal-20260919T094707Z-r02",
+          "identity_sha256": "31c1f3e42837904ea3624a4751576200c6dfa87243fb86d9e73fa81565d612f3",
+          "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+          "metrics": {
+            "AssA": 68.7,
+            "DetA": 70.7,
+            "FN": 20691.0,
+            "FP": 3204.0,
+            "HOTA": 69.6,
+            "IDF1": 77.9,
+            "IDs": 427.0,
+            "MOTA": 78.3,
+            "Prcn": 96.6,
+            "Rcll": 81.6
+          },
+          "throughput": {
+            "fps": 197.72,
+            "mean_latency_ms": 4.67
+          },
+          "mot_md5": {
+            "MOT17-02-SDP": "59e8508d76cf8e8b9be5a9ce5d86d3a3",
+            "MOT17-04-SDP": "99d330fa748286e144396de3e260b128",
+            "MOT17-05-SDP": "cc32fb9ceafc175473edfdc7d023042d",
+            "MOT17-09-SDP": "32b5cc74344001d7958e64659cd0b029",
+            "MOT17-10-SDP": "cbb624ba33447bb608343a119f00f77e",
+            "MOT17-11-SDP": "a9eb811ec6d733b0018b3480d05a300f",
+            "MOT17-13-SDP": "07c01d4558fd235b6dd93b80574fa1c0"
+          },
+          "wall_seconds": 40.69,
+          "matches_repeat_output": true
+        },
+        {
+          "run_dir": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s44/formal-20260919T094707Z-r03",
+          "identity_sha256": "31c1f3e42837904ea3624a4751576200c6dfa87243fb86d9e73fa81565d612f3",
+          "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+          "metrics": {
+            "AssA": 68.7,
+            "DetA": 70.7,
+            "FN": 20691.0,
+            "FP": 3204.0,
+            "HOTA": 69.6,
+            "IDF1": 77.9,
+            "IDs": 427.0,
+            "MOTA": 78.3,
+            "Prcn": 96.6,
+            "Rcll": 81.6
+          },
+          "throughput": {
+            "fps": 196.76,
+            "mean_latency_ms": 4.69
+          },
+          "mot_md5": {
+            "MOT17-02-SDP": "59e8508d76cf8e8b9be5a9ce5d86d3a3",
+            "MOT17-04-SDP": "99d330fa748286e144396de3e260b128",
+            "MOT17-05-SDP": "cc32fb9ceafc175473edfdc7d023042d",
+            "MOT17-09-SDP": "32b5cc74344001d7958e64659cd0b029",
+            "MOT17-10-SDP": "cbb624ba33447bb608343a119f00f77e",
+            "MOT17-11-SDP": "a9eb811ec6d733b0018b3480d05a300f",
+            "MOT17-13-SDP": "07c01d4558fd235b6dd93b80574fa1c0"
+          },
+          "wall_seconds": 40.625,
+          "matches_repeat_output": true
+        }
+      ],
+      "formal_distinct_outputs_per_sequence": {
+        "MOT17-02-SDP": 1,
+        "MOT17-04-SDP": 1,
+        "MOT17-05-SDP": 1,
+        "MOT17-09-SDP": 1,
+        "MOT17-10-SDP": 1,
+        "MOT17-11-SDP": 1,
+        "MOT17-13-SDP": 1
+      }
+    },
+    "wg:mamba_whole_graph_m:m.t3t1_phase_b": {
+      "recipe_id": "wg:mamba_whole_graph_m:m.t3t1_phase_b",
+      "run_root": "results/training_eval_contract/wg_mamba_whole_graph_m_m.t3t1_phase_b",
+      "identity_sha256": "fd5389ee9d95e0df9700df0987844b6c1f429b0fe5d0177ed11d638542af43ed",
+      "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+      "environment": {
+        "build_dir": "/home/ray/developer/ai/saccade/build",
+        "cuda_visible_devices": null,
+        "driver": "616.92",
+        "gpu": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+        "hostname": "DESKTOP-0FLA6SQ",
+        "native_extensions": {
+          "libsaccade_scan_plugin.so": "8bd0e60e2b78cd01a5697c143498a95b3c514f3b44af4c4f2af30a07cb90af71",
+          "saccade_cheb_gr_online_ext.cpython-312-x86_64-linux-gnu.so": "ef7284891a4900768589ccf437be987564333c20cbb87e063322ea51bea5f553",
+          "saccade_eval_ext.cpython-312-x86_64-linux-gnu.so": "e52d7ea14a336a612f432b35b95c6d914ce5526cf87d03190d892fd7278aefa5",
+          "saccade_media_ext.cpython-312-x86_64-linux-gnu.so": "0adb35e47471bf933e951170f26d8d916f86ff7d5cfad7a2fc55b1e32911d977",
+          "saccade_perception_ext.cpython-312-x86_64-linux-gnu.so": "86a76e872b34001a85d4c3b56d1b2b55d8b8365d9b6a70f5ce9dcef67c02831e",
+          "saccade_tracking_ext.cpython-312-x86_64-linux-gnu.so": "2f29d374432960793d8c6279064ddd68e18adc8a04b1ecf16c459839b71d49f4"
+        },
+        "packages": {
+          "motmetrics": "1.4.0",
+          "numpy": "2.4.4",
+          "nvidia-cuda-runtime": "13.0.96",
+          "nvidia-dali-cuda120": "2.0.0",
+          "nvidia-nvjpeg-cu12": "12.4.0.76",
+          "nvidia-nvjpeg2k-cu12": "0.10.0.49",
+          "tensorrt_cu12": "10.16.1.11",
+          "tensorrt_cu12_bindings": "10.16.1.11",
+          "tensorrt_cu12_libs": "10.16.1.11",
+          "torch": "2.11.0",
+          "torch_build": "2.11.0+cu130",
+          "torchvision": "0.26.0"
+        },
+        "platform": "Linux-6.18.33.1-microsoft-standard-WSL2-x86_64-with-glibc2.44",
+        "python": "3.12.13",
+        "trackeval": {
+          "dirty": false,
+          "git_tree": "b0ba3a0c5b82550156c6afd1ca949fe5ec155161",
+          "root": "third_party/TrackEval"
+        }
+      },
+      "complete": true,
+      "reasons": [],
+      "repeat": {
+        "report": "results/training_eval_contract/wg_mamba_whole_graph_m_m.t3t1_phase_b/repeat-20260919T094912Z-report.json",
+        "n_runs": 6,
+        "distinct_outputs_per_sequence": {
+          "MOT17-02-SDP": 1,
+          "MOT17-04-SDP": 1,
+          "MOT17-05-SDP": 1,
+          "MOT17-09-SDP": 1,
+          "MOT17-10-SDP": 1,
+          "MOT17-11-SDP": 1,
+          "MOT17-13-SDP": 1
+        },
+        "metric_observed_range": {
+          "AssA": {
+            "min": 72.8,
+            "max": 72.8,
+            "observed_range": 0.0
+          },
+          "DetA": {
+            "min": 76.1,
+            "max": 76.1,
+            "observed_range": 0.0
+          },
+          "FN": {
+            "min": 18053.0,
+            "max": 18053.0,
+            "observed_range": 0.0
+          },
+          "FP": {
+            "min": 2005.0,
+            "max": 2005.0,
+            "observed_range": 0.0
+          },
+          "HOTA": {
+            "min": 74.3,
+            "max": 74.3,
+            "observed_range": 0.0
+          },
+          "IDF1": {
+            "min": 80.3,
+            "max": 80.3,
+            "observed_range": 0.0
+          },
+          "IDs": {
+            "min": 358.0,
+            "max": 358.0,
+            "observed_range": 0.0
+          },
+          "MOTA": {
+            "min": 81.8,
+            "max": 81.8,
+            "observed_range": 0.0
+          },
+          "Prcn": {
+            "min": 97.9,
+            "max": 97.9,
+            "observed_range": 0.0
+          },
+          "Rcll": {
+            "min": 83.9,
+            "max": 83.9,
+            "observed_range": 0.0
+          }
+        },
+        "throughput": [
+          {
+            "fps": 216.47,
+            "mean_latency_ms": 4.23
+          },
+          {
+            "fps": 216.78,
+            "mean_latency_ms": 4.22
+          },
+          {
+            "fps": 216.63,
+            "mean_latency_ms": 4.22
+          },
+          {
+            "fps": 216.91,
+            "mean_latency_ms": 4.22
+          },
+          {
+            "fps": 217.5,
+            "mean_latency_ms": 4.2
+          },
+          {
+            "fps": 217.57,
+            "mean_latency_ms": 4.2
+          }
+        ]
+      },
+      "formal": [
+        {
+          "run_dir": "results/training_eval_contract/wg_mamba_whole_graph_m_m.t3t1_phase_b/formal-20260919T095304Z-r01",
+          "identity_sha256": "fd5389ee9d95e0df9700df0987844b6c1f429b0fe5d0177ed11d638542af43ed",
+          "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+          "metrics": {
+            "AssA": 72.8,
+            "DetA": 76.1,
+            "FN": 18053.0,
+            "FP": 2005.0,
+            "HOTA": 74.3,
+            "IDF1": 80.3,
+            "IDs": 358.0,
+            "MOTA": 81.8,
+            "Prcn": 97.9,
+            "Rcll": 83.9
+          },
+          "throughput": {
+            "fps": 216.66,
+            "mean_latency_ms": 4.22
+          },
+          "mot_md5": {
+            "MOT17-02-SDP": "c775f2afd4fe5372fb84a7b8a86c080f",
+            "MOT17-04-SDP": "e7f1f6529ff6406132af3ca7c7e60e21",
+            "MOT17-05-SDP": "5b053a40d5b39702cff875af5e2b9d99",
+            "MOT17-09-SDP": "66306649b01f253a8691e91b47ba90db",
+            "MOT17-10-SDP": "cc6f7c7a149d7d5d306e235eb4bf3e55",
+            "MOT17-11-SDP": "9f262e190926f509c3dd2e46ea3725a4",
+            "MOT17-13-SDP": "3a7309485f48062dd933b5bcdf6a0193"
+          },
+          "wall_seconds": 37.303,
+          "matches_repeat_output": true
+        },
+        {
+          "run_dir": "results/training_eval_contract/wg_mamba_whole_graph_m_m.t3t1_phase_b/formal-20260919T095304Z-r02",
+          "identity_sha256": "fd5389ee9d95e0df9700df0987844b6c1f429b0fe5d0177ed11d638542af43ed",
+          "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+          "metrics": {
+            "AssA": 72.8,
+            "DetA": 76.1,
+            "FN": 18053.0,
+            "FP": 2005.0,
+            "HOTA": 74.3,
+            "IDF1": 80.3,
+            "IDs": 358.0,
+            "MOTA": 81.8,
+            "Prcn": 97.9,
+            "Rcll": 83.9
+          },
+          "throughput": {
+            "fps": 217.59,
+            "mean_latency_ms": 4.2
+          },
+          "mot_md5": {
+            "MOT17-02-SDP": "c775f2afd4fe5372fb84a7b8a86c080f",
+            "MOT17-04-SDP": "e7f1f6529ff6406132af3ca7c7e60e21",
+            "MOT17-05-SDP": "5b053a40d5b39702cff875af5e2b9d99",
+            "MOT17-09-SDP": "66306649b01f253a8691e91b47ba90db",
+            "MOT17-10-SDP": "cc6f7c7a149d7d5d306e235eb4bf3e55",
+            "MOT17-11-SDP": "9f262e190926f509c3dd2e46ea3725a4",
+            "MOT17-13-SDP": "3a7309485f48062dd933b5bcdf6a0193"
+          },
+          "wall_seconds": 37.125,
+          "matches_repeat_output": true
+        },
+        {
+          "run_dir": "results/training_eval_contract/wg_mamba_whole_graph_m_m.t3t1_phase_b/formal-20260919T095304Z-r03",
+          "identity_sha256": "fd5389ee9d95e0df9700df0987844b6c1f429b0fe5d0177ed11d638542af43ed",
+          "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+          "metrics": {
+            "AssA": 72.8,
+            "DetA": 76.1,
+            "FN": 18053.0,
+            "FP": 2005.0,
+            "HOTA": 74.3,
+            "IDF1": 80.3,
+            "IDs": 358.0,
+            "MOTA": 81.8,
+            "Prcn": 97.9,
+            "Rcll": 83.9
+          },
+          "throughput": {
+            "fps": 216.77,
+            "mean_latency_ms": 4.22
+          },
+          "mot_md5": {
+            "MOT17-02-SDP": "c775f2afd4fe5372fb84a7b8a86c080f",
+            "MOT17-04-SDP": "e7f1f6529ff6406132af3ca7c7e60e21",
+            "MOT17-05-SDP": "5b053a40d5b39702cff875af5e2b9d99",
+            "MOT17-09-SDP": "66306649b01f253a8691e91b47ba90db",
+            "MOT17-10-SDP": "cc6f7c7a149d7d5d306e235eb4bf3e55",
+            "MOT17-11-SDP": "9f262e190926f509c3dd2e46ea3725a4",
+            "MOT17-13-SDP": "3a7309485f48062dd933b5bcdf6a0193"
+          },
+          "wall_seconds": 37.219,
+          "matches_repeat_output": true
+        }
+      ],
+      "formal_distinct_outputs_per_sequence": {
+        "MOT17-02-SDP": 1,
+        "MOT17-04-SDP": 1,
+        "MOT17-05-SDP": 1,
+        "MOT17-09-SDP": 1,
+        "MOT17-10-SDP": 1,
+        "MOT17-11-SDP": 1,
+        "MOT17-13-SDP": 1
+      }
+    },
+    "pyt:s.adapted_teacher:s.adapted_teacher": {
+      "recipe_id": "pyt:s.adapted_teacher:s.adapted_teacher",
+      "run_root": "results/training_eval_contract/pyt_s.adapted_teacher_s.adapted_teacher",
+      "identity_sha256": "0b712bd7aaa5c2d35c18d6863b89522aa7d52758c1a9b67cd40af4d98818b3db",
+      "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+      "environment": {
+        "build_dir": "/home/ray/developer/ai/saccade/build",
+        "cuda_visible_devices": null,
+        "driver": "616.92",
+        "gpu": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+        "hostname": "DESKTOP-0FLA6SQ",
+        "native_extensions": {
+          "libsaccade_scan_plugin.so": "8bd0e60e2b78cd01a5697c143498a95b3c514f3b44af4c4f2af30a07cb90af71",
+          "saccade_cheb_gr_online_ext.cpython-312-x86_64-linux-gnu.so": "ef7284891a4900768589ccf437be987564333c20cbb87e063322ea51bea5f553",
+          "saccade_eval_ext.cpython-312-x86_64-linux-gnu.so": "e52d7ea14a336a612f432b35b95c6d914ce5526cf87d03190d892fd7278aefa5",
+          "saccade_media_ext.cpython-312-x86_64-linux-gnu.so": "0adb35e47471bf933e951170f26d8d916f86ff7d5cfad7a2fc55b1e32911d977",
+          "saccade_perception_ext.cpython-312-x86_64-linux-gnu.so": "86a76e872b34001a85d4c3b56d1b2b55d8b8365d9b6a70f5ce9dcef67c02831e",
+          "saccade_tracking_ext.cpython-312-x86_64-linux-gnu.so": "2f29d374432960793d8c6279064ddd68e18adc8a04b1ecf16c459839b71d49f4"
+        },
+        "packages": {
+          "motmetrics": "1.4.0",
+          "numpy": "2.4.4",
+          "nvidia-cuda-runtime": "13.0.96",
+          "nvidia-dali-cuda120": "2.0.0",
+          "nvidia-nvjpeg-cu12": "12.4.0.76",
+          "nvidia-nvjpeg2k-cu12": "0.10.0.49",
+          "tensorrt_cu12": "10.16.1.11",
+          "tensorrt_cu12_bindings": "10.16.1.11",
+          "tensorrt_cu12_libs": "10.16.1.11",
+          "torch": "2.11.0",
+          "torch_build": "2.11.0+cu130",
+          "torchvision": "0.26.0"
+        },
+        "platform": "Linux-6.18.33.1-microsoft-standard-WSL2-x86_64-with-glibc2.44",
+        "python": "3.12.13",
+        "trackeval": {
+          "dirty": false,
+          "git_tree": "b0ba3a0c5b82550156c6afd1ca949fe5ec155161",
+          "root": "third_party/TrackEval"
+        }
+      },
+      "complete": true,
+      "reasons": [],
+      "repeat": {
+        "report": "results/training_eval_contract/pyt_s.adapted_teacher_s.adapted_teacher/repeat-20260919T095459Z-report.json",
+        "n_runs": 6,
+        "distinct_outputs_per_sequence": {
+          "MOT17-02-SDP": 1,
+          "MOT17-04-SDP": 1,
+          "MOT17-05-SDP": 1,
+          "MOT17-09-SDP": 1,
+          "MOT17-10-SDP": 1,
+          "MOT17-11-SDP": 1,
+          "MOT17-13-SDP": 1
+        },
+        "metric_observed_range": {
+          "AssA": {
+            "min": 60.1,
+            "max": 60.1,
+            "observed_range": 0.0
+          },
+          "DetA": {
+            "min": 30.8,
+            "max": 30.8,
+            "observed_range": 0.0
+          },
+          "FN": {
+            "min": 72297.0,
+            "max": 72297.0,
+            "observed_range": 0.0
+          },
+          "FP": {
+            "min": 361.0,
+            "max": 361.0,
+            "observed_range": 0.0
+          },
+          "HOTA": {
+            "min": 43.0,
+            "max": 43.0,
+            "observed_range": 0.0
+          },
+          "IDF1": {
+            "min": 48.8,
+            "max": 48.8,
+            "observed_range": 0.0
+          },
+          "IDs": {
+            "min": 60.0,
+            "max": 60.0,
+            "observed_range": 0.0
+          },
+          "MOTA": {
+            "min": 35.2,
+            "max": 35.2,
+            "observed_range": 0.0
+          },
+          "Prcn": {
+            "min": 99.1,
+            "max": 99.1,
+            "observed_range": 0.0
+          },
+          "Rcll": {
+            "min": 35.6,
+            "max": 35.6,
+            "observed_range": 0.0
+          }
+        },
+        "throughput": [
+          {
+            "fps": 70.52,
+            "mean_latency_ms": 13.74
+          },
+          {
+            "fps": 71.74,
+            "mean_latency_ms": 13.49
+          },
+          {
+            "fps": 70.68,
+            "mean_latency_ms": 13.7
+          },
+          {
+            "fps": 71.73,
+            "mean_latency_ms": 13.48
+          },
+          {
+            "fps": 70.28,
+            "mean_latency_ms": 13.78
+          },
+          {
+            "fps": 69.69,
+            "mean_latency_ms": 13.91
+          }
+        ]
+      },
+      "formal": [
+        {
+          "run_dir": "results/training_eval_contract/pyt_s.adapted_teacher_s.adapted_teacher/formal-20260919T100338Z-r01",
+          "identity_sha256": "0b712bd7aaa5c2d35c18d6863b89522aa7d52758c1a9b67cd40af4d98818b3db",
+          "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+          "metrics": {
+            "AssA": 60.1,
+            "DetA": 30.8,
+            "FN": 72297.0,
+            "FP": 361.0,
+            "HOTA": 43.0,
+            "IDF1": 48.8,
+            "IDs": 60.0,
+            "MOTA": 35.2,
+            "Prcn": 99.1,
+            "Rcll": 35.6
+          },
+          "throughput": {
+            "fps": 72.24,
+            "mean_latency_ms": 13.39
+          },
+          "mot_md5": {
+            "MOT17-02-SDP": "eede4737954e2a44076ec836f44455be",
+            "MOT17-04-SDP": "f778bad661ee54623cffe409a6e207de",
+            "MOT17-05-SDP": "5d87470edf838b84e8d2a1f706bff779",
+            "MOT17-09-SDP": "2933e60965f5c51756cd542d6143406c",
+            "MOT17-10-SDP": "d96f0faeafc07a3025b749e0934515b9",
+            "MOT17-11-SDP": "37a1f303548dcdebec689726e02e93bf",
+            "MOT17-13-SDP": "cb777da63667a06c536aa96923acc617"
+          },
+          "wall_seconds": 83.82,
+          "matches_repeat_output": true
+        },
+        {
+          "run_dir": "results/training_eval_contract/pyt_s.adapted_teacher_s.adapted_teacher/formal-20260919T100338Z-r02",
+          "identity_sha256": "0b712bd7aaa5c2d35c18d6863b89522aa7d52758c1a9b67cd40af4d98818b3db",
+          "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+          "metrics": {
+            "AssA": 60.1,
+            "DetA": 30.8,
+            "FN": 72297.0,
+            "FP": 361.0,
+            "HOTA": 43.0,
+            "IDF1": 48.8,
+            "IDs": 60.0,
+            "MOTA": 35.2,
+            "Prcn": 99.1,
+            "Rcll": 35.6
+          },
+          "throughput": {
+            "fps": 70.26,
+            "mean_latency_ms": 13.79
+          },
+          "mot_md5": {
+            "MOT17-02-SDP": "eede4737954e2a44076ec836f44455be",
+            "MOT17-04-SDP": "f778bad661ee54623cffe409a6e207de",
+            "MOT17-05-SDP": "5d87470edf838b84e8d2a1f706bff779",
+            "MOT17-09-SDP": "2933e60965f5c51756cd542d6143406c",
+            "MOT17-10-SDP": "d96f0faeafc07a3025b749e0934515b9",
+            "MOT17-11-SDP": "37a1f303548dcdebec689726e02e93bf",
+            "MOT17-13-SDP": "cb777da63667a06c536aa96923acc617"
+          },
+          "wall_seconds": 85.683,
+          "matches_repeat_output": true
+        },
+        {
+          "run_dir": "results/training_eval_contract/pyt_s.adapted_teacher_s.adapted_teacher/formal-20260919T100338Z-r03",
+          "identity_sha256": "0b712bd7aaa5c2d35c18d6863b89522aa7d52758c1a9b67cd40af4d98818b3db",
+          "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+          "metrics": {
+            "AssA": 60.1,
+            "DetA": 30.8,
+            "FN": 72297.0,
+            "FP": 361.0,
+            "HOTA": 43.0,
+            "IDF1": 48.8,
+            "IDs": 60.0,
+            "MOTA": 35.2,
+            "Prcn": 99.1,
+            "Rcll": 35.6
+          },
+          "throughput": {
+            "fps": 70.71,
+            "mean_latency_ms": 13.7
+          },
+          "mot_md5": {
+            "MOT17-02-SDP": "eede4737954e2a44076ec836f44455be",
+            "MOT17-04-SDP": "f778bad661ee54623cffe409a6e207de",
+            "MOT17-05-SDP": "5d87470edf838b84e8d2a1f706bff779",
+            "MOT17-09-SDP": "2933e60965f5c51756cd542d6143406c",
+            "MOT17-10-SDP": "d96f0faeafc07a3025b749e0934515b9",
+            "MOT17-11-SDP": "37a1f303548dcdebec689726e02e93bf",
+            "MOT17-13-SDP": "cb777da63667a06c536aa96923acc617"
+          },
+          "wall_seconds": 85.396,
+          "matches_repeat_output": true
+        }
+      ],
+      "formal_distinct_outputs_per_sequence": {
+        "MOT17-02-SDP": 1,
+        "MOT17-04-SDP": 1,
+        "MOT17-05-SDP": 1,
+        "MOT17-09-SDP": 1,
+        "MOT17-10-SDP": 1,
+        "MOT17-11-SDP": 1,
+        "MOT17-13-SDP": 1
+      }
+    },
+    "pyt:s.adapted_teacher:s.t3t1_phase_b": {
+      "recipe_id": "pyt:s.adapted_teacher:s.t3t1_phase_b",
+      "run_root": "results/training_eval_contract/pyt_s.adapted_teacher_s.t3t1_phase_b",
+      "identity_sha256": "7acaf85b8a4942905989ed5a665d3a59704a2b27448ac6198157e5e1cc3245e9",
+      "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+      "environment": {
+        "build_dir": "/home/ray/developer/ai/saccade/build",
+        "cuda_visible_devices": null,
+        "driver": "616.92",
+        "gpu": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+        "hostname": "DESKTOP-0FLA6SQ",
+        "native_extensions": {
+          "libsaccade_scan_plugin.so": "8bd0e60e2b78cd01a5697c143498a95b3c514f3b44af4c4f2af30a07cb90af71",
+          "saccade_cheb_gr_online_ext.cpython-312-x86_64-linux-gnu.so": "ef7284891a4900768589ccf437be987564333c20cbb87e063322ea51bea5f553",
+          "saccade_eval_ext.cpython-312-x86_64-linux-gnu.so": "e52d7ea14a336a612f432b35b95c6d914ce5526cf87d03190d892fd7278aefa5",
+          "saccade_media_ext.cpython-312-x86_64-linux-gnu.so": "0adb35e47471bf933e951170f26d8d916f86ff7d5cfad7a2fc55b1e32911d977",
+          "saccade_perception_ext.cpython-312-x86_64-linux-gnu.so": "86a76e872b34001a85d4c3b56d1b2b55d8b8365d9b6a70f5ce9dcef67c02831e",
+          "saccade_tracking_ext.cpython-312-x86_64-linux-gnu.so": "2f29d374432960793d8c6279064ddd68e18adc8a04b1ecf16c459839b71d49f4"
+        },
+        "packages": {
+          "motmetrics": "1.4.0",
+          "numpy": "2.4.4",
+          "nvidia-cuda-runtime": "13.0.96",
+          "nvidia-dali-cuda120": "2.0.0",
+          "nvidia-nvjpeg-cu12": "12.4.0.76",
+          "nvidia-nvjpeg2k-cu12": "0.10.0.49",
+          "tensorrt_cu12": "10.16.1.11",
+          "tensorrt_cu12_bindings": "10.16.1.11",
+          "tensorrt_cu12_libs": "10.16.1.11",
+          "torch": "2.11.0",
+          "torch_build": "2.11.0+cu130",
+          "torchvision": "0.26.0"
+        },
+        "platform": "Linux-6.18.33.1-microsoft-standard-WSL2-x86_64-with-glibc2.44",
+        "python": "3.12.13",
+        "trackeval": {
+          "dirty": false,
+          "git_tree": "b0ba3a0c5b82550156c6afd1ca949fe5ec155161",
+          "root": "third_party/TrackEval"
+        }
+      },
+      "complete": true,
+      "reasons": [],
+      "repeat": {
+        "report": "results/training_eval_contract/pyt_s.adapted_teacher_s.t3t1_phase_b/repeat-20260919T100756Z-report.json",
+        "n_runs": 6,
+        "distinct_outputs_per_sequence": {
+          "MOT17-02-SDP": 1,
+          "MOT17-04-SDP": 1,
+          "MOT17-05-SDP": 1,
+          "MOT17-09-SDP": 1,
+          "MOT17-10-SDP": 1,
+          "MOT17-11-SDP": 1,
+          "MOT17-13-SDP": 1
+        },
+        "metric_observed_range": {
+          "AssA": {
+            "min": 68.4,
+            "max": 68.4,
+            "observed_range": 0.0
+          },
+          "DetA": {
+            "min": 72.6,
+            "max": 72.6,
+            "observed_range": 0.0
+          },
+          "FN": {
+            "min": 19982.0,
+            "max": 19982.0,
+            "observed_range": 0.0
+          },
+          "FP": {
+            "min": 3318.0,
+            "max": 3318.0,
+            "observed_range": 0.0
+          },
+          "HOTA": {
+            "min": 70.3,
+            "max": 70.3,
+            "observed_range": 0.0
+          },
+          "IDF1": {
+            "min": 76.5,
+            "max": 76.5,
+            "observed_range": 0.0
+          },
+          "IDs": {
+            "min": 414.0,
+            "max": 414.0,
+            "observed_range": 0.0
+          },
+          "MOTA": {
+            "min": 78.9,
+            "max": 78.9,
+            "observed_range": 0.0
+          },
+          "Prcn": {
+            "min": 96.5,
+            "max": 96.5,
+            "observed_range": 0.0
+          },
+          "Rcll": {
+            "min": 82.2,
+            "max": 82.2,
+            "observed_range": 0.0
+          }
+        },
+        "throughput": [
+          {
+            "fps": 69.96,
+            "mean_latency_ms": 13.85
+          },
+          {
+            "fps": 70.32,
+            "mean_latency_ms": 13.77
+          },
+          {
+            "fps": 69.99,
+            "mean_latency_ms": 13.84
+          },
+          {
+            "fps": 70.09,
+            "mean_latency_ms": 13.82
+          },
+          {
+            "fps": 68.96,
+            "mean_latency_ms": 14.05
+          },
+          {
+            "fps": 69.52,
+            "mean_latency_ms": 13.94
+          }
+        ]
+      },
+      "formal": [
+        {
+          "run_dir": "results/training_eval_contract/pyt_s.adapted_teacher_s.t3t1_phase_b/formal-20260919T101645Z-r01",
+          "identity_sha256": "7acaf85b8a4942905989ed5a665d3a59704a2b27448ac6198157e5e1cc3245e9",
+          "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+          "metrics": {
+            "AssA": 68.4,
+            "DetA": 72.6,
+            "FN": 19982.0,
+            "FP": 3318.0,
+            "HOTA": 70.3,
+            "IDF1": 76.5,
+            "IDs": 414.0,
+            "MOTA": 78.9,
+            "Prcn": 96.5,
+            "Rcll": 82.2
+          },
+          "throughput": {
+            "fps": 70.07,
+            "mean_latency_ms": 13.83
+          },
+          "mot_md5": {
+            "MOT17-02-SDP": "03908692ecb67cf144536840c33c4e1e",
+            "MOT17-04-SDP": "7a75092d3736a533d4d1a343475a19f9",
+            "MOT17-05-SDP": "11dae53df7b276b74745c3584de67bdb",
+            "MOT17-09-SDP": "f969dddb5310f2631033723efe3335fe",
+            "MOT17-10-SDP": "c5b3c7dd43c9b0a1a39f3c3c76a4e17b",
+            "MOT17-11-SDP": "f55554d17065666303ca971673288518",
+            "MOT17-13-SDP": "1f9eb6729bf9d62d87ffe47b8b0e719d"
+          },
+          "wall_seconds": 86.966,
+          "matches_repeat_output": true
+        },
+        {
+          "run_dir": "results/training_eval_contract/pyt_s.adapted_teacher_s.t3t1_phase_b/formal-20260919T101645Z-r02",
+          "identity_sha256": "7acaf85b8a4942905989ed5a665d3a59704a2b27448ac6198157e5e1cc3245e9",
+          "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+          "metrics": {
+            "AssA": 68.4,
+            "DetA": 72.6,
+            "FN": 19982.0,
+            "FP": 3318.0,
+            "HOTA": 70.3,
+            "IDF1": 76.5,
+            "IDs": 414.0,
+            "MOTA": 78.9,
+            "Prcn": 96.5,
+            "Rcll": 82.2
+          },
+          "throughput": {
+            "fps": 70.89,
+            "mean_latency_ms": 13.65
+          },
+          "mot_md5": {
+            "MOT17-02-SDP": "03908692ecb67cf144536840c33c4e1e",
+            "MOT17-04-SDP": "7a75092d3736a533d4d1a343475a19f9",
+            "MOT17-05-SDP": "11dae53df7b276b74745c3584de67bdb",
+            "MOT17-09-SDP": "f969dddb5310f2631033723efe3335fe",
+            "MOT17-10-SDP": "c5b3c7dd43c9b0a1a39f3c3c76a4e17b",
+            "MOT17-11-SDP": "f55554d17065666303ca971673288518",
+            "MOT17-13-SDP": "1f9eb6729bf9d62d87ffe47b8b0e719d"
+          },
+          "wall_seconds": 86.105,
+          "matches_repeat_output": true
+        },
+        {
+          "run_dir": "results/training_eval_contract/pyt_s.adapted_teacher_s.t3t1_phase_b/formal-20260919T101645Z-r03",
+          "identity_sha256": "7acaf85b8a4942905989ed5a665d3a59704a2b27448ac6198157e5e1cc3245e9",
+          "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+          "metrics": {
+            "AssA": 68.4,
+            "DetA": 72.6,
+            "FN": 19982.0,
+            "FP": 3318.0,
+            "HOTA": 70.3,
+            "IDF1": 76.5,
+            "IDs": 414.0,
+            "MOTA": 78.9,
+            "Prcn": 96.5,
+            "Rcll": 82.2
+          },
+          "throughput": {
+            "fps": 67.92,
+            "mean_latency_ms": 14.28
+          },
+          "mot_md5": {
+            "MOT17-02-SDP": "03908692ecb67cf144536840c33c4e1e",
+            "MOT17-04-SDP": "7a75092d3736a533d4d1a343475a19f9",
+            "MOT17-05-SDP": "11dae53df7b276b74745c3584de67bdb",
+            "MOT17-09-SDP": "f969dddb5310f2631033723efe3335fe",
+            "MOT17-10-SDP": "c5b3c7dd43c9b0a1a39f3c3c76a4e17b",
+            "MOT17-11-SDP": "f55554d17065666303ca971673288518",
+            "MOT17-13-SDP": "1f9eb6729bf9d62d87ffe47b8b0e719d"
+          },
+          "wall_seconds": 89.205,
+          "matches_repeat_output": true
+        }
+      ],
+      "formal_distinct_outputs_per_sequence": {
+        "MOT17-02-SDP": 1,
+        "MOT17-04-SDP": 1,
+        "MOT17-05-SDP": 1,
+        "MOT17-09-SDP": 1,
+        "MOT17-10-SDP": 1,
+        "MOT17-11-SDP": 1,
+        "MOT17-13-SDP": 1
+      }
+    },
+    "pyt:m.adapted_teacher:m.adapted_teacher": {
+      "recipe_id": "pyt:m.adapted_teacher:m.adapted_teacher",
+      "run_root": "results/training_eval_contract/pyt_m.adapted_teacher_m.adapted_teacher",
+      "identity_sha256": "001816758bb4d9e31a18cb0cf2f252305fb36805b69b4b7f57f11e75d390a956",
+      "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+      "environment": {
+        "build_dir": "/home/ray/developer/ai/saccade/build",
+        "cuda_visible_devices": null,
+        "driver": "616.92",
+        "gpu": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+        "hostname": "DESKTOP-0FLA6SQ",
+        "native_extensions": {
+          "libsaccade_scan_plugin.so": "8bd0e60e2b78cd01a5697c143498a95b3c514f3b44af4c4f2af30a07cb90af71",
+          "saccade_cheb_gr_online_ext.cpython-312-x86_64-linux-gnu.so": "ef7284891a4900768589ccf437be987564333c20cbb87e063322ea51bea5f553",
+          "saccade_eval_ext.cpython-312-x86_64-linux-gnu.so": "e52d7ea14a336a612f432b35b95c6d914ce5526cf87d03190d892fd7278aefa5",
+          "saccade_media_ext.cpython-312-x86_64-linux-gnu.so": "0adb35e47471bf933e951170f26d8d916f86ff7d5cfad7a2fc55b1e32911d977",
+          "saccade_perception_ext.cpython-312-x86_64-linux-gnu.so": "86a76e872b34001a85d4c3b56d1b2b55d8b8365d9b6a70f5ce9dcef67c02831e",
+          "saccade_tracking_ext.cpython-312-x86_64-linux-gnu.so": "2f29d374432960793d8c6279064ddd68e18adc8a04b1ecf16c459839b71d49f4"
+        },
+        "packages": {
+          "motmetrics": "1.4.0",
+          "numpy": "2.4.4",
+          "nvidia-cuda-runtime": "13.0.96",
+          "nvidia-dali-cuda120": "2.0.0",
+          "nvidia-nvjpeg-cu12": "12.4.0.76",
+          "nvidia-nvjpeg2k-cu12": "0.10.0.49",
+          "tensorrt_cu12": "10.16.1.11",
+          "tensorrt_cu12_bindings": "10.16.1.11",
+          "tensorrt_cu12_libs": "10.16.1.11",
+          "torch": "2.11.0",
+          "torch_build": "2.11.0+cu130",
+          "torchvision": "0.26.0"
+        },
+        "platform": "Linux-6.18.33.1-microsoft-standard-WSL2-x86_64-with-glibc2.44",
+        "python": "3.12.13",
+        "trackeval": {
+          "dirty": false,
+          "git_tree": "b0ba3a0c5b82550156c6afd1ca949fe5ec155161",
+          "root": "third_party/TrackEval"
+        }
+      },
+      "complete": true,
+      "reasons": [],
+      "repeat": {
+        "report": "results/training_eval_contract/pyt_m.adapted_teacher_m.adapted_teacher/repeat-20260919T102111Z-report.json",
+        "n_runs": 6,
+        "distinct_outputs_per_sequence": {
+          "MOT17-02-SDP": 1,
+          "MOT17-04-SDP": 1,
+          "MOT17-05-SDP": 1,
+          "MOT17-09-SDP": 1,
+          "MOT17-10-SDP": 1,
+          "MOT17-11-SDP": 1,
+          "MOT17-13-SDP": 1
+        },
+        "metric_observed_range": {
+          "AssA": {
+            "min": 64.3,
+            "max": 64.3,
+            "observed_range": 0.0
+          },
+          "DetA": {
+            "min": 52.9,
+            "max": 52.9,
+            "observed_range": 0.0
+          },
+          "FN": {
+            "min": 43121.0,
+            "max": 43121.0,
+            "observed_range": 0.0
+          },
+          "FP": {
+            "min": 631.0,
+            "max": 631.0,
+            "observed_range": 0.0
+          },
+          "HOTA": {
+            "min": 58.3,
+            "max": 58.3,
+            "observed_range": 0.0
+          },
+          "IDF1": {
+            "min": 70.1,
+            "max": 70.1,
+            "observed_range": 0.0
+          },
+          "IDs": {
+            "min": 133.0,
+            "max": 133.0,
+            "observed_range": 0.0
+          },
+          "MOTA": {
+            "min": 60.9,
+            "max": 60.9,
+            "observed_range": 0.0
+          },
+          "Prcn": {
+            "min": 99.1,
+            "max": 99.1,
+            "observed_range": 0.0
+          },
+          "Rcll": {
+            "min": 61.6,
+            "max": 61.6,
+            "observed_range": 0.0
+          }
+        },
+        "throughput": [
+          {
+            "fps": 67.31,
+            "mean_latency_ms": 14.44
+          },
+          {
+            "fps": 67.06,
+            "mean_latency_ms": 14.5
+          },
+          {
+            "fps": 66.48,
+            "mean_latency_ms": 14.63
+          },
+          {
+            "fps": 67.2,
+            "mean_latency_ms": 14.46
+          },
+          {
+            "fps": 67.36,
+            "mean_latency_ms": 14.43
+          },
+          {
+            "fps": 67.14,
+            "mean_latency_ms": 14.48
+          }
+        ]
+      },
+      "formal": [
+        {
+          "run_dir": "results/training_eval_contract/pyt_m.adapted_teacher_m.adapted_teacher/formal-20260919T103018Z-r01",
+          "identity_sha256": "001816758bb4d9e31a18cb0cf2f252305fb36805b69b4b7f57f11e75d390a956",
+          "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+          "metrics": {
+            "AssA": 64.3,
+            "DetA": 52.9,
+            "FN": 43121.0,
+            "FP": 631.0,
+            "HOTA": 58.3,
+            "IDF1": 70.1,
+            "IDs": 133.0,
+            "MOTA": 60.9,
+            "Prcn": 99.1,
+            "Rcll": 61.6
+          },
+          "throughput": {
+            "fps": 66.64,
+            "mean_latency_ms": 14.59
+          },
+          "mot_md5": {
+            "MOT17-02-SDP": "ad7bb0ae366994e351605058211683b0",
+            "MOT17-04-SDP": "e15ce016e7912442af470a4cdece8ec2",
+            "MOT17-05-SDP": "74a8e612c536bd245e8e2719fb9b4d16",
+            "MOT17-09-SDP": "b95f5a4ea8cebb74143de6ee7ab8006a",
+            "MOT17-10-SDP": "1680799203677ae1eadd41d6f6b05fef",
+            "MOT17-11-SDP": "14a360143952b9b23eb2a122d686fd2e",
+            "MOT17-13-SDP": "6abe1a5ae0e053278537ee60dc6d0518"
+          },
+          "wall_seconds": 90.593,
+          "matches_repeat_output": true
+        },
+        {
+          "run_dir": "results/training_eval_contract/pyt_m.adapted_teacher_m.adapted_teacher/formal-20260919T103018Z-r02",
+          "identity_sha256": "001816758bb4d9e31a18cb0cf2f252305fb36805b69b4b7f57f11e75d390a956",
+          "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+          "metrics": {
+            "AssA": 64.3,
+            "DetA": 52.9,
+            "FN": 43121.0,
+            "FP": 631.0,
+            "HOTA": 58.3,
+            "IDF1": 70.1,
+            "IDs": 133.0,
+            "MOTA": 60.9,
+            "Prcn": 99.1,
+            "Rcll": 61.6
+          },
+          "throughput": {
+            "fps": 66.21,
+            "mean_latency_ms": 14.69
+          },
+          "mot_md5": {
+            "MOT17-02-SDP": "ad7bb0ae366994e351605058211683b0",
+            "MOT17-04-SDP": "e15ce016e7912442af470a4cdece8ec2",
+            "MOT17-05-SDP": "74a8e612c536bd245e8e2719fb9b4d16",
+            "MOT17-09-SDP": "b95f5a4ea8cebb74143de6ee7ab8006a",
+            "MOT17-10-SDP": "1680799203677ae1eadd41d6f6b05fef",
+            "MOT17-11-SDP": "14a360143952b9b23eb2a122d686fd2e",
+            "MOT17-13-SDP": "6abe1a5ae0e053278537ee60dc6d0518"
+          },
+          "wall_seconds": 91.055,
+          "matches_repeat_output": true
+        },
+        {
+          "run_dir": "results/training_eval_contract/pyt_m.adapted_teacher_m.adapted_teacher/formal-20260919T103018Z-r03",
+          "identity_sha256": "001816758bb4d9e31a18cb0cf2f252305fb36805b69b4b7f57f11e75d390a956",
+          "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+          "metrics": {
+            "AssA": 64.3,
+            "DetA": 52.9,
+            "FN": 43121.0,
+            "FP": 631.0,
+            "HOTA": 58.3,
+            "IDF1": 70.1,
+            "IDs": 133.0,
+            "MOTA": 60.9,
+            "Prcn": 99.1,
+            "Rcll": 61.6
+          },
+          "throughput": {
+            "fps": 66.54,
+            "mean_latency_ms": 14.62
+          },
+          "mot_md5": {
+            "MOT17-02-SDP": "ad7bb0ae366994e351605058211683b0",
+            "MOT17-04-SDP": "e15ce016e7912442af470a4cdece8ec2",
+            "MOT17-05-SDP": "74a8e612c536bd245e8e2719fb9b4d16",
+            "MOT17-09-SDP": "b95f5a4ea8cebb74143de6ee7ab8006a",
+            "MOT17-10-SDP": "1680799203677ae1eadd41d6f6b05fef",
+            "MOT17-11-SDP": "14a360143952b9b23eb2a122d686fd2e",
+            "MOT17-13-SDP": "6abe1a5ae0e053278537ee60dc6d0518"
+          },
+          "wall_seconds": 90.791,
+          "matches_repeat_output": true
+        }
+      ],
+      "formal_distinct_outputs_per_sequence": {
+        "MOT17-02-SDP": 1,
+        "MOT17-04-SDP": 1,
+        "MOT17-05-SDP": 1,
+        "MOT17-09-SDP": 1,
+        "MOT17-10-SDP": 1,
+        "MOT17-11-SDP": 1,
+        "MOT17-13-SDP": 1
+      }
+    },
+    "pyt:m.adapted_teacher:m.t3t1_phase_b": {
+      "recipe_id": "pyt:m.adapted_teacher:m.t3t1_phase_b",
+      "run_root": "results/training_eval_contract/pyt_m.adapted_teacher_m.t3t1_phase_b",
+      "identity_sha256": "18243108ba097066e2baee5b3c51d58ef223d1eb607070e5d5c51934b4734028",
+      "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+      "environment": {
+        "build_dir": "/home/ray/developer/ai/saccade/build",
+        "cuda_visible_devices": null,
+        "driver": "616.92",
+        "gpu": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+        "hostname": "DESKTOP-0FLA6SQ",
+        "native_extensions": {
+          "libsaccade_scan_plugin.so": "8bd0e60e2b78cd01a5697c143498a95b3c514f3b44af4c4f2af30a07cb90af71",
+          "saccade_cheb_gr_online_ext.cpython-312-x86_64-linux-gnu.so": "ef7284891a4900768589ccf437be987564333c20cbb87e063322ea51bea5f553",
+          "saccade_eval_ext.cpython-312-x86_64-linux-gnu.so": "e52d7ea14a336a612f432b35b95c6d914ce5526cf87d03190d892fd7278aefa5",
+          "saccade_media_ext.cpython-312-x86_64-linux-gnu.so": "0adb35e47471bf933e951170f26d8d916f86ff7d5cfad7a2fc55b1e32911d977",
+          "saccade_perception_ext.cpython-312-x86_64-linux-gnu.so": "86a76e872b34001a85d4c3b56d1b2b55d8b8365d9b6a70f5ce9dcef67c02831e",
+          "saccade_tracking_ext.cpython-312-x86_64-linux-gnu.so": "2f29d374432960793d8c6279064ddd68e18adc8a04b1ecf16c459839b71d49f4"
+        },
+        "packages": {
+          "motmetrics": "1.4.0",
+          "numpy": "2.4.4",
+          "nvidia-cuda-runtime": "13.0.96",
+          "nvidia-dali-cuda120": "2.0.0",
+          "nvidia-nvjpeg-cu12": "12.4.0.76",
+          "nvidia-nvjpeg2k-cu12": "0.10.0.49",
+          "tensorrt_cu12": "10.16.1.11",
+          "tensorrt_cu12_bindings": "10.16.1.11",
+          "tensorrt_cu12_libs": "10.16.1.11",
+          "torch": "2.11.0",
+          "torch_build": "2.11.0+cu130",
+          "torchvision": "0.26.0"
+        },
+        "platform": "Linux-6.18.33.1-microsoft-standard-WSL2-x86_64-with-glibc2.44",
+        "python": "3.12.13",
+        "trackeval": {
+          "dirty": false,
+          "git_tree": "b0ba3a0c5b82550156c6afd1ca949fe5ec155161",
+          "root": "third_party/TrackEval"
+        }
+      },
+      "complete": true,
+      "reasons": [],
+      "repeat": {
+        "report": "results/training_eval_contract/pyt_m.adapted_teacher_m.t3t1_phase_b/repeat-20260919T103454Z-report.json",
+        "n_runs": 6,
+        "distinct_outputs_per_sequence": {
+          "MOT17-02-SDP": 1,
+          "MOT17-04-SDP": 1,
+          "MOT17-05-SDP": 1,
+          "MOT17-09-SDP": 1,
+          "MOT17-10-SDP": 1,
+          "MOT17-11-SDP": 1,
+          "MOT17-13-SDP": 1
+        },
+        "metric_observed_range": {
+          "AssA": {
+            "min": 73.1,
+            "max": 73.1,
+            "observed_range": 0.0
+          },
+          "DetA": {
+            "min": 75.0,
+            "max": 75.0,
+            "observed_range": 0.0
+          },
+          "FN": {
+            "min": 18533.0,
+            "max": 18533.0,
+            "observed_range": 0.0
+          },
+          "FP": {
+            "min": 2102.0,
+            "max": 2102.0,
+            "observed_range": 0.0
+          },
+          "HOTA": {
+            "min": 74.0,
+            "max": 74.0,
+            "observed_range": 0.0
+          },
+          "IDF1": {
+            "min": 80.1,
+            "max": 80.1,
+            "observed_range": 0.0
+          },
+          "IDs": {
+            "min": 346.0,
+            "max": 346.0,
+            "observed_range": 0.0
+          },
+          "MOTA": {
+            "min": 81.3,
+            "max": 81.3,
+            "observed_range": 0.0
+          },
+          "Prcn": {
+            "min": 97.8,
+            "max": 97.8,
+            "observed_range": 0.0
+          },
+          "Rcll": {
+            "min": 83.5,
+            "max": 83.5,
+            "observed_range": 0.0
+          }
+        },
+        "throughput": [
+          {
+            "fps": 64.94,
+            "mean_latency_ms": 14.98
+          },
+          {
+            "fps": 64.06,
+            "mean_latency_ms": 15.2
+          },
+          {
+            "fps": 64.63,
+            "mean_latency_ms": 15.04
+          },
+          {
+            "fps": 65.16,
+            "mean_latency_ms": 14.92
+          },
+          {
+            "fps": 64.28,
+            "mean_latency_ms": 15.14
+          },
+          {
+            "fps": 64.93,
+            "mean_latency_ms": 14.98
+          }
+        ]
+      },
+      "formal": [
+        {
+          "run_dir": "results/training_eval_contract/pyt_m.adapted_teacher_m.t3t1_phase_b/formal-20260919T104423Z-r01",
+          "identity_sha256": "18243108ba097066e2baee5b3c51d58ef223d1eb607070e5d5c51934b4734028",
+          "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+          "metrics": {
+            "AssA": 73.1,
+            "DetA": 75.0,
+            "FN": 18533.0,
+            "FP": 2102.0,
+            "HOTA": 74.0,
+            "IDF1": 80.1,
+            "IDs": 346.0,
+            "MOTA": 81.3,
+            "Prcn": 97.8,
+            "Rcll": 83.5
+          },
+          "throughput": {
+            "fps": 64.96,
+            "mean_latency_ms": 14.97
+          },
+          "mot_md5": {
+            "MOT17-02-SDP": "c7c4172bd4bfc4f1ec9a505c1c7e45b5",
+            "MOT17-04-SDP": "d0106521ae30259841b0d7be3c6951ae",
+            "MOT17-05-SDP": "0ab14d3940082446e6f0e7cf86ee2082",
+            "MOT17-09-SDP": "7578eaaca63fe2f8383a9aacd75fafdc",
+            "MOT17-10-SDP": "fb3a4222629f83eadacefb37ca5ff9c2",
+            "MOT17-11-SDP": "e13972b0f9c99bd6f02e04ae95fd41b8",
+            "MOT17-13-SDP": "0d5ff3d2ad77d9f96c76c22f4dbb654c"
+          },
+          "wall_seconds": 93.297,
+          "matches_repeat_output": true
+        },
+        {
+          "run_dir": "results/training_eval_contract/pyt_m.adapted_teacher_m.t3t1_phase_b/formal-20260919T104423Z-r02",
+          "identity_sha256": "18243108ba097066e2baee5b3c51d58ef223d1eb607070e5d5c51934b4734028",
+          "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+          "metrics": {
+            "AssA": 73.1,
+            "DetA": 75.0,
+            "FN": 18533.0,
+            "FP": 2102.0,
+            "HOTA": 74.0,
+            "IDF1": 80.1,
+            "IDs": 346.0,
+            "MOTA": 81.3,
+            "Prcn": 97.8,
+            "Rcll": 83.5
+          },
+          "throughput": {
+            "fps": 64.79,
+            "mean_latency_ms": 15.01
+          },
+          "mot_md5": {
+            "MOT17-02-SDP": "c7c4172bd4bfc4f1ec9a505c1c7e45b5",
+            "MOT17-04-SDP": "d0106521ae30259841b0d7be3c6951ae",
+            "MOT17-05-SDP": "0ab14d3940082446e6f0e7cf86ee2082",
+            "MOT17-09-SDP": "7578eaaca63fe2f8383a9aacd75fafdc",
+            "MOT17-10-SDP": "fb3a4222629f83eadacefb37ca5ff9c2",
+            "MOT17-11-SDP": "e13972b0f9c99bd6f02e04ae95fd41b8",
+            "MOT17-13-SDP": "0d5ff3d2ad77d9f96c76c22f4dbb654c"
+          },
+          "wall_seconds": 93.508,
+          "matches_repeat_output": true
+        },
+        {
+          "run_dir": "results/training_eval_contract/pyt_m.adapted_teacher_m.t3t1_phase_b/formal-20260919T104423Z-r03",
+          "identity_sha256": "18243108ba097066e2baee5b3c51d58ef223d1eb607070e5d5c51934b4734028",
+          "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+          "metrics": {
+            "AssA": 73.1,
+            "DetA": 75.0,
+            "FN": 18533.0,
+            "FP": 2102.0,
+            "HOTA": 74.0,
+            "IDF1": 80.1,
+            "IDs": 346.0,
+            "MOTA": 81.3,
+            "Prcn": 97.8,
+            "Rcll": 83.5
+          },
+          "throughput": {
+            "fps": 65.13,
+            "mean_latency_ms": 14.92
+          },
+          "mot_md5": {
+            "MOT17-02-SDP": "c7c4172bd4bfc4f1ec9a505c1c7e45b5",
+            "MOT17-04-SDP": "d0106521ae30259841b0d7be3c6951ae",
+            "MOT17-05-SDP": "0ab14d3940082446e6f0e7cf86ee2082",
+            "MOT17-09-SDP": "7578eaaca63fe2f8383a9aacd75fafdc",
+            "MOT17-10-SDP": "fb3a4222629f83eadacefb37ca5ff9c2",
+            "MOT17-11-SDP": "e13972b0f9c99bd6f02e04ae95fd41b8",
+            "MOT17-13-SDP": "0d5ff3d2ad77d9f96c76c22f4dbb654c"
+          },
+          "wall_seconds": 93.183,
+          "matches_repeat_output": true
+        }
+      ],
+      "formal_distinct_outputs_per_sequence": {
+        "MOT17-02-SDP": 1,
+        "MOT17-04-SDP": 1,
+        "MOT17-05-SDP": 1,
+        "MOT17-09-SDP": 1,
+        "MOT17-10-SDP": 1,
+        "MOT17-11-SDP": 1,
+        "MOT17-13-SDP": 1
+      }
+    },
+    "wg:mamba_whole_graph/engine=s.backbone_engine_v14replica_e12:s.t3t1_phase_b": {
+      "recipe_id": "wg:mamba_whole_graph/engine=s.backbone_engine_v14replica_e12:s.t3t1_phase_b",
+      "run_root": "results/training_eval_contract/wg_mamba_whole_graph_engine_s.backbone_engine_v14replica_e12_s.t3t1_phase_b",
+      "identity_sha256": "2c0d56163edcc803774b4ba09707dfdc983ba2b017a62479ad73982fc96f2bf7",
+      "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+      "environment": {
+        "build_dir": "/home/ray/developer/ai/saccade/build",
+        "cuda_visible_devices": null,
+        "driver": "616.92",
+        "gpu": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+        "hostname": "DESKTOP-0FLA6SQ",
+        "native_extensions": {
+          "libsaccade_scan_plugin.so": "8bd0e60e2b78cd01a5697c143498a95b3c514f3b44af4c4f2af30a07cb90af71",
+          "saccade_cheb_gr_online_ext.cpython-312-x86_64-linux-gnu.so": "ef7284891a4900768589ccf437be987564333c20cbb87e063322ea51bea5f553",
+          "saccade_eval_ext.cpython-312-x86_64-linux-gnu.so": "e52d7ea14a336a612f432b35b95c6d914ce5526cf87d03190d892fd7278aefa5",
+          "saccade_media_ext.cpython-312-x86_64-linux-gnu.so": "0adb35e47471bf933e951170f26d8d916f86ff7d5cfad7a2fc55b1e32911d977",
+          "saccade_perception_ext.cpython-312-x86_64-linux-gnu.so": "86a76e872b34001a85d4c3b56d1b2b55d8b8365d9b6a70f5ce9dcef67c02831e",
+          "saccade_tracking_ext.cpython-312-x86_64-linux-gnu.so": "2f29d374432960793d8c6279064ddd68e18adc8a04b1ecf16c459839b71d49f4"
+        },
+        "packages": {
+          "motmetrics": "1.4.0",
+          "numpy": "2.4.4",
+          "nvidia-cuda-runtime": "13.0.96",
+          "nvidia-dali-cuda120": "2.0.0",
+          "nvidia-nvjpeg-cu12": "12.4.0.76",
+          "nvidia-nvjpeg2k-cu12": "0.10.0.49",
+          "tensorrt_cu12": "10.16.1.11",
+          "tensorrt_cu12_bindings": "10.16.1.11",
+          "tensorrt_cu12_libs": "10.16.1.11",
+          "torch": "2.11.0",
+          "torch_build": "2.11.0+cu130",
+          "torchvision": "0.26.0"
+        },
+        "platform": "Linux-6.18.33.1-microsoft-standard-WSL2-x86_64-with-glibc2.44",
+        "python": "3.12.13",
+        "trackeval": {
+          "dirty": false,
+          "git_tree": "b0ba3a0c5b82550156c6afd1ca949fe5ec155161",
+          "root": "third_party/TrackEval"
+        }
+      },
+      "complete": true,
+      "reasons": [],
+      "repeat": {
+        "report": "results/training_eval_contract/wg_mamba_whole_graph_engine_s.backbone_engine_v14replica_e12_s.t3t1_phase_b/repeat-20260919T104906Z-report.json",
+        "n_runs": 6,
+        "distinct_outputs_per_sequence": {
+          "MOT17-02-SDP": 1,
+          "MOT17-04-SDP": 1,
+          "MOT17-05-SDP": 1,
+          "MOT17-09-SDP": 1,
+          "MOT17-10-SDP": 1,
+          "MOT17-11-SDP": 1,
+          "MOT17-13-SDP": 1
+        },
+        "metric_observed_range": {
+          "AssA": {
+            "min": 68.8,
+            "max": 68.8,
+            "observed_range": 0.0
+          },
+          "DetA": {
+            "min": 72.5,
+            "max": 72.5,
+            "observed_range": 0.0
+          },
+          "FN": {
+            "min": 20208.0,
+            "max": 20208.0,
+            "observed_range": 0.0
+          },
+          "FP": {
+            "min": 3232.0,
+            "max": 3232.0,
+            "observed_range": 0.0
+          },
+          "HOTA": {
+            "min": 70.5,
+            "max": 70.5,
+            "observed_range": 0.0
+          },
+          "IDF1": {
+            "min": 77.1,
+            "max": 77.1,
+            "observed_range": 0.0
+          },
+          "IDs": {
+            "min": 415.0,
+            "max": 415.0,
+            "observed_range": 0.0
+          },
+          "MOTA": {
+            "min": 78.8,
+            "max": 78.8,
+            "observed_range": 0.0
+          },
+          "Prcn": {
+            "min": 96.6,
+            "max": 96.6,
+            "observed_range": 0.0
+          },
+          "Rcll": {
+            "min": 82.0,
+            "max": 82.0,
+            "observed_range": 0.0
+          }
+        },
+        "throughput": [
+          {
+            "fps": 198.19,
+            "mean_latency_ms": 4.66
+          },
+          {
+            "fps": 198.05,
+            "mean_latency_ms": 4.66
+          },
+          {
+            "fps": 197.89,
+            "mean_latency_ms": 4.67
+          },
+          {
+            "fps": 197.54,
+            "mean_latency_ms": 4.67
+          },
+          {
+            "fps": 198.05,
+            "mean_latency_ms": 4.66
+          },
+          {
+            "fps": 198.24,
+            "mean_latency_ms": 4.66
+          }
+        ]
+      },
+      "formal": [
+        {
+          "run_dir": "results/training_eval_contract/wg_mamba_whole_graph_engine_s.backbone_engine_v14replica_e12_s.t3t1_phase_b/formal-20260919T105316Z-r01",
+          "identity_sha256": "2c0d56163edcc803774b4ba09707dfdc983ba2b017a62479ad73982fc96f2bf7",
+          "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+          "metrics": {
+            "AssA": 68.8,
+            "DetA": 72.5,
+            "FN": 20208.0,
+            "FP": 3232.0,
+            "HOTA": 70.5,
+            "IDF1": 77.1,
+            "IDs": 415.0,
+            "MOTA": 78.8,
+            "Prcn": 96.6,
+            "Rcll": 82.0
+          },
+          "throughput": {
+            "fps": 197.25,
+            "mean_latency_ms": 4.68
+          },
+          "mot_md5": {
+            "MOT17-02-SDP": "ce03b932f37d51d717433b1c3ba7ef5e",
+            "MOT17-04-SDP": "d753c770b75704d6fda096fbb30ff67b",
+            "MOT17-05-SDP": "b0939ae514762314c6b1db14d079a55b",
+            "MOT17-09-SDP": "febdc28281f66344a2ca1ef9be13f44d",
+            "MOT17-10-SDP": "af225426c8653de0234a552b52b25562",
+            "MOT17-11-SDP": "d039fd4279371eb21d9e7cfd5d78561b",
+            "MOT17-13-SDP": "8f912eb1ec191689389cfd3d8386d888"
+          },
+          "wall_seconds": 40.776,
+          "matches_repeat_output": true
+        },
+        {
+          "run_dir": "results/training_eval_contract/wg_mamba_whole_graph_engine_s.backbone_engine_v14replica_e12_s.t3t1_phase_b/formal-20260919T105316Z-r02",
+          "identity_sha256": "2c0d56163edcc803774b4ba09707dfdc983ba2b017a62479ad73982fc96f2bf7",
+          "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+          "metrics": {
+            "AssA": 68.8,
+            "DetA": 72.5,
+            "FN": 20208.0,
+            "FP": 3232.0,
+            "HOTA": 70.5,
+            "IDF1": 77.1,
+            "IDs": 415.0,
+            "MOTA": 78.8,
+            "Prcn": 96.6,
+            "Rcll": 82.0
+          },
+          "throughput": {
+            "fps": 197.84,
+            "mean_latency_ms": 4.67
+          },
+          "mot_md5": {
+            "MOT17-02-SDP": "ce03b932f37d51d717433b1c3ba7ef5e",
+            "MOT17-04-SDP": "d753c770b75704d6fda096fbb30ff67b",
+            "MOT17-05-SDP": "b0939ae514762314c6b1db14d079a55b",
+            "MOT17-09-SDP": "febdc28281f66344a2ca1ef9be13f44d",
+            "MOT17-10-SDP": "af225426c8653de0234a552b52b25562",
+            "MOT17-11-SDP": "d039fd4279371eb21d9e7cfd5d78561b",
+            "MOT17-13-SDP": "8f912eb1ec191689389cfd3d8386d888"
+          },
+          "wall_seconds": 40.724,
+          "matches_repeat_output": true
+        },
+        {
+          "run_dir": "results/training_eval_contract/wg_mamba_whole_graph_engine_s.backbone_engine_v14replica_e12_s.t3t1_phase_b/formal-20260919T105316Z-r03",
+          "identity_sha256": "2c0d56163edcc803774b4ba09707dfdc983ba2b017a62479ad73982fc96f2bf7",
+          "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+          "metrics": {
+            "AssA": 68.8,
+            "DetA": 72.5,
+            "FN": 20208.0,
+            "FP": 3232.0,
+            "HOTA": 70.5,
+            "IDF1": 77.1,
+            "IDs": 415.0,
+            "MOTA": 78.8,
+            "Prcn": 96.6,
+            "Rcll": 82.0
+          },
+          "throughput": {
+            "fps": 196.67,
+            "mean_latency_ms": 4.7
+          },
+          "mot_md5": {
+            "MOT17-02-SDP": "ce03b932f37d51d717433b1c3ba7ef5e",
+            "MOT17-04-SDP": "d753c770b75704d6fda096fbb30ff67b",
+            "MOT17-05-SDP": "b0939ae514762314c6b1db14d079a55b",
+            "MOT17-09-SDP": "febdc28281f66344a2ca1ef9be13f44d",
+            "MOT17-10-SDP": "af225426c8653de0234a552b52b25562",
+            "MOT17-11-SDP": "d039fd4279371eb21d9e7cfd5d78561b",
+            "MOT17-13-SDP": "8f912eb1ec191689389cfd3d8386d888"
+          },
+          "wall_seconds": 40.849,
+          "matches_repeat_output": true
+        }
+      ],
+      "formal_distinct_outputs_per_sequence": {
+        "MOT17-02-SDP": 1,
+        "MOT17-04-SDP": 1,
+        "MOT17-05-SDP": 1,
+        "MOT17-09-SDP": 1,
+        "MOT17-10-SDP": 1,
+        "MOT17-11-SDP": 1,
+        "MOT17-13-SDP": 1
+      }
+    }
+  },
+  "pairs": {
+    "B1.s.distill_to_gt1": {
+      "classification": "controlled",
+      "variance_axis": "treatment",
+      "lhs_recipe": "wg:mamba_whole_graph:s.distill",
+      "rhs_recipe": "wg:mamba_whole_graph:s.gt1",
+      "lhs_formal_runs": [
+        "results/training_eval_contract/wg_mamba_whole_graph_s.distill/formal-20260919T083605Z-r01",
+        "results/training_eval_contract/wg_mamba_whole_graph_s.distill/formal-20260919T083605Z-r02",
+        "results/training_eval_contract/wg_mamba_whole_graph_s.distill/formal-20260919T083605Z-r03"
+      ],
+      "rhs_formal_runs": [
+        "results/training_eval_contract/wg_mamba_whole_graph_s.gt1/formal-20260919T084225Z-r01",
+        "results/training_eval_contract/wg_mamba_whole_graph_s.gt1/formal-20260919T084225Z-r02",
+        "results/training_eval_contract/wg_mamba_whole_graph_s.gt1/formal-20260919T084225Z-r03"
+      ],
+      "both_sides_formal": true
+    },
+    "B2.s.gt1_to_gt2_plain": {
+      "classification": "controlled",
+      "variance_axis": "treatment",
+      "lhs_recipe": "wg:mamba_whole_graph:s.gt1",
+      "rhs_recipe": "wg:mamba_whole_graph:s.gt2_plain",
+      "lhs_formal_runs": [
+        "results/training_eval_contract/wg_mamba_whole_graph_s.gt1/formal-20260919T084225Z-r01",
+        "results/training_eval_contract/wg_mamba_whole_graph_s.gt1/formal-20260919T084225Z-r02",
+        "results/training_eval_contract/wg_mamba_whole_graph_s.gt1/formal-20260919T084225Z-r03"
+      ],
+      "rhs_formal_runs": [
+        "results/training_eval_contract/wg_mamba_whole_graph_s.gt2_plain/formal-20260919T084841Z-r01",
+        "results/training_eval_contract/wg_mamba_whole_graph_s.gt2_plain/formal-20260919T084841Z-r02",
+        "results/training_eval_contract/wg_mamba_whole_graph_s.gt2_plain/formal-20260919T084841Z-r03"
+      ],
+      "both_sides_formal": true
+    },
+    "B3.m.distill_to_gt1": {
+      "classification": "controlled",
+      "variance_axis": "treatment",
+      "lhs_recipe": "wg:mamba_whole_graph_m/ckpt-head:m.distill",
+      "rhs_recipe": "wg:mamba_whole_graph_m/ckpt-head:m.gt1",
+      "lhs_formal_runs": [
+        "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.distill/formal-20260919T085525Z-r01",
+        "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.distill/formal-20260919T085525Z-r02",
+        "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.distill/formal-20260919T085525Z-r03"
+      ],
+      "rhs_formal_runs": [
+        "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.gt1/formal-20260919T090223Z-r01",
+        "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.gt1/formal-20260919T090223Z-r02",
+        "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.gt1/formal-20260919T090223Z-r03"
+      ],
+      "both_sides_formal": true
+    },
+    "B4.m.gt1_to_gt2_plain": {
+      "classification": "controlled",
+      "variance_axis": "treatment",
+      "lhs_recipe": "wg:mamba_whole_graph_m/ckpt-head:m.gt1",
+      "rhs_recipe": "wg:mamba_whole_graph_m/ckpt-head:m.gt2_plain",
+      "lhs_formal_runs": [
+        "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.gt1/formal-20260919T090223Z-r01",
+        "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.gt1/formal-20260919T090223Z-r02",
+        "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.gt1/formal-20260919T090223Z-r03"
+      ],
+      "rhs_formal_runs": [
+        "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.gt2_plain/formal-20260919T090919Z-r01",
+        "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.gt2_plain/formal-20260919T090919Z-r02",
+        "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.gt2_plain/formal-20260919T090919Z-r03"
+      ],
+      "both_sides_formal": true
+    },
+    "C1.s.explicit_vs_implicit_shared_gt1_s42": {
+      "classification": "controlled",
+      "variance_axis": "treatment",
+      "lhs_recipe": "wg:mamba_whole_graph:s.implicit_s42",
+      "rhs_recipe": "wg:mamba_whole_graph:s.t3t1_phase_b",
+      "lhs_formal_runs": [
+        "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s42/formal-20260919T091548Z-r01",
+        "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s42/formal-20260919T091548Z-r02",
+        "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s42/formal-20260919T091548Z-r03"
+      ],
+      "rhs_formal_runs": [
+        "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_phase_b/formal-20260919T092203Z-r01",
+        "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_phase_b/formal-20260919T092203Z-r02",
+        "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_phase_b/formal-20260919T092203Z-r03"
+      ],
+      "both_sides_formal": true
+    },
+    "C2.s.explicit_vs_implicit_shared_gt1_s43": {
+      "classification": "controlled",
+      "variance_axis": "treatment",
+      "lhs_recipe": "wg:mamba_whole_graph:s.implicit_s43",
+      "rhs_recipe": "wg:mamba_whole_graph:s.t3t1_shared_s43",
+      "lhs_formal_runs": [
+        "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s43/formal-20260919T092819Z-r01",
+        "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s43/formal-20260919T092819Z-r02",
+        "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s43/formal-20260919T092819Z-r03"
+      ],
+      "rhs_formal_runs": [
+        "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s43/formal-20260919T093436Z-r01",
+        "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s43/formal-20260919T093436Z-r02",
+        "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s43/formal-20260919T093436Z-r03"
+      ],
+      "both_sides_formal": true
+    },
+    "C3.s.explicit_vs_implicit_shared_gt1_s44": {
+      "classification": "controlled",
+      "variance_axis": "treatment",
+      "lhs_recipe": "wg:mamba_whole_graph:s.implicit_s44",
+      "rhs_recipe": "wg:mamba_whole_graph:s.t3t1_shared_s44",
+      "lhs_formal_runs": [
+        "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s44/formal-20260919T094052Z-r01",
+        "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s44/formal-20260919T094052Z-r02",
+        "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s44/formal-20260919T094052Z-r03"
+      ],
+      "rhs_formal_runs": [
+        "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s44/formal-20260919T094707Z-r01",
+        "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s44/formal-20260919T094707Z-r02",
+        "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s44/formal-20260919T094707Z-r03"
+      ],
+      "both_sides_formal": true
+    },
+    "D1.s.implicit_seed_42_vs_43": {
+      "classification": "controlled",
+      "variance_axis": "training_seed",
+      "lhs_recipe": "wg:mamba_whole_graph:s.implicit_s42",
+      "rhs_recipe": "wg:mamba_whole_graph:s.implicit_s43",
+      "lhs_formal_runs": [
+        "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s42/formal-20260919T091548Z-r01",
+        "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s42/formal-20260919T091548Z-r02",
+        "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s42/formal-20260919T091548Z-r03"
+      ],
+      "rhs_formal_runs": [
+        "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s43/formal-20260919T092819Z-r01",
+        "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s43/formal-20260919T092819Z-r02",
+        "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s43/formal-20260919T092819Z-r03"
+      ],
+      "both_sides_formal": true
+    },
+    "D2.s.implicit_seed_43_vs_44": {
+      "classification": "controlled",
+      "variance_axis": "training_seed",
+      "lhs_recipe": "wg:mamba_whole_graph:s.implicit_s43",
+      "rhs_recipe": "wg:mamba_whole_graph:s.implicit_s44",
+      "lhs_formal_runs": [
+        "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s43/formal-20260919T092819Z-r01",
+        "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s43/formal-20260919T092819Z-r02",
+        "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s43/formal-20260919T092819Z-r03"
+      ],
+      "rhs_formal_runs": [
+        "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s44/formal-20260919T094052Z-r01",
+        "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s44/formal-20260919T094052Z-r02",
+        "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s44/formal-20260919T094052Z-r03"
+      ],
+      "both_sides_formal": true
+    },
+    "D3.s.explicit_shared_seed_42_vs_43": {
+      "classification": "controlled",
+      "variance_axis": "training_seed",
+      "lhs_recipe": "wg:mamba_whole_graph:s.t3t1_phase_b",
+      "rhs_recipe": "wg:mamba_whole_graph:s.t3t1_shared_s43",
+      "lhs_formal_runs": [
+        "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_phase_b/formal-20260919T092203Z-r01",
+        "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_phase_b/formal-20260919T092203Z-r02",
+        "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_phase_b/formal-20260919T092203Z-r03"
+      ],
+      "rhs_formal_runs": [
+        "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s43/formal-20260919T093436Z-r01",
+        "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s43/formal-20260919T093436Z-r02",
+        "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s43/formal-20260919T093436Z-r03"
+      ],
+      "both_sides_formal": true
+    },
+    "D4.s.explicit_shared_seed_43_vs_44": {
+      "classification": "controlled",
+      "variance_axis": "training_seed",
+      "lhs_recipe": "wg:mamba_whole_graph:s.t3t1_shared_s43",
+      "rhs_recipe": "wg:mamba_whole_graph:s.t3t1_shared_s44",
+      "lhs_formal_runs": [
+        "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s43/formal-20260919T093436Z-r01",
+        "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s43/formal-20260919T093436Z-r02",
+        "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s43/formal-20260919T093436Z-r03"
+      ],
+      "rhs_formal_runs": [
+        "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s44/formal-20260919T094707Z-r01",
+        "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s44/formal-20260919T094707Z-r02",
+        "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s44/formal-20260919T094707Z-r03"
+      ],
+      "both_sides_formal": true
+    },
+    "E1.s_vs_m.production_system": {
+      "classification": "system_comparison",
+      "variance_axis": "treatment",
+      "lhs_recipe": "wg:mamba_whole_graph:s.t3t1_phase_b",
+      "rhs_recipe": "wg:mamba_whole_graph_m:m.t3t1_phase_b",
+      "lhs_formal_runs": [
+        "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_phase_b/formal-20260919T092203Z-r01",
+        "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_phase_b/formal-20260919T092203Z-r02",
+        "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_phase_b/formal-20260919T092203Z-r03"
+      ],
+      "rhs_formal_runs": [
+        "results/training_eval_contract/wg_mamba_whole_graph_m_m.t3t1_phase_b/formal-20260919T095304Z-r01",
+        "results/training_eval_contract/wg_mamba_whole_graph_m_m.t3t1_phase_b/formal-20260919T095304Z-r02",
+        "results/training_eval_contract/wg_mamba_whole_graph_m_m.t3t1_phase_b/formal-20260919T095304Z-r03"
+      ],
+      "both_sides_formal": true
+    },
+    "E2.s.native_head_vs_mamba_head_shared_backbone": {
+      "classification": "system_comparison",
+      "variance_axis": "treatment",
+      "lhs_recipe": "pyt:s.adapted_teacher:s.adapted_teacher",
+      "rhs_recipe": "pyt:s.adapted_teacher:s.t3t1_phase_b",
+      "lhs_formal_runs": [
+        "results/training_eval_contract/pyt_s.adapted_teacher_s.adapted_teacher/formal-20260919T100338Z-r01",
+        "results/training_eval_contract/pyt_s.adapted_teacher_s.adapted_teacher/formal-20260919T100338Z-r02",
+        "results/training_eval_contract/pyt_s.adapted_teacher_s.adapted_teacher/formal-20260919T100338Z-r03"
+      ],
+      "rhs_formal_runs": [
+        "results/training_eval_contract/pyt_s.adapted_teacher_s.t3t1_phase_b/formal-20260919T101645Z-r01",
+        "results/training_eval_contract/pyt_s.adapted_teacher_s.t3t1_phase_b/formal-20260919T101645Z-r02",
+        "results/training_eval_contract/pyt_s.adapted_teacher_s.t3t1_phase_b/formal-20260919T101645Z-r03"
+      ],
+      "both_sides_formal": true
+    },
+    "E3.m.native_head_vs_mamba_head_shared_backbone": {
+      "classification": "system_comparison",
+      "variance_axis": "treatment",
+      "lhs_recipe": "pyt:m.adapted_teacher:m.adapted_teacher",
+      "rhs_recipe": "pyt:m.adapted_teacher:m.t3t1_phase_b",
+      "lhs_formal_runs": [
+        "results/training_eval_contract/pyt_m.adapted_teacher_m.adapted_teacher/formal-20260919T103018Z-r01",
+        "results/training_eval_contract/pyt_m.adapted_teacher_m.adapted_teacher/formal-20260919T103018Z-r02",
+        "results/training_eval_contract/pyt_m.adapted_teacher_m.adapted_teacher/formal-20260919T103018Z-r03"
+      ],
+      "rhs_formal_runs": [
+        "results/training_eval_contract/pyt_m.adapted_teacher_m.t3t1_phase_b/formal-20260919T104423Z-r01",
+        "results/training_eval_contract/pyt_m.adapted_teacher_m.t3t1_phase_b/formal-20260919T104423Z-r02",
+        "results/training_eval_contract/pyt_m.adapted_teacher_m.t3t1_phase_b/formal-20260919T104423Z-r03"
+      ],
+      "both_sides_formal": true
+    },
+    "E4.s.production_backbone_engine_ab": {
+      "classification": "controlled",
+      "variance_axis": "treatment",
+      "lhs_recipe": "wg:mamba_whole_graph:s.t3t1_phase_b",
+      "rhs_recipe": "wg:mamba_whole_graph/engine=s.backbone_engine_v14replica_e12:s.t3t1_phase_b",
+      "lhs_formal_runs": [
+        "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_phase_b/formal-20260919T092203Z-r01",
+        "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_phase_b/formal-20260919T092203Z-r02",
+        "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_phase_b/formal-20260919T092203Z-r03"
+      ],
+      "rhs_formal_runs": [
+        "results/training_eval_contract/wg_mamba_whole_graph_engine_s.backbone_engine_v14replica_e12_s.t3t1_phase_b/formal-20260919T105316Z-r01",
+        "results/training_eval_contract/wg_mamba_whole_graph_engine_s.backbone_engine_v14replica_e12_s.t3t1_phase_b/formal-20260919T105316Z-r02",
+        "results/training_eval_contract/wg_mamba_whole_graph_engine_s.backbone_engine_v14replica_e12_s.t3t1_phase_b/formal-20260919T105316Z-r03"
+      ],
+      "both_sides_formal": true
+    }
+  },
+  "variance_axis": "runtime_repeat",
+  "claim_rule": "per recipe: 'k distinct outputs in n repeat runs' (n=6) and the observed metric range; never 'deterministic' or 'bit-exact'",
+  "note": "campaign inventory, not a baseline table: baseline status and every pair verdict are assigned by deliverable 4 (validate-pair) against the same-identity repeat report's observed range and the pair's confounds"
+}

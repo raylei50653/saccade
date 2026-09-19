@@ -32,8 +32,18 @@ be told apart from two results that merely look alike:
   ``allowed_differences``).  Missing identity, a non-formal stage, a
   contract mismatch or any unexplained difference is ``not_paired``.
 
+* ``campaign`` inventories a run root after the procedure has been run for
+  every recipe (deliverable-3 closeout): per recipe the formal runs, the
+  same-identity repeat report behind them, byte agreement between the two,
+  and every invariant a reader would otherwise re-derive (one identity, one
+  clean commit, this contract, the bench lease, complete records, no
+  unaccounted run dir); per pair, which formal runs ``validate-pair`` can be
+  handed.  The committed snapshot (``report_data/training_eval_campaign.json``
+  + its generated doc) is the surviving record of the gitignored raw runs.
+
 Nothing here produces or interprets a baseline number; deliverable 4 runs
-the recipes and reads the reports.
+``validate-pair`` over the inventory and reads the deltas against the
+repeat reports.
 
 Usage:
     .venv/bin/python scripts/provenance/training_eval_contract.py freeze
@@ -43,6 +53,7 @@ Usage:
     .venv/bin/python scripts/provenance/training_eval_contract.py run <recipe> --stage smoke|repeat|formal [--runs N]
     .venv/bin/python scripts/provenance/training_eval_contract.py repeat-report <run_dir>...
     .venv/bin/python scripts/provenance/training_eval_contract.py validate-pair <comparison_id> <lhs_run> <rhs_run>
+    .venv/bin/python scripts/provenance/training_eval_contract.py campaign [--root DIR] --emit report_data/training_eval_campaign.json --campaign-md docs/research/training/training_eval_campaign.md
 """
 
 # status: stable
@@ -87,12 +98,15 @@ DEFAULT_MATRIX = Path("report_data/training_comparison_matrix.json")
 DEFAULT_INVENTORY = Path("report_data/training_lineage_inventory.json")
 DEFAULT_MD_OUT = Path("docs/research/training/training_eval_contract.md")
 DEFAULT_RUN_ROOT = Path("results/training_eval_contract")
+DEFAULT_CAMPAIGN_OUT = Path("report_data/training_eval_campaign.json")
+DEFAULT_CAMPAIGN_MD = Path("docs/research/training/training_eval_campaign.md")
 
 CONTRACT_SCHEMA = "training_eval_contract_v1"
 IDENTITY_SCHEMA = "training_eval_runtime_identity_v1"
 RUN_RECORD_SCHEMA = "training_eval_run_record_v1"
 REPEAT_REPORT_SCHEMA = "training_eval_repeat_report_v1"
 PAIR_VERDICT_SCHEMA = "training_eval_pair_verdict_v1"
+CAMPAIGN_SCHEMA = "training_eval_campaign_v1"
 MATRIX_SCHEMA = "training_comparison_matrix_v1"
 INVENTORY_SCHEMA = "training_lineage_inventory_v1"
 
@@ -1542,6 +1556,424 @@ def _verdict(
     }
 
 
+# --------------------------------------------------------------------------- campaign inventory
+
+
+def _run_dirs_under(recipe_root: Path) -> list[Path]:
+    if not recipe_root.is_dir():
+        return []
+    return sorted(
+        d
+        for d in recipe_root.iterdir()
+        if d.is_dir() and any(d.name.startswith(f"{s}-") for s in STAGES)
+    )
+
+
+def campaign_recipe(
+    contract: Mapping[str, Any], recipe_id: str, root: Path
+) -> dict[str, Any]:
+    """One recipe's formal runs and the same-identity repeat report behind them.
+
+    Every invariant a deliverable-4 reader would otherwise re-derive by hand
+    is checked here and written down as a reason when it fails: one identity
+    across the formal runs, clean tree, this contract, the bench lease,
+    complete records, a complete same-identity repeat report of at least
+    ``repeat.min_runs``, and no run directory under the recipe root that the
+    inventory does not account for (a stray dirty or superseded run must be
+    moved out, not silently ignored).
+    """
+    procedure = contract["declared"]["procedure"]
+    recipe_root = root / _slug(recipe_id)
+    reasons: list[str] = []
+    formal: list[dict[str, Any]] = []
+    identities: set[str] = set()
+    commits: set[str] = set()
+    environment: dict[str, Any] | None = None
+    formal_dirs = [
+        d for d in _run_dirs_under(recipe_root) if d.name.startswith("formal-")
+    ]
+    for run_dir in formal_dirs:
+        try:
+            identity = run_identity(run_dir)
+            record = run_record(run_dir)
+        except (ContractError, rm.ManifestError) as exc:
+            reasons.append(f"{run_dir.name}: {exc}")
+            continue
+        pairing = identity["pairing"]
+        identities.add(identity["identity_sha256"])
+        commits.add(pairing["commit"])
+        environment = environment or pairing["environment"]
+        if identity["stage"] != "formal" or record.get("stage") != "formal":
+            reasons.append(f"{run_dir.name}: not a formal-stage run")
+        if pairing["recipe_id"] != recipe_id:
+            reasons.append(f"{run_dir.name}: recipe {pairing['recipe_id']!r}")
+        if pairing["contract_sha256"] != contract["frozen"]["contract_sha256"]:
+            reasons.append(f"{run_dir.name}: bound to a different contract sha256")
+        if pairing["dirty"]:
+            reasons.append(f"{run_dir.name}: dirty tree")
+        if pairing["dataset"]["subset"]:
+            reasons.append(f"{run_dir.name}: sequence subset run")
+        if record.get("lease") != procedure["formal"]["lease"]:
+            reasons.append(
+                f"{run_dir.name}: lease {record.get('lease')!r} != {procedure['formal']['lease']!r}"
+            )
+        if not record.get("complete"):
+            reasons.append(
+                f"{run_dir.name}: incomplete {record.get('incomplete_reasons')}"
+            )
+        if record.get("identity_sha256") != identity["identity_sha256"]:
+            reasons.append(f"{run_dir.name}: record identity != manifest identity")
+        formal.append(
+            {
+                "run_dir": str(run_dir),
+                "identity_sha256": identity["identity_sha256"],
+                "commit": pairing["commit"],
+                "metrics": (record.get("metrics") or {}).get("numeric"),
+                "throughput": record.get("throughput"),
+                "mot_md5": record.get("mot_md5") or {},
+                "wall_seconds": record.get("wall_seconds"),
+            }
+        )
+    if len(formal) < procedure["formal"]["min_runs"]:
+        reasons.append(
+            f"{len(formal)} formal runs < formal.min_runs {procedure['formal']['min_runs']}"
+        )
+    if len(identities) > 1:
+        reasons.append(f"formal runs carry {len(identities)} identities")
+    identity_sha = next(iter(identities)) if len(identities) == 1 else None
+
+    report_path: Path | None = None
+    report: dict[str, Any] | None = None
+    if identity_sha:
+        hits = find_repeat_reports(recipe_root, identity_sha)
+        if hits:
+            report_path = hits[-1]
+            report = _read_json(report_path)
+            if report["n_runs"] < procedure["repeat"]["min_runs"]:
+                reasons.append(
+                    f"repeat report has {report['n_runs']} runs < repeat.min_runs"
+                )
+            missing = [d for d in report["run_dirs"] if not Path(d).is_dir()]
+            if missing:
+                reasons.append(f"repeat report cites missing run dirs {missing}")
+        else:
+            reasons.append("no complete same-identity repeat report")
+
+    accounted = {Path(d).resolve() for d in (report or {}).get("run_dirs", [])}
+    accounted |= {d.resolve() for d in formal_dirs}
+    stray = [
+        d.name for d in _run_dirs_under(recipe_root) if d.resolve() not in accounted
+    ]
+    if stray:
+        reasons.append(
+            f"unaccounted run dirs under {recipe_root} (move superseded runs out): {stray}"
+        )
+
+    repeat_hashes: dict[str, set[str]] = {}
+    if report:
+        for seq_report in report["byte_identity"]["detail"]["reports"]:
+            repeat_hashes[seq_report["sequence"]] = set(seq_report["hashes"])
+    formal_distinct: dict[str, int] = {}
+    for run in formal:
+        run["matches_repeat_output"] = bool(repeat_hashes) and all(
+            run["mot_md5"].get(seq) in hashes for seq, hashes in repeat_hashes.items()
+        )
+    for seq in sorted({s for run in formal for s in run["mot_md5"]}):
+        formal_distinct[seq] = len({run["mot_md5"].get(seq) for run in formal})
+
+    return {
+        "recipe_id": recipe_id,
+        "run_root": str(recipe_root),
+        "identity_sha256": identity_sha,
+        "commit": next(iter(commits)) if len(commits) == 1 else sorted(commits),
+        "environment": environment,
+        "complete": not reasons,
+        "reasons": reasons,
+        "repeat": (
+            {
+                "report": str(report_path),
+                "n_runs": report["n_runs"],
+                "distinct_outputs_per_sequence": report["byte_identity"][
+                    "distinct_outputs_per_sequence"
+                ],
+                "metric_observed_range": {
+                    k: {
+                        "min": v["min"],
+                        "max": v["max"],
+                        "observed_range": v["observed_range"],
+                    }
+                    for k, v in report["metric_observed_range"].items()
+                },
+                "throughput": report["throughput"],
+            }
+            if report
+            else None
+        ),
+        "formal": formal,
+        "formal_distinct_outputs_per_sequence": formal_distinct,
+    }
+
+
+def campaign_inventory(contract: Mapping[str, Any], root: Path) -> dict[str, Any]:
+    """Inventory of every contract recipe's repeat evidence and formal runs.
+
+    Deliverable-3 closeout and deliverable-4 input: which formal runs exist,
+    which same-identity repeat report backs each, whether all of them sit on
+    one clean commit under this contract, and which prepared pairs have a
+    formal run on both sides.  It assigns no baseline status, decides no
+    pair (``validate-pair`` does), and never says "deterministic".
+    """
+    recipes = {
+        recipe_id: campaign_recipe(contract, recipe_id, root)
+        for recipe_id in contract["recipes"]
+    }
+    reasons: list[str] = []
+    commits = {r["commit"] for r in recipes.values() if isinstance(r["commit"], str)}
+    if len(commits) > 1:
+        reasons.append(
+            f"formal runs span {len(commits)} commits; pairs across commits are not paired"
+        )
+    incomplete = [k for k, r in recipes.items() if not r["complete"]]
+    if incomplete:
+        reasons.append(f"recipes without a complete inventory: {incomplete}")
+    pairs = {}
+    for cid, pair in contract["pairs"].items():
+        lhs, rhs = recipes[pair["lhs_recipe"]], recipes[pair["rhs_recipe"]]
+        pairs[cid] = {
+            "classification": pair["classification"],
+            "variance_axis": pair["variance_axis"],
+            "lhs_recipe": pair["lhs_recipe"],
+            "rhs_recipe": pair["rhs_recipe"],
+            "lhs_formal_runs": [f["run_dir"] for f in lhs["formal"]],
+            "rhs_formal_runs": [f["run_dir"] for f in rhs["formal"]],
+            "both_sides_formal": bool(lhs["formal"] and rhs["formal"])
+            and lhs["complete"]
+            and rhs["complete"],
+        }
+    n_repeat = [r["repeat"]["n_runs"] for r in recipes.values() if r["repeat"]]
+    return {
+        "schema": CAMPAIGN_SCHEMA,
+        "generated_at": _now(),
+        "contract_sha256": contract["frozen"]["contract_sha256"],
+        "run_root": str(root),
+        "commit": next(iter(commits)) if len(commits) == 1 else sorted(commits),
+        "complete": not reasons,
+        "reasons": reasons,
+        "n_recipes": len(recipes),
+        "n_recipes_complete": len(recipes) - len(incomplete),
+        "recipes": recipes,
+        "pairs": pairs,
+        "variance_axis": "runtime_repeat",
+        "claim_rule": (
+            "per recipe: 'k distinct outputs in n repeat runs' (n="
+            f"{'..'.join(str(x) for x in sorted({min(n_repeat), max(n_repeat)})) if n_repeat else 0}) "
+            "and the observed metric range; never 'deterministic' or 'bit-exact'"
+        ),
+        "note": (
+            "campaign inventory, not a baseline table: baseline status and every "
+            "pair verdict are assigned by deliverable 4 (validate-pair) against the "
+            "same-identity repeat report's observed range and the pair's confounds"
+        ),
+    }
+
+
+def render_campaign_table(inventory: Mapping[str, Any]) -> str:
+    lines = [
+        f"{'recipe':<58} {'rep':>3} {'kmax':>4} {'HOTA':>5} {'IDF1':>5} {'fps':>6} {'formal':>6} ok"
+    ]
+    for recipe_id, r in inventory["recipes"].items():
+        rep = r["repeat"]
+        first = (
+            r["formal"][0]["metrics"]
+            if r["formal"] and r["formal"][0]["metrics"]
+            else {}
+        )
+        fps = [f["throughput"]["fps"] for f in r["formal"] if f.get("throughput")]
+        lines.append(
+            f"{recipe_id:<58} "
+            f"{rep['n_runs'] if rep else 0:>3} "
+            f"{max(rep['distinct_outputs_per_sequence'].values()) if rep else '-':>4} "
+            f"{first.get('HOTA', '-'):>5} {first.get('IDF1', '-'):>5} "
+            f"{(sum(fps) / len(fps)) if fps else 0:>6.1f} "
+            f"{len(r['formal']):>6} {'yes' if r['complete'] else 'NO'}"
+        )
+    return "\n".join(lines)
+
+
+def _fmt(value: Any) -> str:
+    if value is None:
+        return "—"
+    if isinstance(value, float):
+        return f"{value:g}"
+    return str(value)
+
+
+def _fmt_count(value: Any) -> str:
+    return "—" if value is None else str(int(value))
+
+
+def render_campaign_markdown(inventory: Mapping[str, Any]) -> str:
+    """Human view of ``campaign_inventory``; regenerate, never edit."""
+    date = inventory["generated_at"][:10]
+    commit = inventory["commit"]
+    commit_s = (
+        commit[:12] if isinstance(commit, str) else ", ".join(c[:12] for c in commit)
+    )
+    recipes = inventory["recipes"]
+    n_rep = sorted({r["repeat"]["n_runs"] for r in recipes.values() if r["repeat"]})
+    kmax = max(
+        (
+            max(r["repeat"]["distinct_outputs_per_sequence"].values())
+            for r in recipes.values()
+            if r["repeat"]
+        ),
+        default=None,
+    )
+    rmax = max(
+        (
+            v["observed_range"]
+            for r in recipes.values()
+            if r["repeat"]
+            for v in r["repeat"]["metric_observed_range"].values()
+        ),
+        default=None,
+    )
+    envs = {
+        (r["environment"] or {}).get("hostname"): r["environment"]
+        for r in recipes.values()
+        if r["environment"]
+    }
+    out: list[str] = [
+        "<!-- doc-status: active -->",
+        "<!-- doc-promotion: report_data -->",
+        f"<!-- doc-date: {date} -->",
+        "<!-- doc-module: detection -->",
+        f"<!-- Generated by scripts/provenance/training_eval_contract.py campaign from {DEFAULT_CAMPAIGN_OUT}; regenerate rather than edit. -->",
+        "",
+        "# Training eval campaign inventory (#421 · deliverable 3 closeout)",
+        "",
+        f"Generated {inventory['generated_at']} from `{inventory['run_root']}` (gitignored raw runs); "
+        f"contract sha256 `{inventory['contract_sha256'][:16]}…`; every run bound at commit `{commit_s}`. "
+        f"Machine-readable: `{DEFAULT_CAMPAIGN_OUT}`.",
+        "",
+        "This is the **run inventory** the contract's procedure produced, not a baseline table: "
+        "baseline status and every pair verdict are assigned by deliverable 4 (`validate-pair`) against the "
+        "same-identity repeat report's observed range and the pair's recorded confounds. "
+        "A number below is a formal run's printed metric (one decimal); it inherits no claim beyond that.",
+        "",
+        "## 1. Status",
+        "",
+        f"- Inventory complete: **{'yes' if inventory['complete'] else 'NO'}** "
+        f"({inventory['n_recipes_complete']}/{inventory['n_recipes']} recipes with a same-identity repeat report and complete formal runs on one clean commit under this contract).",
+    ]
+    for reason in inventory["reasons"]:
+        out.append(f"- INCOMPLETE: {reason}")
+    out += [
+        f"- Repeat evidence: n = {', '.join(map(str, n_rep)) or '—'} runs per recipe; "
+        f"max distinct outputs in any sequence = {_fmt(kmax)}; max observed metric range across all keys = {_fmt(rmax)}. "
+        f"Claim rule: {inventory['claim_rule']}.",
+        "- Formal runs: each recipe's formal outputs are compared byte-wise (MOT md5) against its repeat runs "
+        "(`matches_repeat_output`) — a formal run that diverges from its own repeat set is flagged, not averaged in.",
+        f"- Pairs with a formal run on both sides: "
+        f"{sum(p['both_sides_formal'] for p in inventory['pairs'].values())}/{len(inventory['pairs'])}.",
+        f"- Variance axis of everything here: `{inventory['variance_axis']}` (fixed checkpoints re-run); "
+        "training-seed variance lives only in the D1–D4 pairs' *treatment*, never in a repeat report.",
+        "",
+        "## 2. Environment",
+        "",
+    ]
+    for env in envs.values():
+        out.append(
+            f"- `{env.get('hostname')}` · {env.get('platform', '')} · {env.get('gpu')} (driver {env.get('driver')}) · "
+            f"python {env.get('python')} · packages {json.dumps(env.get('packages'), sort_keys=True)} · "
+            f"TrackEval tree `{(env.get('trackeval') or {}).get('git_tree', '')[:12]}` · "
+            f"{len(env.get('native_extensions') or {})} native extensions digested"
+        )
+    out += [
+        "",
+        "## 3. Per-recipe inventory",
+        "",
+        "`k` = distinct outputs across the n repeat runs (max over sequences); `range` = max observed metric range over all keys; "
+        "metrics are formal r01 as printed; `formal=repeat` = every formal run's MOT files are byte-identical to the repeat set; "
+        "fps = mean over formal runs (serial profile; eager rows are a lower bound by declaration).",
+        "",
+        "| recipe | identity | n | k | range | formal | formal=repeat | HOTA | DetA | AssA | IDF1 | MOTA | IDs | FP | FN | fps | ok |",
+        "|---|---|---:|---:|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|",
+    ]
+    for recipe_id, r in recipes.items():
+        rep = r["repeat"]
+        first = (r["formal"][0]["metrics"] if r["formal"] else None) or {}
+        fps = [f["throughput"]["fps"] for f in r["formal"] if f.get("throughput")]
+        out.append(
+            "| `{rid}` | `{ident}` | {n} | {k} | {rng} | {nf} | {eq} | {hota} | {deta} | {assa} | {idf1} | {mota} | {ids} | {fp} | {fn} | {fps} | {ok} |".format(
+                rid=recipe_id,
+                ident=(r["identity_sha256"] or "")[:12],
+                n=rep["n_runs"] if rep else 0,
+                k=_fmt(max(rep["distinct_outputs_per_sequence"].values()))
+                if rep
+                else "—",
+                rng=_fmt(
+                    max(
+                        v["observed_range"]
+                        for v in rep["metric_observed_range"].values()
+                    )
+                )
+                if rep
+                else "—",
+                nf=len(r["formal"]),
+                eq="yes"
+                if r["formal"] and all(f["matches_repeat_output"] for f in r["formal"])
+                else "NO",
+                hota=_fmt(first.get("HOTA")),
+                deta=_fmt(first.get("DetA")),
+                assa=_fmt(first.get("AssA")),
+                idf1=_fmt(first.get("IDF1")),
+                mota=_fmt(first.get("MOTA")),
+                ids=_fmt_count(first.get("IDs")),
+                fp=_fmt_count(first.get("FP")),
+                fn=_fmt_count(first.get("FN")),
+                fps=f"{sum(fps) / len(fps):.1f}" if fps else "—",
+                ok="yes" if r["complete"] else "NO",
+            )
+        )
+        for reason in r["reasons"]:
+            out.append(f"| | | | | | | | | | | | | | | | | ↳ {reason} |")
+    out += [
+        "",
+        "## 4. Prepared pairs — formal runs available to `validate-pair`",
+        "",
+        "| pair | class | variance axis | lhs formal | rhs formal | both sides |",
+        "|---|---|---|---:|---:|---|",
+    ]
+    for cid, p in inventory["pairs"].items():
+        out.append(
+            f"| `{cid}` | {p['classification']} | {p['variance_axis']} | {len(p['lhs_formal_runs'])} | "
+            f"{len(p['rhs_formal_runs'])} | {'yes' if p['both_sides_formal'] else 'NO'} |"
+        )
+    out += [
+        "",
+        "## 5. Handoff to deliverable 4",
+        "",
+        "1. For each prepared pair, run `training_eval_contract.py validate-pair <pair> <lhs formal run> <rhs formal run>` "
+        "on the formal runs listed in section 4 (all three lhs × rhs combinations are the same measurement only if "
+        "`formal=repeat` holds on both sides; the inventory says so per recipe). A pair is a baseline row only with a `paired` verdict.",
+        "2. Read every delta against the same-identity repeat report's observed range (section 3, `range`) and the print "
+        "precision (one decimal): a delta at or below the range is 'not distinguishable from run-to-run variation'; a delta "
+        "above it is not by itself an effect — the pair's `remaining_confounds` (contract §pairs) stay attached to the row.",
+        "3. Only the 15 prepared pairs are pairs. Any other cross-recipe reading of section 3 (e.g. `gt2_plain` vs `t3t1_phase_b` "
+        "in either family) is **not** a prepared comparison: every plain-GT2 ↔ T3→T1 pairing carries the `warmup_epochs` 5→3 "
+        "schedule difference (and, for s, a seed difference) outside the curriculum treatment "
+        "(`docs/research/training/training_comparison_matrix.md`), so it may be cited only as historical/confounded, never as a training effect.",
+        "4. `n` repeat runs with `k = 1` bound only divergence rates above ~1−0.05^(1/n); the words 'deterministic' and 'bit-exact' "
+        "are not available to deliverable 4 either.",
+        "5. Raw runs live under the gitignored run root (manifests v3, stdout/stderr, MOT files, latency profiles); this inventory "
+        "and the repeat reports are the surviving committed record. Superseded pre-merge smoke / dirty-repeat runs were moved to "
+        "`results/training_eval_contract_superseded_20260919_pre_merge/` and are never pairable.",
+        "",
+    ]
+    return "\n".join(out)
+
+
 # --------------------------------------------------------------------------- freeze / check
 
 
@@ -1887,6 +2319,14 @@ def main(argv: list[str] | None = None) -> int:
     s_pair.add_argument("rhs_run", type=Path)
     s_pair.add_argument("--emit", type=Path, default=None)
 
+    s_camp = sub.add_parser(
+        "campaign",
+        help="inventory every recipe's repeat report + formal runs under the run root",
+    )
+    s_camp.add_argument("--root", type=Path, default=DEFAULT_RUN_ROOT)
+    s_camp.add_argument("--emit", type=Path, default=None)
+    s_camp.add_argument("--campaign-md", type=Path, default=None)
+
     args = ap.parse_args(argv)
     try:
         return _dispatch(args)
@@ -2015,6 +2455,21 @@ def _dispatch(args: argparse.Namespace) -> int:
             _write(args.emit, text)
         print(text if not args.emit else f"{verdict['verdict']} -> {args.emit}")
         return 0 if verdict["verdict"] == "paired" else 1
+    if args.cmd == "campaign":
+        inventory = campaign_inventory(contract, Path(args.root))
+        print(render_campaign_table(inventory))
+        for reason in inventory["reasons"]:
+            print(f"INCOMPLETE: {reason}")
+        for recipe_id, r in inventory["recipes"].items():
+            for reason in r["reasons"]:
+                print(f"  {recipe_id}: {reason}")
+        if args.emit:
+            _write(REPO_ROOT / args.emit, json.dumps(inventory, indent=2) + "\n")
+            print(f"campaign inventory -> {args.emit}")
+        if args.campaign_md:
+            _write(REPO_ROOT / args.campaign_md, render_campaign_markdown(inventory))
+            print(f"campaign doc -> {args.campaign_md}")
+        return 0 if inventory["complete"] else 1
     raise ContractError(f"unknown command {args.cmd}")
 
 

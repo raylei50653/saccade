@@ -290,6 +290,7 @@ Manifest: `docs/ownership/doc_migration_manifest.yaml`
 - `docs/research/training/pp22_full_cadence_interp_training_plan.md`
 - `docs/research/training/pp22_stress_test_findings.md`
 - `docs/research/training/training_comparison_matrix.md`
+- `docs/research/training/training_eval_campaign.md`
 - `docs/research/training/training_eval_contract.md`
 - `docs/research/training/training_lineage_inventory.md`
 
@@ -392,6 +393,6 @@ Excluded from the active index and default search view.
 
 ## Inventory summary
 
-- documents: 342
-- active: 287
+- documents: 343
+- active: 288
 - grayed out: 55
