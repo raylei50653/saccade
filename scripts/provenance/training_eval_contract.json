@@ -1,0 +1,2630 @@
+{
+  "schema": "training_eval_contract_v1",
+  "issue": 421,
+  "deliverable": 3,
+  "declared": {
+    "scope": "Freezes the shared evaluation method and the exact runner recipe for every deliverable-2 row that is prepared for measurement (controlled + system_comparison rows listed in prepared_comparisons). It produces no baseline number; deliverable 4 runs the recipes and reads the reports. A recipe measures the system its runtime binding names (see each recipe's head source), not 'the checkpoint' in the abstract.",
+    "out_of_scope": [
+      "per-detector threshold re-tuning variants (the matched-baseline study's cs/cst/ntt fair points): a separate declaration with its own pairs, never merged with fixed-policy rows",
+      "--double-buffer headline throughput (config D of the reproducibility study): a separate execution profile that must be declared before use; numbers under it are not comparable to this contract's serial profile",
+      "A1/A2 raw pretrained-YOLO rows (no runner in the inventory)",
+      "historical results (no preset/engine sha, no runtime identity; never reusable as a paired side)",
+      "training-cache rebuilds and any new training arm (a rebuilt cache is a new node, not the old one)"
+    ],
+    "dataset": {
+      "data_root": "datasets/MOT17",
+      "split": "train",
+      "detector": "SDP",
+      "sequences": [
+        "MOT17-02-SDP",
+        "MOT17-04-SDP",
+        "MOT17-05-SDP",
+        "MOT17-09-SDP",
+        "MOT17-10-SDP",
+        "MOT17-11-SDP",
+        "MOT17-13-SDP"
+      ],
+      "max_frames": null,
+      "smoke_sequences": [
+        "MOT17-09-SDP"
+      ],
+      "note": "Every s/m checkpoint in the lineage was trained on these seven sequences (inventory dataset_split.train); this contract is therefore an in-domain measurement and says so. Frame range is always the full sequence (max_frames unset); a run that passes --max-frames is refused."
+    },
+    "evaluator": {
+      "clear_and_idf1": "motmetrics (version recorded in the run identity). gt loaded with fmt=mot15-2D min_confidence=1 (only 'consider' rows), predictions with min_confidence=-1 (nothing dropped), IoU distance with distth 0.5, accumulated per sequence; the overall numbers are ratios over the summed idtp/idfp/idfn/FP/FN/IDs/objects counts (src/saccade/perception/eval/metrics.py). No distractor-class filtering on this path.",
+      "hota": "HOTA/DetA/AssA via the vendored third_party/TrackEval (git tree recorded in the run identity; SACCADE_TRACKEVAL_ROOT must be unset) with TrackEval's MotChallenge2DBox preprocessing (distractor / zero-marked removal). The evaluator prints and skips HOTA when TrackEval is unimportable; the runner marks such a run incomplete.",
+      "required_metric_keys": [
+        "IDF1",
+        "MOTA",
+        "HOTA",
+        "DetA",
+        "AssA",
+        "IDs",
+        "FP",
+        "FN"
+      ],
+      "score_on_gt_frames": false,
+      "output_layer": "The MOT file is the tracker's own output including its configured post-processing (interpolate_tracklets etc. from the resolved config); those keys are tracker policy, not evaluator settings, and are pinned by the resolved config sha.",
+      "precision_of_record": "Metrics are recorded as the evaluator prints them (one decimal, percent). Deltas smaller than the print precision are not resolvable under this contract; deliverable 4 must not manufacture extra digits."
+    },
+    "timing": {
+      "clock": "host wall-clock (time.perf_counter) inside the evaluator; a frame is complete when its tracker output rows are on the host (track_results_on_host) and appended to the sequence result",
+      "start_point": "top of _run_frame, before the frame is fetched from the streamer (t_e2e_start); under the serial profile the fetch waits for the streamer's background GPU decode (prefetch depth 2), so decode time counts only insofar as it is not hidden by that prefetch",
+      "end_point": "_record_frame_timing at output emission of the same frame; under the serial profile no frame is deferred, so there is no double-buffer final drain",
+      "decode_included": "partially (see start_point): JPEG decode runs on a background thread ahead of the frame; the measured interval includes the wait for it, not its full cost",
+      "warmup": "the first warmup_frames (resolved config, 50) frames of every sequence are excluded from latency and throughput",
+      "throughput": "per sequence: frames after warmup / (last frame completion - first measured frame start); overall: sum of frames / sum of per-sequence intervals (the 'Overall throughput' line and _fps_summary.txt); model load, CUDA-graph capture, sequence setup, result-file write and metric scoring are outside every interval",
+      "artifacts": "_latency_profile_<seq>.json (mean/p95/p99/samples), _latency_profile.json, _fps_summary.txt in the run dir; the runner copies the summaries (minus samples) into contract_run.json",
+      "comparability": "latency/throughput are comparable only between runs of the same execution profile on the same environment identity; the eager profile's FPS is a lower bound (no compile, no graphs) and never a deployment number"
+    },
+    "execution_profiles": {
+      "whole_graph_serial": {
+        "description": "the family preset as declared: TRT backbone engine + whole-detect CUDA graph + tracker graph + graphed main NMS, torch.compile on (preset default), GPU JPEG decode (preset default), serial scheduling (no --double-buffer), single process (processes 0, cpp_threads 0)",
+        "fixed_argv": [
+          "--detector",
+          "SDP"
+        ],
+        "temporal_blocks": "whole-graph forward is single-frame: a temporal checkpoint's blocks are bypassed, effective T=1 (build_mamba_gated_detector)",
+        "head_source": "the preset's mamba_head_engine when named (m preset) unless the recipe carries --no-mamba-trt; see each recipe's head source"
+      },
+      "eager_pytorch": {
+        "description": "mamba_pyt_backbone preset: PyTorch backbone taken from --mamba-teacher-ckpt (fpn_backbone_engine empty), no whole-graph / cuda / tracker graph, --no-compile (eager), GPU JPEG decode, serial, single process; the tracker policy is brought to the production s preset by explicit overrides (section 6)",
+        "fixed_argv": [
+          "--detector",
+          "SDP",
+          "--no-compile"
+        ],
+        "temporal_blocks": "a temporal Mamba checkpoint would run the STREAMING temporal path by default on this profile; every eager Mamba recipe carries --no-temporal so the effective forward is T=1, matching the whole-graph rows",
+        "head_source": "the endpoint's own checkpoint head: TeacherHeadDetector (native Detect head, gate-free) for gated_teacher_ckpt nodes; the Mamba head in PyTorch for mamba_ckpt nodes (--no-mamba-trt); the eager preset's default mamba_ckpt is cleared with --mamba-ckpt '' on native-head rows because mot17.py refuses both"
+      }
+    },
+    "tracker_policy": {
+      "rule": "One fixed tracker policy per execution profile. Whole-graph rows use their family preset as declared (s and m presets differ in kalman_r_scale and the relink bridge gate; that difference is part of the E1 system difference and is frozen as such). Eager rows all use the production s tracker policy: the eager preset is brought to it by CLI overrides derived at freeze time (every resolved key that differs between source_preset and eager_preset outside the execution/artifact keys).",
+      "source_preset": "mamba_whole_graph",
+      "eager_preset": "mamba_pyt_backbone",
+      "excluded_keys": [],
+      "declared_limit": "E3 (m native head vs m Mamba head) therefore runs under the s production tracker policy, not m's retuned policy (kalman_r_scale 3.5, relaxed bridge gate). This is a fixed-policy comparison by declaration; an m-policy variant would be a separate pair id.",
+      "per_detector_retuning": "forbidden inside a pair: both sides run the identical resolved tracker keys (validate-pair refuses any config difference outside the treatment)"
+    },
+    "runtime_env": {
+      "forbidden_prefix": "SACCADE_",
+      "allowed": [
+        "SACCADE_BUILD_PATH",
+        "SACCADE_PARENT_RUN_ROOT",
+        "SACCADE_PARENT_RUN_CLAIM"
+      ],
+      "why": "the evaluator reads escape hatches from the environment (SACCADE_FRESHNESS_W, SACCADE_STABILITY_W, SACCADE_ENABLE_DDA, SACCADE_DDA_MAX_COST, SACCADE_GMC_PCR_THRESH, SACCADE_GPU_RELINK_GATE, SACCADE_STREAM_MODE, SACCADE_DOUBLE_BUFFER, SACCADE_DETECT_BARRIER, SACCADE_MAIN_NMS_GRAPHED, ...) that the resolved config cannot see; the runner refuses to start when any non-allowed SACCADE_* variable is set, rather than recording it",
+      "child_env": "SACCADE_BUILD_PATH = the resolved native build dir (its *.so digests are part of the environment identity); LD_LIBRARY_PATH gets torch/lib prepended (the cuBLAS resolution the eval drivers use); the parent-run claim variables let mot17.py join the runner's manifest instead of publishing its own",
+      "cwd": "the checkout root (every artifact path is relative to it)"
+    },
+    "identity": {
+      "bound_where": "run_manifest.json schema v3, field runtime_identity, written by open_run before mot17.py starts (production provenance mode); mot17.py joins that claim via SACCADE_PARENT_RUN_ROOT/CLAIM",
+      "pairing_keys": [
+        "contract_sha256",
+        "recipe_id",
+        "execution_profile",
+        "preset_sha256",
+        "resolved_config_sha256 (every argparse dest after preset merge + argv, minus run_local_keys)",
+        "artifacts.<key>.sha256 for every non-empty artifact dest (mamba_ckpt, mamba_teacher_ckpt, mamba_yolo_weights, fpn_backbone_engine, mamba_head_engine, teacher_head_ckpt, teacher_head_backbone_engine, engine)",
+        "dataset.key_sha256 (per-sequence seqinfo/gt/image digests) + subset flag",
+        "environment (hostname, platform, python, torch/torchvision/tensorrt/numpy/motmetrics versions, GPU name, driver, CUDA_VISIBLE_DEVICES, build dir + native *.so digests, TrackEval git tree + dirty)",
+        "commit"
+      ],
+      "identity_sha256": "sha256 of the pairing block; repeat reports and formal runs are matched on it",
+      "run_local_keys": [
+        "output",
+        "mlflow_uri",
+        "mlflow_experiment",
+        "mlflow_run_name"
+      ],
+      "fail_closed": "missing manifest, reconstructed provenance, missing/foreign runtime_identity schema, contract sha mismatch, incomplete run record, non-formal stage, or any identity path differing outside the pair's allowed_differences => not_paired"
+    },
+    "treatment_axis_to_identity_paths": {
+      "training_schedule": [
+        "config.mamba_ckpt",
+        "artifacts.mamba_ckpt"
+      ],
+      "training_seed": [
+        "config.mamba_ckpt",
+        "artifacts.mamba_ckpt"
+      ],
+      "training_budget": [
+        "config.mamba_ckpt",
+        "artifacts.mamba_ckpt"
+      ],
+      "warm_start": [
+        "config.mamba_ckpt",
+        "artifacts.mamba_ckpt"
+      ],
+      "teacher_cache": [
+        "config.mamba_ckpt",
+        "artifacts.mamba_ckpt"
+      ],
+      "teacher": [
+        "config.mamba_ckpt",
+        "artifacts.mamba_ckpt"
+      ],
+      "deployed_backbone_artifact": [
+        "config.fpn_backbone_engine",
+        "artifacts.fpn_backbone_engine"
+      ]
+    },
+    "procedure": {
+      "stages": [
+        "smoke",
+        "repeat",
+        "formal"
+      ],
+      "smoke": {
+        "purpose": "prove the recipe executes end to end (model load, graph capture, every required metric key incl. HOTA) on the smoke sequence set",
+        "sequences": "declared.dataset.smoke_sequences",
+        "lease": "gpu0",
+        "status": "procedure evidence only; a sequence-subset run; never pairable, never a baseline"
+      },
+      "repeat": {
+        "purpose": "observe run-to-run variance of one identity on the full sequence set before any formal number exists",
+        "min_runs": 3,
+        "lease": "gpu0",
+        "identity_rule": "all runs of a report share one identity_sha256; byte identity via scripts/tools/eval_repeat_identity.py (raw MOT identity incl. track ids) and the observed metric range per key",
+        "claim_rule": "report 'k distinct outputs in n runs' and the observed range; never 'deterministic' / 'bit-exact'; zero divergences in n runs only rule out per-run divergence rates above ~1-0.05^(1/n) (n=3: ~63%, n=6: ~39%) at 95% one-sided, so min_runs is a floor for procedure, not evidence of reproducibility (docs/research/eval/nogpudecode_reproducibility_20260907.md)",
+        "reproducibility_is_per_configuration": "no recipe inherits another recipe's repeat evidence; a treatment arm does not inherit its base arm's",
+        "recommended_runs": 6
+      },
+      "formal": {
+        "purpose": "the runs deliverable 4 may cite",
+        "lease": "machine-bench",
+        "requires_clean_tree": true,
+        "requires_repeat_report_same_identity": true,
+        "min_runs": 1,
+        "recommended_runs": 3,
+        "note": "a formal run is refused unless a complete repeat report with >= repeat.min_runs runs exists for the same identity_sha256 under the recipe's run root; a formal run is not a baseline by itself — baseline status is assigned in deliverable 4 against the repeat report's observed range"
+      },
+      "single_run_rule": "no run, formal or otherwise, is a determinism claim; a single-run delta below the same-identity observed range reads as 'not distinguishable from run-to-run variation', and a delta above it does not automatically prove an effect"
+    },
+    "variance_axes": {
+      "runtime_repeat": "same identity, repeated runs (repeat reports): what the measurement instrument resolves",
+      "training_seed": "seed_replicate pairs (D1-D4): different checkpoints from the same recipe at different seeds; a training-process quantity",
+      "rule": "never pooled and never substituted: a treatment delta is read against runtime_repeat for resolvability and against training_seed for attributability; a seed-replicate delta is not a runtime-repeat estimate and vice versa"
+    },
+    "prepared_comparisons": [
+      "B1.s.distill_to_gt1",
+      "B2.s.gt1_to_gt2_plain",
+      "B3.m.distill_to_gt1",
+      "B4.m.gt1_to_gt2_plain",
+      "C1.s.explicit_vs_implicit_shared_gt1_s42",
+      "C2.s.explicit_vs_implicit_shared_gt1_s43",
+      "C3.s.explicit_vs_implicit_shared_gt1_s44",
+      "D1.s.implicit_seed_42_vs_43",
+      "D2.s.implicit_seed_43_vs_44",
+      "D3.s.explicit_shared_seed_42_vs_43",
+      "D4.s.explicit_shared_seed_43_vs_44",
+      "E1.s_vs_m.production_system",
+      "E2.s.native_head_vs_mamba_head_shared_backbone",
+      "E3.m.native_head_vs_mamba_head_shared_backbone",
+      "E4.s.production_backbone_engine_ab"
+    ]
+  },
+  "frozen": {
+    "at": "2026-09-19T06:39:05+00:00",
+    "commit": "1fac71e72f1367661edb04063f42f737f7eab41c",
+    "matrix_path": "report_data/training_comparison_matrix.json",
+    "matrix_sha256": "6fe701ada98a0d4f348d7ad534a14168527929bf74aa0c01a5458325f0a8a6ee",
+    "inventory_path": "report_data/training_lineage_inventory.json",
+    "inventory_sha256": "b722ec9bb0f8606980ea6f53faf366444c48f2e6d1a9f1a63530179716cc4b4f",
+    "eager_tracker_policy": {
+      "argv": [
+        "--private-continuation",
+        "--private-max-candidates",
+        "50",
+        "--private-min-score",
+        "0.1",
+        "--private-prior-iou-threshold",
+        "0.3"
+      ],
+      "overrides": {
+        "private_continuation_enabled": true,
+        "private_max_candidates": 50,
+        "private_min_score": 0.1,
+        "private_prior_iou_threshold": 0.3
+      }
+    },
+    "contract_sha256": "995b4cddef3a9b9946565d8d71941fcaf09b2d629373c8bdaacc765f28216c12"
+  },
+  "recipes": {
+    "wg:mamba_whole_graph:s.distill": {
+      "recipe_id": "wg:mamba_whole_graph:s.distill",
+      "node": "s.distill",
+      "family": "s",
+      "node_kind": "mamba_ckpt",
+      "binding": "family_preset",
+      "execution_profile": "whole_graph_serial",
+      "preset": "mamba_whole_graph",
+      "preset_path": "configs/presets/mamba_whole_graph.yaml",
+      "preset_sha256": "093b66ed124063f035ae9cf2a76e4f5426743cd819fb66e3e54994c97ea42cd1",
+      "argv": [
+        "--preset",
+        "mamba_whole_graph",
+        "--mamba-ckpt",
+        "runs/mamba_distill_v14replica/best.ckpt",
+        "--detector",
+        "SDP"
+      ],
+      "command": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_distill_v14replica/best.ckpt --detector SDP",
+      "artifacts": {
+        "mamba_ckpt": {
+          "path": "runs/mamba_distill_v14replica/best.ckpt",
+          "size_bytes": 121231620,
+          "node": "s.distill",
+          "sha256": "6129cb71dd4368a9b58c1de57a9f697a3f9ed564746c8d1a22a59cd447f8f929",
+          "sha256_source": "inventory"
+        },
+        "mamba_teacher_ckpt": {
+          "path": "runs/gated_det_v1/best.ckpt",
+          "size_bytes": 116736565,
+          "node": "s.legacy_teacher",
+          "sha256": "d2ace71d47c3358d36867c64795b09fad7e3ae0c794ef59554b17518c387dbcf",
+          "sha256_source": "inventory"
+        },
+        "mamba_yolo_weights": {
+          "path": "models/yolo/yolo26s.pt",
+          "size_bytes": 20422725,
+          "node": "s.pretrained_yolo",
+          "sha256": "646f8bc3fe0a656803d95c294f7852321748cb29d13466a1af8862e2db384a1b",
+          "sha256_source": "inventory"
+        },
+        "fpn_backbone_engine": {
+          "path": "models/yolo/yolo26s_backbone_640_best.engine",
+          "size_bytes": 20298516,
+          "node": "s.backbone_engine",
+          "sha256": "2ef3d4d40dfb670982cbbb98e6ed7d07e5b1a590cfa126d5ccf7342ee1579ce4",
+          "sha256_source": "inventory"
+        },
+        "mamba_head_engine": null,
+        "teacher_head_ckpt": null,
+        "teacher_head_backbone_engine": null,
+        "engine": {
+          "path": "models/yolo/yolo26m_960_batch1.engine",
+          "size_bytes": 44854500,
+          "node": null,
+          "sha256": "351d1797f890bcd5087cecea21fb620b252fff6604a236402786b2430af27f96",
+          "sha256_source": "disk_at_freeze"
+        }
+      },
+      "resolved_config_sha256": "fe42dc3bf2d6038aa384de8b05acd5556243437d3360d1f7bed4d253e28542db",
+      "resolved_config_keys": 452,
+      "binding_facts": {
+        "head_source": {
+          "kind": "checkpoint_pytorch",
+          "node": "s.distill",
+          "checkpoint_head_deployed": true,
+          "source_attribution": null
+        },
+        "head_path": "checkpoint PyTorch head inside whole graph",
+        "effective_T": 1,
+        "temporal_blocks": "absent",
+        "backbone_engine_node": "s.backbone_engine",
+        "backbone_node": null,
+        "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
+        "engine_bytes_attributed": false,
+        "graphs": {
+          "use_whole_graph": true,
+          "use_cuda_graph": true,
+          "use_tracker_graph": true
+        },
+        "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
+        "tracker_policy_source": "preset"
+      },
+      "tracker_policy_overrides": [],
+      "comparisons": [
+        "B1.s.distill_to_gt1:lhs"
+      ]
+    },
+    "wg:mamba_whole_graph:s.gt1": {
+      "recipe_id": "wg:mamba_whole_graph:s.gt1",
+      "node": "s.gt1",
+      "family": "s",
+      "node_kind": "mamba_ckpt",
+      "binding": "family_preset",
+      "execution_profile": "whole_graph_serial",
+      "preset": "mamba_whole_graph",
+      "preset_path": "configs/presets/mamba_whole_graph.yaml",
+      "preset_sha256": "093b66ed124063f035ae9cf2a76e4f5426743cd819fb66e3e54994c97ea42cd1",
+      "argv": [
+        "--preset",
+        "mamba_whole_graph",
+        "--mamba-ckpt",
+        "runs/mamba_gt_v14replica_stage1/best.ckpt",
+        "--detector",
+        "SDP"
+      ],
+      "command": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_stage1/best.ckpt --detector SDP",
+      "artifacts": {
+        "mamba_ckpt": {
+          "path": "runs/mamba_gt_v14replica_stage1/best.ckpt",
+          "size_bytes": 121232324,
+          "node": "s.gt1",
+          "sha256": "ff40f07e9c27826912653c314b845b5c8cb3a1717138d368c433e8d1dad830f5",
+          "sha256_source": "inventory"
+        },
+        "mamba_teacher_ckpt": {
+          "path": "runs/gated_det_v1/best.ckpt",
+          "size_bytes": 116736565,
+          "node": "s.legacy_teacher",
+          "sha256": "d2ace71d47c3358d36867c64795b09fad7e3ae0c794ef59554b17518c387dbcf",
+          "sha256_source": "inventory"
+        },
+        "mamba_yolo_weights": {
+          "path": "models/yolo/yolo26s.pt",
+          "size_bytes": 20422725,
+          "node": "s.pretrained_yolo",
+          "sha256": "646f8bc3fe0a656803d95c294f7852321748cb29d13466a1af8862e2db384a1b",
+          "sha256_source": "inventory"
+        },
+        "fpn_backbone_engine": {
+          "path": "models/yolo/yolo26s_backbone_640_best.engine",
+          "size_bytes": 20298516,
+          "node": "s.backbone_engine",
+          "sha256": "2ef3d4d40dfb670982cbbb98e6ed7d07e5b1a590cfa126d5ccf7342ee1579ce4",
+          "sha256_source": "inventory"
+        },
+        "mamba_head_engine": null,
+        "teacher_head_ckpt": null,
+        "teacher_head_backbone_engine": null,
+        "engine": {
+          "path": "models/yolo/yolo26m_960_batch1.engine",
+          "size_bytes": 44854500,
+          "node": null,
+          "sha256": "351d1797f890bcd5087cecea21fb620b252fff6604a236402786b2430af27f96",
+          "sha256_source": "disk_at_freeze"
+        }
+      },
+      "resolved_config_sha256": "4340749205f549c962e054dda079c265c571415ad0e04dc9a6f04e5618ccda2c",
+      "resolved_config_keys": 452,
+      "binding_facts": {
+        "head_source": {
+          "kind": "checkpoint_pytorch",
+          "node": "s.gt1",
+          "checkpoint_head_deployed": true,
+          "source_attribution": null
+        },
+        "head_path": "checkpoint PyTorch head inside whole graph",
+        "effective_T": 1,
+        "temporal_blocks": "absent",
+        "backbone_engine_node": "s.backbone_engine",
+        "backbone_node": null,
+        "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
+        "engine_bytes_attributed": false,
+        "graphs": {
+          "use_whole_graph": true,
+          "use_cuda_graph": true,
+          "use_tracker_graph": true
+        },
+        "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
+        "tracker_policy_source": "preset"
+      },
+      "tracker_policy_overrides": [],
+      "comparisons": [
+        "B1.s.distill_to_gt1:rhs",
+        "B2.s.gt1_to_gt2_plain:lhs"
+      ]
+    },
+    "wg:mamba_whole_graph:s.gt2_plain": {
+      "recipe_id": "wg:mamba_whole_graph:s.gt2_plain",
+      "node": "s.gt2_plain",
+      "family": "s",
+      "node_kind": "mamba_ckpt",
+      "binding": "family_preset",
+      "execution_profile": "whole_graph_serial",
+      "preset": "mamba_whole_graph",
+      "preset_path": "configs/presets/mamba_whole_graph.yaml",
+      "preset_sha256": "093b66ed124063f035ae9cf2a76e4f5426743cd819fb66e3e54994c97ea42cd1",
+      "argv": [
+        "--preset",
+        "mamba_whole_graph",
+        "--mamba-ckpt",
+        "runs/mamba_gt_v14replica_final/best.ckpt",
+        "--detector",
+        "SDP"
+      ],
+      "command": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_final/best.ckpt --detector SDP",
+      "artifacts": {
+        "mamba_ckpt": {
+          "path": "runs/mamba_gt_v14replica_final/best.ckpt",
+          "size_bytes": 121232388,
+          "node": "s.gt2_plain",
+          "sha256": "c1acd2bb50642a3f4816e517b4165781defc30df6ea97c42bbc23db1d51eb989",
+          "sha256_source": "inventory"
+        },
+        "mamba_teacher_ckpt": {
+          "path": "runs/gated_det_v1/best.ckpt",
+          "size_bytes": 116736565,
+          "node": "s.legacy_teacher",
+          "sha256": "d2ace71d47c3358d36867c64795b09fad7e3ae0c794ef59554b17518c387dbcf",
+          "sha256_source": "inventory"
+        },
+        "mamba_yolo_weights": {
+          "path": "models/yolo/yolo26s.pt",
+          "size_bytes": 20422725,
+          "node": "s.pretrained_yolo",
+          "sha256": "646f8bc3fe0a656803d95c294f7852321748cb29d13466a1af8862e2db384a1b",
+          "sha256_source": "inventory"
+        },
+        "fpn_backbone_engine": {
+          "path": "models/yolo/yolo26s_backbone_640_best.engine",
+          "size_bytes": 20298516,
+          "node": "s.backbone_engine",
+          "sha256": "2ef3d4d40dfb670982cbbb98e6ed7d07e5b1a590cfa126d5ccf7342ee1579ce4",
+          "sha256_source": "inventory"
+        },
+        "mamba_head_engine": null,
+        "teacher_head_ckpt": null,
+        "teacher_head_backbone_engine": null,
+        "engine": {
+          "path": "models/yolo/yolo26m_960_batch1.engine",
+          "size_bytes": 44854500,
+          "node": null,
+          "sha256": "351d1797f890bcd5087cecea21fb620b252fff6604a236402786b2430af27f96",
+          "sha256_source": "disk_at_freeze"
+        }
+      },
+      "resolved_config_sha256": "dbfd8ff77eb30de4dfd5ac9bc6c5a2dd0b704b0089d1f9d0413d830e1863d0a9",
+      "resolved_config_keys": 452,
+      "binding_facts": {
+        "head_source": {
+          "kind": "checkpoint_pytorch",
+          "node": "s.gt2_plain",
+          "checkpoint_head_deployed": true,
+          "source_attribution": null
+        },
+        "head_path": "checkpoint PyTorch head inside whole graph",
+        "effective_T": 1,
+        "temporal_blocks": "absent",
+        "backbone_engine_node": "s.backbone_engine",
+        "backbone_node": null,
+        "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
+        "engine_bytes_attributed": false,
+        "graphs": {
+          "use_whole_graph": true,
+          "use_cuda_graph": true,
+          "use_tracker_graph": true
+        },
+        "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
+        "tracker_policy_source": "preset"
+      },
+      "tracker_policy_overrides": [],
+      "comparisons": [
+        "B2.s.gt1_to_gt2_plain:rhs"
+      ]
+    },
+    "wg:mamba_whole_graph_m/ckpt-head:m.distill": {
+      "recipe_id": "wg:mamba_whole_graph_m/ckpt-head:m.distill",
+      "node": "m.distill",
+      "family": "m",
+      "node_kind": "mamba_ckpt",
+      "binding": "family_preset",
+      "execution_profile": "whole_graph_serial",
+      "preset": "mamba_whole_graph_m",
+      "preset_path": "configs/presets/mamba_whole_graph_m.yaml",
+      "preset_sha256": "496c4ec22b497c70bc8409227513939b4cd86834bf2210475d0ad655be6937af",
+      "argv": [
+        "--preset",
+        "mamba_whole_graph_m",
+        "--no-mamba-trt",
+        "--mamba-ckpt",
+        "runs/mamba_distill_yolo26m_v14replica/best.ckpt",
+        "--detector",
+        "SDP"
+      ],
+      "command": "scripts/eval/mot17.py --preset mamba_whole_graph_m --no-mamba-trt --mamba-ckpt runs/mamba_distill_yolo26m_v14replica/best.ckpt --detector SDP",
+      "artifacts": {
+        "mamba_ckpt": {
+          "path": "runs/mamba_distill_yolo26m_v14replica/best.ckpt",
+          "size_bytes": 121821956,
+          "node": "m.distill",
+          "sha256": "5bc14397102ee71763b6b260e4f43a79a797f4a3de99e64422dd53597a5ee56c",
+          "sha256_source": "inventory"
+        },
+        "mamba_teacher_ckpt": {
+          "path": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
+          "size_bytes": 251885507,
+          "node": "m.adapted_teacher",
+          "sha256": "5f1cb461cb063788ee8fb933340055add4b4003d7c945ef14f676a5a8c3bea06",
+          "sha256_source": "inventory"
+        },
+        "mamba_yolo_weights": {
+          "path": "models/yolo/yolo26m.pt",
+          "size_bytes": 44255705,
+          "node": "m.pretrained_yolo",
+          "sha256": "401cea9ab23ad19246ff7744859816bc599f350e93c9dd30367b6f0a0745d0b7",
+          "sha256_source": "inventory"
+        },
+        "fpn_backbone_engine": {
+          "path": "models/yolo/yolo26m_backbone_640_best.engine",
+          "size_bytes": 40186740,
+          "node": "m.backbone_engine",
+          "sha256": "fdf0f4550f584e73d5b7ca8393def25b74715f5ab639449dd01873becd66e580",
+          "sha256_source": "inventory"
+        },
+        "mamba_head_engine": {
+          "path": "models/yolo/mamba_head_26m.engine",
+          "size_bytes": 22549364,
+          "node": "m.head_engine",
+          "sha256": "c0c0e3e1a99e1707996d876334af2217c9c725d03bb1fe6838073a47723806cf",
+          "sha256_source": "inventory"
+        },
+        "teacher_head_ckpt": null,
+        "teacher_head_backbone_engine": null,
+        "engine": {
+          "path": "models/yolo/yolo26m_960_batch1.engine",
+          "size_bytes": 44854500,
+          "node": null,
+          "sha256": "351d1797f890bcd5087cecea21fb620b252fff6604a236402786b2430af27f96",
+          "sha256_source": "disk_at_freeze"
+        }
+      },
+      "resolved_config_sha256": "8fb66ece1a1e522dd3111963c7e5a532783173e67da1d60ae9b3a3456196ad0a",
+      "resolved_config_keys": 452,
+      "binding_facts": {
+        "head_source": {
+          "kind": "checkpoint_pytorch",
+          "node": "m.distill",
+          "checkpoint_head_deployed": true,
+          "source_attribution": null
+        },
+        "head_path": "checkpoint PyTorch head inside whole graph",
+        "effective_T": 1,
+        "temporal_blocks": "absent",
+        "backbone_engine_node": "m.backbone_engine",
+        "backbone_node": null,
+        "backbone_teacher_consistency": "same_teacher_indicated",
+        "engine_bytes_attributed": false,
+        "graphs": {
+          "use_whole_graph": true,
+          "use_cuda_graph": true,
+          "use_tracker_graph": true
+        },
+        "gate_teacher_at_runtime": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
+        "tracker_policy_source": "preset"
+      },
+      "tracker_policy_overrides": [],
+      "comparisons": [
+        "B3.m.distill_to_gt1:lhs"
+      ]
+    },
+    "wg:mamba_whole_graph_m/ckpt-head:m.gt1": {
+      "recipe_id": "wg:mamba_whole_graph_m/ckpt-head:m.gt1",
+      "node": "m.gt1",
+      "family": "m",
+      "node_kind": "mamba_ckpt",
+      "binding": "family_preset",
+      "execution_profile": "whole_graph_serial",
+      "preset": "mamba_whole_graph_m",
+      "preset_path": "configs/presets/mamba_whole_graph_m.yaml",
+      "preset_sha256": "496c4ec22b497c70bc8409227513939b4cd86834bf2210475d0ad655be6937af",
+      "argv": [
+        "--preset",
+        "mamba_whole_graph_m",
+        "--no-mamba-trt",
+        "--mamba-ckpt",
+        "runs/mamba_gt_yolo26m_v14replica_stage1/best.ckpt",
+        "--detector",
+        "SDP"
+      ],
+      "command": "scripts/eval/mot17.py --preset mamba_whole_graph_m --no-mamba-trt --mamba-ckpt runs/mamba_gt_yolo26m_v14replica_stage1/best.ckpt --detector SDP",
+      "artifacts": {
+        "mamba_ckpt": {
+          "path": "runs/mamba_gt_yolo26m_v14replica_stage1/best.ckpt",
+          "size_bytes": 121822980,
+          "node": "m.gt1",
+          "sha256": "fb8434556a2a14c84b8f1c6d00bc4734bfb2897d5fbd73e01ddbc110078068de",
+          "sha256_source": "inventory"
+        },
+        "mamba_teacher_ckpt": {
+          "path": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
+          "size_bytes": 251885507,
+          "node": "m.adapted_teacher",
+          "sha256": "5f1cb461cb063788ee8fb933340055add4b4003d7c945ef14f676a5a8c3bea06",
+          "sha256_source": "inventory"
+        },
+        "mamba_yolo_weights": {
+          "path": "models/yolo/yolo26m.pt",
+          "size_bytes": 44255705,
+          "node": "m.pretrained_yolo",
+          "sha256": "401cea9ab23ad19246ff7744859816bc599f350e93c9dd30367b6f0a0745d0b7",
+          "sha256_source": "inventory"
+        },
+        "fpn_backbone_engine": {
+          "path": "models/yolo/yolo26m_backbone_640_best.engine",
+          "size_bytes": 40186740,
+          "node": "m.backbone_engine",
+          "sha256": "fdf0f4550f584e73d5b7ca8393def25b74715f5ab639449dd01873becd66e580",
+          "sha256_source": "inventory"
+        },
+        "mamba_head_engine": {
+          "path": "models/yolo/mamba_head_26m.engine",
+          "size_bytes": 22549364,
+          "node": "m.head_engine",
+          "sha256": "c0c0e3e1a99e1707996d876334af2217c9c725d03bb1fe6838073a47723806cf",
+          "sha256_source": "inventory"
+        },
+        "teacher_head_ckpt": null,
+        "teacher_head_backbone_engine": null,
+        "engine": {
+          "path": "models/yolo/yolo26m_960_batch1.engine",
+          "size_bytes": 44854500,
+          "node": null,
+          "sha256": "351d1797f890bcd5087cecea21fb620b252fff6604a236402786b2430af27f96",
+          "sha256_source": "disk_at_freeze"
+        }
+      },
+      "resolved_config_sha256": "2952ae600b5c75986677f1e8dcb82a5c332ec86f0452afd21e08150343488bef",
+      "resolved_config_keys": 452,
+      "binding_facts": {
+        "head_source": {
+          "kind": "checkpoint_pytorch",
+          "node": "m.gt1",
+          "checkpoint_head_deployed": true,
+          "source_attribution": null
+        },
+        "head_path": "checkpoint PyTorch head inside whole graph",
+        "effective_T": 1,
+        "temporal_blocks": "absent",
+        "backbone_engine_node": "m.backbone_engine",
+        "backbone_node": null,
+        "backbone_teacher_consistency": "same_teacher_indicated",
+        "engine_bytes_attributed": false,
+        "graphs": {
+          "use_whole_graph": true,
+          "use_cuda_graph": true,
+          "use_tracker_graph": true
+        },
+        "gate_teacher_at_runtime": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
+        "tracker_policy_source": "preset"
+      },
+      "tracker_policy_overrides": [],
+      "comparisons": [
+        "B3.m.distill_to_gt1:rhs",
+        "B4.m.gt1_to_gt2_plain:lhs"
+      ]
+    },
+    "wg:mamba_whole_graph_m/ckpt-head:m.gt2_plain": {
+      "recipe_id": "wg:mamba_whole_graph_m/ckpt-head:m.gt2_plain",
+      "node": "m.gt2_plain",
+      "family": "m",
+      "node_kind": "mamba_ckpt",
+      "binding": "family_preset",
+      "execution_profile": "whole_graph_serial",
+      "preset": "mamba_whole_graph_m",
+      "preset_path": "configs/presets/mamba_whole_graph_m.yaml",
+      "preset_sha256": "496c4ec22b497c70bc8409227513939b4cd86834bf2210475d0ad655be6937af",
+      "argv": [
+        "--preset",
+        "mamba_whole_graph_m",
+        "--no-mamba-trt",
+        "--mamba-ckpt",
+        "runs/mamba_gt_yolo26m_v14replica_final/best.ckpt",
+        "--detector",
+        "SDP"
+      ],
+      "command": "scripts/eval/mot17.py --preset mamba_whole_graph_m --no-mamba-trt --mamba-ckpt runs/mamba_gt_yolo26m_v14replica_final/best.ckpt --detector SDP",
+      "artifacts": {
+        "mamba_ckpt": {
+          "path": "runs/mamba_gt_yolo26m_v14replica_final/best.ckpt",
+          "size_bytes": 121823044,
+          "node": "m.gt2_plain",
+          "sha256": "1960e28f8924e5918c4ee3989abc583a390f63f8257017dcb4cc85fe30b00a84",
+          "sha256_source": "inventory"
+        },
+        "mamba_teacher_ckpt": {
+          "path": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
+          "size_bytes": 251885507,
+          "node": "m.adapted_teacher",
+          "sha256": "5f1cb461cb063788ee8fb933340055add4b4003d7c945ef14f676a5a8c3bea06",
+          "sha256_source": "inventory"
+        },
+        "mamba_yolo_weights": {
+          "path": "models/yolo/yolo26m.pt",
+          "size_bytes": 44255705,
+          "node": "m.pretrained_yolo",
+          "sha256": "401cea9ab23ad19246ff7744859816bc599f350e93c9dd30367b6f0a0745d0b7",
+          "sha256_source": "inventory"
+        },
+        "fpn_backbone_engine": {
+          "path": "models/yolo/yolo26m_backbone_640_best.engine",
+          "size_bytes": 40186740,
+          "node": "m.backbone_engine",
+          "sha256": "fdf0f4550f584e73d5b7ca8393def25b74715f5ab639449dd01873becd66e580",
+          "sha256_source": "inventory"
+        },
+        "mamba_head_engine": {
+          "path": "models/yolo/mamba_head_26m.engine",
+          "size_bytes": 22549364,
+          "node": "m.head_engine",
+          "sha256": "c0c0e3e1a99e1707996d876334af2217c9c725d03bb1fe6838073a47723806cf",
+          "sha256_source": "inventory"
+        },
+        "teacher_head_ckpt": null,
+        "teacher_head_backbone_engine": null,
+        "engine": {
+          "path": "models/yolo/yolo26m_960_batch1.engine",
+          "size_bytes": 44854500,
+          "node": null,
+          "sha256": "351d1797f890bcd5087cecea21fb620b252fff6604a236402786b2430af27f96",
+          "sha256_source": "disk_at_freeze"
+        }
+      },
+      "resolved_config_sha256": "57a9af0efe121ad79a80c691a5bafac8ab3f74c29be5d305bec664d4b8f22065",
+      "resolved_config_keys": 452,
+      "binding_facts": {
+        "head_source": {
+          "kind": "checkpoint_pytorch",
+          "node": "m.gt2_plain",
+          "checkpoint_head_deployed": true,
+          "source_attribution": null
+        },
+        "head_path": "checkpoint PyTorch head inside whole graph",
+        "effective_T": 1,
+        "temporal_blocks": "absent",
+        "backbone_engine_node": "m.backbone_engine",
+        "backbone_node": null,
+        "backbone_teacher_consistency": "same_teacher_indicated",
+        "engine_bytes_attributed": false,
+        "graphs": {
+          "use_whole_graph": true,
+          "use_cuda_graph": true,
+          "use_tracker_graph": true
+        },
+        "gate_teacher_at_runtime": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
+        "tracker_policy_source": "preset"
+      },
+      "tracker_policy_overrides": [],
+      "comparisons": [
+        "B4.m.gt1_to_gt2_plain:rhs"
+      ]
+    },
+    "wg:mamba_whole_graph:s.implicit_s42": {
+      "recipe_id": "wg:mamba_whole_graph:s.implicit_s42",
+      "node": "s.implicit_s42",
+      "family": "s",
+      "node_kind": "mamba_ckpt",
+      "binding": "family_preset",
+      "execution_profile": "whole_graph_serial",
+      "preset": "mamba_whole_graph",
+      "preset_path": "configs/presets/mamba_whole_graph.yaml",
+      "preset_sha256": "093b66ed124063f035ae9cf2a76e4f5426743cd819fb66e3e54994c97ea42cd1",
+      "argv": [
+        "--preset",
+        "mamba_whole_graph",
+        "--mamba-ckpt",
+        "runs/mamba_gt_v14replica_implicit_s42/best.ckpt",
+        "--detector",
+        "SDP"
+      ],
+      "command": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_implicit_s42/best.ckpt --detector SDP",
+      "artifacts": {
+        "mamba_ckpt": {
+          "path": "runs/mamba_gt_v14replica_implicit_s42/best.ckpt",
+          "size_bytes": 121232772,
+          "node": "s.implicit_s42",
+          "sha256": "be8ef8612aca1a8f7636d0cfd24a0ebda919fc58730fa88bc5b5a9ba50e5419f",
+          "sha256_source": "inventory"
+        },
+        "mamba_teacher_ckpt": {
+          "path": "runs/gated_det_v1/best.ckpt",
+          "size_bytes": 116736565,
+          "node": "s.legacy_teacher",
+          "sha256": "d2ace71d47c3358d36867c64795b09fad7e3ae0c794ef59554b17518c387dbcf",
+          "sha256_source": "inventory"
+        },
+        "mamba_yolo_weights": {
+          "path": "models/yolo/yolo26s.pt",
+          "size_bytes": 20422725,
+          "node": "s.pretrained_yolo",
+          "sha256": "646f8bc3fe0a656803d95c294f7852321748cb29d13466a1af8862e2db384a1b",
+          "sha256_source": "inventory"
+        },
+        "fpn_backbone_engine": {
+          "path": "models/yolo/yolo26s_backbone_640_best.engine",
+          "size_bytes": 20298516,
+          "node": "s.backbone_engine",
+          "sha256": "2ef3d4d40dfb670982cbbb98e6ed7d07e5b1a590cfa126d5ccf7342ee1579ce4",
+          "sha256_source": "inventory"
+        },
+        "mamba_head_engine": null,
+        "teacher_head_ckpt": null,
+        "teacher_head_backbone_engine": null,
+        "engine": {
+          "path": "models/yolo/yolo26m_960_batch1.engine",
+          "size_bytes": 44854500,
+          "node": null,
+          "sha256": "351d1797f890bcd5087cecea21fb620b252fff6604a236402786b2430af27f96",
+          "sha256_source": "disk_at_freeze"
+        }
+      },
+      "resolved_config_sha256": "feefbe4db82a8f0efa5bb33c30b0a959dcd7dd293dd08c6bc4277af078c6bfa8",
+      "resolved_config_keys": 452,
+      "binding_facts": {
+        "head_source": {
+          "kind": "checkpoint_pytorch",
+          "node": "s.implicit_s42",
+          "checkpoint_head_deployed": true,
+          "source_attribution": null
+        },
+        "head_path": "checkpoint PyTorch head inside whole graph",
+        "effective_T": 1,
+        "temporal_blocks": "absent",
+        "backbone_engine_node": "s.backbone_engine",
+        "backbone_node": null,
+        "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
+        "engine_bytes_attributed": false,
+        "graphs": {
+          "use_whole_graph": true,
+          "use_cuda_graph": true,
+          "use_tracker_graph": true
+        },
+        "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
+        "tracker_policy_source": "preset"
+      },
+      "tracker_policy_overrides": [],
+      "comparisons": [
+        "C1.s.explicit_vs_implicit_shared_gt1_s42:lhs",
+        "D1.s.implicit_seed_42_vs_43:lhs"
+      ]
+    },
+    "wg:mamba_whole_graph:s.t3t1_phase_b": {
+      "recipe_id": "wg:mamba_whole_graph:s.t3t1_phase_b",
+      "node": "s.t3t1_phase_b",
+      "family": "s",
+      "node_kind": "mamba_ckpt",
+      "binding": "family_preset",
+      "execution_profile": "whole_graph_serial",
+      "preset": "mamba_whole_graph",
+      "preset_path": "configs/presets/mamba_whole_graph.yaml",
+      "preset_sha256": "093b66ed124063f035ae9cf2a76e4f5426743cd819fb66e3e54994c97ea42cd1",
+      "argv": [
+        "--preset",
+        "mamba_whole_graph",
+        "--mamba-ckpt",
+        "runs/mamba_gt_v14replica_t3_t1/best.ckpt",
+        "--detector",
+        "SDP"
+      ],
+      "command": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1/best.ckpt --detector SDP",
+      "artifacts": {
+        "mamba_ckpt": {
+          "path": "runs/mamba_gt_v14replica_t3_t1/best.ckpt",
+          "size_bytes": 126211713,
+          "node": "s.t3t1_phase_b",
+          "sha256": "c161c88e50b894d8b51cc614c46c3700370373decf05a15825bdf00ccf0e0876",
+          "sha256_source": "inventory"
+        },
+        "mamba_teacher_ckpt": {
+          "path": "runs/gated_det_v1/best.ckpt",
+          "size_bytes": 116736565,
+          "node": "s.legacy_teacher",
+          "sha256": "d2ace71d47c3358d36867c64795b09fad7e3ae0c794ef59554b17518c387dbcf",
+          "sha256_source": "inventory"
+        },
+        "mamba_yolo_weights": {
+          "path": "models/yolo/yolo26s.pt",
+          "size_bytes": 20422725,
+          "node": "s.pretrained_yolo",
+          "sha256": "646f8bc3fe0a656803d95c294f7852321748cb29d13466a1af8862e2db384a1b",
+          "sha256_source": "inventory"
+        },
+        "fpn_backbone_engine": {
+          "path": "models/yolo/yolo26s_backbone_640_best.engine",
+          "size_bytes": 20298516,
+          "node": "s.backbone_engine",
+          "sha256": "2ef3d4d40dfb670982cbbb98e6ed7d07e5b1a590cfa126d5ccf7342ee1579ce4",
+          "sha256_source": "inventory"
+        },
+        "mamba_head_engine": null,
+        "teacher_head_ckpt": null,
+        "teacher_head_backbone_engine": null,
+        "engine": {
+          "path": "models/yolo/yolo26m_960_batch1.engine",
+          "size_bytes": 44854500,
+          "node": null,
+          "sha256": "351d1797f890bcd5087cecea21fb620b252fff6604a236402786b2430af27f96",
+          "sha256_source": "disk_at_freeze"
+        }
+      },
+      "resolved_config_sha256": "c0a3248f66197d219cc96cef441e3146fd7e35a7db347bef9790614b82cbb752",
+      "resolved_config_keys": 452,
+      "binding_facts": {
+        "head_source": {
+          "kind": "checkpoint_pytorch",
+          "node": "s.t3t1_phase_b",
+          "checkpoint_head_deployed": true,
+          "source_attribution": null
+        },
+        "head_path": "checkpoint PyTorch head inside whole graph",
+        "effective_T": 1,
+        "temporal_blocks": "present; BYPASSED by whole-graph effective T=1",
+        "backbone_engine_node": "s.backbone_engine",
+        "backbone_node": null,
+        "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
+        "engine_bytes_attributed": false,
+        "graphs": {
+          "use_whole_graph": true,
+          "use_cuda_graph": true,
+          "use_tracker_graph": true
+        },
+        "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
+        "tracker_policy_source": "preset"
+      },
+      "tracker_policy_overrides": [],
+      "comparisons": [
+        "C1.s.explicit_vs_implicit_shared_gt1_s42:rhs",
+        "D3.s.explicit_shared_seed_42_vs_43:lhs",
+        "E1.s_vs_m.production_system:lhs",
+        "E4.s.production_backbone_engine_ab:lhs"
+      ]
+    },
+    "wg:mamba_whole_graph:s.implicit_s43": {
+      "recipe_id": "wg:mamba_whole_graph:s.implicit_s43",
+      "node": "s.implicit_s43",
+      "family": "s",
+      "node_kind": "mamba_ckpt",
+      "binding": "family_preset",
+      "execution_profile": "whole_graph_serial",
+      "preset": "mamba_whole_graph",
+      "preset_path": "configs/presets/mamba_whole_graph.yaml",
+      "preset_sha256": "093b66ed124063f035ae9cf2a76e4f5426743cd819fb66e3e54994c97ea42cd1",
+      "argv": [
+        "--preset",
+        "mamba_whole_graph",
+        "--mamba-ckpt",
+        "runs/mamba_gt_v14replica_implicit_s43/best.ckpt",
+        "--detector",
+        "SDP"
+      ],
+      "command": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_implicit_s43/best.ckpt --detector SDP",
+      "artifacts": {
+        "mamba_ckpt": {
+          "path": "runs/mamba_gt_v14replica_implicit_s43/best.ckpt",
+          "size_bytes": 121232772,
+          "node": "s.implicit_s43",
+          "sha256": "57ad6750f003f4a48231a38fe0abddd49b042f8d011427e30c5ca13d382fa7fe",
+          "sha256_source": "inventory"
+        },
+        "mamba_teacher_ckpt": {
+          "path": "runs/gated_det_v1/best.ckpt",
+          "size_bytes": 116736565,
+          "node": "s.legacy_teacher",
+          "sha256": "d2ace71d47c3358d36867c64795b09fad7e3ae0c794ef59554b17518c387dbcf",
+          "sha256_source": "inventory"
+        },
+        "mamba_yolo_weights": {
+          "path": "models/yolo/yolo26s.pt",
+          "size_bytes": 20422725,
+          "node": "s.pretrained_yolo",
+          "sha256": "646f8bc3fe0a656803d95c294f7852321748cb29d13466a1af8862e2db384a1b",
+          "sha256_source": "inventory"
+        },
+        "fpn_backbone_engine": {
+          "path": "models/yolo/yolo26s_backbone_640_best.engine",
+          "size_bytes": 20298516,
+          "node": "s.backbone_engine",
+          "sha256": "2ef3d4d40dfb670982cbbb98e6ed7d07e5b1a590cfa126d5ccf7342ee1579ce4",
+          "sha256_source": "inventory"
+        },
+        "mamba_head_engine": null,
+        "teacher_head_ckpt": null,
+        "teacher_head_backbone_engine": null,
+        "engine": {
+          "path": "models/yolo/yolo26m_960_batch1.engine",
+          "size_bytes": 44854500,
+          "node": null,
+          "sha256": "351d1797f890bcd5087cecea21fb620b252fff6604a236402786b2430af27f96",
+          "sha256_source": "disk_at_freeze"
+        }
+      },
+      "resolved_config_sha256": "4e3da9d3222633aac69165b3b58c3cc3c86c4ab25fc1e5d06010d617e9cefc00",
+      "resolved_config_keys": 452,
+      "binding_facts": {
+        "head_source": {
+          "kind": "checkpoint_pytorch",
+          "node": "s.implicit_s43",
+          "checkpoint_head_deployed": true,
+          "source_attribution": null
+        },
+        "head_path": "checkpoint PyTorch head inside whole graph",
+        "effective_T": 1,
+        "temporal_blocks": "absent",
+        "backbone_engine_node": "s.backbone_engine",
+        "backbone_node": null,
+        "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
+        "engine_bytes_attributed": false,
+        "graphs": {
+          "use_whole_graph": true,
+          "use_cuda_graph": true,
+          "use_tracker_graph": true
+        },
+        "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
+        "tracker_policy_source": "preset"
+      },
+      "tracker_policy_overrides": [],
+      "comparisons": [
+        "C2.s.explicit_vs_implicit_shared_gt1_s43:lhs",
+        "D1.s.implicit_seed_42_vs_43:rhs",
+        "D2.s.implicit_seed_43_vs_44:lhs"
+      ]
+    },
+    "wg:mamba_whole_graph:s.t3t1_shared_s43": {
+      "recipe_id": "wg:mamba_whole_graph:s.t3t1_shared_s43",
+      "node": "s.t3t1_shared_s43",
+      "family": "s",
+      "node_kind": "mamba_ckpt",
+      "binding": "family_preset",
+      "execution_profile": "whole_graph_serial",
+      "preset": "mamba_whole_graph",
+      "preset_path": "configs/presets/mamba_whole_graph.yaml",
+      "preset_sha256": "093b66ed124063f035ae9cf2a76e4f5426743cd819fb66e3e54994c97ea42cd1",
+      "argv": [
+        "--preset",
+        "mamba_whole_graph",
+        "--mamba-ckpt",
+        "runs/mamba_gt_v14replica_t3_t1_shared_s43/best.ckpt",
+        "--detector",
+        "SDP"
+      ],
+      "command": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1_shared_s43/best.ckpt --detector SDP",
+      "artifacts": {
+        "mamba_ckpt": {
+          "path": "runs/mamba_gt_v14replica_t3_t1_shared_s43/best.ckpt",
+          "size_bytes": 126212097,
+          "node": "s.t3t1_shared_s43",
+          "sha256": "b6f9f7e6222b76a52a4fc1f22ea85150e5b4af01414bbc65656a12f66da95f74",
+          "sha256_source": "inventory"
+        },
+        "mamba_teacher_ckpt": {
+          "path": "runs/gated_det_v1/best.ckpt",
+          "size_bytes": 116736565,
+          "node": "s.legacy_teacher",
+          "sha256": "d2ace71d47c3358d36867c64795b09fad7e3ae0c794ef59554b17518c387dbcf",
+          "sha256_source": "inventory"
+        },
+        "mamba_yolo_weights": {
+          "path": "models/yolo/yolo26s.pt",
+          "size_bytes": 20422725,
+          "node": "s.pretrained_yolo",
+          "sha256": "646f8bc3fe0a656803d95c294f7852321748cb29d13466a1af8862e2db384a1b",
+          "sha256_source": "inventory"
+        },
+        "fpn_backbone_engine": {
+          "path": "models/yolo/yolo26s_backbone_640_best.engine",
+          "size_bytes": 20298516,
+          "node": "s.backbone_engine",
+          "sha256": "2ef3d4d40dfb670982cbbb98e6ed7d07e5b1a590cfa126d5ccf7342ee1579ce4",
+          "sha256_source": "inventory"
+        },
+        "mamba_head_engine": null,
+        "teacher_head_ckpt": null,
+        "teacher_head_backbone_engine": null,
+        "engine": {
+          "path": "models/yolo/yolo26m_960_batch1.engine",
+          "size_bytes": 44854500,
+          "node": null,
+          "sha256": "351d1797f890bcd5087cecea21fb620b252fff6604a236402786b2430af27f96",
+          "sha256_source": "disk_at_freeze"
+        }
+      },
+      "resolved_config_sha256": "ed1852acf293e6f910b17549d5678be477cfd449b1a955b8c3d64847c5be26ab",
+      "resolved_config_keys": 452,
+      "binding_facts": {
+        "head_source": {
+          "kind": "checkpoint_pytorch",
+          "node": "s.t3t1_shared_s43",
+          "checkpoint_head_deployed": true,
+          "source_attribution": null
+        },
+        "head_path": "checkpoint PyTorch head inside whole graph",
+        "effective_T": 1,
+        "temporal_blocks": "present; BYPASSED by whole-graph effective T=1",
+        "backbone_engine_node": "s.backbone_engine",
+        "backbone_node": null,
+        "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
+        "engine_bytes_attributed": false,
+        "graphs": {
+          "use_whole_graph": true,
+          "use_cuda_graph": true,
+          "use_tracker_graph": true
+        },
+        "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
+        "tracker_policy_source": "preset"
+      },
+      "tracker_policy_overrides": [],
+      "comparisons": [
+        "C2.s.explicit_vs_implicit_shared_gt1_s43:rhs",
+        "D3.s.explicit_shared_seed_42_vs_43:rhs",
+        "D4.s.explicit_shared_seed_43_vs_44:lhs"
+      ]
+    },
+    "wg:mamba_whole_graph:s.implicit_s44": {
+      "recipe_id": "wg:mamba_whole_graph:s.implicit_s44",
+      "node": "s.implicit_s44",
+      "family": "s",
+      "node_kind": "mamba_ckpt",
+      "binding": "family_preset",
+      "execution_profile": "whole_graph_serial",
+      "preset": "mamba_whole_graph",
+      "preset_path": "configs/presets/mamba_whole_graph.yaml",
+      "preset_sha256": "093b66ed124063f035ae9cf2a76e4f5426743cd819fb66e3e54994c97ea42cd1",
+      "argv": [
+        "--preset",
+        "mamba_whole_graph",
+        "--mamba-ckpt",
+        "runs/mamba_gt_v14replica_implicit_s44/best.ckpt",
+        "--detector",
+        "SDP"
+      ],
+      "command": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_implicit_s44/best.ckpt --detector SDP",
+      "artifacts": {
+        "mamba_ckpt": {
+          "path": "runs/mamba_gt_v14replica_implicit_s44/best.ckpt",
+          "size_bytes": 121232772,
+          "node": "s.implicit_s44",
+          "sha256": "a15ca3fdde8e0ef6a4f83e118c3a16fba1a81c0c5c44c4af3ce86bb72ddf4a1c",
+          "sha256_source": "inventory"
+        },
+        "mamba_teacher_ckpt": {
+          "path": "runs/gated_det_v1/best.ckpt",
+          "size_bytes": 116736565,
+          "node": "s.legacy_teacher",
+          "sha256": "d2ace71d47c3358d36867c64795b09fad7e3ae0c794ef59554b17518c387dbcf",
+          "sha256_source": "inventory"
+        },
+        "mamba_yolo_weights": {
+          "path": "models/yolo/yolo26s.pt",
+          "size_bytes": 20422725,
+          "node": "s.pretrained_yolo",
+          "sha256": "646f8bc3fe0a656803d95c294f7852321748cb29d13466a1af8862e2db384a1b",
+          "sha256_source": "inventory"
+        },
+        "fpn_backbone_engine": {
+          "path": "models/yolo/yolo26s_backbone_640_best.engine",
+          "size_bytes": 20298516,
+          "node": "s.backbone_engine",
+          "sha256": "2ef3d4d40dfb670982cbbb98e6ed7d07e5b1a590cfa126d5ccf7342ee1579ce4",
+          "sha256_source": "inventory"
+        },
+        "mamba_head_engine": null,
+        "teacher_head_ckpt": null,
+        "teacher_head_backbone_engine": null,
+        "engine": {
+          "path": "models/yolo/yolo26m_960_batch1.engine",
+          "size_bytes": 44854500,
+          "node": null,
+          "sha256": "351d1797f890bcd5087cecea21fb620b252fff6604a236402786b2430af27f96",
+          "sha256_source": "disk_at_freeze"
+        }
+      },
+      "resolved_config_sha256": "da1fd25827ef42cf293c4344dee4659cc2a065ae303022baa77cd4598cdd0d59",
+      "resolved_config_keys": 452,
+      "binding_facts": {
+        "head_source": {
+          "kind": "checkpoint_pytorch",
+          "node": "s.implicit_s44",
+          "checkpoint_head_deployed": true,
+          "source_attribution": null
+        },
+        "head_path": "checkpoint PyTorch head inside whole graph",
+        "effective_T": 1,
+        "temporal_blocks": "absent",
+        "backbone_engine_node": "s.backbone_engine",
+        "backbone_node": null,
+        "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
+        "engine_bytes_attributed": false,
+        "graphs": {
+          "use_whole_graph": true,
+          "use_cuda_graph": true,
+          "use_tracker_graph": true
+        },
+        "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
+        "tracker_policy_source": "preset"
+      },
+      "tracker_policy_overrides": [],
+      "comparisons": [
+        "C3.s.explicit_vs_implicit_shared_gt1_s44:lhs",
+        "D2.s.implicit_seed_43_vs_44:rhs"
+      ]
+    },
+    "wg:mamba_whole_graph:s.t3t1_shared_s44": {
+      "recipe_id": "wg:mamba_whole_graph:s.t3t1_shared_s44",
+      "node": "s.t3t1_shared_s44",
+      "family": "s",
+      "node_kind": "mamba_ckpt",
+      "binding": "family_preset",
+      "execution_profile": "whole_graph_serial",
+      "preset": "mamba_whole_graph",
+      "preset_path": "configs/presets/mamba_whole_graph.yaml",
+      "preset_sha256": "093b66ed124063f035ae9cf2a76e4f5426743cd819fb66e3e54994c97ea42cd1",
+      "argv": [
+        "--preset",
+        "mamba_whole_graph",
+        "--mamba-ckpt",
+        "runs/mamba_gt_v14replica_t3_t1_shared_s44/best.ckpt",
+        "--detector",
+        "SDP"
+      ],
+      "command": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1_shared_s44/best.ckpt --detector SDP",
+      "artifacts": {
+        "mamba_ckpt": {
+          "path": "runs/mamba_gt_v14replica_t3_t1_shared_s44/best.ckpt",
+          "size_bytes": 126212097,
+          "node": "s.t3t1_shared_s44",
+          "sha256": "d540887b48ae8e425809428ef5be4e87e99defc36c6e952039487f43c5220ac1",
+          "sha256_source": "inventory"
+        },
+        "mamba_teacher_ckpt": {
+          "path": "runs/gated_det_v1/best.ckpt",
+          "size_bytes": 116736565,
+          "node": "s.legacy_teacher",
+          "sha256": "d2ace71d47c3358d36867c64795b09fad7e3ae0c794ef59554b17518c387dbcf",
+          "sha256_source": "inventory"
+        },
+        "mamba_yolo_weights": {
+          "path": "models/yolo/yolo26s.pt",
+          "size_bytes": 20422725,
+          "node": "s.pretrained_yolo",
+          "sha256": "646f8bc3fe0a656803d95c294f7852321748cb29d13466a1af8862e2db384a1b",
+          "sha256_source": "inventory"
+        },
+        "fpn_backbone_engine": {
+          "path": "models/yolo/yolo26s_backbone_640_best.engine",
+          "size_bytes": 20298516,
+          "node": "s.backbone_engine",
+          "sha256": "2ef3d4d40dfb670982cbbb98e6ed7d07e5b1a590cfa126d5ccf7342ee1579ce4",
+          "sha256_source": "inventory"
+        },
+        "mamba_head_engine": null,
+        "teacher_head_ckpt": null,
+        "teacher_head_backbone_engine": null,
+        "engine": {
+          "path": "models/yolo/yolo26m_960_batch1.engine",
+          "size_bytes": 44854500,
+          "node": null,
+          "sha256": "351d1797f890bcd5087cecea21fb620b252fff6604a236402786b2430af27f96",
+          "sha256_source": "disk_at_freeze"
+        }
+      },
+      "resolved_config_sha256": "c3059d80882c469261d67ea1c034d4bcf7045ca26e36bb44ff61b7fb91b0538a",
+      "resolved_config_keys": 452,
+      "binding_facts": {
+        "head_source": {
+          "kind": "checkpoint_pytorch",
+          "node": "s.t3t1_shared_s44",
+          "checkpoint_head_deployed": true,
+          "source_attribution": null
+        },
+        "head_path": "checkpoint PyTorch head inside whole graph",
+        "effective_T": 1,
+        "temporal_blocks": "present; BYPASSED by whole-graph effective T=1",
+        "backbone_engine_node": "s.backbone_engine",
+        "backbone_node": null,
+        "backbone_teacher_consistency": "DIFFERENT_TEACHER_INDICATED",
+        "engine_bytes_attributed": false,
+        "graphs": {
+          "use_whole_graph": true,
+          "use_cuda_graph": true,
+          "use_tracker_graph": true
+        },
+        "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
+        "tracker_policy_source": "preset"
+      },
+      "tracker_policy_overrides": [],
+      "comparisons": [
+        "C3.s.explicit_vs_implicit_shared_gt1_s44:rhs",
+        "D4.s.explicit_shared_seed_43_vs_44:rhs"
+      ]
+    },
+    "wg:mamba_whole_graph_m:m.t3t1_phase_b": {
+      "recipe_id": "wg:mamba_whole_graph_m:m.t3t1_phase_b",
+      "node": "m.t3t1_phase_b",
+      "family": "m",
+      "node_kind": "mamba_ckpt",
+      "binding": "family_preset",
+      "execution_profile": "whole_graph_serial",
+      "preset": "mamba_whole_graph_m",
+      "preset_path": "configs/presets/mamba_whole_graph_m.yaml",
+      "preset_sha256": "496c4ec22b497c70bc8409227513939b4cd86834bf2210475d0ad655be6937af",
+      "argv": [
+        "--preset",
+        "mamba_whole_graph_m",
+        "--mamba-ckpt",
+        "runs/mamba_gt_yolo26m_v14replica_t3_t1/best.ckpt",
+        "--detector",
+        "SDP"
+      ],
+      "command": "scripts/eval/mot17.py --preset mamba_whole_graph_m --mamba-ckpt runs/mamba_gt_yolo26m_v14replica_t3_t1/best.ckpt --detector SDP",
+      "artifacts": {
+        "mamba_ckpt": {
+          "path": "runs/mamba_gt_yolo26m_v14replica_t3_t1/best.ckpt",
+          "size_bytes": 126802369,
+          "node": "m.t3t1_phase_b",
+          "sha256": "a5a0e7091cd854ad68210ae4bbd43af73c7d3d098ea119f02ea65fab59c0676c",
+          "sha256_source": "inventory"
+        },
+        "mamba_teacher_ckpt": {
+          "path": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
+          "size_bytes": 251885507,
+          "node": "m.adapted_teacher",
+          "sha256": "5f1cb461cb063788ee8fb933340055add4b4003d7c945ef14f676a5a8c3bea06",
+          "sha256_source": "inventory"
+        },
+        "mamba_yolo_weights": {
+          "path": "models/yolo/yolo26m.pt",
+          "size_bytes": 44255705,
+          "node": "m.pretrained_yolo",
+          "sha256": "401cea9ab23ad19246ff7744859816bc599f350e93c9dd30367b6f0a0745d0b7",
+          "sha256_source": "inventory"
+        },
+        "fpn_backbone_engine": {
+          "path": "models/yolo/yolo26m_backbone_640_best.engine",
+          "size_bytes": 40186740,
+          "node": "m.backbone_engine",
+          "sha256": "fdf0f4550f584e73d5b7ca8393def25b74715f5ab639449dd01873becd66e580",
+          "sha256_source": "inventory"
+        },
+        "mamba_head_engine": {
+          "path": "models/yolo/mamba_head_26m.engine",
+          "size_bytes": 22549364,
+          "node": "m.head_engine",
+          "sha256": "c0c0e3e1a99e1707996d876334af2217c9c725d03bb1fe6838073a47723806cf",
+          "sha256_source": "inventory"
+        },
+        "teacher_head_ckpt": null,
+        "teacher_head_backbone_engine": null,
+        "engine": {
+          "path": "models/yolo/yolo26m_960_batch1.engine",
+          "size_bytes": 44854500,
+          "node": null,
+          "sha256": "351d1797f890bcd5087cecea21fb620b252fff6604a236402786b2430af27f96",
+          "sha256_source": "disk_at_freeze"
+        }
+      },
+      "resolved_config_sha256": "49074ad37f66c8064a1df994bdb22aa641dc2edb55b7e0d87f37e226ce2660c2",
+      "resolved_config_keys": 452,
+      "binding_facts": {
+        "head_source": {
+          "kind": "trt_engine",
+          "node": "m.head_engine",
+          "checkpoint_head_deployed": false,
+          "source_attribution": {
+            "status": "unattributed",
+            "onnx_matches": [
+              "m.distill",
+              "m.gt1",
+              "m.gt2_plain",
+              "m.t3t1_phase_a",
+              "m.t3t1_phase_b",
+              "m.t3t1_phase_b_gpu_decode"
+            ],
+            "verdict": "ambiguous"
+          }
+        },
+        "head_path": "TRT head engine models/yolo/mamba_head_26m.engine (checkpoint head NOT deployed)",
+        "effective_T": 1,
+        "temporal_blocks": "present in checkpoint; checkpoint head NOT deployed",
+        "backbone_engine_node": "m.backbone_engine",
+        "backbone_node": null,
+        "backbone_teacher_consistency": "same_teacher_indicated",
+        "engine_bytes_attributed": false,
+        "graphs": {
+          "use_whole_graph": true,
+          "use_cuda_graph": true,
+          "use_tracker_graph": true
+        },
+        "gate_teacher_at_runtime": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
+        "tracker_policy_source": "preset"
+      },
+      "tracker_policy_overrides": [],
+      "comparisons": [
+        "E1.s_vs_m.production_system:rhs"
+      ]
+    },
+    "pyt:s.adapted_teacher:s.adapted_teacher": {
+      "recipe_id": "pyt:s.adapted_teacher:s.adapted_teacher",
+      "node": "s.adapted_teacher",
+      "family": "s",
+      "node_kind": "gated_teacher_ckpt",
+      "binding": "shared_backbone_node",
+      "execution_profile": "eager_pytorch",
+      "preset": "mamba_pyt_backbone",
+      "preset_path": "configs/presets/mamba_pyt_backbone.yaml",
+      "preset_sha256": "4ac2413a476635824eb777b5a235edb7046c57aee178e3cd1ef8ceedb7feaf32",
+      "argv": [
+        "--preset",
+        "mamba_pyt_backbone",
+        "--teacher-head-ckpt",
+        "runs/gated_det_v14replica/epoch_0012.ckpt",
+        "--mamba-yolo-weights",
+        "models/yolo/yolo26s.pt",
+        "--mamba-ckpt",
+        "",
+        "--mamba-teacher-ckpt",
+        "runs/gated_det_v14replica/epoch_0012.ckpt",
+        "--detector",
+        "SDP",
+        "--no-compile",
+        "--private-continuation",
+        "--private-max-candidates",
+        "50",
+        "--private-min-score",
+        "0.1",
+        "--private-prior-iou-threshold",
+        "0.3"
+      ],
+      "command": "scripts/eval/mot17.py --preset mamba_pyt_backbone --teacher-head-ckpt runs/gated_det_v14replica/epoch_0012.ckpt --mamba-yolo-weights models/yolo/yolo26s.pt --mamba-ckpt '' --mamba-teacher-ckpt runs/gated_det_v14replica/epoch_0012.ckpt --detector SDP --no-compile --private-continuation --private-max-candidates 50 --private-min-score 0.1 --private-prior-iou-threshold 0.3",
+      "artifacts": {
+        "mamba_ckpt": null,
+        "mamba_teacher_ckpt": {
+          "path": "runs/gated_det_v14replica/epoch_0012.ckpt",
+          "size_bytes": 116838679,
+          "node": "s.adapted_teacher",
+          "sha256": "08d1d68dc8fb6c2bb304642cedcd42a29efaed8d420e2f87f690c774f24d57fc",
+          "sha256_source": "inventory"
+        },
+        "mamba_yolo_weights": {
+          "path": "models/yolo/yolo26s.pt",
+          "size_bytes": 20422725,
+          "node": "s.pretrained_yolo",
+          "sha256": "646f8bc3fe0a656803d95c294f7852321748cb29d13466a1af8862e2db384a1b",
+          "sha256_source": "inventory"
+        },
+        "fpn_backbone_engine": null,
+        "mamba_head_engine": null,
+        "teacher_head_ckpt": {
+          "path": "runs/gated_det_v14replica/epoch_0012.ckpt",
+          "size_bytes": 116838679,
+          "node": "s.adapted_teacher",
+          "sha256": "08d1d68dc8fb6c2bb304642cedcd42a29efaed8d420e2f87f690c774f24d57fc",
+          "sha256_source": "inventory"
+        },
+        "teacher_head_backbone_engine": null,
+        "engine": {
+          "path": "models/yolo/yolo26m_960_batch1.engine",
+          "size_bytes": 44854500,
+          "node": null,
+          "sha256": "351d1797f890bcd5087cecea21fb620b252fff6604a236402786b2430af27f96",
+          "sha256_source": "disk_at_freeze"
+        }
+      },
+      "resolved_config_sha256": "156ab028b19fa82571cdf0855b4553a4248d011bb797f2adc8b08275698ab216",
+      "resolved_config_keys": 452,
+      "binding_facts": {
+        "head_source": {
+          "kind": "checkpoint_pytorch",
+          "node": "s.adapted_teacher",
+          "checkpoint_head_deployed": true,
+          "source_attribution": null
+        },
+        "head_path": "native Detect head via TeacherHeadDetector, PyTorch eager",
+        "effective_T": 1,
+        "temporal_blocks": "absent",
+        "backbone_engine_node": null,
+        "backbone_node": "s.adapted_teacher",
+        "backbone_teacher_consistency": "same_teacher_indicated",
+        "engine_bytes_attributed": null,
+        "graphs": {
+          "use_whole_graph": false,
+          "use_cuda_graph": false,
+          "use_tracker_graph": false
+        },
+        "gate_teacher_at_runtime": null,
+        "tracker_policy_source": "contract_required"
+      },
+      "tracker_policy_overrides": [
+        "--private-continuation",
+        "--private-max-candidates",
+        "50",
+        "--private-min-score",
+        "0.1",
+        "--private-prior-iou-threshold",
+        "0.3"
+      ],
+      "comparisons": [
+        "E2.s.native_head_vs_mamba_head_shared_backbone:lhs"
+      ]
+    },
+    "pyt:s.adapted_teacher:s.t3t1_phase_b": {
+      "recipe_id": "pyt:s.adapted_teacher:s.t3t1_phase_b",
+      "node": "s.t3t1_phase_b",
+      "family": "s",
+      "node_kind": "mamba_ckpt",
+      "binding": "shared_backbone_node",
+      "execution_profile": "eager_pytorch",
+      "preset": "mamba_pyt_backbone",
+      "preset_path": "configs/presets/mamba_pyt_backbone.yaml",
+      "preset_sha256": "4ac2413a476635824eb777b5a235edb7046c57aee178e3cd1ef8ceedb7feaf32",
+      "argv": [
+        "--preset",
+        "mamba_pyt_backbone",
+        "--no-mamba-trt",
+        "--no-temporal",
+        "--mamba-ckpt",
+        "runs/mamba_gt_v14replica_t3_t1/best.ckpt",
+        "--mamba-teacher-ckpt",
+        "runs/gated_det_v14replica/epoch_0012.ckpt",
+        "--mamba-yolo-weights",
+        "models/yolo/yolo26s.pt",
+        "--detector",
+        "SDP",
+        "--no-compile",
+        "--private-continuation",
+        "--private-max-candidates",
+        "50",
+        "--private-min-score",
+        "0.1",
+        "--private-prior-iou-threshold",
+        "0.3"
+      ],
+      "command": "scripts/eval/mot17.py --preset mamba_pyt_backbone --no-mamba-trt --no-temporal --mamba-ckpt runs/mamba_gt_v14replica_t3_t1/best.ckpt --mamba-teacher-ckpt runs/gated_det_v14replica/epoch_0012.ckpt --mamba-yolo-weights models/yolo/yolo26s.pt --detector SDP --no-compile --private-continuation --private-max-candidates 50 --private-min-score 0.1 --private-prior-iou-threshold 0.3",
+      "artifacts": {
+        "mamba_ckpt": {
+          "path": "runs/mamba_gt_v14replica_t3_t1/best.ckpt",
+          "size_bytes": 126211713,
+          "node": "s.t3t1_phase_b",
+          "sha256": "c161c88e50b894d8b51cc614c46c3700370373decf05a15825bdf00ccf0e0876",
+          "sha256_source": "inventory"
+        },
+        "mamba_teacher_ckpt": {
+          "path": "runs/gated_det_v14replica/epoch_0012.ckpt",
+          "size_bytes": 116838679,
+          "node": "s.adapted_teacher",
+          "sha256": "08d1d68dc8fb6c2bb304642cedcd42a29efaed8d420e2f87f690c774f24d57fc",
+          "sha256_source": "inventory"
+        },
+        "mamba_yolo_weights": {
+          "path": "models/yolo/yolo26s.pt",
+          "size_bytes": 20422725,
+          "node": "s.pretrained_yolo",
+          "sha256": "646f8bc3fe0a656803d95c294f7852321748cb29d13466a1af8862e2db384a1b",
+          "sha256_source": "inventory"
+        },
+        "fpn_backbone_engine": null,
+        "mamba_head_engine": null,
+        "teacher_head_ckpt": null,
+        "teacher_head_backbone_engine": null,
+        "engine": {
+          "path": "models/yolo/yolo26m_960_batch1.engine",
+          "size_bytes": 44854500,
+          "node": null,
+          "sha256": "351d1797f890bcd5087cecea21fb620b252fff6604a236402786b2430af27f96",
+          "sha256_source": "disk_at_freeze"
+        }
+      },
+      "resolved_config_sha256": "0f0504f41878d31444ceea55e61c2b592ffb63933bfa5ad8135d06e671dda98d",
+      "resolved_config_keys": 452,
+      "binding_facts": {
+        "head_source": {
+          "kind": "checkpoint_pytorch",
+          "node": "s.t3t1_phase_b",
+          "checkpoint_head_deployed": true,
+          "source_attribution": null
+        },
+        "head_path": "mamba head, PyTorch eager (--no-temporal required: streaming temporal is the non-whole-graph default)",
+        "effective_T": 1,
+        "temporal_blocks": "present; must be bypassed explicitly (--no-temporal)",
+        "backbone_engine_node": null,
+        "backbone_node": "s.adapted_teacher",
+        "backbone_teacher_consistency": "same_teacher_indicated",
+        "engine_bytes_attributed": null,
+        "graphs": {
+          "use_whole_graph": false,
+          "use_cuda_graph": false,
+          "use_tracker_graph": false
+        },
+        "gate_teacher_at_runtime": null,
+        "tracker_policy_source": "contract_required"
+      },
+      "tracker_policy_overrides": [
+        "--private-continuation",
+        "--private-max-candidates",
+        "50",
+        "--private-min-score",
+        "0.1",
+        "--private-prior-iou-threshold",
+        "0.3"
+      ],
+      "comparisons": [
+        "E2.s.native_head_vs_mamba_head_shared_backbone:rhs"
+      ]
+    },
+    "pyt:m.adapted_teacher:m.adapted_teacher": {
+      "recipe_id": "pyt:m.adapted_teacher:m.adapted_teacher",
+      "node": "m.adapted_teacher",
+      "family": "m",
+      "node_kind": "gated_teacher_ckpt",
+      "binding": "shared_backbone_node",
+      "execution_profile": "eager_pytorch",
+      "preset": "mamba_pyt_backbone",
+      "preset_path": "configs/presets/mamba_pyt_backbone.yaml",
+      "preset_sha256": "4ac2413a476635824eb777b5a235edb7046c57aee178e3cd1ef8ceedb7feaf32",
+      "argv": [
+        "--preset",
+        "mamba_pyt_backbone",
+        "--teacher-head-ckpt",
+        "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
+        "--mamba-yolo-weights",
+        "models/yolo/yolo26m.pt",
+        "--mamba-ckpt",
+        "",
+        "--mamba-teacher-ckpt",
+        "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
+        "--detector",
+        "SDP",
+        "--no-compile",
+        "--private-continuation",
+        "--private-max-candidates",
+        "50",
+        "--private-min-score",
+        "0.1",
+        "--private-prior-iou-threshold",
+        "0.3"
+      ],
+      "command": "scripts/eval/mot17.py --preset mamba_pyt_backbone --teacher-head-ckpt runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt --mamba-yolo-weights models/yolo/yolo26m.pt --mamba-ckpt '' --mamba-teacher-ckpt runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt --detector SDP --no-compile --private-continuation --private-max-candidates 50 --private-min-score 0.1 --private-prior-iou-threshold 0.3",
+      "artifacts": {
+        "mamba_ckpt": null,
+        "mamba_teacher_ckpt": {
+          "path": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
+          "size_bytes": 251885507,
+          "node": "m.adapted_teacher",
+          "sha256": "5f1cb461cb063788ee8fb933340055add4b4003d7c945ef14f676a5a8c3bea06",
+          "sha256_source": "inventory"
+        },
+        "mamba_yolo_weights": {
+          "path": "models/yolo/yolo26m.pt",
+          "size_bytes": 44255705,
+          "node": "m.pretrained_yolo",
+          "sha256": "401cea9ab23ad19246ff7744859816bc599f350e93c9dd30367b6f0a0745d0b7",
+          "sha256_source": "inventory"
+        },
+        "fpn_backbone_engine": null,
+        "mamba_head_engine": null,
+        "teacher_head_ckpt": {
+          "path": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
+          "size_bytes": 251885507,
+          "node": "m.adapted_teacher",
+          "sha256": "5f1cb461cb063788ee8fb933340055add4b4003d7c945ef14f676a5a8c3bea06",
+          "sha256_source": "inventory"
+        },
+        "teacher_head_backbone_engine": null,
+        "engine": {
+          "path": "models/yolo/yolo26m_960_batch1.engine",
+          "size_bytes": 44854500,
+          "node": null,
+          "sha256": "351d1797f890bcd5087cecea21fb620b252fff6604a236402786b2430af27f96",
+          "sha256_source": "disk_at_freeze"
+        }
+      },
+      "resolved_config_sha256": "11182db6d1ec05f3ef143d22f00cce0da6210fe22b843f093649acc0e30e8508",
+      "resolved_config_keys": 452,
+      "binding_facts": {
+        "head_source": {
+          "kind": "checkpoint_pytorch",
+          "node": "m.adapted_teacher",
+          "checkpoint_head_deployed": true,
+          "source_attribution": null
+        },
+        "head_path": "native Detect head via TeacherHeadDetector, PyTorch eager",
+        "effective_T": 1,
+        "temporal_blocks": "absent",
+        "backbone_engine_node": null,
+        "backbone_node": "m.adapted_teacher",
+        "backbone_teacher_consistency": "same_teacher_indicated",
+        "engine_bytes_attributed": null,
+        "graphs": {
+          "use_whole_graph": false,
+          "use_cuda_graph": false,
+          "use_tracker_graph": false
+        },
+        "gate_teacher_at_runtime": null,
+        "tracker_policy_source": "contract_required"
+      },
+      "tracker_policy_overrides": [
+        "--private-continuation",
+        "--private-max-candidates",
+        "50",
+        "--private-min-score",
+        "0.1",
+        "--private-prior-iou-threshold",
+        "0.3"
+      ],
+      "comparisons": [
+        "E3.m.native_head_vs_mamba_head_shared_backbone:lhs"
+      ]
+    },
+    "pyt:m.adapted_teacher:m.t3t1_phase_b": {
+      "recipe_id": "pyt:m.adapted_teacher:m.t3t1_phase_b",
+      "node": "m.t3t1_phase_b",
+      "family": "m",
+      "node_kind": "mamba_ckpt",
+      "binding": "shared_backbone_node",
+      "execution_profile": "eager_pytorch",
+      "preset": "mamba_pyt_backbone",
+      "preset_path": "configs/presets/mamba_pyt_backbone.yaml",
+      "preset_sha256": "4ac2413a476635824eb777b5a235edb7046c57aee178e3cd1ef8ceedb7feaf32",
+      "argv": [
+        "--preset",
+        "mamba_pyt_backbone",
+        "--no-mamba-trt",
+        "--no-temporal",
+        "--mamba-ckpt",
+        "runs/mamba_gt_yolo26m_v14replica_t3_t1/best.ckpt",
+        "--mamba-teacher-ckpt",
+        "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
+        "--mamba-yolo-weights",
+        "models/yolo/yolo26m.pt",
+        "--detector",
+        "SDP",
+        "--no-compile",
+        "--private-continuation",
+        "--private-max-candidates",
+        "50",
+        "--private-min-score",
+        "0.1",
+        "--private-prior-iou-threshold",
+        "0.3"
+      ],
+      "command": "scripts/eval/mot17.py --preset mamba_pyt_backbone --no-mamba-trt --no-temporal --mamba-ckpt runs/mamba_gt_yolo26m_v14replica_t3_t1/best.ckpt --mamba-teacher-ckpt runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt --mamba-yolo-weights models/yolo/yolo26m.pt --detector SDP --no-compile --private-continuation --private-max-candidates 50 --private-min-score 0.1 --private-prior-iou-threshold 0.3",
+      "artifacts": {
+        "mamba_ckpt": {
+          "path": "runs/mamba_gt_yolo26m_v14replica_t3_t1/best.ckpt",
+          "size_bytes": 126802369,
+          "node": "m.t3t1_phase_b",
+          "sha256": "a5a0e7091cd854ad68210ae4bbd43af73c7d3d098ea119f02ea65fab59c0676c",
+          "sha256_source": "inventory"
+        },
+        "mamba_teacher_ckpt": {
+          "path": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
+          "size_bytes": 251885507,
+          "node": "m.adapted_teacher",
+          "sha256": "5f1cb461cb063788ee8fb933340055add4b4003d7c945ef14f676a5a8c3bea06",
+          "sha256_source": "inventory"
+        },
+        "mamba_yolo_weights": {
+          "path": "models/yolo/yolo26m.pt",
+          "size_bytes": 44255705,
+          "node": "m.pretrained_yolo",
+          "sha256": "401cea9ab23ad19246ff7744859816bc599f350e93c9dd30367b6f0a0745d0b7",
+          "sha256_source": "inventory"
+        },
+        "fpn_backbone_engine": null,
+        "mamba_head_engine": null,
+        "teacher_head_ckpt": null,
+        "teacher_head_backbone_engine": null,
+        "engine": {
+          "path": "models/yolo/yolo26m_960_batch1.engine",
+          "size_bytes": 44854500,
+          "node": null,
+          "sha256": "351d1797f890bcd5087cecea21fb620b252fff6604a236402786b2430af27f96",
+          "sha256_source": "disk_at_freeze"
+        }
+      },
+      "resolved_config_sha256": "428ca431546280ca2bc638b2aa8208c37a0645ce32459efe13874c67d49acd8e",
+      "resolved_config_keys": 452,
+      "binding_facts": {
+        "head_source": {
+          "kind": "checkpoint_pytorch",
+          "node": "m.t3t1_phase_b",
+          "checkpoint_head_deployed": true,
+          "source_attribution": null
+        },
+        "head_path": "mamba head, PyTorch eager (--no-temporal required: streaming temporal is the non-whole-graph default)",
+        "effective_T": 1,
+        "temporal_blocks": "present; must be bypassed explicitly (--no-temporal)",
+        "backbone_engine_node": null,
+        "backbone_node": "m.adapted_teacher",
+        "backbone_teacher_consistency": "same_teacher_indicated",
+        "engine_bytes_attributed": null,
+        "graphs": {
+          "use_whole_graph": false,
+          "use_cuda_graph": false,
+          "use_tracker_graph": false
+        },
+        "gate_teacher_at_runtime": null,
+        "tracker_policy_source": "contract_required"
+      },
+      "tracker_policy_overrides": [
+        "--private-continuation",
+        "--private-max-candidates",
+        "50",
+        "--private-min-score",
+        "0.1",
+        "--private-prior-iou-threshold",
+        "0.3"
+      ],
+      "comparisons": [
+        "E3.m.native_head_vs_mamba_head_shared_backbone:rhs"
+      ]
+    },
+    "wg:mamba_whole_graph/engine=s.backbone_engine_v14replica_e12:s.t3t1_phase_b": {
+      "recipe_id": "wg:mamba_whole_graph/engine=s.backbone_engine_v14replica_e12:s.t3t1_phase_b",
+      "node": "s.t3t1_phase_b",
+      "family": "s",
+      "node_kind": "mamba_ckpt",
+      "binding": "family_preset",
+      "execution_profile": "whole_graph_serial",
+      "preset": "mamba_whole_graph",
+      "preset_path": "configs/presets/mamba_whole_graph.yaml",
+      "preset_sha256": "093b66ed124063f035ae9cf2a76e4f5426743cd819fb66e3e54994c97ea42cd1",
+      "argv": [
+        "--preset",
+        "mamba_whole_graph",
+        "--mamba-ckpt",
+        "runs/mamba_gt_v14replica_t3_t1/best.ckpt",
+        "--fpn-backbone-engine",
+        "models/yolo/yolo26s_backbone_640_v14replica_e12.engine",
+        "--detector",
+        "SDP"
+      ],
+      "command": "scripts/eval/mot17.py --preset mamba_whole_graph --mamba-ckpt runs/mamba_gt_v14replica_t3_t1/best.ckpt --fpn-backbone-engine models/yolo/yolo26s_backbone_640_v14replica_e12.engine --detector SDP",
+      "artifacts": {
+        "mamba_ckpt": {
+          "path": "runs/mamba_gt_v14replica_t3_t1/best.ckpt",
+          "size_bytes": 126211713,
+          "node": "s.t3t1_phase_b",
+          "sha256": "c161c88e50b894d8b51cc614c46c3700370373decf05a15825bdf00ccf0e0876",
+          "sha256_source": "inventory"
+        },
+        "mamba_teacher_ckpt": {
+          "path": "runs/gated_det_v1/best.ckpt",
+          "size_bytes": 116736565,
+          "node": "s.legacy_teacher",
+          "sha256": "d2ace71d47c3358d36867c64795b09fad7e3ae0c794ef59554b17518c387dbcf",
+          "sha256_source": "inventory"
+        },
+        "mamba_yolo_weights": {
+          "path": "models/yolo/yolo26s.pt",
+          "size_bytes": 20422725,
+          "node": "s.pretrained_yolo",
+          "sha256": "646f8bc3fe0a656803d95c294f7852321748cb29d13466a1af8862e2db384a1b",
+          "sha256_source": "inventory"
+        },
+        "fpn_backbone_engine": {
+          "path": "models/yolo/yolo26s_backbone_640_v14replica_e12.engine",
+          "size_bytes": 20359660,
+          "node": "s.backbone_engine_v14replica_e12",
+          "sha256": "e244e8fe813aaa5dd55f7a98a8ba572fe2c2c1c6867f8a2463dd0de39dbe6446",
+          "sha256_source": "inventory"
+        },
+        "mamba_head_engine": null,
+        "teacher_head_ckpt": null,
+        "teacher_head_backbone_engine": null,
+        "engine": {
+          "path": "models/yolo/yolo26m_960_batch1.engine",
+          "size_bytes": 44854500,
+          "node": null,
+          "sha256": "351d1797f890bcd5087cecea21fb620b252fff6604a236402786b2430af27f96",
+          "sha256_source": "disk_at_freeze"
+        }
+      },
+      "resolved_config_sha256": "e57a8765a255c7cad91c4ff436611ff5620b05543faa537a7d08227cbc867e54",
+      "resolved_config_keys": 452,
+      "binding_facts": {
+        "head_source": {
+          "kind": "checkpoint_pytorch",
+          "node": "s.t3t1_phase_b",
+          "checkpoint_head_deployed": true,
+          "source_attribution": null
+        },
+        "head_path": "checkpoint PyTorch head inside whole graph",
+        "effective_T": 1,
+        "temporal_blocks": "present; BYPASSED by whole-graph effective T=1",
+        "backbone_engine_node": "s.backbone_engine_v14replica_e12",
+        "backbone_node": null,
+        "backbone_teacher_consistency": "same_teacher_indicated",
+        "engine_bytes_attributed": false,
+        "graphs": {
+          "use_whole_graph": true,
+          "use_cuda_graph": true,
+          "use_tracker_graph": true
+        },
+        "gate_teacher_at_runtime": "null (backbone-only; no teacher forward)",
+        "tracker_policy_source": "preset"
+      },
+      "tracker_policy_overrides": [],
+      "comparisons": [
+        "E4.s.production_backbone_engine_ab:rhs"
+      ]
+    }
+  },
+  "pairs": {
+    "B1.s.distill_to_gt1": {
+      "design": "stage_increment",
+      "classification": "controlled",
+      "treatment_axes": [
+        "warm_start",
+        "training_budget",
+        "training_schedule",
+        "teacher_cache"
+      ],
+      "lhs_recipe": "wg:mamba_whole_graph:s.distill",
+      "rhs_recipe": "wg:mamba_whole_graph:s.gt1",
+      "allowed_differences": [
+        "artifacts.mamba_ckpt",
+        "config.mamba_ckpt"
+      ],
+      "allowed_differences_source": "treatment_axes",
+      "frozen_differences": {
+        "artifacts.mamba_ckpt": {
+          "lhs": "6129cb71dd4368a9b58c1de57a9f697a3f9ed564746c8d1a22a59cd447f8f929",
+          "rhs": "ff40f07e9c27826912653c314b845b5c8cb3a1717138d368c433e8d1dad830f5"
+        },
+        "config.mamba_ckpt": {
+          "lhs": "runs/mamba_distill_v14replica/best.ckpt",
+          "rhs": "runs/mamba_gt_v14replica_stage1/best.ckpt"
+        }
+      },
+      "variance_axis": "treatment",
+      "question": null,
+      "intended_treatment": "GT1 stage as a bundle: live teacher (no cache), gt_ratio 0.5, clip_len 4 / stride 8, lr 1e-4, batch 4, +30 epochs",
+      "remaining_confounds": [
+        "deployed_backbone_teacher_mismatch"
+      ]
+    },
+    "B2.s.gt1_to_gt2_plain": {
+      "design": "stage_increment",
+      "classification": "controlled",
+      "treatment_axes": [
+        "warm_start",
+        "training_budget",
+        "training_schedule",
+        "teacher_cache"
+      ],
+      "lhs_recipe": "wg:mamba_whole_graph:s.gt1",
+      "rhs_recipe": "wg:mamba_whole_graph:s.gt2_plain",
+      "allowed_differences": [
+        "artifacts.mamba_ckpt",
+        "config.mamba_ckpt"
+      ],
+      "allowed_differences_source": "treatment_axes",
+      "frozen_differences": {
+        "artifacts.mamba_ckpt": {
+          "lhs": "ff40f07e9c27826912653c314b845b5c8cb3a1717138d368c433e8d1dad830f5",
+          "rhs": "c1acd2bb50642a3f4816e517b4165781defc30df6ea97c42bbc23db1d51eb989"
+        },
+        "config.mamba_ckpt": {
+          "lhs": "runs/mamba_gt_v14replica_stage1/best.ckpt",
+          "rhs": "runs/mamba_gt_v14replica_final/best.ckpt"
+        }
+      },
+      "variance_axis": "treatment",
+      "question": null,
+      "intended_treatment": "plain GT2 stage: gt_ratio 0.5 -> 0.0 on the cache, +30 epochs, everything else as GT1",
+      "remaining_confounds": [
+        "deployed_backbone_teacher_mismatch"
+      ]
+    },
+    "B3.m.distill_to_gt1": {
+      "design": "stage_increment",
+      "classification": "controlled",
+      "treatment_axes": [
+        "warm_start",
+        "training_budget",
+        "training_schedule",
+        "teacher_cache"
+      ],
+      "lhs_recipe": "wg:mamba_whole_graph_m/ckpt-head:m.distill",
+      "rhs_recipe": "wg:mamba_whole_graph_m/ckpt-head:m.gt1",
+      "allowed_differences": [
+        "artifacts.mamba_ckpt",
+        "config.mamba_ckpt"
+      ],
+      "allowed_differences_source": "treatment_axes",
+      "frozen_differences": {
+        "artifacts.mamba_ckpt": {
+          "lhs": "5bc14397102ee71763b6b260e4f43a79a797f4a3de99e64422dd53597a5ee56c",
+          "rhs": "fb8434556a2a14c84b8f1c6d00bc4734bfb2897d5fbd73e01ddbc110078068de"
+        },
+        "config.mamba_ckpt": {
+          "lhs": "runs/mamba_distill_yolo26m_v14replica/best.ckpt",
+          "rhs": "runs/mamba_gt_yolo26m_v14replica_stage1/best.ckpt"
+        }
+      },
+      "variance_axis": "treatment",
+      "question": null,
+      "intended_treatment": "GT1 stage as a bundle (m family)",
+      "remaining_confounds": []
+    },
+    "B4.m.gt1_to_gt2_plain": {
+      "design": "stage_increment",
+      "classification": "controlled",
+      "treatment_axes": [
+        "warm_start",
+        "training_budget",
+        "training_schedule",
+        "teacher_cache"
+      ],
+      "lhs_recipe": "wg:mamba_whole_graph_m/ckpt-head:m.gt1",
+      "rhs_recipe": "wg:mamba_whole_graph_m/ckpt-head:m.gt2_plain",
+      "allowed_differences": [
+        "artifacts.mamba_ckpt",
+        "config.mamba_ckpt"
+      ],
+      "allowed_differences_source": "treatment_axes",
+      "frozen_differences": {
+        "artifacts.mamba_ckpt": {
+          "lhs": "fb8434556a2a14c84b8f1c6d00bc4734bfb2897d5fbd73e01ddbc110078068de",
+          "rhs": "1960e28f8924e5918c4ee3989abc583a390f63f8257017dcb4cc85fe30b00a84"
+        },
+        "config.mamba_ckpt": {
+          "lhs": "runs/mamba_gt_yolo26m_v14replica_stage1/best.ckpt",
+          "rhs": "runs/mamba_gt_yolo26m_v14replica_final/best.ckpt"
+        }
+      },
+      "variance_axis": "treatment",
+      "question": null,
+      "intended_treatment": "plain GT2 stage (m family)",
+      "remaining_confounds": []
+    },
+    "C1.s.explicit_vs_implicit_shared_gt1_s42": {
+      "design": "paired_siblings",
+      "classification": "controlled",
+      "treatment_axes": [
+        "training_schedule"
+      ],
+      "lhs_recipe": "wg:mamba_whole_graph:s.implicit_s42",
+      "rhs_recipe": "wg:mamba_whole_graph:s.t3t1_phase_b",
+      "allowed_differences": [
+        "artifacts.mamba_ckpt",
+        "config.mamba_ckpt"
+      ],
+      "allowed_differences_source": "treatment_axes",
+      "frozen_differences": {
+        "artifacts.mamba_ckpt": {
+          "lhs": "be8ef8612aca1a8f7636d0cfd24a0ebda919fc58730fa88bc5b5a9ba50e5419f",
+          "rhs": "c161c88e50b894d8b51cc614c46c3700370373decf05a15825bdf00ccf0e0876"
+        },
+        "config.mamba_ckpt": {
+          "lhs": "runs/mamba_gt_v14replica_implicit_s42/best.ckpt",
+          "rhs": "runs/mamba_gt_v14replica_t3_t1/best.ckpt"
+        }
+      },
+      "variance_axis": "treatment",
+      "question": "curriculum doc §6 matched pair; the production checkpoint is the seed-42 explicit member",
+      "intended_treatment": "explicit T3->T1 staging (15 ep T=3 with temporal blocks, then 15 ep T=1) vs implicit all-frames T=4 for 30 ep, from the shared GT1 at seed 42",
+      "remaining_confounds": [
+        "deployed_backbone_teacher_mismatch"
+      ]
+    },
+    "C2.s.explicit_vs_implicit_shared_gt1_s43": {
+      "design": "paired_siblings",
+      "classification": "controlled",
+      "treatment_axes": [
+        "training_schedule"
+      ],
+      "lhs_recipe": "wg:mamba_whole_graph:s.implicit_s43",
+      "rhs_recipe": "wg:mamba_whole_graph:s.t3t1_shared_s43",
+      "allowed_differences": [
+        "artifacts.mamba_ckpt",
+        "config.mamba_ckpt"
+      ],
+      "allowed_differences_source": "treatment_axes",
+      "frozen_differences": {
+        "artifacts.mamba_ckpt": {
+          "lhs": "57ad6750f003f4a48231a38fe0abddd49b042f8d011427e30c5ca13d382fa7fe",
+          "rhs": "b6f9f7e6222b76a52a4fc1f22ea85150e5b4af01414bbc65656a12f66da95f74"
+        },
+        "config.mamba_ckpt": {
+          "lhs": "runs/mamba_gt_v14replica_implicit_s43/best.ckpt",
+          "rhs": "runs/mamba_gt_v14replica_t3_t1_shared_s43/best.ckpt"
+        }
+      },
+      "variance_axis": "treatment",
+      "question": null,
+      "intended_treatment": "explicit T3->T1 staging vs implicit all-frames T=4, shared GT1, seed 43",
+      "remaining_confounds": [
+        "deployed_backbone_teacher_mismatch"
+      ]
+    },
+    "C3.s.explicit_vs_implicit_shared_gt1_s44": {
+      "design": "paired_siblings",
+      "classification": "controlled",
+      "treatment_axes": [
+        "training_schedule"
+      ],
+      "lhs_recipe": "wg:mamba_whole_graph:s.implicit_s44",
+      "rhs_recipe": "wg:mamba_whole_graph:s.t3t1_shared_s44",
+      "allowed_differences": [
+        "artifacts.mamba_ckpt",
+        "config.mamba_ckpt"
+      ],
+      "allowed_differences_source": "treatment_axes",
+      "frozen_differences": {
+        "artifacts.mamba_ckpt": {
+          "lhs": "a15ca3fdde8e0ef6a4f83e118c3a16fba1a81c0c5c44c4af3ce86bb72ddf4a1c",
+          "rhs": "d540887b48ae8e425809428ef5be4e87e99defc36c6e952039487f43c5220ac1"
+        },
+        "config.mamba_ckpt": {
+          "lhs": "runs/mamba_gt_v14replica_implicit_s44/best.ckpt",
+          "rhs": "runs/mamba_gt_v14replica_t3_t1_shared_s44/best.ckpt"
+        }
+      },
+      "variance_axis": "treatment",
+      "question": null,
+      "intended_treatment": "explicit T3->T1 staging vs implicit all-frames T=4, shared GT1, seed 44",
+      "remaining_confounds": [
+        "deployed_backbone_teacher_mismatch"
+      ]
+    },
+    "D1.s.implicit_seed_42_vs_43": {
+      "design": "seed_replicate",
+      "classification": "controlled",
+      "treatment_axes": [
+        "training_seed"
+      ],
+      "lhs_recipe": "wg:mamba_whole_graph:s.implicit_s42",
+      "rhs_recipe": "wg:mamba_whole_graph:s.implicit_s43",
+      "allowed_differences": [
+        "artifacts.mamba_ckpt",
+        "config.mamba_ckpt"
+      ],
+      "allowed_differences_source": "treatment_axes",
+      "frozen_differences": {
+        "artifacts.mamba_ckpt": {
+          "lhs": "be8ef8612aca1a8f7636d0cfd24a0ebda919fc58730fa88bc5b5a9ba50e5419f",
+          "rhs": "57ad6750f003f4a48231a38fe0abddd49b042f8d011427e30c5ca13d382fa7fe"
+        },
+        "config.mamba_ckpt": {
+          "lhs": "runs/mamba_gt_v14replica_implicit_s42/best.ckpt",
+          "rhs": "runs/mamba_gt_v14replica_implicit_s43/best.ckpt"
+        }
+      },
+      "variance_axis": "training_seed",
+      "question": null,
+      "intended_treatment": "training seed only (implicit all-frames arm)",
+      "remaining_confounds": [
+        "deployed_backbone_teacher_mismatch"
+      ]
+    },
+    "D2.s.implicit_seed_43_vs_44": {
+      "design": "seed_replicate",
+      "classification": "controlled",
+      "treatment_axes": [
+        "training_seed"
+      ],
+      "lhs_recipe": "wg:mamba_whole_graph:s.implicit_s43",
+      "rhs_recipe": "wg:mamba_whole_graph:s.implicit_s44",
+      "allowed_differences": [
+        "artifacts.mamba_ckpt",
+        "config.mamba_ckpt"
+      ],
+      "allowed_differences_source": "treatment_axes",
+      "frozen_differences": {
+        "artifacts.mamba_ckpt": {
+          "lhs": "57ad6750f003f4a48231a38fe0abddd49b042f8d011427e30c5ca13d382fa7fe",
+          "rhs": "a15ca3fdde8e0ef6a4f83e118c3a16fba1a81c0c5c44c4af3ce86bb72ddf4a1c"
+        },
+        "config.mamba_ckpt": {
+          "lhs": "runs/mamba_gt_v14replica_implicit_s43/best.ckpt",
+          "rhs": "runs/mamba_gt_v14replica_implicit_s44/best.ckpt"
+        }
+      },
+      "variance_axis": "training_seed",
+      "question": null,
+      "intended_treatment": "training seed only (implicit all-frames arm)",
+      "remaining_confounds": [
+        "deployed_backbone_teacher_mismatch"
+      ]
+    },
+    "D3.s.explicit_shared_seed_42_vs_43": {
+      "design": "seed_replicate",
+      "classification": "controlled",
+      "treatment_axes": [
+        "training_seed"
+      ],
+      "lhs_recipe": "wg:mamba_whole_graph:s.t3t1_phase_b",
+      "rhs_recipe": "wg:mamba_whole_graph:s.t3t1_shared_s43",
+      "allowed_differences": [
+        "artifacts.mamba_ckpt",
+        "config.mamba_ckpt"
+      ],
+      "allowed_differences_source": "treatment_axes",
+      "frozen_differences": {
+        "artifacts.mamba_ckpt": {
+          "lhs": "c161c88e50b894d8b51cc614c46c3700370373decf05a15825bdf00ccf0e0876",
+          "rhs": "b6f9f7e6222b76a52a4fc1f22ea85150e5b4af01414bbc65656a12f66da95f74"
+        },
+        "config.mamba_ckpt": {
+          "lhs": "runs/mamba_gt_v14replica_t3_t1/best.ckpt",
+          "rhs": "runs/mamba_gt_v14replica_t3_t1_shared_s43/best.ckpt"
+        }
+      },
+      "variance_axis": "training_seed",
+      "question": null,
+      "intended_treatment": "training seed only (explicit T3->T1 arm from the shared GT1)",
+      "remaining_confounds": [
+        "deployed_backbone_teacher_mismatch"
+      ]
+    },
+    "D4.s.explicit_shared_seed_43_vs_44": {
+      "design": "seed_replicate",
+      "classification": "controlled",
+      "treatment_axes": [
+        "training_seed"
+      ],
+      "lhs_recipe": "wg:mamba_whole_graph:s.t3t1_shared_s43",
+      "rhs_recipe": "wg:mamba_whole_graph:s.t3t1_shared_s44",
+      "allowed_differences": [
+        "artifacts.mamba_ckpt",
+        "config.mamba_ckpt"
+      ],
+      "allowed_differences_source": "treatment_axes",
+      "frozen_differences": {
+        "artifacts.mamba_ckpt": {
+          "lhs": "b6f9f7e6222b76a52a4fc1f22ea85150e5b4af01414bbc65656a12f66da95f74",
+          "rhs": "d540887b48ae8e425809428ef5be4e87e99defc36c6e952039487f43c5220ac1"
+        },
+        "config.mamba_ckpt": {
+          "lhs": "runs/mamba_gt_v14replica_t3_t1_shared_s43/best.ckpt",
+          "rhs": "runs/mamba_gt_v14replica_t3_t1_shared_s44/best.ckpt"
+        }
+      },
+      "variance_axis": "training_seed",
+      "question": null,
+      "intended_treatment": "training seed only (explicit T3->T1 arm from the shared GT1)",
+      "remaining_confounds": [
+        "deployed_backbone_teacher_mismatch"
+      ]
+    },
+    "E1.s_vs_m.production_system": {
+      "design": "system",
+      "classification": "system_comparison",
+      "treatment_axes": [],
+      "lhs_recipe": "wg:mamba_whole_graph:s.t3t1_phase_b",
+      "rhs_recipe": "wg:mamba_whole_graph_m:m.t3t1_phase_b",
+      "allowed_differences": [
+        "artifacts.fpn_backbone_engine",
+        "artifacts.mamba_ckpt",
+        "artifacts.mamba_head_engine",
+        "artifacts.mamba_teacher_ckpt",
+        "artifacts.mamba_yolo_weights",
+        "config.fpn_backbone_engine",
+        "config.kalman_r_scale",
+        "config.mamba_ckpt",
+        "config.mamba_head_engine",
+        "config.mamba_teacher_ckpt",
+        "config.mamba_yolo_weights",
+        "config.preset",
+        "config.relink_bridge_dir_bonus",
+        "config.relink_bridge_h_hi",
+        "config.relink_bridge_h_lo",
+        "config.relink_bridge_px",
+        "preset_sha256"
+      ],
+      "allowed_differences_source": "system_diff_at_freeze",
+      "frozen_differences": {
+        "artifacts.fpn_backbone_engine": {
+          "lhs": "2ef3d4d40dfb670982cbbb98e6ed7d07e5b1a590cfa126d5ccf7342ee1579ce4",
+          "rhs": "fdf0f4550f584e73d5b7ca8393def25b74715f5ab639449dd01873becd66e580"
+        },
+        "artifacts.mamba_ckpt": {
+          "lhs": "c161c88e50b894d8b51cc614c46c3700370373decf05a15825bdf00ccf0e0876",
+          "rhs": "a5a0e7091cd854ad68210ae4bbd43af73c7d3d098ea119f02ea65fab59c0676c"
+        },
+        "artifacts.mamba_head_engine": {
+          "lhs": null,
+          "rhs": "c0c0e3e1a99e1707996d876334af2217c9c725d03bb1fe6838073a47723806cf"
+        },
+        "artifacts.mamba_teacher_ckpt": {
+          "lhs": "d2ace71d47c3358d36867c64795b09fad7e3ae0c794ef59554b17518c387dbcf",
+          "rhs": "5f1cb461cb063788ee8fb933340055add4b4003d7c945ef14f676a5a8c3bea06"
+        },
+        "artifacts.mamba_yolo_weights": {
+          "lhs": "646f8bc3fe0a656803d95c294f7852321748cb29d13466a1af8862e2db384a1b",
+          "rhs": "401cea9ab23ad19246ff7744859816bc599f350e93c9dd30367b6f0a0745d0b7"
+        },
+        "config.fpn_backbone_engine": {
+          "lhs": "models/yolo/yolo26s_backbone_640_best.engine",
+          "rhs": "models/yolo/yolo26m_backbone_640_best.engine"
+        },
+        "config.kalman_r_scale": {
+          "lhs": 2.8,
+          "rhs": 3.5
+        },
+        "config.mamba_ckpt": {
+          "lhs": "runs/mamba_gt_v14replica_t3_t1/best.ckpt",
+          "rhs": "runs/mamba_gt_yolo26m_v14replica_t3_t1/best.ckpt"
+        },
+        "config.mamba_head_engine": {
+          "lhs": null,
+          "rhs": "models/yolo/mamba_head_26m.engine"
+        },
+        "config.mamba_teacher_ckpt": {
+          "lhs": "runs/gated_det_v1/best.ckpt",
+          "rhs": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt"
+        },
+        "config.mamba_yolo_weights": {
+          "lhs": "models/yolo/yolo26s.pt",
+          "rhs": "models/yolo/yolo26m.pt"
+        },
+        "config.preset": {
+          "lhs": "mamba_whole_graph",
+          "rhs": "mamba_whole_graph_m"
+        },
+        "config.relink_bridge_dir_bonus": {
+          "lhs": 0.8,
+          "rhs": 0.0
+        },
+        "config.relink_bridge_h_hi": {
+          "lhs": 1.33,
+          "rhs": 1.7
+        },
+        "config.relink_bridge_h_lo": {
+          "lhs": 0.75,
+          "rhs": 0.6
+        },
+        "config.relink_bridge_px": {
+          "lhs": 0.25,
+          "rhs": 0.4
+        },
+        "preset_sha256": {
+          "lhs": "093b66ed124063f035ae9cf2a76e4f5426743cd819fb66e3e54994c97ea42cd1",
+          "rhs": "496c4ec22b497c70bc8409227513939b4cd86834bf2210475d0ad655be6937af"
+        }
+      },
+      "variance_axis": "treatment",
+      "question": "quality/cost comparison of the headline s and m presets; never a training attribution",
+      "intended_treatment": "the two shipped systems as their presets name them",
+      "remaining_confounds": [
+        "deployed_backbone_teacher_mismatch",
+        "backbone_family",
+        "inference_forward_mode",
+        "deployed_backbone_artifact",
+        "deployed_head_artifact",
+        "tracker_runtime_policy",
+        "warm_start",
+        "teacher",
+        "teacher_cache",
+        "training_seed"
+      ]
+    },
+    "E2.s.native_head_vs_mamba_head_shared_backbone": {
+      "design": "system",
+      "classification": "system_comparison",
+      "treatment_axes": [],
+      "lhs_recipe": "pyt:s.adapted_teacher:s.adapted_teacher",
+      "rhs_recipe": "pyt:s.adapted_teacher:s.t3t1_phase_b",
+      "allowed_differences": [
+        "artifacts.mamba_ckpt",
+        "artifacts.teacher_head_ckpt",
+        "config.mamba_ckpt",
+        "config.mamba_trt",
+        "config.no_temporal",
+        "config.teacher_head_ckpt"
+      ],
+      "allowed_differences_source": "system_diff_at_freeze",
+      "frozen_differences": {
+        "artifacts.mamba_ckpt": {
+          "lhs": null,
+          "rhs": "c161c88e50b894d8b51cc614c46c3700370373decf05a15825bdf00ccf0e0876"
+        },
+        "artifacts.teacher_head_ckpt": {
+          "lhs": "08d1d68dc8fb6c2bb304642cedcd42a29efaed8d420e2f87f690c774f24d57fc",
+          "rhs": null
+        },
+        "config.mamba_ckpt": {
+          "lhs": "",
+          "rhs": "runs/mamba_gt_v14replica_t3_t1/best.ckpt"
+        },
+        "config.mamba_trt": {
+          "lhs": null,
+          "rhs": false
+        },
+        "config.no_temporal": {
+          "lhs": false,
+          "rhs": true
+        },
+        "config.teacher_head_ckpt": {
+          "lhs": "runs/gated_det_v14replica/epoch_0012.ckpt",
+          "rhs": ""
+        }
+      },
+      "variance_axis": "treatment",
+      "question": "docs/reference/original_head_matched_baseline.md design; the head is the only structural difference",
+      "intended_treatment": "native Detect head vs Mamba head on the same PyTorch backbone (the adapted teacher's), eager",
+      "remaining_confounds": [
+        "head_family",
+        "deployed_head_artifact",
+        "tracker_runtime_policy",
+        "warm_start",
+        "teacher",
+        "teacher_cache",
+        "training_seed",
+        "training_schedule",
+        "training_budget"
+      ]
+    },
+    "E3.m.native_head_vs_mamba_head_shared_backbone": {
+      "design": "system",
+      "classification": "system_comparison",
+      "treatment_axes": [],
+      "lhs_recipe": "pyt:m.adapted_teacher:m.adapted_teacher",
+      "rhs_recipe": "pyt:m.adapted_teacher:m.t3t1_phase_b",
+      "allowed_differences": [
+        "artifacts.mamba_ckpt",
+        "artifacts.teacher_head_ckpt",
+        "config.mamba_ckpt",
+        "config.mamba_trt",
+        "config.no_temporal",
+        "config.teacher_head_ckpt"
+      ],
+      "allowed_differences_source": "system_diff_at_freeze",
+      "frozen_differences": {
+        "artifacts.mamba_ckpt": {
+          "lhs": null,
+          "rhs": "a5a0e7091cd854ad68210ae4bbd43af73c7d3d098ea119f02ea65fab59c0676c"
+        },
+        "artifacts.teacher_head_ckpt": {
+          "lhs": "5f1cb461cb063788ee8fb933340055add4b4003d7c945ef14f676a5a8c3bea06",
+          "rhs": null
+        },
+        "config.mamba_ckpt": {
+          "lhs": "",
+          "rhs": "runs/mamba_gt_yolo26m_v14replica_t3_t1/best.ckpt"
+        },
+        "config.mamba_trt": {
+          "lhs": null,
+          "rhs": false
+        },
+        "config.no_temporal": {
+          "lhs": false,
+          "rhs": true
+        },
+        "config.teacher_head_ckpt": {
+          "lhs": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
+          "rhs": ""
+        }
+      },
+      "variance_axis": "treatment",
+      "question": null,
+      "intended_treatment": "native Detect head vs Mamba head on the same PyTorch backbone (m adapted teacher), eager",
+      "remaining_confounds": [
+        "head_family",
+        "deployed_head_artifact",
+        "tracker_runtime_policy",
+        "warm_start",
+        "teacher",
+        "teacher_cache",
+        "training_schedule",
+        "training_budget"
+      ]
+    },
+    "E4.s.production_backbone_engine_ab": {
+      "design": "runtime_ab",
+      "classification": "controlled",
+      "treatment_axes": [
+        "deployed_backbone_artifact"
+      ],
+      "lhs_recipe": "wg:mamba_whole_graph:s.t3t1_phase_b",
+      "rhs_recipe": "wg:mamba_whole_graph/engine=s.backbone_engine_v14replica_e12:s.t3t1_phase_b",
+      "allowed_differences": [
+        "artifacts.fpn_backbone_engine",
+        "config.fpn_backbone_engine"
+      ],
+      "allowed_differences_source": "treatment_axes",
+      "frozen_differences": {
+        "artifacts.fpn_backbone_engine": {
+          "lhs": "2ef3d4d40dfb670982cbbb98e6ed7d07e5b1a590cfa126d5ccf7342ee1579ce4",
+          "rhs": "e244e8fe813aaa5dd55f7a98a8ba572fe2c2c1c6867f8a2463dd0de39dbe6446"
+        },
+        "config.fpn_backbone_engine": {
+          "lhs": "models/yolo/yolo26s_backbone_640_best.engine",
+          "rhs": "models/yolo/yolo26s_backbone_640_v14replica_e12.engine"
+        }
+      },
+      "variance_axis": "treatment",
+      "question": "the resolution path for the s production confound: same head, two engines",
+      "intended_treatment": "deployed backbone engine: the preset's yolo26s_backbone_640_best.engine (sibling ONNX = legacy teacher) vs yolo26s_backbone_640_v14replica_e12.engine (sibling ONNX = the head's own teacher)",
+      "remaining_confounds": []
+    }
+  },
+  "dataset_key": {
+    "data_root": "datasets/MOT17",
+    "split": "train",
+    "detector": "SDP",
+    "sequences": [
+      "MOT17-02-SDP",
+      "MOT17-04-SDP",
+      "MOT17-05-SDP",
+      "MOT17-09-SDP",
+      "MOT17-10-SDP",
+      "MOT17-11-SDP",
+      "MOT17-13-SDP"
+    ],
+    "max_frames": null,
+    "per_sequence": {
+      "MOT17-02-SDP": {
+        "n_frames": 600,
+        "frame_rate": "30",
+        "im_size": [
+          1920,
+          1080
+        ],
+        "seqinfo_sha256": "f58e8717a5edb67594497a46ca8aff6212fdef8cd04aa9d0c51c811a63d6539c",
+        "gt_sha256": "2e3ecb488da8886d3200d402b2b08890c6d2879923839444e9b74fa43a551440",
+        "img1_files": 600,
+        "img1_digest": "f1a07d54c25e1f1bb08c901abec5848178ab8133dbd49da1444680a488065599"
+      },
+      "MOT17-04-SDP": {
+        "n_frames": 1050,
+        "frame_rate": "30",
+        "im_size": [
+          1920,
+          1080
+        ],
+        "seqinfo_sha256": "13d2c4f151a6738d26c701f490c0d4858b8015dbcaa5b16dc26f9f1b257f50e1",
+        "gt_sha256": "f8cfbe36ef38a2e1857d7ebfe7d754b2355a3ffb9e1f9cedea435e86e4fbc948",
+        "img1_files": 1050,
+        "img1_digest": "aa31ab1a5549013eab238523155d9c9e846d84ca414f2a1498ab28c3b65863d2"
+      },
+      "MOT17-05-SDP": {
+        "n_frames": 837,
+        "frame_rate": "14",
+        "im_size": [
+          640,
+          480
+        ],
+        "seqinfo_sha256": "8bbcb68df2e6d7d391db3e30e382855688102cc22bc2ce4f9e231081168545ad",
+        "gt_sha256": "ed74c54176b21b38cb690eda79a4755cf16e4c4a9ca2f019b0ba8904636174f5",
+        "img1_files": 837,
+        "img1_digest": "f228d1db66f259c7151562c7bc9227be819d15426eb1e2ff18a52a5e80a12603"
+      },
+      "MOT17-09-SDP": {
+        "n_frames": 525,
+        "frame_rate": "30",
+        "im_size": [
+          1920,
+          1080
+        ],
+        "seqinfo_sha256": "439c4e3f764fa6fdf1171f238602ba6b32dc7a71a5cf8d17603d91e896a34fa8",
+        "gt_sha256": "592f0d5b519c03b35bb1578c33d726460f63abb91ea0c515f87e8d6d76be001d",
+        "img1_files": 525,
+        "img1_digest": "5eda2f88a8cc5def964aef84a70a05de518c55cec0adb26cb715fd794476d714"
+      },
+      "MOT17-10-SDP": {
+        "n_frames": 654,
+        "frame_rate": "30",
+        "im_size": [
+          1920,
+          1080
+        ],
+        "seqinfo_sha256": "6867998f66753629b7a4e4093d1e473131be0fa6a23fa7263b4f197bef9db3d8",
+        "gt_sha256": "f8cca05d98fa36d8b6f2b807e03d32407d00d40299d679e4da320e42862677c0",
+        "img1_files": 654,
+        "img1_digest": "b7c55fd11e3884a8440dce7499ae2e7718aa1dfacdacfe0c6b1a886858286cc2"
+      },
+      "MOT17-11-SDP": {
+        "n_frames": 900,
+        "frame_rate": "30",
+        "im_size": [
+          1920,
+          1080
+        ],
+        "seqinfo_sha256": "b6487e5ae527741884ae30d3dd470c406f5b4aa8ed35381085941c421a43784b",
+        "gt_sha256": "4952d6e4efc705c90688e434fd138a55ada2c0d5f576ba3847ee102fc18aff93",
+        "img1_files": 900,
+        "img1_digest": "b63ae93a2fad598f467f0ce87fc3563f51154df951ae4abb4a92e69ef7458589"
+      },
+      "MOT17-13-SDP": {
+        "n_frames": 750,
+        "frame_rate": "25",
+        "im_size": [
+          1920,
+          1080
+        ],
+        "seqinfo_sha256": "dc583f1ea7ace41f5ff4a8f3bd506fd92f20c5f3ccf78400eb02c69233d2283e",
+        "gt_sha256": "4827603ef87bbd61123cb4c5f194b3bf23531bd78ed9cd916084e53dca998013",
+        "img1_files": 750,
+        "img1_digest": "670a6fc7a4c6da987f42272ddb4334a193fa327fa5b5d5f48ff069834b55a9fd"
+      }
+    },
+    "key_sha256": "4aacc710d36c481976057f76fc75996751f6dd53f1b39f550b08291dbed99ec2",
+    "captured_at": "2026-09-19T06:28:01+00:00",
+    "captured_host": "DESKTOP-0FLA6SQ"
+  }
+}

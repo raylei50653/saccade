@@ -42,6 +42,7 @@ from scripts.provenance import backfill as bf  # noqa: E402
 from scripts.provenance import run_manifest as rm  # noqa: E402
 from scripts.provenance.run_manifest import (  # noqa: E402
     MANIFEST_FILENAME,
+    SCHEMA_VERSION,
     ManifestError,
     attach_reconstructed_manifest,
     build_manifest,
@@ -131,11 +132,14 @@ def test_a_v1_manifest_missing_a_v1_required_field_is_still_fail_closed():
         validate_manifest(payload)
 
 
-def test_the_writer_only_emits_v2(tmp_path):
+def test_the_writer_only_emits_the_current_version(tmp_path):
     """Compatibility is a read-side concession; nothing new is written at v1."""
     open_run(tmp_path / "r", produced_by="eval")
-    assert read_manifest(tmp_path / "r")["schema_version"] == 2
-    assert build_reconstructed_manifest("r", **_sources())["schema_version"] == 2
+    assert read_manifest(tmp_path / "r")["schema_version"] == SCHEMA_VERSION
+    assert (
+        build_reconstructed_manifest("r", **_sources())["schema_version"]
+        == SCHEMA_VERSION
+    )
 
 
 def test_a_reconstruction_may_not_be_written_at_the_legacy_version(tmp_path):

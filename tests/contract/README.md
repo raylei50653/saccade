@@ -53,6 +53,7 @@
 | `test_scripts_structure.py` | system | contract | active | Contract tests for the scripts/ self-documentation + generated index. |
 | `test_terminal_slot_schema.py` | system | contract | active | Contract for the terminal-slot YAML schema validator. |
 | `test_training_comparison_matrix.py` | detection | contract | active | Contract for the #421 comparison matrix: a pair is ``controlled`` only when the bytes say so. |
+| `test_training_eval_contract.py` | detection | contract | active | Contract for the #421 shared eval contract: a run is pairable only when its identity says so. |
 | `test_training_lineage_inventory.py` | detection | contract | active | Contract for the #421 training-lineage inventory: claims vs bytes stay separate. |
 
 <!-- END generated test index -->
