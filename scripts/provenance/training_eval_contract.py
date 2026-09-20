@@ -1,3 +1,4 @@
+# status: stable
 """Shared evaluation contract and identity-bound runner for the #421 lineage (deliverable 3).
 
 Deliverable 2 (``training_comparison.py``) said *which* node pairs a paired
@@ -41,9 +42,15 @@ be told apart from two results that merely look alike:
   handed.  The committed snapshot (``report_data/training_eval_campaign.json``
   + its generated doc) is the surviving record of the gitignored raw runs.
 
-Nothing here produces or interprets a baseline number; deliverable 4 runs
-``validate-pair`` over the inventory and reads the deltas against the
-repeat reports.
+* ``baselines`` (deliverable 4): campaign inventory = the only input naming
+  runs, contract = the only input naming pairs; every lhs × rhs formal
+  combination of every prepared pair goes through ``validate-pair`` plus a
+  per-side clean-tree / bench-lease / campaign-commit gate; a baseline row
+  forms only from ``paired`` verdicts (baseline side = the pair's lhs), each
+  delta is read against print precision and both sides' runtime-repeat
+  ranges, ``remaining_confounds`` stay on the row, plain-GT2 ↔ T3→T1 is
+  historical only.  Observed differences, never effect claims; ``--audit``
+  re-checks a committed report from the three JSONs without the raw runs.
 
 Usage:
     .venv/bin/python scripts/provenance/training_eval_contract.py freeze
@@ -54,9 +61,8 @@ Usage:
     .venv/bin/python scripts/provenance/training_eval_contract.py repeat-report <run_dir>...
     .venv/bin/python scripts/provenance/training_eval_contract.py validate-pair <comparison_id> <lhs_run> <rhs_run>
     .venv/bin/python scripts/provenance/training_eval_contract.py campaign [--root DIR] --emit report_data/training_eval_campaign.json --campaign-md docs/research/training/training_eval_campaign.md
+    .venv/bin/python scripts/provenance/training_eval_contract.py baselines [--campaign JSON] --emit report_data/training_eval_baselines.json --baselines-md docs/research/training/training_eval_baselines.md [--audit]
 """
-
-# status: stable
 
 from __future__ import annotations
 
@@ -100,6 +106,8 @@ DEFAULT_MD_OUT = Path("docs/research/training/training_eval_contract.md")
 DEFAULT_RUN_ROOT = Path("results/training_eval_contract")
 DEFAULT_CAMPAIGN_OUT = Path("report_data/training_eval_campaign.json")
 DEFAULT_CAMPAIGN_MD = Path("docs/research/training/training_eval_campaign.md")
+DEFAULT_BASELINES_OUT = Path("report_data/training_eval_baselines.json")
+DEFAULT_BASELINES_MD = Path("docs/research/training/training_eval_baselines.md")
 
 CONTRACT_SCHEMA = "training_eval_contract_v1"
 IDENTITY_SCHEMA = "training_eval_runtime_identity_v1"
@@ -107,6 +115,7 @@ RUN_RECORD_SCHEMA = "training_eval_run_record_v1"
 REPEAT_REPORT_SCHEMA = "training_eval_repeat_report_v1"
 PAIR_VERDICT_SCHEMA = "training_eval_pair_verdict_v1"
 CAMPAIGN_SCHEMA = "training_eval_campaign_v1"
+BASELINES_SCHEMA = "training_eval_baselines_v1"
 MATRIX_SCHEMA = "training_comparison_matrix_v1"
 INVENTORY_SCHEMA = "training_lineage_inventory_v1"
 
@@ -1974,6 +1983,1116 @@ def render_campaign_markdown(inventory: Mapping[str, Any]) -> str:
     return "\n".join(out)
 
 
+# --------------------------------------------------------------------------- deliverable 4: baselines
+
+# Print precision of the evaluator's OVERALL METRICS line (declared.evaluator.
+# precision_of_record): percent metrics at one decimal, counts as integers.
+# A delta below this is not resolvable under the contract; the throughput
+# line prints two decimals.
+COUNT_METRIC_KEYS = frozenset({"IDs", "FP", "FN"})
+PERCENT_PRINT_PRECISION = 0.1
+COUNT_PRINT_PRECISION = 1.0
+THROUGHPUT_PRINT_PRECISION = 0.01
+HEADLINE_METRIC_KEYS = ("HOTA", "IDF1", "MOTA")
+
+# Cross-recipe readings that deliverable 4 may cite only as historical: the
+# matrix row is the authority for their confounds (``remaining_confounds``
+# with ``warmup_epochs`` 5→3 in every plain-GT2 ↔ T3→T1 pairing, plus the
+# seed for s); the campaign recipes named here are the formal runs the
+# numbers come from.  They are not contract pairs, so ``validate-pair``
+# refuses them by construction and no baseline row is formed.
+HISTORICAL_COMPARISONS: dict[str, tuple[str, str]] = {
+    "C6.s.plain_gt2_vs_t3t1_unpaired_original": (
+        "wg:mamba_whole_graph:s.gt2_plain",
+        "wg:mamba_whole_graph:s.t3t1_phase_b",
+    ),
+    "C9.m.plain_gt2_vs_t3t1": (
+        "wg:mamba_whole_graph_m/ckpt-head:m.gt2_plain",
+        "wg:mamba_whole_graph_m:m.t3t1_phase_b",
+    ),
+}
+
+# Reading groups the doc summarises: which prepared pairs answer which
+# question, and which group is the attributability reference of which.
+READING_GROUPS: dict[str, dict[str, Any]] = {
+    "explicit_vs_implicit_shared_gt1": {
+        "prefixes": ("C1.", "C2.", "C3."),
+        "reference_group": "seed_replicates",
+        "question": "explicit T3->T1 staging vs implicit all-frames T=4 from the shared GT1, three seed-paired replicates (s)",
+    },
+    "seed_replicates": {
+        "prefixes": ("D1.", "D2.", "D3.", "D4."),
+        "reference_group": None,
+        "question": "training-seed variability of one recipe (implicit arm 42/43/44, explicit arm 42/43/44); the attributability reference for the C group",
+    },
+    "stage_increments": {
+        "prefixes": ("B1.", "B2.", "B3.", "B4."),
+        "reference_group": None,
+        "question": "distill -> GT1 -> plain GT2 stage bundles (s and m); one pair per stage, no seed replicate",
+    },
+    "system_comparisons": {
+        "prefixes": ("E1.", "E2.", "E3."),
+        "reference_group": None,
+        "question": "s vs m production systems; native Detect head vs Mamba head on a shared PyTorch backbone (eager, s tracker policy)",
+    },
+    "engine_ab": {
+        "prefixes": ("E4.",),
+        "reference_group": None,
+        "question": "the s production backbone engine (sibling ONNX = legacy teacher) vs the head's own teacher engine, same head",
+    },
+}
+
+
+def metric_print_precision(key: str) -> float:
+    return (
+        COUNT_PRINT_PRECISION if key in COUNT_METRIC_KEYS else PERCENT_PRINT_PRECISION
+    )
+
+
+def _rel_run_dir(run_dir: str | Path) -> Path:
+    path = Path(run_dir)
+    return path if path.is_absolute() else REPO_ROOT / path
+
+
+def delta_reading(
+    lhs: float,
+    rhs: float,
+    *,
+    precision: float,
+    lhs_observed_range: float | None,
+    rhs_observed_range: float | None,
+) -> dict[str, Any]:
+    """One metric's delta read against print precision and both repeat ranges.
+
+    ``reading`` is one of ``no_observed_difference`` (delta is 0 at print
+    precision), ``within_runtime_repeat_range`` (|delta| <= the larger of the
+    two sides' observed ranges), ``above_runtime_repeat_range`` (|delta| >
+    both ranges).  The last one is a statement about the instrument, not
+    about cause: an observed range of 0.0 means this batch of repeats saw no
+    variation, not that none exists, and the pair's confounds stay attached.
+    """
+    delta = round(rhs - lhs, 6)
+    floor = max(
+        lhs_observed_range if lhs_observed_range is not None else 0.0,
+        rhs_observed_range if rhs_observed_range is not None else 0.0,
+    )
+    if abs(delta) < precision:
+        reading = "no_observed_difference"
+    elif abs(delta) <= floor:
+        reading = "within_runtime_repeat_range"
+    else:
+        reading = "above_runtime_repeat_range"
+    return {
+        "lhs": lhs,
+        "rhs": rhs,
+        "delta_rhs_minus_lhs": delta,
+        "print_precision": precision,
+        "lhs_observed_range": lhs_observed_range,
+        "rhs_observed_range": rhs_observed_range,
+        "runtime_repeat_floor": floor,
+        "reading": reading,
+    }
+
+
+def _throughput_range(values: Iterable[Mapping[str, Any] | None]) -> dict[str, Any]:
+    fps = [float(v["fps"]) for v in values if v and v.get("fps") is not None]
+    if not fps:
+        return {"values": [], "min": None, "max": None, "observed_range": None}
+    return {
+        "values": fps,
+        "min": min(fps),
+        "max": max(fps),
+        "observed_range": round(max(fps) - min(fps), 6),
+    }
+
+
+def d4_side_gate(
+    label: str,
+    identity: Mapping[str, Any],
+    record: Mapping[str, Any],
+    campaign: Mapping[str, Any],
+    contract: Mapping[str, Any],
+    run_dir: str,
+) -> list[str]:
+    """Procedure facts ``validate-pair`` does not re-check (it compares the two sides
+    to each other; two dirty runs are equal in ``dirty``).  A baseline row needs
+    each side on its own to be a clean-tree, bench-lease formal run that the
+    campaign inventory lists for its recipe on the campaign's commit."""
+    reasons: list[str] = []
+    pairing = identity["pairing"]
+    procedure = contract["declared"]["procedure"]["formal"]
+    if pairing.get("dirty"):
+        reasons.append(f"{label}: dirty tree")
+    if record.get("lease") != procedure["lease"]:
+        reasons.append(
+            f"{label}: lease {record.get('lease')!r} != {procedure['lease']!r}"
+        )
+    if pairing.get("commit") != campaign.get("commit"):
+        reasons.append(
+            f"{label}: commit {str(pairing.get('commit'))[:12]} is not the campaign commit"
+        )
+    recipe_entry = campaign["recipes"].get(pairing["recipe_id"])
+    listed = {f["run_dir"] for f in (recipe_entry or {}).get("formal", [])}
+    if run_dir not in listed:
+        reasons.append(
+            f"{label}: {run_dir} is not a formal run the campaign inventory lists"
+        )
+    elif identity["identity_sha256"] != recipe_entry["identity_sha256"]:
+        reasons.append(f"{label}: identity differs from the campaign inventory's")
+    return reasons
+
+
+def d4_pair_verdict(
+    contract: Mapping[str, Any],
+    campaign: Mapping[str, Any],
+    comparison_id: str,
+    lhs_run: str,
+    rhs_run: str,
+) -> dict[str, Any]:
+    """``validate-pair`` plus the per-side procedure gate; fail-closed."""
+    verdict = validate_pair(
+        contract, comparison_id, _rel_run_dir(lhs_run), _rel_run_dir(rhs_run)
+    )
+    verdict["lhs_run"], verdict["rhs_run"] = lhs_run, rhs_run
+    extra: list[str] = []
+    for label, run_dir in (("lhs", lhs_run), ("rhs", rhs_run)):
+        try:
+            identity = run_identity(_rel_run_dir(run_dir))
+            record = run_record(_rel_run_dir(run_dir))
+        except (ContractError, rm.ManifestError):
+            continue  # already a validate-pair reason
+        extra += d4_side_gate(label, identity, record, campaign, contract, run_dir)
+    if extra:
+        verdict["reasons"] = list(verdict["reasons"]) + extra
+        verdict["verdict"] = "not_paired"
+    return verdict
+
+
+def _pair_confounds(
+    contract: Mapping[str, Any], matrix_rows: Mapping[str, Mapping[str, Any]], cid: str
+) -> list[dict[str, Any]]:
+    """The pair's ``remaining_confounds`` (names from the contract, detail from the
+    matrix row the contract was frozen from).  Missing or disagreeing lists are a
+    contract/matrix inconsistency and refuse the row."""
+    pair = contract["pairs"][cid]
+    if "remaining_confounds" not in pair or not isinstance(
+        pair["remaining_confounds"], list
+    ):
+        raise ContractError(f"{cid}: contract pair carries no remaining_confounds list")
+    names = list(pair["remaining_confounds"])
+    row = matrix_rows.get(cid)
+    if row is None:
+        raise ContractError(f"{cid}: not a matrix row")
+    detail = {c.get("name"): c for c in row.get("remaining_confounds", [])}
+    if sorted(detail) != sorted(names):
+        raise ContractError(
+            f"{cid}: contract remaining_confounds {names} != matrix {sorted(detail)}"
+        )
+    return [
+        {
+            "name": name,
+            "severity": detail[name].get("severity"),
+            "detail": detail[name].get("detail"),
+        }
+        for name in names
+    ]
+
+
+def baseline_pair(
+    contract: Mapping[str, Any],
+    campaign: Mapping[str, Any],
+    matrix_rows: Mapping[str, Mapping[str, Any]],
+    cid: str,
+) -> dict[str, Any]:
+    """One prepared pair: every lhs × rhs formal combination through the verdict,
+    and a baseline row only when all of them are ``paired`` and each side's formal
+    runs agree with each other.  The baseline side is the pair's lhs by contract
+    orientation; nothing here ranks or re-selects."""
+    if cid not in contract["pairs"]:
+        raise ContractError(f"{cid}: not a prepared pair")
+    if cid not in campaign.get("pairs", {}):
+        raise ContractError(f"{cid}: not in the campaign inventory")
+    pair = contract["pairs"][cid]
+    inv = campaign["pairs"][cid]
+    if (
+        inv["lhs_recipe"] != pair["lhs_recipe"]
+        or inv["rhs_recipe"] != pair["rhs_recipe"]
+        or inv["classification"] != pair["classification"]
+        or inv["variance_axis"] != pair["variance_axis"]
+    ):
+        raise ContractError(
+            f"{cid}: campaign inventory disagrees with the contract pair"
+        )
+    confounds = _pair_confounds(contract, matrix_rows, cid)
+    lhs_runs, rhs_runs = list(inv["lhs_formal_runs"]), list(inv["rhs_formal_runs"])
+    reasons: list[str] = []
+    if not lhs_runs or not rhs_runs:
+        reasons.append("a side has no formal run in the campaign inventory")
+    combinations = [
+        d4_pair_verdict(contract, campaign, cid, lhs, rhs)
+        for lhs in lhs_runs
+        for rhs in rhs_runs
+    ]
+    not_paired = [c for c in combinations if c["verdict"] != "paired"]
+    if not_paired:
+        reasons.append(
+            f"{len(not_paired)}/{len(combinations)} formal combinations are not_paired"
+        )
+    for label, key in (("lhs", "lhs"), ("rhs", "rhs")):
+        views = {
+            canonical_json(c["metrics"].get(key)) for c in combinations if c["metrics"]
+        }
+        if len(views) > 1:
+            reasons.append(f"{label}: formal runs disagree in their metrics")
+    canonical = combinations[0] if combinations else None
+    lhs_entry = campaign["recipes"][pair["lhs_recipe"]]
+    rhs_entry = campaign["recipes"][pair["rhs_recipe"]]
+    row: dict[str, Any] | None = None
+    if not reasons and canonical is not None:
+        lhs_m, rhs_m = canonical["metrics"]["lhs"], canonical["metrics"]["rhs"]
+        lhs_rng = lhs_entry["repeat"]["metric_observed_range"]
+        rhs_rng = rhs_entry["repeat"]["metric_observed_range"]
+        metrics = {
+            key: delta_reading(
+                float(lhs_m[key]),
+                float(rhs_m[key]),
+                precision=metric_print_precision(key),
+                lhs_observed_range=lhs_rng.get(key, {}).get("observed_range"),
+                rhs_observed_range=rhs_rng.get(key, {}).get("observed_range"),
+            )
+            for key in sorted(set(lhs_m) & set(rhs_m))
+        }
+        missing = set(REQUIRED_METRIC_KEYS) - set(metrics)
+        if missing:
+            raise ContractError(
+                f"{cid}: required metric keys missing: {sorted(missing)}"
+            )
+        lhs_formal = {f["run_dir"]: f for f in lhs_entry["formal"]}
+        rhs_formal = {f["run_dir"]: f for f in rhs_entry["formal"]}
+        lhs_fps = _throughput_range(lhs_entry["repeat"]["throughput"])
+        rhs_fps = _throughput_range(rhs_entry["repeat"]["throughput"])
+        lhs_run_fps = float(lhs_formal[canonical["lhs_run"]]["throughput"]["fps"])
+        rhs_run_fps = float(rhs_formal[canonical["rhs_run"]]["throughput"]["fps"])
+        row = {
+            "baseline_side": "lhs",
+            "baseline_recipe": pair["lhs_recipe"],
+            "treatment_recipe": pair["rhs_recipe"],
+            "lhs_run": canonical["lhs_run"],
+            "rhs_run": canonical["rhs_run"],
+            "lhs_identity_sha256": lhs_entry["identity_sha256"],
+            "rhs_identity_sha256": rhs_entry["identity_sha256"],
+            "repeat_n": {
+                "lhs": lhs_entry["repeat"]["n_runs"],
+                "rhs": rhs_entry["repeat"]["n_runs"],
+            },
+            "repeat_distinct_outputs_max": {
+                "lhs": max(
+                    lhs_entry["repeat"]["distinct_outputs_per_sequence"].values()
+                ),
+                "rhs": max(
+                    rhs_entry["repeat"]["distinct_outputs_per_sequence"].values()
+                ),
+            },
+            "metrics": metrics,
+            "throughput_fps": {
+                **delta_reading(
+                    lhs_run_fps,
+                    rhs_run_fps,
+                    precision=THROUGHPUT_PRINT_PRECISION,
+                    lhs_observed_range=lhs_fps["observed_range"],
+                    rhs_observed_range=rhs_fps["observed_range"],
+                ),
+                "lhs_repeat": lhs_fps,
+                "rhs_repeat": rhs_fps,
+                "lhs_formal": _throughput_range(
+                    f.get("throughput") for f in lhs_entry["formal"]
+                ),
+                "rhs_formal": _throughput_range(
+                    f.get("throughput") for f in rhs_entry["formal"]
+                ),
+                "profile": contract["recipes"][pair["lhs_recipe"]]["execution_profile"],
+            },
+            "observed_differences": canonical["observed_differences"],
+        }
+    return {
+        "comparison_id": cid,
+        "design": pair["design"],
+        "classification": pair["classification"],
+        "variance_axis": pair["variance_axis"],
+        "treatment_axes": list(pair["treatment_axes"]),
+        "intended_treatment": pair.get("intended_treatment"),
+        "lhs_recipe": pair["lhs_recipe"],
+        "rhs_recipe": pair["rhs_recipe"],
+        "allowed_differences": list(pair["allowed_differences"]),
+        "remaining_confounds": confounds,
+        "n_combinations": len(combinations),
+        "n_paired": len(combinations) - len(not_paired),
+        "verdict": "paired" if not reasons else "not_paired",
+        "reasons": reasons,
+        "combinations": [
+            {
+                "lhs_run": c["lhs_run"],
+                "rhs_run": c["rhs_run"],
+                "verdict": c["verdict"],
+                "reasons": c["reasons"],
+            }
+            for c in combinations
+        ],
+        "baseline_row": row,
+    }
+
+
+def _sign(x: float) -> int:
+    return (x > 0) - (x < 0)
+
+
+def group_readings(pairs: Mapping[str, Mapping[str, Any]]) -> dict[str, Any]:
+    """Cross-row readings per group, computed from the rows only.
+
+    Every statement is about observed differences: sign consistency across
+    seed-paired replicates, whether every row is above its runtime-repeat
+    floor, and (for the C group) whether the smallest |delta| exceeds the
+    largest seed-replicate |delta| — the contract's attributability reference
+    (``declared.variance_axes.rule``).  None of them upgrades a row to an
+    effect claim.
+    """
+    out: dict[str, Any] = {}
+    keys = ("HOTA", "DetA", "AssA", "IDF1", "MOTA", "IDs")
+    for group, spec in READING_GROUPS.items():
+        members = [cid for cid in pairs if cid.startswith(spec["prefixes"])]
+        rows = {cid: pairs[cid]["baseline_row"] for cid in members}
+        entry: dict[str, Any] = {
+            "question": spec["question"],
+            "members": members,
+            "rows_available": [cid for cid, r in rows.items() if r],
+            # every declared member present with a row; a partial group reads nothing
+            "complete": all(
+                any(cid.startswith(prefix) and rows[cid] for cid in members)
+                for prefix in spec["prefixes"]
+            ),
+            "reference_group": spec["reference_group"],
+            "per_metric": {},
+        }
+        if entry["complete"]:
+            for key in keys:
+                deltas = {
+                    cid: r["metrics"][key]["delta_rhs_minus_lhs"]
+                    for cid, r in rows.items()
+                }
+                readings = {
+                    cid: r["metrics"][key]["reading"] for cid, r in rows.items()
+                }
+                signs = {_sign(d) for d in deltas.values()}
+                entry["per_metric"][key] = {
+                    "deltas": deltas,
+                    "readings": readings,
+                    "all_above_runtime_repeat_range": all(
+                        v == "above_runtime_repeat_range" for v in readings.values()
+                    ),
+                    "sign_consistent": len(signs) == 1 and 0 not in signs,
+                    "min_abs_delta": min(abs(d) for d in deltas.values()),
+                    "max_abs_delta": max(abs(d) for d in deltas.values()),
+                }
+        out[group] = entry
+    ref = out.get("seed_replicates")
+    target = out.get("explicit_vs_implicit_shared_gt1")
+    if target and target["complete"] and ref and ref["complete"]:
+        for key, m in target["per_metric"].items():
+            seed_max = ref["per_metric"][key]["max_abs_delta"]
+            m["seed_replicate_max_abs_delta"] = seed_max
+            m["min_abs_delta_exceeds_seed_replicate_max"] = (
+                m["min_abs_delta"] > seed_max
+            )
+    return out
+
+
+def historical_comparisons(
+    contract: Mapping[str, Any],
+    campaign: Mapping[str, Any],
+    matrix_rows: Mapping[str, Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    """Non-prepared cross-recipe readings, carried as historical only.
+
+    Each entry records the ``validate-pair`` refusal (not a prepared pair),
+    the identity paths the two formal runs actually differ in, the matrix
+    row's training confounds, and the printed numbers — never a delta
+    reading, never a baseline row.
+    """
+    out: list[dict[str, Any]] = []
+    for cid, (lhs_recipe, rhs_recipe) in HISTORICAL_COMPARISONS.items():
+        if cid in contract["pairs"]:
+            raise ContractError(f"{cid}: listed as historical but is a prepared pair")
+        row = matrix_rows.get(cid)
+        if row is None or row.get("classification") != "historical_not_comparable":
+            raise ContractError(f"{cid}: not a historical_not_comparable matrix row")
+        if (
+            lhs_recipe not in campaign["recipes"]
+            or rhs_recipe not in campaign["recipes"]
+        ):
+            raise ContractError(
+                f"{cid}: historical recipes are not in the campaign inventory"
+            )
+        lhs_entry = campaign["recipes"][lhs_recipe]
+        rhs_entry = campaign["recipes"][rhs_recipe]
+        lhs_run, rhs_run = (
+            lhs_entry["formal"][0]["run_dir"],
+            rhs_entry["formal"][0]["run_dir"],
+        )
+        verdict = validate_pair(
+            contract, cid, _rel_run_dir(lhs_run), _rel_run_dir(rhs_run)
+        )
+        if verdict["verdict"] != "not_paired":
+            raise ContractError(
+                f"{cid}: a historical comparison must not validate as paired"
+            )
+        identity_diff = flat_diff(
+            _pair_view(run_identity(_rel_run_dir(lhs_run))),
+            _pair_view(run_identity(_rel_run_dir(rhs_run))),
+        )
+        schedule = (row.get("axes") or {}).get("training_schedule") or {}
+        seed = (row.get("axes") or {}).get("training_seed") or {}
+        out.append(
+            {
+                "comparison_id": cid,
+                "classification": row["classification"],
+                "intended_treatment": row.get("intended_treatment"),
+                "lhs_recipe": lhs_recipe,
+                "rhs_recipe": rhs_recipe,
+                "lhs_run": lhs_run,
+                "rhs_run": rhs_run,
+                "validate_pair": {
+                    "verdict": verdict["verdict"],
+                    "reasons": verdict["reasons"],
+                },
+                "training_confounds": [
+                    {
+                        k: c.get(k)
+                        for k in ("name", "severity", "status", "lhs", "rhs", "detail")
+                    }
+                    for c in row.get("remaining_confounds", [])
+                ],
+                "schedule_confound_keys": schedule.get("confound_keys"),
+                "training_seed_axis": seed.get("status"),
+                "runtime_identity_differences": identity_diff,
+                "printed_metrics": {
+                    "lhs": lhs_entry["formal"][0]["metrics"],
+                    "rhs": rhs_entry["formal"][0]["metrics"],
+                },
+                "baseline_row": None,
+                "status": (
+                    "historical only: not a prepared pair; the numbers may be quoted side by side "
+                    "with the confounds attached, never as a training effect"
+                ),
+            }
+        )
+    return out
+
+
+def load_campaign(path: Path) -> dict[str, Any]:
+    payload = _read_json(path)
+    if payload.get("schema") != CAMPAIGN_SCHEMA:
+        raise ContractError(
+            f"{path}: schema {payload.get('schema')!r} is not {CAMPAIGN_SCHEMA}"
+        )
+    return payload
+
+
+def _check_campaign_input(
+    contract: Mapping[str, Any], campaign: Mapping[str, Any]
+) -> None:
+    if campaign.get("contract_sha256") != contract["frozen"]["contract_sha256"]:
+        raise ContractError(
+            "campaign inventory was taken under a different contract sha256"
+        )
+    if not campaign.get("complete"):
+        raise ContractError(
+            f"campaign inventory is incomplete: {campaign.get('reasons')}"
+        )
+    if not isinstance(campaign.get("commit"), str):
+        raise ContractError("campaign inventory spans more than one commit")
+    prepared = set(contract["declared"]["prepared_comparisons"])
+    if set(contract["pairs"]) != prepared:
+        raise ContractError("contract pairs differ from declared.prepared_comparisons")
+    if set(campaign.get("pairs", {})) != prepared:
+        raise ContractError(
+            f"campaign pairs {sorted(set(campaign.get('pairs', {})) ^ prepared)} differ from the prepared pairs"
+        )
+    if set(campaign.get("recipes", {})) != set(contract["recipes"]):
+        raise ContractError("campaign recipes differ from the contract recipes")
+
+
+def baseline_report(
+    contract: Mapping[str, Any],
+    campaign: Mapping[str, Any],
+    matrix: Mapping[str, Any],
+    *,
+    campaign_path: Path | None = None,
+) -> dict[str, Any]:
+    """Deliverable 4: the prepared pairs through ``validate-pair`` on the campaign's
+    formal runs, baseline rows from ``paired`` verdicts only, every delta read
+    against print precision and both sides' runtime-repeat ranges, confounds
+    attached, historical readings separated.  The campaign inventory is the only
+    input naming runs; the contract is the only input naming pairs."""
+    _check_campaign_input(contract, campaign)
+    matrix_rows = _row_by_id(matrix)
+    pairs = {
+        cid: baseline_pair(contract, campaign, matrix_rows, cid)
+        for cid in contract["declared"]["prepared_comparisons"]
+    }
+    rows = [cid for cid, p in pairs.items() if p["baseline_row"]]
+    return {
+        "schema": BASELINES_SCHEMA,
+        "generated_at": _now(),
+        "issue": contract.get("issue"),
+        "deliverable": 4,
+        "contract_sha256": contract["frozen"]["contract_sha256"],
+        "campaign_path": str(campaign_path) if campaign_path else None,
+        "campaign_sha256": sha256_json(campaign),
+        "campaign_generated_at": campaign.get("generated_at"),
+        "matrix_sha256": contract["frozen"]["matrix_sha256"],
+        "commit": campaign["commit"],
+        "run_root": campaign.get("run_root"),
+        "n_pairs": len(pairs),
+        "n_paired": len(rows),
+        "baseline_rows": rows,
+        "complete": len(rows) == len(pairs),
+        "delta_direction": "rhs_minus_lhs (treatment minus baseline; the baseline side is the contract pair's lhs)",
+        "pairs": pairs,
+        "readings": group_readings(pairs),
+        "historical": historical_comparisons(contract, campaign, matrix_rows),
+        "claim_rules": {
+            "observed_difference": (
+                "a delta between two paired formal runs, read against the print precision and the larger of "
+                "the two sides' same-identity runtime-repeat observed ranges; 'above_runtime_repeat_range' means "
+                "the instrument resolved it in this campaign"
+            ),
+            "observed_range_zero": (
+                "an observed range of 0.0 means this batch of repeat runs saw no variation (k = 1 distinct output "
+                "in n runs bounds only per-run divergence rates above ~1-0.05^(1/n)); it is not a bound and not a "
+                "determinism claim"
+            ),
+            "effect_claim": (
+                "not issued by this report: a delta above the runtime-repeat range is not by itself a causal "
+                "effect; every row keeps its remaining_confounds; the C group is additionally read against the "
+                "training-seed reference (D group) for attributability, and even where it exceeds that reference "
+                "the statement is 'consistent across three seed-paired replicates', not an effect size"
+            ),
+            "baseline_identity": (
+                "baseline status is the contract pair's lhs by orientation; no row was chosen by ranking a metric"
+            ),
+            "historical": (
+                "plain-GT2 <-> T3->T1 in either family is not a prepared pair (warmup_epochs 5->3 outside the "
+                "curriculum; s also differs in seed); quoted only under section 'historical'"
+            ),
+        },
+        "variance_axes": contract["declared"]["variance_axes"],
+    }
+
+
+def audit_baseline_report(
+    report: Mapping[str, Any],
+    contract: Mapping[str, Any],
+    campaign: Mapping[str, Any],
+    matrix: Mapping[str, Any],
+) -> list[str]:
+    """Is a committed report still the report of this contract + campaign?
+
+    Pure over the three JSON inputs (no run dirs, so it runs in CI): contract
+    and campaign shas, the pair set, every row's confounds, recipes, run dirs
+    and metrics against the campaign inventory, every delta recomputed, and a
+    row present only under a ``paired`` verdict.  Any drift is a reason.
+    """
+    reasons: list[str] = []
+    if report.get("schema") != BASELINES_SCHEMA:
+        reasons.append(f"schema {report.get('schema')!r}")
+    if report.get("contract_sha256") != contract["frozen"]["contract_sha256"]:
+        reasons.append("report bound to a different contract sha256")
+    if report.get("campaign_sha256") != sha256_json(campaign):
+        reasons.append("report bound to a different campaign inventory")
+    if report.get("commit") != campaign.get("commit"):
+        reasons.append("report commit != campaign commit")
+    try:
+        _check_campaign_input(contract, campaign)
+    except ContractError as exc:
+        reasons.append(str(exc))
+    matrix_rows = _row_by_id(matrix)
+    prepared = list(contract["declared"]["prepared_comparisons"])
+    if list(report.get("pairs", {})) != prepared:
+        reasons.append("report pairs != declared.prepared_comparisons")
+    for cid in prepared:
+        entry = (report.get("pairs") or {}).get(cid)
+        if not entry:
+            continue
+        pair = contract["pairs"][cid]
+        try:
+            expected = _pair_confounds(contract, matrix_rows, cid)
+        except ContractError as exc:
+            reasons.append(str(exc))
+            continue
+        if [c["name"] for c in entry.get("remaining_confounds", [])] != [
+            c["name"] for c in expected
+        ]:
+            reasons.append(f"{cid}: remaining_confounds differ from the contract")
+        for key in (
+            "lhs_recipe",
+            "rhs_recipe",
+            "classification",
+            "variance_axis",
+            "design",
+        ):
+            if entry.get(key) != pair[key]:
+                reasons.append(f"{cid}: {key} differs from the contract")
+        if entry.get("allowed_differences") != list(pair["allowed_differences"]):
+            reasons.append(f"{cid}: allowed_differences differ from the contract")
+        row = entry.get("baseline_row")
+        if entry.get("verdict") != "paired":
+            if row is not None:
+                reasons.append(f"{cid}: baseline row without a paired verdict")
+            continue
+        if row is None:
+            reasons.append(f"{cid}: paired verdict without a baseline row")
+            continue
+        if entry.get("n_combinations", 0) < 1 or entry.get("n_paired") != entry.get(
+            "n_combinations"
+        ):
+            reasons.append(f"{cid}: paired verdict but not every combination is paired")
+        if any(c["verdict"] != "paired" for c in entry.get("combinations", [])):
+            reasons.append(f"{cid}: a combination is not_paired")
+        if (
+            row.get("baseline_side") != "lhs"
+            or row.get("baseline_recipe") != pair["lhs_recipe"]
+        ):
+            reasons.append(f"{cid}: baseline side is not the contract lhs")
+        for side, recipe in (("lhs", pair["lhs_recipe"]), ("rhs", pair["rhs_recipe"])):
+            inv_recipe = campaign["recipes"].get(recipe) or {}
+            formal = {f["run_dir"]: f for f in inv_recipe.get("formal", [])}
+            run = row.get(f"{side}_run")
+            if run not in formal:
+                reasons.append(
+                    f"{cid}: {side} run is not a campaign formal run of {recipe}"
+                )
+                continue
+            if row.get(f"{side}_identity_sha256") != inv_recipe.get("identity_sha256"):
+                reasons.append(f"{cid}: {side} identity != campaign inventory")
+            rng = (inv_recipe.get("repeat") or {}).get("metric_observed_range") or {}
+            for key, m in (row.get("metrics") or {}).items():
+                if formal[run]["metrics"].get(key) != m.get(side):
+                    reasons.append(f"{cid}: {side} {key} != campaign formal metric")
+                if m.get(f"{side}_observed_range") != rng.get(key, {}).get(
+                    "observed_range"
+                ):
+                    reasons.append(
+                        f"{cid}: {side} {key} observed range != campaign repeat report"
+                    )
+        if set(REQUIRED_METRIC_KEYS) - set(row.get("metrics") or {}):
+            reasons.append(f"{cid}: required metric keys missing")
+        for key, m in (row.get("metrics") or {}).items():
+            if not all(
+                k in m for k in ("lhs", "rhs", "delta_rhs_minus_lhs", "reading")
+            ):
+                reasons.append(f"{cid}: {key} row is not a delta reading")
+                continue
+            expected_m = delta_reading(
+                float(m["lhs"]),
+                float(m["rhs"]),
+                precision=metric_print_precision(key),
+                lhs_observed_range=m.get("lhs_observed_range"),
+                rhs_observed_range=m.get("rhs_observed_range"),
+            )
+            if expected_m != m:
+                reasons.append(f"{cid}: {key} delta reading does not recompute")
+    for hist in report.get("historical", []):
+        if hist.get("comparison_id") in contract["pairs"]:
+            reasons.append(
+                f"{hist.get('comparison_id')}: historical entry is a prepared pair"
+            )
+        if (
+            hist.get("baseline_row") is not None
+            or (hist.get("validate_pair") or {}).get("verdict") != "not_paired"
+        ):
+            reasons.append(
+                f"{hist.get('comparison_id')}: historical entry carries a row or a paired verdict"
+            )
+        if not hist.get("training_confounds"):
+            reasons.append(
+                f"{hist.get('comparison_id')}: historical entry lost its confounds"
+            )
+    if set(h.get("comparison_id") for h in report.get("historical", [])) != set(
+        HISTORICAL_COMPARISONS
+    ):
+        reasons.append("historical set differs from HISTORICAL_COMPARISONS")
+    if report.get("readings") != group_readings(report.get("pairs") or {}):
+        reasons.append("group readings do not recompute from the rows")
+    text = json.dumps(report).lower()
+    for word in ("deterministic", "bit-exact"):
+        if word in text.replace(f"not a {word}", "").replace(
+            f"never '{word}'", ""
+        ).replace(f"not {word}", ""):
+            reasons.append(f"report uses the word {word!r}")
+    return reasons
+
+
+def _fmt_delta(m: Mapping[str, Any], digits: int = 1) -> str:
+    d = m["delta_rhs_minus_lhs"]
+    return f"{d:+.{digits}f}"
+
+
+_READING_SHORT = {
+    "no_observed_difference": "=",
+    "within_runtime_repeat_range": "≤range",
+    "above_runtime_repeat_range": ">range",
+}
+
+
+def render_baselines_markdown(report: Mapping[str, Any]) -> str:
+    """Human view of ``baseline_report``; regenerate, never edit."""
+    date = report["generated_at"][:10]
+    pairs = report["pairs"]
+    out: list[str] = [
+        "<!-- doc-status: active -->",
+        "<!-- doc-promotion: report_data -->",
+        f"<!-- doc-date: {date} -->",
+        "<!-- doc-module: detection -->",
+        f"<!-- Generated by scripts/provenance/training_eval_contract.py baselines from {DEFAULT_BASELINES_OUT}; regenerate rather than edit. -->",
+        "",
+        "# Training eval baselines — pairwise comparison (#421 · deliverable 4)",
+        "",
+        f"Generated {report['generated_at']} from the committed campaign inventory `{report['campaign_path']}` "
+        f"(sha256 `{report['campaign_sha256'][:16]}…`, taken {report['campaign_generated_at']}) under contract sha256 "
+        f"`{report['contract_sha256'][:16]}…`; every run at commit `{report['commit'][:12]}`. "
+        f"Machine-readable: `{DEFAULT_BASELINES_OUT}`.",
+        "",
+        "Every number here is an **observed difference** between two formal runs; this document issues no effect claim. "
+        "Read the claim rules (§2) before any row.",
+        "",
+        "## 1. Status",
+        "",
+        f"- Prepared pairs: {report['n_pairs']}; `validate-pair` verdict `paired` on every lhs × rhs formal combination: "
+        f"**{report['n_paired']}/{report['n_pairs']}**; baseline rows formed: {report['n_paired']} "
+        f"({'complete' if report['complete'] else 'INCOMPLETE'}).",
+    ]
+    for cid, p in pairs.items():
+        for reason in p["reasons"]:
+            out.append(f"- NOT PAIRED `{cid}`: {reason}")
+    out += [
+        f"- Delta direction: {report['delta_direction']}.",
+        "- Baseline identity: the contract pair's lhs by orientation (§4 column *baseline*); no row was chosen or re-chosen by ranking a metric.",
+        f"- Historical (non-prepared) readings: {len(report['historical'])} (§6), never rows.",
+        "",
+        "## 2. Claim rules",
+        "",
+    ]
+    for key, rule in report["claim_rules"].items():
+        out.append(f"- **{key}**: {rule}")
+    out += [
+        f"- **variance axes** (contract): runtime_repeat = {report['variance_axes']['runtime_repeat']}; "
+        f"training_seed = {report['variance_axes']['training_seed']}; rule: {report['variance_axes']['rule']}",
+        "",
+        "## 3. Reading legend",
+        "",
+        "`=` no observed difference at print precision (0.1 for percent metrics, 1 for counts, 0.01 fps); "
+        "`≤range` |Δ| within the larger of the two sides' runtime-repeat observed ranges; "
+        "`>range` |Δ| above both ranges — resolved by the instrument in this campaign, not an effect. "
+        "`n/k` = repeat runs / max distinct outputs per side.",
+        "",
+        "## 4. Baseline rows (paired verdicts only)",
+        "",
+        "| pair | class | axis | baseline (lhs) | treatment (rhs) | n/k lhs · rhs | HOTA lhs→rhs (Δ) | IDF1 lhs→rhs (Δ) | MOTA lhs→rhs (Δ) | IDs (Δ) | fps lhs→rhs (Δ) | confounds |",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|",
+    ]
+    for cid, p in pairs.items():
+        row = p["baseline_row"]
+        conf = ", ".join(c["name"] for c in p["remaining_confounds"]) or "—"
+        if not row:
+            out.append(
+                f"| `{cid}` | {p['classification']} | {p['variance_axis']} | `{p['lhs_recipe']}` | `{p['rhs_recipe']}` | — | not_paired | | | | | {conf} |"
+            )
+            continue
+        m = row["metrics"]
+        fps = row["throughput_fps"]
+
+        def cell(key: str, digits: int = 1) -> str:
+            e = m[key]
+            return f"{e['lhs']:.{digits}f}→{e['rhs']:.{digits}f} ({_fmt_delta(e, digits)} {_READING_SHORT[e['reading']]})"
+
+        out.append(
+            f"| `{cid}` | {p['classification']} | {p['variance_axis']} | `{row['baseline_recipe']}` | `{row['treatment_recipe']}` | "
+            f"{row['repeat_n']['lhs']}/{row['repeat_distinct_outputs_max']['lhs']} · {row['repeat_n']['rhs']}/{row['repeat_distinct_outputs_max']['rhs']} | "
+            f"{cell('HOTA')} | {cell('IDF1')} | {cell('MOTA')} | {int(m['IDs']['lhs'])}→{int(m['IDs']['rhs'])} ({_fmt_delta(m['IDs'], 0)} {_READING_SHORT[m['IDs']['reading']]}) | "
+            f"{fps['lhs']:.1f}→{fps['rhs']:.1f} ({_fmt_delta(fps, 1)} {_READING_SHORT[fps['reading']]}) | {conf} |"
+        )
+    out += [
+        "",
+        "## 5. Per-pair detail",
+        "",
+    ]
+    for cid, p in pairs.items():
+        out += [
+            f"### `{cid}`",
+            "",
+            f"- design `{p['design']}` · classification `{p['classification']}` · variance axis `{p['variance_axis']}` · "
+            f"treatment axes {json.dumps(p['treatment_axes'])}",
+            f"- intended treatment: {p['intended_treatment'] or '—'}",
+            f"- verdict **{p['verdict']}** ({p['n_paired']}/{p['n_combinations']} formal combinations paired)"
+            + (f"; reasons: {p['reasons']}" if p["reasons"] else ""),
+            f"- allowed differences: {json.dumps(p['allowed_differences'])}",
+        ]
+        if p["remaining_confounds"]:
+            out.append(
+                "- remaining confounds (attached to the row regardless of the numbers):"
+            )
+            for c in p["remaining_confounds"]:
+                out.append(f"  - `{c['name']}` [{c['severity']}]: {c['detail']}")
+        else:
+            out.append(
+                "- remaining confounds: none recorded by the matrix for this pair"
+            )
+        row = p["baseline_row"]
+        if not row:
+            out.append("- no baseline row")
+            out.append("")
+            continue
+        out += [
+            f"- runs: lhs `{row['lhs_run']}` (identity `{row['lhs_identity_sha256'][:12]}`), "
+            f"rhs `{row['rhs_run']}` (identity `{row['rhs_identity_sha256'][:12]}`)",
+            f"- observed identity differences: {json.dumps(sorted(row['observed_differences']))}",
+            "",
+            "| metric | lhs | rhs | Δ (rhs−lhs) | precision | range lhs | range rhs | reading |",
+            "|---|---:|---:|---:|---:|---:|---:|---|",
+        ]
+        for key, e in row["metrics"].items():
+            digits = 0 if key in COUNT_METRIC_KEYS else 1
+            out.append(
+                f"| {key} | {e['lhs']:.{digits}f} | {e['rhs']:.{digits}f} | {_fmt_delta(e, digits)} | {e['print_precision']:g} | "
+                f"{_fmt(e['lhs_observed_range'])} | {_fmt(e['rhs_observed_range'])} | {e['reading']} |"
+            )
+        fps = row["throughput_fps"]
+        out.append(
+            f"| fps ({fps['profile']}) | {fps['lhs']:.2f} | {fps['rhs']:.2f} | {_fmt_delta(fps, 2)} | {fps['print_precision']:g} | "
+            f"{_fmt(fps['lhs_observed_range'])} | {_fmt(fps['rhs_observed_range'])} | {fps['reading']} |"
+        )
+        out += [
+            "",
+            f"fps repeat ranges: lhs {fps['lhs_repeat']['min']}–{fps['lhs_repeat']['max']} (n={len(fps['lhs_repeat']['values'])}), "
+            f"rhs {fps['rhs_repeat']['min']}–{fps['rhs_repeat']['max']} (n={len(fps['rhs_repeat']['values'])}); "
+            f"formal fps lhs {fps['lhs_formal']['values']}, rhs {fps['rhs_formal']['values']}. "
+            + (
+                "Eager rows are a throughput lower bound by contract declaration."
+                if fps["profile"] == "eager_pytorch"
+                else "Serial whole-graph profile; not the double-buffer headline throughput."
+            ),
+            "",
+        ]
+    out += [
+        "## 6. Historical readings (not prepared pairs, no rows)",
+        "",
+    ]
+    for h in report["historical"]:
+        lm, rm_ = h["printed_metrics"]["lhs"], h["printed_metrics"]["rhs"]
+        out += [
+            f"### `{h['comparison_id']}` — {h['classification']}",
+            "",
+            f"- {h['status']}",
+            f"- `validate-pair`: **{h['validate_pair']['verdict']}** — {h['validate_pair']['reasons']}",
+            f"- lhs `{h['lhs_recipe']}` (`{h['lhs_run']}`) · rhs `{h['rhs_recipe']}` (`{h['rhs_run']}`)",
+            f"- intended treatment (matrix): {h['intended_treatment']}",
+            f"- training confounds (matrix; schedule keys {json.dumps(h['schedule_confound_keys'])}; seed axis `{h['training_seed_axis']}`):",
+        ]
+        for c in h["training_confounds"]:
+            extra = (
+                f" lhs={c['lhs']} rhs={c['rhs']}"
+                if c.get("lhs") is not None or c.get("rhs") is not None
+                else ""
+            )
+            out.append(f"  - `{c['name']}` [{c['severity']}]{extra}: {c['detail']}")
+        out += [
+            f"- runtime identity differences between the two formal runs: {json.dumps(sorted(h['runtime_identity_differences']))}",
+            "- printed side by side (no delta reading is issued): "
+            + "; ".join(
+                f"{k} {_fmt(lm.get(k))} | {_fmt(rm_.get(k))}"
+                for k in HEADLINE_METRIC_KEYS
+            )
+            + f"; IDs {_fmt_count(lm.get('IDs'))} | {_fmt_count(rm_.get('IDs'))}",
+            "",
+        ]
+    out += [
+        "## 7. What the rows support / do not support",
+        "",
+    ]
+    out += _render_readings(report)
+    out += [
+        "",
+        "## 8. Provenance",
+        "",
+        f"- contract sha256 `{report['contract_sha256']}` · matrix sha256 `{report['matrix_sha256']}` · campaign sha256 `{report['campaign_sha256']}`",
+        f"- run root `{report['run_root']}` (gitignored raw runs: manifests v3, stdout, MOT files, latency profiles); the campaign inventory + repeat reports are the surviving record",
+        "- regenerate: `.venv/bin/python scripts/provenance/training_eval_contract.py baselines --emit "
+        f"{DEFAULT_BASELINES_OUT} --baselines-md {DEFAULT_BASELINES_MD}`; audit without runs: `... baselines --audit`",
+        "",
+    ]
+    return "\n".join(out)
+
+
+def _render_readings(report: Mapping[str, Any]) -> list[str]:
+    readings = report["readings"]
+    out: list[str] = []
+
+    def metric_line(group: str, key: str) -> str:
+        m = readings[group]["per_metric"][key]
+        digits = 0 if key in COUNT_METRIC_KEYS else 1
+        deltas = ", ".join(
+            f"`{cid.split('.')[0]}` {d:+.{digits}f}" for cid, d in m["deltas"].items()
+        )
+        return (
+            f"  - {key}: {deltas}; sign consistent: {'yes' if m['sign_consistent'] else 'no'}; "
+            f"all `>range`: {'yes' if m['all_above_runtime_repeat_range'] else 'no'}"
+            + (
+                f"; min |Δ| {m['min_abs_delta']:.{digits}f} vs seed-replicate max |Δ| {m['seed_replicate_max_abs_delta']:.{digits}f} → "
+                f"{'exceeds' if m['min_abs_delta_exceeds_seed_replicate_max'] else 'does not exceed'}"
+                if "seed_replicate_max_abs_delta" in m
+                else ""
+            )
+        )
+
+    g = readings["explicit_vs_implicit_shared_gt1"]
+    out += [f"### C1–C3 · {g['question']}", ""]
+    if not g["complete"]:
+        out += [
+            f"- rows available: {g['rows_available']} — group reading unavailable",
+            "",
+        ]
+    else:
+        for key in ("HOTA", "IDF1", "MOTA", "AssA", "DetA", "IDs"):
+            out.append(metric_line("explicit_vs_implicit_shared_gt1", key))
+        strong = [
+            key
+            for key in ("HOTA", "IDF1", "MOTA", "AssA", "DetA", "IDs")
+            if g["per_metric"][key]["sign_consistent"]
+            and g["per_metric"][key]["all_above_runtime_repeat_range"]
+            and g["per_metric"][key].get("min_abs_delta_exceeds_seed_replicate_max")
+        ]
+        weak = [
+            key
+            for key in ("HOTA", "IDF1", "MOTA", "AssA", "DetA", "IDs")
+            if key not in strong
+        ]
+        out += [
+            "",
+            "- **Supports (observed):** "
+            + (
+                f"on {', '.join(strong)} the explicit T3→T1 arm differs from the implicit arm with one sign in all three "
+                "seed-paired replicates, above the runtime-repeat range of every row, and the smallest |Δ| exceeds the largest "
+                "|Δ| observed between seed replicates of either arm (D1–D4). This is the contract's attributability reference "
+                "being met: a consistent observed difference across three seeds, not an effect size (3 seeds) and not a mechanism."
+                if strong
+                else "no metric meets sign consistency + `>range` + exceeds-seed-reference on all three replicates."
+            ),
+            "- **Does not support:** "
+            + (
+                f"any claim on {', '.join(weak)} (sign or magnitude does not clear the seed-replicate reference); "
+                if weak
+                else ""
+            )
+            + "a causal attribution to staging alone (the treatment is the declared bundle: 15 ep T=3 with temporal blocks then 15 ep T=1 vs 30 ep implicit T=4); "
+            "a magnitude estimate; transfer off the preset s backbone engine (`deployed_backbone_teacher_mismatch` is common-mode on every s row, see E4); "
+            "the eager or m families.",
+            "",
+        ]
+    g = readings["seed_replicates"]
+    out += [f"### D1–D4 · {g['question']}", ""]
+    if g["complete"]:
+        for key in ("HOTA", "IDF1", "MOTA", "AssA", "DetA", "IDs"):
+            out.append(metric_line("seed_replicates", key))
+        out += [
+            "",
+            "- **Supports (observed):** the spread between seed replicates of one recipe is what these four deltas show; it is the "
+            "reference the C group is read against (`declared.variance_axes.rule`). Each is above its runtime-repeat range where marked, "
+            "so seed-to-seed variation is resolvable by the instrument.",
+            "- **Does not support:** a variance estimate (two deltas per arm), pooling with runtime-repeat variance, or any ordering of seeds.",
+            "",
+        ]
+    else:
+        out += [
+            f"- rows available: {g['rows_available']} — group reading unavailable",
+            "",
+        ]
+    g = readings["stage_increments"]
+    out += [f"### B1–B4 · {g['question']}", ""]
+    if g["complete"]:
+        for key in ("HOTA", "IDF1", "MOTA", "IDs"):
+            out.append(metric_line("stage_increments", key))
+        out += [
+            "",
+            "- **Supports (observed):** each stage bundle changes the printed numbers by more than the runtime-repeat range where marked `>range`; "
+            "the direction per stage is as listed.",
+            "- **Does not support:** attributing a delta to any single ingredient of the bundle (warm start, budget, schedule and cache move together), "
+            "a seed-controlled statement (one checkpoint per stage, no replicate), or a cross-family comparison (s rows carry the common-mode backbone confound; m rows run the checkpoint head via `--no-mamba-trt`).",
+            "",
+        ]
+    else:
+        out += [
+            f"- rows available: {g['rows_available']} — group reading unavailable",
+            "",
+        ]
+    g = readings["system_comparisons"]
+    out += [f"### E1–E3 · {g['question']}", ""]
+    if g["complete"]:
+        for key in ("HOTA", "IDF1", "MOTA", "IDs"):
+            out.append(metric_line("system_comparisons", key))
+        out += [
+            "",
+            "- **Supports (observed):** the two systems / heads differ by the printed amounts under the frozen recipes; E1 is the executable "
+            "s-vs-m production comparison, E2/E3 the native-Detect-head vs Mamba-head numbers on the shared PyTorch backbone under the "
+            "s tracker policy (a declared limit for E3).",
+            "- **Does not support:** attribution to any axis — `remaining_confounds` list every unmatched training and runtime axis "
+            "(head family, deployed head artifact, tracker policy, warm start, teacher, cache, seed, schedule, budget); E2/E3 fps are eager lower bounds.",
+            "",
+        ]
+    else:
+        out += [
+            f"- rows available: {g['rows_available']} — group reading unavailable",
+            "",
+        ]
+    g = readings["engine_ab"]
+    out += [f"### E4 · {g['question']}", ""]
+    if g["complete"]:
+        for key in ("HOTA", "IDF1", "MOTA", "DetA", "AssA", "IDs"):
+            out.append(metric_line("engine_ab", key))
+        e4_signs = {
+            _sign(next(iter(m["deltas"].values())))
+            for key, m in g["per_metric"].items()
+            if key in ("HOTA", "IDF1", "MOTA")
+        }
+        out += [
+            "",
+            "- **Supports (observed):** swapping the deployed s backbone engine under the same head moves the numbers by more than the "
+            "runtime-repeat range where marked, "
+            + (
+                "with mixed sign across HOTA/IDF1/MOTA"
+                if len(e4_signs) > 1
+                else "with one sign across HOTA/IDF1/MOTA"
+            )
+            + ": the s production confound is numerically live, so every s-row absolute number is specific to the preset engine.",
+            "- **Does not support:** which engine is 'correct' or better (one head, no seed replicate, no per-sequence reading), or that s-internal "
+            "paired deltas would change under the other engine (common-mode by design, untested).",
+            "",
+        ]
+    else:
+        out += [
+            f"- rows available: {g['rows_available']} — group reading unavailable",
+            "",
+        ]
+    out += [
+        "### Not available from this deliverable",
+        "",
+        "- Any plain-GT2 ↔ T3→T1 training effect (s or m): §6 only.",
+        "- Any m-family curriculum statement: m has no controlled curriculum pair (matrix).",
+        "- Any determinism / bit-exactness statement: repeat evidence is `k distinct outputs in n runs`.",
+        "- Any headline (double-buffer) throughput: all fps here are the serial whole-graph or eager profiles.",
+    ]
+    return out
+
+
 # --------------------------------------------------------------------------- freeze / check
 
 
@@ -2327,6 +3446,19 @@ def main(argv: list[str] | None = None) -> int:
     s_camp.add_argument("--emit", type=Path, default=None)
     s_camp.add_argument("--campaign-md", type=Path, default=None)
 
+    s_base = sub.add_parser(
+        "baselines",
+        help="deliverable 4: validate-pair over the campaign inventory's formal runs, baseline rows + delta readings",
+    )
+    s_base.add_argument("--campaign", type=Path, default=DEFAULT_CAMPAIGN_OUT)
+    s_base.add_argument("--emit", type=Path, default=None)
+    s_base.add_argument("--baselines-md", type=Path, default=None)
+    s_base.add_argument(
+        "--audit",
+        action="store_true",
+        help="exit 1 unless the committed report + doc still follow from contract, campaign and matrix (no runs needed)",
+    )
+
     args = ap.parse_args(argv)
     try:
         return _dispatch(args)
@@ -2470,6 +3602,51 @@ def _dispatch(args: argparse.Namespace) -> int:
             _write(REPO_ROOT / args.campaign_md, render_campaign_markdown(inventory))
             print(f"campaign doc -> {args.campaign_md}")
         return 0 if inventory["complete"] else 1
+    if args.cmd == "baselines":
+        campaign = load_campaign(REPO_ROOT / args.campaign)
+        matrix = load_matrix(REPO_ROOT / args.matrix)
+        if args.audit:
+            emit = REPO_ROOT / (args.emit or DEFAULT_BASELINES_OUT)
+            md = REPO_ROOT / (args.baselines_md or DEFAULT_BASELINES_MD)
+            report = _read_json(emit)
+            reasons = audit_baseline_report(report, contract, campaign, matrix)
+            if not md.is_file() or md.read_text() != render_baselines_markdown(report):
+                reasons.append(f"{md} is not the rendering of {emit}")
+            for reason in reasons:
+                print(f"STALE: {reason}")
+            print(
+                f"training_eval_baselines: {'fresh' if not reasons else 'stale'} "
+                f"({report.get('n_paired')}/{report.get('n_pairs')} paired)"
+            )
+            return 0 if not reasons else 1
+        report = baseline_report(
+            contract, campaign, matrix, campaign_path=args.campaign
+        )
+        for cid, p in report["pairs"].items():
+            row = p["baseline_row"]
+            head = (
+                " ".join(
+                    f"{k} {row['metrics'][k]['lhs']:.1f}->{row['metrics'][k]['rhs']:.1f}({row['metrics'][k]['delta_rhs_minus_lhs']:+.1f})"
+                    for k in HEADLINE_METRIC_KEYS
+                )
+                if row
+                else "no row"
+            )
+            print(
+                f"{p['verdict']:<10} {cid:<48} {p['n_paired']}/{p['n_combinations']} {head}"
+            )
+            for reason in p["reasons"]:
+                print(f"  {reason}")
+        if args.emit:
+            _write(
+                REPO_ROOT / args.emit,
+                json.dumps(report, indent=2, ensure_ascii=False) + "\n",
+            )
+            print(f"baselines report -> {args.emit}")
+        if args.baselines_md:
+            _write(REPO_ROOT / args.baselines_md, render_baselines_markdown(report))
+            print(f"baselines doc -> {args.baselines_md}")
+        return 0 if report["complete"] else 1
     raise ContractError(f"unknown command {args.cmd}")
 
 
