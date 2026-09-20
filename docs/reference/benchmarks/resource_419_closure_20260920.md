@@ -1,6 +1,6 @@
 # #419 acceptance closure — GPU resource-sensitivity characterization
 
-<!-- doc-status: closed -->
+<!-- doc-status: active -->
 <!-- doc-promotion: ledger -->
 <!-- doc-date: 2026-09-20 -->
 <!-- doc-module: cross -->
