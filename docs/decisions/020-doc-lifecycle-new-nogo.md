@@ -1,15 +1,45 @@
-<!-- doc-status: proposed -->
+<!-- doc-status: accepted -->
+<!-- doc-promotion: none -->
+<!-- doc-date: 2026-09-20 -->
+<!-- doc-module: cross -->
 
 # ADR 020: Doc-Lifecycle 管理策略 —「新 NO-GO」(typed terminal + versioned model + seal-triggered disposal)
 
 ## Status
 
-**Proposed** (2026-07-15)
+**Accepted — partially adopted** (2026-09-20) — [issue #439](https://github.com/raylei50653/saccade/issues/439);原 **Proposed** 2026-07-15,umbrella [#164](https://github.com/raylei50653/saccade/issues/164) 於 2026-09-18 以 stale 關閉。
 
-這是一份**計畫文檔**:定義問題、設計理由、與完整規格需求,作為後續 PR 的依據。落地 PR 只需含「管理策略 + 預計改動清單」;本文即該策略的完整上下文,避免日後抓不到點。
+**Terminal verdict: `partial_adoption_s1_s5_manifest_only`** — 本 ADR 只有 **S1 + S5 + §4.5** 是落地並持續生效的機制;**S2 / S3 / S4 / S6 與 §4.5 的 freeze guard 明確不再追求**(not pursued,不是 deferred)。本 ADR 從此不再宣稱一個完整的 seal→compress→dispose 機械化,§2–§6 保留為當時的設計紀錄,不得被讀成待辦清單。
+
+| 項目 | 2026-09-20 實測 | 處置 |
+|---|---|---|
+| S1 typed terminal slot | schema `scripts/docs/terminal_slot_schema.py` + `docs/ownership/terminal_slot_fixtures.yaml` + `tests/contract/test_terminal_slot_schema.py`;6 份 bridge-fidelity results doc + `claim_state_registry.md` 帶 slot | **adopted**;既有 slot 繼續受 schema test 保護,新線**可用可不用** |
+| S5 master map 生成骨架 | `scripts/docs/build_master_map.py` → `docs/ownership/master_map.generated.md`,`test_migration_manifest_v0` fail-closed | **adopted** |
+| §4.5 migration manifest + gray-out | `docs/ownership/doc_migration_manifest.yaml`:8 cluster / 55 resolved files,`snapshot.resolved_at: 2026-07-16` 後未變;8/8 `quarantined`、0 `disposable` | **adopted as gray-out input only**(見下) |
+| S2 master model version + bump guard | 未落地;沒有任何一條線宣告過 `math-closed` master model | **not pursued** |
+| S3 seal fail-closed gate(slot presence / enum guard) | 未落地 | **not pursued** |
+| S4 dispose flow(delete-to-git / fold + 入鏈改寫) | 未落地;`disposable` 狀態從未被任何 cluster 到達 | **not pursued** |
+| S6 drift reconciliation(version-lag) | 未落地(前提 S2 不存在) | **not pursued** |
+| §4.5 freeze guard(改 frozen process 必伴隨 migration transition) | 未落地 | **not pursued** |
+
+### 為什麼 downgrade 而不是排一個 unit
+
+決定依據是 2026-07-16 → 2026-09-20 兩個月的**實際使用訊號**,不是設計是否正確:
+
+1. **pay-on-use 從未被觸發。** 55 個 quarantined 檔裡只有 2 個在凍結後被碰過:H0 的 declaration(靠 H0 packet 自己的 seal/receipt 機制收線,與本 ADR 的 slot 無關)與一份 relink 分析(2026-09-13 順手改寫)。兩次都沒有伴隨任何 migration transition,也沒有人需要它。隔離集是**惰性的**,不是活的債。
+2. **S1 slot 不是 repo 實際使用的 terminal 單位。** 7–9 月封掉的所有線(GCTM、H0 re-entry、H2、OWDL、#419 scaling、[ADR 026](026-frozen-input-source-evolution.md) supersession)全部走 research packet + `claim_state_registry` + supersession ledger 收線,**零**條 emit S1 slot,也沒有因此出事。在這上面加 S3 gate 只會 gate 到一個沒人走的路徑。
+3. **disposal 問題已有活的接手者,且座標不同。** 本 ADR 把 disposal 建在「per-study terminal 齊 → cluster disposable → 搬/刪」上;現在真正在動的是 [#368](https://github.com/raylei50653/saccade/issues/368)(question-oriented module docs:讀者看到哪份是 canonical answer,Phase 1 已 accepted、Phase 2 有 [activation boundary](../ownership/module_doc_question_phase2_activation_boundary.md))與 [#404](https://github.com/raylei50653/saccade/issues/404)(evidence / generated artifact 的 ownership、retention、disposal)。再做 S4 = 在 ADR 026 ledger 與 #404 之外開第三套 disposal 機制。
+4. [ADR 021](021-asset-provenance-and-progress-reporting.md) §1.1 記的「S3/S4/S6 未落地、9/9 quarantined」是 2026-09-01 的觀察(cluster 實數為 8);本 Status 是對該觀察的正式回應。
+
+### Downgrade 後各件的歸屬
+
+- **manifest 留著,角色降為 S5 的 gray-out 輸入**:`migration_state: quarantined` 繼續讓 master map 與 default search 排除這 55 檔;`disposable` 這個轉移由本 ADR 的工具**不可達**。哪天某 cluster 真的被 #368 Phase 2 或 #404 處置掉,由該線在同一 PR 移除 manifest entry(manifest 仍是 ephemeral,只是排水口換人)。
+- **quarantined process 檔的正式 disposal 規則** → #404 擁有(evidence 與 generated/frozen artifact);**讀者面的 canonical pointer** → #368 Phase 2 擁有。兩者都**不**重新裁決任何 cluster 的研究 verdict(同 #439 non-scope)。
+- **frozen input 的改動守則**(本 ADR 原想用 freeze guard 做的事)→ 已由 ADR 026 以 supersession ledger 對 CLOSED packet 落地;對非 packet 的 quarantined doc **不設 guard**。
+- **不回填** ~187 份無 `doc-status` 的舊檔(§2 pay-on-use 不變)。
 
 - 診斷來源:`../modules/semantic/research/` 膨脹事件 + docs 全域 lifecycle 稽核(2026-07-15)
-- 相關治理契約:[doc_structure_contract.md](../ownership/doc_structure_contract.md)(本 ADR 不取代它,是在其「when to archive」欄補上**觸發機制**)
+- 相關治理契約:[doc_structure_contract.md](../ownership/doc_structure_contract.md)(本 ADR 不取代它,是在其「when to archive」欄補上**觸發機制**——該觸發機制即 S3,現已不追求)
 
 ---
 

@@ -4,8 +4,10 @@
 #
 # 性質：
 #   - EPHEMERAL：遷移抽乾後整份刪除，不得長成第四套 archive。
-#   - MACHINE-CONSUMED：由 build_master_map（gray-out frozen）與 pre_push freeze guard 讀取；
-#     不是人讀的散文。詳見 issue #164 / #166。
+#   - MACHINE-CONSUMED：由 build_master_map（gray-out frozen）讀取；不是人讀的散文。
+#     詳見 issue #164 / #166。原規劃的 pre_push freeze guard 與 S4 dispose flow 依 ADR 020
+#     Status（2026-09-20，issue #439）明確不追求：本檔的角色只剩 gray-out 輸入，
+#     `disposable` 轉移由 ADR 020 工具不可達；entry 由實際處置該 cluster 的線（#368 / #404）移除。
 #   - 只記機械需要的「事實」，不存分類、不複寫 verdict。
 #
 # SNAPSHOT 契約（避免把 Git history availability 變成隱性前提）：

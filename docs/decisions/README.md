@@ -20,7 +20,7 @@
 - [ADR 017: 2025-2026 高 MOTA 技術整合策略分析](017-high-mota-2026-integration-strategy.md)
 - [ADR 018: 專案主線收斂與雙線開發方向](018-project-main-line-direction.md)
 - [ADR 019: Demote ReID and Adopt Geometry-First Production Tracker](019-demote-reid-geometry-first-production-tracker.md)
-- [ADR 020: Doc-Lifecycle 管理策略 —「新 NO-GO」](020-doc-lifecycle-new-nogo.md)
+- [ADR 020: Doc-Lifecycle 管理策略 —「新 NO-GO」](020-doc-lifecycle-new-nogo.md) — issue #439；terminal verdict `partial_adoption_s1_s5_manifest_only`：只有 S1 slot schema、S5 generated master map、§4.5 manifest gray-out 生效；S2/S3/S4/S6 與 freeze guard not pursued，disposal 由 #368 / #404 接手
 - [ADR 021: 資產身分層與生成式進度報告](021-asset-provenance-and-progress-reporting.md) — W-A closed (EC1–EC3). EC3 round record: [asset_disposal_round_wa-ec3-r1-20260910.md](../ownership/asset_disposal_round_wa-ec3-r1-20260910.md)
 - [ADR 022: 檢查分類法與出版落後預設](022-check-taxonomy-and-publication-lag.md)
 - [ADR 023: 評估 detector 路徑與 Ultralytics 的解耦邊界](023-ultralytics-runtime-decouple.md) — issue #391；分析 only，不授權換 detector
