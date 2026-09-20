@@ -10,7 +10,8 @@
 This is the closure ledger for
 [#419](https://github.com/raylei50653/saccade/issues/419) (work package F of
 #420). It aligns the existing evidence records against the issue's acceptance
-checklist and states what the umbrella issue established. It adds **no new
+checklist (eight items satisfied, the optional detector/tracker split not
+exercised) and states what the umbrella issue established. It adds **no new
 measurement**, selects **no production routing policy**, attributes **no
 mechanism** to any curve, and makes **no edge-hardware claim**. Every number
 below is copied from the cited record; the records, not this page, are the
@@ -75,15 +76,16 @@ evidence.
 | 5 | Power/clock/utilization metadata retained | 100 ms `nvidia-smi` samples inside measured windows per run, summarized per budget/mode; clocks differ across budgets and are recorded, not attributed | **satisfied** |
 | 6 | Persistent-blocker measurements labelled as a proxy | [resource_sensitivity_20260915.md](resource_sensitivity_20260915.md) is titled and read as a residency-pressure proxy; phase B presents proxy and true partition separately | **satisfied** |
 | 7 | ≥ 1 true partition point validates or falsifies the proxy trend | Falsified: proxy K=8 ran 5.7 FPS with DB gain ≈1.03 versus a true 8-SM partition at 91 FPS / 1.17; proxy curve not citable for SM scaling ([phase B](resource_partition_20260915.md)) | **satisfied** |
-| 8 | If detector/tracker partitioning is feasible, ≥ 1 shared-vs-reserved comparison reports tail-latency and throughput trade-off | Shared 32 SM vs fixed 16+16 vs 24-SM headroom vs dynamic borrowing, with the production serial and double-buffer pipelines as the stable lane and matched elastic bursts as the reserved-against load; tail (stable p99, period σ, target passes) and throughput/completion (burst p95, DB fps, units/s) reported per point ([09-16](resource_mixed_20260916.md), [09-18](resource_mixed_db_20260918.md)). **The reservation axis measured is stable-pipeline vs elastic work; a detector-vs-tracker spatial split (42/4, 38/8 …) was not executed** — the issue's own ladder C names it as optional and the studies above answer the shared-vs-reserved question the item asks for. | **satisfied (stable/elastic reservation; D/T split not measured)** |
+| 8 | If detector/tracker partitioning is feasible, ≥ 1 shared-vs-reserved comparison reports tail-latency and throughput trade-off | **Not exercised.** No detector-vs-tracker spatial split (42/4, 38/8 …) was measured. The 09-16…09-18 records compare shared 32 SM against fixed 16+16, 24-SM headroom and dynamic borrowing with the production pipeline as the *stable* lane and matched elastic bursts as the *reserved-against* load ([09-16](resource_mixed_20260916.md), [09-18](resource_mixed_db_20260918.md)); they are supporting evidence for the general latency/capacity trade-off in decision statements 2–3 and are **not** relabelled as a D/T comparison. Ladder C names this item optional; no D/T isolation claim is made. | **not exercised (optional)** |
 | 9 | Final artifact reusable as a before/after optimization benchmark | frozen record + `frozen_benchmark.py compare` (scope fail-closed, frontier movement, same-session `--control` requirement), exercised against the 09-15 sweep | **satisfied** |
 
 Decision-rule outcomes named in the issue: (1) graceful scaling — not met
 (retained fraction < 0.8 below 32 SM); (2) knee — not resolved; (3)
 shared-resource sensitivity — proxy and true partition disagree materially;
-(4) tail-latency trade-off — observed (reserved/headroom lower stable tail at
-elastic-completion cost; shared loses the tail only at 8192/W4); (5) no useful
-isolation effect — not the outcome, but also not a policy selection.
+(4) tail-latency trade-off — observed on the stable/elastic axis
+(reserved/headroom lower stable tail at elastic-completion cost; shared loses
+the tail only at 8192/W4), not on a detector/tracker split; (5) no useful
+isolation effect — not the outcome on that axis, and no policy is selected.
 
 ## Non-claims and what stays open elsewhere
 
@@ -100,7 +102,8 @@ isolation effect — not the outcome, but also not a policy selection.
   confidence intervals, equivalence margins or rare-tail estimates. Absolute
   numbers are not comparable across sessions (7–10% host drift 09-17→09-18;
   3% 09-15→09-20).
-- **Detector/tracker spatial split**: not measured (item 8 above).
+- **Detector/tracker spatial split**: not exercised (item 8 above); no D/T
+  isolation claim of any kind.
 
 ## Frozen artifacts for future comparison
 
