@@ -47,6 +47,7 @@
 | `test_reporting_extended.py` | eval | behavior | active | Extended tests for perception/eval/reporting.py. |
 | `test_resource_admission.py` | eval | contract | active | Reject invalid arrival evidence, queue bounds, timing and block routing. |
 | `test_resource_elastic.py` | eval | contract | active | Synthetic elastic summaries reject missing samples, SM escapes and altered metrics. |
+| `test_resource_frozen_benchmark.py` | eval | contract | active | The frozen SM-scaling benchmark applies its pre-declared rules and refuses scope drift. |
 | `test_resource_mixed.py` | eval | contract | active | Fail closed on corrupt full-pipeline mixed-workload evidence. |
 | `test_resource_mixed_db.py` | eval | contract | active | Fail closed on corrupt double-buffer mixed-workload evidence. |
 | `test_resource_partition.py` | eval | contract | active | The true-partition reporter must fail closed on any routing escape. |

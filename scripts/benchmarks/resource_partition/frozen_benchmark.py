@@ -12,6 +12,7 @@
 # significance claim: every comparison is a ratio or a delta of observed means,
 # with the repetition ranges kept beside it.
 import argparse
+import copy
 import hashlib
 import json
 import re
@@ -333,8 +334,8 @@ def build(root, study_record=None, targets=None):
         "kind": "serial_vs_double_buffer_sm_scaling",
         "scope": scope_from_sweep(sweep, summary),
         "criteria": {
-            **CRITERIA,
-            "frontier": {**CRITERIA["frontier"], "targets": targets},
+            **copy.deepcopy(CRITERIA),
+            "frontier": {**copy.deepcopy(CRITERIA["frontier"]), "targets": targets},
         },
         "budgets": budgets,
         "knee": knee_analysis(budgets),
