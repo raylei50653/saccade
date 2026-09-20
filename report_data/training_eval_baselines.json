@@ -1,0 +1,5051 @@
+{
+  "schema": "training_eval_baselines_v1",
+  "generated_at": "2026-09-20T04:41:45+00:00",
+  "issue": 421,
+  "deliverable": 4,
+  "contract_sha256": "dc300ac5fda5610356efcc9503c3b7140da867f3b70a58106513801925639649",
+  "campaign_path": "report_data/training_eval_campaign.json",
+  "campaign_sha256": "408ec256877a7258a876ae891af2a9db49ec7ba3da8aec8c6ba9898881a8d9c1",
+  "campaign_generated_at": "2026-09-19T11:10:44+00:00",
+  "matrix_sha256": "6fe701ada98a0d4f348d7ad534a14168527929bf74aa0c01a5458325f0a8a6ee",
+  "commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+  "run_root": "results/training_eval_contract",
+  "n_pairs": 15,
+  "n_paired": 15,
+  "baseline_rows": [
+    "B1.s.distill_to_gt1",
+    "B2.s.gt1_to_gt2_plain",
+    "B3.m.distill_to_gt1",
+    "B4.m.gt1_to_gt2_plain",
+    "C1.s.explicit_vs_implicit_shared_gt1_s42",
+    "C2.s.explicit_vs_implicit_shared_gt1_s43",
+    "C3.s.explicit_vs_implicit_shared_gt1_s44",
+    "D1.s.implicit_seed_42_vs_43",
+    "D2.s.implicit_seed_43_vs_44",
+    "D3.s.explicit_shared_seed_42_vs_43",
+    "D4.s.explicit_shared_seed_43_vs_44",
+    "E1.s_vs_m.production_system",
+    "E2.s.native_head_vs_mamba_head_shared_backbone",
+    "E3.m.native_head_vs_mamba_head_shared_backbone",
+    "E4.s.production_backbone_engine_ab"
+  ],
+  "complete": true,
+  "delta_direction": "rhs_minus_lhs (treatment minus baseline; the baseline side is the contract pair's lhs)",
+  "pairs": {
+    "B1.s.distill_to_gt1": {
+      "comparison_id": "B1.s.distill_to_gt1",
+      "design": "stage_increment",
+      "classification": "controlled",
+      "variance_axis": "treatment",
+      "treatment_axes": [
+        "warm_start",
+        "training_budget",
+        "training_schedule",
+        "teacher_cache"
+      ],
+      "intended_treatment": "GT1 stage as a bundle: live teacher (no cache), gt_ratio 0.5, clip_len 4 / stride 8, lr 1e-4, batch 4, +30 epochs",
+      "lhs_recipe": "wg:mamba_whole_graph:s.distill",
+      "rhs_recipe": "wg:mamba_whole_graph:s.gt1",
+      "allowed_differences": [
+        "artifacts.mamba_ckpt",
+        "config.mamba_ckpt"
+      ],
+      "remaining_confounds": [
+        {
+          "name": "deployed_backbone_teacher_mismatch",
+          "severity": "common_mode",
+          "detail": "both endpoints deploy on s.backbone_engine whose sibling ONNX indicates s.legacy_teacher while the heads were trained against s.adapted_teacher; engine bytes unattributed. Cannot explain a paired delta; absolute numbers are on an unintended backbone."
+        }
+      ],
+      "n_combinations": 9,
+      "n_paired": 9,
+      "verdict": "paired",
+      "reasons": [],
+      "combinations": [
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.distill/formal-20260919T083605Z-r01",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.gt1/formal-20260919T084225Z-r01",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.distill/formal-20260919T083605Z-r01",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.gt1/formal-20260919T084225Z-r02",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.distill/formal-20260919T083605Z-r01",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.gt1/formal-20260919T084225Z-r03",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.distill/formal-20260919T083605Z-r02",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.gt1/formal-20260919T084225Z-r01",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.distill/formal-20260919T083605Z-r02",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.gt1/formal-20260919T084225Z-r02",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.distill/formal-20260919T083605Z-r02",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.gt1/formal-20260919T084225Z-r03",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.distill/formal-20260919T083605Z-r03",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.gt1/formal-20260919T084225Z-r01",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.distill/formal-20260919T083605Z-r03",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.gt1/formal-20260919T084225Z-r02",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.distill/formal-20260919T083605Z-r03",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.gt1/formal-20260919T084225Z-r03",
+          "verdict": "paired",
+          "reasons": []
+        }
+      ],
+      "baseline_row": {
+        "baseline_side": "lhs",
+        "baseline_recipe": "wg:mamba_whole_graph:s.distill",
+        "treatment_recipe": "wg:mamba_whole_graph:s.gt1",
+        "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.distill/formal-20260919T083605Z-r01",
+        "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.gt1/formal-20260919T084225Z-r01",
+        "lhs_identity_sha256": "d60ff54a2a4b9cac21d627eaa3fba7ffe89705541a9ac736ff684afd802325c7",
+        "rhs_identity_sha256": "dc01652b8a89ac0139ef03f8a6b4d85368143dc4783dd40c6860378c71d389d1",
+        "repeat_n": {
+          "lhs": 6,
+          "rhs": 6
+        },
+        "repeat_distinct_outputs_max": {
+          "lhs": 1,
+          "rhs": 1
+        },
+        "metrics": {
+          "AssA": {
+            "lhs": 57.0,
+            "rhs": 67.1,
+            "delta_rhs_minus_lhs": 10.1,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "DetA": {
+            "lhs": 61.7,
+            "rhs": 68.5,
+            "delta_rhs_minus_lhs": 6.8,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "FN": {
+            "lhs": 25446.0,
+            "rhs": 22423.0,
+            "delta_rhs_minus_lhs": -3023.0,
+            "print_precision": 1.0,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "FP": {
+            "lhs": 8157.0,
+            "rhs": 4229.0,
+            "delta_rhs_minus_lhs": -3928.0,
+            "print_precision": 1.0,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "HOTA": {
+            "lhs": 59.2,
+            "rhs": 67.6,
+            "delta_rhs_minus_lhs": 8.4,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "IDF1": {
+            "lhs": 68.1,
+            "rhs": 75.6,
+            "delta_rhs_minus_lhs": 7.5,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "IDs": {
+            "lhs": 622.0,
+            "rhs": 459.0,
+            "delta_rhs_minus_lhs": -163.0,
+            "print_precision": 1.0,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "MOTA": {
+            "lhs": 69.5,
+            "rhs": 75.9,
+            "delta_rhs_minus_lhs": 6.4,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "Prcn": {
+            "lhs": 91.4,
+            "rhs": 95.5,
+            "delta_rhs_minus_lhs": 4.1,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "Rcll": {
+            "lhs": 77.3,
+            "rhs": 80.0,
+            "delta_rhs_minus_lhs": 2.7,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          }
+        },
+        "throughput_fps": {
+          "lhs": 192.79,
+          "rhs": 196.24,
+          "delta_rhs_minus_lhs": 3.45,
+          "print_precision": 0.01,
+          "lhs_observed_range": 1.42,
+          "rhs_observed_range": 1.92,
+          "runtime_repeat_floor": 1.92,
+          "reading": "above_runtime_repeat_range",
+          "lhs_repeat": {
+            "values": [
+              192.99,
+              192.39,
+              192.44,
+              193.27,
+              192.9,
+              193.81
+            ],
+            "min": 192.39,
+            "max": 193.81,
+            "observed_range": 1.42
+          },
+          "rhs_repeat": {
+            "values": [
+              195.01,
+              195.7,
+              194.73,
+              196.32,
+              194.4,
+              195.98
+            ],
+            "min": 194.4,
+            "max": 196.32,
+            "observed_range": 1.92
+          },
+          "lhs_formal": {
+            "values": [
+              192.79,
+              192.91,
+              193.07
+            ],
+            "min": 192.79,
+            "max": 193.07,
+            "observed_range": 0.28
+          },
+          "rhs_formal": {
+            "values": [
+              196.24,
+              195.61,
+              196.53
+            ],
+            "min": 195.61,
+            "max": 196.53,
+            "observed_range": 0.92
+          },
+          "profile": "whole_graph_serial"
+        },
+        "observed_differences": {
+          "artifacts.mamba_ckpt": {
+            "lhs": "6129cb71dd4368a9b58c1de57a9f697a3f9ed564746c8d1a22a59cd447f8f929",
+            "rhs": "ff40f07e9c27826912653c314b845b5c8cb3a1717138d368c433e8d1dad830f5"
+          },
+          "config.mamba_ckpt": {
+            "lhs": "runs/mamba_distill_v14replica/best.ckpt",
+            "rhs": "runs/mamba_gt_v14replica_stage1/best.ckpt"
+          }
+        }
+      }
+    },
+    "B2.s.gt1_to_gt2_plain": {
+      "comparison_id": "B2.s.gt1_to_gt2_plain",
+      "design": "stage_increment",
+      "classification": "controlled",
+      "variance_axis": "treatment",
+      "treatment_axes": [
+        "warm_start",
+        "training_budget",
+        "training_schedule",
+        "teacher_cache"
+      ],
+      "intended_treatment": "plain GT2 stage: gt_ratio 0.5 -> 0.0 on the cache, +30 epochs, everything else as GT1",
+      "lhs_recipe": "wg:mamba_whole_graph:s.gt1",
+      "rhs_recipe": "wg:mamba_whole_graph:s.gt2_plain",
+      "allowed_differences": [
+        "artifacts.mamba_ckpt",
+        "config.mamba_ckpt"
+      ],
+      "remaining_confounds": [
+        {
+          "name": "deployed_backbone_teacher_mismatch",
+          "severity": "common_mode",
+          "detail": "both endpoints deploy on s.backbone_engine whose sibling ONNX indicates s.legacy_teacher while the heads were trained against s.adapted_teacher; engine bytes unattributed. Cannot explain a paired delta; absolute numbers are on an unintended backbone."
+        }
+      ],
+      "n_combinations": 9,
+      "n_paired": 9,
+      "verdict": "paired",
+      "reasons": [],
+      "combinations": [
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.gt1/formal-20260919T084225Z-r01",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.gt2_plain/formal-20260919T084841Z-r01",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.gt1/formal-20260919T084225Z-r01",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.gt2_plain/formal-20260919T084841Z-r02",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.gt1/formal-20260919T084225Z-r01",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.gt2_plain/formal-20260919T084841Z-r03",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.gt1/formal-20260919T084225Z-r02",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.gt2_plain/formal-20260919T084841Z-r01",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.gt1/formal-20260919T084225Z-r02",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.gt2_plain/formal-20260919T084841Z-r02",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.gt1/formal-20260919T084225Z-r02",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.gt2_plain/formal-20260919T084841Z-r03",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.gt1/formal-20260919T084225Z-r03",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.gt2_plain/formal-20260919T084841Z-r01",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.gt1/formal-20260919T084225Z-r03",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.gt2_plain/formal-20260919T084841Z-r02",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.gt1/formal-20260919T084225Z-r03",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.gt2_plain/formal-20260919T084841Z-r03",
+          "verdict": "paired",
+          "reasons": []
+        }
+      ],
+      "baseline_row": {
+        "baseline_side": "lhs",
+        "baseline_recipe": "wg:mamba_whole_graph:s.gt1",
+        "treatment_recipe": "wg:mamba_whole_graph:s.gt2_plain",
+        "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.gt1/formal-20260919T084225Z-r01",
+        "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.gt2_plain/formal-20260919T084841Z-r01",
+        "lhs_identity_sha256": "dc01652b8a89ac0139ef03f8a6b4d85368143dc4783dd40c6860378c71d389d1",
+        "rhs_identity_sha256": "dea276e3f4d049bfe0c21c4968e40076b6944c10945049216230fa61a872fd3f",
+        "repeat_n": {
+          "lhs": 6,
+          "rhs": 6
+        },
+        "repeat_distinct_outputs_max": {
+          "lhs": 1,
+          "rhs": 1
+        },
+        "metrics": {
+          "AssA": {
+            "lhs": 67.1,
+            "rhs": 66.5,
+            "delta_rhs_minus_lhs": -0.6,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "DetA": {
+            "lhs": 68.5,
+            "rhs": 69.7,
+            "delta_rhs_minus_lhs": 1.2,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "FN": {
+            "lhs": 22423.0,
+            "rhs": 20209.0,
+            "delta_rhs_minus_lhs": -2214.0,
+            "print_precision": 1.0,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "FP": {
+            "lhs": 4229.0,
+            "rhs": 4885.0,
+            "delta_rhs_minus_lhs": 656.0,
+            "print_precision": 1.0,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "HOTA": {
+            "lhs": 67.6,
+            "rhs": 67.9,
+            "delta_rhs_minus_lhs": 0.3,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "IDF1": {
+            "lhs": 75.6,
+            "rhs": 75.8,
+            "delta_rhs_minus_lhs": 0.2,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "IDs": {
+            "lhs": 459.0,
+            "rhs": 529.0,
+            "delta_rhs_minus_lhs": 70.0,
+            "print_precision": 1.0,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "MOTA": {
+            "lhs": 75.9,
+            "rhs": 77.2,
+            "delta_rhs_minus_lhs": 1.3,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "Prcn": {
+            "lhs": 95.5,
+            "rhs": 95.0,
+            "delta_rhs_minus_lhs": -0.5,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "Rcll": {
+            "lhs": 80.0,
+            "rhs": 82.0,
+            "delta_rhs_minus_lhs": 2.0,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          }
+        },
+        "throughput_fps": {
+          "lhs": 196.24,
+          "rhs": 197.01,
+          "delta_rhs_minus_lhs": 0.77,
+          "print_precision": 0.01,
+          "lhs_observed_range": 1.92,
+          "rhs_observed_range": 1.09,
+          "runtime_repeat_floor": 1.92,
+          "reading": "within_runtime_repeat_range",
+          "lhs_repeat": {
+            "values": [
+              195.01,
+              195.7,
+              194.73,
+              196.32,
+              194.4,
+              195.98
+            ],
+            "min": 194.4,
+            "max": 196.32,
+            "observed_range": 1.92
+          },
+          "rhs_repeat": {
+            "values": [
+              197.35,
+              196.26,
+              196.74,
+              196.65,
+              196.65,
+              196.59
+            ],
+            "min": 196.26,
+            "max": 197.35,
+            "observed_range": 1.09
+          },
+          "lhs_formal": {
+            "values": [
+              196.24,
+              195.61,
+              196.53
+            ],
+            "min": 195.61,
+            "max": 196.53,
+            "observed_range": 0.92
+          },
+          "rhs_formal": {
+            "values": [
+              197.01,
+              197.29,
+              197.21
+            ],
+            "min": 197.01,
+            "max": 197.29,
+            "observed_range": 0.28
+          },
+          "profile": "whole_graph_serial"
+        },
+        "observed_differences": {
+          "artifacts.mamba_ckpt": {
+            "lhs": "ff40f07e9c27826912653c314b845b5c8cb3a1717138d368c433e8d1dad830f5",
+            "rhs": "c1acd2bb50642a3f4816e517b4165781defc30df6ea97c42bbc23db1d51eb989"
+          },
+          "config.mamba_ckpt": {
+            "lhs": "runs/mamba_gt_v14replica_stage1/best.ckpt",
+            "rhs": "runs/mamba_gt_v14replica_final/best.ckpt"
+          }
+        }
+      }
+    },
+    "B3.m.distill_to_gt1": {
+      "comparison_id": "B3.m.distill_to_gt1",
+      "design": "stage_increment",
+      "classification": "controlled",
+      "variance_axis": "treatment",
+      "treatment_axes": [
+        "warm_start",
+        "training_budget",
+        "training_schedule",
+        "teacher_cache"
+      ],
+      "intended_treatment": "GT1 stage as a bundle (m family)",
+      "lhs_recipe": "wg:mamba_whole_graph_m/ckpt-head:m.distill",
+      "rhs_recipe": "wg:mamba_whole_graph_m/ckpt-head:m.gt1",
+      "allowed_differences": [
+        "artifacts.mamba_ckpt",
+        "config.mamba_ckpt"
+      ],
+      "remaining_confounds": [],
+      "n_combinations": 9,
+      "n_paired": 9,
+      "verdict": "paired",
+      "reasons": [],
+      "combinations": [
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.distill/formal-20260919T085525Z-r01",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.gt1/formal-20260919T090223Z-r01",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.distill/formal-20260919T085525Z-r01",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.gt1/formal-20260919T090223Z-r02",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.distill/formal-20260919T085525Z-r01",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.gt1/formal-20260919T090223Z-r03",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.distill/formal-20260919T085525Z-r02",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.gt1/formal-20260919T090223Z-r01",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.distill/formal-20260919T085525Z-r02",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.gt1/formal-20260919T090223Z-r02",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.distill/formal-20260919T085525Z-r02",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.gt1/formal-20260919T090223Z-r03",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.distill/formal-20260919T085525Z-r03",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.gt1/formal-20260919T090223Z-r01",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.distill/formal-20260919T085525Z-r03",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.gt1/formal-20260919T090223Z-r02",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.distill/formal-20260919T085525Z-r03",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.gt1/formal-20260919T090223Z-r03",
+          "verdict": "paired",
+          "reasons": []
+        }
+      ],
+      "baseline_row": {
+        "baseline_side": "lhs",
+        "baseline_recipe": "wg:mamba_whole_graph_m/ckpt-head:m.distill",
+        "treatment_recipe": "wg:mamba_whole_graph_m/ckpt-head:m.gt1",
+        "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.distill/formal-20260919T085525Z-r01",
+        "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.gt1/formal-20260919T090223Z-r01",
+        "lhs_identity_sha256": "b6bacb199a4c14f7cd8f02f845a28b1dd1e8a34b46657630889708e4afa9ec49",
+        "rhs_identity_sha256": "2a83e5cc8cbe29d5273ffaa67345a740cc33bd6b5a968a87178367773376816d",
+        "repeat_n": {
+          "lhs": 6,
+          "rhs": 6
+        },
+        "repeat_distinct_outputs_max": {
+          "lhs": 1,
+          "rhs": 1
+        },
+        "metrics": {
+          "AssA": {
+            "lhs": 62.4,
+            "rhs": 70.8,
+            "delta_rhs_minus_lhs": 8.4,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "DetA": {
+            "lhs": 66.4,
+            "rhs": 73.5,
+            "delta_rhs_minus_lhs": 7.1,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "FN": {
+            "lhs": 20813.0,
+            "rhs": 19025.0,
+            "delta_rhs_minus_lhs": -1788.0,
+            "print_precision": 1.0,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "FP": {
+            "lhs": 6836.0,
+            "rhs": 2517.0,
+            "delta_rhs_minus_lhs": -4319.0,
+            "print_precision": 1.0,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "HOTA": {
+            "lhs": 64.2,
+            "rhs": 72.0,
+            "delta_rhs_minus_lhs": 7.8,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "IDF1": {
+            "lhs": 72.5,
+            "rhs": 79.1,
+            "delta_rhs_minus_lhs": 6.6,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "IDs": {
+            "lhs": 645.0,
+            "rhs": 353.0,
+            "delta_rhs_minus_lhs": -292.0,
+            "print_precision": 1.0,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "MOTA": {
+            "lhs": 74.8,
+            "rhs": 80.5,
+            "delta_rhs_minus_lhs": 5.7,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "Prcn": {
+            "lhs": 93.0,
+            "rhs": 97.4,
+            "delta_rhs_minus_lhs": 4.4,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "Rcll": {
+            "lhs": 81.5,
+            "rhs": 83.1,
+            "delta_rhs_minus_lhs": 1.6,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          }
+        },
+        "throughput_fps": {
+          "lhs": 168.86,
+          "rhs": 169.97,
+          "delta_rhs_minus_lhs": 1.11,
+          "print_precision": 0.01,
+          "lhs_observed_range": 1.12,
+          "rhs_observed_range": 0.95,
+          "runtime_repeat_floor": 1.12,
+          "reading": "within_runtime_repeat_range",
+          "lhs_repeat": {
+            "values": [
+              169.37,
+              169.06,
+              169.32,
+              169.41,
+              168.66,
+              169.78
+            ],
+            "min": 168.66,
+            "max": 169.78,
+            "observed_range": 1.12
+          },
+          "rhs_repeat": {
+            "values": [
+              170.74,
+              170.31,
+              170.57,
+              170.57,
+              169.93,
+              169.79
+            ],
+            "min": 169.79,
+            "max": 170.74,
+            "observed_range": 0.95
+          },
+          "lhs_formal": {
+            "values": [
+              168.86,
+              168.88,
+              169.8
+            ],
+            "min": 168.86,
+            "max": 169.8,
+            "observed_range": 0.94
+          },
+          "rhs_formal": {
+            "values": [
+              169.97,
+              170.07,
+              170.08
+            ],
+            "min": 169.97,
+            "max": 170.08,
+            "observed_range": 0.11
+          },
+          "profile": "whole_graph_serial"
+        },
+        "observed_differences": {
+          "artifacts.mamba_ckpt": {
+            "lhs": "5bc14397102ee71763b6b260e4f43a79a797f4a3de99e64422dd53597a5ee56c",
+            "rhs": "fb8434556a2a14c84b8f1c6d00bc4734bfb2897d5fbd73e01ddbc110078068de"
+          },
+          "config.mamba_ckpt": {
+            "lhs": "runs/mamba_distill_yolo26m_v14replica/best.ckpt",
+            "rhs": "runs/mamba_gt_yolo26m_v14replica_stage1/best.ckpt"
+          }
+        }
+      }
+    },
+    "B4.m.gt1_to_gt2_plain": {
+      "comparison_id": "B4.m.gt1_to_gt2_plain",
+      "design": "stage_increment",
+      "classification": "controlled",
+      "variance_axis": "treatment",
+      "treatment_axes": [
+        "warm_start",
+        "training_budget",
+        "training_schedule",
+        "teacher_cache"
+      ],
+      "intended_treatment": "plain GT2 stage (m family)",
+      "lhs_recipe": "wg:mamba_whole_graph_m/ckpt-head:m.gt1",
+      "rhs_recipe": "wg:mamba_whole_graph_m/ckpt-head:m.gt2_plain",
+      "allowed_differences": [
+        "artifacts.mamba_ckpt",
+        "config.mamba_ckpt"
+      ],
+      "remaining_confounds": [],
+      "n_combinations": 9,
+      "n_paired": 9,
+      "verdict": "paired",
+      "reasons": [],
+      "combinations": [
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.gt1/formal-20260919T090223Z-r01",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.gt2_plain/formal-20260919T090919Z-r01",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.gt1/formal-20260919T090223Z-r01",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.gt2_plain/formal-20260919T090919Z-r02",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.gt1/formal-20260919T090223Z-r01",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.gt2_plain/formal-20260919T090919Z-r03",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.gt1/formal-20260919T090223Z-r02",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.gt2_plain/formal-20260919T090919Z-r01",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.gt1/formal-20260919T090223Z-r02",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.gt2_plain/formal-20260919T090919Z-r02",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.gt1/formal-20260919T090223Z-r02",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.gt2_plain/formal-20260919T090919Z-r03",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.gt1/formal-20260919T090223Z-r03",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.gt2_plain/formal-20260919T090919Z-r01",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.gt1/formal-20260919T090223Z-r03",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.gt2_plain/formal-20260919T090919Z-r02",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.gt1/formal-20260919T090223Z-r03",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.gt2_plain/formal-20260919T090919Z-r03",
+          "verdict": "paired",
+          "reasons": []
+        }
+      ],
+      "baseline_row": {
+        "baseline_side": "lhs",
+        "baseline_recipe": "wg:mamba_whole_graph_m/ckpt-head:m.gt1",
+        "treatment_recipe": "wg:mamba_whole_graph_m/ckpt-head:m.gt2_plain",
+        "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.gt1/formal-20260919T090223Z-r01",
+        "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.gt2_plain/formal-20260919T090919Z-r01",
+        "lhs_identity_sha256": "2a83e5cc8cbe29d5273ffaa67345a740cc33bd6b5a968a87178367773376816d",
+        "rhs_identity_sha256": "4bf156faee5c0a5c3b45dd9e86ebc03eec10f9ffef2c9c6fbe0fe15bc2fede88",
+        "repeat_n": {
+          "lhs": 6,
+          "rhs": 6
+        },
+        "repeat_distinct_outputs_max": {
+          "lhs": 1,
+          "rhs": 1
+        },
+        "metrics": {
+          "AssA": {
+            "lhs": 70.8,
+            "rhs": 71.3,
+            "delta_rhs_minus_lhs": 0.5,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "DetA": {
+            "lhs": 73.5,
+            "rhs": 74.4,
+            "delta_rhs_minus_lhs": 0.9,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "FN": {
+            "lhs": 19025.0,
+            "rhs": 18087.0,
+            "delta_rhs_minus_lhs": -938.0,
+            "print_precision": 1.0,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "FP": {
+            "lhs": 2517.0,
+            "rhs": 2590.0,
+            "delta_rhs_minus_lhs": 73.0,
+            "print_precision": 1.0,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "HOTA": {
+            "lhs": 72.0,
+            "rhs": 72.8,
+            "delta_rhs_minus_lhs": 0.8,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "IDF1": {
+            "lhs": 79.1,
+            "rhs": 79.8,
+            "delta_rhs_minus_lhs": 0.7,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "IDs": {
+            "lhs": 353.0,
+            "rhs": 368.0,
+            "delta_rhs_minus_lhs": 15.0,
+            "print_precision": 1.0,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "MOTA": {
+            "lhs": 80.5,
+            "rhs": 81.3,
+            "delta_rhs_minus_lhs": 0.8,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "Prcn": {
+            "lhs": 97.4,
+            "rhs": 97.3,
+            "delta_rhs_minus_lhs": -0.1,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "Rcll": {
+            "lhs": 83.1,
+            "rhs": 83.9,
+            "delta_rhs_minus_lhs": 0.8,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          }
+        },
+        "throughput_fps": {
+          "lhs": 169.97,
+          "rhs": 170.13,
+          "delta_rhs_minus_lhs": 0.16,
+          "print_precision": 0.01,
+          "lhs_observed_range": 0.95,
+          "rhs_observed_range": 0.65,
+          "runtime_repeat_floor": 0.95,
+          "reading": "within_runtime_repeat_range",
+          "lhs_repeat": {
+            "values": [
+              170.74,
+              170.31,
+              170.57,
+              170.57,
+              169.93,
+              169.79
+            ],
+            "min": 169.79,
+            "max": 170.74,
+            "observed_range": 0.95
+          },
+          "rhs_repeat": {
+            "values": [
+              170.75,
+              171.28,
+              171.16,
+              170.63,
+              171.06,
+              170.84
+            ],
+            "min": 170.63,
+            "max": 171.28,
+            "observed_range": 0.65
+          },
+          "lhs_formal": {
+            "values": [
+              169.97,
+              170.07,
+              170.08
+            ],
+            "min": 169.97,
+            "max": 170.08,
+            "observed_range": 0.11
+          },
+          "rhs_formal": {
+            "values": [
+              170.13,
+              170.75,
+              170.9
+            ],
+            "min": 170.13,
+            "max": 170.9,
+            "observed_range": 0.77
+          },
+          "profile": "whole_graph_serial"
+        },
+        "observed_differences": {
+          "artifacts.mamba_ckpt": {
+            "lhs": "fb8434556a2a14c84b8f1c6d00bc4734bfb2897d5fbd73e01ddbc110078068de",
+            "rhs": "1960e28f8924e5918c4ee3989abc583a390f63f8257017dcb4cc85fe30b00a84"
+          },
+          "config.mamba_ckpt": {
+            "lhs": "runs/mamba_gt_yolo26m_v14replica_stage1/best.ckpt",
+            "rhs": "runs/mamba_gt_yolo26m_v14replica_final/best.ckpt"
+          }
+        }
+      }
+    },
+    "C1.s.explicit_vs_implicit_shared_gt1_s42": {
+      "comparison_id": "C1.s.explicit_vs_implicit_shared_gt1_s42",
+      "design": "paired_siblings",
+      "classification": "controlled",
+      "variance_axis": "treatment",
+      "treatment_axes": [
+        "training_schedule"
+      ],
+      "intended_treatment": "explicit T3->T1 staging (15 ep T=3 with temporal blocks, then 15 ep T=1) vs implicit all-frames T=4 for 30 ep, from the shared GT1 at seed 42",
+      "lhs_recipe": "wg:mamba_whole_graph:s.implicit_s42",
+      "rhs_recipe": "wg:mamba_whole_graph:s.t3t1_phase_b",
+      "allowed_differences": [
+        "artifacts.mamba_ckpt",
+        "config.mamba_ckpt"
+      ],
+      "remaining_confounds": [
+        {
+          "name": "deployed_backbone_teacher_mismatch",
+          "severity": "common_mode",
+          "detail": "both endpoints deploy on s.backbone_engine whose sibling ONNX indicates s.legacy_teacher while the heads were trained against s.adapted_teacher; engine bytes unattributed. Cannot explain a paired delta; absolute numbers are on an unintended backbone."
+        }
+      ],
+      "n_combinations": 9,
+      "n_paired": 9,
+      "verdict": "paired",
+      "reasons": [],
+      "combinations": [
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s42/formal-20260919T091548Z-r01",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_phase_b/formal-20260919T092203Z-r01",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s42/formal-20260919T091548Z-r01",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_phase_b/formal-20260919T092203Z-r02",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s42/formal-20260919T091548Z-r01",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_phase_b/formal-20260919T092203Z-r03",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s42/formal-20260919T091548Z-r02",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_phase_b/formal-20260919T092203Z-r01",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s42/formal-20260919T091548Z-r02",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_phase_b/formal-20260919T092203Z-r02",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s42/formal-20260919T091548Z-r02",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_phase_b/formal-20260919T092203Z-r03",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s42/formal-20260919T091548Z-r03",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_phase_b/formal-20260919T092203Z-r01",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s42/formal-20260919T091548Z-r03",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_phase_b/formal-20260919T092203Z-r02",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s42/formal-20260919T091548Z-r03",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_phase_b/formal-20260919T092203Z-r03",
+          "verdict": "paired",
+          "reasons": []
+        }
+      ],
+      "baseline_row": {
+        "baseline_side": "lhs",
+        "baseline_recipe": "wg:mamba_whole_graph:s.implicit_s42",
+        "treatment_recipe": "wg:mamba_whole_graph:s.t3t1_phase_b",
+        "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s42/formal-20260919T091548Z-r01",
+        "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_phase_b/formal-20260919T092203Z-r01",
+        "lhs_identity_sha256": "2681e05b082f6b9dcff2939b77a8246583b5a230b00eed6f79d9df539c2f4bd8",
+        "rhs_identity_sha256": "cf7cd3a241c2f5655f767b77c7d7f8b338b75cd68402103ccb176d3920bb4bad",
+        "repeat_n": {
+          "lhs": 6,
+          "rhs": 6
+        },
+        "repeat_distinct_outputs_max": {
+          "lhs": 1,
+          "rhs": 1
+        },
+        "metrics": {
+          "AssA": {
+            "lhs": 67.7,
+            "rhs": 69.9,
+            "delta_rhs_minus_lhs": 2.2,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "DetA": {
+            "lhs": 69.9,
+            "rhs": 70.2,
+            "delta_rhs_minus_lhs": 0.3,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "FN": {
+            "lhs": 20161.0,
+            "rhs": 20940.0,
+            "delta_rhs_minus_lhs": 779.0,
+            "print_precision": 1.0,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "FP": {
+            "lhs": 4246.0,
+            "rhs": 3471.0,
+            "delta_rhs_minus_lhs": -775.0,
+            "print_precision": 1.0,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "HOTA": {
+            "lhs": 68.7,
+            "rhs": 70.0,
+            "delta_rhs_minus_lhs": 1.3,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "IDF1": {
+            "lhs": 76.7,
+            "rhs": 78.3,
+            "delta_rhs_minus_lhs": 1.6,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "IDs": {
+            "lhs": 512.0,
+            "rhs": 429.0,
+            "delta_rhs_minus_lhs": -83.0,
+            "print_precision": 1.0,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "MOTA": {
+            "lhs": 77.8,
+            "rhs": 77.9,
+            "delta_rhs_minus_lhs": 0.1,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "Prcn": {
+            "lhs": 95.6,
+            "rhs": 96.3,
+            "delta_rhs_minus_lhs": 0.7,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "Rcll": {
+            "lhs": 82.0,
+            "rhs": 81.4,
+            "delta_rhs_minus_lhs": -0.6,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          }
+        },
+        "throughput_fps": {
+          "lhs": 197.51,
+          "rhs": 196.84,
+          "delta_rhs_minus_lhs": -0.67,
+          "print_precision": 0.01,
+          "lhs_observed_range": 2.05,
+          "rhs_observed_range": 0.78,
+          "runtime_repeat_floor": 2.05,
+          "reading": "within_runtime_repeat_range",
+          "lhs_repeat": {
+            "values": [
+              196.71,
+              197.4,
+              197.04,
+              196.4,
+              198.05,
+              196.0
+            ],
+            "min": 196.0,
+            "max": 198.05,
+            "observed_range": 2.05
+          },
+          "rhs_repeat": {
+            "values": [
+              197.74,
+              197.22,
+              197.66,
+              196.96,
+              197.66,
+              197.26
+            ],
+            "min": 196.96,
+            "max": 197.74,
+            "observed_range": 0.78
+          },
+          "lhs_formal": {
+            "values": [
+              197.51,
+              197.18,
+              196.49
+            ],
+            "min": 196.49,
+            "max": 197.51,
+            "observed_range": 1.02
+          },
+          "rhs_formal": {
+            "values": [
+              196.84,
+              196.69,
+              197.77
+            ],
+            "min": 196.69,
+            "max": 197.77,
+            "observed_range": 1.08
+          },
+          "profile": "whole_graph_serial"
+        },
+        "observed_differences": {
+          "artifacts.mamba_ckpt": {
+            "lhs": "be8ef8612aca1a8f7636d0cfd24a0ebda919fc58730fa88bc5b5a9ba50e5419f",
+            "rhs": "c161c88e50b894d8b51cc614c46c3700370373decf05a15825bdf00ccf0e0876"
+          },
+          "config.mamba_ckpt": {
+            "lhs": "runs/mamba_gt_v14replica_implicit_s42/best.ckpt",
+            "rhs": "runs/mamba_gt_v14replica_t3_t1/best.ckpt"
+          }
+        }
+      }
+    },
+    "C2.s.explicit_vs_implicit_shared_gt1_s43": {
+      "comparison_id": "C2.s.explicit_vs_implicit_shared_gt1_s43",
+      "design": "paired_siblings",
+      "classification": "controlled",
+      "variance_axis": "treatment",
+      "treatment_axes": [
+        "training_schedule"
+      ],
+      "intended_treatment": "explicit T3->T1 staging vs implicit all-frames T=4, shared GT1, seed 43",
+      "lhs_recipe": "wg:mamba_whole_graph:s.implicit_s43",
+      "rhs_recipe": "wg:mamba_whole_graph:s.t3t1_shared_s43",
+      "allowed_differences": [
+        "artifacts.mamba_ckpt",
+        "config.mamba_ckpt"
+      ],
+      "remaining_confounds": [
+        {
+          "name": "deployed_backbone_teacher_mismatch",
+          "severity": "common_mode",
+          "detail": "both endpoints deploy on s.backbone_engine whose sibling ONNX indicates s.legacy_teacher while the heads were trained against s.adapted_teacher; engine bytes unattributed. Cannot explain a paired delta; absolute numbers are on an unintended backbone."
+        }
+      ],
+      "n_combinations": 9,
+      "n_paired": 9,
+      "verdict": "paired",
+      "reasons": [],
+      "combinations": [
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s43/formal-20260919T092819Z-r01",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s43/formal-20260919T093436Z-r01",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s43/formal-20260919T092819Z-r01",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s43/formal-20260919T093436Z-r02",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s43/formal-20260919T092819Z-r01",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s43/formal-20260919T093436Z-r03",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s43/formal-20260919T092819Z-r02",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s43/formal-20260919T093436Z-r01",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s43/formal-20260919T092819Z-r02",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s43/formal-20260919T093436Z-r02",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s43/formal-20260919T092819Z-r02",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s43/formal-20260919T093436Z-r03",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s43/formal-20260919T092819Z-r03",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s43/formal-20260919T093436Z-r01",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s43/formal-20260919T092819Z-r03",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s43/formal-20260919T093436Z-r02",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s43/formal-20260919T092819Z-r03",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s43/formal-20260919T093436Z-r03",
+          "verdict": "paired",
+          "reasons": []
+        }
+      ],
+      "baseline_row": {
+        "baseline_side": "lhs",
+        "baseline_recipe": "wg:mamba_whole_graph:s.implicit_s43",
+        "treatment_recipe": "wg:mamba_whole_graph:s.t3t1_shared_s43",
+        "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s43/formal-20260919T092819Z-r01",
+        "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s43/formal-20260919T093436Z-r01",
+        "lhs_identity_sha256": "d1c343ec872ef43b733707abbfa2ab040cbd776b78a3bf7f6ce04c3b50746644",
+        "rhs_identity_sha256": "2be797390e12e8efc1bf90e392f47a00f2ce586d11694a077179f7c65ded9d6c",
+        "repeat_n": {
+          "lhs": 6,
+          "rhs": 6
+        },
+        "repeat_distinct_outputs_max": {
+          "lhs": 1,
+          "rhs": 1
+        },
+        "metrics": {
+          "AssA": {
+            "lhs": 68.5,
+            "rhs": 69.0,
+            "delta_rhs_minus_lhs": 0.5,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "DetA": {
+            "lhs": 69.7,
+            "rhs": 70.6,
+            "delta_rhs_minus_lhs": 0.9,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "FN": {
+            "lhs": 19797.0,
+            "rhs": 20953.0,
+            "delta_rhs_minus_lhs": 1156.0,
+            "print_precision": 1.0,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "FP": {
+            "lhs": 5004.0,
+            "rhs": 3035.0,
+            "delta_rhs_minus_lhs": -1969.0,
+            "print_precision": 1.0,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "HOTA": {
+            "lhs": 68.9,
+            "rhs": 69.7,
+            "delta_rhs_minus_lhs": 0.8,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "IDF1": {
+            "lhs": 76.9,
+            "rhs": 78.3,
+            "delta_rhs_minus_lhs": 1.4,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "IDs": {
+            "lhs": 539.0,
+            "rhs": 420.0,
+            "delta_rhs_minus_lhs": -119.0,
+            "print_precision": 1.0,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "MOTA": {
+            "lhs": 77.4,
+            "rhs": 78.3,
+            "delta_rhs_minus_lhs": 0.9,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "Prcn": {
+            "lhs": 94.9,
+            "rhs": 96.8,
+            "delta_rhs_minus_lhs": 1.9,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "Rcll": {
+            "lhs": 82.4,
+            "rhs": 81.3,
+            "delta_rhs_minus_lhs": -1.1,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          }
+        },
+        "throughput_fps": {
+          "lhs": 196.26,
+          "rhs": 197.29,
+          "delta_rhs_minus_lhs": 1.03,
+          "print_precision": 0.01,
+          "lhs_observed_range": 2.27,
+          "rhs_observed_range": 0.9,
+          "runtime_repeat_floor": 2.27,
+          "reading": "within_runtime_repeat_range",
+          "lhs_repeat": {
+            "values": [
+              197.5,
+              196.47,
+              195.23,
+              196.83,
+              196.68,
+              196.3
+            ],
+            "min": 195.23,
+            "max": 197.5,
+            "observed_range": 2.27
+          },
+          "rhs_repeat": {
+            "values": [
+              197.51,
+              197.19,
+              197.72,
+              197.55,
+              196.82,
+              197.05
+            ],
+            "min": 196.82,
+            "max": 197.72,
+            "observed_range": 0.9
+          },
+          "lhs_formal": {
+            "values": [
+              196.26,
+              195.52,
+              196.91
+            ],
+            "min": 195.52,
+            "max": 196.91,
+            "observed_range": 1.39
+          },
+          "rhs_formal": {
+            "values": [
+              197.29,
+              196.91,
+              197.27
+            ],
+            "min": 196.91,
+            "max": 197.29,
+            "observed_range": 0.38
+          },
+          "profile": "whole_graph_serial"
+        },
+        "observed_differences": {
+          "artifacts.mamba_ckpt": {
+            "lhs": "57ad6750f003f4a48231a38fe0abddd49b042f8d011427e30c5ca13d382fa7fe",
+            "rhs": "b6f9f7e6222b76a52a4fc1f22ea85150e5b4af01414bbc65656a12f66da95f74"
+          },
+          "config.mamba_ckpt": {
+            "lhs": "runs/mamba_gt_v14replica_implicit_s43/best.ckpt",
+            "rhs": "runs/mamba_gt_v14replica_t3_t1_shared_s43/best.ckpt"
+          }
+        }
+      }
+    },
+    "C3.s.explicit_vs_implicit_shared_gt1_s44": {
+      "comparison_id": "C3.s.explicit_vs_implicit_shared_gt1_s44",
+      "design": "paired_siblings",
+      "classification": "controlled",
+      "variance_axis": "treatment",
+      "treatment_axes": [
+        "training_schedule"
+      ],
+      "intended_treatment": "explicit T3->T1 staging vs implicit all-frames T=4, shared GT1, seed 44",
+      "lhs_recipe": "wg:mamba_whole_graph:s.implicit_s44",
+      "rhs_recipe": "wg:mamba_whole_graph:s.t3t1_shared_s44",
+      "allowed_differences": [
+        "artifacts.mamba_ckpt",
+        "config.mamba_ckpt"
+      ],
+      "remaining_confounds": [
+        {
+          "name": "deployed_backbone_teacher_mismatch",
+          "severity": "common_mode",
+          "detail": "both endpoints deploy on s.backbone_engine whose sibling ONNX indicates s.legacy_teacher while the heads were trained against s.adapted_teacher; engine bytes unattributed. Cannot explain a paired delta; absolute numbers are on an unintended backbone."
+        }
+      ],
+      "n_combinations": 9,
+      "n_paired": 9,
+      "verdict": "paired",
+      "reasons": [],
+      "combinations": [
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s44/formal-20260919T094052Z-r01",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s44/formal-20260919T094707Z-r01",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s44/formal-20260919T094052Z-r01",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s44/formal-20260919T094707Z-r02",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s44/formal-20260919T094052Z-r01",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s44/formal-20260919T094707Z-r03",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s44/formal-20260919T094052Z-r02",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s44/formal-20260919T094707Z-r01",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s44/formal-20260919T094052Z-r02",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s44/formal-20260919T094707Z-r02",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s44/formal-20260919T094052Z-r02",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s44/formal-20260919T094707Z-r03",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s44/formal-20260919T094052Z-r03",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s44/formal-20260919T094707Z-r01",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s44/formal-20260919T094052Z-r03",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s44/formal-20260919T094707Z-r02",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s44/formal-20260919T094052Z-r03",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s44/formal-20260919T094707Z-r03",
+          "verdict": "paired",
+          "reasons": []
+        }
+      ],
+      "baseline_row": {
+        "baseline_side": "lhs",
+        "baseline_recipe": "wg:mamba_whole_graph:s.implicit_s44",
+        "treatment_recipe": "wg:mamba_whole_graph:s.t3t1_shared_s44",
+        "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s44/formal-20260919T094052Z-r01",
+        "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s44/formal-20260919T094707Z-r01",
+        "lhs_identity_sha256": "cc62fed75cd22a64d3c299af1666cc29c891aa04eb12109045fc1f7b3113c098",
+        "rhs_identity_sha256": "31c1f3e42837904ea3624a4751576200c6dfa87243fb86d9e73fa81565d612f3",
+        "repeat_n": {
+          "lhs": 6,
+          "rhs": 6
+        },
+        "repeat_distinct_outputs_max": {
+          "lhs": 1,
+          "rhs": 1
+        },
+        "metrics": {
+          "AssA": {
+            "lhs": 67.6,
+            "rhs": 68.7,
+            "delta_rhs_minus_lhs": 1.1,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "DetA": {
+            "lhs": 69.9,
+            "rhs": 70.7,
+            "delta_rhs_minus_lhs": 0.8,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "FN": {
+            "lhs": 20025.0,
+            "rhs": 20691.0,
+            "delta_rhs_minus_lhs": 666.0,
+            "print_precision": 1.0,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "FP": {
+            "lhs": 4510.0,
+            "rhs": 3204.0,
+            "delta_rhs_minus_lhs": -1306.0,
+            "print_precision": 1.0,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "HOTA": {
+            "lhs": 68.6,
+            "rhs": 69.6,
+            "delta_rhs_minus_lhs": 1.0,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "IDF1": {
+            "lhs": 76.5,
+            "rhs": 77.9,
+            "delta_rhs_minus_lhs": 1.4,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "IDs": {
+            "lhs": 525.0,
+            "rhs": 427.0,
+            "delta_rhs_minus_lhs": -98.0,
+            "print_precision": 1.0,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "MOTA": {
+            "lhs": 77.7,
+            "rhs": 78.3,
+            "delta_rhs_minus_lhs": 0.6,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "Prcn": {
+            "lhs": 95.3,
+            "rhs": 96.6,
+            "delta_rhs_minus_lhs": 1.3,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "Rcll": {
+            "lhs": 82.2,
+            "rhs": 81.6,
+            "delta_rhs_minus_lhs": -0.6,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          }
+        },
+        "throughput_fps": {
+          "lhs": 196.16,
+          "rhs": 196.17,
+          "delta_rhs_minus_lhs": 0.01,
+          "print_precision": 0.01,
+          "lhs_observed_range": 1.11,
+          "rhs_observed_range": 1.24,
+          "runtime_repeat_floor": 1.24,
+          "reading": "within_runtime_repeat_range",
+          "lhs_repeat": {
+            "values": [
+              196.61,
+              197.35,
+              196.57,
+              196.62,
+              196.24,
+              196.69
+            ],
+            "min": 196.24,
+            "max": 197.35,
+            "observed_range": 1.11
+          },
+          "rhs_repeat": {
+            "values": [
+              197.75,
+              197.84,
+              197.24,
+              196.6,
+              197.29,
+              197.1
+            ],
+            "min": 196.6,
+            "max": 197.84,
+            "observed_range": 1.24
+          },
+          "lhs_formal": {
+            "values": [
+              196.16,
+              196.64,
+              197.54
+            ],
+            "min": 196.16,
+            "max": 197.54,
+            "observed_range": 1.38
+          },
+          "rhs_formal": {
+            "values": [
+              196.17,
+              197.72,
+              196.76
+            ],
+            "min": 196.17,
+            "max": 197.72,
+            "observed_range": 1.55
+          },
+          "profile": "whole_graph_serial"
+        },
+        "observed_differences": {
+          "artifacts.mamba_ckpt": {
+            "lhs": "a15ca3fdde8e0ef6a4f83e118c3a16fba1a81c0c5c44c4af3ce86bb72ddf4a1c",
+            "rhs": "d540887b48ae8e425809428ef5be4e87e99defc36c6e952039487f43c5220ac1"
+          },
+          "config.mamba_ckpt": {
+            "lhs": "runs/mamba_gt_v14replica_implicit_s44/best.ckpt",
+            "rhs": "runs/mamba_gt_v14replica_t3_t1_shared_s44/best.ckpt"
+          }
+        }
+      }
+    },
+    "D1.s.implicit_seed_42_vs_43": {
+      "comparison_id": "D1.s.implicit_seed_42_vs_43",
+      "design": "seed_replicate",
+      "classification": "controlled",
+      "variance_axis": "training_seed",
+      "treatment_axes": [
+        "training_seed"
+      ],
+      "intended_treatment": "training seed only (implicit all-frames arm)",
+      "lhs_recipe": "wg:mamba_whole_graph:s.implicit_s42",
+      "rhs_recipe": "wg:mamba_whole_graph:s.implicit_s43",
+      "allowed_differences": [
+        "artifacts.mamba_ckpt",
+        "config.mamba_ckpt"
+      ],
+      "remaining_confounds": [
+        {
+          "name": "deployed_backbone_teacher_mismatch",
+          "severity": "common_mode",
+          "detail": "both endpoints deploy on s.backbone_engine whose sibling ONNX indicates s.legacy_teacher while the heads were trained against s.adapted_teacher; engine bytes unattributed. Cannot explain a paired delta; absolute numbers are on an unintended backbone."
+        }
+      ],
+      "n_combinations": 9,
+      "n_paired": 9,
+      "verdict": "paired",
+      "reasons": [],
+      "combinations": [
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s42/formal-20260919T091548Z-r01",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s43/formal-20260919T092819Z-r01",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s42/formal-20260919T091548Z-r01",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s43/formal-20260919T092819Z-r02",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s42/formal-20260919T091548Z-r01",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s43/formal-20260919T092819Z-r03",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s42/formal-20260919T091548Z-r02",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s43/formal-20260919T092819Z-r01",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s42/formal-20260919T091548Z-r02",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s43/formal-20260919T092819Z-r02",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s42/formal-20260919T091548Z-r02",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s43/formal-20260919T092819Z-r03",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s42/formal-20260919T091548Z-r03",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s43/formal-20260919T092819Z-r01",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s42/formal-20260919T091548Z-r03",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s43/formal-20260919T092819Z-r02",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s42/formal-20260919T091548Z-r03",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s43/formal-20260919T092819Z-r03",
+          "verdict": "paired",
+          "reasons": []
+        }
+      ],
+      "baseline_row": {
+        "baseline_side": "lhs",
+        "baseline_recipe": "wg:mamba_whole_graph:s.implicit_s42",
+        "treatment_recipe": "wg:mamba_whole_graph:s.implicit_s43",
+        "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s42/formal-20260919T091548Z-r01",
+        "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s43/formal-20260919T092819Z-r01",
+        "lhs_identity_sha256": "2681e05b082f6b9dcff2939b77a8246583b5a230b00eed6f79d9df539c2f4bd8",
+        "rhs_identity_sha256": "d1c343ec872ef43b733707abbfa2ab040cbd776b78a3bf7f6ce04c3b50746644",
+        "repeat_n": {
+          "lhs": 6,
+          "rhs": 6
+        },
+        "repeat_distinct_outputs_max": {
+          "lhs": 1,
+          "rhs": 1
+        },
+        "metrics": {
+          "AssA": {
+            "lhs": 67.7,
+            "rhs": 68.5,
+            "delta_rhs_minus_lhs": 0.8,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "DetA": {
+            "lhs": 69.9,
+            "rhs": 69.7,
+            "delta_rhs_minus_lhs": -0.2,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "FN": {
+            "lhs": 20161.0,
+            "rhs": 19797.0,
+            "delta_rhs_minus_lhs": -364.0,
+            "print_precision": 1.0,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "FP": {
+            "lhs": 4246.0,
+            "rhs": 5004.0,
+            "delta_rhs_minus_lhs": 758.0,
+            "print_precision": 1.0,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "HOTA": {
+            "lhs": 68.7,
+            "rhs": 68.9,
+            "delta_rhs_minus_lhs": 0.2,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "IDF1": {
+            "lhs": 76.7,
+            "rhs": 76.9,
+            "delta_rhs_minus_lhs": 0.2,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "IDs": {
+            "lhs": 512.0,
+            "rhs": 539.0,
+            "delta_rhs_minus_lhs": 27.0,
+            "print_precision": 1.0,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "MOTA": {
+            "lhs": 77.8,
+            "rhs": 77.4,
+            "delta_rhs_minus_lhs": -0.4,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "Prcn": {
+            "lhs": 95.6,
+            "rhs": 94.9,
+            "delta_rhs_minus_lhs": -0.7,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "Rcll": {
+            "lhs": 82.0,
+            "rhs": 82.4,
+            "delta_rhs_minus_lhs": 0.4,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          }
+        },
+        "throughput_fps": {
+          "lhs": 197.51,
+          "rhs": 196.26,
+          "delta_rhs_minus_lhs": -1.25,
+          "print_precision": 0.01,
+          "lhs_observed_range": 2.05,
+          "rhs_observed_range": 2.27,
+          "runtime_repeat_floor": 2.27,
+          "reading": "within_runtime_repeat_range",
+          "lhs_repeat": {
+            "values": [
+              196.71,
+              197.4,
+              197.04,
+              196.4,
+              198.05,
+              196.0
+            ],
+            "min": 196.0,
+            "max": 198.05,
+            "observed_range": 2.05
+          },
+          "rhs_repeat": {
+            "values": [
+              197.5,
+              196.47,
+              195.23,
+              196.83,
+              196.68,
+              196.3
+            ],
+            "min": 195.23,
+            "max": 197.5,
+            "observed_range": 2.27
+          },
+          "lhs_formal": {
+            "values": [
+              197.51,
+              197.18,
+              196.49
+            ],
+            "min": 196.49,
+            "max": 197.51,
+            "observed_range": 1.02
+          },
+          "rhs_formal": {
+            "values": [
+              196.26,
+              195.52,
+              196.91
+            ],
+            "min": 195.52,
+            "max": 196.91,
+            "observed_range": 1.39
+          },
+          "profile": "whole_graph_serial"
+        },
+        "observed_differences": {
+          "artifacts.mamba_ckpt": {
+            "lhs": "be8ef8612aca1a8f7636d0cfd24a0ebda919fc58730fa88bc5b5a9ba50e5419f",
+            "rhs": "57ad6750f003f4a48231a38fe0abddd49b042f8d011427e30c5ca13d382fa7fe"
+          },
+          "config.mamba_ckpt": {
+            "lhs": "runs/mamba_gt_v14replica_implicit_s42/best.ckpt",
+            "rhs": "runs/mamba_gt_v14replica_implicit_s43/best.ckpt"
+          }
+        }
+      }
+    },
+    "D2.s.implicit_seed_43_vs_44": {
+      "comparison_id": "D2.s.implicit_seed_43_vs_44",
+      "design": "seed_replicate",
+      "classification": "controlled",
+      "variance_axis": "training_seed",
+      "treatment_axes": [
+        "training_seed"
+      ],
+      "intended_treatment": "training seed only (implicit all-frames arm)",
+      "lhs_recipe": "wg:mamba_whole_graph:s.implicit_s43",
+      "rhs_recipe": "wg:mamba_whole_graph:s.implicit_s44",
+      "allowed_differences": [
+        "artifacts.mamba_ckpt",
+        "config.mamba_ckpt"
+      ],
+      "remaining_confounds": [
+        {
+          "name": "deployed_backbone_teacher_mismatch",
+          "severity": "common_mode",
+          "detail": "both endpoints deploy on s.backbone_engine whose sibling ONNX indicates s.legacy_teacher while the heads were trained against s.adapted_teacher; engine bytes unattributed. Cannot explain a paired delta; absolute numbers are on an unintended backbone."
+        }
+      ],
+      "n_combinations": 9,
+      "n_paired": 9,
+      "verdict": "paired",
+      "reasons": [],
+      "combinations": [
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s43/formal-20260919T092819Z-r01",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s44/formal-20260919T094052Z-r01",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s43/formal-20260919T092819Z-r01",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s44/formal-20260919T094052Z-r02",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s43/formal-20260919T092819Z-r01",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s44/formal-20260919T094052Z-r03",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s43/formal-20260919T092819Z-r02",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s44/formal-20260919T094052Z-r01",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s43/formal-20260919T092819Z-r02",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s44/formal-20260919T094052Z-r02",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s43/formal-20260919T092819Z-r02",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s44/formal-20260919T094052Z-r03",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s43/formal-20260919T092819Z-r03",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s44/formal-20260919T094052Z-r01",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s43/formal-20260919T092819Z-r03",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s44/formal-20260919T094052Z-r02",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s43/formal-20260919T092819Z-r03",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s44/formal-20260919T094052Z-r03",
+          "verdict": "paired",
+          "reasons": []
+        }
+      ],
+      "baseline_row": {
+        "baseline_side": "lhs",
+        "baseline_recipe": "wg:mamba_whole_graph:s.implicit_s43",
+        "treatment_recipe": "wg:mamba_whole_graph:s.implicit_s44",
+        "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s43/formal-20260919T092819Z-r01",
+        "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.implicit_s44/formal-20260919T094052Z-r01",
+        "lhs_identity_sha256": "d1c343ec872ef43b733707abbfa2ab040cbd776b78a3bf7f6ce04c3b50746644",
+        "rhs_identity_sha256": "cc62fed75cd22a64d3c299af1666cc29c891aa04eb12109045fc1f7b3113c098",
+        "repeat_n": {
+          "lhs": 6,
+          "rhs": 6
+        },
+        "repeat_distinct_outputs_max": {
+          "lhs": 1,
+          "rhs": 1
+        },
+        "metrics": {
+          "AssA": {
+            "lhs": 68.5,
+            "rhs": 67.6,
+            "delta_rhs_minus_lhs": -0.9,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "DetA": {
+            "lhs": 69.7,
+            "rhs": 69.9,
+            "delta_rhs_minus_lhs": 0.2,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "FN": {
+            "lhs": 19797.0,
+            "rhs": 20025.0,
+            "delta_rhs_minus_lhs": 228.0,
+            "print_precision": 1.0,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "FP": {
+            "lhs": 5004.0,
+            "rhs": 4510.0,
+            "delta_rhs_minus_lhs": -494.0,
+            "print_precision": 1.0,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "HOTA": {
+            "lhs": 68.9,
+            "rhs": 68.6,
+            "delta_rhs_minus_lhs": -0.3,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "IDF1": {
+            "lhs": 76.9,
+            "rhs": 76.5,
+            "delta_rhs_minus_lhs": -0.4,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "IDs": {
+            "lhs": 539.0,
+            "rhs": 525.0,
+            "delta_rhs_minus_lhs": -14.0,
+            "print_precision": 1.0,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "MOTA": {
+            "lhs": 77.4,
+            "rhs": 77.7,
+            "delta_rhs_minus_lhs": 0.3,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "Prcn": {
+            "lhs": 94.9,
+            "rhs": 95.3,
+            "delta_rhs_minus_lhs": 0.4,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "Rcll": {
+            "lhs": 82.4,
+            "rhs": 82.2,
+            "delta_rhs_minus_lhs": -0.2,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          }
+        },
+        "throughput_fps": {
+          "lhs": 196.26,
+          "rhs": 196.16,
+          "delta_rhs_minus_lhs": -0.1,
+          "print_precision": 0.01,
+          "lhs_observed_range": 2.27,
+          "rhs_observed_range": 1.11,
+          "runtime_repeat_floor": 2.27,
+          "reading": "within_runtime_repeat_range",
+          "lhs_repeat": {
+            "values": [
+              197.5,
+              196.47,
+              195.23,
+              196.83,
+              196.68,
+              196.3
+            ],
+            "min": 195.23,
+            "max": 197.5,
+            "observed_range": 2.27
+          },
+          "rhs_repeat": {
+            "values": [
+              196.61,
+              197.35,
+              196.57,
+              196.62,
+              196.24,
+              196.69
+            ],
+            "min": 196.24,
+            "max": 197.35,
+            "observed_range": 1.11
+          },
+          "lhs_formal": {
+            "values": [
+              196.26,
+              195.52,
+              196.91
+            ],
+            "min": 195.52,
+            "max": 196.91,
+            "observed_range": 1.39
+          },
+          "rhs_formal": {
+            "values": [
+              196.16,
+              196.64,
+              197.54
+            ],
+            "min": 196.16,
+            "max": 197.54,
+            "observed_range": 1.38
+          },
+          "profile": "whole_graph_serial"
+        },
+        "observed_differences": {
+          "artifacts.mamba_ckpt": {
+            "lhs": "57ad6750f003f4a48231a38fe0abddd49b042f8d011427e30c5ca13d382fa7fe",
+            "rhs": "a15ca3fdde8e0ef6a4f83e118c3a16fba1a81c0c5c44c4af3ce86bb72ddf4a1c"
+          },
+          "config.mamba_ckpt": {
+            "lhs": "runs/mamba_gt_v14replica_implicit_s43/best.ckpt",
+            "rhs": "runs/mamba_gt_v14replica_implicit_s44/best.ckpt"
+          }
+        }
+      }
+    },
+    "D3.s.explicit_shared_seed_42_vs_43": {
+      "comparison_id": "D3.s.explicit_shared_seed_42_vs_43",
+      "design": "seed_replicate",
+      "classification": "controlled",
+      "variance_axis": "training_seed",
+      "treatment_axes": [
+        "training_seed"
+      ],
+      "intended_treatment": "training seed only (explicit T3->T1 arm from the shared GT1)",
+      "lhs_recipe": "wg:mamba_whole_graph:s.t3t1_phase_b",
+      "rhs_recipe": "wg:mamba_whole_graph:s.t3t1_shared_s43",
+      "allowed_differences": [
+        "artifacts.mamba_ckpt",
+        "config.mamba_ckpt"
+      ],
+      "remaining_confounds": [
+        {
+          "name": "deployed_backbone_teacher_mismatch",
+          "severity": "common_mode",
+          "detail": "both endpoints deploy on s.backbone_engine whose sibling ONNX indicates s.legacy_teacher while the heads were trained against s.adapted_teacher; engine bytes unattributed. Cannot explain a paired delta; absolute numbers are on an unintended backbone."
+        }
+      ],
+      "n_combinations": 9,
+      "n_paired": 9,
+      "verdict": "paired",
+      "reasons": [],
+      "combinations": [
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_phase_b/formal-20260919T092203Z-r01",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s43/formal-20260919T093436Z-r01",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_phase_b/formal-20260919T092203Z-r01",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s43/formal-20260919T093436Z-r02",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_phase_b/formal-20260919T092203Z-r01",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s43/formal-20260919T093436Z-r03",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_phase_b/formal-20260919T092203Z-r02",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s43/formal-20260919T093436Z-r01",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_phase_b/formal-20260919T092203Z-r02",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s43/formal-20260919T093436Z-r02",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_phase_b/formal-20260919T092203Z-r02",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s43/formal-20260919T093436Z-r03",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_phase_b/formal-20260919T092203Z-r03",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s43/formal-20260919T093436Z-r01",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_phase_b/formal-20260919T092203Z-r03",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s43/formal-20260919T093436Z-r02",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_phase_b/formal-20260919T092203Z-r03",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s43/formal-20260919T093436Z-r03",
+          "verdict": "paired",
+          "reasons": []
+        }
+      ],
+      "baseline_row": {
+        "baseline_side": "lhs",
+        "baseline_recipe": "wg:mamba_whole_graph:s.t3t1_phase_b",
+        "treatment_recipe": "wg:mamba_whole_graph:s.t3t1_shared_s43",
+        "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_phase_b/formal-20260919T092203Z-r01",
+        "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s43/formal-20260919T093436Z-r01",
+        "lhs_identity_sha256": "cf7cd3a241c2f5655f767b77c7d7f8b338b75cd68402103ccb176d3920bb4bad",
+        "rhs_identity_sha256": "2be797390e12e8efc1bf90e392f47a00f2ce586d11694a077179f7c65ded9d6c",
+        "repeat_n": {
+          "lhs": 6,
+          "rhs": 6
+        },
+        "repeat_distinct_outputs_max": {
+          "lhs": 1,
+          "rhs": 1
+        },
+        "metrics": {
+          "AssA": {
+            "lhs": 69.9,
+            "rhs": 69.0,
+            "delta_rhs_minus_lhs": -0.9,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "DetA": {
+            "lhs": 70.2,
+            "rhs": 70.6,
+            "delta_rhs_minus_lhs": 0.4,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "FN": {
+            "lhs": 20940.0,
+            "rhs": 20953.0,
+            "delta_rhs_minus_lhs": 13.0,
+            "print_precision": 1.0,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "FP": {
+            "lhs": 3471.0,
+            "rhs": 3035.0,
+            "delta_rhs_minus_lhs": -436.0,
+            "print_precision": 1.0,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "HOTA": {
+            "lhs": 70.0,
+            "rhs": 69.7,
+            "delta_rhs_minus_lhs": -0.3,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "IDF1": {
+            "lhs": 78.3,
+            "rhs": 78.3,
+            "delta_rhs_minus_lhs": 0.0,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "no_observed_difference"
+          },
+          "IDs": {
+            "lhs": 429.0,
+            "rhs": 420.0,
+            "delta_rhs_minus_lhs": -9.0,
+            "print_precision": 1.0,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "MOTA": {
+            "lhs": 77.9,
+            "rhs": 78.3,
+            "delta_rhs_minus_lhs": 0.4,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "Prcn": {
+            "lhs": 96.3,
+            "rhs": 96.8,
+            "delta_rhs_minus_lhs": 0.5,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "Rcll": {
+            "lhs": 81.4,
+            "rhs": 81.3,
+            "delta_rhs_minus_lhs": -0.1,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          }
+        },
+        "throughput_fps": {
+          "lhs": 196.84,
+          "rhs": 197.29,
+          "delta_rhs_minus_lhs": 0.45,
+          "print_precision": 0.01,
+          "lhs_observed_range": 0.78,
+          "rhs_observed_range": 0.9,
+          "runtime_repeat_floor": 0.9,
+          "reading": "within_runtime_repeat_range",
+          "lhs_repeat": {
+            "values": [
+              197.74,
+              197.22,
+              197.66,
+              196.96,
+              197.66,
+              197.26
+            ],
+            "min": 196.96,
+            "max": 197.74,
+            "observed_range": 0.78
+          },
+          "rhs_repeat": {
+            "values": [
+              197.51,
+              197.19,
+              197.72,
+              197.55,
+              196.82,
+              197.05
+            ],
+            "min": 196.82,
+            "max": 197.72,
+            "observed_range": 0.9
+          },
+          "lhs_formal": {
+            "values": [
+              196.84,
+              196.69,
+              197.77
+            ],
+            "min": 196.69,
+            "max": 197.77,
+            "observed_range": 1.08
+          },
+          "rhs_formal": {
+            "values": [
+              197.29,
+              196.91,
+              197.27
+            ],
+            "min": 196.91,
+            "max": 197.29,
+            "observed_range": 0.38
+          },
+          "profile": "whole_graph_serial"
+        },
+        "observed_differences": {
+          "artifacts.mamba_ckpt": {
+            "lhs": "c161c88e50b894d8b51cc614c46c3700370373decf05a15825bdf00ccf0e0876",
+            "rhs": "b6f9f7e6222b76a52a4fc1f22ea85150e5b4af01414bbc65656a12f66da95f74"
+          },
+          "config.mamba_ckpt": {
+            "lhs": "runs/mamba_gt_v14replica_t3_t1/best.ckpt",
+            "rhs": "runs/mamba_gt_v14replica_t3_t1_shared_s43/best.ckpt"
+          }
+        }
+      }
+    },
+    "D4.s.explicit_shared_seed_43_vs_44": {
+      "comparison_id": "D4.s.explicit_shared_seed_43_vs_44",
+      "design": "seed_replicate",
+      "classification": "controlled",
+      "variance_axis": "training_seed",
+      "treatment_axes": [
+        "training_seed"
+      ],
+      "intended_treatment": "training seed only (explicit T3->T1 arm from the shared GT1)",
+      "lhs_recipe": "wg:mamba_whole_graph:s.t3t1_shared_s43",
+      "rhs_recipe": "wg:mamba_whole_graph:s.t3t1_shared_s44",
+      "allowed_differences": [
+        "artifacts.mamba_ckpt",
+        "config.mamba_ckpt"
+      ],
+      "remaining_confounds": [
+        {
+          "name": "deployed_backbone_teacher_mismatch",
+          "severity": "common_mode",
+          "detail": "both endpoints deploy on s.backbone_engine whose sibling ONNX indicates s.legacy_teacher while the heads were trained against s.adapted_teacher; engine bytes unattributed. Cannot explain a paired delta; absolute numbers are on an unintended backbone."
+        }
+      ],
+      "n_combinations": 9,
+      "n_paired": 9,
+      "verdict": "paired",
+      "reasons": [],
+      "combinations": [
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s43/formal-20260919T093436Z-r01",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s44/formal-20260919T094707Z-r01",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s43/formal-20260919T093436Z-r01",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s44/formal-20260919T094707Z-r02",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s43/formal-20260919T093436Z-r01",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s44/formal-20260919T094707Z-r03",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s43/formal-20260919T093436Z-r02",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s44/formal-20260919T094707Z-r01",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s43/formal-20260919T093436Z-r02",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s44/formal-20260919T094707Z-r02",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s43/formal-20260919T093436Z-r02",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s44/formal-20260919T094707Z-r03",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s43/formal-20260919T093436Z-r03",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s44/formal-20260919T094707Z-r01",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s43/formal-20260919T093436Z-r03",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s44/formal-20260919T094707Z-r02",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s43/formal-20260919T093436Z-r03",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s44/formal-20260919T094707Z-r03",
+          "verdict": "paired",
+          "reasons": []
+        }
+      ],
+      "baseline_row": {
+        "baseline_side": "lhs",
+        "baseline_recipe": "wg:mamba_whole_graph:s.t3t1_shared_s43",
+        "treatment_recipe": "wg:mamba_whole_graph:s.t3t1_shared_s44",
+        "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s43/formal-20260919T093436Z-r01",
+        "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_shared_s44/formal-20260919T094707Z-r01",
+        "lhs_identity_sha256": "2be797390e12e8efc1bf90e392f47a00f2ce586d11694a077179f7c65ded9d6c",
+        "rhs_identity_sha256": "31c1f3e42837904ea3624a4751576200c6dfa87243fb86d9e73fa81565d612f3",
+        "repeat_n": {
+          "lhs": 6,
+          "rhs": 6
+        },
+        "repeat_distinct_outputs_max": {
+          "lhs": 1,
+          "rhs": 1
+        },
+        "metrics": {
+          "AssA": {
+            "lhs": 69.0,
+            "rhs": 68.7,
+            "delta_rhs_minus_lhs": -0.3,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "DetA": {
+            "lhs": 70.6,
+            "rhs": 70.7,
+            "delta_rhs_minus_lhs": 0.1,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "FN": {
+            "lhs": 20953.0,
+            "rhs": 20691.0,
+            "delta_rhs_minus_lhs": -262.0,
+            "print_precision": 1.0,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "FP": {
+            "lhs": 3035.0,
+            "rhs": 3204.0,
+            "delta_rhs_minus_lhs": 169.0,
+            "print_precision": 1.0,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "HOTA": {
+            "lhs": 69.7,
+            "rhs": 69.6,
+            "delta_rhs_minus_lhs": -0.1,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "IDF1": {
+            "lhs": 78.3,
+            "rhs": 77.9,
+            "delta_rhs_minus_lhs": -0.4,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "IDs": {
+            "lhs": 420.0,
+            "rhs": 427.0,
+            "delta_rhs_minus_lhs": 7.0,
+            "print_precision": 1.0,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "MOTA": {
+            "lhs": 78.3,
+            "rhs": 78.3,
+            "delta_rhs_minus_lhs": 0.0,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "no_observed_difference"
+          },
+          "Prcn": {
+            "lhs": 96.8,
+            "rhs": 96.6,
+            "delta_rhs_minus_lhs": -0.2,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "Rcll": {
+            "lhs": 81.3,
+            "rhs": 81.6,
+            "delta_rhs_minus_lhs": 0.3,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          }
+        },
+        "throughput_fps": {
+          "lhs": 197.29,
+          "rhs": 196.17,
+          "delta_rhs_minus_lhs": -1.12,
+          "print_precision": 0.01,
+          "lhs_observed_range": 0.9,
+          "rhs_observed_range": 1.24,
+          "runtime_repeat_floor": 1.24,
+          "reading": "within_runtime_repeat_range",
+          "lhs_repeat": {
+            "values": [
+              197.51,
+              197.19,
+              197.72,
+              197.55,
+              196.82,
+              197.05
+            ],
+            "min": 196.82,
+            "max": 197.72,
+            "observed_range": 0.9
+          },
+          "rhs_repeat": {
+            "values": [
+              197.75,
+              197.84,
+              197.24,
+              196.6,
+              197.29,
+              197.1
+            ],
+            "min": 196.6,
+            "max": 197.84,
+            "observed_range": 1.24
+          },
+          "lhs_formal": {
+            "values": [
+              197.29,
+              196.91,
+              197.27
+            ],
+            "min": 196.91,
+            "max": 197.29,
+            "observed_range": 0.38
+          },
+          "rhs_formal": {
+            "values": [
+              196.17,
+              197.72,
+              196.76
+            ],
+            "min": 196.17,
+            "max": 197.72,
+            "observed_range": 1.55
+          },
+          "profile": "whole_graph_serial"
+        },
+        "observed_differences": {
+          "artifacts.mamba_ckpt": {
+            "lhs": "b6f9f7e6222b76a52a4fc1f22ea85150e5b4af01414bbc65656a12f66da95f74",
+            "rhs": "d540887b48ae8e425809428ef5be4e87e99defc36c6e952039487f43c5220ac1"
+          },
+          "config.mamba_ckpt": {
+            "lhs": "runs/mamba_gt_v14replica_t3_t1_shared_s43/best.ckpt",
+            "rhs": "runs/mamba_gt_v14replica_t3_t1_shared_s44/best.ckpt"
+          }
+        }
+      }
+    },
+    "E1.s_vs_m.production_system": {
+      "comparison_id": "E1.s_vs_m.production_system",
+      "design": "system",
+      "classification": "system_comparison",
+      "variance_axis": "treatment",
+      "treatment_axes": [],
+      "intended_treatment": "the two shipped systems as their presets name them",
+      "lhs_recipe": "wg:mamba_whole_graph:s.t3t1_phase_b",
+      "rhs_recipe": "wg:mamba_whole_graph_m:m.t3t1_phase_b",
+      "allowed_differences": [
+        "artifacts.fpn_backbone_engine",
+        "artifacts.mamba_ckpt",
+        "artifacts.mamba_head_engine",
+        "artifacts.mamba_teacher_ckpt",
+        "artifacts.mamba_yolo_weights",
+        "config.fpn_backbone_engine",
+        "config.kalman_r_scale",
+        "config.mamba_ckpt",
+        "config.mamba_head_engine",
+        "config.mamba_teacher_ckpt",
+        "config.mamba_yolo_weights",
+        "config.preset",
+        "config.relink_bridge_dir_bonus",
+        "config.relink_bridge_h_hi",
+        "config.relink_bridge_h_lo",
+        "config.relink_bridge_px",
+        "preset_sha256"
+      ],
+      "remaining_confounds": [
+        {
+          "name": "deployed_backbone_teacher_mismatch",
+          "severity": "asymmetric",
+          "detail": "endpoints differ in backbone/teacher consistency (DIFFERENT_TEACHER_INDICATED vs same_teacher_indicated); the delta is not common-mode; tolerated only because the two sides are different systems by declaration"
+        },
+        {
+          "name": "backbone_family",
+          "severity": "structural",
+          "detail": ""
+        },
+        {
+          "name": "inference_forward_mode",
+          "severity": "structural",
+          "detail": "differs: {\"gate_teacher_at_runtime\": {\"lhs\": \"null (backbone-only; no teacher forward)\", \"rhs\": \"runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt\"}}"
+        },
+        {
+          "name": "deployed_backbone_artifact",
+          "severity": "structural",
+          "detail": "engine bytes never attributed; identity = node sha, provenance = sibling-ONNX evidence"
+        },
+        {
+          "name": "deployed_head_artifact",
+          "severity": "structural",
+          "detail": "rhs runs the fixed head engine, not the rhs checkpoint head (sibling ONNX ambiguous: ['m.distill', 'm.gt1', 'm.gt2_plain', 'm.t3t1_phase_a', 'm.t3t1_phase_b', 'm.t3t1_phase_b_gpu_decode']; checkpoint source ambiguous)"
+        },
+        {
+          "name": "tracker_runtime_policy",
+          "severity": "structural",
+          "detail": "tracker/runtime keys differ: {\"kalman_r_scale\": {\"lhs\": 2.8, \"rhs\": 3.5}, \"relink_bridge_dir_bonus\": {\"lhs\": 0.8, \"rhs\": 0.0}, \"relink_bridge_h_hi\": {\"lhs\": 1.33, \"rhs\": 1.7}, \"relink_bridge_h_lo\": {\"lhs\": 0.75, \"rhs\": 0.6}, \"relink_bridge_px\": {\"lhs\": 0.25, \"rhs\": 0.4}}"
+        },
+        {
+          "name": "warm_start",
+          "severity": "training",
+          "detail": "no common ancestor in the inventory (chains root at s.distill vs m.distill)"
+        },
+        {
+          "name": "teacher",
+          "severity": "training",
+          "detail": ""
+        },
+        {
+          "name": "teacher_cache",
+          "severity": "training",
+          "detail": "compared stages use ['s.teacher_cache'] vs ['m.teacher_cache']"
+        },
+        {
+          "name": "training_seed",
+          "severity": "training",
+          "detail": "bases: args.seed / args.seed"
+        }
+      ],
+      "n_combinations": 9,
+      "n_paired": 9,
+      "verdict": "paired",
+      "reasons": [],
+      "combinations": [
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_phase_b/formal-20260919T092203Z-r01",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_m_m.t3t1_phase_b/formal-20260919T095304Z-r01",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_phase_b/formal-20260919T092203Z-r01",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_m_m.t3t1_phase_b/formal-20260919T095304Z-r02",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_phase_b/formal-20260919T092203Z-r01",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_m_m.t3t1_phase_b/formal-20260919T095304Z-r03",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_phase_b/formal-20260919T092203Z-r02",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_m_m.t3t1_phase_b/formal-20260919T095304Z-r01",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_phase_b/formal-20260919T092203Z-r02",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_m_m.t3t1_phase_b/formal-20260919T095304Z-r02",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_phase_b/formal-20260919T092203Z-r02",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_m_m.t3t1_phase_b/formal-20260919T095304Z-r03",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_phase_b/formal-20260919T092203Z-r03",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_m_m.t3t1_phase_b/formal-20260919T095304Z-r01",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_phase_b/formal-20260919T092203Z-r03",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_m_m.t3t1_phase_b/formal-20260919T095304Z-r02",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_phase_b/formal-20260919T092203Z-r03",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_m_m.t3t1_phase_b/formal-20260919T095304Z-r03",
+          "verdict": "paired",
+          "reasons": []
+        }
+      ],
+      "baseline_row": {
+        "baseline_side": "lhs",
+        "baseline_recipe": "wg:mamba_whole_graph:s.t3t1_phase_b",
+        "treatment_recipe": "wg:mamba_whole_graph_m:m.t3t1_phase_b",
+        "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_phase_b/formal-20260919T092203Z-r01",
+        "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_m_m.t3t1_phase_b/formal-20260919T095304Z-r01",
+        "lhs_identity_sha256": "cf7cd3a241c2f5655f767b77c7d7f8b338b75cd68402103ccb176d3920bb4bad",
+        "rhs_identity_sha256": "fd5389ee9d95e0df9700df0987844b6c1f429b0fe5d0177ed11d638542af43ed",
+        "repeat_n": {
+          "lhs": 6,
+          "rhs": 6
+        },
+        "repeat_distinct_outputs_max": {
+          "lhs": 1,
+          "rhs": 1
+        },
+        "metrics": {
+          "AssA": {
+            "lhs": 69.9,
+            "rhs": 72.8,
+            "delta_rhs_minus_lhs": 2.9,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "DetA": {
+            "lhs": 70.2,
+            "rhs": 76.1,
+            "delta_rhs_minus_lhs": 5.9,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "FN": {
+            "lhs": 20940.0,
+            "rhs": 18053.0,
+            "delta_rhs_minus_lhs": -2887.0,
+            "print_precision": 1.0,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "FP": {
+            "lhs": 3471.0,
+            "rhs": 2005.0,
+            "delta_rhs_minus_lhs": -1466.0,
+            "print_precision": 1.0,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "HOTA": {
+            "lhs": 70.0,
+            "rhs": 74.3,
+            "delta_rhs_minus_lhs": 4.3,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "IDF1": {
+            "lhs": 78.3,
+            "rhs": 80.3,
+            "delta_rhs_minus_lhs": 2.0,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "IDs": {
+            "lhs": 429.0,
+            "rhs": 358.0,
+            "delta_rhs_minus_lhs": -71.0,
+            "print_precision": 1.0,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "MOTA": {
+            "lhs": 77.9,
+            "rhs": 81.8,
+            "delta_rhs_minus_lhs": 3.9,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "Prcn": {
+            "lhs": 96.3,
+            "rhs": 97.9,
+            "delta_rhs_minus_lhs": 1.6,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "Rcll": {
+            "lhs": 81.4,
+            "rhs": 83.9,
+            "delta_rhs_minus_lhs": 2.5,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          }
+        },
+        "throughput_fps": {
+          "lhs": 196.84,
+          "rhs": 216.66,
+          "delta_rhs_minus_lhs": 19.82,
+          "print_precision": 0.01,
+          "lhs_observed_range": 0.78,
+          "rhs_observed_range": 1.1,
+          "runtime_repeat_floor": 1.1,
+          "reading": "above_runtime_repeat_range",
+          "lhs_repeat": {
+            "values": [
+              197.74,
+              197.22,
+              197.66,
+              196.96,
+              197.66,
+              197.26
+            ],
+            "min": 196.96,
+            "max": 197.74,
+            "observed_range": 0.78
+          },
+          "rhs_repeat": {
+            "values": [
+              216.47,
+              216.78,
+              216.63,
+              216.91,
+              217.5,
+              217.57
+            ],
+            "min": 216.47,
+            "max": 217.57,
+            "observed_range": 1.1
+          },
+          "lhs_formal": {
+            "values": [
+              196.84,
+              196.69,
+              197.77
+            ],
+            "min": 196.69,
+            "max": 197.77,
+            "observed_range": 1.08
+          },
+          "rhs_formal": {
+            "values": [
+              216.66,
+              217.59,
+              216.77
+            ],
+            "min": 216.66,
+            "max": 217.59,
+            "observed_range": 0.93
+          },
+          "profile": "whole_graph_serial"
+        },
+        "observed_differences": {
+          "artifacts.fpn_backbone_engine": {
+            "lhs": "2ef3d4d40dfb670982cbbb98e6ed7d07e5b1a590cfa126d5ccf7342ee1579ce4",
+            "rhs": "fdf0f4550f584e73d5b7ca8393def25b74715f5ab639449dd01873becd66e580"
+          },
+          "artifacts.mamba_ckpt": {
+            "lhs": "c161c88e50b894d8b51cc614c46c3700370373decf05a15825bdf00ccf0e0876",
+            "rhs": "a5a0e7091cd854ad68210ae4bbd43af73c7d3d098ea119f02ea65fab59c0676c"
+          },
+          "artifacts.mamba_head_engine": {
+            "lhs": null,
+            "rhs": "c0c0e3e1a99e1707996d876334af2217c9c725d03bb1fe6838073a47723806cf"
+          },
+          "artifacts.mamba_teacher_ckpt": {
+            "lhs": "d2ace71d47c3358d36867c64795b09fad7e3ae0c794ef59554b17518c387dbcf",
+            "rhs": "5f1cb461cb063788ee8fb933340055add4b4003d7c945ef14f676a5a8c3bea06"
+          },
+          "artifacts.mamba_yolo_weights": {
+            "lhs": "646f8bc3fe0a656803d95c294f7852321748cb29d13466a1af8862e2db384a1b",
+            "rhs": "401cea9ab23ad19246ff7744859816bc599f350e93c9dd30367b6f0a0745d0b7"
+          },
+          "config.fpn_backbone_engine": {
+            "lhs": "models/yolo/yolo26s_backbone_640_best.engine",
+            "rhs": "models/yolo/yolo26m_backbone_640_best.engine"
+          },
+          "config.kalman_r_scale": {
+            "lhs": 2.8,
+            "rhs": 3.5
+          },
+          "config.mamba_ckpt": {
+            "lhs": "runs/mamba_gt_v14replica_t3_t1/best.ckpt",
+            "rhs": "runs/mamba_gt_yolo26m_v14replica_t3_t1/best.ckpt"
+          },
+          "config.mamba_head_engine": {
+            "lhs": null,
+            "rhs": "models/yolo/mamba_head_26m.engine"
+          },
+          "config.mamba_teacher_ckpt": {
+            "lhs": "runs/gated_det_v1/best.ckpt",
+            "rhs": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt"
+          },
+          "config.mamba_yolo_weights": {
+            "lhs": "models/yolo/yolo26s.pt",
+            "rhs": "models/yolo/yolo26m.pt"
+          },
+          "config.preset": {
+            "lhs": "mamba_whole_graph",
+            "rhs": "mamba_whole_graph_m"
+          },
+          "config.relink_bridge_dir_bonus": {
+            "lhs": 0.8,
+            "rhs": 0.0
+          },
+          "config.relink_bridge_h_hi": {
+            "lhs": 1.33,
+            "rhs": 1.7
+          },
+          "config.relink_bridge_h_lo": {
+            "lhs": 0.75,
+            "rhs": 0.6
+          },
+          "config.relink_bridge_px": {
+            "lhs": 0.25,
+            "rhs": 0.4
+          },
+          "preset_sha256": {
+            "lhs": "093b66ed124063f035ae9cf2a76e4f5426743cd819fb66e3e54994c97ea42cd1",
+            "rhs": "496c4ec22b497c70bc8409227513939b4cd86834bf2210475d0ad655be6937af"
+          }
+        }
+      }
+    },
+    "E2.s.native_head_vs_mamba_head_shared_backbone": {
+      "comparison_id": "E2.s.native_head_vs_mamba_head_shared_backbone",
+      "design": "system",
+      "classification": "system_comparison",
+      "variance_axis": "treatment",
+      "treatment_axes": [],
+      "intended_treatment": "native Detect head vs Mamba head on the same PyTorch backbone (the adapted teacher's), eager",
+      "lhs_recipe": "pyt:s.adapted_teacher:s.adapted_teacher",
+      "rhs_recipe": "pyt:s.adapted_teacher:s.t3t1_phase_b",
+      "allowed_differences": [
+        "artifacts.mamba_ckpt",
+        "artifacts.teacher_head_ckpt",
+        "config.mamba_ckpt",
+        "config.mamba_trt",
+        "config.no_temporal",
+        "config.teacher_head_ckpt"
+      ],
+      "remaining_confounds": [
+        {
+          "name": "head_family",
+          "severity": "structural",
+          "detail": "architecture signature differs"
+        },
+        {
+          "name": "deployed_head_artifact",
+          "severity": "structural",
+          "detail": "different head kinds"
+        },
+        {
+          "name": "tracker_runtime_policy",
+          "severity": "structural",
+          "detail": "tracker policy must be fixed by the shared eval contract (deliverable 3); not derivable from the inventory"
+        },
+        {
+          "name": "warm_start",
+          "severity": "training",
+          "detail": "no common ancestor in the inventory (chains root at s.adapted_teacher vs s.distill)"
+        },
+        {
+          "name": "teacher",
+          "severity": "training",
+          "detail": ""
+        },
+        {
+          "name": "teacher_cache",
+          "severity": "training",
+          "detail": "compared stages use [] vs ['s.teacher_cache']"
+        },
+        {
+          "name": "training_seed",
+          "severity": "training",
+          "detail": "bases: args.seed / args.seed"
+        },
+        {
+          "name": "training_schedule",
+          "severity": "training",
+          "detail": "non-treatment schedule keys differ: ['batch_size', 'clip_len', 'clip_stride', 'staging']"
+        },
+        {
+          "name": "training_budget",
+          "severity": "training",
+          "detail": "epochs planned over the whole recorded chain (no common ancestor)"
+        }
+      ],
+      "n_combinations": 9,
+      "n_paired": 9,
+      "verdict": "paired",
+      "reasons": [],
+      "combinations": [
+        {
+          "lhs_run": "results/training_eval_contract/pyt_s.adapted_teacher_s.adapted_teacher/formal-20260919T100338Z-r01",
+          "rhs_run": "results/training_eval_contract/pyt_s.adapted_teacher_s.t3t1_phase_b/formal-20260919T101645Z-r01",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/pyt_s.adapted_teacher_s.adapted_teacher/formal-20260919T100338Z-r01",
+          "rhs_run": "results/training_eval_contract/pyt_s.adapted_teacher_s.t3t1_phase_b/formal-20260919T101645Z-r02",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/pyt_s.adapted_teacher_s.adapted_teacher/formal-20260919T100338Z-r01",
+          "rhs_run": "results/training_eval_contract/pyt_s.adapted_teacher_s.t3t1_phase_b/formal-20260919T101645Z-r03",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/pyt_s.adapted_teacher_s.adapted_teacher/formal-20260919T100338Z-r02",
+          "rhs_run": "results/training_eval_contract/pyt_s.adapted_teacher_s.t3t1_phase_b/formal-20260919T101645Z-r01",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/pyt_s.adapted_teacher_s.adapted_teacher/formal-20260919T100338Z-r02",
+          "rhs_run": "results/training_eval_contract/pyt_s.adapted_teacher_s.t3t1_phase_b/formal-20260919T101645Z-r02",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/pyt_s.adapted_teacher_s.adapted_teacher/formal-20260919T100338Z-r02",
+          "rhs_run": "results/training_eval_contract/pyt_s.adapted_teacher_s.t3t1_phase_b/formal-20260919T101645Z-r03",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/pyt_s.adapted_teacher_s.adapted_teacher/formal-20260919T100338Z-r03",
+          "rhs_run": "results/training_eval_contract/pyt_s.adapted_teacher_s.t3t1_phase_b/formal-20260919T101645Z-r01",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/pyt_s.adapted_teacher_s.adapted_teacher/formal-20260919T100338Z-r03",
+          "rhs_run": "results/training_eval_contract/pyt_s.adapted_teacher_s.t3t1_phase_b/formal-20260919T101645Z-r02",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/pyt_s.adapted_teacher_s.adapted_teacher/formal-20260919T100338Z-r03",
+          "rhs_run": "results/training_eval_contract/pyt_s.adapted_teacher_s.t3t1_phase_b/formal-20260919T101645Z-r03",
+          "verdict": "paired",
+          "reasons": []
+        }
+      ],
+      "baseline_row": {
+        "baseline_side": "lhs",
+        "baseline_recipe": "pyt:s.adapted_teacher:s.adapted_teacher",
+        "treatment_recipe": "pyt:s.adapted_teacher:s.t3t1_phase_b",
+        "lhs_run": "results/training_eval_contract/pyt_s.adapted_teacher_s.adapted_teacher/formal-20260919T100338Z-r01",
+        "rhs_run": "results/training_eval_contract/pyt_s.adapted_teacher_s.t3t1_phase_b/formal-20260919T101645Z-r01",
+        "lhs_identity_sha256": "0b712bd7aaa5c2d35c18d6863b89522aa7d52758c1a9b67cd40af4d98818b3db",
+        "rhs_identity_sha256": "7acaf85b8a4942905989ed5a665d3a59704a2b27448ac6198157e5e1cc3245e9",
+        "repeat_n": {
+          "lhs": 6,
+          "rhs": 6
+        },
+        "repeat_distinct_outputs_max": {
+          "lhs": 1,
+          "rhs": 1
+        },
+        "metrics": {
+          "AssA": {
+            "lhs": 60.1,
+            "rhs": 68.4,
+            "delta_rhs_minus_lhs": 8.3,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "DetA": {
+            "lhs": 30.8,
+            "rhs": 72.6,
+            "delta_rhs_minus_lhs": 41.8,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "FN": {
+            "lhs": 72297.0,
+            "rhs": 19982.0,
+            "delta_rhs_minus_lhs": -52315.0,
+            "print_precision": 1.0,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "FP": {
+            "lhs": 361.0,
+            "rhs": 3318.0,
+            "delta_rhs_minus_lhs": 2957.0,
+            "print_precision": 1.0,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "HOTA": {
+            "lhs": 43.0,
+            "rhs": 70.3,
+            "delta_rhs_minus_lhs": 27.3,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "IDF1": {
+            "lhs": 48.8,
+            "rhs": 76.5,
+            "delta_rhs_minus_lhs": 27.7,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "IDs": {
+            "lhs": 60.0,
+            "rhs": 414.0,
+            "delta_rhs_minus_lhs": 354.0,
+            "print_precision": 1.0,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "MOTA": {
+            "lhs": 35.2,
+            "rhs": 78.9,
+            "delta_rhs_minus_lhs": 43.7,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "Prcn": {
+            "lhs": 99.1,
+            "rhs": 96.5,
+            "delta_rhs_minus_lhs": -2.6,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "Rcll": {
+            "lhs": 35.6,
+            "rhs": 82.2,
+            "delta_rhs_minus_lhs": 46.6,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          }
+        },
+        "throughput_fps": {
+          "lhs": 72.24,
+          "rhs": 70.07,
+          "delta_rhs_minus_lhs": -2.17,
+          "print_precision": 0.01,
+          "lhs_observed_range": 2.05,
+          "rhs_observed_range": 1.36,
+          "runtime_repeat_floor": 2.05,
+          "reading": "above_runtime_repeat_range",
+          "lhs_repeat": {
+            "values": [
+              70.52,
+              71.74,
+              70.68,
+              71.73,
+              70.28,
+              69.69
+            ],
+            "min": 69.69,
+            "max": 71.74,
+            "observed_range": 2.05
+          },
+          "rhs_repeat": {
+            "values": [
+              69.96,
+              70.32,
+              69.99,
+              70.09,
+              68.96,
+              69.52
+            ],
+            "min": 68.96,
+            "max": 70.32,
+            "observed_range": 1.36
+          },
+          "lhs_formal": {
+            "values": [
+              72.24,
+              70.26,
+              70.71
+            ],
+            "min": 70.26,
+            "max": 72.24,
+            "observed_range": 1.98
+          },
+          "rhs_formal": {
+            "values": [
+              70.07,
+              70.89,
+              67.92
+            ],
+            "min": 67.92,
+            "max": 70.89,
+            "observed_range": 2.97
+          },
+          "profile": "eager_pytorch"
+        },
+        "observed_differences": {
+          "artifacts.mamba_ckpt": {
+            "lhs": null,
+            "rhs": "c161c88e50b894d8b51cc614c46c3700370373decf05a15825bdf00ccf0e0876"
+          },
+          "artifacts.teacher_head_ckpt": {
+            "lhs": "08d1d68dc8fb6c2bb304642cedcd42a29efaed8d420e2f87f690c774f24d57fc",
+            "rhs": null
+          },
+          "config.mamba_ckpt": {
+            "lhs": "",
+            "rhs": "runs/mamba_gt_v14replica_t3_t1/best.ckpt"
+          },
+          "config.mamba_trt": {
+            "lhs": null,
+            "rhs": false
+          },
+          "config.no_temporal": {
+            "lhs": false,
+            "rhs": true
+          },
+          "config.teacher_head_ckpt": {
+            "lhs": "runs/gated_det_v14replica/epoch_0012.ckpt",
+            "rhs": ""
+          }
+        }
+      }
+    },
+    "E3.m.native_head_vs_mamba_head_shared_backbone": {
+      "comparison_id": "E3.m.native_head_vs_mamba_head_shared_backbone",
+      "design": "system",
+      "classification": "system_comparison",
+      "variance_axis": "treatment",
+      "treatment_axes": [],
+      "intended_treatment": "native Detect head vs Mamba head on the same PyTorch backbone (m adapted teacher), eager",
+      "lhs_recipe": "pyt:m.adapted_teacher:m.adapted_teacher",
+      "rhs_recipe": "pyt:m.adapted_teacher:m.t3t1_phase_b",
+      "allowed_differences": [
+        "artifacts.mamba_ckpt",
+        "artifacts.teacher_head_ckpt",
+        "config.mamba_ckpt",
+        "config.mamba_trt",
+        "config.no_temporal",
+        "config.teacher_head_ckpt"
+      ],
+      "remaining_confounds": [
+        {
+          "name": "head_family",
+          "severity": "structural",
+          "detail": "architecture signature differs"
+        },
+        {
+          "name": "deployed_head_artifact",
+          "severity": "structural",
+          "detail": "different head kinds"
+        },
+        {
+          "name": "tracker_runtime_policy",
+          "severity": "structural",
+          "detail": "tracker policy must be fixed by the shared eval contract (deliverable 3); not derivable from the inventory"
+        },
+        {
+          "name": "warm_start",
+          "severity": "training",
+          "detail": "no common ancestor in the inventory (chains root at m.adapted_teacher vs m.distill)"
+        },
+        {
+          "name": "teacher",
+          "severity": "training",
+          "detail": ""
+        },
+        {
+          "name": "teacher_cache",
+          "severity": "training",
+          "detail": "compared stages use [] vs ['m.teacher_cache']"
+        },
+        {
+          "name": "training_schedule",
+          "severity": "training",
+          "detail": "non-treatment schedule keys differ: ['batch_size', 'clip_len', 'clip_stride', 'staging', 'warmup_epochs']"
+        },
+        {
+          "name": "training_budget",
+          "severity": "training",
+          "detail": "epochs planned over the whole recorded chain (no common ancestor)"
+        }
+      ],
+      "n_combinations": 9,
+      "n_paired": 9,
+      "verdict": "paired",
+      "reasons": [],
+      "combinations": [
+        {
+          "lhs_run": "results/training_eval_contract/pyt_m.adapted_teacher_m.adapted_teacher/formal-20260919T103018Z-r01",
+          "rhs_run": "results/training_eval_contract/pyt_m.adapted_teacher_m.t3t1_phase_b/formal-20260919T104423Z-r01",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/pyt_m.adapted_teacher_m.adapted_teacher/formal-20260919T103018Z-r01",
+          "rhs_run": "results/training_eval_contract/pyt_m.adapted_teacher_m.t3t1_phase_b/formal-20260919T104423Z-r02",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/pyt_m.adapted_teacher_m.adapted_teacher/formal-20260919T103018Z-r01",
+          "rhs_run": "results/training_eval_contract/pyt_m.adapted_teacher_m.t3t1_phase_b/formal-20260919T104423Z-r03",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/pyt_m.adapted_teacher_m.adapted_teacher/formal-20260919T103018Z-r02",
+          "rhs_run": "results/training_eval_contract/pyt_m.adapted_teacher_m.t3t1_phase_b/formal-20260919T104423Z-r01",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/pyt_m.adapted_teacher_m.adapted_teacher/formal-20260919T103018Z-r02",
+          "rhs_run": "results/training_eval_contract/pyt_m.adapted_teacher_m.t3t1_phase_b/formal-20260919T104423Z-r02",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/pyt_m.adapted_teacher_m.adapted_teacher/formal-20260919T103018Z-r02",
+          "rhs_run": "results/training_eval_contract/pyt_m.adapted_teacher_m.t3t1_phase_b/formal-20260919T104423Z-r03",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/pyt_m.adapted_teacher_m.adapted_teacher/formal-20260919T103018Z-r03",
+          "rhs_run": "results/training_eval_contract/pyt_m.adapted_teacher_m.t3t1_phase_b/formal-20260919T104423Z-r01",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/pyt_m.adapted_teacher_m.adapted_teacher/formal-20260919T103018Z-r03",
+          "rhs_run": "results/training_eval_contract/pyt_m.adapted_teacher_m.t3t1_phase_b/formal-20260919T104423Z-r02",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/pyt_m.adapted_teacher_m.adapted_teacher/formal-20260919T103018Z-r03",
+          "rhs_run": "results/training_eval_contract/pyt_m.adapted_teacher_m.t3t1_phase_b/formal-20260919T104423Z-r03",
+          "verdict": "paired",
+          "reasons": []
+        }
+      ],
+      "baseline_row": {
+        "baseline_side": "lhs",
+        "baseline_recipe": "pyt:m.adapted_teacher:m.adapted_teacher",
+        "treatment_recipe": "pyt:m.adapted_teacher:m.t3t1_phase_b",
+        "lhs_run": "results/training_eval_contract/pyt_m.adapted_teacher_m.adapted_teacher/formal-20260919T103018Z-r01",
+        "rhs_run": "results/training_eval_contract/pyt_m.adapted_teacher_m.t3t1_phase_b/formal-20260919T104423Z-r01",
+        "lhs_identity_sha256": "001816758bb4d9e31a18cb0cf2f252305fb36805b69b4b7f57f11e75d390a956",
+        "rhs_identity_sha256": "18243108ba097066e2baee5b3c51d58ef223d1eb607070e5d5c51934b4734028",
+        "repeat_n": {
+          "lhs": 6,
+          "rhs": 6
+        },
+        "repeat_distinct_outputs_max": {
+          "lhs": 1,
+          "rhs": 1
+        },
+        "metrics": {
+          "AssA": {
+            "lhs": 64.3,
+            "rhs": 73.1,
+            "delta_rhs_minus_lhs": 8.8,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "DetA": {
+            "lhs": 52.9,
+            "rhs": 75.0,
+            "delta_rhs_minus_lhs": 22.1,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "FN": {
+            "lhs": 43121.0,
+            "rhs": 18533.0,
+            "delta_rhs_minus_lhs": -24588.0,
+            "print_precision": 1.0,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "FP": {
+            "lhs": 631.0,
+            "rhs": 2102.0,
+            "delta_rhs_minus_lhs": 1471.0,
+            "print_precision": 1.0,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "HOTA": {
+            "lhs": 58.3,
+            "rhs": 74.0,
+            "delta_rhs_minus_lhs": 15.7,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "IDF1": {
+            "lhs": 70.1,
+            "rhs": 80.1,
+            "delta_rhs_minus_lhs": 10.0,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "IDs": {
+            "lhs": 133.0,
+            "rhs": 346.0,
+            "delta_rhs_minus_lhs": 213.0,
+            "print_precision": 1.0,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "MOTA": {
+            "lhs": 60.9,
+            "rhs": 81.3,
+            "delta_rhs_minus_lhs": 20.4,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "Prcn": {
+            "lhs": 99.1,
+            "rhs": 97.8,
+            "delta_rhs_minus_lhs": -1.3,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "Rcll": {
+            "lhs": 61.6,
+            "rhs": 83.5,
+            "delta_rhs_minus_lhs": 21.9,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          }
+        },
+        "throughput_fps": {
+          "lhs": 66.64,
+          "rhs": 64.96,
+          "delta_rhs_minus_lhs": -1.68,
+          "print_precision": 0.01,
+          "lhs_observed_range": 0.88,
+          "rhs_observed_range": 1.1,
+          "runtime_repeat_floor": 1.1,
+          "reading": "above_runtime_repeat_range",
+          "lhs_repeat": {
+            "values": [
+              67.31,
+              67.06,
+              66.48,
+              67.2,
+              67.36,
+              67.14
+            ],
+            "min": 66.48,
+            "max": 67.36,
+            "observed_range": 0.88
+          },
+          "rhs_repeat": {
+            "values": [
+              64.94,
+              64.06,
+              64.63,
+              65.16,
+              64.28,
+              64.93
+            ],
+            "min": 64.06,
+            "max": 65.16,
+            "observed_range": 1.1
+          },
+          "lhs_formal": {
+            "values": [
+              66.64,
+              66.21,
+              66.54
+            ],
+            "min": 66.21,
+            "max": 66.64,
+            "observed_range": 0.43
+          },
+          "rhs_formal": {
+            "values": [
+              64.96,
+              64.79,
+              65.13
+            ],
+            "min": 64.79,
+            "max": 65.13,
+            "observed_range": 0.34
+          },
+          "profile": "eager_pytorch"
+        },
+        "observed_differences": {
+          "artifacts.mamba_ckpt": {
+            "lhs": null,
+            "rhs": "a5a0e7091cd854ad68210ae4bbd43af73c7d3d098ea119f02ea65fab59c0676c"
+          },
+          "artifacts.teacher_head_ckpt": {
+            "lhs": "5f1cb461cb063788ee8fb933340055add4b4003d7c945ef14f676a5a8c3bea06",
+            "rhs": null
+          },
+          "config.mamba_ckpt": {
+            "lhs": "",
+            "rhs": "runs/mamba_gt_yolo26m_v14replica_t3_t1/best.ckpt"
+          },
+          "config.mamba_trt": {
+            "lhs": null,
+            "rhs": false
+          },
+          "config.no_temporal": {
+            "lhs": false,
+            "rhs": true
+          },
+          "config.teacher_head_ckpt": {
+            "lhs": "runs/gated_det_yolo26m_v14replica/epoch_0012.ckpt",
+            "rhs": ""
+          }
+        }
+      }
+    },
+    "E4.s.production_backbone_engine_ab": {
+      "comparison_id": "E4.s.production_backbone_engine_ab",
+      "design": "runtime_ab",
+      "classification": "controlled",
+      "variance_axis": "treatment",
+      "treatment_axes": [
+        "deployed_backbone_artifact"
+      ],
+      "intended_treatment": "deployed backbone engine: the preset's yolo26s_backbone_640_best.engine (sibling ONNX = legacy teacher) vs yolo26s_backbone_640_v14replica_e12.engine (sibling ONNX = the head's own teacher)",
+      "lhs_recipe": "wg:mamba_whole_graph:s.t3t1_phase_b",
+      "rhs_recipe": "wg:mamba_whole_graph/engine=s.backbone_engine_v14replica_e12:s.t3t1_phase_b",
+      "allowed_differences": [
+        "artifacts.fpn_backbone_engine",
+        "config.fpn_backbone_engine"
+      ],
+      "remaining_confounds": [],
+      "n_combinations": 9,
+      "n_paired": 9,
+      "verdict": "paired",
+      "reasons": [],
+      "combinations": [
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_phase_b/formal-20260919T092203Z-r01",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_engine_s.backbone_engine_v14replica_e12_s.t3t1_phase_b/formal-20260919T105316Z-r01",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_phase_b/formal-20260919T092203Z-r01",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_engine_s.backbone_engine_v14replica_e12_s.t3t1_phase_b/formal-20260919T105316Z-r02",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_phase_b/formal-20260919T092203Z-r01",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_engine_s.backbone_engine_v14replica_e12_s.t3t1_phase_b/formal-20260919T105316Z-r03",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_phase_b/formal-20260919T092203Z-r02",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_engine_s.backbone_engine_v14replica_e12_s.t3t1_phase_b/formal-20260919T105316Z-r01",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_phase_b/formal-20260919T092203Z-r02",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_engine_s.backbone_engine_v14replica_e12_s.t3t1_phase_b/formal-20260919T105316Z-r02",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_phase_b/formal-20260919T092203Z-r02",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_engine_s.backbone_engine_v14replica_e12_s.t3t1_phase_b/formal-20260919T105316Z-r03",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_phase_b/formal-20260919T092203Z-r03",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_engine_s.backbone_engine_v14replica_e12_s.t3t1_phase_b/formal-20260919T105316Z-r01",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_phase_b/formal-20260919T092203Z-r03",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_engine_s.backbone_engine_v14replica_e12_s.t3t1_phase_b/formal-20260919T105316Z-r02",
+          "verdict": "paired",
+          "reasons": []
+        },
+        {
+          "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_phase_b/formal-20260919T092203Z-r03",
+          "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_engine_s.backbone_engine_v14replica_e12_s.t3t1_phase_b/formal-20260919T105316Z-r03",
+          "verdict": "paired",
+          "reasons": []
+        }
+      ],
+      "baseline_row": {
+        "baseline_side": "lhs",
+        "baseline_recipe": "wg:mamba_whole_graph:s.t3t1_phase_b",
+        "treatment_recipe": "wg:mamba_whole_graph/engine=s.backbone_engine_v14replica_e12:s.t3t1_phase_b",
+        "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_phase_b/formal-20260919T092203Z-r01",
+        "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_engine_s.backbone_engine_v14replica_e12_s.t3t1_phase_b/formal-20260919T105316Z-r01",
+        "lhs_identity_sha256": "cf7cd3a241c2f5655f767b77c7d7f8b338b75cd68402103ccb176d3920bb4bad",
+        "rhs_identity_sha256": "2c0d56163edcc803774b4ba09707dfdc983ba2b017a62479ad73982fc96f2bf7",
+        "repeat_n": {
+          "lhs": 6,
+          "rhs": 6
+        },
+        "repeat_distinct_outputs_max": {
+          "lhs": 1,
+          "rhs": 1
+        },
+        "metrics": {
+          "AssA": {
+            "lhs": 69.9,
+            "rhs": 68.8,
+            "delta_rhs_minus_lhs": -1.1,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "DetA": {
+            "lhs": 70.2,
+            "rhs": 72.5,
+            "delta_rhs_minus_lhs": 2.3,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "FN": {
+            "lhs": 20940.0,
+            "rhs": 20208.0,
+            "delta_rhs_minus_lhs": -732.0,
+            "print_precision": 1.0,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "FP": {
+            "lhs": 3471.0,
+            "rhs": 3232.0,
+            "delta_rhs_minus_lhs": -239.0,
+            "print_precision": 1.0,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "HOTA": {
+            "lhs": 70.0,
+            "rhs": 70.5,
+            "delta_rhs_minus_lhs": 0.5,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "IDF1": {
+            "lhs": 78.3,
+            "rhs": 77.1,
+            "delta_rhs_minus_lhs": -1.2,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "IDs": {
+            "lhs": 429.0,
+            "rhs": 415.0,
+            "delta_rhs_minus_lhs": -14.0,
+            "print_precision": 1.0,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "MOTA": {
+            "lhs": 77.9,
+            "rhs": 78.8,
+            "delta_rhs_minus_lhs": 0.9,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "Prcn": {
+            "lhs": 96.3,
+            "rhs": 96.6,
+            "delta_rhs_minus_lhs": 0.3,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          },
+          "Rcll": {
+            "lhs": 81.4,
+            "rhs": 82.0,
+            "delta_rhs_minus_lhs": 0.6,
+            "print_precision": 0.1,
+            "lhs_observed_range": 0.0,
+            "rhs_observed_range": 0.0,
+            "runtime_repeat_floor": 0.0,
+            "reading": "above_runtime_repeat_range"
+          }
+        },
+        "throughput_fps": {
+          "lhs": 196.84,
+          "rhs": 197.25,
+          "delta_rhs_minus_lhs": 0.41,
+          "print_precision": 0.01,
+          "lhs_observed_range": 0.78,
+          "rhs_observed_range": 0.7,
+          "runtime_repeat_floor": 0.78,
+          "reading": "within_runtime_repeat_range",
+          "lhs_repeat": {
+            "values": [
+              197.74,
+              197.22,
+              197.66,
+              196.96,
+              197.66,
+              197.26
+            ],
+            "min": 196.96,
+            "max": 197.74,
+            "observed_range": 0.78
+          },
+          "rhs_repeat": {
+            "values": [
+              198.19,
+              198.05,
+              197.89,
+              197.54,
+              198.05,
+              198.24
+            ],
+            "min": 197.54,
+            "max": 198.24,
+            "observed_range": 0.7
+          },
+          "lhs_formal": {
+            "values": [
+              196.84,
+              196.69,
+              197.77
+            ],
+            "min": 196.69,
+            "max": 197.77,
+            "observed_range": 1.08
+          },
+          "rhs_formal": {
+            "values": [
+              197.25,
+              197.84,
+              196.67
+            ],
+            "min": 196.67,
+            "max": 197.84,
+            "observed_range": 1.17
+          },
+          "profile": "whole_graph_serial"
+        },
+        "observed_differences": {
+          "artifacts.fpn_backbone_engine": {
+            "lhs": "2ef3d4d40dfb670982cbbb98e6ed7d07e5b1a590cfa126d5ccf7342ee1579ce4",
+            "rhs": "e244e8fe813aaa5dd55f7a98a8ba572fe2c2c1c6867f8a2463dd0de39dbe6446"
+          },
+          "config.fpn_backbone_engine": {
+            "lhs": "models/yolo/yolo26s_backbone_640_best.engine",
+            "rhs": "models/yolo/yolo26s_backbone_640_v14replica_e12.engine"
+          }
+        }
+      }
+    }
+  },
+  "readings": {
+    "explicit_vs_implicit_shared_gt1": {
+      "question": "explicit T3->T1 staging vs implicit all-frames T=4 from the shared GT1, three seed-paired replicates (s)",
+      "members": [
+        "C1.s.explicit_vs_implicit_shared_gt1_s42",
+        "C2.s.explicit_vs_implicit_shared_gt1_s43",
+        "C3.s.explicit_vs_implicit_shared_gt1_s44"
+      ],
+      "rows_available": [
+        "C1.s.explicit_vs_implicit_shared_gt1_s42",
+        "C2.s.explicit_vs_implicit_shared_gt1_s43",
+        "C3.s.explicit_vs_implicit_shared_gt1_s44"
+      ],
+      "complete": true,
+      "reference_group": "seed_replicates",
+      "per_metric": {
+        "HOTA": {
+          "deltas": {
+            "C1.s.explicit_vs_implicit_shared_gt1_s42": 1.3,
+            "C2.s.explicit_vs_implicit_shared_gt1_s43": 0.8,
+            "C3.s.explicit_vs_implicit_shared_gt1_s44": 1.0
+          },
+          "readings": {
+            "C1.s.explicit_vs_implicit_shared_gt1_s42": "above_runtime_repeat_range",
+            "C2.s.explicit_vs_implicit_shared_gt1_s43": "above_runtime_repeat_range",
+            "C3.s.explicit_vs_implicit_shared_gt1_s44": "above_runtime_repeat_range"
+          },
+          "all_above_runtime_repeat_range": true,
+          "sign_consistent": true,
+          "min_abs_delta": 0.8,
+          "max_abs_delta": 1.3,
+          "seed_replicate_max_abs_delta": 0.3,
+          "min_abs_delta_exceeds_seed_replicate_max": true
+        },
+        "DetA": {
+          "deltas": {
+            "C1.s.explicit_vs_implicit_shared_gt1_s42": 0.3,
+            "C2.s.explicit_vs_implicit_shared_gt1_s43": 0.9,
+            "C3.s.explicit_vs_implicit_shared_gt1_s44": 0.8
+          },
+          "readings": {
+            "C1.s.explicit_vs_implicit_shared_gt1_s42": "above_runtime_repeat_range",
+            "C2.s.explicit_vs_implicit_shared_gt1_s43": "above_runtime_repeat_range",
+            "C3.s.explicit_vs_implicit_shared_gt1_s44": "above_runtime_repeat_range"
+          },
+          "all_above_runtime_repeat_range": true,
+          "sign_consistent": true,
+          "min_abs_delta": 0.3,
+          "max_abs_delta": 0.9,
+          "seed_replicate_max_abs_delta": 0.4,
+          "min_abs_delta_exceeds_seed_replicate_max": false
+        },
+        "AssA": {
+          "deltas": {
+            "C1.s.explicit_vs_implicit_shared_gt1_s42": 2.2,
+            "C2.s.explicit_vs_implicit_shared_gt1_s43": 0.5,
+            "C3.s.explicit_vs_implicit_shared_gt1_s44": 1.1
+          },
+          "readings": {
+            "C1.s.explicit_vs_implicit_shared_gt1_s42": "above_runtime_repeat_range",
+            "C2.s.explicit_vs_implicit_shared_gt1_s43": "above_runtime_repeat_range",
+            "C3.s.explicit_vs_implicit_shared_gt1_s44": "above_runtime_repeat_range"
+          },
+          "all_above_runtime_repeat_range": true,
+          "sign_consistent": true,
+          "min_abs_delta": 0.5,
+          "max_abs_delta": 2.2,
+          "seed_replicate_max_abs_delta": 0.9,
+          "min_abs_delta_exceeds_seed_replicate_max": false
+        },
+        "IDF1": {
+          "deltas": {
+            "C1.s.explicit_vs_implicit_shared_gt1_s42": 1.6,
+            "C2.s.explicit_vs_implicit_shared_gt1_s43": 1.4,
+            "C3.s.explicit_vs_implicit_shared_gt1_s44": 1.4
+          },
+          "readings": {
+            "C1.s.explicit_vs_implicit_shared_gt1_s42": "above_runtime_repeat_range",
+            "C2.s.explicit_vs_implicit_shared_gt1_s43": "above_runtime_repeat_range",
+            "C3.s.explicit_vs_implicit_shared_gt1_s44": "above_runtime_repeat_range"
+          },
+          "all_above_runtime_repeat_range": true,
+          "sign_consistent": true,
+          "min_abs_delta": 1.4,
+          "max_abs_delta": 1.6,
+          "seed_replicate_max_abs_delta": 0.4,
+          "min_abs_delta_exceeds_seed_replicate_max": true
+        },
+        "MOTA": {
+          "deltas": {
+            "C1.s.explicit_vs_implicit_shared_gt1_s42": 0.1,
+            "C2.s.explicit_vs_implicit_shared_gt1_s43": 0.9,
+            "C3.s.explicit_vs_implicit_shared_gt1_s44": 0.6
+          },
+          "readings": {
+            "C1.s.explicit_vs_implicit_shared_gt1_s42": "above_runtime_repeat_range",
+            "C2.s.explicit_vs_implicit_shared_gt1_s43": "above_runtime_repeat_range",
+            "C3.s.explicit_vs_implicit_shared_gt1_s44": "above_runtime_repeat_range"
+          },
+          "all_above_runtime_repeat_range": true,
+          "sign_consistent": true,
+          "min_abs_delta": 0.1,
+          "max_abs_delta": 0.9,
+          "seed_replicate_max_abs_delta": 0.4,
+          "min_abs_delta_exceeds_seed_replicate_max": false
+        },
+        "IDs": {
+          "deltas": {
+            "C1.s.explicit_vs_implicit_shared_gt1_s42": -83.0,
+            "C2.s.explicit_vs_implicit_shared_gt1_s43": -119.0,
+            "C3.s.explicit_vs_implicit_shared_gt1_s44": -98.0
+          },
+          "readings": {
+            "C1.s.explicit_vs_implicit_shared_gt1_s42": "above_runtime_repeat_range",
+            "C2.s.explicit_vs_implicit_shared_gt1_s43": "above_runtime_repeat_range",
+            "C3.s.explicit_vs_implicit_shared_gt1_s44": "above_runtime_repeat_range"
+          },
+          "all_above_runtime_repeat_range": true,
+          "sign_consistent": true,
+          "min_abs_delta": 83.0,
+          "max_abs_delta": 119.0,
+          "seed_replicate_max_abs_delta": 27.0,
+          "min_abs_delta_exceeds_seed_replicate_max": true
+        }
+      }
+    },
+    "seed_replicates": {
+      "question": "training-seed variability of one recipe (implicit arm 42/43/44, explicit arm 42/43/44); the attributability reference for the C group",
+      "members": [
+        "D1.s.implicit_seed_42_vs_43",
+        "D2.s.implicit_seed_43_vs_44",
+        "D3.s.explicit_shared_seed_42_vs_43",
+        "D4.s.explicit_shared_seed_43_vs_44"
+      ],
+      "rows_available": [
+        "D1.s.implicit_seed_42_vs_43",
+        "D2.s.implicit_seed_43_vs_44",
+        "D3.s.explicit_shared_seed_42_vs_43",
+        "D4.s.explicit_shared_seed_43_vs_44"
+      ],
+      "complete": true,
+      "reference_group": null,
+      "per_metric": {
+        "HOTA": {
+          "deltas": {
+            "D1.s.implicit_seed_42_vs_43": 0.2,
+            "D2.s.implicit_seed_43_vs_44": -0.3,
+            "D3.s.explicit_shared_seed_42_vs_43": -0.3,
+            "D4.s.explicit_shared_seed_43_vs_44": -0.1
+          },
+          "readings": {
+            "D1.s.implicit_seed_42_vs_43": "above_runtime_repeat_range",
+            "D2.s.implicit_seed_43_vs_44": "above_runtime_repeat_range",
+            "D3.s.explicit_shared_seed_42_vs_43": "above_runtime_repeat_range",
+            "D4.s.explicit_shared_seed_43_vs_44": "above_runtime_repeat_range"
+          },
+          "all_above_runtime_repeat_range": true,
+          "sign_consistent": false,
+          "min_abs_delta": 0.1,
+          "max_abs_delta": 0.3
+        },
+        "DetA": {
+          "deltas": {
+            "D1.s.implicit_seed_42_vs_43": -0.2,
+            "D2.s.implicit_seed_43_vs_44": 0.2,
+            "D3.s.explicit_shared_seed_42_vs_43": 0.4,
+            "D4.s.explicit_shared_seed_43_vs_44": 0.1
+          },
+          "readings": {
+            "D1.s.implicit_seed_42_vs_43": "above_runtime_repeat_range",
+            "D2.s.implicit_seed_43_vs_44": "above_runtime_repeat_range",
+            "D3.s.explicit_shared_seed_42_vs_43": "above_runtime_repeat_range",
+            "D4.s.explicit_shared_seed_43_vs_44": "above_runtime_repeat_range"
+          },
+          "all_above_runtime_repeat_range": true,
+          "sign_consistent": false,
+          "min_abs_delta": 0.1,
+          "max_abs_delta": 0.4
+        },
+        "AssA": {
+          "deltas": {
+            "D1.s.implicit_seed_42_vs_43": 0.8,
+            "D2.s.implicit_seed_43_vs_44": -0.9,
+            "D3.s.explicit_shared_seed_42_vs_43": -0.9,
+            "D4.s.explicit_shared_seed_43_vs_44": -0.3
+          },
+          "readings": {
+            "D1.s.implicit_seed_42_vs_43": "above_runtime_repeat_range",
+            "D2.s.implicit_seed_43_vs_44": "above_runtime_repeat_range",
+            "D3.s.explicit_shared_seed_42_vs_43": "above_runtime_repeat_range",
+            "D4.s.explicit_shared_seed_43_vs_44": "above_runtime_repeat_range"
+          },
+          "all_above_runtime_repeat_range": true,
+          "sign_consistent": false,
+          "min_abs_delta": 0.3,
+          "max_abs_delta": 0.9
+        },
+        "IDF1": {
+          "deltas": {
+            "D1.s.implicit_seed_42_vs_43": 0.2,
+            "D2.s.implicit_seed_43_vs_44": -0.4,
+            "D3.s.explicit_shared_seed_42_vs_43": 0.0,
+            "D4.s.explicit_shared_seed_43_vs_44": -0.4
+          },
+          "readings": {
+            "D1.s.implicit_seed_42_vs_43": "above_runtime_repeat_range",
+            "D2.s.implicit_seed_43_vs_44": "above_runtime_repeat_range",
+            "D3.s.explicit_shared_seed_42_vs_43": "no_observed_difference",
+            "D4.s.explicit_shared_seed_43_vs_44": "above_runtime_repeat_range"
+          },
+          "all_above_runtime_repeat_range": false,
+          "sign_consistent": false,
+          "min_abs_delta": 0.0,
+          "max_abs_delta": 0.4
+        },
+        "MOTA": {
+          "deltas": {
+            "D1.s.implicit_seed_42_vs_43": -0.4,
+            "D2.s.implicit_seed_43_vs_44": 0.3,
+            "D3.s.explicit_shared_seed_42_vs_43": 0.4,
+            "D4.s.explicit_shared_seed_43_vs_44": 0.0
+          },
+          "readings": {
+            "D1.s.implicit_seed_42_vs_43": "above_runtime_repeat_range",
+            "D2.s.implicit_seed_43_vs_44": "above_runtime_repeat_range",
+            "D3.s.explicit_shared_seed_42_vs_43": "above_runtime_repeat_range",
+            "D4.s.explicit_shared_seed_43_vs_44": "no_observed_difference"
+          },
+          "all_above_runtime_repeat_range": false,
+          "sign_consistent": false,
+          "min_abs_delta": 0.0,
+          "max_abs_delta": 0.4
+        },
+        "IDs": {
+          "deltas": {
+            "D1.s.implicit_seed_42_vs_43": 27.0,
+            "D2.s.implicit_seed_43_vs_44": -14.0,
+            "D3.s.explicit_shared_seed_42_vs_43": -9.0,
+            "D4.s.explicit_shared_seed_43_vs_44": 7.0
+          },
+          "readings": {
+            "D1.s.implicit_seed_42_vs_43": "above_runtime_repeat_range",
+            "D2.s.implicit_seed_43_vs_44": "above_runtime_repeat_range",
+            "D3.s.explicit_shared_seed_42_vs_43": "above_runtime_repeat_range",
+            "D4.s.explicit_shared_seed_43_vs_44": "above_runtime_repeat_range"
+          },
+          "all_above_runtime_repeat_range": true,
+          "sign_consistent": false,
+          "min_abs_delta": 7.0,
+          "max_abs_delta": 27.0
+        }
+      }
+    },
+    "stage_increments": {
+      "question": "distill -> GT1 -> plain GT2 stage bundles (s and m); one pair per stage, no seed replicate",
+      "members": [
+        "B1.s.distill_to_gt1",
+        "B2.s.gt1_to_gt2_plain",
+        "B3.m.distill_to_gt1",
+        "B4.m.gt1_to_gt2_plain"
+      ],
+      "rows_available": [
+        "B1.s.distill_to_gt1",
+        "B2.s.gt1_to_gt2_plain",
+        "B3.m.distill_to_gt1",
+        "B4.m.gt1_to_gt2_plain"
+      ],
+      "complete": true,
+      "reference_group": null,
+      "per_metric": {
+        "HOTA": {
+          "deltas": {
+            "B1.s.distill_to_gt1": 8.4,
+            "B2.s.gt1_to_gt2_plain": 0.3,
+            "B3.m.distill_to_gt1": 7.8,
+            "B4.m.gt1_to_gt2_plain": 0.8
+          },
+          "readings": {
+            "B1.s.distill_to_gt1": "above_runtime_repeat_range",
+            "B2.s.gt1_to_gt2_plain": "above_runtime_repeat_range",
+            "B3.m.distill_to_gt1": "above_runtime_repeat_range",
+            "B4.m.gt1_to_gt2_plain": "above_runtime_repeat_range"
+          },
+          "all_above_runtime_repeat_range": true,
+          "sign_consistent": true,
+          "min_abs_delta": 0.3,
+          "max_abs_delta": 8.4
+        },
+        "DetA": {
+          "deltas": {
+            "B1.s.distill_to_gt1": 6.8,
+            "B2.s.gt1_to_gt2_plain": 1.2,
+            "B3.m.distill_to_gt1": 7.1,
+            "B4.m.gt1_to_gt2_plain": 0.9
+          },
+          "readings": {
+            "B1.s.distill_to_gt1": "above_runtime_repeat_range",
+            "B2.s.gt1_to_gt2_plain": "above_runtime_repeat_range",
+            "B3.m.distill_to_gt1": "above_runtime_repeat_range",
+            "B4.m.gt1_to_gt2_plain": "above_runtime_repeat_range"
+          },
+          "all_above_runtime_repeat_range": true,
+          "sign_consistent": true,
+          "min_abs_delta": 0.9,
+          "max_abs_delta": 7.1
+        },
+        "AssA": {
+          "deltas": {
+            "B1.s.distill_to_gt1": 10.1,
+            "B2.s.gt1_to_gt2_plain": -0.6,
+            "B3.m.distill_to_gt1": 8.4,
+            "B4.m.gt1_to_gt2_plain": 0.5
+          },
+          "readings": {
+            "B1.s.distill_to_gt1": "above_runtime_repeat_range",
+            "B2.s.gt1_to_gt2_plain": "above_runtime_repeat_range",
+            "B3.m.distill_to_gt1": "above_runtime_repeat_range",
+            "B4.m.gt1_to_gt2_plain": "above_runtime_repeat_range"
+          },
+          "all_above_runtime_repeat_range": true,
+          "sign_consistent": false,
+          "min_abs_delta": 0.5,
+          "max_abs_delta": 10.1
+        },
+        "IDF1": {
+          "deltas": {
+            "B1.s.distill_to_gt1": 7.5,
+            "B2.s.gt1_to_gt2_plain": 0.2,
+            "B3.m.distill_to_gt1": 6.6,
+            "B4.m.gt1_to_gt2_plain": 0.7
+          },
+          "readings": {
+            "B1.s.distill_to_gt1": "above_runtime_repeat_range",
+            "B2.s.gt1_to_gt2_plain": "above_runtime_repeat_range",
+            "B3.m.distill_to_gt1": "above_runtime_repeat_range",
+            "B4.m.gt1_to_gt2_plain": "above_runtime_repeat_range"
+          },
+          "all_above_runtime_repeat_range": true,
+          "sign_consistent": true,
+          "min_abs_delta": 0.2,
+          "max_abs_delta": 7.5
+        },
+        "MOTA": {
+          "deltas": {
+            "B1.s.distill_to_gt1": 6.4,
+            "B2.s.gt1_to_gt2_plain": 1.3,
+            "B3.m.distill_to_gt1": 5.7,
+            "B4.m.gt1_to_gt2_plain": 0.8
+          },
+          "readings": {
+            "B1.s.distill_to_gt1": "above_runtime_repeat_range",
+            "B2.s.gt1_to_gt2_plain": "above_runtime_repeat_range",
+            "B3.m.distill_to_gt1": "above_runtime_repeat_range",
+            "B4.m.gt1_to_gt2_plain": "above_runtime_repeat_range"
+          },
+          "all_above_runtime_repeat_range": true,
+          "sign_consistent": true,
+          "min_abs_delta": 0.8,
+          "max_abs_delta": 6.4
+        },
+        "IDs": {
+          "deltas": {
+            "B1.s.distill_to_gt1": -163.0,
+            "B2.s.gt1_to_gt2_plain": 70.0,
+            "B3.m.distill_to_gt1": -292.0,
+            "B4.m.gt1_to_gt2_plain": 15.0
+          },
+          "readings": {
+            "B1.s.distill_to_gt1": "above_runtime_repeat_range",
+            "B2.s.gt1_to_gt2_plain": "above_runtime_repeat_range",
+            "B3.m.distill_to_gt1": "above_runtime_repeat_range",
+            "B4.m.gt1_to_gt2_plain": "above_runtime_repeat_range"
+          },
+          "all_above_runtime_repeat_range": true,
+          "sign_consistent": false,
+          "min_abs_delta": 15.0,
+          "max_abs_delta": 292.0
+        }
+      }
+    },
+    "system_comparisons": {
+      "question": "s vs m production systems; native Detect head vs Mamba head on a shared PyTorch backbone (eager, s tracker policy)",
+      "members": [
+        "E1.s_vs_m.production_system",
+        "E2.s.native_head_vs_mamba_head_shared_backbone",
+        "E3.m.native_head_vs_mamba_head_shared_backbone"
+      ],
+      "rows_available": [
+        "E1.s_vs_m.production_system",
+        "E2.s.native_head_vs_mamba_head_shared_backbone",
+        "E3.m.native_head_vs_mamba_head_shared_backbone"
+      ],
+      "complete": true,
+      "reference_group": null,
+      "per_metric": {
+        "HOTA": {
+          "deltas": {
+            "E1.s_vs_m.production_system": 4.3,
+            "E2.s.native_head_vs_mamba_head_shared_backbone": 27.3,
+            "E3.m.native_head_vs_mamba_head_shared_backbone": 15.7
+          },
+          "readings": {
+            "E1.s_vs_m.production_system": "above_runtime_repeat_range",
+            "E2.s.native_head_vs_mamba_head_shared_backbone": "above_runtime_repeat_range",
+            "E3.m.native_head_vs_mamba_head_shared_backbone": "above_runtime_repeat_range"
+          },
+          "all_above_runtime_repeat_range": true,
+          "sign_consistent": true,
+          "min_abs_delta": 4.3,
+          "max_abs_delta": 27.3
+        },
+        "DetA": {
+          "deltas": {
+            "E1.s_vs_m.production_system": 5.9,
+            "E2.s.native_head_vs_mamba_head_shared_backbone": 41.8,
+            "E3.m.native_head_vs_mamba_head_shared_backbone": 22.1
+          },
+          "readings": {
+            "E1.s_vs_m.production_system": "above_runtime_repeat_range",
+            "E2.s.native_head_vs_mamba_head_shared_backbone": "above_runtime_repeat_range",
+            "E3.m.native_head_vs_mamba_head_shared_backbone": "above_runtime_repeat_range"
+          },
+          "all_above_runtime_repeat_range": true,
+          "sign_consistent": true,
+          "min_abs_delta": 5.9,
+          "max_abs_delta": 41.8
+        },
+        "AssA": {
+          "deltas": {
+            "E1.s_vs_m.production_system": 2.9,
+            "E2.s.native_head_vs_mamba_head_shared_backbone": 8.3,
+            "E3.m.native_head_vs_mamba_head_shared_backbone": 8.8
+          },
+          "readings": {
+            "E1.s_vs_m.production_system": "above_runtime_repeat_range",
+            "E2.s.native_head_vs_mamba_head_shared_backbone": "above_runtime_repeat_range",
+            "E3.m.native_head_vs_mamba_head_shared_backbone": "above_runtime_repeat_range"
+          },
+          "all_above_runtime_repeat_range": true,
+          "sign_consistent": true,
+          "min_abs_delta": 2.9,
+          "max_abs_delta": 8.8
+        },
+        "IDF1": {
+          "deltas": {
+            "E1.s_vs_m.production_system": 2.0,
+            "E2.s.native_head_vs_mamba_head_shared_backbone": 27.7,
+            "E3.m.native_head_vs_mamba_head_shared_backbone": 10.0
+          },
+          "readings": {
+            "E1.s_vs_m.production_system": "above_runtime_repeat_range",
+            "E2.s.native_head_vs_mamba_head_shared_backbone": "above_runtime_repeat_range",
+            "E3.m.native_head_vs_mamba_head_shared_backbone": "above_runtime_repeat_range"
+          },
+          "all_above_runtime_repeat_range": true,
+          "sign_consistent": true,
+          "min_abs_delta": 2.0,
+          "max_abs_delta": 27.7
+        },
+        "MOTA": {
+          "deltas": {
+            "E1.s_vs_m.production_system": 3.9,
+            "E2.s.native_head_vs_mamba_head_shared_backbone": 43.7,
+            "E3.m.native_head_vs_mamba_head_shared_backbone": 20.4
+          },
+          "readings": {
+            "E1.s_vs_m.production_system": "above_runtime_repeat_range",
+            "E2.s.native_head_vs_mamba_head_shared_backbone": "above_runtime_repeat_range",
+            "E3.m.native_head_vs_mamba_head_shared_backbone": "above_runtime_repeat_range"
+          },
+          "all_above_runtime_repeat_range": true,
+          "sign_consistent": true,
+          "min_abs_delta": 3.9,
+          "max_abs_delta": 43.7
+        },
+        "IDs": {
+          "deltas": {
+            "E1.s_vs_m.production_system": -71.0,
+            "E2.s.native_head_vs_mamba_head_shared_backbone": 354.0,
+            "E3.m.native_head_vs_mamba_head_shared_backbone": 213.0
+          },
+          "readings": {
+            "E1.s_vs_m.production_system": "above_runtime_repeat_range",
+            "E2.s.native_head_vs_mamba_head_shared_backbone": "above_runtime_repeat_range",
+            "E3.m.native_head_vs_mamba_head_shared_backbone": "above_runtime_repeat_range"
+          },
+          "all_above_runtime_repeat_range": true,
+          "sign_consistent": false,
+          "min_abs_delta": 71.0,
+          "max_abs_delta": 354.0
+        }
+      }
+    },
+    "engine_ab": {
+      "question": "the s production backbone engine (sibling ONNX = legacy teacher) vs the head's own teacher engine, same head",
+      "members": [
+        "E4.s.production_backbone_engine_ab"
+      ],
+      "rows_available": [
+        "E4.s.production_backbone_engine_ab"
+      ],
+      "complete": true,
+      "reference_group": null,
+      "per_metric": {
+        "HOTA": {
+          "deltas": {
+            "E4.s.production_backbone_engine_ab": 0.5
+          },
+          "readings": {
+            "E4.s.production_backbone_engine_ab": "above_runtime_repeat_range"
+          },
+          "all_above_runtime_repeat_range": true,
+          "sign_consistent": true,
+          "min_abs_delta": 0.5,
+          "max_abs_delta": 0.5
+        },
+        "DetA": {
+          "deltas": {
+            "E4.s.production_backbone_engine_ab": 2.3
+          },
+          "readings": {
+            "E4.s.production_backbone_engine_ab": "above_runtime_repeat_range"
+          },
+          "all_above_runtime_repeat_range": true,
+          "sign_consistent": true,
+          "min_abs_delta": 2.3,
+          "max_abs_delta": 2.3
+        },
+        "AssA": {
+          "deltas": {
+            "E4.s.production_backbone_engine_ab": -1.1
+          },
+          "readings": {
+            "E4.s.production_backbone_engine_ab": "above_runtime_repeat_range"
+          },
+          "all_above_runtime_repeat_range": true,
+          "sign_consistent": true,
+          "min_abs_delta": 1.1,
+          "max_abs_delta": 1.1
+        },
+        "IDF1": {
+          "deltas": {
+            "E4.s.production_backbone_engine_ab": -1.2
+          },
+          "readings": {
+            "E4.s.production_backbone_engine_ab": "above_runtime_repeat_range"
+          },
+          "all_above_runtime_repeat_range": true,
+          "sign_consistent": true,
+          "min_abs_delta": 1.2,
+          "max_abs_delta": 1.2
+        },
+        "MOTA": {
+          "deltas": {
+            "E4.s.production_backbone_engine_ab": 0.9
+          },
+          "readings": {
+            "E4.s.production_backbone_engine_ab": "above_runtime_repeat_range"
+          },
+          "all_above_runtime_repeat_range": true,
+          "sign_consistent": true,
+          "min_abs_delta": 0.9,
+          "max_abs_delta": 0.9
+        },
+        "IDs": {
+          "deltas": {
+            "E4.s.production_backbone_engine_ab": -14.0
+          },
+          "readings": {
+            "E4.s.production_backbone_engine_ab": "above_runtime_repeat_range"
+          },
+          "all_above_runtime_repeat_range": true,
+          "sign_consistent": true,
+          "min_abs_delta": 14.0,
+          "max_abs_delta": 14.0
+        }
+      }
+    }
+  },
+  "historical": [
+    {
+      "comparison_id": "C6.s.plain_gt2_vs_t3t1_unpaired_original",
+      "classification": "historical_not_comparable",
+      "intended_treatment": "explicit T3->T1 staging vs plain GT2 T=4 from the shared GT1 (the original +2.1 IDF1 headline)",
+      "lhs_recipe": "wg:mamba_whole_graph:s.gt2_plain",
+      "rhs_recipe": "wg:mamba_whole_graph:s.t3t1_phase_b",
+      "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.gt2_plain/formal-20260919T084841Z-r01",
+      "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_phase_b/formal-20260919T092203Z-r01",
+      "validate_pair": {
+        "verdict": "not_paired",
+        "reasons": [
+          "C6.s.plain_gt2_vs_t3t1_unpaired_original is not a prepared pair"
+        ]
+      },
+      "training_confounds": [
+        {
+          "name": "deployed_backbone_teacher_mismatch",
+          "severity": "common_mode",
+          "status": null,
+          "lhs": null,
+          "rhs": null,
+          "detail": "both endpoints deploy on s.backbone_engine whose sibling ONNX indicates s.legacy_teacher while the heads were trained against s.adapted_teacher; engine bytes unattributed. Cannot explain a paired delta; absolute numbers are on an unintended backbone."
+        },
+        {
+          "name": "training_seed",
+          "severity": "training",
+          "status": "unmatched",
+          "lhs": 20260612,
+          "rhs": 42,
+          "detail": "bases: args.seed / args.seed"
+        },
+        {
+          "name": "training_schedule",
+          "severity": "training",
+          "status": "unmatched",
+          "lhs": [
+            "s.gt2_plain"
+          ],
+          "rhs": [
+            "s.t3t1_phase_a",
+            "s.t3t1_phase_b"
+          ],
+          "detail": "non-treatment schedule keys differ: ['warmup_epochs']"
+        }
+      ],
+      "schedule_confound_keys": [
+        "warmup_epochs"
+      ],
+      "training_seed_axis": "unmatched",
+      "runtime_identity_differences": {
+        "artifacts.mamba_ckpt": {
+          "lhs": "c1acd2bb50642a3f4816e517b4165781defc30df6ea97c42bbc23db1d51eb989",
+          "rhs": "c161c88e50b894d8b51cc614c46c3700370373decf05a15825bdf00ccf0e0876"
+        },
+        "config.mamba_ckpt": {
+          "lhs": "runs/mamba_gt_v14replica_final/best.ckpt",
+          "rhs": "runs/mamba_gt_v14replica_t3_t1/best.ckpt"
+        }
+      },
+      "printed_metrics": {
+        "lhs": {
+          "AssA": 66.5,
+          "DetA": 69.7,
+          "FN": 20209.0,
+          "FP": 4885.0,
+          "HOTA": 67.9,
+          "IDF1": 75.8,
+          "IDs": 529.0,
+          "MOTA": 77.2,
+          "Prcn": 95.0,
+          "Rcll": 82.0
+        },
+        "rhs": {
+          "AssA": 69.9,
+          "DetA": 70.2,
+          "FN": 20940.0,
+          "FP": 3471.0,
+          "HOTA": 70.0,
+          "IDF1": 78.3,
+          "IDs": 429.0,
+          "MOTA": 77.9,
+          "Prcn": 96.3,
+          "Rcll": 81.4
+        }
+      },
+      "baseline_row": null,
+      "status": "historical only: not a prepared pair; the numbers may be quoted side by side with the confounds attached, never as a training effect"
+    },
+    {
+      "comparison_id": "C9.m.plain_gt2_vs_t3t1",
+      "classification": "historical_not_comparable",
+      "intended_treatment": "explicit T3->T1 staging vs plain GT2 T=4 from the m GT1, same seed",
+      "lhs_recipe": "wg:mamba_whole_graph_m/ckpt-head:m.gt2_plain",
+      "rhs_recipe": "wg:mamba_whole_graph_m:m.t3t1_phase_b",
+      "lhs_run": "results/training_eval_contract/wg_mamba_whole_graph_m_ckpt-head_m.gt2_plain/formal-20260919T090919Z-r01",
+      "rhs_run": "results/training_eval_contract/wg_mamba_whole_graph_m_m.t3t1_phase_b/formal-20260919T095304Z-r01",
+      "validate_pair": {
+        "verdict": "not_paired",
+        "reasons": [
+          "C9.m.plain_gt2_vs_t3t1 is not a prepared pair"
+        ]
+      },
+      "training_confounds": [
+        {
+          "name": "training_schedule",
+          "severity": "training",
+          "status": "unmatched",
+          "lhs": [
+            "m.gt2_plain"
+          ],
+          "rhs": [
+            "m.t3t1_phase_a",
+            "m.t3t1_phase_b"
+          ],
+          "detail": "non-treatment schedule keys differ: ['warmup_epochs']"
+        }
+      ],
+      "schedule_confound_keys": [
+        "warmup_epochs"
+      ],
+      "training_seed_axis": "matched",
+      "runtime_identity_differences": {
+        "artifacts.mamba_ckpt": {
+          "lhs": "1960e28f8924e5918c4ee3989abc583a390f63f8257017dcb4cc85fe30b00a84",
+          "rhs": "a5a0e7091cd854ad68210ae4bbd43af73c7d3d098ea119f02ea65fab59c0676c"
+        },
+        "config.mamba_ckpt": {
+          "lhs": "runs/mamba_gt_yolo26m_v14replica_final/best.ckpt",
+          "rhs": "runs/mamba_gt_yolo26m_v14replica_t3_t1/best.ckpt"
+        },
+        "config.mamba_trt": {
+          "lhs": false,
+          "rhs": null
+        }
+      },
+      "printed_metrics": {
+        "lhs": {
+          "AssA": 71.3,
+          "DetA": 74.4,
+          "FN": 18087.0,
+          "FP": 2590.0,
+          "HOTA": 72.8,
+          "IDF1": 79.8,
+          "IDs": 368.0,
+          "MOTA": 81.3,
+          "Prcn": 97.3,
+          "Rcll": 83.9
+        },
+        "rhs": {
+          "AssA": 72.8,
+          "DetA": 76.1,
+          "FN": 18053.0,
+          "FP": 2005.0,
+          "HOTA": 74.3,
+          "IDF1": 80.3,
+          "IDs": 358.0,
+          "MOTA": 81.8,
+          "Prcn": 97.9,
+          "Rcll": 83.9
+        }
+      },
+      "baseline_row": null,
+      "status": "historical only: not a prepared pair; the numbers may be quoted side by side with the confounds attached, never as a training effect"
+    }
+  ],
+  "claim_rules": {
+    "observed_difference": "a delta between two paired formal runs, read against the print precision and the larger of the two sides' same-identity runtime-repeat observed ranges; 'above_runtime_repeat_range' means the instrument resolved it in this campaign",
+    "observed_range_zero": "an observed range of 0.0 means this batch of repeat runs saw no variation (k = 1 distinct output in n runs bounds only per-run divergence rates above ~1-0.05^(1/n)); it is not a bound and not a determinism claim",
+    "effect_claim": "not issued by this report: a delta above the runtime-repeat range is not by itself a causal effect; every row keeps its remaining_confounds; the C group is additionally read against the training-seed reference (D group) for attributability, and even where it exceeds that reference the statement is 'consistent across three seed-paired replicates', not an effect size",
+    "baseline_identity": "baseline status is the contract pair's lhs by orientation; no row was chosen by ranking a metric",
+    "historical": "plain-GT2 <-> T3->T1 in either family is not a prepared pair (warmup_epochs 5->3 outside the curriculum; s also differs in seed); quoted only under section 'historical'"
+  },
+  "variance_axes": {
+    "runtime_repeat": "same identity, repeated runs (repeat reports): what the measurement instrument resolves",
+    "training_seed": "seed_replicate pairs (D1-D4): different checkpoints from the same recipe at different seeds; a training-process quantity",
+    "rule": "never pooled and never substituted: a treatment delta is read against runtime_repeat for resolvability and against training_seed for attributability; a seed-replicate delta is not a runtime-repeat estimate and vice versa"
+  }
+}
