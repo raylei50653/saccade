@@ -169,6 +169,7 @@ Manifest: `docs/ownership/doc_migration_manifest.yaml`
 - `docs/reference/benchmarks/frozen_v2_ablation.md`
 - `docs/reference/benchmarks/latency_log.md`
 - `docs/reference/benchmarks/reid_handover_ablation_20260808.md`
+- `docs/reference/benchmarks/resource_419_closure_20260920.md`
 - `docs/reference/benchmarks/resource_admission_20260915.md`
 - `docs/reference/benchmarks/resource_elastic_20260915.md`
 - `docs/reference/benchmarks/resource_hardware_20260916.md`
@@ -396,6 +397,6 @@ Excluded from the active index and default search view.
 
 ## Inventory summary
 
-- documents: 346
-- active: 291
+- documents: 347
+- active: 292
 - grayed out: 55
