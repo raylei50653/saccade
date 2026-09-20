@@ -26,6 +26,7 @@
 - [ADR 023: 評估 detector 路徑與 Ultralytics 的解耦邊界](023-ultralytics-runtime-decouple.md) — issue #391；分析 only，不授權換 detector
 - [ADR 024: EvalConfig Phase 4 module-view disposition](024-eval-config-module-views.md) — issue #139；terminal verdict `retain_current_views`
 - [ADR 025: `saccade_tracking_ext` 的第三方交付形式](025-native-extension-delivery.md) — terminal verdict `consumer_cmake_build`；`pip install saccade` 單獨不含 native tracker；安裝路徑見 [runbook](../reference/runbooks/native_extension_install.md)
+- [ADR 026: CLOSED packet frozen input 的 source evolution policy](026-frozen-input-source-evolution.md) — issue #436；terminal verdict `historical_immutability_not_production_freeze`；packet 不改、HEAD 可演進，轉移記在 [supersession ledger](../research/contracts/frozen_source_supersession_ledger_v1.json)；#434 是第一次碰撞而非先例
 
 > ADR 001、002、003 未建立（對應決策已直接合併至後續 ADR 中）。
 

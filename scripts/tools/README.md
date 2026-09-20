@@ -442,6 +442,7 @@ deleting.
 | `export_d0_runtime_capture.py` | stable | cli | Merge per-sequence Issue #112 native captures into D0's CSV contract. |
 | `export_headline_bridge_decision_trace.py` | stable | cli | Canonicalize H0 records plus its independent native-universe sidecar. |
 | `export_r1_temporal_reduction_capture.py` | stable | cli | Seal native shadow observations into the R1 temporal-reduction payload. |
+| `frozen_source_status.py` | stable | cli | Historical-vs-current status of CLOSED packets' frozen inputs (ADR 026). |
 | `gap_occupancy_features.py` | diagnostic | cli | Gap-occupancy (exclusion) features for relink candidates. |
 | `gate_clean_color.py` | diagnostic | - | Test the 'use color ReID only on non-occluded relink candidates' gate. |
 | `gate_rule_search.py` | diagnostic | cli | Constrained multi-gate rule search (not combinatorial thrashing). |

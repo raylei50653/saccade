@@ -1,0 +1,6 @@
+{
+  "schema": "frozen_source_supersession_ledger_v1",
+  "policy": "docs/decisions/026-frozen-input-source-evolution.md",
+  "purpose": "Mechanical authority for whether a frozen input of a CLOSED research packet is `current` or `historical` at HEAD. Packets under docs/modules/semantic/research/evidence/ are never edited; when production source, tooling or a bound document legitimately moves past a packet's frozen bytes, one entry per (path, frozen_sha256) is appended here in the same PR. The checker (scripts/tools/frozen_source_status.py) re-hashes the blob at `last_current_ref`, so the historical evidence stays byte-verifiable from git objects without freezing HEAD. Missing entry + drift = unrecorded drift = fail on every arm. Packet artifacts and the H0 owner-event declaration are not ledgerable.",
+  "entries": []
+}
