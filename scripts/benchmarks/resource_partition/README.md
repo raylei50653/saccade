@@ -99,6 +99,32 @@ decode; only double mode adds `--double-buffer`. Tracker-stage latency is
 unobserved and stays `null`. Levels are shuffled per repetition (`--seed 419`),
 mode order alternates, and each DB gain pairs the same-repetition serial run.
 
+## Frozen benchmark and before/after comparison (`frozen_benchmark.py`)
+
+`frozen_benchmark.py build <sweep-dir>` turns a completed sweep whose every
+point validated into a compact record (`saccade-partition-frozen-benchmark-v1`):
+per-budget aggregates over repetitions (FPS, DB gain, frame p50/p95/p99,
+period p50/p95/p99 and σ, telemetry means) for serial and double, the scope
+that a later run must reproduce (preset, sequences, frame bounds, warmup,
+barrier, requested levels, device name/SM count/alignment) with the recorded
+`HEAD`, harness/library hashes, driver and toolchain versions, the
+**pre-declared knee verdict** and the **service-level frontier** (smallest
+verified budget meeting each declared FPS / frame-p99 target in every
+repetition). The rule constants at the top of the script are part of the
+schema; changing them is a new schema version.
+
+`frozen_benchmark.py compare --reference <record.json> --candidate <sweep-dir
+or record> [--control <sweep-dir or record>]` exits 2 unless the scope and
+criteria match exactly; otherwise it reports candidate/reference ratios of
+means per budget and mode, DB-gain deltas, whether repetition ranges overlap,
+both knee verdicts and frontier movement in SMs. It records (never rejects)
+`HEAD`, source, driver and toolchain differences. Absolutes on one host have
+drifted 7–10% between sessions at identical clocks, so a before/after claim
+should pass the reference source re-run in the **same session** as
+`--control`; without it the comparison says `host_drift: null`. The committed
+reference is
+[`resource_scaling_closure_20260920.json`](../../../docs/reference/benchmarks/resource_scaling_closure_20260920.json).
+
 ## Artifacts
 
 - `input_identity_before.json` / `input_identity_after.json`, `green_probe.json`
@@ -108,6 +134,8 @@ mode order alternates, and each DB gain pairs the same-repetition serial run.
   completions, routing verification, verdict; `<point>/cupti_activity.trace`
   for audited twins; `<point>/eval/` holds the ordinary evaluator outputs.
 - `<point>.telemetry.csv`, `<point>.log`, `summary.json`, `resource_partition.png`.
+- `sweep.json` also records `toolchain` (python/torch/TensorRT/cuda-bindings
+  versions of the point interpreter) for the frozen record's scope.
 
 See [the phase-B report](../../../docs/reference/benchmarks/resource_partition_20260915.md)
 for measured results.
@@ -119,6 +147,7 @@ for measured results.
 
 | Script | Status | Usage | Function |
 |--------|--------|-------|----------|
+| `frozen_benchmark.py` | diagnostic | cli | Freeze the serial/double-buffer SM-scaling benchmark and compare a later sweep against it. |
 | `green_owner.py` | diagnostic | - | Own Green Context routing for PyTorch, TensorRT, native CUDA and graph launches. |
 | `plot.py` | diagnostic | cli | Plot verified-partition serial/double FPS, DB gain and frame p99 versus actual SM count. |
 | `report.py` | diagnostic | cli | Build the machine-readable phase-B study record and its markdown tables. |

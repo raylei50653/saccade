@@ -175,6 +175,7 @@ def main():
         "library_sha256": {"audit": sha256(audit), "probe": sha256(probe)},
         "build_commands": build_commands,
         "nvcc": subprocess.check_output(["nvcc", "--version"], text=True),
+        "toolchain": toolchain_versions(),
         "gpu": subprocess.check_output(["nvidia-smi", "-q"], text=True),
         "environment": {
             k: v
@@ -275,6 +276,18 @@ def main():
         check=True,
         cwd=ROOT,
     )
+
+
+def toolchain_versions():
+    """Library versions of the interpreter that runs the points, for the frozen
+    benchmark's scope record (never for any verdict)."""
+    code = (
+        "import json, sys, torch, tensorrt, cuda.bindings as cb;"
+        "print(json.dumps({'python': sys.version.split()[0], 'torch': torch.__version__,"
+        " 'tensorrt': tensorrt.__version__, 'cuda_bindings': cb.__version__,"
+        " 'torch_cuda': torch.version.cuda}))"
+    )
+    return json.loads(subprocess.check_output([sys.executable, "-c", code], text=True))
 
 
 def point_name(entry):
