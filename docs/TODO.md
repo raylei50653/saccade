@@ -66,7 +66,7 @@ legacy `native_960` presets (`speed` / `baseline`) remain useful for comparison,
 | resource / perf | [#419](https://github.com/raylei50653/saccade/issues/419) | [resource](modules/resource/TODO.md) |
 | governance（tracker frozen substrate） | [#436](https://github.com/raylei50653/saccade/issues/436) | — |
 | training lineage | [#421](https://github.com/raylei50653/saccade/issues/421) | — |
-| semantic | [#442](https://github.com/raylei50653/saccade/issues/442)（OWDL owner seal decision） | [semantic](modules/semantic/TODO.md) |
+| semantic | ⏸️ 無 active（[#442](https://github.com/raylei50653/saccade/issues/442) resolved 2026-09-20: OWDL sealed at `311c2225`, parked） | [semantic](modules/semantic/TODO.md) |
 
 #368 Phase 2 **未啟動**：啟動前置條件見 [activation boundary](ownership/module_doc_question_phase2_activation_boundary.md)（第 7 條 = 本表明列該 unit 並移入 `Now`）。
 

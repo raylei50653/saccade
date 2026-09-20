@@ -1,9 +1,9 @@
 ---
-doc-status: active
+doc-status: parked
 doc-promotion: navigation-only; not evidence
 owner-module: semantic
 work-class: mainline-study
-wip-role: sole-active
+wip-role: parked
 created: 2026-08-27
 ---
 
@@ -11,10 +11,14 @@ created: 2026-08-27
 
 ## Status
 
-**ACTIVE · mainline-study · sole-active · WAITING_OWNER_SEAL.**
-Implementation complete; no formal outcome access authorized. The authority
-pointer is [semantic TODO](../../modules/semantic/TODO.md). This activation
-does not authorize formal study execution.
+**PARKED · mainline-study · SEALED, no runner-review scheduled.**
+Owner seal issued 2026-09-20 ([#442](https://github.com/raylei50653/saccade/issues/442)):
+`declaration_seal_head = 311c222580dd29fcecacd5e2cc7cf6b2b459e684`, carried in the
+[seal receipt](../../modules/semantic/research/observability_weighted_directional_likelihood_seal_receipt_20260920.json).
+The semantic sole-active slot is released; the authority pointer remains
+[semantic TODO](../../modules/semantic/TODO.md). The seal freezes identity only —
+no formal outcome access, runner, or execution is authorized, and nothing
+follows automatically.
 
 ## Current boundary
 
@@ -64,15 +68,27 @@ an identity.
 - [SR2 declaration record](../../modules/semantic/research/observability_weighted_directional_likelihood_declaration_20260827.score.json)
 - [`observability_weighted_directional_likelihood.py`](../../../scripts/tools/observability_weighted_directional_likelihood.py)
 - [`test_observability_weighted_directional_likelihood.py`](../../../tests/unit/eval/diagnostics/test_observability_weighted_directional_likelihood.py)
+- [seal receipt 2026-09-20](../../modules/semantic/research/observability_weighted_directional_likelihood_seal_receipt_20260920.json)
+  (`declaration_seal_head`, sealed-file digests, source hashes, custody root, open-item dispositions)
 
 ## Current step
 
-**WAITING_OWNER_SEAL.** Pre-seal implementation is complete. There is no
-remaining legal implementation work. Do not load or summarize formal B1
-outcome rows, compute metrics, or add the runner.
+**PARKED after seal.** The sealed object is
+`311c222580dd29fcecacd5e2cc7cf6b2b459e684` (merge of PR #398, the head at which
+pre-seal was confirmed complete; every sealed file is byte-identical to that
+tree on `main`). No runner-review phase is scheduled. Do not load or summarize
+formal B1 outcome rows, compute metrics, or add the runner.
 
-Owner seal, when issued, records the exact merged commit SHA in the seal
-receipt (`declaration_seal_head`), not a branch name.
+Resume requires an explicit owner scheduling decision that names the
+runner-review phase and reacquires the semantic sole-active slot; until then
+this card is not executable work. Resume preconditions:
+
+- sealed-file raw byte identity against `declaration_seal_head` still holds;
+- the nine frozen sources verify 9/9 at the paths the runner reads — repo paths
+  or the read-only custody root
+  `/home/ray/owdl_custody/owdl_m_b1_v1_seal_311c2225_20260920/` (SHA256SUMS
+  self-sealed). If neither reproduces the bytes, the first *Discard when*
+  condition applies.
 
 Any later `runner_review_head` has this **first gate**, before runner
 authority is even considered:
@@ -119,3 +135,16 @@ identity.
   rules without changing frozen bytes: the seal artifact records the exact
   merged commit SHA; the first runner-review gate is raw byte identity of
   the sealed declaration. Status = `WAITING_OWNER_SEAL`.
+- 2026-09-20 — owner decision on [#442](https://github.com/raylei50653/saccade/issues/442):
+  **seal, then park.** Seal receipt issued with
+  `declaration_seal_head = 311c222580dd29fcecacd5e2cc7cf6b2b459e684` (PR #398
+  merge; PR #326 merge `0e869fea` was not chosen because its test file
+  predates the reviewed one, while every other sealed file is identical).
+  Nine frozen sources verified 9/9 by byte identity (`formal_rows_read: 0`).
+  Two open items dispositioned: (1) pre-seal label-free exposure pre-count —
+  **not permitted, not taken**; an exposure shortfall at execution is an
+  accepted `OWDL_INVALID_STUDY` risk; (2) frozen-source custody — **read-only
+  custody copy made** at `/home/ray/owdl_custody/owdl_m_b1_v1_seal_311c2225_20260920/`.
+  Pause reason: no runner-review phase scheduled; the semantic sole-active
+  slot is released (`⏸️ 無 active`). No execution, runner, or registry state
+  change is authorized by the seal.

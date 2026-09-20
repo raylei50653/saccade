@@ -163,7 +163,7 @@ tools:
   fact_owner: docs/modules/semantic/research/observability_weighted_directional_likelihood_declaration_20260827.md
   no_go_ids: []
   recipes: []
-  notes: WAITING_OWNER_SEAL; check-only only. Formal outcome execution requires an exact-SHA owner seal and a separate runner_review_head whose declaration bytes match the seal exactly.
+  notes: Sealed 2026-09-20 (declaration_seal_head 311c2225, receipt observability_weighted_directional_likelihood_seal_receipt_20260920.json); thread parked; check-only only. Formal outcome execution still requires a separate runner_review_head whose declaration bytes match the seal exactly, plus separate execution authority.
 - id: analyze_preloss_motion
   path: scripts/tools/analyze_preloss_motion.py
   door: A

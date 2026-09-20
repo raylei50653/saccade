@@ -5,11 +5,10 @@
 
 ## Sole active
 
-- **OWDL — WAITING_OWNER_SEAL; implementation complete; no formal outcome access authorized.**
-  owner decision → [#442](https://github.com/raylei50653/saccade/issues/442)（`Now`）·
-  [thread](../../research/threads/observability_weighted_directional_likelihood_task.md) ·
-  [declaration](research/observability_weighted_directional_likelihood_declaration_20260827.md).
-- GCTM/H0 runtime slots remain **無 active**; OWDL neither activates nor
+- ⏸️ **無 active**（2026-09-20，[#442](https://github.com/raylei50653/saccade/issues/442) owner 決定 **seal, then park**）。
+  OWDL 已 seal：`declaration_seal_head = 311c2225…`，[seal receipt](research/observability_weighted_directional_likelihood_seal_receipt_20260920.json)；
+  runner-review 未排程，thread 移至 Parked。re-activate = 新的 owner scheduling decision 重新取得本 slot。
+- GCTM/H0 runtime slots remain **無 active**; the OWDL seal neither activates nor
   satisfies their runtime-substrate and compatibility gates.
 
 ## Registry-owned lines（state 在 registry；此處只留指標）
@@ -31,6 +30,10 @@
 
 ## Parked
 
+- **OWDL — sealed at `311c2225`, no runner-review scheduled** → [thread](../../research/threads/observability_weighted_directional_likelihood_task.md) ·
+  [seal receipt](research/observability_weighted_directional_likelihood_seal_receipt_20260920.json) ·
+  [declaration](research/observability_weighted_directional_likelihood_declaration_20260827.md)；
+  resume 條件（sealed bytes 原樣、九個 source 9/9、owner 排程 runner-review）在 thread。
 - Score temporal-to-stable-domain → [charter](../../research/threads/score_temporal_to_stable_domain_20260712.md)
 - GT-support morphology → [charter](../../research/threads/gt_support_morphology_20260711.md)
 - Occ-exit intervention modeling → [charter](../../research/threads/occ_exit_audit_20260709.md)
