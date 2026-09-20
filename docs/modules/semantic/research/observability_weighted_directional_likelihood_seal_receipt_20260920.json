@@ -1,0 +1,159 @@
+{
+  "schema": "owdl_seal_receipt_v1",
+  "receipt_id": "owdl_m_b1_v1_seal_receipt_20260920",
+  "study_id": "owdl_m_b1_v1",
+  "evidence_class": "owner_seal_receipt",
+  "authority": "owner",
+  "issued_at": "2026-09-20",
+  "resolves_issue": "https://github.com/raylei50653/saccade/issues/442",
+  "decision": "seal at exact merged commit SHA, then park; no runner-review head or execution is scheduled",
+  "declaration_seal_head": "311c222580dd29fcecacd5e2cc7cf6b2b459e684",
+  "declaration_seal_head_kind": "merge commit of PR #398 (2026-09-12), the head at which the owner confirmed pre-seal complete; ancestor of main",
+  "why_not_0e869fea": "PR #326 merge 0e869feae627e3da2c6fe03365c6482671aafe2b carries an earlier test file (blob b3c2fcb0); every other sealed file is byte-identical between the two heads. The seal binds the tests too, so the head that carries the reviewed tests is the only coherent identity.",
+  "sealed_files": {
+    "declaration": {
+      "path": "docs/modules/semantic/research/observability_weighted_directional_likelihood_declaration_20260827.md",
+      "sha256": "d711ab3c4ddad4a5357c070841a3b6af08b37a944eb73d0057e15380e546f860",
+      "bytes": 31927,
+      "git_blob": "217c0f946437eb399bcb826d0c7e80f0ca1a42e6"
+    },
+    "study_spec": {
+      "path": "docs/modules/semantic/research/observability_weighted_directional_likelihood_study_v1.json",
+      "sha256": "a348eb21d671e049f2e85136d4c9f78d9fe874636252d9e0af6e37ebccc1ec44",
+      "bytes": 8869,
+      "git_blob": "9083b177296eeab25eb3e43574ce85d5a9cfd4a7"
+    },
+    "score_record": {
+      "path": "docs/modules/semantic/research/observability_weighted_directional_likelihood_declaration_20260827.score.json",
+      "sha256": "cf96b63b80fd04f35cb0bd48065668994afacdea8139f6e26479b8d3cc54b7be",
+      "bytes": 6492,
+      "git_blob": "092fa68b0bb4022fdac94c0356eab645be8839f5"
+    },
+    "study_schema": {
+      "path": "scripts/tools/observability_weighted_directional_likelihood_study_schema_v1.json",
+      "sha256": "e33acf136634cfbf9d396743da1e7396383b7c72531790008903b2aced04243c",
+      "bytes": 16440,
+      "git_blob": "c709b77246edf3fb648067c50031f8a4566fa65a"
+    },
+    "math_core": {
+      "path": "scripts/tools/observability_weighted_directional_likelihood.py",
+      "sha256": "9f239c7a6fd0359b4395c4ff23175a41017d5e803d15d5b325ef12948bfd7b7a",
+      "bytes": 31646,
+      "git_blob": "578b9a6688100c59854803748a4e7de3d5121fd7"
+    },
+    "tests": {
+      "path": "tests/unit/eval/diagnostics/test_observability_weighted_directional_likelihood.py",
+      "sha256": "4c334239aba0ec855e8b3983a26d61de89902d12c1c26cbd48af739f405e95df",
+      "bytes": 30568,
+      "git_blob": "848b5d183dfe4ccec38f1abc1759a872ba3e0c49"
+    }
+  },
+  "sealed_files_identity_rule": "raw byte identity against the tree named by declaration_seal_head; pretty-print, key reordering, or any re-normalization is not an admissible substitute",
+  "frozen_source_files": [
+    {
+      "role": "pair_table",
+      "path": "out/signal_study/m_b1_smoke_20260709T092543Z/pairs.csv",
+      "sha256": "0ae3896791ec074fbe951198752c17385c4ee0770a7ec3831225d3ea56a69d17",
+      "bytes": 18753786
+    },
+    {
+      "role": "source_context",
+      "path": "out/signal_study/m_b1_smoke_20260709T092543Z/context.json",
+      "sha256": "3db5a79bae9963b07c9ae10845aeda4b5a96a5c0956de364c89eaa9d105eaafd",
+      "bytes": 2285
+    },
+    {
+      "role": "trajectory_mot17_02_sdp",
+      "path": "results/MOT17_eval_m_b1_substrate_20260709T092543Z/MOT17-02-SDP.txt",
+      "sha256": "42d958b9dc111906170ba6b4b3676e7614194d61562a1a15b3318dc714633e7a",
+      "bytes": 522500
+    },
+    {
+      "role": "trajectory_mot17_04_sdp",
+      "path": "results/MOT17_eval_m_b1_substrate_20260709T092543Z/MOT17-04-SDP.txt",
+      "sha256": "0cf0a0ee2db0b0ece4622f957e2bb76cfd037fc73747b2f6ef08854e5b7be6ad",
+      "bytes": 2221261
+    },
+    {
+      "role": "trajectory_mot17_05_sdp",
+      "path": "results/MOT17_eval_m_b1_substrate_20260709T092543Z/MOT17-05-SDP.txt",
+      "sha256": "8f37383d429e54fbad792c8065b00f5804cdc90b4589976e4c9e0b19c0ec333e",
+      "bytes": 244109
+    },
+    {
+      "role": "trajectory_mot17_09_sdp",
+      "path": "results/MOT17_eval_m_b1_substrate_20260709T092543Z/MOT17-09-SDP.txt",
+      "sha256": "14c82627d0365c604e68045e39dad6c9017d79120b8aba478c1c11e0b4ac6254",
+      "bytes": 196094
+    },
+    {
+      "role": "trajectory_mot17_10_sdp",
+      "path": "results/MOT17_eval_m_b1_substrate_20260709T092543Z/MOT17-10-SDP.txt",
+      "sha256": "905af425a7ae51e698bfb73d812928913055a16eff832c4f0be4daa56194ce6d",
+      "bytes": 531815
+    },
+    {
+      "role": "trajectory_mot17_11_sdp",
+      "path": "results/MOT17_eval_m_b1_substrate_20260709T092543Z/MOT17-11-SDP.txt",
+      "sha256": "8f257f9f325d0b7ac2a2ee7ed518e20ea5466860e56a7c62237cec5781aef22c",
+      "bytes": 410297
+    },
+    {
+      "role": "trajectory_mot17_13_sdp",
+      "path": "results/MOT17_eval_m_b1_substrate_20260709T092543Z/MOT17-13-SDP.txt",
+      "sha256": "8efab3e2c4294c9884946afe9398197e80a20d3c41973138bd16af54a47d7eb0",
+      "bytes": 520359
+    }
+  ],
+  "frozen_source_verification_at_seal": {
+    "date": "2026-09-20",
+    "method": "byte count and SHA-256 of each repo-relative path, the same identity check the pre-seal --check-only preflight performs",
+    "result": "9/9 present and byte-identical",
+    "formal_rows_read": 0,
+    "outcome_access": false
+  },
+  "open_item_dispositions": {
+    "preseal_exposure_precount": {
+      "item": "whether a label-free, effect-free exposure pre-count (R5a short-gap rankable events under the §6.3 selector; P1/P2 GT-pair counts per q_v bin) may be taken before seal",
+      "disposition": "not permitted; not taken",
+      "rationale": "the sealed bytes are sealed as reviewed; any count over the frozen pair table reads formal rows and spends the blind boundary the seal protects (declaration §4.1). An exposure shortfall at execution time is an accepted OWDL_INVALID_STUDY risk, not a negative outcome, and repair requires a new declaration."
+    },
+    "frozen_source_custody": {
+      "item": "the nine frozen sources are gitignored and untracked (out/, results/); whether to make a custody copy",
+      "disposition": "made at seal time",
+      "custody_root": "/home/ray/owdl_custody/owdl_m_b1_v1_seal_311c2225_20260920/",
+      "custody_layout": "repo-relative paths preserved under the root; SHA256SUMS at the root; files and directories read-only",
+      "custody_verification": "sha256sum -c SHA256SUMS: 9/9 OK",
+      "custody_status": "byte copy only; the copy is not a second identity. A future runner must still verify the study-spec hashes against whichever path it reads, and the repo-relative paths remain the declared identities."
+    }
+  },
+  "authority_binding_slots": {
+    "declaration_seal_head": "carried here; stays null in the sealed study spec by construction (declaration §1.1)",
+    "runner_review_head": "not issued; no runner-review receipt exists",
+    "runner_sha256": "not issued"
+  },
+  "post_seal_state": {
+    "thread_status": "parked",
+    "semantic_sole_active": "released (無 active)",
+    "runner_review_scheduled": false,
+    "execution_authorized": false,
+    "resume_conditions": [
+      "an owner scheduling decision that names a runner-review phase and reacquires the semantic sole-active slot",
+      "sealed_files raw byte identity against declaration_seal_head still holds at the runner-review head (first gate; mismatch is terminal)",
+      "frozen_source_files 9/9 byte-identical at the paths the runner reads (repo paths or custody root)"
+    ],
+    "discard_condition": "if the nine frozen sources cannot be reproduced byte-identically from the repo paths or the custody root, the thread's 'source identity cannot be frozen or reconstructed without a new runtime run' discard condition applies"
+  },
+  "not_authorized": {
+    "formal_outcome_loading": true,
+    "runner_implementation": true,
+    "runner_review_head": true,
+    "execution": true,
+    "terminal_selection": true,
+    "score_integration": true,
+    "preset_or_tracker_change": true,
+    "cross_dataset_declaration": true,
+    "registry_state_change": true,
+    "automatic_continuation": true
+  }
+}
