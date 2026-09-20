@@ -22,6 +22,14 @@ drift there is always unrecorded.
 ``--mode development`` (default) fails on unrecorded drift and on an invalid
 ledger; ``historical`` bindings are reported as warnings.  ``--mode attested``
 adds the claim that the packets describe HEAD and also fails on ``historical``.
+``--mode attested --packet <id>`` scopes that claim to one packet: only *its*
+bindings must be ``current``; a historical predecessor is a warning, not a
+failure, so a successor packet can attest itself once its predecessors have been
+historicized.  An unknown packet id fails closed.
+
+The ledger is append-only against the merge-base with ``--base`` (default
+``origin/main`` when it resolves): every entry present there must still be
+present, byte-for-byte as JSON, at HEAD.
 ``--replay <packet_id>`` runs a historical packet's pinned targeted tests in a
 detached worktree at its ``last_current_ref``: the strongest form of "the
 evidence is still verifiable" without touching HEAD.
@@ -108,6 +116,7 @@ class BindingStatus:
 class Report:
     mode: str
     head: str | None
+    packet: str | None = None
     bindings: list[BindingStatus] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
@@ -129,6 +138,7 @@ class Report:
             "schema": "frozen_source_status_report_v1",
             "policy": POLICY_REL,
             "mode": self.mode,
+            "packet": self.packet,
             "head": self.head,
             "ok": self.ok,
             "bindings": [item.as_dict() for item in self.bindings],
@@ -468,6 +478,59 @@ def validate_ledger(
     return valid, errors
 
 
+# -------------------------------------------------------------------- append-only
+
+DEFAULT_BASE = "origin/main"
+
+
+def _entry_key(entry: Mapping[str, Any]) -> str:
+    return str(entry.get("entry_id"))
+
+
+def append_only_violations(
+    head_ledger: Mapping[str, Any], base_ledger: Mapping[str, Any] | None
+) -> list[str]:
+    """Entries present at the base must survive unchanged at HEAD.
+
+    *base_ledger* ``None`` means the ledger did not exist at the base, so every
+    HEAD entry is an append.  Comparison is structural JSON equality: an edited
+    entry is as much a violation as a deleted one.
+    """
+    if base_ledger is None:
+        return []
+    head_by_id = {_entry_key(e): e for e in head_ledger.get("entries") or []}
+    out: list[str] = []
+    for base_entry in base_ledger.get("entries") or []:
+        eid = _entry_key(base_entry)
+        head_entry = head_by_id.get(eid)
+        if head_entry is None:
+            out.append(f"ledger is append-only: entry {eid} was removed")
+        elif json.dumps(head_entry, sort_keys=True) != json.dumps(
+            base_entry, sort_keys=True
+        ):
+            out.append(f"ledger is append-only: entry {eid} was modified")
+    return out
+
+
+def ledger_at_merge_base(
+    root: Path, base: str, ledger_rel: str = LEDGER_REL
+) -> tuple[Mapping[str, Any] | None, str | None]:
+    """(ledger at merge-base(base, HEAD) or None if absent there, error or None)."""
+    merge_base = _git(root, "merge-base", base, "HEAD")
+    if not isinstance(merge_base, str) or not merge_base:
+        return None, f"cannot resolve merge-base of {base!r} and HEAD"
+    raw = _git(root, "cat-file", "blob", f"{merge_base}:{ledger_rel}", binary=True)
+    if not isinstance(raw, bytes):
+        return None, None  # ledger did not exist at the base: nothing to preserve
+    try:
+        parsed = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        return None, f"ledger at {merge_base[:12]} is not valid JSON: {exc}"
+    if not isinstance(parsed, Mapping):
+        return None, f"ledger at {merge_base[:12]} is not an object"
+    return parsed, None
+
+
 # ----------------------------------------------------------------------- evaluate
 
 
@@ -483,10 +546,22 @@ def evaluate(
     ledger_path: Path | None = None,
     schema_path: Path | None = None,
     mode: str = "development",
+    packet: str | None = None,
+    base: str | None = None,
+    base_required: bool = False,
 ) -> Report:
+    """Evaluate every binding at HEAD.
+
+    *packet* scopes an attested claim to one packet (see module docstring);
+    it is only meaningful with ``mode="attested"``.  *base* names the ref whose
+    merge-base with HEAD anchors the append-only check; when it cannot be
+    resolved the check is a warning unless *base_required*.
+    """
     if mode not in ("development", "attested"):
         raise ValueError(f"unknown mode {mode!r}")
-    report = Report(mode=mode, head=git_head(root))
+    if packet is not None and mode != "attested":
+        raise ValueError("packet scoping is only meaningful in attested mode")
+    report = Report(mode=mode, head=git_head(root), packet=packet)
     try:
         bindings = discover_bindings(root)
         ledger = load_ledger(ledger_path or root / LEDGER_REL)
@@ -495,6 +570,22 @@ def evaluate(
         return report
     entries, ledger_errors = validate_ledger(ledger, bindings, root, schema_path)
     report.errors.extend(ledger_errors)
+
+    base_ledger, base_error = ledger_at_merge_base(root, base or DEFAULT_BASE)
+    if base_error is not None:
+        (report.errors if base_required else report.warnings).append(
+            f"append-only check skipped: {base_error}"
+            if not base_required
+            else f"append-only check: {base_error}"
+        )
+    else:
+        report.errors.extend(append_only_violations(ledger, base_ledger))
+
+    if packet is not None and not any(b.packet_id == packet for b in bindings):
+        report.errors.append(
+            f"attested packet {packet!r} has no bindings under {EVIDENCE_REL}; "
+            "an unknown packet cannot be attested"
+        )
 
     for binding in bindings:
         disk = _disk_sha256(root, binding.path)
@@ -553,7 +644,7 @@ def evaluate(
                 f"(entry {item.entry_id}); packet conclusions describe the frozen "
                 "coordinate, not HEAD"
             )
-            if mode == "attested":
+            if mode == "attested" and (packet is None or b.packet_id == packet):
                 report.errors.append(line)
             else:
                 report.warnings.append(line)
@@ -681,6 +772,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="development: unrecorded drift and ledger defects fail, historical warns; "
         "attested: historical also fails (the consumer claims packets describe HEAD)",
     )
+    parser.add_argument(
+        "--packet",
+        metavar="PACKET_ID",
+        help="with --mode attested: only this packet's bindings must be current; "
+        "historical predecessors warn instead of failing",
+    )
+    parser.add_argument(
+        "--base",
+        metavar="REF",
+        default=None,
+        help=f"ref whose merge-base with HEAD anchors the append-only ledger check "
+        f"(default {DEFAULT_BASE}; unresolvable = warning unless given explicitly)",
+    )
     parser.add_argument("--json", action="store_true", help="emit the report as JSON")
     parser.add_argument(
         "--ledger", type=Path, default=None, help="override ledger path"
@@ -702,7 +806,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"replay failed: {exc}", file=sys.stderr)
             return 2
 
-    report = evaluate(ROOT, args.ledger, mode=args.mode)
+    if args.packet and args.mode != "attested":
+        parser.error("--packet requires --mode attested")
+    report = evaluate(
+        ROOT,
+        args.ledger,
+        mode=args.mode,
+        packet=args.packet,
+        base=args.base,
+        base_required=args.base is not None,
+    )
     if args.json:
         print(json.dumps(report.as_dict(), indent=2, sort_keys=True))
     else:
@@ -712,8 +825,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         summary = (
             ", ".join(f"{k}={v}" for k, v in sorted(counts.items())) or "no bindings"
         )
+        scope = f" packet={args.packet}" if args.packet else ""
         print(
-            f"frozen-source status [{args.mode}] @ {report.head or 'no-git'}: {summary}"
+            f"frozen-source status [{args.mode}{scope}] @ {report.head or 'no-git'}: {summary}"
         )
         for line in report.warnings:
             print(f"  warning: {line}")

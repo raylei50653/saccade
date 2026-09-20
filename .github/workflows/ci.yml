@@ -134,7 +134,7 @@ jobs:
       # `historical`; unrecorded drift fails. `--mode attested` is for consumers
       # that claim the packets describe HEAD, not for every PR.
       - name: Frozen-Source Evolution Status (ADR 026, development arm)
-        run: uv run python scripts/tools/frozen_source_status.py --mode development
+        run: uv run python scripts/tools/frozen_source_status.py --mode development --base origin/main
       - name: H0 Immutable Archive Corpus
         run: uv run python scripts/tools/check_h0_phase_a_archives.py
       - name: H2 Measurement Archive Corpus

@@ -141,6 +141,10 @@ registry record 裡的 `frozen_inputs` 列出的是 digest，本來就不會因 
 | `successor_packet_id` / `owner_authorization` | historicization 必須為 `null`；supersession 必須齊備（§3.4） |
 | `recorded_by_pr`、`recorded_on`、`rationale` | 出處 |
 
+**append-only 是被強制的，不只是命名**：checker 讀 `merge-base(--base, HEAD)`（預設
+`origin/main`）上的 ledger，那裡存在的每筆 entry 在 HEAD 必須原樣存在（JSON 結構相等）；
+刪除或改寫任一筆都 fail。base 無法解析時預設只 warn，CI 明給 `--base origin/main` 則 fail-closed。
+
 缺檔 = 被刪除的 guard，不是空 ledger。這是 structural provenance，不是密碼學簽章（與
 `h2_controlled_host_execution_domain_v1` 的自述一致）。
 
@@ -177,8 +181,8 @@ owner-event，不是改本規則；本 ADR 不預設那種期間。
 | 臂 | 觸發 | 檢查 | `unrecorded_drift` | `historical` |
 |---|---|---|---|---|
 | **ordinary development PR** | 每個 PR：`pytest tests/`（`test_frozen_source_evolution_policy.py`，pre-push §5 與 CI 都跑）＋ CI contracts job 的 step `frozen_source_status.py --mode development` | packet artifacts 不變、ledger 合法、每個 binding 是 `current` 或 `historical` | **fail**，錯誤訊息指回 §5 | warn；該 packet 的 `tooling:targeted_tests` 檔由 `tests/contract/conftest.py` **整檔 skip 並附理由** |
-| **attested / current consumer** | `SACCADE_ATTESTED_CONSUMER=1 pytest …` 或 `frozen_source_status.py --mode attested`；任何把 packet 當 HEAD 為真的東西都應跑這臂（successor packet 的 CI、H0 re-entry 準備、把 packet 列為 substrate 的 `research_lock open`） | 同上，外加「packet 描述 HEAD」 | fail | **fail**；pinned targeted tests 也照常執行並（正確地）紅 |
-| **successor work** | 研究單元要用演進後的 substrate | `frozen_source_status.py --replay <packet_id>`：在 `last_current_ref` 的 detached worktree 重跑該 packet 的 pinned tests（證明歷史 packet 在自己的座標上仍通過自己的檢查）；successor packet 自己則在 attested arm 必須全 `current` | fail | 舊 packet `historical` 是**預期狀態**；successor 的 binding 必須 `current` |
+| **attested / current consumer** | `SACCADE_ATTESTED_CONSUMER=1 pytest …` 或 `frozen_source_status.py --mode attested`；任何把 packet 當 HEAD 為真的東西都應跑這臂（H0 re-entry 準備、把 packet 列為 substrate 的 `research_lock open`）。**global**（無 `--packet`）= 全 repo 每個 binding 都描述 HEAD；**scoped**（`--mode attested --packet X`）= 只有 X 的 bindings 必須 `current`，其他 packet 的 `historical` 只 warn；不存在的 X fail-closed | 同上，外加「packet 描述 HEAD」 | fail（scoped 也 fail：repo 完整性不分 scope） | global：**fail**；scoped：只有 X 自己的 `historical` 才 fail。pinned targeted tests 在 `SACCADE_ATTESTED_CONSUMER=1` 下照常執行並（正確地）紅 |
+| **successor work** | 研究單元要用演進後的 substrate | 先 `frozen_source_status.py --replay <old_packet>`（在 `last_current_ref` 的 detached worktree 重跑舊 packet 的 pinned tests，證明它在自己的座標上仍通過自己的檢查），再 `--mode attested --packet <successor>`（successor 的 bindings 全 `current`） | fail | 舊 packet `historical` 是**預期狀態**，不使 successor 的 scoped attestation 失敗；global attested 在此情境下必然紅，那不是 successor 要過的門 |
 
 skip 的範圍刻意是「整個 targeted test 檔」而不是逐條挑：那個檔就是 packet 的 currency
 suite，且它被 manifest 釘住不能拆。skip 只在狀態確為 `historical` 時發生；`unrecorded_drift`
@@ -244,8 +248,10 @@ runtime-identity gate（§1.2 第二組）與本表**獨立並存**，各走各�
    承接的意思是「successor 要重新證明它們對新 bytes 成立」，不是自動繼承。
 3. ledger entry `kind: "supersession"`、`successor_packet_id`、`owner_authorization:
    {owner_acceptance_id, date}`；`claims_inherited` 仍是 `false`。
-4. successor 自己的 CI 在 attested arm 必須全 `current`；舊 packet 在 development arm 是
-   `historical`，在 attested arm 紅是預期。
+4. `frozen_source_status.py --replay <old_packet>` 全綠，然後
+   `frozen_source_status.py --mode attested --packet <successor_id>` exit 0（successor 的
+   bindings 全 `current`；舊 packet 的 `historical` 在 scoped attestation 只是 warning）。
+   global `--mode attested` 在此情境下紅是預期，不是 successor 的門。
 5. registry 新 record 由 owner 寫（C5.1）。
 
 ### 5.3 Pinned tooling（validator / schema / fixture / targeted tests）
@@ -318,7 +324,7 @@ runtime-identity gate（§1.2 第二組）與本表**獨立並存**，各走各�
 | 本 ADR | `docs/decisions/026-frozen-input-source-evolution.md` |
 | ledger（初始空） | `docs/research/contracts/frozen_source_supersession_ledger_v1.json` |
 | ledger schema | `scripts/tools/frozen_source_supersession_ledger_v1.schema.json` |
-| checker / CLI（`--mode development\|attested`、`--json`、`--replay`） | `scripts/tools/frozen_source_status.py` |
+| checker / CLI（`--mode development\|attested [--packet X]`、`--base`、`--json`、`--replay`） | `scripts/tools/frozen_source_status.py` |
 | development-arm skip guard | `tests/contract/conftest.py` |
 | contract tests（live-tree gate + worktree scenarios） | `tests/contract/test_frozen_source_evolution_policy.py` |
 | CI step | `.github/workflows/ci.yml` — "Frozen-source evolution status (ADR 026, development arm)" |

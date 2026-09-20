@@ -112,6 +112,7 @@ def test_cli_development_arm_passes_on_live_tree() -> None:
     payload = json.loads(proc.stdout)
     assert payload["ok"] is True
     assert payload["mode"] == "development"
+    assert payload["packet"] is None
     assert payload["policy"] == frozen.POLICY_REL
 
 
@@ -528,6 +529,117 @@ def test_supersession_successor_must_refreeze_and_declare_supersedes(
     assert ("scenario_successor", frozen.STATUS_CURRENT) in by_packet
     assert (STATIC_PACKET, frozen.STATUS_HISTORICAL) in by_packet
     assert not scenario.evaluate("attested").ok
+
+
+def _complete_successor(scenario: Scenario) -> str:
+    """Historicize hpp for both packets and stand up a valid successor packet."""
+    new_sha = scenario.drift()
+    auth = {
+        "owner_acceptance_id": "scenario_owner_acceptance_20260920",
+        "date": "2026-09-20",
+    }
+    scenario.write_ledger(
+        [
+            scenario.entry(
+                kind=frozen.ENTRY_SUPERSESSION,
+                successor_packet_id="scenario_successor",
+                owner_authorization=auth,
+            )
+        ]
+    )
+    scenario.write_successor(
+        "scenario_successor",
+        new_sha,
+        supersedes=[
+            {"packet_id": p, "owner_acceptance_id": auth["owner_acceptance_id"]}
+            for p in (STATIC_PACKET, UNIVERSE_PACKET)
+        ],
+    )
+    return "scenario_successor"
+
+
+def test_scoped_attestation_passes_for_a_current_successor(scenario: Scenario) -> None:
+    successor = _complete_successor(scenario)
+    report = frozen.evaluate(scenario.root, mode="attested", packet=successor)
+    assert report.ok, report.errors
+    assert report.packet == successor
+    # predecessors are still historical, reported but not fatal to the successor's claim
+    assert sorted(report.historical_packets) == [UNIVERSE_PACKET, STATIC_PACKET]
+    assert len([w for w in report.warnings if "is historical" in w]) == 2
+    # the global claim is still refused: the repo as a whole is not at the old coordinate
+    assert not frozen.evaluate(scenario.root, mode="attested").ok
+
+
+def test_scoped_attestation_of_a_historical_packet_fails(scenario: Scenario) -> None:
+    _complete_successor(scenario)
+    report = frozen.evaluate(scenario.root, mode="attested", packet=STATIC_PACKET)
+    assert not report.ok
+    assert all("is historical" in e for e in report.errors), report.errors
+    assert all(STATIC_PACKET in e for e in report.errors)
+
+
+def test_scoped_attestation_of_an_unknown_packet_fails_closed(
+    scenario: Scenario,
+) -> None:
+    report = frozen.evaluate(scenario.root, mode="attested", packet="no_such_packet")
+    assert not report.ok
+    assert any("unknown packet cannot be attested" in e for e in report.errors)
+
+
+def test_scoped_attestation_still_fails_on_unrecorded_drift(scenario: Scenario) -> None:
+    successor = _complete_successor(scenario)
+    scenario.drift(CU)  # second frozen path moves without an entry
+    report = frozen.evaluate(scenario.root, mode="attested", packet=successor)
+    assert not report.ok
+    assert any("unrecorded drift" in e for e in report.errors)
+
+
+def test_packet_scoping_requires_attested_mode() -> None:
+    with pytest.raises(ValueError, match="attested"):
+        frozen.evaluate(_REPO, mode="development", packet=STATIC_PACKET)
+
+
+# ----------------------------------------------------------------- append-only
+
+
+def _ledger(entries: list[dict[str, Any]]) -> dict[str, Any]:
+    return {
+        "schema": frozen.LEDGER_SCHEMA_ID,
+        "policy": frozen.POLICY_REL,
+        "entries": entries,
+    }
+
+
+def test_append_only_accepts_appends_and_an_absent_base() -> None:
+    a = {"entry_id": "a", "kind": "historicization"}
+    b = {"entry_id": "b", "kind": "historicization"}
+    assert frozen.append_only_violations(_ledger([a, b]), None) == []
+    assert frozen.append_only_violations(_ledger([a, b]), _ledger([a])) == []
+    assert frozen.append_only_violations(_ledger([a]), _ledger([a])) == []
+
+
+def test_append_only_refuses_removed_or_modified_entries() -> None:
+    a = {"entry_id": "a", "kind": "historicization", "rationale": "x"}
+    a_edit = {"entry_id": "a", "kind": "historicization", "rationale": "y"}
+    removed = frozen.append_only_violations(_ledger([]), _ledger([a]))
+    assert removed == ["ledger is append-only: entry a was removed"]
+    modified = frozen.append_only_violations(_ledger([a_edit]), _ledger([a]))
+    assert modified == ["ledger is append-only: entry a was modified"]
+
+
+def test_append_only_base_resolution(scenario: Scenario) -> None:
+    # HEAD itself as base: the committed ledger is the base, scenario entries are appends
+    scenario.drift()
+    scenario.write_ledger([scenario.entry()])
+    report = frozen.evaluate(scenario.root, base="HEAD", base_required=True)
+    assert report.ok, report.errors
+    # an unresolvable base is a warning by default and an error when required
+    lenient = frozen.evaluate(scenario.root, base="refs/no/such/ref")
+    assert lenient.ok
+    assert any("append-only check skipped" in w for w in lenient.warnings)
+    strict = frozen.evaluate(scenario.root, base="refs/no/such/ref", base_required=True)
+    assert not strict.ok
+    assert any("cannot resolve merge-base" in e for e in strict.errors)
 
 
 def test_missing_ledger_is_a_deleted_guard(scenario: Scenario) -> None:
