@@ -4,8 +4,9 @@
 
 ## Sole active
 
-🔄 [#419](https://github.com/raylei50653/saccade/issues/419) — SM-scaling / double-buffer headroom / tail-latency under GPU partitioning（`Now`）。
-Green Context phase B（PR #427）、mixed-workload frontier（PR #433）、unconstrained DB critical path（PR #434）已 merge；剩 D/T reservation 與兩個 harness 缺陷，見 issue。
+⏸️ **無 active**（2026-09-20，[#419](https://github.com/raylei50653/saccade/issues/419) closed）。
+SM-scaling / double-buffer headroom / tail-latency under GPU partitioning 收線於 PR #451 + closure ledger PR #452 →
+[resource_419_closure_20260920.md](../../reference/benchmarks/resource_419_closure_20260920.md)（D/T split 記為 not exercised，非重標）。
 
 ## Parked
 

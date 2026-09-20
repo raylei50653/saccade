@@ -63,10 +63,12 @@ legacy `native_960` presets (`speed` / `baseline`) remain useful for comparison,
 
 | Owner | Issue | Module TODO |
 |---|---|---|
-| resource / perf | [#419](https://github.com/raylei50653/saccade/issues/419) | [resource](modules/resource/TODO.md) |
-| governance（tracker frozen substrate） | [#436](https://github.com/raylei50653/saccade/issues/436) | — |
-| training lineage | [#421](https://github.com/raylei50653/saccade/issues/421) | — |
+| resource / perf | ⏸️ 無 active（[#419](https://github.com/raylei50653/saccade/issues/419) closed 2026-09-20 → [closure ledger](reference/benchmarks/resource_419_closure_20260920.md)） | [resource](modules/resource/TODO.md) |
+| governance（tracker frozen substrate） | ⏸️ 無 active（[#436](https://github.com/raylei50653/saccade/issues/436) closed 2026-09-20 → [ADR 026](decisions/026-frozen-input-source-evolution.md)） | — |
+| training lineage | ⏸️ 無 active（[#421](https://github.com/raylei50653/saccade/issues/421) closed 2026-09-20） | — |
 | semantic | ⏸️ 無 active（[#442](https://github.com/raylei50653/saccade/issues/442) resolved 2026-09-20: OWDL sealed at `311c2225`, parked） | [semantic](modules/semantic/TODO.md) |
+
+`Now` milestone 於 2026-09-20 清空（0 open）。下一個 sole-active 需 owner 開 issue 並移入 `Now`，本表才列。
 
 #368 Phase 2 **未啟動**：啟動前置條件見 [activation boundary](ownership/module_doc_question_phase2_activation_boundary.md)（第 7 條 = 本表明列該 unit 並移入 `Now`）。
 
