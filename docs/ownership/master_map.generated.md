@@ -57,6 +57,7 @@ Manifest: `docs/ownership/doc_migration_manifest.yaml`
 - `docs/decisions/023-ultralytics-runtime-decouple.md`
 - `docs/decisions/024-eval-config-module-views.md`
 - `docs/decisions/025-native-extension-delivery.md`
+- `docs/decisions/026-frozen-input-source-evolution.md`
 - `docs/decisions/README.md`
 - `docs/experiments/README.md`
 - `docs/experiments/occ_exit_audit_p55/README.md`
@@ -394,6 +395,6 @@ Excluded from the active index and default search view.
 
 ## Inventory summary
 
-- documents: 344
-- active: 289
+- documents: 345
+- active: 290
 - grayed out: 55

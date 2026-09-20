@@ -128,6 +128,13 @@ jobs:
         run: uv run python scripts/tools/check_math_model_source_attestation.py --mode development
       - name: H0 Repair Acceptance Matrix
         run: uv run python scripts/tools/check_h0_repair_acceptance_matrix.py
+      # ADR 026: a CLOSED packet's frozen inputs are historical identity, not a
+      # freeze on HEAD. Packet artifacts must be intact and every source /
+      # tooling / document binding must be `current` or ledger-recorded
+      # `historical`; unrecorded drift fails. `--mode attested` is for consumers
+      # that claim the packets describe HEAD, not for every PR.
+      - name: Frozen-Source Evolution Status (ADR 026, development arm)
+        run: uv run python scripts/tools/frozen_source_status.py --mode development
       - name: H0 Immutable Archive Corpus
         run: uv run python scripts/tools/check_h0_phase_a_archives.py
       - name: H2 Measurement Archive Corpus
