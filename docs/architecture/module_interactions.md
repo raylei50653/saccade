@@ -78,7 +78,7 @@ production (see §6 for the parked surface).
 | Bridge direction bonus (`0.8`, s only) | recovery | `--relink-bridge-dir-bonus 0` | widens px gate for direction-consistent pairs | [math_model §10.4](../reference/math_model.md#104-direction-bonus) |
 | Private continuation | recovery | `--no-private-continuation` | association input set (track-gated wider-NMS boxes) | [math_model §9.1](../reference/math_model.md#91-private-continuationinput-set-policy) |
 | Tracklet interpolation (`max_gap 35`) | recovery | `--no-interpolate-tracklets` | output layer (offline gap fill) | [math_model §12](../reference/math_model.md#12-output-與-offline-postprocessing) |
-| Whole-detect CUDA graph | runtime | derived config `use_whole_graph: false` | detect stage scheduling | [mamba_head_cuda_graph note](../research/pipeline/mamba_head_cuda_graph_eval_bug_20260602.md) |
+| Whole-detect CUDA graph | runtime | derived config `use_whole_graph: false` | detect stage scheduling | [mamba_whole_graph_analysis](../modules/detection/mamba_whole_graph_analysis.md) |
 | Head CUDA graph | runtime | derived config `use_cuda_graph: false` (with whole graph off) | detect head | same |
 | Tracker CUDA graph | runtime | derived config `use_tracker_graph: false` | tracker update | [tracker_lane_dose_response](../reference/benchmarks/tracker_lane_dose_response_20260907.md) |
 | Graphed main NMS (`main_nms_graphed`) | runtime | `--no-main-nms-graphed` | postprocess NMS | issue #56 · [production_pipeline_code_map](../reference/production_pipeline_code_map.md) |
