@@ -275,6 +275,7 @@ not the headline architecture.
 - 目錄地圖（從路徑找到實作）：[src/README.md](../../src/README.md)
 - 開發入口：[DEVELOPMENT.md](../../DEVELOPMENT.md)
 - API / event / storage contract：[api_spec.md](../modules/storage/api_spec.md)
+- 現行 full stack 各機制的 present-day role 與 interaction map：[module_interactions.md](module_interactions.md)
 - 模組 delta ledger：[PIPELINE_REFERENCE.md](../reference/PIPELINE_REFERENCE.md)
 - 全流程敘事版資料流：[pipeline_flow.md](../reference/pipeline_flow.md)
 - Tracker 深入說明：[gpubytetracker_deep_dive.md](../modules/geometry/tracker_deep_dive.md)

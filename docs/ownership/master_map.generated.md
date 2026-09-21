@@ -17,6 +17,7 @@ Manifest: `docs/ownership/doc_migration_manifest.yaml`
 - `docs/TODO_history.md`
 - `docs/WORKTREE_RESOURCES.md`
 - `docs/architecture/README.md`
+- `docs/architecture/module_interactions.md`
 - `docs/archive/DATAFLOW.md`
 - `docs/archive/README.md`
 - `docs/archive/adr/018-concurrent-eval-architecture.md`
@@ -168,6 +169,7 @@ Manifest: `docs/ownership/doc_migration_manifest.yaml`
 - `docs/reference/benchmarks/frame_budget_20260905.md`
 - `docs/reference/benchmarks/frozen_v2_ablation.md`
 - `docs/reference/benchmarks/latency_log.md`
+- `docs/reference/benchmarks/module_interactions_20260921.md`
 - `docs/reference/benchmarks/reid_handover_ablation_20260808.md`
 - `docs/reference/benchmarks/resource_419_closure_20260920.md`
 - `docs/reference/benchmarks/resource_admission_20260915.md`
@@ -397,6 +399,6 @@ Excluded from the active index and default search view.
 
 ## Inventory summary
 
-- documents: 347
-- active: 292
+- documents: 349
+- active: 294
 - grayed out: 55

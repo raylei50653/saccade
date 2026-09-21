@@ -19,6 +19,8 @@
 - `production_db_attribution.py`
   - Combine clean production FPS, `--profile-frame-csv` ledgers, nsys JSON, and `SACCADE_ASSOC_STATS` dumps into exposed-cost / bottleneck JSON. Contract: `docs/research/pipeline/production_db_critical_path_contract.md`.
 
+- [`module_interactions/`](module_interactions/README.md)
+  - #418：production preset 的 full-stack leave-one-out subtraction（`FULL-A` / `FULL-A-B` / runtime toggle），pre-declared 讀法，report JSON 進 `docs/reference/benchmarks/`。
 - [`resource_sensitivity/`](resource_sensitivity/README.md)
   - #419 的 full-pipeline serial/DB 資源壓力 sweep、telemetry 與 Green Context capability probe。
 - [`resource_partition/`](resource_partition/README.md)
