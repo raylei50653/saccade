@@ -6,6 +6,7 @@
 
 | 文件 | 內容 |
 |------|------|
+| [module_interactions_20260921.md](module_interactions_20260921.md) | **#418 full-stack leave-one-out subtraction of the production preset**（`FULL` = #421 production row，md5 一致）：14 個單項 `FULL-A`、5 組 pair `FULL-A-B`、2 個 reference point、runtime toggle 的 output-identity + serial fps；pre-declared 讀法；只記 observed difference，role 判讀在 [architecture/module_interactions.md](../../architecture/module_interactions.md) |
 | [frozen_v2_ablation.md](frozen_v2_ablation.md) | **現行 headline (`frozen_v2`) 累積消融 + per-seq + 兩操作點延遲**（showcase 附錄與 ADR 018 的可追溯佐證） |
 | [reid_handover_ablation_20260808.md](reid_handover_ablation_20260808.md) | **為什麼 `reid_mode: off`**（ReID 買 0.0 IDF1、付 −34% FPS）＋ offline handover +0.4 ＋ live handover −4.5 |
 | [bridge_gate_stability_20260808.md](bridge_gate_stability_20260808.md) | **bridge gate 的穩定邊界與參數耦合**：`h_hi` 在 1.7 有真實不連續、出貨 m 落在錯誤側、`h_lo≈0.76` 寬平台（候選變更未套用；**已被下一列否決**） |

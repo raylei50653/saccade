@@ -1,0 +1,4722 @@
+{
+  "commit": "df419b0b7904429b16485c2fd6ab24de2b64a02d",
+  "dirty": true,
+  "full": {
+    "fps": {
+      "max": 192.59,
+      "mean": 191.95,
+      "min": 191.5,
+      "range": 1.09
+    },
+    "k_distinct_outputs": 1,
+    "mean_latency_ms": {
+      "max": 4.84,
+      "mean": 4.827,
+      "min": 4.81
+    },
+    "metrics": {
+      "AssA": {
+        "max": 69.9,
+        "mean": 69.9,
+        "min": 69.9,
+        "n": 3,
+        "range": 0.0
+      },
+      "DetA": {
+        "max": 70.2,
+        "mean": 70.2,
+        "min": 70.2,
+        "n": 3,
+        "range": 0.0
+      },
+      "FN": {
+        "max": 20940.0,
+        "mean": 20940.0,
+        "min": 20940.0,
+        "n": 3,
+        "range": 0.0
+      },
+      "FP": {
+        "max": 3471.0,
+        "mean": 3471.0,
+        "min": 3471.0,
+        "n": 3,
+        "range": 0.0
+      },
+      "HOTA": {
+        "max": 70.0,
+        "mean": 70.0,
+        "min": 70.0,
+        "n": 3,
+        "range": 0.0
+      },
+      "IDF1": {
+        "max": 78.3,
+        "mean": 78.3,
+        "min": 78.3,
+        "n": 3,
+        "range": 0.0
+      },
+      "IDs": {
+        "max": 429.0,
+        "mean": 429.0,
+        "min": 429.0,
+        "n": 3,
+        "range": 0.0
+      },
+      "MOTA": {
+        "max": 77.9,
+        "mean": 77.9,
+        "min": 77.9,
+        "n": 3,
+        "range": 0.0
+      },
+      "Prcn": {
+        "max": 96.3,
+        "mean": 96.3,
+        "min": 96.3,
+        "n": 3,
+        "range": 0.0
+      },
+      "Rcll": {
+        "max": 81.4,
+        "mean": 81.4,
+        "min": 81.4,
+        "n": 3,
+        "range": 0.0
+      }
+    },
+    "mot_md5": {
+      "MOT17-02-SDP": "c6346a93a0a0b38b5477a4296f861bae",
+      "MOT17-04-SDP": "244283ebcc7d785320cdf1f94f7d4f5e",
+      "MOT17-05-SDP": "8307db47fba264184b65084e8833420a",
+      "MOT17-09-SDP": "3c449e5e7bbc94706b00e71c81f5515d",
+      "MOT17-10-SDP": "3258ecc5eae50a94f36f91acb6e41476",
+      "MOT17-11-SDP": "e00a04725aa2bf7606a2cb467669807f",
+      "MOT17-13-SDP": "b938dfec8f4c792d685ca2fea2f79141"
+    },
+    "n": 3,
+    "p99_ms": {
+      "mean": 6.222
+    },
+    "run_dirs": [
+      "results/module_interactions_418/20260921/FULL/r01",
+      "results/module_interactions_418/20260921/FULL/r02",
+      "results/module_interactions_418/20260921/FULL/r03"
+    ]
+  },
+  "generated_at": "2026-09-21T15:39:37+00:00",
+  "host": {
+    "gpu": "NVIDIA GeForce RTX 5070 Ti Laptop GPU, 616.92",
+    "hostname": "DESKTOP-0FLA6SQ",
+    "platform": "Linux-6.18.33.1-microsoft-standard-WSL2-x86_64-with-glibc2.44"
+  },
+  "identity": {
+    "full_k_distinct": 1,
+    "full_n": 3,
+    "mot_md5_equal": true,
+    "reference_commit": "50f93a505cc43811c45a9674658fb8444eba63d1",
+    "reference_metrics": {
+      "AssA": 69.9,
+      "DetA": 70.2,
+      "FN": 20940.0,
+      "FP": 3471.0,
+      "HOTA": 70.0,
+      "IDF1": 78.3,
+      "IDs": 429.0,
+      "MOTA": 77.9,
+      "Prcn": 96.3,
+      "Rcll": 81.4
+    },
+    "reference_recipe": "wg:mamba_whole_graph:s.t3t1_phase_b",
+    "reference_run": "results/training_eval_contract/wg_mamba_whole_graph_s.t3t1_phase_b/formal-20260919T092203Z-r01"
+  },
+  "pairs": [
+    {
+      "A": "Bridge",
+      "B": "Interp",
+      "id": "FULL-Bridge-Interp",
+      "interaction": {
+        "AssA": {
+          "I": -0.1,
+          "d_A": 2.0,
+          "d_AB": 2.9,
+          "d_A_without_B": 2.1,
+          "d_B": 0.8,
+          "d_B_without_A": 0.9
+        },
+        "HOTA": {
+          "I": 0.5,
+          "d_A": 1.4,
+          "d_AB": 1.9,
+          "d_A_without_B": 0.9,
+          "d_B": 1.0,
+          "d_B_without_A": 0.5
+        },
+        "IDF1": {
+          "I": 0.5,
+          "d_A": 2.7,
+          "d_AB": 2.9,
+          "d_A_without_B": 2.2,
+          "d_B": 0.7,
+          "d_B_without_A": 0.2
+        },
+        "IDs": {
+          "I": 66.0,
+          "d_A": -94.0,
+          "d_AB": -540.0,
+          "d_A_without_B": -160.0,
+          "d_B": -380.0,
+          "d_B_without_A": -446.0
+        },
+        "MOTA": {
+          "I": 1.2,
+          "d_A": 1.3,
+          "d_AB": 1.5,
+          "d_A_without_B": 0.1,
+          "d_B": 1.4,
+          "d_B_without_A": 0.2
+        }
+      },
+      "note": "both gap-recovery layers off: suspected backup pair",
+      "reading": {
+        "HOTA": "complement_dependency",
+        "IDF1": "complement_dependency"
+      }
+    },
+    {
+      "A": "OccState",
+      "B": "OAO",
+      "id": "FULL-OccState-OAO",
+      "interaction": {
+        "AssA": {
+          "I": 2.4,
+          "d_A": 2.2,
+          "d_AB": 2.0,
+          "d_A_without_B": -0.2,
+          "d_B": 2.2,
+          "d_B_without_A": -0.2
+        },
+        "HOTA": {
+          "I": 1.2,
+          "d_A": 1.1,
+          "d_AB": 1.2,
+          "d_A_without_B": -0.1,
+          "d_B": 1.3,
+          "d_B_without_A": 0.1
+        },
+        "IDF1": {
+          "I": 1.5,
+          "d_A": 1.4,
+          "d_AB": 1.5,
+          "d_A_without_B": -0.1,
+          "d_B": 1.6,
+          "d_B_without_A": 0.1
+        },
+        "IDs": {
+          "I": -33.0,
+          "d_A": -19.0,
+          "d_AB": 5.0,
+          "d_A_without_B": 14.0,
+          "d_B": -9.0,
+          "d_B_without_A": 24.0
+        },
+        "MOTA": {
+          "I": 0.5,
+          "d_A": 0.2,
+          "d_AB": 0.0,
+          "d_A_without_B": -0.3,
+          "d_B": 0.3,
+          "d_B_without_A": -0.2
+        }
+      },
+      "note": "both occlusion cost terms off: suspected overlap",
+      "reading": {
+        "HOTA": "complement_dependency",
+        "IDF1": "complement_dependency"
+      }
+    },
+    {
+      "A": "StabCost",
+      "B": "StabBid",
+      "id": "FULL-StabCost-StabBid",
+      "interaction": {
+        "AssA": {
+          "I": 1.2,
+          "d_A": 0.9,
+          "d_AB": 0.7,
+          "d_A_without_B": -0.3,
+          "d_B": 1.0,
+          "d_B_without_A": -0.2
+        },
+        "HOTA": {
+          "I": 0.6,
+          "d_A": 0.4,
+          "d_AB": 0.3,
+          "d_A_without_B": -0.2,
+          "d_B": 0.5,
+          "d_B_without_A": -0.1
+        },
+        "IDF1": {
+          "I": 0.7,
+          "d_A": 0.7,
+          "d_AB": 1.0,
+          "d_A_without_B": 0.0,
+          "d_B": 1.0,
+          "d_B_without_A": 0.3
+        },
+        "IDs": {
+          "I": -36.0,
+          "d_A": 1.0,
+          "d_AB": -34.0,
+          "d_A_without_B": 37.0,
+          "d_B": -71.0,
+          "d_B_without_A": -35.0
+        },
+        "MOTA": {
+          "I": -0.2,
+          "d_A": -0.2,
+          "d_AB": -0.1,
+          "d_A_without_B": 0.0,
+          "d_B": -0.1,
+          "d_B_without_A": 0.1
+        }
+      },
+      "note": "dual height stability both off (re-reads the 2026-07-09 4-way on the current identity)",
+      "reading": {
+        "HOTA": "complement_dependency",
+        "IDF1": "complement_dependency"
+      }
+    },
+    {
+      "A": "GMC",
+      "B": "KalmanR",
+      "id": "FULL-GMC-KalmanR",
+      "interaction": {
+        "AssA": {
+          "I": 1.6,
+          "d_A": 4.6,
+          "d_AB": 4.0,
+          "d_A_without_B": 3.0,
+          "d_B": 1.0,
+          "d_B_without_A": -0.6
+        },
+        "HOTA": {
+          "I": 1.2,
+          "d_A": 3.3,
+          "d_AB": 2.7,
+          "d_A_without_B": 2.1,
+          "d_B": 0.6,
+          "d_B_without_A": -0.6
+        },
+        "IDF1": {
+          "I": 0.9,
+          "d_A": 4.9,
+          "d_AB": 5.0,
+          "d_A_without_B": 4.0,
+          "d_B": 1.0,
+          "d_B_without_A": 0.1
+        },
+        "IDs": {
+          "I": -70.0,
+          "d_A": -358.0,
+          "d_AB": -339.0,
+          "d_A_without_B": -288.0,
+          "d_B": -51.0,
+          "d_B_without_A": 19.0
+        },
+        "MOTA": {
+          "I": 0.4,
+          "d_A": 2.3,
+          "d_AB": 2.3,
+          "d_A_without_B": 1.9,
+          "d_B": 0.4,
+          "d_B_without_A": 0.0
+        }
+      },
+      "note": "motion model both off: does R scaling absorb residual camera motion?",
+      "reading": {
+        "HOTA": "complement_dependency",
+        "IDF1": "complement_dependency"
+      }
+    },
+    {
+      "A": "Bridge",
+      "B": "PrivCont",
+      "id": "FULL-Bridge-PrivCont",
+      "interaction": {
+        "AssA": {
+          "I": -1.6,
+          "d_A": 2.0,
+          "d_AB": 4.0,
+          "d_A_without_B": 3.6,
+          "d_B": 0.4,
+          "d_B_without_A": 2.0
+        },
+        "HOTA": {
+          "I": -0.7,
+          "d_A": 1.4,
+          "d_AB": 2.1,
+          "d_A_without_B": 2.1,
+          "d_B": 0.0,
+          "d_B_without_A": 0.7
+        },
+        "IDF1": {
+          "I": -0.7,
+          "d_A": 2.7,
+          "d_AB": 3.7,
+          "d_A_without_B": 3.4,
+          "d_B": 0.3,
+          "d_B_without_A": 1.0
+        },
+        "IDs": {
+          "I": 6.0,
+          "d_A": -94.0,
+          "d_AB": -90.0,
+          "d_A_without_B": -100.0,
+          "d_B": 10.0,
+          "d_B_without_A": 4.0
+        },
+        "MOTA": {
+          "I": 0.4,
+          "d_A": 1.3,
+          "d_AB": 0.7,
+          "d_A_without_B": 0.9,
+          "d_B": -0.2,
+          "d_B_without_A": -0.6
+        }
+      },
+      "note": "identity recovery vs continuation recall: suspected orthogonal",
+      "reading": {
+        "HOTA": "substitute_backup",
+        "IDF1": "substitute_backup"
+      }
+    }
+  ],
+  "preset": "mamba_whole_graph",
+  "preset_sha256": "093b66ed124063f035ae9cf2a76e4f5426743cd819fb66e3e54994c97ea42cd1",
+  "raw_root": "results/module_interactions_418/20260921",
+  "rows": [
+    {
+      "deltas": {
+        "AssA": {
+          "delta": -4.6,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "DetA": {
+          "delta": -1.8,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "FN": {
+          "delta": 2369.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "FP": {
+          "delta": -208.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "HOTA": {
+          "delta": -3.3,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "IDF1": {
+          "delta": -4.9,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "IDs": {
+          "delta": 358.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "MOTA": {
+          "delta": -2.3,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "Prcn": {
+          "delta": 0.2,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "Rcll": {
+          "delta": -2.2,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        }
+      },
+      "family": "motion",
+      "fps": {
+        "max": 196.65,
+        "mean": 196.62,
+        "min": 196.6,
+        "range": 0.05
+      },
+      "fps_delta_pct": 2.43,
+      "id": "FULL-GMC",
+      "k_distinct_outputs": 1,
+      "kind": "quality",
+      "material": {
+        "AssA": "-",
+        "HOTA": "-",
+        "IDF1": "-",
+        "IDs": "-",
+        "MOTA": "-"
+      },
+      "mean_latency_ms": {
+        "max": 4.71,
+        "mean": 4.71,
+        "min": 4.71
+      },
+      "metrics_identical_to_full": false,
+      "mot_diff_lines": {
+        "MOT17-02-SDP": {
+          "differing": 11435,
+          "first": [
+            "3,1,1428.01,431.49,185.08,345.67,0.6190,-1,-1,-1",
+            "3,1,1428.01,431.48,185.08,345.67,0.6190,-1,-1,-1"
+          ],
+          "lines": 11377,
+          "lines_other": 11447
+        },
+        "MOT17-04-SDP": {
+          "differing": 44078,
+          "first": [
+            "3,114,1360.25,566.78,103.50,244.91,0.9754,-1,-1,-1",
+            "3,119,1360.24,566.78,103.50,244.91,0.9754,-1,-1,-1"
+          ],
+          "lines": 44078,
+          "lines_other": 44023
+        },
+        "MOT17-05-SDP": {
+          "differing": 5318,
+          "first": [
+            "3,217,21.69,147.82,82.59,196.69,0.5985,-1,-1,-1",
+            "3,224,20.94,147.80,82.59,196.69,0.5985,-1,-1,-1"
+          ],
+          "lines": 5318,
+          "lines_other": 5081
+        },
+        "MOT17-09-SDP": {
+          "differing": 4173,
+          "first": [
+            "3,370,1258.21,534.40,59.83,126.09,0.8448,-1,-1,-1",
+            "3,416,1258.21,534.41,59.83,126.09,0.8448,-1,-1,-1"
+          ],
+          "lines": 4091,
+          "lines_other": 4173
+        },
+        "MOT17-10-SDP": {
+          "differing": 11356,
+          "first": [
+            "3,407,535.34,434.61,63.88,169.22,0.8460,-1,-1,-1",
+            "3,453,535.52,434.38,63.88,169.22,0.8460,-1,-1,-1"
+          ],
+          "lines": 11356,
+          "lines_other": 10239
+        },
+        "MOT17-11-SDP": {
+          "differing": 8072,
+          "first": [
+            "3,575,388.56,269.03,114.78,330.31,0.8526,-1,-1,-1",
+            "3,719,388.73,268.57,114.78,330.31,0.8526,-1,-1,-1"
+          ],
+          "lines": 8072,
+          "lines_other": 7923
+        },
+        "MOT17-13-SDP": {
+          "differing": 10536,
+          "first": [
+            "3,667,1621.61,554.50,62.06,122.45,0.7054,-1,-1,-1",
+            "3,859,1622.06,552.67,62.06,122.45,0.7054,-1,-1,-1"
+          ],
+          "lines": 10536,
+          "lines_other": 9365
+        }
+      },
+      "n": 2,
+      "note": "global motion compensation off (tracker sees raw camera motion)",
+      "output_identical_to_full": false,
+      "p99_ms": {
+        "mean": 5.887
+      },
+      "removes": [
+        "GMC"
+      ],
+      "single_role": "essential"
+    },
+    {
+      "deltas": {
+        "AssA": {
+          "delta": -1.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "DetA": {
+          "delta": -0.1,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "FN": {
+          "delta": 220.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "FP": {
+          "delta": 165.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "HOTA": {
+          "delta": -0.6,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "IDF1": {
+          "delta": -1.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "IDs": {
+          "delta": 51.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "MOTA": {
+          "delta": -0.4,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "Prcn": {
+          "delta": -0.1,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "Rcll": {
+          "delta": -0.2,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        }
+      },
+      "family": "motion",
+      "fps": {
+        "max": 194.87,
+        "mean": 194.55,
+        "min": 194.22,
+        "range": 0.65
+      },
+      "fps_delta_pct": 1.35,
+      "id": "FULL-KalmanR",
+      "k_distinct_outputs": 1,
+      "kind": "quality",
+      "material": {
+        "AssA": "-",
+        "HOTA": "-",
+        "IDF1": "-",
+        "IDs": "-",
+        "MOTA": "-"
+      },
+      "mean_latency_ms": {
+        "max": 4.77,
+        "mean": 4.76,
+        "min": 4.75
+      },
+      "metrics_identical_to_full": false,
+      "mot_diff_lines": {
+        "MOT17-02-SDP": {
+          "differing": 11447,
+          "first": [
+            "3,1,1428.01,431.49,185.08,345.67,0.6190,-1,-1,-1",
+            "3,1,1427.79,431.41,185.32,346.09,0.6190,-1,-1,-1"
+          ],
+          "lines": 11377,
+          "lines_other": 11447
+        },
+        "MOT17-04-SDP": {
+          "differing": 44078,
+          "first": [
+            "3,114,1360.25,566.78,103.50,244.91,0.9754,-1,-1,-1",
+            "3,119,1360.23,566.75,103.61,245.16,0.9754,-1,-1,-1"
+          ],
+          "lines": 44078,
+          "lines_other": 44069
+        },
+        "MOT17-05-SDP": {
+          "differing": 5318,
+          "first": [
+            "3,217,21.69,147.82,82.59,196.69,0.5985,-1,-1,-1",
+            "3,225,21.61,147.69,82.72,196.99,0.5985,-1,-1,-1"
+          ],
+          "lines": 5318,
+          "lines_other": 5218
+        },
+        "MOT17-09-SDP": {
+          "differing": 4143,
+          "first": [
+            "3,370,1258.21,534.40,59.83,126.09,0.8448,-1,-1,-1",
+            "3,378,1258.20,534.35,59.85,126.15,0.8448,-1,-1,-1"
+          ],
+          "lines": 4091,
+          "lines_other": 4143
+        },
+        "MOT17-10-SDP": {
+          "differing": 11356,
+          "first": [
+            "3,407,535.34,434.61,63.88,169.22,0.8460,-1,-1,-1",
+            "3,412,535.26,434.38,63.92,169.31,0.8460,-1,-1,-1"
+          ],
+          "lines": 11356,
+          "lines_other": 11208
+        },
+        "MOT17-11-SDP": {
+          "differing": 8120,
+          "first": [
+            "3,575,388.56,269.03,114.78,330.31,0.8526,-1,-1,-1",
+            "3,584,388.38,269.03,114.84,330.46,0.8526,-1,-1,-1"
+          ],
+          "lines": 8072,
+          "lines_other": 8120
+        },
+        "MOT17-13-SDP": {
+          "differing": 10568,
+          "first": [
+            "3,667,1621.61,554.50,62.06,122.45,0.7054,-1,-1,-1",
+            "3,677,1621.92,553.97,62.00,122.31,0.7054,-1,-1,-1"
+          ],
+          "lines": 10536,
+          "lines_other": 10568
+        }
+      },
+      "n": 2,
+      "note": "measurement-noise scale 2.8 -> 1.0 (unscaled R); raw parser default is 0.75",
+      "output_identical_to_full": false,
+      "p99_ms": {
+        "mean": 5.869
+      },
+      "removes": [
+        "KalmanR"
+      ],
+      "single_role": "essential"
+    },
+    {
+      "deltas": {
+        "AssA": {
+          "delta": -2.2,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "DetA": {
+          "delta": 0.1,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "FN": {
+          "delta": -34.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "FP": {
+          "delta": 248.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "HOTA": {
+          "delta": -1.1,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "IDF1": {
+          "delta": -1.4,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "IDs": {
+          "delta": 19.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "MOTA": {
+          "delta": -0.2,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "Prcn": {
+          "delta": -0.2,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "Rcll": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        }
+      },
+      "family": "occlusion",
+      "fps": {
+        "max": 193.55,
+        "mean": 192.79,
+        "min": 192.02,
+        "range": 1.53
+      },
+      "fps_delta_pct": 0.44,
+      "id": "FULL-OccState",
+      "k_distinct_outputs": 1,
+      "kind": "quality",
+      "material": {
+        "AssA": "-",
+        "HOTA": "-",
+        "IDF1": "-",
+        "IDs": "-",
+        "MOTA": ""
+      },
+      "mean_latency_ms": {
+        "max": 4.82,
+        "mean": 4.8,
+        "min": 4.78
+      },
+      "metrics_identical_to_full": false,
+      "mot_diff_lines": {
+        "MOT17-02-SDP": {
+          "differing": 9285,
+          "first": [
+            "129,7,791.57,455.12,92.30,249.13,0.2774,-1,-1,-1",
+            "129,7,802.16,447.57,88.43,240.00,0.9596,-1,-1,-1"
+          ],
+          "lines": 11377,
+          "lines_other": 11437
+        },
+        "MOT17-04-SDP": {
+          "differing": 44271,
+          "first": [
+            "3,114,1360.25,566.78,103.50,244.91,0.9754,-1,-1,-1",
+            "3,116,1360.25,566.78,103.50,244.91,0.9754,-1,-1,-1"
+          ],
+          "lines": 44078,
+          "lines_other": 44271
+        },
+        "MOT17-05-SDP": {
+          "differing": 5401,
+          "first": [
+            "3,217,21.69,147.82,82.59,196.69,0.5985,-1,-1,-1",
+            "3,221,21.69,147.82,82.59,196.69,0.5985,-1,-1,-1"
+          ],
+          "lines": 5318,
+          "lines_other": 5401
+        },
+        "MOT17-09-SDP": {
+          "differing": 4091,
+          "first": [
+            "3,370,1258.21,534.40,59.83,126.09,0.8448,-1,-1,-1",
+            "3,374,1258.21,534.40,59.83,126.09,0.8448,-1,-1,-1"
+          ],
+          "lines": 4091,
+          "lines_other": 4091
+        },
+        "MOT17-10-SDP": {
+          "differing": 11400,
+          "first": [
+            "3,407,535.34,434.61,63.88,169.22,0.8460,-1,-1,-1",
+            "3,411,535.34,434.61,63.88,169.22,0.8460,-1,-1,-1"
+          ],
+          "lines": 11356,
+          "lines_other": 11418
+        },
+        "MOT17-11-SDP": {
+          "differing": 8072,
+          "first": [
+            "3,575,388.56,269.03,114.78,330.31,0.8526,-1,-1,-1",
+            "3,576,388.56,269.03,114.78,330.31,0.8526,-1,-1,-1"
+          ],
+          "lines": 8072,
+          "lines_other": 8072
+        },
+        "MOT17-13-SDP": {
+          "differing": 10536,
+          "first": [
+            "3,667,1621.61,554.50,62.06,122.45,0.7054,-1,-1,-1",
+            "3,668,1621.61,554.50,62.06,122.45,0.7054,-1,-1,-1"
+          ],
+          "lines": 10536,
+          "lines_other": 10420
+        }
+      },
+      "n": 2,
+      "note": "same-height front-latch occlusion gate off",
+      "output_identical_to_full": false,
+      "p99_ms": {
+        "mean": 6.066
+      },
+      "removes": [
+        "OccState"
+      ],
+      "single_role": "essential"
+    },
+    {
+      "deltas": {
+        "AssA": {
+          "delta": -2.2,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "DetA": {
+          "delta": -0.3,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "FN": {
+          "delta": -679.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "FP": {
+          "delta": 936.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "HOTA": {
+          "delta": -1.3,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "IDF1": {
+          "delta": -1.6,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "IDs": {
+          "delta": 9.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "MOTA": {
+          "delta": -0.3,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "Prcn": {
+          "delta": -0.9,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "Rcll": {
+          "delta": 0.6,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        }
+      },
+      "family": "occlusion",
+      "fps": {
+        "max": 192.58,
+        "mean": 192.18,
+        "min": 191.78,
+        "range": 0.8
+      },
+      "fps_delta_pct": 0.12,
+      "id": "FULL-OAO",
+      "k_distinct_outputs": 1,
+      "kind": "quality",
+      "material": {
+        "AssA": "-",
+        "HOTA": "-",
+        "IDF1": "-",
+        "IDs": "",
+        "MOTA": "-"
+      },
+      "mean_latency_ms": {
+        "max": 4.82,
+        "mean": 4.815,
+        "min": 4.81
+      },
+      "metrics_identical_to_full": false,
+      "mot_diff_lines": {
+        "MOT17-02-SDP": {
+          "differing": 11146,
+          "first": [
+            "25,17,994.76,448.35,39.87,100.98,0.4279,-1,-1,-1",
+            "25,17,996.75,445.95,41.89,106.72,0.2643,-1,-1,-1"
+          ],
+          "lines": 11377,
+          "lines_other": 11623
+        },
+        "MOT17-04-SDP": {
+          "differing": 44266,
+          "first": [
+            "3,114,1360.25,566.78,103.50,244.91,0.9754,-1,-1,-1",
+            "3,107,1360.25,566.78,103.50,244.91,0.9754,-1,-1,-1"
+          ],
+          "lines": 44078,
+          "lines_other": 44266
+        },
+        "MOT17-05-SDP": {
+          "differing": 5551,
+          "first": [
+            "3,217,21.69,147.82,82.59,196.69,0.5985,-1,-1,-1",
+            "3,199,21.69,147.82,82.59,196.69,0.5985,-1,-1,-1"
+          ],
+          "lines": 5318,
+          "lines_other": 5551
+        },
+        "MOT17-09-SDP": {
+          "differing": 4157,
+          "first": [
+            "3,370,1258.21,534.40,59.83,126.09,0.8448,-1,-1,-1",
+            "3,337,1258.21,534.40,59.83,126.09,0.8448,-1,-1,-1"
+          ],
+          "lines": 4091,
+          "lines_other": 4157
+        },
+        "MOT17-10-SDP": {
+          "differing": 12063,
+          "first": [
+            "3,407,535.34,434.61,63.88,169.22,0.8460,-1,-1,-1",
+            "3,369,535.34,434.61,63.88,169.22,0.8460,-1,-1,-1"
+          ],
+          "lines": 11356,
+          "lines_other": 12063
+        },
+        "MOT17-11-SDP": {
+          "differing": 8074,
+          "first": [
+            "3,575,388.56,269.03,114.78,330.31,0.8526,-1,-1,-1",
+            "3,490,388.56,269.03,114.78,330.31,0.8526,-1,-1,-1"
+          ],
+          "lines": 8072,
+          "lines_other": 8074
+        },
+        "MOT17-13-SDP": {
+          "differing": 10709,
+          "first": [
+            "3,667,1621.61,554.50,62.06,122.45,0.7054,-1,-1,-1",
+            "3,577,1621.61,554.50,62.06,122.45,0.7054,-1,-1,-1"
+          ],
+          "lines": 10536,
+          "lines_other": 10709
+        }
+      },
+      "n": 2,
+      "note": "OAO penalty off entirely (ramp has nothing to scale)",
+      "output_identical_to_full": false,
+      "p99_ms": {
+        "mean": 6.028
+      },
+      "removes": [
+        "OAO"
+      ],
+      "single_role": "essential"
+    },
+    {
+      "deltas": {
+        "AssA": {
+          "delta": -1.1,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "DetA": {
+          "delta": 0.3,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "FN": {
+          "delta": 208.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "FP": {
+          "delta": -389.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "HOTA": {
+          "delta": -0.5,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "IDF1": {
+          "delta": -0.8,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "IDs": {
+          "delta": 37.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "MOTA": {
+          "delta": 0.1,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "Prcn": {
+          "delta": 0.4,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "Rcll": {
+          "delta": -0.2,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        }
+      },
+      "family": "occlusion",
+      "fps": {
+        "max": 194.7,
+        "mean": 192.81,
+        "min": 190.93,
+        "range": 3.77
+      },
+      "fps_delta_pct": 0.45,
+      "id": "FULL-OAORamp",
+      "k_distinct_outputs": 1,
+      "kind": "quality",
+      "material": {
+        "AssA": "-",
+        "HOTA": "-",
+        "IDF1": "-",
+        "IDs": "-",
+        "MOTA": ""
+      },
+      "mean_latency_ms": {
+        "max": 4.86,
+        "mean": 4.81,
+        "min": 4.76
+      },
+      "metrics_identical_to_full": false,
+      "mot_diff_lines": {
+        "MOT17-02-SDP": {
+          "differing": 10925,
+          "first": [
+            "25,17,994.76,448.35,39.87,100.98,0.4279,-1,-1,-1",
+            "25,17,993.54,448.49,38.96,98.57,0.5340,-1,-1,-1"
+          ],
+          "lines": 11377,
+          "lines_other": 11406
+        },
+        "MOT17-04-SDP": {
+          "differing": 44078,
+          "first": [
+            "3,114,1360.25,566.78,103.50,244.91,0.9754,-1,-1,-1",
+            "3,124,1360.25,566.78,103.50,244.91,0.9754,-1,-1,-1"
+          ],
+          "lines": 44078,
+          "lines_other": 44014
+        },
+        "MOT17-05-SDP": {
+          "differing": 5318,
+          "first": [
+            "3,217,21.69,147.82,82.59,196.69,0.5985,-1,-1,-1",
+            "3,226,21.69,147.82,82.59,196.69,0.5985,-1,-1,-1"
+          ],
+          "lines": 5318,
+          "lines_other": 5274
+        },
+        "MOT17-09-SDP": {
+          "differing": 4091,
+          "first": [
+            "3,370,1258.21,534.40,59.83,126.09,0.8448,-1,-1,-1",
+            "3,382,1258.21,534.40,59.83,126.09,0.8448,-1,-1,-1"
+          ],
+          "lines": 4091,
+          "lines_other": 4078
+        },
+        "MOT17-10-SDP": {
+          "differing": 11356,
+          "first": [
+            "3,407,535.34,434.61,63.88,169.22,0.8460,-1,-1,-1",
+            "3,420,535.34,434.61,63.88,169.22,0.8460,-1,-1,-1"
+          ],
+          "lines": 11356,
+          "lines_other": 11171
+        },
+        "MOT17-11-SDP": {
+          "differing": 8072,
+          "first": [
+            "3,575,388.56,269.03,114.78,330.31,0.8526,-1,-1,-1",
+            "3,595,388.56,269.03,114.78,330.31,0.8526,-1,-1,-1"
+          ],
+          "lines": 8072,
+          "lines_other": 8068
+        },
+        "MOT17-13-SDP": {
+          "differing": 10536,
+          "first": [
+            "3,667,1621.61,554.50,62.06,122.45,0.7054,-1,-1,-1",
+            "3,692,1621.61,554.50,62.06,122.45,0.7054,-1,-1,-1"
+          ],
+          "lines": 10536,
+          "lines_other": 10220
+        }
+      },
+      "n": 2,
+      "note": "duration ramp off at the ramped tau 0.50 (confound: plain OAO shipped at tau 0.25)",
+      "output_identical_to_full": false,
+      "p99_ms": {
+        "mean": 6.409
+      },
+      "removes": [
+        "OAORamp"
+      ],
+      "single_role": "essential"
+    },
+    {
+      "deltas": {
+        "AssA": {
+          "delta": -2.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "DetA": {
+          "delta": -0.6,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "FN": {
+          "delta": 60.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "FP": {
+          "delta": 1292.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "HOTA": {
+          "delta": -1.4,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "IDF1": {
+          "delta": -2.7,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "IDs": {
+          "delta": 94.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "MOTA": {
+          "delta": -1.3,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "Prcn": {
+          "delta": -1.3,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "Rcll": {
+          "delta": -0.1,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        }
+      },
+      "family": "recovery",
+      "fps": {
+        "max": 178.77,
+        "mean": 176.58,
+        "min": 174.39,
+        "range": 4.38
+      },
+      "fps_delta_pct": -8.01,
+      "id": "FULL-Bridge",
+      "k_distinct_outputs": 1,
+      "kind": "quality",
+      "material": {
+        "AssA": "-",
+        "HOTA": "-",
+        "IDF1": "-",
+        "IDs": "-",
+        "MOTA": "-"
+      },
+      "mean_latency_ms": {
+        "max": 5.41,
+        "mean": 5.33,
+        "min": 5.25
+      },
+      "metrics_identical_to_full": false,
+      "mot_diff_lines": {
+        "MOT17-02-SDP": {
+          "differing": 9213,
+          "first": [
+            "131,25,556.57,445.55,96.23,307.28,0.1332,-1,-1,-1",
+            "131,26,493.12,463.63,33.31,102.31,0.2539,-1,-1,-1"
+          ],
+          "lines": 11377,
+          "lines_other": 11247
+        },
+        "MOT17-04-SDP": {
+          "differing": 44563,
+          "first": [
+            "3,114,1360.25,566.78,103.50,244.91,0.9754,-1,-1,-1",
+            "3,117,1360.25,566.78,103.50,244.91,0.9754,-1,-1,-1"
+          ],
+          "lines": 44078,
+          "lines_other": 44563
+        },
+        "MOT17-05-SDP": {
+          "differing": 5318,
+          "first": [
+            "3,217,21.69,147.82,82.59,196.69,0.5985,-1,-1,-1",
+            "3,219,21.69,147.82,82.59,196.69,0.5985,-1,-1,-1"
+          ],
+          "lines": 5318,
+          "lines_other": 5224
+        },
+        "MOT17-09-SDP": {
+          "differing": 4129,
+          "first": [
+            "3,370,1258.21,534.40,59.83,126.09,0.8448,-1,-1,-1",
+            "3,375,1258.21,534.40,59.83,126.09,0.8448,-1,-1,-1"
+          ],
+          "lines": 4091,
+          "lines_other": 4129
+        },
+        "MOT17-10-SDP": {
+          "differing": 11786,
+          "first": [
+            "3,407,535.34,434.61,63.88,169.22,0.8460,-1,-1,-1",
+            "3,412,535.34,434.61,63.88,169.22,0.8460,-1,-1,-1"
+          ],
+          "lines": 11356,
+          "lines_other": 11786
+        },
+        "MOT17-11-SDP": {
+          "differing": 8072,
+          "first": [
+            "3,575,388.56,269.03,114.78,330.31,0.8526,-1,-1,-1",
+            "3,579,388.56,269.03,114.78,330.31,0.8526,-1,-1,-1"
+          ],
+          "lines": 8072,
+          "lines_other": 8037
+        },
+        "MOT17-13-SDP": {
+          "differing": 11074,
+          "first": [
+            "3,667,1621.61,554.50,62.06,122.45,0.7054,-1,-1,-1",
+            "3,669,1621.61,554.50,62.06,122.45,0.7054,-1,-1,-1"
+          ],
+          "lines": 10536,
+          "lines_other": 11074
+        }
+      },
+      "n": 2,
+      "note": "tracker-core bidirectional foot-bridge relink off",
+      "output_identical_to_full": false,
+      "p99_ms": {
+        "mean": 8.226
+      },
+      "removes": [
+        "Bridge"
+      ],
+      "single_role": "essential"
+    },
+    {
+      "deltas": {
+        "AssA": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "DetA": {
+          "delta": 0.2,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "FN": {
+          "delta": -14.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "FP": {
+          "delta": -81.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "HOTA": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "IDF1": {
+          "delta": 0.1,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "IDs": {
+          "delta": -3.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "MOTA": {
+          "delta": 0.1,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "Prcn": {
+          "delta": 0.1,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "Rcll": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        }
+      },
+      "family": "recovery",
+      "fps": {
+        "max": 189.14,
+        "mean": 178.45,
+        "min": 167.76,
+        "range": 21.38
+      },
+      "fps_delta_pct": -7.03,
+      "id": "FULL-BridgeMargin",
+      "k_distinct_outputs": 1,
+      "kind": "quality",
+      "material": {
+        "AssA": "",
+        "HOTA": "",
+        "IDF1": "",
+        "IDs": "",
+        "MOTA": ""
+      },
+      "mean_latency_ms": {
+        "max": 5.59,
+        "mean": 5.24,
+        "min": 4.89
+      },
+      "metrics_identical_to_full": false,
+      "mot_diff_lines": {
+        "MOT17-02-SDP": {
+          "differing": 6799,
+          "first": [
+            "250,9,470.85,456.71,31.99,103.84,0.7726,-1,-1,-1",
+            "250,7,1227.12,439.98,135.27,367.07,0.8004,-1,-1,-1"
+          ],
+          "lines": 11377,
+          "lines_other": 11380
+        },
+        "MOT17-04-SDP": {
+          "differing": 0,
+          "first": null,
+          "lines": 44078,
+          "lines_other": 44078
+        },
+        "MOT17-05-SDP": {
+          "differing": 4734,
+          "first": [
+            "114,230,156.97,19.29,145.10,408.50,0.7556,-1,-1,-1",
+            "114,226,298.49,176.34,27.16,85.20,0.2835,-1,-1,-1"
+          ],
+          "lines": 5318,
+          "lines_other": 5332
+        },
+        "MOT17-09-SDP": {
+          "differing": 2958,
+          "first": [
+            "195,373,-142.54,70.26,515.55,1186.42,0.4954,-1,-1,-1",
+            "195,371,574.26,372.88,155.29,407.94,0.6159,-1,-1,-1"
+          ],
+          "lines": 4091,
+          "lines_other": 4107
+        },
+        "MOT17-10-SDP": {
+          "differing": 3833,
+          "first": [
+            "428,521,525.79,320.56,57.08,167.85,0.8243,-1,-1,-1",
+            "428,520,692.50,318.70,29.70,84.87,0.1865,-1,-1,-1"
+          ],
+          "lines": 11356,
+          "lines_other": 11369
+        },
+        "MOT17-11-SDP": {
+          "differing": 6634,
+          "first": [
+            "115,586,1291.06,389.02,42.50,119.17,0.3241,-1,-1,-1",
+            "115,586,1291.12,388.85,42.34,118.49,0.3353,-1,-1,-1"
+          ],
+          "lines": 8072,
+          "lines_other": 8051
+        },
+        "MOT17-13-SDP": {
+          "differing": 10211,
+          "first": [
+            "21,688,1330.91,509.04,18.35,45.71,0.8544,-1,-1,-1",
+            "21,686,1473.83,503.67,18.61,48.79,0.7551,-1,-1,-1"
+          ],
+          "lines": 10536,
+          "lines_other": 10444
+        }
+      },
+      "n": 2,
+      "note": "bridge reciprocal-margin guard off (ambiguous bridges accepted)",
+      "output_identical_to_full": false,
+      "p99_ms": {
+        "mean": 7.875
+      },
+      "removes": [
+        "BridgeMargin"
+      ],
+      "single_role": "no_material_quality_role"
+    },
+    {
+      "deltas": {
+        "AssA": {
+          "delta": -0.5,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "DetA": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "FN": {
+          "delta": 70.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "FP": {
+          "delta": 89.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "HOTA": {
+          "delta": -0.3,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "IDF1": {
+          "delta": -0.5,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "IDs": {
+          "delta": 11.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "MOTA": {
+          "delta": -0.2,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "Prcn": {
+          "delta": -0.1,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "Rcll": {
+          "delta": -0.1,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        }
+      },
+      "family": "recovery",
+      "fps": {
+        "max": 190.6,
+        "mean": 188.47,
+        "min": 186.34,
+        "range": 4.26
+      },
+      "fps_delta_pct": -1.81,
+      "id": "FULL-BridgeDirBonus",
+      "k_distinct_outputs": 1,
+      "kind": "quality",
+      "material": {
+        "AssA": "-",
+        "HOTA": "-",
+        "IDF1": "-",
+        "IDs": "-",
+        "MOTA": ""
+      },
+      "mean_latency_ms": {
+        "max": 4.99,
+        "mean": 4.925,
+        "min": 4.86
+      },
+      "metrics_identical_to_full": false,
+      "mot_diff_lines": {
+        "MOT17-02-SDP": {
+          "differing": 5465,
+          "first": [
+            "307,45,803.55,449.02,28.36,73.84,0.2526,-1,-1,-1",
+            "307,46,664.45,456.20,25.32,61.05,0.1679,-1,-1,-1"
+          ],
+          "lines": 11377,
+          "lines_other": 11294
+        },
+        "MOT17-04-SDP": {
+          "differing": 44078,
+          "first": [
+            "3,114,1360.25,566.78,103.50,244.91,0.9754,-1,-1,-1",
+            "3,115,1360.25,566.78,103.50,244.91,0.9754,-1,-1,-1"
+          ],
+          "lines": 44078,
+          "lines_other": 44059
+        },
+        "MOT17-05-SDP": {
+          "differing": 5318,
+          "first": [
+            "3,217,21.69,147.82,82.59,196.69,0.5985,-1,-1,-1",
+            "3,218,21.69,147.82,82.59,196.69,0.5985,-1,-1,-1"
+          ],
+          "lines": 5318,
+          "lines_other": 5302
+        },
+        "MOT17-09-SDP": {
+          "differing": 4107,
+          "first": [
+            "3,370,1258.21,534.40,59.83,126.09,0.8448,-1,-1,-1",
+            "3,372,1258.21,534.40,59.83,126.09,0.8448,-1,-1,-1"
+          ],
+          "lines": 4091,
+          "lines_other": 4107
+        },
+        "MOT17-10-SDP": {
+          "differing": 11380,
+          "first": [
+            "3,407,535.34,434.61,63.88,169.22,0.8460,-1,-1,-1",
+            "3,409,535.34,434.61,63.88,169.22,0.8460,-1,-1,-1"
+          ],
+          "lines": 11356,
+          "lines_other": 11380
+        },
+        "MOT17-11-SDP": {
+          "differing": 8072,
+          "first": [
+            "3,575,388.56,269.03,114.78,330.31,0.8526,-1,-1,-1",
+            "3,576,388.56,269.03,114.78,330.31,0.8526,-1,-1,-1"
+          ],
+          "lines": 8072,
+          "lines_other": 8072
+        },
+        "MOT17-13-SDP": {
+          "differing": 10616,
+          "first": [
+            "3,667,1621.61,554.50,62.06,122.45,0.7054,-1,-1,-1",
+            "3,668,1621.61,554.50,62.06,122.45,0.7054,-1,-1,-1"
+          ],
+          "lines": 10536,
+          "lines_other": 10633
+        }
+      },
+      "n": 2,
+      "note": "bridge directional-consistency bonus off (s preset value 0.8; m ships 0.0)",
+      "output_identical_to_full": false,
+      "p99_ms": {
+        "mean": 6.165
+      },
+      "removes": [
+        "BridgeDirBonus"
+      ],
+      "single_role": "essential"
+    },
+    {
+      "deltas": {
+        "AssA": {
+          "delta": -0.8,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "DetA": {
+          "delta": -1.1,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "FN": {
+          "delta": 3461.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "FP": {
+          "delta": -2318.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "HOTA": {
+          "delta": -1.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "IDF1": {
+          "delta": -0.7,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "IDs": {
+          "delta": 380.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "MOTA": {
+          "delta": -1.4,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "Prcn": {
+          "delta": 2.4,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "Rcll": {
+          "delta": -3.1,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        }
+      },
+      "family": "recovery",
+      "fps": {
+        "max": 192.09,
+        "mean": 181.63,
+        "min": 171.17,
+        "range": 20.92
+      },
+      "fps_delta_pct": -5.38,
+      "id": "FULL-Interp",
+      "k_distinct_outputs": 1,
+      "kind": "quality",
+      "material": {
+        "AssA": "-",
+        "HOTA": "-",
+        "IDF1": "-",
+        "IDs": "-",
+        "MOTA": "-"
+      },
+      "mean_latency_ms": {
+        "max": 5.44,
+        "mean": 5.115,
+        "min": 4.79
+      },
+      "metrics_identical_to_full": false,
+      "mot_diff_lines": {
+        "MOT17-02-SDP": {
+          "differing": 10954,
+          "first": [
+            "25,17,994.76,448.35,39.87,100.98,0.4279,-1,-1,-1",
+            "25,18,687.62,450.40,38.77,94.40,0.7556,-1,-1,-1"
+          ],
+          "lines": 11377,
+          "lines_other": 10323
+        },
+        "MOT17-04-SDP": {
+          "differing": 43771,
+          "first": [
+            "11,119,501.84,141.31,74.39,178.94,0.3141,-1,-1,-1",
+            "11,120,100.89,550.18,84.04,247.62,0.7437,-1,-1,-1"
+          ],
+          "lines": 44078,
+          "lines_other": 43217
+        },
+        "MOT17-05-SDP": {
+          "differing": 5263,
+          "first": [
+            "12,221,318.46,203.12,25.64,68.51,0.9207,-1,-1,-1",
+            "12,226,165.39,197.58,26.50,72.23,0.2367,-1,-1,-1"
+          ],
+          "lines": 5318,
+          "lines_other": 4737
+        },
+        "MOT17-09-SDP": {
+          "differing": 3963,
+          "first": [
+            "31,371,318.86,450.38,108.78,255.05,0.5049,-1,-1,-1",
+            "31,372,1329.52,458.00,78.03,208.52,0.9396,-1,-1,-1"
+          ],
+          "lines": 4091,
+          "lines_other": 3761
+        },
+        "MOT17-10-SDP": {
+          "differing": 11297,
+          "first": [
+            "5,417,642.49,408.36,93.07,212.59,0.7691,-1,-1,-1",
+            "5,420,828.49,436.20,24.21,66.57,0.4291,-1,-1,-1"
+          ],
+          "lines": 11356,
+          "lines_other": 10045
+        },
+        "MOT17-11-SDP": {
+          "differing": 7837,
+          "first": [
+            "19,587,1615.22,356.43,34.26,84.72,0.3832,-1,-1,-1",
+            "19,588,1643.51,349.44,27.53,85.15,0.5034,-1,-1,-1"
+          ],
+          "lines": 8072,
+          "lines_other": 7714
+        },
+        "MOT17-13-SDP": {
+          "differing": 10324,
+          "first": [
+            "7,681,1077.87,492.90,11.45,29.78,0.6162,-1,-1,-1",
+            "7,682,138.21,590.83,51.00,153.62,0.5696,-1,-1,-1"
+          ],
+          "lines": 10536,
+          "lines_other": 9252
+        }
+      },
+      "n": 2,
+      "note": "output-layer gap interpolation off (max_gap 35)",
+      "output_identical_to_full": false,
+      "p99_ms": {
+        "mean": 6.797
+      },
+      "removes": [
+        "Interp"
+      ],
+      "single_role": "essential"
+    },
+    {
+      "deltas": {
+        "AssA": {
+          "delta": -0.4,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "DetA": {
+          "delta": 0.5,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "FN": {
+          "delta": 516.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "FP": {
+          "delta": -789.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "HOTA": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "IDF1": {
+          "delta": -0.3,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "IDs": {
+          "delta": -10.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "MOTA": {
+          "delta": 0.2,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "Prcn": {
+          "delta": 0.8,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "Rcll": {
+          "delta": -0.5,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        }
+      },
+      "family": "recovery",
+      "fps": {
+        "max": 187.28,
+        "mean": 185.36,
+        "min": 183.44,
+        "range": 3.84
+      },
+      "fps_delta_pct": -3.43,
+      "id": "FULL-PrivCont",
+      "k_distinct_outputs": 1,
+      "kind": "quality",
+      "material": {
+        "AssA": "-",
+        "HOTA": "",
+        "IDF1": "-",
+        "IDs": "",
+        "MOTA": ""
+      },
+      "mean_latency_ms": {
+        "max": 5.07,
+        "mean": 5.015,
+        "min": 4.96
+      },
+      "metrics_identical_to_full": false,
+      "mot_diff_lines": {
+        "MOT17-02-SDP": {
+          "differing": 10787,
+          "first": [
+            "25,17,994.76,448.35,39.87,100.98,0.4279,-1,-1,-1",
+            "25,17,993.54,448.49,38.96,98.57,0.5340,-1,-1,-1"
+          ],
+          "lines": 11377,
+          "lines_other": 11266
+        },
+        "MOT17-04-SDP": {
+          "differing": 44078,
+          "first": [
+            "3,114,1360.25,566.78,103.50,244.91,0.9754,-1,-1,-1",
+            "3,123,1360.25,566.78,103.50,244.91,0.9754,-1,-1,-1"
+          ],
+          "lines": 44078,
+          "lines_other": 43614
+        },
+        "MOT17-05-SDP": {
+          "differing": 5318,
+          "first": [
+            "3,217,21.69,147.82,82.59,196.69,0.5985,-1,-1,-1",
+            "3,229,21.69,147.82,82.59,196.69,0.5985,-1,-1,-1"
+          ],
+          "lines": 5318,
+          "lines_other": 5293
+        },
+        "MOT17-09-SDP": {
+          "differing": 4091,
+          "first": [
+            "3,370,1258.21,534.40,59.83,126.09,0.8448,-1,-1,-1",
+            "3,383,1258.21,534.40,59.83,126.09,0.8448,-1,-1,-1"
+          ],
+          "lines": 4091,
+          "lines_other": 4060
+        },
+        "MOT17-10-SDP": {
+          "differing": 11356,
+          "first": [
+            "3,407,535.34,434.61,63.88,169.22,0.8460,-1,-1,-1",
+            "3,420,535.34,434.61,63.88,169.22,0.8460,-1,-1,-1"
+          ],
+          "lines": 11356,
+          "lines_other": 10882
+        },
+        "MOT17-11-SDP": {
+          "differing": 8072,
+          "first": [
+            "3,575,388.56,269.03,114.78,330.31,0.8526,-1,-1,-1",
+            "3,574,388.56,269.03,114.78,330.31,0.8526,-1,-1,-1"
+          ],
+          "lines": 8072,
+          "lines_other": 8007
+        },
+        "MOT17-13-SDP": {
+          "differing": 10536,
+          "first": [
+            "3,667,1621.61,554.50,62.06,122.45,0.7054,-1,-1,-1",
+            "3,666,1621.61,554.50,62.06,122.45,0.7054,-1,-1,-1"
+          ],
+          "lines": 10536,
+          "lines_other": 10401
+        }
+      },
+      "n": 2,
+      "note": "track-gated wider-NMS continuation candidates off",
+      "output_identical_to_full": false,
+      "p99_ms": {
+        "mean": 6.41
+      },
+      "removes": [
+        "PrivCont"
+      ],
+      "single_role": "essential"
+    },
+    {
+      "deltas": {
+        "AssA": {
+          "delta": -0.9,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "DetA": {
+          "delta": 0.2,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "FN": {
+          "delta": 1.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "FP": {
+          "delta": -199.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "HOTA": {
+          "delta": -0.4,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "IDF1": {
+          "delta": -0.7,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "IDs": {
+          "delta": -1.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "MOTA": {
+          "delta": 0.2,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "Prcn": {
+          "delta": 0.2,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "Rcll": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        }
+      },
+      "family": "association",
+      "fps": {
+        "max": 175.55,
+        "mean": 172.91,
+        "min": 170.27,
+        "range": 5.28
+      },
+      "fps_delta_pct": -9.92,
+      "id": "FULL-StabCost",
+      "k_distinct_outputs": 1,
+      "kind": "quality",
+      "material": {
+        "AssA": "-",
+        "HOTA": "-",
+        "IDF1": "-",
+        "IDs": "",
+        "MOTA": ""
+      },
+      "mean_latency_ms": {
+        "max": 5.47,
+        "mean": 5.385,
+        "min": 5.3
+      },
+      "metrics_identical_to_full": false,
+      "mot_diff_lines": {
+        "MOT17-02-SDP": {
+          "differing": 5947,
+          "first": [
+            "147,9,466.85,458.18,38.63,96.44,0.2147,-1,-1,-1",
+            "147,9,466.62,459.99,36.59,90.62,0.1613,-1,-1,-1"
+          ],
+          "lines": 11377,
+          "lines_other": 11383
+        },
+        "MOT17-04-SDP": {
+          "differing": 44078,
+          "first": [
+            "3,114,1360.25,566.78,103.50,244.91,0.9754,-1,-1,-1",
+            "3,115,1360.25,566.78,103.50,244.91,0.9754,-1,-1,-1"
+          ],
+          "lines": 44078,
+          "lines_other": 44025
+        },
+        "MOT17-05-SDP": {
+          "differing": 5318,
+          "first": [
+            "3,217,21.69,147.82,82.59,196.69,0.5985,-1,-1,-1",
+            "3,218,21.69,147.82,82.59,196.69,0.5985,-1,-1,-1"
+          ],
+          "lines": 5318,
+          "lines_other": 5301
+        },
+        "MOT17-09-SDP": {
+          "differing": 4091,
+          "first": [
+            "3,370,1258.21,534.40,59.83,126.09,0.8448,-1,-1,-1",
+            "3,374,1258.21,534.40,59.83,126.09,0.8448,-1,-1,-1"
+          ],
+          "lines": 4091,
+          "lines_other": 4070
+        },
+        "MOT17-10-SDP": {
+          "differing": 11356,
+          "first": [
+            "3,407,535.34,434.61,63.88,169.22,0.8460,-1,-1,-1",
+            "3,410,535.34,434.61,63.88,169.22,0.8460,-1,-1,-1"
+          ],
+          "lines": 11356,
+          "lines_other": 11309
+        },
+        "MOT17-11-SDP": {
+          "differing": 8072,
+          "first": [
+            "3,575,388.56,269.03,114.78,330.31,0.8526,-1,-1,-1",
+            "3,579,388.56,269.03,114.78,330.31,0.8526,-1,-1,-1"
+          ],
+          "lines": 8072,
+          "lines_other": 8026
+        },
+        "MOT17-13-SDP": {
+          "differing": 10536,
+          "first": [
+            "3,667,1621.61,554.50,62.06,122.45,0.7054,-1,-1,-1",
+            "3,672,1621.61,554.50,62.06,122.45,0.7054,-1,-1,-1"
+          ],
+          "lines": 10536,
+          "lines_other": 10514
+        }
+      },
+      "n": 2,
+      "note": "height-stability reward in the multiplicative cost off",
+      "output_identical_to_full": false,
+      "p99_ms": {
+        "mean": 6.794
+      },
+      "removes": [
+        "StabCost"
+      ],
+      "single_role": "essential"
+    },
+    {
+      "deltas": {
+        "AssA": {
+          "delta": -1.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "DetA": {
+          "delta": 0.2,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "FN": {
+          "delta": 33.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "FP": {
+          "delta": -198.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "HOTA": {
+          "delta": -0.5,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "IDF1": {
+          "delta": -1.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "IDs": {
+          "delta": 71.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "MOTA": {
+          "delta": 0.1,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "Prcn": {
+          "delta": 0.2,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "Rcll": {
+          "delta": -0.1,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        }
+      },
+      "family": "association",
+      "fps": {
+        "max": 180.57,
+        "mean": 178.91,
+        "min": 177.26,
+        "range": 3.31
+      },
+      "fps_delta_pct": -6.79,
+      "id": "FULL-StabBid",
+      "k_distinct_outputs": 1,
+      "kind": "quality",
+      "material": {
+        "AssA": "-",
+        "HOTA": "-",
+        "IDF1": "-",
+        "IDs": "-",
+        "MOTA": ""
+      },
+      "mean_latency_ms": {
+        "max": 5.24,
+        "mean": 5.185,
+        "min": 5.13
+      },
+      "metrics_identical_to_full": false,
+      "mot_diff_lines": {
+        "MOT17-02-SDP": {
+          "differing": 10897,
+          "first": [
+            "28,17,1001.26,445.83,42.86,111.08,0.3865,-1,-1,-1",
+            "28,18,691.21,448.23,38.60,96.33,0.8098,-1,-1,-1"
+          ],
+          "lines": 11377,
+          "lines_other": 11325
+        },
+        "MOT17-04-SDP": {
+          "differing": 44078,
+          "first": [
+            "3,114,1360.25,566.78,103.50,244.91,0.9754,-1,-1,-1",
+            "3,118,1360.25,566.78,103.50,244.91,0.9754,-1,-1,-1"
+          ],
+          "lines": 44078,
+          "lines_other": 43987
+        },
+        "MOT17-05-SDP": {
+          "differing": 5323,
+          "first": [
+            "3,217,21.69,147.82,82.59,196.69,0.5985,-1,-1,-1",
+            "3,220,21.69,147.82,82.59,196.69,0.5985,-1,-1,-1"
+          ],
+          "lines": 5318,
+          "lines_other": 5323
+        },
+        "MOT17-09-SDP": {
+          "differing": 4091,
+          "first": [
+            "3,370,1258.21,534.40,59.83,126.09,0.8448,-1,-1,-1",
+            "3,378,1258.21,534.40,59.83,126.09,0.8448,-1,-1,-1"
+          ],
+          "lines": 4091,
+          "lines_other": 4021
+        },
+        "MOT17-10-SDP": {
+          "differing": 11593,
+          "first": [
+            "3,407,535.34,434.61,63.88,169.22,0.8460,-1,-1,-1",
+            "3,419,535.34,434.61,63.88,169.22,0.8460,-1,-1,-1"
+          ],
+          "lines": 11356,
+          "lines_other": 11593
+        },
+        "MOT17-11-SDP": {
+          "differing": 8072,
+          "first": [
+            "3,575,388.56,269.03,114.78,330.31,0.8526,-1,-1,-1",
+            "3,583,388.56,269.03,114.78,330.31,0.8526,-1,-1,-1"
+          ],
+          "lines": 8072,
+          "lines_other": 8050
+        },
+        "MOT17-13-SDP": {
+          "differing": 10536,
+          "first": [
+            "3,667,1621.61,554.50,62.06,122.45,0.7054,-1,-1,-1",
+            "3,676,1621.61,554.50,62.06,122.45,0.7054,-1,-1,-1"
+          ],
+          "lines": 10536,
+          "lines_other": 10298
+        }
+      },
+      "n": 2,
+      "note": "auction height-stability bid off (env default 0.1)",
+      "output_identical_to_full": false,
+      "p99_ms": {
+        "mean": 6.513
+      },
+      "removes": [
+        "StabBid"
+      ],
+      "single_role": "essential"
+    },
+    {
+      "deltas": {
+        "AssA": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "DetA": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "FN": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "FP": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "HOTA": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "IDF1": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "IDs": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "MOTA": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "Prcn": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "Rcll": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        }
+      },
+      "family": "association",
+      "fps": {
+        "max": 183.14,
+        "mean": 181.63,
+        "min": 180.12,
+        "range": 3.02
+      },
+      "fps_delta_pct": -5.38,
+      "id": "FULL-DDA",
+      "k_distinct_outputs": 1,
+      "kind": "quality",
+      "material": {
+        "AssA": "",
+        "HOTA": "",
+        "IDF1": "",
+        "IDs": "",
+        "MOTA": ""
+      },
+      "mean_latency_ms": {
+        "max": 5.16,
+        "mean": 5.115,
+        "min": 5.07
+      },
+      "metrics_identical_to_full": true,
+      "mot_diff_lines": null,
+      "n": 2,
+      "note": "S0 unambiguous pre-stage (cost <= 0.12, high-conf, confirmed) off",
+      "output_identical_to_full": true,
+      "p99_ms": {
+        "mean": 6.639
+      },
+      "removes": [
+        "DDA"
+      ],
+      "single_role": "no_material_quality_role"
+    },
+    {
+      "deltas": {
+        "AssA": {
+          "delta": -4.2,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "DetA": {
+          "delta": -0.2,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "FN": {
+          "delta": 1915.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "FP": {
+          "delta": -1288.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "HOTA": {
+          "delta": -2.2,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "IDF1": {
+          "delta": -4.4,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "IDs": {
+          "delta": 126.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "MOTA": {
+          "delta": -0.7,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "Prcn": {
+          "delta": 1.3,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "Rcll": {
+          "delta": -1.8,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        }
+      },
+      "family": "association",
+      "fps": {
+        "max": 174.99,
+        "mean": 174.34,
+        "min": 173.7,
+        "range": 1.29
+      },
+      "fps_delta_pct": -9.17,
+      "id": "FULL-MultCost",
+      "k_distinct_outputs": 1,
+      "kind": "quality",
+      "material": {
+        "AssA": "-",
+        "HOTA": "-",
+        "IDF1": "-",
+        "IDs": "-",
+        "MOTA": "-"
+      },
+      "mean_latency_ms": {
+        "max": 5.35,
+        "mean": 5.33,
+        "min": 5.31
+      },
+      "metrics_identical_to_full": false,
+      "mot_diff_lines": {
+        "MOT17-02-SDP": {
+          "differing": 10930,
+          "first": [
+            "25,17,994.76,448.35,39.87,100.98,0.4279,-1,-1,-1",
+            "25,18,687.62,450.40,38.77,94.40,0.7556,-1,-1,-1"
+          ],
+          "lines": 11377,
+          "lines_other": 11150
+        },
+        "MOT17-04-SDP": {
+          "differing": 44078,
+          "first": [
+            "3,114,1360.25,566.78,103.50,244.91,0.9754,-1,-1,-1",
+            "3,166,1360.25,566.78,103.50,244.91,0.9754,-1,-1,-1"
+          ],
+          "lines": 44078,
+          "lines_other": 43374
+        },
+        "MOT17-05-SDP": {
+          "differing": 5318,
+          "first": [
+            "3,217,21.69,147.82,82.59,196.69,0.5985,-1,-1,-1",
+            "3,290,21.69,147.82,82.59,196.69,0.5985,-1,-1,-1"
+          ],
+          "lines": 5318,
+          "lines_other": 5181
+        },
+        "MOT17-09-SDP": {
+          "differing": 4091,
+          "first": [
+            "3,370,1258.21,534.40,59.83,126.09,0.8448,-1,-1,-1",
+            "3,469,1258.21,534.40,59.83,126.09,0.8448,-1,-1,-1"
+          ],
+          "lines": 4091,
+          "lines_other": 4046
+        },
+        "MOT17-10-SDP": {
+          "differing": 11356,
+          "first": [
+            "3,407,535.34,434.61,63.88,169.22,0.8460,-1,-1,-1",
+            "3,524,535.34,434.61,63.88,169.22,0.8460,-1,-1,-1"
+          ],
+          "lines": 11356,
+          "lines_other": 10478
+        },
+        "MOT17-11-SDP": {
+          "differing": 8072,
+          "first": [
+            "3,575,388.56,269.03,114.78,330.31,0.8526,-1,-1,-1",
+            "3,754,388.56,269.03,114.78,330.31,0.8526,-1,-1,-1"
+          ],
+          "lines": 8072,
+          "lines_other": 7919
+        },
+        "MOT17-13-SDP": {
+          "differing": 10536,
+          "first": [
+            "3,667,1621.61,554.50,62.06,122.45,0.7054,-1,-1,-1",
+            "3,857,1621.61,554.50,62.06,122.45,0.7054,-1,-1,-1"
+          ],
+          "lines": 10536,
+          "lines_other": 9477
+        }
+      },
+      "n": 2,
+      "note": "additive clamp chain instead of log-linear cost (confound: knobs tuned for the multiplicative form; stability cost has no additive path)",
+      "output_identical_to_full": false,
+      "p99_ms": {
+        "mean": 6.842
+      },
+      "removes": [
+        "MultCost"
+      ],
+      "single_role": "essential"
+    },
+    {
+      "deltas": {
+        "AssA": {
+          "delta": -3.1,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "DetA": {
+          "delta": -0.4,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "FN": {
+          "delta": -406.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "FP": {
+          "delta": 1720.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "HOTA": {
+          "delta": -1.8,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "IDF1": {
+          "delta": -2.2,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "IDs": {
+          "delta": 31.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "MOTA": {
+          "delta": -1.2,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "Prcn": {
+          "delta": -1.7,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "Rcll": {
+          "delta": 0.3,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        }
+      },
+      "family": "occlusion",
+      "fps": {
+        "max": 180.87,
+        "mean": 180.7,
+        "min": 180.53,
+        "range": 0.34
+      },
+      "fps_delta_pct": -5.86,
+      "id": "REF-OAOPlain025",
+      "k_distinct_outputs": 1,
+      "kind": "reference",
+      "material": {
+        "AssA": "-",
+        "HOTA": "-",
+        "IDF1": "-",
+        "IDs": "-",
+        "MOTA": "-"
+      },
+      "mean_latency_ms": {
+        "max": 5.15,
+        "mean": 5.145,
+        "min": 5.14
+      },
+      "metrics_identical_to_full": false,
+      "mot_diff_lines": {
+        "MOT17-02-SDP": {
+          "differing": 11179,
+          "first": [
+            "27,20,716.71,460.19,38.99,99.66,0.4984,-1,-1,-1",
+            "27,20,717.48,466.80,41.56,111.71,0.2565,-1,-1,-1"
+          ],
+          "lines": 11377,
+          "lines_other": 11669
+        },
+        "MOT17-04-SDP": {
+          "differing": 44237,
+          "first": [
+            "3,114,1360.25,566.78,103.50,244.91,0.9754,-1,-1,-1",
+            "3,111,1360.25,566.78,103.50,244.91,0.9754,-1,-1,-1"
+          ],
+          "lines": 44078,
+          "lines_other": 44237
+        },
+        "MOT17-05-SDP": {
+          "differing": 5463,
+          "first": [
+            "3,217,21.69,147.82,82.59,196.69,0.5985,-1,-1,-1",
+            "3,205,21.69,147.82,82.59,196.69,0.5985,-1,-1,-1"
+          ],
+          "lines": 5318,
+          "lines_other": 5463
+        },
+        "MOT17-09-SDP": {
+          "differing": 4166,
+          "first": [
+            "3,370,1258.21,534.40,59.83,126.09,0.8448,-1,-1,-1",
+            "3,352,1258.21,534.40,59.83,126.09,0.8448,-1,-1,-1"
+          ],
+          "lines": 4091,
+          "lines_other": 4166
+        },
+        "MOT17-10-SDP": {
+          "differing": 12182,
+          "first": [
+            "3,407,535.34,434.61,63.88,169.22,0.8460,-1,-1,-1",
+            "3,385,535.34,434.61,63.88,169.22,0.8460,-1,-1,-1"
+          ],
+          "lines": 11356,
+          "lines_other": 12182
+        },
+        "MOT17-11-SDP": {
+          "differing": 8081,
+          "first": [
+            "3,575,388.56,269.03,114.78,330.31,0.8526,-1,-1,-1",
+            "3,519,388.56,269.03,114.78,330.31,0.8526,-1,-1,-1"
+          ],
+          "lines": 8072,
+          "lines_other": 8081
+        },
+        "MOT17-13-SDP": {
+          "differing": 11156,
+          "first": [
+            "3,667,1621.61,554.50,62.06,122.45,0.7054,-1,-1,-1",
+            "3,608,1621.61,554.50,62.06,122.45,0.7054,-1,-1,-1"
+          ],
+          "lines": 10536,
+          "lines_other": 11156
+        }
+      },
+      "n": 2,
+      "note": "historical plain-OAO operating point (tau 0.25, no ramp): names the FULL-OAORamp tau confound",
+      "output_identical_to_full": false,
+      "p99_ms": {
+        "mean": 6.471
+      },
+      "removes": [
+        "OAORamp"
+      ],
+      "single_role": null
+    },
+    {
+      "deltas": {
+        "AssA": {
+          "delta": -2.9,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "DetA": {
+          "delta": -0.8,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "FN": {
+          "delta": 3276.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "FP": {
+          "delta": -2103.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "HOTA": {
+          "delta": -1.9,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "IDF1": {
+          "delta": -2.9,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "IDs": {
+          "delta": 540.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "MOTA": {
+          "delta": -1.5,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "Prcn": {
+          "delta": 2.2,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "Rcll": {
+          "delta": -3.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        }
+      },
+      "family": "recovery",
+      "fps": {
+        "max": 179.36,
+        "mean": 177.05,
+        "min": 174.74,
+        "range": 4.62
+      },
+      "fps_delta_pct": -7.76,
+      "id": "FULL-Bridge-Interp",
+      "k_distinct_outputs": 1,
+      "kind": "pair",
+      "material": {
+        "AssA": "-",
+        "HOTA": "-",
+        "IDF1": "-",
+        "IDs": "-",
+        "MOTA": "-"
+      },
+      "mean_latency_ms": {
+        "max": 5.35,
+        "mean": 5.28,
+        "min": 5.21
+      },
+      "metrics_identical_to_full": false,
+      "mot_diff_lines": {
+        "MOT17-02-SDP": {
+          "differing": 10954,
+          "first": [
+            "25,17,994.76,448.35,39.87,100.98,0.4279,-1,-1,-1",
+            "25,18,687.62,450.40,38.77,94.40,0.7556,-1,-1,-1"
+          ],
+          "lines": 11377,
+          "lines_other": 10350
+        },
+        "MOT17-04-SDP": {
+          "differing": 44078,
+          "first": [
+            "3,114,1360.25,566.78,103.50,244.91,0.9754,-1,-1,-1",
+            "3,117,1360.25,566.78,103.50,244.91,0.9754,-1,-1,-1"
+          ],
+          "lines": 44078,
+          "lines_other": 43288
+        },
+        "MOT17-05-SDP": {
+          "differing": 5318,
+          "first": [
+            "3,217,21.69,147.82,82.59,196.69,0.5985,-1,-1,-1",
+            "3,219,21.69,147.82,82.59,196.69,0.5985,-1,-1,-1"
+          ],
+          "lines": 5318,
+          "lines_other": 4741
+        },
+        "MOT17-09-SDP": {
+          "differing": 4091,
+          "first": [
+            "3,370,1258.21,534.40,59.83,126.09,0.8448,-1,-1,-1",
+            "3,375,1258.21,534.40,59.83,126.09,0.8448,-1,-1,-1"
+          ],
+          "lines": 4091,
+          "lines_other": 3767
+        },
+        "MOT17-10-SDP": {
+          "differing": 11356,
+          "first": [
+            "3,407,535.34,434.61,63.88,169.22,0.8460,-1,-1,-1",
+            "3,412,535.34,434.61,63.88,169.22,0.8460,-1,-1,-1"
+          ],
+          "lines": 11356,
+          "lines_other": 10180
+        },
+        "MOT17-11-SDP": {
+          "differing": 8072,
+          "first": [
+            "3,575,388.56,269.03,114.78,330.31,0.8526,-1,-1,-1",
+            "3,579,388.56,269.03,114.78,330.31,0.8526,-1,-1,-1"
+          ],
+          "lines": 8072,
+          "lines_other": 7715
+        },
+        "MOT17-13-SDP": {
+          "differing": 10536,
+          "first": [
+            "3,667,1621.61,554.50,62.06,122.45,0.7054,-1,-1,-1",
+            "3,669,1621.61,554.50,62.06,122.45,0.7054,-1,-1,-1"
+          ],
+          "lines": 10536,
+          "lines_other": 9408
+        }
+      },
+      "n": 2,
+      "note": "both gap-recovery layers off: suspected backup pair",
+      "output_identical_to_full": false,
+      "p99_ms": {
+        "mean": 6.623
+      },
+      "removes": [
+        "Bridge",
+        "Interp"
+      ],
+      "single_role": null
+    },
+    {
+      "deltas": {
+        "AssA": {
+          "delta": -2.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "DetA": {
+          "delta": -0.2,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "FN": {
+          "delta": -681.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "FP": {
+          "delta": 623.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "HOTA": {
+          "delta": -1.2,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "IDF1": {
+          "delta": -1.5,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "IDs": {
+          "delta": -5.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "MOTA": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "Prcn": {
+          "delta": -0.6,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "Rcll": {
+          "delta": 0.6,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        }
+      },
+      "family": "occlusion",
+      "fps": {
+        "max": 183.98,
+        "mean": 181.76,
+        "min": 179.54,
+        "range": 4.44
+      },
+      "fps_delta_pct": -5.31,
+      "id": "FULL-OccState-OAO",
+      "k_distinct_outputs": 1,
+      "kind": "pair",
+      "material": {
+        "AssA": "-",
+        "HOTA": "-",
+        "IDF1": "-",
+        "IDs": "",
+        "MOTA": ""
+      },
+      "mean_latency_ms": {
+        "max": 5.31,
+        "mean": 5.24,
+        "min": 5.17
+      },
+      "metrics_identical_to_full": false,
+      "mot_diff_lines": {
+        "MOT17-02-SDP": {
+          "differing": 11125,
+          "first": [
+            "25,17,994.76,448.35,39.87,100.98,0.4279,-1,-1,-1",
+            "25,17,996.75,445.95,41.89,106.72,0.2643,-1,-1,-1"
+          ],
+          "lines": 11377,
+          "lines_other": 11615
+        },
+        "MOT17-04-SDP": {
+          "differing": 44244,
+          "first": [
+            "3,114,1360.25,566.78,103.50,244.91,0.9754,-1,-1,-1",
+            "3,106,1360.25,566.78,103.50,244.91,0.9754,-1,-1,-1"
+          ],
+          "lines": 44078,
+          "lines_other": 44244
+        },
+        "MOT17-05-SDP": {
+          "differing": 5538,
+          "first": [
+            "3,217,21.69,147.82,82.59,196.69,0.5985,-1,-1,-1",
+            "3,197,21.69,147.82,82.59,196.69,0.5985,-1,-1,-1"
+          ],
+          "lines": 5318,
+          "lines_other": 5538
+        },
+        "MOT17-09-SDP": {
+          "differing": 4159,
+          "first": [
+            "3,370,1258.21,534.40,59.83,126.09,0.8448,-1,-1,-1",
+            "3,335,1258.21,534.40,59.83,126.09,0.8448,-1,-1,-1"
+          ],
+          "lines": 4091,
+          "lines_other": 4159
+        },
+        "MOT17-10-SDP": {
+          "differing": 11777,
+          "first": [
+            "3,407,535.34,434.61,63.88,169.22,0.8460,-1,-1,-1",
+            "3,367,535.34,434.61,63.88,169.22,0.8460,-1,-1,-1"
+          ],
+          "lines": 11356,
+          "lines_other": 11777
+        },
+        "MOT17-11-SDP": {
+          "differing": 8074,
+          "first": [
+            "3,575,388.56,269.03,114.78,330.31,0.8526,-1,-1,-1",
+            "3,485,388.56,269.03,114.78,330.31,0.8526,-1,-1,-1"
+          ],
+          "lines": 8072,
+          "lines_other": 8074
+        },
+        "MOT17-13-SDP": {
+          "differing": 10725,
+          "first": [
+            "3,667,1621.61,554.50,62.06,122.45,0.7054,-1,-1,-1",
+            "3,572,1621.61,554.50,62.06,122.45,0.7054,-1,-1,-1"
+          ],
+          "lines": 10536,
+          "lines_other": 10725
+        }
+      },
+      "n": 2,
+      "note": "both occlusion cost terms off: suspected overlap",
+      "output_identical_to_full": false,
+      "p99_ms": {
+        "mean": 6.57
+      },
+      "removes": [
+        "OccState",
+        "OAO"
+      ],
+      "single_role": null
+    },
+    {
+      "deltas": {
+        "AssA": {
+          "delta": -0.7,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "DetA": {
+          "delta": 0.2,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "FN": {
+          "delta": 60.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "FP": {
+          "delta": -250.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "HOTA": {
+          "delta": -0.3,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "IDF1": {
+          "delta": -1.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "IDs": {
+          "delta": 34.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "MOTA": {
+          "delta": 0.1,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "Prcn": {
+          "delta": 0.3,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "Rcll": {
+          "delta": -0.1,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        }
+      },
+      "family": "association",
+      "fps": {
+        "max": 177.11,
+        "mean": 175.71,
+        "min": 174.31,
+        "range": 2.8
+      },
+      "fps_delta_pct": -8.46,
+      "id": "FULL-StabCost-StabBid",
+      "k_distinct_outputs": 1,
+      "kind": "pair",
+      "material": {
+        "AssA": "-",
+        "HOTA": "-",
+        "IDF1": "-",
+        "IDs": "-",
+        "MOTA": ""
+      },
+      "mean_latency_ms": {
+        "max": 5.34,
+        "mean": 5.29,
+        "min": 5.24
+      },
+      "metrics_identical_to_full": false,
+      "mot_diff_lines": {
+        "MOT17-02-SDP": {
+          "differing": 10893,
+          "first": [
+            "28,17,1001.26,445.83,42.86,111.08,0.3865,-1,-1,-1",
+            "28,18,691.21,448.23,38.60,96.33,0.8098,-1,-1,-1"
+          ],
+          "lines": 11377,
+          "lines_other": 11366
+        },
+        "MOT17-04-SDP": {
+          "differing": 44078,
+          "first": [
+            "3,114,1360.25,566.78,103.50,244.91,0.9754,-1,-1,-1",
+            "3,119,1360.25,566.78,103.50,244.91,0.9754,-1,-1,-1"
+          ],
+          "lines": 44078,
+          "lines_other": 43957
+        },
+        "MOT17-05-SDP": {
+          "differing": 5353,
+          "first": [
+            "3,217,21.69,147.82,82.59,196.69,0.5985,-1,-1,-1",
+            "3,222,21.69,147.82,82.59,196.69,0.5985,-1,-1,-1"
+          ],
+          "lines": 5318,
+          "lines_other": 5353
+        },
+        "MOT17-09-SDP": {
+          "differing": 4091,
+          "first": [
+            "3,370,1258.21,534.40,59.83,126.09,0.8448,-1,-1,-1",
+            "3,382,1258.21,534.40,59.83,126.09,0.8448,-1,-1,-1"
+          ],
+          "lines": 4091,
+          "lines_other": 4057
+        },
+        "MOT17-10-SDP": {
+          "differing": 11366,
+          "first": [
+            "3,407,535.34,434.61,63.88,169.22,0.8460,-1,-1,-1",
+            "3,419,535.34,434.61,63.88,169.22,0.8460,-1,-1,-1"
+          ],
+          "lines": 11356,
+          "lines_other": 11366
+        },
+        "MOT17-11-SDP": {
+          "differing": 8072,
+          "first": [
+            "3,575,388.56,269.03,114.78,330.31,0.8526,-1,-1,-1",
+            "3,589,388.56,269.03,114.78,330.31,0.8526,-1,-1,-1"
+          ],
+          "lines": 8072,
+          "lines_other": 8054
+        },
+        "MOT17-13-SDP": {
+          "differing": 10536,
+          "first": [
+            "3,667,1621.61,554.50,62.06,122.45,0.7054,-1,-1,-1",
+            "3,684,1621.61,554.50,62.06,122.45,0.7054,-1,-1,-1"
+          ],
+          "lines": 10536,
+          "lines_other": 10365
+        }
+      },
+      "n": 2,
+      "note": "dual height stability both off (re-reads the 2026-07-09 4-way on the current identity)",
+      "output_identical_to_full": false,
+      "p99_ms": {
+        "mean": 6.665
+      },
+      "removes": [
+        "StabCost",
+        "StabBid"
+      ],
+      "single_role": null
+    },
+    {
+      "deltas": {
+        "AssA": {
+          "delta": -4.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "DetA": {
+          "delta": -1.3,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "FN": {
+          "delta": 2308.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "FP": {
+          "delta": -128.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "HOTA": {
+          "delta": -2.7,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "IDF1": {
+          "delta": -5.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "IDs": {
+          "delta": 339.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "MOTA": {
+          "delta": -2.3,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "Prcn": {
+          "delta": 0.1,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "Rcll": {
+          "delta": -2.1,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        }
+      },
+      "family": "motion",
+      "fps": {
+        "max": 187.66,
+        "mean": 183.56,
+        "min": 179.45,
+        "range": 8.21
+      },
+      "fps_delta_pct": -4.37,
+      "id": "FULL-GMC-KalmanR",
+      "k_distinct_outputs": 1,
+      "kind": "pair",
+      "material": {
+        "AssA": "-",
+        "HOTA": "-",
+        "IDF1": "-",
+        "IDs": "-",
+        "MOTA": "-"
+      },
+      "mean_latency_ms": {
+        "max": 5.19,
+        "mean": 5.065,
+        "min": 4.94
+      },
+      "metrics_identical_to_full": false,
+      "mot_diff_lines": {
+        "MOT17-02-SDP": {
+          "differing": 11553,
+          "first": [
+            "3,1,1428.01,431.49,185.08,345.67,0.6190,-1,-1,-1",
+            "3,1,1427.80,431.40,185.32,346.09,0.6190,-1,-1,-1"
+          ],
+          "lines": 11377,
+          "lines_other": 11553
+        },
+        "MOT17-04-SDP": {
+          "differing": 44078,
+          "first": [
+            "3,114,1360.25,566.78,103.50,244.91,0.9754,-1,-1,-1",
+            "3,123,1360.22,566.75,103.61,245.16,0.9754,-1,-1,-1"
+          ],
+          "lines": 44078,
+          "lines_other": 44030
+        },
+        "MOT17-05-SDP": {
+          "differing": 5318,
+          "first": [
+            "3,217,21.69,147.82,82.59,196.69,0.5985,-1,-1,-1",
+            "3,230,21.02,147.68,82.72,196.99,0.5985,-1,-1,-1"
+          ],
+          "lines": 5318,
+          "lines_other": 5139
+        },
+        "MOT17-09-SDP": {
+          "differing": 4144,
+          "first": [
+            "3,370,1258.21,534.40,59.83,126.09,0.8448,-1,-1,-1",
+            "3,412,1258.20,534.35,59.85,126.15,0.8448,-1,-1,-1"
+          ],
+          "lines": 4091,
+          "lines_other": 4144
+        },
+        "MOT17-10-SDP": {
+          "differing": 11356,
+          "first": [
+            "3,407,535.34,434.61,63.88,169.22,0.8460,-1,-1,-1",
+            "3,447,535.38,434.20,63.92,169.31,0.8460,-1,-1,-1"
+          ],
+          "lines": 11356,
+          "lines_other": 10301
+        },
+        "MOT17-11-SDP": {
+          "differing": 8072,
+          "first": [
+            "3,575,388.56,269.03,114.78,330.31,0.8526,-1,-1,-1",
+            "3,696,388.49,268.65,114.84,330.46,0.8526,-1,-1,-1"
+          ],
+          "lines": 8072,
+          "lines_other": 7822
+        },
+        "MOT17-13-SDP": {
+          "differing": 10536,
+          "first": [
+            "3,667,1621.61,554.50,62.06,122.45,0.7054,-1,-1,-1",
+            "3,830,1622.28,552.51,62.00,122.31,0.7054,-1,-1,-1"
+          ],
+          "lines": 10536,
+          "lines_other": 9403
+        }
+      },
+      "n": 2,
+      "note": "motion model both off: does R scaling absorb residual camera motion?",
+      "output_identical_to_full": false,
+      "p99_ms": {
+        "mean": 6.378
+      },
+      "removes": [
+        "GMC",
+        "KalmanR"
+      ],
+      "single_role": null
+    },
+    {
+      "deltas": {
+        "AssA": {
+          "delta": -4.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "DetA": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "FN": {
+          "delta": 820.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "FP": {
+          "delta": -134.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "HOTA": {
+          "delta": -2.1,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "IDF1": {
+          "delta": -3.7,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "IDs": {
+          "delta": 90.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "MOTA": {
+          "delta": -0.7,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "Prcn": {
+          "delta": 0.1,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "Rcll": {
+          "delta": -0.8,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        }
+      },
+      "family": "recovery",
+      "fps": {
+        "max": 188.39,
+        "mean": 185.47,
+        "min": 182.56,
+        "range": 5.83
+      },
+      "fps_delta_pct": -3.38,
+      "id": "FULL-Bridge-PrivCont",
+      "k_distinct_outputs": 1,
+      "kind": "pair",
+      "material": {
+        "AssA": "-",
+        "HOTA": "-",
+        "IDF1": "-",
+        "IDs": "-",
+        "MOTA": "-"
+      },
+      "mean_latency_ms": {
+        "max": 5.11,
+        "mean": 5.025,
+        "min": 4.94
+      },
+      "metrics_identical_to_full": false,
+      "mot_diff_lines": {
+        "MOT17-02-SDP": {
+          "differing": 10779,
+          "first": [
+            "25,17,994.76,448.35,39.87,100.98,0.4279,-1,-1,-1",
+            "25,17,993.54,448.49,38.96,98.57,0.5340,-1,-1,-1"
+          ],
+          "lines": 11377,
+          "lines_other": 11039
+        },
+        "MOT17-04-SDP": {
+          "differing": 44078,
+          "first": [
+            "3,114,1360.25,566.78,103.50,244.91,0.9754,-1,-1,-1",
+            "3,126,1360.25,566.78,103.50,244.91,0.9754,-1,-1,-1"
+          ],
+          "lines": 44078,
+          "lines_other": 43669
+        },
+        "MOT17-05-SDP": {
+          "differing": 5318,
+          "first": [
+            "3,217,21.69,147.82,82.59,196.69,0.5985,-1,-1,-1",
+            "3,230,21.69,147.82,82.59,196.69,0.5985,-1,-1,-1"
+          ],
+          "lines": 5318,
+          "lines_other": 5182
+        },
+        "MOT17-09-SDP": {
+          "differing": 4091,
+          "first": [
+            "3,370,1258.21,534.40,59.83,126.09,0.8448,-1,-1,-1",
+            "3,386,1258.21,534.40,59.83,126.09,0.8448,-1,-1,-1"
+          ],
+          "lines": 4091,
+          "lines_other": 4064
+        },
+        "MOT17-10-SDP": {
+          "differing": 11356,
+          "first": [
+            "3,407,535.34,434.61,63.88,169.22,0.8460,-1,-1,-1",
+            "3,421,535.34,434.61,63.88,169.22,0.8460,-1,-1,-1"
+          ],
+          "lines": 11356,
+          "lines_other": 11273
+        },
+        "MOT17-11-SDP": {
+          "differing": 8072,
+          "first": [
+            "3,575,388.56,269.03,114.78,330.31,0.8526,-1,-1,-1",
+            "3,585,388.56,269.03,114.78,330.31,0.8526,-1,-1,-1"
+          ],
+          "lines": 8072,
+          "lines_other": 7961
+        },
+        "MOT17-13-SDP": {
+          "differing": 10686,
+          "first": [
+            "3,667,1621.61,554.50,62.06,122.45,0.7054,-1,-1,-1",
+            "3,676,1621.61,554.50,62.06,122.45,0.7054,-1,-1,-1"
+          ],
+          "lines": 10536,
+          "lines_other": 10686
+        }
+      },
+      "n": 2,
+      "note": "identity recovery vs continuation recall: suspected orthogonal",
+      "output_identical_to_full": false,
+      "p99_ms": {
+        "mean": 6.171
+      },
+      "removes": [
+        "Bridge",
+        "PrivCont"
+      ],
+      "single_role": null
+    },
+    {
+      "deltas": {
+        "AssA": {
+          "delta": -11.5,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "DetA": {
+          "delta": -9.4,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "FN": {
+          "delta": 3381.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "FP": {
+          "delta": 6933.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "HOTA": {
+          "delta": -10.6,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "IDF1": {
+          "delta": -9.6,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "IDs": {
+          "delta": 166.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "MOTA": {
+          "delta": -9.4,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "Prcn": {
+          "delta": -6.9,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "Rcll": {
+          "delta": -3.1,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        }
+      },
+      "family": "runtime",
+      "fps": {
+        "max": 51.58,
+        "mean": 51.5,
+        "min": 51.38,
+        "range": 0.2
+      },
+      "fps_delta_pct": -73.17,
+      "fps_delta_pct_vs_late_control": -73.66,
+      "id": "RT-NoWholeGraph",
+      "k_distinct_outputs": 1,
+      "kind": "runtime",
+      "mean_latency_ms": {
+        "max": 19.07,
+        "mean": 19.023,
+        "min": 18.99
+      },
+      "metrics_identical_to_full": false,
+      "mot_diff_lines": {
+        "MOT17-02-SDP": {
+          "differing": 11377,
+          "first": [
+            "3,1,1428.01,431.49,185.08,345.67,0.6190,-1,-1,-1",
+            "3,1,1432.33,429.72,176.22,346.49,0.6394,-1,-1,-1"
+          ],
+          "lines": 11377,
+          "lines_other": 11256
+        },
+        "MOT17-04-SDP": {
+          "differing": 45746,
+          "first": [
+            "3,114,1360.25,566.78,103.50,244.91,0.9754,-1,-1,-1",
+            "3,147,1359.28,569.13,103.80,240.72,0.8963,-1,-1,-1"
+          ],
+          "lines": 44078,
+          "lines_other": 45746
+        },
+        "MOT17-05-SDP": {
+          "differing": 5697,
+          "first": [
+            "3,217,21.69,147.82,82.59,196.69,0.5985,-1,-1,-1",
+            "3,308,17.30,138.18,84.63,210.44,0.6110,-1,-1,-1"
+          ],
+          "lines": 5318,
+          "lines_other": 5697
+        },
+        "MOT17-09-SDP": {
+          "differing": 5015,
+          "first": [
+            "3,370,1258.21,534.40,59.83,126.09,0.8448,-1,-1,-1",
+            "3,506,1257.63,533.77,56.22,127.69,0.8062,-1,-1,-1"
+          ],
+          "lines": 4091,
+          "lines_other": 5015
+        },
+        "MOT17-10-SDP": {
+          "differing": 11897,
+          "first": [
+            "3,407,535.34,434.61,63.88,169.22,0.8460,-1,-1,-1",
+            "3,562,532.25,433.55,64.86,167.19,0.8449,-1,-1,-1"
+          ],
+          "lines": 11356,
+          "lines_other": 11897
+        },
+        "MOT17-11-SDP": {
+          "differing": 8086,
+          "first": [
+            "3,575,388.56,269.03,114.78,330.31,0.8526,-1,-1,-1",
+            "3,798,388.02,277.96,115.51,323.42,0.8323,-1,-1,-1"
+          ],
+          "lines": 8072,
+          "lines_other": 8086
+        },
+        "MOT17-13-SDP": {
+          "differing": 10683,
+          "first": [
+            "3,667,1621.61,554.50,62.06,122.45,0.7054,-1,-1,-1",
+            "3,929,1622.15,552.58,59.63,126.01,0.7586,-1,-1,-1"
+          ],
+          "lines": 10536,
+          "lines_other": 10683
+        }
+      },
+      "n": 3,
+      "note": "head-only CUDA graph instead of whole-detect graph",
+      "output_identical_to_full": false,
+      "p99_ms": {
+        "mean": 22.468
+      },
+      "removes": [
+        "WholeGraph"
+      ],
+      "runtime_reading": "OUTPUT DIFFERS (not a pure runtime toggle)"
+    },
+    {
+      "deltas": {
+        "AssA": {
+          "delta": -11.5,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "DetA": {
+          "delta": -9.4,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "FN": {
+          "delta": 3381.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "FP": {
+          "delta": 6933.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "HOTA": {
+          "delta": -10.6,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "IDF1": {
+          "delta": -9.6,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "IDs": {
+          "delta": 166.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "MOTA": {
+          "delta": -9.4,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "Prcn": {
+          "delta": -6.9,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        },
+        "Rcll": {
+          "delta": -3.1,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": ">range"
+        }
+      },
+      "family": "runtime",
+      "fps": {
+        "max": 52.17,
+        "mean": 51.08,
+        "min": 48.91,
+        "range": 3.26
+      },
+      "fps_delta_pct": -73.39,
+      "fps_delta_pct_vs_late_control": -73.87,
+      "id": "RT-NoDetectGraph",
+      "k_distinct_outputs": 1,
+      "kind": "runtime",
+      "mean_latency_ms": {
+        "max": 20.05,
+        "mean": 19.2,
+        "min": 18.77
+      },
+      "metrics_identical_to_full": false,
+      "mot_diff_lines": {
+        "MOT17-02-SDP": {
+          "differing": 11377,
+          "first": [
+            "3,1,1428.01,431.49,185.08,345.67,0.6190,-1,-1,-1",
+            "3,1,1432.33,429.72,176.22,346.49,0.6394,-1,-1,-1"
+          ],
+          "lines": 11377,
+          "lines_other": 11256
+        },
+        "MOT17-04-SDP": {
+          "differing": 45746,
+          "first": [
+            "3,114,1360.25,566.78,103.50,244.91,0.9754,-1,-1,-1",
+            "3,147,1359.28,569.13,103.80,240.72,0.8963,-1,-1,-1"
+          ],
+          "lines": 44078,
+          "lines_other": 45746
+        },
+        "MOT17-05-SDP": {
+          "differing": 5697,
+          "first": [
+            "3,217,21.69,147.82,82.59,196.69,0.5985,-1,-1,-1",
+            "3,308,17.30,138.18,84.63,210.44,0.6110,-1,-1,-1"
+          ],
+          "lines": 5318,
+          "lines_other": 5697
+        },
+        "MOT17-09-SDP": {
+          "differing": 5015,
+          "first": [
+            "3,370,1258.21,534.40,59.83,126.09,0.8448,-1,-1,-1",
+            "3,506,1257.63,533.77,56.22,127.69,0.8062,-1,-1,-1"
+          ],
+          "lines": 4091,
+          "lines_other": 5015
+        },
+        "MOT17-10-SDP": {
+          "differing": 11897,
+          "first": [
+            "3,407,535.34,434.61,63.88,169.22,0.8460,-1,-1,-1",
+            "3,562,532.25,433.55,64.86,167.19,0.8449,-1,-1,-1"
+          ],
+          "lines": 11356,
+          "lines_other": 11897
+        },
+        "MOT17-11-SDP": {
+          "differing": 8086,
+          "first": [
+            "3,575,388.56,269.03,114.78,330.31,0.8526,-1,-1,-1",
+            "3,798,388.02,277.96,115.51,323.42,0.8323,-1,-1,-1"
+          ],
+          "lines": 8072,
+          "lines_other": 8086
+        },
+        "MOT17-13-SDP": {
+          "differing": 10683,
+          "first": [
+            "3,667,1621.61,554.50,62.06,122.45,0.7054,-1,-1,-1",
+            "3,929,1622.15,552.58,59.63,126.01,0.7586,-1,-1,-1"
+          ],
+          "lines": 10536,
+          "lines_other": 10683
+        }
+      },
+      "n": 3,
+      "note": "eager detect path (no CUDA graph on detect)",
+      "output_identical_to_full": false,
+      "p99_ms": {
+        "mean": 22.245
+      },
+      "removes": [
+        "WholeGraph",
+        "HeadGraph"
+      ],
+      "runtime_reading": "OUTPUT DIFFERS (not a pure runtime toggle)"
+    },
+    {
+      "deltas": {
+        "AssA": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "DetA": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "FN": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "FP": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "HOTA": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "IDF1": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "IDs": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "MOTA": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "Prcn": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "Rcll": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        }
+      },
+      "family": "runtime",
+      "fps": {
+        "max": 166.94,
+        "mean": 164.23,
+        "min": 161.93,
+        "range": 5.01
+      },
+      "fps_delta_pct": -14.44,
+      "fps_delta_pct_vs_late_control": -15.99,
+      "id": "RT-NoTrackerGraph",
+      "k_distinct_outputs": 1,
+      "kind": "runtime",
+      "mean_latency_ms": {
+        "max": 5.72,
+        "mean": 5.63,
+        "min": 5.53
+      },
+      "metrics_identical_to_full": true,
+      "mot_diff_lines": null,
+      "n": 3,
+      "note": "tracker update not captured into a CUDA graph",
+      "output_identical_to_full": true,
+      "p99_ms": {
+        "mean": 7.726
+      },
+      "removes": [
+        "TrackerGraph"
+      ],
+      "runtime_reading": "runtime-only"
+    },
+    {
+      "deltas": {
+        "AssA": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "DetA": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "FN": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "FP": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "HOTA": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "IDF1": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "IDs": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "MOTA": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "Prcn": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "Rcll": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        }
+      },
+      "family": "runtime",
+      "fps": {
+        "max": 178.49,
+        "mean": 160.66,
+        "min": 148.94,
+        "range": 29.55
+      },
+      "fps_delta_pct": -16.3,
+      "fps_delta_pct_vs_late_control": -17.82,
+      "id": "RT-NoNMSGraph",
+      "k_distinct_outputs": 1,
+      "kind": "runtime",
+      "mean_latency_ms": {
+        "max": 6.34,
+        "mean": 5.877,
+        "min": 5.2
+      },
+      "metrics_identical_to_full": true,
+      "mot_diff_lines": null,
+      "n": 3,
+      "note": "eager main NMS instead of the graphed nocopyback variant",
+      "output_identical_to_full": true,
+      "p99_ms": {
+        "mean": 9.952
+      },
+      "removes": [
+        "NMSGraph"
+      ],
+      "runtime_reading": "runtime-only"
+    },
+    {
+      "deltas": {
+        "AssA": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "DetA": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "FN": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "FP": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "HOTA": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "IDF1": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "IDs": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "MOTA": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "Prcn": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "Rcll": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        }
+      },
+      "family": "runtime",
+      "fps": {
+        "max": 309.23,
+        "mean": 297.15,
+        "min": 285.87,
+        "range": 23.36
+      },
+      "fps_delta_pct": 54.81,
+      "fps_delta_pct_vs_late_control": 52.0,
+      "id": "RT-DoubleBuffer",
+      "k_distinct_outputs": 1,
+      "kind": "runtime",
+      "mean_latency_ms": {
+        "max": 7.89,
+        "mean": 7.56,
+        "min": 7.23
+      },
+      "metrics_identical_to_full": true,
+      "mot_diff_lines": null,
+      "n": 3,
+      "note": "detect(N+1) || tracker(N) overlap (the headline scheduling)",
+      "output_identical_to_full": true,
+      "p99_ms": {
+        "mean": 11.788
+      },
+      "removes": [],
+      "runtime_reading": "runtime-only"
+    },
+    {
+      "deltas": {
+        "AssA": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "DetA": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "FN": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "FP": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "HOTA": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "IDF1": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "IDs": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "MOTA": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "Prcn": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "Rcll": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        }
+      },
+      "family": "runtime",
+      "fps": {
+        "max": 122.28,
+        "mean": 119.93,
+        "min": 117.38,
+        "range": 4.9
+      },
+      "fps_delta_pct": -37.52,
+      "fps_delta_pct_vs_late_control": -38.65,
+      "id": "RT-NoWholeGraph-T1",
+      "k_distinct_outputs": 1,
+      "kind": "runtime",
+      "mean_latency_ms": {
+        "max": 8.13,
+        "mean": 7.95,
+        "min": 7.79
+      },
+      "metrics_identical_to_full": true,
+      "mot_diff_lines": {
+        "MOT17-02-SDP": {
+          "differing": 2,
+          "first": [
+            "60,11,1053.06,484.42,37.67,107.88,0.8867,-1,-1,-1",
+            "60,11,1053.06,484.42,37.67,107.88,0.8866,-1,-1,-1"
+          ],
+          "lines": 11377,
+          "lines_other": 11377
+        },
+        "MOT17-04-SDP": {
+          "differing": 2,
+          "first": [
+            "8,135,1441.89,245.77,54.84,170.08,0.8223,-1,-1,-1",
+            "8,135,1441.89,245.77,54.84,170.08,0.8224,-1,-1,-1"
+          ],
+          "lines": 44078,
+          "lines_other": 44078
+        },
+        "MOT17-05-SDP": {
+          "differing": 2,
+          "first": [
+            "754,340,277.14,153.05,46.16,145.37,0.7333,-1,-1,-1",
+            "754,340,277.14,153.05,46.16,145.37,0.7334,-1,-1,-1"
+          ],
+          "lines": 5318,
+          "lines_other": 5318
+        },
+        "MOT17-09-SDP": {
+          "differing": 0,
+          "first": null,
+          "lines": 4091,
+          "lines_other": 4091
+        },
+        "MOT17-10-SDP": {
+          "differing": 0,
+          "first": null,
+          "lines": 11356,
+          "lines_other": 11356
+        },
+        "MOT17-11-SDP": {
+          "differing": 2,
+          "first": [
+            "338,576,820.56,199.70,185.72,550.82,0.7399,-1,-1,-1",
+            "338,576,820.56,199.70,185.72,550.82,0.7398,-1,-1,-1"
+          ],
+          "lines": 8072,
+          "lines_other": 8072
+        },
+        "MOT17-13-SDP": {
+          "differing": 1,
+          "first": [
+            "114,680,1648.12,541.48,42.58,120.15,0.6848,-1,-1,-1",
+            "114,680,1648.12,541.48,42.58,120.15,0.6849,-1,-1,-1"
+          ],
+          "lines": 10536,
+          "lines_other": 10536
+        }
+      },
+      "n": 3,
+      "note": "head-only CUDA graph with the temporal path pinned to T=1 (the whole-graph forward bypasses the checkpoint's temporal blocks; this is the pure scheduling subtraction)",
+      "output_identical_to_full": false,
+      "p99_ms": {
+        "mean": 10.348
+      },
+      "removes": [
+        "WholeGraph"
+      ],
+      "runtime_reading": "runtime-only (metric-identical; md5 differs by sub-precision score rounding)"
+    },
+    {
+      "deltas": {
+        "AssA": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "DetA": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "FN": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "FP": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "HOTA": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "IDF1": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "IDs": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "MOTA": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "Prcn": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "Rcll": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        }
+      },
+      "family": "runtime",
+      "fps": {
+        "max": 112.31,
+        "mean": 110.53,
+        "min": 108.34,
+        "range": 3.97
+      },
+      "fps_delta_pct": -42.42,
+      "fps_delta_pct_vs_late_control": -43.46,
+      "id": "RT-NoDetectGraph-T1",
+      "k_distinct_outputs": 1,
+      "kind": "runtime",
+      "mean_latency_ms": {
+        "max": 8.85,
+        "mean": 8.673,
+        "min": 8.53
+      },
+      "metrics_identical_to_full": true,
+      "mot_diff_lines": {
+        "MOT17-02-SDP": {
+          "differing": 2,
+          "first": [
+            "60,11,1053.06,484.42,37.67,107.88,0.8867,-1,-1,-1",
+            "60,11,1053.06,484.42,37.67,107.88,0.8866,-1,-1,-1"
+          ],
+          "lines": 11377,
+          "lines_other": 11377
+        },
+        "MOT17-04-SDP": {
+          "differing": 2,
+          "first": [
+            "8,135,1441.89,245.77,54.84,170.08,0.8223,-1,-1,-1",
+            "8,135,1441.89,245.77,54.84,170.08,0.8224,-1,-1,-1"
+          ],
+          "lines": 44078,
+          "lines_other": 44078
+        },
+        "MOT17-05-SDP": {
+          "differing": 2,
+          "first": [
+            "754,340,277.14,153.05,46.16,145.37,0.7333,-1,-1,-1",
+            "754,340,277.14,153.05,46.16,145.37,0.7334,-1,-1,-1"
+          ],
+          "lines": 5318,
+          "lines_other": 5318
+        },
+        "MOT17-09-SDP": {
+          "differing": 0,
+          "first": null,
+          "lines": 4091,
+          "lines_other": 4091
+        },
+        "MOT17-10-SDP": {
+          "differing": 0,
+          "first": null,
+          "lines": 11356,
+          "lines_other": 11356
+        },
+        "MOT17-11-SDP": {
+          "differing": 2,
+          "first": [
+            "338,576,820.56,199.70,185.72,550.82,0.7399,-1,-1,-1",
+            "338,576,820.56,199.70,185.72,550.82,0.7398,-1,-1,-1"
+          ],
+          "lines": 8072,
+          "lines_other": 8072
+        },
+        "MOT17-13-SDP": {
+          "differing": 1,
+          "first": [
+            "114,680,1648.12,541.48,42.58,120.15,0.6848,-1,-1,-1",
+            "114,680,1648.12,541.48,42.58,120.15,0.6849,-1,-1,-1"
+          ],
+          "lines": 10536,
+          "lines_other": 10536
+        }
+      },
+      "n": 3,
+      "note": "eager detect path with the temporal path pinned to T=1",
+      "output_identical_to_full": false,
+      "p99_ms": {
+        "mean": 11.403
+      },
+      "removes": [
+        "WholeGraph",
+        "HeadGraph"
+      ],
+      "runtime_reading": "runtime-only (metric-identical; md5 differs by sub-precision score rounding)"
+    },
+    {
+      "deltas": {
+        "AssA": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "DetA": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "FN": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "FP": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "HOTA": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "IDF1": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "IDs": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "MOTA": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "Prcn": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "Rcll": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        }
+      },
+      "family": "runtime",
+      "fps": {
+        "max": 195.37,
+        "mean": 192.78,
+        "min": 191.3,
+        "range": 4.07
+      },
+      "fps_delta_pct": 0.43,
+      "fps_delta_pct_vs_late_control": -1.39,
+      "id": "RT-NoDDA",
+      "k_distinct_outputs": 1,
+      "kind": "runtime",
+      "mean_latency_ms": {
+        "max": 4.84,
+        "mean": 4.807,
+        "min": 4.75
+      },
+      "metrics_identical_to_full": true,
+      "mot_diff_lines": null,
+      "n": 3,
+      "note": "S0 unambiguous pre-stage off, measured as a runtime row because its output is bit-identical to FULL",
+      "output_identical_to_full": true,
+      "p99_ms": {
+        "mean": 5.928
+      },
+      "removes": [
+        "DDA"
+      ],
+      "runtime_reading": "output-identical, fps unresolved"
+    },
+    {
+      "deltas": {
+        "AssA": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "DetA": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "FN": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "FP": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "HOTA": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "IDF1": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "IDs": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "MOTA": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "Prcn": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        },
+        "Rcll": {
+          "delta": 0.0,
+          "range_full": 0.0,
+          "range_side": 0.0,
+          "reading": "="
+        }
+      },
+      "family": "reference",
+      "fps": {
+        "max": 195.83,
+        "mean": 195.49,
+        "min": 195.18,
+        "range": 0.65
+      },
+      "fps_delta_pct": 1.84,
+      "fps_delta_pct_vs_late_control": 0.0,
+      "id": "CTRL-FULL-late",
+      "k_distinct_outputs": 1,
+      "kind": "runtime",
+      "mean_latency_ms": {
+        "max": 4.75,
+        "mean": 4.737,
+        "min": 4.72
+      },
+      "metrics_identical_to_full": true,
+      "mot_diff_lines": null,
+      "n": 3,
+      "note": "same-session FULL control run at the end of the campaign; reads the serial-fps drift over the session",
+      "output_identical_to_full": true,
+      "p99_ms": {
+        "mean": 5.935
+      },
+      "removes": [],
+      "runtime_reading": "output-identical, fps unresolved"
+    }
+  ],
+  "rules": {
+    "delta_direction": "variant minus FULL (a negative quality delta means the removal hurt)",
+    "materiality": {
+      "ids_threshold": 10,
+      "note": "|delta| > 0.2 on IDF1/HOTA/AssA/MOTA or |delta IDs| > 10, and resolved against the repeat ranges, counts as material; the 0.2 figure is the evidence ledger's decision-knob noise guidance, not a significance test",
+      "quality_axes": [
+        "IDF1",
+        "HOTA",
+        "AssA",
+        "MOTA"
+      ],
+      "quality_threshold": 0.2
+    },
+    "pair_reading": {
+      "additive": "|I| <= 0.2: independent contributions at this resolution",
+      "complement_dependency": "I > +0.2: A's contribution needs B (or vice versa); removing both loses less than the sum",
+      "definition": "I(A,B) = M(FULL) - M(FULL-A) - M(FULL-B) + M(FULL-A-B) on IDF1 and HOTA",
+      "substitute_backup": "I < -0.2: each covers for the other; removing both loses more than the sum",
+      "threshold": 0.2
+    },
+    "reference_rows": "not subtractions: retuned or historical values quoted beside a subtraction to name its confound",
+    "repeat_range": "each side's same-session observed range (max-min over its runs); a delta is 'resolved' when |delta| exceeds the larger of the two sides' ranges and is above print precision; an observed range of 0.0 bounds nothing",
+    "runtime": {
+      "fps_threshold_pct": 2.0,
+      "identity": "all seven MOT md5s equal to FULL's (bit-identical output)",
+      "note": "a runtime row is 'runtime-only' when output is identical and the serial fps delta exceeds 2% of FULL and the two sides' fps ranges do not overlap; fps here is the serial whole-graph profile, not the double-buffer headline"
+    },
+    "single_roles": {
+      "conflict": "material positive on IDF1 or HOTA and no material negative on IDF1/HOTA/MOTA",
+      "essential": "material negative on IDF1 or HOTA and no material positive on IDF1/HOTA/MOTA",
+      "no_material_quality_role": "no material delta on any axis (role then rests on pairs, runtime, safety or dependency)",
+      "trade_off": "material negative on one quality axis and material positive on another"
+    }
+  },
+  "schema": "saccade-module-interactions-subtraction-v1",
+  "sequences": [
+    "MOT17-02-SDP",
+    "MOT17-04-SDP",
+    "MOT17-05-SDP",
+    "MOT17-09-SDP",
+    "MOT17-10-SDP",
+    "MOT17-11-SDP",
+    "MOT17-13-SDP"
+  ]
+}
