@@ -27,6 +27,12 @@ It does not change default eval.  Missing or incomplete fingerprints fail
 closed.  A first divergent stage is the first observable producer-facing
 boundary, not a causal mechanism.
 
+``run`` never writes into a run directory before its child eval claims it
+(``mot17.py`` refuses a non-empty ``--output``).  Layout of an artifact dir:
+``rN/`` (MOT output, then ``rN/stage_fingerprint/`` moved in after the child
+exits), ``logs/rN.log`` (child stdout+stderr), ``fingerprints/`` (staging
+while a child runs).
+
 Not wired to pre-push: the current ``baseline`` path is known to diverge, so
 a default CI gate would fail on main.  After a fix, ``run`` is the regression
 gate.  ``compare`` on stored #363 evidence is the positive control.
@@ -62,6 +68,7 @@ from eval_repeat_identity import (  # noqa: E402
     format_report,
 )
 from eval_stage_fingerprint import (  # noqa: E402
+    FINGERPRINT_DIRNAME,
     KIND_FIRST_OBSERVABLE,
     KIND_INSUFFICIENT,
     LOCALIZATION_BUDGETS,
@@ -85,6 +92,10 @@ DEFAULT_KV: dict[str, str] = {
 }
 DEFAULT_SWITCHES: tuple[str, ...] = ("--no-gpu-decode",)
 MANAGED_FLAGS = ("--output",)
+EVAL_SCRIPT = _ROOT / "scripts" / "eval" / "mot17.py"
+FINGERPRINT_WRAPPER = _SCRIPT_DIR / "run_eval_stage_fingerprint.py"
+LOG_DIRNAME = "logs"
+PENDING_FINGERPRINT_DIRNAME = "fingerprints"
 
 
 def _timestamp() -> str:
@@ -179,31 +190,58 @@ def run_one_eval(
     out_dir: Path,
     eval_flags: Sequence[str],
     stage_fingerprint: bool = False,
+    fingerprint_wrapper: Path | None = None,
 ) -> subprocess.CompletedProcess[str]:
+    """Run one child eval without touching the directory it will claim.
+
+    ``mot17.py`` claims ``--output`` as its first side effect and refuses a
+    non-empty directory (``scripts/provenance/run_manifest.py``).  The child
+    log therefore goes to ``<root>/logs/<run>.log``, and stage fingerprints
+    are written to ``<root>/fingerprints/<run>/`` while the child runs.  After
+    the child exits, the fingerprints move to ``<run>/stage_fingerprint/``,
+    where :func:`compare_stage_fingerprints` reads them.  The wrapper runs
+    ``mot17.py`` in-process, so they were produced by the run that claimed
+    the directory.
+    """
+    root = out_dir.parent
+    log_path = root / LOG_DIRNAME / f"{out_dir.name}.log"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
     out_dir.mkdir(parents=True, exist_ok=True)
+    pending_fingerprints = root / PENDING_FINGERPRINT_DIRNAME / out_dir.name
     if stage_fingerprint:
-        wrapper = _SCRIPT_DIR / "run_eval_stage_fingerprint.py"
-        fingerprint_dir = out_dir / "stage_fingerprint"
+        wrapper = fingerprint_wrapper or FINGERPRINT_WRAPPER
         cmd = [
             python,
             str(wrapper),
             "--fingerprint-dir",
-            str(fingerprint_dir),
+            str(pending_fingerprints),
             *eval_flags,
             "--output",
             str(out_dir),
         ]
     else:
         cmd = [python, str(eval_script), *eval_flags, "--output", str(out_dir)]
-    log_path = out_dir / "stdout.log"
     with log_path.open("w", encoding="utf-8") as log:
-        return subprocess.run(
+        proc = subprocess.run(
             cmd,
             cwd=_ROOT,
             stdout=log,
             stderr=subprocess.STDOUT,
             text=True,
         )
+    if stage_fingerprint and pending_fingerprints.exists():
+        target = out_dir / FINGERPRINT_DIRNAME
+        if target.exists():
+            # Never merge into fingerprints this harness did not just write;
+            # leaving them out makes the comparison fail closed.
+            print(
+                f"  {target} already exists; left {pending_fingerprints} "
+                "in place (fingerprint comparison will fail closed)",
+                file=sys.stderr,
+            )
+        else:
+            pending_fingerprints.rename(target)
+    return proc
 
 
 def cmd_compare(
@@ -253,7 +291,6 @@ def cmd_run(
     eval_flags = merge_eval_flags(forwarded, inject_no_gpu_decode=not gpu_decode)
     root = artifact_dir.resolve()
     root.mkdir(parents=True, exist_ok=True)
-    eval_script = _ROOT / "scripts" / "eval" / "mot17.py"
     run_dirs: list[Path] = []
     eval_returncodes: list[int] = []
     print(
@@ -267,10 +304,11 @@ def cmd_run(
         print(f"  run {index + 1}/{n} → {out_dir}")
         proc = run_one_eval(
             python=sys.executable,
-            eval_script=eval_script,
+            eval_script=EVAL_SCRIPT,
             out_dir=out_dir,
             eval_flags=eval_flags,
             stage_fingerprint=stage_fingerprint,
+            fingerprint_wrapper=FINGERPRINT_WRAPPER,
         )
         run_dirs.append(out_dir)
         eval_returncodes.append(proc.returncode)

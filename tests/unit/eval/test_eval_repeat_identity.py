@@ -342,3 +342,204 @@ def test_stored_block_s_divergence_fails_closed() -> None:
 def test_stored_block_s_matching_pair_passes() -> None:
     report = compare_run_dirs([_EVIDENCE_REF.parent, _EVIDENCE_SAME.parent])
     assert report.ok
+
+
+# ---------------------------------------------------------------------------
+# Real child processes in front of the real output-dir claim guard (#457).
+#
+# Every test above replaces ``run_one_eval``, which is how the harness could
+# pre-write ``stdout.log`` into the directory ``mot17.py`` claims and fail
+# every eval on main without a test noticing.  Here the harness launches real
+# subprocesses; the fake eval claims ``--output`` through
+# ``scripts.provenance.run_manifest.claim_or_join_run``, exactly as
+# ``mot17.py`` does, so a harness that writes into the run directory first
+# fails these tests.
+
+_FAKE_EVAL = """
+import argparse, json, os, sys
+from pathlib import Path
+
+sys.path.insert(0, os.environ["FAKE_EVAL_ROOT"])
+from scripts.provenance.run_manifest import claim_or_join_run
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--output", required=True)
+    args, _ = parser.parse_known_args()
+    out = Path(args.output)
+    plan = json.loads(os.environ.get("FAKE_EVAL_PLAN", "{}")).get(out.name, {})
+    print(f"fake eval {out.name}")
+    claim_or_join_run(out, produced_by="eval", cmdline=sys.argv)
+    line = plan.get("line", os.environ["FAKE_EVAL_LINE"])
+    (out / "MOT17-02-SDP.txt").write_text(line + "\\n", encoding="utf-8")
+    return int(plan.get("exit", 0))
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+"""
+
+_FAKE_WRAPPER = """
+import argparse, json, os, runpy, sys
+from pathlib import Path
+
+import numpy as np
+
+sys.path.insert(0, os.environ["FAKE_EVAL_ROOT"])
+from scripts.tools.eval_stage_fingerprint import (
+    DETECTION_STAGES, STAGES, fingerprint_detections, fingerprint_mot_lines,
+    write_fingerprint_log,
+)
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--fingerprint-dir", type=Path, required=True)
+    args, forwarded = parser.parse_known_args()
+    out = Path(forwarded[forwarded.index("--output") + 1]).resolve()
+    fp_dir = args.fingerprint_dir.resolve()
+    lifecycle = out.parent / "lifecycle" / f"{out.name}.json"
+    lifecycle.parent.mkdir(parents=True, exist_ok=True)
+    lifecycle.write_text(json.dumps({
+        "fingerprint_dir_inside_output": fp_dir.is_relative_to(out),
+        "output_empty_at_start": not out.exists() or not any(out.iterdir()),
+    }))
+    fp_dir.mkdir(parents=True, exist_ok=True)
+    plan = json.loads(os.environ.get("FAKE_EVAL_PLAN", "{}")).get(out.name, {})
+    code = 0
+    try:
+        sys.argv = [os.environ["FAKE_EVAL_SCRIPT"], *forwarded]
+        runpy.run_path(os.environ["FAKE_EVAL_SCRIPT"], run_name="__main__")
+    except SystemExit as exc:
+        code = exc.code if isinstance(exc.code, int) else 1
+    finally:
+        det = fingerprint_detections(
+            boxes=np.array([[1.0, 2.0, 3.0, 4.0]], dtype=np.float32),
+            scores=np.array([0.5], dtype=np.float32),
+            classes=np.array([0], dtype=np.int32),
+        )
+        mot = fingerprint_mot_lines([os.environ["FAKE_EVAL_LINE"]])
+        records = [
+            {"sequence": "MOT17-02-SDP", "frame": 15, "stage": stage,
+             **(det if stage in DETECTION_STAGES else mot)}
+            for stage in STAGES
+        ]
+        write_fingerprint_log(
+            fp_dir, records, include_payloads=True, limitations=(),
+            complete=plan.get("complete"),
+        )
+    return code
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+"""
+
+
+@pytest.fixture
+def real_child(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
+    from scripts.provenance.run_manifest import (
+        PARENT_RUN_CLAIM_ENV,
+        PARENT_RUN_ROOT_ENV,
+    )
+
+    fake_eval = tmp_path / "fake_mot17.py"
+    fake_eval.write_text(_FAKE_EVAL, encoding="utf-8")
+    fake_wrapper = tmp_path / "fake_fingerprint_wrapper.py"
+    fake_wrapper.write_text(_FAKE_WRAPPER, encoding="utf-8")
+    monkeypatch.delenv(PARENT_RUN_ROOT_ENV, raising=False)
+    monkeypatch.delenv(PARENT_RUN_CLAIM_ENV, raising=False)
+    monkeypatch.setenv("FAKE_EVAL_ROOT", str(ROOT))
+    monkeypatch.setenv("FAKE_EVAL_SCRIPT", str(fake_eval))
+    monkeypatch.setenv("FAKE_EVAL_LINE", LINE_A)
+    monkeypatch.setattr(harness, "EVAL_SCRIPT", fake_eval)
+    monkeypatch.setattr(harness, "FINGERPRINT_WRAPPER", fake_wrapper)
+
+    def plan(**runs: dict[str, object]) -> None:
+        import json
+
+        monkeypatch.setenv("FAKE_EVAL_PLAN", json.dumps(runs))
+
+    return SimpleNamespace(artifact=tmp_path / "art", plan=plan)
+
+
+def _run(real_child: SimpleNamespace, *, stage_fingerprint: bool) -> int:
+    return harness.cmd_run(
+        n=2,
+        sleep=0.0,
+        artifact_dir=real_child.artifact,
+        forwarded=[],
+        stage_fingerprint=stage_fingerprint,
+    )
+
+
+def test_run_child_claims_empty_output_and_log_lives_outside(
+    real_child: SimpleNamespace,
+) -> None:
+    rc = _run(real_child, stage_fingerprint=False)
+    art = real_child.artifact
+    assert rc == 0
+    for name in ("r1", "r2"):
+        assert (art / name / "run_manifest.json").is_file()
+        assert (art / name / "MOT17-02-SDP.txt").read_text().strip() == LINE_A
+        assert not (art / name / "stdout.log").exists()
+        log = (art / "logs" / f"{name}.log").read_text()
+        assert f"fake eval {name}" in log
+        assert "ManifestError" not in log
+
+
+def test_run_nonzero_child_still_fails_closed_with_real_claim(
+    real_child: SimpleNamespace,
+) -> None:
+    real_child.plan(r2={"exit": 3})
+    rc = _run(real_child, stage_fingerprint=False)
+    assert rc == 1
+    # Both children claimed and wrote an identical MOT; only r2's exit fails.
+    for name in ("r1", "r2"):
+        assert (real_child.artifact / name / "run_manifest.json").is_file()
+    exits = (real_child.artifact / "eval_exits.json").read_text()
+    assert '"had_eval_failure": true' in exits
+
+
+def test_stage_fingerprint_staged_outside_output_then_moved_into_run_dir(
+    real_child: SimpleNamespace,
+) -> None:
+    import json
+
+    rc = _run(real_child, stage_fingerprint=True)
+    art = real_child.artifact
+    assert rc == 0
+    for name in ("r1", "r2"):
+        facts = json.loads((art / "lifecycle" / f"{name}.json").read_text())
+        assert facts == {
+            "fingerprint_dir_inside_output": False,
+            "output_empty_at_start": True,
+        }
+        assert (art / name / "stage_fingerprint" / "manifest.json").is_file()
+        assert (art / name / "run_manifest.json").is_file()
+        assert not (art / "fingerprints" / name).exists()
+    run_dirs = [art / "r1", art / "r2"]
+    assert harness.cmd_compare(run_dirs, None, stage_fingerprint=True) == 0
+
+
+@pytest.mark.parametrize(
+    "r2_plan",
+    [
+        pytest.param({"exit": 1, "complete": False}, id="child-crash"),
+        pytest.param({"complete": False}, id="incomplete-fingerprint-exit-0"),
+    ],
+)
+def test_stage_fingerprint_crash_or_incomplete_fails_closed(
+    real_child: SimpleNamespace, r2_plan: dict[str, object]
+) -> None:
+    real_child.plan(r2=r2_plan)
+    rc = _run(real_child, stage_fingerprint=True)
+    art = real_child.artifact
+    assert rc == 1
+    # r1 is healthy: the failure must come from r2, not from the claim guard.
+    assert (art / "r1" / "run_manifest.json").is_file()
+    assert "ManifestError" not in (art / "logs" / "r1.log").read_text()
+    assert (art / "r2" / "stage_fingerprint" / "manifest.json").is_file()
+    run_dirs = [art / "r1", art / "r2"]
+    assert harness.cmd_compare(run_dirs, None, stage_fingerprint=True) == 1
