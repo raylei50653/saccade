@@ -137,6 +137,17 @@ CONDITION2_RULES: dict[str, Condition2Rule] = {
 if tuple(CONDITION2_RULES) != STAGES:
     raise RuntimeError("CONDITION2_RULES must cover STAGES in pipeline order")
 
+# The earliest observed difference in (sequence, frame, stage) order is
+# evidence of *where* a difference first shows up in the written output, not
+# of which stage produced it: sequence-level postprocess (interpolation)
+# writes into earlier frames using later observations, so a detector
+# divergence at frame t+k can surface as a ``mot_file`` difference at frame t.
+# Condition-2 attribution is read only from the root stage (#457).
+EARLIEST_OBSERVED_CLAIM = (
+    "earliest observed difference in frame order; not a producing-stage "
+    "attribution (see root_stage_divergence)"
+)
+
 INSTRUMENTATION_INSUFFICIENT_CLAIM = (
     "MOT diverged but every instrumented stage hash matched; "
     "instrumentation insufficient"
@@ -1254,8 +1265,18 @@ def make_first_divergence(
     ordered_only: bool = False,
     reference_payload: list[Any] | None = None,
     other_payload: list[Any] | None = None,
+    attribute: bool = True,
 ) -> FirstStageDivergence:
+    """``attribute=False`` keeps the observation but claims no stage."""
+
     reading = read_condition_2(kind=kind, stage=stage)
+    if not attribute:
+        reading = Condition2Reading(
+            last_identical_stage=None,
+            first_divergent_stage=None,
+            producing_path_verdict=VERDICT_NOT_APPLICABLE,
+            allowed_claim=EARLIEST_OBSERVED_CLAIM,
+        )
     return FirstStageDivergence(
         kind=kind,
         sequence=sequence,
@@ -1284,8 +1305,15 @@ class StageRepeatReport:
     complete: bool
     instrumentation_sufficient: bool
     reasons: tuple[str, ...] = field(default_factory=tuple)
+    # Earliest observed difference in (sequence, frame, stage) order.  Frame-
+    # level evidence only; carries no condition-2 attribution.
     first_divergence: FirstStageDivergence | None = None
     n_records: tuple[int, ...] = ()
+    # Most upstream stage (``STAGES`` order) that differs at any frame; the
+    # only source of the condition-2 reading.  Upstream stages never differ,
+    # so divergence is present by this stage.  A downstream stage may still
+    # have an independent producer of its own; that is not excluded.
+    root_stage_divergence: FirstStageDivergence | None = None
 
     def to_dict(self) -> dict[str, Any]:
         payload = asdict(self)
@@ -1315,6 +1343,54 @@ def _payload_of(record: Mapping[str, Any] | None) -> list[Any] | None:
     return list(rows)
 
 
+def _divergence_at(
+    indexes: Sequence[Mapping[tuple[str, int, str], Mapping[str, Any]]],
+    key: tuple[str, int, str],
+    *,
+    kind: str,
+    attribute: bool,
+) -> FirstStageDivergence:
+    sequence, frame, stage = key
+    hashes = [
+        None if key not in index else str(index[key]["ordered_bit_hash"])
+        for index in indexes
+    ]
+    reference_run = _mode_run(hashes)
+    ref_record: Mapping[str, Any] | None = None
+    other_record: Mapping[str, Any] | None = None
+    if reference_run is None:
+        other_run = next(index for index, item in enumerate(hashes) if item is None)
+        ref_hash = None
+        other_hash = None
+    else:
+        ref_hash = hashes[reference_run]
+        other_run = next(index for index, item in enumerate(hashes) if item != ref_hash)
+        ref_record = indexes[reference_run].get(key)
+        other_record = indexes[other_run].get(key)
+        other_hash = hashes[other_run]
+    ordered_only = False
+    if ref_record is not None and other_record is not None:
+        ordered_only = (
+            ref_record.get("multiset_canonical_hash")
+            == other_record.get("multiset_canonical_hash")
+            and ref_hash != other_hash
+        )
+    return make_first_divergence(
+        kind=kind,
+        sequence=sequence,
+        frame=frame,
+        stage=stage,
+        reference_run=reference_run,
+        other_run=other_run,
+        reference_hash=ref_hash,
+        other_hash=other_hash,
+        ordered_only=ordered_only,
+        reference_payload=_payload_of(ref_record),
+        other_payload=_payload_of(other_record),
+        attribute=attribute,
+    )
+
+
 def compare_stage_fingerprints(
     run_dirs: Sequence[Path],
     *,
@@ -1322,9 +1398,16 @@ def compare_stage_fingerprints(
 ) -> StageRepeatReport:
     """Fail-closed identity of per-stage fingerprints across run directories.
 
-    Missing or incomplete logs fail.  The first ``(sequence, frame, stage)``
-    whose ``ordered_bit_hash`` differs is the first observable divergence,
-    not a causal mechanism.
+    Missing or incomplete logs fail.  Two readings are reported:
+
+    * ``first_divergence`` -- the first ``(sequence, frame, stage)`` whose
+      ``ordered_bit_hash`` differs.  Frame-level evidence only: it carries no
+      stage attribution, because sequence-level postprocess writes earlier
+      frames from later observations.
+    * ``root_stage_divergence`` -- the most upstream stage that differs at any
+      frame.  Condition-2 attribution comes from this one.
+
+    Neither is a causal mechanism.
     """
 
     resolved = [Path(path) for path in run_dirs]
@@ -1377,6 +1460,7 @@ def compare_stage_fingerprints(
             reasons=tuple(reasons),
             n_records=tuple(len(item) for item in records_per_run),
             first_divergence=make_first_divergence(kind=KIND_INCOMPLETE),
+            root_stage_divergence=make_first_divergence(kind=KIND_INCOMPLETE),
         )
 
     indexes = [index_records(records) for records in records_per_run]
@@ -1394,6 +1478,7 @@ def compare_stage_fingerprints(
             reasons=(f"duplicate fingerprint keys in runs {duplicate_runs}",),
             n_records=tuple(len(item) for item in records_per_run),
             first_divergence=make_first_divergence(kind=KIND_INCOMPLETE),
+            root_stage_divergence=make_first_divergence(kind=KIND_INCOMPLETE),
         )
     reference_keys = set(indexes[0])
     coverage_mismatch = [
@@ -1413,6 +1498,7 @@ def compare_stage_fingerprints(
             ),
             n_records=tuple(len(item) for item in records_per_run),
             first_divergence=make_first_divergence(kind=KIND_INCOMPLETE),
+            root_stage_divergence=make_first_divergence(kind=KIND_INCOMPLETE),
         )
     keys = sorted(
         {key for index in indexes for key in index},
@@ -1433,59 +1519,48 @@ def compare_stage_fingerprints(
             n_records=tuple(len(item) for item in records_per_run),
         )
 
+    divergent = [
+        key
+        for key in keys
+        if len(
+            {
+                None if key not in index else str(index[key]["ordered_bit_hash"])
+                for index in indexes
+            }
+        )
+        > 1
+        or any(key not in index for index in indexes)
+    ]
+    kind = KIND_FIRST_OBSERVABLE if mot_diverged is True else KIND_STAGE_ONLY
     first: FirstStageDivergence | None = None
-    for sequence, frame, stage in keys:
-        hashes = [
-            None if key not in index else str(index[key]["ordered_bit_hash"])
-            for index, key in ((item, (sequence, frame, stage)) for item in indexes)
-        ]
-        if any(item is None for item in hashes) or len({item for item in hashes}) > 1:
-            reference_run = _mode_run(hashes)
-            if reference_run is None:
-                other_run = next(
-                    index for index, item in enumerate(hashes) if item is None
-                )
-                ref_record = None
-                other_record = None
-                ref_hash = None
-                other_hash = None
-            else:
-                ref_hash = hashes[reference_run]
-                other_run = next(
-                    index for index, item in enumerate(hashes) if item != ref_hash
-                )
-                ref_record = indexes[reference_run].get((sequence, frame, stage))
-                other_record = indexes[other_run].get((sequence, frame, stage))
-                other_hash = hashes[other_run]
-            ordered_only = False
-            if ref_record is not None and other_record is not None:
-                ordered_only = (
-                    ref_record.get("multiset_canonical_hash")
-                    == other_record.get("multiset_canonical_hash")
-                    and ref_hash != other_hash
-                )
-            first = make_first_divergence(
-                kind=(
-                    KIND_FIRST_OBSERVABLE if mot_diverged is True else KIND_STAGE_ONLY
-                ),
-                sequence=sequence,
-                frame=frame,
-                stage=stage,
-                reference_run=reference_run,
-                other_run=other_run,
-                reference_hash=ref_hash,
-                other_hash=other_hash,
-                ordered_only=ordered_only,
-                reference_payload=_payload_of(ref_record),
-                other_payload=_payload_of(other_record),
-            )
-            reasons.append(
-                f"{sequence} frame {frame} stage {stage}: first observable divergence"
-            )
-            break
+    root: FirstStageDivergence | None = None
+    if divergent:
+        # ``keys`` is frame-major, so divergent[0] is the earliest observed
+        # difference.  The root is the most upstream stage that differs at
+        # any frame, then its earliest (sequence, frame).
+        observed = divergent[0]
+        root_key = min(
+            divergent,
+            key=lambda item: (
+                STAGE_INDEX.get(item[2], len(STAGES)),
+                item[0],
+                item[1],
+            ),
+        )
+        first = _divergence_at(indexes, observed, kind=kind, attribute=False)
+        root = _divergence_at(indexes, root_key, kind=kind, attribute=True)
+        reasons.append(
+            f"{observed[0]} frame {observed[1]} stage {observed[2]}: "
+            "earliest observed difference"
+        )
+        reasons.append(
+            f"{root_key[0]} frame {root_key[1]} stage {root_key[2]}: "
+            "root stage divergence"
+        )
 
     if first is None and mot_diverged:
         first = make_first_divergence(kind=KIND_INSUFFICIENT)
+        root = first
         reasons.append(
             "MOT files diverged but every instrumented stage hash matched; "
             "instrumentation is not sufficient to narrow the bound further"
@@ -1498,6 +1573,7 @@ def compare_stage_fingerprints(
             reasons=tuple(reasons),
             first_divergence=first,
             n_records=tuple(len(item) for item in records_per_run),
+            root_stage_divergence=root,
         )
 
     ok = first is None
@@ -1509,24 +1585,25 @@ def compare_stage_fingerprints(
         reasons=tuple(reasons),
         first_divergence=first,
         n_records=tuple(len(item) for item in records_per_run),
+        root_stage_divergence=root,
     )
 
 
 def write_first_divergence(path: Path, report: StageRepeatReport) -> None:
-    """Persist only the first mismatched payload, never a full tensor dump."""
+    """Persist only the mismatched payloads, never a full tensor dump.
+
+    ``earliest_observed`` keeps the frame-level evidence; ``root_stage``
+    carries the condition-2 reading.
+    """
 
     if report.first_divergence is None:
         return
-    if report.first_divergence.kind != KIND_FIRST_OBSERVABLE:
-        path.write_text(
-            json.dumps(report.first_divergence.to_dict(), indent=2) + "\n",
-            encoding="utf-8",
-        )
-        return
-    path.write_text(
-        json.dumps(report.first_divergence.to_dict(), indent=2) + "\n",
-        encoding="utf-8",
-    )
+    root = report.root_stage_divergence
+    payload = {
+        "earliest_observed": report.first_divergence.to_dict(),
+        "root_stage": None if root is None else root.to_dict(),
+    }
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
 def format_stage_report(report: StageRepeatReport) -> str:
@@ -1538,23 +1615,32 @@ def format_stage_report(report: StageRepeatReport) -> str:
     first = report.first_divergence
     if first is not None:
         lines.append(
-            f"  first_observable: kind={first.kind} sequence={first.sequence or '-'} "
-            f"frame={first.frame} "
-            f"last_identical_stage={first.last_identical_stage or '-'} "
-            f"first_divergent_stage={first.first_divergent_stage or '-'} "
+            f"  earliest_observed: kind={first.kind} "
+            f"sequence={first.sequence or '-'} frame={first.frame} "
+            f"stage={first.stage or '-'} "
             f"runs={first.reference_run}->{first.other_run} "
             f"ordered_only={first.ordered_only}"
         )
-        lines.append(
-            f"  producing_path_verdict={first.producing_path_verdict} "
-            f"mechanism_claim={first.mechanism_claim} issue_close={first.issue_close}"
-        )
-        if first.allowed_claim:
-            lines.append(f"  allowed_claim: {first.allowed_claim}")
         if first.reference_hash is not None:
             lines.append(f"    ref  {first.reference_hash}")
         if first.other_hash is not None:
             lines.append(f"    other {first.other_hash}")
+    root = report.root_stage_divergence
+    if root is not None:
+        lines.append(
+            f"  root_stage: kind={root.kind} sequence={root.sequence or '-'} "
+            f"frame={root.frame} "
+            f"last_identical_stage={root.last_identical_stage or '-'} "
+            f"first_divergent_stage={root.first_divergent_stage or '-'} "
+            f"runs={root.reference_run}->{root.other_run} "
+            f"ordered_only={root.ordered_only}"
+        )
+        lines.append(
+            f"  producing_path_verdict={root.producing_path_verdict} "
+            f"mechanism_claim={root.mechanism_claim} issue_close={root.issue_close}"
+        )
+        if root.allowed_claim:
+            lines.append(f"  allowed_claim: {root.allowed_claim}")
     for reason in report.reasons:
         lines.append(f"  reason: {reason}")
     return "\n".join(lines)
