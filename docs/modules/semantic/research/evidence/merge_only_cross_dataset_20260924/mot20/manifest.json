@@ -1,0 +1,157 @@
+{
+  "arm_output_dirs": {
+    "base": "/home/ray/developer/ai/saccade/results/xval459_20260924/replay_mot20/arms/base",
+    "base_r1": "/home/ray/developer/ai/saccade/results/xval459_20260924/replay_mot20/arms/base_r1",
+    "base_r2": "/home/ray/developer/ai/saccade/results/xval459_20260924/replay_mot20/arms/base_r2",
+    "merge_only": "/home/ray/developer/ai/saccade/results/xval459_20260924/replay_mot20/arms/merge_only",
+    "merge_only_r1": "/home/ray/developer/ai/saccade/results/xval459_20260924/replay_mot20/arms/merge_only_r1",
+    "merge_only_r2": "/home/ray/developer/ai/saccade/results/xval459_20260924/replay_mot20/arms/merge_only_r2"
+  },
+  "commands": {
+    "replay": [
+      "scripts/eval/experiments/run_output_layer_repair_chaining.py",
+      "--substrate",
+      "results/xval459_20260924/substrate_mot20",
+      "--out",
+      "results/xval459_20260924/replay_mot20",
+      "--artifact-dir",
+      "results/xval459_20260924/evidence/mot20",
+      "--data-root",
+      "datasets/MOT20/MOT20",
+      "--split",
+      "train",
+      "--seqs",
+      "MOT20-01,MOT20-02",
+      "--detector",
+      "",
+      "--substrate-commit",
+      "b3ac57259eeddc90a241185eefe99ad8a1fd301b",
+      "--arms",
+      "base,merge_only",
+      "--repeats",
+      "3",
+      "--repeat-arms",
+      "base,merge_only"
+    ],
+    "substrate_capture": [
+      "uv run python scripts/eval/mot17.py",
+      "--preset mamba_whole_graph_m",
+      "--data-root datasets/MOT20/MOT20",
+      "--split train",
+      "--double-buffer",
+      "--no-gpu-decode",
+      "--no-interpolate-tracklets",
+      "--output /home/ray/developer/ai/saccade/results/xval459_20260924/substrate_mot20"
+    ]
+  },
+  "identity": {
+    "argv": [
+      "scripts/eval/experiments/run_output_layer_repair_chaining.py",
+      "--substrate",
+      "results/xval459_20260924/substrate_mot20",
+      "--out",
+      "results/xval459_20260924/replay_mot20",
+      "--artifact-dir",
+      "results/xval459_20260924/evidence/mot20",
+      "--data-root",
+      "datasets/MOT20/MOT20",
+      "--split",
+      "train",
+      "--seqs",
+      "MOT20-01,MOT20-02",
+      "--detector",
+      "",
+      "--substrate-commit",
+      "b3ac57259eeddc90a241185eefe99ad8a1fd301b",
+      "--arms",
+      "base,merge_only",
+      "--repeats",
+      "3",
+      "--repeat-arms",
+      "base,merge_only"
+    ],
+    "dirty": false,
+    "harness": "scripts/eval/experiments/run_output_layer_repair_chaining.py",
+    "measured_at": "2026-09-24T13:53:27.798467+00:00",
+    "preset_contract": {
+      "cheb_gr_engine": "models/embedding/mobilenetv4_reid_visclean_224.engine",
+      "cheb_gr_model": "mobilenetv4_reid",
+      "data_root": "/home/ray/developer/ai/saccade/datasets/MOT20/MOT20",
+      "decode": "cpu JPEG via --no-gpu-decode (substrate capture)",
+      "detector": null,
+      "double_buffer": true,
+      "handover": {
+        "appearance_occlusion_cov": 0.4,
+        "bank_mode": "spread",
+        "bank_n": 0,
+        "cheb_lambda": 2.0,
+        "decide_n": 5,
+        "fuse_lambda": 0.3,
+        "k2": 6,
+        "margin": 0.05,
+        "max_cost": 0.45,
+        "max_fwd": 50,
+        "max_gap": 60,
+        "min_head_samples": 2,
+        "n_samples": 50,
+        "neighbor_iou_max": 0.0,
+        "pool_frac": 0.3
+      },
+      "interpolate_after_stages": true,
+      "interpolation": {
+        "max_gap": 35,
+        "min_h": 0.0,
+        "min_track_len": 5
+      },
+      "merge": {
+        "cheb_lambda": 2.0,
+        "fuse_lambda": 0.3,
+        "k2": 6,
+        "max_cost": 0.45,
+        "max_fwd": 50,
+        "max_gap": 60,
+        "min_overlap_frames": 1,
+        "n_samples": 50,
+        "pool_frac": 0.3
+      },
+      "preset": "mamba_whole_graph_m",
+      "reid_mode": "off",
+      "sequences": [
+        "MOT20-01",
+        "MOT20-02"
+      ],
+      "split": "train"
+    },
+    "repeat_kind": "within_process",
+    "replay_harness_commit": "eb465b49d60129eceaec0c93d94dcfb63487f120",
+    "runtime": {
+      "env": {
+        "SACCADE_DETECT_BARRIER": null,
+        "SACCADE_DOUBLE_BUFFER": null,
+        "SACCADE_GPU_DECODE": null,
+        "SACCADE_MAIN_NMS_GRAPHED": null,
+        "SACCADE_STREAM_MODE": null
+      },
+      "gpu": {
+        "capability": [
+          12,
+          0
+        ],
+        "cuda": "13.0",
+        "name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+        "torch": "2.11.0+cu130"
+      },
+      "host": "DESKTOP-0FLA6SQ",
+      "platform": "Linux-6.18.33.1-microsoft-standard-WSL2-x86_64-with-glibc2.44",
+      "python": "3.12.13"
+    },
+    "substrate": "/home/ray/developer/ai/saccade/results/xval459_20260924/substrate_mot20",
+    "substrate_commit": "b3ac57259eeddc90a241185eefe99ad8a1fd301b",
+    "substrate_sha256": {
+      "MOT20-01": "9e5385d8bd078cdbfd06dc44f193f3fa18cee31fdf428b7f6c32cc10de948442",
+      "MOT20-02": "b3808775419b509df0101c298bba260b901814210febbe09ca67fd62f430631a"
+    }
+  },
+  "results": "/home/ray/developer/ai/saccade/results/xval459_20260924/evidence/mot20/results.json",
+  "schema": "output_layer_repair_chaining_revalidation_manifest/v1"
+}

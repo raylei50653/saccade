@@ -1,0 +1,16 @@
+{
+  "MOT20-01.txt": {
+    "sha256": "9e5385d8bd078cdbfd06dc44f193f3fa18cee31fdf428b7f6c32cc10de948442"
+  },
+  "MOT20-02.txt": {
+    "sha256": "b3808775419b509df0101c298bba260b901814210febbe09ca67fd62f430631a"
+  },
+  "MOT20-03.txt": {
+    "sha256": "2dd2cb984e7e5d4f2c28b0f454d2e1ba445a2d9535e7c2fe2a53a4ba7569772d"
+  },
+  "MOT20-05.txt": {
+    "sha256": "40d36e24f2f3131fc3ca1d0e10df031da416cc9724c069f052d48db12fe2c494"
+  },
+  "cross_process_repeat": "identical",
+  "substrate_commit": "b3ac5725"
+}
