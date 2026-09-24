@@ -198,3 +198,48 @@ def test_aggregate_and_markdown_use_accepted_links_not_link_pairs(harness):
     table = harness.markdown_table([row])
     assert "accepted links" in table.splitlines()[0]
     assert "link pairs" not in table
+
+
+def test_merge_stage_records_timing_and_accepted_pairs(harness):
+    """Instrumentation only: timing and accepted rows ride along the record."""
+    raw = [_line(1, 1), _line(2, 1), _line(10, 2), _line(11, 2)]
+
+    def fake_extract(lines, seq_img_dir, extractor, **kwargs):
+        return {}
+
+    def fake_merge(lines, embeddings, *, decision_log, **kwargs):
+        decision_log.append(
+            {
+                "kind": "pair",
+                "a_id": 1,
+                "b_id": 2,
+                "cost": 0.3,
+                "gap": 8,
+                "verdict": "accepted",
+            }
+        )
+        decision_log.append(
+            {
+                "kind": "pair",
+                "a_id": 1,
+                "b_id": 3,
+                "cost": 0.6,
+                "gap": 4,
+                "verdict": "reject_cost",
+            }
+        )
+        return list(lines), {"merges": 1}
+
+    params = dict(harness.DEFAULT_MERGE)
+    out, rec = harness.apply_merge_stage(
+        raw,
+        seq_img_dir="/unused",
+        extractor=object(),
+        params=params,
+        extract_fn=fake_extract,
+        merge_fn=fake_merge,
+    )
+    assert out == raw
+    assert set(rec["timing_s"]) == {"extract", "merge"}
+    assert all(v >= 0.0 for v in rec["timing_s"].values())
+    assert rec["accepted_pairs"] == [{"a_id": 1, "b_id": 2, "cost": 0.3, "gap": 8}]
