@@ -44,6 +44,7 @@ import platform
 import socket
 import subprocess
 import sys
+import time
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -243,6 +244,7 @@ def apply_merge_stage(
 
     extract = extract_fn or extract_tracklet_embeddings
     merge = merge_fn or cheb_gr_merge_output_tracklets
+    t0 = time.perf_counter()
     embeddings = extract(
         lines,
         seq_img_dir,
@@ -252,6 +254,7 @@ def apply_merge_stage(
         appearance_occlusion_gate=True,
         appearance_occlusion_cov=float(params.get("appearance_occlusion_cov", 0.4)),
     )
+    t1 = time.perf_counter()
     decision_log: list[dict[str, Any]] = []
     out, stats = merge(
         lines,
@@ -267,6 +270,7 @@ def apply_merge_stage(
         fuse_lambda=float(params["fuse_lambda"]),
         decision_log=decision_log,
     )
+    t2 = time.perf_counter()
     diag = summarize_merge_log(decision_log)
     record = {
         "stage": "merge",
@@ -278,6 +282,20 @@ def apply_merge_stage(
         },
         "diagnostics": diag,
         "accepted_links": int(stats.get("merges", diag["accepted"])),
+        # Wall time of this stage (host clock). Extraction dominates; merge is
+        # the pairwise Cheb-GR distance + greedy union.
+        "timing_s": {"extract": t1 - t0, "merge": t2 - t1},
+        # Accepted pair rows, kept for event characterization (cost, gap).
+        "accepted_pairs": [
+            {
+                "a_id": int(row["a_id"]),
+                "b_id": int(row["b_id"]),
+                "cost": float(row["cost"]),
+                "gap": int(row["gap"]),
+            }
+            for row in decision_log
+            if row.get("kind") == "pair" and row.get("verdict") == "accepted"
+        ],
     }
     return out, record
 
@@ -418,6 +436,7 @@ def score_output_dir(
     data_root: str,
     split: str,
     sequences: list[str],
+    detector: str | None = "SDP",
 ) -> dict[str, Any]:
     """Full-precision motmetrics + TrackEval HOTA family."""
     import motmetrics as mm
@@ -429,7 +448,7 @@ def score_output_dir(
 
     seq_csv = ",".join(sequences)
     printed = run_motmetrics_evaluation(
-        data_root, split, str(output_dir), seq_csv, detector="SDP"
+        data_root, split, str(output_dir), seq_csv, detector=detector or None
     )
     accs, names = [], []
     jobs: list[tuple[str, str, str]] = []
@@ -584,6 +603,7 @@ def run_arm(
     interp_params: dict[str, Any],
     interpolate: bool,
     repeat_index: int = 0,
+    detector: str | None = "SDP",
 ) -> dict[str, Any]:
     stages = ARM_STAGES[arm]
     tag = arm if repeat_index == 0 else f"{arm}_r{repeat_index}"
@@ -615,7 +635,11 @@ def run_arm(
             f"accepted={links} interp_frames={interp_stats.get('frames_added', 0)}"
         )
     metrics = score_output_dir(
-        arm_dir, data_root=str(data_root), split=split, sequences=sequences
+        arm_dir,
+        data_root=str(data_root),
+        split=split,
+        sequences=sequences,
+        detector=detector,
     )
     stage_agg = aggregate_stage_records(seq_records)
     return {
@@ -637,6 +661,8 @@ def run_arm(
                     "n_output_ids": len(rec["output_track_ids"]),
                     "diagnostics": rec.get("diagnostics", {}),
                     "stats": rec.get("stats", {}),
+                    "timing_s": rec.get("timing_s", {}),
+                    "accepted_pairs": rec.get("accepted_pairs", []),
                 }
                 for rec in recs
             ]
@@ -689,6 +715,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--data-root", default="datasets/MOT17")
     p.add_argument("--split", default="train")
     p.add_argument("--seqs", default=",".join(SEQS))
+    p.add_argument(
+        "--detector",
+        default="SDP",
+        help="Detector suffix recorded in provenance ('' for datasets whose "
+        "sequence names carry none, e.g. MOT20 / DanceTrack).",
+    )
     p.add_argument("--cheb-gr-model", default="mobilenetv4_reid")
     p.add_argument("--cheb-gr-engine", default="")
     p.add_argument("--merge-max-cost", type=float, default=DEFAULT_MERGE["max_cost"])
@@ -794,7 +826,9 @@ def main(argv: list[str] | None = None) -> int:
         },
         "preset_contract": {
             "preset": "mamba_whole_graph_m",
-            "detector": "SDP",
+            "detector": args.detector or None,
+            "data_root": str(data_root),
+            "split": args.split,
             "sequences": sequences,
             "reid_mode": "off",
             "decode": "cpu JPEG via --no-gpu-decode (substrate capture)",
@@ -828,6 +862,7 @@ def main(argv: list[str] | None = None) -> int:
                 interp_params=interp_params,
                 interpolate=not args.no_interpolate,
                 repeat_index=0,
+                detector=args.detector,
             )
         )
         extra = args.repeats - 1 if arm in repeat_arms else 0
@@ -847,6 +882,7 @@ def main(argv: list[str] | None = None) -> int:
                     interp_params=interp_params,
                     interpolate=not args.no_interpolate,
                     repeat_index=ridx,
+                    detector=args.detector,
                 )
             )
 
@@ -900,7 +936,15 @@ def main(argv: list[str] | None = None) -> int:
                     "substrate_capture": [
                         "uv run python scripts/eval/mot17.py",
                         "--preset mamba_whole_graph_m",
-                        "--detector SDP",
+                        *([f"--detector {args.detector}"] if args.detector else []),
+                        *(
+                            []
+                            if args.data_root == "datasets/MOT17"
+                            else [
+                                f"--data-root {args.data_root}",
+                                f"--split {args.split}",
+                            ]
+                        ),
                         "--double-buffer",
                         "--no-gpu-decode",
                         "--no-interpolate-tracklets",
