@@ -30,6 +30,7 @@ from scripts.tools.eval_stage_fingerprint import (  # noqa: E402
     CONDITION2_SUFFICIENT_SESSION_CLAIM,
     CONDITION2_RULES,
     DIVERGENCE_NAME,
+    EARLIEST_OBSERVED_CLAIM,
     _track_count,
     INSTRUMENTATION_INSUFFICIENT_CLAIM,
     KIND_FIRST_OBSERVABLE,
@@ -406,7 +407,7 @@ def test_gpu_decode_fingerprint_stops_on_first_pair(
     assert session["mechanism_claim"] is False
     assert session["condition_2_advanced"] is False
     assert session["issue_close"] is False
-    first = json.loads((artifact / "first_divergence.json").read_text())
+    first = json.loads((artifact / "first_divergence.json").read_text())["root_stage"]
     assert first["last_identical_stage"] == "detector_output"
     assert first["first_divergent_stage"] == "post_nms"
 
@@ -535,7 +536,13 @@ def test_single_stage_mutation_localizes_that_stage(tmp_path: Path, stage: str) 
     _write_fp(b, _records_for_frame(mutate_stage=stage))
     report = compare_stage_fingerprints([a, b], mot_diverged=True)
     assert not report.ok
-    first = report.first_divergence
+    observed = report.first_divergence
+    assert observed is not None
+    assert (observed.frame, observed.stage) == (FRAME, stage)
+    assert observed.first_divergent_stage is None
+    assert observed.producing_path_verdict == VERDICT_NOT_APPLICABLE
+    assert observed.allowed_claim == EARLIEST_OBSERVED_CLAIM
+    first = report.root_stage_divergence
     assert first is not None
     assert first.kind == KIND_FIRST_OBSERVABLE
     assert first.sequence == SEQ
@@ -550,7 +557,9 @@ def test_single_stage_mutation_localizes_that_stage(tmp_path: Path, stage: str) 
     assert first.issue_close is False
     dump = tmp_path / DIVERGENCE_NAME
     write_first_divergence(dump, report)
-    payload = json.loads(dump.read_text(encoding="utf-8"))
+    written = json.loads(dump.read_text(encoding="utf-8"))
+    assert written["earliest_observed"]["stage"] == stage
+    payload = written["root_stage"]
     assert payload["stage"] == stage
     assert payload["first_divergent_stage"] == stage
     assert payload["last_identical_stage"] == rule.last_identical_stage
@@ -743,7 +752,9 @@ def test_stage_only_divergence_does_not_advance_condition2(
     )
     assert summary["first_divergence"]["stage"] == "post_nms"
     assert summary["first_divergence"]["frame"] == FRAME
-    dump = json.loads((artifact / "first_divergence.json").read_text(encoding="utf-8"))
+    dump = json.loads((artifact / "first_divergence.json").read_text(encoding="utf-8"))[
+        "root_stage"
+    ]
     assert dump["stage"] == "post_nms"
     assert dump["kind"] == KIND_STAGE_ONLY
     assert dump["last_identical_stage"] is None
@@ -961,3 +972,106 @@ def test_background_emit_observes_completed_lines_not_enqueue_placeholder(
     mot_after = [item for item in collector.records if item["stage"] == "mot"]
     assert len(mot_after) == 1
     assert mot_after[0]["count"] == 1
+
+
+def _interpolated_run(last_x: float) -> list[dict[str, Any]]:
+    """One track, frames 1-5 and 7, gap at 6 filled by the real interpolator.
+
+    ``last_x`` is the detector box at frame 7; everything earlier is fixed.
+    """
+
+    from saccade.perception.eval.post_merge import interpolate_tracklets
+
+    boxes = {f: 100.0 + 2.0 * f for f in (1, 2, 3, 4, 5)}
+    boxes[7] = last_x
+    per_frame = {
+        f: f"{f},7,{x:.2f},50.00,20.00,40.00,0.9000,-1,-1,-1" for f, x in boxes.items()
+    }
+    written, stats = interpolate_tracklets(
+        [per_frame[f] for f in sorted(per_frame)], max_gap=20, min_track_len=5
+    )
+    assert stats["frames_added"] == 1
+    written_by_frame: dict[int, list[str]] = {}
+    for line in written:
+        written_by_frame.setdefault(int(line.split(",", 1)[0]), []).append(line)
+
+    records: list[dict[str, Any]] = []
+    for frame in range(1, 8):
+        if frame in boxes:
+            x = boxes[frame]
+            box = np.array([[x, 50.0, x + 20.0, 90.0]], dtype=np.float32)
+            score = np.array([0.9], dtype=np.float32)
+            cls = np.array([0], dtype=np.int32)
+            ids = np.array([7], dtype=np.int32)
+        else:
+            box = np.zeros((0, 4), dtype=np.float32)
+            score = np.zeros((0,), dtype=np.float32)
+            cls = np.zeros((0,), dtype=np.int32)
+            ids = np.zeros((0,), dtype=np.int32)
+        det = fingerprint_detections(boxes=box, scores=score, classes=cls, ids=None)
+        trk = fingerprint_detections(boxes=box, scores=score, classes=cls, ids=ids)
+        payloads = {
+            "detector_output": det,
+            "post_nms": det,
+            "tracker_input": det,
+            "tracker_output": trk,
+            "mot": fingerprint_mot_lines(
+                [per_frame[frame]] if frame in per_frame else []
+            ),
+            "mot_file": fingerprint_mot_lines(written_by_frame.get(frame, [])),
+        }
+        for stage in STAGES:
+            records.append(
+                {"sequence": SEQ, "frame": frame, "stage": stage, **payloads[stage]}
+            )
+    return records
+
+
+def test_interpolation_back_fill_is_not_attributed_to_postprocess(
+    tmp_path: Path,
+) -> None:
+    """#457 / #363: a detector divergence at frame 7 is written into frame 6.
+
+    Frame order sees ``mot_file`` at frame 6 first.  That stays recorded as
+    the earliest observed difference, but the root stage is the detector at
+    frame 7, and the condition-2 reading must come from the detector rule,
+    not the ``mot_file`` ("sequence-level postprocess") rule.
+    """
+
+    a = tmp_path / "r1"
+    b = tmp_path / "r2"
+    _write_fp(a, _interpolated_run(last_x=114.0))
+    _write_fp(b, _interpolated_run(last_x=116.0))
+    report = compare_stage_fingerprints([a, b], mot_diverged=True)
+    assert not report.ok
+
+    observed = report.first_divergence
+    assert observed is not None
+    assert (observed.frame, observed.stage) == (6, "mot_file")
+    assert observed.reference_payload != observed.other_payload
+    assert observed.first_divergent_stage is None
+    assert observed.producing_path_verdict == VERDICT_NOT_APPLICABLE
+    assert observed.allowed_claim == EARLIEST_OBSERVED_CLAIM
+
+    root = report.root_stage_divergence
+    assert root is not None
+    assert (root.frame, root.stage) == (7, "detector_output")
+    detector_rule = CONDITION2_RULES["detector_output"]
+    assert root.first_divergent_stage == "detector_output"
+    assert root.producing_path_verdict == detector_rule.producing_path_verdict
+    assert root.allowed_claim == detector_rule.allowed_claim
+    assert root.allowed_claim != CONDITION2_RULES["mot_file"].allowed_claim
+
+    text = format_stage_report(report)
+    assert "earliest_observed: kind=first_observable_divergence" in text
+    assert "frame=6 stage=mot_file" in text
+    assert "first_divergent_stage=detector_output" in text
+    assert "producing_path_verdict=insufficient" in text
+
+    dump = tmp_path / DIVERGENCE_NAME
+    write_first_divergence(dump, report)
+    written = json.loads(dump.read_text(encoding="utf-8"))
+    assert written["earliest_observed"]["stage"] == "mot_file"
+    assert written["earliest_observed"]["frame"] == 6
+    assert written["root_stage"]["stage"] == "detector_output"
+    assert written["root_stage"]["frame"] == 7

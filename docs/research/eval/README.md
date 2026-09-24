@@ -28,7 +28,7 @@ See [../../ownership/doc_structure_contract.md](../../ownership/doc_structure_co
 | [scoring_energy_20260630.md](scoring_energy_20260630.md) | Scoring energy 分析 |
 | [wsl2_d2h_pinned_memory_leak_20260517.md](wsl2_d2h_pinned_memory_leak_20260517.md) | WSL2 D2H pinned memory leak post-mortem |
 | [nogpudecode_reproducibility_20260907.md](nogpudecode_reproducibility_20260907.md) | **`--no-gpu-decode` 的重複執行變異**:重現性不能由旗標單獨保證,必須逐組態驗證(`baseline` 7-seq 14/20 分歧、`mamba_whole_graph_m --double-buffer` 0/20)＋取代「bit-exact ⇒ N=1」的判讀規則與受影響結論分級 |
-| [eval_repeat_identity_boundary_20260907.md](eval_repeat_identity_boundary_20260907.md) | **#363 closed:** GPU-decode `mot`→`mot_file` 為凍結表 `sufficient`(condition 2) + #367 harness (condition 3);Condition 1 未做、非必需 |
+| [eval_repeat_identity_boundary_20260907.md](eval_repeat_identity_boundary_20260907.md) | **#363 closed:** GPU-decode `mot`→`mot_file` 為凍結表 `sufficient`(condition 2) + #367 harness (condition 3);Condition 1 未做、非必需.**2026-09-24 更正(§12):`mot_file` 歸因是 frame 主序假象,實際 root stage = `detector_output`** |
 | *(pointer)* [output_layer_repair_chaining_20260905.md](../../modules/semantic/research/output_layer_repair_chaining_20260905.md) | 2026-09-05 offline handover × Cheb-GR merge chaining 歷史互補性探針（#335；非 current-HEAD claim） |
 | *(pointer)* [output_layer_repair_chaining_revalidation_20260912.md](../../modules/semantic/research/output_layer_repair_chaining_revalidation_20260912.md) | 2026-09-12 current-HEAD 五臂 revalidation（`85b95ac1`；歷史表仍分開） |
 
