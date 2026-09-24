@@ -41,6 +41,11 @@
       "sha256": "4fc3498e96cc5836655c1478ace7bd84d41648312cc3dff9cd7cbb3a6e036a70"
     },
     {
+      "bytes": 1372,
+      "file": "manifest.json",
+      "sha256": "ffb5262ea4b2e5a8294dd17328821419f8b362ab967b0484c39ae9ad802c31b4"
+    },
+    {
       "bytes": 5745,
       "file": "mot17/manifest.json",
       "sha256": "9d2066234e1687d5396072ff0b8f2591045d44d8020319b5ba8295f69694e506"

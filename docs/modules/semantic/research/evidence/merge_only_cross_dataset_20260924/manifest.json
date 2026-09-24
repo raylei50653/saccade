@@ -1,0 +1,50 @@
+{
+  "arms": [
+    "base",
+    "merge_only"
+  ],
+  "commands": "commands.md",
+  "datasets": {
+    "dancetrack": {
+      "data_root": "datasets/DanceTrack via 6-digit symlink mirror",
+      "sequences": 40,
+      "split": "train"
+    },
+    "mot17": {
+      "data_root": "datasets/MOT17",
+      "detector": "SDP",
+      "sequences": 7,
+      "split": "train"
+    },
+    "mot20": {
+      "data_root": "datasets/MOT20/MOT20",
+      "excluded": {
+        "MOT20-03": "merge stage OOM",
+        "MOT20-05": "merge stage OOM (not attempted after 03)"
+      },
+      "sequences": [
+        "MOT20-01",
+        "MOT20-02"
+      ],
+      "split": "train"
+    }
+  },
+  "dirty": false,
+  "interpolation_decomposition": "no_interp/ per dataset",
+  "issue": "#459",
+  "per_dataset_files": [
+    "results.json",
+    "manifest.json",
+    "merge_events.json",
+    "substrate_sha256.json",
+    "no_interp/results.json",
+    "no_interp/manifest.json"
+  ],
+  "question": "Does the fixed merge-only operating point keep its identity gain across MOT17 / MOT20 / DanceTrack; retain globally, gate conditionally, or park?",
+  "replay_harness_commit": "eb465b49",
+  "report": "docs/modules/semantic/research/merge_only_cross_dataset_20260924.md",
+  "schema": "merge_only_cross_dataset_manifest/v1",
+  "substrate_commit": "b3ac5725",
+  "summary": "table.json",
+  "verdict": "gated_conditionally"
+}
