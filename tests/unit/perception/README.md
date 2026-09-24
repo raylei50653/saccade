@@ -6,5 +6,6 @@
 | Test | Scope | Function | Lifecycle | Summary |
 |------|-------|----------|-----------|---------|
 | `test_online_telemetry.py` | perception | behavior | active | Unit tests for saccade.perception.online_telemetry.OnlineTelemetry. |
+| `test_trt_engine_stream_ordering.py` | perception | regression | active | Native TRTEngine enqueues on the caller's stream, including the null stream. |
 
 <!-- END generated test index -->

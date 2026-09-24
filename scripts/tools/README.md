@@ -207,8 +207,9 @@ uv run python scripts/tools/check_eval_repeat_identity.py compare DIR DIR --stag
 ```
 
 A pass on N runs is not a determinism proof.  This tool is **not** a pre-push
-gate: `baseline` is currently known to diverge.  After a fix, `run` is the
-regression entry.  Boundary write-up:
+gate (it needs the GPU).  Since #457 it is the GPU validation gate; the
+mechanism regression is `tests/unit/perception/test_trt_engine_stream_ordering.py`.
+Boundary write-up:
 [eval_repeat_identity_boundary_20260907.md](../../docs/research/eval/eval_repeat_identity_boundary_20260907.md).
 
 After a budgeted localization session returns `budget_exhausted_identical`,

@@ -36,9 +36,11 @@ mechanism.
 exits), ``logs/rN.log`` (child stdout+stderr), ``fingerprints/`` (staging
 while a child runs).
 
-Not wired to pre-push: the current ``baseline`` path is known to diverge, so
-a default CI gate would fail on main.  After a fix, ``run`` is the regression
-gate.  ``compare`` on stored #363 evidence is the positive control.
+Not wired to pre-push: ``run`` needs the GPU and minutes per eval.  It is
+the GPU validation gate for #457 (TRT enqueued on a private stream when the
+caller's stream was the null handle); the deterministic regression for that
+mechanism is ``tests/unit/perception/test_trt_engine_stream_ordering.py``.
+``compare`` on stored #363 evidence is the positive control.
 
 The decimal-hash chain (``check_decimal_chain_routine.py``) is a different
 question: same-process order contamination, ID-free, on

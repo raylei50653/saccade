@@ -19,7 +19,7 @@ class TRTLogger : public nvinfer1::ILogger {
 
 class TRTEngine::Impl {
 public:
-    Impl(const std::string& model_path) : internal_stream_(nullptr) {
+    Impl(const std::string& model_path) {
         std::ifstream file(model_path, std::ios::binary);
         if (!file.good()) {
             throw std::runtime_error("❌ [TRTEngine] Model not found: " + model_path);
@@ -33,28 +33,16 @@ public:
         file.read(model_data.data(), size);
         file.close();
 
-        cudaStreamCreateWithFlags(&internal_stream_, cudaStreamNonBlocking);
+        runtime_.reset(nvinfer1::createInferRuntime(gLogger));
+        if (!runtime_) throw std::runtime_error("❌ Failed to create TRT Runtime");
 
-        try {
-            runtime_.reset(nvinfer1::createInferRuntime(gLogger));
-            if (!runtime_) throw std::runtime_error("❌ Failed to create TRT Runtime");
-
-            engine_.reset(runtime_->deserializeCudaEngine(model_data.data(), size));
-            if (!engine_) throw std::runtime_error("❌ Failed to deserialize engine");
-        } catch (...) {
-            cudaStreamDestroy(internal_stream_);
-            internal_stream_ = nullptr;
-            throw;
-        }
+        engine_.reset(runtime_->deserializeCudaEngine(model_data.data(), size));
+        if (!engine_) throw std::runtime_error("❌ Failed to deserialize engine");
 
         // context_ is created lazily on first infer()/enqueueV3() call so that
         // callers that only query metadata (tensor shapes, engine ptr) or use
         // infer_with_context() with their own context don't pay the VRAM cost.
         std::cout << "✅ [TRTEngine] Pimpl Loaded: " << model_path << std::endl;
-    }
-
-    ~Impl() {
-        if (internal_stream_) cudaStreamDestroy(internal_stream_);
     }
 
     nvinfer1::IExecutionContext* ensure_context() {
@@ -65,8 +53,13 @@ public:
         return context_.get();
     }
 
+    // `stream` is enqueued as given.  A null handle is the legacy default
+    // stream, which is what torch.cuda.current_stream().cuda_stream returns
+    // outside a stream context -- not "no stream".  Substituting a private
+    // non-blocking stream for it dropped ordering against the caller's
+    // producer/consumer kernels (#457).
     bool infer(const std::vector<void*>& bindings, cudaStream_t stream) {
-        cudaStream_t s = stream ? stream : internal_stream_;
+        cudaStream_t s = stream;
         auto* ctx = ensure_context();
         int nbTensors = engine_->getNbIOTensors();
         for (int i = 0; i < nbTensors; ++i) {
@@ -82,7 +75,7 @@ public:
     }
 
     bool enqueueV3(cudaStream_t stream) {
-        return ensure_context()->enqueueV3(stream ? stream : internal_stream_);
+        return ensure_context()->enqueueV3(stream);
     }
 
     nvinfer1::Dims getTensorDims(const char* name) const {
@@ -125,7 +118,7 @@ public:
     bool infer_with_context(nvinfer1::IExecutionContext* ctx,
                             const std::vector<void*>& bindings,
                             cudaStream_t stream) {
-        cudaStream_t s = stream ? stream : internal_stream_;
+        cudaStream_t s = stream;
         int nbTensors = engine_->getNbIOTensors();
         for (int i = 0; i < nbTensors; ++i) {
             if (i >= (int)bindings.size()) continue;
@@ -136,7 +129,6 @@ public:
     }
 
 private:
-    cudaStream_t internal_stream_;
     std::unique_ptr<nvinfer1::IRuntime> runtime_;
     std::unique_ptr<nvinfer1::ICudaEngine> engine_;
     std::unique_ptr<nvinfer1::IExecutionContext> context_;
