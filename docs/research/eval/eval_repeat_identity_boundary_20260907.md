@@ -17,6 +17,10 @@
 > **不主張** `fast_emit_mot_lines` / `emit_tracks_unified` 是 producer —
 > 它們是 MOT 行的寫出口. 定位到某個 stage 是首次可觀測 divergence,不是
 > causal mechanism. ingest / detect-internal / Kalman 仍可能包在同一個 stage 裡.
+>
+> **更正 (2026-09-24,#457).** §6 / §10 / §11 的 `mot`→`mot_file`(「sequence-level
+> postprocess 產生」)是 comparator 以 frame 為主序造成的假象;實際最早分歧的 stage 是
+> `detector_output`.見 §12.以下各節保留原文作為當時紀錄,不改寫.
 
 量測本體與判讀規則仍以
 [nogpudecode_reproducibility_20260907.md](nogpudecode_reproducibility_20260907.md)
@@ -478,3 +482,47 @@ Closure contract 原文不變:(**1 可重現機制 OR 2 具體產生路徑**) **
 三項皆 yes ⇒ 依 (1 OR 2) AND 3,**#363 已具備關閉條件**.不需要為 Condition 1 繼續挖,也不用再切 `mot`→`mot_file`.
 
 Comparator / localization run **不**關 issue(`issue_close=false`).Owner 已接受這份 evidence 並 close.Closing comment 指向本節與 https://github.com/raylei50653/saccade/issues/363#issuecomment-5577344845 .
+
+## 12. 更正:condition 2 的 `mot`→`mot_file` 歸因不成立 (2026-09-24, #457)
+
+**結論.** §10 live session(`gpu-decode-stage-fingerprint-20260908T003732Z-budget8`,pair r1/r6)
+與 §11 closure review 採用的 `mot`→`mot_file` / 「divergence 在 sequence-level postprocess
+路徑產生」**是錯的**.同一份 fingerprint 裡,**實際最早分歧的 stage 是 `detector_output`**.
+
+| 讀法 | frame | stage | condition-2 reading |
+|---|---:|---|---|
+| 當時 comparator(frame 為主序的第一筆差異) | 228 | `mot_file` | `sufficient`「sequence-level postprocess」 |
+| 分 stage 看:`detector_output` 第一次不同 | 231 | `detector_output` | `insufficient`「已在 detect_fn output 出現」 |
+
+`detector_output` / `post_nms` / `tracker_input` 只在 frame 231 不同(各 1 frame);從
+`tracker_output` 起擴散(`tracker_output` 370 frames、`mot` 360 frames,皆始於 231);
+`mot_file` 365 frames,始於 228.
+
+**成因.** 舊 comparator 依 `(sequence, frame, stage)` 排序,取第一個 hash 不同的 key.但
+sequence-level interpolation 會用**較晚**的觀測值回填**較早**的 gap:frame 231 的 detector
+差異經 interpolation 寫進 frame 228 的 `mot_file`,於是 frame 順序上 `mot_file` 先出現,
+被讀成 root stage.「per-frame `mot` 相同而 `mot_file` 不同」(§11 Q2)只在 frame 228 成立,
+不代表 postprocess 是 producer.
+
+**修正(comparator).** `compare_stage_fingerprints` 現在分開回報兩件事:
+
+- `first_divergence` = earliest observed difference(frame 為主序)。保留 frame-level
+  evidence(frame / stage / hash / payload),但**不帶 stage attribution**
+  (`producing_path_verdict=not_applicable`).
+- `root_stage_divergence` = 在任一 frame 出現差異的**最上游** stage。condition-2 reading 與
+  localization session 只讀這一個.上游 stage 從未不同 ⇒ divergence 到這個 stage 時已存在;
+  下游 stage 另有獨立 producer 的可能**不被排除**.
+
+`first_divergence.json` 改成 `{"earliest_observed": …, "root_stage": …}`.回歸測試
+`test_interpolation_back_fill_is_not_attributed_to_postprocess` 用實際的
+`interpolate_tracklets` 造出「frame 7 detector 不同 → frame 6 `mot_file` 不同」,
+若 root 退回 frame 主序會失敗.以新 comparator 重讀 §10 pair:root = `detector_output` @ 231;
+#457 的 block S pair(`457-localization-20260924/blockS-fp`):earliest observed = `mot_file` @ 10,
+root = `detector_output` @ 11.
+
+**對 closure 的影響.** §11 Q2 的「Yes」前提不成立:依凍結表,這個 pair 的 condition-2 reading
+是 `detector_output` / `insufficient`,不是 `sufficient`.#457 另外找到並修掉一個會在
+`TensorRTDetector` 路徑造成這類 detector-output 分歧的機制(TRT 在 null stream 上被改排到
+私有 non-blocking stream,PR #460),但 **本文未量測 GPU-decode arm G 在該修正後是否仍分歧**,
+不把 #460 當成本 pair 的已證機制.#363 是否需要 reopen 由 owner 決定;本節只更正紀錄.
+

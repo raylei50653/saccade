@@ -150,7 +150,7 @@ range 不會縮小;但**獨立重跑一個新 block 不保證**得到同樣或�
 
 ### 5.1 Revalidation inventory 收束(2026-09-08)
 
-**#363 已依 condition 2 + condition 3 關閉**(producing path 定到 `mot`→`mot_file`;fail-closed
+**#363 已依 condition 2 + condition 3 關閉**(producing path 定到 `mot`→`mot_file` —— **2026-09-24 更正:此歸因不成立,root stage 是 `detector_output`,見 [boundary §12](eval_repeat_identity_boundary_20260907.md)**;fail-closed
 harness 交付;condition 1 機制未做、非必需)。**該 closure 沒有縮小 §2.1 的任何一欄,也沒有任何
 runtime mechanism fix。** #367 是 observability bound,不是 runtime boundary:`--preset baseline`
 的 run-to-run 分歧仍然存在,規模仍只由 §2.1 的 observed range 描述。

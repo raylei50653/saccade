@@ -24,8 +24,11 @@ failure.
 
 ``--stage-fingerprint`` is opt-in per-stage observability for condition 2.
 It does not change default eval.  Missing or incomplete fingerprints fail
-closed.  A first divergent stage is the first observable producer-facing
-boundary, not a causal mechanism.
+closed.  Two readings are reported: the earliest observed difference in
+frame order (evidence only; interpolation writes earlier frames from later
+ones), and the root stage -- the most upstream stage that differs at any
+frame -- which alone carries the condition-2 reading.  Neither is a causal
+mechanism.
 
 ``run`` never writes into a run directory before its child eval claims it
 (``mot17.py`` refuses a non-empty ``--output``).  Layout of an artifact dir:
@@ -365,7 +368,9 @@ def cmd_run(
         stage_payload = json.loads(
             (root / "stage_fingerprint.json").read_text(encoding="utf-8")
         )
-        first = stage_payload.get("first_divergence") or {}
+        # Attribution comes from the root stage, never from the earliest
+        # written frame (#457: interpolation back-fills earlier frames).
+        first = stage_payload.get("root_stage_divergence") or {}
         fingerprint_reading_valid = first.get("kind") in {
             KIND_FIRST_OBSERVABLE,
             KIND_INSUFFICIENT,
