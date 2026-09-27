@@ -228,7 +228,10 @@ def main(argv: list[str] | None = None) -> int:
             "tracklets_with_embedding": sum(1 for v in emb.values() if v.shape[0]),
             "samples": n_samples,
             "embedding_sha256": embedding_hash.hexdigest(),
-            "substrate_sha256": _sha(lines),
+            "substrate_sha256": hashlib.sha256(
+                (args.substrate / f"{seq}.txt").read_bytes()
+            ).hexdigest(),
+            "substrate_lines_sha256": _sha(lines),
             "row_chunk": max(1, DEFAULT_BLOCK_ELEMS // max(1, 2 * n_samples)),
             "graph_nodes": 2 * n_samples,
             # Rows per block = elems // nodes; blocked iff that is < nodes.
@@ -294,7 +297,7 @@ def main(argv: list[str] | None = None) -> int:
         torch.cuda.empty_cache()
 
     payload = {
-        "schema": "merge_impl_equivalence/v2",
+        "schema": "merge_impl_equivalence/v3",
         "numeric_contract": numeric_contract,
         "commit": subprocess.check_output(
             ["git", "rev-parse", "HEAD"], cwd=PROJECT_ROOT, text=True

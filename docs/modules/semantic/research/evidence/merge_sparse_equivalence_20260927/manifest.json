@@ -1,0 +1,33 @@
+{
+  "acceptance": "acceptance.json",
+  "commands": "commands.md",
+  "engine_sha256": "a41d627c9188de709a3f463a6b17585eb35a4a64b3447303d7a8689cac2a03a7",
+  "hash_domain_note": "Captured v2 substrate_sha256 hashes normalized lines. substrate_bindings.json binds it to original raw bytes. Current runner v3 separates the two domains.",
+  "issue": "#459",
+  "mot20_coverage": 4,
+  "numerical_contract": {
+    "allow_tf32": false,
+    "autocast": false,
+    "cublas_workspace_config": ":4096:8",
+    "cuda": "13.0",
+    "default_block_elems": 268435456,
+    "deterministic_algorithms": false,
+    "dtype": "float32",
+    "matmul_precision": "highest",
+    "reduction": "stable-key ordered sequential group sum",
+    "topk": "unchanged torch.topk; ties qualified against dense on this stack",
+    "torch": "2.11.0+cu130"
+  },
+  "original_packet_inventory_sha256": "0ae21ceef530d90dea9609222f97a36bb24e8c2cf4b78d0f44e71bf20ff4b10a",
+  "production_eligible": false,
+  "qualification_capture_schema": "merge_impl_equivalence/v2",
+  "qualification_commit": "31dfcaee69173841dd62323bb53dc1cd327a838c",
+  "question": "Qualify a fixed-operating-point sparse merge replacement and complete dense-scene coverage without changing accepted decisions on the 49-sequence reference set.",
+  "reference_sequences": 49,
+  "remaining_scope": "F1 separately scoped; F4 independent portability follow-up; no production promotion",
+  "report": "docs/modules/semantic/research/closed/merge_sparse_equivalence_20260927.md",
+  "schema": "merge_sparse_equivalence_supplement/v1",
+  "scored_replay_commit": "e79609306d3254982961a18475b4d7bcc20eeed6",
+  "substrate_commit": "b3ac57259eeddc90a241185eefe99ad8a1fd301b",
+  "verifier": "verify_acceptance.py"
+}

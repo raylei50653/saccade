@@ -2383,6 +2383,33 @@ last_reviewed_at: 2026-07-23
 ```
 ---
 
+### `output_identity.merge_only_repair`
+
+```yaml
+layer: output identity repair
+ladder: unavailable
+transition_semantics: unavailable
+state: RETAINED_OPT_IN_OFFLINE_REPAIR
+substrate: frozen tracker outputs at the fixed merge-only operating point
+production_status: not eligible
+open_limits:
+  - F1 merge-induced interpolation seams remain unresolved
+  - F2 numerical qualification is bounded to the recorded execution stack
+  - F4 frame-name portability remains a separate engineering issue
+blockers:
+  - type: dependency
+    what: promotion review requires the separate F1 interaction study
+    clause: owner review in merge_sparse_equivalence_20260927, Remaining promotion conditions
+    depends_on: merge provenance-aware interpolation evidence
+decision_relevance: retained offline repair; no production default change
+supporting_declaration: ../../modules/semantic/research/closed/merge_sparse_equivalence_20260927.md
+accepting_review: owner chat 2026-09-27, retained opt-in offline repair, not production eligible
+last_transition: 2026-09-27 — owner accepts retained offline status; F2 evidence is supplemental, not production promotion
+admissible_units: [separate F1 design review, separate F4 portability fix]
+derived_from: owner-scoped follow-up sequence; no formal promotion ladder is claimed
+last_reviewed_at: 2026-09-27
+```
+
 ## 7. 架構缺口（顯式化，而不是假裝可編排）
 
 | 缺口 | 影響 |
