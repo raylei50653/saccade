@@ -202,6 +202,7 @@ Manifest: `docs/ownership/doc_migration_manifest.yaml`
 - `docs/reference/native_runtime_head_parity_declaration.md`
 - `docs/reference/native_runtime_head_parity_result.md`
 - `docs/reference/native_runtime_head_parity_tf32_off_declaration.md`
+- `docs/reference/native_runtime_head_parity_tf32_off_result.md`
 - `docs/reference/native_runtime_packaging_audit.md`
 - `docs/reference/native_runtime_shipping_boundary.md`
 - `docs/reference/no_go_registry.md`
@@ -410,6 +411,6 @@ Excluded from the active index and default search view.
 
 ## Inventory summary
 
-- documents: 360
-- active: 305
+- documents: 361
+- active: 306
 - grayed out: 55
