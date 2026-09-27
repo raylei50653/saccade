@@ -10,7 +10,7 @@
 
 | 軸 | PR-1（已否決） | PR-1R |
 |:--|:--|:--|
-| TensorRT TF32 builder flag | 預設（開） | **清除**（`config.clear_flag(TF32)`，build 後讀回 `tf32=false`） |
+| TensorRT TF32 builder flag | 預設（開） | **清除**（`config.clear_flag(TF32)`；在 `build_serialized_network()` 之前與之後各讀回一次，兩次都必須是 `fp16=false`、`tf32=false`，否則工具停止） |
 | ONNX | `6e919dad…` | **同一份**；工具重新匯出後若 sha256 不同就停止（fail-closed） |
 | checkpoint／scan plugin／batch／head-only 範圍／FP16 | — | 全部與 PR-1 相同（FP16 關、batch 靜態 1、plugin `9f4d6dac…`） |
 
@@ -23,9 +23,9 @@ PR-1R 的產物用自己的 stem（`*_notf32`），PR-1 被否決的 engine 原�
 | 項目 | 值 |
 |:--|:--|
 | ONNX | `models/yolo/mamba_head_s_v14replica_t3_t1_fp32_notf32.onnx`，sha256 `6e919dad14af81083a25679225930a3473a8cdd6ebf9828ea07b414a9316b58b`（== PR-1） |
-| engine | `models/yolo/mamba_head_s_v14replica_t3_t1_fp32_notf32.engine`，sha256 `3b7a98ab122e2ab79d94a6de3c5848af0c07d95f9445d0d6d800405284e5d3ce`（只識別這次 build，理由同 PR-1 artifact doc §3） |
-| builder flag 讀回 | `fp16=false`、`tf32=false` |
-| lineage manifest | `…_notf32.lineage.json`，`issue` = PR-1R，`tool.git_commit` = `7d31c590`，`git_dirty=false` |
+| engine | `models/yolo/mamba_head_s_v14replica_t3_t1_fp32_notf32.engine`，sha256 `c77148a80db947104a075c962f45bdcf68ce33efd95cad9f5f2ae52130986dc9`（只識別這次 build，理由同 PR-1 artifact doc §3）。#474 review 前的兩次 build（`3b7a98ab…`、`261e1595…`）已被覆寫，沒有用於任何量測 |
+| builder flag 讀回 | build 前與 build 後皆 `fp16=false`、`tf32=false` |
+| lineage manifest | `…_notf32.lineage.json`，sha256 `a015bce04884c68df2b5c303dc9197dfd9c4856301e9bea6d2acf7cf251358fd`；`issue` = PR-1R，`tool.git_commit` = `0a0c905e`，`git_dirty=false`，`builder_flags` = "FP32 with TensorRT TF32 disabled; FP16 off; otherwise TensorRT defaults" |
 | `--check` | PR-1R 與 PR-1 兩個 manifest 各自回 `OK`；PR-1 engine sha256 仍是 `b0502f84…`（PR-2 正式 run 記錄的那一份，未被改動） |
 | 環境 | TensorRT 10.16.1.11；RTX 5070 Ti Laptop（SM 12.0） |
 
