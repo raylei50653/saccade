@@ -8,6 +8,7 @@
 | [mot17_default_config.md](mot17_default_config.md) | MOT17 目前推薦 baseline（`mamba_whole_graph`）與 raw CLI fallback |
 | [pipeline_flow.md](pipeline_flow.md) | 現行 eval stage 名稱與 source map；細節見 [DATAFLOW.md](../DATAFLOW.md) |
 | [production_pipeline_code_map.md](production_pipeline_code_map.md) | 806c52cf source 閱讀快照：production call graph、tensor／演算法表、association passes 與同步邊界 |
+| [native_runtime_packaging_audit.md](native_runtime_packaging_audit.md) | #465 Phase A：headline runtime 的 Python／native 邊界、依賴清單、預編譯包形式比較與 verdict（`native_package_blocked_by_bounded_python_surface`） |
 | [math_model.md](math_model.md) | 現行 baseline 的全局數學模型：GMC、Kalman、成本、auction、bridge relink |
 | [math_model_implementation.md](math_model_implementation.md) | 修改模型時的實作流程、invariants、測試與文檔 checklist |
 | [PIPELINE_REFERENCE.md](PIPELINE_REFERENCE.md) | 2026-05 legacy pipeline snapshot / module delta ledger（非現行 baseline） |
