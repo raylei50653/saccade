@@ -14,7 +14,7 @@ operating point:
 Each sparse run is compared with dense on:
 
 - output MOT lines (sha256) and stats;
-- the accepted pairs, in acceptance order;
+- the accepted pairs, in decision-log pair order;
 - per-pair verdicts for temporally eligible pairs, and max |Δcost|;
 - decision margins of the dense run: the distance from any eligible cost to
   ``max_cost``, and the smallest gap between distinct candidate costs.
@@ -36,6 +36,7 @@ import argparse
 import functools
 import hashlib
 import json
+import os
 import subprocess
 import sys
 import time
@@ -104,11 +105,14 @@ def _run(
         )
         torch.cuda.synchronize()
         wall = time.perf_counter() - t0
-        peak = torch.cuda.max_memory_allocated() - base_mem
+        peak_allocated = torch.cuda.max_memory_allocated()
+        peak_reserved = torch.cuda.max_memory_reserved()
+        peak = peak_allocated - base_mem
     finally:
         m.tracklet_distance_pairs = original  # type: ignore[assignment]
     pairs = [r for r in log if r["kind"] == "pair"]
     return {
+        "output_lines": out,
         "out_sha256": _sha(out),
         "stats": {k: int(v) for k, v in stats.items()},
         "accepted": [
@@ -121,6 +125,9 @@ def _run(
         },
         "wall_s": wall,
         "peak_gpu_bytes": int(peak),
+        "peak_allocated_bytes": int(peak_allocated),
+        "peak_reserved_bytes": int(peak_reserved),
+        "baseline_allocated_bytes": int(base_mem),
     }
 
 
@@ -172,6 +179,21 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--dense-max-samples", type=int, default=27000)
     p.add_argument("--forced-block-elems", type=int, default=1 << 20)
     args = p.parse_args(argv)
+    if torch.get_float32_matmul_precision() != "highest":
+        raise RuntimeError("F2 qualification requires highest FP32 matmul precision")
+    numeric_contract = {
+        "dtype": "float32",
+        "matmul_precision": torch.get_float32_matmul_precision(),
+        "allow_tf32": torch.backends.cuda.matmul.allow_tf32,
+        "autocast": torch.is_autocast_enabled("cuda"),
+        "torch": str(torch.__version__),
+        "cuda": torch.version.cuda,
+        "cublas_workspace_config": os.environ.get("CUBLAS_WORKSPACE_CONFIG"),
+        "deterministic_algorithms": torch.are_deterministic_algorithms_enabled(),
+        "default_block_elems": DEFAULT_BLOCK_ELEMS,
+        "reduction": "stable-key ordered sequential group sum",
+        "topk": "unchanged torch.topk; ties qualified against dense on this stack",
+    }
 
     from saccade.perception.eval.cheb_gr_merge import extract_tracklet_embeddings
     from saccade.perception.feature_extractor import TRTFeatureExtractor
@@ -195,10 +217,19 @@ def main(argv: list[str] | None = None) -> int:
             appearance_occlusion_gate=True,
             appearance_occlusion_cov=0.4,
         )
+        if any(v.dtype != torch.float32 for v in emb.values()):
+            raise RuntimeError("Expected frozen FP32 embeddings")
+        embedding_hash = hashlib.sha256()
+        for tid, features in sorted(emb.items()):
+            embedding_hash.update(str(tid).encode() + b"\0")
+            embedding_hash.update(features.cpu().contiguous().numpy().tobytes())
         n_samples = int(sum(int(v.shape[0]) for v in emb.values()))
         row: dict[str, Any] = {
             "tracklets_with_embedding": sum(1 for v in emb.values() if v.shape[0]),
             "samples": n_samples,
+            "embedding_sha256": embedding_hash.hexdigest(),
+            "substrate_sha256": _sha(lines),
+            "row_chunk": max(1, DEFAULT_BLOCK_ELEMS // max(1, 2 * n_samples)),
             "graph_nodes": 2 * n_samples,
             # Rows per block = elems // nodes; blocked iff that is < nodes.
             "sparse_blocked_regime": (DEFAULT_BLOCK_ELEMS // max(1, 2 * n_samples))
@@ -212,8 +243,19 @@ def main(argv: list[str] | None = None) -> int:
         if n_samples <= args.dense_max_samples:
             runs["dense"] = _run(lines, emb, "dense", None)
         runs["sparse"] = _run(lines, emb, "sparse", None)
+        repeat = _run(lines, emb, "sparse", None)
+        row["sparse_repeat_costs_exact"] = repeat["pairs"] == runs["sparse"]["pairs"]
+        row["sparse_repeat_output_exact"] = (
+            repeat["out_sha256"] == runs["sparse"]["out_sha256"]
+        )
         if "dense" in runs:
             runs["sparse_blocked"] = _run(lines, emb, "sparse", args.forced_block_elems)
+        from saccade.perception.eval.post_merge import interpolate_tracklets
+
+        final, _ = interpolate_tracklets(
+            runs["sparse"]["output_lines"], max_gap=35, min_track_len=5, min_h=0.0
+        )
+        row["final_mot_sha256"] = _sha(final)
         for name, r in runs.items():
             row[name] = {
                 "out_sha256": r["out_sha256"],
@@ -221,6 +263,9 @@ def main(argv: list[str] | None = None) -> int:
                 "accepted": len(r["accepted"]),
                 "wall_s": r["wall_s"],
                 "peak_gpu_bytes": r["peak_gpu_bytes"],
+                "peak_allocated_bytes": r["peak_allocated_bytes"],
+                "peak_reserved_bytes": r["peak_reserved_bytes"],
+                "baseline_allocated_bytes": r["baseline_allocated_bytes"],
             }
         if "dense" in runs:
             for name in ("sparse", "sparse_blocked"):
@@ -249,7 +294,8 @@ def main(argv: list[str] | None = None) -> int:
         torch.cuda.empty_cache()
 
     payload = {
-        "schema": "merge_impl_equivalence/v1",
+        "schema": "merge_impl_equivalence/v2",
+        "numeric_contract": numeric_contract,
         "commit": subprocess.check_output(
             ["git", "rev-parse", "HEAD"], cwd=PROJECT_ROOT, text=True
         ).strip(),
@@ -263,12 +309,38 @@ def main(argv: list[str] | None = None) -> int:
         "forced_block_elems": args.forced_block_elems,
         "dense_max_samples": args.dense_max_samples,
         "device": torch.cuda.get_device_name(0),
+        "source_sha256": {
+            name: hashlib.sha256((PROJECT_ROOT / name).read_bytes()).hexdigest()
+            for name in (
+                "src/saccade/perception/eval/cheb_gr_merge.py",
+                "src/saccade/perception/reid/cheb_gr.py",
+                "scripts/eval/experiments/merge_impl_equivalence.py",
+            )
+        },
         "sequences": rows,
     }
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
     print(f"Wrote {args.out}")
-    return 0
+    passed = all(
+        r["sparse_repeat_costs_exact"]
+        and r["sparse_repeat_output_exact"]
+        and all(
+            all(
+                r[mode]["vs_dense"][key]
+                for key in (
+                    "out_identical",
+                    "stats_identical",
+                    "accepted_identical_in_order",
+                )
+            )
+            and r[mode]["vs_dense"]["eligible_verdict_mismatches"] == 0
+            for mode in ("sparse", "sparse_blocked")
+            if "vs_dense" in r.get(mode, {})
+        )
+        for r in rows.values()
+    )
+    return 0 if passed else 1
 
 
 if __name__ == "__main__":

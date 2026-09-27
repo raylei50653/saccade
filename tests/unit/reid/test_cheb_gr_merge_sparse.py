@@ -175,3 +175,32 @@ def test_unknown_distance_impl_is_rejected():
     lines, emb = _lines_and_embeddings(0)
     with pytest.raises(ValueError, match="distance_impl"):
         cheb_gr_merge_output_tracklets(lines, emb, enabled=True, distance_impl="approx")
+
+
+@pytest.mark.parametrize("device", ["cpu", "cuda"])
+def test_ordered_group_sum_preserves_cancellation_order(device):
+    if device == "cuda" and not torch.cuda.is_available():
+        pytest.skip("CUDA unavailable")
+    from saccade.perception.eval.cheb_gr_merge import _ordered_group_sum
+
+    keys = torch.tensor([2, 1, 2, 1, 2], device=device)
+    values = torch.tensor([1e20, 4.0, -1e20, 5.0, 3.0], device=device)
+    for _ in range(5):
+        groups, sums = _ordered_group_sum(keys, values)
+        assert groups.tolist() == [1, 2]
+        assert sums.tolist() == [9.0, 3.0]
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA-only contract")
+def test_cuda_sparse_costs_repeat_bitwise_and_reject_autocast():
+    feats, owner = _clustered(8, 4, [50, 3, 44, 50, 1, 38, 50, 12], d=128)
+    feats = feats.cuda()
+    pairs = [(a, b) for a in range(8) for b in range(a + 1, 8)]
+    expected = tracklet_distance_pairs(feats, owner, 8, pairs, row_chunk=17)
+    for _ in range(4):
+        assert tracklet_distance_pairs(feats, owner, 8, pairs, row_chunk=17) == expected
+    with torch.autocast("cuda"):
+        with pytest.raises(ValueError, match="autocast off"):
+            tracklet_distance_pairs(feats, owner, 8, pairs)
+    with pytest.raises(ValueError, match="FP32"):
+        tracklet_distance_pairs(feats.half(), owner, 8, pairs)

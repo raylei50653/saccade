@@ -160,6 +160,26 @@ def tracklet_distance_matrix(
     return dmat
 
 
+def _ordered_group_sum(keys: Tensor, values: Tensor) -> tuple[Tensor, Tensor]:
+    """Sum each integer-key group in stable input order, without atomic adds.
+
+    One gather and elementwise add per group slot fixes the reduction order.
+    The merge operating point bounds group sizes by max_fwd (normalization)
+    or k2 (query expansion). No float scatter/index_add is used.
+    """
+    order = torch.argsort(keys, stable=True)
+    keys, values = keys[order], values[order]
+    unique, counts = torch.unique_consecutive(keys, return_counts=True)
+    sums = values.new_zeros(unique.numel())
+    if not unique.numel():
+        return unique, sums
+    starts = counts.cumsum(0) - counts
+    for slot in range(int(counts.max())):
+        idx = (starts + slot).clamp_max(values.numel() - 1)
+        sums = sums + torch.where(slot < counts, values[idx], 0.0)
+    return unique, sums
+
+
 def _sparse_self_rerank(
     feats: Tensor,
     *,
@@ -223,7 +243,9 @@ def _sparse_self_rerank(
     rows, cols, dval = rows[recip], cols[recip], dval[recip]
 
     val = dval.neg().exp()
-    rowsum = torch.zeros(n, dtype=val.dtype, device=device).index_add_(0, rows, val)
+    sum_rows, sums = _ordered_group_sum(rows, val)
+    rowsum = torch.zeros(n, dtype=val.dtype, device=device)
+    rowsum[sum_rows] = sums
     val = val / rowsum.clamp_min(1e-12)[rows]
 
     if k2 > 1:
@@ -231,7 +253,7 @@ def _sparse_self_rerank(
         counts = torch.bincount(rows, minlength=n)
         crow = torch.zeros(n + 1, dtype=torch.long, device=device)
         crow[1:] = torch.cumsum(counts, 0)
-        src_rows = knn.reshape(-1)
+        src_rows = knn.sort(dim=1).values.reshape(-1)
         dst_rows = torch.arange(n, device=device).repeat_interleave(kq)
         lens = counts[src_rows]
         dst = dst_rows.repeat_interleave(lens)
@@ -243,10 +265,7 @@ def _sparse_self_rerank(
         src = starts + within
         qkey = dst * n + cols[src]
         qval = val[src] * (1.0 / k2)
-        ukey, inv = torch.unique(qkey, sorted=True, return_inverse=True)
-        val = torch.zeros(ukey.numel(), dtype=qval.dtype, device=device).index_add_(
-            0, inv, qval
-        )
+        ukey, val = _ordered_group_sum(qkey, qval)
         rows = ukey // n
         cols = ukey % n
     else:
@@ -297,11 +316,12 @@ def tracklet_distance_pairs(
 ) -> dict[tuple[int, int], float]:
     """Exact :func:`tracklet_distance_matrix` entries for the requested pairs.
 
-    Computes the same quantity with the same operations. Three things differ:
+    Computes the same mathematical quantity. Three things differ:
     only ``pairs`` (``a < b``) are evaluated; the sample-level re-ranking is
     row-blocked and sparse (memory ~ O(N * max_fwd * k2), not O(N^2)); and
     Jaccard is taken only over the sample blocks those pairs need. Results can
-    differ from the dense path by float summation order only.
+    differ from the dense path through floating-point reduction/GEMM rounding.
+    Sparse group sums have a fixed order and do not use atomic accumulation.
 
     Row blocking: when the full [N, N] distance fits ``max_block_elems``, one
     block covers all rows, so the distance GEMM is the dense path's call and the
@@ -315,6 +335,15 @@ def tracklet_distance_pairs(
     s = sample_feats.shape[0]
     if s == 0 or not pairs:
         return out
+    if sample_feats.is_cuda and (
+        sample_feats.dtype != torch.float32
+        or torch.is_autocast_enabled("cuda")
+        or torch.get_float32_matmul_precision() != "highest"
+    ):
+        raise ValueError(
+            "Sparse merge requires FP32 embeddings, autocast off, and "
+            "highest float32 matmul precision; other modes need requalification"
+        )
     device = sample_feats.device
     n = 2 * s
     if row_chunk is None:
@@ -453,7 +482,8 @@ def cheb_gr_merge_output_tracklets(
             pairs with :func:`tracklet_distance_pairs`, so memory stays linear
             in the sample count. ``"dense"`` is the original
             :func:`tracklet_distance_matrix` path, kept as the equivalence
-            reference. The accepted merges are the same; in the decision log,
+            reference. Decision equivalence is qualified on the frozen reference
+            set, not guaranteed across arbitrary hardware or inputs. In the decision log,
             a pair that fails both gates is ``reject_temporal`` with
             ``cost=None`` under ``"sparse"`` and ``reject_cost`` under
             ``"dense"``.
