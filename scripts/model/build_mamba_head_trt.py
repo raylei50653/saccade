@@ -34,7 +34,7 @@ def build(
     max_batch: int = 4,
     fp16: bool = True,
     tf32: bool = True,
-) -> dict[str, bool]:
+) -> dict[str, dict[str, bool]]:
     onnx = Path(onnx_path)
     engine = Path(engine_path)
     plugin = project_root / "build/libsaccade_scan_plugin.so"
@@ -100,19 +100,26 @@ def build(
         config.set_flag(trt.BuilderFlag.FP16)
         print("FP16 enabled")
     if not tf32:
-        # TensorRT enables TF32 by default; clearing it keeps FP32 layers in
-        # strict FP32 (issue #465 PR-1R).
+        # TensorRT enables TF32 by default; clear it for an FP32 build with
+        # TensorRT TF32 disabled (issue #465 PR-1R).
         config.clear_flag(trt.BuilderFlag.TF32)
         print("TF32 disabled")
-    flags = {
-        "fp16": config.get_flag(trt.BuilderFlag.FP16),
-        "tf32": config.get_flag(trt.BuilderFlag.TF32),
-    }
+
+    def _read_flags() -> dict[str, bool]:
+        return {
+            "fp16": config.get_flag(trt.BuilderFlag.FP16),
+            "tf32": config.get_flag(trt.BuilderFlag.TF32),
+        }
+
+    flags = {"before_build": _read_flags()}
 
     print("Building TRT engine (this may take several minutes)...")
     serialized = builder.build_serialized_network(network, config)
     if serialized is None:
         raise RuntimeError("Engine build failed")
+    # Read the config again after the build that consumed it, so the recorded
+    # flags describe the configuration the engine was actually built from.
+    flags["after_build"] = _read_flags()
 
     engine_data = serialized if isinstance(serialized, bytes) else bytes(serialized)
     engine.parent.mkdir(parents=True, exist_ok=True)

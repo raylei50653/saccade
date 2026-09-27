@@ -325,8 +325,12 @@ def build_engine(
         fp16=False,
         tf32=tf32,
     )
-    if flags != {"fp16": False, "tf32": tf32}:
-        raise SystemExit(f"builder flags {flags} do not match precision {precision}")
+    expected = {"fp16": False, "tf32": tf32}
+    if flags != {"before_build": expected, "after_build": expected}:
+        raise SystemExit(
+            f"builder flags {flags} do not match precision {precision} "
+            f"(expected {expected} before and after the build)"
+        )
     major, minor = torch.cuda.get_device_capability()
     return {
         **_file_record(engine),
@@ -334,7 +338,7 @@ def build_engine(
         "builder_flags": (
             "TensorRT defaults (TF32 allowed); FP16 off"
             if tf32
-            else "TF32 cleared (strict FP32); FP16 off; otherwise TensorRT defaults"
+            else "FP32 with TensorRT TF32 disabled; FP16 off; otherwise TensorRT defaults"
         ),
         "builder_flag_readback": flags,
         "profile": "batch min=opt=max=1",
