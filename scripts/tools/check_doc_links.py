@@ -12,6 +12,7 @@ link ``[text](target)`` it verifies the target exists:
   containing file's directory.
 - Gitignored targets are reported separately as local artifact warnings,
   whether or not they exist. Tracked targets still require an existing file.
+  Only indexed .gitignore rules apply, never machine-local ignore settings.
 
 Exit code 1 if any link is broken, else 0.
 
@@ -25,6 +26,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from urllib.parse import unquote
 
@@ -79,8 +81,25 @@ def link_exists(md_file: Path, target: str) -> bool:
     return any(path.exists() for path in link_paths(md_file, target))
 
 
+def git_output(
+    root: Path,
+    *args: str,
+    input: bytes | None = None,
+    env: dict[str, str] | None = None,
+    allowed: tuple[int, ...] = (0,),
+) -> bytes:
+    result = subprocess.run(
+        ["git", *args], cwd=root, input=input, capture_output=True, env=env
+    )
+    if result.returncode not in allowed:
+        raise RuntimeError(
+            f"git {args[0]} failed: {os.fsdecode(result.stderr).strip()}"
+        )
+    return result.stdout
+
+
 def ignored_paths(paths: set[Path]) -> set[Path]:
-    """Query Git once, retaining its tracked-file and negated-rule semantics."""
+    """Batch-classify using an isolated copy of the index and its ignore rules."""
     relative = sorted(
         str(path.relative_to(REPO_ROOT))
         for path in paths
@@ -88,18 +107,63 @@ def ignored_paths(paths: set[Path]) -> set[Path]:
     )
     if not relative:
         return set()
-    result = subprocess.run(
-        ["git", "check-ignore", "--stdin", "-z"],
-        cwd=REPO_ROOT,
-        input="\0".join(relative) + "\0",
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    # 1 means no ignored paths; operational errors must not silently pass.
-    if result.returncode not in (0, 1):
-        raise RuntimeError(f"git check-ignore failed: {result.stderr.strip()}")
-    return {REPO_ROOT / path for path in result.stdout.split("\0") if path}
+    index = git_output(REPO_ROOT, "ls-files", "--stage", "-z")
+    object_format = git_output(REPO_ROOT, "rev-parse", "--show-object-format").strip()
+    # Git must not inherit the caller's repository/index/config overrides.
+    env = {
+        key: value for key, value in os.environ.items() if not key.startswith("GIT_")
+    }
+    env.update(GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull)
+    with tempfile.TemporaryDirectory(prefix="doc-link-policy-") as directory:
+        policy = Path(directory)
+        git_output(
+            policy,
+            "init",
+            "-q",
+            "--template=",
+            f"--object-format={os.fsdecode(object_format)}",
+            env=env,
+        )
+        # --info-only needs no copied blob objects. The index preserves Git's
+        # tracked-file protection, including force-added ignored targets.
+        git_output(
+            policy,
+            "update-index",
+            "--info-only",
+            "-z",
+            "--index-info",
+            input=index,
+            env=env,
+        )
+        for entry in index.split(b"\0"):
+            if not entry:
+                continue
+            metadata, name = entry.split(b"\t", 1)
+            mode, oid, stage = metadata.split()
+            if stage != b"0":
+                raise RuntimeError("Git index has unresolved merge entries")
+            path = Path(os.fsdecode(name))
+            if path.name != ".gitignore" or mode not in (b"100644", b"100755"):
+                continue
+            target = policy / path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(
+                git_output(REPO_ROOT, "cat-file", "blob", os.fsdecode(oid))
+            )
+        # Fresh metadata excludes info/exclude; only indexed .gitignore files
+        # are materialized. Explicitly disable even the default global ignore.
+        output = git_output(
+            policy,
+            "-c",
+            f"core.excludesFile={os.devnull}",
+            "check-ignore",
+            "--stdin",
+            "-z",
+            input=os.fsencode("\0".join(relative) + "\0"),
+            env=env,
+            allowed=(0, 1),
+        )
+    return {REPO_ROOT / os.fsdecode(path) for path in output.split(b"\0") if path}
 
 
 def main() -> int:

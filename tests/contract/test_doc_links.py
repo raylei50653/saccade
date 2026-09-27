@@ -20,6 +20,7 @@ import check_doc_links as chk  # noqa: E402
 def repo(tmp_path, monkeypatch):
     subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
     (tmp_path / ".gitignore").write_text("out/\nresults/\n*.json\n!kept.json\n")
+    subprocess.run(["git", "add", ".gitignore"], cwd=tmp_path, check=True)
     (tmp_path / "docs").mkdir()
     monkeypatch.setattr(chk, "REPO_ROOT", tmp_path)
     return tmp_path
@@ -87,4 +88,57 @@ def test_git_failure_is_not_silently_accepted(repo, capsys):
     (repo / "README.md").write_text("[local](out/report.json)\n")
     (repo / ".git").rename(repo / "git-disabled")
     assert chk.main() == 1
-    assert "git check-ignore failed" in capsys.readouterr().err
+    assert "git ls-files failed" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("source", ["global", "info", "untracked", "modified"])
+def test_local_ignore_rules_do_not_hide_broken_links(repo, capsys, source):
+    (repo / "README.md").write_text(
+        "[missing](docs/missing.md)\n[artifact](out/report.json)\n"
+    )
+    assert chk.main() == 1
+    baseline = capsys.readouterr().out
+    if source == "global":
+        exclude = repo / "global-ignore"
+        exclude.write_text("*.md\n")
+        subprocess.run(
+            ["git", "config", "core.excludesFile", str(exclude)], cwd=repo, check=True
+        )
+    elif source == "info":
+        (repo / ".git/info").mkdir(exist_ok=True)
+        (repo / ".git/info/exclude").write_text("docs/missing.md\n")
+    elif source == "untracked":
+        (repo / "docs/.gitignore").write_text("missing.md\n")
+    else:
+        (repo / ".gitignore").write_text("docs/missing.md\n")
+    assert chk.main() == 1
+    assert capsys.readouterr().out == baseline
+
+
+def test_indexed_nested_rules_and_negation_ignore_worktree_edits(repo, capsys):
+    rules = repo / "docs/.gitignore"
+    rules.write_text("*.png\n!kept.png\n")
+    subprocess.run(["git", "add", "docs/.gitignore"], cwd=repo, check=True)
+    (repo / "README.md").write_text(
+        "[artifact](docs/output.png)\n[missing](docs/kept.png)\n"
+    )
+    assert chk.main() == 1
+    baseline = capsys.readouterr().out
+    assert "1 local artifact reference(s)" in baseline
+    assert "1 broken doc link(s)" in baseline
+    rules.unlink()
+    assert chk.main() == 1
+    assert capsys.readouterr().out == baseline
+
+
+def test_global_config_environment_is_not_inherited(repo, capsys, monkeypatch):
+    exclude = repo / "global-ignore"
+    exclude.write_text("*.md\n")
+    (repo / "README.md").write_text("[missing](docs/missing.md)\n")
+    monkeypatch.setenv("GIT_CONFIG_COUNT", "1")
+    monkeypatch.setenv("GIT_CONFIG_KEY_0", "core.excludesFile")
+    monkeypatch.setenv("GIT_CONFIG_VALUE_0", str(exclude))
+    assert chk.main() == 1
+    output = capsys.readouterr().out
+    assert "1 broken doc link(s)" in output
+    assert "local artifact" not in output

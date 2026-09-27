@@ -26,6 +26,13 @@ artifacts exist on disk. Missing ordinary or tracked targets remain errors;
 Git classification errors also fail the check. `scripts/pre_push.sh` runs this
 check. A warning does not make a local artifact link accessible on GitHub.
 
+Artifact classification uses only `.gitignore` contents staged in the Git
+index, evaluated in a temporary repository with the same tracked paths.
+Global ignore configuration, `.git/info/exclude`, untracked `.gitignore` files,
+and unstaged edits to tracked ignore files cannot turn broken links into
+warnings. Stage intentional ignore-policy changes before running the check.
+Git's nested-rule, negation, and force-tracked-file semantics are preserved.
+
 ## Continuous Decimal Hash
 
 The decimal-hash determinism family has four scripts with layered roles:
