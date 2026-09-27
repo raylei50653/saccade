@@ -147,8 +147,8 @@ LibTorch C++（`libtorch*.so`，不含 `libtorch_python.so`）**不**違反 G2�
 | current owner | `mot17.py`／`scripts/eval/config/*`／`mot17_args.py:167 configure_runtime_env`／`eval/config.py`（四層解析）＋`tracker_gpu.py:587 GPUByteTracker.set_params` 等（映射到 native `set_*`） |
 | shipping 責任 | 讀一份扁平 resolved config：native 物件參數直接送進 `set_*`，host／tail 參數由 native 宿主讀取；不做任何預設疊加、不讀 `SACCADE_*`。**shipping 讀到的每一個語義值都必須來自這份 JSON**，U3–U5 不得把 headline 值寫死在程式碼裡 |
 | dev／eval 責任 | 四層解析、所有 preset、CLI、env hatch 維持原樣 |
-| extraction boundary | `mamba_whole_graph.resolved.json` 是**完整的 shipping-runtime resolved schema**，不是現有 `set_*` 的鏡像。至少分成兩段：<br>• `native_params`：native 物件（`GPUByteTracker`、`PerceptionPipeline`、`GMC`）的 `set_*` 實際收到的值（不是 YAML 鍵），外加 native 端 `getenv` 預設的明確值（例如 `SACCADE_ENABLE_DDA`）；<br>• `host_params`：目前由 Python 宿主消費、沒有對應 `set_*` 的值。這包括 ingest／detector 後段（輸入尺寸、decode／top-k 參數）、stage 順序與 FP hard filter 參數、排程（double-buffer、barrier）、emit，以及 **sequence tail 的每一個條件式步驟**。tail 步驟以 `evaluator.py` 序列尾段為準：deferred alias remap、`filter_low_quality_tracklets`（`min_tracklet_len`／`min_tracklet_score`）、`interpolate_tracklets`（`interpolate_tracklets`／`interpolate_max_gap`／`interpolate_min_track_len`／`interpolate_min_h`）。每一步都要記錄啟用旗標與參數，**停用的步驟也要明列**。<br>另外附 source preset hash。欄位清單由 PR-3 從 oracle 程式碼列舉並寫進 schema，不在本文凍結。exporter 屬 `developer_build_debug` |
-| validation | (a) `native_params`：Python 從 preset 解析後送進 native 的參數，與 JSON 逐欄相等；`host_params`：Python 宿主在 oracle 執行時實際使用的 `cfg` 值，與 JSON 逐欄相等；schema 覆蓋檢查要確認 oracle 宿主讀取的每個語義欄位都有對應鍵。(b) native loader 設定後回讀的值與 JSON 相等。若 exporter 要改 `src/saccade/**` 或 `scripts/eval/mot17.py`，會觸發 `decision_relevant` partition 的 runtime-identity attestation，PR 必須照該 gate 處理；優先把 exporter 放在 partition 外 |
+| extraction boundary | `mamba_whole_graph.resolved.json` 是**完整的 shipping-runtime resolved schema**，不是現有 `set_*` 的鏡像。至少分成兩段：<br>• `native_params`：native 物件（`GPUByteTracker`、`PerceptionPipeline`、`GMC`）的 `set_*` 實際收到的值（不是 YAML 鍵），外加 native 端 `getenv` 預設的明確值（例如 `SACCADE_ENABLE_DDA`）；<br>• `host_params`：目前由 Python 宿主消費、沒有對應 `set_*` 的值。這包括 ingest／detector 後段（輸入尺寸、decode／top-k 參數）、stage 順序與 FP hard filter 參數、排程（double-buffer、barrier）、emit，以及 sequence tail 的**每一個條件步驟**，停用的也要以明確的 false 或值列出。headline 的 tail 在本文凍結如下（依據＝argparse 預設＋`mamba_whole_graph.yaml`，preset 沒有覆寫的欄位取預設；`evaluator.py` 尾段的 gate）：Cheb-GR／live evfifo post-merge＝off（`cheb_gr_merge_enabled=false`，sparse ReID 未開，L3030 gate 不成立）；`post_lifecycle_merge=false`；deferred alias＝off（`semantic_delayed_claim=false`）；tracklet quality filter＝off（`min_tracklet_len=1`、`min_tracklet_score=0.0`，gate 是 `>1 or >0.0`）；**interpolation＝on**（`interpolate_max_gap=35`、`interpolate_min_track_len=5`、`interpolate_min_h=0.0`）。<br>另外附 source preset hash。其餘 `host_params` 欄位（ingest、detector、FP filter、排程）由 PR-3 從 oracle 程式碼列舉並寫進 schema。exporter 屬 `developer_build_debug` |
+| validation | (a) `native_params`：Python 從 preset 解析後送進 native 的參數，與 JSON 逐欄相等；`host_params`：Python 宿主在 oracle 執行時實際使用的 `cfg` 值，與 JSON 逐欄相等；schema 覆蓋檢查要確認 oracle 宿主讀取的每個語義欄位都有對應鍵。(b) 見 PR-4：`native_params` 做 set 後回讀、`host_params` 做 parse 後回讀，兩者都要 == JSON；未知或缺少欄位時 fail-closed。若 exporter 要改 `src/saccade/**` 或 `scripts/eval/mot17.py`，會觸發 `decision_relevant` partition 的 runtime-identity attestation，PR 必須照該 gate 處理；優先把 exporter 放在 partition 外 |
 
 ### B3 — track ID 與 MOT emit（S9；U4）
 
@@ -160,15 +160,15 @@ LibTorch C++（`libtorch*.so`，不含 `libtorch_python.so`）**不**違反 G2�
 | extraction boundary | MOT 文字格式規格（欄位、`:.2f`／`:.4f`、列順序）＋「per-sequence 首次出現順序」規則。run-global 計數不進 shipping |
 | validation | golden test：對 Python 以單一 sequence 執行的輸出 byte-identical；多 sequence 比對時先做首次出現順序重標再比 |
 
-### B4 — sequence tail（S10；U4）
+### B4 — sequence-tail 插值（S10；U4）
 
 | 欄 | 內容 |
 |:--|:--|
-| current owner | `evaluator.py` 序列尾段，依序呼叫 `post_merge.py` 的 `apply_deferred_alias`（:310）、`filter_low_quality_tracklets`（:283）、`interpolate_tracklets`（:359，pandas），每一步都由 `cfg` 條件決定是否執行；同一模組也承載研究用的修復。audit S10 只點名插值，這裡把同段其他條件式步驟也納入，讓 shipping 完整覆蓋 oracle 的 tail |
-| shipping 責任 | 依 B2 `host_params` 的 tail 段，照 oracle 的順序執行啟用中的 tail 步驟（插值的參數，例如 `interpolate_max_gap`／`interpolate_min_track_len`／`interpolate_min_h`，一律讀 JSON，不寫死），然後寫檔 |
+| current owner | `post_merge.py:359 interpolate_tracklets`（pandas），由 `evaluator.py` 序列尾段呼叫。同一段還有其他條件步驟（Cheb-GR／evfifo post-merge、`post_lifecycle_merge`、`apply_deferred_alias`、`filter_low_quality_tracklets`），但它們在 headline 都不執行（B2），**不屬於** shipping scope |
+| shipping 責任 | **headline 的 shipping tail 語義只有 interpolation**：參數（`interpolate_max_gap`／`interpolate_min_track_len`／`interpolate_min_h`）從 B2 `host_params` 讀，不寫死，做完後寫檔。停用步驟在 B2 只是明確的 false，**不是** PR-6 的 native 實作範圍。native loader 看到任一停用步驟被設成啟用，就 fail-closed。將來若支援的 shipping preset 啟用其中任何一步，要另開 scope |
 | dev／eval 責任 | 其他插值參數、post_merge 的研究修復、pandas 依賴全部留在 Python |
 | extraction boundary | 輸入＝B3 的 MOT 列，輸出＝插值後的 MOT 列；純 host 端函式，不碰 GPU |
-| validation | 對 Python tail 的 golden fixture byte-identical：每個啟用步驟單獨比一次，整段再比一次。邊界 case 包括 gap 恰為 max_gap、長度恰為 min_len、單幀 track，以及 tail 旗標停用時的輸入直通 |
+| validation | 對 Python `interpolate_tracklets` 的 golden fixture byte-identical（邊界：gap 恰為 max_gap、長度恰為 min_len、單幀 track、`min_h` 邊界）；另加一個測試：停用步驟被設為啟用時，loader 必須 fail-closed |
 
 ### B5 — 模型載入與 lineage gate（S11；U1）
 
@@ -191,9 +191,9 @@ LibTorch C++（`libtorch*.so`，不含 `libtorch_python.so`）**不**違反 G2�
 | **PR-1** | U1a | headline head 匯出＋lineage 紀錄（B1、B5 的 artifact 端） | developer_build_debug 工具 | artifact 可重建、hash 與 lineage 記錄齊全 | — |
 | **PR-2** | U1b | head parity：tensor 對 eager／compile，7-seq MOT 對 oracle；owner 判定 | shared_boundary gate | B1 validation。**失敗即停** | PR-1 |
 | **PR-3** | U2a | resolved config exporter＋schema＋Python 端等價 contract test | developer_build_debug 工具 | B2 (a) | — |
-| **PR-4** | U2b | native resolved-config loader → `set_*` | shipping_runtime | B2 (b) | PR-3 |
+| **PR-4** | U2b | native resolved-config loader：解析並驗證**完整** schema；`native_params` 套用到 `set_*`，`host_params` 做成 typed native host config，U3–U5 只能唯讀使用 | shipping_runtime | `native_params`：set 後回讀的值 == JSON；`host_params`：parse 後回讀的值 == JSON；未知欄位或缺少必需欄位時 fail-closed；U3–U5 不得另設 fallback 或預設值 | PR-3 |
 | **PR-5** | U3a | detector-output dump 工具（Python）＋native replay 宿主：**main NMS＋private continuation append → FP hard filter → GMC → tracker**；serial、eager。stage 順序必須與 oracle 相同（`evaluator.py`：`_run_nms` → `_run_detection_filters` → `_run_track`），private candidate 也要經過 FP hard filter，不得重排 | shipping_runtime | 同一份 detection 輸入下，tracker 的**結構化輸出** `(frame, local_id, box, score)` 對 Python serial 組態；**不**要求 MOT txt parity（ID 映射、formatter、tail 在 PR-6） | PR-4 |
-| **PR-6** | U4 | native ID 映射＋sequence tail＋MOT formatter（B3、B4），先以 golden fixture 單獨驗，再接進 PR-5 宿主 | shipping_runtime（抽 shared_boundary） | B3、B4 validation；接線後，同一份 detection 輸入下 MOT txt 對 Python serial 組態 byte-identical（多 sequence 時用重標後的 parity） | library 部分無依賴；接線依賴 PR-5 |
+| **PR-6** | U4 | native ID 映射＋interpolation＋MOT formatter（B3、B4），先以 golden fixture 單獨驗，再接進 PR-5 宿主 | shipping_runtime（抽 shared_boundary） | B3、B4 validation；接線後，同一份 detection 輸入下 MOT txt 對 Python serial 組態 byte-identical（多 sequence 時用重標後的 parity） | library 部分無依賴；接線依賴 PR-5 |
 | **PR-7** | U3b-1 | native ingest：nvJPEG decode＋normalize | shipping_runtime | 解碼像素對 torchvision 單獨量（差異要報告，不併入後段） | PR-5 |
 | **PR-8** | U3b-2 | native detector：`TRTEngine` backbone＋B1 head＋S2 後段 | shipping_runtime | detection tensor 對 oracle | PR-2、PR-7 |
 | **PR-9** | U3b-3 | 端到端 serial native：ingest→detect→post→tail | shipping_runtime | 7-seq MOT txt 對 Python serial 組態 | PR-6、PR-8 |
