@@ -33,7 +33,8 @@ def build(
     opt_batch: int = 1,
     max_batch: int = 4,
     fp16: bool = True,
-) -> None:
+    tf32: bool = True,
+) -> dict[str, dict[str, bool]]:
     onnx = Path(onnx_path)
     engine = Path(engine_path)
     plugin = project_root / "build/libsaccade_scan_plugin.so"
@@ -98,16 +99,33 @@ def build(
     if fp16 and builder.platform_has_fast_fp16:
         config.set_flag(trt.BuilderFlag.FP16)
         print("FP16 enabled")
+    if not tf32:
+        # TensorRT enables TF32 by default; clear it for an FP32 build with
+        # TensorRT TF32 disabled (issue #465 PR-1R).
+        config.clear_flag(trt.BuilderFlag.TF32)
+        print("TF32 disabled")
+
+    def _read_flags() -> dict[str, bool]:
+        return {
+            "fp16": config.get_flag(trt.BuilderFlag.FP16),
+            "tf32": config.get_flag(trt.BuilderFlag.TF32),
+        }
+
+    flags = {"before_build": _read_flags()}
 
     print("Building TRT engine (this may take several minutes)...")
     serialized = builder.build_serialized_network(network, config)
     if serialized is None:
         raise RuntimeError("Engine build failed")
+    # Read the config again after the build that consumed it, so the recorded
+    # flags describe the configuration the engine was actually built from.
+    flags["after_build"] = _read_flags()
 
     engine_data = serialized if isinstance(serialized, bytes) else bytes(serialized)
     engine.parent.mkdir(parents=True, exist_ok=True)
     engine.write_bytes(engine_data)
     print(f"TRT engine saved: {engine} ({len(engine_data) / 1e6:.1f} MB)")
+    return flags
 
 
 if __name__ == "__main__":
@@ -129,6 +147,7 @@ if __name__ == "__main__":
     parser.add_argument("--opt-batch", type=int, default=1)
     parser.add_argument("--max-batch", type=int, default=4)
     parser.add_argument("--no-fp16", action="store_true", help="Disable FP16")
+    parser.add_argument("--no-tf32", action="store_true", help="Disable TF32")
     args = parser.parse_args()
 
     build(
@@ -141,4 +160,5 @@ if __name__ == "__main__":
         opt_batch=args.opt_batch,
         max_batch=args.max_batch,
         fp16=not args.no_fp16,
+        tf32=not args.no_tf32,
     )

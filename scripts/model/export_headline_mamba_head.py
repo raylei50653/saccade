@@ -33,6 +33,8 @@ Usage:
         .venv/bin/python scripts/model/export_headline_mamba_head.py
     # re-export into a temp dir and verify the recorded ONNX sha256
     .venv/bin/python scripts/model/export_headline_mamba_head.py --check
+    # PR-1R: same ONNX, engine built with TF32 cleared (own stem, *_notf32)
+    .venv/bin/python scripts/model/export_headline_mamba_head.py --precision fp32-no-tf32
 """
 # status: diagnostic
 
@@ -68,6 +70,17 @@ INVENTORY_BACKBONE_NODE = "s.backbone_engine"
 DEFAULT_YOLO_WEIGHTS = "models/yolo/yolo26s.pt"
 DEFAULT_TEACHER_CKPT = "runs/gated_det_v1/best.ckpt"
 DEFAULT_STEM = "models/yolo/mamba_head_s_v14replica_t3_t1_fp32"
+# Engine build precision. "fp32" is the PR-1 form (TensorRT defaults, TF32
+# allowed), rejected by PR-2 as HEAD_PARITY_OUT_OF_TOLERANCE; "fp32-no-tf32"
+# is PR-1R: the same ONNX with TF32 cleared, the only design change. Each has
+# its own stem so the rejected artifact stays in place as reference evidence.
+PRECISIONS = {
+    "fp32": {"stem": DEFAULT_STEM, "tf32": True},
+    "fp32-no-tf32": {"stem": DEFAULT_STEM + "_notf32", "tf32": False},
+}
+# PR-1R reuses the PR-1 ONNX; a re-export that hashes differently is a
+# different artifact, not the same form with TF32 off.
+PR1_ONNX_SHA256 = "6e919dad14af81083a25679225930a3473a8cdd6ebf9828ea07b414a9316b58b"
 PLUGIN = "build/libsaccade_scan_plugin.so"
 IMG_SIZE = 640
 OUTPUT_NAMES = ["cls_p3", "cls_p4", "cls_p5", "reg_p3", "reg_p4", "reg_p5"]
@@ -293,13 +306,16 @@ def export_onnx(head: Any, out: Path, in_channels: list[int]) -> dict[str, Any]:
     }
 
 
-def build_engine(onnx: Path, engine: Path, in_channels: list[int]) -> dict[str, Any]:
+def build_engine(
+    onnx: Path, engine: Path, in_channels: list[int], precision: str = "fp32"
+) -> dict[str, Any]:
     import tensorrt as trt
     import torch
 
     from build_mamba_head_trt import build
 
-    build(
+    tf32 = PRECISIONS[precision]["tf32"]
+    flags = build(
         str(onnx),
         str(engine),
         *in_channels,
@@ -307,12 +323,24 @@ def build_engine(onnx: Path, engine: Path, in_channels: list[int]) -> dict[str, 
         opt_batch=1,
         max_batch=1,
         fp16=False,
+        tf32=tf32,
     )
+    expected = {"fp16": False, "tf32": tf32}
+    if flags != {"before_build": expected, "after_build": expected}:
+        raise SystemExit(
+            f"builder flags {flags} do not match precision {precision} "
+            f"(expected {expected} before and after the build)"
+        )
     major, minor = torch.cuda.get_device_capability()
     return {
         **_file_record(engine),
-        "precision": "fp32",
-        "builder_flags": "TensorRT defaults (TF32 allowed); FP16 off",
+        "precision": precision,
+        "builder_flags": (
+            "TensorRT defaults (TF32 allowed); FP16 off"
+            if tf32
+            else "FP32 with TensorRT TF32 disabled; FP16 off; otherwise TensorRT defaults"
+        ),
+        "builder_flag_readback": flags,
         "profile": "batch min=opt=max=1",
         "tensorrt_version": trt.__version__,
         "gpu": torch.cuda.get_device_name(),
@@ -343,7 +371,7 @@ def environment() -> dict[str, Any]:
 
 
 def run_export(args: argparse.Namespace) -> int:
-    stem = project_root / args.stem
+    stem = project_root / (args.stem or PRECISIONS[args.precision]["stem"])
     onnx_path = stem.with_suffix(".onnx")
     engine_path = stem.with_suffix(".engine")
     lineage_path = stem.with_suffix(".lineage.json")
@@ -354,14 +382,28 @@ def run_export(args: argparse.Namespace) -> int:
     inputs = resolve_inputs(args.yolo_weights, args.teacher_ckpt)
     head, described = build_head(inputs)
     onnx_rec = export_onnx(head, onnx_path, described["head_load"]["in_channels"])
+    if args.precision != "fp32" and onnx_rec["sha256"] != PR1_ONNX_SHA256:
+        raise SystemExit(
+            f"ONNX sha256 {onnx_rec['sha256']} != PR-1 {PR1_ONNX_SHA256}; "
+            f"{args.precision} must reuse the PR-1 ONNX"
+        )
     engine_rec = (
         None
         if args.skip_engine
-        else build_engine(onnx_path, engine_path, described["head_load"]["in_channels"])
+        else build_engine(
+            onnx_path,
+            engine_path,
+            described["head_load"]["in_channels"],
+            args.precision,
+        )
     )
     record = {
         "schema": SCHEMA,
-        "issue": "#465 Phase B PR-1 (U1a)",
+        "issue": (
+            "#465 Phase B PR-1 (U1a)"
+            if args.precision == "fp32"
+            else "#465 Phase B PR-1R (U1a redesign: TF32 off)"
+        ),
         "generated_utc": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
         "tool": {
             "path": _rel(Path(__file__)),
@@ -406,7 +448,8 @@ def run_export(args: argparse.Namespace) -> int:
 
 def run_check(args: argparse.Namespace) -> int:
     """Re-export the ONNX from the same inputs and compare to the manifest."""
-    lineage_path = (project_root / args.stem).with_suffix(".lineage.json")
+    stem = args.stem or PRECISIONS[args.precision]["stem"]
+    lineage_path = (project_root / stem).with_suffix(".lineage.json")
     record = json.loads(lineage_path.read_text())
     if record.get("schema") != SCHEMA:
         raise SystemExit(
@@ -431,6 +474,11 @@ def run_check(args: argparse.Namespace) -> int:
     onnx_path = project_root / record["onnx"]["path"]
     if not onnx_path.exists() or _sha256(onnx_path) != record["onnx"]["sha256"]:
         failures.append(f"{record['onnx']['path']} missing or altered")
+    if record.get("engine") and record["engine"].get("precision") != args.precision:
+        failures.append(
+            f"manifest precision {record['engine'].get('precision')!r} != "
+            f"--precision {args.precision!r}"
+        )
     if record.get("engine"):
         engine_path = project_root / record["engine"]["path"]
         if (
@@ -447,7 +495,15 @@ def run_check(args: argparse.Namespace) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--stem", default=DEFAULT_STEM, help="output path stem")
+    parser.add_argument(
+        "--precision",
+        choices=sorted(PRECISIONS),
+        default="fp32",
+        help="engine build precision (fp32 = PR-1 form, fp32-no-tf32 = PR-1R)",
+    )
+    parser.add_argument(
+        "--stem", default=None, help="output path stem (default: per --precision)"
+    )
     parser.add_argument("--yolo-weights", default=DEFAULT_YOLO_WEIGHTS)
     parser.add_argument("--teacher-ckpt", default=DEFAULT_TEACHER_CKPT)
     parser.add_argument(

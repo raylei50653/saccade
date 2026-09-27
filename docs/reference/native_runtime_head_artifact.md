@@ -1,5 +1,7 @@
 # Native runtime head artifact（#465 Phase B PR-1／U1a）
 
+> **PR-2 terminal（2026-09-27）：`HEAD_PARITY_OUT_OF_TOLERANCE`**，本文的 artifact 形式被否決，見 [parity 結果](native_runtime_head_parity_result.md)；redesign（TF32 off）見 [PR-1R](native_runtime_head_artifact_tf32_off.md)。以下內容維持 PR-1 當時的紀錄。
+>
 > 狀態：PR-1 artifact 端完成；**不改** eval harness、preset、threshold、weights、benchmark claim，也沒有量 parity（那是 PR-2）。
 > 邊界依據：[native_runtime_shipping_boundary.md](native_runtime_shipping_boundary.md) §5 B1／B5、§6 PR-1。本文沿用該文的編號（S1–S11、B1–B5、PR-1…PR-12），不重述它的論證。
 > 工具：`scripts/model/export_headline_mamba_head.py`（`developer_build_debug`）。

@@ -140,3 +140,20 @@ def test_probe_does_not_touch_the_exported_head() -> None:
     }
     _tool().probe_head_load(head, sd)
     assert all(torch.equal(before[k], v) for k, v in head.state_dict().items())
+
+
+# --- PR-1R: TF32 off is the only change against the rejected PR-1 form ---
+
+
+def test_precisions_keep_the_pr1_form_and_separate_stems() -> None:
+    tool = _tool()
+    assert tool.PRECISIONS["fp32"] == {"stem": tool.DEFAULT_STEM, "tf32": True}
+    assert tool.PRECISIONS["fp32-no-tf32"]["tf32"] is False
+    stems = [p["stem"] for p in tool.PRECISIONS.values()]
+    assert len(set(stems)) == len(stems)  # the rejected artifact is never overwritten
+
+
+def test_pr1r_pins_the_onnx_the_pr2_declaration_froze() -> None:
+    tool = _tool()
+    declaration = REPO / "docs/reference/native_runtime_head_parity_declaration.md"
+    assert f"sha256 `{tool.PR1_ONNX_SHA256}`" in declaration.read_text()
