@@ -140,3 +140,21 @@ representations to the unchanged original substrate checksums. Captured v2 JSON
 is preserved byte-for-byte. The current qualifier's v3 schema records raw bytes
 as `substrate_sha256` and normalized lines as `substrate_lines_sha256`; this is
 an output-metadata correction after qualification, with no numerical code change.
+
+## Qualification-boundary repair after PR review
+
+The shared merge API again defaults to the historical dense implementation.
+The offline repair harness and qualifier explicitly select sparse. Sparse merge
+validates each supplied embedding as FP32 before concatenation can promote a
+mixed-dtype input. No thresholds, datasets, numerical reductions or interpolation
+rules changed in this repair.
+
+The maintained acceptance verifier pins the immutable supplemental and original
+packet inventories, checks the full captured runtime/source identity, and directly
+compares dense/default/forced output hashes. Its default also rejects current
+source drift; `--archive-only` explicitly audits the historical capture without
+qualifying current code or runtime. The original captures and `acceptance.json`
+remain historical. Boundary regression tests do not replace full reference
+requalification after a source change. See the packet command guide for the
+updated archival check. F1 interpolation research remains separate and unresolved;
+status remains **not production eligible**.

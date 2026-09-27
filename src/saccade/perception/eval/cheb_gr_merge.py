@@ -459,7 +459,7 @@ def cheb_gr_merge_output_tracklets(
     max_fwd: int = 50,
     fuse_lambda: float = 0.3,
     decision_log: list[dict[str, Any]] | None = None,
-    distance_impl: str = "sparse",
+    distance_impl: str = "dense",
 ) -> tuple[list[str], dict[str, int]]:
     """Merge temporally-disjoint tracklets by Cheb-GR appearance similarity.
 
@@ -478,9 +478,9 @@ def cheb_gr_merge_output_tracklets(
             pair carrying the first rejecting condition, or ``accepted``.
             ``None`` (the default) is a no-op: merge decisions are unchanged.
             Event counts from this log are diagnostics, not an accuracy metric.
-        distance_impl: ``"sparse"`` (default) scores only temporally eligible
+        distance_impl: ``"sparse"`` (explicit offline opt-in) scores only temporally eligible
             pairs with :func:`tracklet_distance_pairs`, so memory stays linear
-            in the sample count. ``"dense"`` is the original
+            in the sample count. ``"dense"`` (default) is the original
             :func:`tracklet_distance_matrix` path, kept as the equivalence
             reference. Decision equivalence is qualified on the frozen reference
             set, not guaranteed across arbitrary hardware or inputs. In the decision log,
@@ -494,6 +494,18 @@ def cheb_gr_merge_output_tracklets(
     stats = _MergeStats()
     if not enabled or not results_lines:
         return results_lines, vars(stats)
+
+    if distance_impl not in ("sparse", "dense"):
+        raise ValueError(f"unknown distance_impl {distance_impl!r}")
+    if distance_impl == "sparse":
+        # Validate before concatenation can silently promote mixed dtypes.
+        # Include unused/empty inputs so eligibility cannot bypass the contract.
+        for track_id, input_embedding in embeddings.items():
+            if input_embedding.dtype != torch.float32:
+                raise ValueError(
+                    f"Sparse merge requires FP32 embeddings; track {track_id} "
+                    f"has {input_embedding.dtype}; other modes need requalification"
+                )
 
     records = _parse_mot_lines(results_lines)
     tracklets: list[OutputTracklet] = _build_output_tracklets(
@@ -540,8 +552,6 @@ def cheb_gr_merge_output_tracklets(
     sample_feats = torch.cat(feats_list, dim=0)
     sample_owner = torch.tensor(owner_list, dtype=torch.long)
 
-    if distance_impl not in ("sparse", "dense"):
-        raise ValueError(f"unknown distance_impl {distance_impl!r}")
     dist_kwargs: dict[str, Any] = {
         "pool_frac": pool_frac,
         "cheb_lambda": cheb_lambda,

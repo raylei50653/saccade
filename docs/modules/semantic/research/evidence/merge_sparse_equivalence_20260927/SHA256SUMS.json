@@ -6,9 +6,9 @@
       "sha256": "8a3e9d462115dd54b48cff4ec4020241f8271004cf48268930e626c4c4501ed9"
     },
     {
-      "bytes": 4379,
+      "bytes": 5573,
       "file": "commands.md",
-      "sha256": "3f93aedb7217f01a7c4755437e2749902b477503b0f10f98a56699eea5bf89db"
+      "sha256": "7d1408ffffb451aef6d5088dbf278b56fcbb120641447b95c6a97b238e29b66a"
     },
     {
       "bytes": 1725,
@@ -121,9 +121,9 @@
       "sha256": "4936578cadb69ec890304cff27445f8e7fdfec55016b8a27fe8ab6621ecf6ec5"
     },
     {
-      "bytes": 8042,
+      "bytes": 13031,
       "file": "verify_acceptance.py",
-      "sha256": "662724b671f265e1504848dcffbd480bc0c7f19b38a93666dfa1b10bd75fd80f"
+      "sha256": "ec355dda709ae676ad023e09b8e8982f42c9f72cfc68e89a9e42094746102a5d"
     }
   ]
 }

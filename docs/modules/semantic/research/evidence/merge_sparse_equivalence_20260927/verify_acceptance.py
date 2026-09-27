@@ -1,12 +1,15 @@
 """Verify supplemental F2 evidence; run from any working directory.
 
 Use --local-mot to additionally read the original local MOT/substrate files.
-The default verification uses the sealed packets and exact recorded hashes.
+The default also requires current sources to match the captured qualification.
+Use --archive-only to audit historical evidence without qualifying current code.
 """
 
 import argparse
 import hashlib
 import json
+import subprocess
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +18,101 @@ REPO = next(p for p in PACKET.parents if (p / "pyproject.toml").exists())
 ORIGINAL = (
     REPO / "docs/modules/semantic/research/evidence/merge_only_cross_dataset_20260924"
 )
+# Trust anchor is the independently reviewed PR head, not a packet-controlled ref.
+SEALED_REF = "31c36d78a5f8197300127052b54a6a6e62b8a1cb"
+PACKET_REL = "docs/modules/semantic/research/evidence/merge_sparse_equivalence_20260927"
+ORIGINAL_REL = (
+    "docs/modules/semantic/research/evidence/merge_only_cross_dataset_20260924"
+)
+MAINTAINED_FILES = {"verify_acceptance.py", "commands.md"}
+
+
+@lru_cache(maxsize=None)
+def sealed_bytes(relative: str) -> bytes:
+    return subprocess.check_output(
+        ["git", "show", f"{SEALED_REF}:{relative}"], cwd=REPO
+    )
+
+
+def sealed_json(relative: str) -> Any:
+    return json.loads(sealed_bytes(relative))
+
+
+def verify_inventory(root: Path, relative: str, maintained: set[str]) -> None:
+    expected = sealed_json(f"{relative}/SHA256SUMS.json")
+    inventory = load(root / "SHA256SUMS.json")
+    expected_rows = {row["file"]: row for row in expected["files"]}
+    rows = inventory["files"]
+    physical = {
+        p.relative_to(root).as_posix()
+        for p in root.rglob("*")
+        if p.is_file()
+        and "__pycache__" not in p.parts
+        and p != root / "SHA256SUMS.json"
+    }
+    require(physical == set(expected_rows), f"{relative}: unsealed/missing files")
+    require(
+        len(rows) == len(expected_rows)
+        and {row["file"] for row in rows} == set(expected_rows),
+        f"{relative}: inventory membership drift",
+    )
+    if not maintained:
+        require(inventory == expected, f"{relative}: sealed inventory drift")
+    for row in rows:
+        name = row["file"]
+        if name not in maintained:
+            require(row == expected_rows[name], f"{name}: sealed checksum drift")
+        path = root / name
+        require(
+            path.is_file() and not path.is_symlink(), f"{name}: missing sealed file"
+        )
+        require(
+            path.stat().st_size == row["bytes"] and sha(path) == row["sha256"],
+            f"{name}: sealed bytes drift",
+        )
+
+
+def verify_identity(qualified: dict[str, Any], dataset: str) -> None:
+    expected = sealed_json(f"{PACKET_REL}/qualification/{dataset}.json")
+    # Compare every captured identity field, including the complete numeric
+    # contract, source inventory/hashes, GPU, software, merge and block policy.
+    require(
+        {k: v for k, v in qualified.items() if k != "sequences"}
+        == {k: v for k, v in expected.items() if k != "sequences"},
+        f"{dataset}: qualification runtime/source identity drift; requalification required",
+    )
+    require(
+        set(qualified["sequences"]) == set(expected["sequences"]),
+        f"{dataset}: qualification sequence coverage drift",
+    )
+    for name, digest in qualified["source_sha256"].items():
+        captured = subprocess.check_output(
+            ["git", "show", f"{qualified['commit']}:{name}"], cwd=REPO
+        )
+        require(
+            hashlib.sha256(captured).hexdigest() == digest,
+            f"{name}: captured source hash mismatch",
+        )
+    for seq, row in qualified["sequences"].items():
+        for key in (
+            "embedding_sha256",
+            "substrate_sha256",
+            "samples",
+            "graph_nodes",
+            "row_chunk",
+            "sparse_blocked_regime",
+            "sparse_blocked_forced_regime",
+        ):
+            require(row[key] == expected["sequences"][seq][key], f"{seq}: {key} drift")
+
+
+def current_source_drift() -> list[str]:
+    expected = sealed_json(f"{PACKET_REL}/qualification/mot17.json")
+    return [
+        name
+        for name, digest in expected["source_sha256"].items()
+        if not (REPO / name).is_file() or sha(REPO / name) != digest
+    ]
 
 
 def load(path: Path) -> Any:
@@ -54,7 +152,14 @@ def partition_digest(ids: set[int], edges: list[tuple[int, int]]) -> str:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--local-mot", action="store_true")
+    parser.add_argument(
+        "--archive-only",
+        action="store_true",
+        help="Verify the sealed capture only; does not qualify current sources/runtime",
+    )
     args = parser.parse_args()
+    verify_inventory(PACKET, PACKET_REL, MAINTAINED_FILES)
+    verify_inventory(ORIGINAL, ORIGINAL_REL, set())
     rows = {}
     bindings = load(PACKET / "substrate_bindings.json")
     prior_acceptance = load(PACKET / "prior_acceptance.json")
@@ -68,6 +173,7 @@ def main() -> None:
         measured = arm(load(PACKET / "replay" / replay / "results.json"))
         prior = load(PACKET / "prior_equivalence" / f"{ds}.json")
         qualified = load(PACKET / "qualification" / f"{ds}.json")
+        verify_identity(qualified, ds)
         require(qualified["numeric_contract"]["matmul_precision"] == "highest", ds)
         require(not qualified["numeric_contract"]["allow_tf32"], ds)
         require(not qualified["numeric_contract"]["autocast"], ds)
@@ -81,6 +187,15 @@ def main() -> None:
                 f"{seq}: repeat",
             )
             for mode in ["sparse", "sparse_blocked"]:
+                require(
+                    q[mode]["out_sha256"] == q["dense"]["out_sha256"],
+                    f"{seq}: output hash mismatch {mode}",
+                )
+                require(
+                    q[mode]["stats"] == q["dense"]["stats"]
+                    and q[mode]["accepted"] == q["dense"]["accepted"],
+                    f"{seq}: stats/accepted count mismatch {mode}",
+                )
                 v = q[mode]["vs_dense"]
                 require(
                     all(
@@ -187,10 +302,22 @@ def main() -> None:
             all(v[k]["range"] == 0 for k in ["IDF1", "HOTA", "AssA", "MOTA"]),
             f"{name}: full metrics repeats",
         )
+    drift = current_source_drift()
+    if not args.archive_only:
+        require(
+            not drift,
+            f"Current source drift requires full reference requalification: {drift}",
+        )
     print(
         json.dumps(
             dict(
                 all_passed=True,
+                verification_scope="sealed_capture"
+                if args.archive_only
+                else "sealed_capture_and_source_identity",
+                current_source_drift=drift,
+                current_runtime_qualified=False,
+                production_eligible=False,
                 reference_sequences=49,
                 mot20_sequences=4,
                 local_mot_checked=args.local_mot,

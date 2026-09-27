@@ -50,15 +50,32 @@ the replacement to these scored rows.
 ## Acceptance checks
 
 ```bash
-python docs/modules/semantic/research/evidence/merge_sparse_equivalence_20260927/verify_acceptance.py
+python docs/modules/semantic/research/evidence/merge_sparse_equivalence_20260927/verify_acceptance.py --archive-only
 # On the capture host, also read original local MOT files and substrates:
-python docs/modules/semantic/research/evidence/merge_sparse_equivalence_20260927/verify_acceptance.py --local-mot
+python docs/modules/semantic/research/evidence/merge_sparse_equivalence_20260927/verify_acceptance.py --archive-only --local-mot
 python tools/resctl.py run machine-bench -- .venv/bin/python -m pytest tests/unit/reid/test_cheb_gr_merge_sparse.py tests/unit/reid/test_cheb_gr_merge.py tests/unit/eval/test_output_layer_repair_chaining.py -q
 ```
 
 `prior_equivalence/` and `prior_acceptance.json` retain the pre-ordered evidence.
 `acceptance.json` is the final verifier result. `SHA256SUMS.json` seals every
 other packet file. The original #459 packet is referenced and unchanged.
+
+The boundary repair pins immutable evidence and its inventory to reviewed head
+`31c36d78a5f8197300127052b54a6a6e62b8a1cb`. Only this command guide and the verifier
+are maintained; their current bytes remain covered by `SHA256SUMS.json`.
+The verifier compares the entire captured runtime/source identity and the actual
+dense/default/forced output hashes, independently of comparison booleans.
+The pinned Git objects must be available; missing objects fail closed.
+
+Without `--archive-only`, the verifier additionally rejects current source hash
+drift. The input-validation/default repair changes the merge source, and the v3
+hash-domain correction changes the qualifier source; neither is silently
+relabelled as the captured qualification. `--archive-only` verifies historical
+evidence and explicitly reports source drift and `current_runtime_qualified=false`.
+Even a source match alone does not qualify a different execution stack. A current
+qualification requires the full frozen reference replay under the declared
+contract, with separately reviewed new evidence. Do not overwrite these captures
+or reuse `acceptance.json` as a verdict for the repaired source.
 
 ## Narrow next step
 

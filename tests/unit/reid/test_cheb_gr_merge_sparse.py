@@ -1,6 +1,6 @@
 """Sparse/pre-gated Cheb-GR merge path equals the dense reference path.
 
-The sparse path (``distance_impl="sparse"``, default) must reproduce the dense
+The explicit sparse path (``distance_impl="sparse"``) must reproduce the dense
 ``tracklet_distance_matrix`` entries up to float summation order, and must make
 identical merge decisions. Real-embedding equivalence on MOT17 / MOT20 /
 DanceTrack is recorded by ``scripts/eval/experiments/merge_impl_equivalence.py``.
@@ -204,3 +204,58 @@ def test_cuda_sparse_costs_repeat_bitwise_and_reject_autocast():
             tracklet_distance_pairs(feats, owner, 8, pairs)
     with pytest.raises(ValueError, match="FP32"):
         tracklet_distance_pairs(feats.half(), owner, 8, pairs)
+
+
+@pytest.mark.parametrize("device", ["cpu", "cuda"])
+@pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16, torch.float64])
+@pytest.mark.parametrize("mixed", [False, True])
+def test_sparse_rejects_input_dtypes_before_concat(monkeypatch, device, dtype, mixed):
+    if device == "cuda" and not torch.cuda.is_available():
+        pytest.skip("CUDA unavailable")
+    lines, emb = _lines_and_embeddings(0)
+    emb = {
+        k: v.to(device=device, dtype=torch.float32 if mixed else dtype)
+        for k, v in emb.items()
+    }
+    emb[1] = emb[1].to(dtype=dtype)
+
+    def forbidden_concat(*args, **kwargs):
+        pytest.fail("Invalid embeddings reached torch.cat")
+
+    monkeypatch.setattr(torch, "cat", forbidden_concat)
+    with pytest.raises(ValueError, match="FP32 embeddings; track 1"):
+        cheb_gr_merge_output_tracklets(
+            lines, emb, enabled=True, max_cost=0.45, distance_impl="sparse"
+        )
+
+
+def test_sparse_rejects_unused_empty_non_fp32_embedding():
+    lines, emb = _lines_and_embeddings(0)
+    emb[999] = torch.empty((0, 24), dtype=torch.float16)
+    with pytest.raises(ValueError, match="track 999"):
+        cheb_gr_merge_output_tracklets(lines, emb, enabled=True, distance_impl="sparse")
+
+
+def test_legacy_default_uses_dense_and_offline_opt_in_uses_sparse(monkeypatch):
+    import saccade.perception.eval.cheb_gr_merge as merge
+
+    lines, emb = _lines_and_embeddings(0)
+    seen = []
+    dense, sparse = merge.tracklet_distance_matrix, merge.tracklet_distance_pairs
+
+    def record_dense(*args, **kwargs):
+        seen.append("dense")
+        return dense(*args, **kwargs)
+
+    def record_sparse(*args, **kwargs):
+        seen.append("sparse")
+        return sparse(*args, **kwargs)
+
+    monkeypatch.setattr(merge, "tracklet_distance_matrix", record_dense)
+    monkeypatch.setattr(merge, "tracklet_distance_pairs", record_sparse)
+    merge.cheb_gr_merge_output_tracklets(lines, emb, enabled=True)
+    assert seen == ["dense"]
+    merge.cheb_gr_merge_output_tracklets(
+        lines, emb, enabled=True, max_cost=0.45, distance_impl="sparse"
+    )
+    assert seen == ["dense", "sparse"]
