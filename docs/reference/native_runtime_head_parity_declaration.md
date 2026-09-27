@@ -1,6 +1,6 @@
 # Native runtime head parity — 預宣告（#465 Phase B PR-2／U1b）
 
-> 狀態：**預宣告，於 PR-2 的第一個量測 run 之前 commit。** commit 之後只能以文末 §9 的 append-only amendment 修訂，不得 inline 編輯。
+> 狀態：**預宣告，於 PR-2 的第一個量測 run 之前凍結。** 凍結點 = 本文所在 PR（#472）merge；review 期間的修訂列在 §9。凍結之後只能以 §9 的 append-only amendment 修訂，不得 inline 編輯。
 > 權威 seal bar：[experiment contract §20.8](../research/contracts/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)（本文引用，不複述）。
 > 邊界依據：[native_runtime_shipping_boundary.md](native_runtime_shipping_boundary.md) §5 B1 validation、§6 PR-2；受測 artifact：[native_runtime_head_artifact.md](native_runtime_head_artifact.md)（PR-1，#471）。
 
@@ -61,7 +61,8 @@
 **量**（每個 pair ∈ {(T,C), (T,E), (E,C)}，所有 frame 與 anchor 取最大值）：
 
 - `score_maxabs`：`sigmoid(cls)` 逐元素 |Δ| 的最大值（全部 80 類、全部 anchor）；
-- `box_maxabs_px`：以 `_postprocess_mamba_fixed_eager` 相同的 anchor／stride 解碼成 xyxy，再乘 `(W_orig/640, H_orig/640)` 換到原圖座標後，逐座標 |Δ| 的最大值；只計入在 **C** 中 `max_class sigmoid ≥ 0.05` 的 anchor（0.05 = headline 的 `base_score_floor` = `min(conf_threshold, track_thresh)`，`evaluator.py` 的 score floor；headline 的 `crowd_low_score_mode` 為 false，所以 crowd 的較低門檻不會啟用）。
+- `box_maxabs_px`：以 `_postprocess_mamba_fixed_eager` 相同的 anchor／stride 解碼成 xyxy，再乘 `(W_orig/640, H_orig/640)` 換到原圖座標後，逐座標 |Δ| 的最大值。計入的 anchor 是該 pair **兩邊的聯集**：對 pair (X,Y)，mask = `(max_class sigmoid_X ≥ 0.05) | (max_class sigmoid_Y ≥ 0.05)`；判定用的 (T,C) 即 `(score_C ≥ 0.05) | (score_T ≥ 0.05)`。這樣同時涵蓋「T 新跨過門檻」（C < 0.05 ≤ T）與「T 掉出門檻」（T < 0.05 ≤ C），兩者都是 tracker 可能消費的 candidate。0.05 = headline 的 `base_score_floor` = `min(conf_threshold, track_thresh)`（`evaluator.py` 的 score floor）；headline 的 `crowd_low_score_mode` 為 false，所以 crowd 的較低門檻不會啟用。
+- **跨越 0.05 本身不是 gross error**：threshold crossing 的實際後果交給 L2 判斷；L1 只檢查跨過門檻的那些 anchor，box 有沒有錯到 gross 的程度。
 
 **κ_L1** =（空間：5316 frames × 全部 anchor；關係：(T,C) 的上述兩個最大值；規則：`score_maxabs ≤ 0.05` **且** `box_maxabs_px ≤ 4.0` ⇒ `L1_PASS`，否則 `L1_GROSS_ERROR`）。
 (T,E)、(E,C) 只報告，不參與判定；另報各 pair 的 per-sequence max 與 99.9 percentile。
@@ -76,7 +77,7 @@
 |:--|:--|:--|
 | `A_C` | （無） | oracle |
 | `A_T` | `--mamba-head-engine models/yolo/mamba_head_s_v14replica_t3_t1_fp32.engine` | 只把 head 換成 T；S2 與其餘設定同 oracle（postprocess compile 仍開） |
-| `A_N` | `--no-compile` | reference：repository 已經當成「同一個模型」的另一個組態；它的偏差定義容差尺度 |
+| `A_N` | `--no-compile` | reference：repository 已經當成「同一個模型」的另一個組態；它的偏差定義容差尺度。**這是 composite nuisance reference，不是 head-only reference**：`--no-compile` 同時關掉 head／block compile **與** `set_postprocess_compile`，而 `A_T` 保留 compiled postprocess。所以 `|Δ_N|` **不是**對 head compile effect 的估計，只是同 session、同模型、較廣的數值實作差異的參考尺度，可能比純 eager-head 的漂移大；cap 限制了它能把容差放寬到多少 |
 
 **執行順序**：`A_C#1, A_T#1, A_N#1, A_C#2, A_T#2, A_N#2`，同一 session、同一租約。
 
@@ -93,7 +94,7 @@
    - floor = 0.20 pt（IDF1／HOTA／MOTA）、5（IDs）；cap = 1.00 pt、30（IDs）。
    - **κ_L2** =（空間：7-seq combined 的四個 metric；關係：|Δ_T,m| 對 b_m；規則：四個都 `|Δ_T,m| ≤ b_m` ⇒ `L2_WITHIN`，任一超過 ⇒ `L2_OUT`）。判定是雙向的：變好與變差同樣算偏差。
 
-floor 的理由：reference arm 可能恰好與 oracle 相同（b 會變成 0，任何 flip 都會失敗）。cap 的理由：reference arm 的偏差若很大，不能因此把容差放寬到會影響 headline 判讀的量級（1 pt 約是本專案單一 lever 的決策量級）。兩者都在看到任何 MOT 資料之前固定。
+floor 的理由：reference arm 可能恰好與 oracle 相同（b 會變成 0，任何 flip 都會失敗）。cap 的理由：reference arm 的偏差若很大，不能因此把容差放寬到會影響 headline 判讀的量級（1 pt 約是本專案單一 lever 的決策量級）。兩者都在看到任何 MOT 資料之前固定。**cap 不是「允許退化 1 pt／30 IDs」**：它是非 exact 結果最多還能進入 owner 判定（terminal 4）的範圍；`WITHIN_TOLERANCE` 本身不自動接受。
 
 **只報告、不判定**：DetA、AssA、FP、FN、per-sequence 的四個 metric、每個序列第一個分歧的 frame、`A_N` 與 `A_C` 是否 byte-identical。
 
@@ -117,6 +118,14 @@ runner 把以下內容寫到非 scratch 的 timestamped 目錄並附 manifest（
 - 沒有預先決定 owner 在 terminal 4 的判定。
 - 沒有宣告 FP16、LibTorch 或含 S2 的 artifact 的任何事。
 
-## 9. Amendments（append-only）
+## 9. Review 修訂與 amendments
+
+**凍結前的 review 修訂**（#472 owner review，仍在任何量測 run 之前，沒有看過新資料）：
+
+- R1：L1 `box_maxabs_px` 的 anchor mask 由「只看 C ≥ 0.05」改為「pair 兩邊聯集 ≥ 0.05」。原寫法會漏掉 C < 0.05 ≤ T 的 TRT-only candidate：它的 T box 錯多少都不會進統計。並寫明跨越門檻本身不是 gross error。
+- R2：寫明 `A_N` 是 composite nuisance reference（`--no-compile` 同時關掉 postprocess compile），不是 head-only reference；寫明 cap 是進入 owner 判定的上限，不是允許的退化量。
+- 維持不變：L1 0.05／4 px、L2 floor 0.2 pt／5 IDs、cap 1.0 pt／30 IDs、以 `--no-compile` 當 reference。
+
+**凍結後的 amendments**（append-only）：
 
 （無）
