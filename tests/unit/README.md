@@ -12,6 +12,7 @@
 | `test_headline_head_export_binding.py` | system | contract | active | The headline head exporter binds to the preset and the committed lineage inventory. |
 | `test_math_model_doc_consistency.py` | eval,tracking | contract | active | Pin the LaTeX math-model document (``docs/latex``) to the code it describes. |
 | `test_math_model_source_attestation.py` | eval,tracking,cross-module | contract | active | Fail-closed contracts for the math-model source-byte attestation. |
+| `test_native_head_parity_runner.py` | system | contract | active | The #465 PR-2 head parity runner implements its frozen declaration. |
 | `test_pipeline_health.py` | pipeline | behavior | active | Unit tests for saccade.pipeline.health.check_redis (mocked aioredis). |
 | `test_reconnect_rate.py` | eval | behavior | active | Unit tests for B2 reconnect_rate summarization / export. |
 | `test_resctl.py` | system | contract | active | Fail-closed contracts for tools/resctl.py, the cross-worktree resource lease CLI. |
