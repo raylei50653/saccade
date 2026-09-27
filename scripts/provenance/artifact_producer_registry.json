@@ -344,6 +344,10 @@
       "classification": "not_a_run_producer",
       "reason": "declares no artifact-root output directory and creates none"
     },
+    "scripts/eval/diagnostics/native_head_parity.py": {
+      "classification": "run_producer_wired",
+      "reason": "#465 PR-2 head parity gate; claims its packet directory before writing, each mot17.py arm claims its own sub-directory"
+    },
     "scripts/eval/diagnostics/probe_forwarded_embedding_assoc_cost.py": {
       "classification": "run_producer_out_of_scope",
       "reason": "association-cost probe; writes control/fifo directories under results/",

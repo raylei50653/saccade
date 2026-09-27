@@ -379,8 +379,10 @@ def check_v1(smoke: bool, sequences: tuple[str, ...]) -> tuple[bool, dict[str, A
     for k in env:
         check(f"environment {k}", env[k] == expected_env[k], env[k], expected_env[k])
 
+    # The children inherit this environment; a caller-set hatch or parent-run
+    # claim would change every arm without appearing on any command line.
     saccade_env = _saccade_env()
-    check("no SACCADE_* set by the caller", True, saccade_env, "recorded")
+    check("no SACCADE_* set by the caller", smoke or not saccade_env, saccade_env, {})
 
     frames = {s: len(_seq_frames(s)) for s in sequences}
     gts = {
@@ -848,7 +850,18 @@ def main() -> int:
     sequences = ("MOT17-05-SDP", "MOT17-09-SDP") if smoke else SEQUENCES
     stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     packet = project_root / args.packet_root / (stamp + ("_smoke" if smoke else ""))
-    packet.mkdir(parents=True, exist_ok=False)
+    # ADR 021 AP-2: claim the packet directory before the first result byte.
+    # The mot17.py arms claim their own sub-directories: no parent-claim env is
+    # passed down, so each arm's run_manifest.json records its own command.
+    from scripts.provenance.run_manifest import open_run
+
+    open_run(
+        packet,
+        produced_by="diagnostic",
+        preset=PRESET_NAME,
+        detector="SDP",
+        dataset=f"{DATA_ROOT} {SPLIT}",
+    )
     record: dict[str, Any] = {
         "schema": "saccade.head_parity_packet/v1",
         "issue": "#465 Phase B PR-2 (U1b)",
