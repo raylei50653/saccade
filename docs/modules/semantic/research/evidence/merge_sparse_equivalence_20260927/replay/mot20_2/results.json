@@ -1,0 +1,832 @@
+{
+  "identity": {
+    "argv": [
+      "scripts/eval/experiments/run_output_layer_repair_chaining.py",
+      "--substrate",
+      "results/xval459_20260924/substrate_mot20",
+      "--out",
+      "results/xval459_20260924/supp_sparse_resume_20260927/replay_e2e_mot20",
+      "--artifact-dir",
+      "results/xval459_20260924/supp_sparse_resume_20260927/e2e_mot20",
+      "--data-root",
+      "datasets/MOT20/MOT20",
+      "--split",
+      "train",
+      "--seqs",
+      "MOT20-01,MOT20-02",
+      "--detector",
+      "",
+      "--substrate-commit",
+      "b3ac57259eeddc90a241185eefe99ad8a1fd301b",
+      "--arms",
+      "merge_only"
+    ],
+    "dirty": false,
+    "harness": "scripts/eval/experiments/run_output_layer_repair_chaining.py",
+    "measured_at": "2026-09-27T05:50:53.686135+00:00",
+    "preset_contract": {
+      "cheb_gr_engine": "models/embedding/mobilenetv4_reid_visclean_224.engine",
+      "cheb_gr_model": "mobilenetv4_reid",
+      "data_root": "/home/ray/developer/ai/saccade/datasets/MOT20/MOT20",
+      "decode": "cpu JPEG via --no-gpu-decode (substrate capture)",
+      "detector": null,
+      "double_buffer": true,
+      "handover": {
+        "appearance_occlusion_cov": 0.4,
+        "bank_mode": "spread",
+        "bank_n": 0,
+        "cheb_lambda": 2.0,
+        "decide_n": 5,
+        "fuse_lambda": 0.3,
+        "k2": 6,
+        "margin": 0.05,
+        "max_cost": 0.45,
+        "max_fwd": 50,
+        "max_gap": 60,
+        "min_head_samples": 2,
+        "n_samples": 50,
+        "neighbor_iou_max": 0.0,
+        "pool_frac": 0.3
+      },
+      "interpolate_after_stages": true,
+      "interpolation": {
+        "max_gap": 35,
+        "min_h": 0.0,
+        "min_track_len": 5
+      },
+      "merge": {
+        "cheb_lambda": 2.0,
+        "distance_impl": "sparse",
+        "fuse_lambda": 0.3,
+        "k2": 6,
+        "max_cost": 0.45,
+        "max_fwd": 50,
+        "max_gap": 60,
+        "min_overlap_frames": 1,
+        "n_samples": 50,
+        "pool_frac": 0.3
+      },
+      "preset": "mamba_whole_graph_m",
+      "reid_mode": "off",
+      "sequences": [
+        "MOT20-01",
+        "MOT20-02"
+      ],
+      "split": "train"
+    },
+    "repeat_kind": "within_process",
+    "replay_harness_commit": "e79609306d3254982961a18475b4d7bcc20eeed6",
+    "runtime": {
+      "env": {
+        "SACCADE_DETECT_BARRIER": null,
+        "SACCADE_DOUBLE_BUFFER": null,
+        "SACCADE_GPU_DECODE": null,
+        "SACCADE_MAIN_NMS_GRAPHED": null,
+        "SACCADE_STREAM_MODE": null
+      },
+      "gpu": {
+        "capability": [
+          12,
+          0
+        ],
+        "cuda": "13.0",
+        "name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+        "torch": "2.11.0+cu130"
+      },
+      "host": "DESKTOP-0FLA6SQ",
+      "platform": "Linux-6.18.33.1-microsoft-standard-WSL2-x86_64-with-glibc2.44",
+      "python": "3.12.13"
+    },
+    "substrate": "/home/ray/developer/ai/saccade/results/xval459_20260924/substrate_mot20",
+    "substrate_commit": "b3ac57259eeddc90a241185eefe99ad8a1fd301b",
+    "substrate_sha256": {
+      "MOT20-01": "9e5385d8bd078cdbfd06dc44f193f3fa18cee31fdf428b7f6c32cc10de948442",
+      "MOT20-02": "b3808775419b509df0101c298bba260b901814210febbe09ca67fd62f430631a"
+    }
+  },
+  "primary": [
+    {
+      "arm": "merge_only",
+      "interpolation": {
+        "frames_added": 14934,
+        "gaps_filled": 3969,
+        "tracks_interpolated": 625
+      },
+      "metrics": {
+        "per_sequence": {
+          "MOT20-01": {
+            "IDF1": 58.3452651674668,
+            "IDs": 123,
+            "MOTA": 59.557121288374425
+          },
+          "MOT20-02": {
+            "IDF1": 51.32209509690961,
+            "IDs": 952,
+            "MOTA": 57.68698866500368
+          }
+        },
+        "printed": {
+          "AssA": "36.5%",
+          "DetA": "48.7%",
+          "FN": 56760,
+          "FP": 15677,
+          "HOTA": "42.0%",
+          "IDF1": "52.1%",
+          "IDs": 1075,
+          "MOTA": "57.9%",
+          "Prcn": "88.3%",
+          "Rcll": "67.5%"
+        },
+        "raw": {
+          "AssA": 36.54689840445332,
+          "DetA": 48.722667184272176,
+          "FN": 56760,
+          "FP": 15677,
+          "HOTA": 41.96427354419541,
+          "IDF1": 52.13392570284383,
+          "IDs": 1075,
+          "MOTA": 57.89980070098275,
+          "final_tracks": 1168
+        }
+      },
+      "mot_sha256": {
+        "MOT20-01": "33d9a96a395b0fd2d0e8917afd2ecbaff215520e569854592dce004ee4e4a835",
+        "MOT20-02": "a5681be23f6ef298110d64e0ea57916a64b3c04c9ec31b857fa5326780a8a940"
+      },
+      "output_dir": "/home/ray/developer/ai/saccade/results/xval459_20260924/supp_sparse_resume_20260927/replay_e2e_mot20/arms/merge_only",
+      "repeat_index": 0,
+      "seq_stage_records": {
+        "MOT20-01": [
+          {
+            "accepted_links": 12,
+            "accepted_pairs": [
+              {
+                "a_id": 42,
+                "b_id": 45,
+                "cost": 0.3918246626853943,
+                "gap": 19
+              },
+              {
+                "a_id": 48,
+                "b_id": 71,
+                "cost": 0.3554243743419647,
+                "gap": 22
+              },
+              {
+                "a_id": 48,
+                "b_id": 78,
+                "cost": 0.3491348624229431,
+                "gap": 41
+              },
+              {
+                "a_id": 68,
+                "b_id": 111,
+                "cost": 0.3625790476799011,
+                "gap": 44
+              },
+              {
+                "a_id": 91,
+                "b_id": 100,
+                "cost": 0.4317527711391449,
+                "gap": 15
+              },
+              {
+                "a_id": 103,
+                "b_id": 178,
+                "cost": 0.423965185880661,
+                "gap": 3
+              },
+              {
+                "a_id": 107,
+                "b_id": 122,
+                "cost": 0.3081541359424591,
+                "gap": 8
+              },
+              {
+                "a_id": 116,
+                "b_id": 122,
+                "cost": 0.39570164680480957,
+                "gap": 9
+              },
+              {
+                "a_id": 128,
+                "b_id": 169,
+                "cost": 0.4236116111278534,
+                "gap": 38
+              },
+              {
+                "a_id": 140,
+                "b_id": 144,
+                "cost": 0.1743677407503128,
+                "gap": 6
+              },
+              {
+                "a_id": 166,
+                "b_id": 173,
+                "cost": 0.3245987594127655,
+                "gap": 14
+              },
+              {
+                "a_id": 168,
+                "b_id": 175,
+                "cost": 0.3601531684398651,
+                "gap": 13
+              }
+            ],
+            "diagnostics": {
+              "accepted": 12,
+              "component_count": 10,
+              "has_embedding": 146,
+              "no_embedding": 35,
+              "reject_component_overlap": 1,
+              "reject_cost": 1839,
+              "reject_same_component": 0,
+              "reject_temporal": 8733
+            },
+            "n_input_ids": 181,
+            "n_output_ids": 169,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 169,
+              "ids_before": 181,
+              "merges": 12
+            },
+            "timing_s": {
+              "extract": 4.56899256600002,
+              "merge": 1.963164221999989
+            }
+          }
+        ],
+        "MOT20-02": [
+          {
+            "accepted_links": 85,
+            "accepted_pairs": [
+              {
+                "a_id": 198,
+                "b_id": 229,
+                "cost": 0.4150916635990143,
+                "gap": 13
+              },
+              {
+                "a_id": 208,
+                "b_id": 522,
+                "cost": 0.3630458116531372,
+                "gap": 30
+              },
+              {
+                "a_id": 211,
+                "b_id": 218,
+                "cost": 0.37301382422447205,
+                "gap": 3
+              },
+              {
+                "a_id": 231,
+                "b_id": 250,
+                "cost": 0.43193456530570984,
+                "gap": 34
+              },
+              {
+                "a_id": 297,
+                "b_id": 382,
+                "cost": 0.4365907311439514,
+                "gap": 13
+              },
+              {
+                "a_id": 298,
+                "b_id": 309,
+                "cost": 0.3456130027770996,
+                "gap": 37
+              },
+              {
+                "a_id": 299,
+                "b_id": 312,
+                "cost": 0.3881291151046753,
+                "gap": 56
+              },
+              {
+                "a_id": 314,
+                "b_id": 339,
+                "cost": 0.4360033869743347,
+                "gap": 38
+              },
+              {
+                "a_id": 320,
+                "b_id": 331,
+                "cost": 0.3582388162612915,
+                "gap": 9
+              },
+              {
+                "a_id": 366,
+                "b_id": 431,
+                "cost": 0.43344131112098694,
+                "gap": 14
+              },
+              {
+                "a_id": 367,
+                "b_id": 400,
+                "cost": 0.31881463527679443,
+                "gap": 52
+              },
+              {
+                "a_id": 369,
+                "b_id": 427,
+                "cost": 0.44236552715301514,
+                "gap": 29
+              },
+              {
+                "a_id": 374,
+                "b_id": 404,
+                "cost": 0.3701609671115875,
+                "gap": 37
+              },
+              {
+                "a_id": 380,
+                "b_id": 388,
+                "cost": 0.3545146584510803,
+                "gap": 12
+              },
+              {
+                "a_id": 389,
+                "b_id": 437,
+                "cost": 0.4109659194946289,
+                "gap": 14
+              },
+              {
+                "a_id": 389,
+                "b_id": 438,
+                "cost": 0.40790051221847534,
+                "gap": 24
+              },
+              {
+                "a_id": 405,
+                "b_id": 425,
+                "cost": 0.3882274627685547,
+                "gap": 43
+              },
+              {
+                "a_id": 412,
+                "b_id": 414,
+                "cost": 0.3847540318965912,
+                "gap": 7
+              },
+              {
+                "a_id": 412,
+                "b_id": 425,
+                "cost": 0.42110687494277954,
+                "gap": 39
+              },
+              {
+                "a_id": 417,
+                "b_id": 444,
+                "cost": 0.40999749302864075,
+                "gap": 15
+              },
+              {
+                "a_id": 419,
+                "b_id": 425,
+                "cost": 0.339508980512619,
+                "gap": 16
+              },
+              {
+                "a_id": 420,
+                "b_id": 427,
+                "cost": 0.2559773325920105,
+                "gap": 18
+              },
+              {
+                "a_id": 490,
+                "b_id": 559,
+                "cost": 0.43402227759361267,
+                "gap": 11
+              },
+              {
+                "a_id": 497,
+                "b_id": 505,
+                "cost": 0.40867137908935547,
+                "gap": 12
+              },
+              {
+                "a_id": 515,
+                "b_id": 526,
+                "cost": 0.29516279697418213,
+                "gap": 24
+              },
+              {
+                "a_id": 563,
+                "b_id": 574,
+                "cost": 0.4444578289985657,
+                "gap": 8
+              },
+              {
+                "a_id": 574,
+                "b_id": 662,
+                "cost": 0.41100168228149414,
+                "gap": 12
+              },
+              {
+                "a_id": 579,
+                "b_id": 580,
+                "cost": 0.4293496012687683,
+                "gap": 7
+              },
+              {
+                "a_id": 585,
+                "b_id": 609,
+                "cost": 0.4268767237663269,
+                "gap": 42
+              },
+              {
+                "a_id": 601,
+                "b_id": 608,
+                "cost": 0.44995564222335815,
+                "gap": 29
+              },
+              {
+                "a_id": 631,
+                "b_id": 688,
+                "cost": 0.4426577389240265,
+                "gap": 37
+              },
+              {
+                "a_id": 632,
+                "b_id": 645,
+                "cost": 0.4451943039894104,
+                "gap": 3
+              },
+              {
+                "a_id": 633,
+                "b_id": 636,
+                "cost": 0.38487279415130615,
+                "gap": 7
+              },
+              {
+                "a_id": 654,
+                "b_id": 695,
+                "cost": 0.3930266201496124,
+                "gap": 1
+              },
+              {
+                "a_id": 658,
+                "b_id": 817,
+                "cost": 0.3915802836418152,
+                "gap": 3
+              },
+              {
+                "a_id": 692,
+                "b_id": 696,
+                "cost": 0.17032349109649658,
+                "gap": 7
+              },
+              {
+                "a_id": 700,
+                "b_id": 717,
+                "cost": 0.4213064908981323,
+                "gap": 16
+              },
+              {
+                "a_id": 709,
+                "b_id": 725,
+                "cost": 0.43946585059165955,
+                "gap": 35
+              },
+              {
+                "a_id": 715,
+                "b_id": 807,
+                "cost": 0.28412801027297974,
+                "gap": 25
+              },
+              {
+                "a_id": 745,
+                "b_id": 777,
+                "cost": 0.33784469962120056,
+                "gap": 49
+              },
+              {
+                "a_id": 750,
+                "b_id": 754,
+                "cost": 0.30912095308303833,
+                "gap": 8
+              },
+              {
+                "a_id": 764,
+                "b_id": 924,
+                "cost": 0.29304787516593933,
+                "gap": 18
+              },
+              {
+                "a_id": 781,
+                "b_id": 788,
+                "cost": 0.34039556980133057,
+                "gap": 6
+              },
+              {
+                "a_id": 786,
+                "b_id": 831,
+                "cost": 0.41618525981903076,
+                "gap": 28
+              },
+              {
+                "a_id": 789,
+                "b_id": 939,
+                "cost": 0.4367784857749939,
+                "gap": 15
+              },
+              {
+                "a_id": 798,
+                "b_id": 841,
+                "cost": 0.2834340035915375,
+                "gap": 60
+              },
+              {
+                "a_id": 806,
+                "b_id": 849,
+                "cost": 0.33723050355911255,
+                "gap": 5
+              },
+              {
+                "a_id": 819,
+                "b_id": 823,
+                "cost": 0.37568652629852295,
+                "gap": 6
+              },
+              {
+                "a_id": 826,
+                "b_id": 863,
+                "cost": 0.44013625383377075,
+                "gap": 52
+              },
+              {
+                "a_id": 836,
+                "b_id": 864,
+                "cost": 0.2802954316139221,
+                "gap": 40
+              },
+              {
+                "a_id": 841,
+                "b_id": 961,
+                "cost": 0.4467635154724121,
+                "gap": 9
+              },
+              {
+                "a_id": 843,
+                "b_id": 882,
+                "cost": 0.4396488070487976,
+                "gap": 60
+              },
+              {
+                "a_id": 844,
+                "b_id": 851,
+                "cost": 0.4209188222885132,
+                "gap": 8
+              },
+              {
+                "a_id": 873,
+                "b_id": 915,
+                "cost": 0.4168902635574341,
+                "gap": 35
+              },
+              {
+                "a_id": 876,
+                "b_id": 999,
+                "cost": 0.44953230023384094,
+                "gap": 14
+              },
+              {
+                "a_id": 892,
+                "b_id": 958,
+                "cost": 0.4476656913757324,
+                "gap": 35
+              },
+              {
+                "a_id": 897,
+                "b_id": 944,
+                "cost": 0.4315749704837799,
+                "gap": 58
+              },
+              {
+                "a_id": 898,
+                "b_id": 917,
+                "cost": 0.31672579050064087,
+                "gap": 12
+              },
+              {
+                "a_id": 908,
+                "b_id": 945,
+                "cost": 0.326177716255188,
+                "gap": 4
+              },
+              {
+                "a_id": 910,
+                "b_id": 1023,
+                "cost": 0.2083655446767807,
+                "gap": 5
+              },
+              {
+                "a_id": 913,
+                "b_id": 938,
+                "cost": 0.4445556104183197,
+                "gap": 16
+              },
+              {
+                "a_id": 920,
+                "b_id": 987,
+                "cost": 0.4135148823261261,
+                "gap": 4
+              },
+              {
+                "a_id": 924,
+                "b_id": 990,
+                "cost": 0.2753199636936188,
+                "gap": 59
+              },
+              {
+                "a_id": 927,
+                "b_id": 937,
+                "cost": 0.2937079071998596,
+                "gap": 9
+              },
+              {
+                "a_id": 931,
+                "b_id": 1040,
+                "cost": 0.43779462575912476,
+                "gap": 24
+              },
+              {
+                "a_id": 931,
+                "b_id": 1046,
+                "cost": 0.4287182688713074,
+                "gap": 34
+              },
+              {
+                "a_id": 945,
+                "b_id": 969,
+                "cost": 0.42278391122817993,
+                "gap": 33
+              },
+              {
+                "a_id": 950,
+                "b_id": 965,
+                "cost": 0.4300500750541687,
+                "gap": 17
+              },
+              {
+                "a_id": 951,
+                "b_id": 999,
+                "cost": 0.43853744864463806,
+                "gap": 57
+              },
+              {
+                "a_id": 978,
+                "b_id": 1025,
+                "cost": 0.3908650577068329,
+                "gap": 52
+              },
+              {
+                "a_id": 1017,
+                "b_id": 1115,
+                "cost": 0.4483352601528168,
+                "gap": 38
+              },
+              {
+                "a_id": 1018,
+                "b_id": 1045,
+                "cost": 0.2823594808578491,
+                "gap": 8
+              },
+              {
+                "a_id": 1036,
+                "b_id": 1063,
+                "cost": 0.41849038004875183,
+                "gap": 39
+              },
+              {
+                "a_id": 1051,
+                "b_id": 1097,
+                "cost": 0.43683260679244995,
+                "gap": 31
+              },
+              {
+                "a_id": 1053,
+                "b_id": 1073,
+                "cost": 0.38438481092453003,
+                "gap": 32
+              },
+              {
+                "a_id": 1057,
+                "b_id": 1101,
+                "cost": 0.31323498487472534,
+                "gap": 20
+              },
+              {
+                "a_id": 1062,
+                "b_id": 1099,
+                "cost": 0.3767513930797577,
+                "gap": 39
+              },
+              {
+                "a_id": 1086,
+                "b_id": 1092,
+                "cost": 0.4076566696166992,
+                "gap": 13
+              },
+              {
+                "a_id": 1087,
+                "b_id": 1107,
+                "cost": 0.42488622665405273,
+                "gap": 12
+              },
+              {
+                "a_id": 1167,
+                "b_id": 1181,
+                "cost": 0.41388145089149475,
+                "gap": 7
+              },
+              {
+                "a_id": 1168,
+                "b_id": 1208,
+                "cost": 0.4326551556587219,
+                "gap": 2
+              },
+              {
+                "a_id": 1185,
+                "b_id": 1196,
+                "cost": 0.4129786491394043,
+                "gap": 40
+              },
+              {
+                "a_id": 1227,
+                "b_id": 1254,
+                "cost": 0.38398247957229614,
+                "gap": 23
+              },
+              {
+                "a_id": 1229,
+                "b_id": 1253,
+                "cost": 0.38739538192749023,
+                "gap": 52
+              },
+              {
+                "a_id": 1255,
+                "b_id": 1258,
+                "cost": 0.20428398251533508,
+                "gap": 12
+              }
+            ],
+            "diagnostics": {
+              "accepted": 85,
+              "component_count": 74,
+              "has_embedding": 827,
+              "no_embedding": 257,
+              "reject_component_overlap": 11,
+              "reject_cost": 16385,
+              "reject_same_component": 2,
+              "reject_temporal": 325068
+            },
+            "n_input_ids": 1084,
+            "n_output_ids": 999,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 999,
+              "ids_before": 1084,
+              "merges": 85
+            },
+            "timing_s": {
+              "extract": 26.418476061000007,
+              "merge": 6.281007189999997
+            }
+          }
+        ]
+      },
+      "stage_order": [
+        "merge"
+      ],
+      "stages": {
+        "accepted_links": 97,
+        "per_stage": {
+          "merge": {
+            "accepted_links": 97,
+            "component_count": 84,
+            "events": 0,
+            "handovers": 0,
+            "merges": 97,
+            "no_embedding": 292,
+            "reject_component_overlap": 12,
+            "reject_cost": 18224,
+            "reject_same_component": 2,
+            "reject_temporal": 333801
+          }
+        },
+        "stage_order": [
+          "merge"
+        ]
+      },
+      "tag": "merge_only"
+    }
+  ],
+  "repeats": [],
+  "schema": "output_layer_repair_chaining_revalidation/v1",
+  "table_markdown": "| arm | IDF1 | MOTA | HOTA | AssA | IDs | final tracks | accepted links |\n| --- | ---: | ---: | ---: | ---: | --: | -----------: | -------------: |\n| merge_only | 52.1 | 57.9 | 42.0 | 36.5 | 1075 | 1168 | 97 |",
+  "variation": {}
+}

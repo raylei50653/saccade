@@ -32,6 +32,7 @@
 | `test_evaluator.py` | eval | behavior | active | Tests for the MOT evaluator and stages (perception.eval.evaluator). |
 | `test_external_fp_filter_runtime.py` | eval | behavior | active | Tests for the runtime external-FP filter (perception.eval.evaluator._apply_external_fp_filter). |
 | `test_helpers.py` | eval | behavior | active | Tests for saccade.perception.eval.helpers. |
+| `test_merge_qualification_boundary.py` | eval | contract | active | Fail-closed boundaries of the offline merge qualification verifier. |
 | `test_metrics.py` | eval | behavior | active | Tests for TrackEval metrics discovery (perception.eval.metrics). |
 | `test_metrics_map.py` | eval | behavior | active | Tests for the metrics mAP computation (perception.eval.metrics). |
 | `test_multi_stream.py` | eval | behavior | active | Tests for multi-stream evaluation orchestration (perception.eval.multi_stream). |

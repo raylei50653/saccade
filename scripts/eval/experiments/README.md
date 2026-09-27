@@ -6,6 +6,7 @@
 | Script | Status | Usage | Function |
 |--------|--------|-------|----------|
 | `characterize_merge_events.py` | experiment | cli | Characterize accepted Cheb-GR tracklet merges from a repair-replay result. |
+| `merge_impl_equivalence.py` | experiment | cli | Decision equivalence of the sparse vs dense Cheb-GR merge distance paths. |
 | `oracle_height_birth_ceiling.py` | experiment | cli | Oracle ceiling for a height-conditioned birth/output gate (no detector/tracker). |
 | `oracle_occlusion_hold.py` | experiment | cli | Phase-0 oracle ceiling for the `Occluded(by=A)` state policy. |
 | `oracle_small_birth_ceiling.py` | experiment | cli | Recall-side oracle for LOWERING new_track_thresh on small boxes. |

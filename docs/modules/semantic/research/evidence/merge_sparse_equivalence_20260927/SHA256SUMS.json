@@ -1,0 +1,129 @@
+{
+  "files": [
+    {
+      "bytes": 12754,
+      "file": "acceptance.json",
+      "sha256": "8a3e9d462115dd54b48cff4ec4020241f8271004cf48268930e626c4c4501ed9"
+    },
+    {
+      "bytes": 5573,
+      "file": "commands.md",
+      "sha256": "7d1408ffffb451aef6d5088dbf278b56fcbb120641447b95c6a97b238e29b66a"
+    },
+    {
+      "bytes": 1725,
+      "file": "manifest.json",
+      "sha256": "4a5aec80ce19b12bb1621e873a291545440828dd150003b908a33188a9d7b05a"
+    },
+    {
+      "bytes": 19039,
+      "file": "prior_acceptance.json",
+      "sha256": "3912896cafd0fa5566b08d079babf1acbe5f88ffe725536b53307fc8de2cb308"
+    },
+    {
+      "bytes": 90611,
+      "file": "prior_equivalence/dancetrack.json",
+      "sha256": "38a0f7c98ccee9fdc9ddbd1203b5f253f981fa11d04a00862c8f9c1b56a4038b"
+    },
+    {
+      "bytes": 16230,
+      "file": "prior_equivalence/mot17.json",
+      "sha256": "249644f707eee8287d13bb924fda6b4eafcf5d5292b43fb788f85ec8a3032128"
+    },
+    {
+      "bytes": 6215,
+      "file": "prior_equivalence/mot20.json",
+      "sha256": "7b659dbb3135bed588ff1c8e76f0999b2e7aa67b32928c2ddcefececc14b6d4a"
+    },
+    {
+      "bytes": 701,
+      "file": "prior_source_identity.json",
+      "sha256": "964493955a0d23f93dedc3df1afb0b4b3555f784ab2435044f41e8a6bb51cd7e"
+    },
+    {
+      "bytes": 122773,
+      "file": "qualification/dancetrack.json",
+      "sha256": "13be259127017c94a8dc1b19c9cdec4cc678d08d2fc3465f58995e63ab05865f"
+    },
+    {
+      "bytes": 22549,
+      "file": "qualification/mot17.json",
+      "sha256": "f8b3d05b5cb14c390b6a160567425f769ff115c45e5c51e49b334877f1121f80"
+    },
+    {
+      "bytes": 9670,
+      "file": "qualification/mot20.json",
+      "sha256": "09f6c74ede9e29cffbf945cfd1d68c758567c191f9c33529c086697b652efc7a"
+    },
+    {
+      "bytes": 937,
+      "file": "qualify.sh",
+      "sha256": "3972aeb314334ad5444863292fde9ecfbaec1f928a79c515adba2876d9f50298"
+    },
+    {
+      "bytes": 10279,
+      "file": "replay/dancetrack/manifest.json",
+      "sha256": "85671ce01082e419c3d31ea8c10667e31a796ff2b60b46af6cb4f76f447570f6"
+    },
+    {
+      "bytes": 490566,
+      "file": "replay/dancetrack/results.json",
+      "sha256": "3bb9a65ea8890f875ea164abd27f64ca8af5196ef41c09e71392b92b2aafc248"
+    },
+    {
+      "bytes": 5165,
+      "file": "replay/mot17/manifest.json",
+      "sha256": "87b7213ec87d885b88e7e23d7fafd1461eb983ce94e1a82ab5a952a98e0ca22c"
+    },
+    {
+      "bytes": 27139,
+      "file": "replay/mot17/results.json",
+      "sha256": "f6c630ae3069684a446439746c892f85b08d7319c44cc8646c579681f27649f2"
+    },
+    {
+      "bytes": 4581,
+      "file": "replay/mot20_2/manifest.json",
+      "sha256": "943b93e1db32f5a57177f3fe3e78b125cadacb861a965f5ec066b0c888a8bfe4"
+    },
+    {
+      "bytes": 23057,
+      "file": "replay/mot20_2/results.json",
+      "sha256": "d1fea1ffa53f81ddfc6b8a1ec0d511be70b43f9e23b09421be796ab53647b0eb"
+    },
+    {
+      "bytes": 5684,
+      "file": "replay/mot20_full/manifest.json",
+      "sha256": "efd65ebd4b3d030137143251bf90ef8ac6fc56581ba63294b6763b73434da4ac"
+    },
+    {
+      "bytes": 302115,
+      "file": "replay/mot20_full/results.json",
+      "sha256": "99af15737b70af3ad8f002dd3b8c01e9f8e80c4b597743e29c606c7edcb2fbaa"
+    },
+    {
+      "bytes": 5067,
+      "file": "replay/mot20_full_noint/manifest.json",
+      "sha256": "ec9e9d5ecf78e71be5a5a599088309b679f752f5ff94d64f5b21b5a2e42683d4"
+    },
+    {
+      "bytes": 102466,
+      "file": "replay/mot20_full_noint/results.json",
+      "sha256": "e5c31d81e43175511303c730967ba2667f5d4d71a7992ca40641f4fe5fb930da"
+    },
+    {
+      "bytes": 1187,
+      "file": "replay_mot20.sh",
+      "sha256": "2db9deff098e9670b327497b99fae000d95705f9ca8d317f65f4ffdfd04a5670"
+    },
+    {
+      "bytes": 10981,
+      "file": "substrate_bindings.json",
+      "sha256": "4936578cadb69ec890304cff27445f8e7fdfec55016b8a27fe8ab6621ecf6ec5"
+    },
+    {
+      "bytes": 13031,
+      "file": "verify_acceptance.py",
+      "sha256": "ec355dda709ae676ad023e09b8e8982f42c9f72cfc68e89a9e42094746102a5d"
+    }
+  ]
+}
