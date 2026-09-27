@@ -47,6 +47,7 @@ B5 相關的觀察：這個 checkpoint 的 `mamba_args` **沒有**記錄 `base_y
 | scan plugin | `build/libsaccade_scan_plugin.so`，sha256 `9f4d6dac28b95af822efc0a99b6e641310e6152da55a49c78caca4e6ec1163fc` |
 | 環境 | TensorRT 10.16.1.11；RTX 5070 Ti Laptop（SM 12.0）；torch 2.11.0+cu130；onnx 1.21.0 |
 | 可重建 | `--check`：從相同輸入重新匯出到暫存目錄，ONNX sha256 與紀錄相同（bit-identical），且 on-disk ONNX／engine 未被改動 → `OK` |
+| engine | 同一台機器、同一份 ONNX 建兩次，engine sha256 不同（`b324da3d…`、`e8de5d15…`），證實 engine bytes 不能當身分；manifest 由 clean tree（`git_dirty=false`）產生 |
 | backbone engine | `models/yolo/yolo26s_backbone_640_best.engine` sha256 == inventory `s.backbone_engine` |
 
 ## 4. PR-2 之前已經看過的東西（不是 parity 證據）
