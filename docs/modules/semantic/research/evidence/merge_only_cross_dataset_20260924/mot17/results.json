@@ -1,0 +1,3010 @@
+{
+  "identity": {
+    "argv": [
+      "scripts/eval/experiments/run_output_layer_repair_chaining.py",
+      "--substrate",
+      "results/xval459_20260924/substrate_mot17",
+      "--out",
+      "results/xval459_20260924/replay_mot17",
+      "--artifact-dir",
+      "results/xval459_20260924/evidence/mot17",
+      "--data-root",
+      "datasets/MOT17",
+      "--split",
+      "train",
+      "--seqs",
+      "MOT17-02-SDP,MOT17-04-SDP,MOT17-05-SDP,MOT17-09-SDP,MOT17-10-SDP,MOT17-11-SDP,MOT17-13-SDP",
+      "--detector",
+      "SDP",
+      "--substrate-commit",
+      "b3ac57259eeddc90a241185eefe99ad8a1fd301b",
+      "--arms",
+      "base,merge_only",
+      "--repeats",
+      "3",
+      "--repeat-arms",
+      "base,merge_only"
+    ],
+    "dirty": false,
+    "harness": "scripts/eval/experiments/run_output_layer_repair_chaining.py",
+    "measured_at": "2026-09-24T13:27:22.586134+00:00",
+    "preset_contract": {
+      "cheb_gr_engine": "models/embedding/mobilenetv4_reid_visclean_224.engine",
+      "cheb_gr_model": "mobilenetv4_reid",
+      "data_root": "/home/ray/developer/ai/saccade/datasets/MOT17",
+      "decode": "cpu JPEG via --no-gpu-decode (substrate capture)",
+      "detector": "SDP",
+      "double_buffer": true,
+      "handover": {
+        "appearance_occlusion_cov": 0.4,
+        "bank_mode": "spread",
+        "bank_n": 0,
+        "cheb_lambda": 2.0,
+        "decide_n": 5,
+        "fuse_lambda": 0.3,
+        "k2": 6,
+        "margin": 0.05,
+        "max_cost": 0.45,
+        "max_fwd": 50,
+        "max_gap": 60,
+        "min_head_samples": 2,
+        "n_samples": 50,
+        "neighbor_iou_max": 0.0,
+        "pool_frac": 0.3
+      },
+      "interpolate_after_stages": true,
+      "interpolation": {
+        "max_gap": 35,
+        "min_h": 0.0,
+        "min_track_len": 5
+      },
+      "merge": {
+        "cheb_lambda": 2.0,
+        "fuse_lambda": 0.3,
+        "k2": 6,
+        "max_cost": 0.45,
+        "max_fwd": 50,
+        "max_gap": 60,
+        "min_overlap_frames": 1,
+        "n_samples": 50,
+        "pool_frac": 0.3
+      },
+      "preset": "mamba_whole_graph_m",
+      "reid_mode": "off",
+      "sequences": [
+        "MOT17-02-SDP",
+        "MOT17-04-SDP",
+        "MOT17-05-SDP",
+        "MOT17-09-SDP",
+        "MOT17-10-SDP",
+        "MOT17-11-SDP",
+        "MOT17-13-SDP"
+      ],
+      "split": "train"
+    },
+    "repeat_kind": "within_process",
+    "replay_harness_commit": "eb465b49d60129eceaec0c93d94dcfb63487f120",
+    "runtime": {
+      "env": {
+        "SACCADE_DETECT_BARRIER": null,
+        "SACCADE_DOUBLE_BUFFER": null,
+        "SACCADE_GPU_DECODE": null,
+        "SACCADE_MAIN_NMS_GRAPHED": null,
+        "SACCADE_STREAM_MODE": null
+      },
+      "gpu": {
+        "capability": [
+          12,
+          0
+        ],
+        "cuda": "13.0",
+        "name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+        "torch": "2.11.0+cu130"
+      },
+      "host": "DESKTOP-0FLA6SQ",
+      "platform": "Linux-6.18.33.1-microsoft-standard-WSL2-x86_64-with-glibc2.44",
+      "python": "3.12.13"
+    },
+    "substrate": "/home/ray/developer/ai/saccade/results/xval459_20260924/substrate_mot17",
+    "substrate_commit": "b3ac57259eeddc90a241185eefe99ad8a1fd301b",
+    "substrate_sha256": {
+      "MOT17-02-SDP": "312029468bcad19f639a3a10ab092234d6bf076edf78038ed1028930db32196c",
+      "MOT17-04-SDP": "b1a3d60bdcfd177902e692a0bd464e51519c6ee879ed9ba587d7007c550a2ae6",
+      "MOT17-05-SDP": "29f1aa0c10fb24c9e6c4259e0dd5fda41f332b1fa5131b30717731eb79bc1825",
+      "MOT17-09-SDP": "3a860f9dde52337efb228422b38798d42f25d341594f20b5b591349e2496fc33",
+      "MOT17-10-SDP": "30c96efe5f9b7d70f3868db7a0130238564966ba533eedb9bac061ec8fed32a7",
+      "MOT17-11-SDP": "40aa2383b026019e60eb23ca76ccd4a6043b4b0944dfcd216dab85ec94f6b45f",
+      "MOT17-13-SDP": "a918e4531ccaa8f7d3bd9cebb62aebd67986b66fb1076e217ca0733b1c077470"
+    }
+  },
+  "primary": [
+    {
+      "arm": "base",
+      "interpolation": {
+        "frames_added": 5566,
+        "gaps_filled": 1233,
+        "tracks_interpolated": 348
+      },
+      "metrics": {
+        "per_sequence": {
+          "MOT17-02-SDP": {
+            "IDF1": 59.35155501206333,
+            "IDs": 70,
+            "MOTA": 61.396049728216994
+          },
+          "MOT17-04-SDP": {
+            "IDF1": 93.1270013005038,
+            "IDs": 15,
+            "MOTA": 92.00538301406733
+          },
+          "MOT17-05-SDP": {
+            "IDF1": 71.34786117836966,
+            "IDs": 55,
+            "MOTA": 72.1411016336562
+          },
+          "MOT17-09-SDP": {
+            "IDF1": 67.73504273504274,
+            "IDs": 19,
+            "MOTA": 73.42723004694835
+          },
+          "MOT17-10-SDP": {
+            "IDF1": 71.24902771523315,
+            "IDs": 100,
+            "MOTA": 78.61983020484462
+          },
+          "MOT17-11-SDP": {
+            "IDF1": 79.75162291843071,
+            "IDs": 25,
+            "MOTA": 85.52352691818568
+          },
+          "MOT17-13-SDP": {
+            "IDF1": 78.09363809186966,
+            "IDs": 60,
+            "MOTA": 80.90534272461775
+          }
+        },
+        "printed": {
+          "AssA": "73.5%",
+          "DetA": "75.4%",
+          "FN": 18315,
+          "FP": 1992,
+          "HOTA": "74.4%",
+          "IDF1": "80.4%",
+          "IDs": 344,
+          "MOTA": "81.6%",
+          "Prcn": "97.9%",
+          "Rcll": "83.7%"
+        },
+        "raw": {
+          "AssA": 73.48542261999741,
+          "DetA": 75.44838491453736,
+          "FN": 18315,
+          "FP": 1992,
+          "HOTA": 74.3770694248394,
+          "IDF1": 80.44710977524475,
+          "IDs": 344,
+          "MOTA": 81.61037249436761,
+          "final_tracks": 804
+        }
+      },
+      "mot_sha256": {
+        "MOT17-02-SDP": "296a7c517aeb6241cc7f2af1cc106456a87141799022761c970ba1c180ad6e19",
+        "MOT17-04-SDP": "b1361662e94948b4b32b24417fe29a6b0895562287d8f5d55ad6e82c2a7424c8",
+        "MOT17-05-SDP": "ad4ed0f0f6fb41c7cd246f564580861bbcbe184255ba783bc7a2e8f6c00c5e4f",
+        "MOT17-09-SDP": "4ee3e5271409e19ec23828cc971e0c0bfd59776a65ef7f0c72c5f344c6c304d3",
+        "MOT17-10-SDP": "5c3f71d8d873cf4afad55b97406403ff3e05b8416b85c83bd8d9110671208a49",
+        "MOT17-11-SDP": "24e79cef399719a4556386905b9c8332b23dbb0e164c3fed1ee112287b33eb83",
+        "MOT17-13-SDP": "021c17ac2629259a68ca581976c48b742b6e417fa0357be2109331820554b5b2"
+      },
+      "output_dir": "/home/ray/developer/ai/saccade/results/xval459_20260924/replay_mot17/arms/base",
+      "repeat_index": 0,
+      "seq_stage_records": {
+        "MOT17-02-SDP": [],
+        "MOT17-04-SDP": [],
+        "MOT17-05-SDP": [],
+        "MOT17-09-SDP": [],
+        "MOT17-10-SDP": [],
+        "MOT17-11-SDP": [],
+        "MOT17-13-SDP": []
+      },
+      "stage_order": [],
+      "stages": {
+        "accepted_links": 0,
+        "per_stage": {},
+        "stage_order": []
+      },
+      "tag": "base"
+    },
+    {
+      "arm": "merge_only",
+      "interpolation": {
+        "frames_added": 6553,
+        "gaps_filled": 1293,
+        "tracks_interpolated": 339
+      },
+      "metrics": {
+        "per_sequence": {
+          "MOT17-02-SDP": {
+            "IDF1": 61.908670102754336,
+            "IDs": 64,
+            "MOTA": 62.31096281147408
+          },
+          "MOT17-04-SDP": {
+            "IDF1": 93.12089521249275,
+            "IDs": 15,
+            "MOTA": 91.99276657484702
+          },
+          "MOT17-05-SDP": {
+            "IDF1": 70.74840639017864,
+            "IDs": 42,
+            "MOTA": 70.29058840537805
+          },
+          "MOT17-09-SDP": {
+            "IDF1": 67.99616081902528,
+            "IDs": 19,
+            "MOTA": 73.55868544600939
+          },
+          "MOT17-10-SDP": {
+            "IDF1": 76.41475138344711,
+            "IDs": 90,
+            "MOTA": 77.94999610561571
+          },
+          "MOT17-11-SDP": {
+            "IDF1": 79.0642615558061,
+            "IDs": 26,
+            "MOTA": 85.26918185671894
+          },
+          "MOT17-13-SDP": {
+            "IDF1": 77.93191526841943,
+            "IDs": 57,
+            "MOTA": 80.94829067170589
+          }
+        },
+        "printed": {
+          "AssA": "74.2%",
+          "DetA": "75.5%",
+          "FN": 17868,
+          "FP": 2532,
+          "HOTA": "74.7%",
+          "IDF1": "81.3%",
+          "IDs": 313,
+          "MOTA": "81.6%",
+          "Prcn": "97.4%",
+          "Rcll": "84.1%"
+        },
+        "raw": {
+          "AssA": 74.17277404203861,
+          "DetA": 75.4739234924276,
+          "FN": 17868,
+          "FP": 2532,
+          "HOTA": 74.73741441653425,
+          "IDF1": 81.27670148811515,
+          "IDs": 313,
+          "MOTA": 81.55516175855098,
+          "final_tracks": 719
+        }
+      },
+      "mot_sha256": {
+        "MOT17-02-SDP": "ad36ec6ea0ec0cdf2fdcf5861b5a651e83d34de14fc7b1a61d16f17976cd010b",
+        "MOT17-04-SDP": "dd8ffc9faa44ea67d28423705562f49e4dde1cc2ada69b753e46d55e79f7e174",
+        "MOT17-05-SDP": "3df97303361d468a32d7262249a14247d0b073d230e5c73898d75876668ffe46",
+        "MOT17-09-SDP": "ebbb20f557e1d494e4ce820827ff6d16b0a5845072e18a2d87ad644e31ae4242",
+        "MOT17-10-SDP": "372d46264dcc9b59a5decd011c4d2938d2265b9c58477e7fd9bb815f3679baf0",
+        "MOT17-11-SDP": "007deae2eda31f7f117b38638bb9d7d932406378ee43b0fe3b8c6312086e23c0",
+        "MOT17-13-SDP": "0903468b812a4e393cfc1af34d1e8d183b71db524d51112c4162b41495482f7f"
+      },
+      "output_dir": "/home/ray/developer/ai/saccade/results/xval459_20260924/replay_mot17/arms/merge_only",
+      "repeat_index": 0,
+      "seq_stage_records": {
+        "MOT17-02-SDP": [
+          {
+            "accepted_links": 11,
+            "accepted_pairs": [
+              {
+                "a_id": 4,
+                "b_id": 37,
+                "cost": 0.3797457814216614,
+                "gap": 34
+              },
+              {
+                "a_id": 10,
+                "b_id": 40,
+                "cost": 0.41859278082847595,
+                "gap": 39
+              },
+              {
+                "a_id": 14,
+                "b_id": 22,
+                "cost": 0.37994375824928284,
+                "gap": 56
+              },
+              {
+                "a_id": 21,
+                "b_id": 68,
+                "cost": 0.33719226717948914,
+                "gap": 34
+              },
+              {
+                "a_id": 28,
+                "b_id": 73,
+                "cost": 0.3271293044090271,
+                "gap": 35
+              },
+              {
+                "a_id": 43,
+                "b_id": 88,
+                "cost": 0.3858274519443512,
+                "gap": 43
+              },
+              {
+                "a_id": 57,
+                "b_id": 60,
+                "cost": 0.41139522194862366,
+                "gap": 14
+              },
+              {
+                "a_id": 68,
+                "b_id": 78,
+                "cost": 0.4210028052330017,
+                "gap": 32
+              },
+              {
+                "a_id": 86,
+                "b_id": 87,
+                "cost": 0.40771958231925964,
+                "gap": 3
+              },
+              {
+                "a_id": 92,
+                "b_id": 105,
+                "cost": 0.3561275005340576,
+                "gap": 25
+              },
+              {
+                "a_id": 97,
+                "b_id": 111,
+                "cost": 0.3936211168766022,
+                "gap": 35
+              }
+            ],
+            "diagnostics": {
+              "accepted": 11,
+              "component_count": 10,
+              "has_embedding": 93,
+              "no_embedding": 27,
+              "reject_component_overlap": 1,
+              "reject_cost": 4244,
+              "reject_same_component": 0,
+              "reject_temporal": 22
+            },
+            "n_input_ids": 120,
+            "n_output_ids": 109,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 109,
+              "ids_before": 120,
+              "merges": 11
+            },
+            "timing_s": {
+              "extract": 10.662071904998811,
+              "merge": 7.717952406001132
+            }
+          }
+        ],
+        "MOT17-04-SDP": [
+          {
+            "accepted_links": 1,
+            "accepted_pairs": [
+              {
+                "a_id": 185,
+                "b_id": 190,
+                "cost": 0.44942507147789,
+                "gap": 7
+              }
+            ],
+            "diagnostics": {
+              "accepted": 1,
+              "component_count": 1,
+              "has_embedding": 88,
+              "no_embedding": 9,
+              "reject_component_overlap": 0,
+              "reject_cost": 3809,
+              "reject_same_component": 0,
+              "reject_temporal": 18
+            },
+            "n_input_ids": 97,
+            "n_output_ids": 96,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 96,
+              "ids_before": 97,
+              "merges": 1
+            },
+            "timing_s": {
+              "extract": 14.684786210000311,
+              "merge": 2.6348094420009147
+            }
+          }
+        ],
+        "MOT17-05-SDP": [
+          {
+            "accepted_links": 30,
+            "accepted_pairs": [
+              {
+                "a_id": 218,
+                "b_id": 234,
+                "cost": 0.3861425220966339,
+                "gap": 58
+              },
+              {
+                "a_id": 221,
+                "b_id": 281,
+                "cost": 0.3292543590068817,
+                "gap": 3
+              },
+              {
+                "a_id": 226,
+                "b_id": 248,
+                "cost": 0.42836010456085205,
+                "gap": 33
+              },
+              {
+                "a_id": 234,
+                "b_id": 238,
+                "cost": 0.4403121769428253,
+                "gap": 35
+              },
+              {
+                "a_id": 235,
+                "b_id": 238,
+                "cost": 0.4450131952762604,
+                "gap": 37
+              },
+              {
+                "a_id": 248,
+                "b_id": 258,
+                "cost": 0.31737029552459717,
+                "gap": 15
+              },
+              {
+                "a_id": 249,
+                "b_id": 275,
+                "cost": 0.29333925247192383,
+                "gap": 50
+              },
+              {
+                "a_id": 250,
+                "b_id": 258,
+                "cost": 0.2733440697193146,
+                "gap": 16
+              },
+              {
+                "a_id": 261,
+                "b_id": 269,
+                "cost": 0.41256216168403625,
+                "gap": 8
+              },
+              {
+                "a_id": 265,
+                "b_id": 282,
+                "cost": 0.4106880724430084,
+                "gap": 17
+              },
+              {
+                "a_id": 265,
+                "b_id": 293,
+                "cost": 0.39833399653434753,
+                "gap": 58
+              },
+              {
+                "a_id": 289,
+                "b_id": 297,
+                "cost": 0.36754322052001953,
+                "gap": 21
+              },
+              {
+                "a_id": 291,
+                "b_id": 295,
+                "cost": 0.2017832100391388,
+                "gap": 9
+              },
+              {
+                "a_id": 298,
+                "b_id": 303,
+                "cost": 0.22756357491016388,
+                "gap": 1
+              },
+              {
+                "a_id": 298,
+                "b_id": 304,
+                "cost": 0.21451124548912048,
+                "gap": 4
+              },
+              {
+                "a_id": 299,
+                "b_id": 310,
+                "cost": 0.2257838398218155,
+                "gap": 8
+              },
+              {
+                "a_id": 300,
+                "b_id": 311,
+                "cost": 0.3204633593559265,
+                "gap": 8
+              },
+              {
+                "a_id": 302,
+                "b_id": 305,
+                "cost": 0.16045255959033966,
+                "gap": 8
+              },
+              {
+                "a_id": 332,
+                "b_id": 337,
+                "cost": 0.39595362544059753,
+                "gap": 13
+              },
+              {
+                "a_id": 337,
+                "b_id": 343,
+                "cost": 0.4228423833847046,
+                "gap": 48
+              },
+              {
+                "a_id": 344,
+                "b_id": 350,
+                "cost": 0.44105228781700134,
+                "gap": 25
+              },
+              {
+                "a_id": 347,
+                "b_id": 356,
+                "cost": 0.41661369800567627,
+                "gap": 19
+              },
+              {
+                "a_id": 351,
+                "b_id": 357,
+                "cost": 0.17321106791496277,
+                "gap": 14
+              },
+              {
+                "a_id": 351,
+                "b_id": 373,
+                "cost": 0.40064603090286255,
+                "gap": 51
+              },
+              {
+                "a_id": 352,
+                "b_id": 359,
+                "cost": 0.28976285457611084,
+                "gap": 10
+              },
+              {
+                "a_id": 358,
+                "b_id": 362,
+                "cost": 0.3587400019168854,
+                "gap": 1
+              },
+              {
+                "a_id": 360,
+                "b_id": 369,
+                "cost": 0.2177349179983139,
+                "gap": 4
+              },
+              {
+                "a_id": 363,
+                "b_id": 372,
+                "cost": 0.3852982223033905,
+                "gap": 3
+              },
+              {
+                "a_id": 363,
+                "b_id": 380,
+                "cost": 0.25836795568466187,
+                "gap": 17
+              },
+              {
+                "a_id": 366,
+                "b_id": 369,
+                "cost": 0.3040089011192322,
+                "gap": 3
+              }
+            ],
+            "diagnostics": {
+              "accepted": 30,
+              "component_count": 20,
+              "has_embedding": 137,
+              "no_embedding": 32,
+              "reject_component_overlap": 12,
+              "reject_cost": 9209,
+              "reject_same_component": 2,
+              "reject_temporal": 63
+            },
+            "n_input_ids": 169,
+            "n_output_ids": 139,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 139,
+              "ids_before": 169,
+              "merges": 30
+            },
+            "timing_s": {
+              "extract": 2.5692917900014436,
+              "merge": 2.688100356999712
+            }
+          }
+        ],
+        "MOT17-09-SDP": [
+          {
+            "accepted_links": 2,
+            "accepted_pairs": [
+              {
+                "a_id": 404,
+                "b_id": 409,
+                "cost": 0.3765021562576294,
+                "gap": 18
+              },
+              {
+                "a_id": 422,
+                "b_id": 427,
+                "cost": 0.4375125467777252,
+                "gap": 55
+              }
+            ],
+            "diagnostics": {
+              "accepted": 2,
+              "component_count": 2,
+              "has_embedding": 37,
+              "no_embedding": 5,
+              "reject_component_overlap": 0,
+              "reject_cost": 661,
+              "reject_same_component": 0,
+              "reject_temporal": 3
+            },
+            "n_input_ids": 42,
+            "n_output_ids": 40,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 40,
+              "ids_before": 42,
+              "merges": 2
+            },
+            "timing_s": {
+              "extract": 6.980450060998919,
+              "merge": 0.6530684820008901
+            }
+          }
+        ],
+        "MOT17-10-SDP": [
+          {
+            "accepted_links": 28,
+            "accepted_pairs": [
+              {
+                "a_id": 431,
+                "b_id": 461,
+                "cost": 0.42076292634010315,
+                "gap": 9
+              },
+              {
+                "a_id": 432,
+                "b_id": 455,
+                "cost": 0.21301905810832977,
+                "gap": 3
+              },
+              {
+                "a_id": 443,
+                "b_id": 488,
+                "cost": 0.4044961929321289,
+                "gap": 24
+              },
+              {
+                "a_id": 446,
+                "b_id": 460,
+                "cost": 0.418770968914032,
+                "gap": 18
+              },
+              {
+                "a_id": 447,
+                "b_id": 450,
+                "cost": 0.34327059984207153,
+                "gap": 13
+              },
+              {
+                "a_id": 448,
+                "b_id": 462,
+                "cost": 0.27491241693496704,
+                "gap": 45
+              },
+              {
+                "a_id": 449,
+                "b_id": 454,
+                "cost": 0.31427088379859924,
+                "gap": 6
+              },
+              {
+                "a_id": 454,
+                "b_id": 463,
+                "cost": 0.37790369987487793,
+                "gap": 10
+              },
+              {
+                "a_id": 456,
+                "b_id": 472,
+                "cost": 0.3557886481285095,
+                "gap": 26
+              },
+              {
+                "a_id": 460,
+                "b_id": 468,
+                "cost": 0.3517354130744934,
+                "gap": 32
+              },
+              {
+                "a_id": 463,
+                "b_id": 470,
+                "cost": 0.43206459283828735,
+                "gap": 32
+              },
+              {
+                "a_id": 466,
+                "b_id": 537,
+                "cost": 0.39171281456947327,
+                "gap": 28
+              },
+              {
+                "a_id": 493,
+                "b_id": 526,
+                "cost": 0.3661562204360962,
+                "gap": 7
+              },
+              {
+                "a_id": 503,
+                "b_id": 529,
+                "cost": 0.35360458493232727,
+                "gap": 16
+              },
+              {
+                "a_id": 508,
+                "b_id": 514,
+                "cost": 0.37693721055984497,
+                "gap": 13
+              },
+              {
+                "a_id": 514,
+                "b_id": 527,
+                "cost": 0.32066357135772705,
+                "gap": 13
+              },
+              {
+                "a_id": 523,
+                "b_id": 525,
+                "cost": 0.41429051756858826,
+                "gap": 17
+              },
+              {
+                "a_id": 525,
+                "b_id": 527,
+                "cost": 0.20658722519874573,
+                "gap": 30
+              },
+              {
+                "a_id": 526,
+                "b_id": 533,
+                "cost": 0.3567255139350891,
+                "gap": 27
+              },
+              {
+                "a_id": 529,
+                "b_id": 542,
+                "cost": 0.38881662487983704,
+                "gap": 39
+              },
+              {
+                "a_id": 535,
+                "b_id": 546,
+                "cost": 0.3977493643760681,
+                "gap": 18
+              },
+              {
+                "a_id": 536,
+                "b_id": 538,
+                "cost": 0.31519585847854614,
+                "gap": 8
+              },
+              {
+                "a_id": 536,
+                "b_id": 539,
+                "cost": 0.44879889488220215,
+                "gap": 14
+              },
+              {
+                "a_id": 558,
+                "b_id": 573,
+                "cost": 0.3461230397224426,
+                "gap": 13
+              },
+              {
+                "a_id": 569,
+                "b_id": 575,
+                "cost": 0.33690547943115234,
+                "gap": 27
+              },
+              {
+                "a_id": 571,
+                "b_id": 574,
+                "cost": 0.33508509397506714,
+                "gap": 11
+              },
+              {
+                "a_id": 572,
+                "b_id": 576,
+                "cost": 0.4032215476036072,
+                "gap": 35
+              },
+              {
+                "a_id": 573,
+                "b_id": 577,
+                "cost": 0.4491539001464844,
+                "gap": 42
+              }
+            ],
+            "diagnostics": {
+              "accepted": 28,
+              "component_count": 18,
+              "has_embedding": 126,
+              "no_embedding": 23,
+              "reject_component_overlap": 17,
+              "reject_cost": 7748,
+              "reject_same_component": 4,
+              "reject_temporal": 78
+            },
+            "n_input_ids": 149,
+            "n_output_ids": 121,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 121,
+              "ids_before": 149,
+              "merges": 28
+            },
+            "timing_s": {
+              "extract": 8.434374974000093,
+              "merge": 3.0154136399996787
+            }
+          }
+        ],
+        "MOT17-11-SDP": [
+          {
+            "accepted_links": 3,
+            "accepted_pairs": [
+              {
+                "a_id": 596,
+                "b_id": 613,
+                "cost": 0.39608514308929443,
+                "gap": 45
+              },
+              {
+                "a_id": 657,
+                "b_id": 660,
+                "cost": 0.3527444899082184,
+                "gap": 13
+              },
+              {
+                "a_id": 659,
+                "b_id": 661,
+                "cost": 0.4209756553173065,
+                "gap": 14
+              }
+            ],
+            "diagnostics": {
+              "accepted": 3,
+              "component_count": 3,
+              "has_embedding": 75,
+              "no_embedding": 17,
+              "reject_component_overlap": 1,
+              "reject_cost": 2756,
+              "reject_same_component": 0,
+              "reject_temporal": 15
+            },
+            "n_input_ids": 92,
+            "n_output_ids": 89,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 89,
+              "ids_before": 92,
+              "merges": 3
+            },
+            "timing_s": {
+              "extract": 11.11757431300066,
+              "merge": 1.535438979999526
+            }
+          }
+        ],
+        "MOT17-13-SDP": [
+          {
+            "accepted_links": 10,
+            "accepted_pairs": [
+              {
+                "a_id": 674,
+                "b_id": 692,
+                "cost": 0.4078681170940399,
+                "gap": 5
+              },
+              {
+                "a_id": 687,
+                "b_id": 780,
+                "cost": 0.4390564560890198,
+                "gap": 24
+              },
+              {
+                "a_id": 697,
+                "b_id": 708,
+                "cost": 0.357960969209671,
+                "gap": 28
+              },
+              {
+                "a_id": 699,
+                "b_id": 718,
+                "cost": 0.40474414825439453,
+                "gap": 49
+              },
+              {
+                "a_id": 720,
+                "b_id": 744,
+                "cost": 0.4294534921646118,
+                "gap": 40
+              },
+              {
+                "a_id": 728,
+                "b_id": 742,
+                "cost": 0.43018627166748047,
+                "gap": 27
+              },
+              {
+                "a_id": 737,
+                "b_id": 742,
+                "cost": 0.43116796016693115,
+                "gap": 31
+              },
+              {
+                "a_id": 781,
+                "b_id": 785,
+                "cost": 0.4283061921596527,
+                "gap": 3
+              },
+              {
+                "a_id": 801,
+                "b_id": 802,
+                "cost": 0.3138735294342041,
+                "gap": 9
+              },
+              {
+                "a_id": 801,
+                "b_id": 804,
+                "cost": 0.4270680248737335,
+                "gap": 36
+              }
+            ],
+            "diagnostics": {
+              "accepted": 10,
+              "component_count": 8,
+              "has_embedding": 124,
+              "no_embedding": 11,
+              "reject_component_overlap": 2,
+              "reject_cost": 7578,
+              "reject_same_component": 0,
+              "reject_temporal": 36
+            },
+            "n_input_ids": 135,
+            "n_output_ids": 125,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 125,
+              "ids_before": 135,
+              "merges": 10
+            },
+            "timing_s": {
+              "extract": 10.80912989600074,
+              "merge": 3.1111864799986506
+            }
+          }
+        ]
+      },
+      "stage_order": [
+        "merge"
+      ],
+      "stages": {
+        "accepted_links": 85,
+        "per_stage": {
+          "merge": {
+            "accepted_links": 85,
+            "component_count": 62,
+            "events": 0,
+            "handovers": 0,
+            "merges": 85,
+            "no_embedding": 124,
+            "reject_component_overlap": 33,
+            "reject_cost": 36005,
+            "reject_same_component": 6,
+            "reject_temporal": 235
+          }
+        },
+        "stage_order": [
+          "merge"
+        ]
+      },
+      "tag": "merge_only"
+    }
+  ],
+  "repeats": [
+    {
+      "arm": "base",
+      "interpolation": {
+        "frames_added": 5566,
+        "gaps_filled": 1233,
+        "tracks_interpolated": 348
+      },
+      "metrics": {
+        "per_sequence": {
+          "MOT17-02-SDP": {
+            "IDF1": 59.35155501206333,
+            "IDs": 70,
+            "MOTA": 61.396049728216994
+          },
+          "MOT17-04-SDP": {
+            "IDF1": 93.1270013005038,
+            "IDs": 15,
+            "MOTA": 92.00538301406733
+          },
+          "MOT17-05-SDP": {
+            "IDF1": 71.34786117836966,
+            "IDs": 55,
+            "MOTA": 72.1411016336562
+          },
+          "MOT17-09-SDP": {
+            "IDF1": 67.73504273504274,
+            "IDs": 19,
+            "MOTA": 73.42723004694835
+          },
+          "MOT17-10-SDP": {
+            "IDF1": 71.24902771523315,
+            "IDs": 100,
+            "MOTA": 78.61983020484462
+          },
+          "MOT17-11-SDP": {
+            "IDF1": 79.75162291843071,
+            "IDs": 25,
+            "MOTA": 85.52352691818568
+          },
+          "MOT17-13-SDP": {
+            "IDF1": 78.09363809186966,
+            "IDs": 60,
+            "MOTA": 80.90534272461775
+          }
+        },
+        "printed": {
+          "AssA": "73.5%",
+          "DetA": "75.4%",
+          "FN": 18315,
+          "FP": 1992,
+          "HOTA": "74.4%",
+          "IDF1": "80.4%",
+          "IDs": 344,
+          "MOTA": "81.6%",
+          "Prcn": "97.9%",
+          "Rcll": "83.7%"
+        },
+        "raw": {
+          "AssA": 73.48542261999741,
+          "DetA": 75.44838491453736,
+          "FN": 18315,
+          "FP": 1992,
+          "HOTA": 74.3770694248394,
+          "IDF1": 80.44710977524475,
+          "IDs": 344,
+          "MOTA": 81.61037249436761,
+          "final_tracks": 804
+        }
+      },
+      "mot_sha256": {
+        "MOT17-02-SDP": "296a7c517aeb6241cc7f2af1cc106456a87141799022761c970ba1c180ad6e19",
+        "MOT17-04-SDP": "b1361662e94948b4b32b24417fe29a6b0895562287d8f5d55ad6e82c2a7424c8",
+        "MOT17-05-SDP": "ad4ed0f0f6fb41c7cd246f564580861bbcbe184255ba783bc7a2e8f6c00c5e4f",
+        "MOT17-09-SDP": "4ee3e5271409e19ec23828cc971e0c0bfd59776a65ef7f0c72c5f344c6c304d3",
+        "MOT17-10-SDP": "5c3f71d8d873cf4afad55b97406403ff3e05b8416b85c83bd8d9110671208a49",
+        "MOT17-11-SDP": "24e79cef399719a4556386905b9c8332b23dbb0e164c3fed1ee112287b33eb83",
+        "MOT17-13-SDP": "021c17ac2629259a68ca581976c48b742b6e417fa0357be2109331820554b5b2"
+      },
+      "output_dir": "/home/ray/developer/ai/saccade/results/xval459_20260924/replay_mot17/arms/base_r1",
+      "repeat_index": 1,
+      "seq_stage_records": {
+        "MOT17-02-SDP": [],
+        "MOT17-04-SDP": [],
+        "MOT17-05-SDP": [],
+        "MOT17-09-SDP": [],
+        "MOT17-10-SDP": [],
+        "MOT17-11-SDP": [],
+        "MOT17-13-SDP": []
+      },
+      "stage_order": [],
+      "stages": {
+        "accepted_links": 0,
+        "per_stage": {},
+        "stage_order": []
+      },
+      "tag": "base_r1"
+    },
+    {
+      "arm": "base",
+      "interpolation": {
+        "frames_added": 5566,
+        "gaps_filled": 1233,
+        "tracks_interpolated": 348
+      },
+      "metrics": {
+        "per_sequence": {
+          "MOT17-02-SDP": {
+            "IDF1": 59.35155501206333,
+            "IDs": 70,
+            "MOTA": 61.396049728216994
+          },
+          "MOT17-04-SDP": {
+            "IDF1": 93.1270013005038,
+            "IDs": 15,
+            "MOTA": 92.00538301406733
+          },
+          "MOT17-05-SDP": {
+            "IDF1": 71.34786117836966,
+            "IDs": 55,
+            "MOTA": 72.1411016336562
+          },
+          "MOT17-09-SDP": {
+            "IDF1": 67.73504273504274,
+            "IDs": 19,
+            "MOTA": 73.42723004694835
+          },
+          "MOT17-10-SDP": {
+            "IDF1": 71.24902771523315,
+            "IDs": 100,
+            "MOTA": 78.61983020484462
+          },
+          "MOT17-11-SDP": {
+            "IDF1": 79.75162291843071,
+            "IDs": 25,
+            "MOTA": 85.52352691818568
+          },
+          "MOT17-13-SDP": {
+            "IDF1": 78.09363809186966,
+            "IDs": 60,
+            "MOTA": 80.90534272461775
+          }
+        },
+        "printed": {
+          "AssA": "73.5%",
+          "DetA": "75.4%",
+          "FN": 18315,
+          "FP": 1992,
+          "HOTA": "74.4%",
+          "IDF1": "80.4%",
+          "IDs": 344,
+          "MOTA": "81.6%",
+          "Prcn": "97.9%",
+          "Rcll": "83.7%"
+        },
+        "raw": {
+          "AssA": 73.48542261999741,
+          "DetA": 75.44838491453736,
+          "FN": 18315,
+          "FP": 1992,
+          "HOTA": 74.3770694248394,
+          "IDF1": 80.44710977524475,
+          "IDs": 344,
+          "MOTA": 81.61037249436761,
+          "final_tracks": 804
+        }
+      },
+      "mot_sha256": {
+        "MOT17-02-SDP": "296a7c517aeb6241cc7f2af1cc106456a87141799022761c970ba1c180ad6e19",
+        "MOT17-04-SDP": "b1361662e94948b4b32b24417fe29a6b0895562287d8f5d55ad6e82c2a7424c8",
+        "MOT17-05-SDP": "ad4ed0f0f6fb41c7cd246f564580861bbcbe184255ba783bc7a2e8f6c00c5e4f",
+        "MOT17-09-SDP": "4ee3e5271409e19ec23828cc971e0c0bfd59776a65ef7f0c72c5f344c6c304d3",
+        "MOT17-10-SDP": "5c3f71d8d873cf4afad55b97406403ff3e05b8416b85c83bd8d9110671208a49",
+        "MOT17-11-SDP": "24e79cef399719a4556386905b9c8332b23dbb0e164c3fed1ee112287b33eb83",
+        "MOT17-13-SDP": "021c17ac2629259a68ca581976c48b742b6e417fa0357be2109331820554b5b2"
+      },
+      "output_dir": "/home/ray/developer/ai/saccade/results/xval459_20260924/replay_mot17/arms/base_r2",
+      "repeat_index": 2,
+      "seq_stage_records": {
+        "MOT17-02-SDP": [],
+        "MOT17-04-SDP": [],
+        "MOT17-05-SDP": [],
+        "MOT17-09-SDP": [],
+        "MOT17-10-SDP": [],
+        "MOT17-11-SDP": [],
+        "MOT17-13-SDP": []
+      },
+      "stage_order": [],
+      "stages": {
+        "accepted_links": 0,
+        "per_stage": {},
+        "stage_order": []
+      },
+      "tag": "base_r2"
+    },
+    {
+      "arm": "merge_only",
+      "interpolation": {
+        "frames_added": 6553,
+        "gaps_filled": 1293,
+        "tracks_interpolated": 339
+      },
+      "metrics": {
+        "per_sequence": {
+          "MOT17-02-SDP": {
+            "IDF1": 61.908670102754336,
+            "IDs": 64,
+            "MOTA": 62.31096281147408
+          },
+          "MOT17-04-SDP": {
+            "IDF1": 93.12089521249275,
+            "IDs": 15,
+            "MOTA": 91.99276657484702
+          },
+          "MOT17-05-SDP": {
+            "IDF1": 70.74840639017864,
+            "IDs": 42,
+            "MOTA": 70.29058840537805
+          },
+          "MOT17-09-SDP": {
+            "IDF1": 67.99616081902528,
+            "IDs": 19,
+            "MOTA": 73.55868544600939
+          },
+          "MOT17-10-SDP": {
+            "IDF1": 76.41475138344711,
+            "IDs": 90,
+            "MOTA": 77.94999610561571
+          },
+          "MOT17-11-SDP": {
+            "IDF1": 79.0642615558061,
+            "IDs": 26,
+            "MOTA": 85.26918185671894
+          },
+          "MOT17-13-SDP": {
+            "IDF1": 77.93191526841943,
+            "IDs": 57,
+            "MOTA": 80.94829067170589
+          }
+        },
+        "printed": {
+          "AssA": "74.2%",
+          "DetA": "75.5%",
+          "FN": 17868,
+          "FP": 2532,
+          "HOTA": "74.7%",
+          "IDF1": "81.3%",
+          "IDs": 313,
+          "MOTA": "81.6%",
+          "Prcn": "97.4%",
+          "Rcll": "84.1%"
+        },
+        "raw": {
+          "AssA": 74.17277404203861,
+          "DetA": 75.4739234924276,
+          "FN": 17868,
+          "FP": 2532,
+          "HOTA": 74.73741441653425,
+          "IDF1": 81.27670148811515,
+          "IDs": 313,
+          "MOTA": 81.55516175855098,
+          "final_tracks": 719
+        }
+      },
+      "mot_sha256": {
+        "MOT17-02-SDP": "ad36ec6ea0ec0cdf2fdcf5861b5a651e83d34de14fc7b1a61d16f17976cd010b",
+        "MOT17-04-SDP": "dd8ffc9faa44ea67d28423705562f49e4dde1cc2ada69b753e46d55e79f7e174",
+        "MOT17-05-SDP": "3df97303361d468a32d7262249a14247d0b073d230e5c73898d75876668ffe46",
+        "MOT17-09-SDP": "ebbb20f557e1d494e4ce820827ff6d16b0a5845072e18a2d87ad644e31ae4242",
+        "MOT17-10-SDP": "372d46264dcc9b59a5decd011c4d2938d2265b9c58477e7fd9bb815f3679baf0",
+        "MOT17-11-SDP": "007deae2eda31f7f117b38638bb9d7d932406378ee43b0fe3b8c6312086e23c0",
+        "MOT17-13-SDP": "0903468b812a4e393cfc1af34d1e8d183b71db524d51112c4162b41495482f7f"
+      },
+      "output_dir": "/home/ray/developer/ai/saccade/results/xval459_20260924/replay_mot17/arms/merge_only_r1",
+      "repeat_index": 1,
+      "seq_stage_records": {
+        "MOT17-02-SDP": [
+          {
+            "accepted_links": 11,
+            "accepted_pairs": [
+              {
+                "a_id": 4,
+                "b_id": 37,
+                "cost": 0.3797457814216614,
+                "gap": 34
+              },
+              {
+                "a_id": 10,
+                "b_id": 40,
+                "cost": 0.41859278082847595,
+                "gap": 39
+              },
+              {
+                "a_id": 14,
+                "b_id": 22,
+                "cost": 0.37994375824928284,
+                "gap": 56
+              },
+              {
+                "a_id": 21,
+                "b_id": 68,
+                "cost": 0.33719226717948914,
+                "gap": 34
+              },
+              {
+                "a_id": 28,
+                "b_id": 73,
+                "cost": 0.3271293044090271,
+                "gap": 35
+              },
+              {
+                "a_id": 43,
+                "b_id": 88,
+                "cost": 0.3858274519443512,
+                "gap": 43
+              },
+              {
+                "a_id": 57,
+                "b_id": 60,
+                "cost": 0.41139522194862366,
+                "gap": 14
+              },
+              {
+                "a_id": 68,
+                "b_id": 78,
+                "cost": 0.4210028052330017,
+                "gap": 32
+              },
+              {
+                "a_id": 86,
+                "b_id": 87,
+                "cost": 0.40771958231925964,
+                "gap": 3
+              },
+              {
+                "a_id": 92,
+                "b_id": 105,
+                "cost": 0.3561275005340576,
+                "gap": 25
+              },
+              {
+                "a_id": 97,
+                "b_id": 111,
+                "cost": 0.3936211168766022,
+                "gap": 35
+              }
+            ],
+            "diagnostics": {
+              "accepted": 11,
+              "component_count": 10,
+              "has_embedding": 93,
+              "no_embedding": 27,
+              "reject_component_overlap": 1,
+              "reject_cost": 4244,
+              "reject_same_component": 0,
+              "reject_temporal": 22
+            },
+            "n_input_ids": 120,
+            "n_output_ids": 109,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 109,
+              "ids_before": 120,
+              "merges": 11
+            },
+            "timing_s": {
+              "extract": 7.583752715998344,
+              "merge": 2.1551601750015834
+            }
+          }
+        ],
+        "MOT17-04-SDP": [
+          {
+            "accepted_links": 1,
+            "accepted_pairs": [
+              {
+                "a_id": 185,
+                "b_id": 190,
+                "cost": 0.44942507147789,
+                "gap": 7
+              }
+            ],
+            "diagnostics": {
+              "accepted": 1,
+              "component_count": 1,
+              "has_embedding": 88,
+              "no_embedding": 9,
+              "reject_component_overlap": 0,
+              "reject_cost": 3809,
+              "reject_same_component": 0,
+              "reject_temporal": 18
+            },
+            "n_input_ids": 97,
+            "n_output_ids": 96,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 96,
+              "ids_before": 97,
+              "merges": 1
+            },
+            "timing_s": {
+              "extract": 13.848977794999882,
+              "merge": 3.1993177730000752
+            }
+          }
+        ],
+        "MOT17-05-SDP": [
+          {
+            "accepted_links": 30,
+            "accepted_pairs": [
+              {
+                "a_id": 218,
+                "b_id": 234,
+                "cost": 0.3861425220966339,
+                "gap": 58
+              },
+              {
+                "a_id": 221,
+                "b_id": 281,
+                "cost": 0.3292543590068817,
+                "gap": 3
+              },
+              {
+                "a_id": 226,
+                "b_id": 248,
+                "cost": 0.42836010456085205,
+                "gap": 33
+              },
+              {
+                "a_id": 234,
+                "b_id": 238,
+                "cost": 0.4403121769428253,
+                "gap": 35
+              },
+              {
+                "a_id": 235,
+                "b_id": 238,
+                "cost": 0.4450131952762604,
+                "gap": 37
+              },
+              {
+                "a_id": 248,
+                "b_id": 258,
+                "cost": 0.31737029552459717,
+                "gap": 15
+              },
+              {
+                "a_id": 249,
+                "b_id": 275,
+                "cost": 0.29333925247192383,
+                "gap": 50
+              },
+              {
+                "a_id": 250,
+                "b_id": 258,
+                "cost": 0.2733440697193146,
+                "gap": 16
+              },
+              {
+                "a_id": 261,
+                "b_id": 269,
+                "cost": 0.41256216168403625,
+                "gap": 8
+              },
+              {
+                "a_id": 265,
+                "b_id": 282,
+                "cost": 0.4106880724430084,
+                "gap": 17
+              },
+              {
+                "a_id": 265,
+                "b_id": 293,
+                "cost": 0.39833399653434753,
+                "gap": 58
+              },
+              {
+                "a_id": 289,
+                "b_id": 297,
+                "cost": 0.36754322052001953,
+                "gap": 21
+              },
+              {
+                "a_id": 291,
+                "b_id": 295,
+                "cost": 0.2017832100391388,
+                "gap": 9
+              },
+              {
+                "a_id": 298,
+                "b_id": 303,
+                "cost": 0.22756357491016388,
+                "gap": 1
+              },
+              {
+                "a_id": 298,
+                "b_id": 304,
+                "cost": 0.21451124548912048,
+                "gap": 4
+              },
+              {
+                "a_id": 299,
+                "b_id": 310,
+                "cost": 0.2257838398218155,
+                "gap": 8
+              },
+              {
+                "a_id": 300,
+                "b_id": 311,
+                "cost": 0.3204633593559265,
+                "gap": 8
+              },
+              {
+                "a_id": 302,
+                "b_id": 305,
+                "cost": 0.16045255959033966,
+                "gap": 8
+              },
+              {
+                "a_id": 332,
+                "b_id": 337,
+                "cost": 0.39595362544059753,
+                "gap": 13
+              },
+              {
+                "a_id": 337,
+                "b_id": 343,
+                "cost": 0.4228423833847046,
+                "gap": 48
+              },
+              {
+                "a_id": 344,
+                "b_id": 350,
+                "cost": 0.44105228781700134,
+                "gap": 25
+              },
+              {
+                "a_id": 347,
+                "b_id": 356,
+                "cost": 0.41661369800567627,
+                "gap": 19
+              },
+              {
+                "a_id": 351,
+                "b_id": 357,
+                "cost": 0.17321106791496277,
+                "gap": 14
+              },
+              {
+                "a_id": 351,
+                "b_id": 373,
+                "cost": 0.40064603090286255,
+                "gap": 51
+              },
+              {
+                "a_id": 352,
+                "b_id": 359,
+                "cost": 0.28976285457611084,
+                "gap": 10
+              },
+              {
+                "a_id": 358,
+                "b_id": 362,
+                "cost": 0.3587400019168854,
+                "gap": 1
+              },
+              {
+                "a_id": 360,
+                "b_id": 369,
+                "cost": 0.2177349179983139,
+                "gap": 4
+              },
+              {
+                "a_id": 363,
+                "b_id": 372,
+                "cost": 0.3852982223033905,
+                "gap": 3
+              },
+              {
+                "a_id": 363,
+                "b_id": 380,
+                "cost": 0.25836795568466187,
+                "gap": 17
+              },
+              {
+                "a_id": 366,
+                "b_id": 369,
+                "cost": 0.3040089011192322,
+                "gap": 3
+              }
+            ],
+            "diagnostics": {
+              "accepted": 30,
+              "component_count": 20,
+              "has_embedding": 137,
+              "no_embedding": 32,
+              "reject_component_overlap": 12,
+              "reject_cost": 9209,
+              "reject_same_component": 2,
+              "reject_temporal": 63
+            },
+            "n_input_ids": 169,
+            "n_output_ids": 139,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 139,
+              "ids_before": 169,
+              "merges": 30
+            },
+            "timing_s": {
+              "extract": 1.9214650449994224,
+              "merge": 3.430862753999463
+            }
+          }
+        ],
+        "MOT17-09-SDP": [
+          {
+            "accepted_links": 2,
+            "accepted_pairs": [
+              {
+                "a_id": 404,
+                "b_id": 409,
+                "cost": 0.3765021562576294,
+                "gap": 18
+              },
+              {
+                "a_id": 422,
+                "b_id": 427,
+                "cost": 0.4375125467777252,
+                "gap": 55
+              }
+            ],
+            "diagnostics": {
+              "accepted": 2,
+              "component_count": 2,
+              "has_embedding": 37,
+              "no_embedding": 5,
+              "reject_component_overlap": 0,
+              "reject_cost": 661,
+              "reject_same_component": 0,
+              "reject_temporal": 3
+            },
+            "n_input_ids": 42,
+            "n_output_ids": 40,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 40,
+              "ids_before": 42,
+              "merges": 2
+            },
+            "timing_s": {
+              "extract": 5.662421820999953,
+              "merge": 0.7372766340013186
+            }
+          }
+        ],
+        "MOT17-10-SDP": [
+          {
+            "accepted_links": 28,
+            "accepted_pairs": [
+              {
+                "a_id": 431,
+                "b_id": 461,
+                "cost": 0.42076292634010315,
+                "gap": 9
+              },
+              {
+                "a_id": 432,
+                "b_id": 455,
+                "cost": 0.21301905810832977,
+                "gap": 3
+              },
+              {
+                "a_id": 443,
+                "b_id": 488,
+                "cost": 0.4044961929321289,
+                "gap": 24
+              },
+              {
+                "a_id": 446,
+                "b_id": 460,
+                "cost": 0.418770968914032,
+                "gap": 18
+              },
+              {
+                "a_id": 447,
+                "b_id": 450,
+                "cost": 0.34327059984207153,
+                "gap": 13
+              },
+              {
+                "a_id": 448,
+                "b_id": 462,
+                "cost": 0.27491241693496704,
+                "gap": 45
+              },
+              {
+                "a_id": 449,
+                "b_id": 454,
+                "cost": 0.31427088379859924,
+                "gap": 6
+              },
+              {
+                "a_id": 454,
+                "b_id": 463,
+                "cost": 0.37790369987487793,
+                "gap": 10
+              },
+              {
+                "a_id": 456,
+                "b_id": 472,
+                "cost": 0.3557886481285095,
+                "gap": 26
+              },
+              {
+                "a_id": 460,
+                "b_id": 468,
+                "cost": 0.3517354130744934,
+                "gap": 32
+              },
+              {
+                "a_id": 463,
+                "b_id": 470,
+                "cost": 0.43206459283828735,
+                "gap": 32
+              },
+              {
+                "a_id": 466,
+                "b_id": 537,
+                "cost": 0.39171281456947327,
+                "gap": 28
+              },
+              {
+                "a_id": 493,
+                "b_id": 526,
+                "cost": 0.3661562204360962,
+                "gap": 7
+              },
+              {
+                "a_id": 503,
+                "b_id": 529,
+                "cost": 0.35360458493232727,
+                "gap": 16
+              },
+              {
+                "a_id": 508,
+                "b_id": 514,
+                "cost": 0.37693721055984497,
+                "gap": 13
+              },
+              {
+                "a_id": 514,
+                "b_id": 527,
+                "cost": 0.32066357135772705,
+                "gap": 13
+              },
+              {
+                "a_id": 523,
+                "b_id": 525,
+                "cost": 0.41429051756858826,
+                "gap": 17
+              },
+              {
+                "a_id": 525,
+                "b_id": 527,
+                "cost": 0.20658722519874573,
+                "gap": 30
+              },
+              {
+                "a_id": 526,
+                "b_id": 533,
+                "cost": 0.3567255139350891,
+                "gap": 27
+              },
+              {
+                "a_id": 529,
+                "b_id": 542,
+                "cost": 0.38881662487983704,
+                "gap": 39
+              },
+              {
+                "a_id": 535,
+                "b_id": 546,
+                "cost": 0.3977493643760681,
+                "gap": 18
+              },
+              {
+                "a_id": 536,
+                "b_id": 538,
+                "cost": 0.31519585847854614,
+                "gap": 8
+              },
+              {
+                "a_id": 536,
+                "b_id": 539,
+                "cost": 0.44879889488220215,
+                "gap": 14
+              },
+              {
+                "a_id": 558,
+                "b_id": 573,
+                "cost": 0.3461230397224426,
+                "gap": 13
+              },
+              {
+                "a_id": 569,
+                "b_id": 575,
+                "cost": 0.33690547943115234,
+                "gap": 27
+              },
+              {
+                "a_id": 571,
+                "b_id": 574,
+                "cost": 0.33508509397506714,
+                "gap": 11
+              },
+              {
+                "a_id": 572,
+                "b_id": 576,
+                "cost": 0.4032215476036072,
+                "gap": 35
+              },
+              {
+                "a_id": 573,
+                "b_id": 577,
+                "cost": 0.4491539001464844,
+                "gap": 42
+              }
+            ],
+            "diagnostics": {
+              "accepted": 28,
+              "component_count": 18,
+              "has_embedding": 126,
+              "no_embedding": 23,
+              "reject_component_overlap": 17,
+              "reject_cost": 7748,
+              "reject_same_component": 4,
+              "reject_temporal": 78
+            },
+            "n_input_ids": 149,
+            "n_output_ids": 121,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 121,
+              "ids_before": 149,
+              "merges": 28
+            },
+            "timing_s": {
+              "extract": 6.7172493760008365,
+              "merge": 3.336285761999534
+            }
+          }
+        ],
+        "MOT17-11-SDP": [
+          {
+            "accepted_links": 3,
+            "accepted_pairs": [
+              {
+                "a_id": 596,
+                "b_id": 613,
+                "cost": 0.39608514308929443,
+                "gap": 45
+              },
+              {
+                "a_id": 657,
+                "b_id": 660,
+                "cost": 0.3527444899082184,
+                "gap": 13
+              },
+              {
+                "a_id": 659,
+                "b_id": 661,
+                "cost": 0.4209756553173065,
+                "gap": 14
+              }
+            ],
+            "diagnostics": {
+              "accepted": 3,
+              "component_count": 3,
+              "has_embedding": 75,
+              "no_embedding": 17,
+              "reject_component_overlap": 1,
+              "reject_cost": 2756,
+              "reject_same_component": 0,
+              "reject_temporal": 15
+            },
+            "n_input_ids": 92,
+            "n_output_ids": 89,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 89,
+              "ids_before": 92,
+              "merges": 3
+            },
+            "timing_s": {
+              "extract": 9.603619883999272,
+              "merge": 1.505803735999507
+            }
+          }
+        ],
+        "MOT17-13-SDP": [
+          {
+            "accepted_links": 10,
+            "accepted_pairs": [
+              {
+                "a_id": 674,
+                "b_id": 692,
+                "cost": 0.4078681170940399,
+                "gap": 5
+              },
+              {
+                "a_id": 687,
+                "b_id": 780,
+                "cost": 0.4390564560890198,
+                "gap": 24
+              },
+              {
+                "a_id": 697,
+                "b_id": 708,
+                "cost": 0.357960969209671,
+                "gap": 28
+              },
+              {
+                "a_id": 699,
+                "b_id": 718,
+                "cost": 0.40474414825439453,
+                "gap": 49
+              },
+              {
+                "a_id": 720,
+                "b_id": 744,
+                "cost": 0.4294534921646118,
+                "gap": 40
+              },
+              {
+                "a_id": 728,
+                "b_id": 742,
+                "cost": 0.43018627166748047,
+                "gap": 27
+              },
+              {
+                "a_id": 737,
+                "b_id": 742,
+                "cost": 0.43116796016693115,
+                "gap": 31
+              },
+              {
+                "a_id": 781,
+                "b_id": 785,
+                "cost": 0.4283061921596527,
+                "gap": 3
+              },
+              {
+                "a_id": 801,
+                "b_id": 802,
+                "cost": 0.3138735294342041,
+                "gap": 9
+              },
+              {
+                "a_id": 801,
+                "b_id": 804,
+                "cost": 0.4270680248737335,
+                "gap": 36
+              }
+            ],
+            "diagnostics": {
+              "accepted": 10,
+              "component_count": 8,
+              "has_embedding": 124,
+              "no_embedding": 11,
+              "reject_component_overlap": 2,
+              "reject_cost": 7578,
+              "reject_same_component": 0,
+              "reject_temporal": 36
+            },
+            "n_input_ids": 135,
+            "n_output_ids": 125,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 125,
+              "ids_before": 135,
+              "merges": 10
+            },
+            "timing_s": {
+              "extract": 9.705654385999878,
+              "merge": 3.038335396999173
+            }
+          }
+        ]
+      },
+      "stage_order": [
+        "merge"
+      ],
+      "stages": {
+        "accepted_links": 85,
+        "per_stage": {
+          "merge": {
+            "accepted_links": 85,
+            "component_count": 62,
+            "events": 0,
+            "handovers": 0,
+            "merges": 85,
+            "no_embedding": 124,
+            "reject_component_overlap": 33,
+            "reject_cost": 36005,
+            "reject_same_component": 6,
+            "reject_temporal": 235
+          }
+        },
+        "stage_order": [
+          "merge"
+        ]
+      },
+      "tag": "merge_only_r1"
+    },
+    {
+      "arm": "merge_only",
+      "interpolation": {
+        "frames_added": 6553,
+        "gaps_filled": 1293,
+        "tracks_interpolated": 339
+      },
+      "metrics": {
+        "per_sequence": {
+          "MOT17-02-SDP": {
+            "IDF1": 61.908670102754336,
+            "IDs": 64,
+            "MOTA": 62.31096281147408
+          },
+          "MOT17-04-SDP": {
+            "IDF1": 93.12089521249275,
+            "IDs": 15,
+            "MOTA": 91.99276657484702
+          },
+          "MOT17-05-SDP": {
+            "IDF1": 70.74840639017864,
+            "IDs": 42,
+            "MOTA": 70.29058840537805
+          },
+          "MOT17-09-SDP": {
+            "IDF1": 67.99616081902528,
+            "IDs": 19,
+            "MOTA": 73.55868544600939
+          },
+          "MOT17-10-SDP": {
+            "IDF1": 76.41475138344711,
+            "IDs": 90,
+            "MOTA": 77.94999610561571
+          },
+          "MOT17-11-SDP": {
+            "IDF1": 79.0642615558061,
+            "IDs": 26,
+            "MOTA": 85.26918185671894
+          },
+          "MOT17-13-SDP": {
+            "IDF1": 77.93191526841943,
+            "IDs": 57,
+            "MOTA": 80.94829067170589
+          }
+        },
+        "printed": {
+          "AssA": "74.2%",
+          "DetA": "75.5%",
+          "FN": 17868,
+          "FP": 2532,
+          "HOTA": "74.7%",
+          "IDF1": "81.3%",
+          "IDs": 313,
+          "MOTA": "81.6%",
+          "Prcn": "97.4%",
+          "Rcll": "84.1%"
+        },
+        "raw": {
+          "AssA": 74.17277404203861,
+          "DetA": 75.4739234924276,
+          "FN": 17868,
+          "FP": 2532,
+          "HOTA": 74.73741441653425,
+          "IDF1": 81.27670148811515,
+          "IDs": 313,
+          "MOTA": 81.55516175855098,
+          "final_tracks": 719
+        }
+      },
+      "mot_sha256": {
+        "MOT17-02-SDP": "ad36ec6ea0ec0cdf2fdcf5861b5a651e83d34de14fc7b1a61d16f17976cd010b",
+        "MOT17-04-SDP": "dd8ffc9faa44ea67d28423705562f49e4dde1cc2ada69b753e46d55e79f7e174",
+        "MOT17-05-SDP": "3df97303361d468a32d7262249a14247d0b073d230e5c73898d75876668ffe46",
+        "MOT17-09-SDP": "ebbb20f557e1d494e4ce820827ff6d16b0a5845072e18a2d87ad644e31ae4242",
+        "MOT17-10-SDP": "372d46264dcc9b59a5decd011c4d2938d2265b9c58477e7fd9bb815f3679baf0",
+        "MOT17-11-SDP": "007deae2eda31f7f117b38638bb9d7d932406378ee43b0fe3b8c6312086e23c0",
+        "MOT17-13-SDP": "0903468b812a4e393cfc1af34d1e8d183b71db524d51112c4162b41495482f7f"
+      },
+      "output_dir": "/home/ray/developer/ai/saccade/results/xval459_20260924/replay_mot17/arms/merge_only_r2",
+      "repeat_index": 2,
+      "seq_stage_records": {
+        "MOT17-02-SDP": [
+          {
+            "accepted_links": 11,
+            "accepted_pairs": [
+              {
+                "a_id": 4,
+                "b_id": 37,
+                "cost": 0.3797457814216614,
+                "gap": 34
+              },
+              {
+                "a_id": 10,
+                "b_id": 40,
+                "cost": 0.41859278082847595,
+                "gap": 39
+              },
+              {
+                "a_id": 14,
+                "b_id": 22,
+                "cost": 0.37994375824928284,
+                "gap": 56
+              },
+              {
+                "a_id": 21,
+                "b_id": 68,
+                "cost": 0.33719226717948914,
+                "gap": 34
+              },
+              {
+                "a_id": 28,
+                "b_id": 73,
+                "cost": 0.3271293044090271,
+                "gap": 35
+              },
+              {
+                "a_id": 43,
+                "b_id": 88,
+                "cost": 0.3858274519443512,
+                "gap": 43
+              },
+              {
+                "a_id": 57,
+                "b_id": 60,
+                "cost": 0.41139522194862366,
+                "gap": 14
+              },
+              {
+                "a_id": 68,
+                "b_id": 78,
+                "cost": 0.4210028052330017,
+                "gap": 32
+              },
+              {
+                "a_id": 86,
+                "b_id": 87,
+                "cost": 0.40771958231925964,
+                "gap": 3
+              },
+              {
+                "a_id": 92,
+                "b_id": 105,
+                "cost": 0.3561275005340576,
+                "gap": 25
+              },
+              {
+                "a_id": 97,
+                "b_id": 111,
+                "cost": 0.3936211168766022,
+                "gap": 35
+              }
+            ],
+            "diagnostics": {
+              "accepted": 11,
+              "component_count": 10,
+              "has_embedding": 93,
+              "no_embedding": 27,
+              "reject_component_overlap": 1,
+              "reject_cost": 4244,
+              "reject_same_component": 0,
+              "reject_temporal": 22
+            },
+            "n_input_ids": 120,
+            "n_output_ids": 109,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 109,
+              "ids_before": 120,
+              "merges": 11
+            },
+            "timing_s": {
+              "extract": 7.544480530999863,
+              "merge": 2.8602448729998287
+            }
+          }
+        ],
+        "MOT17-04-SDP": [
+          {
+            "accepted_links": 1,
+            "accepted_pairs": [
+              {
+                "a_id": 185,
+                "b_id": 190,
+                "cost": 0.44942507147789,
+                "gap": 7
+              }
+            ],
+            "diagnostics": {
+              "accepted": 1,
+              "component_count": 1,
+              "has_embedding": 88,
+              "no_embedding": 9,
+              "reject_component_overlap": 0,
+              "reject_cost": 3809,
+              "reject_same_component": 0,
+              "reject_temporal": 18
+            },
+            "n_input_ids": 97,
+            "n_output_ids": 96,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 96,
+              "ids_before": 97,
+              "merges": 1
+            },
+            "timing_s": {
+              "extract": 13.754668974999731,
+              "merge": 2.5274752309996984
+            }
+          }
+        ],
+        "MOT17-05-SDP": [
+          {
+            "accepted_links": 30,
+            "accepted_pairs": [
+              {
+                "a_id": 218,
+                "b_id": 234,
+                "cost": 0.3861425220966339,
+                "gap": 58
+              },
+              {
+                "a_id": 221,
+                "b_id": 281,
+                "cost": 0.3292543590068817,
+                "gap": 3
+              },
+              {
+                "a_id": 226,
+                "b_id": 248,
+                "cost": 0.42836010456085205,
+                "gap": 33
+              },
+              {
+                "a_id": 234,
+                "b_id": 238,
+                "cost": 0.4403121769428253,
+                "gap": 35
+              },
+              {
+                "a_id": 235,
+                "b_id": 238,
+                "cost": 0.4450131952762604,
+                "gap": 37
+              },
+              {
+                "a_id": 248,
+                "b_id": 258,
+                "cost": 0.31737029552459717,
+                "gap": 15
+              },
+              {
+                "a_id": 249,
+                "b_id": 275,
+                "cost": 0.29333925247192383,
+                "gap": 50
+              },
+              {
+                "a_id": 250,
+                "b_id": 258,
+                "cost": 0.2733440697193146,
+                "gap": 16
+              },
+              {
+                "a_id": 261,
+                "b_id": 269,
+                "cost": 0.41256216168403625,
+                "gap": 8
+              },
+              {
+                "a_id": 265,
+                "b_id": 282,
+                "cost": 0.4106880724430084,
+                "gap": 17
+              },
+              {
+                "a_id": 265,
+                "b_id": 293,
+                "cost": 0.39833399653434753,
+                "gap": 58
+              },
+              {
+                "a_id": 289,
+                "b_id": 297,
+                "cost": 0.36754322052001953,
+                "gap": 21
+              },
+              {
+                "a_id": 291,
+                "b_id": 295,
+                "cost": 0.2017832100391388,
+                "gap": 9
+              },
+              {
+                "a_id": 298,
+                "b_id": 303,
+                "cost": 0.22756357491016388,
+                "gap": 1
+              },
+              {
+                "a_id": 298,
+                "b_id": 304,
+                "cost": 0.21451124548912048,
+                "gap": 4
+              },
+              {
+                "a_id": 299,
+                "b_id": 310,
+                "cost": 0.2257838398218155,
+                "gap": 8
+              },
+              {
+                "a_id": 300,
+                "b_id": 311,
+                "cost": 0.3204633593559265,
+                "gap": 8
+              },
+              {
+                "a_id": 302,
+                "b_id": 305,
+                "cost": 0.16045255959033966,
+                "gap": 8
+              },
+              {
+                "a_id": 332,
+                "b_id": 337,
+                "cost": 0.39595362544059753,
+                "gap": 13
+              },
+              {
+                "a_id": 337,
+                "b_id": 343,
+                "cost": 0.4228423833847046,
+                "gap": 48
+              },
+              {
+                "a_id": 344,
+                "b_id": 350,
+                "cost": 0.44105228781700134,
+                "gap": 25
+              },
+              {
+                "a_id": 347,
+                "b_id": 356,
+                "cost": 0.41661369800567627,
+                "gap": 19
+              },
+              {
+                "a_id": 351,
+                "b_id": 357,
+                "cost": 0.17321106791496277,
+                "gap": 14
+              },
+              {
+                "a_id": 351,
+                "b_id": 373,
+                "cost": 0.40064603090286255,
+                "gap": 51
+              },
+              {
+                "a_id": 352,
+                "b_id": 359,
+                "cost": 0.28976285457611084,
+                "gap": 10
+              },
+              {
+                "a_id": 358,
+                "b_id": 362,
+                "cost": 0.3587400019168854,
+                "gap": 1
+              },
+              {
+                "a_id": 360,
+                "b_id": 369,
+                "cost": 0.2177349179983139,
+                "gap": 4
+              },
+              {
+                "a_id": 363,
+                "b_id": 372,
+                "cost": 0.3852982223033905,
+                "gap": 3
+              },
+              {
+                "a_id": 363,
+                "b_id": 380,
+                "cost": 0.25836795568466187,
+                "gap": 17
+              },
+              {
+                "a_id": 366,
+                "b_id": 369,
+                "cost": 0.3040089011192322,
+                "gap": 3
+              }
+            ],
+            "diagnostics": {
+              "accepted": 30,
+              "component_count": 20,
+              "has_embedding": 137,
+              "no_embedding": 32,
+              "reject_component_overlap": 12,
+              "reject_cost": 9209,
+              "reject_same_component": 2,
+              "reject_temporal": 63
+            },
+            "n_input_ids": 169,
+            "n_output_ids": 139,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 139,
+              "ids_before": 169,
+              "merges": 30
+            },
+            "timing_s": {
+              "extract": 1.9061351429991191,
+              "merge": 2.713954104001459
+            }
+          }
+        ],
+        "MOT17-09-SDP": [
+          {
+            "accepted_links": 2,
+            "accepted_pairs": [
+              {
+                "a_id": 404,
+                "b_id": 409,
+                "cost": 0.3765021562576294,
+                "gap": 18
+              },
+              {
+                "a_id": 422,
+                "b_id": 427,
+                "cost": 0.4375125467777252,
+                "gap": 55
+              }
+            ],
+            "diagnostics": {
+              "accepted": 2,
+              "component_count": 2,
+              "has_embedding": 37,
+              "no_embedding": 5,
+              "reject_component_overlap": 0,
+              "reject_cost": 661,
+              "reject_same_component": 0,
+              "reject_temporal": 3
+            },
+            "n_input_ids": 42,
+            "n_output_ids": 40,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 40,
+              "ids_before": 42,
+              "merges": 2
+            },
+            "timing_s": {
+              "extract": 6.1928188239999145,
+              "merge": 0.6130840189998708
+            }
+          }
+        ],
+        "MOT17-10-SDP": [
+          {
+            "accepted_links": 28,
+            "accepted_pairs": [
+              {
+                "a_id": 431,
+                "b_id": 461,
+                "cost": 0.42076292634010315,
+                "gap": 9
+              },
+              {
+                "a_id": 432,
+                "b_id": 455,
+                "cost": 0.21301905810832977,
+                "gap": 3
+              },
+              {
+                "a_id": 443,
+                "b_id": 488,
+                "cost": 0.4044961929321289,
+                "gap": 24
+              },
+              {
+                "a_id": 446,
+                "b_id": 460,
+                "cost": 0.418770968914032,
+                "gap": 18
+              },
+              {
+                "a_id": 447,
+                "b_id": 450,
+                "cost": 0.34327059984207153,
+                "gap": 13
+              },
+              {
+                "a_id": 448,
+                "b_id": 462,
+                "cost": 0.27491241693496704,
+                "gap": 45
+              },
+              {
+                "a_id": 449,
+                "b_id": 454,
+                "cost": 0.31427088379859924,
+                "gap": 6
+              },
+              {
+                "a_id": 454,
+                "b_id": 463,
+                "cost": 0.37790369987487793,
+                "gap": 10
+              },
+              {
+                "a_id": 456,
+                "b_id": 472,
+                "cost": 0.3557886481285095,
+                "gap": 26
+              },
+              {
+                "a_id": 460,
+                "b_id": 468,
+                "cost": 0.3517354130744934,
+                "gap": 32
+              },
+              {
+                "a_id": 463,
+                "b_id": 470,
+                "cost": 0.43206459283828735,
+                "gap": 32
+              },
+              {
+                "a_id": 466,
+                "b_id": 537,
+                "cost": 0.39171281456947327,
+                "gap": 28
+              },
+              {
+                "a_id": 493,
+                "b_id": 526,
+                "cost": 0.3661562204360962,
+                "gap": 7
+              },
+              {
+                "a_id": 503,
+                "b_id": 529,
+                "cost": 0.35360458493232727,
+                "gap": 16
+              },
+              {
+                "a_id": 508,
+                "b_id": 514,
+                "cost": 0.37693721055984497,
+                "gap": 13
+              },
+              {
+                "a_id": 514,
+                "b_id": 527,
+                "cost": 0.32066357135772705,
+                "gap": 13
+              },
+              {
+                "a_id": 523,
+                "b_id": 525,
+                "cost": 0.41429051756858826,
+                "gap": 17
+              },
+              {
+                "a_id": 525,
+                "b_id": 527,
+                "cost": 0.20658722519874573,
+                "gap": 30
+              },
+              {
+                "a_id": 526,
+                "b_id": 533,
+                "cost": 0.3567255139350891,
+                "gap": 27
+              },
+              {
+                "a_id": 529,
+                "b_id": 542,
+                "cost": 0.38881662487983704,
+                "gap": 39
+              },
+              {
+                "a_id": 535,
+                "b_id": 546,
+                "cost": 0.3977493643760681,
+                "gap": 18
+              },
+              {
+                "a_id": 536,
+                "b_id": 538,
+                "cost": 0.31519585847854614,
+                "gap": 8
+              },
+              {
+                "a_id": 536,
+                "b_id": 539,
+                "cost": 0.44879889488220215,
+                "gap": 14
+              },
+              {
+                "a_id": 558,
+                "b_id": 573,
+                "cost": 0.3461230397224426,
+                "gap": 13
+              },
+              {
+                "a_id": 569,
+                "b_id": 575,
+                "cost": 0.33690547943115234,
+                "gap": 27
+              },
+              {
+                "a_id": 571,
+                "b_id": 574,
+                "cost": 0.33508509397506714,
+                "gap": 11
+              },
+              {
+                "a_id": 572,
+                "b_id": 576,
+                "cost": 0.4032215476036072,
+                "gap": 35
+              },
+              {
+                "a_id": 573,
+                "b_id": 577,
+                "cost": 0.4491539001464844,
+                "gap": 42
+              }
+            ],
+            "diagnostics": {
+              "accepted": 28,
+              "component_count": 18,
+              "has_embedding": 126,
+              "no_embedding": 23,
+              "reject_component_overlap": 17,
+              "reject_cost": 7748,
+              "reject_same_component": 4,
+              "reject_temporal": 78
+            },
+            "n_input_ids": 149,
+            "n_output_ids": 121,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 121,
+              "ids_before": 149,
+              "merges": 28
+            },
+            "timing_s": {
+              "extract": 7.447276963999684,
+              "merge": 3.0039502820000052
+            }
+          }
+        ],
+        "MOT17-11-SDP": [
+          {
+            "accepted_links": 3,
+            "accepted_pairs": [
+              {
+                "a_id": 596,
+                "b_id": 613,
+                "cost": 0.39608514308929443,
+                "gap": 45
+              },
+              {
+                "a_id": 657,
+                "b_id": 660,
+                "cost": 0.3527444899082184,
+                "gap": 13
+              },
+              {
+                "a_id": 659,
+                "b_id": 661,
+                "cost": 0.4209756553173065,
+                "gap": 14
+              }
+            ],
+            "diagnostics": {
+              "accepted": 3,
+              "component_count": 3,
+              "has_embedding": 75,
+              "no_embedding": 17,
+              "reject_component_overlap": 1,
+              "reject_cost": 2756,
+              "reject_same_component": 0,
+              "reject_temporal": 15
+            },
+            "n_input_ids": 92,
+            "n_output_ids": 89,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 89,
+              "ids_before": 92,
+              "merges": 3
+            },
+            "timing_s": {
+              "extract": 9.610865389999162,
+              "merge": 2.152109290000226
+            }
+          }
+        ],
+        "MOT17-13-SDP": [
+          {
+            "accepted_links": 10,
+            "accepted_pairs": [
+              {
+                "a_id": 674,
+                "b_id": 692,
+                "cost": 0.4078681170940399,
+                "gap": 5
+              },
+              {
+                "a_id": 687,
+                "b_id": 780,
+                "cost": 0.4390564560890198,
+                "gap": 24
+              },
+              {
+                "a_id": 697,
+                "b_id": 708,
+                "cost": 0.357960969209671,
+                "gap": 28
+              },
+              {
+                "a_id": 699,
+                "b_id": 718,
+                "cost": 0.40474414825439453,
+                "gap": 49
+              },
+              {
+                "a_id": 720,
+                "b_id": 744,
+                "cost": 0.4294534921646118,
+                "gap": 40
+              },
+              {
+                "a_id": 728,
+                "b_id": 742,
+                "cost": 0.43018627166748047,
+                "gap": 27
+              },
+              {
+                "a_id": 737,
+                "b_id": 742,
+                "cost": 0.43116796016693115,
+                "gap": 31
+              },
+              {
+                "a_id": 781,
+                "b_id": 785,
+                "cost": 0.4283061921596527,
+                "gap": 3
+              },
+              {
+                "a_id": 801,
+                "b_id": 802,
+                "cost": 0.3138735294342041,
+                "gap": 9
+              },
+              {
+                "a_id": 801,
+                "b_id": 804,
+                "cost": 0.4270680248737335,
+                "gap": 36
+              }
+            ],
+            "diagnostics": {
+              "accepted": 10,
+              "component_count": 8,
+              "has_embedding": 124,
+              "no_embedding": 11,
+              "reject_component_overlap": 2,
+              "reject_cost": 7578,
+              "reject_same_component": 0,
+              "reject_temporal": 36
+            },
+            "n_input_ids": 135,
+            "n_output_ids": 125,
+            "stage": "merge",
+            "stage_index": 0,
+            "stats": {
+              "ids_after": 125,
+              "ids_before": 135,
+              "merges": 10
+            },
+            "timing_s": {
+              "extract": 9.69539721199908,
+              "merge": 4.173541438000029
+            }
+          }
+        ]
+      },
+      "stage_order": [
+        "merge"
+      ],
+      "stages": {
+        "accepted_links": 85,
+        "per_stage": {
+          "merge": {
+            "accepted_links": 85,
+            "component_count": 62,
+            "events": 0,
+            "handovers": 0,
+            "merges": 85,
+            "no_embedding": 124,
+            "reject_component_overlap": 33,
+            "reject_cost": 36005,
+            "reject_same_component": 6,
+            "reject_temporal": 235
+          }
+        },
+        "stage_order": [
+          "merge"
+        ]
+      },
+      "tag": "merge_only_r2"
+    }
+  ],
+  "schema": "output_layer_repair_chaining_revalidation/v1",
+  "table_markdown": "| arm | IDF1 | MOTA | HOTA | AssA | IDs | final tracks | accepted links |\n| --- | ---: | ---: | ---: | ---: | --: | -----------: | -------------: |\n| base | 80.4 | 81.6 | 74.4 | 73.5 | 344 | 804 | 0 |\n| merge_only | 81.3 | 81.6 | 74.7 | 74.2 | 313 | 719 | 85 |",
+  "variation": {
+    "base": {
+      "AssA": {
+        "max": 73.48542261999741,
+        "min": 73.48542261999741,
+        "range": 0.0,
+        "values": [
+          73.48542261999741,
+          73.48542261999741,
+          73.48542261999741
+        ]
+      },
+      "HOTA": {
+        "max": 74.3770694248394,
+        "min": 74.3770694248394,
+        "range": 0.0,
+        "values": [
+          74.3770694248394,
+          74.3770694248394,
+          74.3770694248394
+        ]
+      },
+      "IDF1": {
+        "max": 80.44710977524475,
+        "min": 80.44710977524475,
+        "range": 0.0,
+        "values": [
+          80.44710977524475,
+          80.44710977524475,
+          80.44710977524475
+        ]
+      },
+      "IDs": {
+        "max": 344.0,
+        "min": 344.0,
+        "range": 0.0,
+        "values": [
+          344.0,
+          344.0,
+          344.0
+        ]
+      },
+      "MOTA": {
+        "max": 81.61037249436761,
+        "min": 81.61037249436761,
+        "range": 0.0,
+        "values": [
+          81.61037249436761,
+          81.61037249436761,
+          81.61037249436761
+        ]
+      },
+      "mot_files_identical": true,
+      "n": 3,
+      "repeat_kind": "within_process"
+    },
+    "merge_only": {
+      "AssA": {
+        "max": 74.17277404203861,
+        "min": 74.17277404203861,
+        "range": 0.0,
+        "values": [
+          74.17277404203861,
+          74.17277404203861,
+          74.17277404203861
+        ]
+      },
+      "HOTA": {
+        "max": 74.73741441653425,
+        "min": 74.73741441653425,
+        "range": 0.0,
+        "values": [
+          74.73741441653425,
+          74.73741441653425,
+          74.73741441653425
+        ]
+      },
+      "IDF1": {
+        "max": 81.27670148811515,
+        "min": 81.27670148811515,
+        "range": 0.0,
+        "values": [
+          81.27670148811515,
+          81.27670148811515,
+          81.27670148811515
+        ]
+      },
+      "IDs": {
+        "max": 313.0,
+        "min": 313.0,
+        "range": 0.0,
+        "values": [
+          313.0,
+          313.0,
+          313.0
+        ]
+      },
+      "MOTA": {
+        "max": 81.55516175855098,
+        "min": 81.55516175855098,
+        "range": 0.0,
+        "values": [
+          81.55516175855098,
+          81.55516175855098,
+          81.55516175855098
+        ]
+      },
+      "mot_files_identical": true,
+      "n": 3,
+      "repeat_kind": "within_process"
+    }
+  }
+}

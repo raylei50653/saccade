@@ -1,0 +1,25 @@
+{
+  "MOT17-02-SDP.txt": {
+    "sha256": "312029468bcad19f639a3a10ab092234d6bf076edf78038ed1028930db32196c"
+  },
+  "MOT17-04-SDP.txt": {
+    "sha256": "b1a3d60bdcfd177902e692a0bd464e51519c6ee879ed9ba587d7007c550a2ae6"
+  },
+  "MOT17-05-SDP.txt": {
+    "sha256": "29f1aa0c10fb24c9e6c4259e0dd5fda41f332b1fa5131b30717731eb79bc1825"
+  },
+  "MOT17-09-SDP.txt": {
+    "sha256": "3a860f9dde52337efb228422b38798d42f25d341594f20b5b591349e2496fc33"
+  },
+  "MOT17-10-SDP.txt": {
+    "sha256": "30c96efe5f9b7d70f3868db7a0130238564966ba533eedb9bac061ec8fed32a7"
+  },
+  "MOT17-11-SDP.txt": {
+    "sha256": "40aa2383b026019e60eb23ca76ccd4a6043b4b0944dfcd216dab85ec94f6b45f"
+  },
+  "MOT17-13-SDP.txt": {
+    "sha256": "a918e4531ccaa8f7d3bd9cebb62aebd67986b66fb1076e217ca0733b1c077470"
+  },
+  "cross_process_repeat": "n/a (MOT17 compared against 2026-09-12 #402 substrate hashes: identical 7/7)",
+  "substrate_commit": "b3ac5725"
+}

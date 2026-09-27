@@ -404,6 +404,10 @@
       "classification": "not_a_run_producer",
       "reason": "declares no artifact-root output directory and creates none"
     },
+    "scripts/eval/experiments/characterize_merge_events.py": {
+      "classification": "not_a_run_producer",
+      "reason": "declares no artifact-root output directory and creates none"
+    },
     "scripts/eval/experiments/oracle_height_birth_ceiling.py": {
       "classification": "run_producer_out_of_scope",
       "reason": "oracle sweep; writes per-arm directories under results/",

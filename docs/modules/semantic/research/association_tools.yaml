@@ -419,6 +419,18 @@ tools:
     - docs/modules/semantic/research/evidence/output_layer_repair_chaining_revalidation_20260912/results.json
     - docs/modules/semantic/research/evidence/output_layer_repair_chaining_revalidation_20260912/manifest.json
   notes: 'Measurement-only chaining replay on a frozen pre-interpolation MOT substrate. Does not add a production postproc-order flag. Stage order is recorded; each stage re-extracts embeddings from the previous stage output.'
+- id: characterize_merge_events
+  path: scripts/eval/experiments/characterize_merge_events.py
+  door: D
+  roles: [one-shot, diagnostic]
+  priority: P2
+  fact_owner: docs/modules/semantic/research/merge_only_cross_dataset_20260924.md
+  recipes: []
+  expected_artifacts:
+    - docs/modules/semantic/research/evidence/merge_only_cross_dataset_20260924/mot17/merge_events.json
+    - docs/modules/semantic/research/evidence/merge_only_cross_dataset_20260924/mot20/merge_events.json
+    - docs/modules/semantic/research/evidence/merge_only_cross_dataset_20260924/dancetrack/merge_events.json
+  notes: 'Labels first-pass accepted Cheb-GR merges same_gt/diff_gt/undetermined against GT and records gap, shorter-track length, CV motion residual, endpoint crowding and cost. Descriptive only; not a causal decomposition.'
 - id: cheb_gr_offline_handover_report
   path: scripts/eval/diagnostics/cheb_gr_offline_handover_report.py
   door: D

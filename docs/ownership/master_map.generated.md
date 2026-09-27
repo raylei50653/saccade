@@ -119,6 +119,7 @@ Manifest: `docs/ownership/doc_migration_manifest.yaml`
 - `docs/modules/semantic/research/evidence/h0_r5_qualification_authoritative_parity_audit_20260725/AUDIT_REPORT.md`
 - `docs/modules/semantic/research/evidence/h2_phase_a_failed_attempt_0a5dffe9_20260727/README.md`
 - `docs/modules/semantic/research/evidence/h2_phase_a_failed_attempt_7646f421_20260728/README.md`
+- `docs/modules/semantic/research/evidence/merge_only_cross_dataset_20260924/commands.md`
 - `docs/modules/semantic/research/evidence/output_layer_repair_chaining_revalidation_20260912/commands.md`
 - `docs/modules/semantic/research/existing_online_object_analysis_for_gctm_alignment_20260718.md`
 - `docs/modules/semantic/research/gctm_b1_o1_task_objectives_and_semantics_20260716.md`
@@ -130,6 +131,7 @@ Manifest: `docs/ownership/doc_migration_manifest.yaml`
 - `docs/modules/semantic/research/h0_gctm_consumer_compatibility_requirements_20260718.md`
 - `docs/modules/semantic/research/headline_bridge_behavioral_identity_capture_declaration_20260725.md`
 - `docs/modules/semantic/research/headline_bridge_behavioral_identity_capture_declaration_20260725.policy.yaml`
+- `docs/modules/semantic/research/merge_only_cross_dataset_20260924.md`
 - `docs/modules/semantic/research/monocular_depth_signal_survey_20260913.md`
 - `docs/modules/semantic/research/observability_weighted_directional_likelihood_declaration_20260827.md`
 - `docs/modules/semantic/research/output_layer_repair_chaining_20260905.md`
@@ -399,6 +401,6 @@ Excluded from the active index and default search view.
 
 ## Inventory summary
 
-- documents: 349
-- active: 294
+- documents: 351
+- active: 296
 - grayed out: 55

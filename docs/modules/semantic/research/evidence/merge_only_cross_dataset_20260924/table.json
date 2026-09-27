@@ -1,0 +1,373 @@
+{
+  "notes": [
+    "mot20 = MOT20-01,MOT20-02 only; MOT20-03/05 merge stage OOM on 12 GB GPU (see mot20/full_set_oom_excerpt.txt)",
+    "dancetrack replay reads frames via a 6-digit symlink mirror (pixels/GT unchanged); merge extractor hardcodes %06d",
+    "tracker_capture_fps is the substrate capture throughput (interp off), serial, same session; merge stage is offline host wall time"
+  ],
+  "rows": [
+    {
+      "accepted_links": 85,
+      "accepted_merge_gt_labels": {
+        "accepted": 85,
+        "diff_gt": 33,
+        "judged_precision": 0.5925925925925926,
+        "same_gt": 48,
+        "undetermined": 4
+      },
+      "base": {
+        "AssA": 73.48542261999741,
+        "DetA": 75.44838491453736,
+        "FN": 18315,
+        "FP": 1992,
+        "HOTA": 74.3770694248394,
+        "IDF1": 80.44710977524475,
+        "IDs": 344,
+        "MOTA": 81.61037249436761,
+        "final_tracks": 804
+      },
+      "dataset": "mot17",
+      "delta": {
+        "AssA": 0.6873514220412034,
+        "DetA": 0.02553857789024505,
+        "FN": -447,
+        "FP": 540,
+        "HOTA": 0.3603449916948449,
+        "IDF1": 0.8295917128703962,
+        "IDs": -31,
+        "MOTA": -0.05521073581662961,
+        "final_tracks": -85
+      },
+      "interpolation_after_stages": "on",
+      "merge_only": {
+        "AssA": 74.17277404203861,
+        "DetA": 75.4739234924276,
+        "FN": 17868,
+        "FP": 2532,
+        "HOTA": 74.73741441653425,
+        "IDF1": 81.27670148811515,
+        "IDs": 313,
+        "MOTA": 81.55516175855098,
+        "final_tracks": 719
+      },
+      "per_sequence_IDF1_sign": {
+        "down": 4,
+        "max": 5.165723668213957,
+        "min": -0.687361362624614,
+        "up": 3,
+        "zero": 0
+      },
+      "repeat_determinism": {
+        "base": {
+          "mot_files_identical": true,
+          "n": 3
+        },
+        "merge_only": {
+          "mot_files_identical": true,
+          "n": 3
+        }
+      },
+      "runtime": {
+        "extract_s_median": 56.15164303899655,
+        "frames": 5316,
+        "merge_s_median": 18.044359237001117,
+        "merge_stage_ms_per_frame_median": 13.957111037621834,
+        "merge_stage_wall_s_per_repeat": [
+          86.61364893600148,
+          72.44618325399824,
+          74.19600227599767
+        ],
+        "tracker_capture_fps": 138.4
+      },
+      "sequences": 7
+    },
+    {
+      "accepted_links": 85,
+      "base": {
+        "AssA": 72.67997706439905,
+        "DetA": 73.83780465149438,
+        "FN": 22272,
+        "FP": 383,
+        "HOTA": 73.18746299955063,
+        "IDF1": 79.54515182161269,
+        "IDs": 737,
+        "MOTA": 79.16952367382922,
+        "final_tracks": 804
+      },
+      "dataset": "mot17",
+      "delta": {
+        "AssA": 0.5699862956642079,
+        "DetA": 0.008652966027113962,
+        "FN": 0,
+        "FP": 0,
+        "HOTA": 0.29296885647113413,
+        "IDF1": 0.7449248908512232,
+        "IDs": -43,
+        "MOTA": 0.03829131677605346,
+        "final_tracks": -85
+      },
+      "interpolation_after_stages": "off",
+      "merge_only": {
+        "AssA": 73.24996336006326,
+        "DetA": 73.8464576175215,
+        "FN": 22272,
+        "FP": 383,
+        "HOTA": 73.48043185602177,
+        "IDF1": 80.29007671246391,
+        "IDs": 694,
+        "MOTA": 79.20781499060527,
+        "final_tracks": 719
+      },
+      "per_sequence_IDF1_sign": {
+        "down": 2,
+        "max": 5.06928307083227,
+        "min": -0.5878962536023096,
+        "up": 5,
+        "zero": 0
+      },
+      "sequences": 7
+    },
+    {
+      "accepted_links": 97,
+      "accepted_merge_gt_labels": {
+        "accepted": 97,
+        "diff_gt": 13,
+        "judged_precision": 0.8194444444444444,
+        "same_gt": 59,
+        "undetermined": 25
+      },
+      "base": {
+        "AssA": 35.657254449512784,
+        "DetA": 48.59527991579805,
+        "FN": 57279,
+        "FP": 15361,
+        "HOTA": 41.381128238991224,
+        "IDF1": 51.09434895511315,
+        "IDs": 1122,
+        "MOTA": 57.756626119625224,
+        "final_tracks": 1265
+      },
+      "dataset": "mot20",
+      "delta": {
+        "AssA": 0.8896439549405386,
+        "DetA": 0.12738726847412352,
+        "FN": -519,
+        "FP": 316,
+        "HOTA": 0.5831453052041837,
+        "IDF1": 1.0395767477306848,
+        "IDs": -47,
+        "MOTA": 0.14317458135752759,
+        "final_tracks": -97
+      },
+      "interpolation_after_stages": "on",
+      "merge_only": {
+        "AssA": 36.54689840445332,
+        "DetA": 48.722667184272176,
+        "FN": 56760,
+        "FP": 15677,
+        "HOTA": 41.96427354419541,
+        "IDF1": 52.13392570284383,
+        "IDs": 1075,
+        "MOTA": 57.89980070098275,
+        "final_tracks": 1168
+      },
+      "per_sequence_IDF1_sign": {
+        "down": 0,
+        "max": 1.1474918638980043,
+        "min": 0.21940363203483315,
+        "up": 2,
+        "zero": 0
+      },
+      "repeat_determinism": {
+        "base": {
+          "mot_files_identical": true,
+          "n": 3
+        },
+        "merge_only": {
+          "mot_files_identical": true,
+          "n": 3
+        }
+      },
+      "runtime": {
+        "extract_s_median": 55.580290779998904,
+        "frames": 3211,
+        "merge_s_median": 300.2091417669981,
+        "merge_stage_ms_per_frame_median": 110.21926674743008,
+        "merge_stage_wall_s_per_repeat": [
+          386.26467785300156,
+          353.914065525998,
+          347.37183827699846
+        ],
+        "tracker_capture_fps": 111.67
+      },
+      "sequences": 2
+    },
+    {
+      "accepted_links": 97,
+      "base": {
+        "AssA": 35.53486967751529,
+        "DetA": 45.532300112769434,
+        "FN": 66873,
+        "FP": 10856,
+        "HOTA": 40.02273476334654,
+        "IDF1": 50.43399373139113,
+        "IDs": 1914,
+        "MOTA": 54.38858726777083,
+        "final_tracks": 1265
+      },
+      "dataset": "mot20",
+      "delta": {
+        "AssA": 0.722965038632033,
+        "DetA": -0.02164711479669279,
+        "FN": 7,
+        "FP": 7,
+        "HOTA": 0.4072912162551745,
+        "IDF1": 0.8308123612328515,
+        "IDs": -50,
+        "MOTA": 0.02061713971548329,
+        "final_tracks": -97
+      },
+      "interpolation_after_stages": "off",
+      "merge_only": {
+        "AssA": 36.25783471614732,
+        "DetA": 45.51065299797274,
+        "FN": 66880,
+        "FP": 10863,
+        "HOTA": 40.430025979601716,
+        "IDF1": 51.264806092623985,
+        "IDs": 1864,
+        "MOTA": 54.409204407486314,
+        "final_tracks": 1168
+      },
+      "per_sequence_IDF1_sign": {
+        "down": 0,
+        "max": 0.9027255367166234,
+        "min": 0.2824193927983032,
+        "up": 2,
+        "zero": 0
+      },
+      "sequences": 2
+    },
+    {
+      "accepted_links": 2678,
+      "accepted_merge_gt_labels": {
+        "accepted": 2678,
+        "diff_gt": 1219,
+        "judged_precision": 0.34603004291845496,
+        "same_gt": 645,
+        "undetermined": 814
+      },
+      "base": {
+        "AssA": 19.13135829611945,
+        "DetA": 56.93552293091304,
+        "FN": 67308,
+        "FP": 32422,
+        "HOTA": 32.86218577688376,
+        "IDF1": 34.474353443724794,
+        "IDs": 4702,
+        "MOTA": 70.070787837102,
+        "final_tracks": 6791
+      },
+      "dataset": "dancetrack",
+      "delta": {
+        "AssA": 1.8724883203934084,
+        "DetA": -1.6063016662877558,
+        "FN": -4064,
+        "FP": 16712,
+        "HOTA": 1.0903723945614914,
+        "IDF1": 3.475189517883976,
+        "IDs": 17,
+        "MOTA": -3.62966784168745,
+        "final_tracks": -2678
+      },
+      "interpolation_after_stages": "on",
+      "merge_only": {
+        "AssA": 21.00384661651286,
+        "DetA": 55.32922126462528,
+        "FN": 63244,
+        "FP": 49134,
+        "HOTA": 33.952558171445254,
+        "IDF1": 37.94954296160877,
+        "IDs": 4719,
+        "MOTA": 66.44111999541455,
+        "final_tracks": 4113
+      },
+      "per_sequence_IDF1_sign": {
+        "down": 6,
+        "max": 21.374405259994973,
+        "min": -1.0370498274922753,
+        "up": 34,
+        "zero": 0
+      },
+      "repeat_determinism": {
+        "base": {
+          "mot_files_identical": true,
+          "n": 3
+        },
+        "merge_only": {
+          "mot_files_identical": true,
+          "n": 3
+        }
+      },
+      "runtime": {
+        "extract_s_median": 187.78866986200228,
+        "frames": 41796,
+        "merge_s_median": 99.66845977199227,
+        "merge_stage_ms_per_frame_median": 6.877622969518484,
+        "merge_stage_wall_s_per_repeat": [
+          352.0264956399933,
+          287.45712963399455,
+          273.0417954129971
+        ],
+        "tracker_capture_fps": 146.98
+      },
+      "sequences": 40
+    },
+    {
+      "accepted_links": 2678,
+      "base": {
+        "AssA": 18.438028142560526,
+        "DetA": 54.417479530298664,
+        "FN": 90037,
+        "FP": 15353,
+        "HOTA": 31.571234437999546,
+        "IDF1": 34.069347985159894,
+        "IDs": 10039,
+        "MOTA": 66.91915283867824,
+        "final_tracks": 6791
+      },
+      "dataset": "dancetrack",
+      "delta": {
+        "AssA": 1.8891273941446833,
+        "DetA": -0.3410987821847016,
+        "FN": 0,
+        "FP": 0,
+        "HOTA": 1.485237072836835,
+        "IDF1": 3.9706278804061697,
+        "IDs": -574,
+        "MOTA": 0.1645029088928993,
+        "final_tracks": -2678
+      },
+      "interpolation_after_stages": "off",
+      "merge_only": {
+        "AssA": 20.32715553670521,
+        "DetA": 54.07638074811396,
+        "FN": 90037,
+        "FP": 15353,
+        "HOTA": 33.05647151083638,
+        "IDF1": 38.03997586556606,
+        "IDs": 9465,
+        "MOTA": 67.08365574757114,
+        "final_tracks": 4113
+      },
+      "per_sequence_IDF1_sign": {
+        "down": 1,
+        "max": 20.573969280517378,
+        "min": -0.1795792714212432,
+        "up": 37,
+        "zero": 2
+      },
+      "sequences": 40
+    }
+  ],
+  "schema": "merge_only_cross_dataset_table/v1"
+}
