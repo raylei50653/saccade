@@ -3,7 +3,7 @@
 > 狀態：Phase A 調查結論；**不改** runtime 行為、preset、threshold、weights、benchmark claim 或 packaging policy。
 > 固定 source commit：`7be2f51f`（main）。證據方法：靜態讀碼＋`mot17.py --help` 的 `-X importtime` import closure＋對既有 build 產物的 `readelf -d` / `cuobjdump`。
 > 沒有執行 inference、benchmark 或 packaging 實驗；本文不發任何效能或精度數字。
-> build 產物來自主 checkout `build/`（2026-09-24 建置、分支 `perf/459-merge-sparse-exact`）；該分支相對 `7be2f51f` 在 `CMakeLists.txt`、`src/perception/`、`src/tracking/tracker_gpu_python.cpp` 無差異，故連結結構可代表 main。
+> build 產物來自主 checkout `build/`（2026-09-24 建置、分支 `perf/459-merge-sparse-exact`）；該分支相對 `7be2f51f` 在 `CMakeLists.txt`、`src/perception/`、`src/tracking/tracker_gpu_python.cpp` 無差異，也就是受檢 target 的 **source 與 main 等價**。但 ELF／link／CUDA 性質也取決於 CMake cache、build 選項與 build 環境，所以 §3.2、§8 觀察到的性質**只描述這一個實測 build configuration**（見 §3.2 的 cache 摘錄），不主張對 main 的每一種 build configuration 都成立。
 
 本文回答一個問題：**supported headline runtime 能不能做成終端使用者免裝 Python 的預編譯包？不能的話差多少。**
 
@@ -74,6 +74,19 @@
 
 ### 3.2 Native libraries（`readelf -d` NEEDED）
 
+實測 build configuration（主 checkout `build/CMakeCache.txt` 與 `CMakeFiles/4.4.3/`）：
+
+| 項目 | 值 | 備註 |
+|:--|:--|:--|
+| CMake | 4.4.3 | |
+| `CMAKE_BUILD_TYPE` | `Debug` | 全域 flags 仍另外加 `-O3`（`CMakeLists.txt` §1） |
+| `CMAKE_CUDA_ARCHITECTURES`（cache） | `75` | 被 `CMakeLists.txt:102` 的一般變數 `"native"` 蓋掉；實測 SASS 只有 `sm_120`，與這個解讀一致 |
+| CUDA compiler | nvcc 13.3.73（venv） | host compiler `/usr/bin/g++-15` |
+| C++ compiler | `/usr/sbin/g++-13`（13.4.1） | |
+| `ENABLE_NATIVE_TESTS` / `ENABLE_NATIVE_COVERAGE` / `SACCADE_ENABLE_NVTX` | ON / OFF / ON | |
+| `Torch_DIR` / TensorRT libs | 主 checkout 的 `.venv`（`torch/share/cmake/Torch`、`tensorrt_libs/libnvinfer{,_plugin}.so.10`） | 絕對 RUNPATH 的來源 |
+| `OpenCV_DIR` | `/usr/lib/cmake/opencv5`（系統） | |
+
 | 產物 | NEEDED（去掉 libc/libstdc++/libm/libgcc） | 備註 |
 |:--|:--|:--|
 | `saccade_tracking_ext` | `libcudart.so.13`、`libcublas.so.13`、`libcublasLt.so.13`、`libcufft.so.12`、`libnvinfer.so.10`、`libtorch{,_cpu,_cuda}.so`、`libc10{,_cuda}.so`、`libopencv_{core,imgproc,video,features,geometry}.so.500` | tracker 程式碼本身**不用** torch／TRT：`saccade_tracking` 靜態庫連到 `saccade_perception`（`CMakeLists.txt:336-341`），所以一起被帶進來。OpenCV 只用在非 headline 的 sparse-flow GMC 模式（`gmc.cpp`：`goodFeaturesToTrack`、`calcOpticalFlowPyrLK`…）；headline GMC 走 cuFFT |
@@ -82,7 +95,7 @@
 | `libsaccade_scan_plugin.so` | `libnvinfer.so.10`、`libcudart.so.13` | TRT Mamba head 的 plugin；headline 未用 |
 | `saccade_node` | GStreamer／GLib、TRT、libtorch、OpenCV、cudart | 示範：一個 native 執行檔**本來就能**不帶 libpython 連結起來 |
 
-RUNPATH 全部是**絕對路徑**，指向 `<checkout>/build`、`<venv>/…/tensorrt_libs`、`<venv>/…/torch/lib`、`build/cuda_devlink`、`build/cuda_shim_root/lib64`；搬動 build 或 venv 就會斷。
+在這個實測 build 裡，RUNPATH 全部是**絕對路徑**，指向 `<checkout>/build`、`<venv>/…/tensorrt_libs`、`<venv>/…/torch/lib`、`build/cuda_devlink`、`build/cuda_shim_root/lib64`；搬動 build 或 venv 就會斷。
 
 `libtorch*.so` 是 C++ 函式庫，本身**不需要** libpython；只有 `libtorch_python.so` 需要。所以「保留 LibTorch」和「免裝 Python」並不衝突，只是套件會變大。
 
@@ -215,9 +228,9 @@ config: 一份預先解析好的扁平設定檔                                 
 | **A. Pure native archive／installer**（單一靜態或近靜態執行檔） | §5 全部搬走；head 為 TRT；靜態連結 | TRT、cudart 在實務上都是動態連結（授權與 driver 相容性）；TRT engine 綁 SM＋TRT 版本；glibc baseline | 最高：除了 B 的全部驗證，還要做靜態連結的相容性測試 |
 | **B. Native executable + shared libs + configs/models** | §5 全部搬走；`$ORIGIN` RUNPATH；明確的 SM 清單 | 與 A 相同的語義阻礙，但把 CUDA/TRT 留成「系統提供或另外決定」 | 中高：MOT txt 對 Python headline 的 parity（同一機器）、乾淨機器上的載入測試 |
 | **C. Python wheel + bundled native extension** | ADR 025 §5 的五條前置條件 | **仍然需要 Python**；也就是 ADR 025 已經記錄的 wheel 線 | 中：屬於 ADR 025／#441 的範圍，不回答本 issue |
-| **D. Transitional bundled-Python package**（例如內嵌 CPython + venv 的 archive） | 不需要搬任何語義 | 體積（torch＋cu13 wheels＋TRT＋triton 動輒數 GB）；Triton JIT 在 runtime 需要 C 編譯器（或關掉 compile，這會改變 kernel 集合）；絕對 RUNPATH 要改寫；§3.6 的 checkout 路徑假設（`mot17.py` 插 `sys.path`、`paths.py` 要 checkout）要處理；它是 eval harness，不是產品 CLI | 中：功能上只需比對同機器 MOT txt，但散佈、授權、更新成本高，而且技術上**並沒有移除** Python，只是把它藏起來 |
+| **D. Transitional bundled-Python package**（例如內嵌 CPython + venv 的 archive） | 不需要搬任何語義 | 體積（torch＋cu13 wheels＋TRT＋triton 動輒數 GB）；Triton JIT 在 runtime 需要 C 編譯器（或關掉 compile，這會改變 kernel 集合）；絕對 RUNPATH 要改寫；§3.6 的 checkout 路徑假設（`mot17.py` 插 `sys.path`、`paths.py` 要 checkout）要處理；它是 eval harness，不是產品 CLI | 中：功能上只需比對同機器 MOT txt，但散佈、授權、更新成本高；滿足「使用者不需自行安裝 Python」，但 runtime 仍然包含 Python，不算 Python-free |
 
-建議的目標形式是 **B**；D 可以當作不動語義的過渡方案，但它不滿足「終端使用者不需要 Python」的精神（使用者不用自己裝，但 Python 仍在套件裡）。要不要做 D 是 owner 的決定，本文不做決定。
+建議的目標形式是 **B**；D 可以當作不動語義的過渡方案：bundled-Python 滿足「終端使用者不需自行安裝 Python」這個部署目標（#465 的字面需求），但不滿足後續 phase 追求的、更強的「runtime 本身 Python-free」目標。兩個目標在本文中分開計算。要不要做 D 是 owner 的決定，本文不做決定。
 
 ---
 
@@ -227,7 +240,7 @@ config: 一份預先解析好的扁平設定檔                                 
 |:--|:--|:--|
 | OS | Linux x86_64 是唯一驗證過的平台。量測主機是 **WSL2**（kernel `6.18.x-microsoft-standard-WSL2`、Arch Linux userland）。原生 Windows 沒有 build 路徑（GStreamer／pkg-config／`.so`／POSIX 路徑），ADR 025 矩陣明確把它列在範圍外 | `uname`；ADR 025 §0 |
 | glibc | build host 是 glibc 2.44；在這台機器建出來的 binary 要求執行端 glibc ≥ build 端 → 發佈版需要較舊的 baseline 建置環境 | `ldd --version` |
-| GPU arch | `CMAKE_CUDA_ARCHITECTURES "native"`（`CMakeLists.txt:102`）；實際產物只有 `sm_120` SASS、**沒有 PTX** → 只能在 CC 12.x 的 GPU 上跑，更舊的 GPU 不能 JIT | `cuobjdump --list-elf` / `--list-ptx` |
+| GPU arch | `CMAKE_CUDA_ARCHITECTURES "native"`（`CMakeLists.txt:102`）；在這個實測 build 裡，產物只有 `sm_120` SASS、**沒有 PTX** → 只能在 CC 12.x 的 GPU 上跑，更舊的 GPU 不能 JIT。`native` 表示 arch 由 build host 的 GPU 決定 | `cuobjdump --list-elf` / `--list-ptx` |
 | TRT engine | 在 build host 上建置，綁 SM＋TRT 10.16；換 GPU 型號就要重建 engine | TRT 慣例；preset 註解 |
 | CUDA | runtime 13.0（wheel），nvcc 13.3；driver 必須支援 CUDA 13 | pyproject、ADR 025 |
 | TensorRT | 10.16.1.11 **cu12** wheel 和 cu13 runtime 放在同一個 process | pyproject |
