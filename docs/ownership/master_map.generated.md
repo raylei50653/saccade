@@ -197,6 +197,7 @@ Manifest: `docs/ownership/doc_migration_manifest.yaml`
 - `docs/reference/math_model.md`
 - `docs/reference/math_model_implementation.md`
 - `docs/reference/mot17_default_config.md`
+- `docs/reference/native_runtime_head_artifact.md`
 - `docs/reference/native_runtime_packaging_audit.md`
 - `docs/reference/native_runtime_shipping_boundary.md`
 - `docs/reference/no_go_registry.md`
@@ -405,6 +406,6 @@ Excluded from the active index and default search view.
 
 ## Inventory summary
 
-- documents: 355
-- active: 300
+- documents: 356
+- active: 301
 - grayed out: 55
