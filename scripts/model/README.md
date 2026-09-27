@@ -35,6 +35,7 @@ README is the classification index for later cleanup.
 | `compile_mamba_head_aot.py` | AOTInductor native-library experiment for Mamba Head |
 | `export_mamba_head.py` | Export Mamba Head to TorchScript |
 | `export_mamba_head_onnx.py` | Export Mamba Head to ONNX with custom op |
+| `export_headline_mamba_head.py` | Headline (`mamba_whole_graph`) head ONNX + FP32 engine + lineage manifest; fail-closed on the preset/inventory checkpoint binding (#465 PR-1) |
 | `export_yolo_backbone.py` | Export YOLO backbone FPN features from base weights |
 | `export_yolo_backbone_ckpt.py` | Export YOLO backbone FPN features from gated-detector checkpoint |
 
@@ -103,6 +104,7 @@ manually or if their outputs support a retained report.
 | `calibrate_yolo_int8.py` | stable | cli | INT8 static quantization for YOLO ONNX via onnxruntime. Produces a QDQ-annotated ONNX that TRT 10.x (explicit… |
 | `compile_mamba_head_aot.py` | stable | cli | Example script demonstrating how to compile the PyTorch Mamba Head into a standalone C++ Shared/Static Librar… |
 | `export_dinov2.py` | stable | cli | Export facebook/dinov2-base (ViT-B/14, 768-dim) to ONNX for TRT compilation. |
+| `export_headline_mamba_head.py` | diagnostic | cli | Export the headline Mamba head as an ONNX + TensorRT artifact with a lineage manifest. |
 | `export_mamba_head.py` | stable | cli | Export PyTorch Mamba Head to TorchScript via wrapper. |
 | `export_mamba_head_onnx.py` | stable | cli | Export PyTorch MambaHead to ONNX with custom SelectiveScan op. |
 | `export_mobilenetv4_reid.py` | stable | cli | Export fine-tuned MobileNetV4 ReID checkpoint to ONNX for TRT compilation. |
