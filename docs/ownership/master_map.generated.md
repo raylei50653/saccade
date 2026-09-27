@@ -113,6 +113,7 @@ Manifest: `docs/ownership/doc_migration_manifest.yaml`
 - `docs/modules/semantic/research/association_recovery_scripts_index_20260709.md`
 - `docs/modules/semantic/research/association_tools.yaml`
 - `docs/modules/semantic/research/bridge_fidelity_reconciled_map_20260715.md`
+- `docs/modules/semantic/research/closed/merge_sparse_equivalence_20260927.md`
 - `docs/modules/semantic/research/escape_tail_forensic_20260711.md`
 - `docs/modules/semantic/research/evidence/h0_r4_authority_overlay_runtime_binding_split_20260724/README.md`
 - `docs/modules/semantic/research/evidence/h0_r5_extension_plugin_attestation_closure_20260724/README.md`
@@ -120,6 +121,7 @@ Manifest: `docs/ownership/doc_migration_manifest.yaml`
 - `docs/modules/semantic/research/evidence/h2_phase_a_failed_attempt_0a5dffe9_20260727/README.md`
 - `docs/modules/semantic/research/evidence/h2_phase_a_failed_attempt_7646f421_20260728/README.md`
 - `docs/modules/semantic/research/evidence/merge_only_cross_dataset_20260924/commands.md`
+- `docs/modules/semantic/research/evidence/merge_sparse_equivalence_20260927/commands.md`
 - `docs/modules/semantic/research/evidence/output_layer_repair_chaining_revalidation_20260912/commands.md`
 - `docs/modules/semantic/research/existing_online_object_analysis_for_gctm_alignment_20260718.md`
 - `docs/modules/semantic/research/gctm_b1_o1_task_objectives_and_semantics_20260716.md`
@@ -402,6 +404,6 @@ Excluded from the active index and default search view.
 
 ## Inventory summary
 
-- documents: 352
-- active: 297
+- documents: 354
+- active: 299
 - grayed out: 55

@@ -1,0 +1,10 @@
+{
+  "commit": "e79609306d3254982961a18475b4d7bcc20eeed6",
+  "files": {
+    "src/saccade/perception/eval/cheb_gr_merge.py": "5b16cc488899ec877d8215bce6c804c5b01b9ade6b78ec365cbac7103721dd38",
+    "src/saccade/perception/reid/cheb_gr.py": "72c752b47497bf655dd7aed93cf8e794cdfe88283a7c2b54d39417a93794ba54",
+    "scripts/eval/experiments/merge_impl_equivalence.py": "afcbcc55e71f1567e8a7d9eb15e43e1d6582b13775ac1c211ad919a6973db7f8",
+    "scripts/eval/experiments/run_output_layer_repair_chaining.py": "6a6982858c28408f80bb7097ee8be78928397c6bb1d634d33f10a42fd004785d",
+    "models/embedding/mobilenetv4_reid_visclean_224.engine": "a41d627c9188de709a3f463a6b17585eb35a4a64b3447303d7a8689cac2a03a7"
+  }
+}

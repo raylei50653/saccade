@@ -1,0 +1,196 @@
+{
+  "commit": "e79609306d3254982961a18475b4d7bcc20eeed6",
+  "dense_max_samples": 27000,
+  "device": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+  "dirty": false,
+  "forced_block_elems": 1048576,
+  "merge": {
+    "cheb_lambda": 2.0,
+    "fuse_lambda": 0.3,
+    "k2": 6,
+    "max_cost": 0.45,
+    "max_fwd": 50,
+    "max_gap": 60,
+    "min_overlap_frames": 1,
+    "n_samples": 50,
+    "pool_frac": 0.3
+  },
+  "schema": "merge_impl_equivalence/v1",
+  "sequences": {
+    "MOT20-01": {
+      "dense": {
+        "accepted": 12,
+        "out_sha256": "4741f3664f88f3179afe66f7ff3d4162cf98e74b79b696b62b48294795f1416a",
+        "peak_gpu_bytes": 1373785088,
+        "stats": {
+          "ids_after": 169,
+          "ids_before": 181,
+          "merges": 12
+        },
+        "wall_s": 3.435029576001398
+      },
+      "dense_margins": {
+        "candidate_exact_cost_ties": 0,
+        "candidates": 13,
+        "min_abs_cost_minus_max_cost": 0.0003066539764404186,
+        "min_positive_candidate_cost_gap": 0.0003535449504852295
+      },
+      "graph_nodes": 8052,
+      "samples": 4026,
+      "sparse": {
+        "accepted": 12,
+        "out_sha256": "4741f3664f88f3179afe66f7ff3d4162cf98e74b79b696b62b48294795f1416a",
+        "peak_gpu_bytes": 470927360,
+        "stats": {
+          "ids_after": 169,
+          "ids_before": 181,
+          "merges": 12
+        },
+        "vs_dense": {
+          "accepted_identical_in_order": true,
+          "eligible_cost_exact_equal": 1495,
+          "eligible_cost_max_abs_diff": 2.384185791015625e-07,
+          "eligible_pairs": 1852,
+          "eligible_verdict_mismatches": 0,
+          "out_identical": true,
+          "pregated_dense_reject_cost_relabeled": 8666,
+          "pregated_pairs": 8733,
+          "stats_identical": true
+        },
+        "wall_s": 1.1120484290004242
+      },
+      "sparse_blocked": {
+        "accepted": 12,
+        "out_sha256": "4741f3664f88f3179afe66f7ff3d4162cf98e74b79b696b62b48294795f1416a",
+        "peak_gpu_bytes": 250287104,
+        "stats": {
+          "ids_after": 169,
+          "ids_before": 181,
+          "merges": 12
+        },
+        "vs_dense": {
+          "accepted_identical_in_order": true,
+          "eligible_cost_exact_equal": 1496,
+          "eligible_cost_max_abs_diff": 2.384185791015625e-07,
+          "eligible_pairs": 1852,
+          "eligible_verdict_mismatches": 0,
+          "out_identical": true,
+          "pregated_dense_reject_cost_relabeled": 8666,
+          "pregated_pairs": 8733,
+          "stats_identical": true
+        },
+        "wall_s": 0.7115410520018486
+      },
+      "sparse_blocked_forced_regime": true,
+      "sparse_blocked_regime": false,
+      "tracklets_with_embedding": 146
+    },
+    "MOT20-02": {
+      "dense": {
+        "accepted": 85,
+        "out_sha256": "ec9c80ff43553cc3a73719c8f4c5a1c33792444aa16d2a35a36f51077a9d95c9",
+        "peak_gpu_bytes": 41656248320,
+        "stats": {
+          "ids_after": 999,
+          "ids_before": 1084,
+          "merges": 85
+        },
+        "wall_s": 269.2755511170035
+      },
+      "dense_margins": {
+        "candidate_exact_cost_ties": 0,
+        "candidates": 98,
+        "min_abs_cost_minus_max_cost": 4.4357776641856805e-05,
+        "min_positive_candidate_cost_gap": 9.953975677490234e-06
+      },
+      "graph_nodes": 45436,
+      "samples": 22718,
+      "sparse": {
+        "accepted": 85,
+        "out_sha256": "ec9c80ff43553cc3a73719c8f4c5a1c33792444aa16d2a35a36f51077a9d95c9",
+        "peak_gpu_bytes": 2033133056,
+        "stats": {
+          "ids_after": 999,
+          "ids_before": 1084,
+          "merges": 85
+        },
+        "vs_dense": {
+          "accepted_identical_in_order": true,
+          "eligible_cost_exact_equal": 13446,
+          "eligible_cost_max_abs_diff": 3.5762786865234375e-07,
+          "eligible_pairs": 16483,
+          "eligible_verdict_mismatches": 0,
+          "out_identical": true,
+          "pregated_dense_reject_cost_relabeled": 324693,
+          "pregated_pairs": 325068,
+          "stats_identical": true
+        },
+        "wall_s": 6.563522789001581
+      },
+      "sparse_blocked": {
+        "accepted": 85,
+        "out_sha256": "ec9c80ff43553cc3a73719c8f4c5a1c33792444aa16d2a35a36f51077a9d95c9",
+        "peak_gpu_bytes": 1375081984,
+        "stats": {
+          "ids_after": 999,
+          "ids_before": 1084,
+          "merges": 85
+        },
+        "vs_dense": {
+          "accepted_identical_in_order": true,
+          "eligible_cost_exact_equal": 13446,
+          "eligible_cost_max_abs_diff": 3.2782554626464844e-07,
+          "eligible_pairs": 16483,
+          "eligible_verdict_mismatches": 0,
+          "out_identical": true,
+          "pregated_dense_reject_cost_relabeled": 324693,
+          "pregated_pairs": 325068,
+          "stats_identical": true
+        },
+        "wall_s": 7.905726600998605
+      },
+      "sparse_blocked_forced_regime": true,
+      "sparse_blocked_regime": true,
+      "tracklets_with_embedding": 827
+    },
+    "MOT20-03": {
+      "dense": "skipped (samples > --dense-max-samples)",
+      "graph_nodes": 73742,
+      "samples": 36871,
+      "sparse": {
+        "accepted": 131,
+        "out_sha256": "c3c59941ecbe33c47d49309a9875ce00ffc0b8f75c3392af3faeb79371c694ab",
+        "peak_gpu_bytes": 2295944704,
+        "stats": {
+          "ids_after": 1144,
+          "ids_before": 1275,
+          "merges": 131
+        },
+        "wall_s": 10.903289562997088
+      },
+      "sparse_blocked_forced_regime": true,
+      "sparse_blocked_regime": true,
+      "tracklets_with_embedding": 1219
+    },
+    "MOT20-05": {
+      "dense": "skipped (samples > --dense-max-samples)",
+      "graph_nodes": 130696,
+      "samples": 65348,
+      "sparse": {
+        "accepted": 326,
+        "out_sha256": "9f928963c2078008388e96f13751a5b29c81094439fd260bdf18beeeccc8df6f",
+        "peak_gpu_bytes": 3913667584,
+        "stats": {
+          "ids_after": 2368,
+          "ids_before": 2694,
+          "merges": 326
+        },
+        "wall_s": 30.736378273999435
+      },
+      "sparse_blocked_forced_regime": true,
+      "sparse_blocked_regime": true,
+      "tracklets_with_embedding": 2562
+    }
+  },
+  "substrate": "results/xval459_20260924/substrate_mot20"
+}

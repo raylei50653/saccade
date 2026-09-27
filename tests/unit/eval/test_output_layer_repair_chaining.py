@@ -208,6 +208,8 @@ def test_merge_stage_records_timing_and_accepted_pairs(harness):
         return {}
 
     def fake_merge(lines, embeddings, *, decision_log, **kwargs):
+        assert kwargs["distance_impl"] == "sparse"
+        assert kwargs["max_cost"] == 0.45
         decision_log.append(
             {
                 "kind": "pair",

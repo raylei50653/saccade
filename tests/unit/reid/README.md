@@ -7,6 +7,7 @@
 |------|-------|----------|-----------|---------|
 | `test_cheb_gr.py` | reid | behavior | active | Unit tests for Cheb-GR re-ranking core (CPU, no GPU required). |
 | `test_cheb_gr_merge.py` | eval | behavior | active | Unit tests for Cheb-GR offline tracklet merge (numeric core). |
+| `test_cheb_gr_merge_sparse.py` | eval | contract | active | Sparse/pre-gated Cheb-GR merge path equals the dense reference path. |
 | `test_cheb_gr_online.py` | eval,reid | behavior | active | Unit tests for the causal online Cheb-GR ID handover (numeric core). |
 | `test_occ_audit.py` | eval | behavior | active | Unit tests for the causal occ-exit identity audit (numeric core). |
 

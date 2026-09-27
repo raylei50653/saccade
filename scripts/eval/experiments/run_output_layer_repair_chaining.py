@@ -269,6 +269,7 @@ def apply_merge_stage(
         max_fwd=int(params["max_fwd"]),
         fuse_lambda=float(params["fuse_lambda"]),
         decision_log=decision_log,
+        distance_impl=str(params.get("distance_impl", "sparse")),
     )
     t2 = time.perf_counter()
     diag = summarize_merge_log(decision_log)
@@ -725,6 +726,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--cheb-gr-engine", default="")
     p.add_argument("--merge-max-cost", type=float, default=DEFAULT_MERGE["max_cost"])
     p.add_argument(
+        "--merge-distance-impl",
+        choices=("sparse", "dense"),
+        default="sparse",
+        help="Cheb-GR merge distance path. 'dense' is the pre-optimization "
+        "reference; decisions are equal (merge_impl_equivalence.py).",
+    )
+    p.add_argument(
         "--handover-min-head", type=int, default=DEFAULT_HANDOVER["min_head_samples"]
     )
     p.add_argument("--handover-margin", type=float, default=DEFAULT_HANDOVER["margin"])
@@ -785,6 +793,7 @@ def main(argv: list[str] | None = None) -> int:
 
     merge_params = dict(DEFAULT_MERGE)
     merge_params["max_cost"] = float(args.merge_max_cost)
+    merge_params["distance_impl"] = args.merge_distance_impl
     handover_params = dict(DEFAULT_HANDOVER)
     handover_params["min_head_samples"] = int(args.handover_min_head)
     handover_params["margin"] = float(args.handover_margin)

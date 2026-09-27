@@ -46,6 +46,7 @@ __all__ = [
     "MERGE_DECISION_VERDICTS",
     "temporal_sample_indices",
     "tracklet_distance_matrix",
+    "tracklet_distance_pairs",
     "cheb_gr_merge_output_tracklets",
     "extract_tracklet_embeddings",
 ]
@@ -159,6 +160,257 @@ def tracklet_distance_matrix(
     return dmat
 
 
+def _ordered_group_sum(keys: Tensor, values: Tensor) -> tuple[Tensor, Tensor]:
+    """Sum each integer-key group in stable input order, without atomic adds.
+
+    One gather and elementwise add per group slot fixes the reduction order.
+    The merge operating point bounds group sizes by max_fwd (normalization)
+    or k2 (query expansion). No float scatter/index_add is used.
+    """
+    order = torch.argsort(keys, stable=True)
+    keys, values = keys[order], values[order]
+    unique, counts = torch.unique_consecutive(keys, return_counts=True)
+    sums = values.new_zeros(unique.numel())
+    if not unique.numel():
+        return unique, sums
+    starts = counts.cumsum(0) - counts
+    for slot in range(int(counts.max())):
+        idx = (starts + slot).clamp_max(values.numel() - 1)
+        sums = sums + torch.where(slot < counts, values[idx], 0.0)
+    return unique, sums
+
+
+def _sparse_self_rerank(
+    feats: Tensor,
+    *,
+    cheb_lambda: float,
+    k2: int,
+    max_fwd: int,
+    row_chunk: int,
+) -> tuple[Tensor, Tensor, Tensor]:
+    """CSR of the query-expanded V from ``cheb_gr_kreciprocal(feats, feats)``.
+
+    Same operations as the dense kernel, on the same doubled node set
+    (``cat([feats, feats])``, N = 2S), but the [N, N] distance matrix only ever
+    exists one row block at a time. Each row block keeps what the dense kernel
+    reads from it: the row mean/std, the capped Chebyshev forward set and the
+    k2 nearest neighbours. Everything downstream is sparse: V has at most
+    ``max_fwd`` non-zeros per row, and QE has at most ``k2 * max_fwd``.
+
+    Returns ``(crow, col, val)``: rows sorted, columns ascending within a row.
+    """
+    device = feats.device
+    combined = torch.cat([feats, feats], dim=0)
+    n = combined.shape[0]
+    cap_k = max_fwd if 0 < max_fwd < n else 0
+    kq = max(k2, 1)
+
+    rows_l: list[Tensor] = []
+    cols_l: list[Tensor] = []
+    dval_l: list[Tensor] = []
+    knn = torch.empty((n, kq), dtype=torch.long, device=device)
+    for r0 in range(0, n, row_chunk):
+        r1 = min(n, r0 + row_chunk)
+        dist = combined[r0:r1] @ combined.t()
+        dist.mul_(-2.0).add_(2.0).clamp_min_(0.0)
+        mu = dist.mean(dim=1, keepdim=True)
+        sigma = dist.std(dim=1, unbiased=False, keepdim=True)
+        fwd = dist <= (mu - cheb_lambda * sigma)
+        local = torch.arange(r1 - r0, device=device)
+        fwd[local, local + r0] = True  # always include self
+        if cap_k:
+            cap = torch.zeros_like(fwd)
+            cap.scatter_(1, torch.topk(dist, cap_k, dim=1, largest=False).indices, True)
+            fwd &= cap
+            del cap
+        knn[r0:r1] = torch.topk(dist, kq, dim=1, largest=False).indices
+        ri, ci = fwd.nonzero(as_tuple=True)
+        rows_l.append(ri + r0)
+        cols_l.append(ci)
+        dval_l.append(dist[ri, ci])
+        del dist, fwd
+
+    rows = torch.cat(rows_l)
+    cols = torch.cat(cols_l)
+    dval = torch.cat(dval_l)
+
+    # k-reciprocal: keep (i, j) only when (j, i) is also a forward edge.
+    key = rows * n + cols
+    sorted_key = torch.sort(key).values
+    rkey = cols * n + rows
+    pos = torch.searchsorted(sorted_key, rkey).clamp_max(sorted_key.numel() - 1)
+    recip = sorted_key[pos] == rkey
+    rows, cols, dval = rows[recip], cols[recip], dval[recip]
+
+    val = dval.neg().exp()
+    sum_rows, sums = _ordered_group_sum(rows, val)
+    rowsum = torch.zeros(n, dtype=val.dtype, device=device)
+    rowsum[sum_rows] = sums
+    val = val / rowsum.clamp_min(1e-12)[rows]
+
+    if k2 > 1:
+        # V_i <- (1/k2) * sum over i's k2 nearest neighbours of V_nbr.
+        counts = torch.bincount(rows, minlength=n)
+        crow = torch.zeros(n + 1, dtype=torch.long, device=device)
+        crow[1:] = torch.cumsum(counts, 0)
+        src_rows = knn.sort(dim=1).values.reshape(-1)
+        dst_rows = torch.arange(n, device=device).repeat_interleave(kq)
+        lens = counts[src_rows]
+        dst = dst_rows.repeat_interleave(lens)
+        starts = crow[src_rows].repeat_interleave(lens)
+        seg_start = torch.cumsum(lens, 0) - lens
+        within = torch.arange(
+            int(lens.sum()), device=device
+        ) - seg_start.repeat_interleave(lens)
+        src = starts + within
+        qkey = dst * n + cols[src]
+        qval = val[src] * (1.0 / k2)
+        ukey, val = _ordered_group_sum(qkey, qval)
+        rows = ukey // n
+        cols = ukey % n
+    else:
+        order = torch.argsort(rows * n + cols)
+        rows, cols, val = rows[order], cols[order], val[order]
+
+    crow = torch.zeros(n + 1, dtype=torch.long, device=device)
+    crow[1:] = torch.cumsum(torch.bincount(rows, minlength=n), 0)
+    return crow, cols, val
+
+
+def _csr_entries(crow: Tensor, rows: Tensor) -> tuple[Tensor, Tensor]:
+    """(local row index, entry index) of every stored entry of CSR ``rows``."""
+    device = crow.device
+    lens = crow[rows + 1] - crow[rows]
+    total = int(lens.sum())
+    local = torch.arange(rows.numel(), device=device).repeat_interleave(lens)
+    seg_start = torch.cumsum(lens, 0) - lens
+    within = torch.arange(total, device=device) - seg_start.repeat_interleave(lens)
+    return local, crow[rows].repeat_interleave(lens) + within
+
+
+def _csr_rows_dense(
+    crow: Tensor, col: Tensor, val: Tensor, rows: Tensor, lookup: Tensor, width: int
+) -> Tensor:
+    """Dense [len(rows), width] of CSR rows restricted to ``lookup >= 0`` cols."""
+    out = torch.zeros((rows.numel(), width), dtype=val.dtype, device=val.device)
+    local, src = _csr_entries(crow, rows)
+    pos = lookup[col[src]]
+    keep = pos >= 0
+    out[local[keep], pos[keep]] = val[src[keep]]
+    return out
+
+
+def tracklet_distance_pairs(
+    sample_feats: Tensor,
+    sample_owner: Tensor,
+    n_tracklets: int,
+    pairs: list[tuple[int, int]],
+    *,
+    pool_frac: float = 0.3,
+    cheb_lambda: float = 2.0,
+    k2: int = 6,
+    max_fwd: int = 50,
+    fuse_lambda: float = 0.3,
+    row_chunk: int | None = None,
+    max_block_elems: int = 1 << 28,
+) -> dict[tuple[int, int], float]:
+    """Exact :func:`tracklet_distance_matrix` entries for the requested pairs.
+
+    Computes the same mathematical quantity. Three things differ:
+    only ``pairs`` (``a < b``) are evaluated; the sample-level re-ranking is
+    row-blocked and sparse (memory ~ O(N * max_fwd * k2), not O(N^2)); and
+    Jaccard is taken only over the sample blocks those pairs need. Results can
+    differ from the dense path through floating-point reduction/GEMM rounding.
+    Sparse group sums have a fixed order and do not use atomic accumulation.
+
+    Row blocking: when the full [N, N] distance fits ``max_block_elems``, one
+    block covers all rows, so the distance GEMM is the dense path's call and the
+    neighbourhood graph is identical. Above that, rows are blocked; cuBLAS may
+    pick a different kernel per block shape, so distances can differ by ulps and
+    can flip a tie at the neighbourhood cap. Merge-decision equality for both
+    regimes is checked against the dense path in
+    ``scripts/eval/experiments/merge_impl_equivalence.py``.
+    """
+    out: dict[tuple[int, int], float] = {}
+    s = sample_feats.shape[0]
+    if s == 0 or not pairs:
+        return out
+    if sample_feats.is_cuda and (
+        sample_feats.dtype != torch.float32
+        or torch.is_autocast_enabled("cuda")
+        or torch.get_float32_matmul_precision() != "highest"
+    ):
+        raise ValueError(
+            "Sparse merge requires FP32 embeddings, autocast off, and "
+            "highest float32 matmul precision; other modes need requalification"
+        )
+    device = sample_feats.device
+    n = 2 * s
+    if row_chunk is None:
+        row_chunk = max(1, max_block_elems // n)
+    crow, col, val = _sparse_self_rerank(
+        sample_feats,
+        cheb_lambda=cheb_lambda,
+        k2=k2,
+        max_fwd=max_fwd,
+        row_chunk=row_chunk,
+    )
+
+    owner = sample_owner.to(device)
+    member_idx = [
+        torch.nonzero(owner == t, as_tuple=True)[0] for t in range(n_tracklets)
+    ]
+    partners: dict[int, list[int]] = {}
+    for a, b in pairs:
+        partners.setdefault(a, []).append(b)
+
+    lookup = torch.full((n,), -1, dtype=torch.long, device=device)
+    for a, bs in partners.items():
+        ia = member_idx[a]
+        if ia.numel() == 0:
+            continue
+        bs = [b for b in bs if member_idx[b].numel() > 0]
+        if not bs:
+            continue
+        ib_all = torch.cat([member_idx[b] for b in bs])
+        q_rows = ia
+        g_rows = ib_all + s  # gallery half of the doubled node set
+        # Histogram intersection is zero off the query support, so only
+        # columns in both supports can contribute.
+        q_cols = torch.unique(col[_csr_entries(crow, q_rows)[1]])
+        g_cols = torch.unique(col[_csr_entries(crow, g_rows)[1]])
+        shared = q_cols[torch.isin(q_cols, g_cols)]
+        width = int(shared.numel())
+
+        d_orig = 0.5 * (1.0 - sample_feats[ia] @ sample_feats[ib_all].t())
+        if width == 0:
+            d_jaccard = torch.ones_like(d_orig)
+        else:
+            lookup[shared] = torch.arange(width, device=device)
+            q = _csr_rows_dense(crow, col, val, q_rows, lookup, width)
+            g = _csr_rows_dense(crow, col, val, g_rows, lookup, width)
+            lookup[shared] = -1
+            d_jaccard = torch.empty_like(d_orig)
+            step = max(1, max_block_elems // max(1, q.shape[0] * width))
+            for g0 in range(0, g.shape[0], step):
+                g1 = min(g.shape[0], g0 + step)
+                inter = torch.minimum(q.unsqueeze(1), g[g0:g1].unsqueeze(0)).sum(dim=2)
+                d_jaccard[:, g0:g1] = 1.0 - inter / (2.0 - inter).clamp_min(1e-12)
+        if fuse_lambda >= 1.0:
+            block_all = d_jaccard
+        else:
+            block_all = fuse_lambda * d_jaccard + (1.0 - fuse_lambda) * d_orig
+
+        c0 = 0
+        for b in bs:
+            nb = member_idx[b].numel()
+            block = block_all[:, c0 : c0 + nb].reshape(-1)
+            c0 += nb
+            k = max(1, int(round(pool_frac * block.numel())))
+            out[(a, b)] = float(torch.topk(block, k, largest=False).values.mean())
+    return out
+
+
 @dataclass
 class _MergeStats:
     ids_before: int = 0
@@ -207,6 +459,7 @@ def cheb_gr_merge_output_tracklets(
     max_fwd: int = 50,
     fuse_lambda: float = 0.3,
     decision_log: list[dict[str, Any]] | None = None,
+    distance_impl: str = "dense",
 ) -> tuple[list[str], dict[str, int]]:
     """Merge temporally-disjoint tracklets by Cheb-GR appearance similarity.
 
@@ -225,6 +478,15 @@ def cheb_gr_merge_output_tracklets(
             pair carrying the first rejecting condition, or ``accepted``.
             ``None`` (the default) is a no-op: merge decisions are unchanged.
             Event counts from this log are diagnostics, not an accuracy metric.
+        distance_impl: ``"sparse"`` (explicit offline opt-in) scores only temporally eligible
+            pairs with :func:`tracklet_distance_pairs`, so memory stays linear
+            in the sample count. ``"dense"`` (default) is the original
+            :func:`tracklet_distance_matrix` path, kept as the equivalence
+            reference. Decision equivalence is qualified on the frozen reference
+            set, not guaranteed across arbitrary hardware or inputs. In the decision log,
+            a pair that fails both gates is ``reject_temporal`` with
+            ``cost=None`` under ``"sparse"`` and ``reject_cost`` under
+            ``"dense"``.
 
     Returns:
         (rewritten lines, stats dict).
@@ -232,6 +494,18 @@ def cheb_gr_merge_output_tracklets(
     stats = _MergeStats()
     if not enabled or not results_lines:
         return results_lines, vars(stats)
+
+    if distance_impl not in ("sparse", "dense"):
+        raise ValueError(f"unknown distance_impl {distance_impl!r}")
+    if distance_impl == "sparse":
+        # Validate before concatenation can silently promote mixed dtypes.
+        # Include unused/empty inputs so eligibility cannot bypass the contract.
+        for track_id, input_embedding in embeddings.items():
+            if input_embedding.dtype != torch.float32:
+                raise ValueError(
+                    f"Sparse merge requires FP32 embeddings; track {track_id} "
+                    f"has {input_embedding.dtype}; other modes need requalification"
+                )
 
     records = _parse_mot_lines(results_lines)
     tracklets: list[OutputTracklet] = _build_output_tracklets(
@@ -278,16 +552,39 @@ def cheb_gr_merge_output_tracklets(
     sample_feats = torch.cat(feats_list, dim=0)
     sample_owner = torch.tensor(owner_list, dtype=torch.long)
 
-    dmat = tracklet_distance_matrix(
-        sample_feats,
-        sample_owner,
-        len(indexed),
-        pool_frac=pool_frac,
-        cheb_lambda=cheb_lambda,
-        k2=k2,
-        max_fwd=max_fwd,
-        fuse_lambda=fuse_lambda,
-    )
+    dist_kwargs: dict[str, Any] = {
+        "pool_frac": pool_frac,
+        "cheb_lambda": cheb_lambda,
+        "k2": k2,
+        "max_fwd": max_fwd,
+        "fuse_lambda": fuse_lambda,
+    }
+
+    def _temporal_ok(ai: int, bi: int) -> tuple[bool, int, int]:
+        ta, tb = indexed[ai][1], indexed[bi][1]
+        earlier, later = (ta, tb) if ta.end <= tb.end else (tb, ta)
+        overlap = earlier.end - later.start
+        gap = later.start - earlier.end
+        ok = not (overlap > min_overlap_frames or gap < 0 or gap > max_gap)
+        return ok, gap, overlap
+
+    pair_cost: dict[tuple[int, int], float] = {}
+    if distance_impl == "dense":
+        dmat = tracklet_distance_matrix(
+            sample_feats, sample_owner, len(indexed), **dist_kwargs
+        )
+    else:
+        # Pre-gate: a temporally impossible pair can never become a candidate,
+        # so its appearance cost is never computed.
+        eligible = [
+            (ai, bi)
+            for ai in range(len(indexed))
+            for bi in range(ai + 1, len(indexed))
+            if _temporal_ok(ai, bi)[0]
+        ]
+        pair_cost = tracklet_distance_pairs(
+            sample_feats, sample_owner, len(indexed), eligible, **dist_kwargs
+        )
 
     # Build merge candidates (a < b) that pass the pairwise temporal gate and
     # the cost ceiling. Pairwise disjointness alone is NOT enough: UnionFind is
@@ -300,13 +597,17 @@ def cheb_gr_merge_output_tracklets(
         ta = indexed[ai][1]
         for bi in range(ai + 1, len(indexed)):
             tb = indexed[bi][1]
-            c = float(dmat[ai, bi])
-            earlier, later = (ta, tb) if ta.end <= tb.end else (tb, ta)
-            overlap = earlier.end - later.start
-            gap = later.start - earlier.end
-            if c > max_cost:
+            temporal_ok, gap, overlap = _temporal_ok(ai, bi)
+            c: float | None
+            if distance_impl == "dense":
+                c = float(dmat[ai, bi])
+            else:
+                c = pair_cost.get((ai, bi))
+            if c is None:
+                verdict = "reject_temporal"
+            elif c > max_cost:
                 verdict = "reject_cost"
-            elif overlap > min_overlap_frames or gap < 0 or gap > max_gap:
+            elif not temporal_ok:
                 verdict = "reject_temporal"
             else:
                 verdict = "pending"
