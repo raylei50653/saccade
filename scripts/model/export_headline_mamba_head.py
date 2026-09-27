@@ -163,6 +163,30 @@ def resolve_inputs(yolo_weights: str, teacher_ckpt: str) -> dict[str, Any]:
     }
 
 
+def probe_head_load(head: Any, state_dict: dict[str, Any]) -> dict[str, list[str]]:
+    """Reload ``state_dict`` into a copy of ``head`` through its own loader; fail closed.
+
+    ``MambaDetectionHead.load_state_dict(strict=False)`` applies the reduction
+    migration, the PixelShuffle compatibility strip and the legal A_log
+    shared<->per-channel conversions, then silently drops every remaining
+    shape mismatch. A dropped key is not passed to ``nn.Module.load_state_dict``
+    and therefore comes back in ``missing_keys``. Probing with the real loader
+    keeps a single definition of "loaded cleanly" instead of a second copy of
+    those rules here. Any missing or unexpected key is an error: the source
+    checkpoint must map onto this head completely.
+    """
+    import copy
+
+    result = copy.deepcopy(head).load_state_dict(dict(state_dict), strict=False)
+    load = {
+        "missing_keys": sorted(result.missing_keys),
+        "unexpected_keys": sorted(result.unexpected_keys),
+    }
+    if load["missing_keys"] or load["unexpected_keys"]:
+        raise SystemExit(f"head did not load cleanly from the checkpoint: {load}")
+    return load
+
+
 def build_head(inputs: dict[str, Any]) -> tuple[Any, dict[str, Any]]:
     """Construct the head exactly as the oracle does and describe how it loaded."""
     import saccade_tracking_ext  # noqa: F401  (before torchvision; see export_mamba_head.py)
@@ -188,17 +212,8 @@ def build_head(inputs: dict[str, Any]) -> tuple[Any, dict[str, Any]]:
     state = torch.load(inputs["ckpt"], map_location="cpu", weights_only=False)
     mamba_args = state["mamba_args"]
     sd = {k.replace("._orig_mod.", "."): v for k, v in state["student"].items()}
-    own = head.state_dict()
     load = {
-        "missing_keys": sorted(set(own) - set(sd)),
-        "unexpected_keys": sorted(set(sd) - set(own)),
-        # MambaDetectionHead.load_state_dict(strict=False) silently drops these.
-        "shape_mismatch_dropped": sorted(
-            k
-            for k in set(own) & set(sd)
-            if own[k].shape != sd[k].shape
-            and not k.endswith("A_log")  # A_log is broadcast, not dropped
-        ),
+        **probe_head_load(head, sd),
         "upsample_loaded": bool(getattr(head, "upsample_loaded", False)),
         "in_channels": list(detector.in_channels),
         "temporal_blocks": (
@@ -208,8 +223,6 @@ def build_head(inputs: dict[str, Any]) -> tuple[Any, dict[str, Any]]:
         ),
         "use_detail_fusion": bool(detector.use_detail_fusion),
     }
-    if load["missing_keys"] or load["shape_mismatch_dropped"]:
-        raise SystemExit(f"head did not load cleanly from the checkpoint: {load}")
     source = {
         "mamba_ckpt": {
             "path": _rel(inputs["ckpt"]),

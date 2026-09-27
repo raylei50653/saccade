@@ -23,9 +23,9 @@ head 由**與 oracle 相同的建構路徑**產生：`build_mamba_gated_detector
 1. preset `configs/presets/mamba_whole_graph.yaml` 的 `use_whole_graph` 為 true；
 2. preset 的 `mamba_ckpt` 路徑 == [training lineage inventory](../research/training/training_lineage_inventory.md) 節點 `s.t3t1_phase_b` 的路徑；
 3. 該 checkpoint 的 sha256 == inventory 記錄的 sha256；
-4. head 從 checkpoint 載入時沒有 missing key，也沒有被 `load_state_dict(strict=False)` 靜默丟掉的 shape-mismatch key。
+4. head 載入乾淨：用 head **自己的** `load_state_dict(sd, strict=False)` 在 head 的副本上重載一次（probe），回傳的 `missing_keys`、`unexpected_keys` 都必須為空。reduction migration、PixelShuffle 相容、合法的 A_log shared↔per-channel 轉換都以真正 loader 的語義為準；其餘 shape mismatch 會被 loader 丟掉，因此以 missing key 的形式出現並被拒絕。工具不另寫一套相容規則。
 
-第 2 項的名稱綁定另由 `tests/unit/test_headline_head_export_binding.py` 在 CI 檢查（hash 需要 gitignored 的 `runs/`，只能在有 checkpoint 的機器上跑）。
+第 2 項的名稱綁定與第 4 項的 probe 規則由 `tests/unit/test_headline_head_export_binding.py` 在 CI 檢查（probe 用小型 CPU head 做 mutation：非法 A_log shape、其他 shape mismatch、多餘 key 都必須失敗，合法 A_log broadcast 必須通過）；hash 需要 gitignored 的 `runs/`，只能在有 checkpoint 的機器上跑。
 
 B5 相關的觀察：這個 checkpoint 的 `mamba_args` **沒有**記錄 `base_yolo_sha256`／`teacher_checkpoint_sha256`，所以 oracle 的 SHA gate（`MambaGatedDetector.__init__`）對它是 no-op。lineage 因此改由 inventory 的 ckpt sha256 釘住，這正是 B5「lineage 判定移到匯出時」的形狀。
 
@@ -42,7 +42,7 @@ B5 相關的觀察：這個 checkpoint 的 `mamba_args` **沒有**記錄 `base_y
 | 項目 | 值 |
 |:--|:--|
 | checkpoint | `runs/mamba_gt_v14replica_t3_t1/best.ckpt`，sha256 `c161c88e50b894d8b51cc614c46c3700370373decf05a15825bdf00ccf0e0876`（== inventory `s.t3t1_phase_b`），epoch 15 |
-| head 載入 | missing 0、unexpected 0、shape-mismatch dropped 0；`upsample_loaded=true`；in_channels `(128, 256, 512)`；temporal blocks 存在但 bypass |
+| head 載入 | loader probe：missing 0、unexpected 0；`upsample_loaded=true`；in_channels `(128, 256, 512)`；temporal blocks 存在但 bypass |
 | ONNX | sha256 `6e919dad14af81083a25679225930a3473a8cdd6ebf9828ea07b414a9316b58b`，opset 17 |
 | scan plugin | `build/libsaccade_scan_plugin.so`，sha256 `9f4d6dac28b95af822efc0a99b6e641310e6152da55a49c78caca4e6ec1163fc` |
 | 環境 | TensorRT 10.16.1.11；RTX 5070 Ti Laptop（SM 12.0）；torch 2.11.0+cu130；onnx 1.21.0 |
