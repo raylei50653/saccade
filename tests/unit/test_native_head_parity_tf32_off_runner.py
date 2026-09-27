@@ -134,3 +134,24 @@ def test_cli_exposes_no_study_identity_option():
         with mock.patch("sys.argv", ["x", "--help"]), pytest.raises(SystemExit):
             R.main()
     assert set(seen) - {"--help"} == {"--smoke-frames", "--_l1-worker", "--_sequences"}
+
+
+# --- freeze commit: the formal run executes on the declaration's merge commit ---
+
+
+def test_freeze_subject_is_declared():
+    assert f"`{R.FREEZE_MERGE_SUBJECT}`" in (REPO / R.DECLARATION).read_text()
+
+
+@pytest.mark.parametrize(
+    ("subject", "parents", "ok"),
+    [
+        ("FREEZE", ["a", "b"], True),
+        ("FREEZE", ["a"], False),  # a later commit re-using the subject is not a merge
+        ("Merge pull request #476 from raylei50653/other", ["a", "b"], False),
+        ("docs: something after the freeze", ["a"], False),
+    ],
+)
+def test_freeze_commit_problem(subject, parents, ok):
+    subject = R.FREEZE_MERGE_SUBJECT if subject == "FREEZE" else subject
+    assert (R.freeze_commit_problem(subject, parents) is None) is ok

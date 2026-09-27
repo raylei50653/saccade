@@ -58,7 +58,14 @@ sys.path.insert(0, str(project_root / "src"))
 
 # --- frozen by the declaration (§2, §4, §5); change only through §9 ----------
 DECLARATION = "docs/reference/native_runtime_head_parity_tf32_off_declaration.md"
-FROZEN_DECLARATION_BLOB = "8c727ea9557c76e1b4fe38cd6edad92d08a466b1"
+FROZEN_DECLARATION_BLOB = "2f48ddfd37bb1352aa28a945551f16c30ec9e029"
+# Declaration §2 "freeze commit": the formal run executes on the merge commit
+# of the PR that froze the declaration. Its SHA is unknown before the merge
+# and recording it in a later commit would move HEAD, so the commit is
+# recognised by its unique merge subject; the packet records the SHA.
+FREEZE_MERGE_SUBJECT = (
+    "Merge pull request #475 from raylei50653/docs/465-pr2r-tf32-off-parity"
+)
 HEAD_ONNX_SHA256 = "6e919dad14af81083a25679225930a3473a8cdd6ebf9828ea07b414a9316b58b"
 HEAD_STEM = "models/yolo/mamba_head_s_v14replica_t3_t1_fp32_notf32"
 HEAD_ENGINE = HEAD_STEM + ".engine"
@@ -395,6 +402,16 @@ def check_v1(smoke: bool, sequences: tuple[str, ...]) -> tuple[bool, dict[str, A
         blobs["runner_blob"],
         blobs["runner_worktree_blob"],
     )
+    freeze = freeze_commit_problem(
+        _git("log", "-1", "--format=%s", "HEAD"),
+        _git("log", "-1", "--format=%P", "HEAD").split(),
+    )
+    check(
+        "HEAD is the freeze (declaration merge) commit",
+        smoke or freeze is None,
+        {"head": blobs["head"], "problem": freeze},
+        FREEZE_MERGE_SUBJECT,
+    )
 
     import tensorrt as trt
     import torch
@@ -443,6 +460,15 @@ def check_v1(smoke: bool, sequences: tuple[str, ...]) -> tuple[bool, dict[str, A
 
     ok = all(c["ok"] for c in checks)
     return ok, {"ok": ok, "checks": checks, "git": blobs, "lease": lease}
+
+
+def freeze_commit_problem(subject: str, parents: list[str]) -> str | None:
+    """None when HEAD is the merge commit that froze the declaration."""
+    if len(parents) != 2:
+        return f"HEAD has {len(parents)} parent(s); the freeze commit is a merge"
+    if subject != FREEZE_MERGE_SUBJECT:
+        return f"HEAD subject {subject!r} is not the freeze merge"
+    return None
 
 
 def _dig(obj: Any, keys: tuple[str, ...]) -> Any:

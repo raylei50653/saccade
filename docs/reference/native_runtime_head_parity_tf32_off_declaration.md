@@ -50,6 +50,7 @@ PR-1 的 TF32-allowed engine **不是**本 study 的 arm：它已有完整的正
 | backbone engine | `models/yolo/yolo26s_backbone_640_best.engine`，sha256 == manifest `companions.backbone_engine.sha256` |
 | preset | `configs/presets/mamba_whole_graph.yaml`，sha256 == manifest `preset.sha256` |
 | 程式碼 | clean tree；PR-2R runner（`scripts/eval/diagnostics/native_head_parity_tf32_off.py`）已 commit；本文與 runner 的 git blob sha 寫進 packet |
+| freeze commit | 正式 run 的 `HEAD` **必須就是本文所在 PR（#475）的 merge commit**：兩個 parent，且 subject 恰為 `Merge pull request #475 from raylei50653/docs/465-pr2r-tf32-off-parity`。main 前進之後不得從新的 HEAD 執行正式 run。merge SHA 在 merge 前未知，所以 runner 以這個唯一的 merge subject 認定 freeze commit，而不是 hard-code SHA（避免 runner／宣告的自我雜湊循環）；packet 記錄實際 SHA，merge 後另以獨立紀錄（#475／#465 comment）公布 |
 | runner 形式 | engine、manifest、宣告、容差、arms **不是** runner 的 CLI 選項，全部 hard-code；正式 invocation 不帶任何 flag（`--smoke-frames` 只產生 `evidence: false` 的 packet） |
 | 環境 | `torch.backends.cudnn.allow_tf32` 與 `torch.backends.cuda.matmul.allow_tf32` == manifest `environment` 的值；TensorRT 版本 == manifest `engine.tensorrt_version`；同一台機器（manifest `environment.host`） |
 | env hatch | caller 不得設定任何 `SACCADE_*`；每個 arm 記錄 `resolved_env_overrides()`，三個 arm 必須相同 |
@@ -138,9 +139,10 @@ runner 把以下內容寫到非 scratch 的 timestamped 目錄（`results/native
 
 ## 9. Review 修訂與 amendments
 
-**凍結前的 review 修訂**：
+**凍結前的 review 修訂**（#475 owner review，任何量測之前，沒有看過新資料）：
 
-（無）
+- R1：freeze point 原本只凍住宣告；runner 只被要求「已 commit」，merge 後 main 上若有 commit 修改量測或 orchestration 程式，V1 仍會接受。§2 新增 freeze commit 一列：正式 run 必須在 #475 的 merge commit 上執行，runner 以 merge subject 認定並在 V1 fail-closed 檢查。
+- 維持不變：study 設計、門檻、容差政策、arms、terminal；不跑 smoke。
 
 **凍結後的 amendments**（append-only）：
 
