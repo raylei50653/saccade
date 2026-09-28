@@ -10,6 +10,7 @@
 | `test_eval_script_paths.py` | eval | contract | active | Pin the scripts/eval compat wrappers to their relocated implementations. |
 | `test_headline_decision_contract.py` | eval,tracking,cross-module | contract | active | Unit tests for scripts/tools/check_headline_decision_contract.py. |
 | `test_headline_head_export_binding.py` | system | contract | active | The headline head exporter binds to the preset and the committed lineage inventory. |
+| `test_headline_head_torchscript_export.py` | system | contract | active | The LibTorch head exporter produces a Python-free, input-independent, identifiable artifact. |
 | `test_math_model_doc_consistency.py` | eval,tracking | contract | active | Pin the LaTeX math-model document (``docs/latex``) to the code it describes. |
 | `test_math_model_source_attestation.py` | eval,tracking,cross-module | contract | active | Fail-closed contracts for the math-model source-byte attestation. |
 | `test_native_head_failure_localization_r2_runner.py` | system | contract | active | The #465 localization r2 runner implements its frozen declaration and nothing else. |
