@@ -54,6 +54,7 @@ target decision layer = `none (cross-layer substrate work)`；κ 見 §4、§5�
 | backbone engine | `models/yolo/yolo26s_backbone_640_best.engine`，sha256 `2ef3d4d40dfb670982cbbb98e6ed7d07e5b1a590cfa126d5ccf7342ee1579ce4`（== manifest `companions.backbone_engine.sha256`） |
 | preset | `configs/presets/mamba_whole_graph.yaml`，sha256 `093b66ed124063f035ae9cf2a76e4f5426743cd819fb66e3e54994c97ea42cd1`（== manifest `preset.sha256`）；preset 不設定 head engine |
 | 環境 | torch `2.11.0+cu130`、cuDNN `91900`、GPU `NVIDIA GeForce RTX 5070 Ti Laptop GPU`（SM 12.0）、host `DESKTOP-0FLA6SQ`，皆 == manifest `environment` |
+| NVIDIA driver 與 CUDA runtime | L 的 custom CUDA op 在 CUDA graph capture 內執行，driver 是執行 substrate 的一部分，以 exact 比對凍結：NVIDIA driver `nvidia-smi --query-gpu=driver_version` == `616.92`（字串相等）；CUDA driver API `cuDriverGetVersion` == `13040`；CUDA runtime `cudaRuntimeGetVersion` == `13000`；process 內映射的 `libcudart.so.13` 恰一份，realpath == `.venv/lib/python3.12/site-packages/nvidia/cu13/lib/libcudart.so.13`、sha256 `96c42e418cec19054186b9429c321603cc190bf26a18104e19408117a2a817b0`（operator library 的 RUNPATH 解析到的 `build/cuda_devlink/libcudart.so.13` 是指向同一檔案的 symlink）。runner 在 V1 讀一次；L1 process 與每個 L2 child（`A_L` 在載入 operator library 之後）在 sidecar 中各讀一次，**全部**必須 exact 等於上列。user-mode driver `libcuda.so.1` 的 realpath 與 sha256 只記錄（driver version 已涵蓋） |
 | env hatch | caller 不得設定任何 `SACCADE_*`；每個 arm 記錄 `resolved_env_overrides()`，三個 arm 必須相同 |
 | 資料 | `datasets/MOT17/train`，序列固定為 `MOT17-02-SDP,MOT17-04-SDP,MOT17-05-SDP,MOT17-09-SDP,MOT17-10-SDP,MOT17-11-SDP,MOT17-13-SDP`（共 5316 frames），依此順序 |
 | 程式碼 | clean tree；`scripts/eval/mot17.py`、`src/saccade/**` 不因本 study 修改 |
@@ -134,7 +135,7 @@ harness 的 whole-graph detect（`MambaGatedDetector._whole_graph_fn` 與 `_whol
 |:--|:--|:--|
 | V3 確定性 | 每個 arm 的兩次 run，7 個 `MOT17-*-SDP.txt` 逐位元相同 | `UNRESOLVED` |
 | V4 oracle 錨定 | `A_C#1` 的 7 個 txt sha256 等於 PR-2R packet `A_C_1`：02 `d426ca1b61ae1441b94cc3269a6fee90f01ca7ec3a649755f170c767b7515328`、04 `cb55746fdc059fae12a6efcbce5cfa00b40fdb4f23b8766ee021a8b5b1602d7b`、05 `ea46b483046879ea28bae14f25f7ec251fea6359e6d850592504ee09f3f4d8dc`、09 `da0a74836843293da0e45923905bf25f31d68145b71771a1da043cdf1e576df4`、10 `587f2f05bfe9caacf57fba2cd5a6828b1b548ddcaef3d155c96055844bf92705`、11 `38dd77309e98a88b3abf827d18b087b6f025bef176b47c280a4961f3013247b0`、13 `4c93f75e6e162e7ab6007a746fc7da97250d54b01d8bd63500a7b07a5af73137`（確認 child 入口是透明的，且本 study 的 oracle 就是 PR-2／PR-2R／r2 的同一個 oracle） | `UNRESOLVED` |
-| V5 注入正確 | `A_L` 每個 run 的 child sidecar：§5.1 步驟 1–4 全部成立且 wrapper 恰呼叫一次；adapter 被呼叫 ≥ 1 次，每次的 runtime requirement 讀回與輸入／輸出斷言都成立；`forward`／`_forward_eager` guard 與 §3 的兩個 JIT scan fallback guard 的呼叫次數皆 = 0；`A_C`／`A_N` 每個 run 的 sidecar：未取代任何函數或 attribute、process 結束前的 `/proc/self/maps` 不含 operator library（sidecar 只由 `atexit` 觀察寫出，不改變執行）。三個 arm 的 harness `run_manifest.json` 的 `cmdline` 等於該 arm 的凍結參數，且不含 `--mamba-head-engine`、`--mamba-trt` | `UNRESOLVED` |
+| V5 注入正確 | `A_L` 每個 run 的 child sidecar：§5.1 步驟 1–4 全部成立且 wrapper 恰呼叫一次；adapter 被呼叫 ≥ 1 次，每次的 runtime requirement 讀回與輸入／輸出斷言都成立；`forward`／`_forward_eager` guard 與 §3 的兩個 JIT scan fallback guard 的呼叫次數皆 = 0；`A_C`／`A_N` 每個 run 的 sidecar：未取代任何函數或 attribute、process 結束前的 `/proc/self/maps` 不含 operator library（sidecar 只由 `atexit` 觀察寫出，不改變執行）。每個 child（三個 arm）與 L1 process 的 §2 driver／CUDA runtime 讀回 exact 等於凍結值。三個 arm 的 harness `run_manifest.json` 的 `cmdline` 等於該 arm 的凍結參數，且不含 `--mamba-head-engine`、`--mamba-trt` | `UNRESOLVED` |
 
 （V3 兩次相同不證明確定性；它只是讓 arm 之間的差異可歸因於 head 的必要條件。）
 
@@ -187,6 +188,9 @@ runner 把以下內容寫到非 scratch 的 timestamped 目錄 `results/native_h
 
 ## 11. Review 修訂與 amendments
 
-**凍結前的 review 修訂**：（無）
+**凍結前的 review 修訂**（#485 owner review，任何量測之前，沒有看過新資料）：
+
+- R1：§2 原本 pin 了 torch、cuDNN、GPU／SM、host 與 operator library sha，但沒有 pin NVIDIA driver 與 CUDA driver／runtime。L 的 custom CUDA op 在 CUDA graph capture 內執行，driver 是執行 substrate 的一部分。§2 新增「NVIDIA driver 與 CUDA runtime」一列：driver `616.92`、`cuDriverGetVersion` `13040`、`cudaRuntimeGetVersion` `13000`、process 內唯一的 `libcudart.so.13`（realpath 與 sha256），在 V1 與每個 process 的 sidecar 中 exact 比對。值由宣告撰寫時在同一台機器上讀取（不涉及任何 frame 或 MOT 資料）。
+- 維持不變：arms、門檻、容差政策、validity 的其餘條件、terminal。
 
 **凍結後的 amendments**（append-only）：（無）
