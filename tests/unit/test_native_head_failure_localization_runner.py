@@ -432,54 +432,168 @@ def test_pair_census_counts():
 
 
 # --- (f) §6 analysis ---------------------------------------------------------
-def _rows(*boxes):
-    return np.asarray([[*b, s, 0.0] for b, s in boxes], dtype=np.float32).reshape(-1, 6)
+def _rows(*rows):
+    """rows given as (box, score) or (box, score, cls)."""
+    out = []
+    for r in rows:
+        box, score, *cls = r
+        out.append([*box, score, cls[0] if cls else 0.0])
+    return np.asarray(out, dtype=np.float32).reshape(-1, 6)
 
 
-def test_ragged_and_first_rows_divergence():
-    rows = _rows(((0, 0, 1, 1), 0.9), ((1, 1, 2, 2), 0.8), ((5, 5, 6, 6), 0.7))
-    by = R.ragged_by_frame(np.array([1, 2]), np.array([2, 1]), rows)
-    assert by[1].shape == (2, 6) and by[2].shape == (1, 6)
-    other = {1: by[1].copy(), 2: by[2].copy()}
-    assert R.first_rows_divergence(by, other) is None
-    other[2][0, 4] = np.nextafter(np.float32(0.7), np.float32(1))
-    assert R.first_rows_divergence(by, other) == 2
-    assert R.first_rows_divergence(by, {1: by[1]}) == 2  # missing frame differs
+def test_first_rows_divergence_and_missing_observation():
+    a = {1: _rows(((0, 0, 1, 1), 0.9)), 2: _rows(((1, 1, 2, 2), 0.8))}
+    b = {1: a[1].copy(), 2: a[2].copy()}
+    assert R.first_rows_divergence(a, b) is None
+    b[2][0, 4] = np.nextafter(np.float32(0.8), np.float32(1))
+    assert R.first_rows_divergence(a, b) == 2
+    assert R.first_rows_divergence(a, {1: a[1], 2: R.MISSING}) == 2
+    assert R.first_rows_divergence({1: R.MISSING}, {1: R.MISSING}) is None
 
 
-def test_attribution_maps_rows_to_delta_anchors():
-    det = _rows(((0, 0, 1, 1), 0.9), ((1, 1, 2, 2), 0.8), ((3, 3, 4, 4), 0.6))
-    in_delta = np.array([False, True, False])
-    tin = _rows(((1, 1, 2, 2), 0.8), ((3, 3, 4, 4), 0.6), ((9, 9, 9, 9), 0.5))
-    assert R.map_rows_to_detector(tin, det) == [1, 2, -1]
-    counts = R.attribute_rows([0, 1, 2], tin, det, in_delta)
-    assert counts == {"delta_anchor": 1, "values": 1, "unmapped": 1}
-    assert R.attribution_class(counts) == "delta_anchor"
-    assert (
-        R.attribution_class({"delta_anchor": 0, "values": 2, "unmapped": 0}) == "values"
+def test_detector_row_status_consistency_and_ties():
+    det = _rows(
+        ((0, 0, 1, 1), 0.9),
+        ((1, 1, 2, 2), 0.8),
+        ((3, 3, 4, 4), 0.8),
+        ((5, 5, 6, 6), 0.7),
     )
+    in_delta = np.array([True, True, False, False])
+    ok = np.ones(4, dtype=bool)
+    assert R.detector_row_status(det, in_delta, ok) == [
+        "delta_anchor",
+        "ambiguous",  # tie at 0.8 with a non-Δ row: top-k index order is not guaranteed
+        "ambiguous",
+        "values",
+    ]
+    bad = ok.copy()
+    bad[0] = False
+    assert R.detector_row_status(det, in_delta, bad)[0] == "inconsistent"
+    same_flag = np.array([False, True, True, False])
+    assert R.detector_row_status(det, same_flag, ok)[1:3] == ["delta_anchor"] * 2
+
+
+def test_inconsistent_row_gets_no_definitive_attribution():
+    det = _rows(((0, 0, 1, 1), 0.9), ((1, 1, 2, 2), 0.8))
+    in_delta = np.array([True, True])
+    status = R.detector_row_status(det, in_delta, np.zeros(2, dtype=bool))
+    counts = R.provenance_counts(R.row_provenance(det, det, status))
+    assert counts["delta_anchor"] == 0 and counts["values"] == 0
+    assert counts["inconsistent"] == 2
+    assert R.attribution_class(counts) == "undetermined"
+
+
+def test_duplicate_boxes_map_by_full_row_not_first_box_match():
+    # same box, different score/class: the tracker row matches only row 1
+    det = _rows(((0, 0, 1, 1), 0.9, 0.0), ((0, 0, 1, 1), 0.7, 2.0))
+    status = R.detector_row_status(det, np.array([False, True]), np.ones(2, dtype=bool))
+    assert R.row_provenance(det[1:2], det, status) == ["delta_anchor"]
+    # a box-only match (score changed downstream) is unmapped, not guessed
+    moved = det[1:2].copy()
+    moved[0, 4] = 0.5
+    assert R.row_provenance(moved, det, status) == ["unmapped"]
+    # bit-identical duplicate rows with different Δ flags are ambiguous
+    dup = _rows(((0, 0, 1, 1), 0.9), ((0, 0, 1, 1), 0.9))
+    st = R.detector_row_status(dup, np.array([True, False]), np.ones(2, dtype=bool))
+    assert R.row_provenance(dup[:1], dup, st) == ["ambiguous"]
+
+
+def test_attribution_class_needs_every_row_for_values():
+    z = dict.fromkeys(R.PROVENANCE, 0)
     assert (
-        R.attribution_class({"delta_anchor": 0, "values": 0, "unmapped": 0}) == "none"
+        R.attribution_class({**z, "delta_anchor": 1, "unmapped": 3}) == "delta_anchor"
     )
-    assert R.row_set_difference(tin, det) == [2]
+    assert R.attribution_class({**z, "values": 2}) == "values"
+    assert R.attribution_class({**z, "values": 2, "ambiguous": 1}) == "undetermined"
+    assert R.attribution_class(z) == "none"
 
 
-def _evidence(det_rows, in_delta, ti_rows, det_idx, ids):
+def test_multiset_excess_counts_multiplicity():
+    a = _rows(((0, 0, 1, 1), 0.9), ((0, 0, 1, 1), 0.9), ((1, 1, 2, 2), 0.8))
+    b = _rows(((0, 0, 1, 1), 0.9), ((1, 1, 2, 2), 0.8))
+    assert R.multiset_excess(a, b) == [1]
+    assert R.multiset_excess(b, a) == []
+
+
+def _status_for(rows, flags):
+    return rows, R.detector_row_status(
+        rows, np.asarray(flags), np.ones(len(rows), dtype=bool)
+    )
+
+
+def test_permutation_is_explained_not_none():
+    det = _rows(((0, 0, 1, 1), 0.9), ((1, 1, 2, 2), 0.8))
+    ref, oth = det, det[::-1].copy()
+    st = _status_for(det, [False, True])
+    exp = R.explain_rows(oth, ref, st, st)
+    assert exp["kind"] == "order_only"
+    assert exp["displaced_positions"] == [0, 1]
+    assert exp["class"] == "delta_anchor"
+
+
+def test_multiplicity_change_is_rows_changed():
+    det = _rows(((0, 0, 1, 1), 0.9), ((1, 1, 2, 2), 0.8))
+    st = _status_for(det, [False, False])
+    exp = R.explain_rows(det[[0, 0, 1]], det, st, st)
+    assert exp["kind"] == "rows_changed"
+    assert exp["rows_only_in_other"]["values"] == 1 and exp["class"] == "values"
+
+
+def test_missing_observation_is_explicitly_unknown():
+    det = _rows(((0, 0, 1, 1), 0.9))
+    st = _status_for(det, [True])
+    exp = R.explain_rows(R.MISSING, det, st, st)
+    assert exp == {
+        "kind": "missing_observation",
+        "missing_side": "other",
+        "class": "unknown",
+    }
+
+
+def _evidence(
+    det_rows, in_delta, ti, det_idx, ids, *, det_frames=None, consistent=None
+):
+    """ti / det_idx / ids: per frame, None = no probe / no emit on that frame."""
     f = len(det_rows)
+    ti_frames = [k + 1 for k in range(f) if ti[k] is not None]
+    trk_frames = [k + 1 for k in range(f) if ids[k] is not None]
+    rows = np.stack(det_rows)
     return {
-        "rows": np.stack(det_rows),
+        "rows": rows,
         "row_in_delta": np.stack(in_delta),
         "row_in_delta_e": np.zeros_like(np.stack(in_delta)),
-        "tracker_input_frames": np.arange(1, f + 1, dtype=np.int32),
-        "tracker_input_counts": np.array([len(r) for r in ti_rows], dtype=np.int32),
-        "tracker_input_rows": np.concatenate(ti_rows),
-        "tracker_frames": np.arange(1, f + 1, dtype=np.int32),
-        "tracker_counts": np.array([len(i) for i in ids], dtype=np.int32),
-        "tracker_ids": np.concatenate([np.asarray(i, np.int64) for i in ids]),
-        "tracker_det_idx": np.concatenate([np.asarray(d, np.int64) for d in det_idx]),
+        "row_consistent": np.ones(rows.shape[:2], dtype=bool)
+        if consistent is None
+        else np.stack(consistent),
+        "detector_output_frames": np.arange(1, f + 1, dtype=np.int32)
+        if det_frames is None
+        else np.asarray(det_frames, dtype=np.int32),
+        "tracker_input_frames": np.asarray(ti_frames, dtype=np.int32),
+        "tracker_input_counts": np.asarray(
+            [len(ti[k - 1]) for k in ti_frames], dtype=np.int32
+        ),
+        "tracker_input_rows": np.concatenate([ti[k - 1] for k in ti_frames])
+        if ti_frames
+        else np.zeros((0, 6), np.float32),
+        "tracker_frames": np.asarray(trk_frames, dtype=np.int32),
+        "tracker_counts": np.asarray(
+            [len(ids[k - 1]) for k in trk_frames], dtype=np.int32
+        ),
+        "tracker_ids": np.concatenate(
+            [np.asarray(ids[k - 1], np.int64) for k in trk_frames]
+        )
+        if trk_frames
+        else np.zeros((0,), np.int64),
+        "tracker_det_idx": np.concatenate(
+            [np.asarray(det_idx[k - 1], np.int64) for k in trk_frames]
+        )
+        if trk_frames
+        else np.zeros((0,), np.int64),
         "tracker_boxes": np.concatenate(
-            [r[: len(i), :4] for r, i in zip(ti_rows, ids)]
-        ).astype(np.float32),
+            [rows[k - 1][: len(ids[k - 1]), :4] for k in trk_frames]
+        ).astype(np.float32)
+        if trk_frames
+        else np.zeros((0, 4), np.float32),
     }
 
 
@@ -490,11 +604,13 @@ def test_delta_flow_and_compare_runs():
     ref = _evidence([a, a], [flags, flags], [a, a], [[0, 1], [0, 1]], [[1, 2], [1, 2]])
     oth = _evidence([a, b], [flags, flags], [a, b], [[0, 1], [0, 1]], [[1, 2], [1, 3]])
     flow = R.delta_flow(oth)
-    assert flow["tracker_input_rows_from_delta"] == 2
-    assert flow["track_det_idx_refs_to_delta"] == 2 and flow["track_det_idx_refs"] == 4
+    assert flow["tracker_input_rows"]["delta_anchor"] == 2
+    assert flow["track_det_idx_refs"]["delta_anchor"] == 2
+    assert flow["track_det_idx_refs"]["values"] == 2
     cmp = R.compare_runs(ref, oth, "row_in_delta")
     assert cmp["first_tracker_input_divergence"] == 2
-    assert cmp["first_tracker_input_attribution"]["class"] == "delta_anchor"
+    assert cmp["first_tracker_input_explanation"]["kind"] == "rows_changed"
+    assert cmp["first_tracker_input_explanation"]["class"] == "delta_anchor"
     assert cmp["first_tracker_output_divergence"] == 2
     trace = R.trace_output_divergence(2, cmp)
     assert trace["tracker_input_divergence_at_or_before"] is True
@@ -502,7 +618,127 @@ def test_delta_flow_and_compare_runs():
     assert R.trace_output_divergence(None, cmp) is None
     same = R.compare_runs(ref, ref, "row_in_delta")
     assert same["first_tracker_input_divergence"] is None
-    assert same["first_tracker_input_attribution"] is None
+    assert same["first_tracker_input_explanation"] is None
+
+
+def test_inconsistent_rows_do_not_count_in_delta_flow():
+    a = _rows(((0, 0, 1, 1), 0.9), ((1, 1, 2, 2), 0.8))
+    flags = np.array([True, True])
+    ev = _evidence(
+        [a], [flags], [a], [[0, 1]], [[1, 2]], consistent=[np.array([False, False])]
+    )
+    flow = R.delta_flow(ev)
+    assert flow["tracker_input_rows"]["delta_anchor"] == 0
+    assert flow["tracker_input_rows"]["inconsistent"] == 2
+    assert flow["track_det_idx_refs"]["delta_anchor"] == 0
+    assert flow["replay_rows_above_floor"]["inconsistent"] == 2
+
+
+def test_one_sided_verified_skip_is_compared_as_empty():
+    a = _rows(((0, 0, 1, 1), 0.9), ((1, 1, 2, 2), 0.8))
+    flags = np.array([False, True])
+    # ref: frame 1 skipped by the harness (detector_output seen, no probe, no emit)
+    ref = _evidence([a], [flags], [None], [None], [None])
+    oth = _evidence([a], [flags], [a], [[0, 1]], [[1, 2]])
+    assert R.tracker_input_view(ref)[1].shape == (0, 6)
+    cmp = R.compare_runs(ref, oth, "row_in_delta")
+    assert cmp["first_tracker_input_divergence"] == 1
+    exp = cmp["first_tracker_input_explanation"]
+    assert exp["kind"] == "rows_changed"
+    assert exp["rows_only_in_other"]["delta_anchor"] == 1
+    assert exp["rows_only_in_other"]["values"] == 1
+
+
+def test_one_sided_unexplained_missing_probe_stays_unknown():
+    a = _rows(((0, 0, 1, 1), 0.9))
+    flags = np.array([True])
+    # no tracker_input probe, yet the frame emitted tracks: not the skip path
+    ref = _evidence([a], [flags], [None], [[0]], [[1]])
+    oth = _evidence([a], [flags], [a], [[0]], [[1]])
+    assert R.tracker_input_view(ref)[1] is R.MISSING
+    cmp = R.compare_runs(ref, oth, "row_in_delta")
+    assert cmp["first_tracker_input_divergence"] == 1
+    assert cmp["first_tracker_input_explanation"]["kind"] == "missing_observation"
+    assert cmp["first_tracker_input_explanation"]["class"] == "unknown"
+    # no detector_output probe either: also missing, never an empty frame
+    ref2 = _evidence([a], [flags], [None], [None], [None], det_frames=[])
+    assert R.tracker_input_view(ref2)[1] is R.MISSING
+
+
+# --- (f2) P1: fail fast between workers ---------------------------------------
+def _fake_run(arm, rep):
+    return {
+        "arm": arm,
+        "rep": rep,
+        "returncode": 0,
+        "txt_sha256": dict.fromkeys(R.SEQUENCES, "x"),
+        "resolved_env_overrides": {},
+    }
+
+
+def test_a_failed_worker_stops_the_schedule(tmp_path, monkeypatch):
+    launched: list[str] = []
+
+    def run_arm(l2_dir, arm, rep):
+        launched.append(f"{arm}#{rep}")
+        run = _fake_run(arm, rep)
+        if (arm, rep) == ("H_M", 1):
+            run["returncode"] = 1  # V3 raised inside the worker
+        return run
+
+    monkeypatch.setattr(R, "run_arm", run_arm)
+    monkeypatch.setattr(R, "arm_manifest_problem", lambda run, head: None)
+    monkeypatch.setattr(R, "evidence_problems", lambda run: [])
+    record = {"v1": {"git": {"head": HEAD}}}
+    inputs, reasons = R._measure(tmp_path, record)
+    assert launched == ["R_C#1", "R_T#1", "H_M#1"]
+    assert inputs == (None, None, None, None)
+    assert [f"{r['arm']}#{r['rep']}" for r in record["runs"]] == launched
+    assert record["aborted_after"] == "H_M#1"
+    assert reasons and "H_M#1" in reasons[0]
+    assert R.decide(not reasons, *inputs) == ("UNRESOLVED", None)
+
+
+@pytest.mark.parametrize(
+    ("fail_at", "hook"),
+    [
+        (("R_T", 1), "coverage"),
+        (("H_V", 1), "manifest"),
+        (("R_C", 2), "v2"),
+    ],
+)
+def test_every_per_run_problem_stops_the_schedule(tmp_path, monkeypatch, fail_at, hook):
+    launched: list[tuple[str, int]] = []
+
+    def run_arm(l2_dir, arm, rep):
+        launched.append((arm, rep))
+        run = _fake_run(arm, rep)
+        if hook == "v2" and (arm, rep) == fail_at:
+            run["txt_sha256"] = dict.fromkeys(R.SEQUENCES, "y")
+        return run
+
+    def manifest(run, head):
+        return (
+            "bad"
+            if hook == "manifest" and (run["arm"], run["rep"]) == fail_at
+            else None
+        )
+
+    def coverage(run):
+        return (
+            ["V3 gap"]
+            if hook == "coverage" and (run["arm"], run["rep"]) == fail_at
+            else []
+        )
+
+    monkeypatch.setattr(R, "run_arm", run_arm)
+    monkeypatch.setattr(R, "arm_manifest_problem", manifest)
+    monkeypatch.setattr(R, "evidence_problems", coverage)
+    record = {"v1": {"git": {"head": HEAD}}}
+    _, reasons = R._measure(tmp_path, record)
+    assert launched[-1] == fail_at
+    assert launched == list(R.RUN_ORDER[: R.RUN_ORDER.index(fail_at) + 1])
+    assert reasons
 
 
 # --- (g) CLI surface -----------------------------------------------------------

@@ -30,7 +30,12 @@ study by itself.
   ``MIXED``) from ``H_M`` and ``H_V``, reported beside it.
 * Report only (§6) -- Δ census, first top-k/member divergence, first
   ``tracker_input`` divergence and its Δ/values attribution, and the output
-  divergence traced back to ``det_idx``, for all seven sequences.
+  divergence traced back to ``det_idx``, for all seven sequences. A row is
+  attributed to the Δ or values channel only through a full-row match whose
+  row→anchor check held and whose score is not tied with a row of the other
+  channel; otherwise it is reported as inconsistent / ambiguous / unmapped.
+  Each run is validated before the next launches; the first invalid run ends
+  the study (UNRESOLVED) with the completed runs kept in the packet.
 
 It reads no time quantity and has no smoke mode (§9: the runner PR reads no
 MOT17 frame). The one formal run must be the direct child of a
@@ -836,58 +841,170 @@ def ragged_by_frame(frames: Any, counts: Any, rows: Any) -> dict[int, Any]:
     return out
 
 
+# Provenance statuses of one row. Only the first two are an attribution; the
+# others keep the uncertainty (§6 is report-only: none of this gates).
+PROVENANCE = ("delta_anchor", "values", "inconsistent", "ambiguous", "unmapped")
+MISSING = None  # a frame whose tracker_input observation is missing
+
+
+def detector_row_status(rows: Any, in_delta: Any, consistent: Any) -> list[str]:
+    """Per replay output row: ``inconsistent`` when the recorded row→anchor
+    check failed; ``ambiguous`` when rows with bit-identical scores (a top-k
+    tie, where index order is not guaranteed, or duplicate rows) disagree on
+    the Δ flag; otherwise the row's Δ channel."""
+    scores = [rows[j, 4].tobytes() for j in range(len(rows))]
+    flags_by_score: dict[bytes, set[bool]] = {}
+    for j, key in enumerate(scores):
+        flags_by_score.setdefault(key, set()).add(bool(in_delta[j]))
+    out = []
+    for j, key in enumerate(scores):
+        if not bool(consistent[j]):
+            out.append("inconsistent")
+        elif len(flags_by_score[key]) > 1:
+            out.append("ambiguous")
+        else:
+            out.append("delta_anchor" if bool(in_delta[j]) else "values")
+    return out
+
+
+def row_provenance(rows: Any, detector_rows: Any, status: list[str]) -> list[str]:
+    """Provenance of rows observed downstream: a full-row (box, score, class)
+    bit-identical match against the replay rows of the same frame. No match is
+    ``unmapped``; several matches are duplicates, so they share a score and
+    :func:`detector_row_status` has already folded them into one status."""
+    index: dict[bytes, list[int]] = {}
+    for j in range(len(detector_rows)):
+        index.setdefault(detector_rows[j].tobytes(), []).append(j)
+    out = []
+    for i in range(len(rows)):
+        cands = index.get(rows[i].tobytes(), [])
+        states = {status[j] for j in cands}
+        if not cands:
+            out.append("unmapped")
+        elif len(states) == 1:
+            out.append(states.pop())
+        else:
+            out.append("ambiguous")
+    return out
+
+
+def provenance_counts(labels: list[str]) -> dict[str, int]:
+    return {k: sum(1 for x in labels if x == k) for k in PROVENANCE}
+
+
+def attribution_class(counts: dict[str, int]) -> str:
+    """``delta_anchor`` if any row is attributed to a Δ anchor; ``values`` only
+    if every row is attributed and none to Δ; ``undetermined`` if no row is Δ
+    but some are unattributed; ``none`` for no rows."""
+    if counts.get("delta_anchor", 0):
+        return "delta_anchor"
+    unknown = sum(counts.get(k, 0) for k in ("inconsistent", "ambiguous", "unmapped"))
+    if unknown:
+        return "undetermined"
+    return "values" if counts.get("values", 0) else "none"
+
+
+def multiset_excess(a: Any, b: Any) -> list[int]:
+    """Indices of ``a`` rows beyond their multiplicity in ``b`` (by exact bytes)."""
+    remaining: dict[bytes, int] = {}
+    for j in range(len(b)):
+        key = b[j].tobytes()
+        remaining[key] = remaining.get(key, 0) + 1
+    out = []
+    for i in range(len(a)):
+        key = a[i].tobytes()
+        if remaining.get(key, 0):
+            remaining[key] -= 1
+        else:
+            out.append(i)
+    return out
+
+
+def tracker_input_view(ev: Any) -> dict[int, Any]:
+    """tracker_input rows per replayed frame. A frame without the probe is a
+    verified empty frame -- compared as zero rows -- only when it has the
+    signature of the harness's two ``fused_boxes.numel() == 0`` early returns
+    (evaluator: after ``detector_output``, before ``post_nms``): the frame was
+    probed at ``detector_output`` and emitted no tracker output. Otherwise it
+    is ``MISSING``."""
+    import numpy as np
+
+    ti = ragged_by_frame(
+        ev["tracker_input_frames"], ev["tracker_input_counts"], ev["tracker_input_rows"]
+    )
+    det_frames = set(ev["detector_output_frames"].tolist())
+    trk_frames = set(ev["tracker_frames"].tolist())
+    out: dict[int, Any] = {}
+    for frame in range(1, len(ev["rows"]) + 1):
+        if frame in ti:
+            out[frame] = ti[frame]
+        elif frame in det_frames and frame not in trk_frames:
+            out[frame] = np.zeros((0, 6), dtype=np.float32)
+        else:
+            out[frame] = MISSING
+    return out
+
+
 def first_rows_divergence(a: dict[int, Any], b: dict[int, Any]) -> int | None:
-    """First frame whose ordered rows differ bit for bit (missing = differ)."""
+    """First frame whose ordered rows differ bit for bit; a frame observed on
+    one side only, or ``MISSING`` on exactly one side, differs."""
     for frame in sorted(set(a) | set(b)):
-        ra, rb = a.get(frame), b.get(frame)
-        if (
-            ra is None
-            or rb is None
-            or ra.shape != rb.shape
-            or ra.tobytes() != rb.tobytes()
-        ):
+        ra, rb = a.get(frame, MISSING), b.get(frame, MISSING)
+        if ra is MISSING and rb is MISSING:
+            continue
+        if ra is MISSING or rb is MISSING:
+            return frame
+        if ra.shape != rb.shape or ra.tobytes() != rb.tobytes():
             return frame
     return None
 
 
-def map_rows_to_detector(rows: Any, detector_rows: Any) -> list[int]:
-    """Index of the first detector row with bit-identical box, -1 if none."""
-    index: dict[bytes, int] = {}
-    for j in range(len(detector_rows)):
-        index.setdefault(detector_rows[j, :4].tobytes(), j)
-    return [index.get(rows[i, :4].tobytes(), -1) for i in range(len(rows))]
-
-
-def row_set_difference(a: Any, b: Any) -> list[int]:
-    """Rows of ``a`` whose exact bytes do not occur in ``b``."""
-    present = {b[j].tobytes() for j in range(len(b))}
-    return [i for i in range(len(a)) if a[i].tobytes() not in present]
-
-
-def attribute_rows(
-    row_idx: list[int], rows: Any, detector_rows: Any, in_delta: Any
-) -> dict[str, int]:
-    """Classify differing tracker-input rows as Δ-anchor, values, or unmapped."""
-    out = {"delta_anchor": 0, "values": 0, "unmapped": 0}
-    if not row_idx:
-        return out
-    mapped = map_rows_to_detector(rows[row_idx], detector_rows)
-    for j in mapped:
-        if j < 0:
-            out["unmapped"] += 1
-        elif bool(in_delta[j]):
-            out["delta_anchor"] += 1
-        else:
-            out["values"] += 1
-    return out
-
-
-def attribution_class(counts: dict[str, int]) -> str:
-    if counts["delta_anchor"]:
-        return "delta_anchor"
-    if counts["values"]:
-        return "values"
-    return "unmapped" if counts["unmapped"] else "none"
+def explain_rows(
+    other_rows: Any,
+    ref_rows: Any,
+    other_status: tuple[Any, list[str]],
+    ref_status: tuple[Any, list[str]],
+) -> dict[str, Any]:
+    """Why two ordered row arrays differ: rows only in one side (additions /
+    removals, multiplicity-aware; a changed row appears as one of each) with
+    their provenance, or, when the multisets agree, the displaced positions
+    of a pure reordering and their provenance."""
+    if other_rows is MISSING or ref_rows is MISSING:
+        return {
+            "kind": "missing_observation",
+            "missing_side": "other" if other_rows is MISSING else "R_C",
+            "class": "unknown",
+        }
+    only_other = multiset_excess(other_rows, ref_rows)
+    only_ref = multiset_excess(ref_rows, other_rows)
+    if not only_other and not only_ref:
+        displaced = [
+            i
+            for i in range(len(other_rows))
+            if other_rows[i].tobytes() != ref_rows[i].tobytes()
+        ]
+        counts = provenance_counts(
+            row_provenance(other_rows[displaced], *other_status) if displaced else []
+        )
+        return {
+            "kind": "order_only",
+            "displaced_positions": displaced,
+            "displaced_rows": counts,
+            "class": attribution_class(counts),
+        }
+    added = provenance_counts(
+        row_provenance(other_rows[only_other], *other_status) if only_other else []
+    )
+    removed = provenance_counts(
+        row_provenance(ref_rows[only_ref], *ref_status) if only_ref else []
+    )
+    total = {k: added[k] + removed[k] for k in PROVENANCE}
+    return {
+        "kind": "rows_changed",
+        "rows_only_in_other": added,
+        "rows_only_in_R_C": removed,
+        "class": attribution_class(total),
+    }
 
 
 def census_first_frames(ev: Any) -> dict[str, int | None]:
@@ -917,84 +1034,70 @@ def census_totals(ev: Any, pair: str) -> dict[str, int]:
     }
 
 
-def delta_flow(ev: Any) -> dict[str, int]:
-    """§6.1 in one run: do Δ-anchor detections reach tracker_input and are
-    they referenced by an output track's det_idx? (det_idx indexes the
-    tracker_input rows of the same frame.)"""
-    det_rows = ev["rows"]
-    in_delta = ev["row_in_delta"]
-    ti = ragged_by_frame(
-        ev["tracker_input_frames"], ev["tracker_input_counts"], ev["tracker_input_rows"]
-    )
+def _frame_status(ev: Any, k: int, delta_key: str) -> tuple[Any, list[str]]:
+    rows = ev["rows"][k]
+    return rows, detector_row_status(rows, ev[delta_key][k], ev["row_consistent"][k])
+
+
+def delta_flow(ev: Any, delta_key: str = "row_in_delta") -> dict[str, Any]:
+    """§6.1 in one run: do Δ-anchor detections reach tracker_input, and are
+    they referenced by an output track's det_idx (which indexes the same
+    frame's tracker_input rows)? Only attributed rows count as Δ or values;
+    the rest are reported by provenance status."""
+    view = tracker_input_view(ev)
     trk_idx = ragged_by_frame(
         ev["tracker_frames"], ev["tracker_counts"], ev["tracker_det_idx"].reshape(-1, 1)
     )
-    out = {
-        "delta_rows_above_floor": 0,
-        "tracker_input_rows": 0,
-        "tracker_input_rows_unmapped": 0,
-        "tracker_input_rows_from_delta": 0,
-        "track_det_idx_refs": 0,
-        "track_det_idx_refs_to_delta": 0,
-        "track_det_idx_missing": 0,
-    }
-    for k in range(len(det_rows)):
-        frame = k + 1
-        rows = det_rows[k]
-        out["delta_rows_above_floor"] += int(
-            (in_delta[k] & (rows[:, 4] >= SCORE_FLOOR)).sum()
-        )
-        tin = ti.get(frame)
-        if tin is None:
+    replay_above: list[str] = []
+    tracker_input: list[str] = []
+    refs: list[str] = []
+    missing_det_idx = 0
+    missing_frames = 0
+    for k in range(len(ev["rows"])):
+        rows, status = _frame_status(ev, k, delta_key)
+        above = rows[:, 4] >= SCORE_FLOOR
+        replay_above += [s for s, a in zip(status, above.tolist()) if a]
+        tin = view.get(k + 1, MISSING)
+        if tin is MISSING:
+            missing_frames += 1
             continue
-        mapped = map_rows_to_detector(tin, rows)
-        from_delta = [j >= 0 and bool(in_delta[k][j]) for j in mapped]
-        out["tracker_input_rows"] += len(mapped)
-        out["tracker_input_rows_unmapped"] += sum(1 for j in mapped if j < 0)
-        out["tracker_input_rows_from_delta"] += sum(from_delta)
-        refs = trk_idx.get(frame)
-        if refs is None:
+        prov = row_provenance(tin, rows, status)
+        tracker_input += prov
+        idx = trk_idx.get(k + 1)
+        if idx is None:
             continue
-        for d in refs.reshape(-1).tolist():
+        for d in idx.reshape(-1).tolist():
             if d == -2:
-                out["track_det_idx_missing"] += 1
-            elif 0 <= d < len(from_delta):
-                out["track_det_idx_refs"] += 1
-                out["track_det_idx_refs_to_delta"] += int(from_delta[d])
-    return out
+                missing_det_idx += 1
+            elif 0 <= d < len(prov):
+                refs.append(prov[d])
+    return {
+        "replay_rows_above_floor": provenance_counts(replay_above),
+        "tracker_input_rows": provenance_counts(tracker_input),
+        "track_det_idx_refs": provenance_counts(refs),
+        "track_det_idx_missing": missing_det_idx,
+        "tracker_input_missing_frames": missing_frames,
+    }
 
 
-def compare_runs(ref: Any, other: Any, other_delta_key: str) -> dict[str, Any]:
-    """§6.3/§6.4 for one sequence: first tracker_input / tracker output
-    divergence of ``other`` against R_C and its Δ/values attribution."""
-    ti_ref = ragged_by_frame(
-        ref["tracker_input_frames"],
-        ref["tracker_input_counts"],
-        ref["tracker_input_rows"],
-    )
-    ti_oth = ragged_by_frame(
-        other["tracker_input_frames"],
-        other["tracker_input_counts"],
-        other["tracker_input_rows"],
-    )
+def compare_runs(ref: Any, other: Any, delta_key: str) -> dict[str, Any]:
+    """§6.3/§6.4 for one sequence: the first tracker_input / tracker output
+    divergence of ``other`` against R_C and its explanation."""
+    import numpy as np
+
+    ti_ref, ti_oth = tracker_input_view(ref), tracker_input_view(other)
     first_ti = first_rows_divergence(ti_ref, ti_oth)
-    attribution = None
-    if first_ti is not None and first_ti in ti_ref and first_ti in ti_oth:
+    explanation = None
+    if first_ti is not None:
         k = first_ti - 1
-        a, b = ti_oth[first_ti], ti_ref[first_ti]
-        added = attribute_rows(
-            row_set_difference(a, b), a, other["rows"][k], other[other_delta_key][k]
+        explanation = explain_rows(
+            ti_oth.get(first_ti, MISSING),
+            ti_ref.get(first_ti, MISSING),
+            _frame_status(other, k, delta_key),
+            _frame_status(ref, k, delta_key),
         )
-        removed = attribute_rows(
-            row_set_difference(b, a), b, ref["rows"][k], ref[other_delta_key][k]
-        )
-        total = {key: added[key] + removed[key] for key in added}
-        attribution = {
-            "rows_only_in_other": added,
-            "rows_only_in_R_C": removed,
-            "class": attribution_class(total),
-        }
     trk = {}
+    joined = {}
     for name, ev in (("ref", ref), ("other", other)):
         ids = ragged_by_frame(
             ev["tracker_frames"], ev["tracker_counts"], ev["tracker_ids"].reshape(-1, 1)
@@ -1008,13 +1111,16 @@ def compare_runs(ref: Any, other: Any, other_delta_key: str) -> dict[str, Any]:
             ev["tracker_frames"], ev["tracker_counts"], ev["tracker_boxes"]
         )
         trk[name] = {"ids": ids, "det_idx": det_idx, "boxes": boxes}
-    joined_ref = {f: _join_tracker(trk["ref"], f) for f in trk["ref"]["ids"]}
-    joined_oth = {f: _join_tracker(trk["other"], f) for f in trk["other"]["ids"]}
+        # no emit on a frame = no tracks on it (the skipped-frame path)
+        joined[name] = {
+            f: _join_tracker(trk[name], f) if f in ids else np.zeros((0, 6))
+            for f in range(1, len(ev["rows"]) + 1)
+        }
     return {
         "first_tracker_input_divergence": first_ti,
-        "first_tracker_input_attribution": attribution,
+        "first_tracker_input_explanation": explanation,
         "first_tracker_output_divergence": first_rows_divergence(
-            joined_ref, joined_oth
+            joined["ref"], joined["other"]
         ),
         "_tracker": trk,
     }
@@ -1410,6 +1516,27 @@ def arm_manifest_problem(run: dict[str, Any], head: str) -> str | None:
     return None
 
 
+def run_problems(
+    run: dict[str, Any], head: str, runs: list[dict[str, Any]]
+) -> list[str]:
+    """Everything that invalidates the study as soon as ``run`` finishes."""
+    tag = f"{run['arm']}#{run['rep']}"
+    if run["returncode"] != 0 or any(v is None for v in run["txt_sha256"].values()):
+        return [f"{tag} failed (exit {run['returncode']}) or missing output"]
+    problems = []
+    problem = arm_manifest_problem(run, head)
+    if problem:
+        problems.append(f"{tag}: {problem}")
+    problems += [f"V3/coverage: {p}" for p in evidence_problems(run)]
+    if run["resolved_env_overrides"] != runs[0]["resolved_env_overrides"]:
+        problems.append(f"{tag}: resolved_env_overrides differ from {runs[0]['arm']}#1")
+    if run["rep"] == 2:
+        first = next(r for r in runs if r["arm"] == run["arm"] and r["rep"] == 1)
+        if first["txt_sha256"] != run["txt_sha256"]:
+            problems.append(f"V2: {run['arm']} runs #1 and #2 are not byte-identical")
+    return problems
+
+
 def evidence_problems(run: dict[str, Any]) -> list[str]:
     """Replay coverage: one replay call per frame, every hybrid frame V3-checked."""
     path = project_root / run["evidence_dir"] / "worker.json"
@@ -1570,30 +1697,22 @@ def _measure(
     reasons: list[str] = []
     l2_dir = packet / "l2"
     l2_dir.mkdir()
-    runs = []
+    # Each run is validated before the next one launches: a failed worker
+    # (V3 raises on its first failing frame), missing output, a manifest
+    # mismatch, incomplete coverage, differing env overrides, or a V2 mismatch
+    # ends the study at once with the completed runs kept in the packet.
+    runs: list[dict[str, Any]] = []
+    record["runs"] = runs
+    head = record["v1"]["git"]["head"]
     for arm, rep in RUN_ORDER:
         print(f"[arm] {arm}#{rep}", flush=True)
-        runs.append(run_arm(l2_dir, arm, rep))
-    record["runs"] = runs
+        run = run_arm(l2_dir, arm, rep)
+        runs.append(run)
+        problems = run_problems(run, head, runs)
+        if problems:
+            record["aborted_after"] = f"{arm}#{rep}"
+            return none, reasons + problems
     by = {(r["arm"], r["rep"]): r for r in runs}
-    head = record["v1"]["git"]["head"]
-    for r in runs:
-        tag = f"{r['arm']}#{r['rep']}"
-        if r["returncode"] != 0 or any(v is None for v in r["txt_sha256"].values()):
-            reasons.append(f"{tag} failed (exit {r['returncode']}) or missing output")
-            continue
-        problem = arm_manifest_problem(r, head)
-        if problem:
-            reasons.append(f"{tag}: {problem}")
-        reasons += [f"V3/coverage: {p}" for p in evidence_problems(r)]
-    envs = {json.dumps(r["resolved_env_overrides"], sort_keys=True) for r in runs}
-    if len(envs) != 1:
-        reasons.append("resolved_env_overrides differ between arms")
-    for arm in ARMS:
-        if by[(arm, 1)]["txt_sha256"] != by[(arm, 2)]["txt_sha256"]:
-            reasons.append(f"V2: {arm} runs #1 and #2 are not byte-identical")
-    if reasons:
-        return none, reasons
 
     scored = {
         arm: score_arm(project_root / by[(arm, 1)]["output_dir"], SEQUENCES)
@@ -1689,6 +1808,9 @@ def _report(
             },
         }
         report["delta_flow_R_T"][seq] = delta_flow(rt)
+        report.setdefault("delta_e_flow_R_E", {})[seq] = delta_flow(
+            evs[("R_E", 1)], "row_in_delta_e"
+        )
         ref_txt = (
             project_root / by[("R_C", 1)]["output_dir"] / f"{seq}.txt"
         ).read_bytes()
@@ -1706,8 +1828,8 @@ def _report(
                 "first_tracker_input_divergence": comparison[
                     "first_tracker_input_divergence"
                 ],
-                "first_tracker_input_attribution": comparison[
-                    "first_tracker_input_attribution"
+                "first_tracker_input_explanation": comparison[
+                    "first_tracker_input_explanation"
                 ],
                 "first_tracker_output_divergence": comparison[
                     "first_tracker_output_divergence"

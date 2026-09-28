@@ -16,7 +16,9 @@ sequences in a temporary data root, then checks the worker's coverage:
   floor); tracker outputs carry ``det_idx``;
 * the harness's run_manifest cmdline equals the worker's mot17.py argv;
 * with ``--arm all``: a second ``R_T`` run reproduces the txt bytes and every
-  evidence array (V2 rehearsal), and the §6 report code runs to completion.
+  evidence array (V2 rehearsal), the §6 report code runs to completion, every
+  ``tracker_input`` row maps back to a replay row by full-row match, and every
+  frame without a ``tracker_input`` probe has the verified-skip signature.
 
 It prints no head-comparison quantity and writes nothing under ``results/``;
 the synthetic images carry no information about the study's data. Its output
@@ -203,6 +205,17 @@ def main() -> int:
             try:
                 report = runner._report(by, seqs)
                 json.dumps(report)
+                # The harness passes detector rows to the tracker unchanged, so
+                # every tracker_input row must map back by full-row match (a
+                # coverage property of the observer, not a head comparison).
+                for key in ("delta_flow_R_T", "delta_e_flow_R_E"):
+                    for seq, flow in report[key].items():
+                        if flow["tracker_input_rows"]["unmapped"]:
+                            problems.append(f"{key} {seq}: unmapped tracker_input rows")
+                        if flow["tracker_input_missing_frames"]:
+                            problems.append(
+                                f"{key} {seq}: missing tracker_input frames"
+                            )
             except Exception as exc:  # noqa: BLE001 — reported as a failure
                 problems.append(f"§6 report raised {exc!r}")
         for p in problems:
