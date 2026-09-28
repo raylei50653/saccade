@@ -434,6 +434,31 @@ set_target_properties(saccade_scan_plugin PROPERTIES
     INSTALL_RPATH "${SACCADE_INSTALL_RPATH}"
 )
 
+# 7c. SelectiveScan LibTorch operator (#465 PR-1L) — registers
+#     saccade_native::selective_scan_fwd for the TorchScript head artifact
+#     (scripts/model/export_headline_mamba_head_torchscript.py). Loaded with
+#     torch.ops.load_library() / dlopen; the TORCH_LIBRARY static registrars
+#     run at load time. Same self-contained shape as the TRT plugin above
+#     (mamba_scan.cu compiled in, hidden visibility), and it links libtorch
+#     only -- never torch_python or libpython (shipping boundary G2).
+add_library(saccade_scan_torchop MODULE
+    src/tracking/mamba_scan_torchop.cpp
+    src/tracking/mamba_scan.cu
+)
+target_link_libraries(saccade_scan_torchop PRIVATE
+    ${TORCH_LIBRARIES}
+    CUDA::cudart
+)
+set_target_properties(saccade_scan_torchop PROPERTIES
+    PREFIX "lib"
+    OUTPUT_NAME "saccade_scan_torchop"
+    CUDA_SEPARABLE_COMPILATION OFF
+    CXX_VISIBILITY_PRESET hidden
+    VISIBILITY_INLINES_HIDDEN ON
+    BUILD_RPATH "${SACCADE_BUILD_RPATH}"
+    INSTALL_RPATH "${SACCADE_INSTALL_RPATH}"
+)
+
 pybind11_add_module(saccade_media_ext NO_EXTRAS src/media/gst_client_python.cpp)
 target_link_libraries(saccade_media_ext PRIVATE 
     saccade_media

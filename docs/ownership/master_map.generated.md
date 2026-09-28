@@ -198,6 +198,7 @@ Manifest: `docs/ownership/doc_migration_manifest.yaml`
 - `docs/reference/math_model_implementation.md`
 - `docs/reference/mot17_default_config.md`
 - `docs/reference/native_runtime_head_artifact.md`
+- `docs/reference/native_runtime_head_artifact_libtorch.md`
 - `docs/reference/native_runtime_head_artifact_tf32_off.md`
 - `docs/reference/native_runtime_head_failure_localization_declaration.md`
 - `docs/reference/native_runtime_head_failure_localization_r2_declaration.md`
@@ -414,6 +415,6 @@ Excluded from the active index and default search view.
 
 ## Inventory summary
 
-- documents: 364
-- active: 309
+- documents: 365
+- active: 310
 - grayed out: 55

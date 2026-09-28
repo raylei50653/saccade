@@ -105,6 +105,7 @@ manually or if their outputs support a retained report.
 | `compile_mamba_head_aot.py` | stable | cli | Example script demonstrating how to compile the PyTorch Mamba Head into a standalone C++ Shared/Static Librar… |
 | `export_dinov2.py` | stable | cli | Export facebook/dinov2-base (ViT-B/14, 768-dim) to ONNX for TRT compilation. |
 | `export_headline_mamba_head.py` | diagnostic | cli | Export the headline Mamba head as an ONNX + TensorRT artifact with a lineage manifest. |
+| `export_headline_mamba_head_torchscript.py` | diagnostic | cli | Export the headline Mamba head as a LibTorch TorchScript artifact with a lineage manifest. |
 | `export_mamba_head.py` | stable | cli | Export PyTorch Mamba Head to TorchScript via wrapper. |
 | `export_mamba_head_onnx.py` | stable | cli | Export PyTorch MambaHead to ONNX with custom SelectiveScan op. |
 | `export_mobilenetv4_reid.py` | stable | cli | Export fine-tuned MobileNetV4 ReID checkpoint to ONNX for TRT compilation. |
