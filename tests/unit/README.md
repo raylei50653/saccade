@@ -15,6 +15,7 @@
 | `test_math_model_source_attestation.py` | eval,tracking,cross-module | contract | active | Fail-closed contracts for the math-model source-byte attestation. |
 | `test_native_head_failure_localization_r2_runner.py` | system | contract | active | The #465 localization r2 runner implements its frozen declaration and nothing else. |
 | `test_native_head_failure_localization_runner.py` | system | contract | active | The #465 localization runner implements its frozen declaration and nothing else. |
+| `test_native_head_parity_libtorch_runner.py` | system | contract | active | The #465 PR-2L runner implements its frozen declaration and PR-2's policy verbatim. |
 | `test_native_head_parity_runner.py` | system | contract | active | The #465 PR-2 head parity runner implements its frozen declaration. |
 | `test_native_head_parity_tf32_off_runner.py` | system | contract | active | The #465 PR-2R runner is PR-2's gate with only the TF32-off head swapped in. |
 | `test_pipeline_health.py` | pipeline | behavior | active | Unit tests for saccade.pipeline.health.check_redis (mocked aioredis). |
