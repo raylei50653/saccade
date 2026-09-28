@@ -18,6 +18,8 @@
 | `compare_detector_suffix_runs.py` | diagnostic | cli | Audit whether two MOT17 detector-suffix runs contain distinct evidence. |
 | `compare_handover_summaries.py` | diagnostic | cli | Compare Cheb-GR offline handover parameter summary JSON files. |
 | `label_boosted_birth_rows.py` | diagnostic | cli | Label and export birth rows boosted by GT for diagnostics. |
+| `native_head_failure_localization.py` | experiment | cli | Run the #465 head failure-localization study (anchor-level C/T/E replay) and write its packet. |
+| `native_head_failure_localization_structural_check.py` | experiment | cli | Exercise the #465 localization arm worker end to end on synthetic frames (no MOT17 data). |
 | `native_head_parity.py` | experiment | cli | Run the #465 PR-2 head parity gate (TRT head vs PyTorch oracle) and write its packet. |
 | `native_head_parity_tf32_off.py` | experiment | cli | Run the #465 PR-2R head parity gate (TF32-off TRT head vs PyTorch oracle) and write its packet. |
 | `probe_forwarded_embedding_assoc_cost.py` | diagnostic | cli | Probe: online assoc cost via forwarded (copy) clean-FIFO embeddings. |
