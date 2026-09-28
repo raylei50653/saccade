@@ -198,6 +198,7 @@ Manifest: `docs/ownership/doc_migration_manifest.yaml`
 - `docs/reference/math_model_implementation.md`
 - `docs/reference/mot17_default_config.md`
 - `docs/reference/native_runtime_head_artifact.md`
+- `docs/reference/native_runtime_head_artifact_libtorch.md`
 - `docs/reference/native_runtime_head_artifact_tf32_off.md`
 - `docs/reference/native_runtime_head_failure_localization_declaration.md`
 - `docs/reference/native_runtime_head_failure_localization_r2_declaration.md`
