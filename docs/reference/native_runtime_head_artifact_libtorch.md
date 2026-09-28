@@ -41,7 +41,7 @@ head 由**與 oracle 相同的建構路徑**產生（重用 `export_headline_mam
 
 ## 3. 這台機器上的紀錄
 
-manifest 由 clean tree 產生（tool commit `26e5566a`，`git_dirty=false`）。
+manifest 由 clean tree 產生（tool commit `f7df457e`，`git_dirty=false`）。
 
 | 項目 | 值 |
 |:--|:--|
