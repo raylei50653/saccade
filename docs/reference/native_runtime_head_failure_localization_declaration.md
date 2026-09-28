@@ -12,8 +12,9 @@
 
 | | 狀態 |
 |:--|:--|
-| divergence 是否由 **anchor membership**（0.05 floor、top-300、argmax class）的差異造成 | **回答**（§5 factorial，機制標籤） |
-| divergence 是否由**同一組 member 的數值**（box、score）差異造成 | **回答**（§5 factorial，機制標籤） |
+| Δ-anchor 子集（membership 或 class 不同的 anchor）取 T 的完整 logits，是否就足以造成 divergence | **回答**（§5 factorial，機制標籤 `D_suff`） |
+| Δ anchor 固定取 C、其餘 anchor 取 T 的數值（membership／class 經 V3 確認不變），是否就足以造成 divergence | **回答**（§5 factorial，機制標籤 `V_suff`） |
+| membership 邊界本身（與 Δ anchor 上的 score／box 數值分開）是否為原因 | **不回答**：`H_M` 對 Δ anchor 替換的是完整 84 維 logits，membership 與這些 anchor 的數值一起改變，無法分離 |
 | 一個與 oracle 同為 PyTorch kernel、但不 bit-exact 的 head（E：eager head）在 replay 系統中是否在容差內 | **回答**（§5 decision terminal；決定 LibTorch 是否優先） |
 | 每個 crossing anchor、top-k、tracker input、association 的第一個分歧 | **報告，不判定**（§6） |
 | TF32 與 tactic selection 的效應分離 | **不回答**（兩個 engine 各一次 build，現有設計無法分離） |
@@ -51,8 +52,8 @@ anchor a 的 **membership**（對 head X）：
 |:--|:--|:--|:--|
 | `R_C` | C | C | 純 C（replay 系統內的 oracle corner） |
 | `R_T` | T | T | 純 T |
-| `H_M` | **T** | C | membership 取 T、其餘數值取 C |
-| `H_V` | **C** | T | membership 取 C、其餘數值取 T |
+| `H_M` | **T** | C | Δ anchor 取 T 的完整 logits（membership／class 與這些 anchor 的 score／box 數值一起變成 T），其餘取 C |
+| `H_V` | **C** | T | Δ anchor 固定取 C，其餘 anchor 取 T 的數值（membership／class 等於 C） |
 | `R_E` | E | E | 純 E（eager head 數值＋compiled S2；Δ 不參與） |
 
 每個 arm 跑兩次；順序 `R_C#1, R_T#1, H_M#1, H_V#1, R_E#1, R_C#2, R_T#2, H_M#2, H_V#2, R_E#2`，同一 session、同一 `machine-bench` 租約。
@@ -63,7 +64,7 @@ anchor a 的 **membership**（對 head X）：
 
 | gate | 條件 | 不成立 ⇒ |
 |:--|:--|:--|
-| V1 凍結輸入 | engine／manifest（檔案 sha256）／ONNX／ckpt／backbone／preset／環境／資料 5316 frames／clean tree／caller 無 `SACCADE_*`／租約直接 child；runner hard-bound（識別 study 的輸入都不是 CLI 選項）；**declaration blob**：HEAD 上本文的 blob 等於 runner 內釘的凍結 blob；**執行凍結點**：runner 另開 PR（§9），所以正式 HEAD 是 **runner PR 的 merge commit**，不是本文的 merge commit。runner merge 後建立 annotated tag `freeze/465-head-localization` 指向該 merge commit、push，並在 #465 貼 freeze record（SHA＋tag）；runner 檢查 HEAD 是 2-parent commit、在 `origin/main` 的 first-parent 鏈上、等於本地 tag 的 target，且 `git ls-remote origin` 回報的 tag target 相同（採納 #475 review 的 hardening note：tag 指向 exact SHA，不只靠 merge subject） | `UNRESOLVED` |
+| V1 凍結輸入 | engine／manifest（檔案 sha256）／ONNX／ckpt／backbone／preset／環境／資料 5316 frames／clean tree／caller 無 `SACCADE_*`／租約直接 child；runner hard-bound（識別 study 的輸入都不是 CLI 選項）；**declaration blob**：HEAD 上本文的 blob 等於 runner 內釘的凍結 blob；**執行凍結點**：runner 另開 PR（§9），所以正式 HEAD 是 **runner PR 的 merge commit**，不是本文的 merge commit。runner merge 後建立 annotated tag `freeze/465-head-localization`，其 **peeled commit target** 是該 merge commit，push 後在 #465 貼 freeze record（commit SHA、tag object SHA、tag 名稱）。runner 檢查：HEAD 是 2-parent commit，在 `origin/main` 的 first-parent 鏈上；`git cat-file -t refs/tags/freeze/465-head-localization` = `tag`（annotated）；本地 `git rev-parse refs/tags/freeze/465-head-localization^{commit}` = HEAD；`git ls-remote origin refs/tags/freeze/465-head-localization^{}` 回報的 peeled SHA = HEAD。所有比較都用 commit SHA，不用 tag object SHA（採納 #475 review 的 hardening note：tag 指向 exact SHA，不只靠 merge subject） | `UNRESOLVED` |
 | V2 確定性 | 每個 arm 兩次 run 的 7 個 txt 逐位元相同 | `UNRESOLVED` |
 | V3 組合正確 | 每個 frame、每個 hybrid arm：(i) 組合後的 84 維 logits 逐 anchor 逐位元等於表中指定的來源（Δ 內等於一方、Δ 外等於另一方）；(ii) 由組合後 logits 重新計算 membership 與 class：`H_M` 的 m 與 class 必須逐 anchor 等於 T，`H_V` 必須等於 C（top-300 名次會因替換而移動，所以要在組合後重算，不是假設）。任一 frame 不成立，runner 立即 fail-closed | `UNRESOLVED` |
 | V4 現象重現 | `R_T` 對 `R_C` 依 §5 κ 為「出界」。replay 系統若不重現 parity failure，就沒有可分解的對象 | `UNRESOLVED` |
@@ -75,8 +76,8 @@ anchor a 的 **membership**（對 head X）：
 **出界（沿用 PR-2 的 κ_L2，容差固定為 floor，不設 reference arm）**：arm X 對 `R_C` 出界 ⇔ 7-seq combined、未四捨五入，`|Δ IDF1| > 0.20` 或 `|Δ HOTA| > 0.20` 或 `|Δ MOTA| > 0.20` 或 `|Δ IDs| > 5`（雙向）。floor 在 PR-2 宣告凍結時就已固定，不依任何已看過的結果調整。
 
 - `E_out` = `R_E` 出界（eager 級的非 bit-exact head 數值就足以造成 parity failure）
-- `M_suff` = `H_M` 出界（只換 membership 就足以造成 parity failure）
-- `V_suff` = `H_V` 出界（membership 不變、只換數值就足以造成 parity failure）
+- `D_suff` = `H_M` 出界：Δ anchor 取 T 的完整 logits 就足以造成 parity failure。**`H_M` 把 divergence 定位到 Δ-anchor 通道；它不能把 membership 當成獨立的因果變數分離出來，因為 Δ anchor 替換的是 T 的完整 logits，score／box 數值也一起換了。**
+- `V_suff` = `H_V` 出界：Δ anchor 固定取 C、其餘 anchor 取 T，且 V3 確認 membership／class 與 C 相同時，仍足以造成 parity failure
 
 **Decision terminal（窮盡，依序；只由 validity 與 `E_out` 決定）**：
 
@@ -90,11 +91,11 @@ anchor a 的 **membership**（對 head X）：
 
 | 標籤 | 條件 |
 |:--|:--|
-| `S2_BOUNDARY_LOCALIZED` | `M_suff` 且非 `V_suff` |
-| `HEAD_NUMERICS_LOCALIZED` | `V_suff` 且非 `M_suff` |
-| `MIXED` | `M_suff` 且 `V_suff`；或兩者皆否（`R_T` 出界但任一單一通道都不足以出界 = 交互作用） |
+| `DELTA_ANCHOR_SUFFICIENT` | `D_suff` 且非 `V_suff` |
+| `COMMON_ANCHOR_VALUES_SUFFICIENT` | `V_suff` 且非 `D_suff` |
+| `MIXED` | `D_suff` 且 `V_suff`；或兩者皆否（`R_T` 出界但任一單一通道都不足以出界 = 交互作用） |
 
-依 §10 O1 的分析，兩個 localized 標籤都指向「head 數值要更接近 oracle」，差別只在需要多接近；它們是機制 evidence，不是路線。
+依 §10 O1 的分析，兩個 sufficient 標籤都指向「head 數值要更接近 oracle」，差別只在需要多接近；它們是機制 evidence，不是路線。`DELTA_ANCHOR_SUFFICIENT` 不得寫成「membership 邊界是原因」或「S2 邊界是原因」。
 
 ## 6. 只報告、不判定（owner 要求的四類 evidence，7 個序列全部報）
 
@@ -121,7 +122,7 @@ row→anchor 的對應由 replay detector 在組合時記錄（eager top-k 索�
 
 ## 10. Owner 決定（凍結前）
 
-**已決定（2026-09-28）**：O1 採 **(a)**，已寫入 §0／§3／§5；O2 = **只用 PR-1R engine**（§3）。以下保留決定前的分析作為紀錄。
+**已決定（2026-09-28）**：O1 採 **(a)**，已寫入 §0／§3／§5；O2 = **只用 PR-1R engine**（§3）。以下保留決定前的分析作為紀錄；其中的 `S2_BOUNDARY_LOCALIZED`／`HEAD_NUMERICS_LOCALIZED` 是 R4 之前的舊名稱，現行名稱與語義見 §5。
 
 **O1 — terminal → 路線的對應。** 草稿依 owner 提議的名稱寫了 terminal，但「`S2_BOUNDARY_LOCALIZED` ⇒ 下一個候選是含 S2 的 artifact」這個對應在因果上不成立，需要 owner 在凍結前重新決定：
 
@@ -141,5 +142,7 @@ row→anchor 的對應由 replay detector 在組合時記錄（eager top-k 索�
 - R1（2026-09-28，owner 決定 O1(a)／O2）：加 `R_E` arm；decision terminal 改為 `EAGER_NUMERICS_WITHIN`／`EAGER_NUMERICS_OUT`，原三個 localized terminal 降為機制標籤；受測 T 定為 PR-1R engine。門檻（PR-2 floor）與 `R_C`／`R_T`／`H_M`／`H_V` 四個 arm 的定義不變。
 - R2（2026-09-28）：V3 明確寫出以 anchor index 整體替換 84 維 logits 並逐位元驗證來源，組合後重算 membership／class，fail-closed。
 - R3（2026-09-28）：執行凍結點改為 runner PR 的 merge commit＋annotated tag（runner 依 §9 另開 PR，本文的 merge commit 不會包含 runner）。
+- R4（2026-09-28，review）：`H_M` 對 Δ anchor 替換完整 logits，所以不能隔離 membership。`M_suff` 改名 `D_suff`；機制標籤改為 `DELTA_ANCHOR_SUFFICIENT`／`COMMON_ANCHOR_VALUES_SUFFICIENT`／`MIXED`；§0 把「membership 本身是否為原因」列為不回答。arm 的組合方式、門檻與 decision terminal 都不變。
+- R5（2026-09-28，review）：V1 的 tag 檢查寫明 annotated tag 的 peeled commit target，遠端用 `refs/tags/freeze/465-head-localization^{}`，比較一律用 commit SHA。
 
 **凍結後的 amendments**（append-only）：（無）
