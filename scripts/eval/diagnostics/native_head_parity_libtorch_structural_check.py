@@ -42,6 +42,7 @@ project_root = Path(__file__).resolve().parents[3]
 RUNNER = project_root / "scripts/eval/diagnostics/native_head_parity_libtorch.py"
 SYNTHETIC = (("SYN-01-SDP", 1920, 1080), ("SYN-02-SDP", 640, 480))
 N_FRAMES = 12
+ENV_FIRST: dict[str, Any] = {}  # the first arm's child env overrides
 
 
 def _load_runner() -> Any:
@@ -114,6 +115,10 @@ def run_arm(runner: Any, arm: str, work: Path) -> list[str]:
         print(proc.stdout[-4000:], proc.stderr[-4000:], sep="\n")
         problems.append(f"child exit {proc.returncode}")
     problems += runner.sidecar_problems(arm, sidecar)
+    problems += runner.env_override_problems(
+        (sidecar or {}).get("resolved_env_overrides"),
+        ENV_FIRST.setdefault("first", (sidecar or {}).get("resolved_env_overrides")),
+    )
     manifest = work / "out" / "run_manifest.json"
     if not manifest.exists():
         problems.append("run_manifest.json missing")

@@ -459,8 +459,11 @@ def test_graph_problems():
     assert R.graph_problems(ok + f"\n{R.PYTHON_OP}(%c)") != []
 
 
+ENV_DEFAULT = {"SACCADE_EXAMPLE_HATCH": "<default>", "SACCADE_OTHER_HATCH": "<default>"}
+
 GOOD_A_L = {
     "arm": "A_L",
+    "resolved_env_overrides": dict(ENV_DEFAULT),
     "installed": list(R.A_L_INSTALLS),
     "runpy_completed": True,
     "op_library_mapped": True,
@@ -476,6 +479,7 @@ GOOD_A_L = {
 }
 GOOD_A_C = {
     "arm": "A_C",
+    "resolved_env_overrides": dict(ENV_DEFAULT),
     "installed": [],
     "runpy_completed": True,
     "op_library_mapped": False,
@@ -536,6 +540,11 @@ def test_injected_sidecar_fails_closed(key, value):
 )
 def test_non_injected_sidecar_fails_closed(key, value):
     assert R.sidecar_problems("A_C", {**GOOD_A_C, key: value}), key
+
+
+def test_sidecar_observer_error_fails():
+    assert R.sidecar_problems("A_C", {**GOOD_A_C, "sidecar_error": "OSError()"})
+    assert R.sidecar_problems("A_L", {**GOOD_A_L, "sidecar_error": "OSError()"})
 
 
 def test_missing_sidecar_fails():
@@ -760,7 +769,6 @@ def _write_run(tmp: Path, arm: str, rep: int, txt: dict, sidecar: dict, head: st
         "mot17_argv": argv,
         "output_dir": f"{arm}_{rep}",
         "sidecar": f"{arm}_{rep}.sidecar.json",
-        "resolved_env_overrides": {},
         "txt_sha256": txt,
     }
 
@@ -846,3 +854,49 @@ def test_placement_problems():
 
 def test_v1_loads_the_artifact_for_the_graph_row():
     assert "load_l(torch)" in RUNNER_SRC["check_v1"]
+
+
+# --- #487 review P2: env overrides are read in the child, not the parent ---
+
+
+def test_env_override_problems():
+    assert R.env_override_problems(dict(ENV_DEFAULT), dict(ENV_DEFAULT)) == []
+    flipped = {**ENV_DEFAULT, "SACCADE_OTHER_HATCH": "1"}
+    assert R.env_override_problems(flipped, dict(ENV_DEFAULT))
+    assert R.env_override_problems(None, dict(ENV_DEFAULT))
+    assert R.env_override_problems({}, dict(ENV_DEFAULT))
+    assert R.env_override_problems(dict(ENV_DEFAULT), None)
+
+
+def test_env_overrides_are_read_in_the_child_not_the_parent():
+    assert "resolved_env_overrides()" in RUNNER_SRC["run_arm_child"]
+    assert "resolved_env_overrides" not in RUNNER_SRC["run_arm"]
+    child = RUNNER_SRC["run_arm_child"]
+    # recorded by the atexit observer, i.e. after the harness ran
+    observer = child[child.index("def write_sidecar") : child.index("atexit.register")]
+    assert 'sidecar["resolved_env_overrides"] = resolved_env_overrides()' in observer
+
+
+def test_run_problems_fails_on_a_child_env_override_difference(tmp_path, monkeypatch):
+    monkeypatch.setattr(R, "project_root", tmp_path)
+    anchor = dict(R.ORACLE_ANCHOR_TXT_SHA256)
+    c1 = _write_run(tmp_path, "A_C", 1, anchor, GOOD_A_C, "H")
+    assert R.run_problems(c1, "H", [c1]) == []
+    other = {s: "1" * 64 for s in R.SEQUENCES}
+    flipped = {
+        **GOOD_A_L,
+        "resolved_env_overrides": {**ENV_DEFAULT, "SACCADE_EXAMPLE_HATCH": "0"},
+    }
+    l1 = _write_run(tmp_path, "A_L", 1, other, flipped, "H")
+    problems = R.run_problems(l1, "H", [c1, l1])
+    assert any("resolved_env_overrides differ" in p for p in problems)
+    missing = {k: v for k, v in GOOD_A_L.items() if k != "resolved_env_overrides"}
+    l1b = _write_run(tmp_path, "A_L", 2, other, missing, "H")
+    assert any("not recorded" in p for p in R.run_problems(l1b, "H", [c1, l1, l1b]))
+
+
+def test_first_run_must_record_env_overrides(tmp_path, monkeypatch):
+    monkeypatch.setattr(R, "project_root", tmp_path)
+    no_env = {k: v for k, v in GOOD_A_C.items() if k != "resolved_env_overrides"}
+    c1 = _write_run(tmp_path, "A_C", 1, dict(R.ORACLE_ANCHOR_TXT_SHA256), no_env, "H")
+    assert any("not recorded" in p for p in R.run_problems(c1, "H", [c1]))

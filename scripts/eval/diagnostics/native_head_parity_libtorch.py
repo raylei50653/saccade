@@ -531,6 +531,8 @@ def sidecar_problems(arm: str, sc: dict[str, Any] | None) -> list[str]:
     if sc is None:
         return ["sidecar missing"]
     problems = []
+    if sc.get("sidecar_error"):
+        problems.append(f"sidecar observer failed: {sc['sidecar_error']}")
     if sc.get("arm") != arm:
         problems.append(f"sidecar arm {sc.get('arm')!r} != {arm!r}")
     if not sc.get("runpy_completed"):
@@ -577,6 +579,23 @@ def sidecar_problems(arm: str, sc: dict[str, Any] | None) -> list[str]:
     if fired:
         problems.append(f"guards called: {fired}")
     return problems
+
+
+def env_override_problems(
+    this: dict[str, Any] | None, first: dict[str, Any] | None
+) -> list[str]:
+    """§2 env hatch: the child-side ``resolved_env_overrides()`` of every run
+    must be recorded and equal to that of the first run (A_C#1)."""
+    if not isinstance(this, dict) or not this:
+        return ["child resolved_env_overrides not recorded"]
+    if not isinstance(first, dict) or not first:
+        return ["first run's child resolved_env_overrides not recorded"]
+    if this != first:
+        diff = sorted(
+            k for k in this.keys() | first.keys() if this.get(k) != first.get(k)
+        )
+        return [f"child resolved_env_overrides differ from the first run on {diff}"]
+    return []
 
 
 def argv_problems(cmdline: list[str] | None, expected: list[str]) -> list[str]:
@@ -1540,6 +1559,11 @@ def run_arm_child(
             if "guard_counts" in state:
                 sidecar["guard_calls"] = dict(state["guard_counts"])
             sidecar["runtime_readback_at_exit"] = runtime_readback(torch)
+            # §2 env hatch: the effective overrides of the process that ran
+            # the harness, read after it finished (not the parent's).
+            from saccade.perception.eval.assoc_basis import resolved_env_overrides
+
+            sidecar["resolved_env_overrides"] = resolved_env_overrides()
         except Exception as exc:  # noqa: BLE001 — recorded, V5 fails closed
             sidecar["sidecar_error"] = repr(exc)
         _write_json(sidecar_path, sidecar)
@@ -1632,8 +1656,6 @@ def run_arm(l2_dir: Path, arm: str, rep: int) -> dict[str, Any]:
         "--_out",
         str(out.relative_to(project_root)),
     ]
-    from saccade.perception.eval.assoc_basis import resolved_env_overrides
-
     log = l2_dir / f"{arm}_{rep}.stdout.log"
     started = _utc()
     with log.open("w") as f:
@@ -1652,7 +1674,6 @@ def run_arm(l2_dir: Path, arm: str, rep: int) -> dict[str, Any]:
         "stdout": str(log.relative_to(project_root)),
         "output_dir": str(out.relative_to(project_root)),
         "sidecar": str(sidecar.relative_to(project_root)),
-        "resolved_env_overrides": resolved_env_overrides(),
         "txt_sha256": {
             s: (_sha256(p) if p.exists() else None) for s, p in txts.items()
         },
@@ -1679,11 +1700,16 @@ def run_problems(
             problems.append(f"{tag}: run_manifest commit {m.get('commit')} != {head}")
         if m.get("dirty") is not False:
             problems.append(f"{tag}: run_manifest reports a dirty tree")
-    sidecar_path = project_root / run["sidecar"]
-    sidecar = json.loads(sidecar_path.read_text()) if sidecar_path.exists() else None
+    sidecar = _read_sidecar(run)
     problems += [f"V5 {tag}: {p}" for p in sidecar_problems(run["arm"], sidecar)]
-    if run["resolved_env_overrides"] != runs[0]["resolved_env_overrides"]:
-        problems.append(f"{tag}: resolved_env_overrides differ from {runs[0]['arm']}#1")
+    first = sidecar if run is runs[0] else _read_sidecar(runs[0])
+    problems += [
+        f"{tag}: {p}"
+        for p in env_override_problems(
+            (sidecar or {}).get("resolved_env_overrides"),
+            (first or {}).get("resolved_env_overrides"),
+        )
+    ]
     if run["arm"] == "A_C" and run["rep"] == 1:
         problems += oracle_anchor_problems(run["txt_sha256"])
     if run["rep"] == 2:
@@ -1691,6 +1717,11 @@ def run_problems(
         if first["txt_sha256"] != run["txt_sha256"]:
             problems.append(f"V3: {run['arm']} runs #1 and #2 are not byte-identical")
     return problems
+
+
+def _read_sidecar(run: dict[str, Any]) -> dict[str, Any] | None:
+    path = project_root / run["sidecar"]
+    return json.loads(path.read_text()) if path.exists() else None
 
 
 def score_arm(out_dir: Path, sequences: tuple[str, ...]) -> dict[str, Any]:
