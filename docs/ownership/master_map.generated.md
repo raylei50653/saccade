@@ -204,6 +204,7 @@ Manifest: `docs/ownership/doc_migration_manifest.yaml`
 - `docs/reference/native_runtime_head_failure_localization_r2_declaration.md`
 - `docs/reference/native_runtime_head_failure_localization_r2_result.md`
 - `docs/reference/native_runtime_head_parity_declaration.md`
+- `docs/reference/native_runtime_head_parity_libtorch_declaration.md`
 - `docs/reference/native_runtime_head_parity_result.md`
 - `docs/reference/native_runtime_head_parity_tf32_off_declaration.md`
 - `docs/reference/native_runtime_head_parity_tf32_off_result.md`
@@ -415,6 +416,6 @@ Excluded from the active index and default search view.
 
 ## Inventory summary
 
-- documents: 365
-- active: 310
+- documents: 366
+- active: 311
 - grayed out: 55
