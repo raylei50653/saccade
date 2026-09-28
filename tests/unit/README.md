@@ -12,6 +12,7 @@
 | `test_headline_head_export_binding.py` | system | contract | active | The headline head exporter binds to the preset and the committed lineage inventory. |
 | `test_math_model_doc_consistency.py` | eval,tracking | contract | active | Pin the LaTeX math-model document (``docs/latex``) to the code it describes. |
 | `test_math_model_source_attestation.py` | eval,tracking,cross-module | contract | active | Fail-closed contracts for the math-model source-byte attestation. |
+| `test_native_head_failure_localization_r2_runner.py` | system | contract | active | The #465 localization r2 runner implements its frozen declaration and nothing else. |
 | `test_native_head_failure_localization_runner.py` | system | contract | active | The #465 localization runner implements its frozen declaration and nothing else. |
 | `test_native_head_parity_runner.py` | system | contract | active | The #465 PR-2 head parity runner implements its frozen declaration. |
 | `test_native_head_parity_tf32_off_runner.py` | system | contract | active | The #465 PR-2R runner is PR-2's gate with only the TF32-off head swapped in. |
