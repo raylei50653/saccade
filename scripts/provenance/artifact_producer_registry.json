@@ -364,6 +364,14 @@
       "classification": "run_producer_wired",
       "reason": "#465 PR-2 head parity gate; claims its packet directory before writing, each mot17.py arm claims its own sub-directory"
     },
+    "scripts/eval/diagnostics/native_head_parity_libtorch.py": {
+      "classification": "run_producer_wired",
+      "reason": "#465 PR-2L LibTorch head parity gate; claims its packet directory before writing, each mot17.py arm claims its own sub-directory"
+    },
+    "scripts/eval/diagnostics/native_head_parity_libtorch_structural_check.py": {
+      "classification": "not_a_run_producer",
+      "reason": "writes only to a TemporaryDirectory that is deleted on exit; produces no artifact-root output"
+    },
     "scripts/eval/diagnostics/native_head_parity_tf32_off.py": {
       "classification": "run_producer_wired",
       "reason": "#465 PR-2R head parity gate (TF32-off head); claims its packet directory before writing, each mot17.py arm claims its own sub-directory"

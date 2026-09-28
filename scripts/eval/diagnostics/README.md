@@ -23,6 +23,8 @@
 | `native_head_failure_localization_r2_structural_check.py` | experiment | cli | Exercise the #465 localization r2 arm worker end to end on synthetic frames (no MOT17 data). |
 | `native_head_failure_localization_structural_check.py` | experiment | cli | Exercise the #465 localization arm worker end to end on synthetic frames (no MOT17 data). |
 | `native_head_parity.py` | experiment | cli | Run the #465 PR-2 head parity gate (TRT head vs PyTorch oracle) and write its packet. |
+| `native_head_parity_libtorch.py` | experiment | cli | Run the #465 PR-2L head parity gate (LibTorch head vs PyTorch oracle) and write its packet. |
+| `native_head_parity_libtorch_structural_check.py` | experiment | cli | Exercise the #465 PR-2L runner's L1 worker and L2 child entry on synthetic frames (no MOT17 data). |
 | `native_head_parity_tf32_off.py` | experiment | cli | Run the #465 PR-2R head parity gate (TF32-off TRT head vs PyTorch oracle) and write its packet. |
 | `probe_forwarded_embedding_assoc_cost.py` | diagnostic | cli | Probe: online assoc cost via forwarded (copy) clean-FIFO embeddings. |
 | `probe_occ_audit_bank_reference.py` | diagnostic | cli | Probe: occ-exit audit with bank-sourced reference vs post-hoc re-extract. |
