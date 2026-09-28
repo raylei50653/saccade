@@ -194,4 +194,12 @@ runner 把以下內容寫到非 scratch 的 timestamped 目錄 `results/native_h
 - R2：「`libcudart.so.13` 恰一份」原本沒有定義計數單位（同一個 ELF 在 `/proc/self/maps` 正常有多個 mapping segment），路徑也沒說是 repo-relative 還是 absolute。改為：以 `(st_dev, st_ino)` 去重後 backing file 恰一個；路徑比對用 realpath 相對於 repo root 的 normalized path，absolute realpath 只記錄。
 - 維持不變：arms、門檻、容差政策、validity 的其餘條件、terminal。
 
-**凍結後的 amendments**（append-only）：（無）
+**凍結後的 amendments**（append-only）：
+
+- **A1（2026-09-28，任何量測之前；owner 核准）— L 的載入方式。**
+  - 發現：runner PR 的結構檢查（合成 frame，未讀 MOT17）中，`A_L` 在 harness 的 whole-graph CUDA graph capture 失敗（`cudaErrorStreamCaptureInvalidated`，`capture_error_mode="relaxed"` 下同樣失敗）。L 單獨在 capture 下以零輸入重現同樣失敗；native op 與 Python op 單獨 capture 皆正常。原因：artifact 的 traced graph 有一個 Tensor 型別的常數 `4`（`mamba_head.py:606` `scans.reshape(4 * B, ...)`，B 是 traced size），以 `aten::mul(prim::NumToTensor(size), 常數)` → `aten::Int` 計算 shape。§3 規定的 `torch.jit.load(..., map_location="cuda")` 把這個常數搬到 cuda:0，shape 運算因此在 GPU 上執行，`aten::Int` 每次呼叫都做一次 device→host 讀取（同步），在 capture 內不合法。依凍結的 §3，正式 run 必然是 execution-invalid ⇒ `UNRESOLVED`。
+  - 修改（取代 §3 表中 L 列的載入方式與 §5.1 步驟 3 的 `torch.jit.load` 呼叫；其餘文字不變）：L 以 **`torch.jit.load(<§2 artifact>)`（不帶 `map_location`）** 載入。archive 中的參數原本就存為 cuda:0，載入後仍在 cuda:0；tensor 常數維持存檔時的 CPU。新增 fail-closed 條件，在 L1 process 與每個 `A_L` child 的每次載入後檢查，並記入 V2／V5 使用的 artifact 紀錄：(i) 所有參數與 buffer 在 `cuda:0`；(ii) inlined graph 中每個 Tensor 型別的 `prim::Constant` 在 CPU。任一不成立 ⇒ `UNRESOLVED`。
+  - 不讀 MOT17 的支撐（結構檢查，非 parity 證據）：同一個 artifact 以兩種方式載入，在 `torch.randn` 合成特徵（seed 0／1／2）上 6 個輸出逐位元相同；不帶 `map_location` 的載入以零輸入 capture 成功；runner 結構檢查（合成 frame）改用此載入方式後，L1 的 V2 (a)(b)(c)、三個 arm 的 V5、argv 檢查全部通過，`A_L` 重跑 byte-identical。
+  - 不採用的替代：graph executor optimize 開，或關閉 profiling executor，也能讓 capture 成功，但兩者都改變 PR-1L manifest 的 runtime requirements，所以不採用。重新匯出 artifact 屬於新的 PR-1L 與新宣告，也不採用。
+  - 不變：artifact（檔案／content sha）、operator library、runtime requirements、§2 其餘凍結值、arms、門檻、容差政策、V1–V5 其餘條件、terminal。
+  - 記錄（不在本 study 判定）：這也是日後 native loader 的 consumer 條件。C++ 端載入同樣不得把 tensor 常數重新映射到 CUDA，否則每次呼叫都有一次同步，也無法被 capture。
