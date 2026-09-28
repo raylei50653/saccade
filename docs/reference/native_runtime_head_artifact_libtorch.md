@@ -27,9 +27,10 @@ head 由**與 oracle 相同的建構路徑**產生（重用 `export_headline_mam
 3. trace 期間的每一個 `TracerWarning` 都必須來自 allowlist 的 source line。allowlist 只有 `_selective_scan_cuda` 裡三個**對 shape 的** Python 分支（state 數檢查、shared／per-channel 判定、rank-1 C broadcast），它們由權重與靜態輸入形狀決定，不由資料決定。其他 TracerWarning（可能把資料相依的分支烤成常數）一律拒絕；
 4. **身分**：`torch.jit.save` 的檔案 bytes 每次都不同（`.data/serialization_id` 是隨機值，`*.debug_pkl` 記錄 trace 的呼叫堆疊與絕對路徑），兩者都不影響執行。manifest 記錄檔案 `sha256`（只識別這一份檔案）與可攜的 **`content_sha256`**（其餘 entry 名稱＋bytes 排序後的 sha256）；`--check` 以 `content_sha256` 比對重新 trace 的結果；
 5. **runtime requirements**（consumer 必須遵守，記錄在 manifest）：graph executor optimize 關、cuDNN benchmark 關、cuDNN TF32 允許、matmul TF32 關。後三項是 oracle harness 實際使用的 torch 預設值，也是 LibTorch C++ 的預設值；
-6. 形狀：artifact 只對 §1 的靜態輸入形狀成立（第 3 項的 shape 分支已固定）。
+6. 形狀：artifact 只對 §1 的靜態輸入形狀成立（第 3 項的 shape 分支已固定）；
+7. **operator 邊界**（shipping runtime 的 C++ boundary）：`saccade_native::selective_scan_fwd` 在任何 raw pointer 進 CUDA launcher 之前，依 Python op 被 `_selective_scan_cuda` 呼叫時的 contract 檢查所有輸入：非空 tensor 皆在 `u` 的 CUDA device、dtype 與 `u` 相同；`u` 為非空 `(B,L,D)` 且可 32-bit 索引；`delta` 形狀同 `u`；`a_per_channel` ∈ {0,1}，為 1 時 `A` 是 `(D,N)`、為 0 時是 `(N,)` 或 `(1,N)`；`B`、`C` 是 `(B,L,N)`（C 已由呼叫端 broadcast）；`D` 為空或 `(D,)`；N 為 [1,32] 的 2 的冪。違反時丟 C++ error，不會變成 illegal access 或錯誤的 pointer 解讀；`CUDAGuard` 固定在 `u` 的 device。
 
-第 2–5 項的規則由 `tests/unit/test_headline_head_torchscript_export.py` 在 CI 檢查（包括 allowlist 的每一行仍逐字存在於 `mamba_head.py`，以及 content hash 只忽略那兩類 entry）；有 CUDA 與已 build 的 library 時，同一個測試另外檢查 native operator 與 Python custom op 在三組形狀／參數上逐位元相同。
+第 2–5 項的規則由 `tests/unit/test_headline_head_torchscript_export.py` 在 CI 檢查（包括 allowlist 的每一行仍逐字存在於 `mamba_head.py`，以及 content hash 只忽略那兩類 entry）；有 CUDA 與已 build 的 library 時，同一個測試另外檢查 native operator 與 Python custom op 在三組形狀／參數上逐位元相同，以及第 7 項：6 種合法形式（per-channel、shared 1-D／2-D、無 D、half、non-contiguous）通過，27 種 contract 違反都以 operator 自己的 error 拒絕、且之後 CUDA context 仍正常。跨 GPU（同型但不同 device index）的情形在單 GPU 機器上無法測，由同一個 device 相等檢查涵蓋。
 
 輸出（gitignored 的 `models/yolo/`）：
 
@@ -41,7 +42,7 @@ head 由**與 oracle 相同的建構路徑**產生（重用 `export_headline_mam
 
 ## 3. 這台機器上的紀錄
 
-manifest 由 clean tree 產生（tool commit `f7df457e`，`git_dirty=false`）。
+manifest 由 clean tree 產生（tool commit `37d4d21d`，`git_dirty=false`；operator 已含 §2 第 7 項的 contract 檢查）。
 
 | 項目 | 值 |
 |:--|:--|
@@ -49,7 +50,7 @@ manifest 由 clean tree 產生（tool commit `f7df457e`，`git_dirty=false`）�
 | head 載入 | loader probe：missing 0、unexpected 0；`upsample_loaded=true`；in_channels `(128, 256, 512)`；temporal blocks 存在但 bypass |
 | TorchScript | 檔案 sha256 `1663ec97022879e8078fb5b9dc3b65f4d2b76e4f8df6d5848300c2b3c999d879`（45,656,246 bytes）；**content_sha256 `f6a540edfecd6e421c533c5c2280fc26351b887006c1384bb61a567ce2f39487`**；native scan 呼叫 3 次（P3／P4／P5 各一） |
 | TracerWarning | 只有 allowlist 的三個位置（`mamba_head.py:30`、`:254`、`:258`） |
-| operator library | `build/libsaccade_scan_torchop.so` sha256 `0e3a38e7…611c`；`DT_NEEDED` = libtorch、libc10、libnvrtc、libc10_cuda、libcudart、libtorch_cpu、libtorch_cuda、libstdc++、libgcc_s、libc |
+| operator library | `build/libsaccade_scan_torchop.so` sha256 `cfea782f…aa43`；`DT_NEEDED` = libtorch、libc10、libnvrtc、libc10_cuda、libcudart、libtorch_cpu、libtorch_cuda、libstdc++、libgcc_s、libc |
 | 環境 | torch 2.11.0+cu130；cuDNN 9.19.0；RTX 5070 Ti Laptop（SM 12.0） |
 | 可重建 | `--check`：重新 trace 的 content_sha256 與 manifest 相同、on-disk 檔案未被改動、結構檢查逐位元相同 → `OK` |
 | 結構檢查 | 在 runtime requirements 下載入存檔的 artifact，對 **合成** `torch.randn` 特徵（seed 0／1／2，不是 MOT17 frame）與同 process 的 eager head（Python scan op）比較：6 個輸出 × 3 個 seed **全部逐位元相同**（max abs diff 0.0） |
