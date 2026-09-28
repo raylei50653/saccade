@@ -415,6 +415,6 @@ Excluded from the active index and default search view.
 
 ## Inventory summary
 
-- documents: 364
-- active: 309
+- documents: 365
+- active: 310
 - grayed out: 55
