@@ -460,7 +460,7 @@ def test_detector_row_status_consistency_and_ties():
     )
     in_delta = np.array([True, True, False, False])
     ok = np.ones(4, dtype=bool)
-    assert R.detector_row_status(det, in_delta, ok) == [
+    assert R.detector_row_status(det, in_delta, ok, ~ok) == [
         "delta_anchor",
         "ambiguous",  # tie at 0.8 with a non-Δ row: top-k index order is not guaranteed
         "ambiguous",
@@ -468,15 +468,19 @@ def test_detector_row_status_consistency_and_ties():
     ]
     bad = ok.copy()
     bad[0] = False
-    assert R.detector_row_status(det, in_delta, bad)[0] == "inconsistent"
+    assert R.detector_row_status(det, in_delta, bad, ~ok)[0] == "inconsistent"
     same_flag = np.array([False, True, True, False])
-    assert R.detector_row_status(det, same_flag, ok)[1:3] == ["delta_anchor"] * 2
+    assert R.detector_row_status(det, same_flag, ok, ~ok)[1:3] == ["delta_anchor"] * 2
+    # a tie with an anchor the eager top-k excluded (recorded before truncation)
+    excluded_tie = np.array([False, False, False, True])
+    assert R.detector_row_status(det, in_delta, ok, excluded_tie)[3] == "ambiguous"
 
 
 def test_inconsistent_row_gets_no_definitive_attribution():
     det = _rows(((0, 0, 1, 1), 0.9), ((1, 1, 2, 2), 0.8))
     in_delta = np.array([True, True])
-    status = R.detector_row_status(det, in_delta, np.zeros(2, dtype=bool))
+    none = np.zeros(2, dtype=bool)
+    status = R.detector_row_status(det, in_delta, none, none)
     counts = R.provenance_counts(R.row_provenance(det, det, status))
     assert counts["delta_anchor"] == 0 and counts["values"] == 0
     assert counts["inconsistent"] == 2
@@ -486,7 +490,8 @@ def test_inconsistent_row_gets_no_definitive_attribution():
 def test_duplicate_boxes_map_by_full_row_not_first_box_match():
     # same box, different score/class: the tracker row matches only row 1
     det = _rows(((0, 0, 1, 1), 0.9, 0.0), ((0, 0, 1, 1), 0.7, 2.0))
-    status = R.detector_row_status(det, np.array([False, True]), np.ones(2, dtype=bool))
+    ok, no_tie = np.ones(2, dtype=bool), np.zeros(2, dtype=bool)
+    status = R.detector_row_status(det, np.array([False, True]), ok, no_tie)
     assert R.row_provenance(det[1:2], det, status) == ["delta_anchor"]
     # a box-only match (score changed downstream) is unmapped, not guessed
     moved = det[1:2].copy()
@@ -494,7 +499,7 @@ def test_duplicate_boxes_map_by_full_row_not_first_box_match():
     assert R.row_provenance(moved, det, status) == ["unmapped"]
     # bit-identical duplicate rows with different Δ flags are ambiguous
     dup = _rows(((0, 0, 1, 1), 0.9), ((0, 0, 1, 1), 0.9))
-    st = R.detector_row_status(dup, np.array([True, False]), np.ones(2, dtype=bool))
+    st = R.detector_row_status(dup, np.array([True, False]), ok, no_tie)
     assert R.row_provenance(dup[:1], dup, st) == ["ambiguous"]
 
 
@@ -516,8 +521,9 @@ def test_multiset_excess_counts_multiplicity():
 
 
 def _status_for(rows, flags):
+    n = len(rows)
     return rows, R.detector_row_status(
-        rows, np.asarray(flags), np.ones(len(rows), dtype=bool)
+        rows, np.asarray(flags), np.ones(n, dtype=bool), np.zeros(n, dtype=bool)
     )
 
 
@@ -551,7 +557,15 @@ def test_missing_observation_is_explicitly_unknown():
 
 
 def _evidence(
-    det_rows, in_delta, ti, det_idx, ids, *, det_frames=None, consistent=None
+    det_rows,
+    in_delta,
+    ti,
+    det_idx,
+    ids,
+    *,
+    det_frames=None,
+    consistent=None,
+    tie=None,
 ):
     """ti / det_idx / ids: per frame, None = no probe / no emit on that frame."""
     f = len(det_rows)
@@ -562,6 +576,10 @@ def _evidence(
         "rows": rows,
         "row_in_delta": np.stack(in_delta),
         "row_in_delta_e": np.zeros_like(np.stack(in_delta)),
+        "row_tie_mixed": np.zeros(rows.shape[:2], dtype=bool)
+        if tie is None
+        else np.stack(tie),
+        "row_tie_mixed_e": np.zeros(rows.shape[:2], dtype=bool),
         "row_consistent": np.ones(rows.shape[:2], dtype=bool)
         if consistent is None
         else np.stack(consistent),
@@ -663,6 +681,151 @@ def test_one_sided_unexplained_missing_probe_stays_unknown():
     # no detector_output probe either: also missing, never an empty frame
     ref2 = _evidence([a], [flags], [None], [None], [None], det_frames=[])
     assert R.tracker_input_view(ref2)[1] is R.MISSING
+
+
+def _member(s, order):
+    st = torch.from_numpy(s)
+    in_topk = torch.zeros(len(s), dtype=torch.bool)
+    in_topk[order] = True
+    above = st >= R.SCORE_FLOOR
+    cls = torch.zeros(len(s), dtype=torch.long)
+    return {"s": st, "cls": cls, "m": above & in_topk, "above": above, "order": order}
+
+
+def _cutoff_tie_frame():
+    """The #478 review fixture: a score tie straddling the top-300 cutoff.
+
+    C keeps 298 common anchors + a, b; T keeps 298 + c, a (c is one float32
+    step above τ in T and one below in C), so a ∉ Δ and b, c ∈ Δ. In T, a
+    and b tie at τ; eager top-k kept a, but S2 may validly emit b there."""
+    n = R.N_ANCHORS
+    tau = np.float32(0.8)
+    a, b, c = 298, 299, 300
+    s_c = np.full(n, 0.01, np.float32)
+    s_c[:298] = 0.9
+    s_c[a] = s_c[b] = tau
+    s_c[c] = np.nextafter(tau, np.float32(0))
+    s_t = s_c.copy()
+    s_t[c] = np.nextafter(tau, np.float32(1))
+    common = torch.arange(298)
+    mc = _member(s_c, torch.cat([common, torch.tensor([a, b])]))
+    mt = _member(s_t, torch.cat([common, torch.tensor([c, a])]))
+    return mt, R.delta_set(mc, mt), (a, b, c)
+
+
+def _emitted_rows(member, substitute=None):
+    """S2 output rows in eager top-k order, each anchor with a distinct box;
+    ``substitute`` = (position, anchor) emits that anchor's row instead."""
+    import torch as _t
+
+    order = member["order"].clone()
+    if substitute is not None:
+        order[substitute[0]] = substitute[1]
+    rows = _t.zeros((len(order), 6))
+    rows[:, 0] = order.float()  # the box identifies the emitted anchor
+    rows[:, 4] = member["s"][order]
+    rows[:, 5] = member["cls"][order].float()
+    return rows
+
+
+def _flow_for(member, delta, rows, positions, tie, tie_e=None):
+    """One-frame evidence where tracker_input holds the rows at ``positions``
+    and one track references each of them through det_idx."""
+    rows_np = rows.numpy().astype(np.float32)
+    in_delta = delta[member["order"]].numpy()
+    ev = _evidence(
+        [rows_np],
+        [in_delta],
+        [rows_np[positions]],
+        [list(range(len(positions)))],
+        [list(range(10, 10 + len(positions)))],
+        consistent=[R.row_consistency(rows, member).numpy()],
+        tie=[tie],
+    )
+    if tie_e is not None:
+        ev["row_tie_mixed_e"] = np.stack([tie_e])
+        ev["row_in_delta_e"] = np.stack([in_delta])
+    return ev
+
+
+def test_tie_straddling_the_cutoff_is_ambiguous_not_wrong():
+    mt, delta, (a, b, c) = _cutoff_tie_frame()
+    assert not delta[a] and delta[b] and delta[c]
+    assert int(mt["order"][-1]) == a  # eager top-k kept a
+    # S2 validly emits b's row (distinct box, same score/class) where eager has a
+    rows = _emitted_rows(mt, substitute=(299, b))
+    assert int(rows[-1, 0]) == b
+    consistent = R.row_consistency(rows, mt).numpy()
+    assert consistent.all()  # score/class agree: the check cannot see the swap
+    mixed = R.tie_mixed(mt, delta).numpy()
+    assert mixed[-1] and not mixed[:299].any()
+    status = R.detector_row_status(
+        rows.numpy(), delta[mt["order"]].numpy(), consistent, mixed
+    )
+    assert status[-1] == "ambiguous"  # never the recorded (wrong) "values"
+    assert status[-2] == "delta_anchor" and status[0] == "values"
+    # without the pre-truncation flag the row would be confidently wrong
+    no_flag = np.zeros(300, dtype=bool)
+    assert (
+        R.detector_row_status(
+            rows.numpy(), delta[mt["order"]].numpy(), consistent, no_flag
+        )[-1]
+        == "values"
+    )
+    # downstream: b's emitted row reaches tracker_input and a track's det_idx
+    flow = R.delta_flow(_flow_for(mt, delta, rows, [298, 299], mixed))
+    assert flow["tracker_input_rows"]["ambiguous"] == 1
+    assert flow["tracker_input_rows"]["delta_anchor"] == 1
+    assert flow["tracker_input_rows"]["values"] == 0
+    assert flow["track_det_idx_refs"]["ambiguous"] == 1
+    assert flow["track_det_idx_refs"]["values"] == 0
+    assert flow["replay_rows_above_floor"]["ambiguous"] == 1
+
+
+def test_c_t_and_e_c_paths_use_their_own_tie_flags():
+    mt, delta, (a, b, c) = _cutoff_tie_frame()
+    rows = _emitted_rows(mt, substitute=(299, b))
+    mixed = R.tie_mixed(mt, delta).numpy()
+    ev = _flow_for(mt, delta, rows, [299], mixed, tie_e=np.zeros(300, dtype=bool))
+    assert R.delta_flow(ev, "row_in_delta")["tracker_input_rows"]["ambiguous"] == 1
+    assert R.delta_flow(ev, "row_in_delta_e")["tracker_input_rows"]["ambiguous"] == 0
+    ev["row_tie_mixed"] = np.zeros((1, 300), dtype=bool)
+    ev["row_tie_mixed_e"] = np.stack([mixed])
+    assert R.delta_flow(ev, "row_in_delta")["tracker_input_rows"]["ambiguous"] == 0
+    assert R.delta_flow(ev, "row_in_delta_e")["tracker_input_rows"]["ambiguous"] == 1
+    assert R.TIE_KEY == {
+        "row_in_delta": "row_tie_mixed",
+        "row_in_delta_e": "row_tie_mixed_e",
+    }
+
+
+def test_tie_within_one_channel_is_not_ambiguous():
+    mt, delta, (a, b, c) = _cutoff_tie_frame()
+    same = delta.clone()
+    same[a] = same[b]  # both tied anchors in one channel: attribution holds
+    assert not bool(R.tie_mixed(mt, same)[-1])
+
+
+def test_cross_class_tie_is_not_flagged_but_substitution_is_inconsistent():
+    mt, delta, (a, b, c) = _cutoff_tie_frame()
+    other = dict(mt)
+    other["cls"] = mt["cls"].clone()
+    other["cls"][b] = 3
+    mixed = R.tie_mixed(other, delta).numpy()
+    assert not mixed[-1]  # the tie alone is not a same-class candidate
+    # S2 actually emitting b's (class-3) row at that position
+    rows = _emitted_rows(other, substitute=(299, b))
+    consistent = R.row_consistency(rows, other).numpy()
+    assert not consistent[-1] and consistent[:299].all()
+    status = R.detector_row_status(
+        rows.numpy(), delta[other["order"]].numpy(), consistent, mixed
+    )
+    assert status[-1] == "inconsistent"
+    flow = R.delta_flow(_flow_for(other, delta, rows, [299], mixed))
+    assert flow["tracker_input_rows"]["inconsistent"] == 1
+    assert flow["track_det_idx_refs"]["inconsistent"] == 1
+    assert flow["track_det_idx_refs"]["values"] == 0
+    assert flow["track_det_idx_refs"]["delta_anchor"] == 0
 
 
 # --- (f2) P1: fail fast between workers ---------------------------------------

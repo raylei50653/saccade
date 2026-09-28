@@ -32,8 +32,8 @@ study by itself.
   ``tracker_input`` divergence and its Δ/values attribution, and the output
   divergence traced back to ``det_idx``, for all seven sequences. A row is
   attributed to the Δ or values channel only through a full-row match whose
-  row→anchor check held and whose score is not tied with a row of the other
-  channel; otherwise it is reported as inconsistent / ambiguous / unmapped.
+  row→anchor check held and whose score/class tie group -- over all anchors,
+  including those the eager top-k excluded -- has a single Δ flag; otherwise it is reported as inconsistent / ambiguous / unmapped.
   Each run is validated before the next launches; the first invalid run ends
   the study (UNRESOLVED) with the completed runs kept in the packet.
 
@@ -380,6 +380,32 @@ def pair_census(a: dict[str, Any], b: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def row_consistency(rows: Any, member: dict[str, Any]) -> Any:
+    """Per emitted row: its score is bit-identical to, and its class equal to,
+    those of the eager top-k anchor at the same position. This does not prove
+    anchor identity under a score tie; :func:`tie_mixed` covers that."""
+    order = member["order"]
+    return (_bits(rows[:, 4]) == _bits(member["s"][order])) & (
+        rows[:, 5] == member["cls"][order].to(rows.dtype)
+    )
+
+
+def tie_mixed(member: dict[str, Any], delta: Any) -> Any:
+    """Per selected row (top-k order): True when some anchor anywhere in the
+    frame -- selected or excluded by the eager top-k -- has the bit-identical
+    score and the same class but the opposite Δ flag. ``topk`` does not
+    guarantee which of tied indices it returns, so the compiled S2 may emit
+    any of them at that row; its channel is then undetermined. (Rows whose
+    emitted score/class differ from the eager anchor are already caught by
+    ``row_consistent``.)"""
+    order = member["order"]
+    s_bits = _bits(member["s"])
+    same = (s_bits[order].unsqueeze(1) == s_bits.unsqueeze(0)) & (
+        member["cls"][order].unsqueeze(1) == member["cls"].unsqueeze(0)
+    )
+    return (same & delta.unsqueeze(0)).any(1) & (same & ~delta.unsqueeze(0)).any(1)
+
+
 CENSUS_KEYS = (
     "delta",
     "member_diff",
@@ -485,9 +511,7 @@ class ReplayDetect:
             detections[:, :, det._whole_graph_y_idx] *= det._whole_graph_sy
             order = composed_member["order"]
             rows = detections[0]
-            consistent = (_bits(rows[:, 4]) == _bits(composed_member["s"][order])) & (
-                rows[:, 5] == composed_member["cls"][order].to(rows.dtype)
-            )
+            consistent = row_consistency(rows, composed_member)
             self.frames.append(
                 {
                     "v3_checked": self.inside != self.outside,
@@ -497,6 +521,10 @@ class ReplayDetect:
                     "row_consistent": consistent.cpu().numpy(),
                     "row_in_delta": delta[order].cpu().numpy(),
                     "row_in_delta_e": delta_e[order].cpu().numpy(),
+                    "row_tie_mixed": tie_mixed(composed_member, delta).cpu().numpy(),
+                    "row_tie_mixed_e": tie_mixed(composed_member, delta_e)
+                    .cpu()
+                    .numpy(),
                     "rows": rows.float().cpu().numpy(),
                 }
             )
@@ -757,6 +785,8 @@ def _write_arm_evidence(
             "row_consistent",
             "row_in_delta",
             "row_in_delta_e",
+            "row_tie_mixed",
+            "row_tie_mixed_e",
             "rows",
         ):
             arrays[key] = (
@@ -847,11 +877,13 @@ PROVENANCE = ("delta_anchor", "values", "inconsistent", "ambiguous", "unmapped")
 MISSING = None  # a frame whose tracker_input observation is missing
 
 
-def detector_row_status(rows: Any, in_delta: Any, consistent: Any) -> list[str]:
+def detector_row_status(
+    rows: Any, in_delta: Any, consistent: Any, tie_mixed_row: Any
+) -> list[str]:
     """Per replay output row: ``inconsistent`` when the recorded row→anchor
-    check failed; ``ambiguous`` when rows with bit-identical scores (a top-k
-    tie, where index order is not guaranteed, or duplicate rows) disagree on
-    the Δ flag; otherwise the row's Δ channel."""
+    check failed; ``ambiguous`` when the row's score tie group over the whole
+    frame (``tie_mixed_row``, recorded before top-k truncation) or among the
+    emitted rows (duplicates) spans both Δ flags; otherwise its Δ channel."""
     scores = [rows[j, 4].tobytes() for j in range(len(rows))]
     flags_by_score: dict[bytes, set[bool]] = {}
     for j, key in enumerate(scores):
@@ -860,7 +892,7 @@ def detector_row_status(rows: Any, in_delta: Any, consistent: Any) -> list[str]:
     for j, key in enumerate(scores):
         if not bool(consistent[j]):
             out.append("inconsistent")
-        elif len(flags_by_score[key]) > 1:
+        elif bool(tie_mixed_row[j]) or len(flags_by_score[key]) > 1:
             out.append("ambiguous")
         else:
             out.append("delta_anchor" if bool(in_delta[j]) else "values")
@@ -1034,9 +1066,14 @@ def census_totals(ev: Any, pair: str) -> dict[str, int]:
     }
 
 
+TIE_KEY = {"row_in_delta": "row_tie_mixed", "row_in_delta_e": "row_tie_mixed_e"}
+
+
 def _frame_status(ev: Any, k: int, delta_key: str) -> tuple[Any, list[str]]:
     rows = ev["rows"][k]
-    return rows, detector_row_status(rows, ev[delta_key][k], ev["row_consistent"][k])
+    return rows, detector_row_status(
+        rows, ev[delta_key][k], ev["row_consistent"][k], ev[TIE_KEY[delta_key]][k]
+    )
 
 
 def delta_flow(ev: Any, delta_key: str = "row_in_delta") -> dict[str, Any]:
