@@ -83,7 +83,10 @@ UNCHANGED_SINCE_DECLARATION = (
 )
 # Execution freeze point: this runner PR's merge commit, named by an annotated
 # tag created after that merge. Compared by peeled commit SHA only.
-FREEZE_TAG = "freeze/465-compiled-head-re"
+# r1 tag ``freeze/465-compiled-head-re`` (-> 20fddc19) stays on the remote as a
+# superseded freeze: its runner parsed ls-remote with the PR-2L tag, so V1 could
+# never pass and no measurement was run.
+FREEZE_TAG = "freeze/465-compiled-head-re-r2"
 FREEZE_REMOTE = "origin"
 FREEZE_BRANCH = "origin/main"
 
@@ -701,6 +704,17 @@ def held_lease() -> dict[str, Any] | None:
     return P2L.held_lease()
 
 
+def parse_ls_remote_peeled(stdout: str) -> str | None:
+    """The peeled SHA of this runner's ``FREEZE_TAG`` in ``git ls-remote`` output."""
+    want = f"refs/tags/{FREEZE_TAG}^{{}}"
+    hits = [
+        line.split("\t", 1)[0]
+        for line in stdout.splitlines()
+        if "\t" in line and line.split("\t", 1)[1] == want
+    ]
+    return hits[0] if len(hits) == 1 else None
+
+
 def observed_freeze() -> dict[str, Any]:
     head = _git("rev-parse", "HEAD")
     parents = _git("log", "-1", "--format=%P", "HEAD").split()
@@ -719,7 +733,7 @@ def observed_freeze() -> dict[str, Any]:
         "tag_object_type": _git_or_none("cat-file", "-t", ref),
         "tag_object_sha": _git_or_none("rev-parse", ref),
         "tag_local_commit": _git_or_none("rev-parse", f"{ref}^{{commit}}"),
-        "tag_remote_peeled": P2L.parse_ls_remote_peeled(ls.stdout)
+        "tag_remote_peeled": parse_ls_remote_peeled(ls.stdout)
         if ls.returncode == 0
         else None,
         "ls_remote_returncode": ls.returncode,

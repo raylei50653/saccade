@@ -19,6 +19,7 @@ from __future__ import annotations
 import ast
 import copy
 import importlib.util
+import inspect
 import subprocess
 import sys
 from pathlib import Path
@@ -129,7 +130,7 @@ def test_study_constants_equal_pr2l():
     assert R.POLICY == P2L.RUNTIME_REQUIREMENTS
     assert tuple(R.ANCHOR_PAIR.split(",")) in P2L.L1_PAIRS
     assert R.LEASE == "machine-bench"
-    assert R.FREEZE_TAG == "freeze/465-compiled-head-re"
+    assert R.FREEZE_TAG == "freeze/465-compiled-head-re-r2"
     assert R.PACKET_ROOT == "results/compiled_head_reverse_engineering_465"
     assert R.UNCHANGED_SINCE_DECLARATION[0] == "src/saccade"
     assert R.PR2L_RUNNER in R.UNCHANGED_SINCE_DECLARATION
@@ -466,6 +467,28 @@ def test_decide_invalid_is_unresolved():
 # --- (e) fail-closed validity -------------------------------------------------
 
 H = "a" * 40
+
+
+def test_parse_ls_remote_reads_this_runners_own_tag():
+    # Regression: r1 reused the PR-2L parser, which matches only the PR-2L tag,
+    # so the peeled SHA of this runner's tag was always None and V1 never passed.
+    head = "a" * 40
+    tag_obj = "b" * 40
+    ref = f"refs/tags/{R.FREEZE_TAG}"
+    out = f"{tag_obj}\t{ref}\n{head}\t{ref}^{{}}\n"
+    assert R.parse_ls_remote_peeled(out) == head
+    assert R.parse_ls_remote_peeled(f"{head}\t{ref}^{{}}\n") == head
+    assert R.parse_ls_remote_peeled(f"{tag_obj}\t{ref}\n") is None
+    assert R.parse_ls_remote_peeled("") is None
+    assert R.parse_ls_remote_peeled(out + f"{tag_obj}\t{ref}^{{}}\n") is None
+    for other in ("freeze/465-compiled-head-re", P2L.FREEZE_TAG):
+        assert R.parse_ls_remote_peeled(f"{head}\trefs/tags/{other}^{{}}\n") is None
+
+
+def test_observed_freeze_uses_this_runners_parser():
+    src = inspect.getsource(R.observed_freeze)
+    assert "P2L.parse_ls_remote_peeled" not in src
+    assert "parse_ls_remote_peeled(ls.stdout)" in src
 
 
 @pytest.mark.parametrize(
