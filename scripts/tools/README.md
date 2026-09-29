@@ -425,8 +425,7 @@ deleting.
 | `check_determinism_paths.py` | stable | - | Detect whether staged/committed changes affect determinism-sensitive paths. |
 | `check_doc_freshness.py` | stable | cli | Warn-only documentation freshness / fact-ownership checks. |
 | `check_doc_links.py` | stable | cli | Check that relative markdown links in docs resolve to existing files. |
-| `check_doc_stale_paths.py` | stable | cli | Fail if any tracked file references a pre-move (stale) doc path. |
-| `check_doc_structure.py` | stable | cli | Warn-only documentation structure / research index coverage checks. |
+| `check_doc_structure.py` | stable | cli | Documentation structure checks: warn on layout, fail on state projection. |
 | `check_eval_observer_effect.py` | diagnostic | cli | Minimal instrumented vs uninstrumented observer-effect check (issue #363). |
 | `check_eval_repeat_identity.py` | stable | cli | Fail-closed detector of silent MOT run-to-run divergence (issue #363). |
 | `check_gpu_contract.py` | stable | - | Saccade GPU-First Performance Contract Checker. |
@@ -438,8 +437,8 @@ deleting.
 | `check_math_model_source_attestation.py` | stable | cli | Fail closed when the audited math-model document or source bytes move. |
 | `check_runtime_identity_staleness.py` | stable | cli | Check runtime-coordinate lag without treating probe equality as equivalence. |
 | `check_scan_bwd.py` | diagnostic | - | Validate the CUDA selective-scan backward against the JIT autograd reference. |
-| `check_scripts_structure.py` | stable | cli | Scripts structure contract: every script self-documents, and the index is fresh. |
-| `check_tests_structure.py` | stable | cli | Tests structure contract: every test self-documents, and the index is fresh. |
+| `check_scripts_structure.py` | stable | cli | Scripts structure report: every script should self-document. |
+| `check_tests_structure.py` | stable | cli | Tests structure report: every test should self-document. |
 | `classify_gap_cause.py` | diagnostic | cli | Classify relink gaps: person-person overlap vs non-person. |
 | `cold_start_transfer.py` | experiment | cli | Cold-start transfer test: do the normalized occ-gate landmarks hold on MOT20? |
 | `color_relink_features.py` | diagnostic | cli | Offline AUC test: color-histogram appearance features for relink candidates. |

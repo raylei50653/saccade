@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
-"""Warn-only documentation structure / research index coverage checks.
+"""Documentation structure checks: warn on layout, fail on state projection.
 
-Companion to ``check_doc_links.py``, ``check_doc_stale_paths.py``, and
-``check_doc_freshness.py``. Implements the machine side of the Doc Structure
+Companion to ``check_doc_links.py`` and ``check_doc_freshness.py``. Implements the machine side of the Doc Structure
 Contract (``docs/ownership/doc_structure_contract.md`` § C4 / C9):
 
   S1  Every ``docs/modules/<m>/research/*.md`` must be referenced (by basename)
@@ -11,14 +10,23 @@ Contract (``docs/ownership/doc_structure_contract.md`` § C4 / C9):
       (except README.md) must be referenced by basename in that directory's
       README if it exists, else in ``docs/research/README.md``.
   S3  Every ``docs/modules/<m>/`` directory must contain README.md and TODO.md.
+  L1  a note declaring ``doc-status: closed`` has moved out of the active path.
   L5  ``docs/TODO.md`` and every ``docs/modules/<m>/TODO.md`` are WIP registers
       (pointer + link), not task lists: no Markdown task checkboxes. Tasks and
       their ordering live in GitHub issues / milestones (DOC_MAINTENANCE § WIP).
 
-This checker is **warn-only** by default for index-coverage findings (exit 0
-even with findings). ``--strict`` exits non-zero on C6.4 lifecycle violations
-(L1–L5); ``scripts/pre_push.sh`` uses that mode. Index coverage remains
-warn-only in either mode.
+The rules above are layout and format: a miss is cheap and fixed by moving or
+editing a file, so they are **warnings in every mode** (#493 PR-2).
+
+``--strict`` exits non-zero only on the rules that project research state or
+decide which documents carry rule authority, because a miss there lets a reader
+take closed work as current or prose as a binding rule:
+
+  L2  a closed note is not listed in the Active section of its owning README.
+  L3  ``docs/research/contracts/`` holds only the allowlisted rule/state docs.
+  L4  the threads index agrees with each card's ``doc-status`` / ``wip-role``.
+
+``scripts/pre_push.sh`` uses ``--strict``.
 
 Index detection currently uses basename substring match against the owning
 README body. It remains warn-only hygiene; Markdown link parsing would reduce
@@ -353,25 +361,41 @@ def _check_thread_status_projection() -> list[str]:
     return violations
 
 
-def check_lifecycle() -> list[str]:
-    """C6.4 L1–L4 — violations, not warnings."""
-    violations: list[str] = []
-
-    for note in sorted(REPO_ROOT.joinpath("docs").rglob("*.md")):
+def check_layout() -> list[str]:
+    """C6.4 L1 + L5 — layout/format rules; warnings, never violations."""
+    warnings: list[str] = []
+    for note in _closed_notes_in_active_paths():
         rel = note.relative_to(REPO_ROOT).as_posix()
+        if rel in LEGACY_CLOSED_IN_ACTIVE:
+            continue
+        warnings.append(
+            f"[L1] {rel}: doc-status is closed but the note still sits in an "
+            "active path (Doc Structure C6.3 — git mv it into closed/)"
+        )
+    warnings.extend(_check_todo_registers())
+    return warnings
+
+
+def _closed_notes_in_active_paths() -> list[Path]:
+    notes: list[Path] = []
+    for note in sorted(REPO_ROOT.joinpath("docs").rglob("*.md")):
         parts = note.relative_to(REPO_ROOT).parts
         if "closed" in parts or "archive" in parts:
             continue
-        if _declared_status(note) != "closed":
-            continue
+        if _declared_status(note) == "closed":
+            notes.append(note)
+    return notes
+
+
+def check_lifecycle() -> list[str]:
+    """C6.4 L2–L4 — state-projection / rule-authority rules; violations."""
+    violations: list[str] = []
+
+    for note in _closed_notes_in_active_paths():
+        rel = note.relative_to(REPO_ROOT).as_posix()
+        parts = note.relative_to(REPO_ROOT).parts
         if rel in LEGACY_CLOSED_IN_ACTIVE:
             continue
-
-        violations.append(
-            f"[L1] {rel}: doc-status is closed but the note still sits in an "
-            "active path (Doc Structure C6.1/C6.3 — git mv it into closed/ in "
-            "the same PR that accepted the terminal)"
-        )
 
         if "modules" in parts:
             owner_readme = note.parent.parent / "README.md"
@@ -393,7 +417,6 @@ def check_lifecycle() -> list[str]:
             )
 
     violations.extend(_check_thread_status_projection())
-    violations.extend(_check_todo_registers())
 
     contracts_dir = RESEARCH_ROOT / "contracts"
     if contracts_dir.is_dir():
@@ -414,7 +437,7 @@ def main() -> int:
     parser.add_argument(
         "--strict",
         action="store_true",
-        help="exit non-zero on C6.4 lifecycle violations (index coverage stays warn-only)",
+        help="exit non-zero on C6.4 L2-L4 (layout, format and index coverage stay warnings)",
     )
     args = parser.parse_args()
 
@@ -422,6 +445,7 @@ def main() -> int:
     warnings.extend(check_module_packages())
     warnings.extend(check_module_research_indexes())
     warnings.extend(check_global_research_indexes())
+    warnings.extend(check_layout())
     violations = check_lifecycle()
 
     if warnings:
@@ -429,16 +453,16 @@ def main() -> int:
         for w in warnings:
             print(f"  {w}")
     else:
-        print("doc structure: ok (no index coverage warnings)")
+        print("doc structure: ok (no index coverage or layout warnings)")
 
     if violations:
-        print(f"doc structure: {len(violations)} lifecycle violation(s) [C6.4]")
+        print(f"doc structure: {len(violations)} state-projection violation(s) [C6.4]")
         for v in violations:
             print(f"  {v}")
         if args.strict:
             return 1
     else:
-        print("doc structure: ok (no lifecycle violations)")
+        print("doc structure: ok (no state-projection violations)")
 
     return 0
 

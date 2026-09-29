@@ -1,15 +1,13 @@
 #!/usr/bin/env python3
-"""Tests structure contract: every test self-documents, and the index is fresh.
+"""Tests structure report: every test should self-document.
 
-Tests-side mirror of ``check_scripts_structure.py``. Fail-closed (``--strict``)
-conditions, each cheap to fix by editing the offending ``test_*.py``:
+Tests-side mirror of ``check_scripts_structure.py``. Conditions, each
+cheap to fix by editing the offending ``test_*.py``:
 
   S1  every tracked ``tests/**/test_*.py`` carries three valid header tags:
       ``# scope:`` (one or more values, each in SCOPES), ``# function:`` in
       FUNCTIONS, and ``# lifecycle:`` in LIFECYCLES.
   S2  every test file has a module docstring (so the index has a Summary line).
-  S3  the generated index (per-dir README blocks + roll-up) is current, i.e.
-      ``build_tests_index.py`` would not change anything on disk.
   S5  a note-required lifecycle (legacy/quarantined/deprecated/remove) must carry a
       non-empty ``# lifecycle-note:`` reason or tracking Issue (rule 5).
   S6  a newly-added test file (vs the upstream base) may not be
@@ -20,6 +18,11 @@ values via commas, not repeated lines), lifecycle-note at most once — enforced
 under S1. Lifecycle is intentionally NOT tied to directory: a test's location
 (e.g. tests/research/) is organisation, not governance state; keep quarantined
 out of the formal suite via markers/collection, not a path rule.
+
+These are header/format rules, so the default gate runs this report-only
+(#493 PR-2): ``pre_push.sh`` and CI do not pass ``--strict``. The generated
+index is a derived snapshot, not checked here: CI regenerates and publishes it
+(``build_tests_index.py``); the checked-in copy may lag.
 
 Usage:
     .venv/bin/python scripts/tools/check_tests_structure.py            # report, exit 0
@@ -104,18 +107,6 @@ def check_self_documentation() -> list[str]:
     return problems
 
 
-def check_index_fresh() -> list[str]:
-    writes, _ = idx.build()
-    stale = []
-    for p, content in writes.items():
-        cur = p.read_text(encoding="utf-8") if p.exists() else None
-        if cur != content:
-            stale.append(
-                f"{p.relative_to(idx.REPO)}: stale, run build_tests_index.py [S3]"
-            )
-    return stale
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -125,7 +116,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    violations = check_self_documentation() + check_index_fresh()
+    violations = check_self_documentation()
 
     if violations:
         print(f"tests structure: {len(violations)} violation(s)")
@@ -134,9 +125,7 @@ def main() -> int:
         if args.strict:
             return 1
     else:
-        print(
-            f"tests structure: ok ({len(idx.tracked_tests())} tests self-documented, index fresh)"
-        )
+        print(f"tests structure: ok ({len(idx.tracked_tests())} tests self-documented)")
     return 0
 
 

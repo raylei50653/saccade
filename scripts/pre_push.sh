@@ -83,39 +83,28 @@ else
     ERRORS=$((ERRORS + 1))
 fi
 
-# ── 4.8 stale doc path check ─────────────────────────────────────────────────
-echo "── stale doc path check"
-if uv run python3 scripts/tools/check_doc_stale_paths.py 2>&1; then
-    ok "stale doc paths"
-else
-    fail "stale doc paths — reference(s) to pre-move Phase 1 doc location(s)"
-    ERRORS=$((ERRORS + 1))
-fi
-
 # ── 4.9 doc freshness check (warn-only) ──────────────────────────────────────
 echo "── doc freshness check (warn-only)"
 uv run python3 scripts/tools/check_doc_freshness.py 2>&1 || true
 ok "doc freshness (warnings only)"
 
-# ── 4.10 doc structure: index coverage (warn) + C6.4 lifecycle (fail-closed) ─
-# Closing a research unit is a merge condition, not a matter of discipline:
-# a note that declares itself closed must leave the active path and the active
-# index in the same PR that accepted its terminal (Doc Structure C6.3).
-echo "── doc structure check (index warn; lifecycle fail-closed)"
+# ── 4.10 doc structure: layout warns; state projection fail-closed ───────────
+# Rules are gated by what a miss costs (#493 PR-2). Index coverage, closed-note
+# location and TODO checkboxes are layout: they warn. A closed note listed as
+# Active, prose in the contracts layer, or a threads index that contradicts its
+# cards lets a reader take closed work as current: those fail (C6.4 L2-L4).
+echo "── doc structure check (layout warn; state projection fail-closed)"
 if uv run python3 scripts/tools/check_doc_structure.py --strict 2>&1; then
   ok "doc structure"
 else
-  fail "doc structure — C6.4 lifecycle violation(s); see docs/ownership/doc_structure_contract.md"
+  fail "doc structure — C6.4 state-projection violation(s); see docs/ownership/doc_structure_contract.md"
   ERRORS=$((ERRORS + 1))
 fi
 
-echo "── scripts structure check (status header + fresh index; fail-closed)"
-if uv run python3 scripts/tools/check_scripts_structure.py --strict 2>&1; then
-  ok "scripts structure"
-else
-  fail "scripts structure — missing '# status:' / docstring, or stale index; run scripts/tools/build_scripts_index.py"
-  ERRORS=$((ERRORS + 1))
-fi
+# Header format only; the generated indexes are CI-published snapshots.
+echo "── scripts structure report (warn-only)"
+uv run python3 scripts/tools/check_scripts_structure.py 2>&1 || true
+ok "scripts structure (warnings only)"
 
 # ── 4.11 runtime-identity staleness: the online → research direction ─────────
 # The claim-state registry has always carried `substrate` / `target_substrate` and
@@ -140,13 +129,9 @@ else
   ERRORS=$((ERRORS + 1))
 fi
 
-echo "── tests structure check (three-axis header + fresh index; fail-closed)"
-if uv run python3 scripts/tools/check_tests_structure.py --strict 2>&1; then
-  ok "tests structure"
-else
-  fail "tests structure — missing scope/function/lifecycle header or docstring, or stale index; run scripts/tools/build_tests_index.py"
-  ERRORS=$((ERRORS + 1))
-fi
+echo "── tests structure report (warn-only)"
+uv run python3 scripts/tools/check_tests_structure.py 2>&1 || true
+ok "tests structure (warnings only)"
 
 # ── 5. pytest ────────────────────────────────────────────────────────────────
 echo "── pytest"

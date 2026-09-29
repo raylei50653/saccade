@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
-"""Scripts structure contract: every script self-documents, and the index is fresh.
+"""Scripts structure report: every script should self-document.
 
-Mirrors ``check_doc_structure.py`` for the ``scripts/`` tree. Fail-closed (``--strict``)
-conditions, each cheap to fix by editing the offending script:
+Mirrors ``check_doc_structure.py`` for the ``scripts/`` tree. Conditions, each
+cheap to fix by editing the offending script:
 
   S1  every tracked ``scripts/**.{py,sh}`` has a ``# status: <label>`` header whose
       label is one of the triage labels (stable/diagnostic/experiment/archive-candidate/generated).
   S2  every ``.py`` has a module docstring; every ``.sh`` has a description comment
       near the top (so the index can show a function line).
-  S3  the generated index (per-dir README blocks + roll-up) is current, i.e.
-      ``build_scripts_index.py`` would not change anything on disk.
+
+These are header/format rules, so the default gate runs this report-only
+(#493 PR-2): ``pre_push.sh`` and CI do not pass ``--strict``. The generated
+index is a derived snapshot, not checked here: CI regenerates and publishes it
+(``build_scripts_index.py``); the checked-in copy may lag.
 
 Usage:
     .venv/bin/python scripts/tools/check_scripts_structure.py            # report, exit 0
@@ -46,18 +49,6 @@ def check_self_documentation() -> list[str]:
     return problems
 
 
-def check_index_fresh() -> list[str]:
-    writes, _ = idx.build()
-    stale = []
-    for p, content in writes.items():
-        cur = p.read_text(encoding="utf-8") if p.exists() else None
-        if cur != content:
-            stale.append(
-                f"{p.relative_to(idx.REPO)}: stale, run build_scripts_index.py [S3]"
-            )
-    return stale
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -67,7 +58,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    violations = check_self_documentation() + check_index_fresh()
+    violations = check_self_documentation()
 
     if violations:
         print(f"scripts structure: {len(violations)} violation(s)")
@@ -77,7 +68,7 @@ def main() -> int:
             return 1
     else:
         print(
-            f"scripts structure: ok ({len(idx.tracked_scripts())} scripts self-documented, index fresh)"
+            f"scripts structure: ok ({len(idx.tracked_scripts())} scripts self-documented)"
         )
     return 0
 

@@ -232,14 +232,17 @@ transition 時，不得製造 registry `last_transition`。
 
 ### Enforcement
 
-`check_doc_structure.py --strict`（pre_push 執行）**紅燈**：
+按**規則的作用**分級（#493 PR-2）：純位置／格式的漏失重排即可，只 warn；
+會讓讀者把已結案工作當成現況、或把 prose 當成規則的，`check_doc_structure.py --strict`
+（pre_push 執行）**紅燈**：
 
-| | 擋什麼 | 對應 |
-|:--|:--|:--|
-| **L1** | `doc-status: closed` 卻仍在 active 路徑 | 規則 2 · 3 |
-| **L2** | closed note 仍佔用 owning README 的 Active 區塊 | 規則 2 · 3 |
-| **L3** | 決策層（`research/contracts/`）長出 prose | C0.1（**與這三條無關**，是另一條規則） |
-| **L4** | thread 的 `wip-role` 與 threads 索引列不一致 | C5.1（投影不得與 owner 矛盾） |
+| | 擋什麼 | 對應 | 等級 |
+|:--|:--|:--|:--|
+| **L1** | `doc-status: closed` 卻仍在 active 路徑 | 規則 2 · 3 | warn（目錄位置） |
+| **L2** | closed note 仍佔用 owning README 的 Active 區塊 | 規則 2 · 3 | **紅燈**（狀態投影：closed 被列成 active） |
+| **L3** | 決策層（`research/contracts/`）長出 prose | C0.1（**與這三條無關**，是另一條規則） | **紅燈**（決定哪些文件具規則權威） |
+| **L4** | thread 的 `wip-role` 與 threads 索引列不一致 | C5.1（投影不得與 owner 矛盾） | **紅燈**（狀態投影） |
+| **L5** | WIP register（TODO）含 task checkbox | DOC_MAINTENANCE § WIP | warn（格式） |
 
 **規則 1 不機械化**：結論夠不夠高密度，checker 判不了——它由 review 擋。假的牙齒比沒有牙齒更糟。
 既有 7 份 closed-in-active note 已 allowlist：**回填是清潔工作，不阻擋主線；但新違規一律擋。**
@@ -331,13 +334,13 @@ Not P9; not dual-stability reopen.
 | Layer | Mechanism |
 |:--|:--|
 | Human | [DOC_MAINTENANCE PR checklist](../DOC_MAINTENANCE.md) — index row, promotion, no phantom paths |
-| Machine (existing) | `check_doc_links.py` hard · `check_doc_stale_paths.py` hard · `check_doc_freshness.py` warn |
-| Machine (this contract) | `check_doc_structure.py` 預設只 warn 索引覆蓋；`--strict` 對 C6.4 lifecycle L1–L4 與 WIP-register L5（TODO 不得含 task checkbox）非零退出（pre-push 使用 strict） |
+| Machine (existing) | `check_doc_links.py` hard · `check_doc_freshness.py` warn（`check_doc_stale_paths.py` 為一次性搬遷 denylist，#493 PR-2 退休） |
+| Machine (this contract) | `check_doc_structure.py` 對索引覆蓋、L1、L5 只 warn；`--strict` 只對 C6.4 狀態投影／規則層 L2–L4 非零退出（pre-push 使用 strict） |
+| Derived indexes | `master_map.generated.md`、scripts／tests inventory 與各目錄 README 生成區塊由 CI 重生並發布（`derived-indexes` artifact）；checked-in 版本是可落後的 snapshot，不由任何閘門要求同步 |
 
 ```bash
 uv run python3 scripts/tools/check_doc_structure.py
 uv run python3 scripts/tools/check_doc_links.py
-uv run python3 scripts/tools/check_doc_stale_paths.py
 ```
 
 ---

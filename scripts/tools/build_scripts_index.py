@@ -220,6 +220,10 @@ def render_rollup(metas: dict[str, tuple[str, str, str]]) -> str:
         "Source of truth = each script's own docstring + `# status:` header; "
         "regenerate with `scripts/tools/build_scripts_index.py`.",
         "",
+        "> **Snapshot, may lag.** CI regenerates this file on every run and publishes it "
+        "as the `derived-indexes` artifact; the checked-in copy is refreshed whenever "
+        "someone reruns the generator, and no gate requires that (#493 PR-2).",
+        "",
         "> **Classification provenance.** Labels were seeded from a one-time survey, "
         "then given semantic role reviews (2026-07-21): the `stable` set was audited "
         "so `stable` means a supported workflow entrypoint or path-stability infra "

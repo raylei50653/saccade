@@ -24,7 +24,6 @@ from scripts.docs.migration_manifest import (
 
 ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = ROOT / "docs/ownership/doc_migration_manifest.yaml"
-MASTER_MAP = ROOT / "docs/ownership/master_map.generated.md"
 
 
 def _write_manifest(root: Path, clusters: str) -> Path:
@@ -220,12 +219,14 @@ def test_generated_master_map_is_deterministic_and_detects_staleness(
     )
 
 
-def test_checked_in_master_map_is_current() -> None:
+def test_master_map_builds_on_the_committed_tree() -> None:
+    """CI regenerates the map (#493 PR-2); the checked-in copy is a lagging snapshot.
+
+    What must hold is that generation works on the live tree, not that someone
+    re-committed its output.
+    """
     manifest = parse_migration_manifest(MANIFEST, repo_root=ROOT)
     master_map = build_master_map(manifest, repo_root=ROOT)
 
-    assert master_map_is_current(
-        MASTER_MAP,
-        master_map,
-        manifest_path="docs/ownership/doc_migration_manifest.yaml",
-    )
+    assert "docs/ownership/doc_migration_manifest.yaml" in master_map.document_inventory
+    assert master_map.grayed_out_files == manifest.frozen_files

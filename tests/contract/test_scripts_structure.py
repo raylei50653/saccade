@@ -1,9 +1,10 @@
-"""Contract tests for the scripts/ self-documentation + generated index.
+"""Contract tests for the scripts/ self-documentation report + index generator.
 
-These guard the invariants that the committed tree must satisfy its own
-`check_scripts_structure` contract, and that the generator/checker actually
-detect the failure modes they claim to (missing status, un-indexed script,
-orphan block left behind after a directory is emptied).
+These guard that the generator/checker actually detect the failure modes they
+claim to (missing status, un-indexed script, orphan block left behind after a
+directory is emptied), and that the index still builds on the committed tree.
+Whether the committed tree is fully self-documented, or its checked-in index
+current, is not asserted: both are report-only since #493 PR-2.
 """
 
 # scope: system
@@ -25,12 +26,10 @@ def _mkfile(p: Path, text: str) -> None:
     p.write_text(text, encoding="utf-8")
 
 
-def test_committed_tree_satisfies_its_own_contract():
-    """The regression guard: every tracked script self-documents and the index is fresh."""
-    violations = chk.check_self_documentation() + chk.check_index_fresh()
-    assert violations == [], (
-        "scripts structure violations on committed tree:\n" + "\n".join(violations)
-    )
+def test_index_builds_on_the_committed_tree():
+    """CI regenerates the index from the live tree; generation must not break."""
+    _writes, metas = idx.build()
+    assert set(metas) == set(idx.tracked_scripts())
 
 
 def test_extract_reads_status_docstring_usage(tmp_path, monkeypatch):

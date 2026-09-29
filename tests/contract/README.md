@@ -12,6 +12,7 @@
 | `test_declaration_policy_binding.py` | system | contract | active | A declaration's policy target is declared in YAML, and checked against the code. |
 | `test_declaration_seal_order.py` | system | contract | active | A sealed declaration must exist before the results it claims to have predicted. |
 | `test_doc_links.py` | system | contract | active | Doc link checks distinguish local artifacts from missing repository files. |
+| `test_doc_structure_rule_roles.py` | system | contract | active | Doc structure gates by rule role: layout warns, state projection fails. |
 | `test_frozen_source_evolution_policy.py` | cross-module | contract | active | ADR 026 + 027: frozen inputs of CLOSED packets -- historical immutability vs HEAD. |
 | `test_gctm_b1_slot_governance_v1.py` | system | contract | active | Contract tests for B1 slot identity and substrate-agnostic GCTM isolation. |
 | `test_gctm_d1_ranking_diagnostic_v1.py` | system | contract | active | Contract tests for the GCTM D1 ranking diagnostic interface package. |
@@ -52,7 +53,7 @@
 | `test_run_manifest_ordering.py` | system | contract | active | Contract for the ADR 021 run-manifest: schema, ordering, and non-reattribution. |
 | `test_runtime_identity_staleness.py` | tracking,system | contract | active | Coordinate drift never becomes equivalence merely because one probe is equal. |
 | `test_score_ranking_declaration_v1.py` | system | contract | active | Contract for the fail-closed L2 score-ranking declaration v1 validator. |
-| `test_scripts_structure.py` | system | contract | active | Contract tests for the scripts/ self-documentation + generated index. |
+| `test_scripts_structure.py` | system | contract | active | Contract tests for the scripts/ self-documentation report + index generator. |
 | `test_terminal_slot_schema.py` | system | contract | active | Contract for the terminal-slot YAML schema validator. |
 | `test_training_comparison_matrix.py` | detection | contract | active | Contract for the #421 comparison matrix: a pair is ``controlled`` only when the bytes say so. |
 | `test_training_eval_baselines.py` | detection | contract | active | Contract for #421 deliverable 4: a baseline row exists only behind a ``paired`` verdict. |

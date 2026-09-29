@@ -162,7 +162,7 @@ One machine-consumed YAML: **`docs/ownership/module_doc_question_map.yaml`**, fo
 
 It must **not** be a hand-written note under `docs/modules/`: acceptance criterion 5 in the issue body exists precisely to stop finished work from spawning another first-class module document, and Phase 1 would otherwise be the first violation of the rule it is meant to enable.
 
-Two mechanical consequences of adding it: adding any `.md`/`.yaml` under `docs/` requires regenerating [`master_map.generated.md`](master_map.generated.md) or `tests/contract/test_migration_manifest_v0.py::test_checked_in_master_map_is_current` fails closed; and the file must not restate verdicts or state, per its own precedent's rule (「只記機械需要的事實，不存分類、不複寫 verdict」) — Axis A is a verbatim copy and Axis B is not a verdict, so both stay on the right side of that line.
+Two mechanical consequences of adding it: adding any `.md`/`.yaml` under `docs/` changes [`master_map.generated.md`](master_map.generated.md) (since #493 PR-2 a CI-published snapshot that no gate requires to be current; at the time of writing, `test_checked_in_master_map_is_current` failed closed on it); and the file must not restate verdicts or state, per its own precedent's rule (「只記機械需要的事實，不存分類、不複寫 verdict」) — Axis A is a verbatim copy and Axis B is not a verdict, so both stay on the right side of that line.
 
 Whether the map is later promoted into per-document self-doc headers plus a generated index — the shape already used by `scripts_inventory.generated.md` and `tests_inventory.generated.md` — is a **Phase 2** decision, not a Phase 1 one.
 
