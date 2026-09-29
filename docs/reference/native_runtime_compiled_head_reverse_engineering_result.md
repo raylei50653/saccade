@@ -21,8 +21,8 @@ remains authoritative for the runtime-route decision (declaration §9).
 | execution freeze (r2) | #490 merge `51e34c39ae2850dd590cd15c5b822c64aa5e1921` (parents `20fddc19` + `49c12f34`, on the `origin/main` first-parent chain); annotated tag `freeze/465-compiled-head-re-r2`, tag object `37779340ef6df318e33f6bf099e82b69e641e3e0`, peeled (local and `origin`) = `51e34c39`; freeze record = #465 comment 5889469444 |
 | runner | `scripts/eval/diagnostics/compiled_head_reverse_engineering.py`, blob `c3c1cad3bc13f9ffe995f4fbda4c33734d697bd4` |
 | execution | detached checkout `51e34c39`, clean tree; main CI green on this commit (run 36562878559, 6/6); packet-free V1 dry under `machine-bench` first (24/24); the formal run was the direct child of `tools/resctl.py run machine-bench`, 2026-09-29 11:52:58–11:58:19Z, same lease at start and end |
-| packet | `results/compiled_head_reverse_engineering_465/20260929T115258Z/` (gitignored, kept locally); `packet.json` sha256 `3aa775e4…`, `MANIFEST.json` sha256 `fa1a419f…` |
-| compile cache | per-run directories inside the packet (`compile_cache/r1/{inductor,triton}`), as fixed by the runner |
+| packet | `results/compiled_head_reverse_engineering_465/20260929T115258Z/` (gitignored, kept locally); `packet.json` sha256 `3aa775e41ea8849bf651323ed5ebf184609d9b45a67ef59712feac750be151c8`, `MANIFEST.json` sha256 `fa1a419f6fcdb60f7861a64163217fd8f15c3433dc7896eb1aac62ef45b55aa9` |
+| compile cache | fresh, per-run directories inside the packet, as fixed by the runner: each R0 arm runs in its own isolated child with its own `compile_cache/r0_<arm>/{inductor,triton}` (a `triton` directory appears only for arms that generate Triton code); R1 uses one `compile_cache/r1/{inductor,triton}` shared by all arms in its single process. No cache is reused across runs or between R0 and R1 |
 | backend policy | PR-2L L1: `matmul_allow_tf32=False`, `cudnn_allow_tf32=True`, `cudnn_benchmark=False`, graph-executor optimize off |
 
 ## 2. Validity
@@ -62,10 +62,13 @@ does not reproduce exactly. Within scope **B**, the stage is **`UNRESOLVED`**.
 
 ## 4. Descriptive drift sizes (report only)
 
-No row in §5 depends on the numbers below. D_s and K are as defined in
-declaration §4 (anchors that differ from E; floor crossings at 0.05).
+No row in §5 depends on the numbers below. D and K are as defined in
+declaration §4: D is the set of **entries** at which an arm differs from E,
+counted separately as score entries and box-coordinate entries; only K is a
+(frame, anchor) support (pairs at which exactly one of the arm and E has
+max-class score at or above 0.05).
 
-| Arm | score \|D\| | score max-abs | box \|D\| | box max-abs | crossings \|K\| |
+| Arm | score entries \|D\| | score max-abs | box-coordinate entries \|D\| | box max-abs (px) | crossing support \|K\| |
 |:--|--:|--:|--:|--:|--:|
 | C | 578,847,912 | 1.3653e-3 | 550,586 | 0.4657 | 5 |
 | C_H | 9,469,529 | 6.232e-4 | 7,397 | 0.0934 | 0 |
@@ -75,7 +78,7 @@ declaration §4 (anchors that differ from E; floor crossings at 0.05).
 
 §5.1 class checks against the reference:
 
-| X vs R | score recall / precision | box recall / precision | max-abs ratio (score / box) | K overlap | Class |
+| X vs R | score-entry recall / precision | box-entry recall / precision | max-abs ratio (score / box) | K overlap | Class |
 |:--|:--|:--|:--|:--|:--|
 | C_H vs C | 0.016 / 0.967 | 0.012 / 0.926 | 0.456 / 0.201 | 0 of 5 | partial |
 | C_B vs C | 0.987 / 0.9995 | 0.990 / 0.999 | 1.000 / 1.000 | 5 of 5 | ∈ class(C) |
@@ -88,9 +91,11 @@ Reading, limited to what these numbers show:
   descriptive observation. It does **not** say the block scope is the only
   cause: C_H ≠ E, and the scope cut is `BOTH_SCOPES`.
 - Along the B ladder, D_B = E and A_B already differs from E, with about 8% of
-  C_B's score differences and none of its crossings. About 78% of A_B's score
-  differences fall on anchors where C_B also differs. How the AOT-stage partial
-  drift becomes C_B's full class is not resolved by this declaration.
+  C_B's differing score entries and none of its crossings. About 78% of A_B's
+  differing score entries are entries where C_B also differs. This overlap does
+  not by itself establish lineage or causality between A_B and C_B. What
+  happens between A_B and C_B that places C_B in class(C) is not resolved by
+  this declaration.
 
 ## 5. Allowed follow-up
 
@@ -102,11 +107,13 @@ Reading, limited to what these numbers show:
   authorize** a §6 operator localization of the block scope. Studying B needs a
   new declaration.
 - Owner decision (09-29): H stage-2 is **not** started now. H has a small drift
-  footprint (about 9.5M score differences, 0 crossings), so it stays as a side
-  branch that is already eligible for §6. The next research direction is a
-  **new B-scope declaration** on how the partial drift produced at
-  AOT/decomposition (A_B) grows into C_B's full drift class. That declaration
-  is separate from this result document.
+  footprint (about 9.5M differing score entries, 0 crossings), so it stays as
+  a side branch that is already eligible for §6. The next research direction is
+  a **new B-scope declaration** with the research question: *which
+  post-Dynamo/AOT-to-Inductor mechanism introduces the additional drift that
+  makes C_B enter the C-like drift class, given that A_B already differs from E
+  but remains outside class(C_B)?* It does not presume that A_B's drift is the
+  precursor of C_B's. That declaration is separate from this result document.
 - #465's runtime-route status is unchanged; headline numbers are unchanged.
 
 Refs #465.
