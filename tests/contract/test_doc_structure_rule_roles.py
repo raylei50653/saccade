@@ -67,6 +67,61 @@ def test_closed_note_listed_as_active_still_fails(tree: Path) -> None:
     assert not any("[L1]" in v for v in violations)
 
 
+def test_closed_note_already_moved_but_listed_as_active_still_fails(
+    tree: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """L2 must not depend on L1: moving the file does not fix the index."""
+    _write(
+        tree / "docs/modules/m/research/closed/done.md",
+        "# done\n\ndoc-status: closed\n",
+    )
+    _write(tree / "docs/modules/m/README.md", "# m\n\n## Active\n\n- done.md\n")
+    # A README nearer by depth must not be mistaken for the owner.
+    _write(tree / "docs/modules/m/research/README.md", "# research\n")
+
+    assert chk.check_layout() == []
+    assert any(
+        "[L2]" in v and "docs/modules/m/README.md" in v for v in chk.check_lifecycle()
+    )
+    monkeypatch.setattr(sys, "argv", ["check_doc_structure.py", "--strict"])
+    assert chk.main() == 1
+
+
+def test_closed_research_note_resolves_to_its_area_index(tree: Path) -> None:
+    _write(
+        tree / "docs/research/eval/closed/done.md",
+        "# done\n\ndoc-status: closed\n",
+    )
+    _write(tree / "docs/research/eval/README.md", "# eval\n\n## Active\n\n- done.md\n")
+    assert any(
+        "[L2]" in v and "docs/research/eval/README.md" in v
+        for v in chk.check_lifecycle()
+    )
+
+
+def test_closed_note_in_closed_section_passes(tree: Path) -> None:
+    _write(
+        tree / "docs/modules/m/research/closed/done.md",
+        "# done\n\ndoc-status: closed\n",
+    )
+    _write(
+        tree / "docs/modules/m/README.md",
+        "# m\n\n## Active\n\n- other.md\n\n## Closed\n\n- done.md\n",
+    )
+    assert chk.check_lifecycle() == []
+
+
+def test_owning_readme_ignores_lifecycle_directories(tree: Path) -> None:
+    _write(tree / "docs/modules/m/research/README.md", "# research\n")
+    note = tree / "docs/modules/m/research/closed/done.md"
+    assert chk._owning_readme(note) == tree / "docs/modules/m/README.md"
+    _write(tree / "docs/research/eval/README.md", "# eval\n")
+    note = tree / "docs/research/eval/closed/sub/done.md"
+    assert chk._owning_readme(note) == tree / "docs/research/eval/README.md"
+    note = tree / "docs/research/other/closed/done.md"
+    assert chk._owning_readme(note) == tree / "docs/research/README.md"
+
+
 def test_prose_in_contracts_layer_still_fails(tree: Path) -> None:
     _write(tree / "docs/research/contracts/essay.md", "# essay\n")
     assert any("[L3]" in v for v in chk.check_lifecycle())

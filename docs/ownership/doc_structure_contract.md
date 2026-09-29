@@ -239,7 +239,7 @@ transition 時，不得製造 registry `last_transition`。
 | | 擋什麼 | 對應 | 等級 |
 |:--|:--|:--|:--|
 | **L1** | `doc-status: closed` 卻仍在 active 路徑 | 規則 2 · 3 | warn（目錄位置） |
-| **L2** | closed note 仍佔用 owning README 的 Active 區塊 | 規則 2 · 3 | **紅燈**（狀態投影：closed 被列成 active） |
+| **L2** | closed note 仍佔用 owning README 的 Active 區塊（**不論是否已搬進 `closed/`**；owner 依語義路徑解析，`closed/`／`archive/` 不改變 owner） | 規則 2 · 3 | **紅燈**（狀態投影：closed 被列成 active） |
 | **L3** | 決策層（`research/contracts/`）長出 prose | C0.1（**與這三條無關**，是另一條規則） | **紅燈**（決定哪些文件具規則權威） |
 | **L4** | thread 的 `wip-role` 與 threads 索引列不一致 | C5.1（投影不得與 owner 矛盾） | **紅燈**（狀態投影） |
 | **L5** | WIP register（TODO）含 task checkbox | DOC_MAINTENANCE § WIP | warn（格式） |

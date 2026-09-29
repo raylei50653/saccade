@@ -22,7 +22,8 @@ editing a file, so they are **warnings in every mode** (#493 PR-2).
 decide which documents carry rule authority, because a miss there lets a reader
 take closed work as current or prose as a binding rule:
 
-  L2  a closed note is not listed in the Active section of its owning README.
+  L2  a closed note is not listed in the Active section of its owning README,
+      whether or not it has already moved into ``closed/``.
   L3  ``docs/research/contracts/`` holds only the allowlisted rule/state docs.
   L4  the threads index agrees with each card's ``doc-status`` / ``wip-role``.
 
@@ -182,6 +183,9 @@ CONTRACTS_ALLOWED = frozenset(
         "safe_region_asset_contract.md",
     }
 )
+
+# Directory names that express lifecycle rather than ownership (C6).
+LIFECYCLE_DIRS = frozenset({"closed", "archive"})
 
 HEADER_LINES = 12  # a doc's own status marker lives in its header, not its prose
 
@@ -376,39 +380,63 @@ def check_layout() -> list[str]:
     return warnings
 
 
+def _closed_notes() -> list[Path]:
+    return [
+        note
+        for note in sorted(REPO_ROOT.joinpath("docs").rglob("*.md"))
+        if _declared_status(note) == "closed"
+    ]
+
+
 def _closed_notes_in_active_paths() -> list[Path]:
-    notes: list[Path] = []
-    for note in sorted(REPO_ROOT.joinpath("docs").rglob("*.md")):
-        parts = note.relative_to(REPO_ROOT).parts
-        if "closed" in parts or "archive" in parts:
-            continue
-        if _declared_status(note) == "closed":
-            notes.append(note)
-    return notes
+    return [
+        note
+        for note in _closed_notes()
+        if not LIFECYCLE_DIRS.intersection(note.relative_to(REPO_ROOT).parts)
+    ]
+
+
+def _owning_readme(note: Path) -> Path | None:
+    """The index that owns ``note``, resolved by meaning rather than depth.
+
+    ``closed/`` and ``archive/`` express lifecycle, not ownership (C6), so they
+    are dropped before resolving: ``docs/modules/m/research/closed/x.md`` is
+    owned by ``docs/modules/m/README.md`` exactly as it was before the move.
+
+    * ``docs/modules/<m>/**``  -> ``docs/modules/<m>/README.md`` (C4 S1)
+    * ``docs/research/**``     -> nearest README walking up to ``docs/research``
+                                  (C4 S2: local README, else the top level)
+    * anything else            -> nearest README walking up to ``docs/``
+    """
+    rel_dir = note.parent.relative_to(REPO_ROOT).parts
+    owner_parts = tuple(p for p in rel_dir if p not in LIFECYCLE_DIRS)
+    if owner_parts[:2] == ("docs", "modules") and len(owner_parts) >= 3:
+        readme = REPO_ROOT.joinpath(*owner_parts[:3], "README.md")
+        return readme if readme.is_file() else None
+
+    floor = 2 if owner_parts[:2] == ("docs", "research") else 1
+    for depth in range(len(owner_parts), floor - 1, -1):
+        readme = REPO_ROOT.joinpath(*owner_parts[:depth], "README.md")
+        if readme.is_file():
+            return readme
+    return None
 
 
 def check_lifecycle() -> list[str]:
     """C6.4 L2–L4 — state-projection / rule-authority rules; violations."""
     violations: list[str] = []
 
-    for note in _closed_notes_in_active_paths():
+    # L2 is about the index, not the file's location: a closed note that has
+    # already moved into closed/ but is still listed as Active is the drift this
+    # rule exists for. Scan every closed note, wherever it lives.
+    for note in _closed_notes():
         rel = note.relative_to(REPO_ROOT).as_posix()
-        parts = note.relative_to(REPO_ROOT).parts
         if rel in LEGACY_CLOSED_IN_ACTIVE:
             continue
-
-        if "modules" in parts:
-            owner_readme = note.parent.parent / "README.md"
-        elif "research" in parts:
-            subdir_readme = note.parent / "README.md"
-            if subdir_readme.is_file():
-                owner_readme = subdir_readme
-            else:
-                owner_readme = note.parent.parent / "README.md"
-        else:
-            owner_readme = note.parent / "README.md"
-
-        if owner_readme.is_file() and note.name in _active_section_body(owner_readme):
+        owner_readme = _owning_readme(note)
+        if owner_readme is None or owner_readme == note:
+            continue
+        if note.name in _active_section_body(owner_readme):
             owner_rel = owner_readme.relative_to(REPO_ROOT).as_posix()
             violations.append(
                 f"[L2] {rel}: closed note still indexed in the Active section of "
