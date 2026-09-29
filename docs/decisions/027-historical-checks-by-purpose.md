@@ -57,8 +57,9 @@ source，所以本 ADR 不動它們（owner 決定：留在預設 gate）。
 | 檢查用途 | 處理 | 本 ADR 落地 |
 |---|---|---|
 | 要求現行 HEAD 永遠等於舊研究所用的 source | **退出一般開發 gate** | 見 §3 |
-| 驗證封存 packet／舊 validator 在原始座標上仍然正確 | 按需執行：`SACCADE_ATTESTED_CONSUMER=1` 或 `--replay` | pinned targeted tests（既有 ADR 026 skip guard）、GCTM D1 fresh-emit、#340 2026-09-09 campaign harness tests |
-| 防止封存證據被改寫，或防止舊證據被當成 HEAD 的證據 | **保留在預設 gate** | packet artifact / owner declaration drift、ledger 合法性與 append-only、attested arm、runtime identity、archive checkers |
+| 驗證封存 packet／舊 validator 在原始座標上仍然正確（**歷史可重現性**） | 按需執行：`frozen_source_status.py --replay <packet>`，或在 pinned commit 的 worktree 內跑 | pinned targeted tests、GCTM D1 fresh-emit、#340 2026-09-09 campaign harness tests（漂移後在 development arm skip，見 §4） |
+| 宣稱**現在的 HEAD** 仍符合 frozen coordinate（**current-consumer currency**） | 由 consumer 主動要求：`SACCADE_ATTESTED_CONSUMER=1` 或 `--mode attested`；任何 `historical` 都**必須 fail** | attested / scoped arm（ADR 026 §4 不變） |
+| 防止封存證據被改寫，或防止舊證據被當成 HEAD 的證據 | **保留在預設 gate** | packet artifact / owner declaration drift、ledger 合法性與 append-only、runtime identity、archive checkers |
 
 判準一句話：**一般開發不必反覆證明舊研究仍描述 HEAD；但證據不能被改寫、適用座標要
 明確、正式結論不能超出有效量測。**
@@ -89,8 +90,9 @@ binding 狀態（取代 ADR 026 §3.2 表中 `historical` / `unrecorded_drift` �
 ## 4. 其他 currency 斷言的分流
 
 兩個 probe 找到的 currency 斷言不在 frozen-source binding 內，照同一規則處理：
-**凍結輸入仍 current 時照跑；漂移後在 development arm skip 並寫明理由，
-`SACCADE_ATTESTED_CONSUMER=1` 時照跑（並正確地紅）。**
+**凍結輸入仍 current 時照跑；漂移（含刪除 / rename）後在 development arm skip 並寫明理由。**
+歷史可重現性在 pinned commit 上跑（下表「按需重現」）；`SACCADE_ATTESTED_CONSUMER=1` 則是在
+HEAD 上宣稱 currency，漂移後照跑並**正確地紅**——兩者不是同一用途。
 
 | 測試 | 漂移判定 | 按需重現 |
 |---|---|---|
@@ -113,6 +115,7 @@ binding 狀態（取代 ADR 026 §3.2 表中 `historical` / `unrecorded_drift` �
 | 驗收 | 由誰證明 |
 |---|---|
 | 改 `tracker_gpu.{hpp,cu}` 或其他 frozen input、不補 ledger，本地 hook / pytest / CI 通過 | `test_source_drift_without_entry_is_derived_historical`；PR 描述附 probe worktree 全 pytest + CI step 結果 |
+| 刪除 / rename 被綁的 input 同樣不阻擋（不是 collection error） | `test_deleted_source_is_derived_historical_not_an_error`、`test_a_missing_sealed_input_counts_as_drift_not_an_error`、`test_a_missing_control_source_counts_as_drift_not_an_error` |
 | 改封存 packet 或 H0 declaration，會 fail | `test_packet_artifact_drift_fails_without_any_entry`、`test_owner_declaration_drift_fails_without_any_entry`、`test_packet_artifacts_cannot_be_historicized` |
 | 凍結 bytes 不可驗證時 fail | `test_frozen_bytes_absent_from_history_stay_unrecorded` |
 | 把 closed packet 當 current evidence 仍被拒 | `test_source_drift_without_entry_is_derived_historical`（attested 分支）、`test_scoped_attestation_of_a_historical_packet_fails`；runtime identity consumer gate 不變 |

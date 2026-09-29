@@ -338,6 +338,16 @@ def test_source_drift_without_entry_is_derived_historical(scenario: Scenario) ->
     assert all("is historical" in e for e in attested.errors), attested.errors
 
 
+def test_deleted_source_is_derived_historical_not_an_error(scenario: Scenario) -> None:
+    """Deleting or renaming a bound source is evolution too (ADR 027)."""
+    (scenario.root / HPP).unlink()
+    dev = scenario.evaluate("development")
+    assert dev.ok, dev.errors
+    assert scenario.statuses(dev) == {frozen.STATUS_HISTORICAL}
+    assert {i.disk_sha256 for i in dev.bindings if i.binding.path == HPP} == {None}
+    assert not scenario.evaluate("attested").ok
+
+
 def test_frozen_bytes_absent_from_history_stay_unrecorded(scenario: Scenario) -> None:
     """A digest no reachable commit carries cannot be a historical coordinate."""
     scenario.write_successor(

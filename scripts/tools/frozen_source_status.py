@@ -739,8 +739,10 @@ def attested_consumer_requested(environ: Mapping[str, str] | None = None) -> boo
 def packet_replay_ref(packet_id: str, root: Path = ROOT) -> str:
     """The coordinate at which *packet_id* was last current.
 
-    HEAD when every binding is current; otherwise the ``last_current_ref`` of its
-    historical bindings (recorded or derived from git), which must agree.
+    HEAD when every binding is current; otherwise the newest of its historical
+    bindings' ``last_current_ref`` values (recorded or derived from git) that
+    still carries every one of the packet's frozen bytes -- paths drifted in
+    different commits yield different per-path refs.
     """
     report = evaluate(root, mode="development")
     items = [i for i in report.bindings if i.binding.packet_id == packet_id]
