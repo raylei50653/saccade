@@ -234,7 +234,11 @@ compile id:
   - `K_pm` / `J_pm`: the recorded post-grad graph or generated code shows the
     pattern-pass difference. The runner records which patterns matched in C_B
     and whether any `pad_mm` rewrite was applied.
-  - `K_all`: the effects of all four, and nothing else.
+  - `K_all`: applies exactly the four declared configuration changes of §3 and
+    no other configuration change, and G1 holds. Purity is checked at the
+    configuration level. Its generated-code delta need not equal the union of
+    the four isolated K_x deltas, because the mechanisms may interact (for
+    example, `pm` rewrites change the code the other three act on).
   - `K_fb`: no generated Triton kernel remains in the output code.
 
   The base arm of K_x is C_B; the base arm of J_x is K_all.
@@ -247,8 +251,9 @@ compile id:
 An arm that fails G1 or G2 is **omitted before measurement**, and that is
 recorded with the reason. It is never replaced by an approximate arm. An omitted
 K_x or K_all makes every §6.2 row that needs it unreachable, and the result falls
-through to `UNRESOLVED`. An omitted J_x only removes x from the sufficiency
-readout (§6.2 rows 4 and 6), which must then say so.
+through to `UNRESOLVED`. An omitted J_x means that x's sufficiency was not
+measured. Every §6.2 row whose label depends on that J_x (rows 3, 4 and 6) then
+resolves to `UNRESOLVED` instead (§6.2 rows 4a and 6a).
 
 ### 5.4 Execution gates
 
@@ -278,17 +283,20 @@ The first satisfied row is the result:
 
 | # | Observation | Result |
 | --- | --- | --- |
-| 1 | a validity failure (§5.1, §5.2, §5.3 G3, §5.4), or a required K arm omitted | `UNRESOLVED` |
+| 1 | a validity failure (§5.1, §5.2, §5.3 G3, §5.4), or K_all or any K_x omitted | `UNRESOLVED` |
 | 2 | K_all ∈ class(C_B) | `UNCOVERED_MECHANISM` (qualifier from §6.3) |
-| 3 | exactly one x ∈ M is class-necessary, and J_x ∈ class(C_B) | `SINGLE_MECHANISM(x)` |
-| 4 | exactly one x ∈ M is class-necessary, and J_x ∉ class(C_B) | `NECESSARY_NOT_SUFFICIENT(x)` |
-| 5 | two or more x ∈ M are class-necessary | `MULTIPLE_NECESSARY(S_nec)`, S_nec = the class-necessary set; each J_x reported |
-| 6 | no x ∈ M is class-necessary (K_all ∉ class(C_B) by row 2) | `REDUNDANT_MECHANISMS(S_suf)`, S_suf = {x : J_x ∈ class(C_B)}; if S_suf is empty, `COMBINATION_ONLY` |
+| 3 | exactly one x ∈ M is class-necessary, and J_x was measured and J_x ∈ class(C_B) | `SINGLE_MECHANISM(x)` |
+| 4 | exactly one x ∈ M is class-necessary, and J_x was measured and J_x ∉ class(C_B) | `NECESSARY_NOT_SUFFICIENT(x)` |
+| 4a | exactly one x ∈ M is class-necessary, and J_x was omitted (§5.3) | `UNRESOLVED` (sufficiency not measured) |
+| 5 | two or more x ∈ M are class-necessary | `MULTIPLE_NECESSARY(S_nec)`, S_nec = the class-necessary set; each J_x reported as measured in / out of class(C_B), or as not measured |
+| 6 | no x ∈ M is class-necessary (K_all ∉ class(C_B) by row 2), and every J_x was measured | `REDUNDANT_MECHANISMS(S_suf)`, S_suf = {x : J_x ∈ class(C_B)}; if S_suf is empty, `COMBINATION_ONLY` |
+| 6a | no x ∈ M is class-necessary, and any J_x was omitted (§5.3) | `UNRESOLVED` (sufficiency set not measured) |
 
-Rows 2–6 are exhaustive once row 1 does not hold. There is no silent
-fallthrough. When J_x was omitted (§5.3), row 3 cannot hold for that x; the
-result is then row 4's label with the qualifier "sufficiency not measured", and
-it must not be read as a negative sufficiency result.
+Rows 2–6a are exhaustive once row 1 does not hold. There is no silent
+fallthrough. `NECESSARY_NOT_SUFFICIENT` is reserved for a J_x that was measured
+and fell outside class(C_B); an omitted J_x never produces it, because an
+unmeasured sufficiency is not a negative sufficiency result. Row 5 is the only
+row that does not depend on J_x, so it may report omitted J_x as not measured.
 
 ### 6.3 Coverage cut (K_fb)
 
@@ -345,7 +353,7 @@ The runner PR must be independently reviewable and must, before any formal run:
   the gate outcome and the omission reason if any;
 - verify that all arms receive identical backbone features;
 - include synthetic tests that read no MOT17 frames for the §6.1 predicate,
-  every §6.2 row (including the omitted-J qualifier), every §6.3 label, and
+  every §6.2 row (including rows 4a and 6a for omitted J arms), every §6.3 label, and
   every §5.3 gate;
 - declare the exact configuration route used per arm (§4).
 
