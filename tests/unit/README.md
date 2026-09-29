@@ -6,6 +6,7 @@
 | Test | Scope | Function | Lifecycle | Summary |
 |------|-------|----------|-----------|---------|
 | `test_check_association_tools.py` | eval | contract | active | Unit tests for scripts/tools/check_association_tools.py. |
+| `test_compiled_head_reverse_engineering_runner.py` | system | contract | active | The #465 compiled-head reverse-engineering runner implements its frozen declaration. |
 | `test_config_consistency.py` | eval | contract | active | Guard against silent divergence across the three config layers. |
 | `test_eval_script_paths.py` | eval | contract | active | Pin the scripts/eval compat wrappers to their relocated implementations. |
 | `test_headline_decision_contract.py` | eval,tracking,cross-module | contract | active | Unit tests for scripts/tools/check_headline_decision_contract.py. |

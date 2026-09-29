@@ -17,6 +17,8 @@
 | `cheb_gr_offline_handover_report.py` | diagnostic | cli | Label and analyze Cheb-GR offline handover decisions. |
 | `compare_detector_suffix_runs.py` | diagnostic | cli | Audit whether two MOT17 detector-suffix runs contain distinct evidence. |
 | `compare_handover_summaries.py` | diagnostic | cli | Compare Cheb-GR offline handover parameter summary JSON files. |
+| `compiled_head_reverse_engineering.py` | experiment | cli | Run the #465 compiled-head reverse-engineering study (R0 provenance, R1 scope/stage localization) and write i… |
+| `compiled_head_reverse_engineering_structural_check.py` | experiment | cli | Exercise the #465 compiled-head reverse-engineering runner's R0 children and R1 worker on synthetic frames (n… |
 | `label_boosted_birth_rows.py` | diagnostic | cli | Label and export birth rows boosted by GT for diagnostics. |
 | `native_head_failure_localization.py` | experiment | cli | Run the #465 head failure-localization study (anchor-level C/T/E replay) and write its packet. |
 | `native_head_failure_localization_r2.py` | experiment | cli | Run the #465 head failure-localization r2 study (cutoff-closed swap set) and write its packet. |
