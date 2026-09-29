@@ -1,6 +1,8 @@
 # #465 compiled-head reverse engineering declaration
 
-Status: **draft / diagnostic only / no measurement authorized by this document**
+Status: **declaration, frozen at the merge commit of PR #488; diagnostic only;
+no measurement authorized by this document** (formal runs need the separate
+runner-PR freeze, §7)
 
 ## 0. Question
 
@@ -208,8 +210,9 @@ never combined):
 - overlap with the reference arm R (§5.1): `|D_X ∩ D_R|`, where D_X is the set of
   entries at which X differs from E, for scores and boxes separately;
 - score max-abs and box max-abs (px) vs E;
-- score-floor crossing count vs E (anchors with exactly one of X, E at or above
-  0.05);
+- score-floor crossing support vs E: the set `K_X` of (frame, anchor) pairs at
+  which exactly one of X, E has max-class score at or above 0.05, its size, and
+  the overlap `|K_X ∩ K_R|` with the reference arm R (§5.1);
 - non-finite count;
 - bit-identity vs E and vs R on every frame;
 - compile graph / code identity;
@@ -230,8 +233,11 @@ separately:
   1. overlap recall `|D_X ∩ D_R| / |D_R| ≥ 0.9`;
   2. overlap precision `|D_X ∩ D_R| / |D_X| ≥ 0.9`;
   3. max-abs(X) is within `[0.5, 2] × max-abs(R)`;
-  4. and, for scores only, the floor-crossing count satisfies
-     `|c_X − c_R| ≤ max(2, 0.5·c_R)`;
+  4. and, for scores only, the floor-crossing support overlaps:
+     `|K_X ∩ K_R| / |K_R| ≥ 0.9` and `|K_X ∩ K_R| / |K_X| ≥ 0.9`, with
+     `K_X` as defined in §4. If `K_R` is empty, `K_X` must be empty too.
+     When `|K_R|` is small, these thresholds require the exact same crossing
+     anchors. For example, with the 5 PR-2L crossings, `K_X = K_R` is required;
 - **X = E**: X is bit-identical to E on every frame;
 - otherwise **X is partial**: X ≠ E and X ∉ class(R).
 
