@@ -1,7 +1,8 @@
 # #465 compiled-head block-scope (B) Inductor mechanism declaration
 
-Status: **declaration, draft (not frozen); diagnostic only; no measurement
-authorized by this document** (formal runs need a separate runner-PR freeze, §8)
+Status: **declaration, frozen at the merge commit of PR #492; diagnostic only;
+no measurement authorized by this document** (formal runs need the separate
+runner-PR freeze, §8)
 
 ## 0. Question
 
