@@ -360,6 +360,14 @@
       "classification": "not_a_run_producer",
       "reason": "writes only to a TemporaryDirectory that is deleted on exit; produces no artifact-root output"
     },
+    "scripts/eval/diagnostics/compiled_head_reverse_engineering.py": {
+      "classification": "run_producer_wired",
+      "reason": "#465 compiled-head reverse-engineering study; claims its packet directory before writing (R0/R1 children write only under it)"
+    },
+    "scripts/eval/diagnostics/compiled_head_reverse_engineering_structural_check.py": {
+      "classification": "not_a_run_producer",
+      "reason": "writes only to a TemporaryDirectory that is deleted on exit; produces no artifact-root output"
+    },
     "scripts/eval/diagnostics/native_head_parity.py": {
       "classification": "run_producer_wired",
       "reason": "#465 PR-2 head parity gate; claims its packet directory before writing, each mot17.py arm claims its own sub-directory"
