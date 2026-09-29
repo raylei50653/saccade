@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Historical-vs-current status of CLOSED packets' frozen inputs (ADR 026).
+"""Historical-vs-current status of CLOSED packets' frozen inputs (ADR 026, 027).
 
 A CLOSED research packet pins its inputs by ``path + sha256``.  That identity
 is immutable and stays byte-verifiable forever; it does **not** by itself say
@@ -14,10 +14,12 @@ digest against the working tree):
   the packet's conclusions as describing HEAD.
 
 Per binding the status is ``current`` (disk == frozen), ``historical`` (disk
-differs and the supersession ledger records the transition with a re-hashable
-``last_current_ref``) or ``unrecorded_drift`` (disk differs and nothing records
-it).  Packet artifacts and the H0 owner-event declaration are never ledgerable:
-drift there is always unrecorded.
+differs and the frozen bytes are recoverable at a ``last_current_ref`` -- the
+one a supersession-ledger entry records, or, since ADR 027, the one derived
+from git history when there is no entry) or ``unrecorded_drift`` (disk differs
+and no reachable commit carries the frozen bytes).  Ordinary source evolution
+therefore owes no ledger entry.  Packet artifacts and the H0 owner-event
+declaration are never historical: drift there is always unrecorded.
 
 ``--mode development`` (default) fails on unrecorded drift and on an invalid
 ledger; ``historical`` bindings are reported as warnings.  ``--mode attested``
@@ -30,9 +32,10 @@ historicized.  An unknown packet id fails closed.
 The ledger is append-only against the merge-base with ``--base`` (default
 ``origin/main`` when it resolves): every entry present there must still be
 present, byte-for-byte as JSON, at HEAD.
-``--replay <packet_id>`` runs a historical packet's pinned targeted tests in a
-detached worktree at its ``last_current_ref``: the strongest form of "the
-evidence is still verifiable" without touching HEAD.
+``--replay <packet_id>`` runs a packet's pinned targeted tests in a detached
+worktree at the coordinate where it was last current (HEAD while it is still
+current): the strongest form of "the evidence is still verifiable" without
+touching HEAD.
 
 Discovery is generic: every ``docs/modules/semantic/research/evidence/*/`` that
 has ``frozen_input_identities.json`` (rows ``inputs[].{role,path,sha256}``) or a
@@ -66,6 +69,7 @@ EVIDENCE_REL = "docs/modules/semantic/research/evidence"
 LEDGER_REL = "docs/research/contracts/frozen_source_supersession_ledger_v1.json"
 SCHEMA_REL = "scripts/tools/frozen_source_supersession_ledger_v1.schema.json"
 POLICY_REL = "docs/decisions/026-frozen-input-source-evolution.md"
+GATE_POLICY_REL = "docs/decisions/027-historical-checks-by-purpose.md"
 LEDGER_SCHEMA_ID = "frozen_source_supersession_ledger_v1"
 ATTESTED_ENV = "SACCADE_ATTESTED_CONSUMER"
 
@@ -103,11 +107,15 @@ class BindingStatus:
     status: str
     disk_sha256: str | None
     entry_id: str | None = None
+    last_current_ref: str | None = None
 
     def as_dict(self) -> dict[str, Any]:
         data = asdict(self.binding)
         data.update(
-            status=self.status, disk_sha256=self.disk_sha256, entry_id=self.entry_id
+            status=self.status,
+            disk_sha256=self.disk_sha256,
+            entry_id=self.entry_id,
+            last_current_ref=self.last_current_ref,
         )
         return data
 
@@ -271,6 +279,38 @@ def git_blob_sha256(root: Path, ref: str, path: str) -> str | None:
     if not isinstance(data, bytes):
         return None
     return sha256_bytes(data)
+
+
+def git_last_current_ref(root: Path, path: str, frozen_sha256: str) -> str | None:
+    """Newest commit reachable from HEAD whose ``path`` still hashes to the frozen bytes.
+
+    ADR 027: the historical coordinate of a drifted source / tooling / document
+    binding is derived from git rather than hand-recorded.  Walk the commits that
+    touched *path* newest-first; the first one carrying the frozen bytes is where
+    they landed, and the parent of the newer commit that changed them away is the
+    last coordinate that still had them (the one a replay can use, since the
+    packet itself exists there).  ``None`` means the frozen bytes are not
+    recoverable from this history -- the caller fails closed.
+    """
+    head = git_head(root)
+    if head is not None and git_blob_sha256(root, head, path) == frozen_sha256:
+        return head  # the drift is in the working tree only
+    listing = _git(root, "rev-list", "HEAD", "--", path)
+    if not isinstance(listing, str):
+        return None
+    newer: str | None = None
+    for commit in listing.split():
+        if git_blob_sha256(root, commit, path) == frozen_sha256:
+            if newer is None:
+                return commit
+            parents = _git(root, "rev-list", "--parents", "-n", "1", newer)
+            if isinstance(parents, str):
+                for parent in parents.split()[1:]:
+                    if git_blob_sha256(root, parent, path) == frozen_sha256:
+                        return parent
+            return commit
+        newer = commit
+    return None
 
 
 def git_is_ancestor(root: Path, ref: str, of: str = "HEAD") -> bool | None:
@@ -597,6 +637,7 @@ def evaluate(
             )
         else:
             current = disk == binding.sha256
+        last_ref: str | None = None
         if current:
             status = STATUS_CURRENT
             if entry is not None:
@@ -604,10 +645,17 @@ def evaluate(
                     f"{binding.packet_id} {binding.binding}: ledger entry "
                     f"{entry['entry_id']} is dormant (HEAD equals the frozen bytes again)"
                 )
-        elif entry is not None and binding.kind not in NON_LEDGERABLE_KINDS:
-            status = STATUS_HISTORICAL
-        else:
+        elif binding.kind in NON_LEDGERABLE_KINDS:
             status = STATUS_UNRECORDED
+        elif entry is not None:
+            status = STATUS_HISTORICAL
+            last_ref = str(entry["last_current_ref"])
+        else:
+            # ADR 027: ordinary source evolution owes no ledger entry; the
+            # historical coordinate is derived from git.  Only frozen bytes that
+            # no reachable commit carries stay unrecorded (not verifiable).
+            last_ref = git_last_current_ref(root, binding.path, binding.sha256)
+            status = STATUS_HISTORICAL if last_ref is not None else STATUS_UNRECORDED
         report.bindings.append(
             BindingStatus(
                 binding=binding,
@@ -616,6 +664,7 @@ def evaluate(
                 entry_id=str(entry["entry_id"])
                 if entry is not None and status != STATUS_CURRENT
                 else None,
+                last_current_ref=last_ref,
             )
         )
 
@@ -635,13 +684,19 @@ def evaluate(
             else:
                 report.errors.append(
                     f"{b.packet_id} {b.binding}: {b.path} {what}, frozen {b.sha256}; "
-                    f"unrecorded drift -- append a ledger entry ({LEDGER_REL}) in the "
-                    f"same PR, see {POLICY_REL} §5"
+                    "unrecorded drift -- no commit reachable from HEAD carries the "
+                    "frozen bytes, so the historical coordinate is not verifiable "
+                    f"(shallow clone, or rewritten history); see {GATE_POLICY_REL}"
                 )
         elif item.status == STATUS_HISTORICAL:
+            source = (
+                f"entry {item.entry_id}"
+                if item.entry_id is not None
+                else f"derived from git at {item.last_current_ref}"
+            )
             line = (
                 f"{b.packet_id} {b.binding}: {b.path} is historical "
-                f"(entry {item.entry_id}); packet conclusions describe the frozen "
+                f"({source}); packet conclusions describe the frozen "
                 "coordinate, not HEAD"
             )
             if mode == "attested" and (packet is None or b.packet_id == packet):
@@ -681,11 +736,54 @@ def attested_consumer_requested(environ: Mapping[str, str] | None = None) -> boo
 # ------------------------------------------------------------------------- replay
 
 
+def packet_replay_ref(packet_id: str, root: Path = ROOT) -> str:
+    """The coordinate at which *packet_id* was last current.
+
+    HEAD when every binding is current; otherwise the newest of its historical
+    bindings' ``last_current_ref`` values (recorded or derived from git) that
+    still carries every one of the packet's frozen bytes -- paths drifted in
+    different commits yield different per-path refs.
+    """
+    report = evaluate(root, mode="development")
+    items = [i for i in report.bindings if i.binding.packet_id == packet_id]
+    if not items:
+        raise FrozenSourceError(f"packet {packet_id!r} has no bindings")
+    if any(i.status == STATUS_UNRECORDED for i in items):
+        raise FrozenSourceError(
+            f"packet {packet_id!r} has unrecorded drift; no verifiable coordinate"
+        )
+    refs = {i.last_current_ref for i in items if i.status == STATUS_HISTORICAL}
+    if not refs:
+        if report.head is None:
+            raise FrozenSourceError("HEAD does not resolve; pass --at <commit>")
+        return report.head
+    # Paths drifted in different commits yield different per-path refs; the
+    # packet was last current at the newest candidate that still carries *all*
+    # of its frozen bytes.
+    whole = [
+        str(r)
+        for r in refs
+        if all(
+            git_blob_sha256(root, str(r), i.binding.path) == i.binding.sha256
+            for i in items
+            if i.binding.kind != KIND_OWNER_DECLARATION
+        )
+    ]
+    newest = [
+        r for r in whole if all(git_is_ancestor(root, o, r) for o in whole if o != r)
+    ]
+    if len(newest) != 1:
+        raise FrozenSourceError(
+            f"packet {packet_id!r} has no single coordinate carrying all of its "
+            f"frozen bytes among {sorted(str(r) for r in refs)}; pass --at"
+        )
+    return newest[0]
+
+
 def replay_packet(packet_id: str, root: Path = ROOT, ref: str | None = None) -> int:
     """Run a packet's pinned targeted tests in a detached worktree at *ref*.
 
-    *ref* defaults to the ``last_current_ref`` recorded for that packet (any of
-    its historical entries; they must agree).  Returns the pytest exit code.
+    *ref* defaults to :func:`packet_replay_ref`.  Returns the pytest exit code.
     """
     targeted = packet_targeted_tests(root).get(packet_id)
     if targeted is None:
@@ -693,21 +791,7 @@ def replay_packet(packet_id: str, root: Path = ROOT, ref: str | None = None) -> 
             f"packet {packet_id!r} has no tooling:targeted_tests binding"
         )
     if ref is None:
-        ledger = load_ledger(root / LEDGER_REL)
-        refs = {
-            str(e["last_current_ref"])
-            for e in ledger.get("entries") or []
-            if any(b.get("packet_id") == packet_id for b in e.get("bound_by") or [])
-        }
-        if not refs:
-            raise FrozenSourceError(
-                f"packet {packet_id!r} has no ledger entry; pass --at <commit>"
-            )
-        if len(refs) > 1:
-            raise FrozenSourceError(
-                f"packet {packet_id!r} has entries at several refs {sorted(refs)}; pass --at"
-            )
-        ref = refs.pop()
+        ref = packet_replay_ref(packet_id, root)
     worktree = Path(tempfile.mkdtemp(prefix="frozen-replay-"))
     try:
         proc = subprocess.run(
@@ -795,7 +879,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="run PACKET_ID's pinned targeted tests in a worktree at its last_current_ref",
     )
     parser.add_argument(
-        "--at", metavar="COMMIT", help="commit for --replay (default: ledger)"
+        "--at",
+        metavar="COMMIT",
+        help="commit for --replay (default: where the packet was last current)",
     )
     args = parser.parse_args(argv)
 

@@ -28,6 +28,7 @@ PACKET = (
 )
 sys.path.insert(0, TOOLS.as_posix())
 
+import frozen_source_status as frozen  # noqa: E402
 from gctm_d1 import (  # noqa: E402
     ALLOWED_TERMINALS,
     DIAGNOSTIC_ID,
@@ -295,7 +296,56 @@ def test_select_terminal_three_way_paths() -> None:
         assert terminal in ALLOWED_TERMINALS
 
 
+def _drifted_sealed_inputs(root: Path = ROOT) -> list[str]:
+    """Documents the sealed emit hashed whose HEAD bytes have since moved.
+
+    A deleted or renamed document is drift too, never an error (ADR 027).
+    """
+    identities = json.loads((PACKET / "identities.json").read_text(encoding="utf-8"))
+    pinned = {
+        identities["gctm_theory_path"]: identities["gctm_theory_sha256"],
+        identities["gctm_lemmas_path"]: identities["gctm_lemmas_sha256"],
+        "docs/research/contracts/score_ranking_evidence_contract.md": identities[
+            "score_contract_sha256"
+        ],
+    }
+
+    def live(path: str) -> str | None:
+        try:
+            return hashlib.sha256((root / path).read_bytes()).hexdigest()
+        except OSError:
+            return None
+
+    return sorted(path for path, sha in pinned.items() if live(path) != sha)
+
+
+def test_a_missing_sealed_input_counts_as_drift_not_an_error(tmp_path: Path) -> None:
+    identities = json.loads((PACKET / "identities.json").read_text(encoding="utf-8"))
+    paths = [
+        identities["gctm_theory_path"],
+        identities["gctm_lemmas_path"],
+        "docs/research/contracts/score_ranking_evidence_contract.md",
+    ]
+    for rel in paths:  # mirror HEAD, including anything already missing there
+        if (ROOT / rel).is_file():
+            (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+            (tmp_path / rel).write_bytes((ROOT / rel).read_bytes())
+    assert _drifted_sealed_inputs(tmp_path) == _drifted_sealed_inputs()
+    (tmp_path / identities["gctm_theory_path"]).unlink(missing_ok=True)
+    assert identities["gctm_theory_path"] in _drifted_sealed_inputs(tmp_path)
+
+
 def test_sealed_packet_is_bit_identical_to_fresh_emit(tmp_path: Path) -> None:
+    # A fresh emit hashes live documents, so this is a currency assertion
+    # (ADR 027): once those documents evolve it belongs to the attested arm.
+    # Sealed-artifact integrity stays covered by the fixture digest below and by
+    # the other tests in this file.
+    drifted = _drifted_sealed_inputs()
+    if drifted and not frozen.attested_consumer_requested():
+        pytest.skip(
+            f"GCTM D1 sealed inputs are historical at HEAD ({', '.join(drifted)}); "
+            f"ADR 027 currency assertion -- set {frozen.ATTESTED_ENV}=1 to run it"
+        )
     result = emit_packet(tmp_path)
     assert result["selected_terminal"] == "GCTM_D1_INTERFACE_READY"
     assert result["all_invariants_passed"] is True

@@ -59,6 +59,7 @@ Manifest: `docs/ownership/doc_migration_manifest.yaml`
 - `docs/decisions/024-eval-config-module-views.md`
 - `docs/decisions/025-native-extension-delivery.md`
 - `docs/decisions/026-frozen-input-source-evolution.md`
+- `docs/decisions/027-historical-checks-by-purpose.md`
 - `docs/decisions/README.md`
 - `docs/experiments/README.md`
 - `docs/experiments/occ_exit_audit_p55/README.md`
@@ -419,6 +420,6 @@ Excluded from the active index and default search view.
 
 ## Inventory summary
 
-- documents: 369
-- active: 314
+- documents: 370
+- active: 315
 - grayed out: 55

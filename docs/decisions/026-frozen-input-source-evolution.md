@@ -9,6 +9,11 @@
 
 **Accepted** (2026-09-20) — [issue #436](https://github.com/raylei50653/saccade/issues/436)
 
+> **Partially superseded by [ADR 027](027-historical-checks-by-purpose.md)** (2026-09-29, #493)：
+> §3.2 的 `historical` / `unrecorded_drift` 定義、§3.4 historicization 列、§4 development arm、
+> §5.1 整節。一般 source / tooling / document 演進不再需要 ledger entry，`historical` 座標改由
+> git 推導；ledger 只在 supersession 時必填。其餘條款原樣有效。
+
 **Terminal verdict: `historical_immutability_not_production_freeze`** — 一個 CLOSED
 research packet 以 `path + sha256` 凍結的是**它自己的 referent**（那組 bytes 的身分），
 不是 HEAD 上那個 path 的未來。packet 永遠不改、永遠可逐位元驗證；production source 可以

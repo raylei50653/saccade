@@ -1,15 +1,16 @@
-"""ADR 026: scope a CLOSED packet's pinned currency tests to the attested arm.
+"""ADR 026 / 027: scope a CLOSED packet's pinned currency tests to the attested arm.
 
 The H0/GCTM packets pin their own targeted test files by sha256, and those
 files compare the packets' frozen digests against the working tree.  That is a
 *currency* assertion ("HEAD still is the frozen coordinate"), not a historical
-one.  Once the supersession ledger records that a packet is historical for some
-path, the development arm skips that packet's targeted tests with the reason,
-and ``SACCADE_ATTESTED_CONSUMER=1`` runs them again (where they fail, correctly,
+one.  Once a packet is historical for some path (a ledger entry, or since ADR
+027 a coordinate derived from git), the development arm skips that packet's
+targeted tests with the reason, and ``SACCADE_ATTESTED_CONSUMER=1`` runs them
+again (where they fail, correctly,
 because the consumer is claiming currency).
 
-Unrecorded drift is never skipped: the pinned tests fail as before and
-``test_frozen_source_evolution_policy.py`` names the missing ledger entry.
+Unrecorded drift (packet artifacts, the H0 declaration, or frozen bytes no
+reachable commit carries) is never skipped: the pinned tests fail as before.
 """
 
 from __future__ import annotations

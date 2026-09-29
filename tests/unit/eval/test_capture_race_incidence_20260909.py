@@ -25,6 +25,7 @@ ROOT = Path(__file__).resolve().parents[3]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from scripts.tools import frozen_source_status as frozen  # noqa: E402
 from scripts.tools.capture_race_incidence_20260909 import (  # noqa: E402
     ANALYZER_REL,
     ANALYZER_SOURCE_SHA256,
@@ -83,6 +84,37 @@ HISTORICAL_SRC = (ROOT / "scripts" / "tools" / "capture_race_incidence.py").read
 def _sha(path: Path) -> str:
     with path.open("rb") as handle:
         return hashlib.file_digest(handle, "sha256").hexdigest()
+
+
+# The campaign is CLOSED and its preflight refuses a control tree whose analyzer
+# or observer differs from the §2.2 freeze, so this whole file asserts that the
+# live capture_attribution sources are still that coordinate. Once they evolve
+# it is a currency suite and belongs to the attested arm (ADR 027); replay it at
+# OBSERVER_CONTROL_COMMIT.
+def _drifted_control_sources(root: Path) -> list[str]:
+    """Frozen control sources whose live bytes moved; a deleted or renamed
+    source is drift too, never a collection error (ADR 027)."""
+    out = []
+    for rel, sha in (
+        (ANALYZER_REL, ANALYZER_SOURCE_SHA256),
+        (OBSERVER_CPP_REL, OBSERVER_CPP_SHA256),
+    ):
+        try:
+            live = _sha(root / rel)
+        except OSError:
+            live = None
+        if live != sha:
+            out.append(rel.as_posix())
+    return out
+
+
+_DRIFTED = _drifted_control_sources(ROOT)
+pytestmark = pytest.mark.skipif(
+    bool(_DRIFTED) and not frozen.attested_consumer_requested(),
+    reason=f"2026-09-09 campaign control sources are historical at HEAD "
+    f"({', '.join(_DRIFTED)}); ADR 027 currency suite -- set "
+    f"{frozen.ATTESTED_ENV}=1 or replay at {OBSERVER_CONTROL_COMMIT}",
+)
 
 
 def _complete(run_dir: Path, sequences) -> None:
@@ -1050,3 +1082,13 @@ def _scripted_executor(script):
         return record
 
     return executor, log
+
+
+def test_a_missing_control_source_counts_as_drift_not_an_error(tmp_path: Path) -> None:
+    for rel in (ANALYZER_REL, OBSERVER_CPP_REL):  # mirror HEAD
+        if (ROOT / rel).is_file():
+            (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+            (tmp_path / rel).write_bytes((ROOT / rel).read_bytes())
+    assert _drifted_control_sources(tmp_path) == _DRIFTED
+    (tmp_path / ANALYZER_REL).unlink(missing_ok=True)
+    assert _drifted_control_sources(tmp_path) == [ANALYZER_REL.as_posix()]
