@@ -64,7 +64,7 @@ legacy `native_960` presets (`speed` / `baseline`) remain useful for comparison,
 | Owner | Issue | Module TODO |
 |---|---|---|
 | resource / perf | ⏸️ 無 active（[#419](https://github.com/raylei50653/saccade/issues/419) closed 2026-09-20 → [closure ledger](reference/benchmarks/resource_419_closure_20260920.md)） | [resource](modules/resource/TODO.md) |
-| governance（tracker frozen substrate） | ⏸️ 無 active（[#436](https://github.com/raylei50653/saccade/issues/436) closed 2026-09-20 → [ADR 026](decisions/026-frozen-input-source-evolution.md)） | — |
+| governance（tracker frozen substrate） | ⏸️ 無 active（[#436](https://github.com/raylei50653/saccade/issues/436) closed 2026-09-20 → [ADR 026](decisions/026-frozen-input-source-evolution.md)；#493 → [ADR 027](decisions/027-historical-checks-by-purpose.md)） | — |
 | training lineage | ⏸️ 無 active（[#421](https://github.com/raylei50653/saccade/issues/421) closed 2026-09-20） | — |
 | semantic | ⏸️ 無 active（[#442](https://github.com/raylei50653/saccade/issues/442) resolved 2026-09-20: OWDL sealed at `311c2225`, parked） | [semantic](modules/semantic/TODO.md) |
 

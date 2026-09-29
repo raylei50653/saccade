@@ -1,18 +1,21 @@
-"""ADR 026: frozen inputs of CLOSED packets -- historical immutability vs HEAD.
+"""ADR 026 + 027: frozen inputs of CLOSED packets -- historical immutability vs HEAD.
 
-Live-tree assertions are the always-on gate: no frozen input of any CLOSED
-packet may drift from its digest without a supersession-ledger entry, and the
-ledger itself must validate.  The scenario tests run in a detached worktree at
-HEAD so they can mutate ``tracker_gpu.hpp`` (the #434 collision file) and the
-ledger without touching the checkout:
+Live-tree assertions are the always-on gate: packet artifacts and the H0
+owner-event declaration never drift, every frozen digest stays recoverable from
+git, and the ledger validates.  Ordinary source / tooling / document evolution
+owes no ledger entry (ADR 027): the binding becomes ``historical`` at a
+coordinate derived from git.  The scenario tests run in a detached worktree at
+``ANCHOR`` (a commit where every binding is current) so they can mutate
+``tracker_gpu.hpp`` (the #434 collision file) and the ledger without touching
+the checkout:
 
-* drift with no entry is ``unrecorded_drift`` on both arms;
-* a valid historicization entry makes the packet ``historical`` -- development
-  passes with a warning, attested fails, and the packet's pinned targeted tests
-  are the ones scoped out of the development arm;
-* an entry that lists the wrong packets, points at a ref whose blob does not
-  hash to the frozen digest, or names a packet artifact, is refused, and the
-  drift it was meant to cover falls back to ``unrecorded_drift``;
+* drift with no entry is ``historical`` (derived) -- development passes with a
+  warning, attested fails, and the packet's pinned targeted tests are the ones
+  scoped out of the development arm;
+* frozen bytes no reachable commit carries, and any packet-artifact or owner
+  declaration drift, stay ``unrecorded_drift`` on both arms;
+* a recorded entry that lists the wrong packets, points at a ref whose blob does
+  not hash to the frozen digest, or names a packet artifact, is refused;
 * supersession needs a successor packet that re-freezes the evolved bytes and
   declares ``supersedes`` under the same owner acceptance id.
 """
@@ -49,6 +52,9 @@ HPP = "include/tracking/tracker_gpu.hpp"
 CU = "src/tracking/tracker_gpu.cu"
 STATIC_PACKET = "h0_gctm_interface_static_feasibility_20260723"
 UNIVERSE_PACKET = "gctm_runtime_native_candidate_universe_20260724"
+# main at the ADR 027 cut: every binding is current here, so the scenarios keep
+# their baseline however far HEAD's sources evolve later.
+ANCHOR = "8415b4ac3234337da1f9e2af53a21bd301a32b2f"
 
 
 def _sha(path: Path) -> str:
@@ -150,7 +156,7 @@ def test_attested_consumer_switch_parsing() -> None:
 
 @pytest.fixture(scope="module")
 def worktree(tmp_path_factory: pytest.TempPathFactory):
-    """Detached worktree at HEAD with the live ledger/schema copied in.
+    """Detached worktree at ``ANCHOR`` with the live ledger/schema copied in.
 
     Scenario tests mutate files here; ``scenario`` resets them between tests.
     """
@@ -165,7 +171,7 @@ def worktree(tmp_path_factory: pytest.TempPathFactory):
             "add",
             "--detach",
             target.as_posix(),
-            "HEAD",
+            ANCHOR,
         ],
         check=True,
         capture_output=True,
@@ -312,15 +318,65 @@ def test_worktree_baseline_is_all_current(scenario: Scenario) -> None:
     assert {i.status for i in report.bindings} == {frozen.STATUS_CURRENT}
 
 
-def test_drift_without_entry_is_unrecorded_on_both_arms(scenario: Scenario) -> None:
+def test_source_drift_without_entry_is_derived_historical(scenario: Scenario) -> None:
+    """ADR 027 acceptance: a tracker edit owes no ledger entry."""
     scenario.drift()
+    dev = scenario.evaluate("development")
+    assert dev.ok, dev.errors
+    assert scenario.statuses(dev) == {frozen.STATUS_HISTORICAL}
+    items = [i for i in dev.bindings if i.binding.path == HPP]
+    assert {i.last_current_ref for i in items} == {scenario.head}
+    assert {i.entry_id for i in items} == {None}
+    assert len([w for w in dev.warnings if "derived from git" in w]) == 2
+    assert set(frozen.targeted_tests_to_skip(dev, scenario.root)) == {
+        "tests/contract/test_h0_gctm_static_feasibility_v1.py",
+        "tests/contract/test_gctm_runtime_universe_v1.py",
+    }
+    # Claiming the packets describe HEAD is still refused.
+    attested = scenario.evaluate("attested")
+    assert not attested.ok
+    assert all("is historical" in e for e in attested.errors), attested.errors
+
+
+def test_frozen_bytes_absent_from_history_stay_unrecorded(scenario: Scenario) -> None:
+    """A digest no reachable commit carries cannot be a historical coordinate."""
+    scenario.write_successor(
+        "scenario_unverifiable", "", supersedes=None, pin_sha="e" * 64
+    )
     for mode in ("development", "attested"):
         report = scenario.evaluate(mode)
         assert not report.ok
-        assert scenario.statuses(report) == {frozen.STATUS_UNRECORDED}
-        assert sum("unrecorded drift" in e for e in report.errors) == 2, report.errors
-        assert all(frozen.POLICY_REL in e for e in report.errors if "unrecorded" in e)
-        assert frozen.targeted_tests_to_skip(report, scenario.root) == {}
+        bad = [
+            i
+            for i in report.bindings
+            if i.binding.packet_id == "scenario_unverifiable" and i.binding.path == HPP
+        ]
+        assert [i.status for i in bad] == [frozen.STATUS_UNRECORDED]
+        assert any("not verifiable" in e for e in report.errors), report.errors
+
+
+def test_packet_artifact_drift_fails_without_any_entry(scenario: Scenario) -> None:
+    """ADR 027 acceptance: editing sealed evidence is never silent."""
+    artifact = f"{frozen.EVIDENCE_REL}/{STATIC_PACKET}/terminal_report.json"
+    scenario.drift(artifact, b"\n")
+    for mode in ("development", "attested"):
+        report = scenario.evaluate(mode)
+        assert not report.ok
+        assert scenario.statuses(report, artifact) == {frozen.STATUS_UNRECORDED}
+        assert any("immutable" in e for e in report.errors)
+
+
+def test_owner_declaration_drift_fails_without_any_entry(scenario: Scenario) -> None:
+    decl = frozen.decl_id.H0_CAPTURE_DECLARATION_RELPATH
+    target = scenario.root / decl
+    original = target.read_bytes()
+    try:
+        target.write_bytes(b"rewritten\n" + original)
+        report = scenario.evaluate()
+        assert not report.ok
+        assert scenario.statuses(report, decl) == {frozen.STATUS_UNRECORDED}
+    finally:
+        target.write_bytes(original)
 
 
 def test_historicization_entry_makes_packet_historical_not_broken(
@@ -374,7 +430,6 @@ def test_entry_must_list_every_packet_pinning_the_digest(scenario: Scenario) -> 
     report = scenario.evaluate()
     assert not report.ok
     assert any("bound_by must list exactly" in e for e in report.errors)
-    assert scenario.statuses(report) == {frozen.STATUS_UNRECORDED}
 
 
 def test_entry_ref_must_carry_the_frozen_bytes(scenario: Scenario) -> None:
@@ -384,7 +439,6 @@ def test_entry_ref_must_carry_the_frozen_bytes(scenario: Scenario) -> None:
     report = scenario.evaluate()
     assert not report.ok
     assert any("not the frozen" in e for e in report.errors), report.errors
-    assert scenario.statuses(report) == {frozen.STATUS_UNRECORDED}
 
 
 def test_entry_ref_must_be_an_ancestor_of_head(scenario: Scenario) -> None:
@@ -588,10 +642,20 @@ def test_scoped_attestation_of_an_unknown_packet_fails_closed(
 
 def test_scoped_attestation_still_fails_on_unrecorded_drift(scenario: Scenario) -> None:
     successor = _complete_successor(scenario)
-    scenario.drift(CU)  # second frozen path moves without an entry
+    # an old packet's sealed artifact moves: repo integrity does not scope
+    scenario.drift(f"{frozen.EVIDENCE_REL}/{STATIC_PACKET}/terminal_report.json", b"\n")
     report = frozen.evaluate(scenario.root, mode="attested", packet=successor)
     assert not report.ok
-    assert any("unrecorded drift" in e for e in report.errors)
+    assert any("immutable" in e for e in report.errors)
+
+
+def test_scoped_attestation_tolerates_derived_historical_siblings(
+    scenario: Scenario,
+) -> None:
+    successor = _complete_successor(scenario)
+    scenario.drift(CU)  # a path the successor does not bind moves without an entry
+    report = frozen.evaluate(scenario.root, mode="attested", packet=successor)
+    assert report.ok, report.errors
 
 
 def test_packet_scoping_requires_attested_mode() -> None:
@@ -652,8 +716,10 @@ def test_missing_ledger_is_a_deleted_guard(scenario: Scenario) -> None:
 
 def test_replay_runs_a_packet_suite_at_a_frozen_coordinate() -> None:
     """The strongest historical check: the packet still passes its own pinned tests
-    at the coordinate where it was current.  HEAD is such a coordinate today."""
-    head = _git(_REPO, "rev-parse", "HEAD")
+    at the coordinate where it was last current (HEAD while it is current,
+    otherwise the recorded or git-derived ``last_current_ref``)."""
+    ref = frozen.packet_replay_ref(UNIVERSE_PACKET, _REPO)
+    assert frozen.git_is_ancestor(_REPO, ref) is True
     env = dict(os.environ)
     env.pop(frozen.ATTESTED_ENV, None)
     proc = subprocess.run(
@@ -662,8 +728,6 @@ def test_replay_runs_a_packet_suite_at_a_frozen_coordinate() -> None:
             (_TOOLS / "frozen_source_status.py").as_posix(),
             "--replay",
             UNIVERSE_PACKET,
-            "--at",
-            head,
         ],
         capture_output=True,
         text=True,

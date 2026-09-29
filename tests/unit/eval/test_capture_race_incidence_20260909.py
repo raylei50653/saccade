@@ -25,6 +25,7 @@ ROOT = Path(__file__).resolve().parents[3]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from scripts.tools import frozen_source_status as frozen  # noqa: E402
 from scripts.tools.capture_race_incidence_20260909 import (  # noqa: E402
     ANALYZER_REL,
     ANALYZER_SOURCE_SHA256,
@@ -83,6 +84,27 @@ HISTORICAL_SRC = (ROOT / "scripts" / "tools" / "capture_race_incidence.py").read
 def _sha(path: Path) -> str:
     with path.open("rb") as handle:
         return hashlib.file_digest(handle, "sha256").hexdigest()
+
+
+# The campaign is CLOSED and its preflight refuses a control tree whose analyzer
+# or observer differs from the §2.2 freeze, so this whole file asserts that the
+# live capture_attribution sources are still that coordinate. Once they evolve
+# it is a currency suite and belongs to the attested arm (ADR 027); replay it at
+# OBSERVER_CONTROL_COMMIT.
+_DRIFTED = [
+    rel.as_posix()
+    for rel, sha in (
+        (ANALYZER_REL, ANALYZER_SOURCE_SHA256),
+        (OBSERVER_CPP_REL, OBSERVER_CPP_SHA256),
+    )
+    if _sha(ROOT / rel) != sha
+]
+pytestmark = pytest.mark.skipif(
+    bool(_DRIFTED) and not frozen.attested_consumer_requested(),
+    reason=f"2026-09-09 campaign control sources are historical at HEAD "
+    f"({', '.join(_DRIFTED)}); ADR 027 currency suite -- set "
+    f"{frozen.ATTESTED_ENV}=1 or replay at {OBSERVER_CONTROL_COMMIT}",
+)
 
 
 def _complete(run_dir: Path, sequences) -> None:
