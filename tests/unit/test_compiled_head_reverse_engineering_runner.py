@@ -577,8 +577,47 @@ def test_anchor_reads_the_pinned_pr2l_rows():
     assert sum(sum(h["score_hist"][1:]) for h in hists.values()) == 578847912
 
 
+def _ev(arm, code, backend, tag="g"):
+    kinds = {k: f"{tag}-{k}" for k in R.BACKEND_KINDS[backend]}
+    return {"arm": arm, "code": code, "kinds": kinds}
+
+
+def _raw(ids, compiled_during=False, unshimmed=0):
+    return {
+        "executed_ids": ids,
+        "compiled_during_hit_pass": compiled_during,
+        "unshimmed_calls": unshimmed,
+    }
+
+
+def _ok_provenance(arm, prefix=""):
+    """Every compiled call of the arm hits one own graph per compiled scope."""
+    events, ids = {}, []
+    for scope, n in (
+        ("head", R.EXPECTED_HEAD_SITES),
+        ("block", sum(R.EXPECTED_BLOCK_LAYOUT)),
+    ):
+        backend = R.ARM_SPECS[arm][scope]
+        if backend is None:
+            continue
+        cid = f"{prefix}{scope}/0"
+        events[cid] = _ev(arm, R.COMPILED_CODES[scope], backend, f"{arm}{scope}")
+        ids += [cid] * n
+    return R.finalize_provenance(events, {arm: _raw(ids)})
+
+
+def _shared_ok():
+    events, arms = {}, {}
+    for arm in R.ARM_ORDER:
+        p = _ok_provenance(arm, prefix=f"{arm}:")
+        events.update(p["events"])
+        arms.update(p["arms"])
+    return {"events": events, "arms": arms}
+
+
 def _r0_ok(arm):
     return {
+        "provenance": _ok_provenance(arm),
         "arm": arm,
         "repeat_identical": True,
         "output_sha256": "s" + arm,
@@ -622,6 +661,7 @@ def _r1_ok(frames=10):
         "policy": dict(R.POLICY),
         "driver_runtime": {},
         "artifact_problems": [],
+        "provenance": _shared_ok(),
     }
 
 
@@ -668,3 +708,172 @@ def test_op_inventory_reads_both_graph_levels():
     inv = R.op_inventory(log)
     assert inv["fx"] == {"torch.conv2d": 1, "torch.nn.functional.silu": 1}
     assert inv["ops"] == {"aten.convolution": 1, "saccade.selective_scan_fwd": 1}
+
+
+# --- (f) graph-construction identity (§4 code identity, §7 fail closed) ------
+
+HEAD_CODE = R.COMPILED_CODES["head"]
+BLOCK_CODE = R.COMPILED_CODES["block"]
+
+
+def _iso_c_h(tag="g"):
+    """C_H isolated: a static and a dynamic compile per head Sequential kind;
+    its 6 calls hit the two dynamic graphs (cls, reg)."""
+    events = {
+        "1/0": _ev("C_H", HEAD_CODE, "inductor", tag + "cls-static"),
+        "1/1": _ev("C_H", HEAD_CODE, "inductor", tag + "cls-dyn"),
+        "1/2": _ev("C_H", HEAD_CODE, "inductor", tag + "reg-static"),
+        "1/3": _ev("C_H", HEAD_CODE, "inductor", tag + "reg-dyn"),
+    }
+    return R.finalize_provenance(events, {"C_H": _raw(["1/1"] * 3 + ["1/3"] * 3)})
+
+
+def _shared_c_h_reusing_c(tag="g"):
+    """R1: C compiled the head graphs; C_H compiles nothing and reuses them."""
+    events = {
+        "1/0": _ev("C", HEAD_CODE, "inductor", tag + "cls-static"),
+        "1/1": _ev("C", HEAD_CODE, "inductor", tag + "cls-dyn"),
+        "1/2": _ev("C", HEAD_CODE, "inductor", tag + "reg-static"),
+        "1/3": _ev("C", HEAD_CODE, "inductor", tag + "reg-dyn"),
+    }
+    return R.finalize_provenance(events, {"C_H": _raw(["1/1"] * 3 + ["1/3"] * 3)})
+
+
+def test_normalize_payload_drops_process_identity_only():
+    text = (
+        "# AOT ID: ['3_inference']\n"
+        "path /tmp/pk/cache/r1/inductor/ab/cab.py\n"
+        "__compiled_fn_12_4e631ec6_6186_4dad_90e9_ac16ebedd23c(x)\n"
+        "obj at 0x7f00deadbeef\n"
+        "triton_poi_fused_silu_0"
+    )
+    out = R.normalize_payload(text, ["/tmp/pk/cache/r1/inductor"])
+    assert "AOT ID" not in out and "<CACHE>/ab/cab.py" in out
+    assert "__compiled_fn(x)" in out and "0x7f" not in out
+    assert "triton_poi_fused_silu_0" in out  # kernel identity kept
+
+
+def test_fingerprint_covers_code_and_every_kind():
+    base = _ev("C", HEAD_CODE, "inductor")
+    fp = R.event_fingerprint(base)
+    assert R.event_fingerprint({**base, "arm": "D_H"}) == fp  # arm is not identity
+    assert R.event_fingerprint({**base, "code": BLOCK_CODE}) != fp
+    for k in R.PROVENANCE_KINDS:
+        other = {**base, "kinds": {**base["kinds"], k: "changed"}}
+        assert R.event_fingerprint(other) != fp
+
+
+def test_post_grad_graph_is_recorded_not_fingerprinted():
+    assert "inductor_post_grad_graph" not in R.PROVENANCE_KINDS
+    assert R.RECORDED_KINDS == ("inductor_post_grad_graph",)
+    base = _ev("C", HEAD_CODE, "inductor")
+    assert R.event_fingerprint({**base, "recorded": {"x": "y"}}) == R.event_fingerprint(
+        base
+    )
+
+
+def test_finalize_attributes_reuse():
+    a = _shared_c_h_reusing_c()["arms"]["C_H"]
+    assert a["own"] == [] and a["reused_from"] == ["C"]
+    assert {x["compiled_by"] for x in a["executed"]} == {"C"}
+    unknown = R.finalize_provenance({}, {"C_H": _raw([None, "9/9"])})
+    assert [x["fingerprint"] for x in unknown["arms"]["C_H"]["executed"]] == [
+        None,
+        None,
+    ]
+
+
+@pytest.mark.parametrize(
+    "arm,code,backend,ok",
+    [
+        ("C_H", HEAD_CODE, "inductor", True),
+        ("D_H", HEAD_CODE, "eager", True),
+        ("A_B", BLOCK_CODE, "aot_eager_decomp_partition", True),
+        ("D_H", HEAD_CODE, "inductor", False),  # hit C's inductor graph
+        ("A_H", HEAD_CODE, "eager", False),
+        ("C_H", BLOCK_CODE, "inductor", False),  # block compiled, block is eager
+        ("C", {"file": "x.py", "name": "f"}, "inductor", False),
+    ],
+)
+def test_backend_problems(arm, code, backend, ok):
+    assert (R.backend_problems(arm, _ev(arm, code, backend)) == []) is ok
+
+
+def test_provenance_reuse_of_the_same_graphs_passes():
+    assert R.provenance_problems("C_H", _iso_c_h()) == []
+    assert R.provenance_problems("C_H", _iso_c_h(), _shared_c_h_reusing_c()) == []
+
+
+def test_provenance_rejects_different_graphs_behind_equal_outputs():
+    """Review P1 regression: same output hash, different executed graph."""
+    problems = R.provenance_problems("C_H", _iso_c_h(), _shared_c_h_reusing_c("other"))
+    assert any("R1 executed graphs != isolated R0 graphs" in p for p in problems)
+    assert any("reused_from ['C']" in p for p in problems)
+
+
+def test_r1_problems_rejects_graph_mismatch_even_with_equal_output_hash():
+    r0 = {a: _r0_ok(a) for a in R.ARM_ORDER}
+    r0["C_H"]["provenance"] = _iso_c_h()
+    rec = _r1_ok()
+    rec["provenance"]["events"].update(_shared_c_h_reusing_c()["events"])
+    rec["provenance"]["arms"]["C_H"] = _shared_c_h_reusing_c()["arms"]["C_H"]
+    assert rec["synthetic_sha256"]["C_H"] == r0["C_H"]["output_sha256"]
+    assert [p for p in R.r1_problems(rec, r0, 10) if "graph identity C_H" in p] == []
+    other = _shared_c_h_reusing_c("other")
+    rec["provenance"]["events"].update(other["events"])
+    rec["provenance"]["arms"]["C_H"] = other["arms"]["C_H"]
+    assert [p for p in R.r1_problems(rec, r0, 10) if "graph identity C_H" in p]
+
+
+@pytest.mark.parametrize(
+    "mutate,needle",
+    [
+        (lambda p: p["arms"]["C_H"]["executed"].pop(), "compiled calls != 6"),
+        (
+            lambda p: p["arms"]["C_H"]["executed"][0].update(fingerprint=None),
+            "not attributable",
+        ),
+        (
+            lambda p: p["arms"]["C_H"].update(compiled_during_hit_pass=True),
+            "attribution pass",
+        ),
+        (lambda p: p["arms"]["C_H"].update(unshimmed_calls=1), "not attributable"),
+        (
+            lambda p: p["events"]["1/1"].update(code={"file": "a.py", "name": "f"}),
+            "not a declared compiled code object",
+        ),
+    ],
+)
+def test_provenance_fails_closed(mutate, needle):
+    shared = _shared_c_h_reusing_c()
+    mutate(shared)
+    problems = R.provenance_problems("C_H", _iso_c_h(), shared)
+    assert any(needle in p for p in problems), problems
+
+
+def test_provenance_rejects_a_foreign_own_compile():
+    shared = _shared_c_h_reusing_c()
+    foreign = _ev("C_H", HEAD_CODE, "inductor", "foreign")
+    shared["events"]["1/9"] = {**foreign, "fingerprint": R.event_fingerprint(foreign)}
+    shared["arms"]["C_H"]["own"] = ["1/9"]
+    problems = R.provenance_problems("C_H", _iso_c_h(), shared)
+    assert any("R1 compiled graphs not in R0" in p for p in problems)
+
+
+def test_isolated_arm_must_execute_only_its_own_graphs():
+    iso = _iso_c_h()
+    iso["arms"]["C_H"]["executed"][0]["compiled_by"] = "C"
+    assert any("another arm's graph" in p for p in R.provenance_problems("C_H", iso))
+    iso = _iso_c_h()
+    iso["arms"]["C_H"]["own"] = ["1/0", "1/2"]  # the executed dynamic graphs missing
+    assert any("did not compile" in p for p in R.provenance_problems("C_H", iso))
+
+
+def test_eager_arm_has_no_compiled_calls():
+    empty = R.finalize_provenance({}, {"E": _raw([])})
+    assert R.provenance_problems("E", empty, empty) == []
+    assert (R.expected_calls("E"), R.expected_calls("C"), R.expected_calls("D_B")) == (
+        0,
+        9,
+        3,
+    )

@@ -6,9 +6,12 @@ checks that read no MOT17 frame; the formal run executes once. This check runs
 the real ``run_r0_child`` for every arm (isolated process, compile logging on,
 fresh compile cache) and the real ``run_r1_worker`` (all arms in one process)
 on generated sequences in a temporary data root, then applies the runner's own
-validity functions: ``r0_problems`` for every arm and ``r1_problems`` (stage
-identity R1 == isolated R0, no compile during the frames, repeat identity, no
-input mutation, finite outputs, wrap sites, policy, driver/runtime). It also
+validity functions: ``r0_problems`` for every arm and ``r1_problems`` (graph
+construction identity -- R1 executes the isolated R0 arm's graphs call by call,
+with cache reuse attributed -- stage identity R1 == isolated R0, no compile
+during the frames, repeat identity, no input mutation, finite outputs, wrap
+sites, policy, driver/runtime). It prints the per-arm provenance summary
+(compiled calls, distinct graphs, own compiles, ``reused_from``). It also
 checks that ``decide`` returns a declared scope result on the R1 record.
 
 It prints no head-comparison quantity and writes nothing under ``results/``;
@@ -129,6 +132,15 @@ def main() -> int:
         else:
             r1 = json.loads(r1_path.read_text())
             problems += runner.r1_problems(r1, r0, len(SYNTHETIC) * N_FRAMES)
+            prov = r1.get("provenance") or {}
+            for arm, a in (prov.get("arms") or {}).items():
+                fps = {x["fingerprint"] for x in a["executed"]}
+                print(
+                    f"[R1 provenance] {arm}: {len(a['executed'])} compiled calls, "
+                    f"{len(fps)} distinct graphs, own compiles {len(a['own'])}, "
+                    f"reused_from {a['reused_from']}",
+                    flush=True,
+                )
             if set(r1["anchor"]["rows"]) != {n for n, _, _ in SYNTHETIC} | {"ALL"}:
                 problems.append("R1 anchor rows do not cover every sequence + ALL")
             result = runner.decide(not problems, r1)

@@ -12,14 +12,21 @@ never a command-line option.
   any compile; any mismatch is ``UNRESOLVED``.
 * R0 (§4) -- one isolated child per arm on seeded synthetic backbone features
   (no MOT17 frame), with Dynamo/AOT/Inductor logging on: wrap sites, Dynamo
-  counters, graph/code logs, an operator inventory and the arm's output hash.
+  counters, graph/code logs, an operator inventory, the graph provenance
+  (compile fingerprints and the compile each call executes) and the arm's
+  output hash.
 * R1 (§4) -- one child builds all arms from deep copies of the same
   pre-compile head (``C``/``C_H``/``C_B`` through the head's own
   ``set_head_compile``/``set_block_compile``; ``D_s``/``A_s`` with the same
   per-module wrap loop and another backend), with no compile logging. Before
-  the first frame it replays the R0 synthetic input: every arm must reproduce
-  its isolated R0 output hash (stage identity), and the Dynamo counters must
-  not move during the frames (no recompile). It then feeds the PR-2L L1 frame
+  the first frame it runs the graph-construction gate: every compile is
+  fingerprinted from Dynamo's structured trace and every compiled call of
+  every arm is attributed to the compile it executes (``reused_from`` when
+  another arm compiled it); the executed graphs must equal the isolated R0
+  arm's, call by call, and come from the arm's declared backend. It then
+  replays the R0 synthetic input: every arm must reproduce its isolated R0
+  output hash (stage identity), and the Dynamo counters must not move during
+  the frames (no recompile). It then feeds the PR-2L L1 frame
   path's shared backbone features to every arm on all 5316 frames. The E,C
   pair is also accumulated with PR-2L's own formulas (V-anchor, exact).
 * Decision (§5) -- the §5.1 drift class, the §5.2 scope cut and the §5.3
@@ -183,6 +190,36 @@ POLICY = {
 CACHE_ENV = ("TORCHINDUCTOR_CACHE_DIR", "TRITON_CACHE_DIR")
 FORBIDDEN_ENV_PREFIXES = ("SACCADE_", "TORCH", "PYTORCH_", "TRITON_")
 RECOMPILE_LIMIT_MARKERS = ("recompile_limit", "cache_size_limit")
+# Graph-construction provenance (§4 "compile graph / code identity", §7
+# "fail closed on graph-construction ... mismatch"). Every compile is read from
+# Dynamo's structured trace (the ``torch.__trace`` logger, which emits whether
+# or not TORCH_TRACE is set) and fingerprinted by these artifacts. In torch
+# 2.11 a compiled head Sequential is traced through one shared code object
+# (``external_utils.inner``) and a compiled MambaBlock through
+# ``MambaBlock.forward``; the cache entries of those two code objects name the
+# ``__compiled_fn_*`` global each compile installed (in that code's module
+# globals), which is how an executed call is attributed to a compile id --
+# including one compiled by another arm (cache reuse).
+TRACE_LOGGER = "torch.__trace"
+PROVENANCE_KINDS = (
+    "dynamo_output_graph",
+    "aot_inference_graph",
+    "inductor_output_code",
+)
+# Recorded, not fingerprinted: Inductor emits its post-grad graph only on an
+# FX-graph-cache miss, so its presence reflects cache state, not the graph.
+RECORDED_KINDS = ("inductor_post_grad_graph",)
+COMPILED_CODES = {
+    "head": {"file": "torch/_dynamo/external_utils.py", "name": "inner"},
+    "block": {"file": MAMBA_HEAD_SOURCE, "name": "forward"},
+}
+COMPILED_FN_PREFIX = "__compiled_fn_"
+# The artifact kinds each declared backend produces for one compile.
+BACKEND_KINDS = {
+    "eager": ("dynamo_output_graph",),
+    "aot_eager_decomp_partition": ("dynamo_output_graph", "aot_inference_graph"),
+    "inductor": PROVENANCE_KINDS,
+}
 # Operator inventory from the R0 compile log: AOT/Inductor graphs name
 # ``torch.ops.<ns>.<op>``; Dynamo's FX graph code (the only graph an ``eager``
 # backend has) names the torch-level callables on ``[__graph_code]`` lines.
@@ -405,6 +442,155 @@ def anchor_problems(
     return problems
 
 
+def normalize_payload(text: str, cache_dirs: list[str]) -> str:
+    """Drop what differs between processes but not in what is compiled:
+    per-process cache directories, compiled-function serials/uuids, AOT ids
+    and object addresses."""
+    for d in cache_dirs:
+        if d:
+            text = text.replace(d, "<CACHE>")
+    text = re.sub(r"__compiled_fn_\d+_[0-9a-f_]+", "__compiled_fn", text)
+    text = re.sub(r"(?m)^.*# AOT ID:.*$", "", text)
+    return re.sub(r"0x[0-9a-fA-F]+", "0x", text)
+
+
+def event_fingerprint(event: dict[str, Any]) -> str:
+    """One compile: the compiled code object plus the hash of every artifact
+    kind it produced (which kinds exist also encodes the backend)."""
+    body = {"code": event.get("code"), "kinds": event.get("kinds") or {}}
+    return hashlib.sha256(json.dumps(body, sort_keys=True).encode()).hexdigest()
+
+
+def expected_calls(arm: str) -> int:
+    """Compiled-function calls one head forward makes for this arm."""
+    spec = ARM_SPECS[arm]
+    return (EXPECTED_HEAD_SITES if spec["head"] else 0) + (
+        sum(EXPECTED_BLOCK_LAYOUT) if spec["block"] else 0
+    )
+
+
+def finalize_provenance(
+    events: dict[str, dict[str, Any]], raw: dict[str, dict[str, Any]]
+) -> dict[str, Any]:
+    """Attach fingerprints and, per executed call, the compile id, its
+    fingerprint and the arm that compiled it (``reused_from`` when not this arm)."""
+    evs = {
+        cid: {**ev, "fingerprint": event_fingerprint(ev)} for cid, ev in events.items()
+    }
+    arms = {}
+    for arm, r in raw.items():
+        executed = []
+        for cid in r["executed_ids"]:
+            ev = evs.get(cid) if cid is not None else None
+            executed.append(
+                {
+                    "compile_id": cid,
+                    "fingerprint": ev["fingerprint"] if ev else None,
+                    "compiled_by": ev["arm"] if ev else None,
+                }
+            )
+        arms[arm] = {
+            "own": sorted(c for c, ev in evs.items() if ev["arm"] == arm),
+            "executed": executed,
+            "reused_from": sorted(
+                {
+                    x["compiled_by"]
+                    for x in executed
+                    if x["compiled_by"] not in (arm, None)
+                }
+            ),
+            "compiled_during_hit_pass": r["compiled_during_hit_pass"],
+            "unshimmed_calls": r.get("unshimmed_calls", 0),
+        }
+    return {"events": evs, "arms": arms}
+
+
+def backend_problems(arm: str, event: dict[str, Any]) -> list[str]:
+    """An executed compile must come from the arm's declared backend at the
+    scope of its code object (head Sequential or MambaBlock)."""
+    scope = next((s for s, c in COMPILED_CODES.items() if c == event.get("code")), None)
+    if scope is None:
+        return [f"compile of {event.get('code')} has no declared scope"]
+    backend = ARM_SPECS[arm][scope]
+    if backend is None:
+        return [f"executed a {scope} compile but the arm leaves {scope} eager"]
+    kinds = tuple(k for k in PROVENANCE_KINDS if k in (event.get("kinds") or {}))
+    if kinds != BACKEND_KINDS[backend]:
+        return [
+            f"{scope} compile has artifacts {kinds}, backend {backend} makes {BACKEND_KINDS[backend]}"
+        ]
+    return []
+
+
+def provenance_problems(
+    arm: str, iso: dict[str, Any] | None, shared: dict[str, Any] | None = None
+) -> list[str]:
+    """Graph-construction identity (§7). ``iso`` is the arm's isolated R0
+    provenance; with ``shared`` (R1), the graphs R1 actually executes for the
+    arm -- own or reused -- must be the isolated arm's graphs, call by call."""
+    problems: list[str] = []
+    records = [("R0", iso)] + ([("R1", shared)] if shared is not None else [])
+    for label, rec in records:
+        a = (rec or {}).get("arms", {}).get(arm)
+        if a is None:
+            problems.append(f"{label} {arm}: no provenance")
+            continue
+        for cid, ev in (rec or {}).get("events", {}).items():
+            if ev.get("code") not in COMPILED_CODES.values():
+                problems.append(
+                    f"{label}: compile {cid} of {ev.get('code')} is not a declared "
+                    f"compiled code object {list(COMPILED_CODES.values())}"
+                )
+        if len(a["executed"]) != expected_calls(arm):
+            problems.append(
+                f"{label} {arm}: {len(a['executed'])} compiled calls != {expected_calls(arm)}"
+            )
+        if a.get("compiled_during_hit_pass"):
+            problems.append(f"{label} {arm}: compiled during the attribution pass")
+        if a.get("unshimmed_calls"):
+            problems.append(f"{label} {arm}: compiled function not attributable")
+        events = (rec or {}).get("events", {})
+        for x in a["executed"]:
+            if x["fingerprint"] is None:
+                problems.append(
+                    f"{label} {arm}: executed call {x['compile_id']} not attributable to a compile"
+                )
+                continue
+            problems += [
+                f"{label} {arm}: {p}"
+                for p in backend_problems(arm, events[x["compile_id"]])
+            ]
+    if problems:
+        return problems
+    assert iso is not None
+    iso_a = iso["arms"][arm]
+    if any(x["compiled_by"] != arm for x in iso_a["executed"]):
+        problems.append(f"R0 {arm}: isolated arm executed another arm's graph")
+    iso_fps = [x["fingerprint"] for x in iso_a["executed"]]
+    # A site's first scale compiles a static graph and the next scale a
+    # dynamic one that serves every later call, so compiled ⊇ executed.
+    iso_compiled = {iso["events"][c]["fingerprint"] for c in iso_a["own"]}
+    if not set(iso_fps) <= iso_compiled:
+        problems.append(f"R0 {arm}: executed a graph it did not compile")
+    if shared is None:
+        return problems
+    sh_a = shared["arms"][arm]
+    sh_fps = [x["fingerprint"] for x in sh_a["executed"]]
+    if sh_fps != iso_fps:
+        problems.append(
+            f"graph identity {arm}: R1 executed graphs != isolated R0 graphs "
+            f"(reused_from {sh_a.get('reused_from')})"
+        )
+    foreign = [
+        c for c in sh_a["own"] if shared["events"][c]["fingerprint"] not in iso_compiled
+    ]
+    if foreign:
+        problems.append(
+            f"graph identity {arm}: R1 compiled graphs not in R0: {foreign}"
+        )
+    return problems
+
+
 def r0_problems(arm: str, r0: dict[str, Any] | None) -> list[str]:
     """R0 per-arm child: completed, repeatable, sites as expected, no limit hit."""
     if r0 is None:
@@ -421,6 +607,7 @@ def r0_problems(arm: str, r0: dict[str, Any] | None) -> list[str]:
         problems.append(f"R0 {arm}: Dynamo recompile limit reached")
     if r0.get("policy") != POLICY:
         problems.append(f"R0 {arm}: policy {r0.get('policy')} != {POLICY}")
+    problems += provenance_problems(arm, r0.get("provenance"))
     return problems
 
 
@@ -460,6 +647,9 @@ def r1_problems(
             f"R1 {arm}: {p}"
             for p in site_problems(arm, (r1.get("wrap_sites") or {}).get(arm))
         ]
+        problems += provenance_problems(
+            arm, (r0.get(arm) or {}).get("provenance"), r1.get("provenance")
+        )
     before, after = r1.get("dynamo_counters_before"), r1.get("dynamo_counters_after")
     if before is None or before != after:
         problems.append("Dynamo compiled during the frames (counters moved)")
@@ -863,6 +1053,159 @@ def _watch_limits() -> _LimitWatcher:
     return w
 
 
+def _code_relpath(path: Any) -> str | None:
+    """torch files relative to site-packages, repo files relative to the repo."""
+    if not isinstance(path, str):
+        return None
+    marker = "site-packages/"
+    if marker in path:
+        return path.split(marker, 1)[1]
+    try:
+        return str(Path(path).resolve().relative_to(project_root))
+    except ValueError:
+        return path
+
+
+class CompileTrace(logging.Handler):
+    """Collects every compile's artifacts from Dynamo's structured trace,
+    attributed to the arm being warmed up (observation only)."""
+
+    def __init__(self) -> None:
+        super().__init__(logging.DEBUG)
+        self.arm: str | None = None
+        self.events: dict[str, dict[str, Any]] = {}
+        self.cache_dirs = [os.environ.get(k, "") for k in CACHE_ENV]
+
+    def emit(self, record: logging.LogRecord) -> None:
+        md = getattr(record, "metadata", None)
+        if not isinstance(md, dict) or md.get("frame_id") is None:
+            return
+        cid = f"{md['frame_id']}/{md.get('frame_compile_id')}"
+        ev = self.events.setdefault(cid, {"arm": self.arm, "code": None, "kinds": {}})
+        for kind in PROVENANCE_KINDS + RECORDED_KINDS:
+            if kind in md:
+                payload = getattr(record, "payload", None) or ""
+                text = normalize_payload(str(payload), self.cache_dirs)
+                digest = hashlib.sha256(text.encode()).hexdigest()
+                if kind in PROVENANCE_KINDS:
+                    ev["kinds"][kind] = digest
+                else:
+                    ev.setdefault("recorded", {})[kind] = digest
+        cm = md.get("compilation_metrics")
+        if cm is not None:
+            get = cm.get if isinstance(cm, dict) else (lambda k: getattr(cm, k, None))
+            ev["code"] = {
+                "file": _code_relpath(get("co_filename")),
+                "name": get("co_name"),
+            }
+
+    def install(self) -> CompileTrace:
+        logging.getLogger(TRACE_LOGGER).addHandler(self)
+        return self
+
+    def remove(self) -> None:
+        logging.getLogger(TRACE_LOGGER).removeHandler(self)
+
+
+def compiled_code_objects() -> dict[str, Any]:
+    """The declared compiled code objects (COMPILED_CODES) by scope."""
+    import torch._dynamo.external_utils as eu
+
+    from saccade.perception.temporal_yolo.mamba_head import MambaBlock
+
+    return {
+        "head": eu.wrap_inline(lambda: None).__code__,
+        "block": MambaBlock.forward.__code__,
+    }
+
+
+def compiled_fn_ids() -> dict[str, str]:
+    """``__compiled_fn_*`` global name -> compile id, from the cache entries."""
+    from torch._dynamo.eval_frame import _debug_get_cache_entry_list
+
+    out: dict[str, str] = {}
+    for code in compiled_code_objects().values():
+        for entry in _debug_get_cache_entry_list(code):
+            for name in entry.code.co_names:
+                if name.startswith(COMPILED_FN_PREFIX):
+                    out[name] = str(entry.compile_id)
+    return out
+
+
+class HitRecorder:
+    """Temporarily wraps every installed ``__compiled_fn_*`` global so each
+    executed compiled call is recorded by name; restores them on exit. Used on
+    synthetic features only, before the first frame."""
+
+    def __init__(self) -> None:
+        # the module globals the transformed bytecode of each code object reads
+        self.spaces = [code_globals(code) for code in compiled_code_objects().values()]
+        self.hits: list[str] = []
+        self.saved: list[tuple[dict[str, Any], str, Any]] = []
+
+    def __enter__(self) -> HitRecorder:
+        for space in self.spaces:
+            for name, fn in list(space.items()):
+                if isinstance(name, str) and name.startswith(COMPILED_FN_PREFIX):
+                    self.saved.append((space, name, fn))
+                    space[name] = self._shim(name, fn)
+        return self
+
+    @property
+    def shimmed(self) -> set[str]:
+        return {name for _, name, _ in self.saved}
+
+    def _shim(self, name: str, fn: Any) -> Any:
+        import torch
+
+        hits = self.hits
+
+        def shim(*args: Any, **kwargs: Any) -> Any:
+            hits.append(name)
+            return fn(*args, **kwargs)
+
+        # Dynamo must not trace the recorder itself (it would compile it).
+        return torch._dynamo.disable(shim)
+
+    def __exit__(self, *exc: Any) -> None:
+        for space, name, fn in self.saved:
+            space[name] = fn
+        if not all(space[name] is fn for space, name, fn in self.saved):
+            raise RuntimeError("compiled functions not restored after attribution")
+
+
+def code_globals(code: Any) -> dict[str, Any]:
+    import torch._dynamo.external_utils as eu
+
+    from saccade.perception.temporal_yolo import mamba_head
+
+    for space in (eu.__dict__, mamba_head.__dict__):
+        if code.co_filename == space.get("__file__"):
+            return space
+    raise RuntimeError(f"no module globals for {code.co_filename}")
+
+
+def provenance_warmup(
+    torch: Any, head: Any, arm: str, trace: CompileTrace
+) -> dict[str, Any]:
+    """Pass 1 compiles what this arm triggers (attributed to it); pass 2
+    records which compiled graph every site call executes."""
+    feats = synthetic_features(torch)
+    trace.arm = arm
+    with torch.inference_mode():
+        run_head(head, [f.clone() for f in feats])
+        n_events = len(trace.events)
+        with HitRecorder() as rec:
+            run_head(head, [f.clone() for f in feats])
+    trace.arm = None
+    ids = compiled_fn_ids()
+    return {
+        "executed_ids": [ids.get(n) for n in rec.hits],
+        "compiled_during_hit_pass": len(trace.events) != n_events,
+        "unshimmed_calls": sum(1 for n in rec.hits if n not in rec.shimmed),
+    }
+
+
 # --------------------------------------------------------------------------
 # R0 child: one arm, isolated, synthetic features, compile logging on
 # --------------------------------------------------------------------------
@@ -878,7 +1221,11 @@ def run_r0_child(arm: str, out: Path) -> int:
         graph_breaks=True,
         recompiles=True,
     )
+    trace = CompileTrace().install()
     head, sites = build_arm(torch, base, arm)
+    raw = provenance_warmup(torch, head, arm, trace)
+    trace.remove()
+    provenance = finalize_provenance(trace.events, {arm: raw})
     with torch.inference_mode():
         sha, repeat_ok = synthetic_hash(torch, head)
     _write_json(
@@ -890,6 +1237,7 @@ def run_r0_child(arm: str, out: Path) -> int:
             "block_layout": list(layout),
             "output_sha256": sha,
             "repeat_identical": repeat_ok,
+            "provenance": provenance,
             "dynamo_counters": dynamo_counters(),
             "recompile_limit_hit": watcher.hit,
             "jit_fallback_calls": dict(guard_counts),
@@ -940,6 +1288,12 @@ def run_r1_worker(
     heads, sites = {}, {}
     for arm in ARM_ORDER:
         heads[arm], sites[arm] = build_arm(torch, base, arm)
+    # Graph-construction gate input, before the first frame: every arm's
+    # compiles and executed graphs, in ARM_ORDER (reuse attributed).
+    trace = CompileTrace().install()
+    raw = {arm: provenance_warmup(torch, heads[arm], arm, trace) for arm in ARM_ORDER}
+    trace.remove()
+    provenance = finalize_provenance(trace.events, raw)
     with torch.inference_mode():
         synthetic = {arm: synthetic_hash(torch, heads[arm])[0] for arm in ARM_ORDER}
     counters_before = dynamo_counters()
@@ -1148,6 +1502,7 @@ def run_r1_worker(
             "wrap_sites": sites,
             "block_layout": list(block_layout(base)),
             "synthetic_sha256": synthetic,
+            "provenance": provenance,
             "dynamo_counters_before": counters_before,
             "dynamo_counters_after": counters_after,
             "recompile_limit_hit": watcher.hit,
