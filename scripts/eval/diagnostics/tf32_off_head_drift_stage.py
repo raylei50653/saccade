@@ -14,10 +14,11 @@ For each r2 arm X in (R_T, R_E, H_M, H_V) against R_C, per sequence:
   with every pair at IoU >= ``IOU_MIN``; scores are ignored);
 * tracker output: the first bit divergence and the first structural divergence
   f* (different id multiset, or a same-id box pair below ``IOU_MIN``);
-* the entry label at f*: ``detection_set`` if ``tracker_input`` differs
-  structurally at f*, else ``association``.
+* the f* label: ``different`` if ``tracker_input`` differs structurally at
+  f*, else ``same``. It describes the tracker boundary at f* only, not where
+  the divergence entered (f* may follow earlier, re-converged input changes).
 
-The terminal is a rule over R_T's seven entry labels (declaration §4). Every
+The terminal is a rule over R_T's seven f* labels (declaration §4). Every
 other number is report-only, including the TF32-on/off comparison of the final
 txt layer of the PR-2 and PR-2R packets.
 
@@ -51,8 +52,8 @@ BINDING = StudyBinding(
     runner_file=__file__,
     freeze_tag=f"freeze/{STUDY_ID}/1",
     pinned_blobs={
-        f"docs/research/studies/{STUDY_ID}/study.yaml": "ff9749784e04e887229f75ed87240bdb38f20de1",
-        f"docs/research/studies/{STUDY_ID}/declaration.md": "63915840022fcfda5112c00cfd18ffede6ed8d9f",
+        f"docs/research/studies/{STUDY_ID}/study.yaml": "9cada86e05fbefcd390c99f8224663c653177ec2",
+        f"docs/research/studies/{STUDY_ID}/declaration.md": "1a56ea7a17fcc94bb705622d5210902c792e3eb8",
     },
 )
 
@@ -70,12 +71,12 @@ ARMS = ("R_T", "R_E", "H_M", "H_V")
 PRIMARY_ARM = "R_T"
 RUNS = (1, 2)
 PROBE_STAGES = ("detector_output", "post_nms", "tracker_input")
-ENTRY_STAGE = "tracker_input"
+FSTAR_STAGE = "tracker_input"
 IOU_MIN = 0.9
-MAJORITY = 5  # of 7 sequences
-TERMINAL_BY_ENTRY = {
-    "association": "ENTERS_AT_ASSOCIATION",
-    "detection_set": "ENTERS_AT_DETECTION_SET",
+SUPPORT_MIN = 5  # 5-of-7 support threshold (stronger than a 4/7 strict majority)
+TERMINAL_BY_LABEL = {
+    "same": "TRACKER_INPUT_SAME_AT_FSTAR",
+    "different": "TRACKER_INPUT_DIFFERENT_AT_FSTAR",
 }
 SPLIT = "SPLIT"
 # Validity criteria in the order they are evaluated (declaration §3).
@@ -174,19 +175,22 @@ def rows_bit_equal(a: np.ndarray, b: np.ndarray) -> bool:
 
 
 def rows_structurally_equal(a: np.ndarray, b: np.ndarray) -> bool:
-    """Same count and a one-to-one same-class pairing with every IoU >= IOU_MIN.
+    """Same count and a perfect matching over eligible pairs exists.
 
-    Rows are (x1, y1, x2, y2, score, class); the score is not compared. The
-    pairing maximises total IoU (Hungarian), class-mismatched pairs scoring 0.
+    Rows are (x1, y1, x2, y2, score, class); the score is not compared. A pair
+    is eligible when the classes match and IoU >= IOU_MIN; the question is
+    whether *some* one-to-one pairing uses only eligible pairs (declaration
+    §2), not whether the max-total-IoU pairing happens to.
     """
     if len(a) != len(b):
         return False
     if len(a) == 0:
         return True
-    iou = iou_matrix(a[:, :4], b[:, :4])
-    iou[a[:, None, 5] != b[None, :, 5]] = 0.0
-    r, c = linear_sum_assignment(-iou)
-    return bool(np.all(iou[r, c] >= IOU_MIN))
+    eligible = (a[:, None, 5] == b[None, :, 5]) & (
+        iou_matrix(a[:, :4], b[:, :4]) >= IOU_MIN
+    )
+    r, c = linear_sum_assignment((~eligible).astype(np.float64))
+    return bool(np.all(eligible[r, c]))
 
 
 def tracks_bit_equal(
@@ -249,14 +253,14 @@ def compare_sequence(
         "first_structural": f_star,
     }
     if f_star is None:
-        out["entry"] = None
+        out["label_at_f_star"] = None
         out["at_f_star"] = None
         return out
     at = {
         stage: not rows_structurally_equal(r[f_star], o[f_star])
         for stage, (r, o) in views.items()
     }
-    ti_ref, ti_oth = views[ENTRY_STAGE]
+    ti_ref, ti_oth = views[FSTAR_STAGE]
     out["at_f_star"] = {
         "structural_differs": at,
         "tracker_input_rows": [int(len(ti_ref[f_star])), int(len(ti_oth[f_star]))],
@@ -266,14 +270,14 @@ def compare_sequence(
             if not rows_structurally_equal(ti_ref[f], ti_oth[f])
         ),
     }
-    out["entry"] = "detection_set" if at[ENTRY_STAGE] else "association"
+    out["label_at_f_star"] = "different" if at[FSTAR_STAGE] else "same"
     return out
 
 
-def decide(entries: Mapping[str, str | None]) -> str:
-    """§4: a label held by >= MAJORITY of the seven sequences names the terminal."""
-    for label, terminal in TERMINAL_BY_ENTRY.items():
-        if sum(1 for e in entries.values() if e == label) >= MAJORITY:
+def decide(labels: Mapping[str, str | None]) -> str:
+    """§4: a label held by >= SUPPORT_MIN of the seven sequences names the terminal."""
+    for label, terminal in TERMINAL_BY_LABEL.items():
+        if sum(1 for e in labels.values() if e == label) >= SUPPORT_MIN:
             return terminal
     return SPLIT
 
@@ -361,20 +365,65 @@ def _check_format(label: str, ev: Mapping[str, np.ndarray]) -> None:
         raise Invalid("V_FORMAT", f"{label} tracker boxes are not finite xyxy")
 
 
-def _stage_comparisons(study: Any) -> dict[str, Any]:
-    evidence: dict[tuple[str, int, str], dict[str, np.ndarray]] = {}
+Evidence = dict[tuple[str, int, str], dict[str, np.ndarray]]
+TxtKey = tuple[str, str, str]  # (input, member dir, sequence)
+
+
+def _txt_keys() -> list[TxtKey]:
+    keys: list[TxtKey] = []
+    for _, ref, other in TXT_PAIRS:
+        for name, directory in (ref, other):
+            for seq in SEQUENCE_FRAMES:
+                if (name, directory, seq) not in keys:
+                    keys.append((name, directory, seq))
+    return keys
+
+
+def _load_inputs(study: Any) -> tuple[Evidence, dict[TxtKey, bytes]]:
+    """Phase V_COMPLETE: every declared member, for every input, before anything else."""
+    evidence: Evidence = {}
     for arm in (REF_ARM, *ARMS):
         for run in RUNS:
             for seq in SEQUENCE_FRAMES:
                 evidence[(arm, run, seq)] = _load_evidence(study, arm, run, seq)
+    raw_txt: dict[TxtKey, bytes] = {}
+    for name, directory, seq in _txt_keys():
+        member = f"{directory}/{seq}.txt"
+        try:
+            raw_txt[(name, directory, seq)] = study.read_input(name, member)
+        except Exception as exc:
+            raise Invalid("V_COMPLETE", f"{name}:{member}: {exc}") from exc
+    return evidence, raw_txt
+
+
+def _check_inputs(
+    evidence: Evidence, raw_txt: Mapping[TxtKey, bytes]
+) -> dict[TxtKey, Tracks]:
+    """Phase V_FORMAT: all probe stages, tracker output and txt, before any comparison."""
     for (arm, run, seq), ev in evidence.items():
         _check_format(f"{arm}_{run}/{seq}", ev)
         try:
-            stage_view(ev, ENTRY_STAGE, SEQUENCE_FRAMES[seq])
+            for stage in PROBE_STAGES:
+                stage_view(ev, stage, SEQUENCE_FRAMES[seq])
             tracker_view(ev, SEQUENCE_FRAMES[seq])
         except ValueError as exc:
             raise Invalid("V_FORMAT", f"{arm}_{run}/{seq}: {exc}") from exc
+    parsed: dict[TxtKey, Tracks] = {}
+    for (name, directory, seq), raw in raw_txt.items():
+        member = f"{name}:{directory}/{seq}.txt"
+        try:
+            tracks = parse_mot_txt(raw)
+        except ValueError as exc:
+            raise Invalid("V_FORMAT", f"{member}: {exc}") from exc
+        n = SEQUENCE_FRAMES[seq]
+        if any(f < 1 or f > n for f in tracks):
+            raise Invalid("V_FORMAT", f"{member}: frame outside 1..{n}")
+        parsed[(name, directory, seq)] = tracks
+    return parsed
 
+
+def _stage_comparisons(evidence: Evidence) -> dict[str, Any]:
+    """Phases V_REF_SELF then V_RUN_REPRO; returns run-1 comparisons per arm."""
     for seq, n in SEQUENCE_FRAMES.items():
         self_cmp = compare_sequence(
             evidence[(REF_ARM, 1, seq)], evidence[(REF_ARM, 2, seq)], n
@@ -401,31 +450,31 @@ def _stage_comparisons(study: Any) -> dict[str, Any]:
     return by_arm
 
 
-def _txt_comparisons(study: Any) -> dict[str, Any]:
+def _txt_comparisons(parsed: Mapping[TxtKey, Tracks]) -> dict[str, Any]:
     out: dict[str, Any] = {}
     for label, (ref_in, ref_dir), (oth_in, oth_dir) in TXT_PAIRS:
-        out[label] = {}
-        for seq, n in SEQUENCE_FRAMES.items():
-            parsed = []
-            for name, directory in ((ref_in, ref_dir), (oth_in, oth_dir)):
-                member = f"{directory}/{seq}.txt"
-                try:
-                    raw = study.read_input(name, member)
-                except Exception as exc:
-                    raise Invalid("V_COMPLETE", f"{name}:{member}: {exc}") from exc
-                try:
-                    parsed.append(parse_mot_txt(raw))
-                except ValueError as exc:
-                    raise Invalid("V_FORMAT", f"{name}:{member}: {exc}") from exc
-            out[label][seq] = compare_txt(parsed[0], parsed[1], n)
+        out[label] = {
+            seq: compare_txt(
+                parsed[(ref_in, ref_dir, seq)], parsed[(oth_in, oth_dir, seq)], n
+            )
+            for seq, n in SEQUENCE_FRAMES.items()
+        }
     return out
+
+
+def evaluate(study: Any) -> tuple[dict[str, Any], dict[str, Any]]:
+    """The validity phases in declared order (§3), then the report-only txt layer."""
+    evidence, raw_txt = _load_inputs(study)
+    parsed = _check_inputs(evidence, raw_txt)
+    by_arm = _stage_comparisons(evidence)
+    return by_arm, _txt_comparisons(parsed)
 
 
 def _report_md(by_arm: Mapping[str, Any], txt: Mapping[str, Any], terminal: str) -> str:
     lines = [
         f"# {STUDY_ID} attempt report (generated; exploratory, not citable)",
         "",
-        f"terminal: **{terminal}** (rule over {PRIMARY_ARM} entry labels, declaration §4)",
+        f"terminal: **{terminal}** (rule over {PRIMARY_ARM} f* labels, declaration §4)",
         "",
         "## Stage divergence against R_C (run 1; run 2 identical by V_RUN_REPRO)",
         "",
@@ -433,7 +482,7 @@ def _report_md(by_arm: Mapping[str, Any], txt: Mapping[str, Any], terminal: str)
         "`n` = structurally divergent frames over the sequence.",
         "",
         "| arm | seq | det_out bit/struct (n) | post_nms bit/struct (n) "
-        "| tracker_input bit/struct (n) | tracker bit/struct | entry at f* "
+        "| tracker_input bit/struct (n) | tracker bit/struct | tracker_input at f* "
         "| ti struct frames before f* |",
         "|:--|:--|:--|:--|:--|:--|:--|--:|",
     ]
@@ -453,7 +502,7 @@ def _report_md(by_arm: Mapping[str, Any], txt: Mapping[str, Any], terminal: str)
             lines.append(
                 f"| {arm} | {seq[6:8]} | {' | '.join(cells)} "
                 f"| {fmt(r['tracker']['first_bit'])}/{fmt(r['tracker']['first_structural'])} "
-                f"| {fmt(r['entry'])} | {fmt(before)} |"
+                f"| {fmt(r['label_at_f_star'])} | {fmt(before)} |"
             )
     lines += [
         "",
@@ -478,8 +527,7 @@ def main() -> int:
     study = open_frozen_study(BINDING)  # no data path exists before this passes
     payload = study.payload_dir()
     try:
-        by_arm = _stage_comparisons(study)
-        txt = _txt_comparisons(study)
+        by_arm, txt = evaluate(study)
     except Exception as exc:  # noqa: BLE001 -- every failure is recorded, never dropped
         criterion, detail = (
             (exc.criterion, exc.detail)
@@ -493,12 +541,12 @@ def main() -> int:
         record = study.record("invalid", invalid_criterion=criterion)
         print(f"INVALID {criterion}: {detail}; recorded {record}")
         return 1
-    entries = {seq: r["entry"] for seq, r in by_arm[PRIMARY_ARM].items()}
-    terminal = decide(entries)
+    labels = {seq: r["label_at_f_star"] for seq, r in by_arm[PRIMARY_ARM].items()}
+    terminal = decide(labels)
     result = {
         "study_id": STUDY_ID,
         "terminal": terminal,
-        "primary_entries": entries,
+        "primary_labels_at_f_star": labels,
         "iou_min": IOU_MIN,
         "stages": by_arm,
         "txt_report_only": txt,
