@@ -90,6 +90,7 @@
 | [pipeline/](pipeline/) | 見下表（本目錄無獨立 README） | Runtime 路徑、perf、sync、CPU |
 | [models/](models/) | 見下表（本目錄無獨立 README） | Canonical model specification（D1）、proof appendix（D2）、terminal review artifact |
 | **[contracts/](contracts/README.md)** | **[contracts/README.md](contracts/README.md)** | **跨研究規範層（先讀，勿自造統計）**：feasible-set 數學框架（ε／independence unit／claim ladder L0–L6／forbidden shortcuts）· runtime-quantity fidelity protocol · gate-vs-score 分層 · Boolean 組合語義 · RegionAsset 打包契約 |
+| [studies/](studies/README.md) | [studies/README.md](studies/README.md) | §20.11 分級研究（formal / exploratory）：`study.yaml`＋declaration＋append-only attempts；規則在 contracts/ §20.11 |
 | [eval/](eval/README.md) | [eval/README.md](eval/README.md) · **[signal_analysis_ledger](eval/signal_analysis_ledger.md)** | Eval / ablation 筆記；**深度訊號總帳**（規範層見 contracts/） |
 | [training/](training/README.md) | [training/README.md](training/README.md) | 訓練實驗 |
 | [reid/](reid/) | 見下表 | 外觀能力上限等跨模組 reid 筆記 |
