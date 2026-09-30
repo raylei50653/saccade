@@ -47,7 +47,7 @@ in this same file — a routing-only class, not a ninth objective type.
 uv run python scripts/tools/check_headline_decision_contract.py
 
 # Doc path hygiene (ownership tree)
-uv run python scripts/tools/check_doc_stale_paths.py
+uv run python scripts/tools/check_doc_links.py
 
 # RUNTIME / CORRECTNESS smoke (example)
 uv run scripts/eval/mot17.py \

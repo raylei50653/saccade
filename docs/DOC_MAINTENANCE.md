@@ -62,8 +62,8 @@ Proposed → Accepted → (必要時) Superseded by ADR XXX
 lifecycle 與 artifact role 的唯一 owner。新增文件與研究收尾請從
 [DEVELOPMENT action cards](../DEVELOPMENT.md#agent-action-cards) 進入。
 
-`check_doc_structure.py` 的索引覆蓋在任何模式下都是 warn；`--strict`（pre-push 使用）只對
-C6.4 lifecycle L1–L4 紅燈。
+`check_doc_structure.py` 的索引覆蓋、closed note 位置（L1）與 TODO checkbox（L5）在任何模式下都是 warn；
+`--strict`（pre-push 使用）只對 C6.4 狀態投影／規則層 L2–L4 紅燈。
 
 ---
 
@@ -143,9 +143,8 @@ WIP = 1 per module owner  (O0 seal)
 
 ### 相關 checker
 
-- `scripts/tools/check_doc_stale_paths.py`：**hard fail**，禁止引用已搬移文件的舊路徑（固定 denylist）。
 - `scripts/tools/check_doc_freshness.py`：**warn-only**，提醒手寫日期、缺 marker 的鏡射數字、跨入口重複的 baseline 數字；只警告不擋 CI。
-- `scripts/tools/check_doc_structure.py`：索引覆蓋 **warn-only**；`--strict` 對 lifecycle L1–L4 hard fail（見 [Doc Structure Contract](ownership/doc_structure_contract.md)）。
+- `scripts/tools/check_doc_structure.py`：索引覆蓋、closed note 位置（L1）、TODO checkbox（L5）**warn-only**；`--strict` 只對狀態投影／規則層 L2–L4 hard fail（見 [Doc Structure Contract](ownership/doc_structure_contract.md)）。
 - `scripts/tools/check_doc_links.py`：**hard fail**，相對 Markdown 連結必須可解析。
 
 ---
@@ -172,5 +171,5 @@ WIP = 1 per module owner  (O0 seal)
 □ WIP=1：module TODO 的 decision-changing charter 未雙開；non-WIP probe / 補件 / 收尾未冒充主線？
 □ 跨多步任務有 threads 卡或已確認不需？（threads README）
 □ 必要時通過 scripts/tools/check_gpu_contract.py 靜態效能合約檢查？
-□ 無失效連結或舊模型名稱？（check_doc_links / check_doc_stale_paths）
+□ 無失效連結或舊模型名稱？（check_doc_links）
 ```

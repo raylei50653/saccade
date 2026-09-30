@@ -16,14 +16,16 @@ comment (`.sh`) gives its **function**, and a `# status: <label>` header gives i
 - **Per-directory index:** the generated table block near the end of each
   directory's `README.md`.
 
-`scripts/tools/check_scripts_structure.py --strict` (wired into `scripts/pre_push.sh`
-and the CI `contracts` job) fails the push if any script lacks a `# status:` /
-docstring, or if the index is stale.
+`scripts/tools/check_scripts_structure.py` (report-only in `scripts/pre_push.sh`
+and the CI `contracts` job) lists any script that lacks a `# status:` / docstring.
+The generated views are derived snapshots: CI regenerates them on every run and
+publishes them as the `derived-indexes` artifact, and no gate requires the
+checked-in copy to be current (#493 PR-2).
 
 ## Adding or removing a script
 
-The structure check is fail-closed, so a new script must self-document or the
-push/CI fails. When you add a `scripts/**/*.py` or `*.sh`:
+The structure check reports rather than blocks, but a script without a header is
+invisible to the index. When you add a `scripts/**/*.py` or `*.sh`:
 
 1. **Function** — `.py`: a module docstring whose first line says what it does
    (add a `Usage:` block if it is a CLI). `.sh`: a `# <one-line>` description
@@ -32,9 +34,10 @@ push/CI fails. When you add a `scripts/**/*.py` or `*.sh`:
    after the shebang on `.sh`), choosing from the [Triage Labels](#triage-labels)
    below. A genuinely new tool is usually `diagnostic`; use `stable` only for a
    supported workflow entrypoint or path-stability infra.
-3. **Regenerate** — run `.venv/bin/python scripts/tools/build_scripts_index.py`
-   and commit the updated directory `README.md` block(s) and
-   `docs/ownership/scripts_inventory.generated.md`.
+3. **Regenerate (optional)** — `.venv/bin/python scripts/tools/build_scripts_index.py`
+   refreshes the directory `README.md` block(s) and
+   `docs/ownership/scripts_inventory.generated.md`; commit them if you like, but
+   nothing fails if you don't.
 
 Removing a script: delete it and re-run the generator — it drops the row and
 strips a directory's generated block if that directory becomes empty.

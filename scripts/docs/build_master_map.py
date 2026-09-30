@@ -93,6 +93,10 @@ def render_master_map(master_map: MasterMap, *, manifest_path: str) -> str:
         "",
         f"Manifest: `{manifest_path}`",
         "",
+        "> **Snapshot, may lag.** CI regenerates this file on every run and publishes it "
+        "as the `derived-indexes` artifact; the checked-in copy is refreshed whenever "
+        "someone reruns the generator, and no gate requires that (#493 PR-2).",
+        "",
         "## Active index and default search view",
         "",
     ]

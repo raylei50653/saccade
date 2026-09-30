@@ -3,6 +3,8 @@
 
 Manifest: `docs/ownership/doc_migration_manifest.yaml`
 
+> **Snapshot, may lag.** CI regenerates this file on every run and publishes it as the `derived-indexes` artifact; the checked-in copy is refreshed whenever someone reruns the generator, and no gate requires that (#493 PR-2).
+
 ## Active index and default search view
 
 - `docs/CUDA_GRAPH_CAPTURE_STREAM_RULE.md`

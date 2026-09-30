@@ -345,6 +345,10 @@ def render_rollup(metas: dict[str, tuple[tuple[str, ...], str, str, str, str]]) 
         "`# scope:` / `# function:` / `# lifecycle:` header; "
         "regenerate with `scripts/tools/build_tests_index.py`.",
         "",
+        "> **Snapshot, may lag.** CI regenerates this file on every run and publishes it "
+        "as the `derived-indexes` artifact; the checked-in copy is refreshed whenever "
+        "someone reruns the generator, and no gate requires that (#493 PR-2).",
+        "",
     ]
     out += _matrix(
         metas,
