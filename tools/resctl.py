@@ -961,9 +961,10 @@ def cmd_run(args: argparse.Namespace) -> int:
     started = time.monotonic()
     rc = 0
     previous: dict[int, Any] = {}
+    late: list[int] = []  # stop requests that arrived after the child exited
     try:
         # A stop request that arrived during setup wins: don't spawn at all.
-        # The same holds when Popen fails while one is pending.
+        # (One pending when Popen fails wins over 127 too; see `finally`.)
         early = _take_pending_signal()
         proc: subprocess.Popen[bytes] | None = None
         if early is None:
@@ -973,9 +974,7 @@ def cmd_run(args: argparse.Namespace) -> int:
                 )
             except OSError as exc:
                 _log(f"failed to start {shlex.join(command)}: {exc}", args.quiet)
-                early = _take_pending_signal()
-                if early is None:
-                    rc = 127
+                rc = 127
         if proc is not None:
             child = proc
 
@@ -983,6 +982,8 @@ def cmd_run(args: argparse.Namespace) -> int:
                 if child.poll() is None:
                     with contextlib.suppress(OSError):
                         child.send_signal(signum)
+                else:
+                    late.append(signum)
 
             previous = {s: signal.signal(s, forward) for s in _FORWARDED_SIGNALS}
             # A signal that arrived after the spawn is delivered here, to `forward`.
@@ -995,9 +996,15 @@ def cmd_run(args: argparse.Namespace) -> int:
             )
             rc = -early
     finally:
-        # `forward` stays installed (a no-op once the child has exited) until
-        # the lease is gone, so a late signal cannot strand it either.
+        # Cleanup is a signal-mask critical section: a stop request arriving
+        # now is held back until the lease is gone (so it cannot strand it) and
+        # then reported in the exit status (so it is not swallowed either).
+        signal.pthread_sigmask(signal.SIG_BLOCK, _FORWARDED_SIGNALS)
         release(rt, acq)
+        pending = _take_pending_signal()
+        stop = late[0] if late else pending
+        if stop is not None and rc >= 0:
+            rc = -stop
         how = f"exit {rc}" if rc >= 0 else f"signal {-rc}"
         _log(
             f"released {args.resource} after {_fmt_elapsed(time.monotonic() - started)} ({how})",
