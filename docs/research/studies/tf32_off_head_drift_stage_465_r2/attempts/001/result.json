@@ -1,0 +1,2937 @@
+{
+  "inversion_census_report_only": {
+    "H_M_1": {
+      "MOT17-02-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 37,
+          "rows": 180000,
+          "x_inverted_rows": 36,
+          "y_inverted_rows": 1
+        },
+        "post_nms": {
+          "either_inverted_rows": 6,
+          "rows": 15145,
+          "x_inverted_rows": 6,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 10323,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 4,
+          "rows": 14789,
+          "x_inverted_rows": 4,
+          "y_inverted_rows": 0
+        }
+      },
+      "MOT17-04-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 0,
+          "rows": 315000,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "post_nms": {
+          "either_inverted_rows": 0,
+          "rows": 45013,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 43218,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 0,
+          "rows": 45013,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        }
+      },
+      "MOT17-05-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 16,
+          "rows": 251100,
+          "x_inverted_rows": 14,
+          "y_inverted_rows": 2
+        },
+        "post_nms": {
+          "either_inverted_rows": 1,
+          "rows": 6315,
+          "x_inverted_rows": 1,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 4737,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 1,
+          "rows": 6251,
+          "x_inverted_rows": 1,
+          "y_inverted_rows": 0
+        }
+      },
+      "MOT17-09-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 0,
+          "rows": 157500,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "post_nms": {
+          "either_inverted_rows": 0,
+          "rows": 4519,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 3761,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 0,
+          "rows": 4513,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        }
+      },
+      "MOT17-10-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 183,
+          "rows": 196200,
+          "x_inverted_rows": 181,
+          "y_inverted_rows": 2
+        },
+        "post_nms": {
+          "either_inverted_rows": 67,
+          "rows": 17220,
+          "x_inverted_rows": 67,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 10045,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 41,
+          "rows": 16522,
+          "x_inverted_rows": 41,
+          "y_inverted_rows": 0
+        }
+      },
+      "MOT17-11-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 17,
+          "rows": 270000,
+          "x_inverted_rows": 17,
+          "y_inverted_rows": 0
+        },
+        "post_nms": {
+          "either_inverted_rows": 3,
+          "rows": 9989,
+          "x_inverted_rows": 3,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 7714,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 2,
+          "rows": 9878,
+          "x_inverted_rows": 2,
+          "y_inverted_rows": 0
+        }
+      },
+      "MOT17-13-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 20,
+          "rows": 225000,
+          "x_inverted_rows": 20,
+          "y_inverted_rows": 0
+        },
+        "post_nms": {
+          "either_inverted_rows": 6,
+          "rows": 18096,
+          "x_inverted_rows": 6,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 9252,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 4,
+          "rows": 17072,
+          "x_inverted_rows": 4,
+          "y_inverted_rows": 0
+        }
+      }
+    },
+    "H_M_2": {
+      "MOT17-02-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 37,
+          "rows": 180000,
+          "x_inverted_rows": 36,
+          "y_inverted_rows": 1
+        },
+        "post_nms": {
+          "either_inverted_rows": 6,
+          "rows": 15145,
+          "x_inverted_rows": 6,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 10323,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 4,
+          "rows": 14789,
+          "x_inverted_rows": 4,
+          "y_inverted_rows": 0
+        }
+      },
+      "MOT17-04-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 0,
+          "rows": 315000,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "post_nms": {
+          "either_inverted_rows": 0,
+          "rows": 45013,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 43218,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 0,
+          "rows": 45013,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        }
+      },
+      "MOT17-05-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 16,
+          "rows": 251100,
+          "x_inverted_rows": 14,
+          "y_inverted_rows": 2
+        },
+        "post_nms": {
+          "either_inverted_rows": 1,
+          "rows": 6315,
+          "x_inverted_rows": 1,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 4737,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 1,
+          "rows": 6251,
+          "x_inverted_rows": 1,
+          "y_inverted_rows": 0
+        }
+      },
+      "MOT17-09-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 0,
+          "rows": 157500,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "post_nms": {
+          "either_inverted_rows": 0,
+          "rows": 4519,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 3761,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 0,
+          "rows": 4513,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        }
+      },
+      "MOT17-10-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 183,
+          "rows": 196200,
+          "x_inverted_rows": 181,
+          "y_inverted_rows": 2
+        },
+        "post_nms": {
+          "either_inverted_rows": 67,
+          "rows": 17220,
+          "x_inverted_rows": 67,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 10045,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 41,
+          "rows": 16522,
+          "x_inverted_rows": 41,
+          "y_inverted_rows": 0
+        }
+      },
+      "MOT17-11-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 17,
+          "rows": 270000,
+          "x_inverted_rows": 17,
+          "y_inverted_rows": 0
+        },
+        "post_nms": {
+          "either_inverted_rows": 3,
+          "rows": 9989,
+          "x_inverted_rows": 3,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 7714,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 2,
+          "rows": 9878,
+          "x_inverted_rows": 2,
+          "y_inverted_rows": 0
+        }
+      },
+      "MOT17-13-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 20,
+          "rows": 225000,
+          "x_inverted_rows": 20,
+          "y_inverted_rows": 0
+        },
+        "post_nms": {
+          "either_inverted_rows": 6,
+          "rows": 18096,
+          "x_inverted_rows": 6,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 9252,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 4,
+          "rows": 17072,
+          "x_inverted_rows": 4,
+          "y_inverted_rows": 0
+        }
+      }
+    },
+    "H_V_1": {
+      "MOT17-02-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 37,
+          "rows": 180000,
+          "x_inverted_rows": 36,
+          "y_inverted_rows": 1
+        },
+        "post_nms": {
+          "either_inverted_rows": 6,
+          "rows": 15134,
+          "x_inverted_rows": 6,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 10326,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 4,
+          "rows": 14779,
+          "x_inverted_rows": 4,
+          "y_inverted_rows": 0
+        }
+      },
+      "MOT17-04-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 0,
+          "rows": 315000,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "post_nms": {
+          "either_inverted_rows": 0,
+          "rows": 45006,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 43200,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 0,
+          "rows": 45006,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        }
+      },
+      "MOT17-05-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 16,
+          "rows": 251100,
+          "x_inverted_rows": 14,
+          "y_inverted_rows": 2
+        },
+        "post_nms": {
+          "either_inverted_rows": 1,
+          "rows": 6314,
+          "x_inverted_rows": 1,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 4733,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 1,
+          "rows": 6250,
+          "x_inverted_rows": 1,
+          "y_inverted_rows": 0
+        }
+      },
+      "MOT17-09-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 0,
+          "rows": 157500,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "post_nms": {
+          "either_inverted_rows": 0,
+          "rows": 4518,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 3764,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 0,
+          "rows": 4512,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        }
+      },
+      "MOT17-10-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 183,
+          "rows": 196200,
+          "x_inverted_rows": 181,
+          "y_inverted_rows": 2
+        },
+        "post_nms": {
+          "either_inverted_rows": 67,
+          "rows": 17217,
+          "x_inverted_rows": 67,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 10046,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 41,
+          "rows": 16523,
+          "x_inverted_rows": 41,
+          "y_inverted_rows": 0
+        }
+      },
+      "MOT17-11-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 17,
+          "rows": 270000,
+          "x_inverted_rows": 17,
+          "y_inverted_rows": 0
+        },
+        "post_nms": {
+          "either_inverted_rows": 3,
+          "rows": 9987,
+          "x_inverted_rows": 3,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 7720,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 2,
+          "rows": 9876,
+          "x_inverted_rows": 2,
+          "y_inverted_rows": 0
+        }
+      },
+      "MOT17-13-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 20,
+          "rows": 225000,
+          "x_inverted_rows": 20,
+          "y_inverted_rows": 0
+        },
+        "post_nms": {
+          "either_inverted_rows": 6,
+          "rows": 18069,
+          "x_inverted_rows": 6,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 9297,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 4,
+          "rows": 17047,
+          "x_inverted_rows": 4,
+          "y_inverted_rows": 0
+        }
+      }
+    },
+    "H_V_2": {
+      "MOT17-02-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 37,
+          "rows": 180000,
+          "x_inverted_rows": 36,
+          "y_inverted_rows": 1
+        },
+        "post_nms": {
+          "either_inverted_rows": 6,
+          "rows": 15134,
+          "x_inverted_rows": 6,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 10326,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 4,
+          "rows": 14779,
+          "x_inverted_rows": 4,
+          "y_inverted_rows": 0
+        }
+      },
+      "MOT17-04-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 0,
+          "rows": 315000,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "post_nms": {
+          "either_inverted_rows": 0,
+          "rows": 45006,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 43200,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 0,
+          "rows": 45006,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        }
+      },
+      "MOT17-05-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 16,
+          "rows": 251100,
+          "x_inverted_rows": 14,
+          "y_inverted_rows": 2
+        },
+        "post_nms": {
+          "either_inverted_rows": 1,
+          "rows": 6314,
+          "x_inverted_rows": 1,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 4733,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 1,
+          "rows": 6250,
+          "x_inverted_rows": 1,
+          "y_inverted_rows": 0
+        }
+      },
+      "MOT17-09-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 0,
+          "rows": 157500,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "post_nms": {
+          "either_inverted_rows": 0,
+          "rows": 4518,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 3764,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 0,
+          "rows": 4512,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        }
+      },
+      "MOT17-10-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 183,
+          "rows": 196200,
+          "x_inverted_rows": 181,
+          "y_inverted_rows": 2
+        },
+        "post_nms": {
+          "either_inverted_rows": 67,
+          "rows": 17217,
+          "x_inverted_rows": 67,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 10046,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 41,
+          "rows": 16523,
+          "x_inverted_rows": 41,
+          "y_inverted_rows": 0
+        }
+      },
+      "MOT17-11-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 17,
+          "rows": 270000,
+          "x_inverted_rows": 17,
+          "y_inverted_rows": 0
+        },
+        "post_nms": {
+          "either_inverted_rows": 3,
+          "rows": 9987,
+          "x_inverted_rows": 3,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 7720,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 2,
+          "rows": 9876,
+          "x_inverted_rows": 2,
+          "y_inverted_rows": 0
+        }
+      },
+      "MOT17-13-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 20,
+          "rows": 225000,
+          "x_inverted_rows": 20,
+          "y_inverted_rows": 0
+        },
+        "post_nms": {
+          "either_inverted_rows": 6,
+          "rows": 18069,
+          "x_inverted_rows": 6,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 9297,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 4,
+          "rows": 17047,
+          "x_inverted_rows": 4,
+          "y_inverted_rows": 0
+        }
+      }
+    },
+    "R_C_1": {
+      "MOT17-02-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 37,
+          "rows": 180000,
+          "x_inverted_rows": 36,
+          "y_inverted_rows": 1
+        },
+        "post_nms": {
+          "either_inverted_rows": 6,
+          "rows": 15144,
+          "x_inverted_rows": 6,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 10323,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 4,
+          "rows": 14789,
+          "x_inverted_rows": 4,
+          "y_inverted_rows": 0
+        }
+      },
+      "MOT17-04-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 0,
+          "rows": 315000,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "post_nms": {
+          "either_inverted_rows": 0,
+          "rows": 45010,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 43217,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 0,
+          "rows": 45010,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        }
+      },
+      "MOT17-05-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 16,
+          "rows": 251100,
+          "x_inverted_rows": 14,
+          "y_inverted_rows": 2
+        },
+        "post_nms": {
+          "either_inverted_rows": 1,
+          "rows": 6315,
+          "x_inverted_rows": 1,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 4737,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 1,
+          "rows": 6251,
+          "x_inverted_rows": 1,
+          "y_inverted_rows": 0
+        }
+      },
+      "MOT17-09-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 0,
+          "rows": 157500,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "post_nms": {
+          "either_inverted_rows": 0,
+          "rows": 4520,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 3761,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 0,
+          "rows": 4514,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        }
+      },
+      "MOT17-10-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 183,
+          "rows": 196200,
+          "x_inverted_rows": 181,
+          "y_inverted_rows": 2
+        },
+        "post_nms": {
+          "either_inverted_rows": 67,
+          "rows": 17220,
+          "x_inverted_rows": 67,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 10045,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 41,
+          "rows": 16522,
+          "x_inverted_rows": 41,
+          "y_inverted_rows": 0
+        }
+      },
+      "MOT17-11-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 17,
+          "rows": 270000,
+          "x_inverted_rows": 17,
+          "y_inverted_rows": 0
+        },
+        "post_nms": {
+          "either_inverted_rows": 3,
+          "rows": 9990,
+          "x_inverted_rows": 3,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 7714,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 2,
+          "rows": 9879,
+          "x_inverted_rows": 2,
+          "y_inverted_rows": 0
+        }
+      },
+      "MOT17-13-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 20,
+          "rows": 225000,
+          "x_inverted_rows": 20,
+          "y_inverted_rows": 0
+        },
+        "post_nms": {
+          "either_inverted_rows": 6,
+          "rows": 18096,
+          "x_inverted_rows": 6,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 9252,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 4,
+          "rows": 17071,
+          "x_inverted_rows": 4,
+          "y_inverted_rows": 0
+        }
+      }
+    },
+    "R_C_2": {
+      "MOT17-02-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 37,
+          "rows": 180000,
+          "x_inverted_rows": 36,
+          "y_inverted_rows": 1
+        },
+        "post_nms": {
+          "either_inverted_rows": 6,
+          "rows": 15144,
+          "x_inverted_rows": 6,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 10323,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 4,
+          "rows": 14789,
+          "x_inverted_rows": 4,
+          "y_inverted_rows": 0
+        }
+      },
+      "MOT17-04-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 0,
+          "rows": 315000,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "post_nms": {
+          "either_inverted_rows": 0,
+          "rows": 45010,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 43217,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 0,
+          "rows": 45010,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        }
+      },
+      "MOT17-05-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 16,
+          "rows": 251100,
+          "x_inverted_rows": 14,
+          "y_inverted_rows": 2
+        },
+        "post_nms": {
+          "either_inverted_rows": 1,
+          "rows": 6315,
+          "x_inverted_rows": 1,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 4737,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 1,
+          "rows": 6251,
+          "x_inverted_rows": 1,
+          "y_inverted_rows": 0
+        }
+      },
+      "MOT17-09-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 0,
+          "rows": 157500,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "post_nms": {
+          "either_inverted_rows": 0,
+          "rows": 4520,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 3761,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 0,
+          "rows": 4514,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        }
+      },
+      "MOT17-10-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 183,
+          "rows": 196200,
+          "x_inverted_rows": 181,
+          "y_inverted_rows": 2
+        },
+        "post_nms": {
+          "either_inverted_rows": 67,
+          "rows": 17220,
+          "x_inverted_rows": 67,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 10045,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 41,
+          "rows": 16522,
+          "x_inverted_rows": 41,
+          "y_inverted_rows": 0
+        }
+      },
+      "MOT17-11-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 17,
+          "rows": 270000,
+          "x_inverted_rows": 17,
+          "y_inverted_rows": 0
+        },
+        "post_nms": {
+          "either_inverted_rows": 3,
+          "rows": 9990,
+          "x_inverted_rows": 3,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 7714,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 2,
+          "rows": 9879,
+          "x_inverted_rows": 2,
+          "y_inverted_rows": 0
+        }
+      },
+      "MOT17-13-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 20,
+          "rows": 225000,
+          "x_inverted_rows": 20,
+          "y_inverted_rows": 0
+        },
+        "post_nms": {
+          "either_inverted_rows": 6,
+          "rows": 18096,
+          "x_inverted_rows": 6,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 9252,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 4,
+          "rows": 17071,
+          "x_inverted_rows": 4,
+          "y_inverted_rows": 0
+        }
+      }
+    },
+    "R_E_1": {
+      "MOT17-02-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 37,
+          "rows": 180000,
+          "x_inverted_rows": 36,
+          "y_inverted_rows": 1
+        },
+        "post_nms": {
+          "either_inverted_rows": 6,
+          "rows": 15144,
+          "x_inverted_rows": 6,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 10323,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 4,
+          "rows": 14789,
+          "x_inverted_rows": 4,
+          "y_inverted_rows": 0
+        }
+      },
+      "MOT17-04-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 0,
+          "rows": 315000,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "post_nms": {
+          "either_inverted_rows": 0,
+          "rows": 45010,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 43217,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 0,
+          "rows": 45010,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        }
+      },
+      "MOT17-05-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 16,
+          "rows": 251100,
+          "x_inverted_rows": 14,
+          "y_inverted_rows": 2
+        },
+        "post_nms": {
+          "either_inverted_rows": 1,
+          "rows": 6315,
+          "x_inverted_rows": 1,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 4737,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 1,
+          "rows": 6251,
+          "x_inverted_rows": 1,
+          "y_inverted_rows": 0
+        }
+      },
+      "MOT17-09-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 0,
+          "rows": 157500,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "post_nms": {
+          "either_inverted_rows": 0,
+          "rows": 4519,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 3761,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 0,
+          "rows": 4513,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        }
+      },
+      "MOT17-10-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 183,
+          "rows": 196200,
+          "x_inverted_rows": 181,
+          "y_inverted_rows": 2
+        },
+        "post_nms": {
+          "either_inverted_rows": 67,
+          "rows": 17220,
+          "x_inverted_rows": 67,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 10045,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 41,
+          "rows": 16522,
+          "x_inverted_rows": 41,
+          "y_inverted_rows": 0
+        }
+      },
+      "MOT17-11-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 17,
+          "rows": 270000,
+          "x_inverted_rows": 17,
+          "y_inverted_rows": 0
+        },
+        "post_nms": {
+          "either_inverted_rows": 3,
+          "rows": 9990,
+          "x_inverted_rows": 3,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 7714,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 2,
+          "rows": 9879,
+          "x_inverted_rows": 2,
+          "y_inverted_rows": 0
+        }
+      },
+      "MOT17-13-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 20,
+          "rows": 225000,
+          "x_inverted_rows": 20,
+          "y_inverted_rows": 0
+        },
+        "post_nms": {
+          "either_inverted_rows": 6,
+          "rows": 18096,
+          "x_inverted_rows": 6,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 9252,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 4,
+          "rows": 17071,
+          "x_inverted_rows": 4,
+          "y_inverted_rows": 0
+        }
+      }
+    },
+    "R_E_2": {
+      "MOT17-02-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 37,
+          "rows": 180000,
+          "x_inverted_rows": 36,
+          "y_inverted_rows": 1
+        },
+        "post_nms": {
+          "either_inverted_rows": 6,
+          "rows": 15144,
+          "x_inverted_rows": 6,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 10323,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 4,
+          "rows": 14789,
+          "x_inverted_rows": 4,
+          "y_inverted_rows": 0
+        }
+      },
+      "MOT17-04-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 0,
+          "rows": 315000,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "post_nms": {
+          "either_inverted_rows": 0,
+          "rows": 45010,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 43217,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 0,
+          "rows": 45010,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        }
+      },
+      "MOT17-05-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 16,
+          "rows": 251100,
+          "x_inverted_rows": 14,
+          "y_inverted_rows": 2
+        },
+        "post_nms": {
+          "either_inverted_rows": 1,
+          "rows": 6315,
+          "x_inverted_rows": 1,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 4737,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 1,
+          "rows": 6251,
+          "x_inverted_rows": 1,
+          "y_inverted_rows": 0
+        }
+      },
+      "MOT17-09-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 0,
+          "rows": 157500,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "post_nms": {
+          "either_inverted_rows": 0,
+          "rows": 4519,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 3761,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 0,
+          "rows": 4513,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        }
+      },
+      "MOT17-10-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 183,
+          "rows": 196200,
+          "x_inverted_rows": 181,
+          "y_inverted_rows": 2
+        },
+        "post_nms": {
+          "either_inverted_rows": 67,
+          "rows": 17220,
+          "x_inverted_rows": 67,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 10045,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 41,
+          "rows": 16522,
+          "x_inverted_rows": 41,
+          "y_inverted_rows": 0
+        }
+      },
+      "MOT17-11-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 17,
+          "rows": 270000,
+          "x_inverted_rows": 17,
+          "y_inverted_rows": 0
+        },
+        "post_nms": {
+          "either_inverted_rows": 3,
+          "rows": 9990,
+          "x_inverted_rows": 3,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 7714,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 2,
+          "rows": 9879,
+          "x_inverted_rows": 2,
+          "y_inverted_rows": 0
+        }
+      },
+      "MOT17-13-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 20,
+          "rows": 225000,
+          "x_inverted_rows": 20,
+          "y_inverted_rows": 0
+        },
+        "post_nms": {
+          "either_inverted_rows": 6,
+          "rows": 18096,
+          "x_inverted_rows": 6,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 9252,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 4,
+          "rows": 17071,
+          "x_inverted_rows": 4,
+          "y_inverted_rows": 0
+        }
+      }
+    },
+    "R_T_1": {
+      "MOT17-02-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 37,
+          "rows": 180000,
+          "x_inverted_rows": 36,
+          "y_inverted_rows": 1
+        },
+        "post_nms": {
+          "either_inverted_rows": 6,
+          "rows": 15135,
+          "x_inverted_rows": 6,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 10326,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 4,
+          "rows": 14779,
+          "x_inverted_rows": 4,
+          "y_inverted_rows": 0
+        }
+      },
+      "MOT17-04-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 0,
+          "rows": 315000,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "post_nms": {
+          "either_inverted_rows": 0,
+          "rows": 45009,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 43201,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 0,
+          "rows": 45009,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        }
+      },
+      "MOT17-05-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 16,
+          "rows": 251100,
+          "x_inverted_rows": 14,
+          "y_inverted_rows": 2
+        },
+        "post_nms": {
+          "either_inverted_rows": 1,
+          "rows": 6314,
+          "x_inverted_rows": 1,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 4733,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 1,
+          "rows": 6250,
+          "x_inverted_rows": 1,
+          "y_inverted_rows": 0
+        }
+      },
+      "MOT17-09-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 0,
+          "rows": 157500,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "post_nms": {
+          "either_inverted_rows": 0,
+          "rows": 4517,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 3764,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 0,
+          "rows": 4511,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        }
+      },
+      "MOT17-10-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 183,
+          "rows": 196200,
+          "x_inverted_rows": 181,
+          "y_inverted_rows": 2
+        },
+        "post_nms": {
+          "either_inverted_rows": 67,
+          "rows": 17217,
+          "x_inverted_rows": 67,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 10046,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 41,
+          "rows": 16523,
+          "x_inverted_rows": 41,
+          "y_inverted_rows": 0
+        }
+      },
+      "MOT17-11-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 17,
+          "rows": 270000,
+          "x_inverted_rows": 17,
+          "y_inverted_rows": 0
+        },
+        "post_nms": {
+          "either_inverted_rows": 3,
+          "rows": 9986,
+          "x_inverted_rows": 3,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 7720,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 2,
+          "rows": 9875,
+          "x_inverted_rows": 2,
+          "y_inverted_rows": 0
+        }
+      },
+      "MOT17-13-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 20,
+          "rows": 225000,
+          "x_inverted_rows": 20,
+          "y_inverted_rows": 0
+        },
+        "post_nms": {
+          "either_inverted_rows": 6,
+          "rows": 18069,
+          "x_inverted_rows": 6,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 9297,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 4,
+          "rows": 17048,
+          "x_inverted_rows": 4,
+          "y_inverted_rows": 0
+        }
+      }
+    },
+    "R_T_2": {
+      "MOT17-02-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 37,
+          "rows": 180000,
+          "x_inverted_rows": 36,
+          "y_inverted_rows": 1
+        },
+        "post_nms": {
+          "either_inverted_rows": 6,
+          "rows": 15135,
+          "x_inverted_rows": 6,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 10326,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 4,
+          "rows": 14779,
+          "x_inverted_rows": 4,
+          "y_inverted_rows": 0
+        }
+      },
+      "MOT17-04-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 0,
+          "rows": 315000,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "post_nms": {
+          "either_inverted_rows": 0,
+          "rows": 45009,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 43201,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 0,
+          "rows": 45009,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        }
+      },
+      "MOT17-05-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 16,
+          "rows": 251100,
+          "x_inverted_rows": 14,
+          "y_inverted_rows": 2
+        },
+        "post_nms": {
+          "either_inverted_rows": 1,
+          "rows": 6314,
+          "x_inverted_rows": 1,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 4733,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 1,
+          "rows": 6250,
+          "x_inverted_rows": 1,
+          "y_inverted_rows": 0
+        }
+      },
+      "MOT17-09-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 0,
+          "rows": 157500,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "post_nms": {
+          "either_inverted_rows": 0,
+          "rows": 4517,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 3764,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 0,
+          "rows": 4511,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        }
+      },
+      "MOT17-10-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 183,
+          "rows": 196200,
+          "x_inverted_rows": 181,
+          "y_inverted_rows": 2
+        },
+        "post_nms": {
+          "either_inverted_rows": 67,
+          "rows": 17217,
+          "x_inverted_rows": 67,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 10046,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 41,
+          "rows": 16523,
+          "x_inverted_rows": 41,
+          "y_inverted_rows": 0
+        }
+      },
+      "MOT17-11-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 17,
+          "rows": 270000,
+          "x_inverted_rows": 17,
+          "y_inverted_rows": 0
+        },
+        "post_nms": {
+          "either_inverted_rows": 3,
+          "rows": 9986,
+          "x_inverted_rows": 3,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 7720,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 2,
+          "rows": 9875,
+          "x_inverted_rows": 2,
+          "y_inverted_rows": 0
+        }
+      },
+      "MOT17-13-SDP": {
+        "detector_output": {
+          "either_inverted_rows": 20,
+          "rows": 225000,
+          "x_inverted_rows": 20,
+          "y_inverted_rows": 0
+        },
+        "post_nms": {
+          "either_inverted_rows": 6,
+          "rows": 18069,
+          "x_inverted_rows": 6,
+          "y_inverted_rows": 0
+        },
+        "tracker": {
+          "either_inverted_rows": 0,
+          "rows": 9297,
+          "x_inverted_rows": 0,
+          "y_inverted_rows": 0
+        },
+        "tracker_input": {
+          "either_inverted_rows": 4,
+          "rows": 17048,
+          "x_inverted_rows": 4,
+          "y_inverted_rows": 0
+        }
+      }
+    }
+  },
+  "iou_min": 0.9,
+  "primary_labels_at_f_star": {
+    "MOT17-02-SDP": "same",
+    "MOT17-04-SDP": "same",
+    "MOT17-05-SDP": "same",
+    "MOT17-09-SDP": "same",
+    "MOT17-10-SDP": "same",
+    "MOT17-11-SDP": "same",
+    "MOT17-13-SDP": "same"
+  },
+  "stages": {
+    "H_M": {
+      "MOT17-02-SDP": {
+        "at_f_star": null,
+        "label_at_f_star": null,
+        "stages": {
+          "detector_output": {
+            "first_bit": 4,
+            "first_structural": null,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 0
+          },
+          "post_nms": {
+            "first_bit": 6,
+            "first_structural": 6,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 5
+          },
+          "tracker_input": {
+            "first_bit": 6,
+            "first_structural": 6,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 4
+          }
+        },
+        "tracker": {
+          "first_bit": null,
+          "first_structural": null
+        }
+      },
+      "MOT17-04-SDP": {
+        "at_f_star": {
+          "structural_differs": {
+            "detector_output": true,
+            "post_nms": true,
+            "tracker_input": true
+          },
+          "tracker_input_rows": [
+            43,
+            43
+          ],
+          "tracker_input_structural_frames_before": 0
+        },
+        "label_at_f_star": "different",
+        "stages": {
+          "detector_output": {
+            "first_bit": 1,
+            "first_structural": 65,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 93
+          },
+          "post_nms": {
+            "first_bit": 135,
+            "first_structural": 557,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 4
+          },
+          "tracker_input": {
+            "first_bit": 135,
+            "first_structural": 557,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 4
+          }
+        },
+        "tracker": {
+          "first_bit": 157,
+          "first_structural": 557
+        }
+      },
+      "MOT17-05-SDP": {
+        "at_f_star": null,
+        "label_at_f_star": null,
+        "stages": {
+          "detector_output": {
+            "first_bit": 71,
+            "first_structural": null,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 0
+          },
+          "post_nms": {
+            "first_bit": null,
+            "first_structural": null,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 0
+          },
+          "tracker_input": {
+            "first_bit": null,
+            "first_structural": null,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 0
+          }
+        },
+        "tracker": {
+          "first_bit": null,
+          "first_structural": null
+        }
+      },
+      "MOT17-09-SDP": {
+        "at_f_star": null,
+        "label_at_f_star": null,
+        "stages": {
+          "detector_output": {
+            "first_bit": 24,
+            "first_structural": null,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 0
+          },
+          "post_nms": {
+            "first_bit": 46,
+            "first_structural": 46,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 1
+          },
+          "tracker_input": {
+            "first_bit": 46,
+            "first_structural": 46,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 1
+          }
+        },
+        "tracker": {
+          "first_bit": null,
+          "first_structural": null
+        }
+      },
+      "MOT17-10-SDP": {
+        "at_f_star": null,
+        "label_at_f_star": null,
+        "stages": {
+          "detector_output": {
+            "first_bit": 21,
+            "first_structural": null,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 0
+          },
+          "post_nms": {
+            "first_bit": 323,
+            "first_structural": 323,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 2
+          },
+          "tracker_input": {
+            "first_bit": null,
+            "first_structural": null,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 0
+          }
+        },
+        "tracker": {
+          "first_bit": null,
+          "first_structural": null
+        }
+      },
+      "MOT17-11-SDP": {
+        "at_f_star": null,
+        "label_at_f_star": null,
+        "stages": {
+          "detector_output": {
+            "first_bit": 6,
+            "first_structural": null,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 0
+          },
+          "post_nms": {
+            "first_bit": 215,
+            "first_structural": 215,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 1
+          },
+          "tracker_input": {
+            "first_bit": 215,
+            "first_structural": 215,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 1
+          }
+        },
+        "tracker": {
+          "first_bit": null,
+          "first_structural": null
+        }
+      },
+      "MOT17-13-SDP": {
+        "at_f_star": null,
+        "label_at_f_star": null,
+        "stages": {
+          "detector_output": {
+            "first_bit": 16,
+            "first_structural": null,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 0
+          },
+          "post_nms": {
+            "first_bit": 84,
+            "first_structural": 84,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 2
+          },
+          "tracker_input": {
+            "first_bit": 511,
+            "first_structural": 511,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 1
+          }
+        },
+        "tracker": {
+          "first_bit": null,
+          "first_structural": null
+        }
+      }
+    },
+    "H_V": {
+      "MOT17-02-SDP": {
+        "at_f_star": {
+          "structural_differs": {
+            "detector_output": false,
+            "post_nms": false,
+            "tracker_input": false
+          },
+          "tracker_input_rows": [
+            37,
+            37
+          ],
+          "tracker_input_structural_frames_before": 15
+        },
+        "label_at_f_star": "same",
+        "stages": {
+          "detector_output": {
+            "first_bit": 1,
+            "first_structural": 19,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 39
+          },
+          "post_nms": {
+            "first_bit": 1,
+            "first_structural": 22,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 45
+          },
+          "tracker_input": {
+            "first_bit": 1,
+            "first_structural": 22,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 44
+          }
+        },
+        "tracker": {
+          "first_bit": 3,
+          "first_structural": 283
+        }
+      },
+      "MOT17-04-SDP": {
+        "at_f_star": {
+          "structural_differs": {
+            "detector_output": false,
+            "post_nms": false,
+            "tracker_input": false
+          },
+          "tracker_input_rows": [
+            40,
+            40
+          ],
+          "tracker_input_structural_frames_before": 0
+        },
+        "label_at_f_star": "same",
+        "stages": {
+          "detector_output": {
+            "first_bit": 1,
+            "first_structural": null,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 0
+          },
+          "post_nms": {
+            "first_bit": 1,
+            "first_structural": 15,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 33
+          },
+          "tracker_input": {
+            "first_bit": 1,
+            "first_structural": 15,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 33
+          }
+        },
+        "tracker": {
+          "first_bit": 3,
+          "first_structural": 3
+        }
+      },
+      "MOT17-05-SDP": {
+        "at_f_star": {
+          "structural_differs": {
+            "detector_output": false,
+            "post_nms": false,
+            "tracker_input": false
+          },
+          "tracker_input_rows": [
+            13,
+            13
+          ],
+          "tracker_input_structural_frames_before": 0
+        },
+        "label_at_f_star": "same",
+        "stages": {
+          "detector_output": {
+            "first_bit": 1,
+            "first_structural": 2,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 139
+          },
+          "post_nms": {
+            "first_bit": 1,
+            "first_structural": 35,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 7
+          },
+          "tracker_input": {
+            "first_bit": 1,
+            "first_structural": 35,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 7
+          }
+        },
+        "tracker": {
+          "first_bit": 3,
+          "first_structural": 15
+        }
+      },
+      "MOT17-09-SDP": {
+        "at_f_star": {
+          "structural_differs": {
+            "detector_output": false,
+            "post_nms": false,
+            "tracker_input": false
+          },
+          "tracker_input_rows": [
+            9,
+            9
+          ],
+          "tracker_input_structural_frames_before": 4
+        },
+        "label_at_f_star": "same",
+        "stages": {
+          "detector_output": {
+            "first_bit": 1,
+            "first_structural": 14,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 66
+          },
+          "post_nms": {
+            "first_bit": 1,
+            "first_structural": 16,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 7
+          },
+          "tracker_input": {
+            "first_bit": 1,
+            "first_structural": 16,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 7
+          }
+        },
+        "tracker": {
+          "first_bit": 3,
+          "first_structural": 319
+        }
+      },
+      "MOT17-10-SDP": {
+        "at_f_star": {
+          "structural_differs": {
+            "detector_output": false,
+            "post_nms": false,
+            "tracker_input": false
+          },
+          "tracker_input_rows": [
+            34,
+            34
+          ],
+          "tracker_input_structural_frames_before": 0
+        },
+        "label_at_f_star": "same",
+        "stages": {
+          "detector_output": {
+            "first_bit": 1,
+            "first_structural": 11,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 54
+          },
+          "post_nms": {
+            "first_bit": 1,
+            "first_structural": 13,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 74
+          },
+          "tracker_input": {
+            "first_bit": 1,
+            "first_structural": 13,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 71
+          }
+        },
+        "tracker": {
+          "first_bit": 3,
+          "first_structural": 6
+        }
+      },
+      "MOT17-11-SDP": {
+        "at_f_star": {
+          "structural_differs": {
+            "detector_output": false,
+            "post_nms": false,
+            "tracker_input": false
+          },
+          "tracker_input_rows": [
+            18,
+            18
+          ],
+          "tracker_input_structural_frames_before": 8
+        },
+        "label_at_f_star": "same",
+        "stages": {
+          "detector_output": {
+            "first_bit": 1,
+            "first_structural": 13,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 123
+          },
+          "post_nms": {
+            "first_bit": 1,
+            "first_structural": 3,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 22
+          },
+          "tracker_input": {
+            "first_bit": 1,
+            "first_structural": 3,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 22
+          }
+        },
+        "tracker": {
+          "first_bit": 3,
+          "first_structural": 49
+        }
+      },
+      "MOT17-13-SDP": {
+        "at_f_star": {
+          "structural_differs": {
+            "detector_output": false,
+            "post_nms": false,
+            "tracker_input": false
+          },
+          "tracker_input_rows": [
+            35,
+            35
+          ],
+          "tracker_input_structural_frames_before": 3
+        },
+        "label_at_f_star": "same",
+        "stages": {
+          "detector_output": {
+            "first_bit": 1,
+            "first_structural": 2,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 73
+          },
+          "post_nms": {
+            "first_bit": 1,
+            "first_structural": 9,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 113
+          },
+          "tracker_input": {
+            "first_bit": 1,
+            "first_structural": 5,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 107
+          }
+        },
+        "tracker": {
+          "first_bit": 3,
+          "first_structural": 14
+        }
+      }
+    },
+    "R_E": {
+      "MOT17-02-SDP": {
+        "at_f_star": null,
+        "label_at_f_star": null,
+        "stages": {
+          "detector_output": {
+            "first_bit": 1,
+            "first_structural": 257,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 2
+          },
+          "post_nms": {
+            "first_bit": 1,
+            "first_structural": 469,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 1
+          },
+          "tracker_input": {
+            "first_bit": 1,
+            "first_structural": 469,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 1
+          }
+        },
+        "tracker": {
+          "first_bit": 3,
+          "first_structural": null
+        }
+      },
+      "MOT17-04-SDP": {
+        "at_f_star": null,
+        "label_at_f_star": null,
+        "stages": {
+          "detector_output": {
+            "first_bit": 1,
+            "first_structural": null,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 0
+          },
+          "post_nms": {
+            "first_bit": 1,
+            "first_structural": null,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 0
+          },
+          "tracker_input": {
+            "first_bit": 1,
+            "first_structural": null,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 0
+          }
+        },
+        "tracker": {
+          "first_bit": 3,
+          "first_structural": null
+        }
+      },
+      "MOT17-05-SDP": {
+        "at_f_star": null,
+        "label_at_f_star": null,
+        "stages": {
+          "detector_output": {
+            "first_bit": 1,
+            "first_structural": 146,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 5
+          },
+          "post_nms": {
+            "first_bit": 1,
+            "first_structural": null,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 0
+          },
+          "tracker_input": {
+            "first_bit": 1,
+            "first_structural": null,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 0
+          }
+        },
+        "tracker": {
+          "first_bit": 3,
+          "first_structural": null
+        }
+      },
+      "MOT17-09-SDP": {
+        "at_f_star": null,
+        "label_at_f_star": null,
+        "stages": {
+          "detector_output": {
+            "first_bit": 1,
+            "first_structural": 265,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 2
+          },
+          "post_nms": {
+            "first_bit": 1,
+            "first_structural": 46,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 1
+          },
+          "tracker_input": {
+            "first_bit": 1,
+            "first_structural": 46,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 1
+          }
+        },
+        "tracker": {
+          "first_bit": 3,
+          "first_structural": null
+        }
+      },
+      "MOT17-10-SDP": {
+        "at_f_star": null,
+        "label_at_f_star": null,
+        "stages": {
+          "detector_output": {
+            "first_bit": 1,
+            "first_structural": 440,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 1
+          },
+          "post_nms": {
+            "first_bit": 1,
+            "first_structural": 652,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 1
+          },
+          "tracker_input": {
+            "first_bit": 1,
+            "first_structural": 652,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 1
+          }
+        },
+        "tracker": {
+          "first_bit": 3,
+          "first_structural": null
+        }
+      },
+      "MOT17-11-SDP": {
+        "at_f_star": null,
+        "label_at_f_star": null,
+        "stages": {
+          "detector_output": {
+            "first_bit": 1,
+            "first_structural": null,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 0
+          },
+          "post_nms": {
+            "first_bit": 1,
+            "first_structural": null,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 0
+          },
+          "tracker_input": {
+            "first_bit": 1,
+            "first_structural": null,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 0
+          }
+        },
+        "tracker": {
+          "first_bit": 3,
+          "first_structural": null
+        }
+      },
+      "MOT17-13-SDP": {
+        "at_f_star": null,
+        "label_at_f_star": null,
+        "stages": {
+          "detector_output": {
+            "first_bit": 1,
+            "first_structural": 234,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 1
+          },
+          "post_nms": {
+            "first_bit": 1,
+            "first_structural": 646,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 1
+          },
+          "tracker_input": {
+            "first_bit": 1,
+            "first_structural": 646,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 1
+          }
+        },
+        "tracker": {
+          "first_bit": 3,
+          "first_structural": null
+        }
+      }
+    },
+    "R_T": {
+      "MOT17-02-SDP": {
+        "at_f_star": {
+          "structural_differs": {
+            "detector_output": false,
+            "post_nms": false,
+            "tracker_input": false
+          },
+          "tracker_input_rows": [
+            37,
+            37
+          ],
+          "tracker_input_structural_frames_before": 18
+        },
+        "label_at_f_star": "same",
+        "stages": {
+          "detector_output": {
+            "first_bit": 1,
+            "first_structural": 19,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 39
+          },
+          "post_nms": {
+            "first_bit": 1,
+            "first_structural": 6,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 50
+          },
+          "tracker_input": {
+            "first_bit": 1,
+            "first_structural": 6,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 48
+          }
+        },
+        "tracker": {
+          "first_bit": 3,
+          "first_structural": 283
+        }
+      },
+      "MOT17-04-SDP": {
+        "at_f_star": {
+          "structural_differs": {
+            "detector_output": false,
+            "post_nms": false,
+            "tracker_input": false
+          },
+          "tracker_input_rows": [
+            40,
+            40
+          ],
+          "tracker_input_structural_frames_before": 0
+        },
+        "label_at_f_star": "same",
+        "stages": {
+          "detector_output": {
+            "first_bit": 1,
+            "first_structural": 65,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 93
+          },
+          "post_nms": {
+            "first_bit": 1,
+            "first_structural": 15,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 37
+          },
+          "tracker_input": {
+            "first_bit": 1,
+            "first_structural": 15,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 37
+          }
+        },
+        "tracker": {
+          "first_bit": 3,
+          "first_structural": 3
+        }
+      },
+      "MOT17-05-SDP": {
+        "at_f_star": {
+          "structural_differs": {
+            "detector_output": false,
+            "post_nms": false,
+            "tracker_input": false
+          },
+          "tracker_input_rows": [
+            13,
+            13
+          ],
+          "tracker_input_structural_frames_before": 0
+        },
+        "label_at_f_star": "same",
+        "stages": {
+          "detector_output": {
+            "first_bit": 1,
+            "first_structural": 2,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 139
+          },
+          "post_nms": {
+            "first_bit": 1,
+            "first_structural": 35,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 7
+          },
+          "tracker_input": {
+            "first_bit": 1,
+            "first_structural": 35,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 7
+          }
+        },
+        "tracker": {
+          "first_bit": 3,
+          "first_structural": 15
+        }
+      },
+      "MOT17-09-SDP": {
+        "at_f_star": {
+          "structural_differs": {
+            "detector_output": false,
+            "post_nms": false,
+            "tracker_input": false
+          },
+          "tracker_input_rows": [
+            9,
+            9
+          ],
+          "tracker_input_structural_frames_before": 5
+        },
+        "label_at_f_star": "same",
+        "stages": {
+          "detector_output": {
+            "first_bit": 1,
+            "first_structural": 14,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 66
+          },
+          "post_nms": {
+            "first_bit": 1,
+            "first_structural": 16,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 8
+          },
+          "tracker_input": {
+            "first_bit": 1,
+            "first_structural": 16,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 8
+          }
+        },
+        "tracker": {
+          "first_bit": 3,
+          "first_structural": 319
+        }
+      },
+      "MOT17-10-SDP": {
+        "at_f_star": {
+          "structural_differs": {
+            "detector_output": false,
+            "post_nms": false,
+            "tracker_input": false
+          },
+          "tracker_input_rows": [
+            34,
+            34
+          ],
+          "tracker_input_structural_frames_before": 0
+        },
+        "label_at_f_star": "same",
+        "stages": {
+          "detector_output": {
+            "first_bit": 1,
+            "first_structural": 11,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 54
+          },
+          "post_nms": {
+            "first_bit": 1,
+            "first_structural": 13,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 76
+          },
+          "tracker_input": {
+            "first_bit": 1,
+            "first_structural": 13,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 71
+          }
+        },
+        "tracker": {
+          "first_bit": 3,
+          "first_structural": 6
+        }
+      },
+      "MOT17-11-SDP": {
+        "at_f_star": {
+          "structural_differs": {
+            "detector_output": false,
+            "post_nms": false,
+            "tracker_input": false
+          },
+          "tracker_input_rows": [
+            18,
+            18
+          ],
+          "tracker_input_structural_frames_before": 8
+        },
+        "label_at_f_star": "same",
+        "stages": {
+          "detector_output": {
+            "first_bit": 1,
+            "first_structural": 13,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 123
+          },
+          "post_nms": {
+            "first_bit": 1,
+            "first_structural": 3,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 23
+          },
+          "tracker_input": {
+            "first_bit": 1,
+            "first_structural": 3,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 23
+          }
+        },
+        "tracker": {
+          "first_bit": 3,
+          "first_structural": 49
+        }
+      },
+      "MOT17-13-SDP": {
+        "at_f_star": {
+          "structural_differs": {
+            "detector_output": false,
+            "post_nms": false,
+            "tracker_input": false
+          },
+          "tracker_input_rows": [
+            35,
+            35
+          ],
+          "tracker_input_structural_frames_before": 3
+        },
+        "label_at_f_star": "same",
+        "stages": {
+          "detector_output": {
+            "first_bit": 1,
+            "first_structural": 2,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 73
+          },
+          "post_nms": {
+            "first_bit": 1,
+            "first_structural": 9,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 114
+          },
+          "tracker_input": {
+            "first_bit": 1,
+            "first_structural": 5,
+            "inverted_signature_count_mismatch_frames": 0,
+            "structural_frames": 108
+          }
+        },
+        "tracker": {
+          "first_bit": 3,
+          "first_structural": 14
+        }
+      }
+    }
+  },
+  "study_id": "tf32_off_head_drift_stage_465_r2",
+  "terminal": "TRACKER_INPUT_SAME_AT_FSTAR",
+  "txt_report_only": {
+    "C_pr2_vs_pr2r": {
+      "MOT17-02-SDP": {
+        "first_bit": null,
+        "first_structural": null
+      },
+      "MOT17-04-SDP": {
+        "first_bit": null,
+        "first_structural": null
+      },
+      "MOT17-05-SDP": {
+        "first_bit": null,
+        "first_structural": null
+      },
+      "MOT17-09-SDP": {
+        "first_bit": null,
+        "first_structural": null
+      },
+      "MOT17-10-SDP": {
+        "first_bit": null,
+        "first_structural": null
+      },
+      "MOT17-11-SDP": {
+        "first_bit": null,
+        "first_structural": null
+      },
+      "MOT17-13-SDP": {
+        "first_bit": null,
+        "first_structural": null
+      }
+    },
+    "T_tf32_on_vs_off": {
+      "MOT17-02-SDP": {
+        "first_bit": 3,
+        "first_structural": 129
+      },
+      "MOT17-04-SDP": {
+        "first_bit": 3,
+        "first_structural": 3
+      },
+      "MOT17-05-SDP": {
+        "first_bit": 3,
+        "first_structural": 3
+      },
+      "MOT17-09-SDP": {
+        "first_bit": 3,
+        "first_structural": 3
+      },
+      "MOT17-10-SDP": {
+        "first_bit": 3,
+        "first_structural": 10
+      },
+      "MOT17-11-SDP": {
+        "first_bit": 3,
+        "first_structural": 82
+      },
+      "MOT17-13-SDP": {
+        "first_bit": 3,
+        "first_structural": 3
+      }
+    },
+    "tf32_off_T_vs_C": {
+      "MOT17-02-SDP": {
+        "first_bit": 3,
+        "first_structural": 283
+      },
+      "MOT17-04-SDP": {
+        "first_bit": 3,
+        "first_structural": 3
+      },
+      "MOT17-05-SDP": {
+        "first_bit": 3,
+        "first_structural": 3
+      },
+      "MOT17-09-SDP": {
+        "first_bit": 3,
+        "first_structural": 3
+      },
+      "MOT17-10-SDP": {
+        "first_bit": 3,
+        "first_structural": 3
+      },
+      "MOT17-11-SDP": {
+        "first_bit": 3,
+        "first_structural": 3
+      },
+      "MOT17-13-SDP": {
+        "first_bit": 3,
+        "first_structural": 3
+      }
+    },
+    "tf32_on_T_vs_C": {
+      "MOT17-02-SDP": {
+        "first_bit": 3,
+        "first_structural": 129
+      },
+      "MOT17-04-SDP": {
+        "first_bit": 3,
+        "first_structural": 3
+      },
+      "MOT17-05-SDP": {
+        "first_bit": 3,
+        "first_structural": 3
+      },
+      "MOT17-09-SDP": {
+        "first_bit": 3,
+        "first_structural": 3
+      },
+      "MOT17-10-SDP": {
+        "first_bit": 3,
+        "first_structural": 3
+      },
+      "MOT17-11-SDP": {
+        "first_bit": 3,
+        "first_structural": 3
+      },
+      "MOT17-13-SDP": {
+        "first_bit": 3,
+        "first_structural": 3
+      }
+    }
+  }
+}
