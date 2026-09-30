@@ -28,7 +28,7 @@ validity_criteria:
   V_COMPLETE: "Every declared member (5 arms x 2 runs x 7 sequences of r2 evidence with the required arrays and the declared frame count; the 4 txt pairs x 7 sequences) is present in its manifest and reads back at the manifest digest."
   V_FORMAT: "For every arm, run and sequence: rows of all three probe stages (detector_output, post_nms, tracker_input) are 6 wide with finite coordinates and tracker boxes are 4 wide with finite coordinates (inverted boxes, x2 < x1 or y2 < y1, are well formed); for all three probe stages and the tracker output, ragged counts cover their bodies exactly, no frame repeats, and frames lie in 1..N; every txt row parses as frame,id,left,top,w,h with finite left,top,w,h (negative w or h is well formed) and a frame in 1..N."
   V_REF_SELF: "R_C run 1 and R_C run 2 are bit-identical at every probe stage and at tracker output on every frame of every sequence (comparator and replay sanity)."
-  V_RUN_REPRO: "For every arm and sequence, the full comparison against R_C (all first-divergence frames, structural and inversion-mismatch frame counts, the f* label and the f* record) is identical for run 1 and run 2."
+  V_RUN_REPRO: "For every arm and sequence, the full comparison against R_C (all first-divergence frames, structural and inverted-signature-count mismatch frame counts, the f* label and the f* record) is identical for run 1 and run 2."
   V_RUNNER: "After the freeze passed, the computation or report code raised an exception that none of V_COMPLETE, V_FORMAT, V_REF_SELF, V_RUN_REPRO covers (a runner bug); decided by the exception alone, not by any computed quantity."
 attempt_policy:
   adoption: first_valid

@@ -174,6 +174,23 @@ def test_inversion_census_and_counts():
     assert m.inversion_census(np.zeros((0, 4), np.float32))["rows"] == 0
 
 
+def test_duplicate_track_ids_match_per_id_not_by_position():
+    """Review blocker: an id emitted twice in one frame is matched as a k x k
+    problem; box order within the id group is not structure."""
+    ids = np.asarray([4, 4, 1], np.int64)
+    boxes = np.asarray(
+        [[0, 0, 10, 20], [100, 0, 110, 20], [50, 50, 60, 70]], np.float32
+    )
+    swapped = boxes[[1, 0, 2]]
+    assert m.tracks_structurally_equal((ids, boxes), (ids, swapped))
+    moved = swapped.copy()
+    moved[0] += [0, 40, 0, 40]  # one id-4 box has no eligible partner any more
+    assert not m.tracks_structurally_equal((ids, boxes), (ids, moved))
+    flipped = swapped.copy()
+    flipped[1, [0, 2]] = flipped[1, [2, 0]]  # same rectangle, other signature
+    assert not m.tracks_structurally_equal((ids, boxes), (ids, flipped))
+
+
 def test_tracks_structural_equality():
     ids = np.asarray([3, 1], np.int64)
     boxes = np.asarray([[0, 0, 10, 20], [50, 50, 60, 70]], np.float32)
@@ -374,7 +391,7 @@ def test_inverted_boxes_pass_v_format_and_are_counted(monkeypatch):
     assert census["R_C_1"]["MOT17-02-SDP"]["detector_output"]["x_inverted_rows"] == 0
     stages = by_arm["R_T"]["MOT17-02-SDP"]["stages"]
     assert stages["tracker_input"]["first_structural"] == 1  # flip != normal
-    assert stages["tracker_input"]["inversion_mismatch_frames"] == 1
+    assert stages["tracker_input"]["inverted_signature_count_mismatch_frames"] == 1
 
 
 def test_non_finite_coordinates_are_v_format(monkeypatch):

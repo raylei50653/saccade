@@ -58,8 +58,8 @@ BINDING = StudyBinding(
     runner_file=__file__,
     freeze_tag=f"freeze/{STUDY_ID}/1",
     pinned_blobs={
-        f"docs/research/studies/{STUDY_ID}/study.yaml": "7125c9796d9dd6c165e55faeec15bd42bbcb4955",
-        f"docs/research/studies/{STUDY_ID}/declaration.md": "04d4a42f23c4477cbaa2c3a6705eb4372aaef6aa",
+        f"docs/research/studies/{STUDY_ID}/study.yaml": "5eb1d34c49fe05c9d08bc731d5e31fe204b28575",
+        f"docs/research/studies/{STUDY_ID}/declaration.md": "18adb5678937d5f0555e3ee0dc78b4ee32002038",
     },
 )
 
@@ -226,9 +226,14 @@ def rows_structurally_equal(a: np.ndarray, b: np.ndarray) -> bool:
     """
     if len(a) != len(b):
         return False
-    if len(a) == 0:
-        return True
     eligible = (a[:, None, 5] == b[None, :, 5]) & eligible_pairs(a[:, :4], b[:, :4])
+    return perfect_matching_exists(eligible)
+
+
+def perfect_matching_exists(eligible: np.ndarray) -> bool:
+    """Whether a one-to-one pairing of a square matrix uses only eligible cells."""
+    if eligible.size == 0:
+        return True
     r, c = linear_sum_assignment((~eligible).astype(np.float64))
     return bool(np.all(eligible[r, c]))
 
@@ -242,17 +247,23 @@ def tracks_bit_equal(
 def tracks_structurally_equal(
     a: tuple[np.ndarray, np.ndarray], b: tuple[np.ndarray, np.ndarray]
 ) -> bool:
-    """Same id multiset and every same-id box pair eligible (§2)."""
+    """Same id multiset and, per id, a perfect matching over eligible box pairs.
+
+    An id that appears k times on both sides is matched as a k x k problem, so
+    the order of duplicate-id boxes within a frame is not structure (§2); a
+    unique id reduces to one eligible pair.
+    """
     ids_a, boxes_a = a
     ids_b, boxes_b = b
     if len(ids_a) != len(ids_b):
         return False
-    oa, ob = np.argsort(ids_a, kind="stable"), np.argsort(ids_b, kind="stable")
-    if not np.array_equal(ids_a[oa], ids_b[ob]):
+    if not np.array_equal(np.sort(ids_a), np.sort(ids_b)):
         return False
-    if len(ids_a) == 0:
-        return True
-    return bool(np.all(np.diagonal(eligible_pairs(boxes_a[oa], boxes_b[ob]))))
+    for tid in np.unique(ids_a):
+        ga, gb = boxes_a[ids_a == tid], boxes_b[ids_b == tid]
+        if not perfect_matching_exists(eligible_pairs(ga, gb)):
+            return False
+    return True
 
 
 def first_divergence(n_frames: int, same: Callable[[int], bool]) -> int | None:
@@ -280,7 +291,7 @@ def compare_sequence(
             ),
             "first_structural": struct_diff[0] if struct_diff else None,
             "structural_frames": len(struct_diff),
-            "inversion_mismatch_frames": sum(
+            "inverted_signature_count_mismatch_frames": sum(
                 1
                 for f in range(1, n_frames + 1)
                 if inversion_counts(r[f][:, :4]) != inversion_counts(o[f][:, :4])
@@ -561,7 +572,7 @@ def _report_md(
         "",
         "| arm | seq | det_out bit/struct (n) | post_nms bit/struct (n) "
         "| tracker_input bit/struct (n) | tracker bit/struct | tracker_input at f* "
-        "| ti struct frames before f* | inv-sig mismatch frames det/nms/ti |",
+        "| ti struct frames before f* | inverted-signature-count mismatch frames det/nms/ti |",
         "|:--|:--|:--|:--|:--|:--|:--|--:|:--|",
     ]
     fmt = lambda v: "—" if v is None else str(v)  # noqa: E731
@@ -581,7 +592,7 @@ def _report_md(
                 f"| {arm} | {seq[6:8]} | {' | '.join(cells)} "
                 f"| {fmt(r['tracker']['first_bit'])}/{fmt(r['tracker']['first_structural'])} "
                 f"| {fmt(r['label_at_f_star'])} | {fmt(before)} "
-                f"| {'/'.join(str(r['stages'][s]['inversion_mismatch_frames']) for s in PROBE_STAGES)} |"
+                f"| {'/'.join(str(r['stages'][s]['inverted_signature_count_mismatch_frames']) for s in PROBE_STAGES)} |"
             )
     lines += [
         "",

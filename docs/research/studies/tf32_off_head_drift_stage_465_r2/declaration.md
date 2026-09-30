@@ -57,11 +57,11 @@
   - *結構分歧*：列數不同，或**不存在**只用 eligible pair 的一對一完美配對。row 的 eligible pair = 同 class 且 box eligible。判定方式是對「非 eligible」成本做 assignment，檢查結果是否全部落在 eligible pair 上；這等於問「是否存在 threshold-feasible perfect matching」，**不是**先取總 IoU 最大的配對再檢查門檻。**score 不比較。**
 - **tracker output**（每 frame 的 track id 與 xyxy box；沒有 emit 的 frame 視為 0 個 track）：
   - *bit 分歧*：id 或 box 的 bytes 不同。
-  - *結構分歧*：id multiset 不同，或任一相同 id 的 box pair 不 eligible。
+  - *結構分歧*：id multiset 不同，或某個 id 的 box 之間**不存在**只用 eligible pair 的完美配對。同一 frame 內同一個 id 出現 k 次時，以 k × k 的 eligible 矩陣判定（同一 id 內 box 的順序不是結構）；id 唯一時就是檢查那一對 box 是否 eligible。不要求每個 frame 的 id 唯一。
 - **f\***：tracker output 第一個結構分歧的 frame。
 - **f\* label**（f\* 存在時）：`tracker_input` 在 f\* 結構分歧 ⇒ `different`；否則 ⇒ `same`。只描述 f\* 當下的 tracker 邊界。
 
-凍結的自由度：IoU 門檻 0.9、「未記錄 = 0 列」、eligible-pair 完美配對、inversion signature 必須相同、canonical IoU（相同矩形 = 1）、以 `tracker_input` 判 f\* label、**5-of-7 support threshold**（比 7 序列的 strict majority 4/7 更強）、run 1 為報告用的 run（run 2 必須相同，見 V_RUN_REPRO）。這些都是事前的選擇，沒有調過；所有結果都寫成「在凍結的 0.9 定義下」。
+凍結的自由度：IoU 門檻 0.9、「未記錄 = 0 列」、eligible-pair 完美配對（tracker output 為逐 id 的完美配對）、inversion signature 必須相同、canonical IoU（相同矩形 = 1）、以 `tracker_input` 判 f\* label、**5-of-7 support threshold**（比 7 序列的 strict majority 4/7 更強）、run 1 為報告用的 run（run 2 必須相同，見 V_RUN_REPRO）。這些都是事前的選擇，沒有調過；所有結果都寫成「在凍結的 0.9 定義下」。
 
 ## 3. Validity
 
@@ -70,7 +70,7 @@
 1. `V_COMPLETE`：所有宣告的 member 都在 manifest 裡且讀回 digest 相符；npz 帶齊所需陣列、frame 數等於序列長度（02 600、04 1050、05 837、09 525、10 654、11 900、13 750）。
 2. `V_FORMAT`：三個 probe stage（`detector_output`、`post_nms`、`tracker_input`）與 tracker output，每個 arm／run／序列都在比較之前檢查：row 為 6 欄、box 為 4 欄，座標皆為 finite；ragged count 恰好覆蓋 body；frame 不重複且在 1..N。txt 每列可解析、left／top／w／h 皆為 finite、frame 在 1..N。**顛倒的框（x2 < x1 或 y2 < y1；txt 為 w < 0 或 h < 0）是合法輸入**，不構成 invalid。
 3. `V_REF_SELF`：`R_C` run 1 與 run 2 在每個 stage、每個 frame 都逐位元相同。
-4. `V_RUN_REPRO`：每個 arm、每個序列，run 1 與 run 2 的整份比較結果（含 inversion-signature mismatch frame 數）相同。
+4. `V_RUN_REPRO`：每個 arm、每個序列，run 1 與 run 2 的整份比較結果（含 inverted-signature-count mismatch frame 數）相同。
 5. `V_RUNNER`：freeze 通過後，計算或報告程式碼丟出上面四條都不涵蓋的例外（runner bug）；只由例外決定，不看任何計算出的量。
 
 這五條都與結果是否有利無關。attempt 政策：`first_valid`、最多 1 次 valid、最多 3 次 attempt。有效執行的結果不重跑；invalid attempt 修正後以新 attempt（新 tag `freeze/tf32_off_head_drift_stage_465_r2/<n>`）追加，舊 attempt 保留。
@@ -92,7 +92,7 @@ terminal 只陳述「在凍結的 0.9 定義下，f\* 當下 `tracker_input` 結
 - 其餘 arm（`R_E`、`H_M`、`H_V`）的同一組量，特別是 `R_E` 當作「容差內的數值雜訊」基準。
 - 每個 stage 的第一個 bit／結構分歧 frame 與整個序列的結構分歧 frame 數；f\* 當下各 stage 是否結構分歧、`tracker_input` 列數、f\* 之前 `tracker_input` 的結構分歧 frame 數。
 - **顛倒框 census**：每個 arm／run／序列，三個 probe stage 與 tracker output 各自的 `x_inverted_rows`、`y_inverted_rows`、`either_inverted_rows`。
-- **inversion-signature mismatch frame 數**：每個 arm 對 `R_C`、每個 probe stage，兩邊 inversion signature multiset（只 x、只 y、兩者皆顛倒的個數）不同的 frame 數。不另設 terminal。
+- **inverted-signature-count mismatch frame 數**：每個 arm 對 `R_C`、每個 probe stage，兩邊「只 x 顛倒、只 y 顛倒、兩者皆顛倒」三個個數不同的 frame 數（未顛倒的個數不列入）。不另設 terminal。
 - 最終 txt 層（含後處理）的第一個 bit／結構分歧 frame，四組：TF32-on T vs C、TF32-off T vs C、T 的 TF32-on vs off、C 的 PR-2 vs PR-2R。
 
 ## 6. 解讀限制
