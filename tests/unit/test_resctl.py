@@ -241,7 +241,16 @@ def try_acquire(*a, **k):
 def release(*a, **k):
     if point == "during_release":
         term()  # cleanup has started, lease not yet removed
-    return real_release(*a, **k)
+    out = real_release(*a, **k)
+    if point == "before_final_unmask":
+        real_sigmask = signal.pthread_sigmask
+        def sigmask(how, mask):  # the next SETMASK is cleanup's final unmask
+            if how == signal.SIG_SETMASK:
+                signal.pthread_sigmask = real_sigmask
+                term()  # still blocked: pending until the unmask below
+            return real_sigmask(how, mask)
+        signal.pthread_sigmask = sigmask
+    return out
 
 mod.try_acquire, mod.release = try_acquire, release
 sys.exit(mod.main(sys.argv[3:]))
@@ -281,7 +290,9 @@ def test_signal_beats_spawn_failure(repo: dict[str, Path]) -> None:
     assert not _lease_path(repo, "gpu0").exists()
 
 
-@pytest.mark.parametrize("point", ["after_wait", "during_release"])
+@pytest.mark.parametrize(
+    "point", ["after_wait", "during_release", "before_final_unmask"]
+)
 def test_signal_during_cleanup_is_not_swallowed(
     repo: dict[str, Path], point: str
 ) -> None:

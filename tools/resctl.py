@@ -961,7 +961,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     started = time.monotonic()
     rc = 0
     previous: dict[int, Any] = {}
-    late: list[int] = []  # stop requests that arrived after the child exited
+    late: list[int] = []  # stop requests after the child exited / during cleanup
     try:
         # A stop request that arrived during setup wins: don't spawn at all.
         # (One pending when Popen fails wins over 127 too; see `finally`.)
@@ -999,20 +999,24 @@ def cmd_run(args: argparse.Namespace) -> int:
         # Cleanup is a signal-mask critical section: a stop request arriving
         # now is held back until the lease is gone (so it cannot strand it) and
         # then reported in the exit status (so it is not swallowed either).
+        # A collector is installed *before* unmasking, so there is no window in
+        # which a pending signal meets the original (default) handler; once the
+        # original handlers are back, cleanup is over and resctl's contract ends.
         signal.pthread_sigmask(signal.SIG_BLOCK, _FORWARDED_SIGNALS)
         release(rt, acq)
-        pending = _take_pending_signal()
-        stop = late[0] if late else pending
-        if stop is not None and rc >= 0:
-            rc = -stop
+        originals = previous or {s: signal.getsignal(s) for s in _FORWARDED_SIGNALS}
+        for sig in _FORWARDED_SIGNALS:
+            signal.signal(sig, lambda signum, _frame: late.append(signum))
+        signal.pthread_sigmask(signal.SIG_SETMASK, old_mask)  # pending -> collector
+        for sig_num, handler in originals.items():
+            signal.signal(sig_num, handler)
+        if late and rc >= 0:
+            rc = -late[0]
         how = f"exit {rc}" if rc >= 0 else f"signal {-rc}"
         _log(
             f"released {args.resource} after {_fmt_elapsed(time.monotonic() - started)} ({how})",
             args.quiet,
         )
-        for s, handler in previous.items():
-            signal.signal(s, handler)
-        signal.pthread_sigmask(signal.SIG_SETMASK, old_mask)
     return rc if rc >= 0 else 128 - rc
 
 
