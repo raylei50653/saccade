@@ -28,9 +28,10 @@ v1.4 之前宣告的研究維持原本的位置與 sealed procedure，不搬進�
 | `section_20_2.mainline_transition` | ✓ | 每個 terminal → §20.7 轉移：`closes_core_unknown` / `adds_decision_capability` / `changes_production_behavior` / `none` |
 | `declaration` / `results` | ✓ / 選填 | 本目錄內的 `.md` 檔名 |
 | `runner` | formal 必填 | repo-relative `.py`；有 runner 就必須有下面三項 |
-| `inputs` | 隨 runner | `name → repo-relative path`；runner 只能經 `FrozenStudy.input(name)` 取得 |
+| `inputs` | 隨 runner | `name → {kind: tracked, path}`（freeze commit 裡的 regular file）或 `{kind: external, path, manifest}`（repo 外／ignored 目錄；`manifest` 是本目錄內、已 commit 的 `research_input_manifest_v1` JSON，列出每個成員的 SHA-256）；runner 只能經 `read_input()` / `input_file()` 取得 frozen bytes |
 | `validity_criteria` | 隨 runner | `id → 定義`；invalid attempt 必須引用其一 |
 | `attempt_policy` | 隨 runner | `adoption`（`first_valid` / `unanimous_valid`）、`max_valid_attempts`、`max_attempts` |
+| `formal_declaration` | formal 必填 | §20.2 全欄位＋substrate＋κ（三部分）＋frozen degrees of freedom＋terminal partition＋seal（review, reviewer）；欄位與交叉約束見 §20.11.1 |
 
 ## Runner 骨架
 
@@ -40,15 +41,17 @@ from research_study import StudyBinding, open_frozen_study
 BINDING = StudyBinding(
     study_id="<study_id>",
     runner_file=__file__,
-    freeze_tag="freeze/<study_id>/1",          # 每個 attempt 一個新 tag
-    pinned_blobs={                             # git rev-parse HEAD:<path>
+    freeze_tag="freeze/<study_id>/1",          # 必須正好是 freeze/<study_id>/<attempt>
+    pinned_blobs={                             # git rev-parse HEAD:<path>；freeze 對 HEAD 驗證，但不證明它們是 source literal
         "docs/research/studies/<study_id>/study.yaml": "<blob>",
         "docs/research/studies/<study_id>/declaration.md": "<blob>",
     },
 )
 
 study = open_frozen_study(BINDING)             # 先驗 freeze，失敗就沒有 data path
-packet = study.input("packet")
+packet = study.read_input("packet")                # tracked：frozen blob 的 bytes
+row = study.read_input("probes", "seq04/l2.npz")   # external：逐次驗 manifest digest
+path = study.input_file("probes", "seq04/l2.npz")  # 需要 path 的 reader：私有唯讀副本
 (study.payload_dir() / "out.csv").write_text(...)
 study.record("valid", terminal="LOCALIZED")    # 或 record("invalid", invalid_criterion="V1")
 ```

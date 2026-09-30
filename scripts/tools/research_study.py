@@ -18,15 +18,21 @@ names the drift it prevents):
   that names an exploratory study fails; promotion is a new formal study
   (§20.5), never a relabel, so a study's tier can never change once merged.
 * **Declaration before execution, in one PR** (conclusion drift). A runner
-  gets data paths only from :func:`open_frozen_study`, which first verifies
-  the freeze: clean tree, annotated tag == HEAD locally and on the remote, and
-  every pinned declaration blob. There is no other constructor for the handle.
+  gets input bytes only from :func:`open_frozen_study`, which first verifies
+  the freeze: clean tree, annotated tag ``freeze/<study_id>/<attempt>`` ==
+  HEAD locally and on the remote, and every pinned declaration blob. There is
+  no other constructor for the handle, and it never hands out a mutable path:
+  tracked inputs are read from the frozen blob, external packets through a
+  committed SHA-256 manifest, both re-verified on every read.
+* **Formal means the full declaration** (conclusion drift). A formal study
+  carries ``formal_declaration`` (§20.2 + §20.8); the checker enforces its
+  fields and cross-constraints, the seal review its content.
 * **Attempts are append-only and adopted by rule** (conclusion drift). An
   invalid attempt must cite a predeclared validity criterion; the adopted
   terminal comes from the declared rule, never from "the latest attempt".
 
 Limit: Python cannot sandbox file access. A runner that computes a data path
-itself bypasses the handle; the static check rejects literal data paths and a
+itself and opens it directly bypasses the handle; the static check rejects literal data paths and a
 runner that never calls ``open_frozen_study``, not arbitrary computed paths.
 
 Usage:
@@ -44,6 +50,7 @@ import json
 import re
 import subprocess
 import sys
+import tempfile
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
@@ -87,6 +94,57 @@ OUTPUT_CLASSES: frozenset[str] = frozenset(
 )
 ADOPTION_RULES: frozenset[str] = frozenset({"first_valid", "unanimous_valid"})
 
+# §20.2 axes, spelled as in the contract.
+TARGET_LAYERS: frozenset[str] = frozenset(
+    {"coarse_gate", "score_ranking", "assignment", "calibration", "none"}
+)
+STUDY_INTENTS: frozenset[str] = frozenset(
+    {
+        "design_evaluation",
+        "capability_map",
+        "boundary_diagnostic",
+        "performance_upper_bound_probe",
+    }
+)
+# §20.3: only these layers have a defined design objective in contract v1.
+DESIGN_LAYERS: frozenset[str] = frozenset({"coarse_gate", "score_ranking"})
+# §20.3 / §20.5: what each intent may claim.
+INTENT_OUTPUT_CLASSES: dict[str, frozenset[str]] = {
+    "design_evaluation": OUTPUT_CLASSES,
+    "capability_map": frozenset({"diagnostic", "unexplained_residual"}),
+    "boundary_diagnostic": frozenset({"diagnostic", "unexplained_residual"}),
+    "performance_upper_bound_probe": frozenset(
+        {"performance_upper_bound", "diagnostic", "unexplained_residual"}
+    ),
+}
+# §20.4 selection order, verbatim and complete.
+SELECTION_ORDER: tuple[str, ...] = (
+    "purpose_alignment",
+    "mechanism_interpretability",
+    "structural_simplicity",
+    "stability",
+    "utility_threshold",
+)
+_FORMAL_DECLARATION_KEYS = frozenset(
+    {
+        "target_decision_layer",
+        "study_intent",
+        "design_objective",
+        "selection_rule",
+        "validity_gate",
+        "stop_conditions",
+        "substrate",
+        "kappa",
+        "frozen_degrees_of_freedom",
+        "terminal_partition",
+        "seal",
+    }
+)
+
+INPUT_KINDS: frozenset[str] = frozenset({"tracked", "external"})
+INPUT_MANIFEST_SCHEMA = "research_input_manifest_v1"
+_REGULAR_BLOB_MODES = frozenset({"100644", "100755"})
+
 # Documents whose citations make a claim formal. Formal studies' own artifacts
 # are added at check time.
 FORMAL_CHAIN_PREFIXES: tuple[str, ...] = (
@@ -120,6 +178,7 @@ _STUDY_KEYS = frozenset(
         "inputs",
         "validity_criteria",
         "attempt_policy",
+        "formal_declaration",
     }
 )
 _REQUIRED_STUDY_KEYS = frozenset(
@@ -135,6 +194,7 @@ _ATTEMPT_KEYS = frozenset(
         "validity",
         "terminal",
         "invalid_criterion",
+        "inputs",
         "files",
     }
 )
@@ -335,6 +395,12 @@ def study_schema_problems(doc: Mapping[str, Any], study_id: str) -> list[str]:
     runner = doc.get("runner")
     if derived == "formal" and runner is None:
         problems.append("a formal study must name its runner (§20.11.3)")
+    if derived == "formal" and "formal_declaration" not in doc:
+        problems.append(
+            "a formal study must carry formal_declaration (§20.2 + §20.8, §20.11.1)"
+        )
+    if "formal_declaration" in doc:
+        problems += formal_declaration_problems(doc)
     if runner is None:
         for key in ("inputs", "validity_criteria", "attempt_policy"):
             if key in doc:
@@ -349,15 +415,10 @@ def study_schema_problems(doc: Mapping[str, Any], study_id: str) -> list[str]:
             "a study with a runner must declare inputs (a mapping, possibly empty)"
         )
     else:
-        for name, path in inputs.items():
-            if (
-                not isinstance(name, str)
-                or not _CRITERION.match(name)
-                or not _is_repo_rel(path)
-            ):
-                problems.append(
-                    f"input {name!r} -> {path!r} is not name -> repo-relative path"
-                )
+        for name, spec in inputs.items():
+            problems += [
+                f"input {name!r}: {p}" for p in _input_spec_problems(name, spec)
+            ]
     criteria = doc.get("validity_criteria")
     if not isinstance(criteria, dict) or not criteria:
         problems.append(
@@ -401,6 +462,147 @@ def study_schema_problems(doc: Mapping[str, Any], study_id: str) -> list[str]:
     return problems
 
 
+def _input_spec_problems(name: Any, spec: Any) -> list[str]:
+    if not isinstance(name, str) or not _CRITERION.match(name):
+        return ["input name is malformed"]
+    if not isinstance(spec, dict) or spec.get("kind") not in INPUT_KINDS:
+        return [f"must be a mapping with kind in {sorted(INPUT_KINDS)}"]
+    expected = {"kind", "path"} | (
+        {"manifest"} if spec["kind"] == "external" else set()
+    )
+    problems = []
+    if set(spec) != expected:
+        problems.append(f"{spec['kind']} input keys must be exactly {sorted(expected)}")
+    if not _is_repo_rel(spec.get("path")):
+        problems.append("path must be repo-relative")
+    manifest = spec.get("manifest")
+    if spec["kind"] == "external" and (
+        not _is_leaf_name(manifest) or not str(manifest).endswith(".json")
+    ):
+        problems.append("manifest must be a .json file name inside the study directory")
+    return problems
+
+
+def _nonempty_str(value: Any) -> bool:
+    return isinstance(value, str) and bool(value.strip())
+
+
+def formal_declaration_problems(doc: Mapping[str, Any]) -> list[str]:
+    """Presence and cross-field consistency of the §20.2 / §20.8 declaration.
+
+    What is mechanical here: every §20.2 field, the §20.9.1 substrate, κ in three
+    separate parts, pinned degrees of freedom, a terminal partition matching the
+    declared terminals, and the §20.3 / §20.4 / §20.5 constraints between them.
+    What is not: whether the content meets the §20.8 bar. That is the seal
+    review, and ``seal`` records it; the checker only requires the record.
+    """
+    decl = doc["formal_declaration"]
+    if not isinstance(decl, dict):
+        return ["formal_declaration must be a mapping"]
+    problems: list[str] = []
+    missing = sorted(_FORMAL_DECLARATION_KEYS - set(decl))
+    unknown = sorted(set(decl) - _FORMAL_DECLARATION_KEYS)
+    if missing:
+        problems.append(f"formal_declaration missing {missing}")
+    if unknown:
+        problems.append(f"formal_declaration unknown keys {unknown}")
+    if missing:
+        return problems
+
+    layer, intent = decl["target_decision_layer"], decl["study_intent"]
+    if layer not in TARGET_LAYERS:
+        problems.append(f"target_decision_layer must be one of {sorted(TARGET_LAYERS)}")
+    if intent not in STUDY_INTENTS:
+        problems.append(f"study_intent must be one of {sorted(STUDY_INTENTS)}")
+    if intent == "design_evaluation" and layer not in DESIGN_LAYERS:
+        problems.append(
+            f"design_evaluation of {layer!r} is blocked: contract v1 defines no "
+            "design objective for that layer (§20.3)"
+        )
+    section = doc["section_20_2"]
+    classes = set(section.get("output_class") or [])
+    allowed = INTENT_OUTPUT_CLASSES.get(intent, frozenset())
+    if intent in STUDY_INTENTS and not classes <= allowed:
+        problems.append(
+            f"intent {intent!r} may not claim {sorted(classes - allowed)} (§20.3, §20.5)"
+        )
+    if not _nonempty_str(decl["design_objective"]):
+        problems.append("design_objective must be stated (§20.3)")
+    selection = decl["selection_rule"]
+    if "design_candidate" in classes:
+        if selection != list(SELECTION_ORDER):
+            problems.append(
+                f"selection_rule must be the §20.4 order {list(SELECTION_ORDER)}"
+            )
+    elif not (
+        isinstance(selection, list) and selection and all(map(_nonempty_str, selection))
+    ):
+        problems.append("selection_rule must be a non-empty list (§20.2)")
+
+    gate = decl["validity_gate"]
+    criteria = doc.get("validity_criteria") or {}
+    if not isinstance(gate, list) or not gate or not set(gate) <= set(criteria):
+        problems.append(
+            "validity_gate must list validity_criteria ids that separate "
+            "UNRESOLVED from futility (§20.2, §20.7)"
+        )
+    stops = decl["stop_conditions"]
+    if not (
+        isinstance(stops, dict)
+        and set(stops) == {"sufficiency", "futility"}
+        and all(
+            isinstance(v, list) and v and all(map(_nonempty_str, v))
+            for v in stops.values()
+        )
+    ):
+        problems.append(
+            "stop_conditions must list sufficiency and futility stops (§20.6)"
+        )
+    if not _nonempty_str(decl["substrate"]):
+        problems.append("substrate must be declared (§20.9.1)")
+    kappa = decl["kappa"]
+    parts = {"quantification_space", "comparison_relation", "decision_rule"}
+    if not (
+        isinstance(kappa, dict)
+        and kappa
+        and all(
+            isinstance(v, dict)
+            and set(v) == parts
+            and all(map(_nonempty_str, v.values()))
+            for v in kappa.values()
+        )
+    ):
+        problems.append(
+            "kappa must map every decidable unit to quantification_space, "
+            "comparison_relation and decision_rule, separately (§20.2)"
+        )
+    dof = decl["frozen_degrees_of_freedom"]
+    if not (isinstance(dof, dict) and dof and all(map(_nonempty_str, dof.values()))):
+        problems.append("frozen_degrees_of_freedom must pin every choice (§20.8.1)")
+    partition = decl["terminal_partition"]
+    terminals = section.get("mainline_transition") or {}
+    if not (
+        isinstance(partition, dict)
+        and set(partition) == set(terminals)
+        and all(map(_nonempty_str, partition.values()))
+    ):
+        problems.append(
+            "terminal_partition must define exactly the declared terminals (§20.8.3)"
+        )
+    if UNRESOLVED not in terminals:
+        problems.append(
+            f"a formal study must map validity failure to {UNRESOLVED} (§20.7)"
+        )
+    seal = decl["seal"]
+    if not (
+        isinstance(seal, dict)
+        and set(seal) == {"review", "reviewer"}
+        and all(map(_nonempty_str, seal.values()))
+    ):
+        problems.append("seal must record review and reviewer (§20.8)")
+    return problems
+
+
 def _md_tier_header(text: str) -> str | None:
     for line in text.splitlines()[:_HEADER_SCAN_LINES]:
         match = _TIER_HEADER.match(line)
@@ -418,7 +620,7 @@ def runner_source_problems(source: str, study: Mapping[str, Any]) -> list[str]:
         tree = ast.parse(source)
     except SyntaxError as exc:
         return [f"runner does not parse: {exc}"]
-    inputs = [str(p) for p in (study.get("inputs") or {}).values()]
+    inputs = _input_paths(study)
     forbidden_exact = {PurePosixPath(p).parts[0] for p in inputs} | {
         prefix.rstrip("/") for prefix in FORBIDDEN_RUNNER_PREFIXES
     }
@@ -438,7 +640,7 @@ def runner_source_problems(source: str, study: Mapping[str, Any]) -> list[str]:
             ):
                 problems.append(
                     f"runner line {node.lineno} names data path {node.value!r}; "
-                    "data must come from FrozenStudy.input()"
+                    "data must come from FrozenStudy.read_input()"
                 )
         if isinstance(node, ast.Call):
             func = node.func
@@ -454,16 +656,163 @@ def runner_source_problems(source: str, study: Mapping[str, Any]) -> list[str]:
     return problems
 
 
+# ---------------------------------------------------------------------- inputs
+
+
+def _input_paths(study: Mapping[str, Any]) -> list[str]:
+    return [
+        str(spec["path"])
+        for spec in (study.get("inputs") or {}).values()
+        if isinstance(spec, dict) and "path" in spec
+    ]
+
+
+def _tree_entry(root: Path, commit: str, rel: str) -> tuple[str, str, str] | None:
+    """(mode, type, object id) of ``rel`` in ``commit``, or None when absent."""
+    out = _git(root, "ls-tree", commit, "--", rel)
+    if not isinstance(out, str) or not out:
+        return None
+    meta, _, path = out.splitlines()[0].partition("\t")
+    if path != rel:
+        return None
+    mode, kind, oid = meta.split()
+    return mode, kind, oid
+
+
+def _symlink_on_path(root: Path, rel: str) -> str | None:
+    current = root
+    for part in PurePosixPath(rel).parts:
+        current = current / part
+        if current.is_symlink():
+            return current.relative_to(root).as_posix()
+    return None
+
+
+def _manifest_files(raw: bytes) -> tuple[dict[str, str], list[str]]:
+    try:
+        doc = json.loads(raw)
+    except ValueError as exc:
+        return {}, [f"manifest is not JSON: {exc}"]
+    if not isinstance(doc, dict) or set(doc) != {"schema", "files"}:
+        return {}, ["manifest keys must be exactly schema, files"]
+    if doc["schema"] != INPUT_MANIFEST_SCHEMA:
+        return {}, [f"manifest schema must be {INPUT_MANIFEST_SCHEMA!r}"]
+    files = doc["files"]
+    if not isinstance(files, dict) or not files:
+        return {}, ["manifest must list at least one file"]
+    bad = [
+        k for k, v in files.items() if not _is_repo_rel(k) or not _SHA256.match(str(v))
+    ]
+    if bad:
+        return {}, [f"manifest entries malformed: {sorted(bad)[:5]}"]
+    return dict(files), []
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _external_tree_problems(
+    root: Path, rel: str, files: Mapping[str, str]
+) -> list[str]:
+    """The on-disk packet is exactly the manifest: same regular files, same bytes."""
+    link = _symlink_on_path(root, rel)
+    if link:
+        return [f"{link} is a symlink; external inputs must be real directories"]
+    base = root / rel
+    if not base.is_dir():
+        return [f"{rel} is not a directory on disk"]
+    present: set[str] = set()
+    problems: list[str] = []
+    for entry in sorted(base.rglob("*")):
+        member = entry.relative_to(base).as_posix()
+        if entry.is_symlink():
+            problems.append(f"{rel}/{member} is a symlink")
+        elif entry.is_file():
+            present.add(member)
+    if present != set(files):
+        extra, lost = sorted(present - set(files)), sorted(set(files) - present)
+        problems.append(
+            f"{rel} differs from its manifest: extra {extra[:5]}, missing {lost[:5]}"
+        )
+    for member in sorted(present & set(files)):
+        if _sha256(base / member) != files[member]:
+            problems.append(f"{rel}/{member} does not match its manifest digest")
+    return problems
+
+
+def input_identities(
+    root: Path, commit: str, study: Mapping[str, Any]
+) -> tuple[dict[str, dict[str, str]], dict[str, dict[str, str]], list[str]]:
+    """(identity per input, manifest per external input, problems) at ``commit``.
+
+    A tracked input is a regular blob in the frozen commit. An external input is
+    not in the tree at all; its identity is a manifest that is.
+    """
+    identities: dict[str, dict[str, str]] = {}
+    manifests: dict[str, dict[str, str]] = {}
+    problems: list[str] = []
+    study_id = str(study["study_id"])
+    for name, spec in sorted((study.get("inputs") or {}).items()):
+        path = str(spec["path"])
+        entry = _tree_entry(root, commit, path)
+        if spec["kind"] == "tracked":
+            if entry is None:
+                problems.append(
+                    f"input {name!r}: {path} is absent from the frozen commit "
+                    "(an untracked or ignored input is external, with a manifest)"
+                )
+            elif entry[1] != "blob" or entry[0] not in _REGULAR_BLOB_MODES:
+                problems.append(
+                    f"input {name!r}: {path} is mode {entry[0]} {entry[1]}, not a regular file"
+                )
+            else:
+                identities[name] = {"kind": "tracked", "path": path, "blob": entry[2]}
+            continue
+        if entry is not None:
+            problems.append(
+                f"input {name!r}: {path} is tracked; declare it kind: tracked"
+            )
+            continue
+        manifest_rel = _study_rel(study_id, str(spec["manifest"]))
+        manifest_entry = _tree_entry(root, commit, manifest_rel)
+        if manifest_entry is None or manifest_entry[0] not in _REGULAR_BLOB_MODES:
+            problems.append(
+                f"input {name!r}: manifest {manifest_rel} is not in the frozen commit"
+            )
+            continue
+        files, found = _manifest_files(_read_at(root, commit, manifest_rel) or b"")
+        if found:
+            problems += [f"input {name!r}: {p}" for p in found]
+            continue
+        manifests[name] = files
+        identities[name] = {
+            "kind": "external",
+            "path": path,
+            "manifest": manifest_rel,
+            "manifest_blob": manifest_entry[2],
+        }
+    return identities, manifests, problems
+
+
 # ---------------------------------------------------------------- freeze + API
 
 
 @dataclass(frozen=True)
 class StudyBinding:
-    """What a runner pins about its own declaration, fixed in the runner source.
+    """What a runner claims about its own declaration.
 
     ``pinned_blobs`` maps repo-relative paths to git blob ids and must cover the
-    study's study.yaml and declaration. ``runner_file`` is the runner's
-    ``__file__``; the freeze requires study.yaml to name that same file.
+    study's study.yaml and declaration; the freeze requires each to be the blob
+    at HEAD. Nothing proves the ids are literals in the runner source — a
+    runner could compute them — so the guarantee is "the runner ran against
+    these blobs", recorded in the attempt, not "the runner fixed them in its
+    text". ``runner_file`` is the runner's ``__file__``; the freeze requires
+    study.yaml to name that same file.
     """
 
     study_id: str
@@ -492,6 +841,8 @@ class FrozenStudy:
         tag: str,
         commit: str,
         pinned: Mapping[str, str],
+        identities: Mapping[str, Mapping[str, str]],
+        manifests: Mapping[str, Mapping[str, str]],
     ) -> None:
         if token is not _OPEN_TOKEN:
             raise StudyError(["FrozenStudy is only issued by open_frozen_study()"])
@@ -503,6 +854,9 @@ class FrozenStudy:
         self._tag = tag
         self.freeze_commit = commit
         self._pinned = dict(pinned)
+        self._identities = {k: dict(v) for k, v in identities.items()}
+        self._manifests = {k: dict(v) for k, v in manifests.items()}
+        self._scratch: Path | None = None
         self._recorded = False
 
     @property
@@ -515,11 +869,57 @@ class FrozenStudy:
             / f"{self.attempt:03d}"
         )
 
-    def input(self, name: str) -> Path:
-        inputs = self._study.get("inputs") or {}
-        if name not in inputs:
+    def input_members(self, name: str) -> list[str]:
+        """The manifest members of an external input, sorted."""
+        if name not in self._manifests:
+            raise StudyError([f"{name!r} is not a declared external input"])
+        return sorted(self._manifests[name])
+
+    def read_input(self, name: str, member: str | None = None) -> bytes:
+        """The frozen bytes of an input, re-verified on every call.
+
+        Tracked: the working-tree file must still be the frozen blob, and the
+        bytes returned are the blob's. External: the member must be in the
+        frozen manifest and its bytes must match the manifest digest.
+        """
+        identity = self._identities.get(name)
+        if identity is None:
             raise StudyError([f"{name!r} is not a declared input of {self.study_id}"])
-        return self._root / inputs[name]
+        path = identity["path"]
+        if identity["kind"] == "tracked":
+            if member is not None:
+                raise StudyError([f"tracked input {name!r} has no members"])
+            link = _symlink_on_path(self._root, path)
+            if link or _worktree_blob(self._root, path) != identity["blob"]:
+                raise StudyError([f"input {name!r} ({path}) changed after the freeze"])
+            data = _git(self._root, "cat-file", "blob", identity["blob"], binary=True)
+            if not isinstance(data, bytes):
+                raise StudyError([f"frozen blob of {name!r} is unreadable"])
+            return data
+        files = self._manifests[name]
+        if member is None or member not in files:
+            raise StudyError([f"{member!r} is not in the manifest of {name!r}"])
+        rel = f"{path}/{member}"
+        link = _symlink_on_path(self._root, rel)
+        if link:
+            raise StudyError([f"{link} is a symlink"])
+        data = (self._root / rel).read_bytes()
+        if hashlib.sha256(data).hexdigest() != files[member]:
+            raise StudyError(
+                [f"input {name!r} member {member} changed after the freeze"]
+            )
+        return data
+
+    def input_file(self, name: str, member: str | None = None) -> Path:
+        """A private read-only copy of the verified bytes, for path-only readers."""
+        data = self.read_input(name, member)
+        if self._scratch is None:
+            self._scratch = Path(tempfile.mkdtemp(prefix=f"frozen_{self.study_id}_"))
+        leaf = PurePosixPath(member or self._identities[name]["path"]).name
+        target = Path(tempfile.mkdtemp(dir=self._scratch)) / leaf
+        target.write_bytes(data)
+        target.chmod(0o444)
+        return target
 
     def payload_dir(self) -> Path:
         """Create (once) and return this attempt's directory for result files."""
@@ -553,6 +953,7 @@ class FrozenStudy:
             "validity": validity,
             "terminal": terminal,
             "invalid_criterion": invalid_criterion,
+            "inputs": dict(sorted(self._identities.items())),
             "files": _payload_hashes(directory),
         }
         path = directory / ATTEMPT_FILE
@@ -667,12 +1068,30 @@ def freeze_problems(
         problems += runner_source_problems(source.decode("utf-8", "replace"), study)
 
     attempts = _existing_attempts(root, binding.study_id)
-    used_tags = {_attempt_field(a, "freeze", "tag") for a in attempts}
-    if binding.freeze_tag in used_tags:
+    expected_tag = freeze_tag_name(binding.study_id, len(attempts) + 1)
+    if binding.freeze_tag != expected_tag:
         problems.append(
-            f"freeze tag {binding.freeze_tag!r} already froze an earlier attempt; "
-            "every attempt gets its own tag (moving one would orphan that record)"
+            f"freeze tag is {binding.freeze_tag!r}; attempt {len(attempts) + 1} "
+            f"must be frozen by {expected_tag!r}"
         )
+    _, _, found = input_identities(root, head, study)
+    problems += found
+    for name, spec in sorted((study.get("inputs") or {}).items()):
+        path = str(spec["path"])
+        link = _symlink_on_path(root, path)
+        if link:
+            problems.append(f"input {name!r}: {link} is a symlink")
+        elif spec["kind"] == "external" and not found:
+            files, _ = _manifest_files(
+                _read_at(
+                    root, head, _study_rel(binding.study_id, str(spec["manifest"]))
+                )
+                or b""
+            )
+            problems += [
+                f"input {name!r}: {p}"
+                for p in _external_tree_problems(root, path, files)
+            ]
     policy = study["attempt_policy"]
     valid = sum(1 for a in attempts if _attempt_validity(a) == "valid")
     if len(attempts) >= policy["max_attempts"]:
@@ -695,6 +1114,9 @@ def open_frozen_study(
     if problems or study is None or head is None:
         raise StudyError(problems or ["freeze could not be established"])
     attempt = len(_existing_attempts(root, binding.study_id)) + 1
+    identities, manifests, found = input_identities(root, head, study)
+    if found:
+        raise StudyError(found)
     return FrozenStudy(
         _OPEN_TOKEN,
         root=root,
@@ -704,7 +1126,14 @@ def open_frozen_study(
         tag=binding.freeze_tag,
         commit=head,
         pinned=binding.pinned_blobs,
+        identities=identities,
+        manifests=manifests,
     )
+
+
+def freeze_tag_name(study_id: str, attempt: int) -> str:
+    """The one tag that may freeze a given attempt: the tag name is its identity."""
+    return f"freeze/{study_id}/{attempt}"
 
 
 def _repo_relative(root: Path, path: str | Path) -> str | None:
@@ -773,6 +1202,10 @@ def attempt_problems(
             "(squash or rebase lost the freeze; merge with a merge commit)"
         )
     problems += [f"{name}: {p}" for p in _tag_problems(root, str(tag), commit)]
+    if tag != freeze_tag_name(study_id, int(name)):
+        problems.append(
+            f"{name}: frozen by {tag!r}, not {freeze_tag_name(study_id, int(name))!r}"
+        )
 
     study_rel = _study_rel(study_id, STUDY_FILE)
     raw = _read_at(root, commit, study_rel)
@@ -794,6 +1227,12 @@ def attempt_problems(
             problems.append(
                 f"{name}: {rel} at the freeze commit is not the pinned blob"
             )
+    identities, _, found = input_identities(root, commit, frozen_study)
+    problems += [f"{name}: {p}" for p in found]
+    if record["inputs"] != identities:
+        problems.append(
+            f"{name}: recorded input identities are not the inputs of the frozen commit"
+        )
     if frozen_study.get("runner") != record["runner"]:
         problems.append(
             f"{name}: attempt runner {record['runner']!r} is not the study's runner"

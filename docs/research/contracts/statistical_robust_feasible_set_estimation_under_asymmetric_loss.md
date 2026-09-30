@@ -1845,9 +1845,22 @@ The checker recomputes the tier and fails on any disagreement: the label is
 checked, never trusted. Nobody else adjudicates the boundary.
 
 **Formal** studies carry the full declaration of §20.2 under the seal bar of
-§20.8, and execute under §20.11.3. **Exploratory** studies need one hypothesis
-line and the §20.2 fields above; they may use §20.11.3, and must if they name a
-runner.
+§20.8, and execute under §20.11.3. Living under `studies/` is not a way around
+either: a formal `study.yaml` must hold a `formal_declaration` block with every
+§20.2 field — target decision layer, study intent, design objective, selection
+rule, validity gate, stop conditions — plus the §20.9.1 substrate, κ for every
+decidable unit in its three separate parts, the pinned degrees of freedom of
+§20.8.1, a terminal partition that defines exactly the declared terminals and
+maps validity failure to `UNRESOLVED`, and the seal record (review, reviewer).
+The checker enforces presence and the constraints between the fields that
+this contract makes mechanical: a design evaluation only of a layer with a
+defined design objective (§20.3); an intent claims only the output classes
+§20.3 and §20.5 allow it; a design candidate is selected by exactly the §20.4
+order. Whether the content meets the §20.8 bar is the seal review's judgment,
+not the checker's; the checker requires that the review is recorded.
+
+**Exploratory** studies need one hypothesis line and the §20.2 fields above;
+they may use §20.11.3, and must if they name a runner.
 
 #### 20.11.2 Exploratory evidence cannot be cited as evidence
 
@@ -1875,15 +1888,34 @@ draft PR: study.yaml + declaration + runner, reviewed
 → results document; merge with a merge commit
 ```
 
-`open_frozen_study()` is the only way a runner obtains a data path, and it
+`open_frozen_study()` is the only way a runner obtains input bytes, and it
 exists only after these hold, all by commit or blob identity: the work tree is
-clean; the tag is annotated and peels to HEAD, locally and on the remote; every
-blob the runner pins — at least `study.yaml` and the declaration — is the blob
-at HEAD; `study.yaml` names this runner; and the runner's source names no
-literal data path and calls `open_frozen_study()`. Reading data first and
-checking the freeze later is therefore not a slower path to the same result;
-there is no API for it. The residual limit is stated: a runner that computes a
-data path itself escapes the static check, and review is the defense there.
+clean; the tag is annotated, is named `freeze/<study_id>/<attempt>` for the
+attempt it freezes, and peels to HEAD, locally and on the remote; every blob
+the runner pins — at least `study.yaml` and the declaration — is the blob at
+HEAD; `study.yaml` names this runner; the runner's source names no literal
+data path and calls `open_frozen_study()`; and every declared input resolves
+to a frozen identity. Reading data first and checking the freeze later is
+therefore not a slower path to the same result; there is no API for it.
+
+The freeze covers the bytes the runner reads, not a path it was once shown.
+An input is one of two kinds:
+
+* **tracked** — a regular file in the freeze commit (not a symlink, not
+  untracked or ignored). Every read re-checks the working-tree file against
+  the frozen blob, fails if they differ, and returns the blob's bytes.
+* **external** — a directory outside the tree (e.g. an ignored result packet),
+  identified by a manifest in the study directory that is itself in the freeze
+  commit and lists every member's SHA-256. At open, the directory must hold
+  exactly those regular files, with those digests and no symlink anywhere;
+  every read re-checks the member's digest.
+
+The runner receives bytes, or a private read-only copy of verified bytes for
+readers that need a path. The attempt records each input's identity (blob id,
+or manifest and manifest blob), and verification recomputes it from the
+freeze commit. The residual limit is stated: a runner that computes a data
+path itself and opens it directly escapes the static check, and review is the
+defense there.
 
 An attempt is formally valid only if its record verifies: the freeze commit is
 an ancestor of HEAD (a squash merge loses it and fails), its tag still peels to
@@ -1906,8 +1938,9 @@ the maximum number of attempts in total.
   because it disappointed; once the valid-attempt budget is spent, a further
   run needs a new declaration (precedent: #465 r1 → r2).
 * **Every attempt is kept.** Attempts are numbered `001…N`, never rewritten or
-  removed once merged, and every attempt has its own freeze tag; moving a tag
-  would orphan the record it froze.
+  removed once merged, and attempt *n* is frozen by exactly
+  `freeze/<study_id>/<n>`: the tag name is the attempt's identity, so no tag
+  can be reused or moved without orphaning the record it froze.
 * **Adoption follows the declared rule, never recency.** `first_valid` adopts
   the earliest valid attempt; `unanimous_valid` requires every valid attempt to
   agree and otherwise adopts the declared `UNRESOLVED` terminal.
