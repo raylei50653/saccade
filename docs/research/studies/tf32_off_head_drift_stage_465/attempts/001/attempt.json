@@ -1,0 +1,40 @@
+{
+  "attempt": 1,
+  "files": {
+    "invalid.json": "ffeea14c30c80b8b6b005fe32f9d5cdfe07a7256411cd5cef394575f4a569742"
+  },
+  "freeze": {
+    "commit": "763db72d418440b12969c22efc6b93eb9e86a47b",
+    "pinned_blobs": {
+      "docs/research/studies/tf32_off_head_drift_stage_465/declaration.md": "1a56ea7a17fcc94bb705622d5210902c792e3eb8",
+      "docs/research/studies/tf32_off_head_drift_stage_465/study.yaml": "9cada86e05fbefcd390c99f8224663c653177ec2"
+    },
+    "tag": "freeze/tf32_off_head_drift_stage_465/1"
+  },
+  "inputs": {
+    "pr2": {
+      "kind": "external",
+      "manifest": "docs/research/studies/tf32_off_head_drift_stage_465/inputs_pr2.json",
+      "manifest_blob": "c05bd18cab8c2489354f02169e34fcecbcac5914",
+      "path": "results/native_head_parity_465/20260927T133422Z"
+    },
+    "pr2r": {
+      "kind": "external",
+      "manifest": "docs/research/studies/tf32_off_head_drift_stage_465/inputs_pr2r.json",
+      "manifest_blob": "317053e76990afbc69d8b953b36f3c5cdfa23c6a",
+      "path": "results/native_head_parity_465_tf32_off/20260927T151100Z"
+    },
+    "r2": {
+      "kind": "external",
+      "manifest": "docs/research/studies/tf32_off_head_drift_stage_465/inputs_r2.json",
+      "manifest_blob": "efac62e0c50e30cc171c5090af559c7465530f6a",
+      "path": "results/native_head_failure_localization_465_r2/20260928T081021Z"
+    }
+  },
+  "invalid_criterion": "V_FORMAT",
+  "runner": "scripts/eval/diagnostics/tf32_off_head_drift_stage.py",
+  "schema": "research_attempt_v1",
+  "study_id": "tf32_off_head_drift_stage_465",
+  "terminal": null,
+  "validity": "invalid"
+}
