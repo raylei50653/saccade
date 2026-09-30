@@ -90,6 +90,7 @@ fork 出去的 daemon 不會把鎖帶走。
 | resctl 被 SIGTERM/SIGINT/SIGHUP（command 已啟動，含 setup 期間 pending 的） | 轉送給 command，等它結束後釋放；exit 128+sig |
 | 同上，但在 spawn 前就收到 | **不啟動 command**，釋放，exit 128+sig |
 | command 起不來（`Popen` 失敗） | 釋放，exit 127；若同時有 pending signal，**signal 優先** → exit 128+sig |
+| command 已結束、resctl 正在清理時收到 | 清理期間 signal 被擋住：先刪 lease，再以 exit 128+sig 回報（不吞、不留 lease） |
 | resctl 被 SIGKILL | kernel 隨 process 死亡釋放 flock（無假鎖）；lease 留下 → `status` 標 **stale**（pid DEAD）；下一個 `run` 直接回收並印 `reclaimed stale lease`。command 端掛了 `PR_SET_PDEATHSIG`，parent 死亡時收到 SIGTERM（best-effort，Linux only，不涵蓋再 re-parent 的孫 process） |
 | lease JSON 壞掉 / 不見，但 flock 被持有 | **BUSY, owner unknown** —— metadata 永遠不能讓資源看起來可用 |
 | lease 在、flock 沒人持 | FREE + stale 註記；`resctl clean` 可清 |
