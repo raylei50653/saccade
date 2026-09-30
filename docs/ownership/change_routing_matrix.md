@@ -36,6 +36,7 @@ in this same file — a routing-only class, not a ninth objective type.
 | RESEARCH + any production default flip | **split PR** — research docs first or behavior second, not both |
 | DOC-STRATEGY + any number or state rewrite | **split PR** — land the fact in its owner (ledger / registry / TODO) first; the strategy file only adds a pointer |
 | DEBUG probe left default-on | fail review |
+| Adds or tightens a check (any entry: hook / pre_push / pytest / CI) | fill the [gate admission](gate_admission.md) fields in the PR description; admission does not authorize the gate |
 | Dual-stability default change | **not O-series**; needs named decision line + evidence (status closed) |
 
 ---
@@ -82,4 +83,4 @@ is unchanged). Label the PR `route=DOC-STRATEGY` when this class applies.
 
 | Surface | Required checks | Notes |
 |:--|:--|:--|
-| `docs/PROJECT_DIRECTION.md`, `docs/decisions/*`, `docs/ownership/*` contracts, docs-root narrative files | `check_doc_structure.py --strict` (C6.4) + doc links + stale paths + freshness; Accepted ADRs are immutable; C5.1 single writer (no state/number rewrite) | No baseline numbers; no preset/default flip. Do not mix with RUNTIME/CONFIG behavior change — **split PR**. Direction-only PRs follow that file's update triggers; ordinary implementation PRs must not be asked to sync it. |
+| `docs/PROJECT_DIRECTION.md`, `docs/decisions/*`, `docs/ownership/*` contracts, docs-root narrative files | `check_doc_structure.py --strict` (C6.4 L2–L4) + doc links + freshness (warn); Accepted ADRs are immutable; C5.1 single writer (no state/number rewrite) | No baseline numbers; no preset/default flip. Do not mix with RUNTIME/CONFIG behavior change — **split PR**. Direction-only PRs follow that file's update triggers; ordinary implementation PRs must not be asked to sync it. |
