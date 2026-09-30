@@ -727,6 +727,10 @@
     "scripts/train/temporal_yolo/train_mamba_head.py": {
       "classification": "run_producer_wired",
       "reason": "mamba head distillation; claims --run-dir before checkpointing"
+    },
+    "scripts/eval/diagnostics/tf32_off_head_drift_stage.py": {
+      "classification": "not_a_run_producer",
+      "reason": "#465 exploratory study runner (§20.11); reads frozen packets only through research_study and writes only its attempt payload under docs/research/studies/tf32_off_head_drift_stage_465/attempts/, never an artifact root"
     }
   }
 }

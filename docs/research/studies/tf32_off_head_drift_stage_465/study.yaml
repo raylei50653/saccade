@@ -1,0 +1,36 @@
+schema: research_study_v1
+study_id: tf32_off_head_drift_stage_465
+evidence_tier: exploratory
+hypothesis: "In the TF32-off r2 replay, T's first structural tracker divergence from C happens with a structurally identical tracker_input (association entry), not with a changed detection set."
+section_20_2:
+  output_class: [diagnostic]
+  mainline_transition:
+    ENTERS_AT_ASSOCIATION: none
+    ENTERS_AT_DETECTION_SET: none
+    SPLIT: none
+declaration: declaration.md
+results: results.md
+runner: scripts/eval/diagnostics/tf32_off_head_drift_stage.py
+inputs:
+  r2:
+    kind: external
+    path: results/native_head_failure_localization_465_r2/20260928T081021Z
+    manifest: inputs_r2.json
+  pr2:
+    kind: external
+    path: results/native_head_parity_465/20260927T133422Z
+    manifest: inputs_pr2.json
+  pr2r:
+    kind: external
+    path: results/native_head_parity_465_tf32_off/20260927T151100Z
+    manifest: inputs_pr2r.json
+validity_criteria:
+  V_COMPLETE: "Every declared member (5 arms x 2 runs x 7 sequences of r2 evidence with the required arrays and the declared frame count; the 4 txt pairs x 7 sequences) is present in its manifest and reads back at the manifest digest."
+  V_FORMAT: "Every probe row is 6 wide with finite xyxy (x2 >= x1, y2 >= y1), every tracker box is finite xyxy, ragged counts cover their bodies, frames lie in 1..N, and every txt row parses as frame,id,left,top,w,h with finite w,h >= 0."
+  V_REF_SELF: "R_C run 1 and R_C run 2 are bit-identical at every probe stage and at tracker output on every frame of every sequence (comparator and replay sanity)."
+  V_RUN_REPRO: "For every arm and sequence, the full comparison against R_C (all first-divergence frames, structural frame counts, the entry label and the f* record) is identical for run 1 and run 2."
+  V_RUNNER: "The runner raised an exception not covered above after the freeze passed (a runner bug); decided by the exception, not by any computed quantity."
+attempt_policy:
+  adoption: first_valid
+  max_valid_attempts: 1
+  max_attempts: 3
