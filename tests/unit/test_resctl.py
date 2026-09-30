@@ -202,6 +202,95 @@ def test_command_killed_by_signal_releases(repo: dict[str, Path]) -> None:
     assert _lease_states(repo["b"])["gpu0"]["state"] == "FREE"
 
 
+# Runs resctl.main() in a fresh interpreter and sends SIGTERM to that process
+# at an exact point in the setup (#497), so the race window is hit every time
+# instead of by timing luck.
+_INJECT_DRIVER = """
+import importlib.util, os, signal, subprocess, sys
+spec = importlib.util.spec_from_file_location("resctl", sys.argv[1])
+mod = importlib.util.module_from_spec(spec)
+sys.modules["resctl"] = mod
+spec.loader.exec_module(mod)
+point = sys.argv[2]
+if point == "after_acquire":
+    real_acquire = mod.try_acquire
+    def try_acquire(*a, **k):
+        acq = real_acquire(*a, **k)
+        os.kill(os.getpid(), signal.SIGTERM)  # lease is written, handlers not yet
+        return acq
+    mod.try_acquire = try_acquire
+elif point == "after_popen":
+    real_acquire, real_popen = mod.try_acquire, subprocess.Popen
+    def try_acquire(*a, **k):  # arm only for the command's Popen, not git's
+        acq = real_acquire(*a, **k)
+        def popen(*a, **k):
+            proc = real_popen(*a, **k)
+            os.kill(os.getpid(), signal.SIGTERM)  # child exists, handlers not yet
+            return proc
+        mod.subprocess.Popen = popen
+        return acq
+    mod.try_acquire = try_acquire
+sys.exit(mod.main(sys.argv[3:]))
+"""
+
+
+def _inject(
+    point: str, cwd: Path, *args: str, timeout: float = 30
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, "-c", _INJECT_DRIVER, str(RESCTL), point, *args],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        env=_env(),
+        timeout=timeout,
+    )
+
+
+def test_signal_before_spawn_releases_and_does_not_start(
+    repo: dict[str, Path],
+) -> None:
+    marker = repo["a"] / "started"
+    res = _inject("after_acquire", repo["a"], "run", "gpu0", "--", "touch", str(marker))
+    assert res.returncode == 128 + signal.SIGTERM, res.stderr
+    assert "not started" in res.stderr
+    assert not marker.exists()
+    assert not _lease_path(repo, "gpu0").exists()
+    assert _lease_states(repo["b"])["gpu0"]["state"] == "FREE"
+
+
+def test_signal_beats_spawn_failure(repo: dict[str, Path]) -> None:
+    """Popen fails while a stop request is pending: the signal wins over 127."""
+    res = _inject("after_acquire", repo["a"], "run", "gpu0", "--", "/nonexistent/cmd")
+    assert res.returncode == 128 + signal.SIGTERM, res.stderr
+    assert not _lease_path(repo, "gpu0").exists()
+
+
+def test_spawn_failure_without_signal_is_127(repo: dict[str, Path]) -> None:
+    res = _cli("run", "gpu0", "--", "/nonexistent/cmd", cwd=repo["a"])
+    assert res.returncode == 127, res.stderr
+    assert not _lease_path(repo, "gpu0").exists()
+
+
+def test_signal_pending_at_spawn_is_forwarded(repo: dict[str, Path]) -> None:
+    """A signal held back during setup reaches the child once handlers exist."""
+    res = _inject("after_popen", repo["a"], "run", "gpu0", "--", "sleep", "60")
+    assert res.returncode == 128 + signal.SIGTERM, res.stderr
+    assert "released gpu0" in res.stderr
+    assert not _lease_path(repo, "gpu0").exists()
+
+
+def test_command_gets_original_signal_mask(repo: dict[str, Path]) -> None:
+    """The setup block must not leak into the command (a blocked mask survives exec)."""
+    probe = "import signal; print(sorted(int(s) for s in signal.pthread_sigmask(signal.SIG_BLOCK, [])))"
+    res = _cli(
+        "run", "--quiet", "gpu0", "--", sys.executable, "-c", probe, cwd=repo["a"]
+    )
+    assert res.returncode == 0, res.stderr
+    blocked = set(json.loads(res.stdout))
+    assert blocked.isdisjoint({signal.SIGINT, signal.SIGTERM, signal.SIGHUP})
+
+
 def test_resctl_sigkill_leaves_no_permanent_lock(repo: dict[str, Path]) -> None:
     """SIGKILL skips every ``finally``: the flock still dies with the process."""
     holder = _hold("gpu0", repo["a"], repo)

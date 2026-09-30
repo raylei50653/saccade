@@ -54,6 +54,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import fcntl
+import functools
 import hashlib
 import json
 import os
@@ -866,14 +867,38 @@ def cmd_who(args: argparse.Namespace) -> int:
     return 0
 
 
-def _die_with_parent() -> None:
-    """Best effort: have the kernel SIGTERM the command if resctl itself dies.
+_FORWARDED_SIGNALS = (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)
 
-    The flock is released the moment resctl dies (that is the whole point of
-    using flock), so without this an orphaned command would keep using the
-    hardware while the resource already reads FREE.  Linux only; grandchildren
-    that re-parent themselves are not covered.
+
+def _take_pending_signal() -> int | None:
+    """Consume blocked ``_FORWARDED_SIGNALS`` that are pending; return the first.
+
+    Only meaningful while those signals are blocked.  Consuming them (rather
+    than just peeking) lets the caller unblock afterwards without the default
+    action firing.
     """
+    first: int | None = None
+    while (info := signal.sigtimedwait(_FORWARDED_SIGNALS, 0)) is not None:
+        if first is None:
+            first = info.si_signo
+    return first
+
+
+def _child_setup(mask: set[signal.Signals]) -> None:
+    """Pre-exec hook for the command: restore resctl's original signal mask,
+    then ask to die with the parent.
+
+    ``cmd_run`` blocks ``_FORWARDED_SIGNALS`` across its setup and a blocked
+    mask survives ``exec``, so the command must get the mask resctl had before
+    that setup began.
+
+    Death signal (best effort): have the kernel SIGTERM the command if resctl
+    itself dies.  The flock is released the moment resctl dies (that is the
+    whole point of using flock), so without this an orphaned command would
+    keep using the hardware while the resource already reads FREE.  Linux
+    only; grandchildren that re-parent themselves are not covered.
+    """
+    signal.pthread_sigmask(signal.SIG_SETMASK, mask)
     try:
         import ctypes
 
@@ -891,8 +916,14 @@ def cmd_run(args: argparse.Namespace) -> int:
     wt = current_worktree()
     wait = bool(args.wait) or args.timeout is not None
     deadline = None if args.timeout is None else time.monotonic() + args.timeout
+    # Keep INT/TERM/HUP blocked from the moment a lease may be written until
+    # the forwarding handlers are installed (#497).  Otherwise a signal in that
+    # window kills resctl with the default action and leaves the lease behind.
+    # Between failed attempts nothing is held, so the mask is restored there.
+    old_mask = signal.pthread_sigmask(signal.SIG_BLOCK, _FORWARDED_SIGNALS)
     acq = try_acquire(rt, args.resource, wt, command)
     while not acq.ok:
+        signal.pthread_sigmask(signal.SIG_SETMASK, old_mask)
         blocker = acq.blocked_by
         assert blocker is not None
         timed_out = deadline is not None and time.monotonic() >= deadline
@@ -913,6 +944,7 @@ def cmd_run(args: argparse.Namespace) -> int:
             args.quiet,
         )
         time.sleep(args.poll)
+        signal.pthread_sigmask(signal.SIG_BLOCK, _FORWARDED_SIGNALS)
         acq = try_acquire(rt, args.resource, wt, command)
 
     if acq.reclaimed_stale is not None:
@@ -928,34 +960,52 @@ def cmd_run(args: argparse.Namespace) -> int:
     )
     started = time.monotonic()
     rc = 0
+    previous: dict[int, Any] = {}
     try:
-        try:
-            proc = subprocess.Popen(command, preexec_fn=_die_with_parent)
-        except OSError as exc:
-            _log(f"failed to start {shlex.join(command)}: {exc}", args.quiet)
-            return 127
+        # A stop request that arrived during setup wins: don't spawn at all.
+        # The same holds when Popen fails while one is pending.
+        early = _take_pending_signal()
+        proc: subprocess.Popen[bytes] | None = None
+        if early is None:
+            try:
+                proc = subprocess.Popen(
+                    command, preexec_fn=functools.partial(_child_setup, old_mask)
+                )
+            except OSError as exc:
+                _log(f"failed to start {shlex.join(command)}: {exc}", args.quiet)
+                early = _take_pending_signal()
+                if early is None:
+                    rc = 127
+        if proc is not None:
+            child = proc
 
-        def forward(signum: int, _frame: Any) -> None:
-            if proc.poll() is None:
-                with contextlib.suppress(OSError):
-                    proc.send_signal(signum)
+            def forward(signum: int, _frame: Any) -> None:
+                if child.poll() is None:
+                    with contextlib.suppress(OSError):
+                        child.send_signal(signum)
 
-        previous = {
-            s: signal.signal(s, forward)
-            for s in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)
-        }
-        try:
-            rc = proc.wait()
-        finally:
-            for s, handler in previous.items():
-                signal.signal(s, handler)
+            previous = {s: signal.signal(s, forward) for s in _FORWARDED_SIGNALS}
+            # A signal that arrived after the spawn is delivered here, to `forward`.
+            signal.pthread_sigmask(signal.SIG_SETMASK, old_mask)
+            rc = child.wait()
+        elif early is not None:
+            _log(
+                f"received signal {early} before starting the command; not started",
+                args.quiet,
+            )
+            rc = -early
     finally:
+        # `forward` stays installed (a no-op once the child has exited) until
+        # the lease is gone, so a late signal cannot strand it either.
         release(rt, acq)
         how = f"exit {rc}" if rc >= 0 else f"signal {-rc}"
         _log(
             f"released {args.resource} after {_fmt_elapsed(time.monotonic() - started)} ({how})",
             args.quiet,
         )
+        for s, handler in previous.items():
+            signal.signal(s, handler)
+        signal.pthread_sigmask(signal.SIG_SETMASK, old_mask)
     return rc if rc >= 0 else 128 - rc
 
 
