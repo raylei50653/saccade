@@ -49,7 +49,7 @@ $P tools/resctl.py handoff-show --here         # 只看目前 worktree
 $P tools/resctl.py clean                       # 只清 stale lease metadata，不碰 active lock
 ```
 
-`run` 的 exit code：command 的 exit code；被 signal 殺掉 = 128+signal；
+`run` 的 exit code：command 的 exit code；被 signal 殺掉 = 128+signal；command 起不來 = 127；
 **拿不到鎖 = 75**（stderr 印出目前 owner 的 worktree / branch / PID / command）；用法錯 = 2。
 `--` 之後的東西原封不動交給 command。
 
@@ -72,6 +72,9 @@ $P tools/resctl.py clean                       # 只清 stale lease metadata，�
 3. 對每個衝突資源的 lock 做 non-blocking probe；任何一個 probe 失敗就放掉自己的鎖，
    回報那個資源的 owner。probe 成功即立刻放掉——衝突的另一方之後取鎖時會反向 probe 到我們。
 4. 寫 lease JSON（atomic rename），放掉 `.acquire.lock`，執行 command。
+   從 `try_acquire` 前到 forwarding handler 裝好為止，SIGINT/TERM/HUP 都被 `pthread_sigmask`
+   擋住（#497），所以 lease 已寫但 handler 還沒裝的空窗中，signal 不會以 default action 殺掉 resctl 而留下 lease；
+   command 在 pre-exec 還原原本的 mask。
 5. command 結束（正常、非零、被 signal）後：**先刪 lease、再放 flock**，所以不會出現
    「鎖已釋放但 lease 還在」被新持有者誤刪的視窗。
 
@@ -84,7 +87,10 @@ fork 出去的 daemon 不會把鎖帶走。
 | 情境 | 行為 |
 |---|---|
 | command crash / 非零退出 | `finally` 釋放；exit code 照傳 |
-| resctl 被 SIGTERM/SIGINT/SIGHUP | 轉送給 command，等它結束後釋放 |
+| resctl 被 SIGTERM/SIGINT/SIGHUP（command 已啟動，含 setup 期間 pending 的） | 轉送給 command，等它結束後釋放；exit 128+sig |
+| 同上，但在 spawn 前就收到 | **不啟動 command**，釋放，exit 128+sig |
+| command 起不來（`Popen` 失敗） | 釋放，exit 127；若同時有 pending signal，**signal 優先** → exit 128+sig |
+| command 已結束、resctl 正在清理時收到 | 清理期間 signal 被擋住：先刪 lease，再以 exit 128+sig 回報（不吞、不留 lease） |
 | resctl 被 SIGKILL | kernel 隨 process 死亡釋放 flock（無假鎖）；lease 留下 → `status` 標 **stale**（pid DEAD）；下一個 `run` 直接回收並印 `reclaimed stale lease`。command 端掛了 `PR_SET_PDEATHSIG`，parent 死亡時收到 SIGTERM（best-effort，Linux only，不涵蓋再 re-parent 的孫 process） |
 | lease JSON 壞掉 / 不見，但 flock 被持有 | **BUSY, owner unknown** —— metadata 永遠不能讓資源看起來可用 |
 | lease 在、flock 沒人持 | FREE + stale 註記；`resctl clean` 可清 |
@@ -123,5 +129,5 @@ priority。需要以上任何一項時先開 issue；工具保持單檔、stdlib
 
 [`tests/unit/test_resctl.py`](../tests/unit/test_resctl.py)：用臨時 repo + 兩個 worktree
 以 subprocess 驅動真實 CLI，覆蓋：同資源互斥、`machine-bench` 雙向衝突、正常/非零/signal/
-SIGKILL 後釋放、corrupt / missing / orphan lease、`--wait` / `--timeout`、跨 worktree
+SIGKILL 後釋放、setup 空窗的 signal（driver 在 acquire 後 / spawn 後精確注入，#497）、command 的 signal mask、corrupt / missing / orphan lease、`--wait` / `--timeout`、跨 worktree
 `status` 與 handoff、runtime 狀態不進 `git status`。
