@@ -508,6 +508,7 @@ deleting.
 | `render_mot_result.py` | diagnostic | cli | Render a MOT-format tracking result onto the source frames and encode a video. |
 | `repaired_tail_or_safe_region.py` | diagnostic | cli | Safe-region thickness for frozen all-tail OR candidate (not new policy search). |
 | `research_lock.py` | stable | cli | Online modification and research measurement are mutually exclusive states. |
+| `research_study.py` | stable | cli | Research study protocol v1 (experiment contract §20.11): tier, freeze, attempts. |
 | `resolved_bridge_policy_config.py` | stable | cli | Single authority for `resolved_bridge_policy_config_v1` fingerprints. |
 | `run_d0_runtime_shadow_fidelity.py` | stable | cli | D0 runtime shadow bridge fidelity — terminal verifier (Issue #112, v2). |
 | `run_door0_ranking_probe.py` | experiment | cli | Door 0 — ambiguous-band ranking-power probe runner. |

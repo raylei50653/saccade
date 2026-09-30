@@ -49,6 +49,7 @@
 | `test_research_lock.py` | system | contract | active | An open research instance holds the online surface shut, and says so before the push. |
 | `test_research_packet_manifest.py` | system | contract | active | Generic manifest/integrity contract for sealed research evidence packets. |
 | `test_research_packet_schema.py` | system | contract | active | Generic schema contract for sealed research evidence packets. |
+| `test_research_study_protocol.py` | system | contract | active | §20.11 research study protocol: tier derived, exploratory uncitable, freeze before data. |
 | `test_run_manifest_backfill.py` | system | contract | active | Contract for ADR 021 AP-4: reconstructed provenance, and what may never get it. |
 | `test_run_manifest_ordering.py` | system | contract | active | Contract for the ADR 021 run-manifest: schema, ordering, and non-reattribution. |
 | `test_runtime_identity_staleness.py` | tracking,system | contract | active | Coordinate drift never becomes equivalence merely because one probe is equal. |

@@ -1332,7 +1332,7 @@ is the historical exception to the §20.0 hosting rule.
 
 ### 20.0 Status and scope
 
-Contract version **v1.3 (2026-07-26; append-only — v1.2 text unchanged, §20.10 added: online / research mutual exclusion, the state machine that owns the research → online direction, the default frozen axis set and its per-instance escalation, the two close dispositions, the rule that the lock stays outside every axis it freezes, and the explicit non-goals)**. Prior version note: v1.2 (2026-07-16; append-only — v1.1 2026-07-13 text unchanged, §20.9 added: substrate as a fourth declaration coordinate, dual-space accounting in owner symbols, ρ/aggregation reduction typing, conservation identities, dependence declaration, cross-space inference obligations, and typed failure semantics; no ε-bound formula is made normative)**. Prior version note: v1.1 (2026-07-13; append-only — v1 2026-07-12 text unchanged, §20.8 and the §20.2 κ line added to consolidate the declaration seal bar accrued in owner reviews). This section is the normative home of the experiment contract. Issue threads, study notes, and PR descriptions must **reference** this section; they must not restate or fork it. Every new decision-layer study that uses this framework's language or infrastructure runs under this contract. Studies opened before v1 keep their sealed procedures but must be re-classified under §20.4 before any result is cited as a design recommendation.
+Contract version **v1.4 (2026-09-30; append-only — v1.3 text unchanged, §20.11 added: two evidence tiers derived mechanically from the §20.2 fields, exploratory evidence uncitable by formal evidence chains, declaration-before-execution inside one PR, and append-only attempts adopted by a predeclared rule; #493 PR-3)**. Prior version note: v1.3 (2026-07-26; append-only — v1.2 text unchanged, §20.10 added: online / research mutual exclusion, the state machine that owns the research → online direction, the default frozen axis set and its per-instance escalation, the two close dispositions, the rule that the lock stays outside every axis it freezes, and the explicit non-goals). Prior version note: v1.2 (2026-07-16; append-only — v1.1 2026-07-13 text unchanged, §20.9 added: substrate as a fourth declaration coordinate, dual-space accounting in owner symbols, ρ/aggregation reduction typing, conservation identities, dependence declaration, cross-space inference obligations, and typed failure semantics; no ε-bound formula is made normative)**. Prior version note: v1.1 (2026-07-13; append-only — v1 2026-07-12 text unchanged, §20.8 and the §20.2 κ line added to consolidate the declaration seal bar accrued in owner reviews). This section is the normative home of the experiment contract. Issue threads, study notes, and PR descriptions must **reference** this section; they must not restate or fork it. Every new decision-layer study that uses this framework's language or infrastructure runs under this contract. Studies opened before v1 keep their sealed procedures but must be re-classified under §20.4 before any result is cited as a design recommendation.
 
 **Hosting rule.** This framework hosts cross-line semantics only. Line-specific predeclared procedures are hosted as standalone files under [`procedures/`](../eval/procedures/), referencing this framework for shared terms; they are not added as new framework sections. §19 (GT-support morphology) was drafted in-framework and is the historical exception — its sealed v1 body has been moved to [procedures/gt_support_morphology_procedure_v1.md](../eval/procedures/gt_support_morphology_procedure_v1.md) with §19.x numbering preserved, and the §19 slot is a tombstone.
 
@@ -1811,6 +1811,142 @@ reproducibility is established only by a separate accepted decision naming a
 concrete regulatory, regression-diagnostic, benchmark, or high-value
 re-verification need — never as a default, and never as a side effect of opening
 a new instance.
+
+### 20.11 Evidence tiers and single-PR execution (v1.4)
+
+§20.2–§20.8 were written for studies that change what the project does, and
+every study paid their full price, spread over a declaration PR, a runner PR
+and a result PR. This section keeps that price for the studies whose
+conclusions can move production or be cited as findings, and lowers it for the
+rest — without lowering what any conclusion is allowed to claim. The
+enforcement is `scripts/tools/research_study.py`, run fail-closed by
+`tests/contract/test_research_study_protocol.py` (pre-push hook and CI); this
+section is the rule, the tool is its only interpreter.
+
+Studies declared before v1.4 keep their own sealed procedures (§20.0). This
+section does not re-classify them, and nothing in it applies retroactively.
+
+#### 20.11.1 Two tiers, derived — not chosen
+
+A study under this section lives in `docs/research/studies/<study_id>/`, with a
+`study.yaml` that carries the §20.2 fields that decide its tier: the §20.4
+output classes it may claim, and the §20.7 mainline transition of every
+terminal. The tier is a function of those fields:
+
+| Condition | Tier |
+|:--|:--|
+| some terminal maps to §20.7 transition 2 (*adds a decision capability*) or 3 (*changes production behavior or metrics*) | **formal** |
+| the output classes include *design candidate* | **formal** |
+| otherwise | **exploratory** |
+
+The author writes `evidence_tier` in `study.yaml`, and in an
+`<!-- evidence-tier: … -->` header on the declaration and results documents.
+The checker recomputes the tier and fails on any disagreement: the label is
+checked, never trusted. Nobody else adjudicates the boundary.
+
+**Formal** studies carry the full declaration of §20.2 under the seal bar of
+§20.8, and execute under §20.11.3. Living under `studies/` is not a way around
+either: a formal `study.yaml` must hold a `formal_declaration` block with every
+§20.2 field — target decision layer, study intent, design objective, selection
+rule, validity gate, stop conditions — plus the §20.9.1 substrate, κ for every
+decidable unit in its three separate parts, the pinned degrees of freedom of
+§20.8.1, a terminal partition that defines exactly the declared terminals and
+maps validity failure to `UNRESOLVED`, and the seal record (review, reviewer).
+The checker enforces presence and the constraints between the fields that
+this contract makes mechanical: a design evaluation only of a layer with a
+defined design objective (§20.3); an intent claims only the output classes
+§20.3 and §20.5 allow it; a design candidate is selected by exactly the §20.4
+order. Whether the content meets the §20.8 bar is the seal review's judgment,
+not the checker's; the checker requires that the review is recorded.
+
+**Exploratory** studies need one hypothesis line and the §20.2 fields above;
+they may use §20.11.3, and must if they name a runner.
+
+#### 20.11.2 Exploratory evidence cannot be cited as evidence
+
+An exploratory result may guide what to study next. It cannot support a
+conclusion. A formal evidence chain — this contract directory, the evidence
+ledger, the NO-GO registry, and every formal study's own documents — that names
+an exploratory study fails the check. Naming is enough; there is no citation
+form that escapes it.
+
+Promotion is §20.5 and nothing else: a new formal study, declared and executed
+from scratch. A merged study's tier never changes, and a study's `study.yaml`
+never changes after an attempt has frozen it. Relabeling is not promotion.
+
+#### 20.11.3 Declaration before execution, in one PR
+
+One draft PR may carry declaration, execution and result, provided the order is
+provable from the repository alone — not from the order of commits, which
+proves only when bytes were committed, not when a result was known:
+
+```text
+draft PR: study.yaml + declaration + runner, reviewed
+→ annotated tag freeze/<study_id>/<n> on that commit, pushed
+→ runner: open_frozen_study() verifies the freeze, then hands out data paths
+→ execute; record the attempt
+→ results document; merge with a merge commit
+```
+
+`open_frozen_study()` is the only way a runner obtains input bytes, and it
+exists only after these hold, all by commit or blob identity: the work tree is
+clean; the tag is annotated, is named `freeze/<study_id>/<attempt>` for the
+attempt it freezes, and peels to HEAD, locally and on the remote; every blob
+the runner pins — at least `study.yaml` and the declaration — is the blob at
+HEAD; `study.yaml` names this runner; the runner's source names no literal
+data path and calls `open_frozen_study()`; and every declared input resolves
+to a frozen identity. Reading data first and checking the freeze later is
+therefore not a slower path to the same result; there is no API for it.
+
+The freeze covers the bytes the runner reads, not a path it was once shown.
+An input is one of two kinds:
+
+* **tracked** — a regular file in the freeze commit (not a symlink, not
+  untracked or ignored). Every read re-checks the working-tree file against
+  the frozen blob, fails if they differ, and returns the blob's bytes.
+* **external** — a directory outside the tree (e.g. an ignored result packet),
+  identified by a manifest in the study directory that is itself in the freeze
+  commit and lists every member's SHA-256. At open, the directory must hold
+  exactly those regular files, with those digests and no symlink anywhere;
+  every read re-checks the member's digest.
+
+The runner receives bytes, or a private read-only copy of verified bytes for
+readers that need a path. The attempt records each input's identity (blob id,
+or manifest and manifest blob), and verification recomputes it from the
+freeze commit. The residual limit is stated: a runner that computes a data
+path itself and opens it directly escapes the static check, and review is the
+defense there.
+
+An attempt is formally valid only if its record verifies: the freeze commit is
+an ancestor of HEAD (a squash merge loses it and fails), its tag still peels to
+it, its pinned blobs are the blobs at that commit, the results document did not
+exist at that commit, and every payload file matches its sealed hash. The
+declaration may grow below its frozen body — amendments append — but the
+frozen body may not change.
+
+#### 20.11.4 Attempts replace exactly-once
+
+A study with a runner predeclares, in `study.yaml`, its validity criteria and
+an attempt policy: the adoption rule, the maximum number of valid attempts, and
+the maximum number of attempts in total.
+
+* **An invalid execution** — a runner defect or incomplete data — is recorded
+  as an invalid attempt that cites one predeclared validity criterion. The
+  criterion must be decidable without knowing whether the result was
+  favourable. The study may then try again, as a new attempt under a new tag.
+* **A valid execution that ends UNRESOLVED** is a result. It is not rerun
+  because it disappointed; once the valid-attempt budget is spent, a further
+  run needs a new declaration (precedent: #465 r1 → r2).
+* **Every attempt is kept.** Attempts are numbered `001…N`, never rewritten or
+  removed once merged, and attempt *n* is frozen by exactly
+  `freeze/<study_id>/<n>`: the tag name is the attempt's identity, so no tag
+  can be reused or moved without orphaning the record it froze.
+* **Adoption follows the declared rule, never recency.** `first_valid` adopts
+  the earliest valid attempt; `unanimous_valid` requires every valid attempt to
+  agree and otherwise adopts the declared `UNRESOLVED` terminal.
+
+§20.10 (online / research mutual exclusion) applies to formal studies
+unchanged; this section adds no lock state.
 
 ---
 
