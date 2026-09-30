@@ -884,7 +884,7 @@ def _take_pending_signal() -> int | None:
     return first
 
 
-def _child_setup(mask: set[signal.Signals]) -> None:
+def _child_setup(mask: set[int | signal.Signals]) -> None:
     """Pre-exec hook for the command: restore resctl's original signal mask,
     then ask to die with the parent.
 
