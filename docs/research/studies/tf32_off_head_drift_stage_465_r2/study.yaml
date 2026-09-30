@@ -1,0 +1,36 @@
+schema: research_study_v1
+study_id: tf32_off_head_drift_stage_465_r2
+evidence_tier: exploratory
+hypothesis: "In the TF32-off r2 replay, at R_T's first structural tracker-output divergence from R_C (f*), tracker_input is structurally the same as R_C's under the frozen IoU-0.9 definition with inversion-signature matching."
+section_20_2:
+  output_class: [diagnostic]
+  mainline_transition:
+    TRACKER_INPUT_SAME_AT_FSTAR: none
+    TRACKER_INPUT_DIFFERENT_AT_FSTAR: none
+    SPLIT: none
+declaration: declaration.md
+results: results.md
+runner: scripts/eval/diagnostics/tf32_off_head_drift_stage_r2.py
+inputs:
+  r2:
+    kind: external
+    path: results/native_head_failure_localization_465_r2/20260928T081021Z
+    manifest: inputs_r2.json
+  pr2:
+    kind: external
+    path: results/native_head_parity_465/20260927T133422Z
+    manifest: inputs_pr2.json
+  pr2r:
+    kind: external
+    path: results/native_head_parity_465_tf32_off/20260927T151100Z
+    manifest: inputs_pr2r.json
+validity_criteria:
+  V_COMPLETE: "Every declared member (5 arms x 2 runs x 7 sequences of r2 evidence with the required arrays and the declared frame count; the 4 txt pairs x 7 sequences) is present in its manifest and reads back at the manifest digest."
+  V_FORMAT: "For every arm, run and sequence: rows of all three probe stages (detector_output, post_nms, tracker_input) are 6 wide with finite coordinates and tracker boxes are 4 wide with finite coordinates (inverted boxes, x2 < x1 or y2 < y1, are well formed); for all three probe stages and the tracker output, ragged counts cover their bodies exactly, no frame repeats, and frames lie in 1..N; every txt row parses as frame,id,left,top,w,h with finite left,top,w,h (negative w or h is well formed) and a frame in 1..N."
+  V_REF_SELF: "R_C run 1 and R_C run 2 are bit-identical at every probe stage and at tracker output on every frame of every sequence (comparator and replay sanity)."
+  V_RUN_REPRO: "For every arm and sequence, the full comparison against R_C (all first-divergence frames, structural and inversion-mismatch frame counts, the f* label and the f* record) is identical for run 1 and run 2."
+  V_RUNNER: "After the freeze passed, the computation or report code raised an exception that none of V_COMPLETE, V_FORMAT, V_REF_SELF, V_RUN_REPRO covers (a runner bug); decided by the exception alone, not by any computed quantity."
+attempt_policy:
+  adoption: first_valid
+  max_valid_attempts: 1
+  max_attempts: 3
