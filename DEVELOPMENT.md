@@ -47,7 +47,7 @@
 | 開立／替換 mainline charter | module TODO 只放唯一 pointer；target、commit point、discard condition 放 linked thread / research note | 契約 C7；[thread role split](docs/research/threads/README.md#mainline-charter--expected-state--probe) | expected state 不得進 registry；WIP=1 只計 charter |
 | 執行／丟棄 probe | 放在 charter 的 `Current step` 或短期執行面；沒有可重用證據就不建正式文件 | charter 的 boundary / commit point | 丟棄 probe 不觸發 registry transition、thread close 或 promotion |
 | 將結果作決策、baseline、NO-GO 或 paper 引用（D2） | 上列 + C5 選定的 `evidence_ledger`、`no_go_registry` 和/或 `report_data` owner | D1 包 + C5 + 對應 evidence 文件 | source 可追溯；commit/preset/host 齊全 |
-| 執行 §20.11 study（formal／exploratory） | `docs/research/studies/<study_id>/`：`study.yaml`＋declaration＋runner；attempts append-only | [contract §20.11](docs/research/contracts/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)；[studies/README](docs/research/studies/README.md) | 同一 draft PR：review → `freeze/<study_id>/<n>` tag → 乾淨 tree 執行 → commit attempt／results → **merge commit**（不可 squash） |
+| 執行 §20.11 study（formal／exploratory） | `docs/research/studies/<study_id>/`：`study.yaml`＋declaration（＋runner，formal 必填）；attempts append-only | [contract §20.11](docs/research/contracts/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md)；[studies/README](docs/research/studies/README.md) | **有 runner 的 study**：同一 draft PR review → `freeze/<study_id>/<n>` tag → 乾淨 tree 執行 → commit attempt／results → **merge commit**（不可 squash）。無 runner 的 exploratory 只依 §20.11.1 宣告要求 |
 | 收尾 research（不論 D1/D2） | canonical 高密度結論；檔案/索引；module TODO；**只有** object 的 accepted state / substrate / limits / transition metadata 改變才更新 registry（該 object 尚未登記 → 同一 PR 新增 record）；有 thread 才更新 thread | C4、C6、C7；有 promotion 再讀 C5；有 thread 再讀 [thread close checklist](docs/research/threads/README.md#how-to-close-a-thread) | `check_doc_structure.py --strict` + `check_doc_links.py` |
 
 ### 研究收尾卡
@@ -222,7 +222,7 @@ Detection 設計索引（非本檔展開）：[docs/modules/detection/README.md]
 
 - `pre_push` 失敗**不得** push。`--fix` 會改 working tree；修完（含 auto-fix / review 補丁）須**先 re-commit 或 amend**，確認 clean 後再重跑至綠——綠燈只對**已提交**內容有效。
 - 不直推 `main`。檢查清單以 [`scripts/pre_push.sh`](scripts/pre_push.sh) 為準，本檔不展開。
-- **新增／加嚴閘門：** 要退休的是「一般開發必須反覆證明舊研究仍描述 HEAD」的負擔；要保留的是「證據沒有被改寫、適用座標明確、正式結論沒有超出有效量測」。新增或加嚴一道檢查時，PR 必須寫明它防哪一種飄移、擋在哪些入口（hook／pytest／CI）→ [gate_admission](docs/ownership/gate_admission.md)（分類與欄位的唯一 owner；該檔不授權新增閘門）。
+- **新增／加嚴閘門：** 要退休的是「一般開發必須反覆證明舊研究仍描述 HEAD」的負擔；要保留的是「證據沒有被改寫、適用座標明確、正式結論沒有超出有效量測」。新增或加嚴一道檢查時，PR 必須寫明它防哪一種飄移、擋在哪些入口（hook／pytest／CI）→ [gate_admission](docs/ownership/gate_admission.md)（分類與欄位語義的 canonical owner；該檔不授權新增閘門）。
 - PR merge ≠ research acceptance（§6）。
 
 ```bash

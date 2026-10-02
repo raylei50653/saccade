@@ -1,7 +1,7 @@
 # Gate admission
 
 **中文：** 閘門准入準則——新增或修改一道檢查時必須回答的問題  
-**Status:** normative (docs governance) — 本檔是飄移分類、核心判準與閘門准入欄位的**唯一** owner；其他入口只連結，不重述  
+**Status:** normative (docs governance) — 本檔是飄移分類、核心判準與閘門准入欄位語義的 **canonical** owner；其他入口（PR template、DEVELOPMENT.md…）可 mirror 欄位名稱或判準作為操作提示，但不得重新定義其語義——兩邊不一致時以本檔為準  
 **Issue:** [#493](https://github.com/raylei50653/saccade/issues/493)（PR-1 [ADR 027](../decisions/027-historical-checks-by-purpose.md)、PR-2 規則作用分流、PR-3 [§20.11](../research/contracts/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md) 分級研究）
 
 **本檔不授權增加任何閘門。** 新增或加嚴一道檢查仍然需要它自己的變更、理由與證據；本檔只規定
@@ -37,10 +37,10 @@
 |---|---|
 | **防的飄移** | §2 的哪一類；說得出「沒有這道檢查時，哪一種錯誤結論或行為會悄悄進 main」 |
 | **擋住的入口** | 列出實際執行它的入口：pre-commit hook（`.githooks/`）、`scripts/pre_push.sh`、pytest 預設收集、CI workflow（寫 job／step 名）。沒有列出的入口視為不擋 |
-| **fail-closed 或 warn 的理由** | fail-closed 需對應結論飄移或行為飄移，或封存完整性／防冒用；文件飄移預設 warn 或自動生成 |
-| **失效後的處理** | 紅燈時的正確動作（修正、重生、republish、supersession…），以及誰有權做 |
+| **處置（disposition）** | 變更後為 fail-closed／warn／removed，並說明理由。fail-closed 需對應結論飄移或行為飄移，或封存完整性／防冒用；文件飄移預設 warn 或自動生成；removed 需說明它為什麼不防（或不再防）§2 的飄移 |
+| **失效後的處理** | 紅燈時的正確動作（修正、重生、republish、supersession…），以及誰有權做；removed 填「不適用」 |
 
-移除或降級一道檢查時，填同樣欄位說明它為什麼不防（或不再防）上述飄移。
+移除或降級一道檢查時，填同樣欄位；處置填 `warn` 或 `removed`，說明它為什麼不防（或不再防）上述飄移。
 
 ## 4. 不因本檔改變的事
 
