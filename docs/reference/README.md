@@ -11,6 +11,7 @@
 | [native_runtime_packaging_audit.md](native_runtime_packaging_audit.md) | #465 Phase A：headline runtime 的 Python／native 邊界、依賴清單、預編譯包形式比較與 verdict（`native_package_blocked_by_bounded_python_surface`） |
 | [native_runtime_shipping_boundary.md](native_runtime_shipping_boundary.md) | #465 Phase A.5：shipping／developer／eval 範圍凍結；固定 shipping entrypoint、U1–U6 與 Python 擁有語義的 scope matrix、shared_boundary 抽取提案、Phase B PR 順序 |
 | [native_runtime_head_artifact.md](native_runtime_head_artifact.md) | #465 Phase B PR-1：headline Mamba head 的 TRT artifact（ONNX＋scan plugin，head-only、FP32）、fail-closed lineage 輸入、可重建檢查與已知限制 |
+| [native_runtime_resolved_config.md](native_runtime_resolved_config.md) | #465 Phase B PR-3：headline resolved shipping config（`configs/shipping/mamba_whole_graph.resolved.json`）的 schema、值的來源（執行 oracle 自身敘述＋native 替身）、fail-closed 覆蓋檢查、匯出時的發現與限制 |
 | [native_runtime_head_parity_declaration.md](native_runtime_head_parity_declaration.md) | #465 Phase B PR-2 預宣告：head parity 的凍結輸入、L1 tensor gross-error screen、L2 7-seq MOT 容差（以 `--no-compile` reference 定尺度，含 floor／cap）、validity gate 與窮盡 terminal |
 | [math_model.md](math_model.md) | 現行 baseline 的全局數學模型：GMC、Kalman、成本、auction、bridge relink |
 | [math_model_implementation.md](math_model_implementation.md) | 修改模型時的實作流程、invariants、測試與文檔 checklist |

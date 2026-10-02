@@ -23,9 +23,14 @@
 | `test_reconnect_rate.py` | eval | behavior | active | Unit tests for B2 reconnect_rate summarization / export. |
 | `test_resctl.py` | system | contract | active | Fail-closed contracts for tools/resctl.py, the cross-worktree resource lease CLI. |
 | `test_resolved_bridge_policy_config.py` | system | contract | active | Pin the resolved-config fingerprints the H0 declaration freezes. |
+| `test_resolved_shipping_config.py` | system | contract | active | The headline resolved shipping config equals what the Python oracle uses. |
 | `test_safe_reject_audit.py` | eval | behavior | active | Tests for constrained FP pruning / safe-reject metrics. |
 | `test_signal_tables.py` | eval | contract | active | Unit tests for signal_tables schema helpers. |
 | `test_slim_release_manifest.py` | system | contract | active | Integrity checks for the slim release manifest. |
 | `test_summarize_relink_pairs.py` | eval | contract | active | Tests for scripts/tools/summarize_relink_pairs.py B1 output contract. |
+| `test_tf32_off_head_drift_stage_r2_runner.py` | system | contract | active | The TF32-off stage-localization r2 runner implements its exploratory declaration. |
+| `test_tf32_off_head_drift_stage_runner.py` | system | contract | active | The TF32-off stage-localization runner implements its exploratory declaration. |
+| `test_tracker_block_divergence_465_r2_runner.py` | system | contract | active | The tracker block-divergence r2 runner implements its exploratory declaration. |
+| `test_tracker_block_divergence_465_runner.py` | system | contract | active | The tracker block-divergence runner implements its exploratory declaration. |
 
 <!-- END generated test index -->

@@ -36,6 +36,7 @@ README is the classification index for later cleanup.
 | `export_mamba_head.py` | Export Mamba Head to TorchScript |
 | `export_mamba_head_onnx.py` | Export Mamba Head to ONNX with custom op |
 | `export_headline_mamba_head.py` | Headline (`mamba_whole_graph`) head ONNX + FP32 engine + lineage manifest; fail-closed on the preset/inventory checkpoint binding (#465 PR-1) |
+| `export_resolved_shipping_config.py` | Headline resolved shipping config (`configs/shipping/mamba_whole_graph.resolved.json`) by executing the oracle's own resolution and native-setup statements; `--check` compares with the committed file (#465 PR-3) |
 | `export_yolo_backbone.py` | Export YOLO backbone FPN features from base weights |
 | `export_yolo_backbone_ckpt.py` | Export YOLO backbone FPN features from gated-detector checkpoint |
 
@@ -109,6 +110,7 @@ manually or if their outputs support a retained report.
 | `export_mamba_head.py` | stable | cli | Export PyTorch Mamba Head to TorchScript via wrapper. |
 | `export_mamba_head_onnx.py` | stable | cli | Export PyTorch MambaHead to ONNX with custom SelectiveScan op. |
 | `export_mobilenetv4_reid.py` | stable | cli | Export fine-tuned MobileNetV4 ReID checkpoint to ONNX for TRT compilation. |
+| `export_resolved_shipping_config.py` | diagnostic | cli | Export the headline preset's resolved shipping config (one flat JSON). |
 | `export_siglip.py` | stable | - | Export SigLIP model to ONNX for TRT build. |
 | `export_transreid.py` | stable | cli | Export TransReID-compatible ViT-B/16 (256×128) to ONNX for TRT compilation. |
 | `export_yolo_backbone.py` | stable | cli | Export YOLO backbone (layers 0-22) to ONNX with 3 FPN feature outputs. |
