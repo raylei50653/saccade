@@ -46,6 +46,19 @@ Primary study intent:           <design evaluation / capability map / boundary d
 Mainline terminal mapping:      <terminal -> state transition per outcome, or "diagnostic-only">
 ```
 
+- [ ] New study (declared after contract v1.4): lives in `docs/research/studies/<study_id>/` per [§20.11](docs/research/contracts/statistical_robust_feasible_set_estimation_under_asymmetric_loss.md) / [studies README](docs/research/studies/README.md); `evidence_tier` matches what the checker derives; if a runner is named: freeze tag pushed before the run and merged with a merge commit (runnerless exploratory: declaration only)
+
+### Adding, tightening, or retiring a check? (hook / `pre_push.sh` / pytest / CI)
+
+Fill in per [gate admission](docs/ownership/gate_admission.md), which owns what each field means (admission does not authorize the gate):
+
+```text
+Drift prevented:        <conclusion / behavior / doc / historical — what would silently land without it>
+Blocked entry points:   <pre-commit hook / scripts/pre_push.sh / pytest default collection / CI workflow:job>
+Disposition:            <fail-closed / warn / removed — and why>
+When it fails:          <correct action and who may take it>
+```
+
 ## Test plan
 
 - [ ] …

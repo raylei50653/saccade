@@ -49,6 +49,7 @@ has **one primary job**, explicit secondaries, and a clear **should-not-own** li
 | [change_routing_matrix.md](change_routing_matrix.md) | Objective touched → required checks; docs-strategy routing-only class in the same file |
 | [extraction_candidates.md](extraction_candidates.md) | What to extract later (reasons only; no moves) |
 | [doc_structure_contract.md](doc_structure_contract.md) | **O1.5** write-where / index / promotion / lifecycle |
+| [gate_admission.md](gate_admission.md) | Drift classification + fields a new/tightened gate must declare (#493); does not authorize gates |
 
 ## Doc-lifecycle recovery
 

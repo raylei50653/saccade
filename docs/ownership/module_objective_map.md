@@ -266,7 +266,7 @@ Secondary:   CONFIG documentation (ACTIVE surface)
 Should-not-own: runtime code ownership; O-series governance (that's docs/ownership)
 Risk:        reopening dual-stability under “docs fix”
 Extraction:  —
-Checks:      doc stale paths; no metric invention without evidence_ledger
+Checks:      doc links; no metric invention without evidence_ledger
 ```
 
 ### `docs/ownership/*` (this tree)
@@ -277,7 +277,7 @@ Secondary:   —
 Should-not-own: tracker behavior defaults
 Risk:        none if docs-only
 Extraction:  —
-Checks:      link/stale path checkers
+Checks:      doc links + check_doc_structure --strict; new/tightened gates → gate_admission.md
 ```
 
 ---
