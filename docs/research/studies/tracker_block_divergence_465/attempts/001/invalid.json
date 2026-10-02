@@ -1,0 +1,6 @@
+{
+  "criterion": "V_REPEAT",
+  "detail": "MOT17-02-SDP f2: dump differs, R_C#1 vs R_C#2",
+  "raw_out": "results/tracker_block_divergence_465/20261002T030926Z",
+  "raw_manifest_sha256": "d6090e7e4febcb58aa4ee10c928c81d688286da780c057c3147fe95840f8a824"
+}

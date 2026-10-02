@@ -1,0 +1,28 @@
+{
+  "attempt": 1,
+  "files": {
+    "invalid.json": "59171b3428a19f433a2b6779ef61fe4ce3d6c5d9ba8505d688667b1a3f754227"
+  },
+  "freeze": {
+    "commit": "68bf34bb64c2392c2579a6be144b9ea2d71d6929",
+    "pinned_blobs": {
+      "docs/research/studies/tracker_block_divergence_465/declaration.md": "49e3eca0880cd9b87223846e3e5645d7a7c6776d",
+      "docs/research/studies/tracker_block_divergence_465/study.yaml": "c0a1cb34b82a13e802ba50a293b1d964d58fbdfc"
+    },
+    "tag": "freeze/tracker_block_divergence_465/1"
+  },
+  "inputs": {
+    "r2": {
+      "kind": "external",
+      "manifest": "docs/research/studies/tracker_block_divergence_465/inputs_r2.json",
+      "manifest_blob": "efac62e0c50e30cc171c5090af559c7465530f6a",
+      "path": "results/native_head_failure_localization_465_r2/20260928T081021Z"
+    }
+  },
+  "invalid_criterion": "V_REPEAT",
+  "runner": "scripts/eval/diagnostics/tracker_block_divergence_465.py",
+  "schema": "research_attempt_v1",
+  "study_id": "tracker_block_divergence_465",
+  "terminal": null,
+  "validity": "invalid"
+}
