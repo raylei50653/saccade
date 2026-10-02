@@ -9,8 +9,8 @@ divergence f*, the detections entering the tracker were structurally the same
 as R_C's. This study asks where inside the tracker the first structural
 divergence appears, at or before f*.
 
-Replay (declaration §2). For each replayed arm (``R_C`` twice, ``R_T``,
-``R_E``) one unmodified ``scripts/eval/mot17.py`` run (headline preset, the
+Replay (declaration §2). For each replay (``R_C`` and ``R_T`` twice each,
+``R_E`` once) one unmodified ``scripts/eval/mot17.py`` run (headline preset, the
 same argv as the r2 localization) is driven by a worker in which exactly two
 things are replaced, both outside production code:
 
@@ -31,9 +31,9 @@ Blocks (§2), in execution order within a tracker step for frame f:
 * ``A`` association -- per active track, ``trk_to_det`` after all auction
   stages (dump ``TRK`` rows at f);
 * ``P`` state transition -- state update, spawn and bridge, read as the
-  multiset of (id, lifecycle state, age) of active tracks in the dump at f+1
-  (predict and the pre-state kernel between the two are functions of exactly
-  these fields);
+  multiset of (id, lifecycle state, age) of active tracks at the end of step f,
+  from the tracker's read-only ``get_state_snapshots`` /
+  ``get_tentative_candidates`` called right after the update returns;
 * ``E`` emission -- the tracker output, compared as in r2 (its first
   divergence is r2's f*).
 
@@ -99,8 +99,8 @@ BINDING = StudyBinding(
     runner_file=__file__,
     freeze_tag=f"freeze/{STUDY_ID}/1",
     pinned_blobs={
-        f"docs/research/studies/{STUDY_ID}/study.yaml": "b5720666caf87204ea3f705d4a1ae235c3d24c43",
-        f"docs/research/studies/{STUDY_ID}/declaration.md": "4029b195d65fe2f1973cee64a1bf5e6ae4cd44e2",
+        f"docs/research/studies/{STUDY_ID}/study.yaml": "c0a1cb34b82a13e802ba50a293b1d964d58fbdfc",
+        f"docs/research/studies/{STUDY_ID}/declaration.md": "49e3eca0880cd9b87223846e3e5645d7a7c6776d",
     },
 )
 
@@ -111,14 +111,17 @@ PRESET_NAME = "mamba_whole_graph"
 # Replay runs in execution order: (run label, r2 arm/run whose tracker_input is injected).
 REPLAYS: tuple[tuple[str, str], ...] = (
     ("R_C#1", "R_C_1"),
-    ("R_T", "R_T_1"),
+    ("R_T#1", "R_T_1"),
     ("R_E", "R_E_1"),
     ("R_C#2", "R_C_1"),
+    ("R_T#2", "R_T_1"),
 )
 REF_RUN = "R_C#1"
-REPEAT_RUN = "R_C#2"
-COMPARED = ("R_T", "R_E")
-PRIMARY = "R_T"
+# V_REPEAT: every terminal-driving observation (dump and step-end state) of
+# the reference and the primary arm must replay identically (§3).
+REPEAT_PAIRS: tuple[tuple[str, str], ...] = (("R_C#1", "R_C#2"), ("R_T#1", "R_T#2"))
+COMPARED = ("R_T#1", "R_E")
+PRIMARY = "R_T#1"
 BLOCKS = ("A", "P", "E")
 TERMINAL_BY_BLOCK = {
     "A": "FIRST_DIVERGENCE_ASSOCIATION",
@@ -130,11 +133,12 @@ VALIDITY_ORDER = (
     "V_COMPLETE",
     "V_FORMAT",
     "V_REPLAY",
-    "V_DUMP",
+    "V_RECORD",
     "V_REPEAT",
     "V_RUNNER",
 )
 LEASE_RESOURCES = ("gpu0", "machine-bench")
+TENTATIVE, CONFIRMED = 1, 2  # tracker_gpu.cu TRACK_TENTATIVE / TRACK_CONFIRMED
 DUMP_ENV = "SACCADE_ASSOC_DUMP"
 
 
@@ -200,8 +204,38 @@ def parse_segment(text: str) -> dict[str, Any]:
 def discrete_state(
     tracks: Sequence[Mapping[str, Any]],
 ) -> Counter[tuple[int, int, int]]:
-    """Multiset of (id, lifecycle state, age) over active tracks (§2 block P)."""
+    """Multiset of (id, lifecycle state, age) over active tracks."""
     return Counter((int(t["id"]), int(t["state"]), int(t["age"])) for t in tracks)
+
+
+def step_end_rows(
+    active: Sequence[tuple[int, int, int, int]],
+    tentative: Sequence[tuple[int, int, int, int]],
+) -> list[tuple[int, int, int, int, int]]:
+    """Join the two read-only snapshots into (id, state, age, uid, generation) rows.
+
+    ``active`` and ``tentative`` hold (id, age, uid, generation) per active /
+    active-tentative slot. Each tentative entry must consume exactly one equal
+    active entry; those rows get state 1 and the remaining active rows state 2
+    (an active slot is only ever written 1 or 2: spawn and the post-update
+    kernel). Raises ``ValueError`` when the join fails.
+    """
+    pool = Counter(tuple(int(v) for v in a) for a in active)
+    tent = Counter(tuple(int(v) for v in t) for t in tentative)
+    if tent - pool:
+        raise ValueError(
+            f"tentative entries without an active slot: {sorted(tent - pool)}"
+        )
+    rows = [(k[0], TENTATIVE, k[1], k[2], k[3]) for k in tent.elements()]
+    rows += [(k[0], CONFIRMED, k[1], k[2], k[3]) for k in (pool - tent).elements()]
+    return sorted(rows)
+
+
+def state_multiset(
+    rows: Sequence[Sequence[int]],
+) -> Counter[tuple[int, int, int]]:
+    """Block P observation: multiset of (id, lifecycle state, age) at step end."""
+    return Counter((int(r[0]), int(r[1]), int(r[2])) for r in rows)
 
 
 def _row_or_pad(rows: np.ndarray, d: int) -> np.ndarray | int:
@@ -278,6 +312,8 @@ def ladder(
     n_frames: int,
     dump_ref: Mapping[int, Mapping[str, Any]],
     dump_oth: Mapping[int, Mapping[str, Any]],
+    state_ref: Mapping[int, Sequence[Sequence[int]]],
+    state_oth: Mapping[int, Sequence[Sequence[int]]],
     ti_ref: Mapping[int, np.ndarray],
     ti_oth: Mapping[int, np.ndarray],
     out_ref: Mapping[int, Any],
@@ -285,40 +321,35 @@ def ladder(
 ) -> dict[str, Any]:
     """Per-block structural equality over one sequence and the first divergence.
 
-    ``P`` at frame f is read from the dump at f+1; ``P(0)`` is the dump at frame
-    1 (the state the sequence starts from) and ``P(n_frames)`` is unobserved.
-    The first divergence is the earliest (frame, block) in the order
-    P(0); then per frame A, P, E (§2).
+    ``A`` at frame f is read from the dump of step f; ``P`` at frame f from the
+    step-end state rows of step f; ``E`` from the output of step f. The first
+    divergence is the earliest (frame, block) in the order A, P, E per frame (§2).
     """
     a_same: dict[int, bool | None] = {}
     p_same: dict[int, bool] = {}
     e_same: dict[int, bool] = {}
-    for f in range(0, n_frames):
-        p_same[f] = discrete_state(dump_ref[f + 1]["tracks"]) == discrete_state(
-            dump_oth[f + 1]["tracks"]
-        )
     for f in range(1, n_frames + 1):
         a_same[f] = association_equal(
             dump_ref[f]["tracks"], ti_ref[f], dump_oth[f]["tracks"], ti_oth[f]
         )
+        p_same[f] = state_multiset(state_ref[f]) == state_multiset(state_oth[f])
         e_same[f] = s2.tracks_structurally_equal(out_ref[f], out_oth[f])
-    first: tuple[int, str] | None = (0, "P") if not p_same[0] else None
-    if first is None:
-        for f in range(1, n_frames + 1):
-            if a_same[f] is False:
-                first = (f, "A")
-            elif f < n_frames and not p_same[f]:
-                first = (f, "P")
-            elif not e_same[f]:
-                first = (f, "E")
-            if first is not None:
-                break
+    first: tuple[int, str] | None = None
+    for f in range(1, n_frames + 1):
+        if a_same[f] is False:
+            first = (f, "A")
+        elif not p_same[f]:
+            first = (f, "P")
+        elif not e_same[f]:
+            first = (f, "E")
+        if first is not None:
+            break
     e_frames = [f for f in range(1, n_frames + 1) if not e_same[f]]
     return {
         "first": None if first is None else {"frame": first[0], "block": first[1]},
         "first_by_block": {
             "A": next((f for f in range(1, n_frames + 1) if a_same[f] is False), None),
-            "P": next((f for f in range(0, n_frames) if not p_same[f]), None),
+            "P": next((f for f in range(1, n_frames + 1) if not p_same[f]), None),
             "E": e_frames[0] if e_frames else None,
         },
         "divergent_frames": {
@@ -357,26 +388,26 @@ def explain_first(
     first: Mapping[str, Any],
     dump_ref: Mapping[int, Mapping[str, Any]],
     dump_oth: Mapping[int, Mapping[str, Any]],
+    state_ref: Mapping[int, Sequence[Sequence[int]]],
+    state_oth: Mapping[int, Sequence[Sequence[int]]],
     ti_ref: Mapping[int, np.ndarray],
     ti_oth: Mapping[int, np.ndarray],
     out_ref: Mapping[int, Any],
     out_oth: Mapping[int, Any],
-    n_frames: int,
 ) -> dict[str, Any]:
     """Report-only description of the first divergence (§5); decides nothing."""
     f, block = int(first["frame"]), str(first["block"])
     out: dict[str, Any] = {"frame": f, "block": block}
-    if f >= 1:
-        out["tracker_input"] = {
-            "structurally_equal": s2.rows_structurally_equal(ti_ref[f], ti_oth[f]),
-            "bit_equal": s2.rows_bit_equal(ti_ref[f], ti_oth[f]),
-            "rows": [len(ti_ref[f]), len(ti_oth[f])],
-            "structural_frames_before": sum(
-                1
-                for g in range(1, f)
-                if not s2.rows_structurally_equal(ti_ref[g], ti_oth[g])
-            ),
-        }
+    out["tracker_input"] = {
+        "structurally_equal": s2.rows_structurally_equal(ti_ref[f], ti_oth[f]),
+        "bit_equal": s2.rows_bit_equal(ti_ref[f], ti_oth[f]),
+        "rows": [len(ti_ref[f]), len(ti_oth[f])],
+        "structural_frames_before": sum(
+            1
+            for g in range(1, f)
+            if not s2.rows_structurally_equal(ti_ref[g], ti_oth[g])
+        ),
+    }
     if block == "A":
         tr, to = dump_ref[f]["tracks"], dump_oth[f]["tracks"]
         records = []
@@ -417,8 +448,8 @@ def explain_first(
                 records.append({"id": tid, "duplicate_id_group": [len(ga), len(gb)]})
         out["association"] = records
     elif block == "P":
-        sa = discrete_state(dump_ref[f + 1]["tracks"])
-        sb = discrete_state(dump_oth[f + 1]["tracks"])
+        sa = state_multiset(state_ref[f])
+        sb = state_multiset(state_oth[f])
         ids_a = {k[0] for k in sa}
         ids_b = {k[0] for k in sb}
         out["state_transition"] = {
@@ -426,12 +457,8 @@ def explain_first(
             "only_other": sorted([list(k) for k in (sb - sa).elements()]),
             "ids_only_ref": sorted(ids_a - ids_b),
             "ids_only_other": sorted(ids_b - ids_a),
-            "association_equal_at_frame": (
-                association_equal(
-                    dump_ref[f]["tracks"], ti_ref[f], dump_oth[f]["tracks"], ti_oth[f]
-                )
-                if f >= 1
-                else None
+            "association_equal_at_frame": association_equal(
+                dump_ref[f]["tracks"], ti_ref[f], dump_oth[f]["tracks"], ti_oth[f]
             ),
         }
     else:
@@ -498,6 +525,7 @@ def run_worker(inputs_json: Path, out_dir: Path) -> int:
         injected[seq] = s2.stage_view(ev, "tracker_input", n)
     calls: list[dict[str, Any]] = []
     emits: list[tuple[str, int, np.ndarray, np.ndarray, np.ndarray]] = []
+    states: list[tuple[str, int, list[Any], list[Any]]] = []
 
     original_track = evaluator_module._run_track
     original_capture = tracker_module.GraphedTrackerUpdate._capture
@@ -518,6 +546,19 @@ def run_worker(inputs_json: Path, out_dir: Path) -> int:
         start = dump.stat().st_size if dump.exists() else 0
         result = original_track(state, **kwargs)
         end = dump.stat().st_size if dump.exists() else 0
+        # Step-end state (§2 block P): both reads only copy device arrays to
+        # host on the update's stream and synchronize it; neither writes
+        # tracker state.
+        tracker = state.detector.tracker
+        active = [
+            (s.obj_id, s.age, s.track_uid, s.generation)
+            for s in tracker.get_state_snapshots()
+        ]
+        tentative = [
+            (c.obj_id, c.age, c.track_uid, c.generation)
+            for c in tracker.get_tentative_candidates()
+        ]
+        states.append((seq, frame, active, tentative))
         calls.append(
             {"seq": seq, "frame": frame, "start": start, "end": end, "rows": len(rows)}
         )
@@ -610,6 +651,20 @@ def run_worker(inputs_json: Path, out_dir: Path) -> int:
             [e[4] for e in rows] or [np.zeros((0, 4), np.float32)]
         ).reshape(-1, 4)
     np.savez(out_dir / "emits.npz", **arrays)
+    # Raw snapshots, joined by the parent (a failed join is V_RECORD there).
+    # Columns: id, age, generation (int64) and uid (uint64, its native type).
+    st: dict[str, np.ndarray] = {}
+    for seq in SEQUENCE_FRAMES:
+        rows_ = [e for e in states if e[0] == seq]
+        st[f"{seq}__frames"] = np.array([e[1] for e in rows_], np.int64)
+        for k, key in ((2, "active"), (3, "tentative")):
+            flat = [r for e in rows_ for r in e[k]]
+            st[f"{seq}__{key}_counts"] = np.array([len(e[k]) for e in rows_], np.int64)
+            st[f"{seq}__{key}_iag"] = np.array(
+                [(r[0], r[1], r[3]) for r in flat], np.int64
+            ).reshape(-1, 3)
+            st[f"{seq}__{key}_uid"] = np.array([r[2] for r in flat], np.uint64)
+    np.savez(out_dir / "states.npz", **st)
     return int(exit_code)
 
 
@@ -625,7 +680,7 @@ def _ragged(
 def load_replay(
     run_dir: Path, ti: Mapping[str, Mapping[int, np.ndarray]]
 ) -> dict[str, Any]:
-    """Check one replay's call record (V_REPLAY part 1) and parse its dump (V_DUMP)."""
+    """Check one replay's call record (V_REPLAY part 1); parse its records (V_RECORD)."""
     calls = json.loads((run_dir / "calls.json").read_text(encoding="utf-8"))
     raw = (run_dir / "assoc_dump.csv").read_bytes()
     segments: dict[str, dict[int, bytes]] = {seq: {} for seq in SEQUENCE_FRAMES}
@@ -652,7 +707,7 @@ def load_replay(
     if sum(len(v) for v in segments.values()) and (
         sum(int(c["end"]) - int(c["start"]) for c in calls) != len(raw)
     ):
-        raise Invalid("V_DUMP", f"{run_dir.name}: dump bytes outside tracker calls")
+        raise Invalid("V_RECORD", f"{run_dir.name}: dump bytes outside tracker calls")
     dumps: dict[str, dict[int, dict[str, Any]]] = {}
     for seq, by_frame in segments.items():
         dumps[seq] = {}
@@ -661,9 +716,33 @@ def load_replay(
                 dumps[seq][frame] = parse_segment(data.decode("ascii"))
             except (ValueError, UnicodeDecodeError) as exc:
                 raise Invalid(
-                    "V_DUMP", f"{run_dir.name}: {seq} f{frame}: {exc}"
+                    "V_RECORD", f"{run_dir.name}: {seq} f{frame}: {exc}"
                 ) from exc
-    return {"segments": segments, "dumps": dumps}
+    states: dict[str, dict[int, list[tuple[int, int, int, int, int]]]] = {}
+    try:
+        z = np.load(run_dir / "states.npz")
+        for seq, n in SEQUENCE_FRAMES.items():
+            frames = z[f"{seq}__frames"]
+            if frames.tolist() != list(range(1, n + 1)):
+                raise ValueError(f"{seq} step-end states are not frames 1..{n}")
+            raw_rows = {}
+            for key in ("active", "tentative"):
+                iag = _ragged(frames, z[f"{seq}__{key}_counts"], z[f"{seq}__{key}_iag"])
+                uid = _ragged(frames, z[f"{seq}__{key}_counts"], z[f"{seq}__{key}_uid"])
+                raw_rows[key] = {
+                    f: [
+                        (int(a[0]), int(a[1]), int(u), int(a[2]))
+                        for a, u in zip(iag[f], uid[f], strict=True)
+                    ]
+                    for f in iag
+                }
+            states[seq] = {
+                f: step_end_rows(raw_rows["active"][f], raw_rows["tentative"][f])
+                for f in range(1, n + 1)
+            }
+    except (OSError, KeyError, ValueError) as exc:
+        raise Invalid("V_RECORD", f"{run_dir.name}: {exc}") from exc
+    return {"segments": segments, "dumps": dumps, "states": states}
 
 
 def load_emits(
@@ -812,17 +891,20 @@ def evaluate(study: Any, raw_out: Path) -> dict[str, Any]:
         rec["emits"] = emits
         replays[run] = rec
 
-    for seq in SEQUENCE_FRAMES:
-        if replays[REF_RUN]["segments"][seq] != replays[REPEAT_RUN]["segments"][seq]:
-            bad = next(
-                f
-                for f in range(1, SEQUENCE_FRAMES[seq] + 1)
-                if replays[REF_RUN]["segments"][seq][f]
-                != replays[REPEAT_RUN]["segments"][seq][f]
-            )
-            raise Invalid(
-                "V_REPEAT", f"{seq} f{bad}: R_C dump differs between the two replays"
-            )
+    for first_run, second_run in REPEAT_PAIRS:
+        a, b = replays[first_run], replays[second_run]
+        for seq, n in SEQUENCE_FRAMES.items():
+            for f in range(1, n + 1):
+                if a["segments"][seq][f] != b["segments"][seq][f]:
+                    raise Invalid(
+                        "V_REPEAT",
+                        f"{seq} f{f}: dump differs, {first_run} vs {second_run}",
+                    )
+                if a["states"][seq][f] != b["states"][seq][f]:
+                    raise Invalid(
+                        "V_REPEAT",
+                        f"{seq} f{f}: step-end state differs, {first_run} vs {second_run}",
+                    )
 
     ref_arm = dict(REPLAYS)[REF_RUN]
     by_run: dict[str, dict[str, Any]] = {}
@@ -833,11 +915,11 @@ def evaluate(study: Any, raw_out: Path) -> dict[str, Any]:
             dr, do = replays[REF_RUN]["dumps"][seq], replays[run]["dumps"][seq]
             outr = {f: (v[0], v[2]) for f, v in replays[REF_RUN]["emits"][seq].items()}
             outo = {f: (v[0], v[2]) for f, v in replays[run]["emits"][seq].items()}
-            lad = ladder(n, dr, do, ti[ref_arm][seq], ti[arm][seq], outr, outo)
+            sr, so = replays[REF_RUN]["states"][seq], replays[run]["states"][seq]
+            views = (dr, do, sr, so, ti[ref_arm][seq], ti[arm][seq], outr, outo)
+            lad = ladder(n, *views)
             lad["first_detail"] = (
-                explain_first(
-                    lad["first"], dr, do, ti[ref_arm][seq], ti[arm][seq], outr, outo, n
-                )
+                explain_first(lad["first"], *views)
                 if lad["first"] is not None
                 else None
             )

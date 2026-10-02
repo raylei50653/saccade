@@ -21,9 +21,9 @@ validity_criteria:
   V_COMPLETE: "Every r2 evidence npz the replays inject (R_C_1, R_T_1, R_E_1 x 7 sequences) is a member of the manifest and reads back at its manifest digest."
   V_FORMAT: "Each of those npz has tracker_input and tracker arrays whose ragged counts cover their bodies exactly, frames lie in 1..N without repeats, and tracker_input rows are 6 wide and finite."
   V_REPLAY: "Each replay worker exits 0; per sequence the tracker is called exactly once per frame 1..N in order with exactly that frame's captured row count injected; and the emitted tracker output (ids, det_idx, boxes) equals the injected arm's r2 run-1 capture bit for bit on every frame."
-  V_DUMP: "Every replay's SACCADE_ASSOC_DUMP bytes are covered exactly by its tracker calls, and every call's segment has a GMC line and only well-formed GMC/TRK/CND lines (CND under its TRK, t2d >= -1)."
-  V_REPEAT: "The two R_C replays produce byte-identical dump segments for every frame of every sequence."
-  V_RUNNER: "After the freeze passed, the computation or report code raised an exception that none of V_COMPLETE, V_FORMAT, V_REPLAY, V_DUMP, V_REPEAT covers (a runner bug); decided by the exception alone, not by any computed quantity."
+  V_RECORD: "Every replay's SACCADE_ASSOC_DUMP bytes are covered exactly by its tracker calls and every call's segment has a GMC line and only well-formed GMC/TRK/CND lines (CND under its TRK, t2d >= -1); and every replay has one step-end state record per frame 1..N of every sequence, in which every tentative snapshot entry joined exactly one active snapshot entry by (id, age, uid, generation)."
+  V_REPEAT: "For each of R_C and R_T, the two replays produce byte-identical dump segments and identical step-end state records for every frame of every sequence."
+  V_RUNNER: "After the freeze passed, the computation or report code raised an exception that none of V_COMPLETE, V_FORMAT, V_REPLAY, V_RECORD, V_REPEAT covers (a runner bug); decided by the exception alone, not by any computed quantity."
 attempt_policy:
   adoption: first_valid
   max_valid_attempts: 1

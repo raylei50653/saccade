@@ -208,6 +208,24 @@ def test_candidate_sets_report():
     assert not m.candidates_equal(x, a, _t(1, cands=[(1, 0.2)]), b)
 
 
+# ---------------------------------------------------------- step-end state
+
+
+def test_step_end_rows_label_tentative_by_join():
+    active = [(1, 0, 11, 0), (2, 3, 12, 0), (2, 0, 13, 1)]
+    tentative = [(2, 0, 13, 1)]
+    rows = m.step_end_rows(active, tentative)
+    assert rows == [(1, 2, 0, 11, 0), (2, 1, 0, 13, 1), (2, 2, 3, 12, 0)]
+    assert m.state_multiset(rows) == m.Counter([(1, 2, 0), (2, 1, 0), (2, 2, 3)])
+
+
+def test_step_end_rows_reject_orphan_tentative():
+    with pytest.raises(ValueError):
+        m.step_end_rows([(1, 0, 11, 0)], [(1, 0, 99, 0)])
+    with pytest.raises(ValueError):  # one active slot cannot be tentative twice
+        m.step_end_rows([(1, 0, 11, 0)], [(1, 0, 11, 0), (1, 0, 11, 0)])
+
+
 # --------------------------------------------------------------- the ladder
 
 N = 4
@@ -224,71 +242,101 @@ def _out(ids):
 
 
 def _base():
-    dump = {1: [], 2: [_t(1, age=1)], 3: [_t(1, age=1)], 4: [_t(1, age=1)]}
+    """Track 1 is born at step 1, matched at step 2, coasting afterwards."""
+    dump = {1: [], 2: [_t(1, age=1)], 3: [_t(1, age=1)], 4: [_t(1, age=2)]}
     dump[2][0]["t2d"] = 0
-    out = {1: _out([]), 2: _out([1]), 3: _out([1]), 4: _out([1])}
-    return dump, out
+    state = {
+        1: [(1, 2, 0, 1, 0)],
+        2: [(1, 2, 0, 1, 0)],
+        3: [(1, 2, 1, 1, 0)],
+        4: [(1, 2, 2, 1, 0)],
+    }
+    out = {1: _out([1]), 2: _out([1]), 3: _out([1]), 4: _out([1])}
+    return dump, state, out
 
 
-def _ladder(dump_a, dump_b, out_a, out_b, ti_b=TI):
-    return m.ladder(N, _dumps(dump_a), _dumps(dump_b), TI, ti_b, out_a, out_b)
+def _ladder(a, b, ti_b=TI):
+    (da, sa, oa), (db, sb, ob) = a, b
+    return m.ladder(N, _dumps(da), _dumps(db), sa, sb, TI, ti_b, oa, ob)
 
 
 def test_identical_replays_have_no_divergence():
-    d, o = _base()
-    r = _ladder(d, d, o, o)
+    base = _base()
+    r = _ladder(base, base)
     assert r["first"] is None
     assert r["divergent_frames"] == {"A": 0, "A_undefined": 0, "P": 0, "E": 0}
 
 
 def test_association_divergence_comes_first_within_its_frame():
-    d, o = _base()
-    db = copy.deepcopy(d)
+    d, st, o = _base()
+    db, sb, ob = copy.deepcopy(d), copy.deepcopy(st), dict(o)
     db[2][0]["t2d"] = 1  # frame 2: matched to the other detection
-    db[3] = [_t(1, age=2)]  # so the next state differs too (P at frame 2)
-    ob = dict(o)
-    ob[2] = _out([])  # and the output too (E at frame 2)
-    r = _ladder(d, db, o, ob)
+    sb[2] = [(1, 2, 1, 1, 0)]  # so the step-end state differs too
+    ob[2] = _out([])  # and the output too
+    r = _ladder((d, st, o), (db, sb, ob))
     assert r["first"] == {"frame": 2, "block": "A"}
     assert r["first_by_block"] == {"A": 2, "P": 2, "E": 2}
 
 
-def test_state_transition_is_read_from_the_next_frame_dump():
-    d, o = _base()
-    db = {k: [dict(t) for t in v] for k, v in d.items()}
-    db[4] = [_t(1, age=1), _t(9, state=1, age=1)]  # a birth at step 3, not emitted
-    r = _ladder(d, db, o, o)
+def test_state_transition_is_the_step_end_snapshot():
+    d, st, o = _base()
+    sb = copy.deepcopy(st)
+    sb[3] = sb[3] + [(9, 1, 0, 2, 0)]  # a tentative birth at step 3, not emitted
+    r = _ladder((d, st, o), (d, sb, o))
     assert r["first"] == {"frame": 3, "block": "P"}
-    assert r["divergent_frames"]["A_undefined"] == 1  # A(4) has different pre-states
     assert r["first_by_block"]["E"] is None
 
 
+def test_step_end_difference_hidden_from_the_next_dump_is_still_p():
+    """Review round 1: a track that differs at step end but is deactivated by the
+    next predict (age >= max_age) leaves the next dumps identical; P must still
+    see it at its own step."""
+    d, st, o = _base()
+    sb = copy.deepcopy(st)
+    sb[2] = sb[2] + [(7, 2, 29, 5, 0)]  # only in the other arm; expires next predict
+    r = _ladder((d, st, o), (d, sb, o))  # dumps identical on every frame
+    assert r["first"] == {"frame": 2, "block": "P"}
+    assert r["divergent_frames"]["A_undefined"] == 0
+
+
 def test_emission_only_divergence():
-    d, o = _base()
+    d, st, o = _base()
     ob = dict(o)
     ob[3] = _out([1, 5])
-    r = _ladder(d, d, o, ob)
+    r = _ladder((d, st, o), (d, st, ob))
     assert r["first"] == {"frame": 3, "block": "E"}
 
 
-def test_initial_state_divergence_is_p_zero():
-    d, o = _base()
-    db = {k: [dict(t) for t in v] for k, v in d.items()}
-    db[1] = [_t(3)]
-    r = _ladder(d, db, o, o)
-    assert r["first"] == {"frame": 0, "block": "P"}
+def test_association_undefined_after_a_state_divergence():
+    d, st, o = _base()
+    db, sb = copy.deepcopy(d), copy.deepcopy(st)
+    sb[2] = [(1, 2, 0, 1, 0), (6, 1, 0, 3, 0)]
+    db[3] = [_t(1, age=1), _t(6, state=1, age=1)]
+    r = _ladder((d, st, o), (db, sb, o))
+    assert r["first"] == {"frame": 2, "block": "P"}
+    assert r["divergent_frames"]["A_undefined"] == 1
 
 
 def test_explain_first_reports_without_deciding():
-    d, o = _base()
-    db = {k: [dict(t) for t in v] for k, v in d.items()}
+    d, st, o = _base()
+    db = copy.deepcopy(d)
     db[2][0]["t2d"] = 1
-    lad = _ladder(d, db, o, o)
-    ex = m.explain_first(lad["first"], _dumps(d), _dumps(db), TI, TI, o, o, N)
+    lad = _ladder((d, st, o), (db, st, o))
+    ex = m.explain_first(lad["first"], _dumps(d), _dumps(db), st, st, TI, TI, o, o)
     assert ex["block"] == "A" and ex["tracker_input"]["structurally_equal"]
     (rec,) = ex["association"]
     assert rec["id"] == 1 and rec["ref"]["t2d"]["index"] == 0
     assert rec["other"]["t2d"]["index"] == 1
+
+
+def test_explain_first_state_transition_keys():
+    d, st, o = _base()
+    sb = copy.deepcopy(st)
+    sb[3] = sb[3] + [(9, 1, 0, 2, 0)]
+    lad = _ladder((d, st, o), (d, sb, o))
+    ex = m.explain_first(lad["first"], _dumps(d), _dumps(d), st, sb, TI, TI, o, o)
+    assert ex["state_transition"]["only_other"] == [[9, 1, 0]]
+    assert ex["state_transition"]["association_equal_at_frame"] is True
 
 
 def test_decide_five_of_seven_support():
@@ -350,7 +398,7 @@ class _FakeStudy:
         return self._paths[member]
 
 
-def _fake_worker(mutate=None):
+def _fake_worker(mutate=None, mutate_state=None):
     """Stand-in for the replay child: writes calls.json, the dump and emits.npz."""
 
     def run(cmd, **kwargs):
@@ -374,6 +422,21 @@ def _fake_worker(mutate=None):
             pos += len(data)
         (out_dir / "assoc_dump.csv").write_bytes(raw)
         (out_dir / "calls.json").write_text(json.dumps(calls))
+        active = {1: [], 2: [(1, 0, 1, 0)], 3: [(1, 0, 1, 0)]}
+        tentative = {1: [], 2: [(1, 0, 1, 0)], 3: []}
+        if mutate_state:
+            mutate_state(out_dir.name, active, tentative)
+        st = {f"{SEQ}__frames": np.arange(1, FN + 1)}
+        for key, src in (("active", active), ("tentative", tentative)):
+            flat = [r for f in range(1, FN + 1) for r in src[f]]
+            st[f"{SEQ}__{key}_counts"] = np.array(
+                [len(src[f]) for f in range(1, FN + 1)]
+            )
+            st[f"{SEQ}__{key}_iag"] = np.array(
+                [(r[0], r[1], r[3]) for r in flat], np.int64
+            ).reshape(-1, 3)
+            st[f"{SEQ}__{key}_uid"] = np.array([r[2] for r in flat], np.uint64)
+        np.savez(out_dir / "states.npz", **st)
         np.savez(
             out_dir / "emits.npz",
             **{
@@ -391,9 +454,9 @@ def _fake_worker(mutate=None):
     return run
 
 
-def _evaluate(monkeypatch, tmp_path, mutate=None, corrupt=None):
+def _evaluate(monkeypatch, tmp_path, mutate=None, corrupt=None, mutate_state=None):
     monkeypatch.setattr(m, "SEQUENCE_FRAMES", {SEQ: FN})
-    monkeypatch.setattr(m.subprocess, "run", _fake_worker(mutate))
+    monkeypatch.setattr(m.subprocess, "run", _fake_worker(mutate, mutate_state))
     raw = tmp_path / "raw"
     raw.mkdir()
     return m.evaluate(_FakeStudy(tmp_path, corrupt), raw)
@@ -401,9 +464,9 @@ def _evaluate(monkeypatch, tmp_path, mutate=None, corrupt=None):
 
 def test_fake_replay_runs_end_to_end(monkeypatch, tmp_path):
     by_run = _evaluate(monkeypatch, tmp_path)
-    assert by_run["R_T"][SEQ]["first"] == {"frame": 3, "block": "E"}
+    assert by_run["R_T#1"][SEQ]["first"] == {"frame": 3, "block": "E"}
     assert by_run["R_E"][SEQ]["first"] is None
-    assert by_run["R_T"][SEQ]["gmc_row_mismatch_frames"] == 0
+    assert by_run["R_T#1"][SEQ]["gmc_row_mismatch_frames"] == 0
 
 
 def test_missing_member_is_v_complete(monkeypatch, tmp_path):
@@ -449,23 +512,54 @@ def test_missing_tracker_call_is_v_replay(monkeypatch, tmp_path):
     assert exc.value.criterion == "V_REPLAY"
 
 
-def test_malformed_dump_is_v_dump(monkeypatch, tmp_path):
+def test_malformed_dump_is_v_record(monkeypatch, tmp_path):
     def garble(run, texts, calls):
         texts[2] = texts[2] + "CND,2,9,0,0.1,1,2,3,4\n"
 
     with pytest.raises(m.Invalid) as exc:
         _evaluate(monkeypatch, tmp_path, mutate=garble)
-    assert exc.value.criterion == "V_DUMP"
+    assert exc.value.criterion == "V_RECORD"
 
 
-def test_r_c_replays_must_repeat(monkeypatch, tmp_path):
-    def drift(run, texts, calls):
-        if run == "R_C_2":
+def test_orphan_tentative_snapshot_is_v_record(monkeypatch, tmp_path):
+    def orphan(run, active, tentative):
+        tentative[3] = [(4, 0, 44, 0)]
+
+    with pytest.raises(m.Invalid) as exc:
+        _evaluate(monkeypatch, tmp_path, mutate_state=orphan)
+    assert exc.value.criterion == "V_RECORD"
+
+
+@pytest.mark.parametrize("run", ["R_C_2", "R_T_2"])
+def test_reference_and_primary_dumps_must_repeat(monkeypatch, tmp_path, run):
+    def drift(run_, texts, calls):
+        if run_ == run:
             texts[3] = texts[3].replace("10.0,20.0", "10.1,20.0")
 
     with pytest.raises(m.Invalid) as exc:
         _evaluate(monkeypatch, tmp_path, mutate=drift)
     assert exc.value.criterion == "V_REPEAT"
+
+
+@pytest.mark.parametrize("run", ["R_C_2", "R_T_2"])
+def test_reference_and_primary_step_end_states_must_repeat(monkeypatch, tmp_path, run):
+    """Review round 1: a second R_T path with the same output but a different
+    internal state must fail V_REPEAT, not pass on V_REPLAY alone."""
+
+    def drift(run_, active, tentative):
+        if run_ == run:
+            active[3] = [(1, 0, 1, 0), (5, 1, 9, 0)]
+
+    with pytest.raises(m.Invalid) as exc:
+        _evaluate(monkeypatch, tmp_path, mutate_state=drift)
+    assert exc.value.criterion == "V_REPEAT"
+
+
+def test_replays_cover_two_runs_of_reference_and_primary():
+    runs = [r for r, _ in m.REPLAYS]
+    assert set(m.REPEAT_PAIRS) == {("R_C#1", "R_C#2"), ("R_T#1", "R_T#2")}
+    assert all(a in runs and b in runs for a, b in m.REPEAT_PAIRS)
+    assert m.PRIMARY == "R_T#1" and m.REF_RUN == "R_C#1"
 
 
 # ------------------------------------------------------- refusal before data
