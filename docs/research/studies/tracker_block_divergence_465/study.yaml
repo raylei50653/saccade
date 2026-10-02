@@ -1,0 +1,30 @@
+schema: research_study_v1
+study_id: tracker_block_divergence_465
+evidence_tier: exploratory
+hypothesis: "In an eager replay of the headline tracker fed with the r2 localization's captured tracker_input, R_T's first structural divergence from R_C lies in one of three tracker blocks (A association, P state transition, E emission) in at least 5 of the 7 sequences."
+section_20_2:
+  output_class: [diagnostic]
+  mainline_transition:
+    FIRST_DIVERGENCE_ASSOCIATION: none
+    FIRST_DIVERGENCE_STATE_TRANSITION: none
+    FIRST_DIVERGENCE_EMISSION: none
+    SPLIT: none
+declaration: declaration.md
+results: results.md
+runner: scripts/eval/diagnostics/tracker_block_divergence_465.py
+inputs:
+  r2:
+    kind: external
+    path: results/native_head_failure_localization_465_r2/20260928T081021Z
+    manifest: inputs_r2.json
+validity_criteria:
+  V_COMPLETE: "Every r2 evidence npz the replays inject (R_C_1, R_T_1, R_E_1 x 7 sequences) is a member of the manifest and reads back at its manifest digest."
+  V_FORMAT: "Each of those npz has tracker_input and tracker arrays whose ragged counts cover their bodies exactly, frames lie in 1..N without repeats, and tracker_input rows are 6 wide and finite."
+  V_REPLAY: "Each replay worker exits 0; per sequence the tracker is called exactly once per frame 1..N in order with exactly that frame's captured row count injected; and the emitted tracker output (ids, det_idx, boxes) equals the injected arm's r2 run-1 capture bit for bit on every frame."
+  V_DUMP: "Every replay's SACCADE_ASSOC_DUMP bytes are covered exactly by its tracker calls, and every call's segment has a GMC line and only well-formed GMC/TRK/CND lines (CND under its TRK, t2d >= -1)."
+  V_REPEAT: "The two R_C replays produce byte-identical dump segments for every frame of every sequence."
+  V_RUNNER: "After the freeze passed, the computation or report code raised an exception that none of V_COMPLETE, V_FORMAT, V_REPLAY, V_DUMP, V_REPEAT covers (a runner bug); decided by the exception alone, not by any computed quantity."
+attempt_policy:
+  adoption: first_valid
+  max_valid_attempts: 1
+  max_attempts: 3
