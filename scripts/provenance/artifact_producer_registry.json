@@ -735,6 +735,14 @@
     "scripts/eval/diagnostics/tf32_off_head_drift_stage_r2.py": {
       "classification": "not_a_run_producer",
       "reason": "#465 exploratory study runner (§20.11, r2 of tf32_off_head_drift_stage_465); reads frozen packets only through research_study and writes only its attempt payload under docs/research/studies/tf32_off_head_drift_stage_465_r2/attempts/, never an artifact root"
+    },
+    "scripts/eval/diagnostics/tracker_block_divergence_465.py": {
+      "classification": "run_producer_wired",
+      "reason": "#465 exploratory study runner (§20.11); reads the frozen r2 packet only through research_study, claims its operator-named --raw-out directory with open_run before the first byte, each replay's mot17.py run claims its own sub-directory, and writes its attempt payload under docs/research/studies/tracker_block_divergence_465/attempts/"
+    },
+    "scripts/eval/diagnostics/tracker_block_divergence_465_r2.py": {
+      "classification": "run_producer_wired",
+      "reason": "#465 exploratory study runner (§20.11, r2 of tracker_block_divergence_465; reuses the r1 runner's replay worker and comparisons unchanged); reads the frozen r2 packet only through research_study, claims its operator-named --raw-out directory with open_run before the first byte, each replay's mot17.py run claims its own sub-directory, and writes its attempt payload under docs/research/studies/tracker_block_divergence_465_r2/attempts/"
     }
   }
 }
