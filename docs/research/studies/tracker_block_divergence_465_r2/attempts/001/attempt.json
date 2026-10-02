@@ -1,0 +1,31 @@
+{
+  "attempt": 1,
+  "files": {
+    "report.md": "065772613c6bfd11c7ab5ff748c66b572b68d73eb5a97afb15ff6b631da50ba7",
+    "result.json": "fe165598a3f59d30d4b2e428a8134f52ee825dab24dbda77bad869e650a562f1"
+  },
+  "freeze": {
+    "commit": "3cb8f74d082b1d4741a4b46b1ac4bd08046361aa",
+    "pinned_blobs": {
+      "docs/research/studies/tracker_block_divergence_465_r2/declaration.md": "3f9ef82f061144c41a02ef1869adcce758f41530",
+      "docs/research/studies/tracker_block_divergence_465_r2/study.yaml": "e507a0921808bbd803b3b7b455fefee7303b8063",
+      "scripts/eval/diagnostics/tf32_off_head_drift_stage_r2.py": "13e59ca7568d37ac665a89c7b111b782f69dfdd9",
+      "scripts/eval/diagnostics/tracker_block_divergence_465.py": "4dd2f0d6f06f2c483f79a9e1cf67e270c08e52ab"
+    },
+    "tag": "freeze/tracker_block_divergence_465_r2/1"
+  },
+  "inputs": {
+    "r2": {
+      "kind": "external",
+      "manifest": "docs/research/studies/tracker_block_divergence_465_r2/inputs_r2.json",
+      "manifest_blob": "efac62e0c50e30cc171c5090af559c7465530f6a",
+      "path": "results/native_head_failure_localization_465_r2/20260928T081021Z"
+    }
+  },
+  "invalid_criterion": null,
+  "runner": "scripts/eval/diagnostics/tracker_block_divergence_465_r2.py",
+  "schema": "research_attempt_v1",
+  "study_id": "tracker_block_divergence_465_r2",
+  "terminal": "FIRST_DIVERGENCE_ASSOCIATION",
+  "validity": "valid"
+}
