@@ -55,4 +55,11 @@ void s2_decode_gather(const S2Level levels[3], const std::int64_t* topk_idx, con
                       const std::int64_t* class_idx, int k, float sx, float sy, float* raw,
                       float* scaled, cudaStream_t stream);
 
+// The whole native S2 on device buffers: s2_score_max, ATen topk (top-k,
+// largest, sorted -- the oracle's aten.topk), s2_decode_gather. `raw` and
+// `scaled` hold k rows of 6. Defined in detector_host.cpp (it needs ATen); the
+// detector host and its GPU test both call it.
+void s2_run(const S2Level levels[3], int num_classes, int k, float sx, float sy, float* raw,
+            float* scaled, cudaStream_t stream);
+
 }  // namespace saccade::shipping

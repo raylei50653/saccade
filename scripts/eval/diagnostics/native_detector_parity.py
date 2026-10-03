@@ -739,7 +739,7 @@ def merge_sections(parts: list[dict[str, Any]]) -> dict[str, Any]:
             k
             for p in parts
             for k in p
-            if k.endswith(("_differ", "_values", "differing"))
+            if k.endswith(("_differ", "_values", "differing")) and isinstance(p[k], int)
         }
         for k in sorted(keys):
             out[k] = sum(p.get(k, 0) for p in parts)
@@ -827,23 +827,62 @@ class Oracle:
         return [*cls_preds, *reg_preds]
 
     def s2(self, cls_preds: list[Any], reg_preds: list[Any]) -> tuple[Any, Any]:
-        """``_whole_graph_fn``'s tail: the compiled S2, then the coordinate scaling."""
-        detections = self.mgd._postprocess_mamba_fixed(
+        return oracle_s2(
+            self.mgd,
             cls_preds,
             reg_preds,
-            self.stride,
-            self.conf_thr,
-            max(self.max_det, self.nms_pad),
+            stride=self.stride,
+            conf_thr=self.conf_thr,
+            max_det=self.max_det,
+            nms_pad=self.nms_pad,
             anchors=self.anchors,
             anchor_strides=self.anchor_strides,
-            small_p3_max_threshold=self.small_p3,
-            box_scale_x=self.sx,
-            box_scale_y=self.sy,
+            small_p3=self.small_p3,
+            sx=self.sx,
+            sy=self.sy,
+            x_idx=self.x_idx,
+            y_idx=self.y_idx,
         )
-        raw = detections.clone()
-        detections[:, :, self.x_idx] *= self.sx
-        detections[:, :, self.y_idx] *= self.sy
-        return raw, detections
+
+
+def oracle_s2(
+    mgd: Any,
+    cls_preds: list[Any],
+    reg_preds: list[Any],
+    *,
+    stride: Any,
+    conf_thr: float,
+    max_det: int,
+    nms_pad: int,
+    anchors: Any,
+    anchor_strides: Any,
+    small_p3: float,
+    sx: Any,
+    sy: Any,
+    x_idx: Any,
+    y_idx: Any,
+    compile_: bool | None = None,
+) -> tuple[Any, Any]:
+    """``_whole_graph_fn``'s tail (pinned by test_native_detector_oracle_pins):
+    the S2 call -- compiled unless ``compile_`` is False -- then the coordinate
+    scaling. Returns (before scaling, after scaling), both (1, rows, 6)."""
+    detections = mgd._postprocess_mamba_fixed(
+        cls_preds,
+        reg_preds,
+        stride,
+        conf_thr,
+        max(max_det, nms_pad),
+        anchors=anchors,
+        anchor_strides=anchor_strides,
+        small_p3_max_threshold=small_p3,
+        box_scale_x=sx,
+        box_scale_y=sy,
+        _compile=compile_,
+    )
+    raw = detections.clone()
+    detections[:, :, x_idx] *= sx
+    detections[:, :, y_idx] *= sy
+    return raw, detections
 
 
 def _np_payload(rec: dict[str, Any], fh: IO[bytes], ingest: Any) -> dict[str, Any]:

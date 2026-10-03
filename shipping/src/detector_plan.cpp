@@ -3,6 +3,7 @@
 
 #include <fstream>
 #include <sstream>
+#include <string_view>
 
 #include "saccade_shipping/sha256.hpp"
 
@@ -20,43 +21,47 @@ void require(bool ok, const std::string& what) {
     throw ConfigError("shipping detector lineage: " + what);
 }
 
+std::string dotted(std::string_view path, std::string_view key) {
+    return std::string(path) + "." + std::string(key);
+}
+
 // Strict accessors over a parsed JSON document; `path` names the JSON path.
-const JsonValue& at(const JsonValue& o, const std::string& key, const std::string& path) {
-    if (o.kind != JsonValue::Kind::Object) lineage_error(path + " is not an object");
+const JsonValue& at(const JsonValue& o, std::string_view key, std::string_view path) {
+    if (o.kind != JsonValue::Kind::Object) lineage_error(std::string(path) + " is not an object");
     const JsonValue* v = o.find(key);
-    if (v == nullptr) lineage_error(path + "." + key + " is missing");
+    if (v == nullptr) lineage_error(dotted(path, key) + " is missing");
     return *v;
 }
 
-const std::string& str_at(const JsonValue& o, const std::string& key, const std::string& path) {
+const std::string& str_at(const JsonValue& o, std::string_view key, std::string_view path) {
     const JsonValue& v = at(o, key, path);
-    if (v.kind != JsonValue::Kind::String) lineage_error(path + "." + key + " is not a string");
+    if (v.kind != JsonValue::Kind::String) lineage_error(dotted(path, key) + " is not a string");
     return v.string;
 }
 
-bool bool_at(const JsonValue& o, const std::string& key, const std::string& path) {
+bool bool_at(const JsonValue& o, std::string_view key, std::string_view path) {
     const JsonValue& v = at(o, key, path);
-    if (v.kind != JsonValue::Kind::Bool) lineage_error(path + "." + key + " is not a bool");
+    if (v.kind != JsonValue::Kind::Bool) lineage_error(dotted(path, key) + " is not a bool");
     return v.boolean;
 }
 
-std::int64_t int_at(const JsonValue& o, const std::string& key, const std::string& path) {
+std::int64_t int_at(const JsonValue& o, std::string_view key, std::string_view path) {
     const JsonValue& v = at(o, key, path);
-    if (v.kind != JsonValue::Kind::Int) lineage_error(path + "." + key + " is not an int");
+    if (v.kind != JsonValue::Kind::Int) lineage_error(dotted(path, key) + " is not an int");
     return v.integer;
 }
 
-const std::vector<JsonValue>& array_at(const JsonValue& o, const std::string& key,
-                                       const std::string& path) {
+const std::vector<JsonValue>& array_at(const JsonValue& o, std::string_view key,
+                                       std::string_view path) {
     const JsonValue& v = at(o, key, path);
-    if (v.kind != JsonValue::Kind::Array) lineage_error(path + "." + key + " is not an array");
+    if (v.kind != JsonValue::Kind::Array) lineage_error(dotted(path, key) + " is not an array");
     return v.array;
 }
 
-std::vector<std::int64_t> ints_at(const JsonValue& o, const std::string& key, const std::string& path) {
+std::vector<std::int64_t> ints_at(const JsonValue& o, std::string_view key, std::string_view path) {
     std::vector<std::int64_t> out;
     for (const JsonValue& e : array_at(o, key, path)) {
-        if (e.kind != JsonValue::Kind::Int) lineage_error(path + "." + key + " holds a non-int");
+        if (e.kind != JsonValue::Kind::Int) lineage_error(dotted(path, key) + " holds a non-int");
         out.push_back(e.integer);
     }
     return out;
@@ -70,9 +75,9 @@ bool sha256_hex_ok(const std::string& s) {
     return true;
 }
 
-const std::string& sha_at(const JsonValue& o, const std::string& key, const std::string& path) {
+const std::string& sha_at(const JsonValue& o, std::string_view key, std::string_view path) {
     const std::string& s = str_at(o, key, path);
-    if (!sha256_hex_ok(s)) lineage_error(path + "." + key + " is not a sha256 hex digest");
+    if (!sha256_hex_ok(s)) lineage_error(dotted(path, key) + " is not a sha256 hex digest");
     return s;
 }
 

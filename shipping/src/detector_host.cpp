@@ -88,6 +88,25 @@ void next_ulp_inplace(at::Tensor t) {
 
 }  // namespace
 
+void s2_run(const S2Level levels[3], int num_classes, int k, float sx, float sy, float* raw,
+            float* scaled, cudaStream_t stream) {
+    if (k <= 0) throw std::invalid_argument("shipping detector S2: k <= 0");
+    c10::cuda::CUDAStreamGuard guard(at::cuda::getStreamFromExternal(stream, 0));
+    int anchors = 0;
+    for (int i = 0; i < 3; ++i) anchors += levels[i].side * levels[i].side;
+    const auto f32 = at::TensorOptions().dtype(at::kFloat).device(at::kCUDA, 0);
+    const at::Tensor scores_max = at::empty({anchors}, f32);
+    const at::Tensor class_idx = at::empty({anchors}, f32.dtype(at::kLong));
+    s2_score_max(levels, num_classes, scores_max.data_ptr<float>(), class_idx.data_ptr<std::int64_t>(),
+                 stream);
+    // _postprocess_mamba_fixed: scores_max[b].topk(max_det) -> aten.topk(x, k).
+    const auto topk = at::topk(scores_max, k);
+    const at::Tensor top_score = std::get<0>(topk).contiguous();
+    const at::Tensor top_idx = std::get<1>(topk).contiguous();
+    s2_decode_gather(levels, top_idx.data_ptr<std::int64_t>(), top_score.data_ptr<float>(),
+                     class_idx.data_ptr<std::int64_t>(), k, sx, sy, raw, scaled, stream);
+}
+
 const char* detector_mutation_name(DetectorMutation m) {
     switch (m) {
         case DetectorMutation::None: return "none";
@@ -139,7 +158,7 @@ struct DetectorHost::Impl {
     void* op_handle = nullptr;
     int height = 0, width = 0;
     float sx = 0.0f, sy = 0.0f;
-    at::Tensor resized, feats[3], head_out[6], scores_max, class_idx, s2_raw, s2_scaled;
+    at::Tensor resized, feats[3], head_out[6], s2_raw, s2_scaled;
     DetectorStages stages;
     DetectorMutation mutation = DetectorMutation::None;
 
@@ -245,8 +264,6 @@ DetectorHost::DetectorHost(const DetectorPlan& plan, const std::string& model_ro
     const auto py = mapped_python_libraries();
     if (!py.empty()) load_error("Python library mapped into the detector process: " + py.front());
 
-    m.scores_max = at::empty({plan.anchors}, f32);
-    m.class_idx = at::empty({plan.anchors}, f32.dtype(at::kLong));
     m.s2_raw = at::empty({plan.max_det, 6}, f32);
     m.s2_scaled = at::empty({plan.max_det, 6}, f32);
 }
@@ -320,15 +337,9 @@ DetectionRows DetectorHost::detect(const float* frame_chw) {
                      p.feature_shapes[static_cast<std::size_t>(i)][2],
                      static_cast<float>(kDetectorStrides[static_cast<std::size_t>(i)])};
     }
-    s2_score_max(levels, p.num_classes, m.scores_max.data_ptr<float>(),
-                 m.class_idx.data_ptr<std::int64_t>(), m.raw_stream);
     const int k = m.mutation == DetectorMutation::S2TopK ? p.max_det - 1 : p.max_det;
-    const auto topk = at::topk(m.scores_max, k);
-    const at::Tensor top_score = std::get<0>(topk).contiguous();
-    const at::Tensor top_idx = std::get<1>(topk).contiguous();
-    s2_decode_gather(levels, top_idx.data_ptr<std::int64_t>(), top_score.data_ptr<float>(),
-                     m.class_idx.data_ptr<std::int64_t>(), k, m.sx, m.sy, m.s2_raw.data_ptr<float>(),
-                     m.s2_scaled.data_ptr<float>(), m.raw_stream);
+    s2_run(levels, p.num_classes, k, m.sx, m.sy, m.s2_raw.data_ptr<float>(),
+           m.s2_scaled.data_ptr<float>(), m.raw_stream);
 
     std::vector<float> raw(static_cast<std::size_t>(k) * 6), scaled(raw.size());
     auto d2h = [&](std::vector<float>& dst, const at::Tensor& src) {
