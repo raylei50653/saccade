@@ -43,7 +43,9 @@ every file) and:
 
 ``manifest.json`` at the top records the run (argv, git head, SACCADE_* env,
 the committed resolved config's sha256, the 256-entry ``u8 -> float32``
-table torch produced). ``--frames hash`` hashes the frames without storing
+table torch produced) and, under ``mot_reference``, the sha256 of the oracle's own
+MOT output in ``eval/`` (each sequence's txt and ``_global_id_map.txt``), the
+reference the native MOT output is compared with (PR-6). ``--frames hash`` hashes the frames without storing
 them (a second dump for the serial reference's run-to-run check).
 
 Usage (GPU; a formal dump runs under a lease)::
@@ -369,18 +371,104 @@ def run(args: argparse.Namespace) -> int:
         "python": platform.python_version(),
         "sequences": {seq: seq_meta[seq] for seq in sorted(seq_meta)},
     }
+    if exit_code == 0:
+        manifest["mot_reference"] = _mot_reference(args.out / "eval", sorted(seq_meta))
     (args.out / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     return exit_code
+
+
+# Bytes per row after each record's int32 header: (header int32s, fixed f32s,
+# per-row bytes). detector/post_nms/tracker_in rows: f32 box[4], f32 score,
+# i32 class; tracker_out rows add i32 id.
+_RECORD_LAYOUT = {
+    "detector.bin": (3, 0, 24),
+    "post_nms.bin": (2, 0, 24),
+    "gmc.bin": (3, 6, 0),
+    "tracker_in.bin": (3, 6, 24),
+    "tracker_out.bin": (2, 0, 28),
+}
+
+
+def _record_frames(path: Path) -> list[int]:
+    """Walk a stream file record by record; return each record's frame."""
+    header, fixed, per_row = _RECORD_LAYOUT[path.name]
+    data = path.read_bytes()
+    pos, frames = 0, []
+    while pos < len(data):
+        if len(data) - pos < 4 * (header + fixed):
+            raise ValueError(f"{path}: truncated record header at byte {pos}")
+        head = struct.unpack_from(f"<{header}i", data, pos)
+        rows = head[1] if per_row else 0
+        size = 4 * (header + fixed) + rows * per_row
+        if rows < 0 or len(data) - pos < size:
+            raise ValueError(f"{path}: truncated record at byte {pos}")
+        frames.append(head[0])
+        pos += size
+    return frames
+
+
+def _stream_problems(seq_dir: Path, meta: dict[str, Any]) -> list[str]:
+    """Parsed record counts vs ``meta.json``, and the per-update streams in
+    step: post_nms, tracker_in and tracker_out have one record per tracker
+    update (gmc too when it ran), on the detector frames that were not empty."""
+    seq = seq_dir.name
+    problems: list[str] = []
+    frames: dict[str, list[int]] = {}
+    for name, rec in meta["files"].items():
+        try:
+            frames[name] = _record_frames(seq_dir / name)
+        except ValueError as exc:
+            problems.append(str(exc))
+            continue
+        if len(frames[name]) != rec["records"]:
+            problems.append(
+                f"{seq}/{name}: {len(frames[name])} records parsed, meta.json says {rec['records']}"
+            )
+    if problems:
+        return problems
+    empty = set(meta["empty_detector_frames"])
+    updates = [f for f in frames["detector.bin"] if f not in empty]
+    for name in ("post_nms.bin", "tracker_in.bin", "tracker_out.bin"):
+        if frames[name] != updates:
+            problems.append(
+                f"{seq}/{name}: frames differ from the non-empty detector frames"
+            )
+    if frames["gmc.bin"] and frames["gmc.bin"] != updates:
+        problems.append(
+            f"{seq}/gmc.bin: frames differ from the non-empty detector frames"
+        )
+    return problems
+
+
+def _mot_reference(eval_dir: Path, sequences: list[str]) -> dict[str, Any]:
+    """The oracle's own MOT output for the dumped run (what U4 is compared with)."""
+
+    def entry(path: Path) -> dict[str, Any]:
+        data = path.read_bytes()
+        return {
+            "path": str(path.relative_to(eval_dir.parent)),
+            "bytes": len(data),
+            "lines": len(data.split(b"\n")) if data else 0,
+            "sha256": hashlib.sha256(data).hexdigest(),
+        }
+
+    return {
+        "global_id_map": entry(eval_dir / "_global_id_map.txt"),
+        "sequences": {seq: entry(eval_dir / f"{seq}.txt") for seq in sequences},
+    }
 
 
 def verify(dump: Path, against: Path | None) -> dict[str, Any]:
     """Re-hash ``dump`` against its meta; optionally compare with a second dump.
 
     Integrity: every stream file (and ``frames.u8`` when stored) must match the
-    sha256, byte and record counts its ``meta.json`` records, and each
-    ``meta.json`` must equal the manifest's copy. Comparison (``against``, e.g.
-    the ``--frames hash`` repeat): every stream's sha256 and the frame hash must
-    be equal, i.e. the serial reference reproduced bit for bit.
+    sha256 and byte count its ``meta.json`` records; each stream is parsed
+    record by record and the count must match too, with post_nms, tracker_in,
+    tracker_out (and gmc, when it ran) one record per non-empty detector frame;
+    each ``meta.json`` must equal the manifest's copy, and the MOT reference
+    files their ``mot_reference`` hashes. Comparison (``against``, e.g.
+    the ``--frames hash`` repeat): every stream's sha256, the frame hash and
+    each MOT txt must be equal, i.e. the serial reference reproduced bit for bit.
     """
     manifest = json.loads((dump / "manifest.json").read_text())
     if manifest.get("format") != FORMAT:
@@ -397,6 +485,7 @@ def verify(dump: Path, against: Path | None) -> dict[str, Any]:
                 or _sha256_file(path) != rec["sha256"]
             ):
                 problems.append(f"{seq}/{name}: content differs from meta.json")
+        problems += _stream_problems(dump / seq, meta)
         frames = meta["frames_u8"]
         if frames["stored"]:
             path = dump / seq / "frames.u8"
@@ -405,6 +494,17 @@ def verify(dump: Path, against: Path | None) -> dict[str, Any]:
                 or _sha256_file(path) != frames["sha256"]
             ):
                 problems.append(f"{seq}/frames.u8: content differs from meta.json")
+    mot_ref = manifest.get("mot_reference")
+    if mot_ref is None:
+        problems.append(
+            "manifest has no mot_reference (dump predates PR-6 or the run failed)"
+        )
+    else:
+        if sorted(mot_ref["sequences"]) != sorted(manifest["sequences"]):
+            problems.append("mot_reference sequences differ from the dumped sequences")
+        for rec in [mot_ref["global_id_map"], *mot_ref["sequences"].values()]:
+            if _sha256_file(dump / rec["path"]) != rec["sha256"]:
+                problems.append(f"{rec['path']}: content differs from the manifest")
     result: dict[str, Any] = {
         "format": "saccade.post_detector_replay_verify/v1",
         "dump": str(dump),
@@ -427,6 +527,10 @@ def verify(dump: Path, against: Path | None) -> dict[str, Any]:
                 diffs.append(f"{seq}/frames.u8")
             if a["empty_detector_frames"] != b["empty_detector_frames"]:
                 diffs.append(f"{seq}/empty_detector_frames")
+            a_mot = manifest.get("mot_reference", {}).get("sequences", {}).get(seq)
+            b_mot = other.get("mot_reference", {}).get("sequences", {}).get(seq)
+            if a_mot is None or b_mot is None or a_mot["sha256"] != b_mot["sha256"]:
+                diffs.append(f"{seq}/MOT txt")
         result["against"] = {
             "dump": str(against),
             "git_head": other["git_head"],
