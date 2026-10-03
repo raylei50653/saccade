@@ -153,7 +153,8 @@ SequenceInput read_sequence_input(const std::filesystem::path& sequence_dir, int
     const int frame_end = max_frames > 0 ? std::min(max_frames, in.seq_length) : in.seq_length;
     if (static_cast<std::size_t>(frame_end) > in.listed.size()) {
         bad_input(in.img_dir.string() + " lists " + std::to_string(in.listed.size()) +
-                  " .jpg entries, fewer than the " + std::to_string(frame_end) + " frames to consume");
+                  " .jpg entries, fewer than the " + std::to_string(frame_end) +
+                  " frames to consume (the oracle would truncate the sequence)");
     }
     in.frames.assign(in.listed.begin(), in.listed.begin() + frame_end);
     return in;

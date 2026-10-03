@@ -341,7 +341,8 @@
      "000001.jpg",
      "000002.jpg",
      "000003.jpg"
-    ]
+    ],
+    "truncated": false
    }
   },
   {
@@ -381,7 +382,8 @@
     "frames": [
      "000001.jpg",
      "000002.jpg"
-    ]
+    ],
+    "truncated": false
    }
   },
   {
@@ -417,7 +419,8 @@
      "000002.jpg",
      "10.jpg",
      "9.jpg"
-    ]
+    ],
+    "truncated": false
    }
   },
   {
@@ -494,7 +497,8 @@
      "b.jpg",
      "dangling.jpg",
      "dir.jpg"
-    ]
+    ],
+    "truncated": false
    }
   },
   {
@@ -524,7 +528,8 @@
     "frames": [
      "a.jpg",
      "b.jpg"
-    ]
+    ],
+    "truncated": false
    }
   },
   {
@@ -539,7 +544,8 @@
     "im_height": 1080,
     "seq_length": 0,
     "listed": [],
-    "frames": []
+    "frames": [],
+    "truncated": false
    }
   },
   {
@@ -564,10 +570,26 @@
     }
    ],
    "max_frames": 0,
-   "native": "same",
+   "native": "refuse",
+   "reason": "a listing shorter than the frames to consume is refused (the oracle truncates the sequence)",
    "oracle": {
-    "ok": false,
-    "error": "StopIteration"
+    "ok": true,
+    "im_width": 1920,
+    "im_height": 1080,
+    "seq_length": 5,
+    "listed": [
+     "000001.jpg",
+     "000002.jpg",
+     "000003.jpg",
+     "000004.jpg"
+    ],
+    "frames": [
+     "000001.jpg",
+     "000002.jpg",
+     "000003.jpg",
+     "000004.jpg"
+    ],
+    "truncated": true
    }
   },
   {
@@ -575,10 +597,16 @@
    "seqinfo": "[Sequence]\nname=SEQ\nimDir=img1\nframeRate=30\nseqLength=1\nimWidth=1920\nimHeight=1080\nimExt=.jpg\n",
    "img1": null,
    "max_frames": 0,
-   "native": "same",
+   "native": "refuse",
+   "reason": "a missing img1/ is refused (the oracle truncates the sequence to nothing)",
    "oracle": {
-    "ok": false,
-    "error": "StopIteration"
+    "ok": true,
+    "im_width": 1920,
+    "im_height": 1080,
+    "seq_length": 1,
+    "listed": [],
+    "frames": [],
+    "truncated": true
    }
   },
   {
@@ -758,7 +786,8 @@
     ],
     "frames": [
      "000001.jpg"
-    ]
+    ],
+    "truncated": false
    }
   },
   {
@@ -798,7 +827,8 @@
     ],
     "frames": [
      "000001.jpg"
-    ]
+    ],
+    "truncated": false
    }
   },
   {
@@ -838,7 +868,8 @@
     ],
     "frames": [
      "000001.jpg"
-    ]
+    ],
+    "truncated": false
    }
   },
   {
@@ -863,7 +894,8 @@
     ],
     "frames": [
      "\u00e9.jpg"
-    ]
+    ],
+    "truncated": false
    }
   },
   {
@@ -879,7 +911,8 @@
     "im_height": 1080,
     "seq_length": 0,
     "listed": [],
-    "frames": []
+    "frames": [],
+    "truncated": false
    }
   }
  ]

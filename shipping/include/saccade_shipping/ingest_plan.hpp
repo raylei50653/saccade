@@ -82,8 +82,10 @@ struct SequenceInput {
 // whose name ends in ".jpg" (pathlib's glob: dot files, directories and
 // symlinks included, case-sensitive) and sorts by path bytes, which is
 // Python's string order for ASCII names; a non-ASCII name is refused. Fewer
-// listed entries than frames to consume is refused (the oracle's iterator
-// would run out); extra entries are listed and not consumed, as in the oracle.
+// listed entries than frames to consume is refused: the oracle's frame loop
+// stops at the end of the listing and writes a truncated sequence, which the
+// shipping entrypoint does not reproduce. Extra entries are listed and not
+// consumed, as in the oracle.
 SequenceInput read_sequence_input(const std::filesystem::path& sequence_dir, int max_frames = 0);
 
 // The seqinfo.ini reader on its own (text of the file).

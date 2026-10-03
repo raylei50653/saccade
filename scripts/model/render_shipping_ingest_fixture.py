@@ -20,7 +20,8 @@ and writes what it produced to ``tests/native/fixtures/shipping_ingest.json``:
   pipeline's ``seqinfo.ini`` reads (``configparser``: ``imWidth``,
   ``imHeight``, ``seqLength``; ``frame_end = min(max_frames or int(1e9),
   seqLength)``) on materialized directory cases. The oracle consumes frame
-  ``k`` = ``k``-th listed entry and fails when the listing runs out. Cases the
+  ``k`` = ``k``-th listed entry and silently stops early when the listing runs
+  out (``truncated``). Cases the
   native reader refuses although the oracle accepts them are marked
   ``"native": "refuse"`` with the reason.
 
@@ -185,8 +186,6 @@ def oracle_sequence(seq: Path, max_frames: int) -> dict[str, Any]:
         return {"ok": False, "error": type(exc).__name__}
     files = TorchvisionGpuStreamer(seq / "img1").img_files
     listed = [Path(f).name for f in files]
-    if frame_end > len(listed):
-        return {"ok": False, "error": "StopIteration"}
     return {
         "ok": True,
         "im_width": w_orig,
@@ -194,6 +193,10 @@ def oracle_sequence(seq: Path, max_frames: int) -> dict[str, Any]:
         "seq_length": config.getint("Sequence", "seqLength"),
         "listed": listed,
         "frames": listed[: max(frame_end, 0)],
+        # The frame loops stop at the first StopIteration (evaluator.py
+        # `_run_frame` returns False, double-buffer `_schedule` returns None):
+        # a short listing truncates the sequence instead of failing it.
+        "truncated": frame_end > len(listed),
     }
 
 
@@ -260,12 +263,16 @@ def sequence_cases() -> list[dict[str, Any]]:
             "seqinfo": SEQINFO.format(n=5),
             "img1": four,
             "max_frames": 0,
+            "native": "refuse",
+            "reason": "a listing shorter than the frames to consume is refused (the oracle truncates the sequence)",
         },
         {
             "name": "no_img1",
             "seqinfo": SEQINFO.format(n=1),
             "img1": None,
             "max_frames": 0,
+            "native": "refuse",
+            "reason": "a missing img1/ is refused (the oracle truncates the sequence to nothing)",
         },
         {"name": "no_seqinfo", "seqinfo": None, "img1": four, "max_frames": 0},
         {
@@ -344,6 +351,10 @@ def sequence_cases() -> list[dict[str, Any]]:
             if case["native"] == "refuse":
                 assert case["oracle"]["ok"], (
                     f"{case['name']}: a refuse case must be one the oracle accepts"
+                )
+            else:
+                assert not case["oracle"]["ok"] or not case["oracle"]["truncated"], (
+                    f"{case['name']}: a truncated sequence must be a refuse case"
                 )
     return cases
 
