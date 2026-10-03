@@ -135,7 +135,9 @@ tracker、GMC、pipeline 與 `filter_detections_cuda` 都不再呼叫 `getenv`�
 | `ASSOC_STATS` | pipeline constructor | pipeline 建立時（相同） |
 | `HO_DEBUG_LEVEL` | Cheb-GR handover binding | 不變（binding 本來就是 legacy 前端；shipping 不建立該物件） |
 
-讀取時機改變的幾項只有在 process 內途中改 env 時才有差別；oracle 不會這樣做（`configure_runtime_env` 在建立任何物件之前設定 env）。exporter 的 `native_env` 掃描現在在 `legacy_env.cpp` 找到同樣的 18 個讀取，輸出逐位元組不變（`--check`）。source guard 測試要求 native 原始碼中只有 `legacy_env.cpp` 與 pybind binding 讀 `SACCADE_*`，`shipping/` 不得 include `legacy_env.hpp`。
+讀取時機改變的幾項只有在 process 內途中改 env 時才有差別；oracle 不會這樣做（`configure_runtime_env` 在建立任何物件之前設定 env）。
+
+**原本的 process-wide `static`**（`FRESHNESS_W`、`STABILITY_W`、`GMC_PCR_THRESH`、`ASSOC_DUMP`）：它們是 function-local `static const`，在 process 第一次 update／estimate 時讀一次 env，之後所有 instance 共用同一個值。初始化之後就不再寫入，所以 instance 之間從未透過它們互相影響；「共用」唯一可觀察的效果是：同一個 process 內、兩次建立物件之間 env 改變時，後建立的 instance 仍沿用第一次讀到的值。PR-4b 改成每個 instance 在建立時讀，這是刻意的語義改變。repo 內寫這些變數的地方：ablation 只把它們傳給子 process；唯一在 process 內寫的是 `tracker_block_divergence_465.py`（`SACCADE_ASSOC_DUMP`），它在 import 與建立任何 tracker 之前就設定好，dump 以 append 模式寫、frame counter 本來就是每個 instance 各自一份，所以行為相同（該 frozen runner 的註解「read once … at its first update」現在不精確，但它的 blob 被凍結，PR-4b 不改它）。`test_native_params_authority.py` 的兩個 two-instance 測試釘住這兩點：env 在兩次建立之間改變時，兩個 instance 各自保有建立時的值，後者不影響前者；env 固定時（harness 的實際情況），兩個 tracker 交錯執行，各自的輸出與單獨執行時逐值相同。exporter 的 `native_env` 掃描現在在 `legacy_env.cpp` 找到同樣的 18 個讀取，輸出逐位元組不變（`--check`）。source guard 測試要求 native 原始碼中只有 `legacy_env.cpp` 與 pybind binding 讀 `SACCADE_*`，`shipping/` 不得 include `legacy_env.hpp`。
 
 ### 8.3 Graph capture 之後凍結
 
@@ -149,8 +151,10 @@ tracker、GMC、pipeline 與 `filter_detections_cuda` 都不再呼叫 `getenv`�
 
 - snapshot 的每個鍵都要有 JSON 值，JSON 的每個值都要有 snapshot 鍵；
 - float 以 setter 實際做的 float32 轉型後**逐位元**比較；`per_sequence` 以該 sequence 的 `seqinfo.ini` 值比較；`{"unset_effect": …}` 對應的診斷必須是 off；
-- 沒有 JSON 值的 snapshot 鍵只有下列幾個，各附理由（`tracker_native_only_expectations()`）：`set_reid_min_candidates.min_candidates`（＝2；沒有 pybind binding，oracle 從未設定，exporter 因此沒有值；只在傳入 embeddings 的 association 分支讀取，shipping 關閉 ReID，不會走這個分支）、4 個 research hook（必須 off）、`config_frozen`（必須 false）；
+- 沒有 JSON 值的 snapshot 鍵只有下列幾個，各附理由（`tracker_native_only_expectations()`）：`set_reid_min_candidates.min_candidates`（＝2；沒有 pybind binding，oracle 從未設定，exporter 因此沒有值；只在傳入 embeddings 的 association 分支讀取，而 shipping tracker 到不了那個分支，見下）、`embeddings_forbidden`（必須 true）、4 個 research hook（必須 off）、`config_frozen`（必須 false）；
 - `native_env` 的 18 個鍵各自歸屬一個物件：tracker 12、GMC 1、pipeline 3；`HO_DEBUG_LEVEL` 與 `KALMAN_ADAPT_MODE` 沒有 shipping consumer（理由寫在 `native_env_consumers()`）。
+
+**不得帶 ReID embeddings**：shipping 沒有 ReID。`build_tracker` 呼叫 `GPUByteTracker::forbid_embeddings()`（單向，不能再打開）；之後 `update()`／`update_into()` 只要收到非 null 的 embeddings 指標就丟 `std::invalid_argument`，在任何 tracker 狀態改變之前。所以 embeddings 分支（以及只有它讀的 `reid_min_candidates`、`set_reid_params` 的值、appearance relink）在 shipping tracker 上不可達；這個 assertion 在 U3 宿主寫出來之前就已經生效，U3 不能漏掉它。legacy 前端從不呼叫它，eval harness 不受影響。ReID 若將來回到 shipping，要另開 scope：補 binding、JSON 欄位與 readback，再拿掉這個 guard。
 
 PR-4a 的範圍 guard 沒有改。會被 setter canonicalize 的值（例如 `confirm_streak=0`、`score_w=1.5`、`occ ttl=0`、`SACCADE_COAST_MAX_AGE=2.5`）可以通過 loader，但會在 readback 失敗，錯誤訊息列出鍵與兩邊的值。
 
@@ -163,20 +167,22 @@ PR-4a 的範圍 guard 沒有改。會被 setter canonicalize 的值（例如 `co
 | 設定任何 env 都不改變結果 | 把 18 個 `native_env` 變數設成多組值，CPU 規劃與 GPU 物件的 snapshot 都不變 |
 | 未知／缺少欄位 fail-closed，刪掉有 native 預設的欄位必失敗 | PR-4a loader（§7，未改） |
 | 凍結 | GPU：capture 之後 19 個 setter 全部丟錯，snapshot 不變；未 capture 的 update 不凍結 |
+| 不得帶 embeddings | GPU：shipping tracker 的 `update_into`／`update` 帶 embeddings 都丟 `invalid_argument`，snapshot 不變；legacy tracker 不受影響 |
+| 原本的 process-wide `static` | pybind：two-instance 測試（§8.2） |
 
-測試計數：CPU 228 checks、GPU 50 checks、pybind 10 tests，全部通過。
+測試計數：CPU 229 checks、GPU 55 checks、pybind 12 tests，全部通過。
 
 ### 8.6 Headline 行為
 
-同一台機器、同一個 `build/` 組態，以 boundary §2 的 oracle（`mot17.py --preset mamba_whole_graph --detector SDP --double-buffer`）跑 MOT17 train 7 個 SDP sequence：main `469f159d` 跑兩次彼此逐位元組相同；PR-4b 的 build 跑一次，7 份 MOT txt 與 main 逐位元組相同（IDF1 78.3／MOTA 77.9／IDs 429）。這只說明 headline 組態下輸出未變，不是一般性的等價主張。
+同一台機器、同一個 `build/` 組態，以 boundary §2 的 oracle（`mot17.py --preset mamba_whole_graph --detector SDP --double-buffer`）跑 MOT17 train 7 個 SDP sequence：main `469f159d` 跑兩次彼此逐位元組相同；PR-4b 的 build 跑兩次（第一版與加上 review 修正之後的最終版各一次），每次 7 份 MOT txt 都與 main 逐位元組相同（IDF1 78.3／MOTA 77.9／IDs 429）。這只說明 headline 組態下輸出未變，不是一般性的等價主張。
 
 ### 8.7 分類與 runtime identity
 
-`shipping/` 在 `h2_path_partition.py` 中改為 `decision_relevant`（PR-4b 第一次把它連到 tracker）。root `CMakeLists.txt` 加入 `saccade_tracker_params` 與 `add_subdirectory(shipping)`，移動 environment recipe；`src/`、`include/` 的改動移動 implementation 軸；`h2_path_partition.py` 移動 identity_semantics 軸。runtime coordinate 依 [republication runbook](runbooks/runtime_identity_republication.md) 重新出版，以 stacked PR 和本 PR 一起 land。
+`shipping/` 與 `configs/shipping/` 在 `h2_path_partition.py` 中改為 `decision_relevant`：前者在 PR-4b 第一次連到 tracker，後者（這份 resolved JSON）是 shipping builder 唯一的決策輸入，改了它卻不移動 coordinate 會留下 attestation 洞。implementation 軸原本以副檔名排除 `.md`／`.rst`／`.txt`，連帶排除了 `CMakeLists.txt`；`build_runtime_identity.py` 現在保留檔名為 `CMakeLists.txt` 的檔案，所以 `shipping/CMakeLists.txt`（shipping library 的 build recipe）進入 implementation 軸，原本就被漏掉的 `src/tracking/CMakeLists.txt`（fpn_reid extension 的獨立 build）也一併納入。root `CMakeLists.txt` 加入 `saccade_tracker_params` 與 `add_subdirectory(shipping)`，移動 environment recipe；`src/`、`include/`、`shipping/`、`configs/shipping/` 移動 implementation 軸；`h2_path_partition.py` 與 `build_runtime_identity.py` 移動 identity_semantics 軸。runtime coordinate 依 [republication runbook](runbooks/runtime_identity_republication.md) 重新出版，以 stacked PR 和本 PR 一起 land。
 
 ### 8.8 限制與留給後續的事
 
-- `reid_min_candidates` 是唯一沒有 JSON 來源、但 kernel 會讀的參數（只在 embeddings 分支）。U3 的 shipping 宿主必須以 null embeddings 呼叫 update；另一個做法是讓 exporter 也輸出它。
-- Python wrapper 的 `set_reid_min_candidates(1)`（`pipeline.py` 在某些 ReID 組態下呼叫）因為沒有 binding 而是 no-op，這是 PR-4b 之前就存在的情況，PR-4b 沒有改它。
+- `reid_min_candidates` 是唯一沒有 JSON 來源、但 kernel 會讀的參數；它只在 embeddings 分支被讀，而 shipping tracker 以 `forbid_embeddings()` 讓該分支不可達（§8.4）。owner 決定不為這個 dormant knob 擴張 ABI。
+- Python wrapper 的 `set_reid_min_candidates(1)`（`pipeline.py` 在某些 ReID 組態下呼叫）因為沒有 binding 而是 no-op，這是 PR-4b 之前就存在的獨立 bug，另開 issue 追蹤，PR-4b 不改它。
 - readback 證明 native 狀態等於 JSON；kernel 是否用到每個欄位，由逐欄映射測試與 §8.6 的 headline 輸出不變共同支撐，不是由 readback 本身證明。
 - U3–U5（native 宿主、ingest、graph／double-buffer）尚未開始；PR-4b land 之後 PR-5 才能開始。

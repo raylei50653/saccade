@@ -3436,6 +3436,11 @@ public:
             throw std::logic_error(
                 "H0 bridge trace requires a bound device evaluation-frame input");
         }
+        if (embeddings_forbidden_ && d_embeddings != nullptr) {
+            throw std::invalid_argument(
+                "GPUByteTracker::update: embeddings are forbidden on this tracker "
+                "(forbid_embeddings: the shipping runtime has no ReID)");
+        }
         freeze_if_capturing(stream);
         ++processed_frame_count_;
 
@@ -4427,6 +4432,9 @@ public:
     void set_assoc_dump_path(const std::string& path) {
         assoc_dump_path_ = path;
     }
+    void forbid_embeddings() {
+        embeddings_forbidden_ = true;
+    }
     TrackerSnapshot snapshot() const {
         TrackerSnapshot out;
         out.max_objects = max_objs_;
@@ -4438,6 +4446,7 @@ public:
         out.instrumentation.bridge_fidelity_audit = research_bridge_fidelity_audit_;
         out.instrumentation.h0_bridge_trace = research_h0_bridge_trace_;
         out.instrumentation.assoc_dump = !assoc_dump_path_.empty();
+        out.embeddings_forbidden = embeddings_forbidden_;
         out.config_frozen = config_frozen_;
         return out;
     }
@@ -4879,6 +4888,8 @@ private:
     // captured graph baked the kernel arguments, so later writes would be
     // silently ignored on replay. require_mutable() turns them into errors.
     bool config_frozen_ = false;
+    // One-way: update with a non-null embeddings pointer throws (shipping).
+    bool embeddings_forbidden_ = false;
     // Diagnostic association dump target (legacy SACCADE_ASSOC_DUMP); empty = off.
     std::string assoc_dump_path_;
     float *d_states_, *d_covs_, *d_scores_, *d_features_;
@@ -5073,6 +5084,7 @@ void GPUByteTracker::set_unified_score_params(const UnifiedScoreParams& params) 
 void GPUByteTracker::set_hatch_params(const TrackerParams::Hatch& hatch) { pimpl_->set_hatch_params(hatch); }
 void GPUByteTracker::set_assoc_dump_path(const std::string& path) { pimpl_->set_assoc_dump_path(path); }
 TrackerSnapshot GPUByteTracker::snapshot() const { return pimpl_->snapshot(); }
+void GPUByteTracker::forbid_embeddings() { pimpl_->forbid_embeddings(); }
 void GPUByteTracker::update_reference_features(int* track_ids, float* features, int num, cudaStream_t stream) { pimpl_->update_reference_features_impl(track_ids, features, num, stream); }
 void GPUByteTracker::set_clean_embedding_flags(int* track_ids, bool* flags, int n, cudaStream_t stream) { pimpl_->set_clean_embedding_flags(track_ids, flags, n, stream); }
 void GPUByteTracker::set_clean_embedding_flags_host(int* h_tids, bool* h_flags, int n, cudaStream_t stream) { pimpl_->set_clean_embedding_flags_host(h_tids, h_flags, n, stream); }

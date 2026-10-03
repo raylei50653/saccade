@@ -12,6 +12,8 @@
 //   * the first update_into inside a CUDA stream capture freezes the tracker:
 //     every runtime-semantic setter then throws and the parameters stay put;
 //   * a value a native setter canonicalizes makes build_tracker fail closed;
+//   * a shipping tracker rejects ReID embeddings (forbid_embeddings), so the
+//     embedding-association branch is unreachable;
 //   * the legacy front-end path (tracking/legacy_env.hpp) still lands its
 //     env values in the same parameter state.
 
@@ -131,6 +133,7 @@ void test_builders_read_back(const sh::ResolvedShippingConfig& cfg, Built& refer
     CHECK(flatten(snap.params) == flatten(sh::planned_tracker_params(cfg, kGeometry)));
     CHECK(snap.params.oao.score_w == -1.0f);
     CHECK(snap.max_objects == 2048 && snap.embedding_dim == 768 && snap.max_assoc == 1024);
+    CHECK(snap.embeddings_forbidden);
     CHECK(!snap.config_frozen);
     CHECK(flatten(sh::build_gmc(cfg)->snapshot()) == flatten(sh::planned_gmc_snapshot(cfg)));
     CHECK(flatten(sh::build_perception_pipeline(cfg)->snapshot()) ==
@@ -180,6 +183,31 @@ void test_capture_freezes_configuration(const sh::ResolvedShippingConfig& cfg) {
                              out_ids, out_classes, out_det_idx, out_count, nullptr, gmc, 0.0f,
                              1.0f, max_objs);
     };
+
+    // ReID embeddings fail closed on a shipping tracker, before any state moves.
+    {
+        float* embeddings = nullptr;
+        cuda_ok(cudaMalloc(&embeddings, std::size_t(max_assoc) * before.embedding_dim * sizeof(float)),
+                "malloc");
+        bool rejected = false;
+        try {
+            tracker->update_into(boxes, scores, classes, max_assoc, stream, out_boxes, out_scores,
+                                 out_ids, out_classes, out_det_idx, out_count, embeddings, gmc,
+                                 0.0f, 1.0f, max_objs);
+        } catch (const std::invalid_argument& e) {
+            rejected = std::string(e.what()).find("embeddings are forbidden") != std::string::npos;
+        }
+        CHECK(rejected);
+        bool rejected_update = false;
+        try {
+            tracker->update(boxes, scores, classes, max_assoc, stream, embeddings, gmc);
+        } catch (const std::invalid_argument&) {
+            rejected_update = true;
+        }
+        CHECK(rejected_update);
+        cuda_ok(cudaFree(embeddings), "free");
+        CHECK(flatten(tracker->snapshot()) == flatten(before));
+    }
 
     // Uncaptured updates (the graph-capture warm-up) leave it mutable.
     update();
@@ -288,6 +316,7 @@ void test_legacy_env_reaches_the_same_state() {
     GPUByteTracker plain(64, 8, 64);
     saccade::legacy_env::apply(plain);
     CHECK(plain.snapshot().params.hatch.stability_w == 0.1f);
+    CHECK(!plain.snapshot().embeddings_forbidden);  // legacy trackers keep ReID
     CHECK(!saccade::legacy_env::kalman_adapt_mode_override().has_value());
 }
 

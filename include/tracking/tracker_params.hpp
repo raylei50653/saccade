@@ -371,6 +371,10 @@ struct TrackerSnapshot {
     int max_assoc = 0;      // constructor, after max(1, max_assoc)
     TrackerParams params;
     TrackerInstrumentation instrumentation;
+    // True once forbid_embeddings() ran: update()/update_into() with a
+    // non-null embeddings pointer then throws. The shipping runtime has no
+    // ReID, so its trackers can never reach the embedding-association branch.
+    bool embeddings_forbidden = false;
     // True once update()/update_into() ran inside a CUDA stream capture; every
     // setter that writes params_ or arms a research hook then throws.
     bool config_frozen = false;
@@ -381,6 +385,7 @@ struct TrackerSnapshot {
         v("constructor.max_assoc", max_assoc);
         params.visit(v);
         instrumentation.visit(v);
+        v("embeddings_forbidden", embeddings_forbidden);
         v("config_frozen", config_frozen);
     }
 };

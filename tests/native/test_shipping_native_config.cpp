@@ -100,6 +100,7 @@ TrackerSnapshot planned_tracker_snapshot(const sh::ResolvedShippingConfig& cfg) 
     s.embedding_dim = static_cast<int>(k.embedding_dim);
     s.max_assoc = static_cast<int>(std::max<std::int64_t>(1, k.max_assoc));
     s.params = sh::planned_tracker_params(cfg, kGeometry);
+    s.embeddings_forbidden = true;  // build_tracker: forbid_embeddings()
     return s;
 }
 
@@ -269,8 +270,9 @@ void test_committed_config_reads_back(const sh::ResolvedShippingConfig& cfg) {
     CHECK(sh::planned_pipeline_snapshot(cfg).filter_compaction == FilterCompactionMode::kStableScan);
 
     const auto tracker_keys = sh::expected_tracker_snapshot(cfg, kGeometry);
-    // 3 constructor dims + 92 TrackerParams fields + 5 hooks/diagnostic + config_frozen
-    CHECK(tracker_keys.size() == 101);
+    // 3 constructor dims + 92 TrackerParams fields + 5 hooks/diagnostic +
+    // embeddings_forbidden + config_frozen
+    CHECK(tracker_keys.size() == 102);
 }
 
 void test_partitions_are_the_documented_ones(const sh::ResolvedShippingConfig& cfg) {
@@ -297,6 +299,7 @@ void test_partitions_are_the_documented_ones(const sh::ResolvedShippingConfig& c
                              "research.bridge_shadow",
                              "research.bridge_fidelity_audit",
                              "research.h0_bridge_trace",
+                             "embeddings_forbidden",
                              "config_frozen",
                          }));
 }

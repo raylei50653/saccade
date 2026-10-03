@@ -141,7 +141,11 @@ const std::vector<NativeOnlyExpectation>& tracker_native_only_expectations() {
          JsonValue::make_int(TrackerParams{}.reid_min_candidates),
          "no pybind binding, so the oracle never sets it and the exporter has no value; "
          "read only on the embedding-association branch (update with a non-null "
-         "embeddings pointer), which shipping never takes because ReID is off"},
+         "embeddings pointer), which is unreachable on shipping trackers "
+         "(embeddings_forbidden)"},
+        {"embeddings_forbidden", JsonValue::make_bool(true),
+         "shipping has no ReID: build_tracker calls forbid_embeddings(), so an update "
+         "with embeddings throws instead of reaching the embedding branch"},
         {"research.portable_or_tail", JsonValue::make_bool(false),
          "research hook; never armed by the oracle"},
         {"research.bridge_shadow", JsonValue::make_bool(false),

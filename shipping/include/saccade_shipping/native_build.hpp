@@ -24,6 +24,8 @@ class PerceptionPipeline;
 namespace saccade::shipping {
 
 // One tracker per sequence, as the oracle does (set_frame_size is per sequence).
+// The tracker forbids embeddings: update/update_into with a non-null
+// embeddings pointer throws (shipping has no ReID).
 std::unique_ptr<GPUByteTracker> build_tracker(const ResolvedShippingConfig& cfg,
                                               SequenceGeometry geometry);
 std::unique_ptr<GMC> build_gmc(const ResolvedShippingConfig& cfg);

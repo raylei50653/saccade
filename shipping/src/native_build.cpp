@@ -15,6 +15,9 @@ std::unique_ptr<GPUByteTracker> build_tracker(const ResolvedShippingConfig& cfg,
                                                     native_int(k.embedding_dim, "embedding_dim"),
                                                     native_int(k.max_assoc, "max_assoc"));
     tracker->set_assoc_dump_path("");  // native_env.SACCADE_ASSOC_DUMP: unset
+    // No ReID in shipping: an update that brings embeddings fails closed, so
+    // the embedding-association branch (and reid_min_candidates) is unreachable.
+    tracker->forbid_embeddings();
     apply_tracker_config(*tracker, cfg, geometry);
     require_readback("GPUByteTracker",
                      readback_mismatches(expected_tracker_snapshot(cfg, geometry),

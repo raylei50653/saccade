@@ -543,6 +543,15 @@ public:
     void set_assoc_dump_path(const std::string& path);
 
     /**
+     * @brief One-way: from now on update()/update_into() with a non-null
+     * embeddings pointer throws std::invalid_argument. The shipping builder
+     * calls this (the shipping runtime has no ReID), which makes the
+     * embedding-association branch, and every parameter only it reads,
+     * unreachable on shipping trackers. The legacy front-ends never call it.
+     */
+    void forbid_embeddings();
+
+    /**
      * @brief Copy of the parameters the update path actually reads, the
      * constructor dimensions, armed research hooks and the freeze flag.
      *

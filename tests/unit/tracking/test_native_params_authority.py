@@ -58,10 +58,11 @@ def test_snapshot_is_one_flat_view() -> None:
     assert snap["constructor.max_assoc"] == 128
     assert snap["set_homography.h"] is None
     assert snap["config_frozen"] is False
+    assert snap["embeddings_forbidden"] is False  # only the shipping builder sets it
     assert not any(
         v for k, v in snap.items() if k.startswith(("research.", "diagnostic."))
     )
-    assert len(snap) == 101
+    assert len(snap) == 102
 
 
 @pytest.mark.parametrize("name", sorted(_HATCHES))
@@ -161,3 +162,87 @@ def test_gmc_and_pipeline_resolve_their_hatches_at_construction(
     snap = ext.PerceptionPipeline(0, 0, cfg).snapshot()
     assert snap["filter_compaction"] == "serial_stable"  # deterministic wins
     assert snap["constructor.config.max_detections"] == cfg.max_detections
+
+
+# ── former process-wide statics ───────────────────────────────────────────
+#
+# Before PR-4b, SACCADE_FRESHNESS_W / SACCADE_STABILITY_W (tracker auction bid)
+# and SACCADE_GMC_PCR_THRESH (GMC phase correlation) were function-local
+# ``static const`` values: read from env once per process, at the first
+# update/estimate, then used by every instance. They were const after that
+# first read, so instances never communicated through them; the only way the
+# old "shared" semantics could be observed is env changing between two
+# constructions inside one process. No harness does that (the oracle sets env
+# in configure_runtime_env before any tracker exists; ablations pass env to
+# subprocesses). PR-4b makes the value per instance, read at construction.
+
+
+def _scene(frame: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    xs = torch.tensor([100.0 + 6 * frame, 420.0 + 2 * frame, 760.0 - 5 * frame])
+    boxes = torch.stack(
+        [xs, torch.full_like(xs, 200.0), xs + 60.0, torch.full_like(xs, 380.0)], 1
+    )
+    scores = torch.tensor([0.92, 0.81, 0.66])
+    return boxes.cuda(), scores.cuda(), torch.zeros(3, dtype=torch.int32).cuda()
+
+
+def _step(tracker: object, frame: int, gmc: torch.Tensor) -> list[tuple]:
+    boxes, scores, classes = _scene(frame)
+    out = tracker.update(  # type: ignore[attr-defined]
+        boxes.data_ptr(),
+        scores.data_ptr(),
+        classes.data_ptr(),
+        int(boxes.shape[0]),
+        torch.cuda.current_stream().cuda_stream,
+        0,
+        gmc.data_ptr(),
+    )
+    return [(r.obj_id, r.x1, r.y1, r.x2, r.y2, r.score) for r in out]
+
+
+def _identity_gmc() -> torch.Tensor:
+    return torch.eye(2, 3, dtype=torch.float32, device="cuda").flatten().contiguous()
+
+
+def test_former_statics_are_per_instance(monkeypatch: pytest.MonkeyPatch) -> None:
+    gmc = _identity_gmc()
+    first = ext.GPUByteTracker(64, 8, 64)
+    for frame in range(3):  # the old statics were fixed by the first update
+        _step(first, frame, gmc)
+    gmc_first = ext.GMC(4)
+
+    monkeypatch.setenv("SACCADE_STABILITY_W", "0")
+    monkeypatch.setenv("SACCADE_FRESHNESS_W", "0.25")
+    monkeypatch.setenv("SACCADE_GMC_PCR_THRESH", "3.5")
+    second = ext.GPUByteTracker(64, 8, 64)
+    gmc_second = ext.GMC(4)
+
+    a, b = first.snapshot(), second.snapshot()
+    assert a["native_env.SACCADE_STABILITY_W"] == pytest.approx(0.1)
+    assert a["native_env.SACCADE_FRESHNESS_W"] == 0.0
+    assert b["native_env.SACCADE_STABILITY_W"] == 0.0
+    assert b["native_env.SACCADE_FRESHNESS_W"] == 0.25
+    assert gmc_first.snapshot()["native_env.SACCADE_GMC_PCR_THRESH"] == 5.0
+    assert gmc_second.snapshot()["native_env.SACCADE_GMC_PCR_THRESH"] == 3.5
+    # Constructing the second instance did not reach the first one.
+    _step(first, 3, gmc)
+    assert first.snapshot() == a
+
+
+def test_instances_under_one_environment_do_not_interfere() -> None:
+    """The harness condition (env fixed for the process): per-instance values
+    equal the old process-wide ones, and interleaving two trackers gives each
+    the output it has alone."""
+    gmc = _identity_gmc()
+    solo = ext.GPUByteTracker(64, 8, 64)
+    expected = [_step(solo, frame, gmc) for frame in range(20)]
+
+    left = ext.GPUByteTracker(64, 8, 64)
+    right = ext.GPUByteTracker(64, 8, 64)
+    assert (
+        left.snapshot() == right.snapshot() == ext.GPUByteTracker(64, 8, 64).snapshot()
+    )
+    for frame in range(20):
+        assert _step(left, frame, gmc) == expected[frame]
+        assert _step(right, frame, gmc) == expected[frame]
+    assert any(expected), "the synthetic scene must produce tracks"
