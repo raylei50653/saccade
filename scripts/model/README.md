@@ -122,7 +122,7 @@ manually or if their outputs support a retained report.
 | `inspect_engine.py` | diagnostic | cli | Inspect TensorRT engine bindings/shapes. |
 | `make_onnx_dynamic.py` | stable | cli | Rewrite ONNX inputs to dynamic axes for TRT. |
 | `render_shipping_detection_filters_fixture.py` | stable | cli | Render the golden fixture for the native host's CPU detection filters. |
-| `render_shipping_detector_s2_fixture.py` | active | cli | Render the native S2 golden fixture from the oracle's compiled S2 (#465 PR-8). |
+| `render_shipping_detector_s2_fixture.py` | stable | cli | Render the native S2 golden fixture from the oracle's compiled S2 (#465 PR-8). |
 | `render_shipping_host_cfg_schema.py` | stable | cli | Render the native typed field list for ``host_params.cfg`` of the resolved config. |
 | `render_shipping_ingest_fixture.py` | stable | cli | Render the golden fixture for the native ingest (decode + normalize). |
 | `render_shipping_mot_output_fixture.py` | stable | cli | Render the golden fixture for the native MOT output path. |

@@ -31,6 +31,7 @@
 | `native_head_parity_libtorch_structural_check.py` | experiment | cli | Exercise the #465 PR-2L runner's L1 worker and L2 child entry on synthetic frames (no MOT17 data). |
 | `native_head_parity_tf32_off.py` | experiment | cli | Run the #465 PR-2R head parity gate (TF32-off TRT head vs PyTorch oracle) and write its packet. |
 | `native_ingest_parity.py` |  | - | Native ingest parity vs the torchvision ingest path (#465 Phase B PR-7). |
+| `native_track_parity.py` | diagnostic | cli | Native end-to-end serial track parity vs the A_L serial run (#465 Phase B PR-9). |
 | `probe_forwarded_embedding_assoc_cost.py` | diagnostic | cli | Probe: online assoc cost via forwarded (copy) clean-FIFO embeddings. |
 | `probe_occ_audit_bank_reference.py` | diagnostic | cli | Probe: occ-exit audit with bank-sourced reference vs post-hoc re-extract. |
 | `probe_sparse_bank_equivalence.py` | diagnostic | cli | Probe: can a sparse per-ID key-embedding bank replace the dense Cheb-GR bank? |

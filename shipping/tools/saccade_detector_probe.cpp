@@ -217,7 +217,7 @@ int run(const Options& opt) {
     std::vector<std::uint8_t> host;
     for (int k = 1; k <= static_cast<int>(ingest.frame_count()); ++k) {
         const sh::IngestFrame f = ingest.ingest(k);
-        const sh::DetectionRows rows = detector.detect(ingest.frame_chw());
+        const sh::DetectionRows rows = detector.detect(ingest.frame_chw(), ingest.height(), ingest.width());
         const sh::DetectorStages& st = detector.stages();
         const std::int64_t n = static_cast<std::int64_t>(rows.size());
         std::vector<Payload> payloads;

@@ -112,6 +112,9 @@ _GPU_OBJECTS = {
 # (src/perception/trt_engine.cpp, which reads no environment).
 _DETECTOR_HOST = {"detector_host.cpp"}
 _DETECTOR_OBJECTS = {"perception/trt_engine.hpp"}
+# The end-to-end serial runtime (PR-9) owns the run's PerceptionPipeline.
+_RUNTIME = {"serial_runtime.cpp"}
+_RUNTIME_OBJECTS = {"tracking/pipeline.hpp"}
 
 
 def test_shipping_sources_include_only_admitted_headers() -> None:
@@ -124,6 +127,7 @@ def test_shipping_sources_include_only_admitted_headers() -> None:
             _CUDA_FREE_NATIVE
             | (_GPU_OBJECTS if p.name in _GPU_BUILDER else set())
             | (_DETECTOR_OBJECTS if p.name in _DETECTOR_HOST else set())
+            | (_RUNTIME_OBJECTS if p.name in _RUNTIME else set())
         )
         for line in p.read_text().splitlines():
             m = include.match(line)

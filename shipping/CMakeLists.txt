@@ -184,6 +184,17 @@ if(TARGET saccade_tracking)
     add_executable(saccade_detector_probe tools/saccade_detector_probe.cpp)
     target_link_libraries(saccade_detector_probe PRIVATE saccade_shipping_detector saccade_shipping_ingest)
 
+    # End-to-end serial runtime (PR-9): ingest -> detector -> post-detector
+    # host -> MOT emit and tail, and the shipping entrypoint saccade_track
+    # (boundary §2; serial until PR-10).
+    add_library(saccade_shipping_runtime STATIC src/serial_runtime.cpp)
+    target_link_libraries(saccade_shipping_runtime PUBLIC
+        saccade_shipping_detector saccade_shipping_ingest saccade_shipping_native)
+    set_target_properties(saccade_shipping_runtime PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+    add_executable(saccade_track tools/saccade_track.cpp)
+    target_link_libraries(saccade_track PRIVATE saccade_shipping_runtime)
+
     if(ENABLE_NATIVE_TESTS)
         # Needs a CUDA device: builds the real objects.
         add_executable(saccade_shipping_native_build_test
@@ -212,6 +223,18 @@ if(TARGET saccade_tracking)
                     ${SACCADE_REPO_ROOT}/tests/native/fixtures/shipping_head_lineage.json
                     ${SACCADE_REPO_ROOT}/configs/shipping/mamba_head_realization.attestation.json
                     ${SACCADE_REPO_ROOT})
+
+        # End-to-end serial runtime wiring (PR-9): per-sequence state and the
+        # wiring mutations, on MOT17 frames when the models and data exist.
+        add_executable(saccade_shipping_serial_runtime_test
+            ${SACCADE_REPO_ROOT}/tests/native/test_shipping_serial_runtime.cpp)
+        target_link_libraries(saccade_shipping_serial_runtime_test PRIVATE saccade_shipping_runtime)
+        add_test(NAME saccade_shipping_serial_runtime_test
+            COMMAND saccade_shipping_serial_runtime_test ${SACCADE_RESOLVED_CONFIG}
+                    ${SACCADE_REPO_ROOT}/models/yolo/mamba_head_s_v14replica_t3_t1_fp32_torchscript.lineage.json
+                    ${SACCADE_REPO_ROOT}/configs/shipping/mamba_head_realization.attestation.json
+                    ${SACCADE_REPO_ROOT}
+                    ${SACCADE_REPO_ROOT}/datasets/MOT17/train)
 
         add_executable(saccade_shipping_ingest_host_test
             ${SACCADE_REPO_ROOT}/tests/native/test_shipping_ingest_host.cpp)
