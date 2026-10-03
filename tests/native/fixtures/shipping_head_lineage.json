@@ -1,0 +1,247 @@
+{
+  "schema": "saccade.head_artifact_lineage_torchscript/v1",
+  "issue": "#465 Phase B PR-1L (U1 redesign: LibTorch TorchScript)",
+  "generated_utc": "2026-09-28T09:24:29+00:00",
+  "tool": {
+    "path": "scripts/model/export_headline_mamba_head_torchscript.py",
+    "git_commit": "37d4d21d0fb5a702e69f2b8c8f7b6aa4683f3864",
+    "git_dirty": false
+  },
+  "preset": {
+    "path": "configs/presets/mamba_whole_graph.yaml",
+    "sha256": "093b66ed124063f035ae9cf2a76e4f5426743cd819fb66e3e54994c97ea42cd1",
+    "mamba_ckpt": "runs/mamba_gt_v14replica_t3_t1/best.ckpt",
+    "fpn_backbone_engine": "models/yolo/yolo26s_backbone_640_best.engine"
+  },
+  "inventory": {
+    "path": "report_data/training_lineage_inventory.json",
+    "sha256": "b722ec9bb0f8606980ea6f53faf366444c48f2e6d1a9f1a63530179716cc4b4f",
+    "captured": {
+      "at_utc": "2026-09-18T12:51:53+00:00",
+      "host": "DESKTOP-0FLA6SQ",
+      "git_head": "3d2b339638e2259bee3ce5c85c1d7352c14209a6",
+      "git_dirty": true,
+      "roles_file": "scripts/provenance/training_lineage_roles.json",
+      "tensor_diff": true,
+      "onnx_match": true,
+      "cache_content_hash": true
+    },
+    "ckpt_node": "s.t3t1_phase_b",
+    "ckpt_sha256_match": true,
+    "backbone_node": "s.backbone_engine",
+    "backbone_engine_sha256_match": true
+  },
+  "source": {
+    "mamba_ckpt": {
+      "path": "runs/mamba_gt_v14replica_t3_t1/best.ckpt",
+      "sha256": "c161c88e50b894d8b51cc614c46c3700370373decf05a15825bdf00ccf0e0876",
+      "bytes": 126211713,
+      "epoch": 15,
+      "selection": {
+        "best_by": "train-loss",
+        "holdout_seqs": [],
+        "status": "diagnostic_train_loss"
+      }
+    },
+    "mamba_args": {
+      "d_model": 128,
+      "d_state": 16,
+      "num_blocks": 1,
+      "spatial_reduction": 4,
+      "num_classes": 80,
+      "use_pixel_shuffle": true,
+      "use_cross_scan": true,
+      "use_hybrid_head": false,
+      "use_temporal_mamba": true,
+      "use_temporal_attention": false,
+      "scan_stop_grad": true,
+      "per_channel_a": false,
+      "use_detail_fusion": false,
+      "detail_source": "none",
+      "detail_channels": 32,
+      "detail_patch_size": 3,
+      "detail_feature_channels": 0,
+      "detail_height": 768,
+      "detail_width": 1280
+    },
+    "lineage_gate": {
+      "base_yolo_sha256_recorded": false,
+      "teacher_checkpoint_sha256_recorded": false,
+      "reading": "the oracle's SHA gate (mamba_gated_detector.py, MambaGatedDetector.__init__) only fires for recorded hashes; lineage is instead pinned here by the inventory ckpt sha256"
+    },
+    "builder_inputs": {
+      "yolo_weights": {
+        "path": "models/yolo/yolo26s.pt",
+        "sha256": "646f8bc3fe0a656803d95c294f7852321748cb29d13466a1af8862e2db384a1b",
+        "bytes": 20422725
+      },
+      "teacher_ckpt": {
+        "path": "runs/gated_det_v1/best.ckpt",
+        "sha256": "d2ace71d47c3358d36867c64795b09fad7e3ae0c794ef59554b17518c387dbcf",
+        "bytes": 116736565,
+        "role": "GatedDetConfig only; not unpickled into the head, no effect on head weights"
+      }
+    }
+  },
+  "head_load": {
+    "missing_keys": [],
+    "unexpected_keys": [],
+    "upsample_loaded": true,
+    "in_channels": [
+      128,
+      256,
+      512
+    ],
+    "temporal_blocks": "present; bypassed (whole-graph forward is single-frame, T=1)",
+    "use_detail_fusion": false
+  },
+  "artifact_scope": {
+    "included": "MambaDetectionHead._forward_eager, single frame (T=1), return_embeddings=False: p3/p4/p5 -> cls_p3..p5, reg_p3..p5",
+    "excluded": "S2 whole-detect tail (640 stretch resize, anchor decode, sigmoid/class max, top-k, coordinate scaling) -> U3b; conf_thr/max_det stay in the B2 resolved config"
+  },
+  "torchscript": {
+    "path": "models/yolo/mamba_head_s_v14replica_t3_t1_fp32_torchscript.pt",
+    "sha256": "1663ec97022879e8078fb5b9dc3b65f4d2b76e4f8df6d5848300c2b3c999d879",
+    "bytes": 45656246,
+    "content_sha256": "f6a540edfecd6e421c533c5c2280fc26351b887006c1384bb61a567ce2f39487",
+    "method": "torch.jit.trace (check_trace=False), no freeze, no optimize",
+    "inputs": {
+      "p3": [
+        1,
+        128,
+        80,
+        80
+      ],
+      "p4": [
+        1,
+        256,
+        40,
+        40
+      ],
+      "p5": [
+        1,
+        512,
+        20,
+        20
+      ]
+    },
+    "outputs": [
+      "cls_p3",
+      "cls_p4",
+      "cls_p5",
+      "reg_p3",
+      "reg_p4",
+      "reg_p5"
+    ],
+    "dtype": "float32",
+    "batch": "static 1",
+    "native_scan_calls": 3,
+    "tracer_warning_sites": [
+      {
+        "file": "src/saccade/perception/temporal_yolo/mamba_head.py",
+        "line": 30,
+        "source": "if n <= 0 or n > 32 or (n & (n - 1)) != 0:"
+      },
+      {
+        "file": "src/saccade/perception/temporal_yolo/mamba_head.py",
+        "line": 254,
+        "source": "a_per_channel = 1 if (A.dim() == 2 and A.shape[0] == D_dim) else 0"
+      },
+      {
+        "file": "src/saccade/perception/temporal_yolo/mamba_head.py",
+        "line": 258,
+        "source": "if C.shape[-1] < N:"
+      }
+    ]
+  },
+  "op_library": {
+    "path": "build/libsaccade_scan_torchop.so",
+    "sha256": "cfea782f320f641a5ca7752dfc54467909afcca96b6d6d9f884a40cbbe81aa43",
+    "bytes": 3517320,
+    "needed": [
+      "libtorch.so",
+      "libc10.so",
+      "libnvrtc.so.13",
+      "libc10_cuda.so",
+      "libcudart.so.13",
+      "libtorch_cpu.so",
+      "libtorch_cuda.so",
+      "libstdc++.so.6",
+      "libgcc_s.so.1",
+      "libc.so.6"
+    ],
+    "op": "saccade_native::selective_scan_fwd"
+  },
+  "runtime_requirements": {
+    "graph_executor_optimize": false,
+    "cudnn_benchmark": false,
+    "cudnn_allow_tf32": true,
+    "matmul_allow_tf32": false
+  },
+  "structural_check": {
+    "input": "synthetic torch.randn features (no MOT17 frame), seeds 0,1,2",
+    "reference": "MambaDetectionHead._forward_eager, Python scan op, same process",
+    "runtime_requirements_held": {
+      "graph_executor_optimize": false,
+      "cudnn_benchmark": false,
+      "cudnn_allow_tf32": true,
+      "matmul_allow_tf32": false
+    },
+    "bitwise_equal_all": true,
+    "per_seed": [
+      {
+        "seed": 0,
+        "bitwise_equal": {
+          "cls_p3": true,
+          "cls_p4": true,
+          "cls_p5": true,
+          "reg_p3": true,
+          "reg_p4": true,
+          "reg_p5": true
+        },
+        "max_abs_diff": 0.0
+      },
+      {
+        "seed": 1,
+        "bitwise_equal": {
+          "cls_p3": true,
+          "cls_p4": true,
+          "cls_p5": true,
+          "reg_p3": true,
+          "reg_p4": true,
+          "reg_p5": true
+        },
+        "max_abs_diff": 0.0
+      },
+      {
+        "seed": 2,
+        "bitwise_equal": {
+          "cls_p3": true,
+          "cls_p4": true,
+          "cls_p5": true,
+          "reg_p3": true,
+          "reg_p4": true,
+          "reg_p5": true
+        },
+        "max_abs_diff": 0.0
+      }
+    ],
+    "reading": "the artifact computes the eager head's function on these inputs; this is not parity evidence"
+  },
+  "companions": {
+    "backbone_engine": {
+      "path": "models/yolo/yolo26s_backbone_640_best.engine",
+      "sha256": "2ef3d4d40dfb670982cbbb98e6ed7d07e5b1a590cfa126d5ccf7342ee1579ce4",
+      "reading": "recorded for B5 hash verification only; its provenance is the inventory's unresolved engine link, not attested here"
+    }
+  },
+  "environment": {
+    "python": "3.12.13",
+    "torch": "2.11.0+cu130",
+    "torch_cuda": "13.0",
+    "cudnn": 91900,
+    "gpu": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+    "sm": "12.0",
+    "host": "DESKTOP-0FLA6SQ"
+  }
+}

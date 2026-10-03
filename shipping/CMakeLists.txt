@@ -52,7 +52,8 @@ set_target_properties(saccade_shipping_mot PROPERTIES POSITION_INDEPENDENT_CODE 
 # JSON -> native parameter state and readback. Includes only the CUDA-free
 # tracking headers (tracker_params.hpp, perception_params.hpp).
 add_library(saccade_shipping_native_config STATIC
-    src/native_config.cpp src/post_detector_plan.cpp src/sequence_output.cpp src/ingest_plan.cpp)
+    src/native_config.cpp src/post_detector_plan.cpp src/sequence_output.cpp src/ingest_plan.cpp
+    src/sha256.cpp src/detector_plan.cpp)
 target_link_libraries(saccade_shipping_native_config PUBLIC
     saccade_shipping_config saccade_tracker_params saccade_shipping_mot)
 target_compile_options(saccade_shipping_native_config PRIVATE -Wall -Wextra -Wpedantic)
@@ -99,6 +100,17 @@ target_compile_options(saccade_shipping_ingest_plan_test PRIVATE -Wall -Wextra -
 add_test(NAME saccade_shipping_ingest_plan_test
     COMMAND saccade_shipping_ingest_plan_test ${SACCADE_RESOLVED_CONFIG}
             ${SACCADE_REPO_ROOT}/tests/native/fixtures/shipping_ingest.json)
+
+# Detector plan: resolved config + frozen PR-1L lineage + realization
+# attestation, and SHA-256 (PR-8).
+add_executable(saccade_shipping_detector_plan_test
+    ${SACCADE_REPO_ROOT}/tests/native/test_shipping_detector_plan.cpp)
+target_link_libraries(saccade_shipping_detector_plan_test PRIVATE saccade_shipping_native_config)
+target_compile_options(saccade_shipping_detector_plan_test PRIVATE -Wall -Wextra -Wpedantic)
+add_test(NAME saccade_shipping_detector_plan_test
+    COMMAND saccade_shipping_detector_plan_test ${SACCADE_RESOLVED_CONFIG}
+            ${SACCADE_REPO_ROOT}/tests/native/fixtures/shipping_head_lineage.json
+            ${SACCADE_REPO_ROOT}/configs/shipping/mamba_head_realization.attestation.json)
 
 if(TARGET saccade_tracking)
     add_library(saccade_shipping_native STATIC src/native_build.cpp src/post_detector_host.cpp)
@@ -155,6 +167,23 @@ if(TARGET saccade_tracking)
     add_executable(saccade_ingest_probe tools/saccade_ingest_probe.cpp)
     target_link_libraries(saccade_ingest_probe PRIVATE saccade_shipping_ingest)
 
+    # Native detector (PR-8): resize -> the existing TRTEngine backbone
+    # (saccade_perception) -> the PR-1L LibTorch head -> S2. LibTorch only
+    # (TORCH_LIBRARIES has no libtorch_python); the head's scan operator is
+    # dlopen'ed at load time after its hash is checked.
+    add_library(saccade_shipping_detector STATIC src/detector_host.cpp src/detector_s2.cu)
+    target_link_libraries(saccade_shipping_detector PUBLIC
+        saccade_shipping_native_config saccade_perception ${TORCH_LIBRARIES} CUDA::cudart
+        ${CMAKE_DL_LIBS})
+    target_include_directories(saccade_shipping_detector PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/include ${SACCADE_REPO_ROOT}/include)
+    set_target_properties(saccade_shipping_detector PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+    # Developer tool (#465 PR-8): stream the native ingest + detector of one
+    # sequence to scripts/eval/diagnostics/native_detector_parity.py.
+    add_executable(saccade_detector_probe tools/saccade_detector_probe.cpp)
+    target_link_libraries(saccade_detector_probe PRIVATE saccade_shipping_detector saccade_shipping_ingest)
+
     if(ENABLE_NATIVE_TESTS)
         # Needs a CUDA device: builds the real objects.
         add_executable(saccade_shipping_native_build_test
@@ -170,6 +199,19 @@ if(TARGET saccade_tracking)
             saccade_shipping_native CUDA::cudart)
         add_test(NAME saccade_shipping_post_detector_host_test
             COMMAND saccade_shipping_post_detector_host_test ${SACCADE_RESOLVED_CONFIG})
+
+        # Native S2 vs the oracle's compiled S2 (fixture), and the detector
+        # loader's hash checks when the model files are present (PR-8).
+        add_executable(saccade_shipping_detector_s2_test
+            ${SACCADE_REPO_ROOT}/tests/native/test_shipping_detector_s2.cpp)
+        target_link_libraries(saccade_shipping_detector_s2_test PRIVATE saccade_shipping_detector)
+        add_test(NAME saccade_shipping_detector_s2_test
+            COMMAND saccade_shipping_detector_s2_test
+                    ${SACCADE_REPO_ROOT}/tests/native/fixtures/shipping_detector_s2.json
+                    ${SACCADE_RESOLVED_CONFIG}
+                    ${SACCADE_REPO_ROOT}/tests/native/fixtures/shipping_head_lineage.json
+                    ${SACCADE_REPO_ROOT}/configs/shipping/mamba_head_realization.attestation.json
+                    ${SACCADE_REPO_ROOT})
 
         add_executable(saccade_shipping_ingest_host_test
             ${SACCADE_REPO_ROOT}/tests/native/test_shipping_ingest_host.cpp)

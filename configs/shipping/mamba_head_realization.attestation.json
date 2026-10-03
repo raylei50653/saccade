@@ -1,0 +1,89 @@
+{
+  "schema": "saccade.head_realization_attestation/v1",
+  "issue": "#465 Phase B PR-8 (U3b-2)",
+  "reading": "Names the operator-library build that realizes the frozen PR-1L lineage on this machine. The lineage (and the PR-1L/PR-2L freezes) are unchanged; the build the lineage names (op_library_sha256 below) no longer exists. This build compiles the same sources, and the PR-2L A_L arm re-run with it gives MOT txt byte-identical to the accepted packet's A_L_1 on every sequence.",
+  "frozen_lineage": {
+    "path": "models/yolo/mamba_head_s_v14replica_t3_t1_fp32_torchscript.lineage.json",
+    "sha256": "677bc82320657a9ae289e78699c7a6f86e890fc629d1bb8189c08d35b57a277a",
+    "tool_commit": "37d4d21d0fb5a702e69f2b8c8f7b6aa4683f3864",
+    "torchscript_sha256": "1663ec97022879e8078fb5b9dc3b65f4d2b76e4f8df6d5848300c2b3c999d879",
+    "torchscript_content_sha256": "f6a540edfecd6e421c533c5c2280fc26351b887006c1384bb61a567ce2f39487",
+    "op_library_sha256": "cfea782f320f641a5ca7752dfc54467909afcca96b6d6d9f884a40cbbe81aa43"
+  },
+  "op_library": {
+    "path": "build/libsaccade_scan_torchop.so",
+    "sha256": "098dd23329c3a57519e17b8f90d83ebc1036e7692c6daee2c26a831543dc5f0d",
+    "bytes": 3517488,
+    "needed": [
+      "libtorch.so",
+      "libc10.so",
+      "libnvrtc.so.13",
+      "libc10_cuda.so",
+      "libcudart.so.13",
+      "libtorch_cpu.so",
+      "libtorch_cuda.so",
+      "libstdc++.so.6",
+      "libgcc_s.so.1",
+      "libc.so.6"
+    ],
+    "compiler_comment": [
+      "GCC: (GNU) 16.2.1 20260810",
+      "GCC: (GNU) 15.3.0"
+    ],
+    "sources_git_blob": {
+      "src/tracking/mamba_scan_torchop.cpp": "6b19e9a359fd04f344b92e7d2c596fea4fcbb505",
+      "src/tracking/mamba_scan.cu": "47673abaed43d5ca4611f5dd5197280a0aa38135",
+      "include/tracking/mamba_scan.cuh": "8f51a9a9fe55b08bf1590cbe279541354c3eece3"
+    },
+    "sources_equal_to_lineage_tool_commit": true
+  },
+  "a_l_reproduction": {
+    "tool": "scripts/eval/diagnostics/native_detector_parity.py anchor",
+    "git_head": "ad234e3d2392e8908f3f03c74251dfe941f1f498",
+    "generated_utc": "2026-10-03T12:18:26Z",
+    "reference": "results/native_head_parity_465_libtorch/20260928T152911Z/l2/A_L_1",
+    "mot17_argv": [
+      "scripts/eval/mot17.py",
+      "--preset",
+      "mamba_whole_graph",
+      "--detector",
+      "SDP",
+      "--double-buffer",
+      "--sequences",
+      "MOT17-02-SDP,MOT17-04-SDP,MOT17-05-SDP,MOT17-09-SDP,MOT17-10-SDP,MOT17-11-SDP,MOT17-13-SDP",
+      "--output",
+      "results/465_pr8_detector/anchor_ad234e3d/A_L"
+    ],
+    "txt_sha256": {
+      "MOT17-02-SDP": {
+        "reference": "e7e39ecbb0165c2ebdf5833d4ebcf4ae0db3bf2d235e219b62e10fb646ab4334",
+        "observed": "e7e39ecbb0165c2ebdf5833d4ebcf4ae0db3bf2d235e219b62e10fb646ab4334"
+      },
+      "MOT17-04-SDP": {
+        "reference": "b3a2a0e62943825bf87aa862373a6b216b071c369ba5a8246dce35a4ca5d7be9",
+        "observed": "b3a2a0e62943825bf87aa862373a6b216b071c369ba5a8246dce35a4ca5d7be9"
+      },
+      "MOT17-05-SDP": {
+        "reference": "2c2d4f37da63949d456a347fb1a32ae2f16153a88a1442ede5b56a02c79dab69",
+        "observed": "2c2d4f37da63949d456a347fb1a32ae2f16153a88a1442ede5b56a02c79dab69"
+      },
+      "MOT17-09-SDP": {
+        "reference": "b46c585ac28511f33acc20007cb7434ff01ab314683e9b1da5805554ad5d7b76",
+        "observed": "b46c585ac28511f33acc20007cb7434ff01ab314683e9b1da5805554ad5d7b76"
+      },
+      "MOT17-10-SDP": {
+        "reference": "18c84298fd087d9616b27acc731ae701cdcd3b3b57ccceec3e3ee02894b14dc4",
+        "observed": "18c84298fd087d9616b27acc731ae701cdcd3b3b57ccceec3e3ee02894b14dc4"
+      },
+      "MOT17-11-SDP": {
+        "reference": "73cdc51fc9dd7e947f130d7735fea80a2673589d35b6a3b48da274da658990d9",
+        "observed": "73cdc51fc9dd7e947f130d7735fea80a2673589d35b6a3b48da274da658990d9"
+      },
+      "MOT17-13-SDP": {
+        "reference": "4a4045e63fa3ba0ff1df4be6a6078944583a8683b0b67e8c870d20b9196725bd",
+        "observed": "4a4045e63fa3ba0ff1df4be6a6078944583a8683b0b67e8c870d20b9196725bd"
+      }
+    },
+    "identical": true
+  }
+}

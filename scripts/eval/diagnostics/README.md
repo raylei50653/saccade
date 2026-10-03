@@ -21,6 +21,7 @@
 | `compiled_head_reverse_engineering_structural_check.py` | experiment | cli | Exercise the #465 compiled-head reverse-engineering runner's R0 children and R1 worker on synthetic frames (n… |
 | `dump_post_detector_replay.py` | diagnostic | - | Dump the #465 PR-5 post-detector replay inputs and the Python serial reference. |
 | `label_boosted_birth_rows.py` | diagnostic | cli | Label and export birth rows boosted by GT for diagnostics. |
+| `native_detector_parity.py` | diagnostic | cli | Native detector parity vs the A_L detector path (#465 Phase B PR-8). |
 | `native_head_failure_localization.py` | experiment | cli | Run the #465 head failure-localization study (anchor-level C/T/E replay) and write its packet. |
 | `native_head_failure_localization_r2.py` | experiment | cli | Run the #465 head failure-localization r2 study (cutoff-closed swap set) and write its packet. |
 | `native_head_failure_localization_r2_structural_check.py` | experiment | cli | Exercise the #465 localization r2 arm worker end to end on synthetic frames (no MOT17 data). |
@@ -29,7 +30,7 @@
 | `native_head_parity_libtorch.py` | experiment | cli | Run the #465 PR-2L head parity gate (LibTorch head vs PyTorch oracle) and write its packet. |
 | `native_head_parity_libtorch_structural_check.py` | experiment | cli | Exercise the #465 PR-2L runner's L1 worker and L2 child entry on synthetic frames (no MOT17 data). |
 | `native_head_parity_tf32_off.py` | experiment | cli | Run the #465 PR-2R head parity gate (TF32-off TRT head vs PyTorch oracle) and write its packet. |
-| `native_ingest_parity.py` | diagnostic | - | Native ingest parity vs the torchvision ingest path (#465 Phase B PR-7). |
+| `native_ingest_parity.py` |  | - | Native ingest parity vs the torchvision ingest path (#465 Phase B PR-7). |
 | `probe_forwarded_embedding_assoc_cost.py` | diagnostic | cli | Probe: online assoc cost via forwarded (copy) clean-FIFO embeddings. |
 | `probe_occ_audit_bank_reference.py` | diagnostic | cli | Probe: occ-exit audit with bank-sourced reference vs post-hoc re-extract. |
 | `probe_sparse_bank_equivalence.py` | diagnostic | cli | Probe: can a sparse per-ID key-embedding bank replace the dense Cheb-GR bank? |
