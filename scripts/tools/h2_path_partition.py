@@ -93,8 +93,14 @@ DECISION_RELEVANT_PATHS: frozenset[str] = frozenset(
     _ADMITTED_RUNTIME_PATHS + _OBSERVATION_SITES + _POLICY_SURFACE
 )
 DECISION_RELEVANT_PREFIXES: tuple[str, ...] = (
+    # The resolved shipping config is the shipping builders' only decision
+    # input (#465 PR-4b): a change to it must move the coordinate.
+    "configs/shipping/",
     "include/",
     "scripts/eval/config/",
+    # Shipping runtime config loader + native builders (#465 PR-4b): admitted
+    # in the change that first links them against the tracker.
+    "shipping/",
     "src/",
 )
 

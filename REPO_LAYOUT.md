@@ -14,11 +14,11 @@ Review mark format:
 
 | Path | Role | Notes | Review |
 |---|---|---|---|
-| `configs/` | Runtime and evaluation configuration | Presets live in `configs/presets/`; `mamba_whole_graph.yaml` is the current frozen main-line preset. | Reviewed 2026-06-18 |
+| `configs/` | Runtime and evaluation configuration | Presets live in `configs/presets/`; `mamba_whole_graph.yaml` is the current frozen main-line preset. `configs/shipping/` holds the resolved shipping config the native builders consume (`decision_relevant` since #465 PR-4b). | Reviewed 2026-10-03 |
 | `include/` | C++ / CUDA public headers | Native tracking, media, perception, and package-facing headers. | Reviewed 2026-06-18 |
 | `scripts/` | Reusable command-line tools | Evaluation, training, native build helpers, benchmarks, and model tooling. Every script carries a `# status:` label and a docstring; see the generated `docs/ownership/scripts_inventory.generated.md` (or each dir's `README.md`) for the function/status index, and `scripts/README.md` for the cleanup ledger. | Reviewed 2026-07-21 |
 | `tests/` | Test suites | Unit, integration, native, benchmark, golden, and experimental tests. | Reviewed 2026-06-18 |
-| `shipping/` | Python-free shipping runtime (native) | `saccade_shipping_config`: strict loader for `configs/shipping/*.resolved.json` (#465 PR-4a). Outside `src/`/`include/`, so not in the `decision_relevant` partition until the shipping runtime is wired in (PR-4b). | Reviewed 2026-10-03 |
+| `shipping/` | Python-free shipping runtime (native) | `saccade_shipping_config`: strict loader for `configs/shipping/*.resolved.json` (#465 PR-4a); `saccade_shipping_native_config`: CUDA-free JSON → tracker-parameter mapping and readback; `saccade_shipping_native`: builds the GPU tracker/GMC/pipeline from the resolved config and fails closed on readback (PR-4b). `decision_relevant` since PR-4b; built standalone (CPU CI) and from the root build. | Reviewed 2026-10-03 |
 | `tools/` | Developer coordination tools (not pipeline code) | `resctl.py`: cross-worktree GPU / CPU / benchmark leases and handoffs; state lives in `.git/worktree-runtime/`, never tracked. See `docs/WORKTREE_RESOURCES.md`. | Reviewed 2026-09-18 |
 | `third_party/` | Vendored external code | Currently includes TrackEval. Avoid mixing local experiment output here. | Reviewed 2026-06-18 |
 | `docker/`, `Dockerfile`, `docker-compose.yml` | Container entry points | Keep deployment/build container changes here. | Reviewed 2026-06-18 |

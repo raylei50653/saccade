@@ -15,6 +15,7 @@
 #include <cmath>
 #include <sstream>
 #include <stdexcept>
+#include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include "tracking/sinkhorn.hpp"
@@ -37,25 +38,6 @@ constexpr int TRACK_TENTATIVE = 1;
 constexpr int TRACK_CONFIRMED = 2;
 constexpr int K_MAX_CANDIDATES = 16;
 
-bool env_flag_enabled(const char* name, bool default_value) {
-    const char* value = std::getenv(name);
-    if (!value || !*value) return default_value;
-    return !(
-        std::strcmp(value, "0") == 0 ||
-        std::strcmp(value, "false") == 0 ||
-        std::strcmp(value, "False") == 0 ||
-        std::strcmp(value, "FALSE") == 0
-    );
-}
-
-float env_float_value(const char* name, float default_value) {
-    const char* value = std::getenv(name);
-    if (!value || !*value) return default_value;
-    char* end = nullptr;
-    const float parsed = std::strtof(value, &end);
-    if (end == value) return default_value;
-    return parsed;
-}
 }
 
 // --- CUDA Kernels ---
@@ -3099,13 +3081,6 @@ public:
         : max_objs_(max_objects),
           embed_dim_(embedding_dim),
           max_assoc_(std::max(1, max_assoc)) {
-        enable_quality_scaling_ = false;
-        q_w_aspect_ = 0.50f;
-        q_w_center_ = 0.30f;
-        q_w_area_ = 0.20f;
-        frame_w_ = 1920;
-        frame_h_ = 1080;
-
         checkCuda(cudaMalloc(&d_states_, max_objs_ * 8 * sizeof(float)));
         checkCuda(cudaMalloc(&d_covs_, max_objs_ * 64 * sizeof(float)));
         checkCuda(cudaMalloc(&d_active_, max_objs_ * sizeof(bool)));
@@ -3138,7 +3113,7 @@ public:
         checkCuda(cudaMalloc(&d_score_sum_, max_objs_ * sizeof(float)));
 
         // Phase-4 bridge per-track state (allocated unconditionally; small, and
-        // only touched when bidirectional_ is on → bit-identical default-off).
+        // only touched when params_.relink.bidirectional is on → bit-identical default-off).
         checkCuda(cudaMalloc(&d_foot_ring_, (size_t)max_objs_ * FOOT_RING_CAP * 3 * sizeof(float)));
         checkCuda(cudaMalloc(&d_foot_len_, max_objs_ * sizeof(int)));
         checkCuda(cudaMalloc(&d_ema_h_, max_objs_ * sizeof(float)));
@@ -3252,22 +3227,6 @@ public:
         checkCuda(cudaHostRegister(h_res_scores_.data(),            max_objs_ *     sizeof(float), cudaHostRegisterDefault));
         checkCuda(cudaHostRegister(h_res_ids_.data(),               max_objs_ *     sizeof(int),   cudaHostRegisterDefault));
         checkCuda(cudaHostRegister(h_res_classes_.data(),           max_objs_ *     sizeof(int),   cudaHostRegisterDefault));
-
-        enable_dda_ = env_flag_enabled("SACCADE_ENABLE_DDA", true);
-        dda_max_cost_ = env_float_value("SACCADE_DDA_MAX_COST", 0.12f);
-        gate_adapt_r_mult_ = env_float_value("SACCADE_GATE_ADAPT_R_MULT", 1.0f);
-        // Occ-gated velocity damping (default 1.0 = bit-identical no-op).
-        occ_vel_damp_ = env_float_value("SACCADE_OCC_VEL_DAMP", 1.0f);
-        occ_vel_occ_thresh_ = env_float_value("SACCADE_OCC_VEL_OCC_THRESH", 0.05f);
-        // NSA gating/output decouple: emit measurement for matched tracks (default off).
-        output_use_measurement_ = env_flag_enabled("SACCADE_OUTPUT_MEASUREMENT", false);
-        // Predict-through-occlusion: confirmed tracks coast-emit their predicted box
-        // for up to N missed frames (default 0 = matched-only, bit-identical).
-        coast_max_age_ = static_cast<int>(env_float_value("SACCADE_COAST_MAX_AGE", 0.0f));
-        coast_score_decay_ = env_float_value("SACCADE_COAST_SCORE_DECAY", 1.0f);
-        // Occlusion gate for coasting: only coast-emit when the predicted box is
-        // occluded by another track (occ_coeff >= thresh). 0 = no gate (all coast).
-        coast_occ_thresh_ = env_float_value("SACCADE_COAST_OCC_THRESH", 0.0f);
     }
 
     ~Impl() {
@@ -3477,6 +3436,12 @@ public:
             throw std::logic_error(
                 "H0 bridge trace requires a bound device evaluation-frame input");
         }
+        if (embeddings_forbidden_ && d_embeddings != nullptr) {
+            throw std::invalid_argument(
+                "GPUByteTracker::update: embeddings are forbidden on this tracker "
+                "(forbid_embeddings: the shipping runtime has no ReID)");
+        }
+        freeze_if_capturing(stream);
         ++processed_frame_count_;
 
         int threads = 256;
@@ -3484,26 +3449,26 @@ public:
         // Quality scaling: always launch; kernel guards with i < num_dets
         int blocks_qs = (max_assoc_ + threads - 1) / threads;
         apply_detection_quality_scaling_kernel<<<blocks_qs, threads, 0, stream>>>(
-            d_scores, d_boxes, num_dets, frame_w_, frame_h_,
-            q_w_aspect_, q_w_center_, q_w_area_);
+            d_scores, d_boxes, num_dets, params_.frame.w, params_.frame.h,
+            params_.quality.w_aspect, params_.quality.w_center, params_.quality.w_area);
 
         int blocks = (max_objs_ + threads - 1) / threads;
         // Relink: archive confirmed tracks expiring THIS frame before predict
         // deactivates them; age the lost bank.
-        if (relink_enabled_ && d_embeddings) {
+        if (params_.relink.enabled && d_embeddings) {
             archive_expiring_tracks_kernel<<<blocks, threads, 0, stream>>>(
                 d_active_, d_state_, d_age_, d_has_clean_embedding_,
                 d_states_, d_features_, d_track_ids_, d_track_uid_, d_generation_,
-                max_objs_, max_age_, embed_dim_, relink_bank_cap_,
+                max_objs_, params_.core.track_buffer, embed_dim_, params_.relink.bank_cap,
                 d_relink_feats_, d_relink_ids_, d_relink_pos_,
                 d_relink_lostage_, d_relink_valid_, d_relink_cursor_,
                 d_relink_uid_, d_relink_generation_);
-            age_relink_bank_kernel<<<(relink_bank_cap_ + threads - 1) / threads, threads, 0, stream>>>(
-                d_relink_lostage_, d_relink_valid_, relink_bank_cap_, relink_max_age_);
+            age_relink_bank_kernel<<<(params_.relink.bank_cap + threads - 1) / threads, threads, 0, stream>>>(
+                d_relink_lostage_, d_relink_valid_, params_.relink.bank_cap, params_.relink.max_age);
         }
         predict_gmc_sinv_fused_kernel<<<blocks, threads, 0, stream>>>(
-            d_states_, d_covs_, d_active_, d_age_, d_gmc, d_s_inv_, max_objs_, max_age_, r_scale_, gate_adapt_r_mult_,
-            d_occ_coeff_, occ_vel_damp_, occ_vel_occ_thresh_);
+            d_states_, d_covs_, d_active_, d_age_, d_gmc, d_s_inv_, max_objs_, params_.core.track_buffer, params_.core.r_scale, params_.hatch.gate_adapt_r_mult,
+            d_occ_coeff_, params_.hatch.occ_vel_damp, params_.hatch.occ_vel_occ_thresh);
 
         // Association: always launch with fixed grid; kernels guard with
         // idx >= num_dets or tau == 0.
@@ -3511,15 +3476,15 @@ public:
         dim3 b_size(16, 16);
         dim3 g_size((max_assoc_ + 15) / 16, (max_objs_ + 15) / 16);
 
-        const bool oao_contest_on = (oao_tau_ > 0.0f && oao_contest_thresh_ >= 0.0f);
+        const bool oao_contest_on = (params_.oao.tau > 0.0f && params_.oao.contest_thresh >= 0.0f);
         kernel::compute_track_occlusion_kernel<<<blocks, threads, 0, stream>>>(
-            d_states_, d_active_, d_occ_coeff_, max_objs_, oao_tau_,
-            occ_state_enabled_ ? d_occ_front_ttl_ : nullptr,
-            occ_iou_thresh_, occ_foot_gap_, occ_ttl_,
-            occ_state_enabled_ ? d_occ_partner_ : nullptr,
-            oao_contest_on ? d_occ_partner_all_ : nullptr, oao_occ_mode_, oao_crowd_radius_,
-            oao_height_gate_, oao_foot_gate_,
-            oao_ramp_frames_ > 0.0f ? d_occ_duration_ : nullptr, oao_ramp_frames_);
+            d_states_, d_active_, d_occ_coeff_, max_objs_, params_.oao.tau,
+            params_.occ.enabled ? d_occ_front_ttl_ : nullptr,
+            params_.occ.iou_thresh, params_.occ.foot_gap, params_.occ.ttl,
+            params_.occ.enabled ? d_occ_partner_ : nullptr,
+            oao_contest_on ? d_occ_partner_all_ : nullptr, params_.oao.occ_mode, params_.oao.crowd_radius,
+            params_.oao.height_gate, params_.oao.foot_gate,
+            params_.oao.ramp_frames > 0.0f ? d_occ_duration_ : nullptr, params_.oao.ramp_frames);
 
         nvtxRangePushA("Assoc/CostMatrix");
         // Sparse-candidate cap: a candidate is selectable by SOME Sinkhorn stage iff
@@ -3527,7 +3492,7 @@ public:
         // the per-track candidate list to genuinely overlapping detections (<< K_MAX),
         // so the race-ordered slots can never evict the true match.
         const float cand_cost_cap =
-            std::max(dda_max_cost_, std::max(match_thresh_, stage2_match_thresh_));
+            std::max(params_.hatch.dda_max_cost, std::max(params_.core.match_thresh, params_.core.stage2_match_thresh));
         if (d_embeddings) {
             checkCuda(cudaMemsetAsync(d_candidate_count_, 0, max_objs_ * sizeof(int), stream));
             checkCuda(cudaMemsetAsync(d_cand_n_, 0, max_objs_ * sizeof(int), stream));
@@ -3538,17 +3503,17 @@ public:
                 d_states_, d_boxes, d_features_, d_embeddings, d_scores,
                 d_candidate_count_, d_has_clean_embedding_,
                 d_s_inv_, d_homography_, d_cost_matrix_, max_objs_, num_dets, embed_dim_, iou_stage1_gate_, maha_gate_,
-                vel_dir_weight_, fuse_score_weight_,
-                reid_cost_cos_w_, reid_cost_iou_w_, reid_cost_score_w_,
-                reid_cos_threshold_, reid_iou_low_,
-                reid_min_candidates_,
-                d_occ_coeff_, oao_tau_,
-                oao_contest_on ? d_occ_partner_all_ : nullptr, oao_contest_thresh_, oao_score_w_,
-                occ_state_enabled_ ? d_occ_front_ttl_ : nullptr, occ_cost_weight_,
-                multiplicative_cost_, stability_cost_w_, sinkhorn_lambda_,
-                association_energy_enabled_, assoc_score_cost_w_, assoc_height_cost_w_,
+                params_.core.vel_dir_weight, params_.core.fuse_score_weight,
+                params_.reid.cost_cos_w, params_.reid.cost_iou_w, params_.reid.cost_score_w,
+                params_.reid.cos_threshold, params_.reid.iou_low,
+                params_.reid_min_candidates,
+                d_occ_coeff_, params_.oao.tau,
+                oao_contest_on ? d_occ_partner_all_ : nullptr, params_.oao.contest_thresh, params_.oao.score_w,
+                params_.occ.enabled ? d_occ_front_ttl_ : nullptr, params_.occ.cost_weight,
+                params_.multiplicative_cost, params_.stability_cost_w, params_.sinkhorn_lambda,
+                params_.association_energy.enabled, params_.association_energy.score_cost_w, params_.association_energy.height_cost_w,
                 d_cand_n_, d_cand_costs_, d_cand_indices_, cand_stride_, cand_cost_cap,
-                d_score_sum_, d_hit_streak_, confirm_streak_);
+                d_score_sum_, d_hit_streak_, params_.core.confirm_streak);
         } else {
             checkCuda(cudaMemsetAsync(d_candidate_count_, 0, max_objs_ * sizeof(int), stream));
             checkCuda(cudaMemsetAsync(d_cand_n_, 0, max_objs_ * sizeof(int), stream));
@@ -3556,15 +3521,15 @@ public:
                 d_states_, d_boxes, d_candidate_count_,
                 d_s_inv_, d_homography_, d_cost_matrix_,
                 max_objs_, num_dets, iou_stage1_gate_, maha_gate_,
-                vel_dir_weight_, fuse_score_weight_,
+                params_.core.vel_dir_weight, params_.core.fuse_score_weight,
                 d_scores,
-                d_occ_coeff_, oao_tau_,
-                oao_contest_on ? d_occ_partner_all_ : nullptr, oao_contest_thresh_, oao_score_w_,
-                occ_state_enabled_ ? d_occ_front_ttl_ : nullptr, occ_cost_weight_,
-                multiplicative_cost_, stability_cost_w_, sinkhorn_lambda_,
-                association_energy_enabled_, assoc_score_cost_w_, assoc_height_cost_w_,
+                d_occ_coeff_, params_.oao.tau,
+                oao_contest_on ? d_occ_partner_all_ : nullptr, params_.oao.contest_thresh, params_.oao.score_w,
+                params_.occ.enabled ? d_occ_front_ttl_ : nullptr, params_.occ.cost_weight,
+                params_.multiplicative_cost, params_.stability_cost_w, params_.sinkhorn_lambda,
+                params_.association_energy.enabled, params_.association_energy.score_cost_w, params_.association_energy.height_cost_w,
                 d_cand_n_, d_cand_costs_, d_cand_indices_, cand_stride_, cand_cost_cap,
-                d_score_sum_, d_hit_streak_, confirm_streak_);
+                d_score_sum_, d_hit_streak_, params_.core.confirm_streak);
         }
         nvtxRangePop();
 
@@ -3577,39 +3542,30 @@ public:
         dim3 auc_b(32); dim3 auc_g((max_objs_ + 31) / 32);
 
         const float effective_mid_thresh = std::clamp(
-            mid_thresh_ * std::max(mid_thresh_scale, 0.01f),
-            track_thresh_,
-            high_thresh_
+            params_.core.mid_thresh * std::max(mid_thresh_scale, 0.01f),
+            params_.core.track_thresh,
+            params_.core.high_thresh
         );
 
         nvtxRangePushA("Assoc/SinkhornMultistage");
         kernel::fused_sinkhorn_multistage_kernel<<<max_objs_, 128, 0, stream>>>(
             d_cand_costs_, d_cand_indices_, d_cand_n_, cand_stride_,
             d_scores, d_boxes, d_state_, d_active_, d_trk_to_det_,
-            max_objs_, sinkhorn_lambda_,
-            dda_max_cost_, match_thresh_, stage2_match_thresh_,
-            high_thresh_, effective_mid_thresh, track_thresh_,
+            max_objs_, params_.sinkhorn_lambda,
+            params_.hatch.dda_max_cost, params_.core.match_thresh, params_.core.stage2_match_thresh,
+            params_.core.high_thresh, effective_mid_thresh, params_.core.track_thresh,
             sinkhorn_stage_stride_,
             d_topk_indices_, d_topk_probs_);
         nvtxRangePop();
 
-        // Freshness bid weight (env SACCADE_FRESHNESS_W, default 0 = bit-identical).
-        // Read once; biases the auction toward recently-matched (fresh) tracks.
-        static const float freshness_w = []() {
-            const char* v = std::getenv("SACCADE_FRESHNESS_W");
-            return v ? std::strtof(v, nullptr) : 0.0f;
-        }();
-
-        // Stability bid weight (env SACCADE_STABILITY_W, default 0.1).
-        // Tracks whose predicted height closely matches the detection height
-        // bid higher, favouring consistent tracks. IDs −42, IDF1 neutral.
-        static const float stability_w = []() {
-            const char* v = std::getenv("SACCADE_STABILITY_W");
-            return v ? std::strtof(v, nullptr) : 0.1f;
-        }();
+        // Auction bid shaping: freshness biases toward recently-matched tracks
+        // (default 0 = off); stability favours tracks whose predicted height
+        // matches the detection (default 0.1; IDs −42, IDF1 neutral).
+        const float freshness_w = params_.hatch.freshness_w;
+        const float stability_w = params_.hatch.stability_w;
 
         auto run_stage = [&](int stage, const char* label) {
-            if (stage == 0 && !enable_dda_) return;
+            if (stage == 0 && !params_.hatch.enable_dda) return;
             int off = stage * sinkhorn_stage_stride_;
             nvtxRangePushA(label);
             checkCuda(cudaMemsetAsync(d_auction_prices_, 0, max_assoc_ * sizeof(uint64_t), stream));
@@ -3638,9 +3594,9 @@ public:
         // gated candidate (det box + cost). Lets offline analysis test whether the
         // GT-correct det was in the track's candidate list and at what cost.
         // NOTE: incompatible with CUDA-graph capture (host I/O). Run with tracker
-        // graph disabled. No-op unless the env var is set.
+        // graph disabled. No-op unless set_assoc_dump_path() set a target.
         {
-            static const char* dump_path = std::getenv("SACCADE_ASSOC_DUMP");
+            const char* dump_path = assoc_dump_path_.empty() ? nullptr : assoc_dump_path_.c_str();
             if (dump_path) {
                 checkCuda(cudaStreamSynchronize(stream));
                 std::vector<int>   h_state(max_objs_), h_age(max_objs_),
@@ -3700,13 +3656,13 @@ public:
             d_active_, d_state_, d_age_, d_scores_, d_classes_,
             d_hit_streak_, d_confirm_streak_required_, d_score_sum_,
             d_trk_to_det_, d_scores, d_classes,
-            confirm_streak_, confirm_score_thresh_, max_objs_
+            params_.core.confirm_streak, params_.core.confirm_score_thresh, max_objs_
         );
 
         kernel::inline_kalman_update_kernel<<<blocks, threads, 0, stream>>>(
             d_states_, d_covs_, d_boxes, d_trk_to_det_, d_active_, max_objs_, light_factor,
-            d_scores, kalman_adapt_mode_, r_scale_,
-            d_age_, d_hit_streak_, confirm_streak_
+            d_scores, params_.core.kalman_adapt_mode, params_.core.r_scale,
+            d_age_, d_hit_streak_, params_.core.confirm_streak
         );
         nvtxRangePop();
 
@@ -3715,26 +3671,26 @@ public:
         // Spawn: always launch; kernels guard with idx >= num_dets or
         // free slots exhausted.
         const float effective_new_track_thresh_spawn = std::clamp(
-            new_track_thresh_ * std::max(mid_thresh_scale, 0.01f),
-            track_thresh_, high_thresh_);
+            params_.core.new_track_thresh * std::max(mid_thresh_scale, 0.01f),
+            params_.core.track_thresh, params_.core.high_thresh);
         cudaMemsetAsync(d_n_free_,      0, sizeof(int), stream);
         cudaMemsetAsync(d_slot_cursor_, 0, sizeof(int), stream);
         collect_free_slots_kernel<<<1, 256, 0, stream>>>(
             d_active_, max_objs_, d_free_slots_, d_n_free_);
         // Seed young-track references from matched det embeddings (fill-in only;
         // the bank's curated representative later overwrites via scatter).
-        if (d_embeddings && (relink_enabled_ || bridge_app_veto_ > -1.0f)) {
+        if (d_embeddings && (params_.relink.enabled || params_.relink.bridge_app_veto > -1.0f)) {
             seed_reference_features_kernel<<<(max_assoc_ + threads - 1) / threads, threads, 0, stream>>>(
                 d_det_to_trk_, d_embeddings, num_dets, embed_dim_, max_objs_, d_features_);
         }
         // Relink: archive tracks that just became LOST so the birth relink can
         // revive them when a detection re-appears (unlike expire-only archiving
         // which only saves about-to-expire confirmed tracks).
-        if (relink_enabled_ && d_embeddings) {
+        if (params_.relink.enabled && d_embeddings) {
             archive_lost_tracks_kernel<<<blocks, threads, 0, stream>>>(
                 d_active_, d_state_, d_age_,
                 d_states_, d_features_, d_track_ids_, d_track_uid_, d_generation_,
-                max_objs_, embed_dim_, relink_bank_cap_,
+                max_objs_, embed_dim_, params_.relink.bank_cap,
                 d_relink_feats_, d_relink_ids_, d_relink_pos_,
                 d_relink_lostage_, d_relink_valid_, d_relink_cursor_,
                 d_relink_uid_, d_relink_generation_);
@@ -3742,21 +3698,21 @@ public:
         // Relink: try to revive a lost identity for each unmatched birth candidate
         // before spawn assigns fresh ids.
         const int* d_revive = nullptr;
-        if (relink_enabled_ && d_embeddings) {
+        if (params_.relink.enabled && d_embeddings) {
             // Dup-id guard: entries whose id is confirmed-tracked again must not
             // be revivable this frame.
-            invalidate_tracked_bank_entries_kernel<<<(relink_bank_cap_ + threads - 1) / threads, threads, 0, stream>>>(
+            invalidate_tracked_bank_entries_kernel<<<(params_.relink.bank_cap + threads - 1) / threads, threads, 0, stream>>>(
                 d_active_, d_state_, d_track_ids_, max_objs_,
-                d_relink_ids_, d_relink_valid_, relink_bank_cap_);
+                d_relink_ids_, d_relink_valid_, params_.relink.bank_cap);
             // Fixed grid (max_assoc_) so the launch config is stable under CUDA
             // graph capture; the kernel guards with d >= n_det.
             relink_births_kernel<<<(max_assoc_ + threads - 1) / threads, threads, 0, stream>>>(
                 d_det_to_trk_, d_boxes, d_scores, d_embeddings, num_dets,
                 effective_new_track_thresh_spawn, embed_dim_,
-                relink_bank_cap_, d_relink_feats_, d_relink_ids_, d_relink_pos_,
+                params_.relink.bank_cap, d_relink_feats_, d_relink_ids_, d_relink_pos_,
                 d_relink_lostage_, d_relink_valid_,
                 d_relink_uid_, d_relink_generation_,
-                relink_sim_thresh_, relink_lambda_, relink_spatial_gate_,
+                params_.relink.sim_thresh, params_.relink.cheb_lambda, params_.relink.spatial_gate,
                 d_det_revive_id_, d_det_revive_uid_, d_det_revive_generation_, d_relink_dbg_);
             d_revive = d_det_revive_id_;
             // Dup-id guard: a revived identity's old LOST slot retires now so a
@@ -3772,12 +3728,12 @@ public:
             d_track_ids_, d_age_, d_scores_, d_classes_,
             d_hit_streak_, d_confirm_streak_required_, d_score_sum_,
             d_track_id_ctr_, d_slot_cursor_,
-            confirm_streak_, birth_low_score_thresh_,
-            max_objs_, birth_prox_norm_thresh_,
+            params_.core.confirm_streak, params_.core.birth_low_score_thresh,
+            max_objs_, params_.core.birth_prox_norm_thresh,
             d_revive, d_covs_,
-            bidirectional_ ? d_foot_len_ : nullptr,
-            bidirectional_ ? d_ema_h_ : nullptr,
-            bidirectional_ ? d_track_revived_ : nullptr,
+            params_.relink.bidirectional ? d_foot_len_ : nullptr,
+            params_.relink.bidirectional ? d_ema_h_ : nullptr,
+            params_.relink.bidirectional ? d_track_revived_ : nullptr,
             d_track_uid_, d_track_uid_ctr_, d_generation_,
             d_det_revive_uid_, d_det_revive_generation_,
             research_h0_bridge_trace_ ? d_h0_slot_generation_ : nullptr,
@@ -3791,7 +3747,7 @@ public:
         // (so newly-spawned candidates record this frame) and before the bridge;
         // the bridge adopts the lost id before compact writes output ids. Both
         // kernels use fixed grids + no host sync → CUDA-graph capture-safe.
-        if (bidirectional_) {
+        if (params_.relink.bidirectional) {
             int grid = (max_objs_ + 255) / 256;
             H0TraceDeviceBuffers h0_trace{};
             if (research_h0_bridge_trace_) {
@@ -3844,11 +3800,11 @@ public:
             // bit-identical). Rasterizes this frame's output set (confirmed,
             // age==0), which the bridge commit below does not change.
             bool occ_on = d_occ_grid_ != nullptr &&
-                          (occ_gate_cover_ > 0.0f || occ_expand_px_ > 0.0f);
+                          (params_.relink.occ_gate_cover > 0.0f || params_.relink.occ_expand_px > 0.0f);
             if (occ_on) {
                 occupancy_update_kernel<<<1, 256, 0, stream>>>(
                     d_active_, d_state_, d_age_, d_states_,
-                    max_objs_, frame_w_, frame_h_, d_occ_grid_, d_occ_frame_);
+                    max_objs_, params_.frame.w, params_.frame.h, d_occ_grid_, d_occ_frame_);
             }
             cudaMemsetAsync(d_bridge_claim_, 0, max_objs_ * sizeof(int), stream);
             if (research_h0_bridge_trace_) {
@@ -3857,15 +3813,15 @@ public:
                     d_trk_to_det_, d_track_ids_, d_states_, d_scores_,
                     d_foot_ring_, d_foot_len_, d_ema_h_,
                     max_objs_, FOOT_RING_CAP,
-                    bridge_px_, bridge_at_, bridge_min_lost_, bridge_ttl_,
-                    bridge_max_speed_, bridge_person_height_, bridge_fps_,
-                    bridge_margin_, bridge_spatial_gate_, bridge_anchor_, bridge_anchor_rate_,
-                    bridge_h_lo_, bridge_h_hi_,
-                    bridge_dir_bonus_,
+                    params_.relink.bridge_px, params_.relink.bridge_at, params_.relink.bridge_min_lost, params_.relink.bridge_ttl,
+                    params_.relink.bridge_max_speed, params_.relink.bridge_person_height, params_.relink.bridge_fps,
+                    params_.relink.bridge_margin, params_.relink.bridge_spatial_gate, params_.relink.bridge_anchor, params_.relink.bridge_anchor_rate,
+                    params_.relink.bridge_h_lo, params_.relink.bridge_h_hi,
+                    params_.relink.bridge_dir_bonus,
                     occ_on ? d_occ_grid_ : nullptr, occ_on ? d_occ_frame_ : nullptr,
-                    occ_gate_cover_, occ_gap_min_, occ_expand_px_, occ_expand_cover_,
-                    frame_w_, frame_h_,
-                    d_features_, embed_dim_, bridge_app_veto_,
+                    params_.relink.occ_gate_cover, params_.relink.occ_gap_min, params_.relink.occ_expand_px, params_.relink.occ_expand_cover,
+                    params_.frame.w, params_.frame.h,
+                    d_features_, embed_dim_, params_.relink.bridge_app_veto,
                     research_portable_or_tail_enabled_ ? 1 : 0,
                     research_portable_or_tail_enabled_ ? d_portable_thr_ : nullptr,
                     research_bridge_fidelity_audit_ ? 1 : 0,
@@ -3884,15 +3840,15 @@ public:
                     d_trk_to_det_, d_track_ids_, d_states_, d_scores_,
                     d_foot_ring_, d_foot_len_, d_ema_h_,
                     max_objs_, FOOT_RING_CAP,
-                    bridge_px_, bridge_at_, bridge_min_lost_, bridge_ttl_,
-                    bridge_max_speed_, bridge_person_height_, bridge_fps_,
-                    bridge_margin_, bridge_spatial_gate_, bridge_anchor_, bridge_anchor_rate_,
-                    bridge_h_lo_, bridge_h_hi_,
-                    bridge_dir_bonus_,
+                    params_.relink.bridge_px, params_.relink.bridge_at, params_.relink.bridge_min_lost, params_.relink.bridge_ttl,
+                    params_.relink.bridge_max_speed, params_.relink.bridge_person_height, params_.relink.bridge_fps,
+                    params_.relink.bridge_margin, params_.relink.bridge_spatial_gate, params_.relink.bridge_anchor, params_.relink.bridge_anchor_rate,
+                    params_.relink.bridge_h_lo, params_.relink.bridge_h_hi,
+                    params_.relink.bridge_dir_bonus,
                     occ_on ? d_occ_grid_ : nullptr, occ_on ? d_occ_frame_ : nullptr,
-                    occ_gate_cover_, occ_gap_min_, occ_expand_px_, occ_expand_cover_,
-                    frame_w_, frame_h_,
-                    d_features_, embed_dim_, bridge_app_veto_,
+                    params_.relink.occ_gate_cover, params_.relink.occ_gap_min, params_.relink.occ_expand_px, params_.relink.occ_expand_cover,
+                    params_.frame.w, params_.frame.h,
+                    d_features_, embed_dim_, params_.relink.bridge_app_veto,
                     research_portable_or_tail_enabled_ ? 1 : 0,
                     research_portable_or_tail_enabled_ ? d_portable_thr_ : nullptr,
                     research_bridge_fidelity_audit_ ? 1 : 0,
@@ -3929,89 +3885,80 @@ public:
             d_trk_to_det_, max_objs_,
             d_res_boxes_, d_res_scores_, d_res_ids_, d_res_classes_, d_res_det_idx_,
             d_res_count_,
-            d_boxes, output_use_measurement_,
-            coast_max_age_, coast_score_decay_,
-            d_occ_coeff_, coast_occ_thresh_);
+            d_boxes, params_.hatch.output_measurement,
+            params_.hatch.coast_max_age, params_.hatch.coast_score_decay,
+            d_occ_coeff_, params_.hatch.coast_occ_thresh);
         h_dirty_ = true;
         h_slot_map_dirty_ = true;
+    }
+
+    // Throws once the configuration is frozen (see config_frozen_).
+    void require_mutable(const char* setter) const {
+        if (config_frozen_) {
+            throw std::logic_error(
+                std::string("GPUByteTracker::") + setter +
+                ": configuration is frozen after the first CUDA graph capture of "
+                "update/update_into; the captured graph would keep replaying the "
+                "old values");
+        }
+    }
+
+    // Freeze on the first update that runs inside a stream capture.
+    void freeze_if_capturing(cudaStream_t stream) {
+        if (config_frozen_) return;
+        cudaStreamCaptureStatus status = cudaStreamCaptureStatusNone;
+        checkCuda(cudaStreamIsCapturing(stream, &status));
+        if (status != cudaStreamCaptureStatusNone) config_frozen_ = true;
     }
 
     void set_params(float track_thresh, float high_thresh, float match_thresh, int track_buffer,
                     float mid_thresh, int confirm_streak, float confirm_score_thresh,
                     bool adaptive_confirmation, float new_track_thresh, int kalman_adapt_mode,
-                    float r_scale = 1.0f, float vel_dir_weight = 0.0f, float fuse_score_weight = 0.0f,
-                    float stage2_match_thresh = 0.5f, float birth_low_score_thresh = 0.0f,
-                    float birth_prox_norm_thresh = 0.0f) {
-        track_thresh_ = track_thresh; high_thresh_ = high_thresh; match_thresh_ = match_thresh; max_age_ = track_buffer;
-        mid_thresh_ = mid_thresh;
-        new_track_thresh_ = new_track_thresh >= 0.0f ? new_track_thresh : mid_thresh;
-        confirm_streak_ = std::max(confirm_streak, 1);
-        confirm_score_thresh_ = confirm_score_thresh;
-        adaptive_confirmation_ = adaptive_confirmation;
-        kalman_adapt_mode_ = kalman_adapt_mode;
-        // Env override for ablation (e.g. SACCADE_KALMAN_ADAPT_MODE=1 enables legacy NSA).
-        {
-            const char* v = std::getenv("SACCADE_KALMAN_ADAPT_MODE");
-            if (v && *v) kalman_adapt_mode_ = std::atoi(v);
-        }
-        r_scale_ = std::max(0.01f, r_scale);
-        vel_dir_weight_ = fmaxf(0.0f, vel_dir_weight);
-        fuse_score_weight_ = std::clamp(fuse_score_weight, 0.0f, 1.0f);
-        stage2_match_thresh_ = std::clamp(stage2_match_thresh, 0.0f, 1.0f);
-        birth_low_score_thresh_ = fmaxf(0.0f, birth_low_score_thresh);
-        birth_prox_norm_thresh_ = fmaxf(0.0f, birth_prox_norm_thresh);
+                    float r_scale, float vel_dir_weight, float fuse_score_weight,
+                    float stage2_match_thresh, float birth_low_score_thresh,
+                    float birth_prox_norm_thresh) {
+        require_mutable("set_params");
+        params_.set_params(track_thresh, high_thresh, match_thresh, track_buffer, mid_thresh,
+                           confirm_streak, confirm_score_thresh, adaptive_confirmation,
+                           new_track_thresh, kalman_adapt_mode, r_scale, vel_dir_weight,
+                           fuse_score_weight, stage2_match_thresh, birth_low_score_thresh,
+                           birth_prox_norm_thresh);
     }
     void set_reid_params(float cos_threshold, float iou_low, float iou_high, float weight,
-                         float cost_cos_w = 0.55f, float cost_iou_w = 0.30f, float cost_score_w = 0.15f) {
-        reid_cos_threshold_ = cos_threshold; reid_iou_low_ = iou_low; reid_iou_high_ = iou_high; reid_weight_ = weight;
-        reid_cost_cos_w_ = cost_cos_w; reid_cost_iou_w_ = cost_iou_w; reid_cost_score_w_ = cost_score_w;
+                         float cost_cos_w, float cost_iou_w, float cost_score_w) {
+        require_mutable("set_reid_params");
+        params_.set_reid_params(cos_threshold, iou_low, iou_high, weight,
+                                cost_cos_w, cost_iou_w, cost_score_w);
     }
     void set_reid_min_candidates(int min_candidates) {
-        reid_min_candidates_ = max(1, min_candidates);
+        require_mutable("set_reid_min_candidates");
+        params_.set_reid_min_candidates(min_candidates);
     }
     void set_relink_params(bool enabled, int bank_cap, float sim_thresh,
                            float cheb_lambda, float spatial_gate, int max_age,
-                           bool bidirectional = false, float bridge_px = 0.25f,
-                           int bridge_at = 4, int bridge_min_lost = 2, int bridge_ttl = 120,
-                           float bridge_max_speed = 0.0f, float bridge_person_height = 1.65f,
-                           float bridge_fps = 30.0f, float bridge_margin = 0.0f,
-                           float bridge_spatial_gate = 0.0f, int bridge_anchor = 0,
-                           float bridge_anchor_rate = 0.0f,
-                           float bridge_h_lo = 0.0f, float bridge_h_hi = 0.0f,
-                           float bridge_dir_bonus = 0.0f,
-                           float occ_gate_cover = 0.0f, int occ_gap_min = 30,
-                           float occ_expand_px = 0.0f, float occ_expand_cover = 0.9f,
-                           float bridge_app_veto = -1.0f) {
-        relink_enabled_ = enabled;
-        relink_bank_cap_ = std::max(1, bank_cap);
-        relink_sim_thresh_ = sim_thresh;
-        relink_lambda_ = std::max(0.0f, cheb_lambda);
-        relink_spatial_gate_ = std::max(0.0f, spatial_gate);
-        relink_max_age_ = std::max(1, max_age);
-        // Phase-4 bidirectional foot-bridge params.
-        bidirectional_ = bidirectional;
-        bridge_px_ = std::max(0.0f, bridge_px);
-        bridge_at_ = std::max(1, bridge_at);
-        bridge_min_lost_ = std::max(0, bridge_min_lost);
-        bridge_ttl_ = std::max(1, bridge_ttl);
-        bridge_max_speed_ = std::max(0.0f, bridge_max_speed);
-        bridge_person_height_ = std::max(0.0f, bridge_person_height);
-        bridge_fps_ = bridge_fps > 0.0f ? bridge_fps : 30.0f;
-        bridge_margin_ = std::max(0.0f, bridge_margin);
-        bridge_spatial_gate_ = std::max(0.0f, bridge_spatial_gate);
-        bridge_anchor_ = (bridge_anchor < 0 || bridge_anchor > 2) ? 0 : bridge_anchor;
-        bridge_anchor_rate_ = std::max(0.0f, bridge_anchor_rate);
-        bridge_h_lo_ = std::max(0.0f, bridge_h_lo);
-        bridge_h_hi_ = std::max(0.0f, bridge_h_hi);
-        bridge_dir_bonus_ = std::max(0.0f, bridge_dir_bonus);
-        occ_gate_cover_ = std::clamp(occ_gate_cover, 0.0f, 1.0f);
-        occ_gap_min_ = std::max(1, occ_gap_min);
-        occ_expand_px_ = std::max(0.0f, occ_expand_px);
-        occ_expand_cover_ = std::clamp(occ_expand_cover, 0.0f, 1.0f);
-        bridge_app_veto_ = std::min(bridge_app_veto, 1.0f);  // <= -1 disables
+                           bool bidirectional, float bridge_px,
+                           int bridge_at, int bridge_min_lost, int bridge_ttl,
+                           float bridge_max_speed, float bridge_person_height,
+                           float bridge_fps, float bridge_margin,
+                           float bridge_spatial_gate, int bridge_anchor,
+                           float bridge_anchor_rate,
+                           float bridge_h_lo, float bridge_h_hi,
+                           float bridge_dir_bonus,
+                           float occ_gate_cover, int occ_gap_min,
+                           float occ_expand_px, float occ_expand_cover,
+                           float bridge_app_veto) {
+        require_mutable("set_relink_params");
+        params_.set_relink_params(enabled, bank_cap, sim_thresh, cheb_lambda, spatial_gate,
+                                  max_age, bidirectional, bridge_px, bridge_at,
+                                  bridge_min_lost, bridge_ttl, bridge_max_speed,
+                                  bridge_person_height, bridge_fps, bridge_margin,
+                                  bridge_spatial_gate, bridge_anchor, bridge_anchor_rate,
+                                  bridge_h_lo, bridge_h_hi, bridge_dir_bonus, occ_gate_cover,
+                                  occ_gap_min, occ_expand_px, occ_expand_cover,
+                                  bridge_app_veto);
         // Research portable OR-tail is set via set_research_portable_or_tail (not here).
         // Occupancy ring (~72 KB): lazily allocated only when an occ gate is on.
-        if (bidirectional_ && (occ_gate_cover_ > 0.0f || occ_expand_px_ > 0.0f) &&
+        if (params_.relink.bidirectional && (params_.relink.occ_gate_cover > 0.0f || params_.relink.occ_expand_px > 0.0f) &&
             d_occ_grid_ == nullptr) {
             checkCuda(cudaMalloc(&d_occ_grid_, (size_t)OCC_RING * OCC_WORDS * sizeof(unsigned int)));
             checkCuda(cudaMalloc(&d_occ_frame_, sizeof(int)));
@@ -4020,11 +3967,11 @@ public:
         }
         // Appearance relink writes births/revives into d_relink_dbg_[0..1], and
         // bridge relink writes attempts/accepts into d_relink_dbg_[2..3].
-        if ((enabled || bidirectional_) && d_relink_dbg_ == nullptr) {
+        if ((enabled || params_.relink.bidirectional) && d_relink_dbg_ == nullptr) {
             checkCuda(cudaMalloc(&d_relink_dbg_, 12 * sizeof(int)));
             checkCuda(cudaMemset(d_relink_dbg_, 0, 12 * sizeof(int)));
         }
-        if (enabled && d_relink_feats_ != nullptr && relink_alloc_cap_ < relink_bank_cap_) {
+        if (enabled && d_relink_feats_ != nullptr && relink_alloc_cap_ < params_.relink.bank_cap) {
             cudaFree(d_relink_feats_); d_relink_feats_ = nullptr;
             cudaFree(d_relink_ids_); d_relink_ids_ = nullptr;
             cudaFree(d_relink_pos_); d_relink_pos_ = nullptr;
@@ -4039,7 +3986,7 @@ public:
             relink_alloc_cap_ = 0;
         }
         if (enabled && d_relink_feats_ == nullptr) {
-            int cap = relink_bank_cap_;
+            int cap = params_.relink.bank_cap;
             checkCuda(cudaMalloc(&d_relink_feats_, (size_t)cap * embed_dim_ * sizeof(float)));
             checkCuda(cudaMalloc(&d_relink_ids_, cap * sizeof(int)));
             checkCuda(cudaMalloc(&d_relink_pos_, cap * 5 * sizeof(float)));
@@ -4063,6 +4010,7 @@ public:
     }
     void set_research_portable_or_tail(bool enabled, const std::vector<float>& thr,
                                        bool audit_enabled) {
+        require_mutable("set_research_portable_or_tail");
         // Default-off research hook. When disabled, free thr buffer so propose
         // kernel keeps portable_thr==nullptr (bit-identical production path).
         research_portable_or_tail_audit_ = audit_enabled;
@@ -4101,10 +4049,12 @@ public:
     }
 
     void set_research_bridge_shadow(bool enabled) {
+        require_mutable("set_research_bridge_shadow");
         research_bridge_shadow_ = enabled;
     }
 
     void set_research_bridge_fidelity_audit(bool enabled, int capacity) {
+        require_mutable("set_research_bridge_fidelity_audit");
         if (!enabled) {
             research_bridge_fidelity_audit_ = false;
             if (d_bridge_fidelity_events_) cudaFree(d_bridge_fidelity_events_);
@@ -4213,6 +4163,7 @@ public:
     void set_research_h0_bridge_trace(
         bool enabled, int pair_capacity, int candidate_capacity, int claim_capacity,
         int commit_capacity) {
+        require_mutable("set_research_h0_bridge_trace");
         if (!enabled) {
             research_h0_bridge_trace_ = false;
             release_research_h0_bridge_trace();
@@ -4287,6 +4238,7 @@ public:
     }
 
     void bind_research_h0_bridge_trace_frame_device(const int* frame_ptr) {
+        require_mutable("bind_research_h0_bridge_trace_frame_device");
         if (!frame_ptr) {
             throw std::invalid_argument("H0 bridge trace frame input must be a non-null device pointer");
         }
@@ -4447,45 +4399,59 @@ public:
     void set_oao_params(float tau, float contest_thresh, float score_w, int occ_mode,
                         float crowd_radius, float height_gate, float foot_gate,
                         float ramp_frames) {
-        oao_tau_ = std::clamp(tau, 0.0f, 1.0f);
-        // contest_thresh < 0 keeps plain OAO (bit-exact); clamp the active range.
-        oao_contest_thresh_ = (contest_thresh < 0.0f) ? -1.0f : std::clamp(contest_thresh, 0.0f, 1.0f);
-        // score_w <= 0 → no score weighting (full penalty); clamp to [0,1] otherwise.
-        oao_score_w_ = std::clamp(score_w, 0.0f, 1.0f);
-        oao_occ_mode_ = (occ_mode == 1) ? 1 : 0;
-        // crowd_radius <= 0 → off (multiplier 1); otherwise radius in units of box height.
-        oao_crowd_radius_ = std::max(0.0f, crowd_radius);
-        // height_gate <= 0 → off; otherwise relative height-diff tolerance for same-depth.
-        oao_height_gate_ = std::max(0.0f, height_gate);
-        // foot_gate <= 0 → off; otherwise relative foot-line gap tolerance for same-depth.
-        oao_foot_gate_ = std::max(0.0f, foot_gate);
-        // ramp_frames <= 0 → off; otherwise frames to ramp the penalty from 0 to full.
-        oao_ramp_frames_ = std::max(0.0f, ramp_frames);
+        require_mutable("set_oao_params");
+        params_.set_oao_params(tau, contest_thresh, score_w, occ_mode, crowd_radius,
+                               height_gate, foot_gate, ramp_frames);
     }
     void set_occ_params(bool enabled, float iou_thresh, float foot_gap, int ttl, float cost_weight) {
-        occ_state_enabled_ = enabled;
-        occ_iou_thresh_ = std::clamp(iou_thresh, 0.0f, 1.0f);
-        occ_foot_gap_ = std::max(0.0f, foot_gap);
-        occ_ttl_ = std::max(1, ttl);
-        occ_cost_weight_ = std::max(0.0f, cost_weight);
+        require_mutable("set_occ_params");
+        params_.set_occ_params(enabled, iou_thresh, foot_gap, ttl, cost_weight);
     }
-    void set_multiplicative_cost_pub(bool enabled) {
-        multiplicative_cost_ = enabled;
+    void set_multiplicative_cost(bool enabled) {
+        require_mutable("set_multiplicative_cost");
+        params_.set_multiplicative_cost(enabled);
     }
-    void set_stability_cost_w_pub(float w) {
-        stability_cost_w_ = w;
+    void set_stability_cost_w(float w) {
+        require_mutable("set_stability_cost_w");
+        params_.set_stability_cost_w(w);
     }
     void set_association_energy_params(
         bool enabled, float score_cost_w, float height_cost_w) {
-        association_energy_enabled_ = enabled;
-        assoc_score_cost_w_ = std::max(0.0f, score_cost_w);
-        assoc_height_cost_w_ = std::max(0.0f, height_cost_w);
+        require_mutable("set_association_energy_params");
+        params_.set_association_energy_params(enabled, score_cost_w, height_cost_w);
     }
     void set_sinkhorn_lambda(float lambda) {
-        sinkhorn_lambda_ = std::max(1.0f, lambda);
+        require_mutable("set_sinkhorn_lambda");
+        params_.set_sinkhorn_lambda(lambda);
+    }
+    void set_hatch_params(const TrackerParams::Hatch& hatch) {
+        require_mutable("set_hatch_params");
+        params_.set_hatch_params(hatch);
+    }
+    // Diagnostic, not configuration: host I/O inside update(), never captured.
+    void set_assoc_dump_path(const std::string& path) {
+        assoc_dump_path_ = path;
+    }
+    void forbid_embeddings() {
+        embeddings_forbidden_ = true;
+    }
+    TrackerSnapshot snapshot() const {
+        TrackerSnapshot out;
+        out.max_objects = max_objs_;
+        out.embedding_dim = embed_dim_;
+        out.max_assoc = max_assoc_;
+        out.params = params_;
+        out.instrumentation.portable_or_tail = research_portable_or_tail_enabled_;
+        out.instrumentation.bridge_shadow = research_bridge_shadow_;
+        out.instrumentation.bridge_fidelity_audit = research_bridge_fidelity_audit_;
+        out.instrumentation.h0_bridge_trace = research_h0_bridge_trace_;
+        out.instrumentation.assoc_dump = !assoc_dump_path_.empty();
+        out.embeddings_forbidden = embeddings_forbidden_;
+        out.config_frozen = config_frozen_;
+        return out;
     }
     /// Read back front-ttl and partner-slot arrays to host (env-gated diagnostic; only
-    /// called when occ_state_enabled_ is true and SACCADE_OCC_LOG is set).
+    /// called when params_.occ.enabled is true and SACCADE_OCC_LOG is set).
     std::vector<int> get_occ_front_info() {
         std::vector<int> out(max_objs_ * 2);
         if (d_occ_front_ttl_) checkCuda(cudaMemcpy(out.data(), d_occ_front_ttl_, max_objs_ * sizeof(int), cudaMemcpyDeviceToHost));
@@ -4493,25 +4459,27 @@ public:
         return out;
     }
     void set_quality_params(bool enabled, float w_aspect, float w_center, float w_area) {
-        enable_quality_scaling_ = enabled;
-        q_w_aspect_ = w_aspect;
-        q_w_center_ = w_center;
-        q_w_area_ = w_area;
+        require_mutable("set_quality_params");
+        params_.set_quality_params(enabled, w_aspect, w_center, w_area);
     }
     void set_frame_size(int w, int h) {
-        frame_w_ = w;
-        frame_h_ = h;
+        require_mutable("set_frame_size");
+        params_.set_frame_size(w, h);
     }
     void set_homography(const float* h) {
-        if (h) {
-            checkCuda(cudaMemcpy(d_homography_, h, 9 * sizeof(float), cudaMemcpyHostToDevice));
+        require_mutable("set_homography");
+        params_.set_homography(h);
+        if (params_.homography) {
+            checkCuda(cudaMemcpy(d_homography_, params_.homography->data(), 9 * sizeof(float), cudaMemcpyHostToDevice));
         } else {
             checkCuda(cudaMemset(d_homography_, 0, 9 * sizeof(float)));
         }
     }
-    void set_unified_score_params(const UnifiedScoreParams& /*params*/) {
-        // Unified score params are reserved for future use in the C++ tracker.
-        // The Python layer applies them directly during semantic reranking.
+    void set_unified_score_params(const UnifiedScoreParams& params) {
+        require_mutable("set_unified_score_params");
+        // Stored for readback only: no native kernel reads these weights. The
+        // Python layer applies them directly during semantic reranking.
+        params_.set_unified_score_params(params);
     }
 
     // Rebuild h_tid_to_slot_ from host arrays.  D2H only if h_dirty_; map rebuild only if
@@ -4795,7 +4763,7 @@ public:
                 h_classes_[i],
                 h_age_[i],
                 h_hit_streak_[i],
-                h_confirm_streak_required_[i] > 0 ? h_confirm_streak_required_[i] : confirm_streak_,
+                h_confirm_streak_required_[i] > 0 ? h_confirm_streak_required_[i] : params_.core.confirm_streak,
                 h_scores_[i],
                 cx - w / 2.0f,
                 cy - h / 2.0f,
@@ -4816,25 +4784,16 @@ public:
 
 private:
     int required_confirm_streak_for_detection(float score, float mid_thresh_scale) const {
-        if (!adaptive_confirmation_) return confirm_streak_;
-        if (score >= high_thresh_) return confirm_streak_;
-        if (mid_thresh_scale > 1.05f) return confirm_streak_ + 2;
-        if (mid_thresh_scale < 0.95f) return confirm_streak_;
-        return confirm_streak_ + 1;
+        if (!params_.core.adaptive_confirmation) return params_.core.confirm_streak;
+        if (score >= params_.core.high_thresh) return params_.core.confirm_streak;
+        if (mid_thresh_scale > 1.05f) return params_.core.confirm_streak + 2;
+        if (mid_thresh_scale < 0.95f) return params_.core.confirm_streak;
+        return params_.core.confirm_streak + 1;
     }
 
     int max_objs_, embed_dim_, max_assoc_;
-    float track_thresh_ = 0.1f, high_thresh_ = 0.5f, match_thresh_ = 0.8f, mid_thresh_ = 0.40f, new_track_thresh_ = 0.40f;
-    float reid_cos_threshold_ = 0.90f, reid_iou_low_ = 0.3f, reid_iou_high_ = 0.6f, reid_weight_ = 0.4f;
-    float reid_cost_cos_w_ = 0.55f, reid_cost_iou_w_ = 0.30f, reid_cost_score_w_ = 0.15f;
-    int reid_min_candidates_ = 2;
 
     // Birth-time lost-bank ReID relink (default off → zero overhead).
-    bool relink_enabled_ = false;
-    int relink_bank_cap_ = 256;
-    float relink_sim_thresh_ = 0.6f, relink_age_alpha_ = 0.1f, relink_spatial_gate_ = 4.0f;
-    float relink_lambda_ = 2.5f;  // Chebyshev T = mu - lambda*sigma
-    int relink_max_age_ = 300;
     int relink_alloc_cap_ = 0;
     float* d_relink_feats_ = nullptr;
     int*   d_relink_ids_ = nullptr;
@@ -4851,22 +4810,6 @@ private:
 
     // Phase-4 bidirectional foot-bridge relink (Kalman-free; default off → no work).
     static constexpr int FOOT_RING_CAP = 8;
-    bool  bidirectional_        = false;
-    float bridge_px_            = 0.25f;
-    int   bridge_at_            = 4;
-    int   bridge_min_lost_      = 2;
-    int   bridge_ttl_           = 120;
-    float bridge_max_speed_     = 0.0f;
-    float bridge_person_height_ = 1.65f;
-    float bridge_fps_           = 30.0f;
-    float bridge_margin_        = 0.0f;
-    float bridge_spatial_gate_  = 0.0f;
-    int   bridge_anchor_        = 0;    // 0=center 1=foot 2=adaptive (residual-weighted)
-    float bridge_anchor_rate_   = 0.0f; // adaptive deformation gate (mean |Δh|/h̄); 0=always-on
-    float bridge_h_lo_          = 0.0f; // scale gate: min ema_lost/ema_cand ratio
-    float bridge_h_hi_          = 0.0f; // scale gate: max ratio (<=0 disables the gate)
-    float bridge_dir_bonus_     = 0.0f; // directional consistency relaxation multiplier
-    float bridge_app_veto_      = -1.0f; // appearance cosine veto floor (<=-1 off)
     // Research M-B1 portable OR-tail (default-off; thr on device only when enabled).
     bool  research_portable_or_tail_enabled_ = false;
     bool  research_portable_or_tail_audit_   = false;
@@ -4919,10 +4862,6 @@ private:
     int* d_h0_native_commit_cursor_ = nullptr;
     int* d_h0_native_commit_overflow_ = nullptr;
     int* d_h0_candidate_claim_record_index_ = nullptr;
-    float occ_gate_cover_       = 0.0f; // gap-occupancy veto: min occ_cover (0=off)
-    int   occ_gap_min_          = 30;   // occ gates apply only to gaps >= this (short-gap occ is noise)
-    float occ_expand_px_        = 0.0f; // tiered expansion: looser bridge_px when occ high (0=off)
-    float occ_expand_cover_     = 0.9f; // min occ_cover to unlock the expanded threshold
     float* d_foot_ring_     = nullptr;  // [max_objs * FOOT_RING_CAP * 3]  (cx,cy,h) chronological
     int*   d_foot_len_      = nullptr;  // [max_objs]  saturating count (cap FOOT_RING_CAP)
     float* d_ema_h_         = nullptr;  // [max_objs]  EMA box height (0 = unseeded)
@@ -4932,92 +4871,27 @@ private:
     unsigned int* d_occ_grid_  = nullptr;  // [OCC_RING * OCC_WORDS]  per-frame occupancy bitmaps
     int*   d_occ_frame_        = nullptr;  // device frame counter for the occupancy ring
 
-    bool enable_quality_scaling_ = false;
-    float q_w_aspect_ = 0.50f;
-    float q_w_center_ = 0.30f;
-    float q_w_area_ = 0.20f;
-    int frame_w_ = 1920;
-    int frame_h_ = 1080;
 
     float iou_stage1_gate_ = 0.30f;
     // 4-DOF Mahalanobis gate: χ²(4, 0.95) = 9.4877 for (cx, cy, aspect, height).
     // #7: This is the association gate (4-DOF); relink uses separate 2/4-DOF
     //      thresholds in tracker_gpu_python.cpp — do not confuse the two.
-    // #6: d² scales inversely with r_scale and gate_adapt_r_mult_
+    // #6: d² scales inversely with r_scale and params_.hatch.gate_adapt_r_mult
     //      (S = P + r_scale * adapt * R), so changing either effectively
     //      rescales this threshold. Tune them together.
     float maha_gate_ = 9.4877f;
-    int max_age_ = 30, confirm_streak_ = 3;
-    float confirm_score_thresh_ = 0.50f;
-    bool adaptive_confirmation_ = false;
-    int kalman_adapt_mode_ = 0;
-    // NSA-Kalman gating/output decouple (registry #8 revival, ablation, default off).
-    // When true, MATCHED tracks emit their associated measurement (detection box)
-    // instead of the filtered state, so a score-conditioned R (NSA) can shape
-    // association/gating without paying the filtered-output localization loss
-    // (DetA −1.44). The filter state itself is untouched (still used for prediction
-    // and the next frame's gate). false = bit-identical (emit filtered state).
-    bool output_use_measurement_ = false;
-    // Predict-through-occlusion coast window (frames) and per-frame score decay.
-    // coast_max_age_==0 ⇒ matched-only output (bit-identical to legacy).
-    int coast_max_age_ = 0;
-    float coast_score_decay_ = 1.0f;
-    float coast_occ_thresh_ = 0.0f;
-    float r_scale_ = 1.0f;
-    float gate_adapt_r_mult_ = 1.0f;
-    // Occlusion-gated velocity damping during miss-gap coasting (ablation, default off).
-    // occ_vel_damp_ scales the x,y position-mean extrapolation (velocity is preserved
-    // for clean recovery) when a track is coasting (age>=1) AND occluded last frame.
-    // 1.0 = bit-identical no-op. < 1.0 enables; 0.0 = full static hold.
-    float occ_vel_damp_ = 1.0f;
-    // occ_coeff is the (ramped) OAO occlusion confidence; a low gate keeps short-gap
-    // coasts in crowds from being suppressed by the duration ramp. Tunable via env.
-    float occ_vel_occ_thresh_ = 0.05f;
-    float vel_dir_weight_ = 0.0f;
-    float fuse_score_weight_ = 0.0f;
-    float stage2_match_thresh_ = 0.5f;
-    float birth_low_score_thresh_ = 0.0f;
-    float birth_prox_norm_thresh_ = 0.0f;
-    float oao_tau_ = 0.0f;
-    // OAO contention gate: < 0 → plain OAO (bit-exact legacy); >= 0 → apply the
-    // penalty only when the detection is also claimed by t's max-overlap partner
-    // (partner-pred IoU >= thresh). Spares uncontested side-by-side real tracks.
-    float oao_contest_thresh_ = -1.0f;
-    // OAO soft score weight: <= 0 → off (full penalty); penalty is scaled by
-    // (1 - oao_score_w * det_score), so confident detections get a reduced penalty
-    // (e.g. w=0.5 → high-score boxes keep half the penalty) without cutting it
-    // entirely, preserving the high-score re-routing benefit in dense static scenes.
-    float oao_score_w_ = -1.0f;
-    // OAO occlusion signal: 0 = max single inter-track IoU (default, bit-exact);
-    // 1 = union coverage (fraction of t covered by union of other boxes, 8x8 grid).
-    int oao_occ_mode_ = 0;
-    // OAO crowd multiplier: <= 0 → off; > 0 → scale penalty by (1 - 1/N) where N is
-    // the count of tracks (incl. self) within oao_crowd_radius * h of t. Sparse
-    // overlaps (real side-by-side) get a small N → reduced penalty; crowds → full.
-    float oao_crowd_radius_ = 0.0f;
-    // OAO same-height gate: <= 0 → off; > 0 → only partners with |h_t - h_j| <=
-    // gate * max(h) contribute to occ_coeff (same-depth occlusions only).
-    float oao_height_gate_ = 0.0f;
-    // OAO same-foot gate: <= 0 → off; > 0 → only partners with |footy_t - footy_j|
-    // <= gate * h_ref contribute (truer same-depth proxy than height).
-    float oao_foot_gate_ = 0.0f;
-    // OAO duration ramp: <= 0 → off; > 0 → penalty *= min(1, overlap_frames/ramp).
-    // Transient crossings (sparse scenes) damped; persistent crowds reach full penalty.
-    float oao_ramp_frames_ = 0.0f;
-    // Occluder-side depth mutual-exclusion (default off → bit-identical).
-    bool  occ_state_enabled_ = false;
-    float occ_iou_thresh_    = 0.45f;
-    float occ_foot_gap_      = 0.15f;  // same-height gate: flag only at similar depth
-    int   occ_ttl_           = 4;
-    float occ_cost_weight_   = 0.50f;
-    bool  multiplicative_cost_ = false;
-    float stability_cost_w_    = 0.0f;
-    float sinkhorn_lambda_     = 30.0f;  // Sinkhorn temperature (cost→prob scaling)
-    bool  association_energy_enabled_ = false;
-    float assoc_score_cost_w_ = 0.0f;
-    float assoc_height_cost_w_ = 0.0f;
-    bool enable_dda_ = false;
-    float dda_max_cost_ = 0.12f;
+    // Every runtime parameter the update path reads (#465 PR-4b). The setters
+    // write it through TrackerParams; kernels are launched from it; snapshot()
+    // copies it. No other copy exists.
+    TrackerParams params_;
+    // Set when update()/update_into() runs inside a CUDA stream capture: the
+    // captured graph baked the kernel arguments, so later writes would be
+    // silently ignored on replay. require_mutable() turns them into errors.
+    bool config_frozen_ = false;
+    // One-way: update with a non-null embeddings pointer throws (shipping).
+    bool embeddings_forbidden_ = false;
+    // Diagnostic association dump target (legacy SACCADE_ASSOC_DUMP); empty = off.
+    std::string assoc_dump_path_;
     float *d_states_, *d_covs_, *d_scores_, *d_features_;
     float* d_occ_coeff_ = nullptr;
     int* d_occ_front_ttl_ = nullptr;  // [max_objs] latched "is confident occluder/front" counter
@@ -5177,11 +5051,11 @@ void GPUByteTracker::set_occ_params(bool enabled, float iou_thresh, float foot_g
 }
 
 void GPUByteTracker::set_multiplicative_cost(bool enabled) {
-    pimpl_->set_multiplicative_cost_pub(enabled);
+    pimpl_->set_multiplicative_cost(enabled);
 }
 
 void GPUByteTracker::set_stability_cost_w(float w) {
-    pimpl_->set_stability_cost_w_pub(w);
+    pimpl_->set_stability_cost_w(w);
 }
 
 void GPUByteTracker::set_association_energy_params(
@@ -5207,6 +5081,10 @@ void GPUByteTracker::set_frame_size(int w, int h) {
 
 void GPUByteTracker::set_homography(const float* h) { pimpl_->set_homography(h); }
 void GPUByteTracker::set_unified_score_params(const UnifiedScoreParams& params) { pimpl_->set_unified_score_params(params); }
+void GPUByteTracker::set_hatch_params(const TrackerParams::Hatch& hatch) { pimpl_->set_hatch_params(hatch); }
+void GPUByteTracker::set_assoc_dump_path(const std::string& path) { pimpl_->set_assoc_dump_path(path); }
+TrackerSnapshot GPUByteTracker::snapshot() const { return pimpl_->snapshot(); }
+void GPUByteTracker::forbid_embeddings() { pimpl_->forbid_embeddings(); }
 void GPUByteTracker::update_reference_features(int* track_ids, float* features, int num, cudaStream_t stream) { pimpl_->update_reference_features_impl(track_ids, features, num, stream); }
 void GPUByteTracker::set_clean_embedding_flags(int* track_ids, bool* flags, int n, cudaStream_t stream) { pimpl_->set_clean_embedding_flags(track_ids, flags, n, stream); }
 void GPUByteTracker::set_clean_embedding_flags_host(int* h_tids, bool* h_flags, int n, cudaStream_t stream) { pimpl_->set_clean_embedding_flags_host(h_tids, h_flags, n, stream); }
@@ -6000,6 +5878,7 @@ void filter_detections_cuda(
     float person_max_aspect,
     float person_min_area_ratio,
     float person_max_area_ratio,
+    FilterCompactionMode compaction,
     cudaStream_t stream,
     int* d_keep_flags,
     int* d_prefix,
@@ -6027,12 +5906,12 @@ void filter_detections_cuda(
         person_max_area_ratio,
     };
     cudaGetLastError();
-    if (env_flag_enabled("SACCADE_DETERMINISTIC_FILTER_COMPACTION", false)) {
+    if (compaction == FilterCompactionMode::kSerialStable) {
         filter_detections_stable_kernel<<<1, 1, 0, stream>>>(
             boxes_ptr, scores_ptr, classes_ptr, num_dets, keep_indices_ptr,
             suspect_flags_ptr, quality_scores_ptr, out_count_ptr, params
         );
-    } else if (env_flag_enabled("SACCADE_ATOMIC_FILTER_BASELINE", false)) {
+    } else if (compaction == FilterCompactionMode::kAtomicBaseline) {
         const int thr = 256;
         const int blk = (num_dets + thr - 1) / thr;
         filter_detections_kernel<<<blk, thr, 0, stream>>>(

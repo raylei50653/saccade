@@ -1,7 +1,10 @@
 #pragma once
 
 #include "saccade/common.hpp"
+#include "tracking/perception_params.hpp"
+#include "tracking/tracker_params.hpp"
 #include <cstdint>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -325,14 +328,6 @@ struct H0BridgeDecisionTraceCapture {
     int identity_uid_wrap_events = 0;
 };
 
-struct UnifiedScoreParams {
-    float w_sim_base = 0.0f;
-    float w_iou_base = 0.0f;
-    float w_maha_base = 0.0f;
-    float shift_ambiguity = 0.0f;
-    float shift_lost_age = 0.0f;
-};
-
 struct TrackerGPUBuffers {
     uintptr_t states;     // float*,  device pointer [max_objs * 8]
     uintptr_t covs;       // float*,  device pointer [max_objs * 64]
@@ -531,6 +526,42 @@ public:
     void set_homography(const float* h);
 
     void set_unified_score_params(const UnifiedScoreParams& params);
+
+    /**
+     * @brief Association/motion/output knobs formerly read from SACCADE_* env
+     * (see TrackerParams::Hatch). The tracker never reads the environment: the
+     * legacy front-ends pass tracking/legacy_env.hpp's resolution here, the
+     * shipping runtime passes the resolved JSON's native_env values.
+     */
+    void set_hatch_params(const TrackerParams::Hatch& hatch);
+
+    /**
+     * @brief Diagnostic association/candidate CSV dump (legacy
+     * SACCADE_ASSOC_DUMP). Empty path = off. Host I/O inside update(); not
+     * compatible with graph capture.
+     */
+    void set_assoc_dump_path(const std::string& path);
+
+    /**
+     * @brief One-way: from now on update()/update_into() with a non-null
+     * embeddings pointer throws std::invalid_argument. The shipping builder
+     * calls this (the shipping runtime has no ReID), which makes the
+     * embedding-association branch, and every parameter only it reads,
+     * unreachable on shipping trackers. The legacy front-ends never call it.
+     */
+    void forbid_embeddings();
+
+    /**
+     * @brief Copy of the parameters the update path actually reads, the
+     * constructor dimensions, armed research hooks and the freeze flag.
+     *
+     * Configuration freezes when update()/update_into() first runs inside a
+     * CUDA stream capture; from then on every set_* that writes TrackerParams
+     * or arms a research hook throws std::logic_error, because the captured
+     * graph keeps replaying the kernel arguments it baked.
+     */
+    TrackerSnapshot snapshot() const;
+
     void update_reference_features(int* track_ids, float* features_ptr, int num, cudaStream_t stream);
     void set_clean_embedding_flags(int* track_ids, bool* flags, int n, cudaStream_t stream);
     void set_clean_embedding_flags_host(int* h_tids, bool* h_flags, int n, cudaStream_t stream);
@@ -648,6 +679,7 @@ void SACCADE_TRACKING_API filter_detections_cuda(
     float person_max_aspect,
     float person_min_area_ratio,
     float person_max_area_ratio,
+    FilterCompactionMode compaction,
     cudaStream_t stream,
     int* d_keep_flags = nullptr,
     int* d_prefix = nullptr,

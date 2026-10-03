@@ -130,6 +130,9 @@ def test_prose_is_non_execution_wherever_it_lives() -> None:
         ("models/yolo/yolo26m.pt", "runtime_asset"),
         ("third_party/plugin.so", "runtime_asset"),
         ("src/saccade/perception/reid/embedder.py", "decision_relevant"),
+        ("shipping/src/native_build.cpp", "decision_relevant"),
+        ("shipping/CMakeLists.txt", "decision_relevant"),
+        ("configs/shipping/mamba_whole_graph.resolved.json", "decision_relevant"),
         ("vendor/unknown.bin", "unclassified"),
     ],
 )

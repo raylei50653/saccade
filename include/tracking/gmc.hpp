@@ -1,6 +1,7 @@
 #pragma once
 
 #include "saccade/common.hpp"
+#include "tracking/perception_params.hpp"
 #include <vector>
 #include <opencv2/opencv.hpp>
 #include <cuda_runtime.h>
@@ -121,6 +122,14 @@ public:
     void reset_profile_stats();
     ProfileStats get_profile_stats() const;
 
+    // Phase-correlation accept threshold (PCR score below it scales the
+    // estimate down). Default 5.0 = legacy SACCADE_GMC_PCR_THRESH unset; the
+    // legacy front-ends resolve that variable through tracking/legacy_env.hpp.
+    void set_pcr_thresh(float pcr_thresh);
+
+    // Read-only view of the configuration this GMC runs with.
+    GmcSnapshot snapshot() const;
+
 private:
     int downscale_;
     int max_corners_;
@@ -128,6 +137,7 @@ private:
     float min_distance_;
     int min_inliers_;
     float ransac_threshold_;
+    float pcr_thresh_ = 5.0f;
 
     cv::Mat prev_gray_;
     std::vector<cv::Point2f> prev_pts_;

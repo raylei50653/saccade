@@ -6,6 +6,7 @@
 #include "tracking/crop_pool.hpp"
 #include "tracking/crop_ring_store.hpp"
 #include "tracking/reid_crop_store.hpp"
+#include "tracking/perception_params.hpp"
 #include "tracking/reid_queue.hpp"
 #include <cuda_runtime.h>
 #include <cstdint>
@@ -73,32 +74,8 @@ public:
         unsigned long long sum_num_private_priors = 0;
     };
 
-    struct Config {
-        float score_threshold       = 0.05f;
-        int   person_class          = 0;
-        bool  person_only           = true;
-        float nms_threshold         = 0.50f;
-        bool  person_geometry_prior = true;
-        bool  geometry_suspect_support = true;
-        float geometry_suspect_support_score = 0.25f;
-        float person_min_height_ratio = 0.018f;
-        float person_min_aspect       = 1.0f;
-        float person_max_aspect       = 5.5f;
-        float person_min_area_ratio   = 0.00006f;
-        float person_max_area_ratio   = 0.0f;
-        int   max_detections          = 2048;
-        bool  private_continuation_enabled = false;
-        float private_candidate_nms_iou = 0.70f;
-        float private_min_score = 0.25f;
-        int   private_max_candidates = 0;
-        float private_prior_iou_threshold = 0.0f;
-        float private_prior_center_threshold = 0.0f;
-        bool  private_low_stage_only = false;
-        float private_track_thresh = 0.05f;
-        float private_mid_thresh = 0.10f;
-        float private_new_track_thresh = 0.35f;
-        float private_score_eps = 1e-4f;
-    };
+    // Fields and defaults: tracking/perception_params.hpp.
+    using Config = PerceptionPipelineConfig;
 
     PerceptionPipeline(FeatureExtractor* reid, Cropper* cropper, Config cfg);
     ~PerceptionPipeline();
@@ -618,10 +595,18 @@ public:
     void reset_postprocess_profile_stats();
     PostprocessProfileStats get_postprocess_profile_stats() const;
 
-    // Default-off private-continuation counters (SACCADE_ASSOC_STATS=1).
-    // Extra accumulate kernel only while enabled; production graph unchanged.
+    // Default-off private-continuation counters (legacy SACCADE_ASSOC_STATS=1,
+    // resolved by tracking/legacy_env.hpp). Extra accumulate kernel only while
+    // enabled; production graph unchanged.
     void set_private_workload_stats_enabled(bool enabled);
     PrivateWorkloadStats drain_private_workload_stats();
+
+    // Detection-filter compaction kernel (legacy env hatches, see
+    // perception_params.hpp). Default kStableScan.
+    void set_filter_compaction_mode(FilterCompactionMode mode);
+
+    // Read-only view of the configuration this pipeline runs with.
+    PerceptionPipelineSnapshot snapshot() const;
 
 private:
     FeatureExtractor* reid_;
@@ -692,6 +677,7 @@ private:
     PostprocessProfileStats last_postprocess_profile_stats_{};
     bool private_workload_stats_enabled_ = false;
     unsigned long long* d_private_workload_stats_ = nullptr;
+    FilterCompactionMode filter_compaction_mode_ = FilterCompactionMode::kStableScan;
 };
 
 } // namespace saccade

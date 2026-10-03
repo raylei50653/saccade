@@ -9,6 +9,8 @@
 #include <fstream>
 #include <iostream>
 #include <limits>
+#include <memory>
+#include <optional>
 #include <unordered_map>
 #include <unordered_set>
 #include <numeric>
@@ -19,6 +21,7 @@
 #include "tracking/box_ops.hpp"
 #include "tracking/tracker_gpu.hpp"
 #include "tracking/gmc.hpp"
+#include "tracking/legacy_env.hpp"
 #include "tracking/cheb_gr_kreciprocal.hpp"
 #include "tracking/dynamic_reid_controller.hpp"
 #include <Eigen/Dense>
@@ -3609,6 +3612,33 @@ private:
 
 } // namespace
 
+namespace {
+
+// One flat dict per snapshot; keys are the snapshot's visit() keys
+// (`<setter>.<arg>`, `constructor.<arg>`, `native_env.<SACCADE_*>`, ...).
+struct SnapshotToDict {
+    py::dict& out;
+    template <class K, class T> void operator()(const K& key, const T& value) const {
+        out[py::str(std::string(key))] = py::cast(value);
+    }
+    template <class K>
+    void operator()(const K& key, const std::optional<std::array<float, 9>>& h) const {
+        out[py::str(std::string(key))] =
+            h ? py::cast(std::vector<float>(h->begin(), h->end())) : py::none();
+    }
+    template <class K> void operator()(const K& key, FilterCompactionMode mode) const {
+        out[py::str(std::string(key))] = py::str(to_string(mode));
+    }
+};
+
+template <class Snapshot> py::dict snapshot_dict(const Snapshot& snapshot) {
+    py::dict out;
+    snapshot.visit(SnapshotToDict{out});
+    return out;
+}
+
+}  // namespace
+
 PYBIND11_MODULE(saccade_tracking_ext, m) {
     m.doc() = "Saccade GPU Tracker (Python Bindings)";
 
@@ -3655,11 +3685,33 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
         .def_readwrite("shift_lost_age", &UnifiedScoreParams::shift_lost_age);
 
     py::class_<GPUByteTracker>(m, "GPUByteTracker")
-        .def(py::init<int, int, int>(),
+        // Legacy front-end: the SACCADE_* hatches are resolved here
+        // (tracking/legacy_env.hpp), never inside the tracker.
+        .def(py::init([](int max_objects, int embedding_dim, int max_assoc) {
+                 auto tracker = std::make_unique<GPUByteTracker>(max_objects, embedding_dim, max_assoc);
+                 legacy_env::apply(*tracker);
+                 return tracker;
+             }),
              py::arg("max_objects") = 2048,
              py::arg("embedding_dim") = 768,
              py::arg("max_assoc") = 1024)
-        .def("set_params", &GPUByteTracker::set_params,
+        .def("set_params",
+             [](GPUByteTracker& self, float track_thresh, float high_thresh, float match_thresh,
+                int track_buffer, float mid_thresh, int confirm_streak,
+                float confirm_score_thresh, bool adaptive_confirmation,
+                float new_track_thresh, int kalman_adapt_mode, float r_scale,
+                float vel_dir_weight, float fuse_score_weight, float stage2_match_thresh,
+                float birth_low_score_thresh, float birth_prox_norm_thresh) {
+                 // Legacy SACCADE_KALMAN_ADAPT_MODE overrides the argument,
+                 // read on every call as before PR-4b.
+                 self.set_params(track_thresh, high_thresh, match_thresh, track_buffer,
+                                 mid_thresh, confirm_streak, confirm_score_thresh,
+                                 adaptive_confirmation, new_track_thresh,
+                                 legacy_env::kalman_adapt_mode_override().value_or(kalman_adapt_mode),
+                                 r_scale, vel_dir_weight, fuse_score_weight,
+                                 stage2_match_thresh, birth_low_score_thresh,
+                                 birth_prox_norm_thresh);
+             },
              py::arg("track_thresh"),
              py::arg("high_thresh"),
              py::arg("match_thresh"),
@@ -4058,6 +4110,11 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
             self.set_unified_score_params(p);
         }, py::arg("w_sim_base"), py::arg("w_iou_base"), py::arg("w_maha_base"), py::arg("shift_ambiguity"), py::arg("shift_lost_age"))
         .def("set_unified_score_params", &GPUByteTracker::set_unified_score_params, py::arg("params"))
+        .def("snapshot", [](const GPUByteTracker& self) { return snapshot_dict(self.snapshot()); },
+             "Read-only copy of every parameter the update path reads (flat dict keyed "
+             "`<setter>.<arg>` / `native_env.<SACCADE_*>`), the constructor dimensions, "
+             "armed research hooks and `config_frozen` (set by the first update/update_into "
+             "inside a CUDA stream capture; later set_* calls raise).")
         .def("update_reference_features", [](GPUByteTracker& self, uintptr_t ids_ptr, uintptr_t features_ptr, int num, uintptr_t stream_ptr) {
             self.update_reference_features(
                 reinterpret_cast<int*>(ids_ptr),
@@ -4476,7 +4533,14 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
         .def("get_priorities", &saccade::DynamicReIDController::get_priorities);
 
     py::class_<GMC>(m, "GMC")
-        .def(py::init<int, int, float, float, int, float>(),
+        // Legacy front-end: SACCADE_GMC_PCR_THRESH is resolved here.
+        .def(py::init([](int downscale, int max_corners, float quality_level,
+                         float min_distance, int min_inliers, float ransac_threshold) {
+                 auto gmc = std::make_unique<GMC>(downscale, max_corners, quality_level,
+                                                  min_distance, min_inliers, ransac_threshold);
+                 legacy_env::apply(*gmc);
+                 return gmc;
+             }),
              py::arg("downscale") = 8,
              py::arg("max_corners") = 100,
              py::arg("quality_level") = 0.01f,
@@ -4529,6 +4593,8 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
             return py::cast(warp);
         }, py::arg("frame"), py::arg("downscale") = -1)
         .def("set_profiling_enabled", &GMC::set_profiling_enabled, py::arg("enabled"))
+        .def("snapshot", [](const GMC& self) { return snapshot_dict(self.snapshot()); },
+             "Read-only copy of this GMC's configuration (flat dict).")
         .def("reset_profile_stats", &GMC::reset_profile_stats)
         .def("get_profile_stats",
             [](const GMC& self) {
@@ -4702,6 +4768,8 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
                 person_max_aspect,
                 person_min_area_ratio,
                 person_max_area_ratio,
+                // Legacy hatch, read per call as before PR-4b.
+                legacy_env::filter_compaction_mode(),
                 reinterpret_cast<cudaStream_t>(stream_ptr)
             );
         },
@@ -4898,12 +4966,16 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
         .def_readwrite("private_score_eps",         &PerceptionPipeline::Config::private_score_eps);
 
     py::class_<PerceptionPipeline>(m, "PerceptionPipeline")
+        // Legacy front-end: the filter-compaction and SACCADE_ASSOC_STATS
+        // hatches are resolved here.
         .def(py::init([](uintptr_t reid_ptr, uintptr_t cropper_ptr,
                          const PerceptionPipeline::Config& cfg) {
-            return new PerceptionPipeline(
+            auto* pipeline = new PerceptionPipeline(
                 reinterpret_cast<FeatureExtractor*>(reid_ptr),
                 reinterpret_cast<Cropper*>(cropper_ptr),
                 cfg);
+            legacy_env::apply(*pipeline);
+            return pipeline;
         }), py::arg("reid_ptr"), py::arg("cropper_ptr"), py::arg("config"))
         .def("enable_crop_ring", &PerceptionPipeline::enable_crop_ring,
              py::arg("capacity"), py::arg("depth"),
@@ -5526,6 +5598,8 @@ PYBIND11_MODULE(saccade_tracking_ext, m) {
                 return out;
             })
         .def("set_postprocess_profiling_enabled", &PerceptionPipeline::set_postprocess_profiling_enabled, py::arg("enabled"))
+        .def("snapshot", [](const PerceptionPipeline& self) { return snapshot_dict(self.snapshot()); },
+             "Read-only copy of this pipeline's configuration (flat dict).")
         .def("reset_postprocess_profile_stats", &PerceptionPipeline::reset_postprocess_profile_stats)
         .def("get_postprocess_profile_stats",
             [](const PerceptionPipeline& self) {

@@ -24,6 +24,7 @@
 | `test_h0_r5_extension_load_vector_parity.py` | system | diagnostic | active | H0-R5 diagnostic: qualification vs authoritative extension-load vector parity. |
 | `test_h0_runtime_confinement.py` | system | contract | active | Kernel-level runtime input confinement and native loader admissions. |
 | `test_headline_bridge_decision_trace.py` | system | contract | active | Outcome-blind contracts for H0's full bridge-decision trace packet. |
+| `test_native_params_authority.py` | tracking | contract | active | GPUByteTracker/GMC/pipeline parameters through the legacy pybind front-end (#465 PR-4b). |
 | `test_reorder.py` | tracking | behavior | active | Unit tests for the tracker reordering buffer (perception.tracking.reorder). |
 | `test_runtime_bridge_decision_path.py` | system | regression | active | P0's terminal must be derived from the *kind* of evidence found, not named ahead. |
 | `test_s0_safe_domain_runtime_transfer.py` | system | contract | active | Contracts for the sealed S0 Amendment 1 terminal runner. |

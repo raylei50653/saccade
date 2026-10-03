@@ -18,7 +18,8 @@ extern "C" void launch_phase_correlation(
     int w, int h, float* dx, float* dy,
     void* d_tmp_complex_a, void* d_tmp_complex_b, void* d_tmp_float,
     float* d_peak_x, float* d_peak_y, float* d_peak_val, float* d_pcr_score,
-    cufftHandle plan_r2c, cufftHandle plan_c2r, cudaStream_t stream);
+    cufftHandle plan_r2c, cufftHandle plan_c2r, cudaStream_t stream,
+    float pcr_thresh);
 
 extern "C" void launch_phase_correlation_into_warp(
     const float* prev_gray, const float* curr_gray,
@@ -26,7 +27,7 @@ extern "C" void launch_phase_correlation_into_warp(
     void* d_tmp_complex_a, void* d_tmp_complex_b, void* d_tmp_float,
     float* d_peak_x, float* d_peak_y, float* d_peak_val, float* d_pcr_score,
     cufftHandle plan_r2c, cufftHandle plan_c2r, cudaStream_t stream,
-    float downscale);
+    float downscale, float pcr_thresh);
 
 // Sub-step launchers for per-stage profiling
 extern "C" void launch_fft_pair(
@@ -45,7 +46,7 @@ extern "C" void launch_ifft_step(
 extern "C" void launch_peak_and_warp(
     const float* d_float, int w, int h,
     float* d_peak_x, float* d_peak_y, float* d_peak_val, float* d_pcr_score,
-    float downscale, float* out_warp, cudaStream_t stream);
+    float downscale, float* out_warp, cudaStream_t stream, float pcr_thresh);
 
 void launch_identity_warp(float* out_warp, cudaStream_t stream);
 
@@ -110,6 +111,23 @@ void GMC::reset() {
 
 void GMC::set_profiling_enabled(bool enabled) {
     profiling_enabled_ = enabled;
+}
+
+void GMC::set_pcr_thresh(float pcr_thresh) {
+    pcr_thresh_ = pcr_thresh;
+}
+
+GmcSnapshot GMC::snapshot() const {
+    GmcSnapshot out;
+    out.downscale = downscale_;
+    out.max_corners = max_corners_;
+    out.quality_level = quality_level_;
+    out.min_distance = min_distance_;
+    out.min_inliers = min_inliers_;
+    out.ransac_threshold = ransac_threshold_;
+    out.pcr_thresh = pcr_thresh_;
+    out.profiling_enabled = profiling_enabled_;
+    return out;
 }
 
 void GMC::reset_profile_stats() {
@@ -224,7 +242,7 @@ std::vector<float> GMC::estimate(const float* frame_gpu_ptr, int width, int heig
             dst_w, dst_h, &dx, &dy,
             d_tmp_complex_a_, d_tmp_complex_b_, d_tmp_float_,
             d_peak_x_, d_peak_y_, d_peak_val_, d_pcr_score_,
-            plan_r2c_, plan_c2r_, gmc_stream_
+            plan_r2c_, plan_c2r_, gmc_stream_, pcr_thresh_
         );
 
         // Update previous frame regardless of PCR outcome
@@ -362,7 +380,7 @@ void GMC::estimate_into(
             launch_peak_and_warp(
                 (const float*)d_tmp_float_, dst_w, dst_h,
                 d_peak_x_, d_peak_y_, d_peak_val_, d_pcr_score_,
-                static_cast<float>(downscale_), d_out_warp, gmc_stream_);
+                static_cast<float>(downscale_), d_out_warp, gmc_stream_, pcr_thresh_);
         });
         last_profile_stats_.phase_corr_ms =
             last_profile_stats_.fft_ms
@@ -375,7 +393,7 @@ void GMC::estimate_into(
             dst_w, dst_h, d_out_warp,
             d_tmp_complex_a_, d_tmp_complex_b_, d_tmp_float_,
             d_peak_x_, d_peak_y_, d_peak_val_, d_pcr_score_,
-            plan_r2c_, plan_c2r_, gmc_stream_, static_cast<float>(downscale_));
+            plan_r2c_, plan_c2r_, gmc_stream_, static_cast<float>(downscale_), pcr_thresh_);
     }
 
     measure_gpu_stage(last_profile_stats_.handoff_ms, [&] {
@@ -512,7 +530,7 @@ void GMC::estimate_into_direct(
         dst_w, dst_h, d_out_warp,
         d_tmp_complex_a_, d_tmp_complex_b_, d_tmp_float_,
         d_peak_x_, d_peak_y_, d_peak_val_, d_pcr_score_,
-        plan_r2c_, plan_c2r_, stream, static_cast<float>(downscale_));
+        plan_r2c_, plan_c2r_, stream, static_cast<float>(downscale_), pcr_thresh_);
     cudaMemcpyAsync(d_prev_gray_, d_gray_small_, needed,
                     cudaMemcpyDeviceToDevice, stream);
 }

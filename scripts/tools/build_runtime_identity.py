@@ -112,9 +112,16 @@ def tracked_files_for_class(path_class: partition.PathClass) -> tuple[str, ...]:
         sorted(
             path
             for path in tracked
-            if partition.classify(path) == path_class
-            and not path.endswith((".md", ".rst", ".txt"))
+            if partition.classify(path) == path_class and not _is_prose(path)
         )
+    )
+
+
+def _is_prose(path: str) -> bool:
+    # A CMakeLists.txt is a build recipe, not prose: the shipping/ build
+    # (#465 PR-4b) and src/tracking/ (fpn_reid extension) carry their own.
+    return (
+        path.endswith((".md", ".rst", ".txt")) and Path(path).name != "CMakeLists.txt"
     )
 
 

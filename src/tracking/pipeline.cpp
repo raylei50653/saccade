@@ -1,5 +1,4 @@
 #include "tracking/pipeline.hpp"
-#include "saccade/env_flag.hpp"
 #include "tracking/tracker_gpu.hpp"
 #include "tracking/private_workload_stats.hpp"
 #include "tracking/copy_pad.cuh"
@@ -38,9 +37,6 @@ PerceptionPipeline::PerceptionPipeline(FeatureExtractor* reid, Cropper* cropper,
     : reid_(reid), cropper_(cropper), cfg_(cfg) {
     if (cfg_.max_detections > 0)
         ensure_scratch(cfg_.max_detections, nullptr);
-    if (env_diagnostic_on("SACCADE_ASSOC_STATS")) {
-        set_private_workload_stats_enabled(true);
-    }
 }
 
 PerceptionPipeline::~PerceptionPipeline() {
@@ -257,6 +253,7 @@ void PerceptionPipeline::process_detections_into(
             cfg_.person_min_height_ratio,
             cfg_.person_min_aspect, cfg_.person_max_aspect,
             cfg_.person_min_area_ratio, cfg_.person_max_area_ratio,
+            filter_compaction_mode_,
             stream,
             d_filter_keep_flags_, d_filter_prefix_, d_filter_suspect_tmp_,
             d_filter_scan_tmp_, filter_scan_tmp_bytes_);
@@ -614,6 +611,7 @@ void PerceptionPipeline::process_detections_main_nms(
             cfg_.person_min_height_ratio,
             cfg_.person_min_aspect, cfg_.person_max_aspect,
             cfg_.person_min_area_ratio, cfg_.person_max_area_ratio,
+            filter_compaction_mode_,
             stream,
             d_filter_keep_flags_, d_filter_prefix_, d_filter_suspect_tmp_,
             d_filter_scan_tmp_, filter_scan_tmp_bytes_);
@@ -1058,6 +1056,7 @@ void PerceptionPipeline::process_detections_graph(
         cfg_.person_min_height_ratio,
         cfg_.person_min_aspect, cfg_.person_max_aspect,
         cfg_.person_min_area_ratio, cfg_.person_max_area_ratio,
+        filter_compaction_mode_,
         stream,
         d_filter_keep_flags_, d_filter_prefix_, d_filter_suspect_tmp_,
         d_filter_scan_tmp_, filter_scan_tmp_bytes_);
@@ -1143,6 +1142,7 @@ void PerceptionPipeline::process_detections_main_nms_graph(
         cfg_.person_min_height_ratio,
         cfg_.person_min_aspect, cfg_.person_max_aspect,
         cfg_.person_min_area_ratio, cfg_.person_max_area_ratio,
+        filter_compaction_mode_,
         stream,
         d_filter_keep_flags_, d_filter_prefix_, d_filter_suspect_tmp_,
         d_filter_scan_tmp_, filter_scan_tmp_bytes_);
@@ -1217,6 +1217,7 @@ void PerceptionPipeline::process_detections_main_nms_graph_nocopyback(
         cfg_.person_min_height_ratio,
         cfg_.person_min_aspect, cfg_.person_max_aspect,
         cfg_.person_min_area_ratio, cfg_.person_max_area_ratio,
+        filter_compaction_mode_,
         stream,
         d_filter_keep_flags_, d_filter_prefix_, d_filter_suspect_tmp_,
         d_filter_scan_tmp_, filter_scan_tmp_bytes_);
@@ -1623,6 +1624,21 @@ PerceptionPipeline::ReIDProfileStats PerceptionPipeline::get_reid_profile_stats(
 
 void PerceptionPipeline::set_postprocess_profiling_enabled(bool enabled) {
     postprocess_profiling_enabled_ = enabled;
+}
+
+void PerceptionPipeline::set_filter_compaction_mode(FilterCompactionMode mode) {
+    filter_compaction_mode_ = mode;
+}
+
+PerceptionPipelineSnapshot PerceptionPipeline::snapshot() const {
+    PerceptionPipelineSnapshot out;
+    out.reid_ptr = reinterpret_cast<std::uintptr_t>(reid_);
+    out.cropper_ptr = reinterpret_cast<std::uintptr_t>(cropper_);
+    out.config = cfg_;
+    out.postprocess_profiling_enabled = postprocess_profiling_enabled_;
+    out.filter_compaction = filter_compaction_mode_;
+    out.private_workload_stats_enabled = private_workload_stats_enabled_;
+    return out;
 }
 
 void PerceptionPipeline::reset_postprocess_profile_stats() {

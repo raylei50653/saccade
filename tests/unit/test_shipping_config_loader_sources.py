@@ -1,13 +1,20 @@
-"""Source-level guards for the native shipping config loader (#465 PR-4a).
+"""Source-level guards for the native shipping config (#465 PR-4a, PR-4b).
 
 The loader's behaviour is pinned by ``tests/native/test_resolved_config.cpp``
-(CI job ``shipping-config-loader``). These checks run in the ordinary pytest
-job and pin two properties that hold by construction:
+and the JSON -> native mapping/readback by
+``tests/native/test_shipping_native_config.cpp`` (CI job
+``shipping-config-loader``) and ``test_shipping_native_build.cpp`` (GPU). These
+checks run in the ordinary pytest job and pin properties that hold by
+construction:
 
 * the compiled ``host_params.cfg`` field list is fresh against the committed
   resolved JSON (so a re-export cannot silently diverge from the native schema);
 * nothing under ``shipping/`` reads the process environment, so env cannot
-  change a load result.
+  change a load result;
+* ``shipping/`` reaches native code only through the CUDA-free parameter
+  headers, except the GPU builder, and never through the legacy env resolver;
+* the native tracker, GMC and pipeline read no ``SACCADE_*`` variable: only the
+  legacy front-ends (``legacy_env.cpp``, the pybind binding) do.
 """
 
 # scope: system
@@ -87,19 +94,74 @@ def test_shipping_sources_never_read_the_environment() -> None:
     assert offenders == []
 
 
-def test_shipping_sources_include_only_std_and_own_headers() -> None:
-    """PR-4a does not touch native tracker/GMC/pipeline code or call setters."""
+# Native headers shipping/ may include. The CUDA-free mapping sees only the
+# parameter stores; the GPU builder additionally sees the objects it builds.
+_CUDA_FREE_NATIVE = {"tracking/tracker_params.hpp", "tracking/perception_params.hpp"}
+_GPU_BUILDER = {"native_build.cpp"}
+_GPU_OBJECTS = {"tracking/tracker_gpu.hpp", "tracking/gmc.hpp", "tracking/pipeline.hpp"}
+
+
+def test_shipping_sources_include_only_admitted_headers() -> None:
     include = re.compile(r'^\s*#\s*include\s+([<"])([^>"]+)[>"]')
     offenders = []
     for p in sorted(SHIPPING.rglob("*")):
         if p.suffix not in {".cpp", ".hpp", ".inc", ".h"}:
             continue
+        admitted = _CUDA_FREE_NATIVE | (
+            _GPU_OBJECTS if p.name in _GPU_BUILDER else set()
+        )
         for line in p.read_text().splitlines():
             m = include.match(line)
             if (
                 m
                 and m.group(1) == '"'
                 and not m.group(2).startswith("saccade_shipping/")
+                and m.group(2) not in admitted
             ):
                 offenders.append(f"{p.relative_to(REPO)}: {m.group(2)}")
     assert offenders == []
+
+
+def test_native_env_reads_are_confined_to_legacy_front_ends() -> None:
+    """PR-4b: env -> explicit parameter happens only in the legacy front-ends.
+
+    ``legacy_env.cpp`` resolves every hatch the tracker/GMC/pipeline used to
+    read; the pybind binding keeps its own handover-debug read (a non-shipping
+    object). Any other native ``getenv`` or env helper is a regression.
+    """
+    native = sorted(
+        p
+        for root in ("src", "include")
+        for p in (REPO / root).rglob("*")
+        if p.suffix in {".cu", ".cuh", ".cpp", ".cc", ".hpp", ".h"}
+    )
+    reader = re.compile(
+        r"\b(getenv|secure_getenv|env_flag_enabled|env_float_value|env_diagnostic_on)\s*\("
+    )
+    allowed = {
+        "src/tracking/legacy_env.cpp",
+        "src/tracking/tracker_gpu_python.cpp",
+        "include/saccade/env_flag.hpp",  # the helper legacy_env.cpp uses
+    }
+    readers = {
+        p.relative_to(REPO).as_posix()
+        for p in native
+        if any(
+            reader.search(line.split("//", 1)[0]) for line in p.read_text().splitlines()
+        )
+    }
+    assert readers - allowed == set()
+    binding = (REPO / "src/tracking/tracker_gpu_python.cpp").read_text()
+    assert re.findall(r'getenv\("(SACCADE_[A-Z0-9_]+)"\)', binding) == [
+        "SACCADE_HO_DEBUG_LEVEL"
+    ]
+    users = {
+        p.relative_to(REPO).as_posix()
+        for p in native
+        if '#include "tracking/legacy_env.hpp"' in p.read_text()
+    }
+    assert users == {
+        "src/tracking/legacy_env.cpp",
+        "src/tracking/seq_runner.cpp",
+        "src/tracking/tracker_gpu_python.cpp",
+    }

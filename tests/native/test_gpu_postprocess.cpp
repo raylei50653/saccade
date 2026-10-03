@@ -123,6 +123,7 @@ void test_filter_detections_cuda() {
         5.5f,
         0.00006f,
         0.0f,
+        saccade::FilterCompactionMode::kStableScan,
         nullptr
     );
     check_cuda(cudaDeviceSynchronize(), "filter_detections_cuda sync");

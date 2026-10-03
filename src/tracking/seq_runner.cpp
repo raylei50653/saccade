@@ -1,4 +1,5 @@
 #include "tracking/seq_runner.hpp"
+#include "tracking/legacy_env.hpp"
 #include "tracking/quality_filter.cuh"
 #include <opencv2/opencv.hpp>
 #include <cuda_runtime.h>
@@ -48,6 +49,7 @@ SequenceRunner::SequenceRunner(BaseDetector*                     detect_detector
     }
 
     pipeline_ = std::make_unique<PerceptionPipeline>(nullptr, nullptr, pipe_cfg);
+    legacy_env::apply(*pipeline_);
 }
 
 SequenceRunner::~SequenceRunner() {
@@ -195,6 +197,7 @@ std::vector<FrameResult> SequenceRunner::run(const SequenceConfig& cfg) {
 
     // Create a fresh tracker for this sequence (no reset() method available)
     GPUByteTracker tracker(max_tracks_ * 8);
+    legacy_env::apply(tracker);
     tracker.set_params(
         cfg.track_thresh,
         cfg.high_thresh,
@@ -205,7 +208,7 @@ std::vector<FrameResult> SequenceRunner::run(const SequenceConfig& cfg) {
         cfg.confirm_score_thresh,
         /*adaptive_confirmation=*/false,
         cfg.new_track_thresh,
-        /*kalman_adapt_mode=*/0,
+        /*kalman_adapt_mode=*/legacy_env::kalman_adapt_mode_override().value_or(0),
         /*r_scale=*/1.0f,
         cfg.vel_dir_weight,
         cfg.fuse_score_weight,
@@ -235,6 +238,7 @@ std::vector<FrameResult> SequenceRunner::run(const SequenceConfig& cfg) {
     if (cfg.gmc_enabled) {
         if (!gmc_) {
             gmc_ = std::make_unique<GMC>(cfg.gmc_downscale);
+            legacy_env::apply(*gmc_);
             cudaMalloc(&d_gmc_warp_, 6 * sizeof(float));
         }
         gmc_->reset();
