@@ -15,7 +15,7 @@
 namespace saccade::shipping {
 namespace {
 
-void check(cudaError_t e, const char* what) {
+void cuda_check(cudaError_t e, const char* what) {
     if (e != cudaSuccess) {
         throw std::runtime_error(std::string("post-detector host: ") + what + ": " +
                                  cudaGetErrorString(e));
@@ -25,8 +25,8 @@ void check(cudaError_t e, const char* what) {
 template <class T>
 T* device_alloc(std::size_t count, const char* what) {
     void* p = nullptr;
-    check(cudaMalloc(&p, count * sizeof(T)), what);
-    check(cudaMemset(p, 0, count * sizeof(T)), what);
+    cuda_check(cudaMalloc(&p, count * sizeof(T)), what);
+    cuda_check(cudaMemset(p, 0, count * sizeof(T)), what);
     return static_cast<T*>(p);
 }
 
@@ -34,7 +34,7 @@ template <class T>
 void d2h(std::vector<T>& dst, const T* src, std::size_t count, cudaStream_t stream) {
     dst.resize(count);
     if (count > 0) {
-        check(cudaMemcpyAsync(dst.data(), src, count * sizeof(T), cudaMemcpyDeviceToHost, stream),
+        cuda_check(cudaMemcpyAsync(dst.data(), src, count * sizeof(T), cudaMemcpyDeviceToHost, stream),
               "D2H");
     }
 }
@@ -108,7 +108,7 @@ PostDetectorHost::PostDetectorHost(const ResolvedShippingConfig& cfg, SequenceGe
     b.out_det_idx = b.alloc<std::int32_t>(o, "tracker output");
     b.out_count = b.alloc<std::int32_t>(1, "tracker output");
     const float identity[6] = {1.f, 0.f, 0.f, 0.f, 1.f, 0.f};  // torch.eye(2, 3)
-    check(cudaMemcpy(b.trk_gmc, identity, sizeof(identity), cudaMemcpyHostToDevice),
+    cuda_check(cudaMemcpy(b.trk_gmc, identity, sizeof(identity), cudaMemcpyHostToDevice),
           "tracker gmc");
 }
 
@@ -136,7 +136,7 @@ void PostDetectorHost::run_pre_roll() {
         tracker_update(plan_.max_assoc);
         ++pre_roll_run_;
     }
-    check(cudaStreamSynchronize(stream_), "pre-roll");
+    cuda_check(cudaStreamSynchronize(stream_), "pre-roll");
     pre_rolled_ = true;
 }
 
@@ -178,7 +178,7 @@ FrameResult PostDetectorHost::process(const DeviceDetections& det, const float* 
     d2h(r.post_nms.boxes, b.post_boxes, static_cast<std::size_t>(n_post) * 4, stream_);
     d2h(r.post_nms.scores, b.post_scores, static_cast<std::size_t>(n_post), stream_);
     d2h(r.post_nms.classes, b.post_classes, static_cast<std::size_t>(n_post), stream_);
-    check(cudaStreamSynchronize(stream_), "post-NMS readback");
+    cuda_check(cudaStreamSynchronize(stream_), "post-NMS readback");
 
     // _run_detection_filters: external FP rule filter, then FP hard filter.
     r.tracker_input = plan_.external_fp ? apply_external_fp_rule(r.post_nms, plan_.external_fp_rule)
@@ -196,37 +196,37 @@ FrameResult PostDetectorHost::process(const DeviceDetections& det, const float* 
     const int n_in = static_cast<int>(std::min<std::size_t>(r.tracker_input.size(),
                                                             static_cast<std::size_t>(plan_.max_assoc)));
     const auto a = static_cast<std::size_t>(plan_.max_assoc);
-    check(cudaMemsetAsync(b.trk_boxes, 0, a * 4 * sizeof(float), stream_), "tracker input");
-    check(cudaMemsetAsync(b.trk_scores, 0, a * sizeof(float), stream_), "tracker input");
-    check(cudaMemsetAsync(b.trk_classes, 0, a * sizeof(std::int32_t), stream_), "tracker input");
+    cuda_check(cudaMemsetAsync(b.trk_boxes, 0, a * 4 * sizeof(float), stream_), "tracker input");
+    cuda_check(cudaMemsetAsync(b.trk_scores, 0, a * sizeof(float), stream_), "tracker input");
+    cuda_check(cudaMemsetAsync(b.trk_classes, 0, a * sizeof(std::int32_t), stream_), "tracker input");
     if (n_in > 0) {
-        check(cudaMemcpyAsync(b.trk_boxes, r.tracker_input.boxes.data(),
+        cuda_check(cudaMemcpyAsync(b.trk_boxes, r.tracker_input.boxes.data(),
                               static_cast<std::size_t>(n_in) * 4 * sizeof(float),
                               cudaMemcpyHostToDevice, stream_),
               "tracker input");
-        check(cudaMemcpyAsync(b.trk_scores, r.tracker_input.scores.data(),
+        cuda_check(cudaMemcpyAsync(b.trk_scores, r.tracker_input.scores.data(),
                               static_cast<std::size_t>(n_in) * sizeof(float),
                               cudaMemcpyHostToDevice, stream_),
               "tracker input");
-        check(cudaMemcpyAsync(b.trk_classes, r.tracker_input.classes.data(),
+        cuda_check(cudaMemcpyAsync(b.trk_classes, r.tracker_input.classes.data(),
                               static_cast<std::size_t>(n_in) * sizeof(std::int32_t),
                               cudaMemcpyHostToDevice, stream_),
               "tracker input");
     }
     if (gmc_) {
-        check(cudaMemcpyAsync(b.trk_gmc, b.gmc_warp, 6 * sizeof(float), cudaMemcpyDeviceToDevice,
+        cuda_check(cudaMemcpyAsync(b.trk_gmc, b.gmc_warp, 6 * sizeof(float), cudaMemcpyDeviceToDevice,
                               stream_),
               "tracker gmc");
     }
     tracker_update(plan_.max_assoc);
 
     std::int32_t count = 0;
-    check(cudaMemcpyAsync(&count, b.out_count, sizeof(count), cudaMemcpyDeviceToHost, stream_),
+    cuda_check(cudaMemcpyAsync(&count, b.out_count, sizeof(count), cudaMemcpyDeviceToHost, stream_),
           "tracker count");
-    check(cudaMemcpyAsync(r.gmc_warp.data(), b.trk_gmc, 6 * sizeof(float), cudaMemcpyDeviceToHost,
+    cuda_check(cudaMemcpyAsync(r.gmc_warp.data(), b.trk_gmc, 6 * sizeof(float), cudaMemcpyDeviceToHost,
                           stream_),
           "tracker gmc");
-    check(cudaStreamSynchronize(stream_), "tracker update");
+    cuda_check(cudaStreamSynchronize(stream_), "tracker update");
     if (count < 0 || count > plan_.max_objects) {
         throw std::runtime_error("post-detector host: tracker count out of range");
     }
@@ -235,7 +235,7 @@ FrameResult PostDetectorHost::process(const DeviceDetections& det, const float* 
     d2h(r.tracker_output.scores, b.out_scores, c, stream_);
     d2h(r.tracker_output.ids, b.out_ids, c, stream_);
     d2h(r.tracker_output.classes, b.out_classes, c, stream_);
-    check(cudaStreamSynchronize(stream_), "tracker readback");
+    cuda_check(cudaStreamSynchronize(stream_), "tracker readback");
     r.updated = true;
     return r;
 }

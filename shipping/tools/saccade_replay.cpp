@@ -21,7 +21,7 @@
 // frame; 1: some stage differs; 2: error.
 //
 // Usage:
-//   saccade_replay --config configs/shipping/mamba_whole_graph.resolved.json \
+//   saccade_replay --config configs/shipping/mamba_whole_graph.resolved.json
 //       --dump <dump dir> --report <report.json> [--sequences A,B]
 //       [--pre-roll N]   (developer measurement: override the tracker pre-roll)
 #include <cuda_runtime.h>
@@ -53,7 +53,7 @@ constexpr const char* kFormat = "saccade.post_detector_replay/v1";
 
 [[noreturn]] void fail(const std::string& msg) { throw std::runtime_error(msg); }
 
-void check(cudaError_t e, const char* what) {
+void cuda_check(cudaError_t e, const char* what) {
     if (e != cudaSuccess) fail(std::string(what) + ": " + cudaGetErrorString(e));
 }
 
@@ -381,7 +381,7 @@ sh::JsonValue replay_sequence(const sh::ResolvedShippingConfig& cfg, const Seque
     float *d_boxes = nullptr, *d_scores = nullptr;
     std::int32_t* d_classes = nullptr;
     std::size_t det_cap = 0;
-    check(cudaMalloc(&d_frame, f32.size() * sizeof(float)), "frame buffer");
+    cuda_check(cudaMalloc(&d_frame, f32.size() * sizeof(float)), "frame buffer");
 
     StageStats post_nms, tracker_input, gmc, tracker_output;
     std::size_t k = 0;  // index into the per-update streams
@@ -393,16 +393,16 @@ sh::JsonValue replay_sequence(const sh::ResolvedShippingConfig& cfg, const Seque
             cudaFree(d_scores);
             cudaFree(d_classes);
             det_cap = n;
-            check(cudaMalloc(&d_boxes, n * 4 * sizeof(float)), "detections");
-            check(cudaMalloc(&d_scores, n * sizeof(float)), "detections");
-            check(cudaMalloc(&d_classes, n * sizeof(std::int32_t)), "detections");
+            cuda_check(cudaMalloc(&d_boxes, n * 4 * sizeof(float)), "detections");
+            cuda_check(cudaMalloc(&d_scores, n * sizeof(float)), "detections");
+            cuda_check(cudaMalloc(&d_classes, n * sizeof(std::int32_t)), "detections");
         }
         if (n > 0) {
-            check(cudaMemcpy(d_boxes, df.rows.boxes.data(), n * 4 * sizeof(float),
+            cuda_check(cudaMemcpy(d_boxes, df.rows.boxes.data(), n * 4 * sizeof(float),
                              cudaMemcpyHostToDevice), "detections");
-            check(cudaMemcpy(d_scores, df.rows.scores.data(), n * sizeof(float),
+            cuda_check(cudaMemcpy(d_scores, df.rows.scores.data(), n * sizeof(float),
                              cudaMemcpyHostToDevice), "detections");
-            check(cudaMemcpy(d_classes, df.rows.classes.data(), n * sizeof(std::int32_t),
+            cuda_check(cudaMemcpy(d_classes, df.rows.classes.data(), n * sizeof(std::int32_t),
                              cudaMemcpyHostToDevice), "detections");
         }
         const float* frame_ptr = nullptr;
@@ -416,7 +416,7 @@ sh::JsonValue replay_sequence(const sh::ResolvedShippingConfig& cfg, const Seque
             frames.read(reinterpret_cast<char*>(u8.data()), static_cast<std::streamsize>(u8.size()));
             if (!frames) fail(d.name + ": frames.u8 truncated");
             for (std::size_t i = 0; i < u8.size(); ++i) f32[i] = lut[u8[i]];
-            check(cudaMemcpy(d_frame, f32.data(), f32.size() * sizeof(float),
+            cuda_check(cudaMemcpy(d_frame, f32.data(), f32.size() * sizeof(float),
                              cudaMemcpyHostToDevice), "frame");
             frame_ptr = d_frame;
         }
@@ -478,7 +478,7 @@ int run(int argc, char** argv) {
         for (const auto& [name, _] : field(manifest, "sequences").object) names.push_back(name);
     }
     cudaStream_t stream = nullptr;
-    check(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking), "stream");
+    cuda_check(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking), "stream");
     // One PerceptionPipeline per run, as run_eval builds it.
     std::unique_ptr<saccade::PerceptionPipeline> pipeline = sh::build_perception_pipeline(cfg);
 
