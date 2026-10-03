@@ -51,6 +51,10 @@ CONF_THR = 0.001  # host_params.detector.build.conf_thr (unread by the fixed S2)
 STRIDES = (8, 16, 32)
 SIDES = tuple(IMG_SIZE // s for s in STRIDES)
 UNIFORM_RANDOM_REG = {"mode": "uniform", "lo": 0, "span": 20 << 16, "frac": 16}
+# Box distances with full float32 mantissas (the integers exceed 24 bits, so the
+# float32 cast rounds them): the box arithmetic then rounds as it does on real
+# head outputs, which the 2^-16 grid above never does.
+FULL_MANTISSA_REG = {"mode": "uniform", "lo": 0, "span": 20 << 26, "frac": 26}
 
 
 def _uniform(lo: float, hi: float, frac: int) -> dict[str, Any]:
@@ -83,6 +87,10 @@ CASES: list[dict[str, Any]] = [
      "cls": _uniform(-14, 4, 16), "reg": UNIFORM_RANDOM_REG},
     {"name": "random_inexact_scale", "seed": 3, "width": 1000, "height": 563,
      "cls": _uniform(-14, 4, 16), "reg": UNIFORM_RANDOM_REG},
+    {"name": "random_full_mantissa_1080p", "seed": 12, "width": 1920, "height": 1080,
+     "cls": _uniform(-14, 4, 16), "reg": FULL_MANTISSA_REG},
+    {"name": "random_full_mantissa_inexact_scale", "seed": 13, "width": 1000, "height": 563,
+     "cls": _uniform(-14, 4, 16), "reg": FULL_MANTISSA_REG},
     {"name": "saturated", "seed": 4, "width": 1920, "height": 1080,
      "cls": _uniform(10, 30, 12), "reg": UNIFORM_RANDOM_REG},
     {"name": "coarse_ties", "seed": 5, "width": 1920, "height": 1080,
