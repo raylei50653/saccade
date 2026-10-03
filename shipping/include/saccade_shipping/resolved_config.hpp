@@ -8,6 +8,10 @@
 //     not declare, at every level;
 //   * checks each value's JSON type (int vs float literal included), its enum
 //     domain or range, and finiteness;
+//     Numeric ranges are shipping-admissibility guards (fail-closed ABI policy),
+//     not the accepted domain of the legacy native setters, which clamp or
+//     canonicalize many inputs; PR-4b may tighten them where exact readback
+//     needs a canonical domain.
 //   * never reads the process environment (`SACCADE_*` or otherwise) and has no
 //     fallback/default values: a field is either in the JSON or the load fails.
 //
