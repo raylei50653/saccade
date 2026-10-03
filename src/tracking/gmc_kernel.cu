@@ -154,7 +154,8 @@ extern "C" void launch_phase_correlation(
     int w, int h, float* dx, float* dy,
     void* d_tmp_complex_a, void* d_tmp_complex_b, void* d_tmp_float,
     float* d_peak_x, float* d_peak_y, float* d_peak_val, float* d_pcr_score,
-    cufftHandle plan_r2c, cufftHandle plan_c2r, cudaStream_t stream)
+    cufftHandle plan_r2c, cufftHandle plan_c2r, cudaStream_t stream,
+    float pcr_thresh)
 {
     // 1. FFT (Input is float Hanning-windowed gray)
     cufftExecR2C(plan_r2c, (cufftReal*)prev_gray, (cufftComplex*)d_tmp_complex_a);
@@ -171,10 +172,6 @@ extern "C" void launch_phase_correlation(
     cufftExecC2R(plan_c2r, (cufftComplex*)d_tmp_complex_a, (cufftReal*)d_tmp_float);
 
     // 4. Find peak with sub-pixel accuracy and PCR quality check
-    static const float pcr_thresh = []() {
-        const char* v = std::getenv("SACCADE_GMC_PCR_THRESH");
-        return v ? std::strtof(v, nullptr) : 5.0f;
-    }();
     find_peak_subpixel_kernel<<<1, 256, 0, stream>>>(
         (float*)d_tmp_float, w, h, d_peak_x, d_peak_y, d_peak_val, d_pcr_score,
         pcr_thresh);
@@ -282,7 +279,7 @@ extern "C" void launch_phase_correlation_into_warp(
     void* d_tmp_complex_a, void* d_tmp_complex_b, void* d_tmp_float,
     float* d_peak_x, float* d_peak_y, float* d_peak_val, float* d_pcr_score,
     cufftHandle plan_r2c, cufftHandle plan_c2r, cudaStream_t stream,
-    float downscale)
+    float downscale, float pcr_thresh)
 {
     cufftExecR2C(plan_r2c, (cufftReal*)prev_gray, (cufftComplex*)d_tmp_complex_a);
     cufftExecR2C(plan_r2c, (cufftReal*)curr_gray, (cufftComplex*)d_tmp_complex_b);
@@ -295,16 +292,12 @@ extern "C" void launch_phase_correlation_into_warp(
 
     cufftExecC2R(plan_c2r, (cufftComplex*)d_tmp_complex_a, (cufftReal*)d_tmp_float);
 
-    static const float pcr_thresh2 = []() {
-        const char* v = std::getenv("SACCADE_GMC_PCR_THRESH");
-        return v ? std::strtof(v, nullptr) : 5.0f;
-    }();
     find_peak_subpixel_kernel<<<1, 256, 0, stream>>>(
         (float*)d_tmp_float, w, h, d_peak_x, d_peak_y, d_peak_val, d_pcr_score,
-        pcr_thresh2);
+        pcr_thresh);
 
     peak_to_translation_warp_kernel<<<1, 1, 0, stream>>>(
-        d_peak_x, d_peak_y, d_pcr_score, w, h, downscale, pcr_thresh2, out_warp);
+        d_peak_x, d_peak_y, d_pcr_score, w, h, downscale, pcr_thresh, out_warp);
 }
 
 // ── Phase Correlation Sub-step Launchers (for per-stage profiling) ────────
@@ -338,17 +331,13 @@ extern "C" void launch_ifft_step(
 extern "C" void launch_peak_and_warp(
     const float* d_float, int w, int h,
     float* d_peak_x, float* d_peak_y, float* d_peak_val, float* d_pcr_score,
-    float downscale, float* out_warp, cudaStream_t stream)
+    float downscale, float* out_warp, cudaStream_t stream, float pcr_thresh)
 {
-    static const float pcr_thresh3 = []() {
-        const char* v = std::getenv("SACCADE_GMC_PCR_THRESH");
-        return v ? std::strtof(v, nullptr) : 5.0f;
-    }();
     find_peak_subpixel_kernel<<<1, 256, 0, stream>>>(
         d_float, w, h, d_peak_x, d_peak_y, d_peak_val, d_pcr_score,
-        pcr_thresh3);
+        pcr_thresh);
     peak_to_translation_warp_kernel<<<1, 1, 0, stream>>>(
-        d_peak_x, d_peak_y, d_pcr_score, w, h, downscale, pcr_thresh3, out_warp);
+        d_peak_x, d_peak_y, d_pcr_score, w, h, downscale, pcr_thresh, out_warp);
 }
 
 // ── Foreground Mask Kernel ─────────────────────────────────────────────────

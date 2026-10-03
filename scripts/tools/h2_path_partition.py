@@ -95,6 +95,9 @@ DECISION_RELEVANT_PATHS: frozenset[str] = frozenset(
 DECISION_RELEVANT_PREFIXES: tuple[str, ...] = (
     "include/",
     "scripts/eval/config/",
+    # Shipping runtime config loader + native builders (#465 PR-4b): admitted
+    # in the change that first links them against the tracker.
+    "shipping/",
     "src/",
 )
 

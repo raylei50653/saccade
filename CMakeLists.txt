@@ -308,9 +308,16 @@ add_library(saccade_perception STATIC
 # 設定導出宏
 target_compile_definitions(saccade_perception PRIVATE SACCADE_EXPORT_PERCEPTION)
 
+# 7a. GPUByteTracker 的參數 store（純 C++，無 CUDA）：tracker 與 shipping/ 的
+#     CUDA-free 測試共用同一份 setter 實作 (#465 PR-4b)。
+add_library(saccade_tracker_params STATIC src/tracking/tracker_params.cpp)
+target_include_directories(saccade_tracker_params PUBLIC ${PROJECT_SOURCE_DIR}/include)
+set_target_properties(saccade_tracker_params PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
 # 7. 定義 Tracking 模組 (Dynamic Library)
 add_library(saccade_tracking STATIC
     src/tracking/tracker_gpu.cu
+    src/tracking/legacy_env.cpp
     src/tracking/relink_gate.cu
     src/tracking/gmc.cpp
     src/tracking/gmc_kernel.cu
@@ -338,6 +345,7 @@ target_link_libraries(saccade_tracking
     CUDA::cufft
     ${OpenCV_LIBS}
     saccade_perception
+    saccade_tracker_params
 )
 target_compile_definitions(saccade_tracking PRIVATE SACCADE_EXPORT_TRACKING)
 
@@ -558,6 +566,7 @@ if(ENABLE_NATIVE_TESTS)
     )
     target_link_libraries(saccade_gpu_postprocess_test PRIVATE
         CUDA::cudart
+        saccade_tracker_params
     )
     set_target_properties(saccade_gpu_postprocess_test PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
     add_test(NAME saccade_gpu_postprocess_test COMMAND saccade_gpu_postprocess_test)
@@ -622,3 +631,7 @@ if(ENABLE_NATIVE_TESTS)
     enable_native_coverage(saccade_gst_buffer_pool_test)
     add_test(NAME saccade_gst_buffer_pool_test COMMAND saccade_gst_buffer_pool_test)
 endif()
+
+# 10. Shipping runtime config (#465 Phase B): strict loader, JSON -> native
+#     parameter mapping with readback, and the GPU object builders.
+add_subdirectory(shipping)

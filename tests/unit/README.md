@@ -25,6 +25,7 @@
 | `test_resolved_bridge_policy_config.py` | system | contract | active | Pin the resolved-config fingerprints the H0 declaration freezes. |
 | `test_resolved_shipping_config.py` | system | contract | active | The headline resolved shipping config equals what the Python oracle uses. |
 | `test_safe_reject_audit.py` | eval | behavior | active | Tests for constrained FP pruning / safe-reject metrics. |
+| `test_shipping_config_loader_sources.py` | system | contract | active | Source-level guards for the native shipping config (#465 PR-4a, PR-4b). |
 | `test_signal_tables.py` | eval | contract | active | Unit tests for signal_tables schema helpers. |
 | `test_slim_release_manifest.py` | system | contract | active | Integrity checks for the slim release manifest. |
 | `test_summarize_relink_pairs.py` | eval | contract | active | Tests for scripts/tools/summarize_relink_pairs.py B1 output contract. |

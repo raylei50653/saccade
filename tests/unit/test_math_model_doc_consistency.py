@@ -8,13 +8,14 @@ three real sources of truth:
   * the eval preset ``configs/presets/mamba_whole_graph.yaml`` (most knobs);
   * the ``scripts/eval/config/lifecycle.py`` dataclass defaults (knobs the preset
     leaves unset, e.g. the relink anchor mode / rate);
-  * the CUDA env-var defaults in ``src/tracking/tracker_gpu.cu`` (the two auction
-    bid biases and the DDA cost cap).
+  * the legacy env-var defaults in ``src/tracking/legacy_env.cpp`` (the two
+    auction bid biases and the DDA cost cap; #465 PR-4b moved these reads out of
+    ``tracker_gpu.cu``, which now takes them as explicit parameters).
 
 When a default is retuned the PDF silently starts documenting a baseline the code
 no longer runs. This module triple-locks each cited constant:
 
-    doc text (.tex)  ==  registry below  ==  source of truth (YAML / py / .cu)
+    doc text (.tex)  ==  registry below  ==  source of truth (YAML / py / .cpp)
 
 ``test_doc_baseline_matches_source`` fails if a source-of-truth default drifts
 from what the registry (and therefore the doc) claims; ``test_doc_baseline_
@@ -45,7 +46,7 @@ import pytest
 _REPO = Path(__file__).resolve().parents[2]
 _PRESET = _REPO / "configs" / "presets" / "mamba_whole_graph.yaml"
 _LIFECYCLE = _REPO / "scripts" / "eval" / "config" / "lifecycle.py"
-_CU = _REPO / "src" / "tracking" / "tracker_gpu.cu"
+_LEGACY_ENV = _REPO / "src" / "tracking" / "legacy_env.cpp"
 _TEX_DIR = _REPO / "docs" / "latex" / "chapters"
 
 
@@ -88,8 +89,8 @@ def _py_default(field: str) -> object:
 
 
 def _cu_env_default(name: str) -> float:
-    """Read the fallback default of an env-var knob in tracker_gpu.cu."""
-    text = _CU.read_text(encoding="utf-8")
+    """Read the unset default of a native env-var knob in legacy_env.cpp."""
+    text = _LEGACY_ENV.read_text(encoding="utf-8")
     # Form A:  env_float_value("NAME", 0.12f)
     m = re.search(rf'env_float_value\("{re.escape(name)}",\s*([0-9.]+)f?\)', text)
     if m:
@@ -98,7 +99,7 @@ def _cu_env_default(name: str) -> float:
     m = re.search(
         rf'std::getenv\("{re.escape(name)}"\).*?:\s*([0-9.]+)f', text, re.DOTALL
     )
-    assert m, f"env default for {name!r} not found in {_CU}"
+    assert m, f"env default for {name!r} not found in {_LEGACY_ENV}"
     return float(m.group(1))
 
 

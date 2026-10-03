@@ -332,18 +332,15 @@ def test_cfg_read_of_a_missing_field_fails(tool: Any, mutate: Any) -> None:
 
 def test_native_getenv_without_default_fails(tool: Any, mutate: Any) -> None:
     mutate(
-        "src/tracking/gmc_kernel.cu",
-        '        const char* v = std::getenv("SACCADE_GMC_PCR_THRESH");\n'
-        "        return v ? std::strtof(v, nullptr) : 5.0f;\n    }();\n"
-        "    find_peak_subpixel_kernel<<<1, 256, 0, stream>>>(\n"
-        "        (float*)d_tmp_float, w, h, d_peak_x, d_peak_y, d_peak_val, d_pcr_score,\n"
-        "        pcr_thresh);\n",
-        '        const char* v = std::getenv("SACCADE_GMC_PCR_THRESH");\n'
-        "        return v ? std::strtof(v, nullptr) : 5.0f;\n    }();\n"
-        '    if (std::getenv("SACCADE_PROBE_HATCH")) {}\n'
-        "    find_peak_subpixel_kernel<<<1, 256, 0, stream>>>(\n"
-        "        (float*)d_tmp_float, w, h, d_peak_x, d_peak_y, d_peak_val, d_pcr_score,\n"
-        "        pcr_thresh);\n",
+        "src/tracking/legacy_env.cpp",
+        "float gmc_pcr_thresh() {\n"
+        '    const char* v = std::getenv("SACCADE_GMC_PCR_THRESH");\n'
+        "    return v ? std::strtof(v, nullptr) : 5.0f;\n}\n",
+        "float gmc_pcr_thresh() {\n"
+        '    const char* v = std::getenv("SACCADE_GMC_PCR_THRESH");\n'
+        "    return v ? std::strtof(v, nullptr) : 5.0f;\n}\n"
+        "bool probe_hatch() {\n"
+        '    return std::getenv("SACCADE_PROBE_HATCH") != nullptr;\n}\n',
     )
     with pytest.raises(SystemExit, match="SACCADE_PROBE_HATCH"):
         tool.native_env()
