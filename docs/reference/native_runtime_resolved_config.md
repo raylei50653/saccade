@@ -1,6 +1,6 @@
 # Native runtime resolved config（#465 Phase B PR-3／U2a）
 
-> 狀態：PR-3 完成 exporter、schema 與 Python 端等價 contract test。PR-4a 加上 native strict loader（§7）。PR-4b 讓 native 物件只從單一參數狀態讀值、native 端不再讀 `SACCADE_*`、shipping 以這份 JSON 建立 GPU 物件並做 set 後回讀（§8）；**U2b 至此完成**。PR-3／PR-4a 不改 native code；PR-4b 改 native code 但 headline 輸出逐位元組不變（§8.6）。PR-5 加上 native post-detector replay 宿主（U3a，§9），並補齊 exporter `steps` 漏列的 3 個 post-detector 分支（§9.2）。PR-6 加上 native MOT 輸出（U4：per-sequence ID、行格式、sequence-tail interpolation，§10），接進 replay 宿主後 7-seq MOT txt 對 Python serial 組態逐位元組相同（多 sequence 以 ID 位移重標），並補上 emit 路徑的 6 個 gate（§10.2）。PR-7 加上 native ingest（U3b-1：nvJPEG 解碼＋normalize，§11），以與 oracle 同一份 nvJPEG binary、只由 resolved config 驅動；parity harness 把解碼、normalize、端到端 ingest 分開對 torchvision ingest 報告。PR-8 加上 native detector（U3b-2：resize、`TRTEngine` backbone、PR-1L LibTorch head、S2，§12），oracle 是 owner 接受的 `A_L`；operator library 以 realization attestation 綁定（PR-1L freeze 不動）；7-seq 5316 幀在 detector 邊界與每個 stage 都逐位元相同（§12.5）。
+> 狀態：PR-3 完成 exporter、schema 與 Python 端等價 contract test。PR-4a 加上 native strict loader（§7）。PR-4b 讓 native 物件只從單一參數狀態讀值、native 端不再讀 `SACCADE_*`、shipping 以這份 JSON 建立 GPU 物件並做 set 後回讀（§8）；**U2b 至此完成**。PR-3／PR-4a 不改 native code；PR-4b 改 native code 但 headline 輸出逐位元組不變（§8.6）。PR-5 加上 native post-detector replay 宿主（U3a，§9），並補齊 exporter `steps` 漏列的 3 個 post-detector 分支（§9.2）。PR-6 加上 native MOT 輸出（U4：per-sequence ID、行格式、sequence-tail interpolation，§10），接進 replay 宿主後 7-seq MOT txt 對 Python serial 組態逐位元組相同（多 sequence 以 ID 位移重標），並補上 emit 路徑的 6 個 gate（§10.2）。PR-7 加上 native ingest（U3b-1：nvJPEG 解碼＋normalize，§11），以與 oracle 同一份 nvJPEG binary、只由 resolved config 驅動；parity harness 把解碼、normalize、端到端 ingest 分開對 torchvision ingest 報告。PR-8 加上 native detector（U3b-2：resize、`TRTEngine` backbone、PR-1L LibTorch head、S2，§12），oracle 是 owner 接受的 `A_L`；operator library 以 realization attestation 綁定（PR-1L freeze 不動）；7-seq 5316 幀在 detector 邊界與每個 stage 都逐位元相同（§12.5）。PR-9 把 ingest、detector、post-detector 宿主與 MOT 輸出接成 shipping entrypoint `saccade_track` 的 serial 組態（U3b-3，§13），oracle 是 `A_L` serial；測量契約見 §13.3。
 > 邊界依據：[native_runtime_shipping_boundary.md](native_runtime_shipping_boundary.md) §5 B2、§6 PR-3。本文沿用該文的編號，不重述它的論證。
 > 工具：`scripts/model/export_resolved_shipping_config.py`（`developer_build_debug`，位於 `decision_relevant` partition 之外）。產物：`configs/shipping/mamba_whole_graph.resolved.json`（commit 進 repo）。
 
@@ -552,3 +552,63 @@ build/shipping/saccade_shipping_detector_s2_test tests/native/fixtures/shipping_
     configs/shipping/mamba_head_realization.attestation.json .
 bash results/465_pr8_detector/<label>/run.sh   # anchor, oracle-rows, parity, repeat --against, 6 negctls
 ```
+
+---
+
+## 13. 端到端 serial native（PR-9／U3b-3）
+
+PR-9 把已分別量過的四段（PR-7 ingest、PR-8 detector、PR-5 post-detector 宿主、PR-6 MOT emit 與 tail）接成 boundary §2 的 shipping entrypoint `saccade_track`，以 serial 組態執行：每個 sequence 目錄（`seqinfo.ini`＋`img1/*.jpg`）產出一份 `<sequence>.txt`。PR-9 不新增任何 stage，新的東西只有接線：哪些物件整個 run 共用、哪些每個 sequence 重建、buffer 由誰擁有、何時可以被覆寫。oracle 是 owner 接受的 `A_L` 的 serial 組態（`mot17.py` 不加 `--double-buffer`，head 換成 PR-1L artifact；#465 決策 1）。graph capture、double-buffer 與效能在 PR-10。
+
+| 項目 | 位置 |
+|:--|:--|
+| 端到端 runtime | `shipping/include/saccade_shipping/serial_runtime.hpp`、`shipping/src/serial_runtime.cpp`（target `saccade_shipping_runtime`，只在 root build） |
+| shipping entrypoint | `shipping/tools/saccade_track.cpp`（target `saccade_track`；`shipping_runtime`）。`--report`／`--trace`／`--max-frames`／`--measurement-mutation` 是 `developer_build_debug` 的量測選項，不屬於 shipping 介面 |
+| parity harness（`developer_build_debug`） | `scripts/eval/diagnostics/native_track_parity.py`（`parity`）；oracle 由 `native_detector_parity.py oracle-rows` 產生（§12） |
+| 測試 | `tests/native/test_shipping_serial_runtime.cpp`（GPU；需要 model 與 MOT17，缺少時 SKIP）、`tests/unit/test_native_track_parity.py`（harness 比較器與 validity 檢查）、`tests/unit/test_native_track_oracle_pins.py`（oracle 的 per-run／per-sequence 分工） |
+
+### 13.1 照抄的 oracle 事實（接線）
+
+- **per run**（`evaluator.run_eval`，在 `for seq in cfg.seqs` 之前建立、迴圈內不重綁）：detector（head 只載入一次）、`PerceptionPipeline`、`GlobalTrackIdMapper`；torchvision 的 nvJPEG 解碼器每個 process 一份（§11.1）。native：一個 `SerialRuntime` 持有 resolved config 與各計畫、一條 CUDA stream、一個 `JpegDecoder`、一個 `DetectorHost`、一個 `PerceptionPipeline`，以及容量為 `max_det` 的 device detection buffer。
+- **per sequence**（`EvalPipeline.__init__`）：`detector.set_whole_graph_img_dims(h_orig, w_orig)`（只設定座標縮放）、`AdaptiveFramePool(h_orig, w_orig)`（frame buffer）、該 sequence `img1` 的 streamer、tracker／GMC／`GraphedTrackerUpdate`（含 pre-roll，§9.1）。native：每個 sequence 一份 `IngestHost`、`PostDetectorHost`、`SequenceOutput`。
+- **per frame**，`k = 1..frame_end`：`ingest(k)` → `detect(frame buffer)` → rows 拷進 run 的 device detection buffer → `process(rows, 同一個 frame buffer)`（GMC 讀的就是 detector 讀的那一幀）→ `add_frame(k, tracker rows)`。每個宿主在 return 前同步 stream，所以下一幀的解碼不會在前一幀的任何 stage 讀完之前覆寫 frame buffer。
+- **ID**：oracle 的 ID 是 run-global（`GlobalTrackIdMapper`）；shipping 只做 per-sequence ID（boundary §5 B3），所以多 sequence 的比較是重標後的相同（§10.5）。
+- 以上 run／sequence 分工由 `test_native_track_oracle_pins.py` 對 oracle 原始碼釘住；`test_shipping_serial_runtime.cpp` 驗證 native 端：同一個 runtime 跑 X、Y、X 時兩次 X 相同；新 runtime 先跑 Y 與先跑 X 再跑 Y 相同；下列三個接線變異各自讓輸出改變。
+
+### 13.2 `DetectorHost` 的介面更正
+
+PR-8 的 `DetectorHost::set_image_dims(h, w)` 同時記下座標縮放與 `detect` 用來解讀 frame buffer 的尺寸。oracle 不是這樣：`set_whole_graph_img_dims` 只設定縮放，frame tensor 自帶它的形狀。兩者綁在一起時，縮放沒有隨 sequence 更新就會以錯誤的尺寸讀 frame buffer（寫 `stale_image_dims` 負控制時，640×480 的 buffer 被當成 1920×1080 讀，越界）。PR-9 把它拆開：`set_image_dims` 只設定縮放，`detect(frame, height, width)` 由呼叫端給 frame 的尺寸（ingest 的 frame buffer 尺寸）。兩者相同時（ingest 拒絕解碼尺寸與 `seqinfo.ini` 不同的幀，§11.6）行為不變；正式 run 會在 PR-9 的 commit 上重跑 PR-8 的 7-seq detector parity 確認（§13.3）。
+
+### 13.3 測量契約（正式 7-seq run 之前寫定）
+
+**oracle**：在 PR-9 的 commit 上重跑 `native_detector_parity.py oracle-rows`：`A_L` serial、MOT17 train 7 個 SDP sequence（02／04／05／09／10／11／13，共 5316 幀），一個 `mot17.py` process 依此順序跑完。它留下每個 sequence 的 MOT txt、`_global_id_map.txt`，以及 `evaluator._run_detect` 每幀的輸出（PR-5 `detector.bin` 格式）。
+
+**native**：一個 `saccade_track` process，依 oracle 的順序跑同樣 7 個 sequence，加 `--trace`（每幀 detector rows，同一格式）與 `--report`。
+
+**section**：
+
+| section | native | oracle | 比較 |
+|:--|:--|:--|:--|
+| `detector` | 端到端接線上每幀的 detector rows | oracle run 的 `_run_detect` rows | 每幀整筆 record 逐位元組（rows 數、box、score、class） |
+| `mot_txt` | `<seq>.txt` | oracle 的 `<seq>.txt`，ID 減去位移（位移取自 oracle 的 `_global_id_map.txt`，該 sequence 的 global ID 必須是連續的一段） | 逐位元組；另要求 track ID 數相同 |
+
+**有效性**（任一不成立 ⇒ `UNRESOLVED`，不判讀 section）：正式 run 在乾淨的 commit 上、gpu0 lease 下執行；attestation 對上 lineage 與 operator library 檔案；`oracle-rows` 報告 ok（V5 sidecar、serial、每個 sequence 錄到 1..frame_end、`is_tiled` 全 false），oracle 的 sequence 順序與 `--max-frames` 和 native 相同，`detector.bin` 的 sha256 與它的 `meta.json` 相同；`saccade_track` exit 0，report 顯示：serial、無 mutation、process 內沒有 Python 函式庫、op library 是 attestation 的 build（經 attestation 綁定）、artifact／engine 的 sha256 與 lineage 相同、runtime readback 與 scan 呼叫次數與 lineage 相同、參數 cuda:0／constant CPU、每個 sequence 的寬、高、幀數與 `seqinfo.ini` 相同。
+
+**EXACT 驗收規則**：PR-9 的 verdict 是 `EXACT` 若且唯若下列全部成立，否則是 `NOT_EXACT`：
+
+1. 有效性成立；
+2. `detector` 與 `mot_txt` 在 7 個 sequence 上全部相同（`detector` 5316/5316 幀）；
+3. 重現性：第二次 `parity --against` 再次 `EXACT`，且每個 sequence 的 native txt 與 trace 的 sha256 與第一次相同；
+4. PR-8 回歸：以 PR-9 commit 的 `saccade_detector_probe` 對同一份 `oracle-rows` 跑 `native_detector_parity.py parity`（7 sequence），9 個 section 全部 `EXACT`（§13.2 的介面更正不改變 detector）。
+
+沒有容差，看到結果之後也不新增容差。任一項不成立：照 section 分開報告（第一個不同的幀／行、rows 數、track ID 數），**停在 PR-9**，不把差異帶進 PR-10。
+
+**負控制**（7 sequence，對同一份 oracle）：`saccade_track --measurement-mutation` 每次只破壞一條接線規則，對應的 section 必須是 `DIFFERS`（其他 section 照實記錄）：
+
+| 負控制 | 破壞的規則 | 必須 `DIFFERS` 的 section |
+|:--|:--|:--|
+| `shared_post_host` | 第一個 sequence 的 `PostDetectorHost`（tracker、GMC、pre-roll）留給之後的 sequence | `mot_txt` |
+| `stale_image_dims` | 座標縮放只在第一個 sequence 設定 | `detector`（只有幾何與第一個 sequence 不同的 MOT17-05 會變） |
+| `gmc_previous_frame` | GMC 讀前一幀的 frame buffer | `mot_txt` |
+| `--ref-edit`（harness） | 第一個 sequence 的 oracle txt 在記憶體中改 1 個字元 | `mot_txt`（只有 MOT17-02） |
+
+**觀察（不是 gate）**：oracle serial run 的 MOT txt 是否與 PR-2L `A_L_1`（double-buffer）逐位元組相同。PR-8 的 `oracle-rows` 與 anchor 在 `a9d657c1` 上 7/7 相同；這只記錄，PR-10 才以 double-buffer 為驗收組態。

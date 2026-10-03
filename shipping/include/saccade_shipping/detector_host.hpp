@@ -86,13 +86,15 @@ public:
 
     const HeadLoadReport& load_report() const;
 
-    // set_whole_graph_img_dims(h, w): the per-sequence coordinate scales.
+    // set_whole_graph_img_dims(h, w): the per-sequence coordinate scales
+    // (seqinfo.ini's imHeight / imWidth), and nothing else.
     void set_image_dims(int height, int width);
 
     // One frame: `frame_chw` is device float32 [3, height, width] (the ingest
-    // frame buffer); returns the detector rows (the PR-5 boundary) after the
-    // stream has been synchronized.
-    DetectionRows detect(const float* frame_chw);
+    // frame buffer; as in the oracle, the frame carries its own size, separate
+    // from the scales above); returns the detector rows (the PR-5 boundary)
+    // after the stream has been synchronized.
+    DetectionRows detect(const float* frame_chw, int height, int width);
 
     const DetectorStages& stages() const;
 

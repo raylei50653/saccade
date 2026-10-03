@@ -156,7 +156,7 @@ struct DetectorHost::Impl {
     std::vector<std::string> engine_outputs;
     torch::jit::Module head;
     void* op_handle = nullptr;
-    int height = 0, width = 0;
+    bool scales_set = false;
     float sx = 0.0f, sy = 0.0f;
     at::Tensor resized, feats[3], head_out[6], s2_raw, s2_scaled;
     DetectorStages stages;
@@ -278,16 +278,16 @@ void DetectorHost::set_mutation_for_measurement(DetectorMutation m) { impl_->mut
 
 void DetectorHost::set_image_dims(int height, int width) {
     if (height <= 0 || width <= 0) run_error("image dims must be positive");
-    impl_->height = height;
-    impl_->width = width;
+    impl_->scales_set = true;
     impl_->sx = coordinate_scale(width, impl_->plan.img_size);
     impl_->sy = coordinate_scale(height, impl_->plan.img_size);
 }
 
-DetectionRows DetectorHost::detect(const float* frame_chw) {
+DetectionRows DetectorHost::detect(const float* frame_chw, int height, int width) {
     Impl& m = *impl_;
     const DetectorPlan& p = m.plan;
-    if (m.height <= 0) run_error("set_image_dims was not called");
+    if (!m.scales_set) run_error("set_image_dims was not called");
+    if (height <= 0 || width <= 0) run_error("frame dims must be positive");
     if (!same(runtime_readback(), p.runtime)) run_error("runtime requirements changed after load");
     c10::cuda::CUDAStreamGuard guard(m.stream);
     torch::NoGradGuard no_grad;
@@ -295,7 +295,7 @@ DetectionRows DetectorHost::detect(const float* frame_chw) {
 
     // resize: F.interpolate(frame[None], (img, img), mode="bilinear", align_corners=False).
     const at::Tensor frame =
-        at::from_blob(const_cast<float*>(frame_chw), {1, 3, m.height, m.width}, f32);
+        at::from_blob(const_cast<float*>(frame_chw), {1, 3, height, width}, f32);
     m.resized = at::upsample_bilinear2d(frame, at::IntArrayRef{p.img_size, p.img_size}, false,
                                         std::nullopt);
     if (!m.resized.is_contiguous()) run_error("resized frame is not contiguous");

@@ -392,6 +392,10 @@
       "classification": "run_producer_wired",
       "reason": "#465 PR-8 native detector parity harness; claims its --out directory with open_run before the first byte, each mot17.py A_L child claims its own sub-directory"
     },
+    "scripts/eval/diagnostics/native_track_parity.py": {
+      "classification": "run_producer_wired",
+      "reason": "#465 PR-9 native end-to-end serial track parity harness; claims its --out directory with open_run before the first byte"
+    },
     "scripts/eval/diagnostics/native_ingest_parity.py": {
       "classification": "run_producer_wired",
       "reason": "#465 PR-7 native ingest parity harness; claims its --out directory with open_run before the first byte"
