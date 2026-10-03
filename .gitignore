@@ -6,6 +6,7 @@ build/
 build_ci/
 build_trt_venv/
 build-native-test/
+build-shipping/
 dist/
 wheels/
 *.egg-info

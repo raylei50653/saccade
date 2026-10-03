@@ -25,6 +25,19 @@ jobs:
       - name: Check Lockfile
         run: uv lock --check
 
+  shipping-config-loader:
+    # Strict native loader for the resolved shipping config (#465 PR-4a). Pure
+    # C++17 (no CUDA/torch), standalone CMake project, so it builds and runs on a
+    # stock runner.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and run the native loader test
+        run: |
+          cmake -S shipping -B "$RUNNER_TEMP/build-shipping" -DCMAKE_COMPILE_WARNING_AS_ERROR=ON
+          cmake --build "$RUNNER_TEMP/build-shipping" --parallel
+          ctest --test-dir "$RUNNER_TEMP/build-shipping" --output-on-failure
+
   ruff:
     needs: lockfile
     runs-on: ubuntu-latest

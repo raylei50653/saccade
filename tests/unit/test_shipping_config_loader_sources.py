@@ -1,0 +1,105 @@
+"""Source-level guards for the native shipping config loader (#465 PR-4a).
+
+The loader's behaviour is pinned by ``tests/native/test_resolved_config.cpp``
+(CI job ``shipping-config-loader``). These checks run in the ordinary pytest
+job and pin two properties that hold by construction:
+
+* the compiled ``host_params.cfg`` field list is fresh against the committed
+  resolved JSON (so a re-export cannot silently diverge from the native schema);
+* nothing under ``shipping/`` reads the process environment, so env cannot
+  change a load result.
+"""
+
+# scope: system
+# function: contract
+# lifecycle: active
+
+from __future__ import annotations
+
+import importlib.util
+import re
+import sys
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parents[2]
+RENDER = REPO / "scripts" / "model" / "render_shipping_host_cfg_schema.py"
+SHIPPING = REPO / "shipping"
+
+
+def _render_module():
+    spec = importlib.util.spec_from_file_location(
+        "render_shipping_host_cfg_schema", RENDER
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_host_cfg_field_list_is_fresh() -> None:
+    render = _render_module()
+    assert render.OUTPUT.read_text(encoding="utf-8") == render.render(), (
+        "shipping/include/saccade_shipping/host_cfg_fields.inc is stale; re-run "
+        "scripts/model/render_shipping_host_cfg_schema.py"
+    )
+
+
+def test_field_list_carries_types_not_values() -> None:
+    text = (
+        SHIPPING / "include" / "saccade_shipping" / "host_cfg_fields.inc"
+    ).read_text()
+    rows = [line for line in text.splitlines() if not line.startswith("//")]
+    assert len(rows) == 416
+    pattern = re.compile(
+        r'^SACCADE_HOST_CFG_FIELD\([A-Za-z_][A-Za-z0-9_]*, "[^"]+", '
+        r"(bool|std::int64_t|double|std::string|NullValue|IntList|StringList)\)$"
+    )
+    assert [row for row in rows if not pattern.match(row)] == []
+
+
+def test_render_rejects_an_untyped_empty_list(tmp_path: Path) -> None:
+    render = _render_module()
+    config = tmp_path / "resolved.json"
+    config.write_text('{"host_params": {"cfg": {"new_modes": []}}}')
+    try:
+        render.render(config)
+    except render.SchemaError as exc:
+        assert "EMPTY_LIST_ELEMENT" in str(exc)
+    else:
+        raise AssertionError("an empty list without a declared element type must fail")
+
+
+def test_shipping_sources_never_read_the_environment() -> None:
+    sources = sorted(
+        p for p in SHIPPING.rglob("*") if p.suffix in {".cpp", ".hpp", ".inc", ".h"}
+    )
+    assert sources, "shipping/ sources not found"
+    forbidden = re.compile(
+        r"\b(getenv|secure_getenv|setenv|putenv|environ|_wgetenv|GetEnvironmentVariable)\b"
+    )
+    offenders = [
+        f"{p.relative_to(REPO)}:{n}"
+        for p in sources
+        for n, line in enumerate(p.read_text().splitlines(), 1)
+        if forbidden.search(line.split("//", 1)[0])
+    ]
+    assert offenders == []
+
+
+def test_shipping_sources_include_only_std_and_own_headers() -> None:
+    """PR-4a does not touch native tracker/GMC/pipeline code or call setters."""
+    include = re.compile(r'^\s*#\s*include\s+([<"])([^>"]+)[>"]')
+    offenders = []
+    for p in sorted(SHIPPING.rglob("*")):
+        if p.suffix not in {".cpp", ".hpp", ".inc", ".h"}:
+            continue
+        for line in p.read_text().splitlines():
+            m = include.match(line)
+            if (
+                m
+                and m.group(1) == '"'
+                and not m.group(2).startswith("saccade_shipping/")
+            ):
+                offenders.append(f"{p.relative_to(REPO)}: {m.group(2)}")
+    assert offenders == []
