@@ -1,6 +1,6 @@
 # Native runtime resolved config（#465 Phase B PR-3／U2a）
 
-> 狀態：PR-3 完成 exporter、schema 與 Python 端等價 contract test。PR-4a 加上 native strict loader（§7）。PR-4b 讓 native 物件只從單一參數狀態讀值、native 端不再讀 `SACCADE_*`、shipping 以這份 JSON 建立 GPU 物件並做 set 後回讀（§8）；**U2b 至此完成**。PR-3／PR-4a 不改 native code；PR-4b 改 native code 但 headline 輸出逐位元組不變（§8.6）。PR-5 加上 native post-detector replay 宿主（U3a，§9），並補齊 exporter `steps` 漏列的 3 個 post-detector 分支（§9.2）。
+> 狀態：PR-3 完成 exporter、schema 與 Python 端等價 contract test。PR-4a 加上 native strict loader（§7）。PR-4b 讓 native 物件只從單一參數狀態讀值、native 端不再讀 `SACCADE_*`、shipping 以這份 JSON 建立 GPU 物件並做 set 後回讀（§8）；**U2b 至此完成**。PR-3／PR-4a 不改 native code；PR-4b 改 native code 但 headline 輸出逐位元組不變（§8.6）。PR-5 加上 native post-detector replay 宿主（U3a，§9），並補齊 exporter `steps` 漏列的 3 個 post-detector 分支（§9.2）。PR-6 加上 native MOT 輸出（U4：per-sequence ID、行格式、sequence-tail interpolation，§10），接進 replay 宿主後 7-seq MOT txt 對 Python serial 組態逐位元組相同（多 sequence 以 ID 位移重標），並補上 emit 路徑的 6 個 gate（§10.2）。
 > 邊界依據：[native_runtime_shipping_boundary.md](native_runtime_shipping_boundary.md) §5 B2、§6 PR-3。本文沿用該文的編號，不重述它的論證。
 > 工具：`scripts/model/export_resolved_shipping_config.py`（`developer_build_debug`，位於 `decision_relevant` partition 之外）。產物：`configs/shipping/mamba_whole_graph.resolved.json`（commit 進 repo）。
 
@@ -258,4 +258,76 @@ external FP rule filter 會刪列，但沒有同步裁切 `geometry_suspect_mask
 .venv/bin/python scripts/eval/diagnostics/dump_post_detector_replay.py --verify <dir>/dump --against <dir>/repeat_hash
 cmake --build build --target saccade_replay
 build/shipping/saccade_replay --config configs/shipping/mamba_whole_graph.resolved.json --dump <dir>/dump --report <dir>/replay_report.json
+```
+
+---
+
+## 10. Native MOT 輸出（PR-6／U4）
+
+PR-6 把 PR-5 宿主的 tracker 輸出變成每個 sequence 的 MOT txt：B3（track ID 與行格式）與 B4（sequence-tail interpolation），先以 golden fixture 對 Python 函式逐位元組驗證，再接進 `saccade_replay`。headline 的 MOT txt 只由 tracker 輸出決定：fast emit 逐列輸出，tail 只有 interpolation（boundary §5 B2 凍結的 tail；其他 tail 步驟 loader 已 fail-closed）。
+
+| 項目 | 位置 |
+|:--|:--|
+| ID 映射、行格式、interpolation（CUDA-free、不讀 config） | `shipping/include/saccade_shipping/mot_output.hpp`、`shipping/src/mot_output.cpp`（target `saccade_shipping_mot`，`-ffp-contract=off`） |
+| 計畫＋fail-closed gate、per-sequence 累積 | `shipping/include/saccade_shipping/sequence_output.hpp`、`shipping/src/sequence_output.cpp`（併入 `saccade_shipping_native_config`） |
+| 接線 | `shipping/tools/saccade_replay.cpp`：每次 tracker update 後 `add_frame`，sequence 結束時套 tail、寫 `--mot-out`、與 dump 內 oracle 的 `eval/<seq>.txt` 比對（report `mot_txt`，格式 `saccade.post_detector_replay_report/v2`） |
+| 測試 | `tests/native/test_shipping_mot_output.cpp`（CPU，CI `shipping-config-loader`；fixture `tests/native/fixtures/shipping_mot_output.json` 由 `scripts/model/render_shipping_mot_output_fixture.py` 產生）、`tests/unit/test_shipping_mot_output_oracle_pins.py`（oracle source pin＋fixture freshness）、`tests/unit/test_post_detector_replay_dump_verify.py`（dump `--verify`） |
+
+### 10.1 照抄的 oracle 事實
+
+- **emit**：headline 的兩個 emit 點（`stages._run_emit` 的同步路徑、`evaluator._flush_deferred_emit`）都呼叫 `helpers.fast_emit_mot_lines`：每個 tracker 列一行 `frame,id,x1,y1,x2-x1,y2-y1,score,-1,-1,-1`，float32 先轉成 double 再相減，`.2f`／`.4f`。native 以 `std::to_chars`（fixed，等同 "C" locale 的 `printf`，與 Python 一樣正確捨入、不受 locale 影響）格式化；NaN 一律寫 `nan`（Python 不印 NaN 的符號）。
+- **ID**：`GlobalTrackIdMapper` 依首次出現順序從 1 編號，計數跨 sequence 延續。shipping 只做 per-sequence 規則（`SequenceIdMapper`），所以單一 sequence 時兩者相同；多個 sequence 時 oracle 的 ID 等於 per-sequence ID 加上前面 sequence 用掉的數量。
+- **interpolation**：`post_merge.interpolate_tracklets` 從**文字**重新解析 MOT 行（interpolation 看到的是捨入後的值）。pandas C parser 對這些短小數給出正確捨入的 double，native 用 `std::from_chars`（fixture 產生器逐欄檢查兩者相同）。確認 track（行數 ≥ `min_track_len`）以穩定排序依 `(id, frame)` 排列；gap 是 1..`max_gap` 幀（`min_h > 0` 時兩端 `h ≥ min_h`）；`alpha = k/(gap+1)`，每欄 `r0 + alpha*(r1-r0)`，先乘、再加、各自捨入（numpy 的 ufunc 分開執行，所以 native 關掉 FMA contraction）。輸出是原始行原樣保留加上新行，依 `(frame, id)` 穩定排序；**沒有任何 gap 可補時原樣回傳、不排序**。參數取自 `host_params.cfg`（`interpolate_max_gap`／`_min_track_len`／`_min_h`），是否執行由 `steps.tail.interpolation` 決定。
+- **寫檔**：`"\n".join(lines)`，沒有結尾換行；是否寫檔由 `steps.tail.write_output`（`not cfg.latency_only`）決定。
+
+### 10.2 Exporter `steps` 補上的 emit gate
+
+`_run_emit` 只有在下列條件全部成立時才走 fast emit：沒有 semantic relinker、id-stability filter、appearance bank、dynamic ReID controller（`_needs_emit_pipeline`），`reid_mode` 屬於 fast-emit 集合，`id_stability_filter` kwarg 關閉。workbench 路徑則完全繞過 `_run_emit`，用自己的 tracker。PR-3／PR-5 的 `steps` 只列了 relinker 與 `pipeline_relink`，PR-6 補上 6 條（headline 值見括號；JSON 只多這 6 個鍵）：
+
+| step | oracle 的 gate（位置） |
+|:--|:--|
+| `emit.id_stability_filter`（false） | `cfg.post_lifecycle_appearance_gate`（`pipeline.py`，建立 `IdStabilityFilter` 的 IfExp） |
+| `emit.appearance_bank`（false） | `cfg.appearance_bank_enabled`（`pipeline.py`） |
+| `emit.dynamic_reid`（false） | `cfg.need_reid_enabled`（`pipeline.py`） |
+| `emit.fast_emit_reid_mode`（true） | `cfg.reid_mode in ('off', 'tracker', 'extract')`（`stages.py` `_use_fast_emit` 的 conjunct） |
+| `emit.id_stability_kwarg`（false） | `bool(cfg.kwargs.get('id_stability_filter', False))`（同上，oracle 寫成 `not ...`） |
+| `track.workbench`（false） | `getattr(cfg, 'workbench', False)`（`pipeline.py`） |
+
+後兩條是寫成 assignment 的 gate。為了讓 exporter 能對 oracle 原始碼驗證它們，exporter 的 gate 收集規則擴充為：assignment 的 `and` 鏈也收 conjunct，`not X` conjunct 也收 `X`（規則只會變寬，既有 step 不受影響）。`plan_sequence_output` 只讀 `steps`；另外要求 `steps.tail.interpolation == cfg.interpolate_tracklets`、`steps.tail.write_output == not cfg.latency_only`，避免手改 JSON 開了 step 卻沒有對應的參數。`track.workbench` 也加進 `plan_post_detector` 的拒絕清單，因為它換掉整條 tracker 路徑，PR-5 原本漏了這條。
+
+### 10.3 驗收
+
+| 驗收項 | 結果 |
+|:--|:--|
+| B3／B4 golden fixture（Python 函式本身產生） | emit 2 組（兩種精度的十進位捨入中點與 ±1 ulp、±0、極大值、NaN／inf）、interpolation 11 組（gap 恰為 `max_gap` 與多 1、長度恰為 `min_track_len` 與少 1、單幀 track、`min_h` 邊界、重複的 `(id, frame)`、大量相同排序鍵、非有限值、各個提早 return、兩組參數下的隨機壓力測試）逐位元組相同；GCC 13 與 GCC 16 都通過 |
+| 比對器不是空轉的 | 對實作做的 14 個變異全部被抓到：FMA、倒數乘法、兩處不穩定排序、`<`／`>` 邊界 3 個、NaN 符號、寬度用 float32 相減、ID 從 0 起算、無 gap 時排序、以 float32 解析、score 精度、解析差 1 ulp |
+| 停用的 emit／tail 分支 | 12 個 config 變異（6 個新 step、relinker、`pipeline_relink`、tail step 與 cfg 不一致、`latency_only`）都讓計畫失敗；`track.workbench` 也讓 post-detector 計畫失敗；loader 原本就拒絕其他 tail 步驟（PR-4a） |
+| 接線後 7-seq（同機器、`build/`、branch commit `5578c9ee`、工作樹乾淨） | 4 個 stage 5316/5316 幀逐位元相同（與 PR-5 相同）；**7/7 sequence 的 MOT txt 重標後逐位元組相同**，track ID 數相同；MOT17-02（位移 0）不重標就 `cmp` 相同 |
+| 單一 sequence | 只 dump MOT17-09：native txt 與 oracle txt 不重標就 `cmp` 相同 |
+| 負控制 | oracle txt 改 1 個字元 ⇒ 只有 `mot_txt` 發散，位置指到該行；config 關掉 interpolation ⇒ `mot_txt` 發散（3761 對 4091 行），4 個 stage 不變 |
+| oracle 自身的重現性 | 第二次執行（`--frames hash`）的每個 stream、frame hash 與每個 MOT txt 都和第一次相同 |
+
+serial 參考的 headline 指標仍為 IDF1 78.3／MOTA 77.9／IDs 429（只記錄觀察值）。結果目錄：`results/465_pr6_mot/full7_5578c9ee/`（`MANIFEST.md`、`verify.json`、`replay_report.json`、`mot_native/`、`single_seq/`、`negctl/`；frames 不納入版本控制）。
+
+### 10.4 dump 與 replay 的 hardening（PR-5 留下的）
+
+- `saccade_replay`：每個 per-update stream（post_nms、tracker_in、tracker_out，GMC 有跑時還有 gmc）的 record 數都必須等於重放的 tracker update 數。原本只檢查 tracker_out。
+- dump 工具：manifest 新增 `mot_reference`，記錄 oracle 的 `eval/<seq>.txt` 與 `_global_id_map.txt` 的 sha256。`--verify` 會逐 record 解析每個 stream，record 數要等於 `meta.json` 的數字，per-update stream 的幀序列要等於非空的 detector 幀，MOT 參考檔要對得上 hash；`--against` 也比對 MOT txt。PR-6 之前的 dump 沒有 `mot_reference`，`--verify` 會判 FAIL，replay 會要求重新 dump。
+
+### 10.5 限制
+
+- 驗的是 serial、eager 的 post-detector 路徑加上 tail；graph 與 double-buffer 在 U5，ingest 與 detector 在 PR-7／PR-8。
+- 多 sequence 的 parity 是**重標後**的相同：要求 oracle 對每個 sequence 給出連續的 ID 區塊，位移取自 oracle 自己的 `_global_id_map.txt`。run-global ID 不進 shipping（boundary §5 B3）。
+- 結果是 headline 組態下的觀察，不是一般性的等價主張。計畫拒絕的組態（任何非 fast emit 的 emit 路徑、interpolation 以外的 tail 步驟）沒有 native 實作。
+- `saccade_replay` 不重算參考檔的 hash，完整性由 dump 工具的 `--verify` 負責（與 stream 檔相同）。
+
+### 10.6 重現
+
+```bash
+.venv/bin/python scripts/model/render_shipping_mot_output_fixture.py --check
+.venv/bin/python tools/resctl.py run gpu0 -- .venv/bin/python scripts/eval/diagnostics/dump_post_detector_replay.py --out <dir>/dump
+.venv/bin/python tools/resctl.py run gpu0 -- .venv/bin/python scripts/eval/diagnostics/dump_post_detector_replay.py --out <dir>/repeat_hash --frames hash
+.venv/bin/python scripts/eval/diagnostics/dump_post_detector_replay.py --verify <dir>/dump --against <dir>/repeat_hash --report <dir>/verify.json
+cmake --build build --target saccade_replay
+build/shipping/saccade_replay --config configs/shipping/mamba_whole_graph.resolved.json --dump <dir>/dump --report <dir>/replay_report.json --mot-out <dir>/mot_native
 ```

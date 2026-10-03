@@ -39,13 +39,14 @@
 //   saccade_replay --config configs/shipping/mamba_whole_graph.resolved.json
 //       --dump <dump dir> --report <report.json> [--sequences A,B]
 //       [--pre-roll N]   (developer measurement: override the tracker pre-roll)
-//       [--mot-out DIR]  (write the native <seq>.txt files there)
+//       [--mot-out DIR]  (write the native <seq>.txt files there; created if absent)
 #include <cuda_runtime.h>
 
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <map>
@@ -608,6 +609,7 @@ sh::JsonValue replay_sequence(const sh::ResolvedShippingConfig& cfg, const Seque
 int run(int argc, char** argv) {
     const Options opt = parse_args(argc, argv);
     const sh::ResolvedShippingConfig cfg = sh::load_resolved_shipping_config_file(opt.config);
+    if (!opt.mot_out.empty()) std::filesystem::create_directories(opt.mot_out);
     const sh::JsonValue manifest = sh::parse_strict_json(read_file(opt.dump + "/manifest.json"));
     if (field(manifest, "format").string != kFormat) fail("unknown dump format");
     const std::vector<float> lut = frame_lut(manifest);
