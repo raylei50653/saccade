@@ -1,80 +1,47 @@
 #!/usr/bin/env python3
 """Native detector parity vs the A_L detector path (#465 Phase B PR-8).
 
-Issue #465 Phase B PR-8 (U3b-2; docs/reference/native_runtime_shipping_boundary.md
-§6: "detection tensor 對 oracle"; measurement contract:
-docs/reference/native_runtime_resolved_config.md §12). Developer tooling only
-(``developer_build_debug``). The oracle is ``A_L``: the headline
-``mot17.py --preset mamba_whole_graph`` with the PR-1L LibTorch head injected
-into the ``_trt_head`` slot exactly as the frozen PR-2L runner
-(``native_head_parity_libtorch.py``) injects it -- its own functions are
-called here, with the operator library's sha256 taken from the realization
-attestation instead of the build the PR-2L packet recorded (PR-1L itself stays
-frozen). Subcommands:
+Issue #465 Phase B PR-8 (U3b-2; boundary §6 "detection tensor 對 oracle";
+measurement contract: docs/reference/native_runtime_resolved_config.md §12).
+Developer tooling only. The oracle is ``A_L``: the headline ``mot17.py`` with
+the PR-1L head injected into ``_trt_head`` by the frozen PR-2L runner's own
+functions, with the operator library's sha256 from the realization attestation
+(PR-1L itself stays frozen). Subcommands:
 
-``anchor``       re-runs the PR-2L ``A_L`` arm (double-buffer, 7 sequences) with
-                 the current build and compares its MOT txt bytes with the
-                 PR-2L packet's ``A_L_1`` -- the evidence that this build
-                 realizes the accepted ``A_L``; also runs PR-2L's V5 sidecar
-                 checks;
-``attest``       writes the realization attestation
-                 (``configs/shipping/mamba_head_realization.attestation.json``)
-                 from an anchor report; refuses unless the anchor is identical;
-``oracle-rows``  runs ``A_L`` serially (no ``--double-buffer``, the PR-5 dump's
-                 configuration) and records ``evaluator._run_detect``'s output
-                 per frame -- the PR-5 ``detector.bin`` boundary (float32 boxes
-                 and scores, int32 classes, ``is_tiled``, no keypoints);
-``parity``       streams the native ingest + detector of each sequence from
+``anchor``       re-run the PR-2L ``A_L`` arm (double-buffer, 7 sequences) with
+                 the current build; MOT txt bytes vs the PR-2L packet's ``A_L_1``
+                 plus PR-2L's V5 sidecar checks;
+``attest``       write ``configs/shipping/mamba_head_realization.attestation.json``
+                 from an identical anchor report;
+``oracle-rows``  run ``A_L`` serially and record ``evaluator._run_detect``'s
+                 output per frame (the PR-5 ``detector.bin`` boundary);
+``parity``       stream the native ingest + detector of each sequence from
                  ``build/shipping/saccade_detector_probe`` (own process, no
-                 Python) and compares, frame by frame and section by section,
-                 each native stage with the oracle stage fed the *native* input
-                 of that stage, so a difference is reported where it arises and
-                 is not carried into the next section:
+                 Python) and compare each native stage with the oracle stage fed
+                 the *native* input of that stage: ``decoder``, ``ingest``,
+                 ``resize``, ``backbone``, ``head``, ``s2_raw``/``s2_scaled``/
+                 ``s2_rows`` (compiled ``_postprocess_mamba_fixed`` + coordinate
+                 scaling on the native head outputs), and ``detector`` (native
+                 rows vs ``--oracle-rows``).
 
-                 ``decoder``   native decoded uint8 vs torchvision's decode;
-                 ``ingest``    native frame buffer vs the oracle ingest op on
-                               torchvision's decode (PR-7, re-checked);
-                 ``resize``    native [1, 3, 640, 640] vs ``F.interpolate`` of
-                               the native frame buffer;
-                 ``backbone``  native p3/p4/p5 vs ``TRTYoloBackbone.infer_graph``
-                               on the native resized frame;
-                 ``head``      native head outputs vs the A_L head (PR-2L's
-                               adapter around the PR-1L module) on the native
-                               p3/p4/p5;
-                 ``s2_raw`` / ``s2_scaled`` / ``s2_rows``  native S2 vs the
-                               oracle's compiled ``_postprocess_mamba_fixed`` +
-                               ``_whole_graph_fn``'s coordinate scaling on the
-                               native head outputs (before scaling, after, and
-                               as detector rows);
-                 ``detector``  native detector rows (the chained native path)
-                               vs the ``oracle-rows`` dump (``--oracle-rows``).
+Tensor sections are bit comparisons (``max_abs``, ordered ``max_ulp``, differing
+values, first differing frames); row sections report count, membership,
+order, class ids, score bits, box bits and all-zero rows separately. No
+tolerance: ``EXACT`` only when every section is. ``--mutation`` runs a probe
+negative control; ``--against`` compares per-frame hashes with an earlier run.
 
-Tensor sections are bit comparisons (``max_abs``, ordered ``max_ulp``,
-differing value counts, first differing frames). Row sections report count,
-membership (multiset of row bit patterns), order, class ids, score bits, box
-bits and all-zero rows separately. There is no tolerance: a section is
-``EXACT`` or ``DIFFERS``; the run is ``EXACT`` only when every section is.
-``--mutation`` passes a negative control to the probe and reports whether the
-expected section caught it. ``--against`` compares per-frame hashes with an
-earlier ``parity`` run (run-to-run identity of both sides).
+Usage (GPU, gpu0 lease; R=results/465_pr8_detector/<label>)::
 
-Usage (GPU; formal runs hold the gpu0 lease)::
-
-    cmake --build build --target saccade_detector_probe
-    R=results/465_pr8_detector/<label>
-    .venv/bin/python tools/resctl.py run gpu0 -- .venv/bin/python \\
-        scripts/eval/diagnostics/native_detector_parity.py anchor --out $R/anchor
+    .venv/bin/python scripts/eval/diagnostics/native_detector_parity.py anchor --out $R/anchor
     .venv/bin/python scripts/eval/diagnostics/native_detector_parity.py \\
         attest --anchor $R/anchor/anchor.json
-    .venv/bin/python tools/resctl.py run gpu0 -- .venv/bin/python \\
-        scripts/eval/diagnostics/native_detector_parity.py oracle-rows --out $R/oracle_rows
-    .venv/bin/python tools/resctl.py run gpu0 -- .venv/bin/python \\
-        scripts/eval/diagnostics/native_detector_parity.py parity --out $R/parity \\
-        --oracle-rows $R/oracle_rows [--sequences S,..] [--max-frames N] \\
-        [--mutation M] [--against $R/parity/report.json]
+    .venv/bin/python scripts/eval/diagnostics/native_detector_parity.py \\
+        oracle-rows --out $R/oracle_rows
+    .venv/bin/python scripts/eval/diagnostics/native_detector_parity.py \\
+        parity --out $R/parity --oracle-rows $R/oracle_rows [--sequences S,..] \\
+        [--max-frames N] [--mutation M] [--against $R/parity/report.json]
 
-Exit 0: identical/EXACT (negative control: caught); 1: a difference (not
-caught); 2: error.
+Exit 0: identical / EXACT / negative control caught; 1: a difference; 2: error.
 """
 # status: diagnostic
 
