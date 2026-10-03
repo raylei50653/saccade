@@ -32,6 +32,15 @@ hide in (or be blamed on) the normalize:
 ``ingest``      native frame buffer vs the oracle frame buffer (end to end; a
                 consequence of the two above, never used to attribute).
 
+``--replay-dump <dump>`` adds a fourth, independent reference: the GMC input
+frames a real ``mot17.py`` serial run handed the PR-5 host, as
+``dump_post_detector_replay.py`` captured them (``frames.u8``, the run's
+``pool.frame_buffer`` stored losslessly as uint8, for every frame with a
+tracker update). ``replay_dump`` compares the native decoded bytes with them
+and the native frame buffer with the oracle op applied to them -- so it checks
+that this harness's reconstruction of the oracle ingest is the eval run's.
+The dump's own integrity is its ``--verify``'s.
+
 Each is ``EXACT`` (bit-identical on every frame) or ``DIFFERS`` with counts,
 maximum absolute difference, a histogram of decoded-byte differences and the
 first differing frames. The file listing and geometry must agree before any
@@ -54,7 +63,8 @@ Usage (GPU; a formal run holds the gpu0 lease)::
     .venv/bin/python tools/resctl.py run gpu0 -- \\
         .venv/bin/python scripts/eval/diagnostics/native_ingest_parity.py \\
         --out results/465_pr7_ingest/<label>/parity [--sequences MOT17-09-SDP] \\
-        [--max-frames N] [--force-decoupled] [--against <earlier report.json>]
+        [--max-frames N] [--force-decoupled] [--against <earlier report.json>] \\
+        [--replay-dump results/465_pr6_mot/<label>/dump]
 """
 # status: diagnostic
 
@@ -139,6 +149,35 @@ def read_record(fh: IO[bytes]) -> dict[str, Any]:
     body = bytearray(length)
     _read_exact(fh, memoryview(body))
     return json.loads(body.decode("utf-8"))
+
+
+# ── the PR-5 replay dump (saccade.post_detector_replay/v1) ─────────────────────
+
+GMC_RECORD = struct.Struct("<3i6f")  # frame, frame_index, has_warp, warp[6]
+
+
+def replay_dump_frames(dump: Path, seq: str, w: int, h: int) -> dict[int, int]:
+    """``{frame: index into frames.u8}`` for one sequence of a replay dump."""
+    meta = json.loads((dump / seq / "meta.json").read_text())
+    if meta.get("format") != "saccade.post_detector_replay/v1":
+        raise RuntimeError(f"{dump / seq}: not a post-detector replay dump")
+    if (meta["width"], meta["height"]) != (w, h):
+        raise RuntimeError(
+            f"{dump / seq}: dump geometry {meta['width']}x{meta['height']} vs {w}x{h}"
+        )
+    data = (dump / seq / "gmc.bin").read_bytes()
+    if len(data) % GMC_RECORD.size:
+        raise RuntimeError(f"{dump / seq}/gmc.bin: truncated record")
+    out = {}
+    for off in range(0, len(data), GMC_RECORD.size):
+        frame, index, *_ = GMC_RECORD.unpack_from(data, off)
+        out[frame] = index
+    size = (dump / seq / "frames.u8").stat().st_size
+    if size != len(out) * 3 * w * h:
+        raise RuntimeError(
+            f"{dump / seq}/frames.u8: {size} bytes for {len(out)} frames"
+        )
+    return out
 
 
 # ── comparisons (device-agnostic torch ops) ────────────────────────────────────
@@ -300,6 +339,7 @@ def run_sequence(
             cmd, stdout=subprocess.PIPE, stderr=err, bufsize=1 << 20
         )
         assert proc.stdout is not None
+        replay_fh = None
         try:
             pre = read_record(proc.stdout)
             if pre.get("format") != STREAM_FORMAT:
@@ -322,6 +362,17 @@ def run_sequence(
             u8 = np.empty(n, dtype=np.uint8)
             f32 = np.empty(n, dtype=np.float32)
             sections = {k: Section() for k in ("decoder", "normalize", "ingest")}
+            replay = (
+                replay_dump_frames(args.replay_dump, seq, w, h)
+                if args.replay_dump
+                else None
+            )
+            if replay is not None:
+                replay_fh = (args.replay_dump / seq / "frames.u8").open("rb")
+            if replay is not None:
+                sections["replay_dump_decoded"] = Section()
+                sections["replay_dump_ingest"] = Section()
+                dump_u8 = np.empty(n, dtype=np.uint8)
             paths: dict[str, int] = {}
             oracle_buffer = torch.zeros((3, h, w), dtype=torch.float32, device="cuda")
             ref_buffer = torch.zeros((3, h, w), dtype=torch.float32, device="cuda")
@@ -357,6 +408,18 @@ def run_sequence(
                 sections["decoder"].add(k, file, r_dec)
                 sections["normalize"].add(k, file, r_norm)
                 sections["ingest"].add(k, file, r_ing)
+                if replay is not None and replay_fh is not None and k in replay:
+                    replay_fh.seek(replay[k] * n)
+                    _read_exact(replay_fh, memoryview(dump_u8))
+                    run_u8 = torch.from_numpy(dump_u8).to("cuda").view(3, h, w)
+                    ref_buffer.zero_()
+                    oracle_ingest(run_u8.permute(1, 2, 0), ref_buffer)
+                    sections["replay_dump_decoded"].add(
+                        k, file, compare_decoded(native_u8, run_u8)
+                    )
+                    sections["replay_dump_ingest"].add(
+                        k, file, compare_float_bits(native_f32, ref_buffer)
+                    )
                 oracle_u8_host = oracle_u8.cpu().numpy()
                 oracle_f32_host = oracle_buffer.cpu().numpy()
                 frames_out.write(
@@ -391,6 +454,8 @@ def run_sequence(
             if end != {"end": True, "frames": frame_end}:
                 raise RuntimeError(f"{seq}: unexpected end record {end}")
         finally:
+            if replay_fh is not None:
+                replay_fh.close()
             streamer._stop_worker()
             proc.stdout.close()
             rc = proc.wait()
@@ -404,6 +469,7 @@ def run_sequence(
         "nvjpeg": pre["nvjpeg"],
         "decode_paths": paths,
         "normalize_lut_f32_hex": pre["normalize_lut_f32_hex"],
+        **({"replay_dump_frames": len(replay)} if replay is not None else {}),
         **{k: s.summary() for k, s in sections.items()},
     }
 
@@ -553,6 +619,11 @@ def run(args: argparse.Namespace) -> int:
         "normalize_table": report["normalize_table"]["verdict"],
         "ingest": report["totals"]["ingest"]["verdict"],
     }
+    if args.replay_dump is not None:
+        report["replay_dump"] = {"path": str(args.replay_dump)}
+        for k in ("replay_dump_decoded", "replay_dump_ingest"):
+            report["totals"][k] = Section.merge([s[k] for s in seqs.values()])
+            report["verdicts"][k] = report["totals"][k]["verdict"]
     ok = set(report["verdicts"].values()) == {"EXACT"}
     if args.against is not None:
         report["against"] = compare_against(args.out / "frames.jsonl", args.against)
@@ -596,11 +667,19 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="earlier report.json to compare hashes with",
     )
+    ap.add_argument(
+        "--replay-dump",
+        type=Path,
+        default=None,
+        help="PR-5/PR-6 replay dump to compare with",
+    )
     ap.add_argument("--progress", action="store_true")
     args = ap.parse_args(argv)
     args.out = args.out.resolve()
     args.probe = args.probe.resolve()
     args.config = args.config.resolve()
+    if args.replay_dump is not None:
+        args.replay_dump = args.replay_dump.resolve()
     if not args.probe.exists():
         ap.error(
             f"{args.probe} not built (cmake --build build --target saccade_ingest_probe)"
