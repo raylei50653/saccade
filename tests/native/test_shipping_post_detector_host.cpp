@@ -181,7 +181,7 @@ std::vector<sh::FrameResult> run_sequence(const sh::ResolvedShippingConfig& cfg,
 void check_constructor_fails_closed(const std::string& config_text, saccade::PerceptionPipeline& pipeline,
                                     cudaStream_t stream) {
     JsonValue doc = sh::parse_strict_json(config_text);
-    *doc.find("host_params")->find("cfg")->find("stage2_quality_gate") = JsonValue::make_bool(true);
+    *doc.find("host_params")->find("steps")->find("filter.stage2_quality_gate") = JsonValue::make_bool(true);
     const sh::ResolvedShippingConfig bad = sh::load_resolved_shipping_config(doc);
     bool refused = false;
     try {

@@ -536,12 +536,14 @@ struct NativeEnvParams {
 // freezes as off in the shipping tail are pinned to false: shipping has no
 // implementation for them.
 struct HostSteps {
-    bool ingest_gpu_decode, ingest_nv12_buffer, schedule_double_buffer, post_native_postprocess,
-        post_private_continuation, post_onms_priors, post_detection_quality,
-        filter_crowd_low_score, filter_external_fp, filter_fp_hard, filter_duplicate_suppression,
-        filter_detection_cap, birth_consecutive_gate, birth_quality_gate, birth_multi_birth,
-        reid_work, gmc, gmc_fg_mask, relink_semantic_relinker, relink_native_bridge,
-        track_graphed_update, emit_pipeline_relink, tail_cheb_gr_or_occ_audit,
+    bool ingest_gpu_decode, ingest_nv12_buffer, schedule_double_buffer, post_scene_adapt,
+        post_narrow_person_bonus, post_native_postprocess, post_private_continuation,
+        post_onms_priors, post_detection_quality, filter_crowd_low_score, filter_external_fp,
+        filter_fp_hard, filter_duplicate_suppression, filter_detection_cap,
+        filter_stage2_quality_gate, birth_consecutive_gate, birth_quality_gate,
+        birth_multi_birth, reid_work, gmc, gmc_fg_mask, relink_semantic_relinker,
+        relink_native_bridge, track_score_jitter, track_graphed_update, emit_pipeline_relink,
+        tail_cheb_gr_or_occ_audit,
         tail_post_lifecycle_merge, tail_deferred_alias, tail_tracklet_quality_filter,
         tail_interpolation, tail_write_output;
 
@@ -550,6 +552,8 @@ struct HostSteps {
         v.field("ingest.gpu_decode", ingest_gpu_decode);
         v.field("ingest.nv12_buffer", ingest_nv12_buffer);
         v.field("schedule.double_buffer", schedule_double_buffer);
+        v.field("post.scene_adapt", post_scene_adapt);
+        v.field("post.narrow_person_bonus", post_narrow_person_bonus);
         v.field("post.native_postprocess", post_native_postprocess);
         v.field("post.private_continuation", post_private_continuation);
         v.field("post.onms_priors", post_onms_priors);
@@ -559,6 +563,7 @@ struct HostSteps {
         v.field("filter.fp_hard", filter_fp_hard);
         v.field("filter.duplicate_suppression", filter_duplicate_suppression);
         v.field("filter.detection_cap", filter_detection_cap);
+        v.field("filter.stage2_quality_gate", filter_stage2_quality_gate);
         v.field("birth.consecutive_gate", birth_consecutive_gate);
         v.field("birth.quality_gate", birth_quality_gate);
         v.field("birth.multi_birth", birth_multi_birth);
@@ -567,6 +572,7 @@ struct HostSteps {
         v.field("gmc.fg_mask", gmc_fg_mask);
         v.field("relink.semantic_relinker", relink_semantic_relinker);
         v.field("relink.native_bridge", relink_native_bridge);
+        v.field("track.score_jitter", track_score_jitter);
         v.field("track.graphed_update", track_graphed_update);
         v.field("emit.pipeline_relink", emit_pipeline_relink);
         v.field("tail.cheb_gr_or_occ_audit", tail_cheb_gr_or_occ_audit, off);

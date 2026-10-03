@@ -42,11 +42,12 @@ PostDetectorPlan plan_post_detector(const ResolvedShippingConfig& cfg) {
     require(!s.emit_pipeline_relink, "steps.emit.pipeline_relink must be false");
     require(!s.ingest_nv12_buffer, "steps.ingest.nv12_buffer must be false (GMC reads RGB)");
     require(s.track_graphed_update, "steps.track.graphed_update must be true");
-    // Not in STEPS (exporter gap), read from the cfg the gate evaluates.
-    require(!c.stage2_quality_gate, "cfg.stage2_quality_gate must be false");
-    require(!c.scene_adapt_enabled && c.narrow_person_score_bonus <= 0.0,
-            "the narrow-person score bonus must be inactive");
-    require(!hp.env.score_jitter.has_value(), "env.SACCADE_SCORE_JITTER must be unset");
+    require(!s.post_scene_adapt && !s.post_narrow_person_bonus,
+            "the narrow-person score bonus must be inactive (steps.post.scene_adapt, "
+            "steps.post.narrow_person_bonus)");
+    require(!s.filter_stage2_quality_gate, "steps.filter.stage2_quality_gate must be false");
+    require(!s.track_score_jitter && !hp.env.score_jitter.has_value(),
+            "SACCADE_SCORE_JITTER must be unset (steps.track.score_jitter)");
     if (s.filter_external_fp) {
         require(c.external_fp_filter_mode == "rule", "external FP filter mode must be \"rule\"");
         require(!(c.external_fp_penalty < 0.999), "the external FP penalty branch must be off");

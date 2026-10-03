@@ -181,10 +181,13 @@ void check_fail_closed(const std::string& config_text) {
         JsonValue value;
     };
     const std::vector<Mutation> mutations = {
-        {"cfg", "stage2_quality_gate", JsonValue::make_bool(true)},
+        {"steps", "filter.stage2_quality_gate", JsonValue::make_bool(true)},
+        {"steps", "post.scene_adapt", JsonValue::make_bool(true)},
+        {"steps", "post.narrow_person_bonus", JsonValue::make_bool(true)},
+        {"steps", "track.score_jitter", JsonValue::make_bool(true)},
+        {"steps", "filter.duplicate_suppression", JsonValue::make_bool(true)},
         {"cfg", "external_fp_filter_mode", JsonValue::make_string("logistic")},
         {"cfg", "external_fp_penalty", JsonValue::make_float(0.5)},
-        {"cfg", "narrow_person_score_bonus", JsonValue::make_float(0.05)},
     };
     for (const Mutation& m : mutations) {
         JsonValue doc = sh::parse_strict_json(config_text);
