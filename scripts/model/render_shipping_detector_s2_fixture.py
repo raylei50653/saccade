@@ -26,7 +26,7 @@ Needs CUDA (the oracle's S2 is compiled for it)::
     .venv/bin/python tools/resctl.py run gpu0 -- \\
         .venv/bin/python scripts/model/render_shipping_detector_s2_fixture.py [--check]
 """
-# status: active
+# status: stable
 
 from __future__ import annotations
 

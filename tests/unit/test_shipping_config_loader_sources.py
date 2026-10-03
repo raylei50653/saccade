@@ -13,7 +13,8 @@ construction:
   change a load result;
 * ``shipping/`` reaches native code only through the CUDA-free parameter
   headers, except the GPU builder and the post-detector host / replay tool
-  (PR-5), and never through the legacy env resolver;
+  (PR-5), and the detector host (PR-8, the existing ``TRTEngine`` backbone),
+  and never through the legacy env resolver;
 * the native tracker, GMC and pipeline read no ``SACCADE_*`` variable: only the
   legacy front-ends (``legacy_env.cpp``, the pybind binding) do.
 """
@@ -107,6 +108,10 @@ _GPU_OBJECTS = {
     "tracking/pipeline.hpp",
     "tracking/copy_pad.cuh",
 }
+# The native detector (PR-8) runs the backbone through the existing TRTEngine
+# (src/perception/trt_engine.cpp, which reads no environment).
+_DETECTOR_HOST = {"detector_host.cpp"}
+_DETECTOR_OBJECTS = {"perception/trt_engine.hpp"}
 
 
 def test_shipping_sources_include_only_admitted_headers() -> None:
@@ -115,8 +120,10 @@ def test_shipping_sources_include_only_admitted_headers() -> None:
     for p in sorted(SHIPPING.rglob("*")):
         if p.suffix not in {".cpp", ".hpp", ".inc", ".h"}:
             continue
-        admitted = _CUDA_FREE_NATIVE | (
-            _GPU_OBJECTS if p.name in _GPU_BUILDER else set()
+        admitted = (
+            _CUDA_FREE_NATIVE
+            | (_GPU_OBJECTS if p.name in _GPU_BUILDER else set())
+            | (_DETECTOR_OBJECTS if p.name in _DETECTOR_HOST else set())
         )
         for line in p.read_text().splitlines():
             m = include.match(line)
