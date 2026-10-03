@@ -307,6 +307,15 @@ def _interp_cases(rng: np.random.Generator) -> list[dict[str, Any]]:
         + [_line(6, 20, 99.99, -0.01, 1.0, 2.0, 0.1)]
         + _track(21, [3, 4, 5, 8, 9])
     )
+    # Many equal (id, frame) and (frame, id) keys, so an unstable sort (which
+    # std::sort is above 16 elements) would reorder them; the last duplicate
+    # at frame 4 is the left end of the following gap.
+    ties = _by_frame(
+        _track(60, [1, 2, 3, 4, 9, 10])
+        + [_line(4, 60, 1.11 * i, 2.0 + i, 30.0, 60.0 + i, 0.01 * i) for i in range(48)]
+        + [_line(4, 61, -1.0 * i, 3.0, 20.0, 40.0, 0.5) for i in range(30)]
+        + _track(61, [1, 2, 3, 7, 8])
+    )
     no_gaps = list(
         reversed(_track(30, [1, 2, 3, 4, 5]) + _track(31, [2, 3, 4, 5, 6, 7]))
     )
@@ -324,6 +333,7 @@ def _interp_cases(rng: np.random.Generator) -> list[dict[str, Any]]:
         _interp_case("boundaries", boundaries, head),
         _interp_case("min_h", min_h_lines, {**head, "min_h": 50.0}),
         _interp_case("duplicate_frames", duplicate, head),
+        _interp_case("many_ties", ties, head),
         _interp_case("nothing_to_fill_keeps_order", no_gaps, head),
         _interp_case(
             "no_confirmed_track", _track(32, [1, 5]) + _track(33, [2, 9]), head

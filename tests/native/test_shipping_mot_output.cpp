@@ -246,7 +246,7 @@ int main(int argc, char** argv) {
         const JsonValue& emit = at(fixture, "emit_cases");
         const JsonValue& interp = at(fixture, "interpolation_cases");
         CHECK(emit.array.size() == 2);
-        CHECK(interp.array.size() == 10);
+        CHECK(interp.array.size() == 11);
         for (const JsonValue& c : emit.array) check_emit_case(c);
         for (const JsonValue& c : interp.array) check_interpolation_case(c);
         check_plan(cfg, at(fixture, "headline_interpolation"));
