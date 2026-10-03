@@ -61,6 +61,15 @@ target_compile_options(saccade_shipping_native_config_test PRIVATE -Wall -Wextra
 add_test(NAME saccade_shipping_native_config_test
     COMMAND saccade_shipping_native_config_test ${SACCADE_RESOLVED_CONFIG})
 
+# Post-detector host plan + CPU detection filters vs the Python oracle (PR-5).
+add_executable(saccade_shipping_detection_filters_test
+    ${SACCADE_REPO_ROOT}/tests/native/test_shipping_detection_filters.cpp)
+target_link_libraries(saccade_shipping_detection_filters_test PRIVATE saccade_shipping_native_config)
+target_compile_options(saccade_shipping_detection_filters_test PRIVATE -Wall -Wextra -Wpedantic)
+add_test(NAME saccade_shipping_detection_filters_test
+    COMMAND saccade_shipping_detection_filters_test ${SACCADE_RESOLVED_CONFIG}
+            ${SACCADE_REPO_ROOT}/tests/native/fixtures/shipping_detection_filters.json)
+
 if(TARGET saccade_tracking)
     add_library(saccade_shipping_native STATIC src/native_build.cpp src/post_detector_host.cpp)
     target_link_libraries(saccade_shipping_native PUBLIC saccade_shipping_native_config saccade_tracking)
@@ -79,5 +88,12 @@ if(TARGET saccade_tracking)
             saccade_shipping_native CUDA::cudart)
         add_test(NAME saccade_shipping_native_build_test
             COMMAND saccade_shipping_native_build_test ${SACCADE_RESOLVED_CONFIG})
+
+        add_executable(saccade_shipping_post_detector_host_test
+            ${SACCADE_REPO_ROOT}/tests/native/test_shipping_post_detector_host.cpp)
+        target_link_libraries(saccade_shipping_post_detector_host_test PRIVATE
+            saccade_shipping_native CUDA::cudart)
+        add_test(NAME saccade_shipping_post_detector_host_test
+            COMMAND saccade_shipping_post_detector_host_test ${SACCADE_RESOLVED_CONFIG})
     endif()
 endif()

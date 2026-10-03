@@ -121,7 +121,9 @@ class _HashedFile:
 
 
 class SequenceWriter:
-    def __init__(self, root: Path, seq: str, width: int, height: int, store_frames: bool):
+    def __init__(
+        self, root: Path, seq: str, width: int, height: int, store_frames: bool
+    ):
         self.dir = root / seq
         self.dir.mkdir(parents=True, exist_ok=False)
         self.seq, self.width, self.height = seq, width, height
@@ -250,8 +252,14 @@ def run(args: argparse.Namespace) -> int:
 
     def run_gmc(state: Any, **kwargs: Any) -> Any:
         frame_f = kwargs["_frame_gmc"]
-        if frame_f.dtype != torch.float32 or frame_f.dim() != 3 or frame_f.shape[0] != 3:
-            raise RuntimeError(f"unexpected GMC input {frame_f.dtype} {tuple(frame_f.shape)}")
+        if (
+            frame_f.dtype != torch.float32
+            or frame_f.dim() != 3
+            or frame_f.shape[0] != 3
+        ):
+            raise RuntimeError(
+                f"unexpected GMC input {frame_f.dtype} {tuple(frame_f.shape)}"
+            )
         u8 = torch.round(frame_f * 255.0).clamp_(0, 255).to(torch.uint8)
         if not torch.equal(torch.div(u8, 255.0), frame_f):
             raise RuntimeError(
@@ -287,7 +295,9 @@ def run(args: argparse.Namespace) -> int:
         )
         w = writer_for(state)
         frame = int(state.current_frame_id)
-        w.files["tracker_in"].write(_i32(frame, n, int(gmc is not None)), g.tobytes(), payload)
+        w.files["tracker_in"].write(
+            _i32(frame, n, int(gmc is not None)), g.tobytes(), payload
+        )
         result = original["track"](state, **kwargs)
         torch.cuda.synchronize()
         count = int(result["count"].reshape(-1)[0].item())
@@ -320,7 +330,9 @@ def run(args: argparse.Namespace) -> int:
     try:
         runpy.run_path(str(project_root / argv[0]), run_name="__main__")
     except SystemExit as exc:
-        exit_code = exc.code if isinstance(exc.code, int) else (0 if exc.code is None else 1)
+        exit_code = (
+            exc.code if isinstance(exc.code, int) else (0 if exc.code is None else 1)
+        )
     finally:
         sys.argv = saved_argv
         evaluator_module._run_detect = original["detect"]
@@ -361,7 +373,9 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--out", type=Path, required=True, help="new or empty directory")
     ap.add_argument("--sequences", default="", help="comma-separated (default: all)")
-    ap.add_argument("--max-frames", type=int, default=0, help="per-sequence cap (smoke)")
+    ap.add_argument(
+        "--max-frames", type=int, default=0, help="per-sequence cap (smoke)"
+    )
     ap.add_argument(
         "--frames",
         choices=("store", "hash"),
