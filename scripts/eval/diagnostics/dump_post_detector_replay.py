@@ -52,6 +52,10 @@ Usage (GPU; a formal dump runs under a lease)::
         .venv/bin/python scripts/eval/diagnostics/dump_post_detector_replay.py \\
         --out results/465_pr5_replay/<label>/dump [--sequences MOT17-09-SDP] \\
         [--max-frames N] [--frames store|hash]
+
+    # integrity of a dump, and bit-equality with a second (hash-only) dump
+    .venv/bin/python scripts/eval/diagnostics/dump_post_detector_replay.py \\
+        --verify <dump> [--against <dump2>] [--report verify.json]
 """
 # status: diagnostic
 
@@ -369,9 +373,77 @@ def run(args: argparse.Namespace) -> int:
     return exit_code
 
 
+def verify(dump: Path, against: Path | None) -> dict[str, Any]:
+    """Re-hash ``dump`` against its meta; optionally compare with a second dump.
+
+    Integrity: every stream file (and ``frames.u8`` when stored) must match the
+    sha256, byte and record counts its ``meta.json`` records, and each
+    ``meta.json`` must equal the manifest's copy. Comparison (``against``, e.g.
+    the ``--frames hash`` repeat): every stream's sha256 and the frame hash must
+    be equal, i.e. the serial reference reproduced bit for bit.
+    """
+    manifest = json.loads((dump / "manifest.json").read_text())
+    if manifest.get("format") != FORMAT:
+        raise SystemExit(f"{dump}: not a {FORMAT} dump")
+    problems: list[str] = []
+    for seq, listed in manifest["sequences"].items():
+        meta = json.loads((dump / seq / "meta.json").read_text())
+        if meta != listed:
+            problems.append(f"{seq}: meta.json differs from the manifest")
+        for name, rec in meta["files"].items():
+            path = dump / seq / name
+            if (
+                path.stat().st_size != rec["bytes"]
+                or _sha256_file(path) != rec["sha256"]
+            ):
+                problems.append(f"{seq}/{name}: content differs from meta.json")
+        frames = meta["frames_u8"]
+        if frames["stored"]:
+            path = dump / seq / "frames.u8"
+            if (
+                path.stat().st_size != frames["bytes"]
+                or _sha256_file(path) != frames["sha256"]
+            ):
+                problems.append(f"{seq}/frames.u8: content differs from meta.json")
+    result: dict[str, Any] = {
+        "format": "saccade.post_detector_replay_verify/v1",
+        "dump": str(dump),
+        "git_head": manifest["git_head"],
+        "git_dirty": manifest["git_dirty"],
+        "sequences": sorted(manifest["sequences"]),
+        "integrity_problems": problems,
+    }
+    if against is not None:
+        other = json.loads((against / "manifest.json").read_text())
+        diffs: list[str] = []
+        if sorted(other["sequences"]) != sorted(manifest["sequences"]):
+            diffs.append("sequence sets differ")
+        for seq in sorted(set(manifest["sequences"]) & set(other["sequences"])):
+            a, b = manifest["sequences"][seq], other["sequences"][seq]
+            for name in a["files"]:
+                if a["files"][name] != b["files"].get(name):
+                    diffs.append(f"{seq}/{name}")
+            if a["frames_u8"]["sha256"] != b["frames_u8"]["sha256"]:
+                diffs.append(f"{seq}/frames.u8")
+            if a["empty_detector_frames"] != b["empty_detector_frames"]:
+                diffs.append(f"{seq}/empty_detector_frames")
+        result["against"] = {
+            "dump": str(against),
+            "git_head": other["git_head"],
+            "git_dirty": other["git_dirty"],
+            "differing_streams": diffs,
+        }
+    result["verdict"] = (
+        "OK"
+        if not problems and not result.get("against", {}).get("differing_streams")
+        else "FAIL"
+    )
+    return result
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--out", type=Path, required=True, help="new or empty directory")
+    ap.add_argument("--out", type=Path, help="new or empty directory (dump mode)")
     ap.add_argument("--sequences", default="", help="comma-separated (default: all)")
     ap.add_argument(
         "--max-frames", type=int, default=0, help="per-sequence cap (smoke)"
@@ -382,7 +454,25 @@ def main(argv: list[str] | None = None) -> int:
         default="store",
         help="store the GMC input frames, or only hash them",
     )
+    ap.add_argument(
+        "--verify", type=Path, help="verify mode: re-hash this dump against its meta"
+    )
+    ap.add_argument(
+        "--against", type=Path, help="with --verify: a second dump that must match"
+    )
+    ap.add_argument("--report", type=Path, help="with --verify: write the JSON here")
     args = ap.parse_args(argv)
+    if args.verify is not None:
+        if args.out is not None:
+            ap.error("--verify and --out are exclusive")
+        result = verify(args.verify.resolve(), args.against and args.against.resolve())
+        text = json.dumps(result, indent=2) + "\n"
+        if args.report is not None:
+            args.report.write_text(text)
+        print(text, end="")
+        return 0 if result["verdict"] == "OK" else 1
+    if args.out is None:
+        ap.error("--out is required (or --verify)")
     args.out = args.out.resolve()
     if args.out.exists() and any(args.out.iterdir()):
         ap.error(f"{args.out} is not empty")
