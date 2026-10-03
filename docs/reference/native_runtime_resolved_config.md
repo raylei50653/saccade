@@ -459,7 +459,7 @@ PR-8 在 shipping 端加上 detector：從 PR-7 的 `frame_chw`（float32 `[3, H
 
 ### 12.3 operator library 的 realization attestation（PR-1L freeze 不動）
 
-PR-1L lineage 記錄的 operator library build（sha256 `cfea782f…`）已不存在：`build/libsaccade_scan_torchop.so` 之後被重新 build（同一個 source blob、同一個 compiler，現在是 `098dd233…`），舊的 binary 沒有保留。lineage 自己寫明這個 sha256「只識別這次 build」。依 owner 決定（10-03），**PR-1L 的凍結內容與 lineage 檔案都不改**；PR-8 另外為目前的 shipping build 建一層 realization attestation：
+PR-1L lineage 記錄的 operator library build（sha256 `cfea782f…`）已不存在：`build/libsaccade_scan_torchop.so` 之後從同一份凍結的 source blob 重新 build（現在是 `098dd233…`），舊的 binary 沒有保留。lineage 沒有記錄 compiler identity，所以兩次 build 是否用同一個 compiler 無法從凍結紀錄證明；目前這份 build 的 compiler metadata（`.comment`）記錄在 realization attestation 裡。lineage 自己寫明這個 sha256「只識別這次 build」。依 owner 決定（10-03），**PR-1L 的凍結內容與 lineage 檔案都不改**；PR-8 另外為目前的 shipping build 建一層 realization attestation：
 
 - 以 sha256 綁定凍結的 lineage 檔案，並逐項重述它的 torchscript sha256／content sha256 與它所記的 operator library sha256；
 - 記錄這次 build 的路徑、sha256、bytes、`DT_NEEDED`（不得含 `libpython*`／`libtorch_python*`）、compiler `.comment`，以及三個 source（`mamba_scan_torchop.cpp`、`mamba_scan.cu`、`mamba_scan.cuh`）的 git blob，且必須等於 lineage tool commit 上的 blob；
