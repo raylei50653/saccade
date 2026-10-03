@@ -414,3 +414,88 @@ build/shipping/saccade_shipping_ingest_host_test configs/shipping/mamba_whole_gr
 .venv/bin/python tools/resctl.py run gpu0 -- .venv/bin/python scripts/eval/diagnostics/native_ingest_parity.py --out <dir>/negctl_decoupled --force-decoupled
 .venv/bin/python tools/resctl.py run gpu0 -- .venv/bin/python scripts/eval/diagnostics/native_ingest_parity.py --out <dir>/replay_dump --replay-dump <PR-6 dump>
 ```
+
+---
+
+## 12. Native detector（PR-8／U3b-2）
+
+PR-8 在 shipping 端加上 detector：從 PR-7 的 `frame_chw`（float32 `[3, H, W]`）經 640×640 bilinear resize、既有的 C++ `TRTEngine` backbone、PR-1L 的 LibTorch TorchScript head、S2 fixed postprocess，產出原圖座標的 detector rows，也就是 PR-5 `detector.bin` 的語義邊界（float32 boxes `[n, 4]`、float32 scores `[n]`、int32 classes `[n]`、`is_tiled = false`、沒有 keypoints）。oracle 是 owner 接受的 `A_L`（PR-2L：headline 組態，head 換成 PR-1L artifact），不是 headline 的 compiled head；serial、eager。main NMS、private continuation、external FP／FP hard filter、GMC、tracker、MOT emit、CUDA graph、double-buffer 與效能都不在本 PR（PR-5／6／9／10）。
+
+| 項目 | 位置 |
+|:--|:--|
+| 計畫＋fail-closed gate（resolved config、凍結的 PR-1L lineage、realization attestation）（CUDA-free） | `shipping/include/saccade_shipping/detector_plan.hpp`、`shipping/src/detector_plan.cpp`；SHA-256：`sha256.hpp`／`sha256.cpp`（併入 `saccade_shipping_native_config`） |
+| GPU：S2 kernel（Inductor lowering 的 twin） | `shipping/include/saccade_shipping/detector_s2.hpp`、`shipping/src/detector_s2.cu` |
+| GPU：detector 宿主（head loader、backbone、resize、topk） | `shipping/include/saccade_shipping/detector_host.hpp`、`shipping/src/detector_host.cpp`（target `saccade_shipping_detector`，只在 root build；連 LibTorch 與 `saccade_perception` 的 `TRTEngine`，不連 `libtorch_python`） |
+| realization attestation | `configs/shipping/mamba_head_realization.attestation.json`（commit 進 repo，§12.3） |
+| probe 工具（`developer_build_debug`） | `shipping/tools/saccade_detector_probe.cpp`（target `saccade_detector_probe`）：獨立 process，跑 PR-7 ingest＋本 PR detector，把每個 stage 的輸出串流到 stdout（`saccade.native_detector_stream/v1`） |
+| parity harness（`developer_build_debug`） | `scripts/eval/diagnostics/native_detector_parity.py`（`anchor`／`attest`／`oracle-rows`／`parity`） |
+
+### 12.1 照抄的 oracle 事實
+
+- **resize**：`_whole_graph_fn` 的 `F.interpolate(frame, size=(img_size, img_size), mode="bilinear", align_corners=False)`。native 直接呼叫 ATen 的 `upsample_bilinear2d`（`output_size` 給定、`scale_factors` 為空，即 `F.interpolate` dispatch 到的同一個 kernel、同一份 `libtorch_cuda`），不是另寫一個 bilinear kernel。
+- **backbone**：`TRTYoloBackbone.infer_graph`：engine 的第 0 個 tensor 是輸入 `[1, 3, img, img]`，其餘依序為 p3／p4／p5；在呼叫端 stream 上 `execute_async_v3`。native 用既有的 `TRTEngine`（`src/perception/trt_engine.cpp`），連結 oracle 的 Python `tensorrt` 所用的同一份 `tensorrt_libs/libnvinfer`。
+- **head**：PR-2L 的 `A_L` 把 PR-1L artifact 放進 `_trt_head` slot（`LibTorchHeadAdapter`：不複製、不改 dtype、不做運算，在目前 stream 上呼叫 module）。native loader：先驗 hash、`dlopen` operator library（註冊 `saccade_native::selective_scan_fwd`）、照 lineage 設定並讀回 runtime requirements（graph executor optimize 關、cuDNN benchmark 關、cuDNN TF32 開、matmul TF32 關）、`torch::jit::load(path)` 不給 device map（PR-2L amendment A1：參數在 cuda:0、tensor constant 留在 CPU），再檢查 inlined graph（無 `prim::PythonOp`、不呼叫 `saccade::selective_scan_fwd`、`saccade_native::selective_scan_fwd` 次數 == lineage）；process 內不得 map 任何 `libpython*`／`libtorch_python*`。
+- **S2**：oracle 預設 `torch.compile` `_postprocess_mamba_fixed_eager`（mode `default`）。以 headline 形狀，torch 2.11.0+cu130／triton 3.6.0 的 Inductor 把它降成：(1) 對每個 anchor 的 80 個 class 做一個 reduction kernel，sigmoid 是 `tl.sigmoid`，PTX 為 `sub.f32 t, 0, x` → `mul.f32 t, t, 0f3FB8AA3B` → `ex2.approx.f32` → `add.f32 1.0` → `div.full.f32 1.0, d`；value 用 `triton_helpers.maximum`（NaN 傳遞）、index 用 `maximum_with_index`（NaN 視為最大、同值取較小 index），兩者都與 reduction 順序無關，所以結果不受 autotune 的 block 形狀影響（快取裡的每個 autotune 變體都是同一串指令）；(2) `aten.topk(scores_max, max_det)`（ATen fallback，不是 Triton）；(3) box 的 pointwise kernel：`x1y1 = a − lt`、`x2y2 = a + rb`、`c = (x1y1 + x2y2) × 0.5`、`wh = x2y2 − x1y1`，再 `(c × s) ∓ (wh × s) × 0.5`。Inductor 的 SASS 把 `c × s` 合進 FFMA，但 stride 是 2 的冪，這些乘積都是精確值，所以結果等於逐一捨入的 float32 運算（也等於 eager）；(4) gather 成 `(1, max_det, 6)`：box、top-k score、`float(class index)`。這是**為什麼 eager S2 不是 oracle**：同一組 head 輸出，eager 的 `sigmoid` 與 compiled 的在 score 欄有 1–3 ulp 的差異（合成輸入上每次都看得到）；box 欄相同。native S2：(1) 以 inline PTX 寫出同一串指令與同一組比較規則；(2) 呼叫 ATen `topk`（oracle 自己的 kernel）；(3)(4) 只對選中的 anchor 以明確的 round-to-nearest float32 運算計算（不 contraction）。
+- **座標縮放與 rows**：`_whole_graph_fn` 之後 `detections[:, :, [0, 2]] *= sx`、`[:, :, [1, 3]] *= sy`，`sx = float32(w / img_size)`（Python double 除法後存入 float32 tensor，`set_whole_graph_img_dims`）；`detect_single_patch_640` 的 whole-graph 分支（無 letterbox、無 NV12）原樣回傳 `raw[0, :, :4]`、`raw[0, :, 4]`、`raw[0, :, 5]`；`_run_native_tensor_prep`（以及 PR-5 的 dump）把 class 轉成 int32。rows 數 = `max(max_det, _whole_graph_nms_pad)`，pad 恆為 0，所以 = `max_det` = 300；8400 個 anchor 一定填滿 top-300，**沒有 padding 列**（`new_zeros` 的初值全部被覆寫）。`conf_thr` 傳進 fixed S2 但不被讀取。
+- **固定常數**（oracle 原始碼字面值，由 `tests/unit/test_native_detector_oracle_pins.py` 釘住）：stride `[8, 16, 32]`、anchor 偏移 `+0.5`、`_whole_graph_nms_pad = 0`、`_whole_graph_fn` 的 stage 順序與縮放、S2 的 op 序列、`_POSTPROCESS_COMPILE_ENABLED` 預設與 `torch.compile(mode="default")`。
+
+### 12.2 由 resolved config 與 lineage 驅動的 gate
+
+`plan_detector` 只讀 resolved config、凍結的 PR-1L lineage 與 realization attestation；任一不成立就 fail-closed（`ConfigError`），沒有替代 preset、沒有預設值。
+
+| 條件 | 不成立時 oracle 會做什麼／為什麼拒絕 |
+|:--|:--|
+| `build.use_whole_graph == true`、`build.trt_head_engine == ""` | 走非 whole-graph 路徑，或 head slot 放的是 TRT head |
+| `build.small_p3_max_threshold == 0.0` | S2 多出 `_fuse_small_p3_scores` |
+| `build.postprocess_compile == true` | eager S2：sigmoid 數值不同（§12.1） |
+| `head_calls == {set_head_compile: [true], set_block_compile: [true]}` | PR-2L 對 `A_L` 的接受只涵蓋 headline 組態 |
+| `detect_fn == detect_native_640`、`cfg.tiling == kwargs.tiling == native_640`、`cfg.tta == false` | 其他 detect 函式（tiling、960、TTA） |
+| `cfg.preprocess_modes == []`、`steps.ingest.nv12_buffer == false`、`steps.track.workbench == false` | letterbox／NV12 的 preprocessed 路徑、workbench 自己的 detector 呼叫 |
+| `contract.feature_dim == 0`、`fpn_reid_mode == false`、box format `xyxy`（contract 與 `cfg.detector_box_format`） | ReID 特徵、cxcywh 解碼 |
+| `img_size` 是 32 的正倍數、`max_det > 0` | — |
+| lineage：schema、`tool.git_dirty == false`、preset path／sha256 == config 的 `source`、`mamba_ckpt`／`fpn_backbone_engine`／builder inputs 的路徑 == config 的 `build`、inventory 對上、`mamba_args.use_detail_fusion == false`、`reg_max` 缺省或 1、head 載入無 missing／unexpected、torchscript 輸入形狀 == `[1, c, img/stride, img/stride]`、輸出名稱、float32／static batch 1、`structural_check.bitwise_equal_all`、op library 不連 Python、`graph_executor_optimize == false` | lineage 描述的不是這份 config 的 model，或 artifact 不是 native 能照抄的形式 |
+
+被載入的檔案：backbone engine 的 sha256 取自 lineage `companions.backbone_engine`、artifact 取自 `torchscript.sha256`、operator library 取自 lineage 或 attestation（§12.3）。三者在任何載入之前比對。
+
+### 12.3 operator library 的 realization attestation（PR-1L freeze 不動）
+
+PR-1L lineage 記錄的 operator library build（sha256 `cfea782f…`）已不存在：`build/libsaccade_scan_torchop.so` 之後被重新 build（同一個 source blob、同一個 compiler，現在是 `098dd233…`），舊的 binary 沒有保留。lineage 自己寫明這個 sha256「只識別這次 build」。依 owner 決定（10-03），**PR-1L 的凍結內容與 lineage 檔案都不改**；PR-8 另外為目前的 shipping build 建一層 realization attestation：
+
+- 以 sha256 綁定凍結的 lineage 檔案，並逐項重述它的 torchscript sha256／content sha256 與它所記的 operator library sha256；
+- 記錄這次 build 的路徑、sha256、bytes、`DT_NEEDED`（不得含 `libpython*`／`libtorch_python*`）、compiler `.comment`，以及三個 source（`mamba_scan_torchop.cpp`、`mamba_scan.cu`、`mamba_scan.cuh`）的 git blob，且必須等於 lineage tool commit 上的 blob；
+- 記錄 `A_L` reproduction：以 PR-2L runner 自己的 `run_arm_child`（只把它的 operator library sha256 換成這次 build）重跑 `A_L`（double-buffer、7 個 sequence），每個 sequence 的 MOT txt 必須與 PR-2L 正式 packet 的 `A_L_1` 逐位元組相同，PR-2L 的 V5 sidecar 檢查與 env override 檢查都要通過。`attest` 只在 anchor 報告 identical、工作樹乾淨時才寫檔。
+
+native loader 只接受：attestation 的 lineage sha256 == 實際 lineage 檔案、它重述的值 == lineage、operator library 檔案的 sha256 == attestation 記錄的 build；沒有給 attestation 時要求等於 lineage 記錄的 build（目前會失敗）。harness 的 oracle 端也綁同一份 attestation。
+
+### 12.4 測量契約（正式 7-seq run 之前寫定）
+
+**oracle**：`A_L` detector path，即 PR-2L runner 的 `A_L` 注入（op library 依 §12.3），headline preset、`--detector SDP`、MOT17 train 7 個 SDP sequence（02／04／05／09／10／11／13，共 5316 幀）。
+
+**stage 分開，各自吃 native 的上一段輸出**（harness `parity`；native 端是 probe 的一次完整串接 run）：
+
+| section | native | oracle（輸入是 native 的上一段） | 比較 |
+|:--|:--|:--|:--|
+| `decoder` | PR-7 解碼 uint8 `[3, H, W]` | torchvision 解碼 | 逐位元組 |
+| `ingest` | PR-7 frame buffer | oracle ingest op 套在 torchvision 解碼上 | 逐位元 |
+| `resize` | `[1, 3, 640, 640]` | `F.interpolate(native frame)` | 逐位元 |
+| `backbone` | p3／p4／p5 | `TRTYoloBackbone.infer_graph(native resized)` | 逐位元 |
+| `head` | 6 個輸出 | `A_L` head（PR-2L adapter＋PR-1L module）吃 native p3／p4／p5 | 逐位元（owner 接受 PR-2L 的條件：native loader 必須對 `A_L` byte／bit identical） |
+| `s2_raw`／`s2_scaled` | S2 `[300, 6]`（縮放前／後） | compiled `_postprocess_mamba_fixed` 吃 native 的 6 個 head 輸出，再照 `_whole_graph_fn` 縮放 | 逐位元 |
+| `s2_rows` | detector rows | 由上一列 oracle 輸出照 `detect_single_patch_640`／`_run_native_tensor_prep` 切成 rows | 見下 |
+| `detector` | detector rows（native 從 JPEG 一路串接） | `oracle-rows`：`A_L` serial run（無 `--double-buffer`）的 `evaluator._run_detect` 輸出，PR-5 `detector.bin` 格式 | 見下 |
+
+**比較 schema**：tensor section 每幀報 `equal`；不相等時報 differing values、`max_abs`（只算有限值）、`max_ulp`（float32 位元序的距離）、非有限的差異數、形狀不符；彙總報 equal frames／frames、合計 differing values、最大 `max_abs`／`max_ulp`、前 20 個發散幀（sequence、frame）。row section 每幀**分開**報：rows 數（native, oracle）、count 相等、membership（每列 6 個值的位元型樣作為 multiset）相等、order（同位置的列）相等、class id 相等、score 位元相等、box 位元相等（含各自的 differing values、`max_abs`、`max_ulp`）、第一個不同的列、全零列數（padding 語義）；彙總為各項不同的幀數與前 20 個發散幀。每幀另記 native 各 stage 與 oracle head／S2／rows 的 sha256（`frames.jsonl`），供 `--against` 做 run-to-run 比對。
+
+**EXACT 驗收規則**：PR-8 的 verdict 是 `EXACT` 若且唯若下列全部成立，否則是 `NOT_EXACT`：
+
+1. 有效性（任一不成立 ⇒ `UNRESOLVED`，不判讀任何 section）：正式 run 在乾淨的 commit 上、gpu0 lease 下執行；attestation 對上 lineage 與 operator library 檔案；anchor（§12.3）identical；`oracle-rows` 報告 ok（V5 sidecar 通過、serial、每個 sequence 錄到 1..frame_end 全部幀、`is_tiled` 全 false）；probe preamble 通過（`python_libraries_mapped == []`、載入的 op library／artifact／engine sha256、runtime readback == lineage、scan 呼叫次數、參數 cuda:0／constant CPU）；每個 sequence 的列檔、幀數與幾何 native == oracle；
+2. 9 個 section（`decoder`、`ingest`、`resize`、`backbone`、`head`、`s2_raw`、`s2_scaled`、`s2_rows`、`detector`）在 7 個 sequence、5316 幀上**全部**逐位元相同；
+3. 重現性：第二次 `parity --against` 的每幀 sha256（native 與 oracle 兩側）與第一次全部相同。
+
+沒有容差，看到結果之後也不新增容差。任一 section 不是 EXACT：照上面的 schema 分開報告（`max_abs`、`max_ulp`、differing values、第一個發散幀、rows 數／membership／order／class 的變化），**停在 PR-8**，不把差異帶進 PR-9 的 MOT 行為。
+
+**負控制**（MOT17-09，525 幀，對同一份 `oracle-rows`）：probe 的 `--mutation` 每次只改一段，對應的 section 必須是 `DIFFERS`（其他 section 照實記錄）：`backbone_ulp`（p3 第 0 個值 +1 ulp）→ `backbone`；`head_ulp`（cls_p3 第 0 個值 +1 ulp）→ `head`；`s2_threshold`（多加一道 score < 0.05 的門檻）、`s2_topk`（top-299）、`s2_order`（第 0、1 列互換）→ `s2_rows`；`box_ulp`（縮放後第 0 列 x1 +1 ulp）→ `s2_rows`。另以 GPU fixture 測試覆蓋 S2 的邊界值（§12.5）。
+
+### 12.5 驗收
+
+（正式 run 後填寫。）
