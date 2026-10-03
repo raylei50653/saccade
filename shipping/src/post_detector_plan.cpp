@@ -42,6 +42,7 @@ PostDetectorPlan plan_post_detector(const ResolvedShippingConfig& cfg) {
     require(!s.emit_pipeline_relink, "steps.emit.pipeline_relink must be false");
     require(!s.ingest_nv12_buffer, "steps.ingest.nv12_buffer must be false (GMC reads RGB)");
     require(s.track_graphed_update, "steps.track.graphed_update must be true");
+    require(!s.track_workbench, "steps.track.workbench must be false (its own tracker path)");
     require(!s.post_scene_adapt && !s.post_narrow_person_bonus,
             "the narrow-person score bonus must be inactive (steps.post.scene_adapt, "
             "steps.post.narrow_person_bonus)");

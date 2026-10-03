@@ -1,5 +1,6 @@
 // saccade_replay: replay a post-detector dump through the native U3a host and
-// compare every stage with the Python serial reference (#465 Phase B PR-5).
+// compare every stage with the Python serial reference (#465 Phase B PR-5),
+// then turn the host's tracker output into the sequence's MOT txt (PR-6).
 //
 // Developer tool (developer_build_debug); the host it drives is
 // saccade_shipping/post_detector_host.hpp. Input is a dump written by
@@ -15,20 +16,37 @@
 //   tracker_output  tracker rows (boxes, scores, local ids, classes)
 //                                                   vs tracker_out.bin
 //
+//   mot_txt         the sequence's MOT lines (sequence_output.hpp: per-sequence
+//                   ids, fast-emit lines, interpolation) vs the oracle's
+//                   eval/<seq>.txt, byte for byte after relabeling: the oracle
+//                   numbers ids run-globally (GlobalTrackIdMapper), so its ids
+//                   for a sequence are the per-sequence ids plus the number of
+//                   ids earlier sequences used; the offset is read from its
+//                   _global_id_map.txt, which must list this sequence's ids as
+//                   one contiguous block. (The reference files' integrity is
+//                   `dump_post_detector_replay.py --verify`'s, against the
+//                   manifest's mot_reference hashes, as for the streams.)
+//
+// Every per-update stream (post_nms, tracker_in, tracker_out, and gmc when GMC
+// runs) must have exactly one record per replayed tracker update.
+//
 // The run is chained (the host's own outputs feed its next stages), so after a
 // first divergence later frames may differ for that reason alone; the report
 // keeps each stage's first divergent frame. Exit 0: every stage equal on every
-// frame; 1: some stage differs; 2: error.
+// frame and every MOT txt identical; 1: something differs; 2: error.
 //
 // Usage:
 //   saccade_replay --config configs/shipping/mamba_whole_graph.resolved.json
 //       --dump <dump dir> --report <report.json> [--sequences A,B]
 //       [--pre-roll N]   (developer measurement: override the tracker pre-roll)
+//       [--mot-out DIR]  (write the native <seq>.txt files there; created if absent)
 #include <cuda_runtime.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <map>
@@ -42,6 +60,7 @@
 #include "saccade_shipping/native_build.hpp"
 #include "saccade_shipping/post_detector_host.hpp"
 #include "saccade_shipping/resolved_config.hpp"
+#include "saccade_shipping/sequence_output.hpp"
 #include "saccade_shipping/strict_json.hpp"
 #include "tracking/pipeline.hpp"
 
@@ -325,7 +344,7 @@ std::vector<float> frame_lut(const sh::JsonValue& manifest) {
 }
 
 struct Options {
-    std::string config, dump, report;
+    std::string config, dump, report, mot_out;
     std::vector<std::string> sequences;
     std::optional<int> pre_roll;
 };
@@ -353,19 +372,91 @@ Options parse_args(int argc, char** argv) {
         else if (a == "--report") o.report = next();
         else if (a == "--sequences") o.sequences = split_csv(next());
         else if (a == "--pre-roll") o.pre_roll = std::stoi(next());
+        else if (a == "--mot-out") o.mot_out = next();
         else fail("unknown argument " + a);
     }
     if (o.config.empty() || o.dump.empty() || o.report.empty()) {
         fail("usage: saccade_replay --config JSON --dump DIR --report JSON "
-             "[--sequences A,B] [--pre-roll N]");
+             "[--sequences A,B] [--pre-roll N] [--mot-out DIR]");
     }
     return o;
 }
 
+// ─── MOT txt (PR-6) ──────────────────────────────────────────────────────
+
+struct MotReference {
+    std::string text;         // the oracle's eval/<seq>.txt
+    std::int64_t offset = 0;  // ids the oracle gave earlier sequences
+    std::size_t ids = 0;      // this sequence's ids in _global_id_map.txt
+};
+
+MotReference load_mot_reference(const std::string& dump, const sh::JsonValue& manifest,
+                                const std::string& seq) {
+    const sh::JsonValue* ref = manifest.find("mot_reference");
+    if (ref == nullptr) fail("dump manifest has no mot_reference (dumped before PR-6); re-dump");
+    const sh::JsonValue* entry = field(*ref, "sequences").find(seq);
+    if (entry == nullptr) fail(seq + ": no MOT reference in the dump manifest");
+    MotReference r;
+    r.text = read_file(dump + "/" + field(*entry, "path").string);
+
+    // "<seq>\tlocal_id=<L>\tglobal_id=<G>" (GlobalTrackIdMapper.dump_lines)
+    std::istringstream map(read_file(dump + "/" + field(field(*ref, "global_id_map"), "path").string));
+    const std::string prefix = seq + "\tlocal_id=";
+    const std::string key = "\tglobal_id=";
+    std::vector<std::int64_t> ids;
+    std::string line;
+    while (std::getline(map, line)) {
+        if (line.rfind(prefix, 0) != 0) continue;
+        const std::size_t g = line.find(key);
+        if (g == std::string::npos) fail("_global_id_map.txt: malformed line \"" + line + "\"");
+        ids.push_back(std::stoll(line.substr(g + key.size())));
+    }
+    std::sort(ids.begin(), ids.end());
+    for (std::size_t i = 0; i < ids.size(); ++i) {
+        if (ids[i] != ids.front() + static_cast<std::int64_t>(i)) {
+            fail(seq + ": its run-global ids are not one contiguous block");
+        }
+    }
+    r.ids = ids.size();
+    r.offset = ids.empty() ? 0 : ids.front() - 1;
+    return r;
+}
+
+std::vector<std::string> split_lines(const std::string& text) {
+    std::vector<std::string> out;
+    if (text.empty()) return out;
+    std::size_t start = 0;
+    while (true) {
+        const std::size_t end = text.find('\n', start);
+        out.push_back(text.substr(start, end == std::string::npos ? std::string::npos : end - start));
+        if (end == std::string::npos) break;
+        start = end + 1;
+    }
+    return out;
+}
+
+// The oracle's lines with the id field (2nd) shifted back by `offset`.
+std::vector<std::string> relabel(const std::vector<std::string>& lines, std::int64_t offset) {
+    std::vector<std::string> out;
+    out.reserve(lines.size());
+    for (const std::string& l : lines) {
+        const std::size_t c1 = l.find(',');
+        const std::size_t c2 = c1 == std::string::npos ? c1 : l.find(',', c1 + 1);
+        if (c2 == std::string::npos) fail("reference MOT line without an id field: \"" + l + "\"");
+        const std::int64_t id = std::stoll(l.substr(c1 + 1, c2 - c1 - 1));
+        out.push_back(l.substr(0, c1 + 1) + std::to_string(id - offset) + l.substr(c2));
+    }
+    return out;
+}
+
 sh::JsonValue replay_sequence(const sh::ResolvedShippingConfig& cfg, const SequenceDump& d,
                               const std::vector<float>& lut, saccade::PerceptionPipeline& pipeline,
-                              cudaStream_t stream, std::optional<int> pre_roll, bool& exact) {
+                              cudaStream_t stream, std::optional<int> pre_roll,
+                              const MotReference& mot_ref, const std::string& mot_out,
+                              bool& exact) {
     sh::PostDetectorHost host(cfg, sh::SequenceGeometry{d.width, d.height}, pipeline, stream);
+    sh::SequenceOutput output(sh::plan_sequence_output(cfg));
+    if (!output.plan().write_output) fail("the config writes no MOT output (steps.tail.write_output)");
     if (pre_roll) host.set_pre_roll_for_measurement(*pre_roll);
     if (host.plan().gmc && !d.frames_stored) fail(d.name + ": GMC needs stored frames");
 
@@ -441,16 +532,64 @@ sh::JsonValue replay_sequence(const sh::ResolvedShippingConfig& cfg, const Seque
                     same_bits(got, want) ? "" : "warp differs");
         }
         compare_tracker(tracker_output, df.frame, r.tracker_output, d.tracker_out[k].rows);
+        output.add_frame(df.frame, r.tracker_output.boxes.data(), r.tracker_output.scores.data(),
+                         r.tracker_output.ids.data(), r.tracker_output.size());
         ++k;
         ++updates;
     }
-    if (k != d.tracker_out.size()) fail(d.name + ": reference has more tracker updates than replay");
+    // One record per replayed tracker update in every per-update stream.
+    const std::size_t want_gmc = host.plan().gmc ? k : 0;
+    if (d.post_nms.size() != k || d.tracker_in.size() != k || d.tracker_out.size() != k ||
+        d.gmc.size() != want_gmc) {
+        fail(d.name + ": reference streams (post_nms " + std::to_string(d.post_nms.size()) +
+             ", tracker_in " + std::to_string(d.tracker_in.size()) + ", tracker_out " +
+             std::to_string(d.tracker_out.size()) + ", gmc " + std::to_string(d.gmc.size()) +
+             ") do not match " + std::to_string(k) + " replayed tracker updates");
+    }
     cudaFree(d_frame);
     cudaFree(d_boxes);
     cudaFree(d_scores);
     cudaFree(d_classes);
 
-    exact = post_nms.exact() && tracker_input.exact() && gmc.exact() && tracker_output.exact();
+    // MOT txt: the sequence tail, then the oracle's lines relabeled.
+    const std::size_t track_ids = output.track_ids();
+    sh::InterpolationStats interp;
+    const std::vector<std::string> lines = output.finish(&interp);
+    const std::string text = sh::join_mot_lines(lines);
+    std::string written;
+    if (!mot_out.empty()) {
+        written = mot_out + "/" + d.name + ".txt";
+        std::ofstream f(written, std::ios::binary);
+        f << text;
+        if (!f) fail("cannot write " + written);
+    }
+    const std::vector<std::string> want = relabel(split_lines(mot_ref.text), mot_ref.offset);
+    const bool mot_equal = sh::join_mot_lines(want) == text;
+    std::optional<std::size_t> first_diff;
+    if (!mot_equal) {
+        std::size_t i = 0;
+        while (i < lines.size() && i < want.size() && lines[i] == want[i]) ++i;
+        first_diff = i;
+    }
+    auto mot = sh::JsonValue::make_object();
+    mot.set("lines", sh::JsonValue::make_int(static_cast<std::int64_t>(lines.size())));
+    mot.set("reference_lines", sh::JsonValue::make_int(static_cast<std::int64_t>(want.size())));
+    mot.set("bytes", sh::JsonValue::make_int(static_cast<std::int64_t>(text.size())));
+    mot.set("track_ids", sh::JsonValue::make_int(static_cast<std::int64_t>(track_ids)));
+    mot.set("reference_track_ids", sh::JsonValue::make_int(static_cast<std::int64_t>(mot_ref.ids)));
+    mot.set("reference_id_offset", sh::JsonValue::make_int(mot_ref.offset));
+    auto ist = sh::JsonValue::make_object();
+    ist.set("tracks_interpolated", sh::JsonValue::make_int(interp.tracks_interpolated));
+    ist.set("gaps_filled", sh::JsonValue::make_int(interp.gaps_filled));
+    ist.set("frames_added", sh::JsonValue::make_int(interp.frames_added));
+    mot.set("interpolation", ist);
+    mot.set("byte_identical_after_relabel", sh::JsonValue::make_bool(mot_equal));
+    mot.set("first_differing_line", first_diff ? sh::JsonValue::make_int(static_cast<std::int64_t>(*first_diff))
+                                                : sh::JsonValue::make_null());
+    mot.set("written", written.empty() ? sh::JsonValue::make_null() : sh::JsonValue::make_string(written));
+
+    exact = post_nms.exact() && tracker_input.exact() && gmc.exact() && tracker_output.exact() &&
+            mot_equal && track_ids == mot_ref.ids;
     auto o = sh::JsonValue::make_object();
     o.set("frames", sh::JsonValue::make_int(static_cast<std::int64_t>(d.detector.size())));
     o.set("tracker_updates", sh::JsonValue::make_int(updates));
@@ -462,6 +601,7 @@ sh::JsonValue replay_sequence(const sh::ResolvedShippingConfig& cfg, const Seque
     stages.set("gmc", gmc.json());
     stages.set("tracker_output", tracker_output.json());
     o.set("stages", stages);
+    o.set("mot_txt", mot);
     o.set("exact", sh::JsonValue::make_bool(exact));
     return o;
 }
@@ -469,6 +609,7 @@ sh::JsonValue replay_sequence(const sh::ResolvedShippingConfig& cfg, const Seque
 int run(int argc, char** argv) {
     const Options opt = parse_args(argc, argv);
     const sh::ResolvedShippingConfig cfg = sh::load_resolved_shipping_config_file(opt.config);
+    if (!opt.mot_out.empty()) std::filesystem::create_directories(opt.mot_out);
     const sh::JsonValue manifest = sh::parse_strict_json(read_file(opt.dump + "/manifest.json"));
     if (field(manifest, "format").string != kFormat) fail("unknown dump format");
     const std::vector<float> lut = frame_lut(manifest);
@@ -486,8 +627,10 @@ int run(int argc, char** argv) {
     bool all_exact = true;
     for (const std::string& name : names) {
         const SequenceDump d = load_sequence(opt.dump, name);
+        const MotReference mot_ref = load_mot_reference(opt.dump, manifest, name);
         bool exact = false;
-        seqs.set(name, replay_sequence(cfg, d, lut, *pipeline, stream, opt.pre_roll, exact));
+        seqs.set(name, replay_sequence(cfg, d, lut, *pipeline, stream, opt.pre_roll, mot_ref,
+                                       opt.mot_out, exact));
         all_exact = all_exact && exact;
         std::cerr << "[saccade_replay] " << name << ": " << (exact ? "EXACT" : "DIFFERS") << "\n";
     }
@@ -495,7 +638,7 @@ int run(int argc, char** argv) {
     cudaStreamDestroy(stream);
 
     auto report = sh::JsonValue::make_object();
-    report.set("format", sh::JsonValue::make_string("saccade.post_detector_replay_report/v1"));
+    report.set("format", sh::JsonValue::make_string("saccade.post_detector_replay_report/v2"));
     report.set("config", sh::JsonValue::make_string(opt.config));
     report.set("dump", sh::JsonValue::make_string(opt.dump));
     report.set("pre_roll_override", opt.pre_roll ? sh::JsonValue::make_int(*opt.pre_roll)

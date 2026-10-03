@@ -543,6 +543,8 @@ struct HostSteps {
         filter_stage2_quality_gate, birth_consecutive_gate, birth_quality_gate,
         birth_multi_birth, reid_work, gmc, gmc_fg_mask, relink_semantic_relinker,
         relink_native_bridge, track_score_jitter, track_graphed_update, emit_pipeline_relink,
+        emit_id_stability_filter, emit_appearance_bank, emit_dynamic_reid,
+        emit_fast_emit_reid_mode, emit_id_stability_kwarg, track_workbench,
         tail_cheb_gr_or_occ_audit,
         tail_post_lifecycle_merge, tail_deferred_alias, tail_tracklet_quality_filter,
         tail_interpolation, tail_write_output;
@@ -575,6 +577,12 @@ struct HostSteps {
         v.field("track.score_jitter", track_score_jitter);
         v.field("track.graphed_update", track_graphed_update);
         v.field("emit.pipeline_relink", emit_pipeline_relink);
+        v.field("emit.id_stability_filter", emit_id_stability_filter);
+        v.field("emit.appearance_bank", emit_appearance_bank);
+        v.field("emit.dynamic_reid", emit_dynamic_reid);
+        v.field("emit.fast_emit_reid_mode", emit_fast_emit_reid_mode);
+        v.field("emit.id_stability_kwarg", emit_id_stability_kwarg);
+        v.field("track.workbench", track_workbench);
         v.field("tail.cheb_gr_or_occ_audit", tail_cheb_gr_or_occ_audit, off);
         v.field("tail.post_lifecycle_merge", tail_post_lifecycle_merge, off);
         v.field("tail.deferred_alias", tail_deferred_alias, off);

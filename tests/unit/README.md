@@ -21,12 +21,14 @@
 | `test_native_head_parity_tf32_off_runner.py` | system | contract | active | The #465 PR-2R runner is PR-2's gate with only the TF32-off head swapped in. |
 | `test_pipeline_health.py` | pipeline | behavior | active | Unit tests for saccade.pipeline.health.check_redis (mocked aioredis). |
 | `test_post_detector_host_oracle_pins.py` | system | contract | active | Oracle pins for the native post-detector replay host (#465 Phase B PR-5, U3a). |
+| `test_post_detector_replay_dump_verify.py` | system | contract | active | ``dump_post_detector_replay.py --verify`` on synthetic dumps (#465 PR-6). |
 | `test_reconnect_rate.py` | eval | behavior | active | Unit tests for B2 reconnect_rate summarization / export. |
 | `test_resctl.py` | system | contract | active | Fail-closed contracts for tools/resctl.py, the cross-worktree resource lease CLI. |
 | `test_resolved_bridge_policy_config.py` | system | contract | active | Pin the resolved-config fingerprints the H0 declaration freezes. |
 | `test_resolved_shipping_config.py` | system | contract | active | The headline resolved shipping config equals what the Python oracle uses. |
 | `test_safe_reject_audit.py` | eval | behavior | active | Tests for constrained FP pruning / safe-reject metrics. |
 | `test_shipping_config_loader_sources.py` | system | contract | active | Source-level guards for the native shipping config (#465 PR-4a, PR-4b). |
+| `test_shipping_mot_output_oracle_pins.py` | system | contract | active | Oracle pins for the native MOT output path (#465 Phase B PR-6, U4). |
 | `test_signal_tables.py` | eval | contract | active | Unit tests for signal_tables schema helpers. |
 | `test_slim_release_manifest.py` | system | contract | active | Integrity checks for the slim release manifest. |
 | `test_summarize_relink_pairs.py` | eval | contract | active | Tests for scripts/tools/summarize_relink_pairs.py B1 output contract. |
