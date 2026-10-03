@@ -12,7 +12,7 @@ Total tracked scripts: **524**. Source of truth = each script's own docstring + 
 | Label | Meaning | Count |
 |-------|---------|------:|
 | `stable` | supported workflow entrypoint; keep path stable | 189 |
-| `diagnostic` | reusable analysis/debug tool, not a main workflow | 210 |
+| `diagnostic` | reusable analysis/debug tool, not a main workflow | 211 |
 | `experiment` | tied to a named experiment or historical sweep | 118 |
 | `archive-candidate` | no longer active; keep only if referenced by docs/results | 6 |
 | `generated` | output or cache; should be ignored, not tracked | 0 |
@@ -325,7 +325,7 @@ Total tracked scripts: **524**. Source of truth = each script's own docstring + 
 | `compare_handover_summaries.py` | diagnostic | cli | Compare Cheb-GR offline handover parameter summary JSON files. |
 | `compiled_head_reverse_engineering.py` | experiment | cli | Run the #465 compiled-head reverse-engineering study (R0 provenance, R1 scope/stage localization) and write i… |
 | `compiled_head_reverse_engineering_structural_check.py` | experiment | cli | Exercise the #465 compiled-head reverse-engineering runner's R0 children and R1 worker on synthetic frames (n… |
-| `dump_post_detector_replay.py` |  | - | Dump the #465 PR-5 post-detector replay inputs and the Python serial reference. |
+| `dump_post_detector_replay.py` | diagnostic | - | Dump the #465 PR-5 post-detector replay inputs and the Python serial reference. |
 | `label_boosted_birth_rows.py` | diagnostic | cli | Label and export birth rows boosted by GT for diagnostics. |
 | `native_head_failure_localization.py` | experiment | cli | Run the #465 head failure-localization study (anchor-level C/T/E replay) and write its packet. |
 | `native_head_failure_localization_r2.py` | experiment | cli | Run the #465 head failure-localization r2 study (cutoff-closed swap set) and write its packet. |

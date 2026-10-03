@@ -41,12 +41,10 @@ every file) and:
   f32 scores[count], i32 ids[count], i32 classes[count]
 * ``frames.u8``       uint8 CHW frames (3*H*W bytes each), in ``gmc.bin`` order
 
-``manifest.json`` at the top records the run (argv, git head, SACCADE_* env,
-the committed resolved config's sha256, the 256-entry ``u8 -> float32``
-table torch produced) and, under ``mot_reference``, the sha256 of the oracle's own
-MOT output in ``eval/`` (each sequence's txt and ``_global_id_map.txt``), the
-reference the native MOT output is compared with (PR-6). ``--frames hash`` hashes the frames without storing
-them (a second dump for the serial reference's run-to-run check).
+``manifest.json`` records the run (argv, git head, SACCADE_* env, resolved
+config sha256, torch's 256-entry ``u8 -> float32`` table) and ``mot_reference``:
+sha256 of the oracle MOT output in ``eval/`` (PR-6's reference). ``--frames
+hash`` hashes frames without storing them (the run-to-run check).
 
 Usage (GPU; a formal dump runs under a lease)::
 
