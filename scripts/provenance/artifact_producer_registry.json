@@ -340,6 +340,10 @@
       "classification": "not_a_run_producer",
       "reason": "declares no artifact-root output directory and creates none"
     },
+    "scripts/eval/diagnostics/dump_post_detector_replay.py": {
+      "classification": "run_producer_wired",
+      "reason": "#465 PR-5 post-detector replay dump; claims its --out directory with open_run before the first byte, the in-process mot17.py run claims its own eval/ sub-directory"
+    },
     "scripts/eval/diagnostics/label_boosted_birth_rows.py": {
       "classification": "not_a_run_producer",
       "reason": "declares no artifact-root output directory and creates none"

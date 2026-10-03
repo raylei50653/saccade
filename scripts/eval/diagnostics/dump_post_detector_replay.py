@@ -476,7 +476,19 @@ def main(argv: list[str] | None = None) -> int:
     args.out = args.out.resolve()
     if args.out.exists() and any(args.out.iterdir()):
         ap.error(f"{args.out} is not empty")
-    args.out.mkdir(parents=True, exist_ok=True)
+    # ADR 021 AP-2: claim the dump directory before the first byte. The in-process
+    # mot17.py run claims its own ``eval/`` sub-directory.
+    if str(project_root) not in sys.path:
+        sys.path.insert(0, str(project_root))
+    from scripts.provenance.run_manifest import open_run
+
+    open_run(
+        args.out,
+        produced_by="diagnostic",
+        preset=PRESET,
+        detector="SDP",
+        dataset="MOT17 train",
+    )
     return run(args)
 
 
