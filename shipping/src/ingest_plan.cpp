@@ -103,7 +103,6 @@ SeqInfo parse_seqinfo(const std::string& text) {
         const std::string key = lower(strip(line.substr(0, d)));
         const std::string value = strip(line.substr(d + 1));
         if (key.empty()) bad_input(where + ": empty key");
-        if (value.find('%') != std::string::npos) bad_input(where + ": '%' in a value is not supported");
         if (!current->emplace(key, value).second) bad_input(where + ": duplicate key " + key);
     }
     const auto sec = sections.find("Sequence");

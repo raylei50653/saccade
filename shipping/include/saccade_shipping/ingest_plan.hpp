@@ -77,8 +77,9 @@ struct SequenceInput {
 // seqinfo.ini is read as configparser reads it for these keys (keys are
 // case-insensitive, `=` or `:`, `#`/`;` comment lines, surrounding whitespace
 // and CR stripped), restricted to the plain form: indented lines (configparser
-// continuation syntax), duplicate sections or keys, `%` in a value, or an
-// integer that is not [+-]digits are refused rather than interpreted. Keys are
+// continuation syntax), duplicate sections or keys, or an integer that is
+// not [+-]digits (which also refuses a `%` interpolation) are refused rather
+// than interpreted. Keys are
 // read from [Sequence] only; configparser's fallback to [DEFAULT] is not
 // implemented, so a key found only there is refused as missing. The listing matches every directory entry
 // whose name ends in ".jpg" (pathlib's glob: dot files, directories and
