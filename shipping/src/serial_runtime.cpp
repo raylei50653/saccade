@@ -124,7 +124,11 @@ SequenceRunResult SerialRuntime::run_sequence(const std::filesystem::path& seque
     PostDetectorHost* post = nullptr;
     const SequenceGeometry geometry{input.im_width, input.im_height};
     if (mutation_ == RuntimeMutation::SharedPostHost) {
-        if (!shared_post_) shared_post_ = std::make_unique<PostDetectorHost>(cfg_, geometry, *pipeline_, stream);
+        if (!shared_post_ || shared_geometry_.im_width != geometry.im_width ||
+            shared_geometry_.im_height != geometry.im_height) {
+            shared_post_ = std::make_unique<PostDetectorHost>(cfg_, geometry, *pipeline_, stream);
+            shared_geometry_ = geometry;
+        }
         post = shared_post_.get();
     } else {
         own_post = std::make_unique<PostDetectorHost>(cfg_, geometry, *pipeline_, stream);

@@ -612,3 +612,5 @@ PR-8 的 `DetectorHost::set_image_dims(h, w)` 同時記下座標縮放與 `detec
 | `--ref-edit`（harness） | 第一個 sequence 的 oracle txt 在記憶體中改 1 個字元 | `mot_txt`（只有 MOT17-02） |
 
 **觀察（不是 gate）**：oracle serial run 的 MOT txt 是否與 PR-2L `A_L_1`（double-buffer）逐位元組相同。PR-8 的 `oracle-rows` 與 anchor 在 `a9d657c1` 上 7/7 相同；這只記錄，PR-10 才以 double-buffer 為驗收組態。
+
+**修訂 A1（第一次正式 run 之後，只改負控制；上面的契約原文不動）**：第一次正式 run（commit `6fcfa788`）中，`shared_post_host` 負控制沒有產生可判讀的結果：MOT17-02（1920×1080）的 `PostDetectorHost` 被留給 MOT17-05（640×480），GMC 以前者的尺寸讀後者的 frame buffer，越界，`saccade_track` 以 CUDA illegal address 結束（harness 判 `UNRESOLVED`、未抓到）。這是負控制的定義錯誤（它破壞的不只是「sequence 狀態」，還破壞了 buffer 尺寸），不是 shipping 路徑的問題；GPU 測試只在同一幾何的兩個 sequence 之間共用，所以沒有暴露。A1 把該變異改成：**前一個 sequence 的 `PostDetectorHost` 只在幾何相同時留給下一個 sequence；幾何不同的 sequence 取得新的宿主**（之後再被留用）。依 7-seq 的順序，預期 MOT17-04、10、11、13 的 `mot_txt` 為 `DIFFERS`，02、05、09 為 `EXACT`；必須 `DIFFERS` 的 section 仍是 `mot_txt`。GPU 測試加上「另一幾何取得新宿主、第二次同幾何改變」兩項。因為變異的程式碼改了，整份正式 run（oracle-rows、parity、repeat、PR-8 回歸、4 個負控制）在 A1 的 commit 上重跑一次；第一次 run 的結果保留並在 §13.4 一併報告。驗收規則與其餘負控制不變。

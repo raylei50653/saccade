@@ -56,7 +56,10 @@ namespace saccade::shipping {
 // shipping caller.
 enum class RuntimeMutation {
     None,
-    SharedPostHost,    // the first sequence's PostDetectorHost is reused for later ones
+    SharedPostHost,    // the previous sequence's PostDetectorHost (tracker, GMC, pre-roll) is
+                       // carried over when its geometry is the same; a sequence of another
+                       // geometry gets a fresh host (GMC sized for one frame size must not read
+                       // another's buffer)
     StaleImageDims,    // set_image_dims only for the first sequence
     GmcPreviousFrame,  // GMC reads the previous frame's buffer (the first frame's for frame 1)
 };
@@ -140,6 +143,7 @@ private:
     std::unique_ptr<PerceptionPipeline> pipeline_;
     std::unique_ptr<DeviceDetections> det_;
     std::unique_ptr<PostDetectorHost> shared_post_;  // RuntimeMutation::SharedPostHost only
+    SequenceGeometry shared_geometry_{};
     RuntimeMutation mutation_ = RuntimeMutation::None;
     int sequences_run_ = 0;
 };

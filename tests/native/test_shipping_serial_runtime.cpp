@@ -11,8 +11,9 @@
 //     both X runs; a fresh runtime that runs Y first gives Y's lines;
 //   * nothing Python is mapped; every frame ingested, pre-roll 4, tracker
 //     updates on every frame;
-//   * the wiring mutations are visible: a PostDetectorHost shared across
-//     sequences changes the second X; image dims set only for the first
+//   * the wiring mutations are visible: a PostDetectorHost carried over to a
+//     sequence of the same geometry changes the second X (a sequence of
+//     another geometry gets a fresh host); image dims set only for the first
 //     sequence change Y; GMC fed the previous frame changes X.
 #include <cstdio>
 #include <filesystem>
@@ -94,6 +95,9 @@ int main(int argc, char** argv) {
         auto shared = make(p, M::SharedPostHost);
         check(shared->run_sequence(p.x, kFrames).lines == x1.lines, "shared_post_host: first X unchanged");
         check(shared->run_sequence(p.x, kFrames).lines != x1.lines, "shared_post_host: second X changes");
+        // Another geometry gets a fresh host (and is then itself carried over).
+        check(shared->run_sequence(p.y, kFrames).lines == y1.lines, "shared_post_host: Y (other geometry) fresh");
+        check(shared->run_sequence(p.y, kFrames).lines != y1.lines, "shared_post_host: second Y changes");
         shared.reset();
 
         auto stale = make(p, M::StaleImageDims);
