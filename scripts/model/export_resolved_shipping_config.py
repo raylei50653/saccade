@@ -1179,6 +1179,15 @@ STEPS: tuple[Step, ...] = (
         PIPELINE,
         "_double_buffer_eligible(cfg, detector, profile_stages)",
     ),
+    # Native tensor prep: the per-sequence narrow-person score bonus starts at
+    # this value and only scene-adapt classification can raise it later; both
+    # false => the bonus stays 0.0 and apply_narrow_person_score_bonus is a no-op.
+    Step("post.scene_adapt", PIPELINE, "cfg.detection.scene_adapt_enabled"),
+    Step(
+        "post.narrow_person_bonus",
+        PIPELINE,
+        "0.0 if cfg.detection.scene_adapt_enabled else cfg.detection.narrow_person_score_bonus",
+    ),
     Step("post.native_postprocess", EVALUATOR, "native_postprocess_available"),
     Step("post.private_continuation", EVALUATOR, "native_private_available"),
     Step("post.onms_priors", EVALUATOR, "enable_onms"),
@@ -1190,6 +1199,7 @@ STEPS: tuple[Step, ...] = (
     Step("filter.fp_hard", STAGES, "cfg.detection.fp_hard_filter_enabled"),
     Step("filter.duplicate_suppression", STAGES, "cfg.duplicate_suppression"),
     Step("filter.detection_cap", STAGES, "cfg.detection.per_frame_detection_cap > 0"),
+    Step("filter.stage2_quality_gate", EVALUATOR, "cfg.stage2_quality_gate"),
     Step("birth.consecutive_gate", STAGES, "cfg.birth_consecutive_gate"),
     Step("birth.quality_gate", STAGES, "cfg.birth_quality_gate"),
     Step("birth.multi_birth", PIPELINE, "cfg.multi_birth_enabled"),
@@ -1204,6 +1214,7 @@ STEPS: tuple[Step, ...] = (
         PIPELINE,
         "(cfg.relink_enabled or _bridge_enabled) and hasattr(detector.tracker, 'set_relink_params')",
     ),
+    Step("track.score_jitter", STAGES, 'os.environ.get("SACCADE_SCORE_JITTER", "")'),
     Step(
         "track.graphed_update",
         PIPELINE,

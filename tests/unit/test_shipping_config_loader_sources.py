@@ -12,7 +12,8 @@ construction:
 * nothing under ``shipping/`` reads the process environment, so env cannot
   change a load result;
 * ``shipping/`` reaches native code only through the CUDA-free parameter
-  headers, except the GPU builder, and never through the legacy env resolver;
+  headers, except the GPU builder and the post-detector host / replay tool
+  (PR-5), and never through the legacy env resolver;
 * the native tracker, GMC and pipeline read no ``SACCADE_*`` variable: only the
   legacy front-ends (``legacy_env.cpp``, the pybind binding) do.
 """
@@ -95,10 +96,17 @@ def test_shipping_sources_never_read_the_environment() -> None:
 
 
 # Native headers shipping/ may include. The CUDA-free mapping sees only the
-# parameter stores; the GPU builder additionally sees the objects it builds.
+# parameter stores; the GPU builder, the post-detector host (PR-5) and its replay
+# tool additionally see the objects they build or drive, and the host the
+# copy-pad launcher it feeds main NMS with.
 _CUDA_FREE_NATIVE = {"tracking/tracker_params.hpp", "tracking/perception_params.hpp"}
-_GPU_BUILDER = {"native_build.cpp"}
-_GPU_OBJECTS = {"tracking/tracker_gpu.hpp", "tracking/gmc.hpp", "tracking/pipeline.hpp"}
+_GPU_BUILDER = {"native_build.cpp", "post_detector_host.cpp", "saccade_replay.cpp"}
+_GPU_OBJECTS = {
+    "tracking/tracker_gpu.hpp",
+    "tracking/gmc.hpp",
+    "tracking/pipeline.hpp",
+    "tracking/copy_pad.cuh",
+}
 
 
 def test_shipping_sources_include_only_admitted_headers() -> None:

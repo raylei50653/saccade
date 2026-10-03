@@ -19,6 +19,7 @@
 | `compare_handover_summaries.py` | diagnostic | cli | Compare Cheb-GR offline handover parameter summary JSON files. |
 | `compiled_head_reverse_engineering.py` | experiment | cli | Run the #465 compiled-head reverse-engineering study (R0 provenance, R1 scope/stage localization) and write i… |
 | `compiled_head_reverse_engineering_structural_check.py` | experiment | cli | Exercise the #465 compiled-head reverse-engineering runner's R0 children and R1 worker on synthetic frames (n… |
+| `dump_post_detector_replay.py` | diagnostic | - | Dump the #465 PR-5 post-detector replay inputs and the Python serial reference. |
 | `label_boosted_birth_rows.py` | diagnostic | cli | Label and export birth rows boosted by GT for diagnostics. |
 | `native_head_failure_localization.py` | experiment | cli | Run the #465 head failure-localization study (anchor-level C/T/E replay) and write its packet. |
 | `native_head_failure_localization_r2.py` | experiment | cli | Run the #465 head failure-localization r2 study (cutoff-closed swap set) and write its packet. |
@@ -36,6 +37,10 @@
 | `relink_bridge_guard_report.py` | diagnostic | cli | Summarize guarded native bridge relink runs. |
 | `run_occ_audit_wp3_promotion.py` | diagnostic | cli | WP3: frozen-substrate occ-exit control/treatment + promotion decision inputs. |
 | `synthesize_handover_applicability.py` | diagnostic | cli | Synthesize Cheb-GR handover applicability evidence across summaries. |
+| `tf32_off_head_drift_stage.py` | experiment | cli | Exploratory #465 study: at which stage does TF32-off T's drift first become structural? |
+| `tf32_off_head_drift_stage_r2.py` | experiment | cli | Exploratory #465 study (r2): at which stage does TF32-off T's drift first become structural? |
+| `tracker_block_divergence_465.py` | experiment | cli | Exploratory #465 study: in which tracker block does R_T first diverge structurally from R_C? |
+| `tracker_block_divergence_465_r2.py` | experiment | cli | Exploratory #465 study r2: in which tracker block does R_T first diverge structurally from R_C? |
 | `verify_l2_evidence.py` | diagnostic | cli | Re-verify the 2026-09-05 L2 source-attribution evidence pack from its raw CSVs. |
 
 <!-- END generated script index -->

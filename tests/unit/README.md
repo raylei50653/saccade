@@ -20,6 +20,7 @@
 | `test_native_head_parity_runner.py` | system | contract | active | The #465 PR-2 head parity runner implements its frozen declaration. |
 | `test_native_head_parity_tf32_off_runner.py` | system | contract | active | The #465 PR-2R runner is PR-2's gate with only the TF32-off head swapped in. |
 | `test_pipeline_health.py` | pipeline | behavior | active | Unit tests for saccade.pipeline.health.check_redis (mocked aioredis). |
+| `test_post_detector_host_oracle_pins.py` | system | contract | active | Oracle pins for the native post-detector replay host (#465 Phase B PR-5, U3a). |
 | `test_reconnect_rate.py` | eval | behavior | active | Unit tests for B2 reconnect_rate summarization / export. |
 | `test_resctl.py` | system | contract | active | Fail-closed contracts for tools/resctl.py, the cross-worktree resource lease CLI. |
 | `test_resolved_bridge_policy_config.py` | system | contract | active | Pin the resolved-config fingerprints the H0 declaration freezes. |
